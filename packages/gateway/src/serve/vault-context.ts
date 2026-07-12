@@ -21,10 +21,13 @@ export interface VaultRequestContext {
   /** The vault this request (or background fire) is addressed to. */
   vaultId: string;
   /**
-   * The calling device's public key (iroh EndpointId) when the request
-   * arrived over an enrolled transport (issue #289 phase 2). Absent for
-   * the shared-bearer transports (loopback embed, `direct` remotes),
-   * which are implicitly enrolled in every vault.
+   * The calling device's key when the request arrived over an enrolled
+   * transport (issue #289 phase 2): an iroh EndpointId for a proved iroh
+   * caller, or a synthetic `http:<uuid>` for a device that redeemed a
+   * pairing ticket over HTTP and authenticates with a per-device token
+   * (issue #376, `device-token-store.ts`). Absent for the ADMIN plane —
+   * the shared landlord token (loopback embed, or the daemon bearer with
+   * no per-device token) — which is implicitly enrolled in every vault.
    */
   deviceKey?: string;
 }
@@ -36,9 +39,12 @@ export interface VaultRequestContext {
  */
 export interface DeviceAccess {
   /**
-   * Extract the calling device's key (iroh EndpointId) from the request.
-   * `undefined` = not a device-scoped transport (shared-bearer loopback),
-   * which is implicitly enrolled in every vault.
+   * Extract the calling device's key (iroh EndpointId) from the request's
+   * iroh-forwarder proof headers. `undefined` = not a proved iroh
+   * transport — the composed handler (`build-gateway.ts`) then falls back
+   * to the HTTP listener's own device-token header before concluding the
+   * caller is the shared-bearer admin plane, implicitly enrolled in every
+   * vault (issue #376).
    */
   deviceKeyFor(req: import('node:http').IncomingMessage): string | undefined;
   /** The vault ids this device key is enrolled in, oldest enrollment first. */

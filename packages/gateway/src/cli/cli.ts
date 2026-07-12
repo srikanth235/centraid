@@ -7,9 +7,12 @@
  *   - persistent shared bearer token (`<dataDir>/token.bin`)
  *   - SIGINT / SIGTERM graceful shutdown
  *
- * v0 PoC scope per centraid#131: loopback or LAN bind, no TLS, single
- * shared token. Per-device tokens, tunneling, and TLS termination are
- * documented out-of-scope follow-ups.
+ * v0 PoC scope per centraid#131: loopback or LAN bind, no TLS. The shared
+ * bearer token is the ADMIN plane; per-device HTTP tokens (issue #376,
+ * minted by `pair`/`devices add` + `POST /centraid/_gateway/pair`) are the
+ * TENANT plane, confined to their device's vault enrollments. TLS
+ * termination stays a documented out-of-scope follow-up (front with
+ * Caddy / Tailscale Funnel / Cloudflare Tunnel).
  *
  * Subcommands:
  *   centraid-gateway serve [--config <path>] [--data-dir <path>] [--host <h>] [--port <p>]
@@ -25,6 +28,8 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
+import type { BearerAuthorization } from '@centraid/app-engine';
 import { serve } from '../serve/serve.js';
 import { daemonLayoutFor, type DaemonLayout } from './paths.js';
 import { type DaemonConfig } from './config.js';
@@ -50,6 +55,13 @@ interface ParsedServe {
 function fail(message: string, code = 1): never {
   process.stderr.write(`centraid-gateway: ${message}\n`);
   process.exit(code);
+}
+
+/** Constant-time string compare — same posture as app-engine's bearer check. */
+function timingSafeTokenEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
 }
 
 function usage(): never {
@@ -88,6 +100,14 @@ function usage(): never {
       'ride HTTP. key export/restore are the recovery story for sealed',
       'secrets (issue #298): copying a vault directory carries ciphertext',
       'only; the key travels ONLY through these receipted gestures.',
+      '',
+      'A ticket minted by `pair` also redeems over plain HTTP (POST',
+      '/centraid/_gateway/pair, issue #376) for a device that cannot dial',
+      'the iroh endpoint directly — it enrolls the caller and mints it a',
+      'per-device HTTP bearer token, confined to that device\'s vaults the',
+      'same way an iroh-proved caller is. The printed token above (serve /',
+      'print-token) stays the unrestricted ADMIN plane; never hand it to a',
+      'device you mean to confine.',
       '',
       'backup is the offsite engine (PROTOCOL.md/FORMAT.md), config from the',
       'same --config/--data-dir resolution `serve` uses (its JSON config',
@@ -186,6 +206,17 @@ async function commandServe(args: string[]): Promise<void> {
     logger,
   });
 
+  // Per-device HTTP bearer tokens (issue #376): the shared token remains
+  // the landlord/admin plane (unrestricted — every vault); a presented
+  // `cdt_...` token resolves through `DeviceTokenStore` to its device key
+  // and gets confined to that device's enrollments exactly like an
+  // iroh-proved request (`build-gateway.ts`'s `composedHandler`).
+  const authorizeBearer = (bearer: string): BearerAuthorization | undefined => {
+    if (timingSafeTokenEqual(bearer, token)) return { plane: 'admin' };
+    const device = devicePlane.pairing.deviceTokens.authorize(bearer);
+    return device ? { plane: 'device', deviceKey: device.deviceKey } : undefined;
+  };
+
   const handle = await serve({
     paths: layout,
     ...(config.host !== undefined ? { host: config.host } : {}),
@@ -194,6 +225,8 @@ async function commandServe(args: string[]): Promise<void> {
     token,
     logTag: 'centraid-gateway',
     deviceAccess: devicePlane.deviceAccess,
+    devicePairing: devicePlane.pairing,
+    authorizeBearer,
   });
   vaultsRef = handle.vaults;
 

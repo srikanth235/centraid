@@ -63,8 +63,10 @@ export type {
 
 export {
   startRuntimeHttpServer,
+  AUTHED_DEVICE_HEADER,
   type RuntimeHttpServerOptions,
   type RuntimeHttpServerHandle,
+  type BearerAuthorization,
 } from './http/http-server.js';
 
 // Public handler types — apps written in TypeScript import these to type

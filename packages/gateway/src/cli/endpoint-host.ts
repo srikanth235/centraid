@@ -21,6 +21,14 @@
  * bearer directly (loopback / `direct` transports): without it, any
  * bearer-holder could stamp an arbitrary device key and dodge the
  * per-vault enrollment check.
+ *
+ * Issue #376 extends the same ACL to the HTTP surface itself: this module
+ * also opens a `DeviceTokenStore` and exposes it (alongside the
+ * `EnrollmentStore` + `PairingTicketStore` it already owned) as `pairing`
+ * — `cli.ts` threads that into `serve()`'s `devicePairing` option (mounts
+ * `POST /centraid/_gateway/pair`) and builds the HTTP listener's
+ * `authorizeBearer` from it, so a per-device HTTP token is confined to its
+ * enrollments the exact same way an iroh-proved request is.
  */
 
 import crypto from 'node:crypto';
@@ -37,6 +45,7 @@ import type { VaultRegistry } from '../serve/vault-registry.js';
 import type { RuntimeLogger } from '@centraid/app-engine';
 import { EnrollmentStore } from '../serve/enrollment-store.js';
 import { PairingTicketStore } from '../serve/pairing-store.js';
+import { DeviceTokenStore } from '../serve/device-token-store.js';
 import { GATEWAY_SCHEMA_EPOCH, GATEWAY_VERSION } from '../version.js';
 import type { DaemonLayout } from './paths.js';
 
@@ -51,6 +60,16 @@ export interface DaemonDevicePlane {
     baseUrl: string;
     token: string;
   }): Promise<GatewayEndpointHandle | undefined>;
+  /**
+   * The device-pairing stores (issue #376) — threaded into `serve()`'s
+   * `devicePairing` option (mounts the HTTP ticket-redemption route) and
+   * used by `cli.ts` to build the HTTP listener's `authorizeBearer`.
+   */
+  pairing: {
+    enrollments: EnrollmentStore;
+    tickets: PairingTicketStore;
+    deviceTokens: DeviceTokenStore;
+  };
 }
 
 function readOrMintSecretKey(file: string): Uint8Array {
@@ -83,6 +102,7 @@ export function makeDaemonDevicePlane(input: {
   const { layout, logger } = input;
   const enrollments = EnrollmentStore.open(layout.devicesFile);
   const tickets = PairingTicketStore.open(layout.pairingTicketsFile);
+  const deviceTokens = DeviceTokenStore.open(layout.deviceTokensFile);
   // Per-boot proof shared only between the endpoint's forwarder and the
   // HTTP layer's device resolution — never persisted, never on the wire
   // outside this process.
@@ -161,5 +181,5 @@ export function makeDaemonDevicePlane(input: {
     return handle;
   };
 
-  return { deviceAccess, startEndpoint };
+  return { deviceAccess, startEndpoint, pairing: { enrollments, tickets, deviceTokens } };
 }

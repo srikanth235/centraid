@@ -35,6 +35,7 @@ import { promises as fs } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   AnalyticsStore,
+  AUTHED_DEVICE_HEADER,
   ConversationHistoryStore,
   ConversationStore,
   InsightsStore,
@@ -83,7 +84,11 @@ import { ConnectionBroker } from './connection-broker.js';
 import { OutboxExecutor } from './outbox-executor.js';
 import type { InstallScopeBlock, VaultPlane } from './vault-plane.js';
 import { runWithVaultContext, VAULT_HEADER, type DeviceAccess } from './vault-context.js';
+import type { EnrollmentStore } from './enrollment-store.js';
+import type { PairingTicketStore } from './pairing-store.js';
+import type { DeviceTokenStore } from './device-token-store.js';
 import { makeVaultRouteHandler } from '../routes/vault-routes.js';
+import { makePairRouteHandler } from '../routes/pair-routes.js';
 import { makeConnectionsRouteHandler } from '../routes/connections-routes.js';
 import { makeDemoRouteHandler } from '../routes/demo-routes.js';
 import { makeImportRouteHandler } from '../routes/import-routes.js';
@@ -164,6 +169,20 @@ export interface BuildGatewayOptions {
    * transport is implicitly enrolled in every vault.
    */
   deviceAccess?: DeviceAccess;
+  /**
+   * The daemon's device-pairing plane (issue #376): its `EnrollmentStore`
+   * + `PairingTicketStore` + `DeviceTokenStore`. When set, `buildGateway`
+   * mounts `POST /centraid/_gateway/pair` (`routes/pair-routes.ts`) — the
+   * HTTP twin of the iroh `gw-pair` ceremony, for devices that cannot dial
+   * the iroh endpoint directly. `serve()` also adds that route's path to
+   * the HTTP listener's `publicPaths` when this is set. Absent for the
+   * desktop embed (no dataDir-backed device plane) and most tests.
+   */
+  devicePairing?: {
+    enrollments: EnrollmentStore;
+    tickets: PairingTicketStore;
+    deviceTokens: DeviceTokenStore;
+  };
   /**
    * Offsite backup engine (PROTOCOL.md/FORMAT.md), off by default. When
    * `enabled`, `buildGateway` constructs a `BackupService` (component
@@ -1495,6 +1514,20 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Gateway identity + version handshake (issue #289): cheap static
     // JSON, mounted first — health polling hits it every few seconds.
     makeGatewayInfoRouteHandler({ instanceId: instanceLease.instanceId }),
+    // HTTP ticket redemption (issue #376): the direct-transport twin of
+    // the iroh `gw-pair` ceremony. Mounted only when the daemon wired its
+    // device-pairing stores; `serve.ts` marks its path bearer-free. A
+    // no-op passthrough (`return false`) on every other host.
+    ...(options.devicePairing
+      ? [
+          makePairRouteHandler({
+            vaults: vaultRegistry,
+            tickets: options.devicePairing.tickets,
+            enrollments: options.devicePairing.enrollments,
+            deviceTokens: options.devicePairing.deviceTokens,
+          }),
+        ]
+      : []),
     // Component-level health + structured error tail. `_gateway/info`
     // is the liveness probe; this is the "what's actually wrong" surface.
     makeHealthRouteHandler(health),
@@ -1627,12 +1660,27 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   const composedHandler: RouteHandler = async (req, res) => {
     // Resolve the request's vault (issue #289): the device's enrollment set
     // scopes what it may address; the header picks within it. No header →
-    // the device's sole enrollment; shared-bearer transports (no device
-    // key) are implicitly enrolled in every vault and default to the
-    // oldest. The server never persists a pointer.
+    // the device's sole enrollment; the ADMIN plane (the shared landlord
+    // token — loopback embed, or the daemon bearer with no per-device
+    // token, issue #376) carries no device key and is implicitly enrolled
+    // in every vault, defaulting to the oldest. The server never persists
+    // a pointer.
+    //
+    // Device-key resolution has two sources, tried in order: the iroh
+    // endpoint-host's per-boot proof headers (`deviceAccess.deviceKeyFor`,
+    // trusted because only that in-process forwarder can stamp them), else
+    // the HTTP listener's own `AUTHED_DEVICE_HEADER` — stamped by
+    // `startRuntimeHttpServer`'s pluggable `authorizeBearer` AFTER it
+    // verifies the presented bearer names a per-device HTTP token (issue
+    // #376). Both headers are deleted from the client-supplied request
+    // before either can be trusted — a bearer-holder can never forge a
+    // device identity for itself.
     const rawHeader = req.headers[VAULT_HEADER];
     const requested = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
-    const deviceKey = options.deviceAccess?.deviceKeyFor(req);
+    const authedHeader = req.headers[AUTHED_DEVICE_HEADER];
+    const authedDeviceKey =
+      typeof authedHeader === 'string' && authedHeader.length > 0 ? authedHeader : undefined;
+    const deviceKey = options.deviceAccess?.deviceKeyFor(req) ?? authedDeviceKey;
     let vaultId: string;
     if (deviceKey !== undefined) {
       const enrolled = options.deviceAccess?.vaultsFor(deviceKey) ?? [];

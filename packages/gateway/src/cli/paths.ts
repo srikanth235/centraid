@@ -24,6 +24,7 @@
  *                              lose the lines a post-mortem needs
  *     devices.json          — device enrollments: device key ↔ vault (#289)
  *     pairing-tickets.json  — one-time pairing tickets, secret hashes only (#289)
+ *     device-tokens.json    — per-device HTTP bearer tokens, secret hashes only (#376)
  *     endpoint-key.bin      — the gateway's persistent iroh secret key (#289)
  *     endpoint.json         — the live endpoint's id + dial ticket, for the pair CLI (#289)
  */
@@ -38,6 +39,8 @@ export interface DaemonLayout extends GatewayPaths {
   devicesFile: string;
   /** One-time pairing tickets (secret hashes + TTLs, issue #289). */
   pairingTicketsFile: string;
+  /** Per-device HTTP bearer tokens — secret hashes only (issue #376). */
+  deviceTokensFile: string;
   /** The gateway's persistent iroh secret key (32 bytes, mode 0o600). */
   endpointKeyFile: string;
   /**
@@ -65,6 +68,7 @@ export function daemonLayoutFor(dataDir: string): DaemonLayout {
     storageDir: path.join(abs, 'storage'),
     devicesFile: path.join(abs, 'devices.json'),
     pairingTicketsFile: path.join(abs, 'pairing-tickets.json'),
+    deviceTokensFile: path.join(abs, 'device-tokens.json'),
     endpointKeyFile: path.join(abs, 'endpoint-key.bin'),
     endpointStateFile: path.join(abs, 'endpoint.json'),
   };

@@ -18,6 +18,7 @@ import { makeDaemonDevicePlane, DEVICE_HEADER, DEVICE_PROOF_HEADER } from './end
 import { daemonLayoutFor } from './paths.ts';
 import { openVaultRegistry, type VaultRegistry } from '../serve/vault-registry.ts';
 import { EnrollmentStore } from '../serve/enrollment-store.ts';
+import { DeviceTokenStore } from '../serve/device-token-store.ts';
 
 const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
 
@@ -158,6 +159,45 @@ test('devices add / list / revoke, scoped by vault', async () => {
   await expect(
     capture(() => commandDevices(['revoke', '--data-dir', dataDir, 'ep-gone'], fail)),
   ).rejects.toThrow(/no enrollment/);
+});
+
+test('devices revoke cascades into that device key\'s HTTP token (issue #376)', async () => {
+  await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
+  await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Other'], fail));
+  const layout = daemonLayoutFor(dataDir);
+  const deviceTokens = DeviceTokenStore.open(layout.deviceTokensFile);
+  const { token } = deviceTokens.mint({ deviceKey: 'http:device-1', label: 'phone' });
+
+  // Two enrollments for the SAME device key, in different vaults.
+  await capture(() =>
+    commandDevices(
+      ['add', '--data-dir', dataDir, 'http:device-1', '--vault', 'Family', '--label', 'phone'],
+      fail,
+    ),
+  );
+  await capture(() =>
+    commandDevices(
+      ['add', '--data-dir', dataDir, 'http:device-1', '--vault', 'Other', '--label', 'phone'],
+      fail,
+    ),
+  );
+
+  const familyRow = JSON.parse(
+    (await capture(() => commandDevices(['list', '--data-dir', dataDir, '--vault', 'Family'], fail)))
+      .trim()
+      .split('\n')[0]!,
+  ) as { enrollmentId: string };
+
+  // Revoking ONE enrollment (by its row id) leaves the other — the token
+  // that key holds must survive.
+  await capture(() => commandDevices(['revoke', '--data-dir', dataDir, familyRow.enrollmentId], fail));
+  expect(DeviceTokenStore.open(layout.deviceTokensFile).authorize(token)).toEqual({
+    deviceKey: 'http:device-1',
+  });
+
+  // Revoking by KEY removes every remaining enrollment — the token dies too.
+  await capture(() => commandDevices(['revoke', '--data-dir', dataDir, 'http:device-1'], fail));
+  expect(DeviceTokenStore.open(layout.deviceTokensFile).authorize(token)).toBeUndefined();
 });
 
 test('devices admin rejects bad usage + unknown vault', async () => {
