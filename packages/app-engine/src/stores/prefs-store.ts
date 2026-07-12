@@ -75,6 +75,43 @@ export class PrefsStore {
   }
 }
 
+/* ---------- Per-subsystem model resolution ---------- */
+
+/**
+ * The chat/automation surfaces that can each carry their own model
+ * override. `'ask'` is the per-app copilot register, `'builder'` the
+ * per-app build register, `'assistant'` the shell-level vault assistant,
+ * `'automations'` the fire pipeline's `ctx.agent` calls.
+ */
+export type ModelSubsystem = 'assistant' | 'ask' | 'builder' | 'automations';
+
+/**
+ * Resolve the model id/alias for one LLM turn, in priority order:
+ *
+ *   1. `explicit` — a caller-supplied override (request body `model`, or
+ *      an automation manifest's `requires.model`);
+ *   2. `model.<runnerKind>.<subsystem>` — the per-subsystem prefs override;
+ *   3. `model.<runnerKind>.default` — the runner-wide prefs default;
+ *   4. `undefined` — nothing resolved; the caller sends no `model` field
+ *      and the backend falls back to its own built-in default.
+ *
+ * Empty-string pref values are treated as unset (a cleared override), same
+ * as `undefined`/`null` at the prefs-store level.
+ */
+export function resolveSubsystemModel(
+  prefs: Record<string, unknown>,
+  runnerKind: string,
+  subsystem: ModelSubsystem,
+  explicit?: string,
+): string | undefined {
+  if (explicit) return explicit;
+  const scoped = prefs[`model.${runnerKind}.${subsystem}`];
+  if (typeof scoped === 'string' && scoped.length > 0) return scoped;
+  const fallback = prefs[`model.${runnerKind}.default`];
+  if (typeof fallback === 'string' && fallback.length > 0) return fallback;
+  return undefined;
+}
+
 /* ---------- HTTP route handler ---------- */
 
 const ROUTE_PREFIX = '/_centraid-user';

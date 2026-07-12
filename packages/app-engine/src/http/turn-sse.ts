@@ -33,6 +33,44 @@ export interface TurnAttachmentRef {
   sizeBytes?: number;
 }
 
+const ATTACHMENT_HASH_RE = /^[a-f0-9]{64}$/;
+
+/**
+ * Parse+validate the `attachments` field of a `_turn` POST body (issue
+ * #190's wire shape) — shared by every `_turn`-shaped route (the per-app
+ * surface and the vault assistant's shell-level surface) so both validate
+ * identically. Anything malformed is silently dropped rather than
+ * rejecting the whole turn — a bad ref just means that one file doesn't ride.
+ */
+export function parseTurnAttachmentRefs(raw: unknown): TurnAttachmentRef[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((a): a is TurnAttachmentRef => {
+    if (!a || typeof a !== 'object') return false;
+    const r = a as Partial<TurnAttachmentRef>;
+    return (
+      typeof r.hash === 'string' && ATTACHMENT_HASH_RE.test(r.hash) && typeof r.mime === 'string'
+    );
+  });
+}
+
+/**
+ * Resolve validated attachment refs to on-disk blob paths for the runner's
+ * multimodal content blocks — the shape `ConversationTurnInput.attachments`
+ * expects. `appId` scopes the blob CAS lookup (an app id, or `_assistant`).
+ */
+export function resolveTurnAttachments(
+  conversationStore: ConversationHistoryStore | undefined,
+  appId: string,
+  refs: readonly TurnAttachmentRef[],
+): { path: string; mime: string; filename?: string }[] {
+  if (!conversationStore || refs.length === 0) return [];
+  return refs.map((a) => ({
+    path: conversationStore.blobPathFor(appId, a.hash),
+    mime: a.mime,
+    ...(a.filename !== undefined ? { filename: a.filename } : {}),
+  }));
+}
+
 /**
  * Serialize work on `(appId, conversationId)` so a second POST queues behind the
  * first. The route handler awaits the previous tail before scheduling its

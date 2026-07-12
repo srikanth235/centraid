@@ -19,7 +19,7 @@
 import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { isValidAppId } from '../registry/app-paths.js';
+import { isValidAppOrAssistantId } from '../registry/app-paths.js';
 
 /** A sha256 hex digest — the CAS key + blob filename. */
 const HASH_RE = /^[a-f0-9]{64}$/;
@@ -53,7 +53,12 @@ export class BlobStore {
   }
 
   private blobDir(appId: string): string {
-    if (!isValidAppId(appId)) throw new Error(`blob-store: invalid app id "${appId}"`);
+    // Real app ids AND the vault assistant's reserved `_assistant` scope
+    // (its attachments ride the same per-app blob CAS shape — issue #190
+    // extended to the shell-level assistant surface).
+    if (!isValidAppOrAssistantId(appId)) {
+      throw new Error(`blob-store: invalid app id "${appId}"`);
+    }
     return path.join(this.appsDir(), appId, 'blobs');
   }
 

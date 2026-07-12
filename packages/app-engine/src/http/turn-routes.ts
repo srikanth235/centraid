@@ -2,6 +2,8 @@
  * HTTP route handler for the per-app chat surface.
  *
  *   POST    /centraid/<appId>/_turn                        ← send turn (SSE stream)
+ *   GET     /centraid/<appId>/_turn/model                   ← read the ask-model picker
+ *   PUT     /centraid/<appId>/_turn/model                   ← set/clear the ask-model override
  *
  * Surface A is now POST-only. The `conversationId` in the POST body is the
  * `conversations` row id in the per-app runtime SQLite. The desktop persists
@@ -23,11 +25,16 @@
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { sendError, readBody, MAX_BODY_BYTES } from './http-utils.js';
+import { sendError, sendJson, readBody, MAX_BODY_BYTES } from './http-utils.js';
 import { buildExtraPrompt } from '../handlers/build-extra-prompt.js';
 import type { ConversationRunner } from '../conversation/runner.js';
 import type { ConversationHistoryStore } from '../conversation/history.js';
-import { driveTurnOverSse, type TurnAttachmentRef } from './turn-sse.js';
+import {
+  driveTurnOverSse,
+  parseTurnAttachmentRefs,
+  resolveTurnAttachments,
+  type TurnAttachmentRef,
+} from './turn-sse.js';
 import type { Registry } from '../registry/registry.js';
 import { appDataDir } from '../registry/app-paths.js';
 import type { RegistryEntry } from '../types.js';
@@ -44,6 +51,41 @@ export function isValidConversationId(id: string): boolean {
   if (id === 'index.json') return false;
   if (id.startsWith('.')) return false;
   return /^[A-Za-z0-9_\-:]+$/.test(id);
+}
+
+/**
+ * One catalog entry the ask-model picker can offer — a trimmed `RunnerModel`
+ * (just the id + a display label; the picker doesn't need tiers/default
+ * flags, those are folded into `defaultModel` below).
+ */
+export interface AskModelOption {
+  id: string;
+  label: string;
+}
+
+/**
+ * Wire shape for `GET /centraid/<appId>/_turn/model` — the kit Ask panel's
+ * inline model picker (subsystem `ask`). `current` is `null` when the
+ * subsystem has no override (falls through to `defaultModel`, itself the
+ * runner's own default when the owner hasn't set `model.<kind>.default`
+ * either). `catalog` is the active runner's model list.
+ */
+export interface AskModelInfo {
+  runnerKind: string;
+  defaultModel?: string;
+  current: string | null;
+  catalog: AskModelOption[];
+}
+
+/**
+ * Host-injected read/write pair backing the ask-model picker routes.
+ * `set(null)` clears the subsystem override (back to default). Optional —
+ * without it the picker routes 503, same shape as the missing-runner guard
+ * on `POST _turn`.
+ */
+export interface AskModelPrefs {
+  get: () => Promise<AskModelInfo>;
+  set: (model: string | null) => Promise<void>;
 }
 
 /**
@@ -88,16 +130,29 @@ export interface TurnRouteContext {
    * same template and end up with the same id.
    */
   conversationLocks: Map<string, Promise<void>>;
+  /**
+   * Optional ask-model picker backing (subsystem `ask`). Wired by the
+   * gateway from the same prefs-store + model-catalog machinery that
+   * resolves the effective ask model at turn time
+   * (`resolveSubsystemModel`), so the picker and the actual turn always
+   * agree. Backs `GET`/`PUT /centraid/<appId>/_turn/model`.
+   */
+  askModel?: AskModelPrefs;
 }
 
-export type ParsedTurnRoute = { kind: 'post'; appId: string };
+export type ParsedTurnRoute =
+  | { kind: 'post'; appId: string }
+  | { kind: 'get-model'; appId: string }
+  | { kind: 'put-model'; appId: string };
 
 /**
  * Match the chat sub-routes under `/centraid/<appId>/_turn`. The caller
  * (router.ts) has already established the URL is under `/centraid/<id>/_turn...`.
  *
- * Surface A is POST-only — anything else (including the old `windows...`
- * sub-paths) returns undefined and the caller 404s.
+ * Surface A (`_turn`) is POST-only. `_turn/model` (the kit Ask composer's
+ * model picker) is GET (read the picker state) / PUT (set or clear the
+ * `ask` subsystem override) — everything else (including the old
+ * `windows...` sub-paths) returns undefined and the caller 404s.
  */
 export function parseTurnSubRoute(
   appId: string,
@@ -106,8 +161,13 @@ export function parseTurnSubRoute(
 ): ParsedTurnRoute | undefined {
   // segments here are the path under /centraid/<appId>/ starting with "_turn"
   // segments[0] === "_turn"
-  if (segments.length === 1 && method.toUpperCase() === 'POST') {
+  const m = method.toUpperCase();
+  if (segments.length === 1 && m === 'POST') {
     return { kind: 'post', appId };
+  }
+  if (segments.length === 2 && segments[1] === 'model') {
+    if (m === 'GET') return { kind: 'get-model', appId };
+    if (m === 'PUT') return { kind: 'put-model', appId };
   }
   return undefined;
 }
@@ -124,8 +184,6 @@ interface PostBody {
   attachments?: TurnAttachmentRef[];
 }
 
-const HASH_RE = /^[a-f0-9]{64}$/;
-
 /**
  * Dispatch one chat-route request. Errors thrown out of here are caught by
  * `Runtime.handle`'s catch-all and turned into 500s.
@@ -141,7 +199,54 @@ export async function handleTurnRoute(
     sendError(res, 404, 'not_found', 'App not registered.');
     return;
   }
+  if (parsed.kind === 'get-model') {
+    await handleGetAskModel(res, ctx);
+    return;
+  }
+  if (parsed.kind === 'put-model') {
+    await handlePutAskModel(req, res, ctx);
+    return;
+  }
   await handlePostTurn(req, res, ctx, entry);
+}
+
+/** `GET /centraid/<appId>/_turn/model` — read the ask-model picker state. */
+async function handleGetAskModel(res: ServerResponse, ctx: TurnRouteContext): Promise<void> {
+  if (!ctx.askModel) {
+    sendError(res, 503, 'no_model_prefs', 'Model preferences are not configured for this runtime.');
+    return;
+  }
+  sendJson(res, 200, await ctx.askModel.get());
+}
+
+/**
+ * `PUT /centraid/<appId>/_turn/model` — set or clear (`model: null`) the
+ * `ask` subsystem's model override. Responds with the refreshed picker
+ * state so the client can render the new selection off one round-trip.
+ */
+async function handlePutAskModel(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: TurnRouteContext,
+): Promise<void> {
+  if (!ctx.askModel) {
+    sendError(res, 503, 'no_model_prefs', 'Model preferences are not configured for this runtime.');
+    return;
+  }
+  let body: { model?: string | null };
+  try {
+    const raw = await readBody(req);
+    body = raw.length === 0 ? {} : (JSON.parse(raw.toString('utf8')) as { model?: string | null });
+  } catch {
+    sendError(res, 400, 'bad_request', 'Invalid JSON body.');
+    return;
+  }
+  if (body.model !== null && body.model !== undefined && typeof body.model !== 'string') {
+    sendError(res, 400, 'bad_request', 'Body must be { model: string | null }.');
+    return;
+  }
+  await ctx.askModel.set(body.model ?? null);
+  sendJson(res, 200, await ctx.askModel.get());
 }
 
 async function handlePostTurn(
@@ -203,20 +308,8 @@ async function handlePostTurn(
   // live in the per-app blob CAS, keyed by sha256. We resolve each to its
   // on-disk path so the adapter can build an image/document content block, and
   // keep the refs to record `attachments` rows on the turn's `message_in` item.
-  const attachmentRefs: TurnAttachmentRef[] = Array.isArray(body.attachments)
-    ? body.attachments.filter(
-        (a): a is TurnAttachmentRef =>
-          !!a && typeof a.hash === 'string' && HASH_RE.test(a.hash) && typeof a.mime === 'string',
-      )
-    : [];
-  const turnAttachments =
-    ctx.conversationStore && attachmentRefs.length > 0
-      ? attachmentRefs.map((a) => ({
-          path: ctx.conversationStore!.blobPathFor(entry.id, a.hash),
-          mime: a.mime,
-          ...(a.filename !== undefined ? { filename: a.filename } : {}),
-        }))
-      : [];
+  const attachmentRefs: TurnAttachmentRef[] = parseTurnAttachmentRefs(body.attachments);
+  const turnAttachments = resolveTurnAttachments(ctx.conversationStore, entry.id, attachmentRefs);
 
   const appMeta = ctx.appMeta ? await ctx.appMeta(entry).catch(() => ({}) as never) : undefined;
   const manifest = await safeReadManifest(entry, ctx.resolveCodeDir);

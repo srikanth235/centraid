@@ -61,6 +61,15 @@ export interface RunAutomationOptions {
   vaultFor?: (appId: string) => VaultBridge | undefined;
   /** Which CLI to drive. Defaults to codex. */
   runner?: RunnerKind;
+  /**
+   * Fallback model id/alias for this fire's `ctx.agent` calls, applied only
+   * when the automation's manifest doesn't set `requires.model` (that always
+   * wins — see `runFire`'s `OpenDispatchArgs.model`). The caller resolves
+   * this from prefs (`model.<runnerKind>.automations` → `model.<runnerKind>.default`)
+   * before calling in; `undefined` here means "no prefs fallback either" —
+   * the backend sends no `model` field and uses its own built-in default.
+   */
+  model?: string;
   /** Hard timeout. Defaults to 5 minutes. */
   timeoutMs?: number;
   /** Override spawn for tests. */
@@ -118,6 +127,10 @@ export async function runAutomation(
       runner,
       runHostAgent,
       toolsAllow: args.toolsAllow,
+      // The manifest's `requires.model` (already folded into `args.model` by
+      // `runFire`) always wins; `opts.model` is the caller's prefs-resolved
+      // fallback for when the manifest doesn't specify one.
+      ...(args.model ?? opts.model ? { model: args.model ?? opts.model } : {}),
       onLog: args.onLog,
     });
 
