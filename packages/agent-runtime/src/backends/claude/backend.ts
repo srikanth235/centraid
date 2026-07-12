@@ -74,8 +74,9 @@ export interface ClaudeTurnInput {
    */
   toolContext?: ToolContext;
   /**
-   * SDK permission mode (`options.permissionMode`). Chat leaves this unset
-   * (SDK default). Automation `ctx.agent` passes `'bypassPermissions'` to
+   * SDK permission mode (`options.permissionMode`). Every gateway-driven
+   * turn is headless — chat/builder turns pass `'bypassPermissions'` for
+   * codex parity (runtime.ts), and automation `ctx.agent` passes it to
    * preserve the non-interactive behavior of the old `claude -p
    * --permission-mode bypassPermissions` spawn — a detached turn must never
    * block on an approval prompt.

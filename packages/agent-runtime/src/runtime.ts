@@ -55,6 +55,14 @@ export async function runTurn(input: TurnInput, config: TurnConfig): Promise<Tur
     {
       cwd: input.cwd,
       message: input.message,
+      // Gateway turns are headless — no approval UI is wired to the SDK's
+      // permission prompts, so the default mode deadlocks the first file
+      // write (the builder agent ends its turn asking the user to "approve
+      // the write"). Codex parity: runCodexTurn pins `approvalPolicy:
+      // 'never'` + `sandbox: 'workspace-write'`, and the pre-SDK spawn was
+      // `claude -p --permission-mode bypassPermissions`. Centraid's own
+      // consent layer (vault grants, outbox) is the gate that matters.
+      permissionMode: 'bypassPermissions',
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
       extraSystemPrompt: input.extraSystemPrompt,
       ...(input.model ? { model: input.model } : {}),
