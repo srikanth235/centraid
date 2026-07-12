@@ -1,11 +1,16 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
-import GatewayPairingForm from '../shell/routes/GatewayPairingForm.js';
-import type { GatewayConnectSuccess } from '../shell/routes/gatewayModals.js';
+import ConnectFlow from '../shell/routes/ConnectFlow.js';
+import type { ConnectFlowResult } from '../shell/routes/connectFlow-core.js';
 import styles from './OnboardingScreen.module.css';
 
 export interface OnboardingCompleteInput {
   displayName: string;
   avatarColor: string;
+  /** The gateway ConnectFlow actually connected — `updateProfileMetadata`
+   *  should land on THIS profile, not always `'local'` (issue #382 fixes
+   *  the prior always-writes-'local' bug: pairing a remote gateway during
+   *  onboarding used to leave that profile's name/color blank). */
+  gatewayId: string;
 }
 export interface OnboardingScreenProps {
   onComplete: (input: OnboardingCompleteInput) => Promise<void> | void;
@@ -36,12 +41,14 @@ function initials(name: string): string {
 }
 
 /**
- * First-run onboarding — a name + a color, ported to React (issue #325,
- * Phase 3). On submit it calls the vanilla-supplied `onComplete`; the host then
- * replaces the root with home. Styles are co-located in
- * `OnboardingScreen.module.css` (scoped CSS Modules — issue #325 Phase 4).
+ * First-run onboarding (issue #325, redesigned around (gateway, vault) pairs
+ * for issue #382) — two steps on one root: (1) identity — a name and a
+ * color, (2) "Where does your data live?" — the shared ConnectFlow wizard's
+ * method cards, embedded. Styles are co-located in
+ * `OnboardingScreen.module.css` (scoped CSS Modules).
  */
 export default function OnboardingScreen({ onComplete }: OnboardingScreenProps): JSX.Element {
+  const [step, setStep] = useState<'identity' | 'connect'>('identity');
   const [displayName, setDisplayName] = useState('');
   // Random initial color so two fresh installs on the same machine don't both
   // start on the same swatch.
@@ -50,53 +57,36 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps):
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // The gateway choice (issue #376) is a toggle within this same step, not a
-  // separate screen: "Keep everything on this Mac" stays the unconditional
-  // default (the CTA below still does exactly what it always did — a fresh
-  // install never sees the gateway panel unless it asks for it). Flipping
-  // this swaps the name/color form for the ticket-paste form; the name/color
-  // already chosen are still what gets saved on a successful connect.
-  const [gatewayOpen, setGatewayOpen] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (step !== 'identity') return;
     // One frame so the CSS entry animation isn't fighting the focus shift.
-    // Skipped once the gateway panel is open — GatewayPairingForm focuses its
-    // own ticket field.
-    if (gatewayOpen) return;
     const id = requestAnimationFrame(() => nameRef.current?.focus());
     return () => cancelAnimationFrame(id);
-  }, [gatewayOpen]);
+  }, [step]);
 
   const ready = displayName.trim().length > 0 && !submitting;
 
-  const submit = (): void => {
-    const name = displayName.trim();
-    if (!name || submitting) return;
+  const goToConnect = (): void => {
+    if (!displayName.trim() || submitting) return;
+    setError(null);
+    setStep('connect');
+  };
+
+  const finish = (result: ConnectFlowResult): void => {
     setSubmitting(true);
     setError(null);
     void (async () => {
       try {
-        await onComplete({ avatarColor, displayName: name });
+        await onComplete({
+          avatarColor,
+          displayName: displayName.trim(),
+          gatewayId: result.gatewayId,
+        });
         // Host replaces the root with home — nothing else to do.
       } catch (err) {
         setSubmitting(false);
-        setError(`Couldn't save your profile: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    })();
-  };
-
-  // The gateway panel's own form handles the "connecting…" lifecycle; this
-  // only fires once `connectGateway` has already succeeded, so it's just the
-  // same local-profile save `submit()` does. Falls back to the vault's name
-  // when the user hopped to "Connect to a gateway" before typing their own —
-  // connecting shouldn't be gated on filling in a name first.
-  const finishAfterGatewayConnect = (result: GatewayConnectSuccess): void => {
-    setError(null);
-    void (async () => {
-      try {
-        await onComplete({ avatarColor, displayName: displayName.trim() || result.label });
-      } catch (err) {
         setError(`Couldn't save your profile: ${err instanceof Error ? err.message : String(err)}`);
       }
     })();
@@ -110,44 +100,45 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps):
     >
       <div className={styles.stageBg} aria-hidden="true" />
       <div className={styles.stageGlow} aria-hidden="true" />
-      <div className={styles.card}>
+      <div className={styles.card} data-step={step}>
         <div className={styles.eyebrow}>
           <span className={styles.eyebrowDot} aria-hidden="true" />
           CENTRAID
         </div>
-        {!gatewayOpen ? (
+        {step === 'identity' ? (
           <>
             <h1 className={styles.title}>
               Make yourself <em>at home</em>.
             </h1>
             <p className={styles.sub}>
-              A name and a color. We use them for your local workspace — you can change either at
-              any time.
+              A name and a color. We use them for your profile — you can change either at any time.
             </p>
           </>
         ) : (
           <>
             <h1 className={styles.title}>
-              Connect to a <em>gateway</em>.
+              Where does your <em>data live</em>?
             </h1>
             <p className={styles.sub}>
-              Paste the pairing ticket from <code>centraid-gateway pair --vault &lt;name&gt;</code>{' '}
-              running elsewhere. Your name and color still save to this Mac.
+              Everything you do happens inside one space. Keep it on this Mac, or connect to a
+              gateway running elsewhere.
             </p>
           </>
         )}
-        <div className={styles.avatarWrap}>
-          <span className={styles.avatarRing} aria-hidden="true" />
-          <span className={styles.avatar} style={{ background: avatarColor }} aria-hidden="true">
-            <span className={styles.initials}>{initials(displayName)}</span>
-          </span>
-        </div>
-        {!gatewayOpen ? (
+        {step === 'identity' ? (
+          <div className={styles.avatarWrap}>
+            <span className={styles.avatarRing} aria-hidden="true" />
+            <span className={styles.avatar} style={{ background: avatarColor }} aria-hidden="true">
+              <span className={styles.initials}>{initials(displayName)}</span>
+            </span>
+          </div>
+        ) : null}
+        {step === 'identity' ? (
           <form
             className={styles.form}
             onSubmit={(e) => {
               e.preventDefault();
-              submit();
+              goToConnect();
             }}
           >
             <label className={styles.fieldLabel} htmlFor="cd-onb-name">
@@ -169,7 +160,7 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps):
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
-                  submit();
+                  goToConnect();
                 }
               }}
             />
@@ -200,9 +191,9 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps):
               className={styles.cta}
               disabled={!ready}
               data-state={submitting ? 'submitting' : ready ? 'ready' : 'idle'}
-              onClick={submit}
+              onClick={goToConnect}
             >
-              <span>Enter Centraid</span>
+              <span>Continue</span>
               <span className={styles.ctaArrow}>
                 <svg
                   width="14"
@@ -218,22 +209,13 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps):
                 </svg>
               </span>
             </button>
-            <button type="button" className={styles.altAction} onClick={() => setGatewayOpen(true)}>
-              Already have a gateway running? Connect instead →
-            </button>
-            {error ? (
-              <div className={styles.error} role="alert">
-                {error}
-              </div>
-            ) : null}
           </form>
         ) : (
-          <div className={styles.gatewayPanel} data-theme="dark">
-            <GatewayPairingForm
-              cancelLabel="Use this Mac instead"
-              connectLabel="Connect & finish"
-              onCancel={() => setGatewayOpen(false)}
-              onConnected={finishAfterGatewayConnect}
+          <div className={styles.connectPanel} data-theme="dark">
+            <ConnectFlow
+              context="onboarding"
+              onCancel={() => setStep('identity')}
+              onDone={finish}
             />
             {error ? (
               <div className={styles.error} role="alert">

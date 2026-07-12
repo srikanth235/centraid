@@ -14,11 +14,17 @@
  */
 
 /** Minimal shape of a gateway profile this module needs (subset of
- *  `CentraidGatewayProfile`). */
+ *  `CentraidGatewayProfile`). `transport`/`hasSsh` feed the grouped
+ *  switcher's transport badge + "can this gateway create a vault from here"
+ *  capability (issue #382) — both optional since older profiles predate
+ *  `transport` and `hasSsh` is a brand-new field the backend half of #382
+ *  adds to `listGateways`'s DTO. */
 export interface FlatSwitcherGateway {
   gatewayId: string;
   gatewayLabel: string;
   gatewayKind: 'local' | 'remote';
+  transport?: 'local' | 'iroh' | 'direct';
+  hasSsh?: boolean;
 }
 
 /** One vault of a gateway (subset of `CentraidGatewayVaultEntry`). */
@@ -108,103 +114,6 @@ export type FlatSwitcherRow =
       status: FlatSwitcherGatewayStatus;
     };
 
-/**
- * Merge every registered gateway's cached vaults into flat rows. A gateway
- * with no cached vaults (never resolved, or resolved to zero — #289 vaults
- * are never actually empty in practice, but treat it the same as "nothing
- * to show") folds to one `'gateway-status'` row instead of vanishing.
- */
-export function buildFlatRows(
-  gateways: readonly FlatSwitcherGateway[],
-  cache: GatewayVaultCache,
-  active: { gatewayId: string; vaultId: string },
-): FlatSwitcherRow[] {
-  const rows: FlatSwitcherRow[] = [];
-  for (const gw of gateways) {
-    const entry = cache[gw.gatewayId];
-    const vaults = entry?.vaults;
-    if (vaults && vaults.length > 0) {
-      for (const v of vaults) {
-        rows.push({
-          kind: 'pair',
-          gatewayId: gw.gatewayId,
-          gatewayLabel: gw.gatewayLabel,
-          gatewayKind: gw.gatewayKind,
-          vaultId: v.vaultId,
-          name: v.name,
-          color: v.color,
-          icon: v.icon,
-          blurb: v.blurb,
-          isActive: gw.gatewayId === active.gatewayId && v.vaultId === active.vaultId,
-          gatewayRefreshing: entry?.status === 'loading',
-        });
-      }
-    } else {
-      rows.push({
-        kind: 'gateway-status',
-        gatewayId: gw.gatewayId,
-        gatewayLabel: gw.gatewayLabel,
-        gatewayKind: gw.gatewayKind,
-        status: entry?.status === 'error' ? (entry.error ?? 'unreachable') : 'loading',
-      });
-    }
-  }
-  return rows;
-}
-
-function rowLabel(row: FlatSwitcherRow): string {
-  return row.kind === 'pair' ? row.name : row.gatewayLabel;
-}
-
-/**
- * Order rows for display (#289 §7): the current pair first, then the rest
- * of the ACTIVE gateway's vaults, then other gateways alphabetically by
- * label (each gateway's own vaults sorted alphabetically by name). There's
- * no persisted recency signal to sort by (see the caller's doc comment) —
- * this is the "no recency data" branch of the spec's sort rule.
- */
-export function sortFlatRows(
-  rows: readonly FlatSwitcherRow[],
-  active: { gatewayId: string; vaultId: string },
-): FlatSwitcherRow[] {
-  const withinGateway = (rs: readonly FlatSwitcherRow[]): FlatSwitcherRow[] =>
-    [...rs].sort((a, b) => {
-      const aActive = a.kind === 'pair' && a.isActive;
-      const bActive = b.kind === 'pair' && b.isActive;
-      if (aActive !== bActive) return aActive ? -1 : 1;
-      return rowLabel(a).localeCompare(rowLabel(b));
-    });
-
-  const activeGatewayRows = rows.filter((r) => r.gatewayId === active.gatewayId);
-  const otherRows = rows.filter((r) => r.gatewayId !== active.gatewayId);
-
-  const byGateway = new Map<string, FlatSwitcherRow[]>();
-  for (const r of otherRows) {
-    const list = byGateway.get(r.gatewayId);
-    if (list) list.push(r);
-    else byGateway.set(r.gatewayId, [r]);
-  }
-  const gatewayIdsSorted = [...byGateway.keys()].sort((a, b) => {
-    const la = byGateway.get(a)![0]!.gatewayLabel;
-    const lb = byGateway.get(b)![0]!.gatewayLabel;
-    return la.localeCompare(lb);
-  });
-
-  return [
-    ...withinGateway(activeGatewayRows),
-    ...gatewayIdsSorted.flatMap((id) => withinGateway(byGateway.get(id)!)),
-  ];
-}
-
-/** Build + sort in one call — the shape the popover actually renders. */
-export function buildSortedFlatRows(
-  gateways: readonly FlatSwitcherGateway[],
-  cache: GatewayVaultCache,
-  active: { gatewayId: string; vaultId: string },
-): FlatSwitcherRow[] {
-  return sortFlatRows(buildFlatRows(gateways, cache, active), active);
-}
-
 export type PairRow = Extract<FlatSwitcherRow, { kind: 'pair' }>;
 
 /**
@@ -245,4 +154,99 @@ export async function applySelection(
     await api.setActiveGateway({ id: plan.gatewayId });
   }
   await api.setActiveVault({ vaultId: plan.vaultId });
+}
+
+/*
+ * ── Grouped switcher model (issue #382) ────────────────────────────────
+ * The redesigned switcher popover is the single home for choosing AND
+ * managing (gateway, vault) pairs: gateway header rows (label, transport
+ * badge, status rail) with nested vault rows, rather than one flat list.
+ * Reuses the same `GatewayVaultCache` / `applyFetchOutcome` fetch-and-cache
+ * machinery above — only the row-shaping is different.
+ */
+
+/** User-facing transport chip on a gateway's header row. */
+export type SwitcherTransportBadge = 'This Mac' | 'iroh' | 'URL' | 'SSH';
+
+export interface GroupedSwitcherGateway {
+  gatewayId: string;
+  gatewayLabel: string;
+  gatewayKind: 'local' | 'remote';
+  transportBadge: SwitcherTransportBadge;
+  /** `'ready'` once at least one vault is known; otherwise the same status
+   *  union `FlatSwitcherRow`'s folded row uses. */
+  status: FlatSwitcherGatewayStatus | 'ready';
+  /** True while a background refresh is in flight (stale-while-revalidate)
+   *  — drives the header rail's subtle pulse. */
+  gatewayRefreshing: boolean;
+  /** Whether the header's "+ New space…" action should render — local and
+   *  SSH-capable gateways admin their own vault lifecycle; a plain
+   *  ticket/token remote gateway doesn't (design doc step C). */
+  canCreateVault: boolean;
+  vaults: PairRow[];
+}
+
+function transportBadgeFor(gw: FlatSwitcherGateway): SwitcherTransportBadge {
+  if (gw.gatewayKind === 'local') return 'This Mac';
+  if (gw.transport === 'direct') return 'URL';
+  if (gw.hasSsh && gw.transport === undefined) return 'SSH';
+  return 'iroh';
+}
+
+/**
+ * Merge every registered gateway's cached vaults into one header-per-gateway
+ * list, each carrying its nested (already-sorted) vault rows. Unlike
+ * {@link buildFlatRows}, a gateway ALWAYS gets a header row regardless of
+ * whether any vaults are known yet — the header itself carries the
+ * loading/error status so the switcher can render "This Mac ▸ (2 spaces)"
+ * next to "office ▸ Offline" in one consistent shape.
+ */
+export function buildGroupedRows(
+  gateways: readonly FlatSwitcherGateway[],
+  cache: GatewayVaultCache,
+  active: { gatewayId: string; vaultId: string },
+): GroupedSwitcherGateway[] {
+  const groups = gateways.map((gw): GroupedSwitcherGateway => {
+    const entry = cache[gw.gatewayId];
+    const vaults: PairRow[] = (entry?.vaults ?? [])
+      .map(
+        (v): PairRow => ({
+          blurb: v.blurb,
+          color: v.color,
+          gatewayId: gw.gatewayId,
+          gatewayKind: gw.gatewayKind,
+          gatewayLabel: gw.gatewayLabel,
+          gatewayRefreshing: entry?.status === 'loading',
+          icon: v.icon,
+          isActive: gw.gatewayId === active.gatewayId && v.vaultId === active.vaultId,
+          kind: 'pair',
+          name: v.name,
+          vaultId: v.vaultId,
+        }),
+      )
+      .sort((a, b) => {
+        if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+    return {
+      canCreateVault: gw.gatewayKind === 'local' || Boolean(gw.hasSsh),
+      gatewayId: gw.gatewayId,
+      gatewayKind: gw.gatewayKind,
+      gatewayLabel: gw.gatewayLabel,
+      gatewayRefreshing: entry?.status === 'loading',
+      status:
+        vaults.length > 0
+          ? 'ready'
+          : entry?.status === 'error'
+            ? (entry.error ?? 'unreachable')
+            : 'loading',
+      transportBadge: transportBadgeFor(gw),
+      vaults,
+    };
+  });
+  return [...groups].sort((a, b) => {
+    if (a.gatewayId === active.gatewayId) return -1;
+    if (b.gatewayId === active.gatewayId) return 1;
+    return a.gatewayLabel.localeCompare(b.gatewayLabel);
+  });
 }

@@ -82,9 +82,13 @@ void (async (): Promise<void> => {
   }
   shellRoot.render(
     <OnboardingScreen
-      onComplete={async ({ displayName, avatarColor }) => {
+      onComplete={async ({ displayName, avatarColor, gatewayId }) => {
+        // issue #382 fix: write the name/color to the profile of the
+        // gateway ConnectFlow actually connected — pairing a remote gateway
+        // during onboarding used to always land on 'local', leaving the
+        // gateway the user just connected to with no display name/color.
         await window.CentraidApi.updateProfileMetadata({
-          id: 'local',
+          id: gatewayId || 'local',
           displayName,
           avatarColor,
         }).catch(() => undefined);

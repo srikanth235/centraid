@@ -1,6 +1,7 @@
-/* Vault quick-switcher popover — ported pixel-for-pixel from the vanilla
-   `.cd-prof-pop*` family (profiles.ts / styles.css §5610+). Body-portalled
-   by vaultSwitcher.ts, same mechanics as contextMenu.module.css. */
+/* Grouped (gateway, vault) switcher popover (issue #382). Body-portalled by
+   vaultSwitcher.ts, same mechanics as contextMenu.module.css. Each gateway
+   is a `.group`: a slim leading `.rail` (colored by status, pulsing while
+   loading) beside a `.groupBody` (header row + indented `.vaults`). */
 
 @keyframes vsPop {
   from {
@@ -22,8 +23,10 @@
 .pop {
   position: fixed;
   z-index: 1101;
-  width: 256px;
+  width: 288px;
   max-width: calc(100vw - 16px);
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
   padding: 6px;
   border-radius: 13px;
   background: var(--bg-elev);
@@ -42,12 +45,134 @@
 .list {
   display: flex;
   flex-direction: column;
+  gap: 2px;
+}
+
+/* ── Gateway group ─────────────────────────────────────────────────────── */
+.group {
+  display: flex;
+  gap: 8px;
+  padding: 6px 4px;
+  border-radius: 10px;
+}
+.group + .group {
+  margin-top: 2px;
+  border-top: 0.5px solid var(--line);
+  padding-top: 8px;
+}
+.rail {
+  flex-shrink: 0;
+  width: 3px;
+  margin: 2px 0;
+  border-radius: 2px;
+  background: var(--ink-4);
+}
+.rail[data-status='ready'] {
+  background: var(--success);
+}
+.rail[data-status='error'] {
+  background: var(--danger);
+}
+.rail[data-pulse='true'] {
+  animation: vsRailPulse 1600ms ease-in-out infinite;
+}
+@keyframes vsRailPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.groupBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 5px 3px 2px;
+}
+.headText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.headLabel {
+  font: var(--t-title);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.headBadge {
+  flex-shrink: 0;
+  font: var(--t-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+.headActions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 100ms;
+}
+.group:hover .headActions,
+.group:focus-within .headActions {
+  opacity: 1;
+}
+.headBtn {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.headBtn:hover,
+.headBtn:focus-visible {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
+  outline: none;
+}
+
+.vaults {
+  display: flex;
+  flex-direction: column;
   gap: 1px;
 }
+.statusRow {
+  padding: 5px 8px;
+  font: var(--t-small);
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+/* ── Vault rows (nested under a group) ────────────────────────────────── */
 .row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   width: 100%;
   padding: 6px 8px;
   border: none;
@@ -65,37 +190,16 @@
 .row[data-active='true'] {
   background: color-mix(in srgb, var(--accent) 11%, transparent);
 }
-.rowDisabled {
-  cursor: default;
-  pointer-events: none;
-  opacity: 0.55;
-}
-.rowDisabled:hover,
-.rowDisabled:focus-visible {
-  background: transparent;
-}
 .avatar {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
-  border-radius: 8px;
+  border-radius: 7px;
   display: grid;
   place-items: center;
 }
 .avatar svg {
   display: block;
-}
-.avatarMuted {
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
-  color: var(--ink-4);
-}
-@keyframes vsSpin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-.spin svg {
-  animation: vsSpin 900ms linear infinite;
 }
 .text {
   flex: 1;
@@ -106,7 +210,7 @@
 .name {
   display: block;
   font: var(--t-title);
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--ink);
   letter-spacing: -0.01em;
@@ -118,7 +222,7 @@
   display: block;
   margin-top: 1px;
   font: var(--t-small);
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--ink-3);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -126,8 +230,8 @@
 }
 .check {
   flex-shrink: 0;
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   display: grid;
   place-items: center;
   color: var(--accent);
@@ -135,6 +239,7 @@
 .check svg {
   display: block;
 }
+
 .divider {
   height: 0.5px;
   margin: 6px;
@@ -165,4 +270,13 @@
 .action svg {
   color: var(--ink-2);
   flex: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rail[data-pulse='true'] {
+    animation: none;
+  }
+  .pop {
+    animation: none;
+  }
 }

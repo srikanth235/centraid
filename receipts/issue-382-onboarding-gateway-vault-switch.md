@@ -125,9 +125,13 @@ coordinates.
   `prefers-reduced-motion`-guarded.
 - `apps/desktop/src/renderer/react/shell/routes/ConnectFlow.tsx` (new,
   + `.module.css`): the wizard itself — method cards (tileFinish
-  gradients), per-method detail inputs, the handshake ladder on
-  "Continue", and a vault step (pick existing, or create new where
-  capable: this device or an SSH-capable gateway).
+  gradients), effects orchestrating the test/vault/commit steps, and the
+  outer step switch. The 'details' step's two per-method panels and the
+  'vault' step are split into
+  `apps/desktop/src/renderer/react/shell/routes/ConnectFlowDetailsStep.tsx`
+  and `ConnectFlowVaultStep.tsx` (new) purely to keep `ConnectFlow.tsx`
+  under the repo's 500-line file-size cap — pure presentation, no logic
+  beyond what `ConnectFlow.tsx`'s effects already orchestrate.
 - `apps/desktop/src/renderer/react/shell/routes/ConnectFlowModal.tsx`
   (new): the switcher's "Add gateway" dialog wrapper around
   `ConnectFlow` with `methods={['gateway','ssh']}` (no "This Mac" —
@@ -263,6 +267,8 @@ New:
 - `apps/desktop/src/renderer/react/shell/routes/HandshakeLadder.module.css`
 - `apps/desktop/src/renderer/react/shell/routes/ConnectFlow.tsx`
 - `apps/desktop/src/renderer/react/shell/routes/ConnectFlow.module.css`
+- `apps/desktop/src/renderer/react/shell/routes/ConnectFlowDetailsStep.tsx`
+- `apps/desktop/src/renderer/react/shell/routes/ConnectFlowVaultStep.tsx`
 - `apps/desktop/src/renderer/react/shell/routes/ConnectFlow.test.tsx`
 - `apps/desktop/src/renderer/react/shell/routes/ConnectFlowModal.tsx`
 - `apps/desktop/src/renderer/react/shell/routes/RenameGatewayModal.tsx`
@@ -474,3 +480,6 @@ notifications.
 ### Costs
 | claude-code-f4f73ee6-029-1783848429-1 | claude-code | f4f73ee6-029f-44a0-a236-a5a8a9810504 | #382 | claude-sonnet-5 | 44340 | 1025223 | 25813707 | 207503 | 1277066 | 14.8343 | 44340 | 1025223 | 25813707 | 207503 | feat(gateway,desktop): SSH admin channel + gateway connectivity test (#382)Adds  |
 | claude-code-f4f73ee6-029-1783848576-1 | claude-code | f4f73ee6-029f-44a0-a236-a5a8a9810504 | #382 | claude-sonnet-5 | 9093 | 27526 | 8970767 | 12272 | 48891 | 3.0058 | 53433 | 1052749 | 34784474 | 219775 | feat(gateway,desktop): SSH admin channel + gateway connectivity test (#382)Adds  |
+| claude-code-f4f73ee6-029-1783848633-1 | claude-code | f4f73ee6-029f-44a0-a236-a5a8a9810504 | #382 | claude-sonnet-5 | 8 | 8236 | 1081388 | 4426 | 12670 | 0.4217 | 53441 | 1060985 | 35865862 | 224201 | feat(desktop): unify onboarding + switcher around (gateway, vault) (#382)Onboard |
+| claude-code-f4f73ee6-029-1783848915-1 | claude-code | f4f73ee6-029f-44a0-a236-a5a8a9810504 | #382 | claude-sonnet-5 | 14761 | 92741 | 16017862 | 28252 | 135754 | 5.6212 | 68202 | 1153726 | 51883724 | 252453 | feat(desktop): unify onboarding + switcher around (gateway, vault) (#382)Onboard |
+| claude-code-f4f73ee6-029-1783848976-1 | claude-code | f4f73ee6-029f-44a0-a236-a5a8a9810504 | #382 | claude-sonnet-5 | 604 | 8808 | 2907126 | 2917 | 12329 | 0.9507 | 68806 | 1162534 | 54790850 | 255370 | feat(desktop): unify onboarding + switcher around (gateway, vault) (#382)Onboard |

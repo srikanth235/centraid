@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createSpace, deleteSpace, loadSpaceInitial, saveSpace } from './spaceModals.js';
-import type { ProfileRowDTO } from '../../screen-contracts.js';
+import { createSpace, deleteSpace, saveSpace } from './spaceModals.js';
 
 const updateVault = vi.fn((_input?: unknown) => Promise.resolve({}));
 // `vi.mock` is hoisted above the imports by vitest, so the gateway stub lands
@@ -28,16 +27,6 @@ beforeEach(() => {
     setActiveVault,
   };
 });
-
-const row: ProfileRowDTO = {
-  active: false,
-  color: '#111',
-  icon: 'Folder',
-  id: 'v1',
-  name: 'Work',
-  primordial: false,
-  subLine: 'b',
-};
 
 describe('spaceModals', () => {
   it('createSpace creates a vault, paints it, and switches to it', async () => {
@@ -67,10 +56,5 @@ describe('spaceModals', () => {
   it('deleteSpace removes the vault', async () => {
     await deleteSpace('v1');
     expect(deleteVault).toHaveBeenCalledWith({ vaultId: 'v1' });
-  });
-
-  it('loadSpaceInitial prefills from the raw vault (blurb/color/icon truth)', async () => {
-    const initial = await loadSpaceInitial(row);
-    expect(initial).toEqual({ name: 'Work', icon: 'Folder', color: '#222', blurb: 'real' });
   });
 });

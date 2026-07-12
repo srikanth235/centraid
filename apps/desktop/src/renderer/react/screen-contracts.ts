@@ -462,36 +462,13 @@ export interface SettingsProvidersBridgeProps {
   setAgentModel: (kind: AgentRunnerKind, modelId: string) => void;
 }
 
-// ── Settings: profiles (spaces + connections) ───────────────────────────────
-export interface ProfileRowDTO {
-  id: string;
-  name: string;
-  icon: string;
-  color: string;
-  subLine: string;
-  active: boolean;
-  primordial: boolean;
-}
-export interface ConnectionRowDTO {
-  id: string;
-  displayName: string;
-  sub: string;
-  active: boolean;
-  removable: boolean;
-}
-export interface SettingsProfilesBridgeProps {
-  profiles: ProfileRowDTO[];
-  connections: ConnectionRowDTO[];
-  onSwitch: (id: string) => void;
-  onEdit: (id: string) => void;
-  onDelete: (id: string) => void;
-  onAdd: () => void;
-  onConnect: (id: string) => void;
-  onRemoveConnection: (id: string) => void;
-  /** Opens the "Add gateway" modal (issue #376) — pairing-ticket redemption
-   *  or the advanced URL+token add. */
-  onAddConnection: () => void;
-}
+// ── Settings: Space (issue #382) ─────────────────────────────────────────────
+// The cross-vault "Spaces" list + gateway "Connections" group DTOs
+// (ProfileRowDTO/ConnectionRowDTO/SettingsProfilesBridgeProps) retired with
+// SettingsProfilesScreen.tsx — that surface moved to the switcher, which is
+// the (gateway, vault) pair manager now. The Settings "Space" page's own
+// shape is `ActiveSpaceData` (shell/routes/settingsAccountData.ts), scoped
+// to the active vault only.
 
 // ── Home ────────────────────────────────────────────────────────────────────
 export interface HomeMenuAnchor {

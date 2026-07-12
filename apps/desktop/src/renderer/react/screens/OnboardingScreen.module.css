@@ -92,6 +92,11 @@
      Chromium both do; degrades cleanly when it doesn't. */
   backdrop-filter: blur(8px) saturate(120%);
   animation: cardRise 540ms cubic-bezier(0.22, 0.61, 0.36, 1) 120ms both;
+  transition: width 220ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+/* Step 2 hosts ConnectFlow's three-across method grid — wider stage. */
+.card[data-step='connect'] {
+  width: min(560px, 94vw);
 }
 
 @keyframes cardRise {
@@ -383,31 +388,11 @@
   color: #ffb8b8;
 }
 
-/* Gateway choice (issue #376) — a low-key text action under the primary CTA,
-   not a second button competing for attention; "keep it local" stays the
-   loud default. */
-.altAction {
-  margin-top: 10px;
-  width: 100%;
-  padding: 4px 2px;
-  background: transparent;
-  border: none;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  text-align: center;
-  color: color-mix(in srgb, #b9bcd1 62%, transparent);
-  cursor: pointer;
-  transition: color 140ms;
-}
-.altAction:hover {
-  color: #f3f4fb;
-}
-
-/* Hosts the shared GatewayPairingForm (kit-token styled — Settings uses it
-   unwrapped). `data-theme="dark"` on this element re-anchors --ink/--line/
-   --accent/etc to the dark ramp regardless of the OS/user theme pref, since
-   this whole screen is a forced-dark surface (see the file header comment). */
-.gatewayPanel {
+/* Hosts the shared ConnectFlow wizard (kit-token styled — the switcher's
+   Add-gateway modal uses it unwrapped too). `data-theme="dark"` on this
+   element re-anchors --ink/--line/--accent/etc to the dark ramp regardless
+   of the OS/user theme pref, since this whole screen is a forced-dark
+   surface (see the file header comment). */
+.connectPanel {
   margin-top: 4px;
 }
