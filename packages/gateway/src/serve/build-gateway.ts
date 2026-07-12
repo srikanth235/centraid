@@ -76,6 +76,7 @@ import { createBrokerHealthProbe } from './broker-health.js';
 import { createSchedulerHealthProbe } from './scheduler-health.js';
 import { createEnrichmentHealthProbe } from './enrichment-health.js';
 import { createBlobSweepHealthProbe } from './blob-sweep-health.js';
+import { createStorageQuotaHealthProbe } from './storage-quota-health.js';
 import { GatewayInstanceLease } from './gateway-instance-lease.js';
 import { ConnectionBroker } from './connection-broker.js';
 import { OutboxExecutor } from './outbox-executor.js';
@@ -117,6 +118,11 @@ import { sendJson } from '../routes/route-helpers.js';
 import type { GatewayPaths } from '../paths.js';
 import { BackupService } from '../backup/backup-service.js';
 import type { BackupConfig } from '../backup/backup-config.js';
+import { openStorageConnectionStore } from '../backup/storage-connections.js';
+import { StorageUsagePoller } from '../backup/storage-usage.js';
+import { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
+import { makeStorageCredentialsResolver } from '../backup/storage-credentials.js';
+import { makeStorageRouteHandler } from '../routes/storage-routes.js';
 
 export type { DeviceAccess } from './vault-context.js';
 
@@ -312,6 +318,38 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // desktop's iroh tunnel) through `BuiltGateway.health`.
   const health = new HealthRegistry();
 
+  // Second-gateway detection (issue #351 tier 1): "one gateway per user" is
+  // an owner-stated topology, never enforced — nothing stops a copied vault
+  // dir or a daemon + desktop embed both pointed at the same root from
+  // corrupting data via cross-copy WAL semantics. A lease file at the vault
+  // registry root records who's serving; a FRESH foreign lease is never
+  // clobber-written (split-brain must be loud, never auto-resolved — mirrors
+  // the backup protocol's generation fencing), a STALE one (crashed owner)
+  // is reclaimed cleanly. Constructed BEFORE the vault registry (moved up
+  // from its original spot, issue #367 §C6) so `isConflicted()` is a valid
+  // closure target for `VaultRegistryOptions.leaseConflicted` below — the
+  // blob sweep's orphan-delete gate reads this on every tick.
+  const instanceLease = new GatewayInstanceLease({
+    rootDir: paths.vaultDir,
+    health,
+    logger: health.loggerFor('instance', logger),
+  });
+
+  // Gateway-level storage state (issue #367 §C1/§C10): the storage-
+  // connections entity (sealed byo-s3 creds / provider api keys, shared by
+  // the backup engine and every vault's CAS tier) and the recovery-kit
+  // confirmation flag, generalized off the backup-only field it started as.
+  // Both live under `paths.storageDir` (default a `storage` sibling of
+  // `vaultDir`, same convention as `backupDir`) — gateway plumbing, never
+  // inside a vault directory a raw copy could carry off-box.
+  const storageDir = paths.storageDir ?? path.join(path.dirname(paths.vaultDir), 'storage');
+  const storageConnections = await openStorageConnectionStore(storageDir);
+  const recoveryKit = new RecoveryKitStateStore(storageDir);
+  // Provider usage cache (issue #367 §D1) — cache-with-TTL + stale-while-
+  // refresh in front of a provider connection's optional `usage` capability
+  // (PROTOCOL.md § Usage). Never polls on its own timer; see storage-usage.ts.
+  const storageUsage = new StorageUsagePoller({ storageConnections });
+
   // Vault registry (duaility §12, #289): the gateway is a landlord hosting
   // N sovereign vaults — one plane per vault under the root, every request
   // addressed to exactly one of them. Required: post-#280 the whole app
@@ -323,6 +361,14 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // `-cache` sibling of `vaultDir` when the host doesn't pin one).
     ...(paths.cacheDir ? { cacheRootDir: paths.cacheDir } : {}),
     logger: health.loggerFor('vaults', logger),
+    // Lease-gated reconciliation (issue #367 §C6): every mounted plane's
+    // blob sweep reads this fresh on each tick.
+    leaseConflicted: () => instanceLease.isConflicted(),
+    // Storage-connection-backed credential resolution (issue #367 §C3):
+    // supersedes the legacy `CENTRAID_S3_*` env-var lane for any vault whose
+    // `blob_store.connectionId` is set; vaults without one keep working off
+    // the env-var default (`vault-plane.ts`'s `defaultEnvS3Credentials`).
+    s3Credentials: makeStorageCredentialsResolver(storageConnections),
   });
 
   // Vault mounts are pull-checked at snapshot time — nothing pushes when a
@@ -387,23 +433,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     }),
   );
 
-  // Second-gateway detection (issue #351 tier 1): "one gateway per user" is
-  // an owner-stated topology, never enforced — nothing stops a copied vault
-  // dir or a daemon + desktop embed both pointed at the same root from
-  // corrupting data via cross-copy WAL semantics. A lease file at the vault
-  // registry root (`gateway.lease`, sibling of the per-vault subdirectories
-  // — `VaultRegistry.scan()` already skips non-directory entries there, so
-  // this is invisible to vault mounting) records who's serving; a FRESH
-  // foreign lease is never clobber-written (split-brain must be loud, never
-  // auto-resolved — mirrors the backup protocol's generation fencing), a
-  // STALE one (crashed owner) is reclaimed cleanly. `start()`/`stop()` below
-  // drive its renew timer; `instanceId` also rides `_gateway/info` so a
-  // client can detect a gateway swap-under-it.
-  const instanceLease = new GatewayInstanceLease({
-    rootDir: paths.vaultDir,
-    health,
-    logger: health.loggerFor('instance', logger),
-  });
+  // `instanceLease` is constructed above (before the vault registry) —
+  // `start()`/`stop()` below drive its renew timer; `instanceId` also rides
+  // `_gateway/info` so a client can detect a gateway swap-under-it.
 
   // Connection health lives in each vault's DB (`needs-auth` flips there,
   // not in broker memory) — surface "N connections need re-auth" so a dead
@@ -529,6 +561,23 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     }),
   );
 
+  // Storage quota watermark (issue #367 §D2) — degraded/error off a
+  // provider-reported quota only (see storage-quota-health.ts); reads the
+  // SAME cache `GET storage/usage` serves, so this never issues its own
+  // network call beyond what that poller's TTL already allows.
+  health.registerProbe(
+    'storage-quota',
+    createStorageQuotaHealthProbe({
+      connections: async () =>
+        (await storageConnections.list()).map((c) => ({
+          connectionId: c.id,
+          name: c.name,
+          kind: c.kind,
+        })),
+      usageFor: (connectionId) => storageUsage.usageFor(connectionId),
+    }),
+  );
+
   // Numeric signals (issue #351 tier 3): outbox backlog, summed across
   // mounted vaults — cheap COUNT(*) at snapshot time, same style as the
   // `connections` probe above. `rssBytes`/`uptimeMs` need no wiring (see
@@ -570,6 +619,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         vaults: vaultRegistry,
         health,
         logger: health.loggerFor('backups', logger),
+        // Recovery-kit confirmation is gateway-level now (issue #367 §C10) —
+        // the Backup card's `recoveryKit` field keeps reading through
+        // `BackupService.recoveryKitStatus()` unchanged, it just resolves
+        // through the same store the storage-connection routes gate on.
+        recoveryKit,
       })
     : undefined;
 
@@ -1437,7 +1491,15 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // `options.backup?.enabled` is false — the handler answers
     // `{configured: false}` rather than 404 in that case. Same bearer
     // gate, same owner-facing-diagnostics family as health/diagnostics.
-    makeBackupRouteHandler({ vaults: vaultRegistry, ...(backupService ? { backupService } : {}) }),
+    makeBackupRouteHandler({
+      vaults: vaultRegistry,
+      recoveryKitStore: recoveryKit,
+      ...(backupService ? { backupService } : {}),
+    }),
+    // Gateway-level storage connections (issue #367 §C1): CRUD + real
+    // connectivity probe + per-vault replication status. Same bearer gate,
+    // same owner-facing-diagnostics family as backup/health.
+    makeStorageRouteHandler({ storageConnections, recoveryKit, vaults: vaultRegistry, storageUsage }),
     // Due task/event reminders, computed live — the desktop main process
     // polls this to fire OS notifications (issue: Tasks/Agenda comparison
     // flagged "no time-based alerts, anywhere").
@@ -1478,6 +1540,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     makeVaultRouteHandler(vaultRegistry, {
       ...(options.deviceAccess ? { deviceAccess: options.deviceAccess } : {}),
       onOutboxDecided: drainOutbox,
+      // Storage-connection attach flow (issue #367 §C1/§C4/§C10): resolves
+      // `blob_store.connectionId` and gates on the recovery-kit nudge.
+      storageConnections,
+      recoveryKit,
       // fix (this session): agent-grant approval can be the FIRST enrollment
       // touch for an automation's agent — resolve its real manifest name
       // the same way reconcileScheduler does, so `approveAgentGrant` never

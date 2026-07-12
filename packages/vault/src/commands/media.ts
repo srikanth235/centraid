@@ -15,6 +15,7 @@ import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 import { MAX_INLINE_DATA_URI_CHARS, mintContentFromDataUri } from '../blob/mint.js';
 import { setStarred, starredExistsSql } from './flags.js';
+import { assertInlineDataUriWithinBudget } from './inline-body-guard.js';
 
 /** Soft-deleted bytes linger this long before the lifecycle sweep purges. */
 const PURGE_AFTER_DAYS = 30;
@@ -225,6 +226,7 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
   // the type and read EXIF server-side, so capture time and dimensions no
   // longer depend on the caller supplying them. Explicit input still wins.
   const spoolMeta = input.staged_sha ? (ctx.blobs.staged(input.staged_sha)?.meta ?? {}) : {};
+  if (input.data_uri !== undefined) assertInlineDataUriWithinBudget(input.data_uri);
   const minted = input.staged_sha
     ? ctx.blobs.claimStaged(input.staged_sha, { title: input.title })
     : mintContentFromDataUri(ctx, input.data_uri!, { title: input.title });

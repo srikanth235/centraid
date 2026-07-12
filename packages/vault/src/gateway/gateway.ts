@@ -11,6 +11,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { nowIso, uuidv7 } from '../ids.js';
 import type { VaultDb } from '../db.js';
 import { resolveServableBlob, liveBlobShas, type BlobResolveOutcome } from '../blob/read.js';
+import { archivedSegmentShas } from '../journal-archive.js';
 import {
   AGENT_CONTENT_VARIANTS,
   resolveAgentContent,
@@ -1227,11 +1228,21 @@ export class Gateway {
    * nothing claims, and reports shas missing from BOTH tiers (integrity
    * errors are surfaced, never papered over). Owner-only, receipted.
    */
-  async sweepBlobs(cred: Credential): Promise<ReconcileResult & { receiptId: string }> {
+  async sweepBlobs(
+    cred: Credential,
+    options?: { skipOrphanDelete?: boolean },
+  ): Promise<ReconcileResult & { receiptId: string }> {
     const owner = this.identify(cred);
     if (owner.kind !== 'owner-device')
       throw new GatewayError('consent', 'only the owner sweeps blob custody');
-    const result = await this.db.blobs.reconcile(liveBlobShas(this.db.vault));
+    // Archived journal segments are claimed by the manifest chain, not by
+    // any core_content_item row — without this union the reconcile sweep
+    // would delete their remote replicas as orphans (issue #367 §E2).
+    const live = liveBlobShas(this.db.vault);
+    for (const sha of archivedSegmentShas(this.db.journal)) live.add(sha);
+    const result = await this.db.blobs.reconcile(live, {
+      ...(options?.skipOrphanDelete ? { skipOrphanDelete: true } : {}),
+    });
     // Refresh the app-readable custody-state mirror (issue #352 phase 3/4)
     // AFTER reconcile — the snapshot reflects the post-sweep steady state,
     // not a stale pre-sweep gap.
@@ -1246,6 +1257,7 @@ export class Gateway {
       decision: 'allow',
       detail: {
         orphansDeleted: result.orphansDeleted.length,
+        orphansSkipped: result.orphansSkipped.length,
         replicated: result.replicated.length,
         missing: result.missing,
       },

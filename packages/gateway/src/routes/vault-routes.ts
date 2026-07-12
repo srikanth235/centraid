@@ -67,6 +67,9 @@ import {
   type EnrichTier,
 } from '@centraid/vault';
 import { readJson, sendJson } from './route-helpers.js';
+import type { StorageConnectionStore } from '../backup/storage-connections.js';
+import type { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
+import { ensureProviderCasTarget } from '../backup/storage-credentials.js';
 
 const PREFIX = '/centraid/_vault';
 
@@ -91,6 +94,23 @@ export interface VaultRouteOptions {
    * instead of `ensureAgentEnrolled`'s bare `humanizeSlug(appId)` fallback.
    */
   resolveAutomationName?: (appId: string) => Promise<string | undefined> | string | undefined;
+  /**
+   * The gateway-level storage-connections entity (issue #367 §C1). When
+   * set, `PUT /centraid/_vault/blob-store` resolves a `connectionId` in the
+   * body against it — denormalizing endpoint/region/bucket/prefix and
+   * `connectionKind` into the vault's `blob_store` settings, and forcing
+   * `encrypt: true` for a `provider`-kind connection (§C4). Absent → the
+   * legacy behavior (the caller supplies endpoint/bucket/region directly,
+   * harness-ambient credentials).
+   */
+  storageConnections?: StorageConnectionStore;
+  /**
+   * Recovery-kit confirmation gate (issue #367 §C10): attaching a
+   * `connectionId` to `blob_store` (enabling a CAS remote tier) is refused
+   * with `409 recovery_kit_not_confirmed` unless either the operator has
+   * confirmed the recovery kit, or the request carries `{force: true}`.
+   */
+  recoveryKit?: RecoveryKitStateStore;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -151,10 +171,13 @@ export function makeVaultRouteHandler(
         return handleVaultsRoute(vaults, visibleVaults, req, res, method, segments);
       }
 
-      // Byte-custody settings (issue #296): where the vault's blobs
-      // replicate (`blob_store`: fs | s3 endpoint/bucket/region/prefix/
-      // encrypt — credentials are harness-ambient, never stored) and the
-      // GPS extraction policy (`media.location`: keep | strip).
+      // Byte-custody settings (issue #296, extended #367 §C1/§C4/§C10):
+      // where the vault's blobs replicate (`blob_store`: fs | s3
+      // endpoint/bucket/region/prefix/encrypt/connectionId — static creds
+      // are never stored here; `connectionId` resolves through the
+      // gateway-level `StorageConnectionStore`, the legacy harness-ambient
+      // env-var lane still works without one) and the GPS extraction policy
+      // (`media.location`: keep | strip).
       if (segments[0] === 'blob-store' && segments.length === 1) {
         if (method === 'GET') {
           return sendJson(res, 200, {
@@ -192,10 +215,67 @@ export function makeVaultRouteHandler(
               message: 'media_location must be "keep" or "strip"',
             });
           }
+
+          // Attaching a storage connection (issue #367 §C1) — resolve
+          // endpoint/region/bucket/prefix/connectionKind off the connection
+          // row so the caller only ever names a `connectionId`, and gate on
+          // the recovery-kit nudge before this vault starts replicating
+          // off-box.
+          let blobStorePatch = blobStore as Record<string, unknown> | null | undefined;
+          let recoveryKitConfirmed: boolean | undefined;
+          const connectionId =
+            blobStorePatch && typeof blobStorePatch['connectionId'] === 'string'
+              ? (blobStorePatch['connectionId'] as string)
+              : undefined;
+          if (connectionId && options.storageConnections) {
+            const connection = await options.storageConnections.get(connectionId);
+            if (!connection) {
+              return sendJson(res, 400, {
+                error: 'bad_request',
+                message: `unknown storage connection "${connectionId}"`,
+              });
+            }
+            const status = await options.recoveryKit?.status();
+            recoveryKitConfirmed = status?.confirmedAt !== null && status?.confirmedAt !== undefined;
+            const force = body.force === true;
+            if (options.recoveryKit && !recoveryKitConfirmed && !force) {
+              return sendJson(res, 409, {
+                error: 'recovery_kit_not_confirmed',
+                recoveryKitConfirmed: false,
+                message:
+                  'confirm you have exported and safely stored the recovery kit before enabling ' +
+                  'a remote storage tier (or resend with {force: true} to bypass)',
+              });
+            }
+            const forceEncrypt = connection.kind === 'provider';
+            if (forceEncrypt && blobStorePatch?.['encrypt'] === false) {
+              return sendJson(res, 400, {
+                error: 'bad_request',
+                message: 'a provider-kind storage connection cannot disable remote encryption',
+              });
+            }
+            // A provider connection's S3 coordinates aren't known until a
+            // grant has been requested (PROTOCOL.md § Credential grant) —
+            // `endpoint`/`bucket` never rotate per-grant for one target, so
+            // this only round-trips once, at attach time.
+            const target =
+              connection.kind === 'provider' && !connection.endpoint && options.storageConnections
+                ? await ensureProviderCasTarget(options.storageConnections, connectionId)
+                : connection;
+            blobStorePatch = {
+              ...blobStorePatch,
+              connectionId,
+              connectionKind: connection.kind,
+              encrypt: forceEncrypt ? true : (blobStorePatch?.['encrypt'] ?? true),
+              ...(target.endpoint ? { endpoint: target.endpoint } : {}),
+              ...(target.region ? { region: target.region } : {}),
+              ...(target.bucket ? { bucket: target.bucket } : {}),
+              ...(target.prefix ? { prefix: target.prefix } : {}),
+            };
+          }
+
           updateBlobStoreSettings(plane.db, {
-            ...(blobStore !== undefined
-              ? { blob_store: blobStore as Record<string, unknown> | null }
-              : {}),
+            ...(blobStorePatch !== undefined ? { blob_store: blobStorePatch } : {}),
             ...(mediaLocation !== undefined
               ? { media_location: mediaLocation as 'keep' | 'strip' | null }
               : {}),
@@ -203,6 +283,7 @@ export function makeVaultRouteHandler(
           return sendJson(res, 200, {
             blob_store: readBlobStoreSettings(plane.db.vault),
             media_location: mediaLocationPolicy(plane.db),
+            ...(recoveryKitConfirmed !== undefined ? { recoveryKitConfirmed } : {}),
           });
         }
       }

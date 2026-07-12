@@ -28,15 +28,24 @@ export {
   type BlobStat,
 } from './blob/store.js';
 export { FsBlobStore, MemoryBlobStore, type LocalBlobStore } from './blob/local.js';
-export { S3BlobStore, type S3BlobStoreOptions, type S3Credentials } from './blob/s3.js';
+export {
+  S3BlobStore,
+  MULTIPART_THRESHOLD_BYTES,
+  type S3BlobStoreOptions,
+  type S3Credentials,
+} from './blob/s3.js';
 export {
   BlobCustody,
   sealBlob,
   unsealBlob,
+  sealBlobStream,
   custodyStateCounts,
+  custodyStateByteCounts,
   type ReconcileResult,
+  type ReconcileOptions,
   type CustodyState,
   type BlobSweepStatus,
+  type RemoteTier,
 } from './blob/custody.js';
 export {
   stageBlobBytes,
@@ -288,3 +297,43 @@ export {
   assertExtSchemaOwnership,
   type ExtApplyOutcome,
 } from './gateway/ext.js';
+
+// --- issue #367 §E: vault.db growth-runway (dbstat sizing, journal
+// archival, FTS index budget, inline-body threshold) — appended as one
+// block, kept distinct from the exports above. ---
+export {
+  dbSizeBreakdown,
+  type DbSizeBreakdown,
+  type TableStatsMethod,
+  type TableSizeEntry,
+} from './schema/table-stats.js';
+export {
+  DEFAULT_JOURNAL_ARCHIVE_WINDOW_DAYS,
+  archivedSegmentShas,
+  runJournalArchival,
+  readArchivedSegment,
+  verifyArchivedSegment,
+  listArchiveManifests,
+  findArchiveManifest,
+  type JournalArchiveStream,
+  type JournalArchiveManifestRow,
+  type JournalArchivalOptions,
+  type JournalArchivalResult,
+  type ArchivedSegmentRows,
+  type ArchiveVerification,
+} from './journal-archive.js';
+export {
+  FTS_BODY_INDEX_BUDGET_CHARS,
+  truncateForIndex,
+  rebuildFtsIndex,
+} from './schema/fts.js';
+export { rebuildDocumentFtsIndex } from './schema/blob.js';
+export {
+  INLINE_BODY_BUDGET_BYTES,
+  InlineBodyTooLargeError,
+  assertTextBodyWithinBudget,
+  assertInlineDataUriWithinBudget,
+  scanInlineBodyViolations,
+  type InlineBodyViolationEntry,
+  type InlineBodyViolationScan,
+} from './commands/inline-body-guard.js';

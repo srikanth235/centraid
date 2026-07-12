@@ -10,6 +10,7 @@ import { useShellActions } from '../actions.js';
 import PageScroll from '../PageScroll.js';
 import { PageLoading } from '../status.js';
 import { loadDiagnosticsData } from './settingsDiagnosticsData.js';
+import { loadStorageCardStatus } from './gatewayStorageData.js';
 import { useGatewayHealth } from '../useGatewayHealth.js';
 import { useGatewayRuntime } from '../useGatewayRuntime.js';
 
@@ -23,7 +24,7 @@ import { useGatewayRuntime } from '../useGatewayRuntime.js';
 // the next pushed snapshot). A 1s local ticker drives the running counters
 // (gateway uptime, "for 2h 14m") between polls.
 export default function GatewayRoute(): JSX.Element {
-  const { showToast } = useShellActions();
+  const { showToast, navigate } = useShellActions();
   const snapshot = useGatewayRuntime();
   const { health } = useGatewayHealth();
   const [saving, setSaving] = useState(false);
@@ -103,6 +104,8 @@ export default function GatewayRoute(): JSX.Element {
         loadBackupStatus={getGatewayBackupStatus}
         onRunBackupNow={runGatewayBackupNow}
         onConfirmRecoveryKit={confirmGatewayRecoveryKit}
+        loadStorageStatus={loadStorageCardStatus}
+        onOpenStorageSettings={() => navigate({ kind: 'settings', page: 'storage' })}
         onRestartGateway={() => window.CentraidApi.restartGateway()}
         onExportDiagnostics={() => window.CentraidApi.exportGatewayDiagnostics()}
       />

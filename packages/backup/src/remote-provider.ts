@@ -1,37 +1,41 @@
 /*
- * `RemoteBackupProvider` — the client side of `centraid-backup-provider/1`
+ * `RemoteBackupProvider` — the client side of `centraid-storage-provider/1`
  * (PROTOCOL.md § Routes) over `fetch`. Every route, verbatim:
  *
- *   GET    /v1/backup/provider                     capabilities
- *   POST   /v1/backup/vaults                        create target
- *   GET    /v1/backup/vaults                        list + usage + accountStatus
- *   POST   /v1/backup/vaults/:id/credentials         issue grant
- *   POST   /v1/backup/vaults/:id/snapshots           register
- *   GET    /v1/backup/vaults/:id/snapshots           list
- *   GET    /v1/backup/vaults/:id/snapshots/:seq      one row
- *   DELETE /v1/backup/vaults/:id                     soft delete
- *   POST   /v1/backup/vaults/:id/undelete            cancel soft delete
- *   POST   /v1/backup/vaults/:id/purge               interactive-tier purge
+ *   GET    /v1/backup/provider                       discovery/capabilities
+ *   POST   /v1/backup/vaults                          create target
+ *   GET    /v1/backup/vaults                          list + usage + accountStatus
+ *   POST   /v1/backup/vaults/:id/credentials          issue grant (any store class)
+ *   GET    /v1/backup/vaults/:id/usage                per-store-class usage (optional `usage` capability)
+ *   POST   /v1/backup/vaults/:id/snapshots            register (backup store)
+ *   GET    /v1/backup/vaults/:id/snapshots            list (backup store)
+ *   GET    /v1/backup/vaults/:id/snapshots/:seq       one row (backup store)
+ *   DELETE /v1/backup/vaults/:id                      soft delete
+ *   POST   /v1/backup/vaults/:id/undelete             cancel soft delete
+ *   POST   /v1/backup/vaults/:id/purge                interactive-tier purge
  *
  * There is no single-target GET route in PROTOCOL.md — `getTarget`/`usage`
  * resolve from the list route and filter by id, throwing `not_found` when
  * absent (a deliberate, spec-faithful choice, not a gap).
  */
 
+import { requestStorageGrant } from './cas-grant.js';
 import { S3ObjectStore } from './s3-store.js';
 import {
   BackupProviderError,
   type AccountStatus,
   type BackupProvider,
-  type BackupProviderErrorCode,
   type ProviderCapabilities,
   type S3Grant,
   type SnapshotRegistration,
   type SnapshotRow,
+  type StoreClass,
   type TargetInfo,
   type Usage,
+  type UsageByStore,
 } from './provider.js';
 import type { ObjectStore } from './object-store.js';
+import { callProviderRoute } from './wire-client.js';
 
 const DEFAULT_GRANT_TTL_SECONDS = 3600;
 
@@ -43,10 +47,6 @@ export interface RemoteBackupProviderOptions {
   fetchImpl?: typeof fetch;
   /** Credential grant TTL requested on `openDataPlane`. */
   grantTtlSeconds?: number;
-}
-
-interface ErrorEnvelope {
-  error: { type: string; code: string; message: string; details?: Record<string, unknown> };
 }
 
 export class RemoteBackupProvider implements BackupProvider {
@@ -62,28 +62,13 @@ export class RemoteBackupProvider implements BackupProvider {
     this.grantTtlSeconds = options.grantTtlSeconds ?? DEFAULT_GRANT_TTL_SECONDS;
   }
 
-  private async call<T>(method: string, routePath: string, body?: unknown): Promise<T> {
-    const res = await this.fetchImpl(`${this.baseUrl}${routePath}`, {
+  private call<T>(method: string, routePath: string, body?: unknown): Promise<T> {
+    return callProviderRoute<T>(
+      { baseUrl: this.baseUrl, apiKey: this.apiKey, fetchImpl: this.fetchImpl },
       method,
-      headers: {
-        authorization: `Bearer ${this.apiKey}`,
-        ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
-      },
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    });
-    const text = await res.text();
-    const parsed = text.length > 0 ? (JSON.parse(text) as { data?: unknown } | ErrorEnvelope) : {};
-    if (!res.ok) {
-      const envelope = parsed as ErrorEnvelope;
-      const code = (envelope.error?.code ?? 'provider_error') as BackupProviderErrorCode;
-      throw new BackupProviderError({
-        status: res.status,
-        code,
-        message: envelope.error?.message ?? `request failed with ${res.status}`,
-        ...(envelope.error?.details ? { details: envelope.error.details } : {}),
-      });
-    }
-    return (parsed as { data: T }).data;
+      routePath,
+      body,
+    );
   }
 
   async capabilities(): Promise<ProviderCapabilities> {
@@ -111,20 +96,30 @@ export class RemoteBackupProvider implements BackupProvider {
     await this.call<unknown>('POST', `/v1/backup/vaults/${encodeURIComponent(targetId)}/purge`);
   }
 
-  private async issueGrant(targetId: string, mode: 'read' | 'read-write'): Promise<S3Grant> {
-    return this.call<S3Grant>(
-      'POST',
-      `/v1/backup/vaults/${encodeURIComponent(targetId)}/credentials`,
-      {
-        ttlSeconds: this.grantTtlSeconds,
-        mode,
-      },
-    );
+  async requestGrant(
+    targetId: string,
+    store: StoreClass,
+    mode: 'read' | 'read-write',
+    ttlSeconds?: number,
+  ): Promise<S3Grant> {
+    return requestStorageGrant({
+      baseUrl: this.baseUrl,
+      apiKey: this.apiKey,
+      fetchImpl: this.fetchImpl,
+      targetId,
+      store,
+      mode,
+      ttlSeconds: ttlSeconds ?? this.grantTtlSeconds,
+    });
   }
 
-  async openDataPlane(targetId: string, mode: 'read' | 'read-write'): Promise<ObjectStore> {
-    const grant = await this.issueGrant(targetId, mode);
-    return new S3ObjectStore(grant, { refreshGrant: () => this.issueGrant(targetId, mode) });
+  async openDataPlane(
+    targetId: string,
+    store: StoreClass,
+    mode: 'read' | 'read-write',
+  ): Promise<ObjectStore> {
+    const grant = await this.requestGrant(targetId, store, mode);
+    return new S3ObjectStore(grant, { refreshGrant: () => this.requestGrant(targetId, store, mode) });
   }
 
   async registerSnapshot(targetId: string, reg: SnapshotRegistration): Promise<SnapshotRow> {
@@ -194,6 +189,13 @@ export class RemoteBackupProvider implements BackupProvider {
     const row = listing.vaults.find((v) => v.id === targetId);
     if (!row) throw BackupProviderError.of('not_found', `unknown target "${targetId}"`);
     return { usage: row.usage, accountStatus: listing.accountStatus };
+  }
+
+  async usageReport(targetId: string): Promise<UsageByStore> {
+    return this.call<UsageByStore>(
+      'GET',
+      `/v1/backup/vaults/${encodeURIComponent(targetId)}/usage`,
+    );
   }
 }
 

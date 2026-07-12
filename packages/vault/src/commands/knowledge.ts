@@ -13,6 +13,7 @@
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 import { sha256Hex } from '../ids.js';
+import { assertTextBodyWithinBudget } from './inline-body-guard.js';
 import { releaseContentIfUnreferenced } from './media.js';
 import { recordRevision } from './revisions.js';
 
@@ -35,6 +36,10 @@ const MEDIA_TYPE: Record<string, string> = {
 /** Dedupe-or-insert a text body as a canonical content item (P2). */
 function contentItemFor(ctx: HandlerCtx, bodyText: string, format: string): string {
   const mediaType = MEDIA_TYPE[format] ?? 'text/plain';
+  // Text bodies stay inline forever (the FTS trigger reads content_uri
+  // in-transaction, no CAS redirect possible) — refuse rather than let an
+  // unbounded note body bloat vault.db (issue #367 §E4).
+  assertTextBodyWithinBudget(bodyText, mediaType);
   const sha = sha256Hex(bodyText);
   const existing = ctx.db
     .prepare('SELECT content_id FROM core_content_item WHERE sha256 = ?')

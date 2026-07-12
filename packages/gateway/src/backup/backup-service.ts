@@ -48,6 +48,7 @@ import {
   type BackupTargetState,
   type RecoveryKitState,
 } from './backup-state.js';
+import type { RecoveryKitStateStore } from './recovery-kit-state.js';
 import { assembleSourceEntries, resetStagingDir, type AssembleOptions } from './backup-sources.js';
 import type { HealthRegistry } from '../serve/health-registry.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
@@ -88,6 +89,17 @@ export interface BackupServiceOptions {
   assembleEntries?: (opts: AssembleOptions) => Promise<SourceEntry[]>;
   /** Injectable provider (tests) — defaults to `buildBackupProvider(config.provider)`. */
   provider?: BackupProvider;
+  /**
+   * Generalized recovery-kit confirmation store (issue #367 §C10). When
+   * set (the live gateway always sets this — `build-gateway.ts`),
+   * `recoveryKitStatus`/`confirmRecoveryKit` delegate here instead of the
+   * per-backup `state.json` field, so the SAME flag gates both the Backup
+   * card and the CAS-attach flow. Omitted (the standalone CLI's one-shot
+   * `BackupService`, tests) falls back to the legacy `backupDir`-scoped
+   * field — unchanged behavior for callers that never adopted storage
+   * connections.
+   */
+  recoveryKit?: RecoveryKitStateStore;
 }
 
 export class BackupService {
@@ -100,6 +112,7 @@ export class BackupService {
   private readonly provider: BackupProvider;
   private readonly keyringPath: string;
   private readonly assembleEntries: (opts: AssembleOptions) => Promise<SourceEntry[]>;
+  private readonly recoveryKit: RecoveryKitStateStore | undefined;
   private keyring: Keyring | undefined;
   private timer: NodeJS.Timeout | undefined;
   /** Serializes every run — "one at a time (no concurrent backups)". */
@@ -118,6 +131,7 @@ export class BackupService {
     this.provider = opts.provider ?? buildBackupProvider(this.config.provider);
     this.keyringPath = this.config.keyringPath ?? path.join(this.backupDir, 'keyring.json');
     this.assembleEntries = opts.assembleEntries ?? assembleSourceEntries;
+    this.recoveryKit = opts.recoveryKit;
 
     this.health.registerProbe('backups', async () => this.probe());
   }
@@ -410,6 +424,7 @@ export class BackupService {
    * to gate the S3-storage enable flow, so it isn't backup-card-specific.
    */
   async recoveryKitStatus(): Promise<RecoveryKitState> {
+    if (this.recoveryKit) return this.recoveryKit.status();
     const state = await loadBackupState(this.backupDir);
     return state.recoveryKit;
   }
@@ -417,6 +432,7 @@ export class BackupService {
   /** Set the recovery-kit confirmation to now (epoch seconds). One-way —
    *  confirming again just refreshes the timestamp. */
   async confirmRecoveryKit(): Promise<RecoveryKitState> {
+    if (this.recoveryKit) return this.recoveryKit.confirm();
     const state = await loadBackupState(this.backupDir);
     const recoveryKit: RecoveryKitState = { confirmedAt: Math.floor(this.now() / 1000) };
     state.recoveryKit = recoveryKit;

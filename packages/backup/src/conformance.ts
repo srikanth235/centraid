@@ -15,6 +15,8 @@ import assert from 'node:assert/strict';
 import type { BackupProvider } from './provider.js';
 import { BackupProviderError } from './provider.js';
 
+const TEXT = new TextEncoder();
+
 export interface ConformanceCase {
   name: string;
   run: () => Promise<void>;
@@ -38,18 +40,18 @@ async function withProvider(
 }
 
 /**
- * `manifestKey` MUST fall under the target's prefix (PROTOCOL.md "Snapshot
- * registration" — the same `vaults/{id}/` the credential grant's own
- * `prefix` uses; see `engine.ts`'s `createSnapshot`). A bare `manifests/…`
- * key is protocol-invalid input — a real provider (Clawgnition, confirmed
- * against a live gateway) 400s it with `invalid_manifest_key` — so every
- * case below that registers a snapshot must build a key shaped like this,
- * not a bare one, to stay a valid grading input for ANY conformant
- * provider rather than only the two reference ones in this package (which
- * happen not to enforce the prefix).
+ * `manifestKey` MUST fall under the target's `backup` store prefix
+ * (PROTOCOL.md "Snapshot registration" — the same `u/{id}/backup/` the
+ * credential grant's own `prefix` uses; see `engine.ts`'s `createSnapshot`).
+ * A bare `manifests/…` key is protocol-invalid input — a conformant
+ * provider MUST 400 it with `invalid_manifest_key` — so every case below
+ * that registers a snapshot must build a key shaped like this, not a bare
+ * one, to stay a valid grading input for ANY conformant provider rather
+ * than only the two reference ones in this package (which happen not to
+ * enforce the prefix).
  */
 function manifestKeyFor(targetId: string, name: string): string {
-  return `vaults/${targetId}/manifests/${name}`;
+  return `u/${targetId}/backup/manifests/${name}`;
 }
 
 async function expectError(fn: () => Promise<unknown>): Promise<BackupProviderError> {
@@ -79,20 +81,27 @@ export function providerConformanceCases(
         withProvider(makeProvider, async (provider) => {
           const caps = await provider.capabilities();
           assert.ok(
-            caps.protocol.includes('centraid-backup-provider/1'),
-            'protocol must declare centraid-backup-provider/1',
+            caps.protocol.includes('centraid-storage-provider/1'),
+            'protocol must declare centraid-storage-provider/1',
           );
           assert.equal(caps.dataPlane, 's3');
           assert.ok(caps.maxCredentialTtlSeconds > 0);
-          assert.ok(caps.softDeleteWindowDays > 0);
-          assert.ok(['free-egress', 'metered-egress'].includes(caps.restoreCostClass));
           assert.ok(['api-key', 'interactive'].includes(caps.purgeAuthTier));
-          if (caps.retention.kind === 'ladder') {
-            assert.equal(
-              caps.retention.neverPruneNewest,
-              true,
-              'retention.neverPruneNewest MUST be true',
-            );
+          assert.ok(Array.isArray(caps.capabilities), 'capabilities must declare an array');
+          for (const flag of caps.capabilities) {
+            assert.ok(['backup', 'cas', 'usage'].includes(flag), `unknown capability flag "${flag}"`);
+          }
+          if (caps.capabilities.includes('backup')) {
+            assert.ok(caps.backup, '"backup" capability declared but `backup` discovery block missing');
+            assert.ok(caps.backup.softDeleteWindowDays > 0);
+            assert.ok(['free-egress', 'metered-egress'].includes(caps.backup.restoreCostClass));
+            if (caps.backup.retention.kind === 'ladder') {
+              assert.equal(
+                caps.backup.retention.neverPruneNewest,
+                true,
+                'retention.neverPruneNewest MUST be true',
+              );
+            }
           }
         }),
     },
@@ -112,12 +121,12 @@ export function providerConformanceCases(
     },
 
     {
-      name: 'data-plane roundtrip via openDataPlane',
+      name: 'data-plane roundtrip via openDataPlane (backup store)',
       run: () =>
         withProvider(makeProvider, async (provider) => {
           const { targetId } = await provider.createTarget({ label: 'dp' });
-          const rw = await provider.openDataPlane(targetId, 'read-write');
-          const payload = new TextEncoder().encode('hello conformance');
+          const rw = await provider.openDataPlane(targetId, 'backup', 'read-write');
+          const payload = TEXT.encode('hello conformance');
           await rw.put('chunks/probe', payload);
           const got = await rw.get('chunks/probe');
           assert.deepEqual([...got], [...payload]);
@@ -129,7 +138,7 @@ export function providerConformanceCases(
           await rw.delete('chunks/probe');
           assert.equal(await rw.head('chunks/probe'), null);
 
-          const ro = await provider.openDataPlane(targetId, 'read');
+          const ro = await provider.openDataPlane(targetId, 'backup', 'read');
           await assert.rejects(
             () => ro.put('chunks/nope', payload),
             'read-mode store must refuse put',
@@ -328,6 +337,113 @@ export function providerConformanceCases(
               'meteredAt must be an epoch-second integer when present',
             );
           }
+        }),
+    },
+
+    // -- Layer 1: grant-layer cases -----------------------------------------
+    // `requestGrant` is OPTIONAL (PROTOCOL.md § Layer 1) — only providers with
+    // a literal wire-grant concept implement it (e.g. a filesystem provider's
+    // data plane IS the caller's own custody, so it has nothing to grant).
+    // Skip cleanly, not fail, when absent.
+
+    {
+      name: 'grant layer: per-store region + store echoed + disjoint prefixes',
+      run: () =>
+        withProvider(makeProvider, async (provider) => {
+          if (!provider.requestGrant) return; // capability not offered — skip cleanly
+          const { targetId } = await provider.createTarget({ label: 'grant-layer' });
+          const backupGrant = await provider.requestGrant(targetId, 'backup', 'read-write');
+          const casGrant = await provider.requestGrant(targetId, 'cas', 'read-write');
+          assert.equal(backupGrant.store, 'backup', 'grant must echo the requested store class');
+          assert.equal(casGrant.store, 'cas', 'grant must echo the requested store class');
+          assert.ok(backupGrant.region.length > 0, 'region must be present');
+          assert.ok(casGrant.region.length > 0, 'region must be present');
+          assert.notEqual(
+            backupGrant.prefix,
+            casGrant.prefix,
+            'each store class MUST get an isolated prefix',
+          );
+        }),
+    },
+
+    // -- Layer 2: cas store cases --------------------------------------------
+    // Generic through `openDataPlane` (like the backup roundtrip above) so
+    // this runs offline against ANY provider, local or remote — for a
+    // remote-backed harness this transitively exercises real S3-compatible
+    // HTTP via the shared S3 test server (see `testing/s3-test-server.ts`).
+
+    {
+      name: 'cas: put/list/get/delete round-trip',
+      run: () =>
+        withProvider(makeProvider, async (provider) => {
+          const caps = await provider.capabilities();
+          if (!caps.capabilities.includes('cas')) return; // capability not offered — skip cleanly
+          const { targetId } = await provider.createTarget({ label: 'cas-roundtrip' });
+          const rw = await provider.openDataPlane(targetId, 'cas', 'read-write');
+          const key = `blobs/${'ab'.repeat(32)}`; // sha256-hex-shaped key (FORMAT.md-agnostic; cas's own key layout)
+          const payload = TEXT.encode('opaque sealed ciphertext');
+          await rw.put(key, payload);
+          const got = await rw.get(key);
+          assert.deepEqual([...got], [...payload]);
+          const listed: string[] = [];
+          for await (const obj of rw.list('blobs/')) listed.push(obj.key);
+          assert.ok(listed.includes(key), 'cas grants MUST include list permission');
+          await rw.delete(key);
+          assert.equal(await rw.head(key), null, 'delete allowed via read-write grant');
+        }),
+    },
+
+    {
+      name: 'cas and backup stores occupy disjoint namespaces',
+      run: () =>
+        withProvider(makeProvider, async (provider) => {
+          const caps = await provider.capabilities();
+          if (!caps.capabilities.includes('cas')) return; // skip cleanly
+          const { targetId } = await provider.createTarget({ label: 'cas-disjoint' });
+          const backupStore = await provider.openDataPlane(targetId, 'backup', 'read-write');
+          const casStore = await provider.openDataPlane(targetId, 'cas', 'read-write');
+          await backupStore.put('probe', TEXT.encode('backup-side'));
+          assert.equal(
+            await casStore.head('probe'),
+            null,
+            'writing to the backup store must not be visible from the cas store',
+          );
+        }),
+    },
+
+    // -- Layer 1: usage cases -------------------------------------------------
+
+    {
+      name: 'usage report: skip cleanly when capability absent, shape + monotonic bytes when present',
+      run: () =>
+        withProvider(makeProvider, async (provider) => {
+          const caps = await provider.capabilities();
+          if (!caps.capabilities.includes('usage') || !provider.usageReport) return; // skip cleanly
+          const { targetId } = await provider.createTarget({ label: 'usage-report' });
+
+          const before = await provider.usageReport(targetId);
+          for (const store of Object.keys(before) as (keyof typeof before)[]) {
+            const report = before[store];
+            if (!report) continue;
+            assert.equal(typeof report.bytesStored, 'number');
+            assert.equal(typeof report.objectCount, 'number');
+            assert.ok(
+              report.quotaBytes === null || typeof report.quotaBytes === 'number',
+              'quotaBytes must be a number or null (unmetered)',
+            );
+            assert.ok(Number.isInteger(report.period.start));
+            assert.ok(Number.isInteger(report.period.end));
+          }
+
+          const rw = await provider.openDataPlane(targetId, 'backup', 'read-write');
+          await rw.put('chunks/usage-probe', TEXT.encode('x'.repeat(1024)));
+          const after = await provider.usageReport(targetId);
+          const beforeBytes = before.backup?.bytesStored ?? 0;
+          const afterBytes = after.backup?.bytesStored ?? 0;
+          assert.ok(
+            afterBytes >= beforeBytes,
+            'bytesStored must be monotonic non-decreasing after a put',
+          );
         }),
     },
   ];

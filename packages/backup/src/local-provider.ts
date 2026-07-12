@@ -45,8 +45,11 @@ import {
   type ProviderCapabilities,
   type SnapshotRegistration,
   type SnapshotRow,
+  type StoreClass,
+  type StoreUsageReport,
   type TargetInfo,
   type Usage,
+  type UsageByStore,
 } from './provider.js';
 
 interface RegistryTarget {
@@ -72,15 +75,21 @@ function emptyRegistry(): Registry {
 
 const SOFT_DELETE_WINDOW_DAYS = 14;
 const CAPABILITIES: ProviderCapabilities = {
-  protocol: ['centraid-backup-provider/1'],
+  protocol: ['centraid-storage-provider/1'],
   dataPlane: 's3',
+  // Local disk has no separate wire-grant concept (openDataPlane IS the
+  // grant), but it still supports both store classes and can report cheap,
+  // real usage — all three are legitimately advertised offline.
+  capabilities: ['backup', 'cas', 'usage'],
   maxCredentialTtlSeconds: 86400,
-  softDeleteWindowDays: SOFT_DELETE_WINDOW_DAYS,
-  retention: { kind: 'none' },
-  restoreCostClass: 'free-egress',
-  objectLock: false,
-  conditionalWrites: true,
   purgeAuthTier: 'api-key',
+  backup: {
+    softDeleteWindowDays: SOFT_DELETE_WINDOW_DAYS,
+    retention: { kind: 'none' },
+    restoreCostClass: 'free-egress',
+    objectLock: false,
+    conditionalWrites: true,
+  },
 };
 
 /* eslint-disable max-classes-per-file -- (#354) the read-only wrapper is a small
@@ -243,15 +252,26 @@ export class LocalBackupProvider implements BackupProvider {
     await this.persist(registry);
   }
 
-  async openDataPlane(targetId: string, mode: 'read' | 'read-write'): Promise<ObjectStore> {
+  /** Per-store isolated root (PROTOCOL.md § Layer 1 — per-store isolated
+   *  prefixes): `objects/<targetId>/<store>/`, giving `backup` and `cas`
+   *  disjoint namespaces without a literal wire grant. */
+  private storeRoot(targetId: string, store: StoreClass): string {
+    return path.join(this.objectsRoot, targetId, store);
+  }
+
+  async openDataPlane(
+    targetId: string,
+    store: StoreClass,
+    mode: 'read' | 'read-write',
+  ): Promise<ObjectStore> {
     const registry = await this.load();
     const target = this.requireTargetIn(registry, targetId);
     if (target.purgedAt)
       throw BackupProviderError.of('purge_pending', `target "${targetId}" was purged`);
-    const root = path.join(this.objectsRoot, targetId);
+    const root = this.storeRoot(targetId, store);
     await fs.mkdir(root, { recursive: true });
-    const store = new FsObjectStore(root);
-    return mode === 'read' ? new ReadOnlyObjectStore(store) : store;
+    const fsStore = new FsObjectStore(root);
+    return mode === 'read' ? new ReadOnlyObjectStore(fsStore) : fsStore;
   }
 
   async registerSnapshot(targetId: string, reg: SnapshotRegistration): Promise<SnapshotRow> {
@@ -330,19 +350,16 @@ export class LocalBackupProvider implements BackupProvider {
     };
   }
 
+  /** Backup store's own usage figure (Layer 2, embedded in the target list) —
+   *  scoped to the `backup` subtree only; `cas` usage is reported separately
+   *  via `usageReport`. */
   async usage(targetId: string): Promise<{ usage: Usage; accountStatus: AccountStatus }> {
     const registry = await this.load();
     this.requireTargetIn(registry, targetId);
-    const store = new FsObjectStore(path.join(this.objectsRoot, targetId));
-    let storedBytes = 0;
-    let objectCount = 0;
-    for await (const obj of store.list('')) {
-      storedBytes += obj.size;
-      objectCount++;
-    }
+    const { bytesStored, objectCount } = await this.countStore(targetId, 'backup');
     return {
       usage: {
-        storedBytes,
+        storedBytes: bytesStored,
         objectCount,
         // quotaBytes deliberately omitted — local disk has no product-declared
         // quota, and the field is optional on the wire (a provider may not cap).
@@ -350,6 +367,37 @@ export class LocalBackupProvider implements BackupProvider {
       },
       accountStatus: 'ok',
     };
+  }
+
+  private async countStore(
+    targetId: string,
+    store: StoreClass,
+  ): Promise<{ bytesStored: number; objectCount: number }> {
+    const fsStore = new FsObjectStore(this.storeRoot(targetId, store));
+    let bytesStored = 0;
+    let objectCount = 0;
+    for await (const obj of fsStore.list('')) {
+      bytesStored += obj.size;
+      objectCount++;
+    }
+    return { bytesStored, objectCount };
+  }
+
+  /** Layer-1 `usage` capability — real byte counts, cheap to compute locally
+   *  (PROTOCOL.md § Usage). `quotaBytes: null` (unmetered); `period` spans
+   *  target creation to now (local disk has no billing-period concept). */
+  async usageReport(targetId: string): Promise<UsageByStore> {
+    const registry = await this.load();
+    const target = this.requireTargetIn(registry, targetId);
+    const start = Math.floor(new Date(target.createdAt).getTime() / 1000);
+    const end = Math.floor(Date.now() / 1000);
+    const out: UsageByStore = {};
+    for (const store of ['backup', 'cas'] as const) {
+      const { bytesStored, objectCount } = await this.countStore(targetId, store);
+      const report: StoreUsageReport = { bytesStored, objectCount, quotaBytes: null, period: { start, end } };
+      out[store] = report;
+    }
+    return out;
   }
 }
 

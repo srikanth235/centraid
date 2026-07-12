@@ -1,8 +1,10 @@
 # @centraid/backup
 
-Offsite backup: the **`centraid-backup-provider/1`** wire protocol seam
-(`PROTOCOL.md`) plus the **`centraid-snapshot/1`** snapshot format engine
-(`FORMAT.md`). Read those two files first — they are normative; this
+Offsite storage: the **`centraid-storage-provider/1`** wire protocol seam
+(`PROTOCOL.md`) — an account+grant layer (Layer 1) with workload semantics
+layered on top per store class (Layer 2: `backup`, `cas`) — plus the
+**`centraid-snapshot/1`** snapshot format engine (`FORMAT.md`) for the
+`backup` store class. Read those two files first — they are normative; this
 package is their reference implementation, and `conformance.ts` is the
 protocol's own definition of "certified provider" (PROTOCOL.md § Conformance).
 
@@ -13,10 +15,17 @@ Zero runtime dependencies — Node >=22 builtins only (`node:crypto` webcrypto,
 
 - **`provider.ts`** — the `BackupProvider` seam, `BackupProviderError` +
   reserved error codes, and every wire type (`ProviderCapabilities`,
-  `SnapshotRow`, `TargetInfo`, `Usage`, `AccountStatus`, `S3Grant`).
+  `SnapshotRow`, `TargetInfo`, `Usage`, `AccountStatus`, `S3Grant`,
+  `StoreClass`, `StoreUsageReport`).
 - **`object-store.ts`** / **`s3-store.ts`** — the `ObjectStore` data-plane
   seam; `FsObjectStore` (local disk) and `S3ObjectStore` (a minimal SigV4
-  client over `fetch`, no AWS SDK).
+  client over `fetch`, no AWS SDK; region comes from the grant, not a
+  hardcode).
+- **`wire-client.ts`** — shared HTTP + `{data}`/`{error}` envelope handling
+  for `RemoteBackupProvider` and `cas-grant.ts`.
+- **`cas-grant.ts`** — `requestStorageGrant` / `requestCasGrant`: a standalone
+  Layer-1 grant path for a `cas` consumer (e.g. the vault's `S3BlobStore`)
+  that has no business pulling in the snapshot engine.
 - **`chunker.ts`** — FastCDC content-defined chunking with a frozen,
   deterministic gear table (format `/1`: min 512 KiB, avg 1 MiB, max 4 MiB).
 - **`crypto.ts`** — AES-256-GCM object encryption, HKDF-SHA256 per-vault key

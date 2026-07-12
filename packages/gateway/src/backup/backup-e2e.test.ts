@@ -330,7 +330,9 @@ test('no-change semantics: a real vault re-registers a NEW snapshot every run (d
 test('incremental backup: a new blob registers a small delta, not a re-upload of everything', async () => {
   const objectsDir = path.join(h.providerDir, 'objects');
   const targetId = (await h.service.status())[h.vaultId]!.targetId;
-  const chunksDir = path.join(objectsDir, targetId, 'chunks');
+  // Per-store isolated prefix (PROTOCOL.md § Layer 1): LocalBackupProvider
+  // nests each store class under its own subdirectory.
+  const chunksDir = path.join(objectsDir, targetId, 'backup', 'chunks');
   const before = await countFiles(chunksDir);
 
   const taskId = invoke(h.plane, 'schedule.add_task', { title: 'Renew passport' })[
@@ -530,7 +532,7 @@ test('fencing for real: a second BackupService registers gen+1; the first servic
 
 test('verify catches real damage: a deleted chunk is reported missing, a flipped chunk is reported corrupt', async () => {
   const targetId = (await h.service.status())[h.vaultId]!.targetId;
-  const chunksDir = path.join(h.providerDir, 'objects', targetId, 'chunks');
+  const chunksDir = path.join(h.providerDir, 'objects', targetId, 'backup', 'chunks');
 
   // Object GC never runs (PROTOCOL.md: "no server-side content GC"), so the
   // provider dir accumulates chunk files from EVERY prior snapshot in this
@@ -542,7 +544,7 @@ test('verify catches real damage: a deleted chunk is reported missing, a flipped
   const provider = openLocalBackupProvider({ rootDir: h.providerDir });
   const keyring = await loadKeyring(path.join(h.backupDir, 'keyring.json'));
   const newestRow = (await provider.listSnapshots(targetId))[0]!;
-  const store = await provider.openDataPlane(targetId, 'read');
+  const store = await provider.openDataPlane(targetId, 'backup', 'read');
   const manifestBytes = await store.get(newestRow.manifestKey);
   const opened = openManifest(manifestBytes, keyring, h.vaultId, newestRow.manifestHash);
   expect(opened.public.chunkIndex.length).toBeGreaterThan(1);

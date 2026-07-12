@@ -1,12 +1,14 @@
 /*
  * `buildDiagnosticsBundle` — document shape, vault file sizing (cheap
- * statSync, no CAS walk), and the redaction contract (issue #351).
+ * statSync, no CAS walk), the redaction contract (issue #351), and the
+ * per-table size breakdown + inline-body violation scan (issue #367 §E1/E4).
  */
 
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
+import { bootstrapVault, openVaultDb, type VaultDb } from '@centraid/vault';
 import { buildDiagnosticsBundle } from './gateway-diagnostics.ts';
 import { GatewayLogStore } from './gateway-log-store.ts';
 import { HealthRegistry } from './health-registry.ts';
@@ -36,6 +38,11 @@ function fakeVaultRegistry(planes: VaultPlane[]): VaultRegistry {
 /** A plane stub carrying only `boot.vaultId` / `name` / `dir`. */
 function fakePlane(vaultId: string, name: string, dir: string): VaultPlane {
   return { boot: { vaultId }, name, dir } as unknown as VaultPlane;
+}
+
+/** A plane stub that ALSO carries real, open vault/journal handles (§E1/E4). */
+function fakePlaneWithDb(vaultId: string, name: string, dir: string, db: VaultDb): VaultPlane {
+  return { boot: { vaultId }, name, dir, db } as unknown as VaultPlane;
 }
 
 test('assembles version, runtime, health, logs, and vault sizes', async () => {
@@ -154,4 +161,40 @@ test('redaction: secret-shaped keys never appear in the serialized bundle, howev
   expect(
     (bundle.config as { nested: { deeper: { authToken: string } } }).nested.deeper.authToken,
   ).toBe('[REDACTED]');
+});
+
+test('a plane stub with no `.db` (every test above) omits tableStats rather than throwing', async () => {
+  const vaultDir = makeTmpDir();
+  fs.writeFileSync(path.join(vaultDir, 'vault.db'), Buffer.alloc(1));
+  fs.writeFileSync(path.join(vaultDir, 'journal.db'), Buffer.alloc(1));
+
+  const bundle = await buildDiagnosticsBundle({
+    health: new HealthRegistry(),
+    logs: new GatewayLogStore(),
+    vaults: fakeVaultRegistry([fakePlane('v1', 'Personal', vaultDir)]),
+  });
+
+  expect(bundle.vaults[0]!.tableStats).toBeUndefined();
+});
+
+test('a mounted vault with live handles gets a dbstat table breakdown and an inline-body violation scan', async () => {
+  const vaultDir = makeTmpDir();
+  const db = openVaultDb({ dir: vaultDir });
+  bootstrapVault(db, { ownerName: 'Priya' });
+
+  const bundle = await buildDiagnosticsBundle({
+    health: new HealthRegistry(),
+    logs: new GatewayLogStore(),
+    vaults: fakeVaultRegistry([fakePlaneWithDb('v1', 'Personal', vaultDir, db)]),
+  });
+
+  const stats = bundle.vaults[0]!.tableStats;
+  expect(stats).toBeDefined();
+  expect(stats!.vaultDb.method).toBe('dbstat');
+  expect(stats!.vaultDb.tables.length).toBeGreaterThan(0);
+  expect(stats!.journalDb.method).toBe('dbstat');
+  // A fresh vault has nothing over the inline-body budget.
+  expect(stats!.inlineBodyViolations.total).toEqual({ count: 0, bytes: 0 });
+
+  db.close();
 });

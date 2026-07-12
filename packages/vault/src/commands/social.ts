@@ -12,6 +12,7 @@ import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 import { sha256Hex } from '../ids.js';
 import { replaceMemo } from './annotations.js';
 import { setStarred, starredExistsSql } from './flags.js';
+import { assertTextBodyWithinBudget } from './inline-body-guard.js';
 
 /** The acting party: the caller's own party, else the vault owner (apps). */
 function actorPartyId(ctx: HandlerCtx): string {
@@ -215,6 +216,10 @@ function draftMessage(ctx: HandlerCtx): Record<string, unknown> {
     }
   }
   // Rent the bytes, own the reference (P2): identical bodies dedupe on sha256.
+  // text/plain stays inline forever (the FTS trigger reads content_uri
+  // in-transaction, no CAS redirect possible) — refuse rather than let an
+  // unbounded draft body bloat vault.db (issue #367 §E4).
+  assertTextBodyWithinBudget(input.body_text, 'text/plain');
   const bodyBytes = Buffer.from(input.body_text, 'utf8');
   const sha = sha256Hex(input.body_text);
   let contentId: string;

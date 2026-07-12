@@ -108,7 +108,7 @@ async function loadPreviousManifest(
   const rows = await provider.listSnapshots(targetId);
   const newest = rows[0];
   if (!newest) return null;
-  const store = await provider.openDataPlane(targetId, 'read');
+  const store = await provider.openDataPlane(targetId, 'backup', 'read');
   const bytes = await store.get(newest.manifestKey);
   const opened = openManifest(bytes, keyring, vaultId, newest.manifestHash);
   const entriesByPath = new Map(opened.entries.map((e) => [e.path, e] as const));
@@ -162,7 +162,7 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
     );
   }
 
-  const store = await opts.provider.openDataPlane(opts.targetId, 'read-write');
+  const store = await opts.provider.openDataPlane(opts.targetId, 'backup', 'read-write');
   const uploadSem = new Semaphore(4);
   const knownChunkIds = new Set<string>(sameEpochPrevious?.chunkSizes.keys());
   const newChunkIndex = new Map<string, number>(); // id -> size, this snapshot's full set
@@ -251,19 +251,19 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
   });
   const hash8 = manifestHash.slice(0, 8);
   // PROTOCOL.md "Snapshot registration": manifestKey MUST fall under the
-  // target's prefix (`vaults/{id}/`, matching the credential grant's own
-  // `prefix` — see `S3Grant`). The key is used unchanged both as the object
-  // store's address (relative to the target's already-scoped ObjectStore —
-  // for the local provider this just nests one harmless extra directory
-  // level, for the remote provider it lands under the grant's own
-  // `vaults/{id}/` prefix too, so the object ends up at
-  // `vaults/{id}/vaults/{id}/manifests/…` in the bucket — a longer key than
-  // strictly necessary, but a single unambiguous key with no second
-  // "relative vs. wire" representation to keep in sync) and as the
+  // target's `backup` store prefix (`u/{id}/backup/`, matching the
+  // credential grant's own `prefix` — see `S3Grant`). The key is used
+  // unchanged both as the object store's address (relative to the target's
+  // already store-scoped ObjectStore — for the local provider this just
+  // nests one harmless extra directory level, for the remote provider it
+  // lands under the grant's own `u/{id}/backup/` prefix too, so the object
+  // ends up at `u/{id}/backup/u/{id}/backup/manifests/…` in the bucket — a
+  // longer key than strictly necessary, but a single unambiguous key with no
+  // second "relative vs. wire" representation to keep in sync) and as the
   // registered `manifestKey` field a real provider validates
-  // (`isWithinVaultPrefix`, confirmed against a live Clawgnition gateway —
-  // a bare `manifests/…` key it 400s with `invalid_manifest_key`).
-  const manifestKey = `vaults/${opts.targetId}/manifests/${Date.now()}-${hash8}.json`;
+  // (`isWithinVaultPrefix`-equivalent — a bare `manifests/…` key a
+  // conformant provider MUST 400 with `invalid_manifest_key`).
+  const manifestKey = `u/${opts.targetId}/backup/manifests/${Date.now()}-${hash8}.json`;
   await store.put(manifestKey, bytes);
 
   const row = await opts.provider.registerSnapshot(opts.targetId, {
@@ -380,7 +380,7 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
     );
   }
 
-  const store = await opts.provider.openDataPlane(opts.targetId, 'read');
+  const store = await opts.provider.openDataPlane(opts.targetId, 'backup', 'read');
   const manifestBytes = await store.get(row.manifestKey);
 
   // 2. Manifest hash verification, then decrypt.
@@ -453,7 +453,7 @@ export async function verifySnapshot(opts: VerifySnapshotOptions): Promise<Verif
       : (await opts.provider.listSnapshots(opts.targetId))[0];
   if (!row) throw new Error('verifySnapshot: no snapshot available');
 
-  const store = await opts.provider.openDataPlane(opts.targetId, 'read');
+  const store = await opts.provider.openDataPlane(opts.targetId, 'backup', 'read');
   const missing: string[] = [];
   const corrupt: string[] = [];
   let checkedObjects = 0;

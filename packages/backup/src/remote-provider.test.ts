@@ -127,21 +127,24 @@ async function startFakeGateway(): Promise<FakeGateway> {
     // GET /v1/backup/provider — discovery/capabilities
     if (req.method === 'GET' && p === '/v1/backup/provider') {
       jsonBody(res, 200, {
-        protocol: ['centraid-backup-provider/1'],
+        protocol: ['centraid-storage-provider/1'],
         dataPlane: 's3',
+        capabilities: ['backup', 'cas', 'usage'],
         maxCredentialTtlSeconds: 86400,
-        softDeleteWindowDays: SOFT_DELETE_WINDOW_DAYS,
-        retention: {
-          kind: 'ladder',
-          keepAllDays: 7,
-          dailyDays: 30,
-          weeklyDays: 365,
-          neverPruneNewest: true,
-        },
-        restoreCostClass: 'metered-egress',
-        objectLock: false,
-        conditionalWrites: true,
         purgeAuthTier: 'interactive',
+        backup: {
+          softDeleteWindowDays: SOFT_DELETE_WINDOW_DAYS,
+          retention: {
+            kind: 'ladder',
+            keepAllDays: 7,
+            dailyDays: 30,
+            weeklyDays: 365,
+            neverPruneNewest: true,
+          },
+          restoreCostClass: 'metered-egress',
+          objectLock: false,
+          conditionalWrites: true,
+        },
       });
       return;
     }
@@ -191,19 +194,31 @@ async function startFakeGateway(): Promise<FakeGateway> {
       return;
     }
 
-    // POST /v1/backup/vaults/:id/credentials — issue grant
+    // POST /v1/backup/vaults/:id/credentials — issue grant (any store class)
     if (req.method === 'POST' && rest === '/credentials') {
-      const body = (await readJsonBody(req)) as { ttlSeconds: number; mode: 'read' | 'read-write' };
+      const body = (await readJsonBody(req)) as {
+        ttlSeconds: number;
+        mode: 'read' | 'read-write';
+        store: 'backup' | 'cas';
+      };
       jsonBody(res, 200, {
         endpoint: s3.url,
+        region: 'auto',
         bucket: BUCKET,
-        prefix: `vaults/${targetId}/`,
+        prefix: `u/${targetId}/${body.store}/`,
+        store: body.store,
         accessKeyId: 'AKIAFAKETEST',
         secretAccessKey: 'fakeSecretKeyValue',
         sessionToken: 'fakeSessionToken',
         expiresAt: Math.floor(Date.now() / 1000) + body.ttlSeconds,
         mode: body.mode,
       });
+      return;
+    }
+
+    // GET /v1/backup/vaults/:id/usage — Layer-1 optional `usage` capability
+    if (req.method === 'GET' && rest === '/usage') {
+      jsonBody(res, 200, { backup: usageReportFor(targetId, 'backup'), cas: usageReportFor(targetId, 'cas') });
       return;
     }
 
@@ -317,7 +332,7 @@ async function startFakeGateway(): Promise<FakeGateway> {
   }
 
   function usageFor(targetId: string) {
-    const prefix = `vaults/${targetId}/`;
+    const prefix = `u/${targetId}/backup/`;
     let storedBytes = 0;
     let objectCount = 0;
     for (const key of s3.listDirect(BUCKET, prefix)) {
@@ -329,6 +344,22 @@ async function startFakeGateway(): Promise<FakeGateway> {
       objectCount,
       quotaBytes: 107374182400,
       meteredAt: Math.floor(Date.now() / 1000), // epoch seconds, like Clawgnition
+    };
+  }
+
+  function usageReportFor(targetId: string, store: 'backup' | 'cas') {
+    const prefix = `u/${targetId}/${store}/`;
+    let bytesStored = 0;
+    let objectCount = 0;
+    for (const key of s3.listDirect(BUCKET, prefix)) {
+      bytesStored += s3.getObjectDirect(BUCKET, key)?.length ?? 0;
+      objectCount++;
+    }
+    return {
+      bytesStored,
+      objectCount,
+      quotaBytes: null,
+      period: { start: 0, end: Math.floor(Date.now() / 1000) },
     };
   }
 
@@ -368,9 +399,10 @@ describe('RemoteBackupProvider against the fake gateway', () => {
   test('envelope: capabilities unwraps the {data} envelope', async () => {
     const { provider } = await fixture();
     const caps = await provider.capabilities();
-    expect(caps.protocol).toContain('centraid-backup-provider/1');
+    expect(caps.protocol).toContain('centraid-storage-provider/1');
     expect(caps.purgeAuthTier).toBe('interactive');
-    expect(caps.retention).toEqual({
+    expect(caps.capabilities).toEqual(['backup', 'cas', 'usage']);
+    expect(caps.backup?.retention).toEqual({
       kind: 'ladder',
       keepAllDays: 7,
       dailyDays: 30,
@@ -419,11 +451,11 @@ describe('RemoteBackupProvider against the fake gateway', () => {
   test('credential modes: openDataPlane issues a grant per mode and it round-trips through the fake S3', async () => {
     const { provider } = await fixture();
     const { targetId } = await provider.createTarget({ label: 't' });
-    const rw = await provider.openDataPlane(targetId, 'read-write');
+    const rw = await provider.openDataPlane(targetId, 'backup', 'read-write');
     await rw.put('chunks/x', new TextEncoder().encode('remote hello'));
     expect(new TextDecoder().decode(await rw.get('chunks/x'))).toBe('remote hello');
 
-    const ro = await provider.openDataPlane(targetId, 'read');
+    const ro = await provider.openDataPlane(targetId, 'backup', 'read');
     expect(new TextDecoder().decode(await ro.get('chunks/x'))).toBe('remote hello');
     await expect(ro.put('chunks/y', new Uint8Array(1))).rejects.toThrow();
   });
@@ -431,7 +463,7 @@ describe('RemoteBackupProvider against the fake gateway', () => {
   test('SigV4 presence: PUT/GET requests carry an Authorization header shaped like AWS4-HMAC-SHA256 and x-amz-content-sha256', async () => {
     const { gateway, provider } = await fixture();
     const { targetId } = await provider.createTarget({ label: 't' });
-    const store = await provider.openDataPlane(targetId, 'read-write');
+    const store = await provider.openDataPlane(targetId, 'backup', 'read-write');
     await store.put('chunks/sigtest', new Uint8Array([1, 2, 3]));
     await store.get('chunks/sigtest');
 
@@ -454,7 +486,7 @@ describe('RemoteBackupProvider against the fake gateway', () => {
   test('S3ObjectStore.list paginates against the fake (page size 2) and returns every key', async () => {
     const { gateway, provider } = await fixture();
     const { targetId } = await provider.createTarget({ label: 't' });
-    const store = await provider.openDataPlane(targetId, 'read-write');
+    const store = await provider.openDataPlane(targetId, 'backup', 'read-write');
     for (let i = 0; i < 5; i++) await store.put(`chunks/p${i}`, new Uint8Array([i]));
     const keys: string[] = [];
     for await (const obj of store.list('chunks/')) keys.push(obj.key);
@@ -476,8 +508,10 @@ describe('RemoteBackupProvider against the fake gateway', () => {
     let refreshCount = 0;
     const grant = {
       endpoint: gateway.s3.url,
+      region: 'auto',
       bucket: BUCKET,
-      prefix: 'vaults/manual-test/',
+      prefix: 'u/manual-test/backup/',
+      store: 'backup' as const,
       accessKeyId: 'AKIAFAKETEST',
       secretAccessKey: 'fakeSecretKeyValue',
       sessionToken: 'fakeSessionToken',
