@@ -1,10 +1,28 @@
 #!/usr/bin/env node
-// Shell QA v2 Suite 1: REAL first-run onboarding. Launches the app WITHOUT
-// the driver's settings seed (no onboardingCompletedAt), so the true
-// OnboardingScreen renders. Walks it as a user: disabled CTA, name entry,
-// color swatch, Enter Centraid -> Home. Then relaunches with the SAME
-// userDataDir and asserts onboarding does NOT show again and the profile
-// name persisted.
+// Shell QA v2 Suite 1: REAL first-run onboarding, rewritten for issue #382's
+// 2-step redesign (identity -> "Where does your data live?" ConnectFlow).
+// Launches the app WITHOUT the driver's settings seed (no
+// onboardingCompletedAt), so the true OnboardingScreen renders. Walks it as
+// a user: disabled CTA, name entry, color swatch, "Continue" into the
+// embedded ConnectFlow, "This Mac" (which completes near-instantly per the
+// design doc — a fresh install has 0/1 local vaults so ConnectFlow
+// auto-commits without an extra click) -> Home. Then relaunches with the
+// SAME userDataDir and asserts onboarding does NOT show again and the
+// profile identity persisted.
+//
+// Empirical note (verified via a throwaway probe against the real app
+// before writing this): the chosen displayName has NO visible UI surface
+// anywhere in the redesigned shell — the switcher's gateway header shows
+// the gateway's technical `label` ("Local"), not `displayName`; the sidebar
+// head and Settings -> Space both show the VAULT's name ("Owner's vault"),
+// never the person's name; Settings -> Spaces (cross-vault list + gateway
+// Connections group) is deleted outright per the design doc. So the only
+// verifiable ground truth for "did onboarding write the name to the right
+// profile" (issue #382's actual bug fix: boot.tsx used to always write to
+// 'local' even when a different gateway was the one just connected) is the
+// gateway's `profile.json` on disk. This suite reads that file directly
+// instead of the old (now-dead) "Settings -> Spaces -> Connections row"
+// check.
 //
 // Run with: node tests/e2e-live/flows-shell-v2-01-onboarding.mjs  (from apps/desktop)
 import { promises as fs } from 'node:fs';
@@ -75,6 +93,14 @@ async function launchVirgin(userDataDir) {
   return { app, page: p };
 }
 
+async function readLocalProfile(userDataDir) {
+  const raw = await fs.readFile(
+    path.join(userDataDir, 'gateways', 'local', 'profile.json'),
+    'utf8',
+  );
+  return JSON.parse(raw);
+}
+
 async function main() {
   await fs.mkdir(OUT_DIR, { recursive: true });
   const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-e2e-onb-'));
@@ -97,14 +123,14 @@ async function main() {
         .isVisible()
         .catch(() => false);
       assert(!homeHeading, 'Home rendered on a virgin profile — onboarding was skipped');
-      await shot('01-first-run-onboarding');
+      await shot('01-first-run-onboarding-step1-identity');
     });
 
     await step(
       'onb-cta-disabled-when-empty',
-      'CTA "Enter Centraid" is disabled while name is empty',
+      'Step 1 "Continue" is disabled while name is empty',
       async () => {
-        const cta = page.getByRole('button', { name: 'Enter Centraid' });
+        const cta = page.getByRole('button', { name: 'Continue' });
         await cta.waitFor({ state: 'visible', timeout: 10_000 });
         assert(await cta.isDisabled(), 'CTA should be disabled with an empty name');
         const state = await cta.getAttribute('data-state');
@@ -137,16 +163,34 @@ async function main() {
     });
 
     await step(
-      'onb-submit-lands-home',
-      '"Enter Centraid" completes onboarding and lands on Home',
+      'onb-continue-to-connect-step',
+      '"Continue" advances to step 2 — "Where does your data live?" method cards',
       async () => {
-        const cta = page.getByRole('button', { name: 'Enter Centraid' });
+        const cta = page.getByRole('button', { name: 'Continue' });
         assert(!(await cta.isDisabled()), 'CTA still disabled with a valid name');
         await cta.click();
         await page
+          .getByRole('heading', { name: /Where does your data live/ })
+          .waitFor({ state: 'visible', timeout: 10_000 });
+        const methodGroup = page.getByRole('radiogroup', { name: 'Where does your data live?' });
+        await methodGroup.waitFor({ state: 'visible', timeout: 5_000 });
+        const cardText = await methodGroup.innerText();
+        assert(/This Mac/.test(cardText), 'method cards missing "This Mac"');
+        assert(/Existing gateway/.test(cardText), 'method cards missing "Existing gateway"');
+        assert(/Over SSH/.test(cardText), 'method cards missing "Over SSH"');
+        await shot('04-connect-step-method-cards');
+      },
+    );
+
+    await step(
+      'onb-this-mac-completes-instantly',
+      '"This Mac" auto-completes onboarding (0/1 local vault) and lands on Home',
+      async () => {
+        await page.getByRole('radio', { name: /^This Mac/ }).click();
+        await page
           .getByRole('heading', { name: 'What should we build?' })
           .waitFor({ state: 'visible', timeout: 60_000 });
-        await shot('04-home-after-onboarding');
+        await shot('05-home-after-onboarding');
         // The persisted flag must now exist on disk.
         const raw = await fs.readFile(path.join(userDataDir, 'centraid-settings.json'), 'utf8');
         const settings = JSON.parse(raw);
@@ -160,50 +204,32 @@ async function main() {
     );
 
     await step(
-      'onb-profile-name-visible',
-      'Chosen display name surfaces in Settings -> Spaces (gateway connection row)',
+      'onb-profile-metadata-written-to-connected-gateway',
+      "issue #382 bug fix: displayName/avatarColor land on the gateway ConnectFlow actually connected ('local' here), not hardcoded",
       async () => {
-        // Observation from a prior run: the display name does NOT appear
-        // anywhere in the main shell chrome (sidebar head shows the vault
-        // name "Owner's vault"). The only surface that reads the profile
-        // displayName back is Settings -> Spaces -> Connections (listGateways
-        // threads gateway-store displayName). Verify it landed there.
-        const homeText = await page.locator('body').textContent();
-        console.log(
-          `[onb] name in main shell chrome: ${/QA Tester/.test(homeText)} (expected false — recorded as UX observation)`,
-        );
-        await page
-          .getByRole('button', { name: /^Settings/ })
-          .first()
-          .click();
-        await page
-          .getByRole('heading', { name: 'Appearance' })
-          .waitFor({ state: 'visible', timeout: 15_000 });
-        await page.getByRole('button', { name: 'Spaces', exact: true }).click();
-        await page
-          .getByRole('heading', { name: 'Spaces' })
-          .first()
-          .waitFor({ state: 'visible', timeout: 15_000 });
-        await page.waitForTimeout(600);
-        await shot('05-settings-spaces-after-onboarding');
-        const spacesText = await page.locator('body').textContent();
-        const found = /QA Tester/.test(spacesText);
-        console.log(`[onb] "QA Tester" visible in Settings -> Spaces: ${found}`);
+        // No UI surface shows displayName anywhere in the redesigned shell
+        // (verified empirically — switcher header shows the gateway's
+        // technical `label`, not `displayName`; Settings -> Space shows the
+        // VAULT's name; the old Settings -> Spaces "Connections" list that
+        // used to read this back is deleted per the design doc). The
+        // profile.json on disk is the only ground truth left.
+        const profile = await readLocalProfile(userDataDir);
+        console.log(`[onb] gateways/local/profile.json: ${JSON.stringify(profile)}`);
         assert(
-          found,
-          'display name "QA Tester" not visible in Settings -> Spaces either — onboarding write is a dead end',
+          profile.displayName === 'QA Tester',
+          `expected displayName "QA Tester" on the local profile, got ${JSON.stringify(profile.displayName)}`,
         );
-        await page.getByRole('button', { name: 'Home', exact: true }).first().click();
-        await page
-          .getByRole('heading', { name: 'What should we build?' })
-          .waitFor({ state: 'visible', timeout: 10_000 });
+        assert(
+          profile.avatarColor === '#4FB077',
+          `expected avatarColor #4FB077 on the local profile, got ${JSON.stringify(profile.avatarColor)}`,
+        );
       },
     );
 
     // ---------- Relaunch: onboarding must NOT show again ----------
     await step(
       'onb-relaunch-skips',
-      'Relaunch (same profile) boots straight to Home, name intact',
+      'Relaunch (same profile) boots straight to Home, identity intact on disk',
       async () => {
         await app.close().catch(() => undefined);
         await new Promise((resolve) => setTimeout(resolve, 500));
@@ -219,23 +245,11 @@ async function main() {
           .catch(() => false);
         assert(!onboardingVisible, 'onboarding rendered again after completion');
         await shot('06-relaunch-straight-to-home');
-        // Name persistence check goes where the name actually surfaces:
-        // Settings -> Spaces connections row.
-        await page
-          .getByRole('button', { name: /^Settings/ })
-          .first()
-          .click();
-        await page
-          .getByRole('heading', { name: 'Appearance' })
-          .waitFor({ state: 'visible', timeout: 15_000 });
-        await page.getByRole('button', { name: 'Spaces', exact: true }).click();
-        await page.waitForTimeout(600);
-        const spacesText = await page.locator('body').textContent();
+        const profile = await readLocalProfile(userDataDir);
         assert(
-          /QA Tester/.test(spacesText),
-          'display name did not persist across relaunch (Settings -> Spaces)',
+          profile.displayName === 'QA Tester',
+          `displayName did not persist across relaunch, got ${JSON.stringify(profile.displayName)}`,
         );
-        await shot('07-relaunch-spaces-name-persisted');
       },
     );
 

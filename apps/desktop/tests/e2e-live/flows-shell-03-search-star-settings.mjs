@@ -239,10 +239,14 @@ async function main() {
       'Appearance',
       'Layout',
       'Workspace',
-      'Spaces',
+      // issue #382: the "Spaces" cross-vault list page is deleted; the
+      // Account section's space-scoped page is now "Space" (singular),
+      // editing only the active vault.
+      'Space',
       'Phone',
       'Import',
       'Connections',
+      'Storage',
       'Agents',
     ];
     await step(

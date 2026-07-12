@@ -7,11 +7,15 @@
 // permanently deleting them -- which demoted the installed app to a "draft"
 // tile with a DRAFT badge).
 //
-// Flow: install Notes (pinned to Home) -> Settings -> Spaces -> create a
-// second space (auto-switches, Home should be empty) -> switch back via the
-// sidebar vault switcher -> Notes must still be a normal pinned tile, NOT a
-// draft/DRAFT-badged tile. Then fully relaunch (same userDataDir) and
-// re-check.
+// Flow: install Notes (pinned to Home) -> sidebar vault switcher -> "New
+// space…" -> create a second space (auto-switches, Home should be empty) ->
+// switch back via the sidebar vault switcher -> Notes must still be a
+// normal pinned tile, NOT a draft/DRAFT-badged tile. Then fully relaunch
+// (same userDataDir) and re-check.
+//
+// Rewritten for issue #382: the old Settings -> Spaces page (cross-vault
+// list + "Add profile" button) is deleted — space create/switch/manage now
+// lives entirely in the sidebar-head switcher popover.
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -95,18 +99,12 @@ async function main() {
 
     await step(
       'create-second-space',
-      'Settings -> Spaces -> Add profile -> auto-switches to a new, empty vault',
+      'Switcher "New space on Local" -> auto-switches to a new, empty vault',
       async () => {
-        await page
-          .getByRole('button', { name: /^Settings/ })
-          .first()
-          .click();
-        await page
-          .getByRole('heading', { name: 'Appearance' })
-          .waitFor({ state: 'visible', timeout: 15_000 });
-        await page.getByRole('button', { name: 'Spaces', exact: true }).click();
-        await page.waitForTimeout(400);
-        await page.getByRole('button', { name: /Add profile/ }).click();
+        await page.getByRole('button', { name: /Active space:/ }).click();
+        const menu = page.getByRole('menu').first();
+        await menu.waitFor({ state: 'visible', timeout: 5_000 });
+        await page.getByRole('button', { name: 'New space on Local' }).click();
         const modal = page.getByRole('dialog');
         await modal.first().waitFor({ state: 'visible', timeout: 10_000 });
         const nameInput = modal.first().locator('input[type="text"]').first();
