@@ -19,6 +19,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { uuidv7 } from '../ids.js';
 import { DOCUMENT_TARGET_TYPE, FOLDER_SCHEME_URI } from '../commands/documents.js';
 import { VISION_SCHEME_URI } from '../schema/enrich.js';
+import { assertPayload } from './payload-schemas.js';
 import type { Publisher, PublishedWrite } from './staging.js';
 
 /** Resolve a scheme by uri, creating it when absent (machine schemes). */
@@ -82,6 +83,9 @@ export interface AnnotationPayload {
 const annotationPublisher: Publisher = {
   entityType: 'knowledge.annotation',
   probe(vault, payload) {
+    // Read-only lookup — the runtime schema gate covers WRITE paths
+    // (create/update, issue #374 Tier 3); probe never touches SQLite with
+    // payload-derived values beyond a domain-native key lookup.
     const p = payload as unknown as AnnotationPayload;
     if (!p.author_party_id) return null;
     // One running caption per (author, target) — the replaceMemo semantic.
@@ -96,7 +100,7 @@ const annotationPublisher: Publisher = {
       : null;
   },
   create(vault, _owner, payload, now) {
-    const p = payload as unknown as AnnotationPayload;
+    const p = assertPayload<AnnotationPayload>('AnnotationPayload', payload);
     const author = vault
       .prepare('SELECT party_id FROM core_party WHERE party_id = ?')
       .get(p.author_party_id ?? '') as { party_id: string } | undefined;
@@ -113,7 +117,7 @@ const annotationPublisher: Publisher = {
     return { entityId: annotationId, wrote: [] };
   },
   update(vault, entityId, payload) {
-    const p = payload as unknown as AnnotationPayload;
+    const p = assertPayload<AnnotationPayload>('AnnotationPayload', payload);
     // The enricher replaces only its OWN prior output — anyone else's
     // annotation on the same target (the owner's memo) is terminal.
     vault
@@ -139,6 +143,7 @@ export interface TagPayload {
 const tagPublisher: Publisher = {
   entityType: 'core.tag',
   probe(vault, payload) {
+    // Read-only lookup — see AnnotationPayload.probe's comment above.
     const p = payload as unknown as TagPayload;
     const row = vault
       .prepare(
@@ -158,7 +163,7 @@ const tagPublisher: Publisher = {
       : { entityId: row.tag_id, disposition: 'update', note: 'refreshes confidence' };
   },
   create(vault, _owner, payload, now) {
-    const p = payload as unknown as TagPayload;
+    const p = assertPayload<TagPayload>('TagPayload', payload);
     const uri = p.scheme_uri ?? VISION_SCHEME_URI;
     const schemeId = ensureScheme(vault, uri, 'Machine tags');
     const conceptId = ensureConcept(vault, schemeId, tagNotation(p.label), p.label);
@@ -172,7 +177,7 @@ const tagPublisher: Publisher = {
     return { entityId: tagId, wrote: [] };
   },
   update(vault, entityId, payload, now) {
-    const p = payload as unknown as TagPayload;
+    const p = assertPayload<TagPayload>('TagPayload', payload);
     vault
       .prepare(
         `UPDATE core_tag SET confidence = ?, tagged_at = ?
@@ -202,7 +207,7 @@ const faceRegionPublisher: Publisher = {
     return null;
   },
   create(vault, _owner, payload) {
-    const p = payload as unknown as FaceRegionPayload;
+    const p = assertPayload<FaceRegionPayload>('FaceRegionPayload', payload);
     const asset = vault
       .prepare('SELECT asset_id FROM media_media_asset WHERE asset_id = ?')
       .get(p.asset_id) as { asset_id: string } | undefined;
@@ -217,7 +222,7 @@ const faceRegionPublisher: Publisher = {
     return { entityId: regionId, wrote: [] };
   },
   update(vault, entityId, payload) {
-    const p = payload as unknown as FaceRegionPayload;
+    const p = assertPayload<FaceRegionPayload>('FaceRegionPayload', payload);
     // A confirmed region is the owner's word — the proposal never touches it.
     vault
       .prepare(
@@ -239,6 +244,7 @@ export interface CollectionPayload {
 const collectionPublisher: Publisher = {
   entityType: 'core.collection',
   probe(vault, payload) {
+    // Read-only lookup — see AnnotationPayload.probe's comment above.
     const p = payload as unknown as CollectionPayload;
     const existing = vault
       .prepare('SELECT collection_id FROM core_collection WHERE name = ?')
@@ -252,7 +258,7 @@ const collectionPublisher: Publisher = {
       : null;
   },
   create(vault, owner, payload, now) {
-    const p = payload as unknown as CollectionPayload;
+    const p = assertPayload<CollectionPayload>('CollectionPayload', payload);
     const collectionId = uuidv7();
     vault
       .prepare(
@@ -264,7 +270,7 @@ const collectionPublisher: Publisher = {
     return { entityId: collectionId, wrote };
   },
   update(vault, entityId, payload, now) {
-    const p = payload as unknown as CollectionPayload;
+    const p = assertPayload<CollectionPayload>('CollectionPayload', payload);
     // Top-up only: the proposal adds what is missing and never removes —
     // the owner may have curated the album since.
     return { wrote: addEntries(vault, entityId, p.members, now) };
@@ -318,6 +324,7 @@ export interface FilingPayload {
 const filingPublisher: Publisher = {
   entityType: 'core.content_item',
   probe(vault, payload) {
+    // Read-only lookup — see AnnotationPayload.probe's comment above.
     const p = payload as unknown as FilingPayload;
     const existing = vault
       .prepare(
@@ -333,7 +340,7 @@ const filingPublisher: Publisher = {
     throw new Error('core.content_item stages as filing updates only, never creates');
   },
   update(vault, entityId, payload, now) {
-    const p = payload as unknown as FilingPayload;
+    const p = assertPayload<FilingPayload>('FilingPayload', payload);
     const wrote: PublishedWrite[] = [];
     // A wrapped content item's display title and folder tag live on its
     // core_document (issue #352) — the content item is the HEAD revision,
