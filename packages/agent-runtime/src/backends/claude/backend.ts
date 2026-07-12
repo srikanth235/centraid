@@ -22,12 +22,12 @@
  */
 
 import { promises as fs } from 'node:fs';
-import path from 'node:path';
 import { type TurnStreamEvent, type TurnAttachment } from '@centraid/app-engine';
 import type { ToolContext } from '../../runtime.js';
 import type { CapabilityTier } from '../../models/tiers.js';
 import { buildUserContent } from '../../multimodal.js';
 import { buildCentraidMcpServer } from './host-tools.js';
+import { agentSpawnEnv } from '../../spawn-env.js';
 
 /**
  * Map a provider-agnostic capability tier to the Claude CLI's built-in model
@@ -145,13 +145,16 @@ export async function runClaudeTurn(
     if (input.model) options.model = resolveClaudeModel(input.model);
     if (input.permissionMode) options.permissionMode = input.permissionMode;
     if (input.prevSessionId) options.resume = input.prevSessionId;
-    if (input.extraPath) {
-      const current = process.env.PATH ?? '';
-      options.env = {
-        ...process.env,
-        PATH: current ? `${input.extraPath}${path.delimiter}${current}` : input.extraPath,
-      };
-    }
+    // `pathToClaudeCodeExecutable` set → pins the exact executable, so PATH
+    // is irrelevant to resolution; unset → the SDK resolves its own bundled
+    // binary by path, not via PATH lookup. We still sanitize/pass `env`
+    // unconditionally (not just when `extraPath` is set) for consistency
+    // with every other agent-CLI spawn (see spawn-env.ts) and because it's
+    // still the env the CLI's own shell tool inherits.
+    options.env = agentSpawnEnv({
+      binPath: config.pathToClaudeCodeExecutable,
+      extraPath: input.extraPath,
+    });
     if (config.pathToClaudeCodeExecutable) {
       options.pathToClaudeCodeExecutable = config.pathToClaudeCodeExecutable;
     }

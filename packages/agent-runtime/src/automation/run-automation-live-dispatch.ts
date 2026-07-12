@@ -34,6 +34,7 @@ import * as automation from '@centraid/automation';
 import type { RunnerKind } from '../types.js';
 import { runClaudeTurn } from '../backends/claude/backend.js';
 import { defaultRunHostAgent, type RunHostAgent } from './run-automation-host-agent.js';
+import { agentSpawnEnv } from '../spawn-env.js';
 
 export interface LiveDispatchOptions {
   /** The automation app directory — also the CLI's cwd. */
@@ -165,7 +166,9 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
   // the event stream, and `--output-schema` enforces the JSON shape.
   const agentDispatcher: automation.AgentDispatcher = async (call, ctx): Promise<unknown> => {
     const effectivePrompt = await stageAttachments(call);
-    const env = { ...process.env };
+    // No configurable binPath on this path — always a bare-name `codex`
+    // spawn, so PATH is always sanitized (see spawn-env.ts).
+    const env = agentSpawnEnv();
     // `stdin: 'ignore'` is load-bearing: `codex exec` treats an open
     // stdin pipe as an appended `<stdin>` instruction block and blocks
     // until EOF — leaving it piped hangs the call until the run times

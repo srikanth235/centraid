@@ -9,6 +9,7 @@
  * no tokens. Everything is best-effort: any failure resolves to `[]`.
  */
 import type { RunnerModel } from '@centraid/app-engine';
+import { agentSpawnEnv } from '../../spawn-env.js';
 
 /** Cap on the SDK control call — generous; Refresh-only so latency is fine. */
 const MODEL_LIST_TIMEOUT_MS = 15_000;
@@ -67,7 +68,14 @@ export async function enumerateClaudeModels(binPath?: string): Promise<RunnerMod
     /* yields nothing */
   }
 
-  const options: Record<string, unknown> = { abortController: abort };
+  // `binPath` set → pins the exact executable, so PATH is irrelevant to
+  // resolution; unset → the SDK resolves its own bundled binary by path,
+  // not via PATH lookup, so sanitization here is defense-in-depth for
+  // consistency with the other agent-CLI spawns (see spawn-env.ts).
+  const options: Record<string, unknown> = {
+    abortController: abort,
+    env: agentSpawnEnv({ binPath }),
+  };
   if (binPath) options.pathToClaudeCodeExecutable = binPath;
 
   let timer: ReturnType<typeof setTimeout> | undefined;
