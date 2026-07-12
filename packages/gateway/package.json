@@ -4,7 +4,7 @@
   "private": true,
   "description": "Host-agnostic centraid gateway: wires app-engine + agent-runtime + stores + chat runner against injected paths and secrets. Consumed by the Electron desktop's in-process embed and the standalone `centraid-gateway` daemon.",
   "bin": {
-    "centraid-gateway": "./dist/cli.js"
+    "centraid-gateway": "./dist/cli/cli.js"
   },
   "files": [
     "dist",

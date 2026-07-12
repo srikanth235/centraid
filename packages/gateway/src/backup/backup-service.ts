@@ -46,6 +46,7 @@ import {
   saveBackupState,
   type BackupState,
   type BackupTargetState,
+  type RecoveryKitState,
 } from './backup-state.js';
 import { assembleSourceEntries, resetStagingDir, type AssembleOptions } from './backup-sources.js';
 import type { HealthRegistry } from '../serve/health-registry.js';
@@ -402,6 +403,27 @@ export class BackupService {
     return state.targets;
   }
 
+  /**
+   * Recovery-kit confirmation gate (issue #351 wave 4 / #367): whether the
+   * operator has ever acknowledged exporting + safely storing the
+   * recovery kit. Generic on purpose — issue #367 reuses this same flag
+   * to gate the S3-storage enable flow, so it isn't backup-card-specific.
+   */
+  async recoveryKitStatus(): Promise<RecoveryKitState> {
+    const state = await loadBackupState(this.backupDir);
+    return state.recoveryKit;
+  }
+
+  /** Set the recovery-kit confirmation to now (epoch seconds). One-way —
+   *  confirming again just refreshes the timestamp. */
+  async confirmRecoveryKit(): Promise<RecoveryKitState> {
+    const state = await loadBackupState(this.backupDir);
+    const recoveryKit: RecoveryKitState = { confirmedAt: Math.floor(this.now() / 1000) };
+    state.recoveryKit = recoveryKit;
+    await saveBackupState(this.backupDir, state);
+    return recoveryKit;
+  }
+
   async listSnapshots(vaultId: string, opts?: { includePruned?: boolean }): Promise<SnapshotRow[]> {
     const target = await this.requireTarget(vaultId);
     return this.provider.listSnapshots(target.targetId, opts);
@@ -451,4 +473,4 @@ export function createBackupService(opts: BackupServiceOptions): BackupService {
   return new BackupService(opts);
 }
 
-export type { BackupState };
+export type { BackupState, RecoveryKitState };

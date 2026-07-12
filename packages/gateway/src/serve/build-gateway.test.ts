@@ -159,6 +159,13 @@ test('serves component health through the composed chain', async () => {
     expect(byName.get('connections')).toMatchObject({ status: 'ok' });
     // Reconcile ran during start() and reported the scheduler healthy.
     expect(byName.get('automations')?.status).toBe('ok');
+    // Wave 4 additions (issue #351): no enrichers installed, no s3 tier
+    // configured on the boot vault — both read as a healthy, honest ok.
+    expect(byName.get('enrichment')).toMatchObject({
+      status: 'ok',
+      detail: '0 of 0 enrichers enabled',
+    });
+    expect(byName.get('blob-sweep')?.status).toBe('ok');
     // The host-pushed failure carries its structured event.
     expect(byName.get('tunnel')).toMatchObject({
       status: 'error',

@@ -18,6 +18,7 @@ import { BlobCustody, type RemoteTier } from './blob/custody.js';
 import { FsBlobStore, MemoryBlobStore, type LocalBlobStore } from './blob/local.js';
 import { S3BlobStore, type S3Credentials } from './blob/s3.js';
 import { registerHammingFn } from './enrich/similarity.js';
+import { asVaultDiskFullError } from './errors.js';
 import { registerContentTextFn } from './schema/fts.js';
 import { JOURNAL_MIGRATIONS, migrate, VAULT_MIGRATIONS } from './schema/migrate.js';
 import { ephemeralSealKey, resolveSealKey, sealKeyFileFor } from './schema/sealed.js';
@@ -71,21 +72,28 @@ export interface OpenVaultOptions {
 }
 
 function openFile(location: string): DatabaseSync {
-  const db = new DatabaseSync(location);
-  db.exec('PRAGMA foreign_keys = ON');
-  if (location !== ':memory:') {
-    db.exec('PRAGMA journal_mode = WAL');
-    // This is a personal-data vault with a low write rate — durability of
-    // each commit matters more than write throughput, so fsync on every
-    // transaction (WAL's default NORMAL can drop the last commit(s) on
-    // power loss; FULL fsyncs the WAL on every commit).
-    db.exec('PRAGMA synchronous = FULL');
-    // journal.db also carries the conversation-ledger band (the old
-    // transcripts.db folded in), which worker subprocesses open by path —
-    // wait for their locks instead of failing immediately.
-    db.exec('PRAGMA busy_timeout = 30000');
+  try {
+    const db = new DatabaseSync(location);
+    db.exec('PRAGMA foreign_keys = ON');
+    if (location !== ':memory:') {
+      db.exec('PRAGMA journal_mode = WAL');
+      // This is a personal-data vault with a low write rate — durability of
+      // each commit matters more than write throughput, so fsync on every
+      // transaction (WAL's default NORMAL can drop the last commit(s) on
+      // power loss; FULL fsyncs the WAL on every commit).
+      db.exec('PRAGMA synchronous = FULL');
+      // journal.db also carries the conversation-ledger band (the old
+      // transcripts.db folded in), which worker subprocesses open by path —
+      // wait for their locks instead of failing immediately.
+      db.exec('PRAGMA busy_timeout = 30000');
+    }
+    return db;
+  } catch (err) {
+    // WAL mode creates a `-wal`/`-shm` sibling on first write — on a
+    // completely full volume even THAT can ENOSPC during open, before any
+    // vault command ever runs. Surface it the same as every other write path.
+    throw asVaultDiskFullError(`opening ${location}`, err);
   }
-  return db;
 }
 
 /** The vault's current `blob_store` settings (`{}`-safe on any shape). */

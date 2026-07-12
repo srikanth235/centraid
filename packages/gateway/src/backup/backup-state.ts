@@ -33,14 +33,31 @@ export interface BackupTargetState {
   lastError?: string;
 }
 
+/**
+ * Recovery-kit confirmation gate (issue #351 wave 4 / #367): a generic
+ * "the operator has confirmed they hold the recovery kit" flag, NOT
+ * scoped to the backup card that first surfaces it — issue #367 will
+ * reuse this exact field to gate the S3-storage enable flow, so it stays
+ * a plain acknowledgement rather than anything backup-specific.
+ */
+export interface RecoveryKitState {
+  /** Epoch SECONDS the operator last confirmed, or `null` if never. */
+  confirmedAt: number | null;
+}
+
 export interface BackupState {
   targets: Record<string, BackupTargetState>;
   /** Random id minted once per gateway install (FORMAT.md `appMeta.sourceInstanceId`). */
   sourceInstanceId: string;
+  recoveryKit: RecoveryKitState;
 }
 
 function emptyState(): BackupState {
-  return { targets: {}, sourceInstanceId: randomBytes(16).toString('hex') };
+  return {
+    targets: {},
+    sourceInstanceId: randomBytes(16).toString('hex'),
+    recoveryKit: { confirmedAt: null },
+  };
 }
 
 export function stateFile(backupDir: string): string {
@@ -54,6 +71,10 @@ export async function loadBackupState(backupDir: string): Promise<BackupState> {
     return {
       targets: parsed.targets ?? {},
       sourceInstanceId: parsed.sourceInstanceId ?? randomBytes(16).toString('hex'),
+      // Absent on a state.json written before this wave — defaults to
+      // "never confirmed" rather than assuming a pre-existing install
+      // already handled its recovery kit.
+      recoveryKit: parsed.recoveryKit ?? { confirmedAt: null },
     };
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;

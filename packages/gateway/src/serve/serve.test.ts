@@ -174,8 +174,14 @@ test('reports {configured: false} when no backup block is set (default handle)',
     headers: { Authorization: `Bearer ${handle.token}` },
   });
   expect(res.status).toBe(200);
-  const body = (await res.json()) as { configured: boolean; vaults: unknown[] };
-  expect(body).toEqual({ configured: false, vaults: [] });
+  const body = (await res.json()) as {
+    configured: boolean;
+    vaults: unknown[];
+    recoveryKit: { confirmedAt: number | null };
+  };
+  // recoveryKit (issue #351 wave 4) reads "never confirmed" — there's no
+  // BackupService (and so no state.json) to have recorded a confirmation.
+  expect(body).toEqual({ configured: false, vaults: [], recoveryKit: { confirmedAt: null } });
 });
 
 test('POST /centraid/_gateway/backup/run refuses with a clear body when not configured', async () => {
@@ -234,4 +240,43 @@ test('backup status/run round-trip when backup IS configured', async () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
   expect(lastBackupAt).toBeTruthy();
+});
+
+test('recoveryKit confirmation survives a restart (issue #351 wave 4)', async () => {
+  // Real end-to-end: real HTTP server, real BackupService, real state.json
+  // on disk — `handle.close()` + a fresh `serve()` over the SAME dataDir is
+  // as close to "the gateway process restarted" as a unit test gets short
+  // of actually spawning a second process.
+  await handle.close();
+  const providerDir = await fs.mkdtemp(path.join(dataDir, 'backup-provider-'));
+  const backupConfig = {
+    enabled: true as const,
+    provider: { kind: 'local' as const, dir: providerDir },
+  };
+  handle = await serve({ paths: pathsUnder(dataDir), backup: backupConfig });
+  const auth = { Authorization: `Bearer ${handle.token}` };
+
+  const before = await fetch(`${handle.url}/centraid/_gateway/backup`, { headers: auth });
+  const beforeBody = (await before.json()) as { recoveryKit: { confirmedAt: number | null } };
+  expect(beforeBody.recoveryKit).toEqual({ confirmedAt: null });
+
+  const confirm = await fetch(`${handle.url}/centraid/_gateway/backup/kit-confirmed`, {
+    method: 'POST',
+    headers: auth,
+  });
+  expect(confirm.status).toBe(200);
+  const confirmBody = (await confirm.json()) as { ok: boolean; confirmedAt: number };
+  expect(confirmBody.ok).toBe(true);
+  expect(confirmBody.confirmedAt).toBeGreaterThan(0);
+
+  // Restart: close this instance, boot a fresh one over the identical
+  // on-disk dataDir (same `<dataDir>/backup/state.json`).
+  await handle.close();
+  handle = await serve({ paths: pathsUnder(dataDir), backup: backupConfig });
+  const authAfter = { Authorization: `Bearer ${handle.token}` }; // token is re-minted per boot
+
+  const after = await fetch(`${handle.url}/centraid/_gateway/backup`, { headers: authAfter });
+  expect(after.status).toBe(200);
+  const afterBody = (await after.json()) as { recoveryKit: { confirmedAt: number | null } };
+  expect(afterBody.recoveryKit).toEqual({ confirmedAt: confirmBody.confirmedAt });
 });

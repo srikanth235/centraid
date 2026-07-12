@@ -28,11 +28,23 @@
  * crash loses at most the in-flight line. Write failures (unwritable
  * dir, full disk) are swallowed and counted (`droppedWrites`) — logging
  * must never itself crash or recurse into logging.
+ *
+ * Disk-full (issue #351 wave 4) gets one extra step beyond "swallow and
+ * count": once `fs.appendFileSync` reports an ENOSPC/SQLITE_FULL-shaped
+ * error (`isDiskFullError`), persistence stops hammering the full disk on
+ * every subsequent line — `DISK_FULL_RETRY_MS` throttles retries to once
+ * per window instead of once per log line — while the in-memory ring keeps
+ * working exactly as before. The event also reports into
+ * `sharedDiskFullTracker` so the gateway's `disk` health probe (disk-health.
+ * ts) goes red with "ENOSPC observed at <time> in gateway log persistence"
+ * even if a `statfs` reading catches free space between the failure and the
+ * next health tick.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 import type { RuntimeLogger } from '@centraid/app-engine';
+import { isDiskFullError, sharedDiskFullTracker, type DiskFullTracker } from '@centraid/vault';
 
 export type GatewayLogLevel = 'info' | 'warn' | 'error';
 
@@ -56,7 +68,17 @@ export interface GatewayLogStoreOptions {
    * shows the pre-restart lines.
    */
   dir?: string;
+  /**
+   * Where disk-full events get reported (read by the gateway's `disk`
+   * health probe). Defaults to the process-wide `sharedDiskFullTracker` so
+   * this wires up with no caller changes — tests inject their own
+   * `new DiskFullTracker()` for isolation.
+   */
+  diskFullTracker?: DiskFullTracker;
 }
+
+/** How long to stop retrying disk writes after an ENOSPC/SQLITE_FULL failure. */
+const DISK_FULL_RETRY_MS = 30_000;
 
 /** Ring capacity: enough to hold a session's worth of gateway chatter
  *  (boot mounts + scheduler + outbox) without unbounded growth. */
@@ -80,10 +102,14 @@ export class GatewayLogStore {
   private readonly dir: string | undefined;
   private readonly currentFile: string | undefined;
   private droppedWrites = 0;
+  private readonly diskFullTracker: DiskFullTracker;
+  /** Epoch ms until which disk writes are suspended after an ENOSPC hit; null = writing normally. */
+  private diskFullUntil: number | null = null;
 
   constructor(capacity: number = DEFAULT_CAPACITY, options: GatewayLogStoreOptions = {}) {
     this.capacity = Math.max(1, capacity);
     this.dir = options.dir;
+    this.diskFullTracker = options.diskFullTracker ?? sharedDiskFullTracker;
     if (this.dir) {
       this.currentFile = path.join(this.dir, CURRENT_FILE_NAME);
       try {
@@ -145,6 +171,14 @@ export class GatewayLogStore {
     return this.droppedWrites;
   }
 
+  /** True while disk writes are backed off after an ENOSPC/SQLITE_FULL hit
+   *  — `persist()` skips `appendFileSync` entirely until this window elapses,
+   *  so a full disk doesn't get hammered once per log line. The ring and
+   *  live fan-out are unaffected either way. */
+  diskFullSuspended(): boolean {
+    return this.diskFullUntil !== null && Date.now() < this.diskFullUntil;
+  }
+
   /** Tee a `RuntimeLogger`: capture into this store, then forward to
    *  `inner` so console/host output is unchanged. */
   wrap(inner: RuntimeLogger): RuntimeLogger {
@@ -166,11 +200,24 @@ export class GatewayLogStore {
 
   private persist(entry: GatewayLogEntry): void {
     if (!this.dir || !this.currentFile) return;
+    // Backed off after a disk-full hit: count the drop but don't retry the
+    // write on every single line while `diskFullUntil` is still in the
+    // future — the very next `append()` past that window is what "retries
+    // periodically" means here (no separate timer, no extra state machine).
+    if (this.diskFullUntil !== null && Date.now() < this.diskFullUntil) {
+      this.droppedWrites += 1;
+      return;
+    }
     try {
       fs.appendFileSync(this.currentFile, `${JSON.stringify(entry)}\n`);
+      this.diskFullUntil = null;
       this.rotateIfNeeded();
-    } catch {
+    } catch (err) {
       this.droppedWrites += 1;
+      if (isDiskFullError(err)) {
+        this.diskFullUntil = Date.now() + DISK_FULL_RETRY_MS;
+        this.diskFullTracker.report(err, 'gateway log persistence');
+      }
     }
   }
 

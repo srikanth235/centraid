@@ -217,6 +217,48 @@ test('custody replicates local bytes to the remote tier and reconciles orphans',
   expect(remoteStore.hasSync(orphan)).toBe(false);
 });
 
+test('sweepStatus records the last reconcile outcome (issue #351 wave 4)', async () => {
+  const { custody } = makeCustody(null);
+  expect(custody.sweepStatus()).toEqual({
+    lastCompletedAt: null,
+    lastError: null,
+    consecutiveFailures: 0,
+  });
+  await custody.reconcile(new Set());
+  const ok = custody.sweepStatus();
+  expect(ok.lastCompletedAt).toBeTruthy();
+  expect(ok.lastError).toBeNull();
+  expect(ok.consecutiveFailures).toBe(0);
+});
+
+test('sweepStatus counts consecutive failures, then clears on the next success', async () => {
+  let broken = true;
+  const custody = new BlobCustody(new MemoryBlobStore(), () => ({
+    store: {
+      kind: 'fake',
+      list: () => (broken ? Promise.reject(new Error('remote unreachable')) : Promise.resolve([])),
+      get: () => Promise.resolve(null),
+      has: () => Promise.resolve(false),
+      put: () => Promise.resolve(),
+      delete: () => Promise.resolve(),
+      stat: () => Promise.resolve(null),
+    },
+  }));
+  await expect(custody.reconcile(new Set())).rejects.toThrow('remote unreachable');
+  await expect(custody.reconcile(new Set())).rejects.toThrow('remote unreachable');
+  const failed = custody.sweepStatus();
+  expect(failed.lastError).toBe('remote unreachable');
+  expect(failed.lastCompletedAt).toBeNull(); // never succeeded yet
+  expect(failed.consecutiveFailures).toBe(2);
+
+  broken = false;
+  await custody.reconcile(new Set());
+  const recovered = custody.sweepStatus();
+  expect(recovered.lastError).toBeNull();
+  expect(recovered.lastCompletedAt).toBeTruthy();
+  expect(recovered.consecutiveFailures).toBe(0);
+});
+
 test('encrypted remote tier stores ciphertext; open() fetches, verifies, re-caches', async () => {
   const key = Buffer.alloc(32, 9);
   const remoteStore = new MemoryBlobStore();

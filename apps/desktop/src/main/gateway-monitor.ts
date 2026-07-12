@@ -49,6 +49,8 @@ import {
   type GatewayRuntimeState,
   type GatewayVersionSkewAction,
 } from './gateway-monitor-core.js';
+import { deriveOutageEvents, type OutageLogEvent } from './gateway-outage-log-core.js';
+import { loadOutageLog, persistOutageEvents } from './gateway-outage-log.js';
 
 export const GATEWAY_RUNTIME_POLL_MS = 5000;
 /** A hung probe counts as down well before the next tick would queue up. */
@@ -57,6 +59,16 @@ const PROBE_TIMEOUT_MS = 4000;
 const RUNTIME_EVENT_CHANNEL = 'centraid:gateway-runtime:event';
 const HEALTH_PATH = '/centraid/_gateway/health';
 const INFO_PATH = '/centraid/_gateway/info';
+
+/**
+ * One durable alert-history entry as the renderer sees it (issue #351 wave
+ * 4) — `previousSession` marks an entry loaded from disk at this launch's
+ * boot, vs. one recorded during the current run, so the Alerts tab can
+ * label history from before the last restart.
+ */
+export interface OutageLogSnapshotEntry extends Omit<OutageLogEvent, 'gatewayId' | 'gatewayLabel'> {
+  previousSession: boolean;
+}
 
 /**
  * The wire snapshot the renderer's Gateway page renders. `componentAlerts`
@@ -71,6 +83,13 @@ export interface GatewayRuntimeSnapshot extends Omit<
 > {
   alert: GatewayAlertConfig;
   pollIntervalMs: number;
+  /**
+   * Durable alert-history log (issue #351 wave 4) — persisted under
+   * Electron userData, so it survives a restart unlike `outages` above
+   * (in-memory, per-launch). Newest-last, capped at
+   * {@link import('./gateway-outage-log-core.js').OUTAGE_LOG_CAP}.
+   */
+  alertHistory: OutageLogSnapshotEntry[];
 }
 
 let state: GatewayRuntimeState | undefined;
@@ -79,6 +98,14 @@ let timer: NodeJS.Timeout | undefined;
 let inFlight: Promise<void> | undefined;
 /** De-dupes the crash-loop OS notification — one per loop-broken episode. */
 const crashLoopNotified = new Set<string>();
+/**
+ * Persisted alert-history log (issue #351 wave 4) — lazily loaded once per
+ * launch (first tick), then kept in memory and rewritten to disk as new
+ * events land. `historyBootAt` is captured the same moment: any persisted
+ * entry older than it predates this launch ("previous session" in the UI).
+ */
+let outageHistory: OutageLogEvent[] | undefined;
+let historyBootAt: number | undefined;
 
 /** Plain liveness probe — used as the primary probe on a `/health` 404 (older gateway). */
 async function probeInfo(baseUrl: string, token: string | undefined): Promise<GatewayProbe> {
@@ -317,6 +344,12 @@ async function tick(): Promise<void> {
       : settings.gatewayUrl
         ? await probeGateway(settings.gatewayUrl, settings.gatewayToken)
         : { at: Date.now(), ok: false, detail: 'gateway URL not resolved yet' };
+  // Captured before `applyProbe` folds this tick's probe in — the durable
+  // outage-log derivation below (issue #351 wave 4) needs the BEFORE value
+  // to detect a real transition, same as `applyProbe`'s own `transitioned`
+  // check does internally for the in-memory `outages` log.
+  const prevStatus = trackedState.status;
+  const prevHealthStatus = trackedState.healthStatus;
   state = applyProbe(trackedState, probe);
 
   const alert: GatewayAlertConfig = {
@@ -357,6 +390,26 @@ async function tick(): Promise<void> {
     crashLoopNotified.delete(state.gatewayId);
   }
 
+  // Persist this tick's alert-worthy events (issue #351 wave 4) — durable,
+  // independent of the OS-alert de-dupe above: down/degraded/recovered log
+  // on every REAL transition (mirrors the Overview tab's in-session outage
+  // log), component-error/version-skew log alongside their OS notification.
+  // Lazily loaded once per launch; `historyBootAt` marks the boundary the
+  // Alerts tab uses to label history from before this launch.
+  if (outageHistory === undefined) {
+    outageHistory = loadOutageLog();
+    historyBootAt = Date.now();
+  }
+  const newOutageEvents = deriveOutageEvents({
+    prevStatus,
+    prevHealthStatus,
+    state,
+    componentActions: componentEvaluated.actions,
+    ...(skewEvaluated.action ? { versionSkewAction: skewEvaluated.action } : {}),
+    now: Date.now(),
+  });
+  outageHistory = persistOutageEvents(outageHistory, newOutageEvents);
+
   // `componentAlerts`/`versionSkewAlertedAt` are internal dedupe bookkeeping
   // — not part of the wire snapshot (see GatewayRuntimeSnapshot's doc comment).
   const {
@@ -364,7 +417,23 @@ async function tick(): Promise<void> {
     versionSkewAlertedAt: _skewAlertedAt,
     ...publicState
   } = state;
-  lastSnapshot = { ...publicState, alert, pollIntervalMs: GATEWAY_RUNTIME_POLL_MS };
+  // Newest-last, mirroring `outages`' ordering — the renderer reverses for
+  // display (see `buildAlertHistoryRows`). `previousSession` compares
+  // against `historyBootAt`, captured the moment this launch first loaded
+  // the persisted log above.
+  const alertHistory: OutageLogSnapshotEntry[] = outageHistory.map((e) => ({
+    at: e.at,
+    kind: e.kind,
+    ...(e.detail !== undefined ? { detail: e.detail } : {}),
+    ...(e.durationMs !== undefined ? { durationMs: e.durationMs } : {}),
+    previousSession: historyBootAt !== undefined && e.at < historyBootAt,
+  }));
+  lastSnapshot = {
+    ...publicState,
+    alert,
+    pollIntervalMs: GATEWAY_RUNTIME_POLL_MS,
+    alertHistory,
+  };
   broadcast(lastSnapshot);
 }
 

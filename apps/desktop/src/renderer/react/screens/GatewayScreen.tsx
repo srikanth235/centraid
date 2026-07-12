@@ -6,6 +6,7 @@ import controlsCss from '../styles/controls.module.css';
 import {
   ALERT_PRESETS,
   availabilityPct,
+  buildAlertHistoryRows,
   buildOutageRows,
   formatAgo,
   formatClock,
@@ -22,6 +23,7 @@ import SettingsDiagnosticsScreen, {
 } from './SettingsDiagnosticsScreen.js';
 import LogsScreen, { type LogsBridgeProps } from './LogsScreen.js';
 import BackupCard, { type BackupCardProps } from './BackupCard.js';
+import AlertHistoryPanel from './AlertHistoryPanel.js';
 import styles from './GatewayScreen.module.css';
 
 // The Gateway page — a calm instrument panel over the main-process
@@ -66,6 +68,8 @@ export interface GatewayScreenProps {
   /** Backup card data (Overview tab) — `GET/POST _gateway/backup`. */
   loadBackupStatus: BackupCardProps['loadStatus'];
   onRunBackupNow: BackupCardProps['onRunNow'];
+  /** Recovery-kit confirmation gate (Backups card) — `POST _gateway/backup/kit-confirmed`. */
+  onConfirmRecoveryKit: BackupCardProps['onConfirmRecoveryKit'];
   /**
    * Restart the local embedded gateway (Overview tab, near the runtime
    * status). Refused for a remote gateway — main answers `{ok: false}`
@@ -182,6 +186,7 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
       : undefined;
   const availability = availabilityPct(snapshot);
   const outageRows = buildOutageRows(snapshot, now);
+  const alertHistoryRows = buildAlertHistoryRows(snapshot);
   const samples = snapshot.samples.slice(-STRIP_SAMPLES);
   const stripSpanMs =
     samples.length >= 2 ? (samples[samples.length - 1]?.at ?? 0) - (samples[0]?.at ?? 0) : 0;
@@ -374,6 +379,7 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
               now={now}
               loadStatus={props.loadBackupStatus}
               onRunNow={props.onRunBackupNow}
+              onConfirmRecoveryKit={props.onConfirmRecoveryKit}
             />
           </div>
         </>
@@ -482,6 +488,8 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
               </div>
             </div>
           </section>
+
+          <AlertHistoryPanel rows={alertHistoryRows} />
         </div>
       ) : null}
     </div>

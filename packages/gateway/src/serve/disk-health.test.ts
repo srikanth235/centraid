@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DiskFullTracker } from '@centraid/vault';
 import {
   createDiskHealthProbe,
   DISK_DEGRADED_BELOW_BYTES,
@@ -91,6 +92,71 @@ describe('createDiskHealthProbe', () => {
         '/vaults/v1/journal.db-wal',
       ].sort(),
     );
+  });
+});
+
+describe('createDiskHealthProbe: disk-full tracker (issue #351 wave 4)', () => {
+  it('forces error and names the event even when statfs looks fine', async () => {
+    const tracker = new DiskFullTracker();
+    tracker.report(Object.assign(new Error('no space left'), { code: 'ENOSPC' }), 'blob CAS write');
+    const probe = createDiskHealthProbe({
+      rootDir: '/vaults',
+      vaults: () => [],
+      statfs: statfsReturning(50 * GIB, 100 * GIB), // plenty free right now
+      diskFullTracker: tracker,
+    });
+    const result = await probe();
+    expect(result.status).toBe('error');
+    expect(result.detail).toContain('ENOSPC observed at');
+    expect(result.detail).toContain('blob CAS write');
+  });
+
+  it('surfaces the event for one tick, then clears once a recovered reading has been served', async () => {
+    const tracker = new DiskFullTracker();
+    tracker.report(
+      Object.assign(new Error('no space left'), { code: 'ENOSPC' }),
+      'gateway log persistence',
+    );
+    const probe = createDiskHealthProbe({
+      rootDir: '/vaults',
+      vaults: () => [],
+      statfs: statfsReturning(50 * GIB, 100 * GIB),
+      diskFullTracker: tracker,
+    });
+
+    const first = await probe();
+    expect(first.status).toBe('error');
+    expect(first.detail).toContain('ENOSPC observed');
+    // The recovered reading just served already cleared the event — the
+    // NEXT tick goes green, without needing a second recovered reading.
+    expect(tracker.current()).toBeNull();
+
+    const second = await probe();
+    expect(second.status).toBe('ok');
+  });
+
+  it('a low reading still forces error even without a tracked event (unchanged threshold behavior)', async () => {
+    const tracker = new DiskFullTracker();
+    const probe = createDiskHealthProbe({
+      rootDir: '/vaults',
+      vaults: () => [],
+      statfs: statfsReturning(DISK_ERROR_BELOW_BYTES - 1, 100 * GIB),
+      diskFullTracker: tracker,
+    });
+    const result = await probe();
+    expect(result.status).toBe('error');
+    expect(result.detail).not.toContain('ENOSPC observed');
+  });
+
+  it('defaults to the process-wide sharedDiskFullTracker when none is injected', async () => {
+    const probe = createDiskHealthProbe({
+      rootDir: '/vaults',
+      vaults: () => [],
+      statfs: statfsReturning(50 * GIB, 100 * GIB),
+    });
+    // No tracker injected and nothing reported into the shared one in this
+    // test run — must behave exactly like the pre-#351-wave-4 probe.
+    expect((await probe()).status).toBe('ok');
   });
 });
 

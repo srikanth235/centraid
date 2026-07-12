@@ -18,6 +18,7 @@
  *   centraid-gateway pair --data-dir <path> [--vault <name-or-id>] [--ttl-minutes <n>]
  *   centraid-gateway devices <list|add|revoke> --data-dir <path> …
  *   centraid-gateway key <status|export|restore|rotate> --data-dir <path> …  (custody, #298)
+ *   centraid-gateway service <install|uninstall|status> …                    (OS service unit, #351)
  *   centraid-gateway --help
  *   centraid-gateway --version
  */
@@ -34,6 +35,7 @@ import { commandVault } from './vault-admin.js';
 import { commandDevices, commandPair } from './device-admin.js';
 import { commandKey } from './key-admin.js';
 import { commandBackup } from './backup-admin.js';
+import { commandService } from './service-admin.js';
 import { makeDaemonDevicePlane } from './endpoint-host.js';
 
 const PKG_VERSION = '0.1.0';
@@ -74,6 +76,9 @@ function usage(): never {
       '  centraid-gateway backup verify  [--config <path> | --data-dir <path>] [--vault <id>]',
       '  centraid-gateway backup restore [--config <path> | --data-dir <path>] --vault <id> --dest <dir> [--seq <n>]',
       '  centraid-gateway backup kit     [--config <path> | --data-dir <path>] --out <file>',
+      '  centraid-gateway service install   [--data-dir <path> | --config <path>] [--host <h>] [--port <p>] [--dry-run] [--label <id>]',
+      '  centraid-gateway service uninstall [--dry-run] [--label <id>]',
+      '  centraid-gateway service status    [--dry-run] [--label <id>]',
       '  centraid-gateway --version',
       '  centraid-gateway --help',
       '',
@@ -91,6 +96,13 @@ function usage(): never {
       '',
       'serve flags override the config file. --data-dir is required if no',
       '--config is supplied (the config file otherwise carries dataDir).',
+      '',
+      'service install/uninstall/status generate and manage a real OS service',
+      'unit for the headless daemon — a macOS LaunchAgent (launchctl) or a',
+      'systemd --user unit — so it survives a reboot and restarts on crash',
+      '(issue #351). install writes the unit pointing `serve` at the SAME',
+      '--data-dir/--config it was given; --dry-run prints the unit and the',
+      'commands without writing or running anything.',
       '',
       'Bind defaults to 127.0.0.1:0 (loopback, OS-assigned port). Pass',
       '--host 0.0.0.0 to bind LAN-reachable interfaces. There is no TLS',
@@ -272,6 +284,9 @@ async function main(): Promise<void> {
       return;
     case 'backup':
       await commandBackup(rest, fail);
+      return;
+    case 'service':
+      await commandService(rest, fail);
       return;
     default:
       fail(`unknown subcommand "${sub}"`, 2);
