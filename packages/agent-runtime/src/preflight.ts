@@ -15,6 +15,7 @@ import { spawn } from 'node:child_process';
 import type { RunnerStatus } from '@centraid/app-engine';
 import type { RunnerKind, RunnerPrefs } from './types.js';
 import { readRunnerModels } from './models/catalog.js';
+import { agentSpawnEnv } from './spawn-env.js';
 
 const VERSION_TIMEOUT_MS = 5_000;
 
@@ -82,7 +83,7 @@ export async function probeCliAvailability(
 ): Promise<CliAvailability> {
   const bin = binPath ?? defaultBinFor(kind);
   try {
-    const raw = await execVersion(bin);
+    const raw = await execVersion(bin, agentSpawnEnv({ binPath }));
     return { available: true, version: raw.trim().slice(0, 200) };
   } catch {
     return { available: false };
@@ -116,7 +117,7 @@ export async function runPreflight(
 async function probe(prefs: RunnerPrefs): Promise<RunnerStatus> {
   const bin = prefs.binPath ?? defaultBinFor(prefs.kind);
   try {
-    const raw = await execVersion(bin);
+    const raw = await execVersion(bin, agentSpawnEnv({ binPath: prefs.binPath }));
     const trimmed = raw.trim().slice(0, 200);
     const parsed = parseSemver(trimmed);
     const minV = MIN_VERSIONS[prefs.kind];
@@ -192,10 +193,11 @@ export function compareSemver(a: SemVer, b: SemVer): number {
   return a.patch - b.patch;
 }
 
-async function execVersion(bin: string): Promise<string> {
+async function execVersion(bin: string, env: NodeJS.ProcessEnv): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const child = spawn(bin, ['--version'], {
       stdio: ['ignore', 'pipe', 'pipe'],
+      env,
     });
     const chunks: Buffer[] = [];
     let settled = false;

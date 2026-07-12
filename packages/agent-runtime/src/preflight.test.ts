@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { afterEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -11,6 +11,7 @@ import {
   runPreflight,
 } from './preflight.ts';
 import { writeCatalogEntry } from './models/catalog.ts';
+import { agentSpawnEnv, sanitizeAgentPath } from './spawn-env.ts';
 
 test('reports binary-not-found when bin does not exist', async () => {
   invalidatePreflightCache();
@@ -113,4 +114,138 @@ test('probeCliAvailability reports unavailable when the CLI is missing', async (
   const status = await probeCliAvailability('codex', '/no/such/bin');
   expect(status.available).toBe(false);
   expect(status.version).toBe(undefined);
+});
+
+// ---- PATH sanitization (issue: stray ~/node_modules/.bin/claude shim) ---
+//
+// `npm run` / `bun run` prepend every ancestor directory's
+// `node_modules/.bin` to PATH. If one of those ancestors (e.g. a user's
+// HOME dir) happens to hold a stray npm install, a `claude`/`codex` shim
+// living there silently shadows the user's real, PATH-resolved install —
+// the app reports (and runs) whatever stale binary the shim points at.
+// `sanitizeAgentPath`/`agentSpawnEnv` (spawn-env.ts) strip those entries
+// before any bare-name `spawn('claude'|'codex', …)`.
+
+test('sanitizeAgentPath strips node_modules/.bin entries, preserving order', () => {
+  const input = [
+    '/usr/local/bin',
+    '/Users/x/node_modules/.bin',
+    '/opt/homebrew/bin',
+    '/Users/x/project/node_modules/.bin',
+    '/Users/x/.local/bin',
+  ].join(path.delimiter);
+  expect(sanitizeAgentPath(input)).toBe(
+    ['/usr/local/bin', '/opt/homebrew/bin', '/Users/x/.local/bin'].join(path.delimiter),
+  );
+});
+
+test('sanitizeAgentPath preserves non-matching entries verbatim (no-op on a clean PATH)', () => {
+  const input = ['/usr/bin', '/bin', '/Users/x/.local/bin'].join(path.delimiter);
+  expect(sanitizeAgentPath(input)).toBe(input);
+});
+
+test('sanitizeAgentPath handles an empty/undefined PATH', () => {
+  expect(sanitizeAgentPath(undefined)).toBe('');
+  expect(sanitizeAgentPath('')).toBe('');
+});
+
+test('agentSpawnEnv strips node_modules/.bin from PATH when no binPath is given', () => {
+  const baseEnv = {
+    PATH: ['/Users/x/node_modules/.bin', '/Users/x/.local/bin'].join(path.delimiter),
+  };
+  const env = agentSpawnEnv({ baseEnv });
+  expect(env.PATH).toBe('/Users/x/.local/bin');
+});
+
+test('agentSpawnEnv leaves PATH untouched when an explicit binPath is given', () => {
+  const baseEnv = {
+    PATH: ['/Users/x/node_modules/.bin', '/Users/x/.local/bin'].join(path.delimiter),
+  };
+  const env = agentSpawnEnv({ baseEnv, binPath: '/some/explicit/claude' });
+  expect(env.PATH).toBe(baseEnv.PATH);
+});
+
+test('agentSpawnEnv prepends extraPath after sanitization', () => {
+  const baseEnv = {
+    PATH: ['/Users/x/node_modules/.bin', '/Users/x/.local/bin'].join(path.delimiter),
+  };
+  const env = agentSpawnEnv({ baseEnv, extraPath: '/extra/dir' });
+  expect(env.PATH).toBe(['/extra/dir', '/Users/x/.local/bin'].join(path.delimiter));
+});
+
+test('agentSpawnEnv preserves other env vars and never mutates baseEnv', () => {
+  const baseEnv = { PATH: '/Users/x/node_modules/.bin', FOO: 'bar' };
+  const env = agentSpawnEnv({ baseEnv });
+  expect(env.FOO).toBe('bar');
+  expect(env).not.toBe(baseEnv);
+  expect(baseEnv.PATH).toBe('/Users/x/node_modules/.bin'); // unmutated
+});
+
+test('agentSpawnEnv defaults baseEnv to process.env', () => {
+  const savedPath = process.env.PATH;
+  try {
+    process.env.PATH = ['/Users/x/node_modules/.bin', '/usr/bin'].join(path.delimiter);
+    const env = agentSpawnEnv();
+    expect(env.PATH).toBe('/usr/bin');
+  } finally {
+    process.env.PATH = savedPath;
+  }
+});
+
+// ---- end-to-end: probeCliAvailability resolves the real install, not a
+// stray node_modules/.bin shim shadowing it on a polluted dev-run PATH ----
+
+async function writeFakeBin(dir: string, name: string, version: string): Promise<string> {
+  await fs.mkdir(dir, { recursive: true });
+  const file = path.join(dir, name);
+  await fs.writeFile(file, `#!/bin/sh\necho "${version}"\n`, { mode: 0o755 });
+  return file;
+}
+
+let savedPath: string | undefined;
+
+afterEach(() => {
+  if (savedPath !== undefined) {
+    process.env.PATH = savedPath;
+    savedPath = undefined;
+  }
+});
+
+test('probeCliAvailability resolves the real install past a node_modules/.bin shim on PATH', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-preflight-pathfix-'));
+  const shimDir = path.join(root, 'node_modules', '.bin'); // e.g. a stray ~/node_modules/.bin
+  const realDir = path.join(root, 'real-bin'); // e.g. ~/.local/bin
+  await writeFakeBin(shimDir, 'codex', '1.0.128');
+  await writeFakeBin(realDir, 'codex', '2.1.207');
+
+  savedPath = process.env.PATH;
+  // Shim first — reproduces npm/bun `run`'s ancestor node_modules/.bin
+  // injection landing ahead of the user's real install on PATH.
+  process.env.PATH = [shimDir, realDir].join(path.delimiter);
+
+  const status = await probeCliAvailability('codex');
+  expect(status.available).toBe(true);
+  expect(status.version).toBe('2.1.207');
+});
+
+test('probeCliAvailability still finds the shim if it is the only thing on PATH (sanitization is not overzealous)', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-preflight-pathfix-'));
+  const shimDir = path.join(root, 'node_modules', '.bin');
+  await writeFakeBin(shimDir, 'codex', '1.0.128');
+
+  savedPath = process.env.PATH;
+  process.env.PATH = shimDir;
+
+  const status = await probeCliAvailability('codex');
+  expect(status.available).toBe(false);
+});
+
+test('probeCliAvailability with an explicit binPath ignores PATH sanitization entirely', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-preflight-pathfix-'));
+  const explicitDir = path.join(root, 'node_modules', '.bin'); // even if it LOOKS like a shim dir
+  const explicitBin = await writeFakeBin(explicitDir, 'codex', '3.3.3');
+
+  const status = await probeCliAvailability('codex', explicitBin);
+  expect(status.available).toBe(true);
+  expect(status.version).toBe('3.3.3');
 });

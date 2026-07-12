@@ -3,6 +3,7 @@ import {
   ASSISTANT_APP_ID,
   createConversation,
   deleteConversation,
+  getUserPrefs,
   listConversations,
   loadConversation,
   streamAssistantTurn,
@@ -28,6 +29,30 @@ type AsstMsg =
   | { kind: 'user'; text: string }
   | { kind: 'ai'; text: string; error?: boolean; streaming?: boolean }
   | { kind: 'tools'; calls: AsstToolCall[] };
+
+// Resolves the model the user picked in Settings → Agents → "Default model
+// for Claude Code" (persisted per-runner as `chatModelByRunner[kind]`) for
+// whichever runner kind is currently active. Mirrors the exact read pattern
+// `settingsProvidersData.ts`'s `loadProviders()` uses for the same two prefs.
+// Fetched fresh on every send rather than cached in the route's ref/state:
+// the user can flip this in Settings without leaving/remounting Assistant,
+// and a couple of tiny IPC reads per turn-send is cheap compared to silently
+// sending stale-model turns. Returns `undefined` (never `''`) when there's no
+// saved preference for the active kind, so callers omit `model` entirely and
+// the Claude Agent SDK's own default still applies — matching prior behavior.
+async function resolveActiveChatModel(): Promise<string | undefined> {
+  const [kindRaw, modelMap] = await Promise.all([
+    getUserPrefs()
+      .then((p) => p['agent.runner.kind'])
+      .catch(() => undefined),
+    window.CentraidApi.getSettings()
+      .then((s) => s.chatModelByRunner)
+      .catch(() => undefined),
+  ]);
+  const kind = kindRaw === 'claude-code' ? 'claude-code' : 'codex';
+  const model = modelMap?.[kind];
+  return model ? model : undefined;
+}
 
 const SUGGESTIONS = [
   'What did I spend the most on last month?',
@@ -266,7 +291,12 @@ export default function AssistantRoute(): JSX.Element {
     };
 
     try {
-      await streamAssistantTurn({ conversationId, message: text }, onEvent, m.current.abort.signal);
+      const model = await resolveActiveChatModel();
+      await streamAssistantTurn(
+        { conversationId, message: text, ...(model ? { model } : {}) },
+        onEvent,
+        m.current.abort.signal,
+      );
     } catch (err) {
       if (!m.current.disposed && !(err instanceof DOMException && err.name === 'AbortError')) {
         m.current.msgs.push({

@@ -4,7 +4,6 @@ import type { InsightsBridgeProps } from '../screen-contracts.js';
 import { insK, insKindLabel, insUsd, relativeTime } from '../format.js';
 import styles from './InsightsScreen.module.css';
 import { cx } from '../ui/cx.js';
-import emptyCss from '../styles/pageEmpty.module.css';
 
 // Daily-consumption line chart — a React port of `insLineChart`
 // (app-insights.ts): same 760×200 viewBox, area gradient, peak marker.
@@ -121,13 +120,31 @@ function ChartStat({
   );
 }
 
-function EmptyLine({ message }: { message: string }): JSX.Element {
+// A panel among several on an otherwise-populated page being empty isn't
+// page-level news — no icon, no dashed frame (that treatment is reserved
+// for the whole route being empty, e.g. ApprovalsScreen's inbox). A quiet
+// single line matches this app's existing in-panel empty idiom (see
+// ApprovalsScreen's `.grantsEmpty`).
+// `compact` — for a panel that already carries its own structure above the
+// message (the By-source table header), so it needs no reserved height. The
+// non-compact form gives the bare right-column panels enough presence to land
+// level with the taller left column.
+function PanelEmpty({ message, compact }: { message: string; compact?: boolean }): JSX.Element {
   return (
-    <div className={emptyCss.pageEmpty}>
-      <div className={emptyCss.pageEmptyIcon} aria-hidden="true">
-        <Icon name="Sparkle" size={22} />
-      </div>
-      <div className={emptyCss.pageEmptyText}>{message}</div>
+    <div className={compact ? styles.panelEmptyCompact : styles.panelEmpty}>{message}</div>
+  );
+}
+
+// The daily-consumption panel reserves a chart-sized footprint so the layout
+// doesn't jump when the first data lands. Filling that footprint with a lone
+// centered sentence reads as dead space; a faint gridded baseline turns it
+// into a legible "chart awaiting data" scaffold, and the note sits on a chip
+// so a gridline never strikes through it.
+function ChartEmpty({ message }: { message: string }): JSX.Element {
+  return (
+    <div className={styles.chartEmpty} aria-hidden={false}>
+      <div className={styles.chartEmptyGrid} aria-hidden="true" />
+      <span className={styles.chartEmptyNote}>{message}</span>
     </div>
   );
 }
@@ -244,7 +261,7 @@ export default function InsightsScreen({ summary }: InsightsBridgeProps): JSX.El
                   </div>
                 </div>
               ) : (
-                <EmptyLine message="No activity in this window yet." />
+                <ChartEmpty message="No activity in this window yet." />
               )}
             </Panel>
 
@@ -283,9 +300,7 @@ export default function InsightsScreen({ summary }: InsightsBridgeProps): JSX.El
                   </div>
                 ))}
                 {summary.byAutomation.length === 0 ? (
-                  <div className={styles.tr}>
-                    <EmptyLine message="No runs yet." />
-                  </div>
+                  <PanelEmpty compact message="No runs yet." />
                 ) : null}
               </div>
             </Panel>
@@ -310,7 +325,7 @@ export default function InsightsScreen({ summary }: InsightsBridgeProps): JSX.El
                   );
                 })}
                 {summary.byModel.length === 0 ? (
-                  <EmptyLine message="No model usage recorded yet." />
+                  <PanelEmpty message="No model usage recorded yet." />
                 ) : null}
               </div>
             </Panel>
@@ -335,7 +350,7 @@ export default function InsightsScreen({ summary }: InsightsBridgeProps): JSX.El
                     </div>
                   </div>
                 ))}
-                {summary.recent.length === 0 ? <EmptyLine message="No activity yet." /> : null}
+                {summary.recent.length === 0 ? <PanelEmpty message="No activity yet." /> : null}
               </div>
             </Panel>
           </div>

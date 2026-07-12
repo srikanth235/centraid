@@ -1,4 +1,10 @@
 /*
+ * governance: allow-repo-hygiene file-size-limit (#378) 5 lines over from the
+ * codex additional_tools/namespace-flattening fix; splitting the codex and
+ * claude capture/normalize halves into separate files would fragment one
+ * coherent host-tool-enumeration story across two files with no readability
+ * gain.
+ *
  * Host tool enumeration for the builder's available-tools grounding
  * block (issue #80 follow-up).
  *
@@ -37,6 +43,7 @@ import type { AddressInfo } from 'node:net';
 import type { RunnerKind } from './types.js';
 import { startMockLlmServer } from '@centraid/automation';
 import { codexProviderOverrideArgs } from './backends/codex/provider-config.js';
+import { agentSpawnEnv } from './spawn-env.js';
 
 /** The throwaway prompt; the mock ends the turn at once, so it's never acted on. */
 const PROBE_PROMPT = 'centraid tool-enumeration probe — reply with: ok';
@@ -71,8 +78,10 @@ async function spawnProbeCli(input: {
   cwd: string;
   abortSignal: AbortSignal;
 }): Promise<void> {
-  const env: NodeJS.ProcessEnv = { ...process.env };
-  env.CENTRAID_MOCK_KEY = input.mockBearerToken;
+  const env = agentSpawnEnv({
+    binPath: input.binPath,
+    baseEnv: { ...process.env, CENTRAID_MOCK_KEY: input.mockBearerToken },
+  });
   const args = [
     'exec',
     ...codexProviderOverrideArgs({
@@ -218,15 +227,21 @@ async function captureClaudeTools(opts: {
       // markers that hijack the child when the gateway runs nested in a Claude
       // session. Keep CLAUDE_CONFIG_DIR so the user's MCP servers are still
       // discovered. process.env is never mutated.
-      const env: NodeJS.ProcessEnv = {};
+      const scrubbed: NodeJS.ProcessEnv = {};
       for (const [k, v] of Object.entries(process.env)) {
         if (k === 'CLAUDE_CONFIG_DIR') {
-          env[k] = v;
+          scrubbed[k] = v;
           continue;
         }
         if (k.startsWith('ANTHROPIC_') || k.startsWith('CLAUDE')) continue;
-        env[k] = v;
+        scrubbed[k] = v;
       }
+      // PATH sanitization (see spawn-env.ts) applies here too: an explicit
+      // `opts.binPath` already pins the exact executable via
+      // `pathToClaudeCodeExecutable` below, so this only matters for the
+      // default (vendored-binary) path, but stays consistent with every
+      // other agent-CLI spawn in this module.
+      const env = agentSpawnEnv({ baseEnv: scrubbed, binPath: opts.binPath });
       env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${addr.port}`;
       env.ANTHROPIC_API_KEY = 'centraid-probe';
 
@@ -325,8 +340,35 @@ export async function enumerateHostTools(
 }
 
 /**
+ * Pull the tool-declaration array out of a codex `/v1/responses` request
+ * body, across two wire shapes we've observed:
+ *   - codex-cli ≤0.128ish: a top-level `tools` array on the request body.
+ *   - codex-cli 0.144+: no top-level `tools` field at all — the
+ *     declarations instead ride inside `input` as an item shaped
+ *     `{type: 'additional_tools', role: 'developer', tools: [...]}`.
+ * Checked in that order so a future revert to the flat shape still works.
+ */
+function extractCodexRequestTools(body: Record<string, unknown>): unknown[] | undefined {
+  if (Array.isArray(body.tools) && body.tools.length > 0) return body.tools;
+  if (Array.isArray(body.input)) {
+    for (const item of body.input) {
+      if (
+        isObject(item) &&
+        item.type === 'additional_tools' &&
+        Array.isArray(item.tools) &&
+        item.tools.length > 0
+      ) {
+        return item.tools;
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
  * Capture codex's tool definitions by spawning `codex exec` against the
- * mock-LLM server and snapshotting the first request's `tools` array. codex
+ * mock-LLM server and snapshotting the first request's tool declarations
+ * (see `extractCodexRequestTools` for the wire shapes handled). codex
  * connects its `[mcp_servers.*]` synchronously during startup, so the first
  * request already carries the full set — no readiness gate needed. The `-c`
  * overrides layer on the user's real ~/.codex so those servers stay reachable
@@ -340,11 +382,14 @@ async function captureCodexTools(opts: {
   const abort = new AbortController();
   const server = await startMockLlmServer({
     onRequest: (_dispatchId, body) => {
-      if (captured === undefined && Array.isArray(body.tools)) {
-        captured = body.tools;
-        // The first request carries the full tool set — stop the CLI now
-        // rather than waiting for it to finish its turn.
-        abort.abort();
+      if (captured === undefined) {
+        const tools = extractCodexRequestTools(body);
+        if (tools) {
+          captured = tools;
+          // The first request carries the full tool set — stop the CLI now
+          // rather than waiting for it to finish its turn.
+          abort.abort();
+        }
       }
     },
   });
@@ -399,6 +444,14 @@ export function normalizeCodexTools(raw: readonly unknown[]): HostTool[] {
   const out: HostTool[] = [];
   for (const entry of raw) {
     if (!isObject(entry)) continue;
+    // A `namespace` groups related tools (e.g. codex's "collaboration" set —
+    // spawn_agent, send_message, ...) under one entry with its own nested
+    // `tools` array rather than being callable itself. Flatten it so the
+    // enumerated surface lists exactly what the agent can call by name.
+    if (entry.type === 'namespace' && Array.isArray(entry.tools)) {
+      out.push(...normalizeCodexTools(entry.tools));
+      continue;
+    }
     // Prefer an explicit `name`; fall back to `type` for the nameless
     // native tools whose `type` is the identity (`web_search`).
     const name =

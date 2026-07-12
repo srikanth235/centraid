@@ -24,6 +24,7 @@
 import { spawn } from 'node:child_process';
 import type { RunnerKind } from '../types.js';
 import { codexProviderOverrideArgs } from '../backends/codex/provider-config.js';
+import { agentSpawnEnv } from '../spawn-env.js';
 
 export interface RunHostAgentInput {
   /** Which agent backend to drive. */
@@ -156,8 +157,10 @@ async function runClaudeAgentSdk(input: RunHostAgentInput): Promise<RunHostAgent
  * `env_key`, never on disk.
  */
 async function spawnCodexExec(input: RunHostAgentInput): Promise<RunHostAgentResult> {
-  const env: NodeJS.ProcessEnv = { ...process.env };
-  env.CENTRAID_MOCK_KEY = input.mockBearerToken;
+  const env = agentSpawnEnv({
+    binPath: input.binPath,
+    baseEnv: { ...process.env, CENTRAID_MOCK_KEY: input.mockBearerToken },
+  });
   // `codex exec` has no tool-allowlist flag; the mock-LLM server only ever
   // stages tool calls the manifest permits, so the allowlist is already
   // enforced upstream. `--dangerously-bypass-approvals-and-sandbox` lets the

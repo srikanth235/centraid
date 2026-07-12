@@ -33,12 +33,12 @@
 
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import { promises as fs } from 'node:fs';
-import path from 'node:path';
 import type { Readable, Writable } from 'node:stream';
 import type { TurnStreamEvent, TurnAttachment } from '@centraid/app-engine';
 import type { ToolContext } from '../../runtime.js';
 import { centraidDynamicToolSpecs, handleCentraidToolCall } from './host-tools.js';
 import { codexImageItems } from '../../multimodal.js';
+import { agentSpawnEnv } from '../../spawn-env.js';
 
 export interface CodexTurnInput {
   cwd: string;
@@ -108,7 +108,7 @@ export async function runCodexTurn(
   await fs.mkdir(input.cwd, { recursive: true });
 
   const args = ['app-server', ...(config.extraArgs ?? [])];
-  const childEnv = buildSpawnEnv(input.extraPath ? { extraPath: input.extraPath } : {});
+  const childEnv = agentSpawnEnv({ binPath: config.binPath, extraPath: input.extraPath });
   const child = spawn(bin, args, {
     cwd: input.cwd,
     env: childEnv,
@@ -633,21 +633,6 @@ function extractErrorText(item: Record<string, unknown>): string | undefined {
   if (err && typeof err.message === 'string') return err.message;
   if (typeof item.aggregated_output === 'string') return item.aggregated_output;
   return undefined;
-}
-
-interface SpawnEnvOptions {
-  extraPath?: string;
-}
-
-function buildSpawnEnv(opts: SpawnEnvOptions): NodeJS.ProcessEnv {
-  const { extraPath } = opts;
-  if (!extraPath) return process.env;
-  // Clone so we never mutate `process.env` — concurrent turns must not race
-  // on PATH.
-  const env: NodeJS.ProcessEnv = { ...process.env };
-  const current = process.env.PATH ?? '';
-  env.PATH = current ? `${extraPath}${path.delimiter}${current}` : extraPath;
-  return env;
 }
 
 function summarizeToolResult(item: Record<string, unknown>): unknown {
