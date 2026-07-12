@@ -31,7 +31,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = path.join(__dirname, 'out');
 const USER_DATA_DIR = path.join(__dirname, 'out', 'userdata-automations-01');
 
-const TEMPLATE_NAME = 'System health check';
+const TEMPLATE_NAME = 'Trip albums';
 
 function assert(cond, msg) {
   if (!cond) throw new Error(`assertion failed: ${msg}`);
@@ -184,7 +184,7 @@ async function main() {
     // ---------------------------------------------------------------------
     await step(
       'flow1-adopt-template',
-      'Discover -> Automations tab -> adopt "System health check" -> on Home AND Automations overview',
+      'Discover -> Automations tab -> adopt "Trip albums" -> on Home AND Automations overview',
       async () => {
         await adoptTemplate(TEMPLATE_NAME);
 
@@ -226,15 +226,15 @@ async function main() {
         await shot('02-view-screen');
 
         const bodyTxt = await bodyText();
-        // packages/blueprints/automations/system-health-check/automations/system-health-check/automation.json
-        // declares a single `cron` trigger ("30 17 * * *"), no webhook -- so
+        // packages/blueprints/automations/trip-albums/automations/trip-albums/automation.json
+        // declares a single `cron` trigger ("0 6 * * *"), no webhook -- so
         // the hero should render the cron/next-runs block, not a webhook URL.
         // NOTE: document.body.innerText reflects CSS text-transform (the
         // heroNextLbl/eyebrow labels render visually as "NEXT 3 RUNS" via
         // `text-transform: uppercase`), so match case-insensitively.
         assert(
-          /30 17 \* \* \*/.test(bodyTxt),
-          `expected cron expr "30 17 * * *" in hero, got body head: ${bodyTxt.slice(0, 300)}`,
+          /0 6 \* \* \*/.test(bodyTxt),
+          `expected cron expr "0 6 * * *" in hero, got body head: ${bodyTxt.slice(0, 300)}`,
         );
         assert(
           /next 3 runs/i.test(bodyTxt),
@@ -564,7 +564,7 @@ async function main() {
         console.log(
           `[auto01] builder body after Edit-in-builder (first 400 chars): ${bodyTxt.slice(0, 400).replace(/\n/g, ' | ')}`,
         );
-        const hasCron = /30 17 \* \* \*/.test(bodyTxt) || /System health check/.test(bodyTxt);
+        const hasCron = /0 6 \* \* \*/.test(bodyTxt) || /Trip albums/.test(bodyTxt);
         console.log(
           `[auto01] builder shows existing automation identity (cron expr or name): ${hasCron}`,
         );

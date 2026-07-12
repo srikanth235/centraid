@@ -3,7 +3,7 @@
   "id": "release-notes-drafter",
   "name": "Release notes drafter",
   "kind": "automation",
-  "description": "Drafts user-facing release notes the moment a pull request merges into main.",
+  "description": "Drafts user-facing release notes the moment a pull request merges into main — wire the minted webhook URL into your repo's GitHub webhook settings, no polling.",
   "version": "0.1.0",
   "actions": [],
   "queries": []

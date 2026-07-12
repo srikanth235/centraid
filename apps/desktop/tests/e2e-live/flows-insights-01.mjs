@@ -94,11 +94,11 @@ async function adoptSystemHealthCheck() {
   await page.getByRole('tab', { name: /^Automations/ }).click();
   await page.waitForTimeout(200);
   const card = page
-    .locator('button[data-kind="automation"]', { hasText: 'System health check' })
+    .locator('button[data-kind="automation"]', { hasText: 'Trip albums' })
     .first();
   await card.waitFor({ state: 'visible', timeout: 10_000 });
   await card.click();
-  const dialog = page.getByRole('dialog', { name: /System health check/ });
+  const dialog = page.getByRole('dialog', { name: /Trip albums/ });
   await dialog.waitFor({ state: 'visible', timeout: 10_000 });
   await shot('adopt-preview-dialog');
   await dialog.getByRole('button', { name: 'Use template' }).click();
@@ -167,7 +167,7 @@ async function main() {
     // ---------- FLOW 2: adopt + run automation once ----------
     await step(
       'flow2-adopt-automation',
-      'Discover -> Automations tab -> adopt "System health check"',
+      'Discover -> Automations tab -> adopt "Trip albums"',
       async () => {
         const t = Date.now();
         await adoptSystemHealthCheck();
@@ -182,12 +182,12 @@ async function main() {
         const t = Date.now();
         await navTo(page, 'Automations');
         await page.waitForTimeout(400);
-        const row = page.getByRole('button', { name: /System health check/ }).first();
+        const row = page.getByRole('button', { name: /Trip albums/ }).first();
         await row.waitFor({ state: 'visible', timeout: 10_000 });
         await shot('02-automations-list-with-shc');
         await row.click();
         await page
-          .getByRole('heading', { name: 'System health check', level: 1 })
+          .getByRole('heading', { name: 'Trip albums', level: 1 })
           .waitFor({ state: 'visible', timeout: 10_000 });
         await shot('02-automation-view-before-run');
 
@@ -251,8 +251,8 @@ async function main() {
           'expected "Automation" source tag in By source / Recent activity',
         );
         assert(
-          /System health check/.test(bodyTxt),
-          'expected automation label "System health check" somewhere on Insights',
+          /Trip albums/.test(bodyTxt),
+          'expected automation label "Trip albums" somewhere on Insights',
         );
         timings.flow2Insights = Date.now() - t;
       },
@@ -267,11 +267,11 @@ async function main() {
         for (let i = 2; i <= 3; i++) {
           await navTo(page, 'Automations');
           await page.waitForTimeout(400);
-          const row = page.getByRole('button', { name: /System health check/ }).first();
+          const row = page.getByRole('button', { name: /Trip albums/ }).first();
           await row.waitFor({ state: 'visible', timeout: 10_000 });
           await row.click();
           await page
-            .getByRole('heading', { name: 'System health check', level: 1 })
+            .getByRole('heading', { name: 'Trip albums', level: 1 })
             .waitFor({ state: 'visible', timeout: 10_000 });
           const runBtn = page.getByRole('button', { name: /Run now|Starting…/ });
           await runBtn.waitFor({ state: 'visible', timeout: 5_000 });
@@ -401,10 +401,10 @@ async function main() {
       async () => {
         await navTo(page, 'Automations');
         await page.waitForTimeout(300);
-        const row = page.getByRole('button', { name: /System health check/ }).first();
+        const row = page.getByRole('button', { name: /Trip albums/ }).first();
         await row.click();
         await page
-          .getByRole('heading', { name: 'System health check', level: 1 })
+          .getByRole('heading', { name: 'Trip albums', level: 1 })
           .waitFor({ state: 'visible', timeout: 10_000 });
         const runBtn = page.getByRole('button', { name: /Run now|Starting…/ });
         await runBtn.click();
@@ -458,7 +458,7 @@ async function main() {
         const noActivityYet = await page.locator('text=No activity yet.').count();
         assert(noRunsYet === 0, 'By source empty after relaunch — runs did not persist');
         assert(noActivityYet === 0, 'Recent activity empty after relaunch — runs did not persist');
-        assert(/System health check/.test(bodyTxt), 'automation label missing after relaunch');
+        assert(/Trip albums/.test(bodyTxt), 'automation label missing after relaunch');
       },
     );
 

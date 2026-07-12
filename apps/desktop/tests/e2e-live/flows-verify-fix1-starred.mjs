@@ -238,17 +238,17 @@ async function main() {
     // ---------- e. star an automation too ----------
     await step(
       'e-star-automation',
-      'Adopt + star "System health check" automation; appears on Starred as an automation card',
+      'Adopt + star "Trip albums" automation; appears on Starred as an automation card',
       async () => {
         await navTo(page, 'Discover');
         await page.getByRole('tab', { name: /^Automations/ }).click();
         await page.waitForTimeout(300);
         const tmplCard = page
-          .locator('button[data-kind="automation"]', { hasText: 'System health check' })
+          .locator('button[data-kind="automation"]', { hasText: 'Trip albums' })
           .first();
         await tmplCard.waitFor({ state: 'visible', timeout: 15_000 });
         await tmplCard.click();
-        const dialog = page.getByRole('dialog', { name: /System health check/ });
+        const dialog = page.getByRole('dialog', { name: /Trip albums/ });
         await dialog.waitFor({ state: 'visible', timeout: 10_000 });
         await dialog.getByRole('button', { name: 'Use template' }).click();
         await page.waitForTimeout(1200);
@@ -256,7 +256,7 @@ async function main() {
 
         await openHome();
         const autoTile = page
-          .locator('[data-kind="automation"]', { hasText: 'System health check' })
+          .locator('[data-kind="automation"]', { hasText: 'Trip albums' })
           .first();
         await autoTile.waitFor({ state: 'visible', timeout: 15_000 });
         const wrap = autoTile.locator('xpath=..');
@@ -277,11 +277,11 @@ async function main() {
           `[fix1] Starred page body after starring automation: ${JSON.stringify(bodyTxt.slice(0, 300))}`,
         );
         assert(
-          /System health check/.test(bodyTxt),
+          /Trip albums/.test(bodyTxt),
           'Starred page missing the starred automation card',
         );
         const autoCardOnStarred = page.locator('[data-kind="automation"]', {
-          hasText: 'System health check',
+          hasText: 'Trip albums',
         });
         await autoCardOnStarred.first().waitFor({ state: 'visible', timeout: 5_000 });
       },

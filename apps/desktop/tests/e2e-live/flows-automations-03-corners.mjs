@@ -59,7 +59,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = path.join(__dirname, 'out');
 const USER_DATA_DIR = path.join(__dirname, 'out', 'userdata-automations-03-corners');
 
-const TEMPLATE_HEALTH = 'System health check';
+const TEMPLATE_HEALTH = 'Trip albums';
 const AGENT_AUTO_ID = 'e2e-agent-purge-demo';
 const AGENT_AUTO_NAME = 'E2E agent purge demo';
 const FAIL_AUTO_ID = 'e2e-fail-demo';
@@ -385,7 +385,7 @@ async function main() {
     // -----------------------------------------------------------------
     await step(
       'setup',
-      'Adopt "System health check"; install Locker + grant access; create+trash a Locker item',
+      'Adopt "Trip albums"; install Locker + grant access; create+trash a Locker item',
       async () => {
         await adoptTemplate(TEMPLATE_HEALTH);
         await shot('00-adopted-health-check');
@@ -646,7 +646,7 @@ async function main() {
     // -----------------------------------------------------------------
     await step(
       'rapid-double-run-now',
-      'System health check: click Run now twice as fast as possible -> no crash, document actual run count',
+      'Trip albums: click Run now twice as fast as possible -> no crash, document actual run count',
       async () => {
         await openAutomationView(TEMPLATE_HEALTH);
         const before = (await gwRuns(await gwFindRef(TEMPLATE_HEALTH))).length;
@@ -793,7 +793,7 @@ async function main() {
     // -----------------------------------------------------------------
     await step(
       'delete-with-run-history-safety',
-      'Delete System health check (which has run history) -> confirm modal -> no crash; orphaned recent-run rows do not break the overview',
+      'Delete Trip albums (which has run history) -> confirm modal -> no crash; orphaned recent-run rows do not break the overview',
       async () => {
         await openAutomationView(TEMPLATE_HEALTH);
         const deleteBtn = page.getByRole('button', {
