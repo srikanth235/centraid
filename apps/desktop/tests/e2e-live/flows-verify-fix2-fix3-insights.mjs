@@ -4,7 +4,7 @@
 // (regenerated via flows-insights-01.mjs — the original fixture from a prior
 // session was gone from disk when this run started, likely cleaned up by a
 // concurrent agent sharing this worktree; a fresh equivalent was rebuilt:
-// 3 "System health check" automation runs + 1 interactive chat turn).
+// 3 "Trip albums" automation runs + 1 interactive chat turn).
 //
 // Run with: node apps/desktop/tests/e2e-live/flows-verify-fix2-fix3-insights.mjs
 import { promises as fs } from 'node:fs';
@@ -131,7 +131,7 @@ async function main() {
     // ================= FIX 2: automation-name labels =================
     await step(
       'fix2-labels',
-      'Insights "By source"/"Recent activity" show "System health check", not generic labels',
+      'Insights "By source"/"Recent activity" show "Trip albums", not generic labels',
       async () => {
         await openInsights();
         await shot('fix2-insights-full-page');
@@ -152,8 +152,8 @@ async function main() {
           .catch(() => bodyTxt);
         console.log(`[fix23] By source panel text: ${JSON.stringify(bySourceText?.slice(0, 400))}`);
         assert(
-          /System health check/.test(bySourceText ?? ''),
-          'By source panel missing "System health check" label',
+          /Trip albums/.test(bySourceText ?? ''),
+          'By source panel missing "Trip albums" label',
         );
 
         // Chat row should still say "Chat" (unaffected, expected).
@@ -172,8 +172,8 @@ async function main() {
           `[fix23] Recent activity panel text: ${JSON.stringify(recentText?.slice(0, 600))}`,
         );
         assert(
-          /System health check/.test(recentText ?? ''),
-          'Recent activity missing "System health check" label for automation runs',
+          /Trip albums/.test(recentText ?? ''),
+          'Recent activity missing "Trip albums" label for automation runs',
         );
         // The old bug rendered the literal raw handler summary "ok" as a
         // standalone recent-activity row label — check no such literal token.

@@ -60,7 +60,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = path.join(__dirname, 'out');
 const USER_DATA_DIR = path.join(__dirname, 'out', 'userdata-automations-02-triggers');
 
-const TEMPLATE_HEALTH = 'System health check'; // cron "30 17 * * *"
+const TEMPLATE_HEALTH = 'Trip albums'; // cron "0 6 * * *"
 const TEMPLATE_WEBHOOK = 'Release notes drafter'; // trigger kind 'webhook', pending:true
 const TEMPLATE_DATA = 'Document filing'; // doc-filer, trigger kind 'data'
 
@@ -816,7 +816,7 @@ async function main() {
     // ---------------------------------------------------------------------
     await step(
       'cron-ui-timezone-note',
-      `Adopt "${TEMPLATE_HEALTH}" (cron "30 17 * * *") -> screenshot the hero trigger summary and cross-check against an independent UTC->local computation (evidence only, not a hard fail per the brief -- this is being fixed separately)`,
+      `Adopt "${TEMPLATE_HEALTH}" (cron "0 6 * * *") -> screenshot the hero trigger summary and cross-check against an independent UTC->local computation (evidence only, not a hard fail per the brief -- this is being fixed separately)`,
       async () => {
         await adoptTemplate(TEMPLATE_HEALTH);
         await openAutomationView(TEMPLATE_HEALTH);
@@ -828,18 +828,18 @@ async function main() {
         console.log(`[auto02] hero "when" text as rendered: ${JSON.stringify(whenText)}`);
 
         // Independent re-derivation of the SAME conversion the renderer's
-        // cronToHuman() performs (app-format.ts:225-282): anchor 17:30 as a
+        // cronToHuman() performs (app-format.ts:225-282): anchor 06:00 as a
         // UTC instant, then render it in this host's local timezone -- this
         // machine's OS timezone is the same one Electron/Chromium reads, so
         // it's a valid oracle for what SHOULD be displayed.
         const anchor = new Date();
-        anchor.setUTCHours(17, 30, 0, 0);
+        anchor.setUTCHours(6, 0, 0, 0);
         const expectedLocal = anchor.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
         console.log(
-          `[auto02] independently computed UTC 17:30 -> local: ${expectedLocal} (host TZ offset minutes: ${anchor.getTimezoneOffset()})`,
+          `[auto02] independently computed UTC 06:00 -> local: ${expectedLocal} (host TZ offset minutes: ${anchor.getTimezoneOffset()})`,
         );
 
-        const matches = whenText.includes(expectedLocal) || whenText === '30 17 * * *';
+        const matches = whenText.includes(expectedLocal) || whenText === '0 6 * * *';
         console.log(
           `[auto02] TIMEZONE CROSS-CHECK verdict: rendered=${JSON.stringify(whenText)} expectedLocalTime=${JSON.stringify(expectedLocal)} looksConverted=${matches}`,
         );

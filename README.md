@@ -9,7 +9,7 @@ Describe an app in a sentence — an agent builds it, a local gateway runs it, a
 ## What it does
 
 - **Build apps by chatting** — describe a new app or a change; the builder agent edits a draft branch, you preview, **Publish** flips it live.
-- **Clone templates** — 8 blueprint apps (Docs, Photos, Notes, People, Locker, Tally, Agenda, Tasks) + 24 automation templates (Gmail pull, Briefing, Email triage, photo captioner, …). Click and deploy, no compile step.
+- **Clone templates** — 8 blueprint apps (Docs, Photos, Notes, People, Locker, Tally, Agenda, Tasks) + 16 automation templates (Google/GitHub connectors plus enrichers like photo captioner and document deadlines). Click and deploy, no compile step.
 - **Run automations** — cron-, webhook-, condition- or data-change-triggered background agents. A generated handler runs in a worker thread with a curated `ctx` surface (`ctx.vault`, `ctx.agent`, `ctx.fetch`, KV state, run history).
 - **Chat with your data** — every app has one `/centraid/<id>/_turn` surface that can rewrite a handler *and* answer a data question in the same conversation; the vault-wide assistant reads across all of them.
 - **Run it anywhere** — one gateway core, two hosts: embedded in the Electron desktop, or the standalone `centraid-gateway` daemon. Mobile (Expo) is a thin client over an iroh p2p tunnel.
@@ -73,7 +73,7 @@ Full tour: [Get started](https://centraid.dev/docs/start/) — install → vault
 | `packages/agent-runtime` | Drives one turn through the codex app-server (JSON-RPC subprocess) or the Claude Agent SDK (in-process); ships the vault-register tools and the `centraid` CLI. |
 | `packages/automation` | Manifest schema, fire spine, in-process scheduler, webhook ingress, worker-thread handler runner. |
 | `packages/tunnel` | iroh QUIC wire protocol — device tunnel + one-time pairing; the TS reference the Swift/Kotlin mobile ports mirror. |
-| `packages/blueprints` | Template gallery: 8 blueprint apps + 24 automation templates, blank-app scaffolders, clone flow. |
+| `packages/blueprints` | Template gallery: 8 blueprint apps + 16 automation templates, blank-app scaffolders, clone flow. |
 | `packages/skills` | Agent grounding: `SKILL.md` units + dynamic renderers (live design tokens, host-tool list). |
 | `packages/design-tokens` | Colors, type, spacing, app metadata, icons — shared across desktop and mobile. |
 | `packages/tsconfig` | Shared `base` / `electron` / `expo` tsconfigs. |

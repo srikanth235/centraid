@@ -108,7 +108,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = path.join(__dirname, 'out');
 const USER_DATA_DIR = path.join(__dirname, 'out', 'userdata-automations-05-grants-rename');
 
-const TEMPLATE_HEALTH = 'System health check';
+const TEMPLATE_HEALTH = 'Trip albums';
 const RENAMED_HEALTH = 'Vitals watch (renamed)';
 
 const AGENT_ID = 'e2e-agent-rename-demo';
@@ -497,7 +497,7 @@ async function main() {
     // -----------------------------------------------------------------
     await step(
       'rename-propagates-everywhere',
-      'Adopt System health check, note its name on Home/Overview/View/Insights, rename via draft-file+publish, verify propagation with NO stale surface',
+      'Adopt Trip albums, note its name on Home/Overview/View/Insights, rename via draft-file+publish, verify propagation with NO stale surface',
       async () => {
         // ---- adopt ----
         await navTo(page, 'Discover');
@@ -665,7 +665,7 @@ async function main() {
           `rename-propagates-everywhere: renaming "${TEMPLATE_HEALTH}" -> "${RENAMED_HEALTH}" (via draft-file+publish, no extra reload/refresh ` +
             `beyond ordinary navigation) propagated CLEANLY to all 4 surfaces (Home AutoCard, Automations overview row, View screen hero, and ` +
             `the Insights "By source" panel — including for the run recorded BEFORE the rename). No stale cache anywhere: each surface re-fetches ` +
-            `the live manifest name (system-health-check's automation.json) on navigation, and Insights resolves automation_ref -> name live too ` +
+            `the live manifest name (trip-albums's automation.json) on navigation, and Insights resolves automation_ref -> name live too ` +
             `(InsightsRoute.tsx:22-34) rather than snapshotting a name at run time.`,
         );
       },
