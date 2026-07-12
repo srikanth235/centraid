@@ -328,8 +328,24 @@ async function main() {
         await page.waitForTimeout(600);
         await shot('07b-settings-space-edited');
 
-        // Reflects in the switcher's vault row (not just the sidebar head —
-        // the switcher is the pair manager now).
+        // The sidebar head's own accessible name ("Active space: <name>. …")
+        // must pick up the rename IMMEDIATELY — no switcher open, no vault
+        // switch, no relaunch. saveSpace() only issued a direct HTTP
+        // updateVault() call with no broadcast until the #382 follow-up fix
+        // (notifyVaultMetadataChanged); before that fix this button kept
+        // showing the pre-edit name here.
+        const headNameAfterSave = await switcherHead().getAttribute('aria-label');
+        assert(
+          headNameAfterSave && /QA Renamed Space/.test(headNameAfterSave),
+          `sidebar head did not pick up the rename without opening the switcher, got ${JSON.stringify(headNameAfterSave)}`,
+        );
+        assert(
+          !/QA Second Space/.test(headNameAfterSave ?? ''),
+          'sidebar head still shows the pre-edit name',
+        );
+
+        // Also reflects in the switcher's vault row (the switcher is the
+        // pair manager now, not just a mirror of the head).
         await openSwitcher();
         const menu = page.getByRole('menu').first();
         const menuText = await menu.innerText();

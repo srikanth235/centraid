@@ -29,6 +29,11 @@ export async function saveSpace(id: string, data: SpaceModalCommit): Promise<voi
     icon: data.icon,
     blurb: data.blurb || null,
   });
+  // updateVault is a direct renderer->gateway HTTP call, not IPC, so unlike
+  // create/switch/delete it never broadcasts VAULT_CHANGED on its own — the
+  // sidebar head would keep showing the old name/color until an unrelated
+  // event refreshed it (found via live E2E, issue #382 follow-up).
+  await window.CentraidApi.notifyVaultMetadataChanged();
 }
 
 export async function deleteSpace(id: string): Promise<void> {

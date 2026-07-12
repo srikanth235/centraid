@@ -759,6 +759,17 @@ interface CentraidApi {
    * names the vault being deleted.
    */
   deleteVault(input: { vaultId: string }): Promise<{ deleted: true }>;
+  /**
+   * Notify-only (issue #382 follow-up): call after a metadata-only
+   * `updateVault()` HTTP call succeeds (rename/retheme) so every window's
+   * `onVaultMetadataChanged` listeners re-read immediately — metadata edits
+   * ride a direct HTTP call, not IPC, so unlike create/switch/delete they
+   * never otherwise broadcast anything. Deliberately separate from
+   * `onVaultChanged`/`VAULT_CHANGED`: that channel means "the ADDRESSED
+   * vault changed" and drives a navigate-Home + full re-scope, which is
+   * wrong for a same-vault rename.
+   */
+  notifyVaultMetadataChanged(): Promise<void>;
   // ----- Phone link (issue #263) -----
   /** Tunnel status + the paired-device allowlist. */
   getPhoneLinkStatus(): Promise<CentraidPhoneLinkStatus>;
@@ -813,6 +824,16 @@ interface CentraidApi {
   onVaultChanged(
     cb: (msg: { activeGatewayId: string; activeVaultId?: string }) => void,
   ): () => void;
+
+  /**
+   * Subscribe to vault METADATA changes (name/color/icon/blurb) on the
+   * active vault (issue #382 follow-up). Fires from
+   * `notifyVaultMetadataChanged()`, not from any addressing change — the
+   * addressed (gateway, vault) is unchanged, so unlike `onVaultChanged`
+   * this must NOT trigger a navigate-Home/full re-scope. Returns the
+   * unsubscribe.
+   */
+  onVaultMetadataChanged(cb: () => void): () => void;
 
   // listTemplates + cloneTemplate moved to the renderer's direct HTTP client
   // (renderer/gateway-client.ts) under the thin-client pivot — the gateway

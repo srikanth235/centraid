@@ -127,6 +127,22 @@ export const Channel = {
   // against the embedded registry directly.
   VAULTS_CREATE: 'centraid:vaults:create',
   VAULTS_DELETE: 'centraid:vaults:delete',
+  // Vault metadata (name/color/icon/blurb) rides a direct renderer->gateway
+  // HTTP `updateVault()` call (`spaceModals.ts`'s `saveSpace`), not IPC — so
+  // unlike create/switch/delete it never fired any broadcast, leaving the
+  // sidebar head showing the stale name/color after a Settings -> Space
+  // save until an unrelated event refreshed it (found via live E2E, #382
+  // follow-up). VAULT_METADATA_CHANGED is the renderer->main "please notify"
+  // invoke, called right after `updateVault()` succeeds. It deliberately
+  // does NOT reuse VAULT_CHANGED's broadcast: App.tsx's `reScope` treats
+  // every VAULT_CHANGED as "the ADDRESSED vault changed" and navigates Home
+  // + wipes gateway-scoped state — correct for a real switch, wrong for a
+  // same-vault rename (confirmed live: it silently kicked the user off the
+  // Settings -> Space page mid-edit). VAULT_METADATA_PUSH is the resulting
+  // main->renderer broadcast; only `useActiveVault`'s lightweight "re-read
+  // the vault list" listens to it, not `reScope`.
+  VAULT_METADATA_CHANGED: 'centraid:vaults:metadata-changed',
+  VAULT_METADATA_PUSH: 'centraid:vaults:metadata-push',
   // Thin-client: hands the renderer the active gateway's HTTP base URL +
   // bearer token so it can call the runtime/data plane directly. Main
   // still owns where the token lives (keychain-backed settings); this is
@@ -605,6 +621,19 @@ export function registerIpcHandlers(): void {
       return { deleted: true };
     },
   );
+
+  // Notify-only: the renderer calls this right after a metadata-only
+  // `updateVault()` HTTP call succeeds (rename/retheme via Settings ->
+  // Space or the switcher's "New space" edit path) so every window's
+  // sidebar head re-reads the vault list immediately. Broadcasts on the
+  // SEPARATE VAULT_METADATA_PUSH channel, not VAULT_CHANGED — no addressing
+  // changed here, so this must not trigger `reScope`'s navigate-Home.
+  ipcMain.handle(Channel.VAULT_METADATA_CHANGED, (): void => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (win.isDestroyed()) continue;
+      win.webContents.send(Channel.VAULT_METADATA_PUSH);
+    }
+  });
 
   // ----- User identity + prefs (gateway-backed) -----
   // USER_ID_GET / USER_PREFS_GET / USER_PREFS_SAVE moved to the renderer's

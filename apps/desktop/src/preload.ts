@@ -50,6 +50,8 @@ const Channel = {
   VAULT_CHANGED: 'centraid:vaults:changed',
   VAULTS_CREATE: 'centraid:vaults:create',
   VAULTS_DELETE: 'centraid:vaults:delete',
+  VAULT_METADATA_CHANGED: 'centraid:vaults:metadata-changed',
+  VAULT_METADATA_PUSH: 'centraid:vaults:metadata-push',
 
   // Phone link (issue #263)
   PHONE_STATUS: 'centraid:phone:status',
@@ -231,11 +233,22 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // Vault create/delete — local gateway only (admin plane; remote is server CLI).
   createVault: (input: { name?: string }) => ipcRenderer.invoke(Channel.VAULTS_CREATE, input),
   deleteVault: (input: { vaultId: string }) => ipcRenderer.invoke(Channel.VAULTS_DELETE, input),
+  // Notify-only: call after a metadata-only `updateVault()` HTTP call
+  // succeeds so every window's `onVaultMetadataChanged` listeners (sidebar
+  // head) re-read immediately instead of waiting on an unrelated event.
+  // Deliberately separate from VAULT_CHANGED — no addressing changed here,
+  // so this must not trigger `reScope`'s navigate-Home in App.tsx.
+  notifyVaultMetadataChanged: () => ipcRenderer.invoke(Channel.VAULT_METADATA_CHANGED),
   onVaultChanged: (cb: (msg: { activeGatewayId: string; activeVaultId?: string }) => void) => {
     const handler = (_e: IpcRendererEvent, msg: unknown): void =>
       cb(msg as { activeGatewayId: string; activeVaultId?: string });
     ipcRenderer.on(Channel.VAULT_CHANGED, handler);
     return () => ipcRenderer.off(Channel.VAULT_CHANGED, handler);
+  },
+  onVaultMetadataChanged: (cb: () => void) => {
+    const handler = (): void => cb();
+    ipcRenderer.on(Channel.VAULT_METADATA_PUSH, handler);
+    return () => ipcRenderer.off(Channel.VAULT_METADATA_PUSH, handler);
   },
 
   // Templates: list + clone moved to the renderer's direct HTTP client —

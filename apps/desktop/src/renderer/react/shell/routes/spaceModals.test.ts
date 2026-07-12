@@ -15,15 +15,18 @@ vi.mock('../../../gateway-client.js', () => ({
 const createVault = vi.fn(() => Promise.resolve({ vaultId: 'new1' }));
 const deleteVault = vi.fn(() => Promise.resolve({ deleted: true }));
 const setActiveVault = vi.fn(() => Promise.resolve());
+const notifyVaultMetadataChanged = vi.fn(() => Promise.resolve());
 
 beforeEach(() => {
   updateVault.mockClear();
   createVault.mockClear();
   deleteVault.mockClear();
   setActiveVault.mockClear();
+  notifyVaultMetadataChanged.mockClear();
   (globalThis as unknown as { CentraidApi: unknown }).CentraidApi = {
     createVault,
     deleteVault,
+    notifyVaultMetadataChanged,
     setActiveVault,
   };
 });
@@ -41,7 +44,7 @@ describe('spaceModals', () => {
     expect(setActiveVault).toHaveBeenCalledWith({ vaultId: 'new1' });
   });
 
-  it('saveSpace renames the vault without switching', async () => {
+  it('saveSpace renames the vault without switching, then notifies listeners to refresh', async () => {
     await saveSpace('v1', { name: 'Work HQ', icon: 'Folder', color: '#111', blurb: 'hq' });
     expect(updateVault).toHaveBeenCalledWith({
       vaultId: 'v1',
@@ -51,6 +54,10 @@ describe('spaceModals', () => {
       blurb: 'hq',
     });
     expect(setActiveVault).not.toHaveBeenCalled();
+    // updateVault is a direct HTTP call, not IPC, so it never broadcasts
+    // VAULT_CHANGED on its own — saveSpace must notify explicitly or the
+    // sidebar head keeps showing the stale name (issue #382 follow-up).
+    expect(notifyVaultMetadataChanged).toHaveBeenCalledTimes(1);
   });
 
   it('deleteSpace removes the vault', async () => {
