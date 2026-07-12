@@ -170,6 +170,7 @@
         "@centraid/backup": "workspace:*",
         "@centraid/blueprints": "workspace:*",
         "@centraid/skills": "workspace:*",
+        "@centraid/tunnel": "workspace:*",
         "@centraid/vault": "workspace:*",
       },
       "devDependencies": {
