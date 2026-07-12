@@ -6,15 +6,10 @@
  *   - `undefined` in the patch  → preserve the current value
  *   - a value in the patch       → set it
  *
- * `chatModelByRunner` is special: it's a per-runner map merged KEY-BY-KEY into
- * the current map, so saving one agent's model never disturbs another's:
- *   - `{ codex: '<model-id>' }` → set codex's model
- *   - `{ codex: '' }`           → CLEAR codex's model (back to "Gateway default")
- *   - key absent from patch      → that runner's entry is preserved
- *   - whole field `undefined`    → the entire map is preserved
- * The empty-string-clears rule is why this isn't a plain spread: the picker's
- * "Gateway default" choice for a runner has value `''`, and the user must be
- * able to drop a previously-pinned concrete model for that runner alone.
+ * Chat-model selection no longer lives here — it moved to the gateway prefs
+ * store (`model.<runnerKind>.<slot>` keys via `GET/PUT /_centraid-user/prefs`,
+ * see `settingsProvidersData.ts`), so every client sharing a gateway sees the
+ * same picks instead of each desktop install keeping its own.
  */
 
 import { clampAlertSeconds } from './gateway-monitor-core.js';
@@ -24,12 +19,6 @@ import type { PersistedSettings } from './settings.js';
 export interface PersistedSettingsPatch {
   activeGatewayId?: string;
   remoteTemplatesUrl?: string;
-  /**
-   * Per-runner chat-model patch, merged key-by-key (see file header):
-   * non-empty value → set that runner; `''` → clear that runner; key absent →
-   * preserve; whole field `undefined` → preserve the entire map.
-   */
-  chatModelByRunner?: Record<string, string>;
   /**
    * Client-owned active vault per gateway (issue #289). Set as a whole map
    * (preserve when `undefined`). The dedicated `setActiveVaultId` path
@@ -48,25 +37,6 @@ export interface PersistedSettingsPatch {
   launchAtLogin?: boolean;
 }
 
-/**
- * Merge a per-runner model patch into the current map. Returns `undefined`
- * when nothing remains (so the field is dropped rather than persisted empty),
- * or `current` untouched when the patch omits the field.
- */
-function mergeChatModelByRunner(
-  current: Record<string, string> | undefined,
-  patch: Record<string, string> | undefined,
-): Record<string, string> | undefined {
-  if (patch === undefined) return current; // preserve the whole map
-  const next: Record<string, string> = { ...current };
-  for (const [kind, value] of Object.entries(patch)) {
-    if (value)
-      next[kind] = value; // non-empty → set
-    else delete next[kind]; // '' → clear this runner only
-  }
-  return Object.keys(next).length ? next : undefined;
-}
-
 /** Preserve-or-set for a plain optional string field (`undefined` = preserve). */
 function preserveOrSet<K extends string>(
   key: K,
@@ -83,17 +53,12 @@ export function mergePersistedSettings(
   current: PersistedSettings,
   patch: PersistedSettingsPatch,
 ): PersistedSettings {
-  const chatModelByRunner = mergeChatModelByRunner(
-    current.chatModelByRunner,
-    patch.chatModelByRunner,
-  );
   // Whole-map preserve-or-set: the vault pointer map is edited through
   // `setActiveVaultId`, so a plain `saveSettings` must carry it verbatim.
   const activeVaultByGateway = patch.activeVaultByGateway ?? current.activeVaultByGateway;
   return {
     activeGatewayId: patch.activeGatewayId?.trim() || current.activeGatewayId,
     ...preserveOrSet('remoteTemplatesUrl', patch.remoteTemplatesUrl, current.remoteTemplatesUrl),
-    ...(chatModelByRunner !== undefined ? { chatModelByRunner } : {}),
     ...(activeVaultByGateway !== undefined && Object.keys(activeVaultByGateway).length
       ? { activeVaultByGateway }
       : {}),

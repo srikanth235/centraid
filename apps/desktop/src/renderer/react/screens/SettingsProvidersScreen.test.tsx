@@ -9,6 +9,7 @@ function makeStatus(over: Partial<AgentsStatusDTO> = {}): AgentsStatusDTO {
     selectedKind: 'codex',
     anyLoading: false,
     savedModelByKind: { codex: 'gpt-5' },
+    subsystemModelByKind: { codex: { assistant: 'gpt-5-mini' } },
     cards: [
       {
         kind: 'codex',
@@ -50,6 +51,7 @@ function makeProps(over: Partial<SettingsProvidersBridgeProps> = {}): SettingsPr
     refreshTools: vi.fn().mockResolvedValue(makeStatus()),
     activateRunner: vi.fn().mockResolvedValue(true),
     setAgentModel: vi.fn(),
+    setSubsystemModel: vi.fn(),
     ...over,
   };
 }
@@ -128,6 +130,36 @@ describe('SettingsProvidersScreen', () => {
       select.dispatchEvent(new Event('change', { bubbles: true }));
     });
     expect(props.setAgentModel).toHaveBeenCalledWith('codex', 'gpt-5-mini');
+  });
+
+  it('renders per-subsystem overrides for the active runner and saves a change', async () => {
+    const props = makeProps();
+    const el = await mount(props);
+    expect(el.textContent).toContain('Chat & agent subsystems');
+    expect(el.textContent).toContain('Assistant');
+    expect(el.textContent).toContain('In-app Ask');
+    expect(el.textContent).toContain('Builder');
+    expect(el.textContent).toContain('Automations');
+
+    // 2 per-card selects (codex + claude-code) + 4 subsystem selects for the
+    // active runner (codex).
+    const selects = [...el.querySelectorAll('.modelSelect')] as HTMLSelectElement[];
+    expect(selects.length).toBe(6);
+    const assistantSelect = selects[2] as HTMLSelectElement;
+    expect(assistantSelect.value).toBe('gpt-5-mini');
+    expect(assistantSelect.querySelector('option[value=""]')?.textContent).toBe(
+      'Use default model',
+    );
+
+    const setter = Object.getOwnPropertyDescriptor(
+      globalThis.HTMLSelectElement.prototype,
+      'value',
+    )?.set;
+    await act(async () => {
+      setter?.call(assistantSelect, 'gpt-5');
+      assistantSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(props.setSubsystemModel).toHaveBeenCalledWith('codex', 'assistant', 'gpt-5');
   });
 
   it('fires the two refreshes', async () => {

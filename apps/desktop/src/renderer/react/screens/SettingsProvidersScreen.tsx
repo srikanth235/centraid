@@ -6,8 +6,10 @@ import type {
   AgentRunnerKind,
   AgentsStatusDTO,
   AgentToolDTO,
+  ModelSubsystem,
   SettingsProvidersBridgeProps,
 } from '../screen-contracts.js';
+import { DrawerGroup, DrawerRow } from './settings-controls.js';
 import styles from './SettingsProvidersScreen.module.css';
 import drawerGroupCss from '../styles/drawerGroup.module.css';
 import controlsCss from '../styles/controls.module.css';
@@ -23,14 +25,26 @@ const TIER_LABEL: Record<(typeof TIER_ORDER)[number], string> = {
 const POLL_MS = 800;
 const POLL_WINDOW_MS = 30_000;
 
+/** Chat & agent subsystem override rows, rendered for the active runner only. */
+const SUBSYSTEM_ROWS: ReadonlyArray<{ key: ModelSubsystem; label: string; hint: string }> = [
+  { key: 'assistant', label: 'Assistant', hint: 'Global Ask across your vault.' },
+  { key: 'ask', label: 'In-app Ask', hint: 'The Ask panel inside each app.' },
+  { key: 'builder', label: 'Builder', hint: 'The app-building agent.' },
+  { key: 'automations', label: 'Automations', hint: 'Background automations & enrichers.' },
+];
+
 function ModelSelect({
   card,
   saved,
   onChange,
+  emptyLabel = 'Gateway default',
+  ariaLabel,
 }: {
   card: AgentCardDTO;
   saved: string;
   onChange: (v: string) => void;
+  emptyLabel?: string;
+  ariaLabel?: string;
 }): JSX.Element {
   const tiered = card.models.some((m) => m.tier);
   const opt = (m: AgentModelDTO): JSX.Element => (
@@ -41,12 +55,12 @@ function ModelSelect({
   return (
     <select
       className={styles.modelSelect}
-      aria-label={`Default model for ${card.title}`}
+      aria-label={ariaLabel ?? `Default model for ${card.title}`}
       disabled={!card.connected}
       value={saved}
       onChange={(e) => onChange(e.target.value)}
     >
-      <option value="">Gateway default</option>
+      <option value="">{emptyLabel}</option>
       {saved && !card.models.some((m) => m.id === saved) ? (
         <option value={saved}>{`${saved} · unavailable`}</option>
       ) : null}
@@ -206,10 +220,14 @@ export default function SettingsProvidersScreen({
   refreshTools,
   activateRunner,
   setAgentModel,
+  setSubsystemModel,
 }: SettingsProvidersBridgeProps): JSX.Element {
   const [status, setStatus] = useState<AgentsStatusDTO | null>(null);
   const [selected, setSelected] = useState<AgentRunnerKind>('codex');
   const [savedByKind, setSavedByKind] = useState<Record<string, string>>({});
+  const [subsystemByKind, setSubsystemByKind] = useState<
+    Record<string, Partial<Record<ModelSubsystem, string>>>
+  >({});
   const [open, setOpen] = useState<Set<AgentRunnerKind>>(new Set());
   const [busyModels, setBusyModels] = useState(false);
   const [busyTools, setBusyTools] = useState(false);
@@ -220,6 +238,7 @@ export default function SettingsProvidersScreen({
     setStatus(s);
     setSelected(s.selectedKind);
     setSavedByKind(s.savedModelByKind);
+    setSubsystemByKind(s.subsystemModelByKind);
   }, []);
 
   const poll = useCallback(() => {
@@ -275,6 +294,16 @@ export default function SettingsProvidersScreen({
     setAgentModel(kind, v);
   };
 
+  const onSetSubsystem = (kind: AgentRunnerKind, subsystem: ModelSubsystem, v: string): void => {
+    setSubsystemByKind((m) => {
+      const next = { ...m, [kind]: { ...m[kind] } };
+      if (v) next[kind]![subsystem] = v;
+      else delete next[kind]![subsystem];
+      return next;
+    });
+    setSubsystemModel(kind, subsystem, v);
+  };
+
   const toggleTools = (kind: AgentRunnerKind): void => {
     setOpen((s) => {
       const next = new Set(s);
@@ -285,81 +314,103 @@ export default function SettingsProvidersScreen({
   };
 
   const cards = status?.cards ?? [];
+  const activeCard = cards.find((c) => c.kind === selected);
 
   return (
-    <div className={drawerGroupCss.group}>
-      <div className={drawerGroupCss.groupLabel}>Connected</div>
-      <div className={drawerGroupCss.groupBody}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div className={controlsCss.note}>
-            Switch the active agent below; set each agent’s default model. Detection is CLI-only —
-            the gateway ran `&lt;bin&gt; --version`; Centraid doesn’t inspect how each agent
-            authenticates.
-          </div>
-          <div
-            className={styles.switch}
-            role="tablist"
-            aria-label="Active agent"
-            data-active-index={String(selected === 'codex' ? 0 : 1)}
-          >
-            <span className={styles.switchInd} />
-            {cards.map((card) => (
-              <button
-                key={card.kind}
-                type="button"
-                className={styles.switchSeg}
-                role="tab"
-                aria-selected={card.kind === selected}
-                data-active={card.kind === selected ? 'true' : ''}
-                data-unavail={card.connected ? '' : 'true'}
-                disabled={!card.connected || card.kind === selected}
-                title={`Make ${card.title} the active agent`}
-                onClick={() => onActivate(card.kind)}
-              >
-                <span className={styles.switchDot} style={{ background: card.accent }} />
-                <span>{card.title}</span>
-              </button>
-            ))}
-          </div>
-          <div className={styles.panel}>
-            {status === null ? (
-              <div className={controlsCss.note}>Reading credential status…</div>
-            ) : (
-              cards.map((card) => (
-                <AgentEntry
+    <>
+      <div className={drawerGroupCss.group}>
+        <div className={drawerGroupCss.groupLabel}>Connected</div>
+        <div className={drawerGroupCss.groupBody}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className={controlsCss.note}>
+              Switch the active agent below; set each agent’s default model. Detection is CLI-only
+              — the gateway ran `&lt;bin&gt; --version`; Centraid doesn’t inspect how each agent
+              authenticates.
+            </div>
+            <div
+              className={styles.switch}
+              role="tablist"
+              aria-label="Active agent"
+              data-active-index={String(selected === 'codex' ? 0 : 1)}
+            >
+              <span className={styles.switchInd} />
+              {cards.map((card) => (
+                <button
                   key={card.kind}
-                  card={card}
-                  active={card.kind === selected}
-                  saved={savedByKind[card.kind] ?? ''}
-                  open={open.has(card.kind)}
-                  onToggle={() => toggleTools(card.kind)}
-                  onSetModel={(v) => onSetModel(card.kind, v)}
-                />
-              ))
-            )}
+                  type="button"
+                  className={styles.switchSeg}
+                  role="tab"
+                  aria-selected={card.kind === selected}
+                  data-active={card.kind === selected ? 'true' : ''}
+                  data-unavail={card.connected ? '' : 'true'}
+                  disabled={!card.connected || card.kind === selected}
+                  title={`Make ${card.title} the active agent`}
+                  onClick={() => onActivate(card.kind)}
+                >
+                  <span className={styles.switchDot} style={{ background: card.accent }} />
+                  <span>{card.title}</span>
+                </button>
+              ))}
+            </div>
+            <div className={styles.panel}>
+              {status === null ? (
+                <div className={controlsCss.note}>Reading credential status…</div>
+              ) : (
+                cards.map((card) => (
+                  <AgentEntry
+                    key={card.kind}
+                    card={card}
+                    active={card.kind === selected}
+                    saved={savedByKind[card.kind] ?? ''}
+                    open={open.has(card.kind)}
+                    onToggle={() => toggleTools(card.kind)}
+                    onSetModel={(v) => onSetModel(card.kind, v)}
+                  />
+                ))
+              )}
+            </div>
           </div>
         </div>
+        <div className={styles.actionsRow}>
+          <button
+            type="button"
+            className={cx(buttonCss.btn, controlsCss.soft)}
+            disabled={busyModels}
+            onClick={() => doRefresh(refreshModels, setBusyModels)}
+          >
+            <Icon name="Reset" size={13} />
+            <span>Refresh models</span>
+          </button>
+          <button
+            type="button"
+            className={cx(buttonCss.btn, controlsCss.soft)}
+            disabled={busyTools}
+            onClick={() => doRefresh(refreshTools, setBusyTools)}
+          >
+            <Icon name="Refresh" size={13} />
+            <span>{busyTools ? 'Scanning tools…' : 'Refresh tools'}</span>
+          </button>
+        </div>
       </div>
-      <div className={styles.actionsRow}>
-        <button
-          type="button"
-          className={cx(buttonCss.btn, controlsCss.soft)}
-          disabled={busyModels}
-          onClick={() => doRefresh(refreshModels, setBusyModels)}
-        >
-          <Icon name="Reset" size={13} />
-          <span>Refresh models</span>
-        </button>
-        <button
-          type="button"
-          className={cx(buttonCss.btn, controlsCss.soft)}
-          disabled={busyTools}
-          onClick={() => doRefresh(refreshTools, setBusyTools)}
-        >
-          <Icon name="Refresh" size={13} />
-          <span>{busyTools ? 'Scanning tools…' : 'Refresh tools'}</span>
-        </button>
-      </div>
-    </div>
+      {activeCard ? (
+        <DrawerGroup label="Chat & agent subsystems">
+          <div className={controlsCss.note}>
+            Subsystem choices override the default model; automations with a model set in their
+            manifest keep it.
+          </div>
+          {SUBSYSTEM_ROWS.map((row) => (
+            <DrawerRow key={row.key} label={row.label} hint={row.hint}>
+              <ModelSelect
+                card={activeCard}
+                saved={subsystemByKind[activeCard.kind]?.[row.key] ?? ''}
+                onChange={(v) => onSetSubsystem(activeCard.kind, row.key, v)}
+                emptyLabel="Use default model"
+                ariaLabel={`${row.label} model for ${activeCard.title}`}
+              />
+            </DrawerRow>
+          ))}
+        </DrawerGroup>
+      ) : null}
+    </>
   );
 }
