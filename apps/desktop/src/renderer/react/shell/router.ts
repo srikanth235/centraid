@@ -38,6 +38,8 @@ export function routeKey(route: ShellRoute): string {
     case 'gateway':
     case 'templates':
       return route.kind;
+    case 'automation-editor':
+      return `automation-editor:${route.automationId ?? 'new'}`;
     case 'automation-view':
       return `automation-view:${route.automationId}`;
     case 'run-view':

@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  buildAutomationViewData,
   buildOverviewData,
   collectAutomationRuns,
+  deriveAutomationHero,
+  triggerOriginLabel,
   type AutomationFeedEntry,
 } from './automationsData.js';
 import { listAutomationRuns, listAutomations } from '../../../gateway-client.js';
@@ -125,78 +126,64 @@ const viewRow = (over: Partial<CentraidAutomationRow> = {}): CentraidAutomationR
 
 const GATEWAY_ORIGIN = 'http://127.0.0.1:5173';
 
-describe('buildAutomationViewData', () => {
-  it('derives hero + status + 30-day KPIs for a cron automation', () => {
-    const recent = Date.now() - 60_000;
-    const data = buildAutomationViewData(
-      viewRow(),
-      [entry({ startedAt: recent, endedAt: recent + 2000 }).run],
-      GATEWAY_ORIGIN,
-    );
-    expect(data?.name).toBe('Daily Digest');
-    expect(data?.kindEyebrow).toBe('Cron schedule');
-    expect(data?.heroIcon).toBe('Clock');
-    expect(data?.enabled).toBe(true);
-    expect(data?.kpis.total).toBe('1');
-    expect(data?.runs).toHaveLength(1);
+describe('deriveAutomationHero', () => {
+  it('derives the cron hero (eyebrow, icon, next runs off the expr)', () => {
+    const hero = deriveAutomationHero(viewRow(), GATEWAY_ORIGIN);
+    expect(hero.kindEyebrow).toBe('Cron schedule');
+    expect(hero.heroIcon).toBe('Clock');
+    expect(hero.cronExprs).toEqual(['0 9 * * *']);
+    expect(hero.nextRuns).toHaveLength(3);
   });
 
   it('marks a webhook automation and derives a pending webhook when unbound', () => {
-    const data = buildAutomationViewData(
+    const hero = deriveAutomationHero(
       viewRow({ triggers: [{ kind: 'webhook', pending: true } as never] }),
-      [],
       GATEWAY_ORIGIN,
     );
-    expect(data?.kindEyebrow).toBe('Webhook');
-    expect(data?.webhook).toEqual({ pending: true, url: null });
-    expect(data?.kpis.total).toBe('0');
+    expect(hero.kindEyebrow).toBe('Webhook');
+    expect(hero.webhook).toEqual({ pending: true, url: null });
   });
 
   it('derives an absolute webhook URL off the gateway origin once provisioned', () => {
-    const data = buildAutomationViewData(
+    const hero = deriveAutomationHero(
       viewRow({ triggers: [{ kind: 'webhook', id: 'abc123' } as never] }),
-      [],
       GATEWAY_ORIGIN,
     );
-    expect(data?.webhook).toEqual({
+    expect(hero.webhook).toEqual({
       pending: false,
       url: 'http://127.0.0.1:5173/_centraid-hook/abc123',
     });
   });
 
   it('labels data/condition triggers honestly instead of "Cron schedule"/"Manual only"', () => {
-    const dataTrig = buildAutomationViewData(
+    const dataTrig = deriveAutomationHero(
       viewRow({ triggers: [{ kind: 'data', entities: ['core.content_derivative'] } as never] }),
-      [],
       GATEWAY_ORIGIN,
     );
-    expect(dataTrig?.kindEyebrow).toBe('Data trigger');
-    expect(dataTrig?.when).toBe('On data changes');
+    expect(dataTrig.kindEyebrow).toBe('Data trigger');
+    expect(dataTrig.when).toBe('On data changes');
 
-    const condTrig = buildAutomationViewData(
+    const condTrig = deriveAutomationHero(
       viewRow({ triggers: [{ kind: 'condition', entity: 'core.event' } as never] }),
-      [],
       GATEWAY_ORIGIN,
     );
-    expect(condTrig?.kindEyebrow).toBe('Condition');
-    expect(condTrig?.when).toBe('On condition');
+    expect(condTrig.kindEyebrow).toBe('Condition');
+    expect(condTrig.when).toBe('On condition');
 
-    const manual = buildAutomationViewData(viewRow({ triggers: [] }), [], GATEWAY_ORIGIN);
-    expect(manual?.kindEyebrow).toBe('Manual');
-    expect(manual?.when).toBe('Manual only');
+    const manual = deriveAutomationHero(viewRow({ triggers: [] }), GATEWAY_ORIGIN);
+    expect(manual.kindEyebrow).toBe('Manual');
+    expect(manual.when).toBe('Manual only');
   });
 
-  it('labels a data-origin run "Data" in the run rows', () => {
-    const data = buildAutomationViewData(
-      viewRow(),
-      [entry({ triggerKind: 'scheduled', triggerOrigin: 'data' } as never).run],
-      GATEWAY_ORIGIN,
+  it('labels a data-origin run "Data"', () => {
+    const trig = triggerOriginLabel(
+      entry({ triggerKind: 'scheduled', triggerOrigin: 'data' } as never).run,
     );
-    expect(data?.runs[0]?.trigLabel).toBe('Data');
+    expect(trig.label).toBe('Data');
   });
 
   it('derives dataDetail (entities + cadence) for a data trigger', () => {
-    const withEvery = buildAutomationViewData(
+    const withEvery = deriveAutomationHero(
       viewRow({
         triggers: [
           {
@@ -206,25 +193,23 @@ describe('buildAutomationViewData', () => {
           } as never,
         ],
       }),
-      [],
       GATEWAY_ORIGIN,
     );
-    expect(withEvery?.dataDetail).toEqual({
+    expect(withEvery.dataDetail).toEqual({
       entities: ['core.content_derivative', 'core.event'],
       everyLabel: 'Every 5m',
     });
-    expect(withEvery?.conditionDetail).toBeNull();
+    expect(withEvery.conditionDetail).toBeNull();
 
-    const withoutEvery = buildAutomationViewData(
+    const withoutEvery = deriveAutomationHero(
       viewRow({ triggers: [{ kind: 'data', entities: ['core.event'] } as never] }),
-      [],
       GATEWAY_ORIGIN,
     );
-    expect(withoutEvery?.dataDetail).toEqual({ entities: ['core.event'], everyLabel: null });
+    expect(withoutEvery.dataDetail).toEqual({ entities: ['core.event'], everyLabel: null });
   });
 
   it('derives conditionDetail with a readable where clause for a structured condition', () => {
-    const data = buildAutomationViewData(
+    const hero = deriveAutomationHero(
       viewRow({
         triggers: [
           {
@@ -235,30 +220,28 @@ describe('buildAutomationViewData', () => {
           } as never,
         ],
       }),
-      [],
       GATEWAY_ORIGIN,
     );
-    expect(data?.conditionDetail).toEqual({
+    expect(hero.conditionDetail).toEqual({
       entity: 'core.event',
       whereText: JSON.stringify({ status: 'overdue' }, null, 2),
       everyLabel: 'Every 1h',
     });
-    expect(data?.dataDetail).toBeNull();
+    expect(hero.dataDetail).toBeNull();
   });
 
   it('passes a plain-string where clause through unchanged', () => {
-    const data = buildAutomationViewData(
+    const hero = deriveAutomationHero(
       viewRow({
         triggers: [{ kind: 'condition', entity: 'core.event', where: 'status = overdue' } as never],
       }),
-      [],
       GATEWAY_ORIGIN,
     );
-    expect(data?.conditionDetail?.whereText).toBe('status = overdue');
+    expect(hero.conditionDetail?.whereText).toBe('status = overdue');
   });
 
   it('renders a structured where clause array as compact "column op value" lines, matching the builder', () => {
-    const data = buildAutomationViewData(
+    const hero = deriveAutomationHero(
       viewRow({
         triggers: [
           {
@@ -271,16 +254,15 @@ describe('buildAutomationViewData', () => {
           } as never,
         ],
       }),
-      [],
       GATEWAY_ORIGIN,
     );
-    expect(data?.conditionDetail?.whereText).toBe('status eq "open"\ndays_left within-days 3');
+    expect(hero.conditionDetail?.whereText).toBe('status eq "open"\ndays_left within-days 3');
   });
 
   it('is null for both dataDetail and conditionDetail on a cron automation', () => {
-    const data = buildAutomationViewData(viewRow(), [], GATEWAY_ORIGIN);
-    expect(data?.dataDetail).toBeNull();
-    expect(data?.conditionDetail).toBeNull();
+    const hero = deriveAutomationHero(viewRow(), GATEWAY_ORIGIN);
+    expect(hero.dataDetail).toBeNull();
+    expect(hero.conditionDetail).toBeNull();
   });
 });
 

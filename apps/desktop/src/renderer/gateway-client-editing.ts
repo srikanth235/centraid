@@ -372,6 +372,53 @@ export async function createAutomation(input: {
   return { row: out.row ?? null, ...(out.webhook ? { webhook: out.webhook } : {}) };
 }
 
+/**
+ * Patch an automation's `name` / `prompt` (manifest `prompt` — the
+ * instructions the builder compiles into `handler.js`) / `triggers` in its
+ * draft, then publish. Every field is optional; only a present one is
+ * changed — the instructions-first editor's save path, an alternative to
+ * routing an edit through the builder chat. Triggers follow the same wire
+ * shape `createAutomation` takes; a `{kind:'webhook'}` entry mints a fresh
+ * secret (returned once, like create) only when the automation had no
+ * webhook trigger before — an edit that keeps an existing one leaves its
+ * secret untouched (`rotateAutomationWebhookSecret` is the dedicated way to
+ * rotate it). 404s when `automationId` doesn't exist, 400s on an invalid
+ * patch (bad trigger kind/shape).
+ */
+export async function updateAutomation(input: {
+  automationId: string;
+  name?: string;
+  prompt?: string;
+  triggers?: CentraidCreateTrigger[];
+}): Promise<{
+  row: CentraidAutomationRow | null;
+  webhook?: { id: string; secret: string; url: string };
+}> {
+  const appId = input.automationId.split('/')[0] ?? '';
+  const sessionId = await ensureAppSession(appId);
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_automations/update?ref=${enc(input.automationId)}`,
+    {
+      method: 'POST',
+      headers: authHeaders(token, 'application/json'),
+      body: JSON.stringify({
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.prompt !== undefined ? { prompt: input.prompt } : {}),
+        ...(input.triggers !== undefined ? { triggers: input.triggers } : {}),
+        sessionId,
+        publish: true,
+      }),
+    },
+  );
+  const out = await readJson<{
+    row: CentraidAutomationRow | null;
+    webhook?: { id: string; secret: string; url: string };
+  }>(res, 'update automation');
+  return { row: out.row ?? null, ...(out.webhook ? { webhook: out.webhook } : {}) };
+}
+
 /** Toggle an automation's `enabled` flag in its draft, then publish. */
 export async function setAutomationEnabled(input: {
   automationId: string;

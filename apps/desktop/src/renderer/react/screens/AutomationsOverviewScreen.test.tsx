@@ -6,7 +6,7 @@ import AutomationsOverviewScreen from './AutomationsOverviewScreen.js';
 
 function makeData(over: Partial<AuOverviewData> = {}): AuOverviewData {
   return {
-    subtitle: '1 active  ·  1 paused  ·  2 recent runs',
+    subtitle: 'unused — the screen derives its own subtitle from rows',
     health: { active: 1, paused: 1, drafts: 0, attention: 1 },
     rows: [
       {
@@ -19,8 +19,27 @@ function makeData(over: Partial<AuOverviewData> = {}): AuOverviewData {
         triggerLabel: 'Every day at 8am',
         integrations: ['Gmail'],
         lastRunLabel: 'Last run 2h ago',
+        lastRunOk: true,
+        nextRunLabel: 'Tomorrow, 8:00 AM',
+        attentionCount: 0,
         statusKind: 'active',
         statusLabel: 'Active',
+      },
+      {
+        ref: 'b@1',
+        id: 'b',
+        name: 'Invoice Sync',
+        hue: 'rose',
+        glyphIcon: 'Webhook',
+        triggerIcon: 'Webhook',
+        triggerLabel: 'Webhook',
+        integrations: [],
+        lastRunLabel: 'Last run 1d ago',
+        lastRunOk: false,
+        nextRunLabel: null,
+        attentionCount: 2,
+        statusKind: 'paused',
+        statusLabel: 'Paused',
       },
     ],
     runs: [
@@ -31,16 +50,18 @@ function makeData(over: Partial<AuOverviewData> = {}): AuOverviewData {
         name: 'Daily Digest',
         summary: 'Summarized 12 emails',
         whenLabel: '2h ago',
-        metaLabel: 'cron · 3s · 1.2k',
+        metaLabel: 'Cron · 3s · 1.2k',
+        startedAt: Date.now(),
       },
       {
         runId: 'r2',
-        automationId: 'a',
+        automationId: 'b',
         ok: false,
-        name: 'Daily Digest',
+        name: 'Invoice Sync',
         summary: 'API error',
         whenLabel: '1d ago',
-        metaLabel: 'cron · 1s · 0.3k',
+        metaLabel: 'Webhook · 1s · 0.3k',
+        startedAt: Date.now() - 86_400_000,
       },
     ],
     ...over,
@@ -80,28 +101,58 @@ async function mount(props: AutomationsOverviewBridgeProps): Promise<HTMLDivElem
 }
 
 describe('AutomationsOverviewScreen', () => {
-  it('renders health tiles, the automation row, and recent runs', async () => {
+  it('renders the header, live-count subtitle, and both fleet rows', async () => {
     const el = await mount(makeProps());
-    expect(el.querySelectorAll('.healthTile').length).toBe(4);
+    const heading = el.querySelector('h1');
+    expect(heading?.textContent).toBe('Automations');
+    // 1 active, 1 paused, and the paused row both fails its last run and
+    // carries pending consent items → 1 automation needs attention.
+    expect(el.textContent).toContain('1 active');
+    expect(el.textContent).toContain('1 paused');
+    expect(el.textContent).toContain('1 need attention');
     expect(el.textContent).toContain('Daily Digest');
+    expect(el.textContent).toContain('Invoice Sync');
     expect(el.textContent).toContain('Every day at 8am');
-    expect(el.textContent).toContain('Last run 2h ago');
-    expect((el.querySelector('.auStatus') as HTMLElement | null)?.dataset.tone).toBe('active');
-    expect(el.querySelectorAll('.auOvRun').length).toBe(2);
-    expect(el.textContent).toContain('Summarized 12 emails');
+    expect(el.textContent).toContain('Next Tomorrow, 8:00 AM');
+  });
+
+  it('exposes data-au-status on each fleet row and the attention badge only when pending', async () => {
+    const el = await mount(makeProps());
+    const statuses = [...el.querySelectorAll('[data-au-status]')].map(
+      (n) => (n as HTMLElement).dataset.auStatus,
+    );
+    expect(statuses).toContain('active');
+    expect(statuses).toContain('paused');
+    // Only "Invoice Sync" (attentionCount: 2) shows the amber badge.
+    expect(el.querySelectorAll('.attentionBadge').length).toBe(1);
+    const rows = [...el.querySelectorAll('.row')];
+    expect(rows).toHaveLength(2);
+    const invoiceRow = rows.find((r) => r.textContent?.includes('Invoice Sync'));
+    expect(invoiceRow?.textContent).toContain('2');
+    const digestRow = rows.find((r) => r.textContent?.includes('Daily Digest'));
+    expect(digestRow?.querySelector('.attentionBadge')).toBeNull();
+  });
+
+  it('renders the recent-activity feed grouped by date', async () => {
+    const el = await mount(makeProps());
+    expect(el.textContent).toContain('Recent activity');
+    expect(el.querySelectorAll('.activityRow').length).toBe(2);
+    // The activity row shows the origin label, not the run summary text.
+    expect(el.textContent).not.toContain('Summarized 12 emails');
+    expect(el.textContent).toContain('Cron');
   });
 
   it('opens an automation and a run via callbacks', async () => {
     const props = makeProps();
     const el = await mount(props);
     await act(async () =>
-      (el.querySelector('.auOvRow') as HTMLButtonElement).dispatchEvent(
+      (el.querySelector('.row') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );
     expect(props.onOpenAutomation).toHaveBeenCalledWith('a@1');
     await act(async () =>
-      (el.querySelector('.auOvRun') as HTMLButtonElement).dispatchEvent(
+      (el.querySelector('.activityRow') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );
@@ -111,27 +162,31 @@ describe('AutomationsOverviewScreen', () => {
   it('fires the header actions', async () => {
     const props = makeProps();
     const el = await mount(props);
-    const [browse, create] = [...el.querySelectorAll('.auActions .auBtn')] as HTMLButtonElement[];
+    const browse = [...el.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Browse templates',
+    );
+    const create = [...el.querySelectorAll('button')].find(
+      (b) => b.textContent === 'New automation',
+    );
     await act(async () => browse?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await act(async () => create?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onBrowseTemplates).toHaveBeenCalledTimes(1);
     expect(props.onNewAutomation).toHaveBeenCalledTimes(1);
   });
 
-  it('shows the empty state when there are no automations', async () => {
+  it('shows the empty state with both CTAs when there are no automations', async () => {
     const el = await mount(
       makeProps({
-        loadData: vi.fn().mockResolvedValue(
-          makeData({
-            rows: [],
-            runs: [],
-            health: { active: 0, paused: 0, drafts: 0, attention: 0 },
-          }),
-        ),
+        loadData: vi.fn().mockResolvedValue(makeData({ rows: [], runs: [] })),
       }),
     );
     expect(el.textContent).toContain('No automations yet');
-    expect(el.querySelectorAll('.healthTile').length).toBe(0);
+    expect([...el.querySelectorAll('button')].some((b) => b.textContent === 'New automation')).toBe(
+      true,
+    );
+    expect(
+      [...el.querySelectorAll('button')].some((b) => b.textContent === 'Browse templates'),
+    ).toBe(true);
   });
 
   it('renders the error state + retry when loadData rejects', async () => {
@@ -142,11 +197,8 @@ describe('AutomationsOverviewScreen', () => {
     const el = await mount(makeProps({ loadData }));
     expect(el.textContent).toContain("Couldn't load automations");
     expect(el.textContent).toContain('boom');
-    await act(async () =>
-      (el.querySelector('.auBtnPrimary') as HTMLButtonElement).dispatchEvent(
-        new MouseEvent('click', { bubbles: true }),
-      ),
-    );
+    const retry = [...el.querySelectorAll('button')].find((b) => b.textContent === 'Retry');
+    await act(async () => retry?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(loadData).toHaveBeenCalledTimes(2);
     expect(el.textContent).toContain('Daily Digest');
   });

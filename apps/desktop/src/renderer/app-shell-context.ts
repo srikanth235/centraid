@@ -60,11 +60,21 @@ export type ShellRoute =
   | { kind: 'approvals' }
   | { kind: 'gateway' }
   | { kind: 'templates' }
+  // Instructions-first create/edit form (Automations UI revamp). `automationId`
+  // (a `ref`) is omitted for create mode; `templateId` seeds the form from a
+  // template gallery entry (Discover/Templates "Use template" for an
+  // automation). Reached inside normal chrome, NOT full-bleed — unlike the
+  // builder chat it replaces as the primary edit surface.
+  | { kind: 'automation-editor'; automationId?: string; templateId?: string }
   | { automationId: string; kind: 'automation-view' }
   | { automationId: string; kind: 'run-view'; runId: string }
   | { id: string; kind: 'app' }
   | { appContext?: AppMetaResolvedType; initialPrompt?: string; kind: 'builder' }
-  | { automationId: string; kind: 'automation-builder' };
+  // `seedMessage`, when set, is the editor's "compile" handoff — a first
+  // message posted into the builder chat on open (mirrors `builder`'s
+  // `initialPrompt`). Optional because most automation-builder entries
+  // (overview "New automation", thread's "Edit") open the chat cold.
+  | { automationId: string; kind: 'automation-builder'; seedMessage?: string };
 
 // Compact summary of the active gateway, fed into the sidebar head row.
 export interface GatewaySummary {

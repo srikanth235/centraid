@@ -71,6 +71,10 @@ describe('shell router', () => {
     expect(routeKey({ kind: 'automation-builder', automationId: 'x' })).toBe(
       'automation-builder:x',
     );
+    expect(routeKey({ kind: 'automation-editor' })).toBe('automation-editor:new');
+    expect(routeKey({ kind: 'automation-editor', automationId: 'a2' })).toBe(
+      'automation-editor:a2',
+    );
   });
 
   it('treats distinct parameterized routes as separate entries', () => {

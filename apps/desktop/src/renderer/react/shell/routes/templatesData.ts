@@ -1,6 +1,10 @@
 import { palette } from '@centraid/design-tokens';
 import { isAutomationTemplate } from '../../../app-format.js';
-import { cloneTemplate as gwCloneTemplate, listTemplates } from '../../../gateway-client.js';
+import {
+  cloneTemplate as gwCloneTemplate,
+  listAutomations,
+  listTemplates,
+} from '../../../gateway-client.js';
 import type { TemplateEntry } from '../../../app-shell-context.js';
 
 // Template catalog data layer — ports the vanilla loadAvailableTemplates
@@ -28,13 +32,25 @@ export async function loadAutomationTemplates(): Promise<TemplateEntry[]> {
 }
 
 /** Clone an automation template on the gateway, returning the new automation id
- *  + any once-only webhook secrets for the caller to surface and to open in the
- *  automation builder (vanilla adoptTemplate, minus the navigation). Throws. */
-export async function cloneAutomationTemplate(
-  tmpl: TemplateEntry,
-): Promise<{ automationId: string; webhooks: ReadonlyArray<{ url: string; secret: string }> }> {
+ *  + any once-only webhook secrets for the caller to surface (vanilla
+ *  adoptTemplate, minus the navigation). Throws on clone failure. */
+export async function cloneAutomationTemplate(tmpl: TemplateEntry): Promise<{
+  automationId: string;
+  /** The `<ownerApp>/<id>` handle the automation-view (thread) and editor
+   *  routes key on — resolved by re-listing after the clone publishes, since
+   *  `_clone` only returns the raw app id. `null` when the freshly-cloned
+   *  row can't be found (callers fall back to the overview). */
+  ref: string | null;
+  webhooks: ReadonlyArray<{ url: string; secret: string }>;
+}> {
   const result = await gwCloneTemplate({ templateId: tmpl.id });
-  return { automationId: result.app.id, webhooks: result.webhooks ?? [] };
+  let ref: string | null = null;
+  try {
+    ref = (await listAutomations()).find((r) => r.id === result.app.id)?.ref ?? null;
+  } catch {
+    ref = null;
+  }
+  return { automationId: result.app.id, ref, webhooks: result.webhooks ?? [] };
 }
 
 /** Log a freshly-minted webhook credential to the console — a dev-only

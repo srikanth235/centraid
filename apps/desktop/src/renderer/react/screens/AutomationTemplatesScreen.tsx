@@ -1,4 +1,4 @@
-import { useMemo, useState, type JSX } from 'react';
+import { useMemo, useState, type CSSProperties, type JSX } from 'react';
 import type { IconName } from '@centraid/design-tokens';
 import { Icon } from '../ui/index.js';
 import type { AutomationTemplatesBridgeProps, DiscoverTemplate } from '../screen-contracts.js';
@@ -9,19 +9,22 @@ import { cx } from '../ui/cx.js';
 
 type Trig = 'all' | 'cron' | 'webhook' | 'data' | 'condition';
 
-// Trigger-kind → icon/label, matching the labels automationsData.ts'
-// buildAutomationViewData (kindEyebrow/run trig) uses for the same four kinds —
+// Trigger-kind → icon/label/hue, matching the labels automationsData.ts'
+// deriveAutomationHero (kindEyebrow/run trig) uses for the same four kinds —
 // data and condition triggers reuse the Clock glyph there too (only webhook
 // gets its own icon), so the card badge and the segmented filter stay honest
-// without inventing a new mark.
+// without inventing a new mark. `hue` borrows the identity-hue palette from
+// `styles/automation.module.css`'s `[data-hue]` map — templates aren't
+// automation instances yet (no `hueForId`), so the accent is keyed off
+// trigger kind instead, kept fixed and decorative only (never gates state).
 const TRIGGER_KIND_META: Record<
   'cron' | 'webhook' | 'data' | 'condition',
-  { icon: IconName; label: string }
+  { icon: IconName; label: string; hue: string }
 > = {
-  cron: { icon: 'Clock', label: 'Cron' },
-  webhook: { icon: 'Webhook', label: 'Webhook' },
-  data: { icon: 'Clock', label: 'Data' },
-  condition: { icon: 'Clock', label: 'Condition' },
+  cron: { icon: 'Clock', label: 'Cron', hue: 'indigo' },
+  webhook: { icon: 'Webhook', label: 'Webhook', hue: 'teal' },
+  data: { icon: 'Clock', label: 'Data', hue: 'violet' },
+  condition: { icon: 'Clock', label: 'Condition', hue: 'ochre' },
 };
 
 function IntegrationChips({ integrations }: { integrations: readonly string[] }): JSX.Element {
@@ -48,8 +51,14 @@ function TemplateCard({
   t: DiscoverTemplate;
   onOpen: (t: DiscoverTemplate) => void;
 }): JSX.Element {
+  const meta = TRIGGER_KIND_META[t.triggerKind ?? 'cron'];
   return (
-    <button type="button" className={styles.card} onClick={() => onOpen(t)}>
+    <button
+      type="button"
+      className={styles.card}
+      style={{ '--tk-hue': `var(--c-${meta.hue})` } as CSSProperties}
+      onClick={() => onOpen(t)}
+    >
       <span className={styles.use}>
         <span>Use template</span>
         <Icon name="ArrowRight" size={13} />
@@ -62,7 +71,7 @@ function TemplateCard({
       <span className={styles.foot}>
         <span className={styles.trig}>
           <span className={styles.trigIcon} aria-hidden="true">
-            <Icon name={TRIGGER_KIND_META[t.triggerKind ?? 'cron'].icon} size={13} />
+            <Icon name={meta.icon} size={13} />
           </span>
           {t.triggerLabel ?? ''}
         </span>

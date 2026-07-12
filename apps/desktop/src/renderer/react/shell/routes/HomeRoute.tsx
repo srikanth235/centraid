@@ -142,7 +142,7 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
     const items = [
       { id: 'open', label: 'Open', icon: 'Eye' },
       { id: 'run', label: 'Run now', icon: 'Play' },
-      { id: 'edit', label: 'Edit in builder', icon: 'Pencil' },
+      { id: 'edit', label: 'Edit', icon: 'Pencil' },
       { id: 'star', label: isStarred(ref) ? 'Unstar' : 'Star', icon: 'Star' },
       'sep' as const,
       { id: 'delete', label: 'Delete', icon: 'Trash', danger: true },
@@ -155,7 +155,7 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
           .catch((err: unknown) =>
             showToast(`Run failed: ${err instanceof Error ? err.message : String(err)}`),
           );
-      else if (pick === 'edit') navigate({ kind: 'automation-builder', automationId: row.id });
+      else if (pick === 'edit') navigate({ kind: 'automation-editor', automationId: row.ref });
       else if (pick === 'star') toggleStar(row.ref);
       else if (pick === 'delete')
         void confirm({
