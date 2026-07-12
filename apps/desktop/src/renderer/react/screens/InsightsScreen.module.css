@@ -281,13 +281,74 @@
   color: var(--ink-4);
 }
 
+/* In-panel empty state — quiet single line, no icon or frame; the
+   dashed-box `pageEmpty` treatment is reserved for a whole route being
+   empty (see ApprovalsScreen's inbox), not one panel among several. The
+   min-height gives the right-column empties (By model, Recent activity)
+   enough presence to land level with the taller left column, so the page
+   has no diagonal void at the bottom-right when everything is empty. */
+.panelEmpty {
+  min-height: 108px;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--ink-4);
+}
+
+/* `compact` variant — the By-source table header already gives the panel
+   structure, so this only needs to read as a quiet row underneath it
+   (left-aligned like the table's own rows), not a reserved centered block. */
+.panelEmptyCompact {
+  padding: 10px 12px 16px;
+  font-size: 12.5px;
+  color: var(--ink-4);
+}
+
+/* Ghost chart — the reserved daily-consumption footprint rendered as a
+   faint gridded scaffold rather than empty space, with the note floated on
+   a panel-colored chip so a gridline never crosses the text. */
+.chartEmpty {
+  position: relative;
+  height: 150px;
+  margin: 6px 18px 18px;
+  display: grid;
+  place-items: center;
+  border-bottom: 0.5px solid var(--line);
+}
+.chartEmptyGrid {
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 36px,
+    color-mix(in srgb, var(--ink) 5%, transparent) 36px,
+    color-mix(in srgb, var(--ink) 5%, transparent) 36.5px
+  );
+  pointer-events: none;
+}
+.chartEmptyNote {
+  position: relative;
+  z-index: 1;
+  padding: 3px 11px;
+  border-radius: 7px;
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line);
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
 /* By-app table. */
 .table {
   padding: 6px 6px 8px;
 }
 .tr {
   display: grid;
-  grid-template-columns: minmax(150px, 1.6fr) 84px 64px 64px 1fr 110px 110px 48px;
+  /* Five tracks for the five rendered cells: Source · Tokens · USD · Mix · Runs.
+     The mix bar takes the flexible track so it can stretch. */
+  grid-template-columns: minmax(150px, 1.6fr) 84px 72px 1fr 48px;
   align-items: center;
   gap: 10px;
   padding: 9px 12px;
