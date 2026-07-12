@@ -13,15 +13,27 @@ import { useAsyncData } from './useAsyncData.js';
 interface VaultRegistrySnapshot {
   vaults: VaultListEntry[];
   activeVaultId: string;
+  /** The gateway this client currently addresses — undefined only when
+   *  `getSettings` itself is unavailable (stubbed test bridges). */
+  activeGatewayId: string | undefined;
+  activeGatewayLabel: string | undefined;
+  activeGatewayKind: 'local' | 'remote' | undefined;
 }
 
 async function loadVaultRegistry(): Promise<VaultRegistrySnapshot> {
-  const [list, auth] = await Promise.all([
+  const [list, auth, settings] = await Promise.all([
     listVaults().catch(() => undefined),
     window.CentraidApi.getGatewayAuth().catch(() => ({ baseUrl: '', vaultId: undefined })),
+    window.CentraidApi.getSettings?.().catch(() => undefined),
   ]);
   const vaults = list ?? [];
-  return { vaults, activeVaultId: auth.vaultId ?? vaults[0]?.vaultId ?? '' };
+  return {
+    vaults,
+    activeVaultId: auth.vaultId ?? vaults[0]?.vaultId ?? '',
+    activeGatewayId: settings?.activeGatewayId,
+    activeGatewayLabel: settings?.activeGatewayLabel,
+    activeGatewayKind: settings?.activeGatewayKind,
+  };
 }
 
 export interface ActiveVaultController {
@@ -31,6 +43,13 @@ export interface ActiveVaultController {
    *  (first paint) or if the gateway mounts no vault plane. */
   active: VaultListEntry | undefined;
   activeVaultId: string;
+  /** The active gateway's id/label/kind (issue #376) — feeds the flat
+   *  switcher's "which pair is current" check and the sidebar head's
+   *  gateway hint. Undefined only while loading or if `getSettings` is
+   *  unavailable (stubbed test bridges). */
+  activeGatewayId: string | undefined;
+  activeGatewayLabel: string | undefined;
+  activeGatewayKind: 'local' | 'remote' | undefined;
   /** True until the first fetch settles (success or failure). */
   loading: boolean;
   /** Re-root the client at a different vault (issue #289). Fires
@@ -56,10 +75,22 @@ export function useActiveVault(): ActiveVaultController {
   const vaults = state.status === 'ready' ? state.data.vaults : [];
   const activeVaultId = state.status === 'ready' ? state.data.activeVaultId : '';
   const active = vaults.find((v) => v.vaultId === activeVaultId);
+  const activeGatewayId = state.status === 'ready' ? state.data.activeGatewayId : undefined;
+  const activeGatewayLabel = state.status === 'ready' ? state.data.activeGatewayLabel : undefined;
+  const activeGatewayKind = state.status === 'ready' ? state.data.activeGatewayKind : undefined;
 
   const switchVault = useCallback((vaultId: string) => {
     void window.CentraidApi.setActiveVault({ vaultId });
   }, []);
 
-  return { vaults, active, activeVaultId, loading: state.status === 'loading', switchVault };
+  return {
+    vaults,
+    active,
+    activeVaultId,
+    activeGatewayId,
+    activeGatewayLabel,
+    activeGatewayKind,
+    loading: state.status === 'loading',
+    switchVault,
+  };
 }

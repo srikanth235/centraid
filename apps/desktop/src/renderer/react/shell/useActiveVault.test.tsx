@@ -13,6 +13,8 @@ beforeEach(async () => {
   listVaults.mockReset();
   (globalThis as unknown as { CentraidApi: unknown }).CentraidApi = {
     getGatewayAuth: () => Promise.resolve({ baseUrl: '', vaultId: 'a' }),
+    getSettings: () =>
+      Promise.resolve({ activeGatewayId: 'local', activeGatewayLabel: 'This Mac', activeGatewayKind: 'local' }),
     setActiveVault: vi.fn(() => Promise.resolve({})),
     onVaultChanged: () => () => {},
     onGatewayChanged: () => () => {},
@@ -54,6 +56,9 @@ describe('useActiveVault', () => {
     expect(ctl.loading).toBe(false);
     expect(ctl.active?.name).toBe("Owner's vault");
     expect(ctl.vaults).toHaveLength(2);
+    expect(ctl.activeGatewayId).toBe('local');
+    expect(ctl.activeGatewayLabel).toBe('This Mac');
+    expect(ctl.activeGatewayKind).toBe('local');
   });
 
   it('falls back to the first vault when the gateway has no explicit pointer', async () => {
