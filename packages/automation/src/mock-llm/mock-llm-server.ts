@@ -381,6 +381,13 @@ export async function startMockLlmServer(
           if (err) reject(err);
           else resolve();
         });
+        // `server.close()` alone only stops accepting NEW connections — a
+        // host agent left holding an idle keep-alive socket (e.g. a stuck
+        // session that never sent a follow-up request — see
+        // TOOL_BATCH_TIMEOUT_MS in persistent-mock-session.ts) blocks the
+        // callback above forever. Force every socket shut immediately so
+        // teardown can never hang on an orphaned client.
+        server.closeAllConnections();
       });
     },
   };

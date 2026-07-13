@@ -107,8 +107,30 @@ async function runClaudeAgentSdk(input: RunHostAgentInput): Promise<RunHostAgent
 
   // Replace the child env wholesale (never mutate process.env): point the
   // SDK-spawned claude at the per-fire mock instead of the real Anthropic API.
-  const env: NodeJS.ProcessEnv = { ...process.env };
-  env.ANTHROPIC_BASE_URL = input.mockBaseUrl;
+  //
+  // Two env-specific traps found live-debugging a hang (this path silently
+  // never returned, not even an error):
+  //   1. `CLAUDECODE`/`CLAUDE_CODE_SESSION_ID`/`CLAUDE_CODE_ENTRYPOINT`/
+  //      `CLAUDE_CODE_EXECPATH`/`CLAUDE_CODE_CHILD_SESSION` — when the host
+  //      process inherits these (e.g. the gateway was itself launched from
+  //      inside a Claude Code session, as every e2e-live run is), the SDK
+  //      treats the spawn as a continuation of that OUTER session and
+  //      authenticates with its real (Keychain/OAuth) credentials instead of
+  //      `ANTHROPIC_API_KEY` — so the request never reaches the mock at all,
+  //      the mock 401s the real bearer, and the SDK retries with growing
+  //      backoff instead of failing fast. Stripping every `CLAUDE_CODE_*` /
+  //      `CLAUDECODE` var forces a clean, unauthenticated-until-we-say-so spawn.
+  //   2. `mockBaseUrl` already carries the mock's own `/v1` suffix (correct
+  //      for codex's Responses-API base_url convention) but the SDK's HTTP
+  //      client appends its OWN `/v1/messages`, doubling to `/v1/v1/messages`
+  //      — which never matches the mock's route table. Strip the trailing
+  //      `/v1` before handing it to `ANTHROPIC_BASE_URL`.
+  const env: NodeJS.ProcessEnv = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (k === 'CLAUDECODE' || k.startsWith('CLAUDE_CODE_')) continue;
+    env[k] = v;
+  }
+  env.ANTHROPIC_BASE_URL = input.mockBaseUrl.replace(/\/v1$/, '');
   env.ANTHROPIC_API_KEY = input.mockBearerToken;
 
   const options: Record<string, unknown> = {

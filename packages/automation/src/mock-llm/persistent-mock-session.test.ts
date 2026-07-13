@@ -155,4 +155,48 @@ describe('startPersistentMockSession (issue #166)', () => {
       await session.close();
     }
   });
+
+  // A live claude-code hang surfaced this: a host agent that receives a
+  // `tool_use` it can never resolve (no built-in, no MCP server for that
+  // name) can leave the mock's parked request open forever with no error and
+  // no follow-up request — `driveAgent` here reproduces exactly that shape by
+  // starting the session and then never touching the mock again.
+  it('fails a batch fast when the host agent never returns a tool_result', async () => {
+    const session = await startPersistentMockSession({
+      workdir: '/tmp',
+      automationId: 'app/auto',
+      driveAgent: () => new Promise(() => {}),
+      toolBatchTimeoutMs: 20,
+    });
+    try {
+      const r = await session.toolDispatcher([{ name: 'example.list_items', args: {} }], fakeCtx());
+      expect(r[0]!.ok).toBe(false);
+      expect(r[0]!.error).toMatch(/did not return a tool_result/);
+      expect(r[0]!.error).toMatch(/example\.list_items/);
+    } finally {
+      // `close()` waits (bounded, up to 5s) for the never-resolving
+      // driveAgent promise, since the session never reported `exited`.
+      await session.close();
+    }
+  }, 10000);
+
+  it('poisons the session after one timeout so later batches fail immediately too', async () => {
+    const session = await startPersistentMockSession({
+      workdir: '/tmp',
+      automationId: 'app/auto',
+      driveAgent: () => new Promise(() => {}),
+      toolBatchTimeoutMs: 20,
+    });
+    try {
+      await session.toolDispatcher([{ name: 'stuck.one', args: {} }], fakeCtx());
+      const t0 = Date.now();
+      const r = await session.toolDispatcher([{ name: 'stuck.two', args: {} }], fakeCtx());
+      // The second batch must NOT wait out its own 20ms deadline — the
+      // session was already poisoned by the first timeout.
+      expect(Date.now() - t0).toBeLessThan(15);
+      expect(r[0]!.ok).toBe(false);
+    } finally {
+      await session.close();
+    }
+  }, 10000);
 });

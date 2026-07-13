@@ -56,6 +56,8 @@ export interface PersistentMockSessionOptions {
   /** Host adapter: run the agent against the mock. */
   readonly driveAgent: AgentDriver;
   readonly onLog?: (level: 'info' | 'warn' | 'error', msg: string) => void;
+  /** Override `TOOL_BATCH_TIMEOUT_MS` — tests only; production uses the default. */
+  readonly toolBatchTimeoutMs?: number;
 }
 
 export interface PersistentMockSession {
@@ -102,6 +104,21 @@ type BatchOutcome =
 const exitError = (outcome: AgentDriveResult): string =>
   `agent session ended before returning tool results${outcome.error ? `: ${outcome.error}` : ''}`;
 
+/**
+ * Bound on one `ctx.tool` batch's round trip. A batch is mock-puppeted — the
+ * agent's own tool execution is the only real work — so a healthy batch
+ * resolves in well under a second. This exists as a backstop for the failure
+ * mode a live claude-code hang surfaced: the host agent receives a
+ * `tool_use` for a name it has no registered handler for (no built-in, no
+ * MCP server) and some SDK versions never surface an error for that — the
+ * turn just never produces a follow-up request, and without this deadline
+ * the batch (and the whole fire) hangs until the outer per-run timeout
+ * (minutes, not seconds). A blown deadline poisons the session so every
+ * later batch in the same fire fails immediately too, instead of each
+ * waiting out its own copy of the same stuck turn.
+ */
+const TOOL_BATCH_TIMEOUT_MS = 60_000;
+
 /** Race `promise` against an `ms` deadline; clears the timer the moment the
  *  promise wins so a finished run leaves no dangling timeout. */
 function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
@@ -135,6 +152,7 @@ function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T | undefined
 export async function startPersistentMockSession(
   opts: PersistentMockSessionOptions,
 ): Promise<PersistentMockSession> {
+  const toolBatchTimeoutMs = opts.toolBatchTimeoutMs ?? TOOL_BATCH_TIMEOUT_MS;
   interface BatchAwaiter {
     settle(outcome: BatchOutcome): void;
   }
@@ -173,6 +191,9 @@ export async function startPersistentMockSession(
     dispatchId: string;
     drive: Promise<AgentDriveResult>;
     exited: AgentDriveResult | undefined;
+    /** Set once a batch blows `TOOL_BATCH_TIMEOUT_MS` — poisons every later
+     *  batch on this session (see `TOOL_BATCH_TIMEOUT_MS` doc). */
+    timedOut: string | undefined;
   }
   let session: Session | undefined;
 
@@ -186,7 +207,7 @@ export async function startPersistentMockSession(
       cwd: opts.workdir,
       abortSignal: ctx.abortSignal,
     });
-    const s: Session = { dispatchId, drive, exited: undefined };
+    const s: Session = { dispatchId, drive, exited: undefined, timedOut: undefined };
     // If the session dies (crash/abort) while a batch is parked, wake the
     // awaiter so the handler sees a failure instead of hanging forever.
     void drive.then((outcome) => {
@@ -206,6 +227,9 @@ export async function startPersistentMockSession(
     if (s.exited) {
       return calls.map(() => ({ ok: false, error: exitError(s.exited!) }));
     }
+    if (s.timedOut) {
+      return calls.map(() => ({ ok: false, error: s.timedOut! }));
+    }
     const turn = batchToStagedTurn(calls);
 
     // Register the awaiter BEFORE staging: staging releases the parked agent
@@ -220,7 +244,16 @@ export async function startPersistentMockSession(
     });
     mock.stageTurn(s.dispatchId, turn);
 
-    const outcome = await outcomePromise;
+    const raced = await withDeadline(outcomePromise, toolBatchTimeoutMs);
+    if (raced === undefined) {
+      batchAwaiters.delete(s.dispatchId);
+      const names = calls.map((c) => c.name).join(', ');
+      s.timedOut =
+        `host agent did not return a tool_result for [${names}] within ${toolBatchTimeoutMs}ms — ` +
+        'it may be stuck on a tool it has no registered handler for (no matching built-in or MCP server)';
+      return calls.map(() => ({ ok: false, error: s.timedOut! }));
+    }
+    const outcome = raced;
     if (outcome.kind === 'exit') {
       return calls.map(() => ({ ok: false, error: exitError(outcome.outcome) }));
     }
