@@ -328,7 +328,7 @@ export async function serveStatic(
     res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'no-store');
     for (const [k, v] of Object.entries(
-      staticSecurityHeaders({ inlineScriptNonce }, opts.frameAncestor),
+      staticSecurityHeaders({ inlineScriptNonce, frameAncestor: opts.frameAncestor }),
     )) {
       res.setHeader(k, v);
     }

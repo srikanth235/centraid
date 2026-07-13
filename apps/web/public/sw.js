@@ -160,7 +160,11 @@ async function tunnel(event, initialRoute) {
 async function shell(request) {
   return fetch(request)
     .then((response) => {
-      if (response.ok && new URL(request.url).origin === self.location.origin) {
+      const url = new URL(request.url);
+      // Never cache /web-config.json: the server marks it no-store because it
+      // carries the (mutable) gateway URL. A stale copy could pin the app to a
+      // dead gateway.
+      if (response.ok && url.origin === self.location.origin && url.pathname !== '/web-config.json') {
         const copy = response.clone();
         void caches.open(CACHE).then((cache) => cache.put(request, copy));
       }
