@@ -22,9 +22,8 @@ function setup(): { runs: ConversationStore; insights: InsightsStore } {
 }
 
 /** Insert a finished turn with one step item (model + tokens), under a
- *  conversation of the given kind. For an automation, each fire is its own
- *  execution conversation tagged with the `<appId>/<id>` ref — the
- *  view derives the owning app id from it. Returns the turn id. */
+ *  conversation of the given kind. Automation turns share the conversation
+ *  tagged with the `<appId>/<id>` ref. Returns the turn id. */
 function seedRun(
   runs: ConversationStore,
   opts: {
@@ -43,10 +42,7 @@ function seedRun(
   const startedAt = opts.startedAt ?? Date.now();
   let conversationId: string;
   if (opts.kind === 'automation' && opts.automationRef) {
-    // Each fire is its own execution conversation, grouped by the automation ref.
-    conversationId = randomUUID();
-    runs.createAutomationRun(
-      conversationId,
+    conversationId = runs.ensureAutomationConversation(
       opts.automationRef,
       opts.automationRef.split('/')[0],
       opts.automationName,

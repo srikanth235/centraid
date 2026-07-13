@@ -22,6 +22,7 @@ function makeProps(over: Partial<AutomationEditorBridgeProps> = {}): AutomationE
   return {
     loadData: vi.fn().mockResolvedValue(makeData()),
     onCancel: vi.fn(),
+    onCompile: vi.fn().mockResolvedValue(true),
     onCopyWebhook: vi.fn(),
     onDecideConsent: vi.fn().mockResolvedValue(true),
     onDelete: vi.fn().mockResolvedValue(false),
@@ -29,6 +30,7 @@ function makeProps(over: Partial<AutomationEditorBridgeProps> = {}): AutomationE
     onOpenRun: vi.fn(),
     onRotateWebhook: vi.fn().mockResolvedValue(true),
     onRunNow: vi.fn().mockResolvedValue(true),
+    onSearchEntities: vi.fn().mockResolvedValue([]),
     onSave: vi.fn().mockResolvedValue(true),
     onToggleEnabled: vi.fn().mockResolvedValue(true),
     ...over,
@@ -70,12 +72,6 @@ function setValue(el: HTMLInputElement | HTMLTextAreaElement, value: string): vo
   });
 }
 
-function radio(el: HTMLElement, name: string): HTMLButtonElement {
-  return [...el.querySelectorAll('[role="radio"]')].find(
-    (b) => b.getAttribute('aria-label') === name,
-  ) as HTMLButtonElement;
-}
-
 function tab(el: HTMLElement, label: string): HTMLButtonElement {
   return [...el.querySelectorAll('[role="tab"]')].find(
     (b) => b.textContent === label,
@@ -108,9 +104,9 @@ describe('AutomationEditorScreen — create mode', () => {
 
     setValue(instructionsField, 'Summarize the week every Monday.');
 
-    // Select the Schedule trigger card — a role=radio card named "Schedule".
+    // Add a schedule without collapsing any existing triggers.
     await act(async () =>
-      radio(el, 'Schedule').dispatchEvent(new MouseEvent('click', { bubbles: true })),
+      button(el, '+ Schedule').dispatchEvent(new MouseEvent('click', { bubbles: true })),
     );
     const cronCard = el.querySelector('[data-trigger-kind="cron"]');
     expect(cronCard).toBeTruthy();
@@ -139,12 +135,31 @@ describe('AutomationEditorScreen — create mode', () => {
       name: 'Weekly digest',
       triggers: [{ expr: '0 8 * * MON', kind: 'cron' }],
     });
-    // Create mode always hands off to the builder to compile the plan — the
-    // seed is a framed compile work order carrying the instructions verbatim.
-    expect(props.onOpenBuilder).toHaveBeenCalledTimes(1);
-    const seed = (props.onOpenBuilder as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
-    expect(seed.startsWith('Compile this automation now')).toBe(true);
-    expect(seed).toContain('Summarize the week every Monday.');
+    expect(props.onOpenBuilder).not.toHaveBeenCalled();
+    expect(props.onCompile).toHaveBeenCalledWith(true);
+  });
+
+  it('searches vault entities after @ and inserts a stable token rendered as a chip', async () => {
+    const onSearchEntities = vi
+      .fn()
+      .mockResolvedValue([
+        { id: 'party-1', subtitle: 'person', title: 'Priya', type: 'core.party' },
+      ]);
+    const el = await mount(makeProps({ onSearchEntities }));
+    const instructions = el.querySelector('textarea') as HTMLTextAreaElement;
+    setValue(instructions, 'Send a reminder to @Pri');
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    });
+    expect(onSearchEntities).toHaveBeenCalledWith('Pri');
+    expect(el.querySelector('[role="listbox"]')?.textContent).toContain('Priya');
+
+    await act(async () => {
+      (el.querySelector('[role="option"]') as HTMLButtonElement).click();
+    });
+    expect(instructions.value).toBe('Send a reminder to @[core.party/party-1]');
+    expect(el.querySelector('[aria-label="Tagged data"]')?.textContent).toContain('party-1');
   });
 });
 
@@ -220,7 +235,7 @@ describe('AutomationEditorScreen — edit mode', () => {
     expect(props.onDecideConsent).toHaveBeenCalledWith('grant', 'g1', 'revoke');
   });
 
-  it('saves changed fields and reveals Recompile plan only when Instructions changed', async () => {
+  it('saves changed fields and starts a hidden compile when Instructions changed', async () => {
     const props = makeProps({ loadData: vi.fn().mockResolvedValue(editData()) });
     const el = await mount(props);
 
@@ -238,19 +253,10 @@ describe('AutomationEditorScreen — edit mode', () => {
       name: 'Daily Digest',
       triggers: [{ expr: '0 8 * * *', kind: 'cron' }],
     });
-    // A successful save in create mode hands off to the builder immediately;
-    // in edit mode with changed instructions it instead surfaces the
-    // opt-in "Recompile plan" affirmative action.
+    // The builder callback remains in the contract but is hidden in v0.
     expect(props.onOpenBuilder).not.toHaveBeenCalled();
-    expect(button(el, 'Recompile plan')).toBeTruthy();
-
-    await act(async () =>
-      button(el, 'Recompile plan').dispatchEvent(new MouseEvent('click', { bubbles: true })),
-    );
-    expect(props.onOpenBuilder).toHaveBeenCalledWith(
-      'My instructions changed. Recompile the handler to match:\n\n' +
-        'Summarize yesterday’s new issues, then post to Slack.',
-    );
+    expect(props.onCompile).toHaveBeenCalledWith(false);
+    expect(el.textContent).not.toContain('Recompile plan');
   });
 
   it('does not show Recompile plan after a save with unchanged Instructions', async () => {
@@ -273,6 +279,49 @@ describe('AutomationEditorScreen — edit mode', () => {
       }),
     );
     expect(el.textContent).not.toContain('Recompile plan');
+  });
+
+  it('preserves and edits every loaded trigger, including condition where', async () => {
+    const props = makeProps({
+      loadData: vi.fn().mockResolvedValue(
+        editData({
+          triggers: [
+            { expr: '0 8 * * *', kind: 'cron' },
+            {
+              entity: 'core.event',
+              every: '*/5 * * * *',
+              kind: 'condition',
+              where: [{ column: 'status', op: 'eq', value: 'open' }],
+            },
+            { entities: ['core.party'], kind: 'data' },
+          ],
+        }),
+      ),
+    });
+    const el = await mount(props);
+    expect(el.querySelectorAll('[data-trigger-kind]').length).toBe(3);
+    expect(button(el, '+ Webhook').disabled).toBe(false);
+
+    const where = el.querySelector('input[placeholder^="[{"]') as HTMLInputElement;
+    setValue(where, '[{"column":"status","op":"eq","value":"closed"}]');
+    await act(async () =>
+      button(el, 'Save changes').dispatchEvent(new MouseEvent('click', { bubbles: true })),
+    );
+
+    expect(props.onSave).toHaveBeenCalledWith({
+      instructions: 'Summarize yesterday’s new issues.',
+      name: 'Daily Digest',
+      triggers: [
+        { expr: '0 8 * * *', kind: 'cron' },
+        {
+          entity: 'core.event',
+          every: '*/5 * * * *',
+          kind: 'condition',
+          where: [{ column: 'status', op: 'eq', value: 'closed' }],
+        },
+        { entities: ['core.party'], kind: 'data' },
+      ],
+    });
   });
 
   it('renders Connectors chips and the Notifications onFailure line from the DTO', async () => {

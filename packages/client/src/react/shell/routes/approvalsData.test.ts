@@ -17,6 +17,7 @@ import {
 function outboxItem(overrides: Partial<OutboxItem> = {}): OutboxItem {
   return {
     itemId: 'item1',
+    actorId: 'agent1',
     connection: { kind: 'pull.gmail', label: 'personal' },
     actor: 'gmail-send',
     actorKind: 'agent',

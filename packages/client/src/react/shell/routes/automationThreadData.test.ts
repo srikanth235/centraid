@@ -9,6 +9,7 @@ import {
   confirmVaultParked,
   decideOutboxItem,
   getBlocking,
+  listAgents,
   listAutomationRuns,
   listOutboxGrants,
   readAutomation,
@@ -23,6 +24,7 @@ vi.mock('../../../gateway-client.js', () => ({
   confirmVaultParked: vi.fn(),
   decideOutboxItem: vi.fn(),
   getBlocking: vi.fn(),
+  listAgents: vi.fn(),
   listAutomationRuns: vi.fn(),
   listOutboxGrants: vi.fn(),
   readAutomation: vi.fn(),
@@ -54,6 +56,7 @@ describe('filterConsentForAutomation', () => {
       outbox: [
         {
           actor: 'Daily Digest',
+          actorId: 'agent-1',
           actorKind: 'agent',
           artifact: { to: 'a@b.com' },
           canEdit: false,
@@ -68,6 +71,7 @@ describe('filterConsentForAutomation', () => {
         {
           // Same display name, but the vault ASSISTANT — must not leak in.
           actor: 'Daily Digest',
+          actorId: 'assistant-1',
           actorKind: 'assistant',
           artifact: {},
           canEdit: false,
@@ -82,6 +86,7 @@ describe('filterConsentForAutomation', () => {
         {
           // A different automation entirely — name doesn't match.
           actor: 'Weekly Report',
+          actorId: 'agent-2',
           actorKind: 'agent',
           artifact: {},
           canEdit: false,
@@ -136,7 +141,7 @@ describe('filterConsentForAutomation', () => {
       },
     ];
 
-    const consent = filterConsentForAutomation('Daily Digest', data, grants);
+    const consent = filterConsentForAutomation('agent-1', data, grants);
 
     expect(consent.outbox.map((o) => o.itemId)).toEqual(['ob1']);
     expect(consent.parked.map((p) => p.invocationId)).toEqual(['p1']);
@@ -144,7 +149,7 @@ describe('filterConsentForAutomation', () => {
   });
 
   it('returns empty lists when nothing matches the automation', () => {
-    const consent = filterConsentForAutomation('Nothing Here', blocking(), []);
+    const consent = filterConsentForAutomation(undefined, blocking(), []);
     expect(consent).toEqual({ grants: [], outbox: [], parked: [] });
   });
 });
@@ -155,6 +160,7 @@ describe('loadAutomationThreadData', () => {
     vi.mocked(listAutomationRuns).mockResolvedValue([]);
     vi.mocked(getBlocking).mockResolvedValue(blocking());
     vi.mocked(listOutboxGrants).mockResolvedValue([]);
+    vi.mocked(listAgents).mockResolvedValue([]);
 
     const result = await loadAutomationThreadData({
       automationId: 'digest/main',
@@ -190,6 +196,17 @@ describe('loadAutomationThreadData', () => {
     ] as unknown as CentraidAutomationRunRecord[]);
     vi.mocked(getBlocking).mockResolvedValue(blocking());
     vi.mocked(listOutboxGrants).mockResolvedValue([]);
+    vi.mocked(listAgents).mockResolvedValue([
+      {
+        agentId: 'agent-1',
+        hostKey: 'digest',
+        partyId: 'party-1',
+        name: 'Daily Digest',
+        modelRef: 'centraid-automation',
+        enrolledAt: '2026-01-01T00:00:00Z',
+        grants: [],
+      },
+    ]);
 
     const result = await loadAutomationThreadData({
       automationId: 'digest/main',

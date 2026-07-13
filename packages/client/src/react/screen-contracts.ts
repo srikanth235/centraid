@@ -485,9 +485,12 @@ export interface AutomationEditorBridgeProps {
   /** Persist Name/Instructions/triggers (manifest-only edit + publish —
    *  `updateAutomation`); resolves true on success. */
   onSave: (fields: AutomationEditorSaveFields) => Promise<boolean>;
-  /** Hand off to the builder chat (the compile mechanism) — `seedMessage`
-   *  posts a first user turn on open (e.g. "add a Slack step"), omitted for
-   *  a cold "Edit in builder" open. */
+  /** Start a hidden compile after the manifest save. */
+  onCompile: (enableOnSuccess?: boolean) => Promise<boolean>;
+  onSearchEntities: (
+    term: string,
+  ) => Promise<Array<{ type: string; id: string; title: string | null; subtitle: string | null }>>;
+  /** Internal-only builder handoff retained for a future surface; hidden in v0. */
   onOpenBuilder: (seedMessage?: string) => void;
   onRunNow: () => Promise<boolean>;
   onToggleEnabled: (next: boolean) => Promise<boolean>;
@@ -525,6 +528,8 @@ export interface AutomationThreadHeaderDTO {
   triggerSummary: string;
   webhook: { pending: boolean; url: string | null } | null;
   nextRuns: string[];
+  /** Stable manifest tokens shown as entity chips. */
+  entityTags: Array<{ type: string; id: string }>;
 }
 export type ThreadRunStatus = 'ok' | 'fail' | 'running' | 'pending';
 export interface ThreadRunDTO {
@@ -550,6 +555,8 @@ export interface AutomationThreadBridgeProps {
   onBack: () => void;
   /** Open the instructions-first editor for this automation. */
   onEdit: () => void;
+  /** Retry the hidden compiler after a failed compile turn. */
+  onRetryCompile: () => Promise<boolean>;
   onOpenRun: (runId: string) => void;
   onRunNow: () => Promise<boolean>;
   onToggleEnabled: (next: boolean) => Promise<boolean>;
@@ -559,8 +566,7 @@ export interface AutomationThreadBridgeProps {
     decision: ConsentDecision,
     alwaysAllow?: boolean,
   ) => Promise<boolean>;
-  /** Composer handoff — post a message into the thread's builder chat (the
-   *  compile mechanism), e.g. "also notify me on failure". */
+  /** Internal-only conversational revision callback retained but hidden in v0. */
   onSendMessage: (text: string) => void;
   onCopyWebhook: (url: string) => void;
   onRotateWebhook: () => Promise<boolean>;

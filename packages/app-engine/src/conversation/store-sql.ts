@@ -215,13 +215,14 @@ export function stateFromRaw(raw: RawState): AutomationStateEntry {
 
 export interface PreparedStatements {
   insertConversation: StatementSync;
+  updateAutomationConversation: StatementSync;
   getConversation: StatementSync;
   getConversationWithCount: StatementSync;
   listConversations: StatementSync;
   renameConversation: StatementSync;
   deleteConversationForUser: StatementSync;
   deleteConversationById: StatementSync;
-  deleteConversationsByAutomation: StatementSync;
+  deleteConversationByAutomation: StatementSync;
   titleOf: StatementSync;
   setTitle: StatementSync;
   setKind: StatementSync;
@@ -236,6 +237,7 @@ export interface PreparedStatements {
   listTurnsAsc: StatementSync;
   listTurnsFiltered: StatementSync;
   listTurnsByAutomation: StatementSync;
+  listInFlightAutomationTurns: StatementSync;
   setTurnPinned: StatementSync;
   pruneAutomationByCount: StatementSync;
   pruneAutomationByDays: StatementSync;
@@ -270,6 +272,11 @@ export function prepare(db: DatabaseSync): PreparedStatements {
          adapter_kind, adapter_session_id, turn_count, pinned, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, 0, 0, ?, ?)
     `),
+    updateAutomationConversation: db.prepare(`
+      UPDATE conversations
+      SET app_id = COALESCE(?, app_id), title = COALESCE(?, title), updated_at = ?
+      WHERE id = ? AND kind = 'automation' AND automation_id = ?
+    `),
     getConversation: db.prepare(`SELECT ${CONV_COLS} FROM conversations c WHERE c.id = ?`),
     getConversationWithCount: db.prepare(`
       SELECT ${CONV_COLS},
@@ -293,11 +300,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     ),
     deleteConversationForUser: db.prepare(`DELETE FROM conversations WHERE id = ? AND user_id = ?`),
     deleteConversationById: db.prepare(`DELETE FROM conversations WHERE id = ?`),
-    // Every execution conversation of one automation. CASCADE drops their
-    // turns/items/attachments (issue: per-execution conversations).
-    deleteConversationsByAutomation: db.prepare(
-      `DELETE FROM conversations WHERE automation_id = ?`,
-    ),
+    deleteConversationByAutomation: db.prepare(`DELETE FROM conversations WHERE automation_id = ?`),
     titleOf: db.prepare(`SELECT title FROM conversations WHERE id = ? AND user_id = ?`),
     setTitle: db.prepare(
       `UPDATE conversations SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
@@ -365,9 +368,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
         AND (? IS NULL OR ok = ?)
       ORDER BY started_at DESC LIMIT ?
     `),
-    // An automation's run history: every fire's turn across its execution
-    // conversations, newest-first. Mirrors listTurnsFiltered but keyed by the
-    // automation ref (`conversations.automation_id`) instead of one conv id.
+    // An automation's history is the turns of its one stable conversation.
     listTurnsByAutomation: db.prepare(`
       SELECT t.* FROM turns t JOIN conversations c ON t.conversation_id = c.id
       WHERE c.automation_id = ?
@@ -375,31 +376,33 @@ export function prepare(db: DatabaseSync): PreparedStatements {
         AND (? IS NULL OR t.ok = ?)
       ORDER BY t.started_at DESC LIMIT ?
     `),
+    listInFlightAutomationTurns: db.prepare(`
+      SELECT t.* FROM turns t JOIN conversations c ON t.conversation_id = c.id
+      WHERE c.kind = 'automation' AND t.ended_at IS NULL
+      ORDER BY t.started_at DESC LIMIT ?
+    `),
     setTurnPinned: db.prepare(`UPDATE turns SET pinned = ? WHERE id = ?`),
-    // Retention is per-automation at execution-conversation grain: drop whole
-    // old fires (CASCADE their turns/items/attachments). Ordering/windowing is
-    // by the fire's own turn (`started_at`/`ok`/`pinned`), not the conversation
-    // row, so a pinned fire always survives.
+    // Retention is per turn within the automation's stable conversation.
+    // Deleting a turn cascades its items and attachments; pinned turns survive.
     pruneAutomationByCount: db.prepare(`
-      DELETE FROM conversations
-      WHERE automation_id = ?
+      DELETE FROM turns
+      WHERE conversation_id IN (SELECT id FROM conversations WHERE automation_id = ?)
         AND id NOT IN (
-          SELECT c.id FROM conversations c JOIN turns t ON t.conversation_id = c.id
-          WHERE c.automation_id = ?
-          ORDER BY t.started_at DESC LIMIT ?
+          SELECT t.id FROM turns t JOIN conversations c ON t.conversation_id = c.id
+          WHERE c.automation_id = ? ORDER BY t.started_at DESC LIMIT ?
         )
-        AND id NOT IN (SELECT conversation_id FROM turns WHERE pinned = 1)
+        AND pinned = 0
     `),
     pruneAutomationByDays: db.prepare(`
-      DELETE FROM conversations
-      WHERE automation_id = ?
-        AND id IN (SELECT conversation_id FROM turns WHERE started_at < ? AND pinned = 0)
+      DELETE FROM turns
+      WHERE conversation_id IN (SELECT id FROM conversations WHERE automation_id = ?)
+        AND started_at < ? AND pinned = 0
     `),
     // keep='errors': drop the successful fires, keep failures (+ pinned).
     pruneAutomationErrorsOnly: db.prepare(`
-      DELETE FROM conversations
-      WHERE automation_id = ?
-        AND id IN (SELECT conversation_id FROM turns WHERE ok = 1 AND pinned = 0)
+      DELETE FROM turns
+      WHERE conversation_id IN (SELECT id FROM conversations WHERE automation_id = ?)
+        AND ok = 1 AND pinned = 0
     `),
     insertItem: db.prepare(`
       INSERT INTO items (

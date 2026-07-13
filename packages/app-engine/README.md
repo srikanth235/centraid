@@ -36,8 +36,8 @@ model ([gateway-db.ts](src/stores/gateway-db.ts) `RUNTIME_MIGRATIONS`,
 [conversation/schema.ts](src/conversation/schema.ts)):
 
 - `conversations` — the durable thread; `kind ∈ {chat, build, automation}`
-  lives here, not per-turn. Each automation fire is its own conversation
-  tagged with `automation_id`.
+  lives here, not per-turn. Each automation has one long-lived conversation
+  tagged with `automation_id`; compile and fire executions append turns.
 - `turns` — one execution; carries the token/cost rollup written at finish.
 - `items` — the ordered trace: `message_in` (ordinal 0, the inbound message),
   `step` (one model call, the token/cost grain), `tool`/`agent` (audit rows).

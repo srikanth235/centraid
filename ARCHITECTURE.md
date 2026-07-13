@@ -19,8 +19,8 @@ Centraid's first principle is that **everything is agentic chat** — automation
 
 | Layer            | What it is                                                                 | Chat                   | Automation                       |
 | ---------------- | ------------------------------------------------------------------------- | ---------------------- | -------------------------------- |
-| **conversation** | the durable thread. `kind` ∈ `{chat, build, automation}` lives here.       | the chat session       | each fire is its own conversation, tagged with the automation ref |
-| **turn**         | one execution under it — `conversation_id` is a NOT-NULL, FK'd, CASCADE spine | one reply round | one fire / `ctx.agent` round     |
+| **conversation** | the durable thread. `kind` ∈ `{chat, build, automation}` lives here.       | the chat session       | one long-lived conversation per automation ref |
+| **turn**         | one execution under it — `conversation_id` is a NOT-NULL, FK'd, CASCADE spine | one reply round | one headless compile or fire / `ctx.agent` round |
 | **item**         | the ordered trace. `kind` ∈ `{message_in, step, tool, agent}`             | inbound message + steps + tool calls | inbound trigger + steps + tool/agent calls |
 
 `kind` lives on the **conversation**, not re-stamped per turn — a thread is single-kind. The inbound message (a person typing, a webhook firing, a cron tick) is a first-class `item` (`kind='message_in'`, ordinal 0); `step` is one primary model-inference call (per-call token + cost accounting); `tool`/`agent` are per-call audit rows. Attachments ride the `message_in` item, content-addressed on disk. The tables are `conversations`, `turns`, `items`, `attachments`, `automation_state`, `run_summary` (see `TRANSCRIPTS_MIGRATIONS` in `gateway-db.ts`). There is no `run` layer and no `run_nodes` table — those were collapsed in issue #190.
@@ -65,6 +65,15 @@ Each gateway host derives its own paths and passes absolute slots to the gateway
 - **Daemon**: the same tree under the config `dataDir` — `vault/`, `prefs.json`, `model-catalog.json` — plus daemon-only plumbing: a persistent `token.bin` (mode 0600) and the device-pairing files (`devices.json`, `pairing-tickets.json`, `endpoint-key.bin`, `endpoint.json`; issue #289). See `packages/gateway/src/cli/paths.ts`.
 
 App-engine owns the conversation-ledger band of the per-vault `journal.db` (`packages/app-engine/src/stores/gateway-db.ts`): conversations, turns, items, attachments, automation KV, and the `run_summary` VIEW that feeds Insights — derived from the ledger tables, no write-through (the old per-app `runtime.sqlite` and central `analytics.sqlite` became a standalone `transcripts.db` in #280, then folded into `journal.db`). The band is ensured idempotently on open and never touches `PRAGMA user_version`. The vault package owns its own files' DDL: `vault.db` (all ontology schemas, one ACID boundary) and `journal.db`'s audit band (the append-only receipt/provenance stream, versioned by the vault's ladder).
+
+## Cron catch-up policy
+
+The gateway's cron scheduler is in-process and intentionally does not backfill
+after sleep, restart, or downtime. Missed fire times are skipped rather than
+burst-executed; one bounded missed-window ledger entry per affected automation
+records the earliest missed fire for operator visibility. The next ordinary
+minute resumes normal scheduling. `scheduler-ledger.test.ts` is the executable
+contract for this policy.
 
 ## Build orchestration
 

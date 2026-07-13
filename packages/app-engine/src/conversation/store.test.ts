@@ -14,7 +14,7 @@ function newStore(): ConversationStore {
   return new ConversationStore(newProvider());
 }
 
-/** Seed one automation fire: its own execution conversation + a finished turn. */
+/** Seed one automation turn in its stable conversation. */
 function seedAutomationTurn(
   store: ConversationStore,
   automationRef: string,
@@ -22,10 +22,13 @@ function seedAutomationTurn(
   startedAt: number,
   ok = true,
 ): void {
-  store.createAutomationRun(`conv-${turnId}`, automationRef, automationRef.split('/')[0]);
+  const conversationId = store.ensureAutomationConversation(
+    automationRef,
+    automationRef.split('/')[0],
+  );
   store.insertTurn({
     turnId,
-    conversationId: `conv-${turnId}`,
+    conversationId,
     triggerKind: 'scheduled',
     startedAt,
   });
@@ -50,24 +53,24 @@ describe('ConversationStore — conversations', () => {
     store.close();
   });
 
-  it('createAutomationRun makes a fresh execution conversation per fire, grouped by ref', () => {
+  it('ensureAutomationConversation reuses one conversation and refreshes its name', () => {
     const store = newStore();
-    store.createAutomationRun('c1', 'app/digest', 'app');
-    store.createAutomationRun('c2', 'app/digest', 'app');
-    const a = store.getConversation('c1');
-    const b = store.getConversation('c2');
+    const first = store.ensureAutomationConversation('app/digest', 'app', 'Digest');
+    const second = store.ensureAutomationConversation('app/digest', 'app', 'Morning digest');
+    const a = store.getConversation('app/digest');
     expect(a?.kind).toBe('automation');
     expect(a?.automationId).toBe('app/digest');
     expect(a?.appId).toBe('app');
-    expect(b?.automationId).toBe('app/digest');
-    expect(a?.id).not.toBe(b?.id);
+    expect(a?.title).toBe('Morning digest');
+    expect(first).toBe('app/digest');
+    expect(second).toBe(first);
     store.close();
   });
 
   it('listConversationsMeta returns chat/build threads with a transcript count', () => {
     const store = newStore();
     const c = store.createConversation({ kind: 'chat', userId: 'u1', appId: 'app' });
-    store.createAutomationRun('auto-conv', 'app/auto'); // automation — excluded from chat list
+    store.ensureAutomationConversation('app/auto'); // automation — excluded from chat list
     store.insertTurn({
       turnId: 't1',
       conversationId: c.id,
@@ -293,13 +296,13 @@ describe('ConversationStore — automation state', () => {
 });
 
 describe('ConversationStore — prune + delete', () => {
-  /** Seed one fire (its own execution conversation + turn + a tool item). */
+  /** Seed one fire turn + a tool item in the stable conversation. */
   function seedFire(store: ConversationStore, i: number, ok = true): void {
     const id = `r${i}`;
-    store.createAutomationRun(`c${i}`, 'app/foo', 'app');
+    const conversationId = store.ensureAutomationConversation('app/foo', 'app');
     store.insertTurn({
       turnId: id,
-      conversationId: `c${i}`,
+      conversationId,
       triggerKind: 'scheduled',
       startedAt: 100 + i,
     });
@@ -344,7 +347,7 @@ describe('ConversationStore — prune + delete', () => {
     store.close();
   });
 
-  it('deleteAutomationData drops every execution conversation (cascade) + state, leaving others', () => {
+  it('deleteAutomationData drops the stable conversation (cascade) + state, leaving others', () => {
     const store = newStore();
     seedAutomationTurn(store, 'app/a', 'a1', 1);
     seedAutomationTurn(store, 'app/b', 'b1', 1);

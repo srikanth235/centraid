@@ -109,6 +109,11 @@ import { buildDiagnosticsBundle } from './gateway-diagnostics.js';
 import { makeDiagnosticsRouteHandler } from '../routes/diagnostics-routes.js';
 import { makeBackupRouteHandler } from '../routes/backup-routes.js';
 import { makeLifecycleRouteHandler } from '../routes/lifecycle-routes.js';
+import { publishAndReconcile, type LifecycleRouteOptions } from '../lifecycle/lifecycle-shared.js';
+import {
+  finalizeCompiledManifest,
+  runHeadlessAutomationCompile,
+} from '../lifecycle/headless-automation-compile.js';
 import { makeUnifiedConversationRunner } from '../runs/unified-conversation-runner.js';
 import {
   makeAssistantConversationRunner,
@@ -1064,6 +1069,90 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       ...(paths.modelCatalogFile ? { catalogPath: paths.modelCatalogFile } : {}),
       ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
     });
+    const compileSessionIdFor = options.sessionIdFor ?? ((appId: string) => `chat-${appId}`);
+    const lifecycleOpts: LifecycleRouteOptions = {
+      store,
+      codeAppsDir,
+      ...(paths.templatesCacheDir ? { templatesCacheDir: paths.templatesCacheDir } : {}),
+      ensureRegistered: async (appId) => {
+        await requireRuntime().registry.ensureUploaded(appId);
+        vaultRegistry.enrollApp(appId);
+        await grantDeclaredAppScopes(plane, store, appId);
+        invalidateToolCatalog();
+      },
+      deregister: deregisterAndCleanup,
+      reconcile: () => reconcileScheduler(vaultId),
+      ext,
+      compileAutomation: ({ automationRef, runId, enableOnSuccess }) => {
+        const parsed = automation.parseRef(automationRef);
+        if (!parsed) return;
+        void (async () => {
+          const row = await automation.readAppOwned(
+            codeAppsDir(),
+            parsed.appId,
+            parsed.automationId,
+          );
+          if (!row) return;
+          const enabledBeforeCompile = row.enabled;
+          const sessionId = compileSessionIdFor(parsed.appId);
+          await runHeadlessAutomationCompile({
+            runner,
+            journalDbFile: workspace.journalDbFile,
+            runnerSessionDir: workspace.runnerSessionDir,
+            dataDir: workspace.appsDir,
+            appId: parsed.appId,
+            automationRef,
+            automationName: row.name,
+            instructions: row.manifest.prompt,
+            runId,
+            onSuccess: async () => {
+              const appDir = await store.snapshotSessionAppDir(sessionId, parsed.appId);
+              const manifestFile = path.join(
+                appDir,
+                'automations',
+                parsed.automationId,
+                automation.MANIFEST_FILE,
+              );
+              const manifest = automation.parseManifest(await fs.readFile(manifestFile, 'utf8'));
+              const compiled = finalizeCompiledManifest(manifest, {
+                enabledBeforeCompile,
+                enableOnSuccess,
+              });
+              await fs.writeFile(manifestFile, `${JSON.stringify(compiled, null, 2)}\n`);
+              await publishAndReconcile(lifecycleOpts, {
+                appId: parsed.appId,
+                sessionId,
+                appDir,
+                message: `compile ${parsed.automationId}`,
+              });
+              health.reportOk('automation-runs', `Plan ready for ${row.name}`);
+            },
+            onFailure: (error) => {
+              health.reportError(
+                'automation-runs',
+                `Compile failed for ${row.name}: ${error}. Retry from the automation thread.`,
+              );
+              logger.warn?.(`Headless compile failed for ${automationRef}: ${error}`);
+              if (row.manifest.onFailure) {
+                const target = automation.parseRef(row.manifest.onFailure, parsed.appId);
+                if (target) {
+                  fireAutomation(`${target.appId}/${target.automationId}`, {
+                    triggerKind: 'on_failure',
+                    triggerOrigin: 'manual',
+                    input: {
+                      automationRef,
+                      compileRunId: runId,
+                      error,
+                      phase: 'compile',
+                    },
+                  });
+                }
+              }
+            },
+          });
+        })();
+      },
+    };
 
     const handlers: RouteHandler[] = [
       makeAppsStoreRouteHandler(store, {
@@ -1085,20 +1174,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       }),
       // App lifecycle over HTTP (issue #141, Phase 2): the gateway owns
       // scaffold / clone / update-meta / automation create+toggle+delete.
-      makeLifecycleRouteHandler({
-        store,
-        codeAppsDir,
-        ...(paths.templatesCacheDir ? { templatesCacheDir: paths.templatesCacheDir } : {}),
-        ensureRegistered: async (appId) => {
-          await requireRuntime().registry.ensureUploaded(appId);
-          vaultRegistry.enrollApp(appId);
-          await grantDeclaredAppScopes(plane, store, appId);
-          invalidateToolCatalog();
-        },
-        deregister: deregisterAndCleanup,
-        reconcile: () => reconcileScheduler(vaultId),
-        ext,
-      }),
+      makeLifecycleRouteHandler(lifecycleOpts),
       // Automation runtime ops over HTTP (issue #141): list/read/run-now,
       // the run feed + per-run detail, and insights — all over THIS
       // vault's conversation ledger (the journal.db ledger band).

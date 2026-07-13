@@ -389,8 +389,7 @@ export function handleRunsMessage(
   filter: { automationId?: string; status?: 'ok' | 'error'; since?: number; limit?: number },
 ): CtxReply {
   try {
-    // An automation's runs are its execution conversations, grouped by the
-    // automation ref (each fire is its own conversation now).
+    // An automation's runs are the turns of its stable ref-keyed conversation.
     const automationRef = filter.automationId ?? audit.automationId;
     const limit = filter.limit ?? 50;
     // Fetch one extra row so we can drop the in-progress self-turn without

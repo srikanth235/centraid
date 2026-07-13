@@ -199,3 +199,33 @@ test('update with no recognized fields is a 400', async () => {
   expect(status).toBe(400);
   expect(json.error).toBe('bad_request');
 });
+
+test('headless compile returns a run id and records failure in the automation thread', async () => {
+  const created = await createAutomation('compile-ledger', { enabled: false });
+  const res = await fetch(
+    `${handle.url}/centraid/_automations/compile?ref=${encodeURIComponent(created.row.ref)}`,
+    {
+      method: 'POST',
+      headers: { ...auth(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enableOnSuccess: true }),
+    },
+  );
+  expect(res.status).toBe(202);
+  const { runId } = (await res.json()) as { runId: string };
+  expect(runId).toContain(':compile:');
+
+  let runs: Array<{ runId: string; triggerKind: string; endedAt?: number; ok: boolean }> = [];
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const feed = await fetch(
+      `${handle.url}/centraid/_automations/runs?ref=${encodeURIComponent(created.row.ref)}`,
+      { headers: auth() },
+    );
+    runs = ((await feed.json()) as { runs: typeof runs }).runs;
+    if (runs.find((run) => run.runId === runId)?.endedAt !== undefined) break;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  expect(runs.find((run) => run.runId === runId)).toMatchObject({
+    triggerKind: 'compile',
+    ok: false,
+  });
+});

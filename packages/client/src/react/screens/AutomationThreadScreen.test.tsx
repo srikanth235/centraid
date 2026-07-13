@@ -44,6 +44,7 @@ function makeData(over: Partial<AutomationThreadDataEx> = {}): AutomationThreadD
     },
     header: {
       description: 'Summarize the inbox',
+      entityTags: [],
       enabled: true,
       glyphIcon: 'Bolt',
       heroIcon: 'Clock',
@@ -116,6 +117,7 @@ function makeProps(
     onEdit: vi.fn(),
     onOpenRun: vi.fn(),
     onRotateWebhook: vi.fn().mockResolvedValue(true),
+    onRetryCompile: vi.fn().mockResolvedValue(true),
     onRunNow: vi.fn().mockResolvedValue(true),
     onSendMessage: vi.fn(),
     onToggleEnabled: vi.fn().mockResolvedValue(true),
@@ -215,22 +217,10 @@ describe('AutomationThreadScreen', () => {
     expect(props.onOpenRun).toHaveBeenCalledWith('r2');
   });
 
-  it('submits the composer', async () => {
-    const props = makeProps();
-    const el = await mount(props);
-    const input = el.querySelector('input[placeholder^="Ask about"]') as HTMLInputElement;
-    const send = el.querySelector('[aria-label="Send"]') as HTMLButtonElement;
-    expect(send.disabled).toBe(true);
-    await act(async () => {
-      const setter = Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype,
-        'value',
-      )!.set!;
-      setter.call(input, 'add a Slack step');
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    await act(async () => send.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(props.onSendMessage).toHaveBeenCalledWith('add a Slack step');
+  it('hides the builder-backed composer in v0', async () => {
+    const el = await mount(makeProps());
+    expect(el.querySelector('input[placeholder^="Ask about"]')).toBeNull();
+    expect(el.querySelector('[aria-label="Send"]')).toBeNull();
   });
 
   it('shows the empty-thread state when there are no runs', async () => {

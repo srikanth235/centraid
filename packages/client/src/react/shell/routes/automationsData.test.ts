@@ -70,6 +70,24 @@ describe('buildOverviewData', () => {
     expect(data.rows[0]?.lastRunLabel).toContain('Last run');
   });
 
+  it('projects compile lifecycle labels into the fleet row', () => {
+    const compiling = buildOverviewData(
+      [row({ enabled: false })],
+      [entry({ endedAt: undefined, ok: false, triggerKind: 'compile' } as never)],
+    );
+    expect(compiling.rows[0]).toMatchObject({ statusKind: 'running', statusLabel: 'Compiling…' });
+    expect(compiling.rows[0]?.lastRunOk).toBeNull();
+
+    const ready = buildOverviewData([row()], [entry({ triggerKind: 'compile' } as never)]);
+    expect(ready.rows[0]).toMatchObject({ statusKind: 'success', statusLabel: 'Plan ready' });
+
+    const failed = buildOverviewData(
+      [row({ enabled: false })],
+      [entry({ error: 'no plan', ok: false, triggerKind: 'compile' } as never)],
+    );
+    expect(failed.rows[0]).toMatchObject({ statusKind: 'failed', statusLabel: 'Compile failed' });
+  });
+
   it('uses the empty-state subtitle when there are no rows', () => {
     const data = buildOverviewData([], []);
     expect(data.subtitle).toBe('Conversations that run on their own.');

@@ -198,13 +198,12 @@ function turnToRunRecord(
   automationRef: string | undefined,
   conversationTitle: string | undefined,
 ): RunRecordJson {
-  // Prefer the analytics summary's ref; fall back to the owning execution
-  // conversation's `automation_id` (the conversation id is no longer the ref —
-  // each fire is its own conversation).
+  // Prefer the analytics summary's ref; fall back to the owning long-lived
+  // automation conversation's `automation_id`.
   const ref = summary?.automationRef ?? automationRef;
   // Same fallback for the display name: the analytics view only covers
   // finished runs, so an in-flight run's name comes straight off its own
-  // conversation's `title` (set once at `createAutomationRun`).
+  // long-lived automation conversation's `title`.
   const name = summary?.automationName ?? (conversationTitle || undefined);
   return {
     runId: turn.turnId,
@@ -428,14 +427,14 @@ export function makeAutomationsRouteHandler(
         const finished = summaries.filter((s) => s.kind === 'automation').map(summaryToRunRow);
         // The `run_summary` view only covers FINISHED turns (`ended_at IS NOT
         // NULL`), so a fire that is still executing is invisible to it. The
-        // thread screen stays put on "Run now" (it no longer jumps into the
-        // SSE run viewer), so surface in-flight turns here or a slow run
-        // looks like nothing happened. Ref-scoped only — the fleet's global
-        // feed can tolerate the completion lag.
-        if (ref) {
+        // thread and fleet surfaces both need in-flight turns; otherwise a
+        // compile or long fire disappears until completion.
+        {
           const seen = new Set(finished.map((r) => r.runId));
-          const live = runsStore
-            .listAutomationTurns(ref, { limit: 10 })
+          const candidates = ref
+            ? runsStore.listAutomationTurns(ref, { limit: 10 })
+            : runsStore.listInFlightAutomationTurns(50);
+          const live = candidates
             .filter((t) => t.endedAt === undefined && !seen.has(t.turnId))
             .map((t) => {
               const conversation = runsStore.getConversation(t.conversationId);
@@ -447,9 +446,12 @@ export function makeAutomationsRouteHandler(
                 conversation?.title,
               );
             });
-          return sendJson(res, 200, { runs: [...live, ...finished] });
+          return sendJson(res, 200, {
+            runs: [...live, ...finished]
+              .sort((a, b) => b.startedAt - a.startedAt)
+              .slice(0, Number.isFinite(limit) && limit > 0 ? limit : 50),
+          });
         }
-        return sendJson(res, 200, { runs: finished });
       }
 
       if (sub === 'run' && method === 'GET') {

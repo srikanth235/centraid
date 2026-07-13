@@ -62,7 +62,7 @@ export interface RunRef {
 
 /**
  * Project a `turns` row into the handler-facing `ctx.runs` ref. Each fire is
- * its own execution conversation now, so the automation ref is passed in
+ * the automation's stable execution conversation, so the automation ref is passed in
  * (it's no longer the conversation id); `inputText` is the turn's ordinal-0
  * `message_in` payload, fetched by the caller.
  */

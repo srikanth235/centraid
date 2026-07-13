@@ -25,6 +25,7 @@
 //          body {name?, prompt?, triggers?, sessionId?, publish?} — 404 if the ref doesn't
 //          exist, 400 on an invalid patch; mints a webhook (returned once, like create) only
 //          when `triggers` adds one where none existed before
+//   POST   /centraid/_automations/compile?ref=<ref>  hidden builder compile → {runId}
 //   POST   /centraid/_automations/rotate-webhook?ref=<ref>  mint a fresh webhook secret
 //          body {sessionId?, publish?} — 404 if the ref doesn't exist, 400 if it has no webhook trigger
 //   POST   /centraid/_automations/enrichment    {enabled} — batch-toggle every installed enricher (issue #306)
@@ -65,6 +66,7 @@ import { provisionPendingWebhooksInFiles } from '@centraid/automation';
 import { readFileMap, readJson, sendJson } from './route-helpers.js';
 import {
   handleAutomationCreate,
+  handleAutomationCompile,
   handleAutomationDelete,
   handleAutomationRotateWebhook,
   handleAutomationSetEnabled,
@@ -112,6 +114,9 @@ export function makeLifecycleRouteHandler(
       }
       if (pathname === '/centraid/_automations' && method === 'POST') {
         return await handleAutomationCreate(opts, req, res);
+      }
+      if (pathname === '/centraid/_automations/compile' && method === 'POST') {
+        return await handleAutomationCompile(opts, req, res, url);
       }
       if (pathname === '/centraid/_automations/set-enabled' && method === 'POST') {
         return await handleAutomationSetEnabled(opts, req, res, url);

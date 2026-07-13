@@ -1,16 +1,24 @@
 import { type JSX, useRef } from 'react';
 import {
   auth,
+  compileAutomation,
   createAutomation,
   deleteAutomation,
   getBlocking,
+  listAgents,
+  listTemplates,
   listOutboxGrants,
   rotateAutomationWebhookSecret,
   runAutomationNow,
   setAutomationEnabled,
+  searchVaultEntities,
   updateAutomation,
 } from '../../../gateway-client.js';
-import type { AuEditorTriggerDTO, AutomationEditorData } from '../../screen-contracts.js';
+import type {
+  AuEditorTriggerDTO,
+  AuEditorTriggerInput,
+  AutomationEditorData,
+} from '../../screen-contracts.js';
 import AutomationEditorScreen from '../../screens/AutomationEditorScreen.js';
 import { useShellActions } from '../actions.js';
 import PageScroll from '../PageScroll.js';
@@ -43,6 +51,23 @@ function triggerToDto(t: CentraidAutomationRow['triggers'][number]): AuEditorTri
   }
 }
 
+function vaultForTriggers(triggers: readonly (AuEditorTriggerDTO | AuEditorTriggerInput)[]) {
+  const entities = triggers.flatMap((trigger) =>
+    trigger.kind === 'condition'
+      ? [trigger.entity]
+      : trigger.kind === 'data'
+        ? trigger.entities
+        : [],
+  );
+  const scopes = Array.from(new Set(entities)).map((entity) => {
+    const [schema, table] = entity.split('.', 2);
+    return { schema: schema || entity, ...(table ? { table } : {}), verbs: 'read' };
+  });
+  return scopes.length > 0
+    ? { purpose: 'dpv:ServiceProvision', why: 'Evaluate automation triggers.', scopes }
+    : undefined;
+}
+
 // React-owned automation editor — the instructions-first create/edit form
 // (Automations UI revamp, see receipts/issue-387-automations-ui-revamp.md). This is a real
 // wrapper, not a stub: it wires `AutomationEditorScreen`'s full bridge-prop
@@ -67,13 +92,6 @@ export default function AutomationEditorRoute({
   const refIdRef = useRef<string | null>(automationId ?? null);
   const rowRef = useRef<CentraidAutomationRow | null>(null);
 
-  // `templateId` is accepted on the route but not consumed yet —
-  // template-seeded creates still go through the clone path
-  // (TemplatesRoute/DiscoverRoute adopt → thread). Pre-filling the editor
-  // from a gallery template is out of scope for wave 1 (see
-  // receipts/issue-387-automations-ui-revamp.md, Out of scope).
-  void templateId;
-
   return (
     <PageScroll>
       <AutomationEditorScreen
@@ -82,31 +100,44 @@ export default function AutomationEditorRoute({
           rowRef.current = loaded.row;
           refIdRef.current = loaded.row?.ref ?? automationId ?? null;
           if (!loaded.row) {
+            const template = templateId
+              ? (await listTemplates()).find((entry) => entry.id === templateId)
+              : undefined;
             return {
               automationId: null,
               connectors: null,
               consent: { grants: [], outbox: [], parked: [] },
               enabled: false,
-              instructions: loaded.instructions,
+              instructions: template?.desc ?? loaded.instructions,
               mode: 'create',
               model: null,
-              name: loaded.name,
+              name: template?.name ?? loaded.name,
               onFailure: null,
               rowId: null,
-              triggers: [],
+              triggers:
+                template?.triggerKind === 'webhook'
+                  ? [{ id: null, kind: 'webhook', pending: true }]
+                  : template?.triggerKind === 'cron'
+                    ? [{ expr: '0 9 * * *', kind: 'cron' }]
+                    : [],
               webhook: null,
             };
           }
-          const [{ baseUrl }, blocking, grants] = await Promise.all([
+          const [{ baseUrl }, blocking, grants, agents] = await Promise.all([
             auth(),
             getBlocking(),
             listOutboxGrants(),
+            listAgents(),
           ]);
           const hero = deriveAutomationHero(loaded.row, baseUrl);
           return {
             automationId: loaded.row.ref,
             connectors: loaded.connectors,
-            consent: filterConsentForAutomation(loaded.row.name, blocking, grants),
+            consent: filterConsentForAutomation(
+              agents.find((agent) => agent.hostKey === loaded.row?.ownerApp)?.agentId,
+              blocking,
+              grants,
+            ),
             enabled: loaded.row.enabled,
             instructions: loaded.instructions,
             mode: 'edit',
@@ -126,6 +157,9 @@ export default function AutomationEditorRoute({
                 name: fields.name,
                 prompt: fields.instructions,
                 triggers: fields.triggers,
+                ...(vaultForTriggers(fields.triggers)
+                  ? { vault: vaultForTriggers(fields.triggers) }
+                  : {}),
               });
               if (row) rowRef.current = row;
               // A `{kind:'webhook'}` trigger that didn't exist before mints a
@@ -147,6 +181,9 @@ export default function AutomationEditorRoute({
               name: fields.name,
               prompt: fields.instructions,
               triggers: fields.triggers,
+              ...(vaultForTriggers(fields.triggers)
+                ? { vault: vaultForTriggers(fields.triggers) }
+                : {}),
             });
             if (row) {
               rowRef.current = row;
@@ -165,6 +202,20 @@ export default function AutomationEditorRoute({
             return false;
           }
         }}
+        onCompile={async (enableOnSuccess) => {
+          const ref = refIdRef.current;
+          if (!ref) return false;
+          try {
+            await compileAutomation({ automationId: ref, enableOnSuccess });
+            showToast('Compiling plan…');
+            navigate({ automationId: ref, kind: 'automation-view' });
+            return true;
+          } catch (err) {
+            showToast(`Could not compile: ${err instanceof Error ? err.message : String(err)}`);
+            return false;
+          }
+        }}
+        onSearchEntities={searchVaultEntities}
         onOpenBuilder={(seedMessage) => {
           // The builder route keys on the BARE app id (`row.id`), not the
           // compound `ref` — useBuilder compares it against `row.ownerApp`

@@ -24,8 +24,8 @@ export interface RunSummary {
   /** `<appId>/<id>` handle — set for `kind: 'automation'`. */
   readonly automationRef?: string;
   /**
-   * The automation's display name at fire time (`conversations.title`,
-   * set once at `createAutomationRun`). Survives the automation being
+   * The automation's display name (`conversations.title`, refreshed by
+   * `ensureAutomationConversation`). Survives the automation being
    * deleted, so an orphaned run can show a real name instead of raw
    * `automationRef`. Absent for runs recorded before this field existed.
    */
