@@ -50,6 +50,16 @@ GitHub issue: [#394](https://github.com/srikanth235/centraid/issues/394)
   the thread supplies the direct retry affordance.
   HTTP coverage is in
   `packages/gateway/src/routes/lifecycle-automation-routes.test.ts`.
+- A browser-found publish race is contained by giving each compile its own
+  disposable worktree session. `packages/app-engine/src/conversation/runner.ts`,
+  `packages/gateway/src/runs/unified-conversation-runner.ts`, and
+  `packages/gateway/src/serve/build-gateway.ts` thread that one-shot session
+  through the shared runner, publish it once, and request best-effort cleanup
+  after success or failure. A failed stale compile therefore cannot leave a
+  rebase in the interactive draft or poison the next compile. Coverage in
+  `packages/gateway/src/lifecycle/headless-automation-compile.test.ts` and
+  `packages/gateway/src/runs/unified-conversation-runner.test.ts` asserts the
+  explicit session hand-off and isolation.
 - `packages/automation/src/scaffold/scaffold.ts` changes generated provenance
   from the builder-specific name to `centraid-compiler`.
 - `packages/client/src/gateway-client-automation-compile.ts` and
@@ -180,6 +190,16 @@ node --check apps/desktop/tests/e2e-live/flows-automations-06-builder-to-run.mjs
 git diff --check
 ```
 
+After the first browser run surfaced a stale compile-publish rebase, the
+focused isolation suite (8 tests) and `bun run typecheck` (26 tasks) passed
+after the fix. The native in-app Browser was also manually exercised against
+the repository's local gateway fixture: the visible direct-gateway flow
+connected, the edited automation rendered `Plan ready`, a manual run rendered
+`Edited browser CRUD verification status.`, and deletion returned to the
+empty Automations state. The slow first compile correctly conflicted after a
+later edit published; the follow-up compile succeeded from its isolated
+session and the failure did not contaminate the retry.
+
 `bun run lint` remains red on the unchanged baseline (207 existing oxlint
 errors, predominantly generated `apps/web/src/generated/centraid_web_iroh.js`
 and legacy e2e-live files). The changed-file-only oxlint invocation above is
@@ -223,6 +243,10 @@ snapshot/restore, consent-checked `ctx.vault.resolve` work order, configured
 represented in the diff. Verification commands are replayable, the
 changed-file oxlint command is present, and the live Electron flow is
 accurately limited to syntax-check evidence rather than claimed as executed.
+
+PASS — a second fresh-context audit of the compile-session follow-up confirms
+the current receipt's best-effort cleanup wording, explicit test coverage
+limits, and manual Browser verification statement match the diff.
 
 ## Accounting
 

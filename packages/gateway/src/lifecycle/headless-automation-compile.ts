@@ -14,6 +14,8 @@ export interface HeadlessCompileOptions {
   runnerSessionDir: string;
   dataDir: string;
   appId: string;
+  /** A fresh, one-shot worktree session for this compile. */
+  draftSessionId: string;
   automationRef: string;
   automationName: string;
   instructions: string;
@@ -124,6 +126,7 @@ export async function runHeadlessAutomationCompile(opts: HeadlessCompileOptions)
     // per-turn escape hatch on ConversationRunner that can weaken this.
     await opts.runner.run({
       appId: opts.appId,
+      draftSessionId: opts.draftSessionId,
       dataDir: opts.dataDir,
       conversationId,
       sessionFile: path.join(opts.runnerSessionDir, `${encodeURIComponent(conversationId)}.jsonl`),

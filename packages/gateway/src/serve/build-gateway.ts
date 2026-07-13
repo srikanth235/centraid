@@ -1069,7 +1069,6 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       ...(paths.modelCatalogFile ? { catalogPath: paths.modelCatalogFile } : {}),
       ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
     });
-    const compileSessionIdFor = options.sessionIdFor ?? ((appId: string) => `chat-${appId}`);
     const lifecycleOpts: LifecycleRouteOptions = {
       store,
       codeAppsDir,
@@ -1094,13 +1093,20 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           );
           if (!row) return;
           const enabledBeforeCompile = row.enabled;
-          const sessionId = compileSessionIdFor(parsed.appId);
+          // Compiles are one-shot drafts. Reusing the interactive chat/edit
+          // worktree lets a failed publish leave a rebase in progress, which
+          // then poisons a later retry (and can conflict with UI edits).
+          // The compile run id is already unique; its final UUID segment is
+          // safe for WorktreeStore session ids.
+          const runSuffix = runId.split(':').at(-1) ?? crypto.randomUUID().slice(0, 8);
+          const sessionId = `compile-${parsed.appId}-${runSuffix}`;
           await runHeadlessAutomationCompile({
             runner,
             journalDbFile: workspace.journalDbFile,
             runnerSessionDir: workspace.runnerSessionDir,
             dataDir: workspace.appsDir,
             appId: parsed.appId,
+            draftSessionId: sessionId,
             automationRef,
             automationName: row.name,
             instructions: row.manifest.prompt,
@@ -1124,15 +1130,19 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
                 sessionId,
                 appDir,
                 message: `compile ${parsed.automationId}`,
+                ephemeralSession: true,
               });
               health.reportOk('automation-runs', `Plan ready for ${row.name}`);
             },
-            onFailure: (error) => {
+            onFailure: async (error) => {
               health.reportError(
                 'automation-runs',
                 `Compile failed for ${row.name}: ${error}. Retry from the automation thread.`,
               );
               logger.warn?.(`Headless compile failed for ${automationRef}: ${error}`);
+              // Discard a failed compile's isolated branch. This also
+              // clears any interrupted rebase before the user retries.
+              await store.closeSession(sessionId).catch(() => undefined);
               if (row.manifest.onFailure) {
                 const target = automation.parseRef(row.manifest.onFailure, parsed.appId);
                 if (target) {

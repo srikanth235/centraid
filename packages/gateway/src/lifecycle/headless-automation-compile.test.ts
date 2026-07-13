@@ -31,6 +31,7 @@ async function harness(runner: ConversationRunner) {
     runnerSessionDir: path.join(dir, 'sessions'),
     dataDir: path.join(dir, 'apps'),
     appId: 'digest',
+    draftSessionId: 'compile-digest-1',
     automationRef: 'digest/main',
     automationName: 'Daily digest',
     instructions: 'Summarize mail about @[core.party/p-1].',
@@ -47,8 +48,10 @@ async function harness(runner: ConversationRunner) {
 
 describe('runHeadlessAutomationCompile', () => {
   it('records a successful compile turn on the stable automation conversation', async () => {
+    let receivedDraftSessionId: string | undefined;
     const runner: ConversationRunner = {
       run: async (input) => {
+        receivedDraftSessionId = input.draftSessionId;
         input.onEvent({ type: 'final', text: 'Files ready.' });
         input.onEvent({ type: 'usage', model: 'test-model', inputTokens: 12, outputTokens: 4 });
         return { adapterKind: 'codex' };
@@ -57,6 +60,7 @@ describe('runHeadlessAutomationCompile', () => {
     const { store, onSuccess, onFailure } = await harness(runner);
     expect(onSuccess).toHaveBeenCalledOnce();
     expect(onFailure).not.toHaveBeenCalled();
+    expect(receivedDraftSessionId).toBe('compile-digest-1');
     expect(store.getConversation('digest/main')?.title).toBe('Daily digest');
     const turn = store.getTurn('compile-1');
     expect(turn?.conversationId).toBe('digest/main');

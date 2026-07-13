@@ -207,7 +207,7 @@ export function makeUnifiedConversationRunner(
     // vault's DRAFT ext band in step with the draft manifest (first access
     // seeds from live rows) so preview writes stay scratch.
     resolveCwd: async (input) => {
-      const sessionId = sessionIdFor(input.appId);
+      const sessionId = input.draftSessionId ?? sessionIdFor(input.appId);
       await ensureSession(opts.store, sessionId);
       const worktreeAppDir = await opts.store.snapshotSessionAppDir(sessionId, input.appId);
       if (opts.ext) await ensureDraftBand(opts.ext, input.appId, worktreeAppDir);
