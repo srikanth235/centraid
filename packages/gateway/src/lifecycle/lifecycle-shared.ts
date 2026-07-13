@@ -43,6 +43,12 @@ export interface LifecycleRouteOptions {
    * publish route. Omitted on hosts without a vault plane.
    */
   ext?: ExtBandOps;
+  /** Start a hidden builder compile; status is recorded in the automation conversation. */
+  compileAutomation?: (input: {
+    automationRef: string;
+    runId: string;
+    enableOnSuccess: boolean;
+  }) => void;
 }
 
 /** Build an app's absolute webhook URL from the inbound request's host. */

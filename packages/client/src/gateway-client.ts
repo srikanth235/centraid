@@ -26,6 +26,7 @@
 import { appSessionUrl, auth, authHeaders, doFetch, enc, readJson } from './gateway-client-core.js';
 
 export * from './gateway-client-core.js';
+export * from './gateway-client-automation-compile.js';
 
 /** URL the renderer loads in an app iframe. */
 export async function appLiveUrl(input: { id: string }): Promise<{ url: string }> {
@@ -136,6 +137,8 @@ export interface TemplateMetaEntry {
   colorKey: string;
   iconKey: string;
   version: string;
+  kind?: 'app' | 'automation';
+  triggerKind?: 'cron' | 'webhook';
 }
 
 /**

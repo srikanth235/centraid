@@ -184,7 +184,7 @@ function starterManifest(name: string, opts: ScaffoldOptions): Manifest {
     triggers: [...triggers],
     requires,
     history: { keep: opts.historyKeep ?? { count: 100 } },
-    generated: { by: 'centraid-builder', at: new Date().toISOString() },
+    generated: { by: 'centraid-compiler', at: new Date().toISOString() },
   };
   if (opts.description?.trim()) raw.description = opts.description.trim();
   if (opts.apps && opts.apps.length > 0) raw.apps = [...opts.apps];

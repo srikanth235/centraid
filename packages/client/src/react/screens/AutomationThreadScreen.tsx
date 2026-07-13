@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit (#387) single cohesive screen component (header/consent-strip/run-spine/composer of one thread surface); splitting would fragment one visual unit
-import { type JSX, type KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { type JSX, useCallback, useEffect, useRef, useState } from 'react';
 import type { IconName } from '@centraid/design-tokens';
 import { Icon } from '../ui/index.js';
 import { cx } from '../ui/cx.js';
@@ -23,8 +23,8 @@ import type {
 // `automation-view` route. Header (identity + trigger chips + enable/run/
 // edit/delete), an inline consent strip (parked/outbox/grants — consent is
 // reviewed here, never begged at runtime), the run spine (a flight-recorder
-// timeline, oldest→newest, date-grouped), and a composer that hands off to
-// the builder chat (the compile mechanism). Purely presentational: the route
+// timeline, oldest→newest, date-grouped). The builder-backed composer is
+// intentionally hidden in v0; instruction edits compile through the editor. Purely presentational: the route
 // wrapper (`AutomationViewRoute.tsx`) owns IO, confirm dialogs, toasts, and
 // navigation.
 
@@ -79,10 +79,9 @@ const RUN_STATUS_ICON: Record<ThreadRunStatus, IconName> = {
   pending: 'Clock',
 };
 
-// Poll lightly while the latest run is in flight — bounded so a run that
-// never reports back (a crashed worker, a dropped SSE) doesn't poll forever.
+// Poll lightly for the full lifetime of an in-flight run. Component cleanup
+// stops the interval when the user leaves; long compiles must not freeze.
 const POLL_INTERVAL_MS = 2000;
-const POLL_MAX_TICKS = 30; // ~60s of polling per "still running" state.
 
 function fmtDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
@@ -405,53 +404,15 @@ function RunEntry({
   );
 }
 
-function Composer({ onSendMessage }: { onSendMessage: (text: string) => void }): JSX.Element {
-  const [text, setText] = useState('');
-  const submit = (): void => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    onSendMessage(trimmed);
-    setText('');
-  };
-  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      submit();
-    }
-  };
-  return (
-    <div className={styles.composer}>
-      <input
-        type="text"
-        className={styles.composerInput}
-        placeholder="Ask about this automation, or tell it what to change…"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={onKeyDown}
-      />
-      <button
-        type="button"
-        className={styles.composerSend}
-        aria-label="Send"
-        title="Send"
-        disabled={!text.trim()}
-        onClick={submit}
-      >
-        <Icon name="Send" size={15} />
-      </button>
-    </div>
-  );
-}
-
 export default function AutomationThreadScreen({
   loadData,
   onBack,
   onEdit,
+  onRetryCompile,
   onOpenRun,
   onRunNow,
   onToggleEnabled,
   onDecideConsent,
-  onSendMessage,
   onCopyWebhook,
   onRotateWebhook,
   onDelete,
@@ -497,14 +458,7 @@ export default function AutomationThreadScreen({
     const latest = state.runs[0];
     const live = (latest !== undefined && latest.status === 'running') || awaitingRun;
     if (!live) return;
-    let ticks = 0;
     const id = setInterval(() => {
-      ticks += 1;
-      if (ticks > POLL_MAX_TICKS) {
-        clearInterval(id);
-        setAwaitingRun(false);
-        return;
-      }
       void reload();
     }, POLL_INTERVAL_MS);
     return () => clearInterval(id);
@@ -601,6 +555,16 @@ export default function AutomationThreadScreen({
           <div className={styles.headText}>
             <h1>{header.name}</h1>
             {header.description ? <p className={styles.headSub}>{header.description}</p> : null}
+            {header.entityTags.length > 0 ? (
+              <div className={styles.chips} aria-label="Tagged data">
+                {header.entityTags.map((tag) => (
+                  <span key={`${tag.type}/${tag.id}`} className={styles.chip}>
+                    <code>@{tag.type}</code>
+                    <span>{tag.id}</span>
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </div>
           <span
             className={au.auStatus}
@@ -629,6 +593,23 @@ export default function AutomationThreadScreen({
             <span className={styles.switchTrack} aria-hidden="true" />
           </label>
           <div className={au.auActions}>
+            {header.statusLabel === 'Compile failed' ? (
+              <button
+                type="button"
+                className={cx(au.auBtn, au.auBtnGhost)}
+                disabled={busy}
+                onClick={() => {
+                  setBusy(true);
+                  void onRetryCompile().finally(() => {
+                    setBusy(false);
+                    void reload();
+                  });
+                }}
+              >
+                <Icon name="Refresh" size={14} />
+                <span>Retry compile</span>
+              </button>
+            ) : null}
             <button
               type="button"
               className={cx(au.auBtn, au.auBtnPrimary)}
@@ -724,8 +705,6 @@ export default function AutomationThreadScreen({
           ))
         )}
       </div>
-
-      <Composer onSendMessage={onSendMessage} />
     </div>
   );
 }

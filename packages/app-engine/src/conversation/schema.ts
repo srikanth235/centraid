@@ -29,6 +29,7 @@ export type AutomationTriggerKind =
   | 'manual'
   | 'replay'
   | 'on_failure'
+  | 'compile'
   | 'interactive';
 
 /**
@@ -50,9 +51,8 @@ export type ItemKind = 'message_in' | 'step' | 'tool' | 'agent';
 /**
  * The durable record holding the turns of one execution. Was `chat_sessions`,
  * generalized: `kind` / `app_id` / `automation_id` moved UP here off the
- * per-turn row. For `kind='automation'` each fire is its OWN conversation
- * (fresh id) tagged with the automation ref in `automation_id`, so an
- * automation's run history is the conversations sharing that ref.
+ * per-turn row. For `kind='automation'`, one stable conversation is tagged
+ * with the automation ref and every compile/fire appends a turn.
  */
 export interface Conversation {
   readonly id: string;
@@ -61,7 +61,7 @@ export interface Conversation {
   readonly userId: string;
   /** Owning app — set for automation and build conversations. */
   readonly appId?: string;
-  /** The automation ref (`<appId>/<id>`) this fire ran — set for `kind: 'automation'`. */
+  /** The automation ref (`<appId>/<id>`) — set for `kind: 'automation'`. */
   readonly automationId?: string;
   readonly title: string;
   /** Runner kind that owns `adapterSessionId` (codex | claude-code). */

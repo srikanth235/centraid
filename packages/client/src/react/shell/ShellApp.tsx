@@ -51,8 +51,7 @@ export interface ShellAppProps {
   onNavReady?: (nav: ShellNav) => void;
 }
 
-const DEFAULT_FULL_BLEED = (r: ShellRoute): boolean =>
-  r.kind === 'app' || r.kind === 'builder' || r.kind === 'automation-builder';
+const DEFAULT_FULL_BLEED = (r: ShellRoute): boolean => r.kind === 'app' || r.kind === 'builder';
 
 export default function ShellApp({
   initialRoute,

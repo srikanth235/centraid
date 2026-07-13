@@ -391,6 +391,11 @@ export async function updateAutomation(input: {
   name?: string;
   prompt?: string;
   triggers?: CentraidCreateTrigger[];
+  vault?: {
+    purpose: string;
+    why?: string;
+    scopes: Array<{ schema: string; table?: string; verbs: string }>;
+  };
 }): Promise<{
   row: CentraidAutomationRow | null;
   webhook?: { id: string; secret: string; url: string };
@@ -408,6 +413,7 @@ export async function updateAutomation(input: {
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.prompt !== undefined ? { prompt: input.prompt } : {}),
         ...(input.triggers !== undefined ? { triggers: input.triggers } : {}),
+        ...(input.vault !== undefined ? { vault: input.vault } : {}),
         sessionId,
         publish: true,
       }),

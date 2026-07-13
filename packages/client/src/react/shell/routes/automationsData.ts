@@ -44,15 +44,17 @@ export function triggerOriginLabel(run: CentraidAutomationRunRecord): {
   icon: string;
   label: string;
 } {
-  return run.triggerOrigin === 'webhook'
-    ? { icon: 'Webhook', label: 'Webhook' }
-    : run.triggerOrigin === 'data'
-      ? { icon: 'Clock', label: 'Data' }
-      : run.triggerOrigin === 'condition'
-        ? { icon: 'Clock', label: 'Condition' }
-        : run.triggerKind === 'manual'
-          ? { icon: 'Play', label: 'Manual' }
-          : { icon: 'Clock', label: 'Cron' };
+  return run.triggerKind === 'compile'
+    ? { icon: 'Sparkle', label: 'Compile' }
+    : run.triggerOrigin === 'webhook'
+      ? { icon: 'Webhook', label: 'Webhook' }
+      : run.triggerOrigin === 'data'
+        ? { icon: 'Clock', label: 'Data' }
+        : run.triggerOrigin === 'condition'
+          ? { icon: 'Clock', label: 'Condition' }
+          : run.triggerKind === 'manual'
+            ? { icon: 'Play', label: 'Manual' }
+            : { icon: 'Clock', label: 'Cron' };
 }
 
 /** Render a `where` condition clause readably — a plain string passes
@@ -121,7 +123,7 @@ export function buildOverviewData(
     if (r.enabled) active += 1;
     else if (lastEntry) paused += 1;
     else drafts += 1;
-    if (lastEntry && !lastEntry.run.ok) attention += 1;
+    if (lastEntry?.run.endedAt !== undefined && !lastEntry.run.ok) attention += 1;
   }
   // Keep the prose consistent with the health tiles below it — drafts are
   // not "paused", they've simply never run.
@@ -135,7 +137,23 @@ export function buildOverviewData(
       const last = lastByRef.get(r.ref);
       const hasCron = r.triggers.some((t) => t.kind === 'cron');
       const hasWebhook = r.triggers.some((t) => t.kind === 'webhook');
-      const statusKind = auStatusForRow(r.enabled, !!last) as AuStatusKind;
+      const compile = last?.run.triggerKind === 'compile' ? last.run : undefined;
+      const statusKind = (
+        compile
+          ? compile.endedAt === undefined
+            ? 'running'
+            : compile.ok
+              ? 'success'
+              : 'failed'
+          : auStatusForRow(r.enabled, !!last)
+      ) as AuStatusKind;
+      const statusLabel = compile
+        ? compile.endedAt === undefined
+          ? 'Compiling…'
+          : compile.ok
+            ? 'Plan ready'
+            : 'Compile failed'
+        : AU_STATUS_LABEL[statusKind];
       const cronTrig = r.triggers.find(
         (t): t is { kind: 'cron'; expr: string } => t.kind === 'cron',
       );
@@ -149,12 +167,12 @@ export function buildOverviewData(
         lastRunLabel: last
           ? `Last run ${relativeTime(new Date(last.run.startedAt).toISOString())}`
           : 'No runs yet',
-        lastRunOk: last ? last.run.ok : null,
+        lastRunOk: last?.run.endedAt !== undefined ? last.run.ok : null,
         name: r.name,
         nextRunLabel: nextRun ? relativeRunLabel(nextRun) : null,
         ref: r.ref,
         statusKind,
-        statusLabel: AU_STATUS_LABEL[statusKind],
+        statusLabel,
         triggerIcon: hasWebhook && !hasCron ? 'Webhook' : 'Clock',
         triggerLabel: triggersSummary(r.triggers),
       };

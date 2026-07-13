@@ -15,6 +15,7 @@ import {
   decideOutboxItem,
   getBlocking,
   listAutomationRuns,
+  listAgents,
   listOutboxGrants,
   readAutomation,
   revokeOutboxGrant,
@@ -95,12 +96,12 @@ export interface AutomationThreadLoadResult {
 // Behavior-tab consent view can filter the same global lists the same way,
 // without re-deriving the matching rule above a second time.
 export function filterConsentForAutomation(
-  automationName: string,
+  agentId: string | undefined,
   blocking: BlockingSummary,
   grants: readonly OutboxGrant[],
 ): AuConsentDTO {
   const parked = blocking.parked
-    .filter((p) => p.callerKind === 'agent' && p.caller === automationName)
+    .filter((p) => p.callerKind === 'agent' && p.callerId === agentId)
     .map((p) => ({
       command: p.command,
       input: p.input,
@@ -108,7 +109,7 @@ export function filterConsentForAutomation(
       parkedAt: p.parkedAt,
     }));
   const outbox = blocking.outbox
-    .filter((o) => o.actorKind === 'agent' && o.actor === automationName)
+    .filter((o) => o.actorKind === 'agent' && o.actorId === agentId)
     .map((o) => ({
       artifact: o.artifact,
       canEdit: o.canEdit,
@@ -121,9 +122,8 @@ export function filterConsentForAutomation(
       target: o.target,
       verb: o.verb,
     }));
-  // No `actorKind` on a grant row (see note above) — name match only.
   const grantDtos = grants
-    .filter((g) => g.actor === automationName)
+    .filter((g) => g.actorId === agentId)
     .map((g) => ({
       createdAt: g.createdAt,
       grantId: g.grantId,
@@ -170,16 +170,31 @@ export async function loadAutomationThreadData(input: {
   automationId: string;
   gatewayOrigin: string;
 }): Promise<AutomationThreadLoadResult | null> {
-  const [row, runs, blocking, grants] = await Promise.all([
+  const [row, runs, blocking, grants, agents] = await Promise.all([
     readAutomation({ automationId: input.automationId }),
     listAutomationRuns({ automationId: input.automationId, limit: 100 }),
     getBlocking(),
     listOutboxGrants(),
+    listAgents(),
   ]);
   if (!row) return null;
 
   const hero = deriveAutomationHero(row, input.gatewayOrigin);
-  const statusKind = auStatusForRow(row.enabled, runs.length > 0) as AuStatusKind;
+  const latestCompile = runs.find((run) => run.triggerKind === 'compile');
+  const statusKind = latestCompile
+    ? latestCompile.endedAt === undefined
+      ? 'running'
+      : latestCompile.ok
+        ? 'success'
+        : 'failed'
+    : (auStatusForRow(row.enabled, runs.length > 0) as AuStatusKind);
+  const statusLabel = latestCompile
+    ? latestCompile.endedAt === undefined
+      ? 'Compiling…'
+      : latestCompile.ok
+        ? 'Plan ready'
+        : 'Compile failed'
+    : AU_STATUS_LABEL[statusKind];
 
   const header: AutomationThreadHeaderDTO = {
     description: row.manifest.description ?? null,
@@ -193,14 +208,25 @@ export async function loadAutomationThreadData(input: {
     nextRuns: hero.nextRuns,
     ref: row.ref,
     statusKind,
-    statusLabel: AU_STATUS_LABEL[statusKind],
+    statusLabel,
     triggerSummary: hero.when,
     webhook: hero.webhook,
+    entityTags: Array.from(
+      (row.manifest.prompt ?? '').matchAll(/@\[([^/\]]+)\/([^\]]+)\]/g),
+      (match) => ({
+        type: match[1]!,
+        id: match[2]!,
+      }),
+    ),
   };
 
   return {
     data: {
-      consent: filterConsentForAutomation(row.name, blocking, grants),
+      consent: filterConsentForAutomation(
+        agents.find((agent) => agent.hostKey === row.ownerApp)?.agentId,
+        blocking,
+        grants,
+      ),
       header,
       runs: runs
         .slice()

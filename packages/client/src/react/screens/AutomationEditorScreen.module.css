@@ -110,6 +110,73 @@
 .textarea::placeholder {
   color: var(--ink-4);
 }
+.instructionsField {
+  position: relative;
+}
+.entityTokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.entityToken {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--ink-2);
+  font-size: 11px;
+}
+.entityToken code {
+  color: var(--accent);
+}
+.mentionPopover {
+  position: absolute;
+  z-index: 20;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 6px;
+  padding: 6px;
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line-strong);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  animation: mention-in 120ms ease-out;
+}
+.mentionOption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.mentionOption:hover,
+.mentionOption:focus-visible {
+  background: var(--bg-sunken);
+  outline: none;
+}
+.mentionOption code {
+  color: var(--ink-4);
+  font-size: 10.5px;
+}
+@keyframes mention-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 
 /* Sections + trigger picker. */
 .section {
@@ -122,6 +189,98 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--ink-2);
+}
+.sectionHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.sectionHint {
+  margin: 4px 0 0;
+  color: var(--ink-4);
+  font-size: 12px;
+}
+.addTrigger {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.addTrigger button {
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+.addTrigger button:hover {
+  color: var(--accent);
+}
+.addTrigger button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.triggerEmpty {
+  margin: 0;
+  padding: 14px 0;
+  color: var(--ink-4);
+  font-size: 12px;
+  border-top: 0.5px solid var(--line);
+  border-bottom: 0.5px solid var(--line);
+}
+.triggerList {
+  display: flex;
+  flex-direction: column;
+}
+.triggerRow {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 15px 0;
+  border-top: 0.5px solid var(--line);
+  animation: trigger-in 150ms ease-out;
+}
+.triggerRow:last-child {
+  border-bottom: 0.5px solid var(--line);
+}
+.triggerRowHead {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+.triggerIndex {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-4);
+}
+.triggerSelect {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.fieldError {
+  margin: 0;
+  color: var(--c-red);
+  font-size: 12px;
+}
+@keyframes trigger-in {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .warnBanner {
   display: flex;

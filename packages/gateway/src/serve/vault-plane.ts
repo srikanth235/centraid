@@ -138,7 +138,8 @@ export function blobSweepBackoff(
   status: { consecutiveFailures: number; lastAttemptedAt: string | null },
   nowMs: number,
 ): { skip: boolean; retryInMs: number } {
-  if (status.consecutiveFailures <= 0 || !status.lastAttemptedAt) return { skip: false, retryInMs: 0 };
+  if (status.consecutiveFailures <= 0 || !status.lastAttemptedAt)
+    return { skip: false, retryInMs: 0 };
   const backoffMs = Math.min(
     BLOB_SWEEP_BACKOFF_STEP_MS * status.consecutiveFailures,
     BLOB_SWEEP_MAX_BACKOFF_MS,
@@ -226,6 +227,7 @@ export interface InstallScopeBlock {
 /** One outbox item as the owner surface lists it (issue #306). */
 export interface OutboxItemSummary {
   itemId: string;
+  actorId: string;
   connection: { kind: string; label: string };
   actor: string | null;
   actorKind: string;
@@ -869,6 +871,7 @@ export class VaultPlane {
     }[];
     return rows.map((r) => ({
       itemId: r.item_id,
+      actorId: r.actor_id,
       connection: { kind: r.kind, label: r.label },
       actor: this.actorName(r.actor_id, r.actor_kind),
       actorKind: this.refineActorKind(r.actor_id, r.actor_kind),

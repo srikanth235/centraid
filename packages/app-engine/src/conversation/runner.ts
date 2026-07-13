@@ -90,6 +90,12 @@ export type TurnStreamEvent =
 export interface ConversationTurnInput {
   appId: string;
   /**
+   * Optional draft-worktree session to use for this turn. Builder hosts use
+   * this to isolate one-shot authoring work (such as an automation compile)
+   * from the app's persistent interactive editing session.
+   */
+  draftSessionId?: string;
+  /**
    * Absolute path to the app's data directory — `entry.path` as resolved by
    * `appDataDir(entry)`. For uploaded apps this is `<appsDir>/<id>`; for
    * path-registered apps it's the externally-supplied folder. `data.sqlite`

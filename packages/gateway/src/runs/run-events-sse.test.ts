@@ -34,10 +34,9 @@ function ledger(): ConversationStore {
   return new ConversationStore(makeJournalDbProvider(path.join(dir, 'journal.db')));
 }
 
-/** Seed one automation fire: its own execution conversation + a turn under it. */
+/** Seed one automation fire turn under its stable conversation. */
 function seedTurn(store: ConversationStore, ref: string, turnId: string, startedAt: number): void {
-  const convId = `conv-${turnId}`;
-  store.createAutomationRun(convId, ref, ref.split('/')[0]);
+  const convId = store.ensureAutomationConversation(ref, ref.split('/')[0]);
   store.insertTurn({ turnId, conversationId: convId, triggerKind: 'manual', startedAt });
 }
 

@@ -66,6 +66,48 @@ export interface VaultAppEntry {
   grants: VaultGrant[];
 }
 
+export interface VaultAgentEntry {
+  agentId: string;
+  hostKey: string;
+  partyId: string;
+  name: string;
+  modelRef: string;
+  enrolledAt: string;
+  grants: VaultGrant[];
+}
+
+/** Active enrolled agents, including the stable id used by consent rows. */
+export async function listAgents(): Promise<VaultAgentEntry[]> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, '/centraid/_vault/agents', {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  const body = await readJson<{ agents: VaultAgentEntry[] }>(res, 'list agents');
+  return body.agents;
+}
+
+export interface VaultEntityHit {
+  type: string;
+  id: string;
+  status: string;
+  title: string | null;
+  subtitle: string | null;
+  thumbnail_content_id: string | null;
+  snippet?: string;
+}
+
+/** Owner-trust entity search used by stable @-tokens in automation instructions. */
+export async function searchVaultEntities(term: string): Promise<VaultEntityHit[]> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_vault/picker?term=${enc(term)}&limit=8`, {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  const body = await readJson<{ cards: VaultEntityHit[] }>(res, 'search vault entities');
+  return body.cards;
+}
+
 /**
  * An invocation parked for owner confirmation (risk above app ceiling).
  * `callerKind` refines `'agent'` into `'assistant'` when the requester is

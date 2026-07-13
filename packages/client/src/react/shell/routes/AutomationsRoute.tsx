@@ -1,5 +1,10 @@
 import type { JSX } from 'react';
-import { getBlocking, listAutomations, listOutboxGrants } from '../../../gateway-client.js';
+import {
+  getBlocking,
+  listAgents,
+  listAutomations,
+  listOutboxGrants,
+} from '../../../gateway-client.js';
 import AutomationsOverviewScreen from '../../screens/AutomationsOverviewScreen.js';
 import { useShellActions } from '../actions.js';
 import PageScroll from '../PageScroll.js';
@@ -21,15 +26,20 @@ export default function AutomationsRoute(): JSX.Element {
     <PageScroll>
       <AutomationsOverviewScreen
         loadData={async () => {
-          const [rows, entries, blocking, grants] = await Promise.all([
+          const [rows, entries, blocking, grants, agents] = await Promise.all([
             listAutomations(),
             collectAutomationRuns(),
             getBlocking(),
             listOutboxGrants(),
+            listAgents(),
           ]);
           const attentionByRef = new Map<string, number>(
             rows.map((row) => {
-              const consent = filterConsentForAutomation(row.name, blocking, grants);
+              const consent = filterConsentForAutomation(
+                agents.find((agent) => agent.hostKey === row.ownerApp)?.agentId,
+                blocking,
+                grants,
+              );
               return [row.ref, consent.parked.length + consent.outbox.length];
             }),
           );

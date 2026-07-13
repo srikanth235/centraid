@@ -452,8 +452,9 @@ export default function App(): JSX.Element {
             />
           );
         }
-        case 'builder':
         case 'automation-builder':
+          return <AutomationEditorRoute automationId={nav.route.automationId} />;
+        case 'builder':
           return (
             <BuilderRoute
               route={nav.route}

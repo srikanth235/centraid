@@ -251,10 +251,10 @@ export default function AutomationsOverviewScreen({
     );
   }
 
-  const { rows, runs } = state;
-  const activeCount = rows.filter((r) => r.statusKind === 'active').length;
-  const pausedCount = rows.filter((r) => r.statusKind === 'paused').length;
-  const draftCount = rows.filter((r) => r.statusKind === 'draft').length;
+  const { rows, runs, health } = state;
+  const activeCount = health.active;
+  const pausedCount = health.paused;
+  const draftCount = health.drafts;
   const attentionCount = rows.filter((r) => r.attentionCount > 0 || r.lastRunOk === false).length;
 
   const subtitle =

@@ -99,6 +99,28 @@ test('runs the turn in the draft worktree with the union of tools + builder prom
   expect(events.some((e) => e.type === 'final')).toBeTruthy();
 });
 
+test('uses a one-shot draft session when the turn supplies one', async () => {
+  let cwd = '';
+  const runner = makeUnifiedConversationRunner({
+    store,
+    prefsLoader: async () => ({ kind: 'codex' }),
+    getDispatcher: () => dispatcher,
+    publicBaseUrl: () => 'http://127.0.0.1:9999',
+    resolveTools: async () => [],
+    runTurn: async (input): Promise<TurnResult> => {
+      cwd = input.cwd;
+      return { adapterKind: 'codex' };
+    },
+  });
+
+  await runner.run(baseInput({ draftSessionId: 'compile-notes-a1b2c3d4' }, () => undefined));
+
+  expect(cwd).toBe(await store.snapshotSessionAppDir('compile-notes-a1b2c3d4', 'notes'));
+  await expect(store.snapshotSessionAppDir('chat-notes', 'notes')).rejects.toMatchObject({
+    code: 'session_missing',
+  });
+});
+
 test('mints a pending webhook authored during the turn and surfaces it once', async () => {
   const events: TurnStreamEvent[] = [];
 

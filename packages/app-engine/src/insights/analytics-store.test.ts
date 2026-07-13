@@ -30,13 +30,12 @@ interface SeedOptions {
   finish?: boolean;
 }
 
-/** One automation fire: its own execution conversation + one finished turn. */
+/** One automation fire appended to its stable conversation. */
 function seedFire(runs: ConversationStore, opts: SeedOptions = {}): string {
   const runId = opts.runId ?? randomUUID();
   const ref = opts.automationRef ?? 'auto.todos/digest';
   const startedAt = opts.startedAt ?? 1_000;
-  const conversationId = randomUUID();
-  runs.createAutomationRun(conversationId, ref, ref.split('/')[0]!);
+  const conversationId = runs.ensureAutomationConversation(ref, ref.split('/')[0]!);
   runs.insertTurn({ turnId: runId, conversationId, triggerKind: 'manual', startedAt });
   runs.insertItem({
     itemId: randomUUID(),
@@ -113,8 +112,7 @@ describe('AnalyticsStore (read-only lens over the run_summary view)', () => {
   it('picks the dominant model by token volume across step items', () => {
     const { runs, analytics } = setup();
     const runId = randomUUID();
-    const conversationId = randomUUID();
-    runs.createAutomationRun(conversationId, 'auto.a/job', 'auto.a');
+    const conversationId = runs.ensureAutomationConversation('auto.a/job', 'auto.a');
     runs.insertTurn({ turnId: runId, conversationId, triggerKind: 'manual', startedAt: 100 });
     for (const [model, tokens, ordinal] of [
       ['small-model', 10, 0],

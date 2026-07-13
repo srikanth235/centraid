@@ -6,6 +6,7 @@
 // minted here — the plaintext is returned once, only the hash persists.
 
 import { promises as fs } from 'node:fs';
+import crypto from 'node:crypto';
 import nodePath from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { AppScaffoldError, listTemplates, type ScaffoldFile } from '@centraid/blueprints';
@@ -21,6 +22,39 @@ import {
   webhookUrl,
   type LifecycleRouteOptions,
 } from '../lifecycle/lifecycle-shared.js';
+
+// ---- POST /centraid/_automations/compile?ref= (hidden builder compile) ----
+
+export async function handleAutomationCompile(
+  opts: LifecycleRouteOptions,
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+): Promise<boolean> {
+  const rawRef = url.searchParams.get('ref') ?? '';
+  const ref = automation.parseRef(rawRef);
+  if (!ref) return sendJson(res, 400, { error: 'bad_request', message: 'compile needs ?ref=' });
+  if (!opts.compileAutomation) {
+    return sendJson(res, 503, { error: 'unavailable', message: 'compile runner unavailable' });
+  }
+  const body = await readJson(req);
+  const row = await automation
+    .readAppOwned(opts.codeAppsDir(), ref.appId, ref.automationId)
+    .catch(() => undefined);
+  if (!row) {
+    return sendJson(res, 404, {
+      error: 'not_found',
+      message: `Automation "${rawRef}" does not exist.`,
+    });
+  }
+  const runId = `${rawRef}:compile:${crypto.randomUUID().slice(0, 8)}`;
+  opts.compileAutomation({
+    automationRef: rawRef,
+    runId,
+    enableOnSuccess: body.enableOnSuccess === true,
+  });
+  return sendJson(res, 202, { runId });
+}
 
 // ---- POST /centraid/_automations (scaffold an automation app) ----
 
@@ -217,7 +251,16 @@ export async function handleAutomationUpdate(
   const triggersInput = Array.isArray(body.triggers)
     ? (body.triggers as Array<Record<string, unknown>>)
     : undefined;
-  if (nameInput === undefined && promptInput === undefined && triggersInput === undefined) {
+  const vaultInput =
+    body.vault !== null && typeof body.vault === 'object' && !Array.isArray(body.vault)
+      ? (body.vault as automation.ManifestVault)
+      : undefined;
+  if (
+    nameInput === undefined &&
+    promptInput === undefined &&
+    triggersInput === undefined &&
+    vaultInput === undefined
+  ) {
     return sendJson(res, 400, {
       error: 'bad_request',
       message: 'update needs at least one of { name, prompt, triggers }',
@@ -306,6 +349,7 @@ export async function handleAutomationUpdate(
     ...(nameInput !== undefined ? { name: nameInput } : {}),
     ...(promptInput !== undefined ? { prompt: promptInput } : {}),
     ...(triggers !== undefined ? { triggers } : {}),
+    ...(vaultInput !== undefined ? { vault: vaultInput } : {}),
   };
   const manifest = automation.validateManifest(patched);
   const changedFile: ScaffoldFile = {

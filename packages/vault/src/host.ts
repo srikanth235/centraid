@@ -481,6 +481,7 @@ export function markAgentRevoked(db: VaultDb, agentId: string): void {
 /** Key-free agent summary — safe to serialize onto an owner-facing surface. */
 export interface AgentSummary {
   agentId: string;
+  hostKey: string;
   partyId: string;
   name: string;
   modelRef: string;
@@ -491,12 +492,13 @@ export interface AgentSummary {
 export function listEnrolledAgents(db: VaultDb): AgentSummary[] {
   const rows = db.vault
     .prepare(
-      `SELECT a.agent_id, a.party_id, p.display_name, a.model_ref, a.enrolled_at
+      `SELECT a.agent_id, a.host_key, a.party_id, p.display_name, a.model_ref, a.enrolled_at
          FROM agent_agent a JOIN core_party p ON p.party_id = a.party_id
         WHERE a.status = 'active' ORDER BY a.enrolled_at`,
     )
     .all() as {
     agent_id: string;
+    host_key: string;
     party_id: string;
     display_name: string;
     model_ref: string;
@@ -504,6 +506,7 @@ export function listEnrolledAgents(db: VaultDb): AgentSummary[] {
   }[];
   return rows.map((r) => ({
     agentId: r.agent_id,
+    hostKey: r.host_key,
     partyId: r.party_id,
     name: r.display_name,
     modelRef: r.model_ref,

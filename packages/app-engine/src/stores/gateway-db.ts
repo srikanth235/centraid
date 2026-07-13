@@ -153,7 +153,7 @@ export const CONVERSATION_LEDGER_DDL = `
       total_cost_usd           REAL,
       step_count               INTEGER,
       tool_count               INTEGER,
-      CHECK (trigger IN ('scheduled','manual','replay','on_failure','interactive'))
+      CHECK (trigger IN ('scheduled','manual','replay','on_failure','compile','interactive'))
     ) STRICT;
     CREATE INDEX IF NOT EXISTS idx_turns_conversation
       ON turns(conversation_id, seq);
@@ -236,9 +236,9 @@ export const CONVERSATION_LEDGER_DDL = `
             THEN substr(c.automation_id, 1, instr(c.automation_id, '/') - 1)
           ELSE c.app_id
         END              AS app_id,
-        -- The automation's display name at fire time (issue: orphaned runs
-        -- showing the raw ref) — conversations.title is set once, at
-        -- createAutomationRun, and outlives the automation manifest being
+        -- The automation's display name (issue: orphaned runs showing the raw
+        -- ref) — conversations.title is refreshed when the stable automation
+        -- conversation is ensured and outlives the automation manifest being
         -- deleted. NULLIF empties it out since the column defaults to ''.
         CASE WHEN c.kind = 'automation' THEN NULLIF(c.title, '') END AS automation_name,
         t.trigger        AS trigger,

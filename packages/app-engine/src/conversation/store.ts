@@ -13,9 +13,8 @@
  *
  *   conversations    — the first-class durable record. `kind` (chat |
  *                      automation | build), `app_id`, `automation_id` live
- *                      here. Each automation FIRE is its own conversation
- *                      (fresh id, `automation_id=<ref>`); the automation's run
- *                      history is the set of conversations sharing that ref.
+ *                      here. Each automation has one stable conversation
+ *                      (`id=automation_id=<ref>`); fires and compiles append turns.
  *   turns            — one execution under a conversation (chat turn /
  *                      automation fire / builder iteration). NOT NULL,
  *                      FK-backed `conversation_id`. Carries the token/cost
@@ -68,8 +67,7 @@ import {
 } from './store-sql.js';
 
 export interface CreateConversationInput {
-  /** Defaults to a fresh UUID. For an automation fire, set `automationId` to
-   *  the ref and leave `id` to default (each fire is its own conversation). */
+  /** Defaults to a fresh UUID. Automation conversations use the stable ref. */
   readonly id?: string;
   readonly kind: RunKind;
   readonly userId: string;
@@ -252,32 +250,42 @@ export class ConversationStore {
     };
   }
 
-  /**
-   * Create one execution conversation for an automation fire — a fresh
-   * `kind='automation'` record (its own id) tagged with the automation ref in
-   * `automation_id`, so every fire is an independent durable run grouped by ref
-   * (not turns piled into one perpetual thread). Automations aren't user-scoped,
-   * so `user_id` is empty. The fire then inserts its turn under `conversationId`.
-   *
-   * `name` (the automation's display name at fire time) rides the
-   * conversation's own `title` column — it survives the automation being
-   * deleted later, so an orphaned run can still show its last-known name
-   * instead of the raw `<appId>/<id>` ref (see `run_summary.automation_name`).
-   */
+  /** Ensure the one long-lived conversation for an automation and refresh its title. */
+  ensureAutomationConversation(automationRef: string, appId?: string, name?: string): string {
+    const existing = this.getConversation(automationRef);
+    if (!existing) {
+      this.createConversation({
+        id: automationRef,
+        kind: 'automation',
+        userId: '',
+        automationId: automationRef,
+        ...(appId !== undefined ? { appId } : {}),
+        ...(name !== undefined ? { title: name } : {}),
+      });
+      return automationRef;
+    }
+    if (existing.kind !== 'automation' || existing.automationId !== automationRef) {
+      throw new Error(`conversation id collision for automation "${automationRef}"`);
+    }
+    const { stmts } = this.ensureReady();
+    stmts.updateAutomationConversation.run(
+      appId ?? null,
+      name ?? null,
+      Date.now(),
+      automationRef,
+      automationRef,
+    );
+    return automationRef;
+  }
+
+  /** @deprecated Use ensureAutomationConversation. */
   createAutomationRun(
-    conversationId: string,
+    _conversationId: string,
     automationRef: string,
     appId?: string,
     name?: string,
   ): void {
-    this.createConversation({
-      id: conversationId,
-      kind: 'automation',
-      userId: '',
-      automationId: automationRef,
-      ...(appId !== undefined ? { appId } : {}),
-      ...(name !== undefined ? { title: name } : {}),
-    });
+    this.ensureAutomationConversation(automationRef, appId, name);
   }
 
   getConversation(id: string): Conversation | undefined {
@@ -323,10 +331,10 @@ export class ConversationStore {
     return Number(stmts.deleteConversationForUser.run(id, userId).changes) > 0;
   }
 
-  /** Delete every execution conversation of an automation + its state. Cascades. */
+  /** Delete the automation's one conversation + its state. Cascades. */
   deleteAutomationData(automationRef: string): void {
     const { stmts } = this.ensureReady();
-    stmts.deleteConversationsByAutomation.run(automationRef);
+    stmts.deleteConversationByAutomation.run(automationRef);
     stmts.deleteStateByAutomation.run(automationRef);
   }
 
@@ -427,8 +435,7 @@ export class ConversationStore {
   }
 
   /**
-   * An automation's run history — every fire's turn across its execution
-   * conversations (grouped by `automation_id = ref`), newest-first. The
+   * An automation's history — every turn in its stable conversation, newest-first. The
    * handler-facing `ctx.runs` feed and any "recent runs" view read this.
    */
   listAutomationTurns(automationRef: string, opts: ListTurnsOptions = {}): Turn[] {
@@ -447,16 +454,20 @@ export class ConversationStore {
     return rows.map(turnFromRaw);
   }
 
+  /** Every currently executing automation turn across the vault, newest-first. */
+  listInFlightAutomationTurns(limit = 50): Turn[] {
+    const { stmts } = this.ensureReady();
+    return (stmts.listInFlightAutomationTurns.all(limit) as unknown as RawTurn[]).map(turnFromRaw);
+  }
+
   setTurnPinned(turnId: string, pinned: boolean): void {
     const { stmts } = this.ensureReady();
     stmts.setTurnPinned.run(pinned ? 1 : 0, turnId);
   }
 
   /**
-   * Apply a `history.keep` retention policy to an automation — at execution
-   * grain: drop whole old fires (their execution conversations), keeping the
-   * latest N / within-window / error fires, and any pinned execution. Cascading
-   * FKs drop the orphaned turns + items + attachments.
+   * Apply `history.keep` at turn grain within the stable conversation. Cascading
+   * FKs drop each pruned turn's items + attachments; pinned turns survive.
    */
   pruneAutomation(
     automationRef: string,

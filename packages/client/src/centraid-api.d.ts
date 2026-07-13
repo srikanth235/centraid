@@ -963,7 +963,7 @@ export interface CentraidAutomationRunRecord {
   /** The automation's last-known display name, recorded on the run itself —
    *  survives the automation being deleted (falls back to `automationId`). */
   automationName?: string;
-  triggerKind: 'scheduled' | 'manual' | 'replay' | 'on_failure' | 'interactive';
+  triggerKind: 'scheduled' | 'manual' | 'replay' | 'on_failure' | 'compile' | 'interactive';
   /** Source that fired the run (`cron` / `webhook` / `data` / `condition` / `manual`). */
   triggerOrigin?: 'cron' | 'webhook' | 'data' | 'condition' | 'manual';
   parentRunId?: string;
@@ -1270,7 +1270,7 @@ declare global {
     kind: 'automation' | 'chat' | 'build';
     automationId?: string;
     automationName?: string;
-    triggerKind: 'scheduled' | 'manual' | 'replay' | 'on_failure' | 'interactive';
+    triggerKind: 'scheduled' | 'manual' | 'replay' | 'on_failure' | 'compile' | 'interactive';
     triggerOrigin?: 'cron' | 'webhook' | 'data' | 'condition' | 'manual';
     parentRunId?: string;
     inputJson?: string;

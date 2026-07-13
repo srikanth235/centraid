@@ -1,6 +1,7 @@
 import { type JSX, useRef } from 'react';
 import {
   auth,
+  compileAutomation,
   deleteAutomation,
   listAutomationRuns,
   rotateAutomationWebhookSecret,
@@ -71,6 +72,18 @@ export default function AutomationViewRoute({
         onEdit={() => {
           const row = rowRef.current;
           if (row) navigate({ kind: 'automation-editor', automationId: row.ref });
+        }}
+        onRetryCompile={async () => {
+          const row = rowRef.current;
+          if (!row) return false;
+          try {
+            await compileAutomation({ automationId: row.ref, enableOnSuccess: !row.enabled });
+            showToast('Compiling plan…');
+            return true;
+          } catch (err) {
+            showToast(`Could not compile: ${err instanceof Error ? err.message : String(err)}`);
+            return false;
+          }
         }}
         onOpenRun={(runId) => {
           const row = rowRef.current;
