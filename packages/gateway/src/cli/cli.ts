@@ -259,11 +259,23 @@ async function commandServe(args: string[]): Promise<void> {
     deviceAccess: devicePlane.deviceAccess,
     devicePairing: devicePlane.pairing,
     authorizeBearer,
+    // Durable PWA control sessions (issue #376): persist control cookies so
+    // a web pairing survives a restart, and propagate `devices revoke` to
+    // live cookies via the SAME enrollment store the endpoint admits from.
+    webSessions: {
+      controlsFile: layout.webSessionsFile,
+      isDeviceValid: (key) => devicePlane.pairing.enrollments.isEnrolled(key),
+    },
     ...(webRoot
       ? {
           web: {
             rootDir: webRoot,
             ...(config.host ? { host: config.host } : {}),
+            // The web UI rides on the API port + 1. If that derived port is
+            // already taken, `startWebUiServer` degrades gracefully — it falls
+            // back to an ephemeral port instead of rejecting — so a web-port
+            // collision can never take down the gateway's API. `handle.webUrl`
+            // (printed below) reflects the real listening port.
             ...(config.port !== undefined && config.port < 65_535
               ? { port: config.port === 0 ? 0 : config.port + 1 }
               : {}),

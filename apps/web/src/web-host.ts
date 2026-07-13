@@ -198,6 +198,16 @@ export function installWebHost(): void {
       };
     },
     removeGateway: async () => {
+      // Server-side logout (issue #376): a control cookie is HttpOnly, so
+      // clearing localStorage alone leaves the session valid on the gateway.
+      // Fire a best-effort DELETE to drop it; never block or fail removal.
+      const prev = loadConnection();
+      if (prev.control && prev.baseUrl) {
+        void fetch(new URL('/centraid/_web/control', `${prev.baseUrl.replace(/\/+$/, '')}/`), {
+          method: 'DELETE',
+          credentials: 'include',
+        }).catch(() => undefined);
+      }
       saveConnection({
         baseUrl: '',
         token: undefined,

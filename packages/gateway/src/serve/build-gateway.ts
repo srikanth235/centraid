@@ -188,6 +188,19 @@ export interface BuildGatewayOptions {
     deviceTokens: DeviceTokenStore;
   };
   /**
+   * Durable PWA control sessions (issue #376). When `controlsFile` is set,
+   * `WebAppSessions` persists CONTROL cookies there so a web pairing
+   * survives a gateway restart / the sliding 30-day idle window instead of
+   * forcing a fresh pairing ticket every 12h. `isDeviceValid` propagates
+   * `devices revoke` to live control/app cookies (a revoked device's cookie
+   * stops authorizing at once). Absent (desktop embed, tests) → in-memory
+   * control sessions with no revocation hook, exactly the prior behavior.
+   */
+  webSessions?: {
+    controlsFile?: string;
+    isDeviceValid?: (deviceKey: string) => boolean;
+  };
+  /**
    * Offsite backup engine (PROTOCOL.md/FORMAT.md), off by default. When
    * `enabled`, `buildGateway` constructs a `BackupService` (component
    * `'backups'` on `health`), starts its hourly scheduler from `start()`,
@@ -343,7 +356,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // aggregates it all. Hosts push externally-owned components (e.g. the
   // desktop's iroh tunnel) through `BuiltGateway.health`.
   const health = new HealthRegistry();
-  const webAppSessions = new WebAppSessions();
+  const webAppSessions = new WebAppSessions(options.webSessions ?? {});
 
   // Second-gateway detection (issue #351 tier 1): "one gateway per user" is
   // an owner-stated topology, never enforced — nothing stops a copied vault
