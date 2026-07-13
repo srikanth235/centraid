@@ -27,7 +27,9 @@ function makeProps(over: Partial<SettingsStorageBridgeProps> = {}): SettingsStor
     testConnection: vi.fn().mockResolvedValue({ ok: true, detail: 'signed request accepted' }),
     confirmRecoveryKit: vi.fn().mockResolvedValue({ confirmedAt: 1_700_000_000 }),
     loadVaultBlobStore: vi.fn().mockResolvedValue({ kind: 'fs' }),
-    attachVaultConnection: vi.fn().mockResolvedValue({ ok: true, value: { kind: 's3', connectionId: 'c1' } }),
+    attachVaultConnection: vi
+      .fn()
+      .mockResolvedValue({ ok: true, value: { kind: 's3', connectionId: 'c1' } }),
     detachVaultConnection: vi.fn().mockResolvedValue({ kind: 'fs' }),
     showToast: vi.fn(),
     ...over,
@@ -79,7 +81,9 @@ describe('SettingsStorageScreen — connection list', () => {
 
   it('Test connection shows the ok result inline', async () => {
     const el = await mount(makeProps());
-    const testBtn = [...el.querySelectorAll('button')].find((b) => b.textContent === 'Test connection');
+    const testBtn = [...el.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Test connection',
+    );
     await act(async () => testBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await act(async () => {
       await Promise.resolve();
@@ -94,7 +98,9 @@ describe('SettingsStorageScreen — connection list', () => {
       testConnection: vi.fn().mockResolvedValue({ ok: false, error: 'connection refused' }),
     });
     const el = await mount(props);
-    const testBtn = [...el.querySelectorAll('button')].find((b) => b.textContent === 'Test connection');
+    const testBtn = [...el.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Test connection',
+    );
     await act(async () => testBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await act(async () => {
       await Promise.resolve();
@@ -121,7 +127,9 @@ describe('SettingsStorageScreen — add connection', () => {
   it('opens the add form and submits a byo-s3 connection', async () => {
     const props = makeProps({ loadConnections: vi.fn().mockResolvedValue([]) });
     const el = await mount(props);
-    const addBtn = [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('Add connection'));
+    const addBtn = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Add connection'),
+    );
     await act(async () => addBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
 
     const fieldInput = (labelText: string): HTMLInputElement | null => {
@@ -157,7 +165,7 @@ describe('SettingsStorageScreen — add connection', () => {
         bucket: 'my-bucket',
         accessKeyId: 'AKIA123',
         secretAccessKey: 'shh-secret',
-        uses: ['backup', 'cas'],
+        uses: ['cas'],
       }),
       undefined,
     );
@@ -167,12 +175,16 @@ describe('SettingsStorageScreen — add connection', () => {
 
   it('switching to "Storage provider" shows baseUrl/apiKey fields instead', async () => {
     const el = await mount(makeProps());
-    const addBtn = [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('Add connection'));
+    const addBtn = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Add connection'),
+    );
     await act(async () => addBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     const providerToggle = [...el.querySelectorAll('button')].find(
       (b) => b.textContent === 'Storage provider',
     );
-    await act(async () => providerToggle?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await act(async () =>
+      providerToggle?.dispatchEvent(new MouseEvent('click', { bubbles: true })),
+    );
     expect(el.textContent).toContain('Base URL');
     expect(el.textContent).toContain('API key');
     expect(el.textContent).not.toContain('Access key ID');
@@ -192,7 +204,9 @@ describe('SettingsStorageScreen — recovery-kit gate', () => {
     const props = makeProps({ createConnection, loadConnections: vi.fn().mockResolvedValue([]) });
     const el = await mount(props);
 
-    const addBtn = [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('Add connection'));
+    const addBtn = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Add connection'),
+    );
     await act(async () => addBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     const fieldInput = (labelText: string): HTMLInputElement | null => {
       const field = [...el.querySelectorAll('.field')].find((f) =>
@@ -242,7 +256,9 @@ describe('SettingsStorageScreen — recovery-kit gate', () => {
     const props = makeProps({ createConnection, loadConnections: vi.fn().mockResolvedValue([]) });
     const el = await mount(props);
 
-    const addBtn = [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('Add connection'));
+    const addBtn = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Add connection'),
+    );
     await act(async () => addBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     const fieldInput = (labelText: string): HTMLInputElement | null => {
       const field = [...el.querySelectorAll('.field')].find((f) =>

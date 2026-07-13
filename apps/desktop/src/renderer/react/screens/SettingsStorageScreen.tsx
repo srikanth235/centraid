@@ -92,7 +92,10 @@ export interface SettingsStorageBridgeProps {
   showToast: (message: string) => void;
 }
 
-const KIND_LABEL: Record<StorageConnectionKind, string> = { 'byo-s3': 'BYO S3', provider: 'Provider' };
+const KIND_LABEL: Record<StorageConnectionKind, string> = {
+  'byo-s3': 'BYO S3',
+  provider: 'Provider',
+};
 const USE_LABEL: Record<StorageConnectionUse, string> = { backup: 'Backup', cas: 'CAS' };
 
 /** A pending gated mutation — re-invoked by the dialog's two action paths. */
@@ -161,8 +164,8 @@ function RecoveryKitGateDialog({
         <p>
           A remote storage tier is ciphertext without the seal key that made it — if it's ever lost,
           everything replicated through it becomes unrecoverable. Export the recovery kit once (
-          <code>centraid-gateway backup kit</code>, or <code>key export</code>) and store it somewhere
-          offline before continuing.
+          <code>centraid-gateway backup kit</code>, or <code>key export</code>) and store it
+          somewhere offline before continuing.
         </p>
         {error ? <div className={styles.gateError}>{error}</div> : null}
         <div className={modalCss.actions}>
@@ -276,7 +279,7 @@ function AddConnectionForm({
   const [usesCas, setUsesCas] = useState(true);
 
   const uses: StorageConnectionUse[] = [
-    ...(usesBackup ? (['backup'] as const) : []),
+    ...(kind === 'provider' && usesBackup ? (['backup'] as const) : []),
     ...(usesCas ? (['cas'] as const) : []),
   ];
 
@@ -306,7 +309,13 @@ function AddConnectionForm({
         uses,
       });
     } else {
-      onSubmit({ kind: 'provider', name: name.trim(), baseUrl: baseUrl.trim(), apiKey: apiKey.trim(), uses });
+      onSubmit({
+        kind: 'provider',
+        name: name.trim(),
+        baseUrl: baseUrl.trim(),
+        apiKey: apiKey.trim(),
+        uses,
+      });
     }
   };
 
@@ -331,7 +340,11 @@ function AddConnectionForm({
 
       <label className={styles.field}>
         <span className={styles.fieldLabel}>Name</span>
-        <input className={styles.textInput} value={name} onChange={(e) => setName(e.target.value)} />
+        <input
+          className={styles.textInput}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
       </label>
 
       {kind === 'byo-s3' ? (
@@ -422,10 +435,21 @@ function AddConnectionForm({
 
       <div className={styles.usesRow}>
         <span className={styles.fieldLabel}>Use for</span>
-        <label className={styles.checkLabel}>
-          <input type="checkbox" checked={usesBackup} onChange={(e) => setUsesBackup(e.target.checked)} />
-          Backup snapshots
-        </label>
+        {kind === 'provider' ? (
+          <label className={styles.checkLabel}>
+            <input
+              type="checkbox"
+              checked={usesBackup}
+              onChange={(e) => setUsesBackup(e.target.checked)}
+            />
+            Encrypted backup snapshots
+          </label>
+        ) : (
+          <span className={controlsCss.note}>
+            Direct S3 is for blob replication. Recoverable snapshots require a storage provider with
+            retention and takeover protection.
+          </span>
+        )}
         <label className={styles.checkLabel}>
           <input type="checkbox" checked={usesCas} onChange={(e) => setUsesCas(e.target.checked)} />
           CAS blob replication
@@ -481,7 +505,8 @@ function VaultAttachSection({
     );
   }
 
-  const attached = blobStore?.kind === 's3' ? connections.find((c) => c.id === blobStore.connectionId) : undefined;
+  const attached =
+    blobStore?.kind === 's3' ? connections.find((c) => c.id === blobStore.connectionId) : undefined;
 
   return (
     <div className={styles.attachRow}>
@@ -490,7 +515,8 @@ function VaultAttachSection({
           <span className={controlsCss.note}>Reading this vault's storage settings…</span>
         ) : blobStore.kind === 's3' ? (
           <span>
-            This vault's blobs replicate through <strong>{attached?.name ?? blobStore.connectionId}</strong>.
+            This vault's blobs replicate through{' '}
+            <strong>{attached?.name ?? blobStore.connectionId}</strong>.
           </span>
         ) : (
           <span>This vault stores blobs locally only — no remote CAS tier attached.</span>
@@ -518,12 +544,7 @@ function VaultAttachSection({
           Attach
         </button>
         {blobStore?.kind === 's3' ? (
-          <button
-            type="button"
-            className={cx(controlsCss.chip)}
-            disabled={busy}
-            onClick={onDetach}
-          >
+          <button type="button" className={cx(controlsCss.chip)} disabled={busy} onClick={onDetach}>
             Detach
           </button>
         ) : null}
@@ -549,7 +570,9 @@ export default function SettingsStorageScreen({
   const [saving, setSaving] = useState(false);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [attachBusy, setAttachBusy] = useState(false);
-  const [testResults, setTestResults] = useState<Map<string, 'testing' | StorageTestResult>>(new Map());
+  const [testResults, setTestResults] = useState<Map<string, 'testing' | StorageTestResult>>(
+    new Map(),
+  );
   const [gate, setGate] = useState<PendingGate | null>(null);
   const mountedRef = useRef(true);
 
@@ -589,7 +612,10 @@ export default function SettingsStorageScreen({
       });
   };
 
-  const runCreate = async (input: StorageConnectionFormInput, opts?: { force?: boolean }): Promise<void> => {
+  const runCreate = async (
+    input: StorageConnectionFormInput,
+    opts?: { force?: boolean },
+  ): Promise<void> => {
     const result = await createConnection(input, opts);
     if (result.ok) {
       setWizardOpen(false);
@@ -616,7 +642,10 @@ export default function SettingsStorageScreen({
       .then((result) => setTestResults((m) => new Map(m).set(id, result)))
       .catch((err: unknown) =>
         setTestResults((m) =>
-          new Map(m).set(id, { ok: false, error: err instanceof Error ? err.message : String(err) }),
+          new Map(m).set(id, {
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          }),
         ),
       );
   };
@@ -684,7 +713,11 @@ export default function SettingsStorageScreen({
         </div>
 
         {wizardOpen ? (
-          <AddConnectionForm busy={saving} onCancel={() => setWizardOpen(false)} onSubmit={onSubmitWizard} />
+          <AddConnectionForm
+            busy={saving}
+            onCancel={() => setWizardOpen(false)}
+            onSubmit={onSubmitWizard}
+          />
         ) : (
           <button
             type="button"
@@ -709,7 +742,11 @@ export default function SettingsStorageScreen({
       </div>
 
       {gate ? (
-        <RecoveryKitGateDialog gate={gate} confirmRecoveryKit={confirmRecoveryKit} onClose={() => setGate(null)} />
+        <RecoveryKitGateDialog
+          gate={gate}
+          confirmRecoveryKit={confirmRecoveryKit}
+          onClose={() => setGate(null)}
+        />
       ) : null}
     </div>
   );

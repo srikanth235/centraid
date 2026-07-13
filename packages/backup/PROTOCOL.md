@@ -34,15 +34,10 @@ provider that stores `centraid-snapshot/1` objects today must not need any
 change when the snapshot format moves to `/2` — that is the test of whether
 a proposed provider feature belongs in this document at all.
 
-Centraid is pre-release: this revision renames the protocol cleanly
-(`centraid-backup-provider/1` → `centraid-storage-provider/1`) and reshapes
-the wire with no migration path or back-compat shim. A provider upgrades in
-one step.
-
 ## Terminology
 
-- **Target** ("vault" on the wire, kept for Clawgnition v2 compatibility):
-  one Centraid vault's namespace at one provider. A target now hosts one
+- **Target** (called a `vault` in endpoint paths): one Centraid vault's
+  namespace at one provider. A target hosts one
   isolated prefix per store class it has been granted for.
 - **Store class**: a named workload sharing Layer 1's account/grant
   machinery — `backup` or `cas` in `/1`.
@@ -148,8 +143,9 @@ be priced before it starts.
 | `POST /v1/backup/vaults/:id/undelete` | api-key | cancel soft delete |
 | `POST /v1/backup/vaults/:id/purge` | **interactive** | irreversible erasure of the whole target (one-way; blocks undelete forever) |
 
-`store` on the credentials route is REQUIRED — no default. A provider MUST
-reject a grant request naming a store class it doesn't advertise in
+`store` and `mode` on the credentials route are REQUIRED — neither has a
+default. A provider MUST reject a missing field or a grant request naming a
+store class it doesn't advertise in
 `capabilities` with `400 invalid_request`.
 
 All responses wrap payloads as `{ "data": … }`. All timestamps on the wire

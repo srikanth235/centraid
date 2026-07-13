@@ -31,6 +31,7 @@ export interface GatewayRecoveryKitStatusDTO {
 
 export interface GatewayBackupStatusDTO {
   configured: boolean;
+  provider?: string;
   vaults: GatewayBackupVaultDTO[];
   recoveryKit: GatewayRecoveryKitStatusDTO;
 }
@@ -66,6 +67,16 @@ export async function runGatewayBackupNow(): Promise<GatewayBackupRunResultDTO> 
     headers: authHeaders(token),
   });
   return readJson<GatewayBackupRunResultDTO>(res, 'run gateway backup');
+}
+
+/** Trigger an integrity verification of the newest snapshot for every backed-up vault. */
+export async function verifyGatewayBackupsNow(): Promise<GatewayBackupRunResultDTO> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, '/centraid/_gateway/backup/verify', {
+    method: 'POST',
+    headers: authHeaders(token),
+  });
+  return readJson<GatewayBackupRunResultDTO>(res, 'verify gateway backups');
 }
 
 /**

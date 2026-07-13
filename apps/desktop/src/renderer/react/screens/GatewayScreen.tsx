@@ -68,6 +68,8 @@ export interface GatewayScreenProps {
   /** Backup card data (Overview tab) — `GET/POST _gateway/backup`. */
   loadBackupStatus: BackupCardProps['loadStatus'];
   onRunBackupNow: BackupCardProps['onRunNow'];
+  onVerifyBackupNow?: BackupCardProps['onVerifyNow'];
+  onExportRecoveryKit?: BackupCardProps['onExportRecoveryKit'];
   /** Recovery-kit confirmation gate (Backups card) — `POST _gateway/backup/kit-confirmed`. */
   onConfirmRecoveryKit: BackupCardProps['onConfirmRecoveryKit'];
   /** Storage card data (Overview tab) — per-connection usage + per-vault
@@ -345,6 +347,8 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
               now={now}
               loadStatus={props.loadBackupStatus}
               onRunNow={props.onRunBackupNow}
+              onVerifyNow={props.onVerifyBackupNow}
+              onExportRecoveryKit={props.onExportRecoveryKit}
               onConfirmRecoveryKit={props.onConfirmRecoveryKit}
             />
 

@@ -20,6 +20,7 @@
 export type DiagnosticsFetchResult = { ok: true; text: string } | { ok: false; error: string };
 
 const DIAGNOSTICS_PATH = '/centraid/_gateway/diagnostics';
+const RECOVERY_KIT_PATH = '/centraid/_gateway/backup/kit';
 
 /**
  * Fetch the active gateway's diagnostics bundle. `fetchImpl` is injectable
@@ -33,9 +34,19 @@ export async function fetchDiagnosticsText(
   token: string | undefined,
   fetchImpl: typeof fetch = fetch,
 ): Promise<DiagnosticsFetchResult> {
+  return fetchJsonText(baseUrl, token, DIAGNOSTICS_PATH, 'diagnostics', fetchImpl);
+}
+
+async function fetchJsonText(
+  baseUrl: string,
+  token: string | undefined,
+  requestPath: string,
+  label: string,
+  fetchImpl: typeof fetch,
+): Promise<DiagnosticsFetchResult> {
   let res: Response;
   try {
-    res = await fetchImpl(new URL(DIAGNOSTICS_PATH, `${baseUrl}/`).toString(), {
+    res = await fetchImpl(new URL(requestPath, `${baseUrl}/`).toString(), {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
   } catch (err) {
@@ -46,7 +57,7 @@ export async function fetchDiagnosticsText(
   try {
     body = await res.json();
   } catch {
-    return { ok: false, error: 'diagnostics response was not JSON' };
+    return { ok: false, error: `${label} response was not JSON` };
   }
   return { ok: true, text: JSON.stringify(body, null, 2) };
 }
@@ -96,6 +107,30 @@ export async function exportGatewayDiagnostics(
   const { canceled, filePath } = await deps.showSaveDialog(defaultPath);
   if (canceled || !filePath) return { ok: false, canceled: true };
 
+  try {
+    await deps.writeFile(filePath, fetched.text);
+    return { ok: true, path: filePath };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** Fetch and save the active gateway's recovery kit through a native dialog. */
+export async function exportGatewayRecoveryKit(
+  deps: ExportDiagnosticsDeps,
+): Promise<ExportDiagnosticsResult> {
+  const settings = await deps.loadSettings();
+  if (!settings.gatewayUrl) return { ok: false, error: 'No active gateway to export from.' };
+  const fetched = await fetchJsonText(
+    settings.gatewayUrl,
+    settings.gatewayToken,
+    RECOVERY_KIT_PATH,
+    'recovery kit',
+    deps.fetchImpl ?? fetch,
+  );
+  if (!fetched.ok) return { ok: false, error: fetched.error };
+  const { canceled, filePath } = await deps.showSaveDialog('centraid-recovery-kit.json');
+  if (canceled || !filePath) return { ok: false, canceled: true };
   try {
     await deps.writeFile(filePath, fetched.text);
     return { ok: true, path: filePath };

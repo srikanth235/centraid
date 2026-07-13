@@ -50,6 +50,8 @@ function fakeBackupService(opts: {
   targets?: Record<string, BackupTargetState>;
   running?: Set<string> | boolean;
   runAll?: () => Promise<void>;
+  verifyAll?: () => Promise<void>;
+  recoveryKitDocument?: () => Promise<Record<string, unknown>>;
   recoveryKitConfirmedAt?: number | null;
 }): BackupService {
   const targets = opts.targets ?? {};
@@ -62,6 +64,10 @@ function fakeBackupService(opts: {
       return vaultId === undefined ? running.size > 0 : running.has(vaultId);
     },
     runAll: opts.runAll ?? (async () => undefined),
+    verifyAll: opts.verifyAll ?? (async () => undefined),
+    recoveryKitDocument:
+      opts.recoveryKitDocument ??
+      (async () => ({ version: 1, kind: 'centraid-recovery-kit', targets: [] })),
     recoveryKitStatus: async () => ({ confirmedAt }),
     confirmRecoveryKit: async () => {
       confirmedAt = 1_752_235_200; // fixed stub "now" — the route just echoes it back
@@ -223,6 +229,33 @@ describe('makeBackupRouteHandler — POST /centraid/_gateway/backup/run', () => 
     );
     const res = await fetch(`${url}/centraid/_gateway/backup/run`);
     expect(res.status).toBe(405);
+  });
+});
+
+describe('makeBackupRouteHandler — POST /centraid/_gateway/backup/verify', () => {
+  it('accepts a manual integrity verification without blocking the response', async () => {
+    const verifyAll = vi.fn(async () => undefined);
+    const backupService = fakeBackupService({ verifyAll });
+    const url = await startHandlerServer(
+      makeBackupRouteHandler({ backupService, vaults: fakeVaults([]) }),
+    );
+    const res = await fetch(`${url}/centraid/_gateway/backup/verify`, { method: 'POST' });
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ accepted: true });
+    expect(verifyAll).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('makeBackupRouteHandler — GET /centraid/_gateway/backup/kit', () => {
+  it('returns the live recovery document only when a backup service exists', async () => {
+    const kit = { version: 1, kind: 'centraid-recovery-kit', targets: [] };
+    const backupService = fakeBackupService({ recoveryKitDocument: async () => kit });
+    const url = await startHandlerServer(
+      makeBackupRouteHandler({ backupService, vaults: fakeVaults([]) }),
+    );
+    const res = await fetch(`${url}/centraid/_gateway/backup/kit`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(kit);
   });
 });
 

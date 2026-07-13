@@ -45,6 +45,7 @@ const Channel = {
   // + save-dialog export of the gateway's diagnostics bundle.
   GATEWAY_RESTART: 'centraid:gateway-runtime:restart',
   GATEWAY_DIAGNOSTICS_EXPORT: 'centraid:gateway-runtime:export-diagnostics',
+  GATEWAY_RECOVERY_KIT_EXPORT: 'centraid:gateway-runtime:export-recovery-kit',
   // Vault addressing (issue #289): client-side active vault per gateway.
   VAULTS_SET_ACTIVE: 'centraid:vaults:set-active',
   VAULT_CHANGED: 'centraid:vaults:changed',
@@ -203,6 +204,7 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // the active gateway's bundle and saves it via a native dialog.
   restartGateway: () => ipcRenderer.invoke(Channel.GATEWAY_RESTART),
   exportGatewayDiagnostics: () => ipcRenderer.invoke(Channel.GATEWAY_DIAGNOSTICS_EXPORT),
+  exportGatewayRecoveryKit: () => ipcRenderer.invoke(Channel.GATEWAY_RECOVERY_KIT_EXPORT),
   onGatewayChanged: (
     cb: (msg: {
       activeGatewayId: string;

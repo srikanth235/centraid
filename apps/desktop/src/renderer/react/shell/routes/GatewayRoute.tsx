@@ -3,6 +3,7 @@ import {
   confirmGatewayRecoveryKit,
   getGatewayBackupStatus,
   runGatewayBackupNow,
+  verifyGatewayBackupsNow,
   streamGatewayLogs,
 } from '../../../gateway-client.js';
 import GatewayScreen from '../../screens/GatewayScreen.js';
@@ -103,6 +104,8 @@ export default function GatewayRoute(): JSX.Element {
         streamLogs={streamGatewayLogs}
         loadBackupStatus={getGatewayBackupStatus}
         onRunBackupNow={runGatewayBackupNow}
+        onVerifyBackupNow={verifyGatewayBackupsNow}
+        onExportRecoveryKit={() => window.CentraidApi.exportGatewayRecoveryKit()}
         onConfirmRecoveryKit={confirmGatewayRecoveryKit}
         loadStorageStatus={loadStorageCardStatus}
         onOpenStorageSettings={() => navigate({ kind: 'settings', page: 'storage' })}

@@ -28,6 +28,8 @@ import { sendError, sendJson } from './route-helpers.js';
 
 const BACKUP_PATH = '/centraid/_gateway/backup';
 const BACKUP_RUN_PATH = '/centraid/_gateway/backup/run';
+const BACKUP_VERIFY_PATH = '/centraid/_gateway/backup/verify';
+const BACKUP_KIT_PATH = '/centraid/_gateway/backup/kit';
 const BACKUP_KIT_CONFIRMED_PATH = '/centraid/_gateway/backup/kit-confirmed';
 
 export interface BackupVaultStatus {
@@ -41,6 +43,7 @@ export interface BackupVaultStatus {
 
 export interface BackupStatusBody {
   configured: boolean;
+  provider?: string;
   vaults: BackupVaultStatus[];
   recoveryKit: RecoveryKitState;
 }
@@ -64,10 +67,12 @@ async function buildStatus(deps: BackupRouteDeps): Promise<BackupStatusBody> {
     const recoveryKit = (await deps.recoveryKitStore?.status()) ?? { confirmedAt: null };
     return { configured: false, vaults: [], recoveryKit };
   }
-  const [state, recoveryKit] = await Promise.all([
+  const [configuration, state, recoveryKit] = await Promise.all([
+    backupService.configured?.() ?? Promise.resolve({ configured: true }),
     backupService.status(),
     backupService.recoveryKitStatus(),
   ]);
+  if (!configuration.configured) return { configured: false, vaults: [], recoveryKit };
   const vaults: BackupVaultStatus[] = deps.vaults.planesList().map((plane) => {
     const vaultId = plane.boot.vaultId;
     const target = state[vaultId];
@@ -80,7 +85,7 @@ async function buildStatus(deps: BackupRouteDeps): Promise<BackupStatusBody> {
       running: backupService.isRunning(vaultId),
     };
   });
-  return { configured: true, vaults, recoveryKit };
+  return { configured: true, provider: configuration.provider, vaults, recoveryKit };
 }
 
 export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
@@ -103,7 +108,10 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
         return sendJson(res, 405, { error: 'method_not_allowed', message: 'POST only' });
       }
       const { backupService } = deps;
-      if (!backupService) {
+      if (
+        !backupService ||
+        !(await (backupService.configured?.() ?? { configured: true })).configured
+      ) {
         return sendJson(res, 409, {
           error: 'not_configured',
           message: 'backup is not configured — add a "backup" block to the gateway config',
@@ -121,6 +129,41 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
       // the outcome from the next `GET` (lastError / running flips back).
       void backupService.runAll().catch(() => undefined);
       return sendJson(res, 202, { accepted: true });
+    }
+
+    if (url.pathname === BACKUP_VERIFY_PATH) {
+      if ((req.method ?? 'GET') !== 'POST') {
+        return sendJson(res, 405, { error: 'method_not_allowed', message: 'POST only' });
+      }
+      const { backupService } = deps;
+      if (
+        !backupService ||
+        !(await (backupService.configured?.() ?? { configured: true })).configured
+      ) {
+        return sendJson(res, 409, {
+          error: 'not_configured',
+          message: 'backup is not configured — add a provider backup connection',
+        });
+      }
+      if (backupService.isRunning()) {
+        return sendJson(res, 202, { accepted: true, alreadyRunning: true });
+      }
+      void backupService.verifyAll().catch(() => undefined);
+      return sendJson(res, 202, { accepted: true });
+    }
+
+    if (url.pathname === BACKUP_KIT_PATH) {
+      if ((req.method ?? 'GET') !== 'GET') {
+        return sendJson(res, 405, { error: 'method_not_allowed', message: 'GET only' });
+      }
+      if (!deps.backupService) {
+        return sendJson(res, 409, { error: 'not_configured', message: 'backup is not configured' });
+      }
+      try {
+        return sendJson(res, 200, await deps.backupService.recoveryKitDocument());
+      } catch (err) {
+        return sendError(res, err);
+      }
     }
 
     if (url.pathname === BACKUP_KIT_CONFIRMED_PATH) {

@@ -20,6 +20,7 @@ async function mount(props: {
   loadStatus: () => Promise<BackupStatusDTO>;
   onRunNow: () => Promise<{ accepted: boolean; alreadyRunning?: boolean }>;
   onConfirmRecoveryKit?: () => Promise<{ confirmedAt: number }>;
+  onExportRecoveryKit?: () => Promise<{ ok: boolean; canceled?: boolean; error?: string }>;
   now?: number;
 }): Promise<HTMLDivElement> {
   container = document.createElement('div');
@@ -32,6 +33,7 @@ async function mount(props: {
         loadStatus={props.loadStatus}
         onRunNow={props.onRunNow}
         onConfirmRecoveryKit={props.onConfirmRecoveryKit ?? neverConfirmKit}
+        onExportRecoveryKit={props.onExportRecoveryKit}
       />,
     );
   });
@@ -50,10 +52,9 @@ describe('BackupCard — not configured', () => {
       loadStatus: vi.fn().mockResolvedValue({ configured: false, vaults: [] }),
       onRunNow: neverRun,
     });
-    expect(el.textContent).toContain('Backups aren’t set up for this gateway');
-    expect(el.textContent).toContain('backup');
-    expect(el.textContent).toContain('centraid-gateway backup kit');
-    expect(el.textContent).toContain('store it offline');
+    expect(el.textContent).toContain('Backups aren’t set up yet');
+    expect(el.textContent).toContain('Settings → Storage');
+    expect(el.textContent).toContain('somewhere offline');
     expect(
       [...el.querySelectorAll('button')].some((b) => b.textContent?.includes('Back up now')),
     ).toBe(false);
@@ -87,7 +88,7 @@ describe('BackupCard — configured', () => {
     expect(el.textContent).toContain('verified 1d 1h ago');
     expect(el.textContent).toContain('Side');
     expect(el.textContent).toContain('backed up never');
-    expect(el.textContent).toContain('centraid-gateway backup kit');
+    expect(el.textContent).toContain('only way to decrypt');
     const warn = el.querySelector('[data-emphasis="warn"]');
     expect(warn?.textContent).toContain('never');
   });
@@ -236,6 +237,33 @@ describe('BackupCard — recovery-kit gate', () => {
     expect(onConfirmRecoveryKit).toHaveBeenCalledTimes(1);
     expect(el.querySelector('[data-testid="recovery-kit-confirmed"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="recovery-kit-gate"]')).toBeNull();
+  });
+
+  it('exports through the native save flow before confirming custody', async () => {
+    const status: BackupStatusDTO = {
+      configured: true,
+      vaults: [{ vaultId: 'v1', name: 'Main' }],
+      recoveryKit: { confirmedAt: null },
+    };
+    const onExportRecoveryKit = vi.fn().mockResolvedValue({ ok: true });
+    const onConfirmRecoveryKit = vi.fn().mockResolvedValue({ confirmedAt: Math.floor(NOW / 1000) });
+    const el = await mount({
+      loadStatus: vi.fn().mockResolvedValue(status),
+      onRunNow: neverRun,
+      onExportRecoveryKit,
+      onConfirmRecoveryKit,
+    });
+    const exportBtn = [...el.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Export recovery kit'),
+    ) as HTMLButtonElement;
+    await act(async () => {
+      exportBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(onExportRecoveryKit).toHaveBeenCalledTimes(1);
+    expect(onConfirmRecoveryKit).toHaveBeenCalledTimes(1);
+    expect(el.querySelector('[data-testid="recovery-kit-confirmed"]')).not.toBeNull();
   });
 
   it('surfaces a confirm failure inline without crashing the card', async () => {

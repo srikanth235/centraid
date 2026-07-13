@@ -1,7 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit (#363) single cross-repo interop suite against a real Clawgnition gateway (wrangler dev); the scenario is one coherent conformance run, not independently splittable cases
 /*
  * Cross-repo interop: `RemoteBackupProvider` (this package's real client)
- * against a REAL Clawgnition `centraid-backup-provider/1` gateway running
+ * against a REAL Clawgnition `centraid-storage-provider/1` gateway running
  * under `wrangler dev` — real D1, real Durable Object fencing/idempotency,
  * real HTTP, with only the S3 data plane swapped for the local
  * `S3TestServer` (playing the role of R2, exactly as Clawgnition's own
@@ -503,7 +503,7 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
     const res = await fetch(`${GATEWAY_URL}/v1/backup/vaults/${targetId}/credentials`, {
       method: 'POST',
       headers: { authorization: `Bearer ${API_KEY}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ ttlSeconds: 3600, mode: 'read' }),
+      body: JSON.stringify({ ttlSeconds: 3600, mode: 'read', store: 'backup' }),
     });
     const body = (await res.json()) as { data: { mode: string; bucket: string } };
     expect(body.data.mode).toBe('read');

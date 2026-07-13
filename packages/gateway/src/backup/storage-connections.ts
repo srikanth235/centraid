@@ -219,6 +219,41 @@ export class StorageConnectionStore {
     return row;
   }
 
+  private validateUses(
+    kind: StorageConnectionKind,
+    uses: StorageConnectionUse[] | undefined,
+    editingId?: string,
+  ): StorageConnectionUse[] {
+    const normalized: StorageConnectionUse[] =
+      uses && uses.length > 0
+        ? [...new Set(uses)]
+        : kind === 'provider'
+          ? ['backup', 'cas']
+          : ['cas'];
+    if (normalized.some((use) => use !== 'backup' && use !== 'cas')) {
+      throw new StorageConnectionError(
+        'invalid_request',
+        'uses may contain only "backup" or "cas"',
+      );
+    }
+    if (kind === 'byo-s3' && normalized.includes('backup')) {
+      throw new StorageConnectionError(
+        'invalid_request',
+        'direct S3 connections support CAS replication only; encrypted backup requires a Centraid storage provider',
+      );
+    }
+    if (
+      normalized.includes('backup') &&
+      this.rows.some((row) => row.id !== editingId && row.uses.includes('backup'))
+    ) {
+      throw new StorageConnectionError(
+        'invalid_request',
+        'only one backup destination can be active at a time',
+      );
+    }
+    return normalized;
+  }
+
   async create(input: CreateStorageConnectionInput): Promise<StorageConnectionRecord> {
     await this.reload();
     if (!input.name || input.name.trim().length === 0) {
@@ -226,8 +261,7 @@ export class StorageConnectionStore {
     }
     const id = randomBytes(12).toString('hex');
     const now = new Date().toISOString();
-    const uses: StorageConnectionUse[] =
-      input.uses && input.uses.length > 0 ? input.uses : ['backup', 'cas'];
+    const uses = this.validateUses(input.kind, input.uses);
     let row: StorageConnectionRow;
     if (input.kind === 'byo-s3') {
       if (!input.endpoint || !input.region || !input.bucket) {
@@ -306,7 +340,7 @@ export class StorageConnectionStore {
         else delete row.prefix;
       }
       if (p.name) row.name = p.name;
-      if (p.uses && p.uses.length > 0) row.uses = p.uses;
+      if (p.uses) row.uses = this.validateUses('byo-s3', p.uses, id);
       if (p.accessKeyId && p.secretAccessKey) {
         row.sealedCredentials = this.sealCreds(id, {
           accessKeyId: p.accessKeyId,
@@ -321,7 +355,7 @@ export class StorageConnectionStore {
       }
       if (p.baseUrl) row.baseUrl = p.baseUrl;
       if (p.name) row.name = p.name;
-      if (p.uses && p.uses.length > 0) row.uses = p.uses;
+      if (p.uses) row.uses = this.validateUses('provider', p.uses, id);
       if (p.apiKey) row.sealedCredentials = this.sealCreds(id, { apiKey: p.apiKey });
     }
     row.updatedAt = now;
@@ -334,7 +368,10 @@ export class StorageConnectionStore {
     await this.reload();
     const row = this.requireRow(id);
     if (row.kind !== 'provider') {
-      throw new StorageConnectionError('invalid_request', `connection "${id}" is not provider-kind`);
+      throw new StorageConnectionError(
+        'invalid_request',
+        `connection "${id}" is not provider-kind`,
+      );
     }
     row.targetId = targetId;
     row.updatedAt = new Date().toISOString();
@@ -367,7 +404,10 @@ export class StorageConnectionStore {
     await this.reload();
     const row = this.requireRow(id);
     if (row.kind !== 'provider') {
-      throw new StorageConnectionError('invalid_request', `connection "${id}" is not provider-kind`);
+      throw new StorageConnectionError(
+        'invalid_request',
+        `connection "${id}" is not provider-kind`,
+      );
     }
     const creds = this.unsealCreds(id, row.sealedCredentials) as { apiKey: string };
     return creds.apiKey;

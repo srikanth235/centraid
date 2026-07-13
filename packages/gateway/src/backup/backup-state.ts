@@ -16,6 +16,8 @@ import path from 'node:path';
 
 export interface BackupTargetState {
   targetId: string;
+  /** Stable destination identity; prevents silently writing an existing vault target through a newly-selected provider. */
+  providerRef?: string;
   /** The opaque random label the target was created with (never the vault name). */
   label: string;
   /** Fencing generation (PROTOCOL.md § Generation fencing) — starts at 1. */
