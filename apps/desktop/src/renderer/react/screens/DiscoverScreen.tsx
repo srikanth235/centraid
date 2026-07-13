@@ -21,7 +21,7 @@ type Layout = 'tiles' | 'rows';
 const isAutomation = (t: DiscoverTemplate): boolean => t.kind === 'automation';
 
 // Trigger-kind → icon/label, matching the labels automationsData.ts'
-// buildAutomationViewData (kindEyebrow/run trig) uses for the same four kinds —
+// deriveAutomationHero (kindEyebrow/run trig) uses for the same four kinds —
 // data and condition triggers reuse the Clock glyph there too (only webhook
 // gets its own icon), so the badge stays honest without inventing a new mark.
 const TRIGGER_KIND_META: Record<

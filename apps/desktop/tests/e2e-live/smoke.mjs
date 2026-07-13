@@ -4,7 +4,7 @@
 //   node apps/desktop/tests/e2e-live/smoke.mjs
 // (prereq: `bun run build --filter=@centraid/desktop` from repo root)
 //
-// Path: launch → Home renders → Discover → 32 bundled templates render →
+// Path: launch → Home renders → Discover → 24 bundled templates render →
 // open one template's preview → close it → back to Home → screenshot →
 // clean shutdown.
 import { promises as fs } from 'node:fs';
@@ -36,12 +36,12 @@ async function main() {
     await tiles.first().waitFor({ state: 'visible', timeout: 20_000 });
     const count = await tiles.count();
     console.log(`[smoke] Discover rendered ${count} template tiles`);
-    assert(count === 32, `expected 32 bundled templates, got ${count}`);
+    assert(count === 24, `expected 24 bundled templates, got ${count}`);
     const appCount = await page.locator('button[data-kind="app"]').count();
     const autoCount = await page.locator('button[data-kind="automation"]').count();
     console.log(`[smoke] breakdown: ${appCount} app templates, ${autoCount} automation templates`);
     assert(appCount === 8, `expected 8 app templates, got ${appCount}`);
-    assert(autoCount === 24, `expected 24 automation templates, got ${autoCount}`);
+    assert(autoCount === 16, `expected 16 automation templates, got ${autoCount}`);
 
     // Open one app template's preview modal.
     await page.locator('button[data-kind="app"]').first().click();

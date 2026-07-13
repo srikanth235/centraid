@@ -1,0 +1,506 @@
+.screen {
+  max-width: 860px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-bottom: 8px;
+}
+.loadingBody {
+  margin-top: 14px;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────── */
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.headMain {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.headText {
+  min-width: 0;
+  flex: 1;
+}
+.headText h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.headSub {
+  margin: 3px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+.btnDanger:not(:disabled):hover {
+  background: color-mix(in srgb, var(--danger) 10%, var(--bg-elev));
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line-strong));
+  color: var(--danger);
+}
+
+.switch {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  cursor: pointer;
+}
+.switch input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.switchTrack {
+  width: 34px;
+  height: 20px;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--ink) 16%, transparent);
+  transition: background 0.16s ease;
+  position: relative;
+}
+.switchTrack::after {
+  content: '';
+  position: absolute;
+  top: 2.5px;
+  left: 2.5px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.16s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.switch input:checked + .switchTrack {
+  background: var(--accent);
+}
+.switch input:checked + .switchTrack::after {
+  transform: translateX(14px);
+}
+.switch input:focus-visible + .switchTrack {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* ── Trigger chips ──────────────────────────────────────────────────── */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border-radius: 8px;
+  border: 0.5px solid var(--line);
+  background: var(--bg-sunken);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.chip code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: var(--ink-2);
+}
+.chipIc {
+  display: inline-flex;
+  color: var(--ink-4);
+}
+.chipNext {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-4);
+  padding-left: 7px;
+  border-left: 0.5px solid var(--line);
+}
+.chipUrl {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chipIconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: none;
+  background: none;
+  color: var(--ink-4);
+  cursor: pointer;
+  transition:
+    color 0.14s ease,
+    background 0.14s ease;
+}
+.chipIconBtn:not(:disabled):hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.chipIconBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ── Consent strip — amber-edged, visually distinct from history ──────── */
+.consentStrip {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.consentCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 0.5px solid color-mix(in srgb, var(--c-amber) 45%, var(--line));
+  border-left: 3px solid var(--c-amber);
+  background: color-mix(in srgb, var(--c-amber) 7%, var(--bg-elev));
+}
+.consentCard[data-status]:not([data-status='pending']) {
+  border-left-color: var(--line-strong);
+  border-color: var(--line);
+  background: var(--bg-elev);
+  opacity: 0.8;
+}
+.consentIc {
+  flex: none;
+  display: inline-flex;
+  margin-top: 1px;
+  color: var(--c-amber);
+}
+.consentBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.consentTitle {
+  font-size: 13px;
+  color: var(--ink);
+}
+.consentTitle code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.consentMeta {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-4);
+}
+.consentCheck {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.consentDecided {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-4);
+}
+.consentActions {
+  flex: none;
+  display: flex;
+  gap: 6px;
+}
+.consentBtnSm {
+  padding: 5px 11px;
+  font-size: 12px;
+}
+
+/* ── Standing grants — quiet, neutral (not amber) ──────────────────────── */
+.grantsLine {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.grantsLine summary {
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+  list-style: none;
+}
+.grantsLine summary::-webkit-details-marker {
+  display: none;
+}
+.grantsLine summary::before {
+  content: '▸ ';
+  color: var(--ink-4);
+}
+.grantsLine[open] summary::before {
+  content: '▾ ';
+}
+.grantsList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding-left: 4px;
+}
+.grantRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 0.5px solid var(--line);
+  background: var(--bg-sunken);
+}
+.grantRow code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+.grantArrow {
+  display: inline-flex;
+  color: var(--ink-4);
+}
+.grantMeta {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-4);
+}
+
+/* ── The thread — flight-recorder spine ────────────────────────────────── */
+.thread {
+  position: relative;
+  padding-left: 26px;
+  min-height: 40px;
+}
+.thread::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 6px;
+  bottom: 6px;
+  width: 1px;
+  background: var(--line);
+}
+.dateGroup {
+  position: relative;
+}
+.dateSep {
+  position: relative;
+  padding: 16px 0 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.dateGroup:first-child .dateSep {
+  padding-top: 0;
+}
+.entry {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 10px 9px 4px;
+  border-radius: 8px;
+  background: none;
+  border: none;
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+.entry:hover {
+  background: var(--bg-sunken);
+}
+.entry:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.entryDot {
+  position: absolute;
+  left: -21.5px;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  transform: translateY(-50%);
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--bg);
+}
+.entryDot[data-run-status='fail'] {
+  background: var(--danger);
+}
+.entryDot[data-run-status='pending'] {
+  background: var(--ink-4);
+}
+@keyframes auThreadPulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow:
+      0 0 0 3px var(--bg),
+      0 0 0 3px color-mix(in srgb, var(--au-hue) 45%, transparent);
+  }
+  50% {
+    opacity: 0.7;
+    box-shadow:
+      0 0 0 3px var(--bg),
+      0 0 0 6px color-mix(in srgb, var(--au-hue) 0%, transparent);
+  }
+}
+.entryDot[data-run-status='running'] {
+  background: var(--au-hue, var(--accent));
+  animation: auThreadPulse 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .entryDot[data-run-status='running'] {
+    animation: none;
+  }
+}
+.entryOrigin {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 0.5px solid var(--line);
+  white-space: nowrap;
+}
+.entryOriginIc {
+  display: inline-flex;
+}
+.entryTime {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-4);
+  min-width: 58px;
+}
+.entrySummary {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.entrySummary[data-run-status='fail'] {
+  color: var(--danger);
+}
+.entryMeta {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-4);
+}
+
+/* ── Empty thread ───────────────────────────────────────────────────── */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 48px 16px;
+  margin-left: -26px;
+}
+.emptyIcon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink-3);
+}
+.emptyTitle {
+  font: var(--t-h2);
+  font-size: 15px;
+  color: var(--ink);
+}
+.emptyHint {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+/* ── Composer ───────────────────────────────────────────────────────── */
+.composer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-top: 6px;
+  border-radius: var(--r-md, 12px);
+  border: 0.5px solid var(--line);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-sm);
+}
+.composerInput {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 4px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+.composerInput:focus {
+  outline: none;
+}
+.composerInput::placeholder {
+  color: var(--ink-4);
+}
+.composerSend {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  transition:
+    filter 0.14s ease,
+    opacity 0.14s ease;
+}
+.composerSend:not(:disabled):hover {
+  filter: brightness(1.08);
+}
+.composerSend:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

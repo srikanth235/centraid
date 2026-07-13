@@ -8,18 +8,53 @@
 // SELECTOR NOTE: the brief that seeded this suite named `.cd-au-*` classes
 // (`.cd-au-ov-*`, `.cd-au-view`, `.cd-au-switch`, `.cd-au-btn-primary`, etc).
 // Those don't exist in the current renderer -- AutomationsOverviewScreen.tsx /
-// AutomationViewScreen.tsx / RunViewScreen.tsx all use Vite CSS Modules
-// (generateScopedName: '[name]__[local]__[hash:base64:5]', see
-// apps/desktop/vite.config.ts:36-38), so a class like `.run` compiles to
-// something like `AutomationViewScreen__run__a1B2c` at runtime -- there is no
-// stable literal `cd-au-*` string anywhere. This suite instead uses, in order
-// of preference: (1) real ARIA roles/names (heading, dialog, switch, tab),
-// (2) literal `title`/`aria-label`/`data-*` attributes that the source hard-
-// codes verbatim (confirmed by reading AutomationViewScreen.tsx,
-// RunViewScreen.tsx, AutomationsOverviewScreen.tsx, confirm.ts), and (3) the
-// repo's own `[class*="substring"]` CSS-module convention (already used in
-// flows-full.mjs, flows-shell-03-*.mjs, flows-verify-fix1-starred.mjs) only
-// where no semantic attribute exists.
+// AutomationThreadScreen.tsx / AutomationEditorScreen.tsx / RunViewScreen.tsx
+// all use Vite CSS Modules (generateScopedName: '[name]__[local]__[hash:base64:5]',
+// see apps/desktop/vite.config.ts:36-38), so a class like `.run` compiles to
+// something like `AutomationThreadScreen__run__a1B2c` at runtime -- there is
+// no stable literal `cd-au-*` string anywhere. This suite instead uses, in
+// order of preference: (1) real ARIA roles/names (heading, dialog, switch,
+// tab, radio), (2) literal `title`/`aria-label`/`data-*` attributes the
+// source hard-codes verbatim (confirmed by reading AutomationThreadScreen.tsx,
+// AutomationEditorScreen.tsx, RunViewScreen.tsx, AutomationsOverviewScreen.tsx,
+// confirm.ts), and (3) the repo's own `[class*="substring"]` CSS-module
+// convention only where no semantic attribute exists.
+//
+// UPDATED CONTRACT (Automations UI revamp -- receipts/issue-387-automations-ui-revamp.md):
+//   - Adopting a template (Discover/Templates "Use template") now lands on
+//     the automation THREAD (route `automation-view`, AutomationThreadScreen)
+//     instead of the builder. Thread signature: crumb button "Automations",
+//     `h1` = automation name, status pill `[data-au-status]`, enable switch
+//     still `input[role="switch"]` wrapped in `label:has(input[role="switch"])`,
+//     buttons "Run now" (plain, NOT "Delete <name>") / "Edit" (plain, NOT
+//     `button[title="Edit in builder"]`) / "Delete" (plain). "Edit" now opens
+//     the EDITOR (route `automation-editor`), not the builder.
+//   - "Run now" on the thread does NOT navigate -- it stays on the thread and
+//     the fired run appears as a `button[data-run-status]` timeline entry
+//     (values ok/fail/running) via bounded polling. A run's row carries
+//     `data-run-status` on BOTH the outer `<button>` and an inner
+//     `<span class="entryDot">` -- always scope to `button[data-run-status]`
+//     when counting/clicking, or a plain `[data-run-status]` locator
+//     double-counts. Click an entry to navigate to the (unchanged) run-view.
+//     Entries render OLDEST-FIRST within each date group (top-to-bottom, like
+//     a growing conversation) -- the INVERSE of the old newest-first feed --
+//     so "the oldest run" is now `.first()`, not `.last()`.
+//   - "New automation" now opens the instructions-first EDITOR (route
+//     `automation-editor`, create mode) instead of scaffolding a gateway row
+//     and jumping straight to the builder. NO gateway row exists until the
+//     editor's "Create automation" button is clicked. The editor: labeled
+//     "Name" input, labeled "Instructions" textarea, a trigger picker
+//     `role="radiogroup"` with `role="radio"` cards ("Schedule"/"Webhook"/
+//     "Condition"/"Data"; Schedule reveals a mono cron-expression input),
+//     tabs `role="tab"` ("Connectors"/"Behavior"/"Notifications"), footer
+//     "Cancel" + "Create automation". Saving hands off to the SAME builder
+//     chat as before, seeded with the typed instructions as the first
+//     auto-sent user message (no manual paste-and-Send needed).
+//   - The old "Next 3 runs" hero block is gone -- the thread's cron trigger
+//     chip shows the raw cron expression plus a single "next <relative
+//     label>" hint (`header.nextRuns[0]` only), not a 3-item list.
+//   - The old per-view "Cron" run-history filter (`button[data-filter="cron"]`)
+//     no longer exists -- the thread has no filter controls at all.
 //
 // Run with: node apps/desktop/tests/e2e-live/flows-automations-01-lifecycle.mjs
 import { promises as fs } from 'node:fs';
@@ -152,14 +187,23 @@ async function adoptTemplate(templateName) {
   await dialog.waitFor({ state: 'visible', timeout: 10_000 });
   await shot('adopt-preview-dialog');
   await dialog.getByRole('button', { name: 'Use template' }).click();
-  // Adopting an automation template navigates straight to its builder
-  // (confirmed in flows-insights-01.mjs and by TemplatesRoute.tsx:25,34).
-  await page.getByRole('button', { name: 'Config' }).waitFor({ state: 'visible', timeout: 15_000 });
+  // Adopting an automation template now navigates straight to its THREAD
+  // (AutomationThreadScreen, route `automation-view`), not the builder --
+  // TemplatesRoute.tsx/DiscoverRoute.tsx `useAutoTemplate`/`applyAutoTemplate`
+  // both `navigate({ kind: 'automation-view', automationId: ref })` after the
+  // clone. "Run now" is the thread's own unambiguous, always-present marker
+  // (no webhook-reveal race for this suite's templates, unlike suite 02).
+  await page
+    .getByRole('button', { name: /Run now|Starting…/ })
+    .waitFor({ state: 'visible', timeout: 15_000 });
   await page.waitForTimeout(500);
-  await shot('adopt-after-use-template-builder');
+  await shot('adopt-after-use-template-thread');
 }
 
 async function runNowFromViewScreen() {
+  // "Run now" on the thread does NOT navigate -- it fires and stays on the
+  // thread; the run shows up as a `button[data-run-status]` timeline entry
+  // via the screen's own bounded poll loop (AutomationThreadScreen.tsx).
   const runBtn = page.getByRole('button', { name: /Run now|Starting…/ });
   await runBtn.waitFor({ state: 'visible', timeout: 5_000 });
   await runBtn.click();
@@ -220,7 +264,7 @@ async function main() {
     // ---------------------------------------------------------------------
     await step(
       'flow2-view-screen',
-      'Automation view screen: hero (name, cron trigger since template has no webhook), enable switch, Run now',
+      'Automation thread screen: header (name, cron trigger chip since template has no webhook), enable switch, Run now/Edit/Delete',
       async () => {
         await openAutomationView(TEMPLATE_NAME);
         await shot('02-view-screen');
@@ -228,17 +272,17 @@ async function main() {
         const bodyTxt = await bodyText();
         // packages/blueprints/automations/trip-albums/automations/trip-albums/automation.json
         // declares a single `cron` trigger ("0 6 * * *"), no webhook -- so
-        // the hero should render the cron/next-runs block, not a webhook URL.
-        // NOTE: document.body.innerText reflects CSS text-transform (the
-        // heroNextLbl/eyebrow labels render visually as "NEXT 3 RUNS" via
-        // `text-transform: uppercase`), so match case-insensitively.
+        // the trigger-chips row should render the cron expr + "next <label>"
+        // hint (TriggerChips in AutomationThreadScreen.tsx), not a webhook
+        // URL. The old "NEXT 3 RUNS" hero block is gone in the revamp --
+        // only `header.nextRuns[0]` renders, as "next <relative label>".
         assert(
           /0 6 \* \* \*/.test(bodyTxt),
-          `expected cron expr "0 6 * * *" in hero, got body head: ${bodyTxt.slice(0, 300)}`,
+          `expected cron expr "0 6 * * *" in the trigger chip, got body head: ${bodyTxt.slice(0, 300)}`,
         );
         assert(
-          /next 3 runs/i.test(bodyTxt),
-          'expected "Next 3 runs" hero block for a cron-triggered automation',
+          /next\s/i.test(bodyTxt),
+          'expected a "next <relative label>" hint next to the cron trigger chip',
         );
         assert(
           !/Provisioning endpoint/.test(bodyTxt),
@@ -246,7 +290,7 @@ async function main() {
         );
 
         // The native checkbox is the standard visually-hidden-input pattern
-        // (AutomationViewScreen.module.css `.switch input { opacity: 0;
+        // (AutomationThreadScreen.module.css `.switch input { opacity: 0;
         // width: 0; height: 0; }`, styled sibling `.switchTrack` is what's
         // actually painted) -- it's real and `attached`, just never
         // Playwright-"visible" (0x0 box), so wait for `attached`, not `visible`.
@@ -264,12 +308,13 @@ async function main() {
         const runBtn = page.getByRole('button', { name: /Run now|Starting…/ });
         await runBtn.waitFor({ state: 'visible', timeout: 5_000 });
 
-        const editBtn = page.locator('button[title="Edit in builder"]');
+        // "Edit" (plain label, no title attr) now opens the EDITOR, not the
+        // builder -- AutomationThreadScreen.tsx's header actions. "Delete" is
+        // also a plain label (not "Delete <name>") -- the automation's name
+        // only appears in the confirm dialog's message, not the button text.
+        const editBtn = page.getByRole('button', { name: 'Edit', exact: true });
         await editBtn.waitFor({ state: 'visible', timeout: 5_000 });
-        const deleteBtn = page.getByRole('button', {
-          name: `Delete ${TEMPLATE_NAME}`,
-          exact: true,
-        });
+        const deleteBtn = page.getByRole('button', { name: 'Delete', exact: true });
         await deleteBtn.waitFor({ state: 'visible', timeout: 5_000 });
       },
     );
@@ -279,9 +324,25 @@ async function main() {
     // ---------------------------------------------------------------------
     await step(
       'flow3-run-now-and-timeline',
-      'Run now -> run viewer timeline renders a resolved final node; expand a node (or Log mode if no tool nodes)',
+      'Run now (stays on thread) -> the run appears as a timeline entry -> open it -> run viewer renders a resolved final node; expand a node (or Log mode if no tool nodes)',
       async () => {
         await runNowFromViewScreen();
+        await shot('03-thread-after-run-now-click');
+
+        // "Run now" no longer navigates (AutomationThreadScreen.tsx doRun) —
+        // the fire is async (202), so the thread's own bounded poll loop
+        // surfaces the run as a `button[data-run-status]` timeline entry.
+        // MUST scope to the `button` tag: the entry's inner `.entryDot` span
+        // also carries `data-run-status`, so a bare `[data-run-status]`
+        // locator double-counts every run.
+        const entries = page.locator('button[data-run-status]');
+        await entries.first().waitFor({ state: 'visible', timeout: 30_000 });
+        await shot('03-thread-run-entry-appeared');
+
+        // Entries render oldest-first within a date group (top-to-bottom,
+        // like a growing conversation) — the just-fired run is the LAST one.
+        await entries.last().click();
+        await page.waitForTimeout(500);
         await shot('03-run-view-after-click');
 
         // Poll for the final timeline node to leave "running"/"pending" —
@@ -387,9 +448,11 @@ async function main() {
         await openAutomationView(TEMPLATE_NAME);
         await shot('04-view-after-3-runs');
 
-        const runRows = page.locator('button[data-ok]');
+        // `button[data-run-status]` (see flow3 note — must scope to `button`,
+        // the inner `.entryDot` span duplicates the attribute).
+        const runRows = page.locator('button[data-run-status]');
         const runRowCount = await runRows.count();
-        console.log(`[auto01] run-history rows visible on automation view: ${runRowCount}`);
+        console.log(`[auto01] run-history rows visible on automation thread: ${runRowCount}`);
         assert(runRowCount === 3, `expected 3 run-history rows after 3 runs, got ${runRowCount}`);
 
         const rows = await gwListAutomations();
@@ -402,13 +465,16 @@ async function main() {
           `[auto01] gateway runs for ${ref}: ${runs.length} (ids: ${runs.map((r) => r.runId).join(', ')})`,
         );
         assert(runs.length === 3, `expected 3 runs in the gateway ledger, got ${runs.length}`);
-        // Oldest run = last in a newest-first feed.
+        // Oldest run = last in the gateway's newest-first API feed.
         olderRunId = runs[runs.length - 1]?.runId ?? null;
         assert(Boolean(olderRunId), 'could not determine an older runId to open from history');
 
-        // Open the OLDEST run row (last row rendered, since RunRow feed is
-        // newest-first) from the UI, not by URL — exercises the actual click path.
-        await runRows.last().click();
+        // Open the OLDEST run row from the UI, not by URL — exercises the
+        // actual click path. UNLIKE the old newest-first feed, the thread's
+        // entries render OLDEST-FIRST top-to-bottom (AutomationThreadScreen.tsx
+        // groupRuns sorts ascending by startedAt), so the oldest run is now
+        // `.first()`, not `.last()`.
+        await runRows.first().click();
         await page.waitForTimeout(1000);
         await shot('04-older-run-view');
         const finalNodes = page.locator('[data-status]');
@@ -482,41 +548,112 @@ async function main() {
     // ---------------------------------------------------------------------
     // FLOW 6: create-new-automation
     // ---------------------------------------------------------------------
+    const NEW_AUTO_NAME = 'GitHub issues digest';
+    const NEW_AUTO_INSTRUCTIONS = "Every weekday morning, summarize yesterday's new GitHub issues.";
     await step(
       'flow6-create-new-automation',
-      '"New automation" from overview -> builder opens, accepts a prompt, shows progress',
+      '"New automation" from overview -> instructions-first EDITOR (create mode, no draft row yet) -> fill Name/Instructions/Schedule trigger -> Create automation -> hands off to the builder, seeded with the instructions as the first auto-sent message',
       async () => {
         await openAutomationsOverview();
-        const newBtn = page.getByRole('button', { name: 'New automation' });
+        // .first() -- the empty-state overview repeats "New automation" as
+        // BOTH a header action and its own empty-state CTA
+        // (AutomationsOverviewScreen.tsx EmptyState); scope defensively even
+        // though by this point in the suite the fleet is non-empty.
+        const newBtn = page.getByRole('button', { name: 'New automation' }).first();
         await newBtn.waitFor({ state: 'visible', timeout: 10_000 });
         await newBtn.click();
 
-        // scaffoldAutomationDraft() mints a REAL gateway row named "New
-        // automation" (createAutomation({ id, name: 'New automation',
-        // enabled: false })) before the builder even paints, then navigates
-        // to { kind: 'automation-builder', automationId: id }.
+        // AutomationsRoute.tsx onNewAutomation -> navigate({kind:'automation-editor'})
+        // (create mode, no automationId/templateId) -- AutomationEditorRoute.tsx's
+        // loadData returns mode:'create' with NO gateway row; unlike the old
+        // scaffoldAutomationDraft() flow, nothing is minted on the gateway
+        // until "Create automation" is clicked below.
+        const nameInput = page.getByLabel('Name', { exact: true });
+        await nameInput.waitFor({ state: 'visible', timeout: 15_000 });
+        const instructionsField = page.getByLabel('Instructions', { exact: true });
+        await instructionsField.waitFor({ state: 'visible', timeout: 5_000 });
+        await shot('06-new-automation-editor-opened');
+
+        const rowsBeforeCreate = await gwListAutomations();
+        const preexisting = rowsBeforeCreate.find((r) => r.name === NEW_AUTO_NAME);
+        console.log(
+          `[auto01] gateway row named "${NEW_AUTO_NAME}" before Create automation is clicked: ${Boolean(preexisting)} (expected false -- create-mode no longer scaffolds eagerly)`,
+        );
+        assert(
+          !preexisting,
+          `expected NO gateway row for "${NEW_AUTO_NAME}" before saving the editor, found one: ${JSON.stringify(preexisting)}`,
+        );
+
+        await nameInput.fill(NEW_AUTO_NAME);
+        await instructionsField.fill(NEW_AUTO_INSTRUCTIONS);
+
+        // Trigger picker: role="radiogroup" of role="radio" cards
+        // (AutomationEditorScreen.tsx TriggerCard) -- pick "Schedule" and
+        // fill a weekday-morning cron expr matching the instructions.
+        await page.getByRole('radio', { name: 'Schedule' }).click();
+        await page.waitForTimeout(150);
+        const cronInput = page.getByPlaceholder('0 7 * * *');
+        await cronInput.waitFor({ state: 'visible', timeout: 5_000 });
+        await cronInput.fill('0 8 * * 1-5');
+        await shot('06-new-automation-editor-filled');
+
+        await page.getByRole('button', { name: 'Create automation', exact: true }).click();
+
+        // onSave -> createAutomation(..., publish:true) mints the REAL row,
+        // then (create mode) onOpenBuilder(instructions) navigates to the
+        // SAME builder chat as before, with the typed instructions seeded as
+        // `initialPrompt` -- useBuilder.ts auto-sends it, no manual
+        // fill+Send needed.
         await page
           .getByRole('button', { name: 'Config' })
           .waitFor({ state: 'visible', timeout: 15_000 });
         await page.waitForTimeout(500);
         await shot('06-new-automation-builder-opened');
 
-        const rowsAfterScaffold = await gwListAutomations();
-        const draftRow = rowsAfterScaffold.find((r) => r.name === 'New automation');
+        const rowsAfterCreate = await gwListAutomations();
+        const createdRow = rowsAfterCreate.find((r) => r.name === NEW_AUTO_NAME);
         console.log(
-          `[auto01] scaffolded draft row present in gateway: ${Boolean(draftRow)} ref=${draftRow?.ref}`,
+          `[auto01] gateway row present after "Create automation": ${Boolean(createdRow)} ref=${createdRow?.ref}`,
         );
         assert(
-          Boolean(draftRow),
-          'expected "New automation" to exist as a real gateway row immediately after clicking New automation',
+          Boolean(createdRow),
+          `expected "${NEW_AUTO_NAME}" to exist as a real gateway row after clicking Create automation`,
         );
 
-        const textarea = page.getByPlaceholder('Describe a change…');
-        await textarea.waitFor({ state: 'visible', timeout: 10_000 });
-        await textarea.fill("Every weekday morning, summarize yesterday's new GitHub issues.");
-        await page.getByRole('button', { name: 'Send' }).click();
-        await page.waitForTimeout(1500);
-        await shot('06-new-automation-after-send');
+        // The instructions typed in the editor must show up as the FIRST
+        // user message in the builder chat (BuilderChatPane.tsx `.user
+        // .userBubble`), proving the seed actually reached the chat and
+        // auto-sent rather than just pre-filling an empty composer.
+        const firstUserBubble = page.locator('[class*="userBubble"]').first();
+        await firstUserBubble.waitFor({ state: 'visible', timeout: 15_000 });
+        const firstUserText = (await firstUserBubble.textContent())?.trim() ?? '';
+        console.log(
+          `[auto01] first user message in the seeded builder chat: ${JSON.stringify(firstUserText)}`,
+        );
+        // The editor frames the seed as an explicit compile work order (the
+        // raw instructions are already the manifest `prompt`); the
+        // instructions must ride inside it verbatim.
+        assert(
+          firstUserText.startsWith('Compile this automation now') &&
+            firstUserText.includes(NEW_AUTO_INSTRUCTIONS),
+          `expected the builder chat's first user message to be the compile work order carrying the editor's instructions, got ${JSON.stringify(firstUserText)}`,
+        );
+
+        // BUG CHECK (informational, not a failing assertion here -- see
+        // flow7 below and flows-automations-06-builder-to-run.mjs for the
+        // load-bearing repro/documentation): AutomationEditorRoute.tsx's
+        // onOpenBuilder passes the COMPOUND automation ref as
+        // `automation-builder`'s `automationId`, which useBuilder.ts/
+        // BuilderRoute.tsx expect to be the BARE app id -- the tell is
+        // BuilderAutomationPane's Config tab stuck on "Loading automation…"
+        // forever (automationRow.current never resolves against the
+        // mismatched appId).
+        const stuckLoadingFlow6 = await page
+          .getByText('Loading automation…', { exact: true })
+          .count();
+        console.log(
+          `[auto01] BUG CHECK: Config tab stuck on "Loading automation…" right after New-automation create: ${stuckLoadingFlow6 > 0}`,
+        );
 
         // Best-effort: wait for a "thinking" bubble to appear then clear, or
         // just document however far it gets within a bounded window (per
@@ -543,13 +680,47 @@ async function main() {
     // ---------------------------------------------------------------------
     await step(
       'flow7-edit-in-builder',
-      '"Edit in builder" on the adopted automation -> builder opens seeded with its existing config',
+      '"Edit" on the thread -> instructions-first EDITOR (edit mode, existing Name/Instructions/cron pre-filled) -> its own "Open builder chat" -> builder opens seeded with the existing config',
       async () => {
         await openAutomationView(TEMPLATE_NAME);
-        const editBtn = page.locator('button[title="Edit in builder"]');
+        // "Edit" now opens the EDITOR, not the builder directly
+        // (AutomationThreadScreen.tsx onEdit -> navigate({kind:'automation-editor'})).
+        const editBtn = page.getByRole('button', { name: 'Edit', exact: true });
         await editBtn.waitFor({ state: 'visible', timeout: 5_000 });
         await editBtn.click();
 
+        // Edit mode: labeled Name/Instructions pre-filled from the loaded
+        // row, cron expr visible in the selected "Schedule" trigger card.
+        const nameInput = page.getByLabel('Name', { exact: true });
+        await nameInput.waitFor({ state: 'visible', timeout: 15_000 });
+        await page.waitForTimeout(300);
+        await shot('07-editor-edit-mode-opened');
+
+        const nameValue = await nameInput.inputValue();
+        console.log(`[auto01] editor Name field on edit-mode load: ${JSON.stringify(nameValue)}`);
+        assert(
+          nameValue === TEMPLATE_NAME,
+          `expected the editor's Name field to be pre-filled with "${TEMPLATE_NAME}", got ${JSON.stringify(nameValue)}`,
+        );
+        // The cron expr lives inside the Schedule trigger card's `<input
+        // value=...>` (AutomationEditorScreen.tsx) -- an input's value is a
+        // DOM property, never part of `document.body.textContent`, so it
+        // must be read via `inputValue()`, not a body-text regex.
+        const cronExprInput = page.getByPlaceholder('0 7 * * *');
+        await cronExprInput.waitFor({ state: 'visible', timeout: 5_000 });
+        const cronExprValue = await cronExprInput.inputValue();
+        console.log(
+          `[auto01] editor cron-expr field on edit-mode load: ${JSON.stringify(cronExprValue)}`,
+        );
+        assert(
+          cronExprValue === '0 6 * * *',
+          `expected the editor's Schedule trigger card to pre-fill the existing cron expr "0 6 * * *", got ${JSON.stringify(cronExprValue)}`,
+        );
+
+        // Edit mode's own "Open builder chat" header action (AutomationEditorScreen.tsx) --
+        // hands off to the SAME builder as before, this time with NO seed
+        // message (existing automation, nothing new to compile yet).
+        await page.getByRole('button', { name: 'Open builder chat', exact: true }).click();
         await page
           .getByRole('button', { name: 'Config' })
           .waitFor({ state: 'visible', timeout: 15_000 });
@@ -560,17 +731,50 @@ async function main() {
         // for an existing automation -- the cron expr should be visible
         // somewhere in the Config pane, unlike the blank "New automation"
         // draft from flow 6.
-        const bodyTxt = await bodyText();
+        //
+        // PRODUCT BUG (not a selector issue), confirmed by reading source +
+        // observing this exact failure live: AutomationEditorRoute.tsx's
+        // onOpenBuilder (both the create-mode AND this edit-mode call site)
+        // does `navigate({automationId: ref, kind:'automation-builder', ...})`
+        // where `ref` is the COMPOUND automation ref (refIdRef.current, e.g.
+        // "trip-albums/trip-albums"). `BuilderRoute.tsx` feeds that straight
+        // into `initialAppId` -> `useBuilder.ts`'s `appId.current`, which
+        // `refreshAutomationRow` compares against the BARE `row.ownerApp`
+        // (never matches, since one side has a "/" and the other doesn't)
+        // and which `ensureConversation`/`streamTurn` URL-encode as a SINGLE
+        // path segment (`/_centraid-conversations/apps/<appId>/sessions`,
+        // `/centraid/<appId>/_turn`) -- the literal "/" survives
+        // `encodeURIComponent` as "%2F", so the gateway 500s resolving an
+        // app literally named "<id>/<id>". Result: the builder that opens is
+        // an ORPHANED "Untitled"/"Draft" session, NOT the existing
+        // automation -- BuilderAutomationPane's Config tab is stuck on
+        // "Loading automation…" forever (automationRow.current never
+        // resolves). The deleted OLD call sites this replaces correctly
+        // used the BARE `row.id` (confirm via `git diff HEAD~1 --
+        // apps/desktop/src/renderer/react/shell/routes/HomeRoute.tsx`:
+        // `navigate({kind:'automation-builder', automationId: row.id})`).
+        // AutomationViewRoute.tsx's NEW composer `onSendMessage` handler has
+        // the identical `automationId: row.ref` shape (untested by this
+        // suite, but same code pattern -- see that file's line ~148) and is
+        // likely affected the same way. Suspected fix locations (NOT
+        // applied -- source edits are out of scope for this e2e task):
+        // AutomationEditorRoute.tsx's two `automation-builder` navigate
+        // calls, AutomationViewRoute.tsx's one.
+        const stuckLoading = await page.getByText('Loading automation…', { exact: true }).count();
         console.log(
-          `[auto01] builder body after Edit-in-builder (first 400 chars): ${bodyTxt.slice(0, 400).replace(/\n/g, ' | ')}`,
+          `[auto01] BUG CHECK: Config tab stuck on "Loading automation…": ${stuckLoading > 0}`,
         );
-        const hasCron = /0 6 \* \* \*/.test(bodyTxt) || /Trip albums/.test(bodyTxt);
+        const builderBodyTxt = await bodyText();
+        console.log(
+          `[auto01] builder body after Open-builder-chat (first 400 chars): ${builderBodyTxt.slice(0, 400).replace(/\n/g, ' | ')}`,
+        );
+        const hasCron = /0 6 \* \* \*/.test(builderBodyTxt) || /Trip albums/.test(builderBodyTxt);
         console.log(
           `[auto01] builder shows existing automation identity (cron expr or name): ${hasCron}`,
         );
         assert(
           hasCron,
-          "expected the builder opened via Edit-in-builder to show the existing automation's name or cron expr somewhere (Config tab)",
+          "expected the builder opened via the editor's Open-builder-chat to show the existing automation's name or cron expr somewhere (Config tab)",
         );
       },
     );
@@ -583,10 +787,9 @@ async function main() {
       'Delete -> Cancel keeps it; Delete -> confirm removes it from overview, Home, and the gateway',
       async () => {
         await openAutomationView(TEMPLATE_NAME);
-        const deleteBtn = page.getByRole('button', {
-          name: `Delete ${TEMPLATE_NAME}`,
-          exact: true,
-        });
+        // Plain "Delete" label (AutomationThreadScreen.tsx) -- the automation
+        // name only appears in the confirm dialog's message, not the button.
+        const deleteBtn = page.getByRole('button', { name: 'Delete', exact: true });
         await deleteBtn.waitFor({ state: 'visible', timeout: 5_000 });
 
         // ---- Cancel path ----
@@ -618,10 +821,19 @@ async function main() {
           .getByRole('heading', { name: 'Automations', level: 1 })
           .waitFor({ state: 'visible', timeout: 10_000 });
         await shot('08-after-confirm-overview');
-        const ovGone = await page.getByRole('button', { name: new RegExp(TEMPLATE_NAME) }).count();
+        // Scope to the FLEET section specifically (AutomationsOverviewScreen.tsx
+        // `div[class*="fleet"]`), not an unscoped role=button query — the
+        // revamped overview also has a NEW "Recent activity" feed below the
+        // fleet, whose `ActivityRow` buttons carry the (possibly-deleted)
+        // automation's name too (a run record survives its automation being
+        // deleted), so an unscoped name match on "Trip albums" still finds
+        // the 3 activity rows from flow4's fired runs even after deletion.
+        const ovGone = await page
+          .locator('div[class*="fleet"] button', { hasText: TEMPLATE_NAME })
+          .count();
         assert(
           ovGone === 0,
-          `expected 0 overview rows for "${TEMPLATE_NAME}" after confirmed delete, found ${ovGone}`,
+          `expected 0 FLEET rows for "${TEMPLATE_NAME}" after confirmed delete, found ${ovGone}`,
         );
 
         await navTo(page, 'Home');
@@ -682,7 +894,7 @@ async function main() {
 
         await openAutomationView(TEMPLATE_NAME);
         await shot('09-relaunch-view-screen');
-        const runRowsAfter = await page.locator('button[data-ok]').count();
+        const runRowsAfter = await page.locator('button[data-run-status]').count();
         console.log(`[auto01] run-history rows visible after relaunch: ${runRowsAfter}`);
         assert(
           runRowsAfter >= 1,
@@ -706,7 +918,7 @@ async function main() {
 
         // Open the persisted run and confirm its timeline still renders (not
         // just the row list).
-        await page.locator('button[data-ok]').first().click();
+        await page.locator('button[data-run-status]').first().click();
         await page.waitForTimeout(1000);
         await shot('09-relaunch-run-view-still-renders');
         const finalNodes = page.locator('[data-status]');

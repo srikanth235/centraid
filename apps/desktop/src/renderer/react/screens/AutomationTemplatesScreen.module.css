@@ -210,21 +210,38 @@
   padding: 18px;
   text-align: left;
   border: 0.5px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--r-md);
   background: var(--bg-elev);
   cursor: pointer;
   font: inherit;
   color: var(--ink);
   overflow: hidden;
   transition:
-    transform 0.18s cubic-bezier(0.22, 0.61, 0.36, 1),
-    border-color 0.18s ease,
-    box-shadow 0.18s ease;
+    border-color 0.16s ease,
+    background 0.16s ease;
+}
+/* Hairline identity-hue accent — a 2px edge keyed off trigger kind
+   (--tk-hue, set inline per card), the same decorative-only role
+   automation.module.css's [data-hue] mapping plays for automation
+   instances (see that module's header comment). Quiet by default, reads
+   a touch stronger on hover — no lift, no shadow. */
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--tk-hue, var(--ink-4));
+  opacity: 0.5;
+  transition: opacity 0.16s ease;
 }
 .card:hover {
-  transform: translateY(-3px);
-  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
-  box-shadow: var(--shadow-md);
+  border-color: var(--line-strong);
+  background: color-mix(in srgb, var(--tk-hue, var(--accent)) 4%, var(--bg-elev));
+}
+.card:hover::before {
+  opacity: 0.9;
 }
 .top {
   display: flex;
@@ -238,15 +255,12 @@
   display: grid;
   place-items: center;
   font-size: 21px;
-  border-radius: 10px;
+  border-radius: var(--r-sm);
   background: color-mix(in srgb, var(--ink) 6%, transparent);
-  transition:
-    transform 0.18s ease,
-    background 0.18s ease;
+  transition: background 0.16s ease;
 }
 .card:hover .emoji {
-  transform: rotate(-6deg) scale(1.05);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  background: color-mix(in srgb, var(--tk-hue, var(--accent)) 16%, transparent);
 }
 .name {
   font-family: var(--font-display);
@@ -274,11 +288,12 @@
   gap: 6px;
   font-family: var(--font-mono);
   font-size: 11px;
+  letter-spacing: 0.01em;
   color: var(--ink-3);
 }
 .trigIcon {
   display: inline-flex;
-  color: var(--accent);
+  color: var(--tk-hue, var(--accent));
 }
 .use {
   position: absolute;

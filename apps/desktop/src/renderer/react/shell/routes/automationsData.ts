@@ -5,7 +5,6 @@
 // helpers come from the pure automation-identity + app-format modules.
 import { auStatusForRow, glyphForId, hueForId } from '../../../automation-identity.js';
 import {
-  fmtRetention,
   fmtTokens,
   formatDuration,
   formatWhereClauses,
@@ -14,17 +13,13 @@ import {
   triggersSummary,
 } from '../../../app-format.js';
 import { cronNextRuns } from '../../../cron.js';
-import { createAutomation, listAutomationRuns, listAutomations } from '../../../gateway-client.js';
-import type { AuOverviewData, AuStatusKind, AutomationViewData } from '../../screen-contracts.js';
-
-/** Scaffold a fresh disabled draft automation, returning its id to open in the
- *  builder (vanilla createAndOpenAutomationBuilder, minus the navigation). A
- *  plain slug id — the app.json#kind, not the id, is the automation signal. */
-export async function scaffoldAutomationDraft(): Promise<string> {
-  const id = `automation-${Math.random().toString(36).slice(2, 8)}`;
-  await createAutomation({ id, name: 'New automation', enabled: false });
-  return id;
-}
+import { listAutomationRuns, listAutomations } from '../../../gateway-client.js';
+import type {
+  AuOverviewData,
+  AuStatusKind,
+  AuViewConditionDetailDTO,
+  AuViewDataDetailDTO,
+} from '../../screen-contracts.js';
 
 export interface AutomationFeedEntry {
   automationId: string;
@@ -32,7 +27,7 @@ export interface AutomationFeedEntry {
   run: CentraidAutomationRunRecord;
 }
 
-const AU_STATUS_LABEL: Record<AuStatusKind, string> = {
+export const AU_STATUS_LABEL: Record<AuStatusKind, string> = {
   active: 'Active',
   paused: 'Paused',
   draft: 'Draft',
@@ -42,10 +37,13 @@ const AU_STATUS_LABEL: Record<AuStatusKind, string> = {
 };
 
 /** Title-Case trigger-origin icon + label for a run row — shared by the
- *  overview feed's `metaLabel` and the single-view's run rows, so a run never
- *  surfaces the raw lowercase `triggerOrigin`/`triggerKind` enum ("data" ·
- *  1.2s) to a user. */
-function triggerOriginLabel(run: CentraidAutomationRunRecord): { icon: string; label: string } {
+ *  overview feed's `metaLabel`, the single-view's run rows, and the thread's
+ *  run entries (automationThreadData.ts), so a run never surfaces the raw
+ *  lowercase `triggerOrigin`/`triggerKind` enum ("data" · 1.2s) to a user. */
+export function triggerOriginLabel(run: CentraidAutomationRunRecord): {
+  icon: string;
+  label: string;
+} {
   return run.triggerOrigin === 'webhook'
     ? { icon: 'Webhook', label: 'Webhook' }
     : run.triggerOrigin === 'data'
@@ -94,10 +92,18 @@ export async function collectAutomationRuns(): Promise<AutomationFeedEntry[]> {
   }));
 }
 
-/** Derive the React overview DTO from the loaded rows + run feed (vanilla buildOverviewData). */
+/** Derive the React overview DTO from the loaded rows + run feed (vanilla buildOverviewData).
+ *  `attentionByRef` is an optional, caller-computed map of automation `ref` →
+ *  pending-consent-item count (the fleet row's amber attention badge —
+ *  Automations UI revamp, receipts/issue-387-automations-ui-revamp.md). It's computed by the
+ *  route wrapper via `filterConsentForAutomation` (automationThreadData.ts)
+ *  rather than here, so this module doesn't take on a reverse dependency on
+ *  the thread data layer that already depends on it. Omitted entirely (e.g.
+ *  existing callers/tests), every row's `attentionCount` is 0. */
 export function buildOverviewData(
   rows: readonly CentraidAutomationRow[],
   entries: readonly AutomationFeedEntry[],
+  attentionByRef?: ReadonlyMap<string, number>,
 ): AuOverviewData {
   const runs = entries
     .filter((e) => e.automationId)
@@ -130,7 +136,12 @@ export function buildOverviewData(
       const hasCron = r.triggers.some((t) => t.kind === 'cron');
       const hasWebhook = r.triggers.some((t) => t.kind === 'webhook');
       const statusKind = auStatusForRow(r.enabled, !!last) as AuStatusKind;
+      const cronTrig = r.triggers.find(
+        (t): t is { kind: 'cron'; expr: string } => t.kind === 'cron',
+      );
+      const nextRun = cronTrig ? cronNextRuns(cronTrig.expr, 1)[0] : undefined;
       return {
+        attentionCount: attentionByRef?.get(r.ref) ?? 0,
         glyphIcon: glyphForId(r.id),
         hue: hueForId(r.id),
         id: r.id,
@@ -138,7 +149,9 @@ export function buildOverviewData(
         lastRunLabel: last
           ? `Last run ${relativeTime(new Date(last.run.startedAt).toISOString())}`
           : 'No runs yet',
+        lastRunOk: last ? last.run.ok : null,
         name: r.name,
+        nextRunLabel: nextRun ? relativeRunLabel(nextRun) : null,
         ref: r.ref,
         statusKind,
         statusLabel: AU_STATUS_LABEL[statusKind],
@@ -156,6 +169,7 @@ export function buildOverviewData(
         name: automationName,
         ok: run.ok,
         runId: run.runId,
+        startedAt: run.startedAt,
         summary: run.ok ? (run.summary ?? '—') : (run.error ?? 'Failed'),
         whenLabel: relativeTime(new Date(run.startedAt).toISOString()),
       };
@@ -164,35 +178,28 @@ export function buildOverviewData(
   };
 }
 
-/** 30-day lifetime KPIs for an automation's runs (vanilla automationLifetime). */
-function automationLifetime(runs: readonly CentraidAutomationRunRecord[]): {
-  total: number;
-  successPct: number | null;
-  avg: string;
-  cost: string;
-} {
-  const total = runs.length;
-  const ok = runs.filter((r) => r.ok).length;
-  const durations = runs
-    .filter((r) => r.endedAt !== undefined)
-    .map((r) => r.endedAt! - r.startedAt);
-  const avgMs = durations.length
-    ? durations.reduce((a, b) => a + b, 0) / durations.length
-    : undefined;
-  const cost = runs.reduce((s, r) => s + (r.totalCostUsd ?? 0), 0);
-  return {
-    total,
-    successPct: total ? Math.round((ok / total) * 100) : null,
-    avg: avgMs !== undefined ? formatDuration(Math.round(avgMs)) : '—',
-    cost: cost > 0 ? `$${cost.toFixed(2)}` : '—',
-  };
+/** The hero/trigger derivation shared by the thread header DTO
+ *  (automationThreadData.ts) and the editor route: webhook URL resolution,
+ *  cron next-run projections, and the data/condition trigger detail blocks.
+ *  Kept here (not in screen-contracts.ts, which stays free of ambient ipc
+ *  types) since it takes the raw `CentraidAutomationRow`. */
+export interface AutomationHeroDTO {
+  cronExprs: string[];
+  nextRuns: string[];
+  webhook: { pending: boolean; url: string | null } | null;
+  dataDetail: AuViewDataDetailDTO | null;
+  conditionDetail: AuViewConditionDetailDTO | null;
+  kindEyebrow: string;
+  heroIcon: string;
+  when: string;
 }
 
-/** Derive the React single-view DTO — hero, run rows, 30-day KPIs, behavior —
- *  so the React screen imports no vanilla formatters (vanilla buildAutomationViewData). */
-export function buildAutomationViewData(
+/** Derive the hero/trigger block for one automation row (vanilla portion of
+ *  deriveAutomationHero is factored here so automationThreadData.ts's thread
+ *  header can reuse it instead of re-deriving webhook/cron/data/condition
+ *  detail a second time). */
+export function deriveAutomationHero(
   row: CentraidAutomationRow,
-  runs: readonly CentraidAutomationRunRecord[],
   /**
    * The active gateway's base URL (`auth().baseUrl` — see
    * `gateway-client-core.ts`). The webhook route only ever lives on the
@@ -204,17 +211,16 @@ export function buildAutomationViewData(
    * `window.CentraidApi` side effect the unit tests stub around).
    */
   gatewayOrigin: string,
-): AutomationViewData {
+): AutomationHeroDTO {
   const hasWebhook = row.triggers.some((t) => t.kind === 'webhook');
   const hasCron = row.triggers.some((t) => t.kind === 'cron');
-  const hasRun = runs.length > 0;
   const cronExprs = row.triggers
     .filter((t): t is { kind: 'cron'; expr: string } => t.kind === 'cron')
     .map((t) => t.expr);
   const nextRuns =
     hasCron && cronExprs[0] ? cronNextRuns(cronExprs[0], 3).map((dt) => relativeRunLabel(dt)) : [];
 
-  let webhook: AutomationViewData['webhook'] = null;
+  let webhook: AutomationHeroDTO['webhook'] = null;
   if (hasWebhook) {
     const wh = row.triggers.find((t) => t.kind === 'webhook') as
       | { kind: 'webhook'; id?: string; pending?: true }
@@ -232,7 +238,7 @@ export function buildAutomationViewData(
   const dataTrig = row.triggers.find(
     (t): t is { kind: 'data'; entities: readonly string[]; every?: string } => t.kind === 'data',
   );
-  const dataDetail: AutomationViewData['dataDetail'] = dataTrig
+  const dataDetail: AuViewDataDetailDTO | null = dataTrig
     ? {
         entities: [...dataTrig.entities],
         everyLabel: dataTrig.every ? `Every ${dataTrig.every}` : null,
@@ -243,7 +249,7 @@ export function buildAutomationViewData(
     (t): t is { kind: 'condition'; entity: string; where?: unknown; every?: string } =>
       t.kind === 'condition',
   );
-  const conditionDetail: AutomationViewData['conditionDetail'] = condTrig
+  const conditionDetail: AuViewConditionDetailDTO | null = condTrig
     ? {
         entity: condTrig.entity,
         everyLabel: condTrig.every ? `Every ${condTrig.every}` : null,
@@ -251,25 +257,11 @@ export function buildAutomationViewData(
       }
     : null;
 
-  const statusKind = auStatusForRow(row.enabled, hasRun) as AuStatusKind;
-  const now = Date.now();
-  const life = automationLifetime(runs.filter((r) => now - r.startedAt <= 30 * 86_400_000));
-  const tools = row.manifest.requires.tools ?? [];
-
   return {
-    behavior: {
-      historyLabel: fmtRetention(row.manifest.history.keep),
-      model: row.manifest.requires.model ?? row.manifest.costEstimate?.model ?? 'Default',
-      onFailure: row.manifest.onFailure ? `Run "${row.manifest.onFailure}"` : 'Stop',
-    },
     conditionDetail,
     cronExprs,
     dataDetail,
-    description: row.manifest.description ?? null,
-    enabled: row.enabled,
-    glyphIcon: glyphForId(row.id),
     heroIcon: hasWebhook && !hasCron ? 'Webhook' : 'Clock',
-    hue: hueForId(row.id),
     kindEyebrow: hasCron
       ? 'Cron schedule'
       : hasWebhook
@@ -279,42 +271,7 @@ export function buildAutomationViewData(
           : row.triggers.some((t) => t.kind === 'condition')
             ? 'Condition'
             : 'Manual',
-    kpis: {
-      avg: life.avg,
-      cost: life.cost,
-      successPct: life.successPct === null ? '—' : `${life.successPct}%`,
-      total: String(life.total),
-    },
-    name: row.name,
     nextRuns,
-    runs: runs.map((run) => {
-      const tokens = (run.totalInputTokens ?? 0) + (run.totalOutputTokens ?? 0);
-      const dur =
-        run.endedAt !== undefined ? formatDuration(run.endedAt - run.startedAt) : 'running';
-      const trig = triggerOriginLabel(run);
-      const filterKey: 'cron' | 'webhook' | 'manual' | 'other' =
-        run.triggerOrigin === 'webhook'
-          ? 'webhook'
-          : run.triggerKind === 'scheduled'
-            ? 'cron'
-            : run.triggerKind === 'manual'
-              ? 'manual'
-              : 'other';
-      return {
-        automationId: run.automationId ?? null,
-        filterKey,
-        metaLabel: `${dur} · ${fmtTokens(tokens)}`,
-        ok: run.ok,
-        runId: run.runId,
-        summary: run.ok ? (run.summary ?? '—') : (run.error ?? 'Failed'),
-        trigIcon: trig.icon,
-        trigLabel: trig.label,
-        whenLabel: relativeTime(new Date(run.startedAt).toISOString()),
-      };
-    }),
-    statusKind,
-    statusLabel: AU_STATUS_LABEL[statusKind],
-    tools: tools.length > 0 ? [...tools] : [...(row.manifest.requires.mcps ?? [])],
     webhook,
     when: triggersSummary(row.triggers),
   };

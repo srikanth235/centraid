@@ -8,7 +8,6 @@ import PageScroll from '../PageScroll.js';
 import { PageEmpty, PageLoading } from '../status.js';
 import { useAsyncData } from '../useAsyncData.js';
 import { openWebhookReveal } from '../webhookReveal.js';
-import { scaffoldAutomationDraft } from './automationsData.js';
 import {
   cloneAutomationTemplate,
   loadAutomationTemplates,
@@ -18,21 +17,25 @@ import {
 // React-owned automation templates gallery — replaces the vanilla
 // renderAutomationTemplates (app-automations-templates.ts). Loads the automation
 // template slice, wires the preview drawer + adopt (clone → webhook secrets →
-// automation builder), and "Start from scratch" (scaffold a draft → builder).
+// the automation's thread), and "Start from scratch" (straight to the
+// instructions-first editor — no draft scaffold, no builder detour).
 export default function TemplatesRoute(): JSX.Element {
   const { navigate, showToast } = useShellActions();
   const state = useAsyncData(() => loadAutomationTemplates());
 
   const useAutoTemplate = (t: TemplateEntry): void => {
     void cloneAutomationTemplate(t)
-      .then(async ({ automationId, webhooks }) => {
+      .then(async ({ ref, webhooks }) => {
         // Show each minted secret once, in-app, before handing off to the
-        // builder — the console line stays as a dev-only fallback.
+        // thread — the console line stays as a dev-only fallback.
         for (const w of webhooks) {
           surfaceMintedWebhook(w);
           await openWebhookReveal(w);
         }
-        navigate({ kind: 'automation-builder', automationId });
+        // The thread route keys on the row's `ref`; if the fresh clone can't
+        // be resolved, land on the fleet instead of a not-found thread.
+        if (ref) navigate({ kind: 'automation-view', automationId: ref });
+        else navigate({ kind: 'automations' });
       })
       .catch((err: unknown) =>
         showToast(`Could not adopt template: ${err instanceof Error ? err.message : String(err)}`),
@@ -40,11 +43,7 @@ export default function TemplatesRoute(): JSX.Element {
   };
 
   const onStartFromScratch = (): void => {
-    void scaffoldAutomationDraft()
-      .then((id) => navigate({ kind: 'automation-builder', automationId: id }))
-      .catch((err: unknown) =>
-        showToast(`Could not start: ${err instanceof Error ? err.message : String(err)}`),
-      );
+    navigate({ kind: 'automation-editor' });
   };
 
   return (

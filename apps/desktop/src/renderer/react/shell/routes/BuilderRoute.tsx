@@ -97,7 +97,16 @@ export default function BuilderRoute({
       onAddToHome={onAddToHome}
       onMetaChange={onMetaChange}
       {...(automation
-        ? { initialAppId: route.automationId }
+        ? {
+            initialAppId: route.automationId,
+            // Editor→builder "compile" handoff (receipts/issue-387-automations-ui-revamp.md): a
+            // seeded first turn posts automatically once useBuilder's
+            // bootstrap effect sees `initialPrompt` on an automation route
+            // (useBuilder.ts:562's `if (initialPrompt) sendUserPrompt(...)`),
+            // mirroring how `builder`'s own `initialPrompt` seeds a
+            // from-Home prompt below.
+            ...(route.seedMessage ? { initialPrompt: route.seedMessage } : {}),
+          }
         : {
             // Editing an installed/published app: thread its existing id
             // through as initialAppId so useBuilder resolves isUpdateMode

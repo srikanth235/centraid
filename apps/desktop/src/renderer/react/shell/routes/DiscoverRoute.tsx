@@ -63,18 +63,22 @@ export default function DiscoverRoute({
         showToast(`Clone failed: ${err instanceof Error ? err.message : String(err)}`),
       );
   };
-  // Clone an automation template → surface once-only webhook secrets → open the
-  // automation builder.
+  // Clone an automation template → surface once-only webhook secrets → open
+  // the automation's thread (adopt lands on the conversation, same as the
+  // Templates gallery — receipts/issue-387-automations-ui-revamp.md).
   const applyAutoTemplate = (t: TemplateEntry): void => {
     void cloneAutomationTemplate(t)
-      .then(async ({ automationId, webhooks }) => {
+      .then(async ({ ref, webhooks }) => {
         // Show each minted secret once, in-app, before handing off to the
-        // builder — the console line stays as a dev-only fallback.
+        // thread — the console line stays as a dev-only fallback.
         for (const w of webhooks) {
           surfaceMintedWebhook(w);
           await openWebhookReveal(w);
         }
-        navigate({ kind: 'automation-builder', automationId });
+        // The thread route keys on the row's `ref`; if the fresh clone can't
+        // be resolved, land on the fleet instead of a not-found thread.
+        if (ref) navigate({ kind: 'automation-view', automationId: ref });
+        else navigate({ kind: 'automations' });
       })
       .catch((err: unknown) =>
         showToast(`Could not adopt template: ${err instanceof Error ? err.message : String(err)}`),

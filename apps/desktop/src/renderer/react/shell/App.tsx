@@ -32,6 +32,7 @@ import { closeVaultSwitcher, openVaultSwitcher, updateVaultSwitcherRows } from '
 import ApprovalsRoute from './routes/ApprovalsRoute.js';
 import AppViewRoute from './routes/AppViewRoute.js';
 import AssistantRoute from './routes/AssistantRoute.js';
+import AutomationEditorRoute from './routes/AutomationEditorRoute.js';
 import AutomationsRoute from './routes/AutomationsRoute.js';
 import AutomationViewRoute from './routes/AutomationViewRoute.js';
 import BuilderRoute from './routes/BuilderRoute.js';
@@ -96,6 +97,7 @@ function activePageFor(route: ShellRoute): SidebarPage | undefined {
     case 'run-view':
     case 'automation-view':
     case 'automation-builder':
+    case 'automation-editor':
     case 'templates':
       // Detail routes with no corresponding sidebar nav item — nothing to highlight.
       return undefined;
@@ -416,6 +418,13 @@ export default function App(): JSX.Element {
           return <GatewayRoute />;
         case 'automation-view':
           return <AutomationViewRoute automationId={nav.route.automationId} />;
+        case 'automation-editor':
+          return (
+            <AutomationEditorRoute
+              automationId={nav.route.automationId}
+              templateId={nav.route.templateId}
+            />
+          );
         case 'run-view':
           return <RunViewRoute automationId={nav.route.automationId} runId={nav.route.runId} />;
         case 'discover':

@@ -301,6 +301,18 @@ export interface AuOverviewRowDTO {
   lastRunLabel: string;
   statusKind: AuStatusKind;
   statusLabel: string;
+  /** Whether the automation's most recent run succeeded — `null` when it has
+   *  never run (the "fleet" row's last-run status dot, additive field for
+   *  the Automations UI revamp — see receipts/issue-387-automations-ui-revamp.md). */
+  lastRunOk: boolean | null;
+  /** Relative label for the next cron fire ("in 2h"), `null` when the
+   *  automation has no cron trigger. */
+  nextRunLabel: string | null;
+  /** Count of this automation's pending parked invocations + staged outbox
+   *  items (the fleet row's amber attention badge) — see
+   *  `filterConsentForAutomation` (automationThreadData.ts) for the
+   *  actor-matching rule the caller uses to compute this. */
+  attentionCount: number;
 }
 export interface AuOverviewRunDTO {
   runId: string;
@@ -310,6 +322,9 @@ export interface AuOverviewRunDTO {
   summary: string;
   whenLabel: string;
   metaLabel: string;
+  /** Raw fire time (ms epoch) — the "Recent activity" list's date-group
+   *  separators are derived from this client-side. */
+  startedAt: number;
 }
 export interface AuOverviewData {
   rows: AuOverviewRowDTO[];
@@ -325,18 +340,7 @@ export interface AutomationsOverviewBridgeProps {
   onNewAutomation: () => void;
 }
 
-// ── Automation single-view ──────────────────────────────────────────────────
-export interface AuViewRunDTO {
-  runId: string;
-  automationId: string | null;
-  ok: boolean;
-  summary: string;
-  trigIcon: string;
-  trigLabel: string;
-  whenLabel: string;
-  metaLabel: string;
-  filterKey: 'cron' | 'webhook' | 'manual' | 'other';
-}
+// ── Automation trigger hero details (thread header + editor) ───────────────
 /** A `data` trigger's hero detail — the entities it watches, and an optional
  *  polling cadence. */
 export interface AuViewDataDetailDTO {
@@ -352,49 +356,216 @@ export interface AuViewConditionDetailDTO {
   whereText: string;
   everyLabel: string | null;
 }
-export interface AutomationViewData {
+// ── Automations UI revamp: consent DTOs (shared by editor + thread) ────────
+// Automations redesign (owner-approved architecture, see
+// receipts/issue-387-automations-ui-revamp.md): consent is configured at edit time (Behavior tab)
+// and reviewed inline in the thread — never a runtime dialog. Both surfaces
+// read the same three consent lists, pre-filtered to ONE automation's actor
+// by the route layer (`automationThreadData.ts`), so these DTOs carry no
+// actor/actorKind field — filtering already happened before the screen sees
+// them.
+export type ConsentKind = 'outbox' | 'parked' | 'grant';
+export type ConsentDecision = 'approve' | 'discard' | 'revoke';
+/** A Tier 3/4 invocation parked for owner confirmation (vault write above
+ *  the automation's install-time ceiling). */
+export interface ParkedItemDTO {
+  invocationId: string;
+  command: string;
+  parkedAt: string;
+  input: Record<string, unknown>;
+}
+/** A staged external write (outbox item) awaiting owner decision or already
+ *  decided/drained — the thread shows both so a past send stays legible. */
+export interface OutboxItemDTO {
+  itemId: string;
+  connectionKind: string;
+  connectionLabel: string;
+  verb: string;
+  target: string;
+  artifact: Record<string, unknown>;
+  status: string;
+  stagedAt: string;
+  canEdit: boolean;
+  note: string | null;
+}
+/** A standing "always allow" rule minted from a past outbox decision. */
+export interface GrantDTO {
+  grantId: string;
+  verb: string;
+  target: string;
+  createdAt: string;
+  revokedAt: string | null;
+}
+export interface AuConsentDTO {
+  parked: ParkedItemDTO[];
+  outbox: OutboxItemDTO[];
+  grants: GrantDTO[];
+}
+
+// ── Automation editor (instructions-first create/edit form) ────────────────
+// Name, Instructions (manifest `prompt` — the source of intent the builder
+// compiles into `handler.js`), a trigger picker, and Connectors / Behavior /
+// Notifications tabs. `AuEditorTriggerDTO` is the LOAD/display shape (webhook
+// carries its minted id + pending flag so the Connectors tab can show the
+// URL); `AuEditorTriggerInput` is the narrower SAVE shape `updateAutomation`
+// accepts (gateway-client-editing.ts `CentraidCreateTrigger` — a webhook
+// entry carries no fields, minting happens server-side).
+export type AuEditorTriggerDTO =
+  | { kind: 'cron'; expr: string }
+  | { kind: 'webhook'; id: string | null; pending: boolean }
+  | { kind: 'condition'; entity: string; where?: unknown; every?: string }
+  | { kind: 'data'; entities: string[]; every?: string };
+export type AuEditorTriggerInput =
+  | { kind: 'cron'; expr: string }
+  | { kind: 'webhook' }
+  | { kind: 'condition'; entity: string; where?: unknown; every?: string }
+  | { kind: 'data'; entities: string[]; every?: string };
+/** Connectors tab: manifest `requires`/`connector`/`vault`, resolved to
+ *  display-ready chip lists (see `automationEditorData.ts`'s
+ *  `deriveConnectors`) so the tab can render real chips instead of a fixed
+ *  explainer. Names only — no secret values cross this DTO. */
+export interface AuEditorConnectorsDTO {
+  mcps: string[];
+  tools: string[];
+  secrets: string[];
+  connector: string | null;
+  vaultPurpose: string | null;
+  /** One compact string per `manifest.vault.scopes[]` entry (e.g.
+   *  `"core.event read"`) — see `automationEditorData.ts`'s
+   *  `vaultScopeLabel` for the exact format, shared with the
+   *  Approvals/Vault screens' scope-summary convention. */
+  vaultScopes: string[];
+}
+export interface AutomationEditorData {
+  mode: 'create' | 'edit';
+  /** The `ref` once the automation exists on the gateway; `null` for a
+   *  not-yet-scaffolded create flow. */
+  automationId: string | null;
+  /** `row.id` — the identity key `hueForId`/`glyphForId` use elsewhere
+   *  (Overview, Thread). Distinct from `automationId` (`row.ref`, a
+   *  `<ownerApp>/<id>` handle) — keying identity on the wrong one makes the
+   *  editor's hue/glyph mismatch the rest of the app. `null` for a
+   *  not-yet-scaffolded create flow. Optional/additive: a `loadData` that
+   *  predates this field still typechecks; the screen falls back to
+   *  `automationId`. */
+  rowId?: string | null;
   name: string;
-  description: string | null;
+  /** Manifest `prompt` — the natural-language instructions the builder
+   *  compiles. Empty string for a fresh create. */
+  instructions: string;
+  triggers: AuEditorTriggerDTO[];
+  enabled: boolean;
+  webhook: { pending: boolean; url: string | null } | null;
+  /** Behavior tab: this automation's current standing consent — same shape
+   *  the thread shows, so "what can it do without asking" reads identically
+   *  in both places. */
+  consent: AuConsentDTO;
+  /** Connectors tab data. `null`/absent in create mode (nothing is
+   *  compiled yet) or when the load layer hasn't populated it — the screen
+   *  treats both as "show the explainer/empty state". Optional/additive,
+   *  same rationale as `rowId`. */
+  connectors?: AuEditorConnectorsDTO | null;
+  /** Notifications tab: manifest `onFailure` — another automation's ref
+   *  this one hands off to when a run fails. Optional/additive. */
+  onFailure?: string | null;
+  /** Notifications tab: manifest `requires.model` (falling back to
+   *  `costEstimate.model`) — the model the compiled plan runs on.
+   *  Optional/additive. */
+  model?: string | null;
+}
+export interface AutomationEditorSaveFields {
+  name: string;
+  instructions: string;
+  triggers: AuEditorTriggerInput[];
+}
+export interface AutomationEditorBridgeProps {
+  /** Load the form. For create mode (no `automationId` in the route),
+   *  resolves to defaults (`mode: 'create'`, empty name/instructions/triggers). */
+  loadData: () => Promise<AutomationEditorData>;
+  /** Persist Name/Instructions/triggers (manifest-only edit + publish —
+   *  `updateAutomation`); resolves true on success. */
+  onSave: (fields: AutomationEditorSaveFields) => Promise<boolean>;
+  /** Hand off to the builder chat (the compile mechanism) — `seedMessage`
+   *  posts a first user turn on open (e.g. "add a Slack step"), omitted for
+   *  a cold "Edit in builder" open. */
+  onOpenBuilder: (seedMessage?: string) => void;
+  onRunNow: () => Promise<boolean>;
+  onToggleEnabled: (next: boolean) => Promise<boolean>;
+  /** Behavior tab consent review — same decision surface the thread uses. */
+  onDecideConsent: (
+    kind: ConsentKind,
+    id: string,
+    decision: ConsentDecision,
+    alwaysAllow?: boolean,
+  ) => Promise<boolean>;
+  onOpenRun: (runId: string) => void;
+  onCopyWebhook: (url: string) => void;
+  onRotateWebhook: () => Promise<boolean>;
+  onDelete: () => Promise<boolean>;
+  onCancel: () => void;
+}
+
+// ── Automation thread (one long-lived conversation per automation) ─────────
+// Every fire is a run appended to the thread; the header carries the same
+// identity + trigger-hero fields `AutomationHeroDTO` carries (this screen
+// supersedes `AutomationViewScreen`) plus `consent`, read inline instead of
+// behind a separate Approvals detour.
+export interface AutomationThreadHeaderDTO {
+  id: string;
+  ref: string;
+  name: string;
   glyphIcon: string;
   hue: string;
-  kindEyebrow: string;
-  heroIcon: string;
-  when: string;
-  cronExprs: string[];
-  nextRuns: string[];
-  webhook: { pending: boolean; url: string | null } | null;
-  dataDetail: AuViewDataDetailDTO | null;
-  conditionDetail: AuViewConditionDetailDTO | null;
-  enabled: boolean;
   statusKind: AuStatusKind;
   statusLabel: string;
-  runs: AuViewRunDTO[];
-  kpis: { total: string; successPct: string; avg: string; cost: string };
-  behavior: { model: string; historyLabel: string; onFailure: string };
-  tools: string[];
+  enabled: boolean;
+  description: string | null;
+  kindEyebrow: string;
+  heroIcon: string;
+  triggerSummary: string;
+  webhook: { pending: boolean; url: string | null } | null;
+  nextRuns: string[];
 }
-/** A freshly-minted or rotated webhook secret — plaintext, shown exactly
- *  once via the one-time reveal modal. */
-export interface AuViewWebhookSecretDTO {
-  url: string;
-  secret: string;
+export type ThreadRunStatus = 'ok' | 'fail' | 'running' | 'pending';
+export interface ThreadRunDTO {
+  runId: string;
+  status: ThreadRunStatus;
+  originLabel: string;
+  startedAt: number;
+  endedAt: number | null;
+  durationMs: number | null;
+  summary: string;
+  costUsd: number | null;
+  /** Small-caps mono date separator label ("Today" / "Yesterday" / "Mon, Jul 6"). */
+  dateGroup: string;
 }
-export interface AutomationViewBridgeProps {
-  /** Load the automation + its runs. `null` = not found. */
-  loadData: () => Promise<AutomationViewData | null>;
+export interface AutomationThreadData {
+  header: AutomationThreadHeaderDTO;
+  consent: AuConsentDTO;
+  runs: ThreadRunDTO[];
+}
+export interface AutomationThreadBridgeProps {
+  /** Load the automation + its runs + its consent surface. `null` = not found. */
+  loadData: () => Promise<AutomationThreadData | null>;
   onBack: () => void;
+  /** Open the instructions-first editor for this automation. */
   onEdit: () => void;
-  /** Confirm + delete; resolves true when deleted (view is navigating away). */
-  onDelete: () => Promise<boolean>;
-  /** Run now; resolves true when started (handing off to the run viewer). */
-  onRun: () => Promise<boolean>;
-  /** Toggle enabled; resolves true on success (the view reloads). */
+  onOpenRun: (runId: string) => void;
+  onRunNow: () => Promise<boolean>;
   onToggleEnabled: (next: boolean) => Promise<boolean>;
+  onDecideConsent: (
+    kind: ConsentKind,
+    id: string,
+    decision: ConsentDecision,
+    alwaysAllow?: boolean,
+  ) => Promise<boolean>;
+  /** Composer handoff — post a message into the thread's builder chat (the
+   *  compile mechanism), e.g. "also notify me on failure". */
+  onSendMessage: (text: string) => void;
   onCopyWebhook: (url: string) => void;
-  onOpenRun: (automationId: string, runId: string) => void;
-  /** Confirm + rotate the webhook secret (URL stays the same); the route
-   *  drives the one-time reveal + toast, resolving true on success. */
-  onRegenerateWebhookSecret: () => Promise<boolean>;
+  onRotateWebhook: () => Promise<boolean>;
+  /** Confirm + delete; resolves true when deleted (thread is navigating away). */
+  onDelete: () => Promise<boolean>;
 }
 
 // ── Settings: appearance + layout pages ─────────────────────────────────────

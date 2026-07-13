@@ -1,0 +1,533 @@
+/* Automation editor — instructions-first create/edit form (Automations UI
+   revamp, see receipts/issue-387-automations-ui-revamp.md). "Flight recorder, not dashboard":
+   a single centered column, mono for machine truth (cron/URLs), identity
+   hue as atmosphere only in edit mode, hairlines + --r-md everywhere. */
+
+.page {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  padding-bottom: 40px;
+}
+
+.loadingBody {
+  padding: 48px 0;
+  font-size: 14px;
+  color: var(--ink-3);
+  text-align: center;
+}
+
+/* Edit-mode header — identity glyph + name + status, actions right. */
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 18px;
+  border-bottom: 0.5px solid var(--line);
+}
+.headIdentity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.headIdentity > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.headName {
+  font: var(--t-h2);
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.headActions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Name / Instructions — labeled fields, Instructions is the visual hero. */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.fieldLabel {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-3);
+}
+.input {
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 10px 13px;
+  width: 100%;
+}
+.input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.input::placeholder {
+  color: var(--ink-4);
+}
+.mono {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  letter-spacing: 0.01em;
+}
+.textarea {
+  font: inherit;
+  font-size: 15.5px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 16px 17px;
+  resize: none;
+  overflow: hidden;
+  min-height: 168px;
+}
+.textarea:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.textarea::placeholder {
+  color: var(--ink-4);
+}
+
+/* Sections + trigger picker. */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sectionTitle {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.warnBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: var(--r-md);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--c-amber);
+  background: color-mix(in srgb, var(--c-amber) 12%, transparent);
+  border: 0.5px solid color-mix(in srgb, var(--c-amber) 32%, transparent);
+}
+.warnBanner svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.trigGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.trigCard {
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+  overflow: hidden;
+  transition: border-color 0.14s ease;
+}
+.trigCardSelected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.trigHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 13px 15px;
+  background: none;
+  border: none;
+  font: inherit;
+  cursor: pointer;
+}
+.trigIcon {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink-3);
+}
+.trigCardSelected .trigIcon {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+}
+.trigBody {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.trigTitle {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.trigDesc {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.trigDetail {
+  padding: 0 15px 15px 59px;
+}
+.trigFields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.subField {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.subFieldLabel {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-4);
+  text-transform: uppercase;
+}
+.trigHint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.trigHint code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+.cronPreview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.cronPreviewLbl {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  margin-right: 2px;
+}
+.cronPreviewPill {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  background: var(--bg-sunken);
+  border: 0.5px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+
+.webhookRow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.webhookUrl {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-2);
+  background: var(--bg-sunken);
+  border: 0.5px solid var(--line);
+  border-radius: 7px;
+  padding: 5px 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.regenBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  background: none;
+  border: 0.5px solid var(--line-strong);
+  border-radius: 7px;
+  padding: 5px 9px;
+  cursor: pointer;
+}
+.regenBtn:hover {
+  color: var(--ink);
+  background: var(--bg-sunken);
+}
+.regenBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Tabs — Connectors / Behavior / Notifications. */
+.tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 0.5px solid var(--line);
+}
+.tab {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-3);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 9px 4px;
+  margin-right: 18px;
+  cursor: pointer;
+}
+.tab:hover {
+  color: var(--ink);
+}
+.tabActive {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+.tabPanel {
+  padding-top: 14px;
+}
+.emptyPanel p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+/* Connectors tab — chip groups (MCPs/tools/secrets/connector/vault access). */
+.connectorsPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.connGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.connGroupLbl {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  font-size: 12px;
+  color: var(--ink-2);
+  background: var(--bg-sunken);
+  border: 0.5px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+.chipMono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.vaultPurpose {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+/* Notifications tab — onFailure handoff + model meta line. */
+.notifPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.notifLine {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+.notifLine code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.notifMeta {
+  font-size: 11.5px;
+  color: var(--ink-4);
+}
+
+/* Behavior tab — enable toggle + standing grants + explainer. */
+.behaviorPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.enableRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.enableLabel {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.enableHint {
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.switch {
+  position: relative;
+  display: inline-flex;
+  width: 38px;
+  height: 22px;
+  cursor: pointer;
+  flex: none;
+}
+.switch input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  margin: 0;
+}
+.switchTrack {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--ink-4);
+  transition: background 0.16s ease;
+}
+.switchTrack::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.16s ease;
+}
+.switch input:checked + .switchTrack {
+  background: var(--success);
+}
+.switch input:checked + .switchTrack::after {
+  transform: translateX(16px);
+}
+.behaviorExplainer {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+.grants {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.grantsLbl {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.grantRow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border: 0.5px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-elev);
+}
+.grantRowRevoked {
+  opacity: 0.55;
+}
+.grantVerb {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  background: var(--bg-sunken);
+  border-radius: 5px;
+  padding: 2px 6px;
+}
+.grantTarget {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.grantRevoked {
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.grantRevokeBtn {
+  flex: none;
+  font: inherit;
+  font-size: 11px;
+  color: var(--danger);
+  background: none;
+  border: 0.5px solid color-mix(in srgb, var(--danger) 35%, var(--line));
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.grantRevokeBtn:hover {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+/* Footer — right-aligned actions. */
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 0.5px solid var(--line);
+}

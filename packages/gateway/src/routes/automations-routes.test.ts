@@ -11,7 +11,12 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { AnalyticsStore, InsightsStore, makeJournalDbProvider } from '@centraid/app-engine';
+import {
+  AnalyticsStore,
+  ConversationStore,
+  InsightsStore,
+  makeJournalDbProvider,
+} from '@centraid/app-engine';
 import { WorktreeStore } from '../worktree-store/index.js';
 import { makeAutomationsRouteHandler } from './automations-routes.ts';
 import { SseSubscriberCap } from './sse-cap.ts';
@@ -104,6 +109,42 @@ test('GET /centraid/_automations/runs returns an empty feed', async () => {
   const r = await call('GET', '/centraid/_automations/runs?limit=10');
   expect(r.status).toBe(200);
   expect(r.body).toEqual({ runs: [] });
+});
+
+// The `run_summary` view only covers finished turns; the thread screen stays
+// put on "Run now", so the ref-scoped feed must surface an IN-FLIGHT fire
+// (started, not ended) as a running record or a slow run is invisible.
+test('GET runs?ref= includes an in-flight fire alongside finished summaries', async () => {
+  const store = new ConversationStore(makeJournalDbProvider(path.join(dir, 'journal.db')));
+  const ref = 'brief/brief';
+  store.createAutomationRun('conv-live', ref, 'brief', 'Brief');
+  store.insertTurn({
+    turnId: `${ref}:100:aaaaaaaa`,
+    conversationId: 'conv-live',
+    triggerKind: 'manual',
+    triggerOrigin: 'manual',
+    startedAt: 100,
+  });
+  store.createAutomationRun('conv-done', ref, 'brief', 'Brief');
+  store.insertTurn({
+    turnId: `${ref}:50:bbbbbbbb`,
+    conversationId: 'conv-done',
+    triggerKind: 'manual',
+    triggerOrigin: 'manual',
+    startedAt: 50,
+  });
+  store.finishTurn({ turnId: `${ref}:50:bbbbbbbb`, endedAt: 60, ok: true });
+
+  const r = await call('GET', `/centraid/_automations/runs?ref=${encodeURIComponent(ref)}`);
+  expect(r.status).toBe(200);
+  const runs = (r.body as { runs: Array<{ runId: string; endedAt?: number; ok: boolean }> }).runs;
+  expect(runs.map((x) => x.runId)).toEqual([`${ref}:100:aaaaaaaa`, `${ref}:50:bbbbbbbb`]);
+  expect(runs[0]?.endedAt).toBeUndefined(); // in-flight → renders as "running"
+  expect(runs[1]?.endedAt).toBe(60);
+  // No ref filter → finished-only view semantics are unchanged.
+  const all = await call('GET', '/centraid/_automations/runs?limit=10');
+  const allRuns = (all.body as { runs: Array<{ runId: string }> }).runs;
+  expect(allRuns.map((x) => x.runId)).toEqual([`${ref}:50:bbbbbbbb`]);
 });
 
 test('GET /centraid/_automations/run?runId= returns null for an unknown run', async () => {

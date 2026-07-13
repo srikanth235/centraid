@@ -1,3 +1,7 @@
+/* Automations overview — "the fleet" (Automations UI revamp, see
+   receipts/issue-387-automations-ui-revamp.md). Flight-recorder register: hairlines, mono for
+   machine truth (trigger exprs, fire times), identity hue as the only
+   per-row color accent, amber only for pending consent. No gradients. */
 @keyframes cd-pulse {
   0%,
   100% {
@@ -10,56 +14,282 @@
   }
 }
 
-.ov {
-  max-width: 1080px;
+.page {
+  max-width: 1040px;
   margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
 }
-.ovHead {
+
+/* Header — h1 + live-count subtitle, actions right-aligned. */
+.head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px 24px;
   flex-wrap: wrap;
-  margin-bottom: 28px;
 }
-.ovTitleRow {
+.headText {
   display: flex;
-  align-items: center;
-  gap: 11px;
-  margin-bottom: 6px;
+  flex-direction: column;
+  gap: 6px;
 }
-.titleIcon {
-  flex: none;
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  background: linear-gradient(155deg, var(--accent-light), var(--accent-deep));
-}
-.ovTitle {
+.title {
   margin: 0;
-  font-family: var(--font-display);
-  font-size: 28px;
-  font-weight: 600;
-  letter-spacing: -0.025em;
+  font: var(--t-h2);
   color: var(--ink);
 }
-.ovSub {
+.subtitle {
   margin: 0;
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--ink-3);
 }
-/* Header action buttons must never wrap their label onto two lines, even
-   when the actions row wraps below the title block on narrow widths
-   (`.ovHead` above handles that wrap via flex-wrap). Local rule only —
-   the shared `au.auBtn` stays untouched since other screens use it too. */
-.headBtn {
+.actions {
   flex: none;
+  display: flex;
+  gap: 9px;
+  align-items: center;
+}
+
+/* Section registers — small-caps mono labels, the sidebar's PAGES register. */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+}
+.sectionLabel {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.sectionCount {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-4);
+}
+
+/* Fleet — one hairline-separated row per automation. */
+.fleet {
+  display: flex;
+  flex-direction: column;
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-md, 12px);
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+  padding: 13px 16px 13px 15px;
+  border: none;
+  border-bottom: 0.5px solid var(--line);
+  background: none;
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+.fleet .row:last-child {
+  border-bottom: none;
+}
+.row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2.5px;
+  background: var(--ink-4);
+}
+.row[data-hue]::before {
+  background: var(--au-hue);
+}
+.row:hover {
+  background: color-mix(in srgb, var(--ink) 3.5%, transparent);
+}
+.row:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.rowMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.rowNameLine {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.rowName {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
+.rowMeta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.rowNext {
+  font-size: 11px;
+  color: var(--ink-4);
+}
+.rowLast {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.lastDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  flex: none;
+  background: var(--ink-4);
+}
+.lastDot[data-ok='true'] {
+  background: var(--success);
+}
+.lastDot[data-ok='false'] {
+  background: var(--danger);
+}
+.attentionBadge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--c-amber);
+  background: color-mix(in srgb, var(--c-amber) 16%, transparent);
+  border: 0.5px solid color-mix(in srgb, var(--c-amber) 32%, transparent);
+}
+.chev {
+  flex: none;
+  display: inline-flex;
+  color: var(--ink-4);
+}
+
+/* Recent activity — compact date-grouped run feed. */
+.activity {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.activityGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.activityGroupLabel {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  padding-left: 2px;
+}
+.activityList {
+  display: flex;
+  flex-direction: column;
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-md, 12px);
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+.activityRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  border: none;
+  border-bottom: 0.5px solid var(--line);
+  background: none;
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+.activityList .activityRow:last-child {
+  border-bottom: none;
+}
+.activityRow:hover {
+  background: color-mix(in srgb, var(--ink) 3.5%, transparent);
+}
+.activityRow:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.activityDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  flex: none;
+  background: var(--success);
+}
+.activityDot[data-ok='false'] {
+  background: var(--danger);
+}
+.activityName {
+  flex: none;
+  max-width: 220px;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.activityOrigin {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.activityWhen {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--ink-4);
+}
+.activityEmpty {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+/* Empty state. */
 .empty {
   display: flex;
   flex-direction: column;
@@ -77,153 +307,41 @@
   display: grid;
   place-items: center;
   border-radius: 14px;
-  background: linear-gradient(160deg, var(--accent-light), var(--accent-deep));
-  color: #fff;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
 }
 .emptyTitle {
-  font-family: var(--font-display);
+  font: var(--t-h2);
   font-size: 16px;
-  font-weight: 600;
   color: var(--ink);
 }
 .emptyText {
+  margin: 0;
   max-width: 420px;
   font-size: 13px;
   line-height: 1.55;
   color: var(--ink-3);
 }
-.ovSec {
+.emptyActions {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
-  margin-bottom: 13px;
+  gap: 9px;
+  margin-top: 4px;
 }
-.ovSecT {
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-}
-.ovSecM {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--ink-3);
-}
-.ovRuns {
-  margin-top: 26px;
-}
-.ovViewall {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 4px 8px;
-  border: none;
-  border-radius: 7px;
-  background: none;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--accent);
-  cursor: pointer;
-  transition: background 0.14s ease;
-}
-.ovViewall:hover {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-}
-.ovViewall svg {
-  width: 13px;
-  height: 13px;
-}
-.ovList {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.ovStream {
-  display: flex;
-  flex-direction: column;
-  border: 0.5px solid var(--line);
-  border-radius: 12px;
-  background: var(--bg-elev);
-  overflow: hidden;
-}
-.ovStreamEmpty {
-  padding: 28px 18px;
-  text-align: center;
-  font-size: 13px;
-  color: var(--ink-3);
-}
-.health {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-  margin-bottom: 22px;
-}
-.healthTile {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 14px 16px;
-  border: 0.5px solid var(--line);
-  border-radius: 12px;
-  background: var(--bg-elev);
-}
-.healthIc {
-  flex: none;
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--au-health-tone, var(--ink)) 12%, transparent);
-  color: var(--au-health-tone, var(--ink-3));
-}
-.healthTile[data-tone='active'] {
-  --au-health-tone: var(--success);
-}
-.healthTile[data-tone='paused'] {
-  --au-health-tone: var(--ink-3);
-}
-.healthTile[data-tone='draft'] {
-  --au-health-tone: var(--icon-amber);
-}
-.healthTile[data-tone='attention'] {
-  --au-health-tone: var(--danger);
-}
-.healthV {
-  display: block;
-  font-family: var(--font-display);
-  font-size: 22px;
-  font-weight: 600;
-  line-height: 1;
-  color: var(--ink);
-}
-.healthK {
-  display: block;
-  margin-top: 3px;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
+
+/* Loading / error. */
 .loadingLabel {
   font-size: 13px;
   color: var(--ink-3);
-  margin: 4px 0 14px;
 }
-.skelStrip {
-  height: 60px;
-  border-radius: 12px;
-  margin-bottom: 22px;
+.skelHead {
+  height: 44px;
+  border-radius: 10px;
   background: color-mix(in srgb, var(--ink) 6%, transparent);
   animation: cd-pulse 1.4s ease-in-out infinite;
 }
 .skelRow {
-  height: 66px;
-  border-radius: 12px;
+  height: 60px;
+  border-bottom: 0.5px solid var(--line);
   background: color-mix(in srgb, var(--ink) 6%, transparent);
   animation: cd-pulse 1.4s ease-in-out infinite;
 }
@@ -237,7 +355,7 @@
   animation-delay: 0.36s;
 }
 @media (prefers-reduced-motion: reduce) {
-  .skelStrip,
+  .skelHead,
   .skelRow {
     animation: none;
   }
@@ -254,9 +372,8 @@
   color: var(--danger);
 }
 .errorTitle {
-  font-family: var(--font-display);
+  font: var(--t-h2);
   font-size: 17px;
-  font-weight: 600;
   color: var(--ink);
 }
 .errorText {
@@ -264,9 +381,4 @@
   font-size: 13px;
   color: var(--ink-3);
   margin-bottom: 6px;
-}
-@media (max-width: 1080px) {
-  .health {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }
