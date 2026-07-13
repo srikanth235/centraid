@@ -536,5 +536,7 @@ export * from './gateway-client-storage.js';
 export {
   listGatewayDevices,
   revokeGatewayDevice,
+  createGatewayDeviceTicket,
   type CentraidGatewayDevice,
+  type GatewayDeviceTicket,
 } from './gateway-client-devices.js';

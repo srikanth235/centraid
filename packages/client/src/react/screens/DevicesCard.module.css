@@ -196,3 +196,115 @@
     padding-left: 46px;
   }
 }
+
+/* ── Pair-a-device panel ─────────────────────────────────────────────── */
+
+.headRight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pair {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 0.5px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+.pairLead {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.pairLead strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.pairForm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.ttlGroup {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.ttlPreset {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  padding: 5px 11px;
+  cursor: pointer;
+}
+.ttlPreset + .ttlPreset {
+  border-left: 1px solid var(--line);
+}
+.ttlPreset:hover:not(:disabled) {
+  color: var(--ink);
+}
+.ttlPresetOn {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent-deep, var(--accent));
+}
+
+.pairActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.generateBtn {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.generateBtn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 88%, #000);
+}
+
+.ticketRow {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+.ticket {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--surface-2, color-mix(in srgb, var(--ink) 6%, transparent));
+  border: 0.5px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  overflow-wrap: anywhere;
+  max-height: 88px;
+  overflow-y: auto;
+}
+.copyBtn {
+  flex: none;
+  align-self: flex-start;
+}
+
+.pairFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pairExpiry {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+}

@@ -3,6 +3,12 @@
  * revoke gesture over HTTP (issue #376), the wire twin of `cli/device-admin.ts`'s
  * `devices list` / `devices revoke`. Backs the desktop's Gateway → Devices card.
  *
+ * `POST /centraid/_gateway/devices/ticket` — the inverse of revoke: MINT a
+ * one-time pairing ticket from the app, the HTTP twin of `centraid-gateway
+ * pair`. Same caller-plane scope; the target vault is `body.vaultId` or the
+ * addressed `x-centraid-vault`. Requires the daemon's iroh endpoint (the
+ * ticket's `gw` pin) — 409 `no_iroh_endpoint` when absent.
+ *
  * Scope is caller-plane, NOT admin-only — the browser PWA shell authorizes as
  * the DEVICE plane (a per-device HTTP token, `device-token-store.ts`), and a
  * user must be able to see + revoke their own device from that shell. The
@@ -27,9 +33,14 @@ import { AUTHED_DEVICE_HEADER } from '@centraid/app-engine';
 import type { RouteHandler } from '../serve/build-gateway.js';
 import type { EnrollmentStore, DeviceEnrollment } from '../serve/enrollment-store.js';
 import type { DeviceTokenStore } from '../serve/device-token-store.js';
-import { sendJson } from './route-helpers.js';
+import type { PairingTicketStore } from '../serve/pairing-store.js';
+import { encodePairingTicket, DEFAULT_TICKET_TTL_MS } from '../serve/pairing-store.js';
+import { readJson, sendJson } from './route-helpers.js';
 
 const DEVICES_PATH = '/centraid/_gateway/devices';
+const DEVICES_TICKET_PATH = `${DEVICES_PATH}/ticket`;
+/** The canonical vault-addressing header (mirrors the client's `VAULT_HEADER`). */
+const VAULT_HEADER = 'x-centraid-vault';
 
 /**
  * One paired device on the wire (mirrors the client's `CentraidGatewayDevice`
@@ -52,8 +63,16 @@ interface DeviceDTO {
 export interface DevicesRouteDeps {
   enrollments: EnrollmentStore;
   deviceTokens: DeviceTokenStore;
+  /** One-time pairing-ticket mint store — the `POST /devices/ticket` twin of `pair`. */
+  tickets: PairingTicketStore;
   /** Resolves a vault id to its owner-facing name; undefined when unknown. */
   vaultName: (vaultId: string) => string | undefined;
+  /**
+   * The gateway's iroh EndpointTicket (identity pin + relay hint) for a minted
+   * ticket's `gw` field, read lazily at mint time; undefined before the daemon
+   * has an endpoint (or on the desktop embed).
+   */
+  endpointTicket?: () => string | undefined;
 }
 
 /** The caller's device key when it authorized as the device plane, else undefined (admin). */
@@ -92,6 +111,69 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
         .map((row) => toDto(row, deps, callerKey, lastUsedFor(row.endpointId)))
         .sort(compareDevices);
       return sendJson(res, 200, { devices });
+    }
+
+    // POST /centraid/_gateway/devices/ticket — mint a one-time pairing ticket
+    // (the inverse of revoke; the wire twin of `cli/device-admin.ts`'s `pair`).
+    // Matched BEFORE the DELETE `/:id` branch so `ticket` isn't read as an id.
+    if (url.pathname === DEVICES_TICKET_PATH) {
+      if (method !== 'POST') {
+        return sendJson(res, 405, { error: 'method_not_allowed' });
+      }
+      let body: Record<string, unknown>;
+      try {
+        body = await readJson(req);
+      } catch {
+        return sendJson(res, 400, { error: 'invalid_body' });
+      }
+      // Target vault: explicit `body.vaultId`, else the addressed-vault header
+      // the shell/web control session stamps on every request.
+      const headerVault = req.headers[VAULT_HEADER];
+      const target =
+        typeof body.vaultId === 'string'
+          ? body.vaultId
+          : typeof headerVault === 'string'
+            ? headerVault
+            : undefined;
+      if (target === undefined) {
+        return sendJson(res, 400, { error: 'vault_required' });
+      }
+      // Scope + existence guard (no existence leak — a device caller outside
+      // the vault, or an unknown vault, both 404 the same way).
+      if (!isAllowed(target) || deps.vaultName(target) === undefined) {
+        return sendJson(res, 404, { error: 'not_found' });
+      }
+      const ttlMs =
+        typeof body.ttlMinutes === 'number' && body.ttlMinutes > 0
+          ? body.ttlMinutes * 60_000
+          : DEFAULT_TICKET_TTL_MS;
+      // `gw` is required in `PairingTicketPayload`; a ticket without the iroh
+      // endpoint pin can't be redeemed, so refuse rather than mint a dud.
+      const gw = deps.endpointTicket?.();
+      if (gw === undefined) {
+        return sendJson(res, 409, {
+          error: 'no_iroh_endpoint',
+          message:
+            'gateway has no iroh endpoint identity yet — start the daemon so it mints its endpoint',
+        });
+      }
+      const minted = deps.tickets.mint(target, ttlMs);
+      const token = encodePairingTicket({
+        v: 1,
+        kind: 'centraid-gw-pair',
+        gw,
+        t: minted.ticketId,
+        s: minted.secret,
+        vaultName: deps.vaultName(target) ?? target,
+        exp: minted.expiresAt,
+      });
+      return sendJson(res, 200, {
+        ok: true,
+        ticket: token,
+        vaultId: target,
+        vaultName: deps.vaultName(target),
+        expiresAt: new Date(minted.expiresAt).toISOString(),
+      });
     }
 
     // /centraid/_gateway/devices/:enrollmentId

@@ -56,6 +56,35 @@ export async function listGatewayDevices(): Promise<CentraidGatewayDevice[]> {
   }
 }
 
+/** A freshly minted one-time pairing ticket (the inverse of revoke). */
+export interface GatewayDeviceTicket {
+  /** The pasteable one-line token for the client's "Add gateway" dialog. */
+  ticket: string;
+  vaultId: string;
+  vaultName?: string;
+  /** Ticket expiry, ISO-8601. */
+  expiresAt: string;
+}
+
+/**
+ * Mint a device-pairing ticket from the app (the operator twin of
+ * `centraid-gateway pair`). The gateway scopes it to the caller's plane and
+ * defaults the target vault to the active `x-centraid-vault` when none is given.
+ */
+export async function createGatewayDeviceTicket(input?: {
+  vaultId?: string;
+  ttlMinutes?: number;
+  label?: string;
+}): Promise<GatewayDeviceTicket> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, '/centraid/_gateway/devices/ticket', {
+    method: 'POST',
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify(input ?? {}),
+  });
+  return readJson<GatewayDeviceTicket & { ok: true }>(res, 'mint pairing ticket');
+}
+
 /** Revoke one paired device (cascades its HTTP token). Idempotent — `removed:false` when already gone. */
 export async function revokeGatewayDevice(deviceId: string): Promise<{ removed: boolean }> {
   const { baseUrl, token } = await auth();

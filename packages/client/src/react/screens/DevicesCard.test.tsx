@@ -110,4 +110,51 @@ describe('DevicesCard', () => {
     expect(el.textContent).toContain('Couldn’t list paired devices');
     expect(el.textContent).toContain('offline');
   });
+
+  it('mints and shows a pairing ticket when onCreateTicket is provided', async () => {
+    const onCreateTicket = vi.fn().mockResolvedValue({
+      ticket: 'CENTRAID-TICKET-XYZ',
+      vaultId: 'v1',
+      vaultName: 'Personal',
+      expiresAt: new Date(NOW + 900_000).toISOString(),
+    });
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    await act(async () => {
+      root = createRoot(container as HTMLDivElement);
+      root.render(
+        <DevicesCard
+          now={NOW}
+          loadDevices={vi.fn().mockResolvedValue([])}
+          onRevokeDevice={() => Promise.resolve({ removed: true })}
+          onCreateTicket={onCreateTicket}
+        />,
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // Open the pairing panel.
+    const pairBtn = [...container.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Pair a device'),
+    );
+    expect(pairBtn).toBeTruthy();
+    await act(async () => pairBtn!.click());
+
+    // Generate the ticket.
+    const genBtn = [...container.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === 'Generate ticket',
+    );
+    await act(async () => {
+      genBtn!.click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(onCreateTicket).toHaveBeenCalledWith({ ttlMinutes: 15 });
+    expect(container.textContent).toContain('CENTRAID-TICKET-XYZ');
+    expect(container.textContent).toContain('Personal');
+  });
 });

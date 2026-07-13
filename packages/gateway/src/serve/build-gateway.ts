@@ -187,6 +187,12 @@ export interface BuildGatewayOptions {
     enrollments: EnrollmentStore;
     tickets: PairingTicketStore;
     deviceTokens: DeviceTokenStore;
+    /**
+     * The gateway's iroh EndpointTicket for a HTTP-minted pairing ticket's
+     * `gw` field (`POST /centraid/_gateway/devices/ticket`), read lazily at
+     * mint time. Undefined before the daemon has an endpoint.
+     */
+    endpointTicket?: () => string | undefined;
   };
   /**
    * Durable PWA control sessions (issue #376). When `controlsFile` is set,
@@ -1619,6 +1625,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           makeDevicesRouteHandler({
             enrollments: options.devicePairing.enrollments,
             deviceTokens: options.devicePairing.deviceTokens,
+            tickets: options.devicePairing.tickets,
+            endpointTicket: options.devicePairing.endpointTicket,
             vaultName: (id) => vaultRegistry.get(id)?.name,
           }),
         ]

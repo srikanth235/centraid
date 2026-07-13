@@ -1,6 +1,7 @@
 import { type JSX, useEffect, useState } from 'react';
 import {
   confirmGatewayRecoveryKit,
+  createGatewayDeviceTicket,
   getGatewayBackupStatus,
   listGatewayDevices,
   revokeGatewayDevice,
@@ -113,6 +114,7 @@ export default function GatewayRoute(): JSX.Element {
         onOpenStorageSettings={() => navigate({ kind: 'settings', page: 'storage' })}
         loadDevices={listGatewayDevices}
         onRevokeDevice={revokeGatewayDevice}
+        onCreateDeviceTicket={createGatewayDeviceTicket}
         onRestartGateway={() => window.CentraidApi.restartGateway()}
         onExportDiagnostics={() => window.CentraidApi.exportGatewayDiagnostics()}
       />

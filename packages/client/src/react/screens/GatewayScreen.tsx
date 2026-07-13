@@ -83,6 +83,7 @@ export interface GatewayScreenProps {
    *  unchanged; the card is simply omitted when unwired. */
   loadDevices?: DevicesCardProps['loadDevices'];
   onRevokeDevice?: DevicesCardProps['onRevokeDevice'];
+  onCreateDeviceTicket?: DevicesCardProps['onCreateTicket'];
   /**
    * Restart the local embedded gateway (Overview tab, near the runtime
    * status). Refused for a remote gateway — main answers `{ok: false}`
@@ -374,6 +375,9 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
                 now={now}
                 loadDevices={props.loadDevices}
                 onRevokeDevice={props.onRevokeDevice}
+                {...(props.onCreateDeviceTicket
+                  ? { onCreateTicket: props.onCreateDeviceTicket }
+                  : {})}
               />
             ) : null}
           </div>
