@@ -1,7 +1,4 @@
-import initWasm, {
-  BrowserEndpoint,
-  type BrowserResponse,
-} from './generated/centraid_web_iroh.js';
+import initWasm, { BrowserEndpoint, type BrowserResponse } from './generated/centraid_web_iroh.js';
 import { loadConnection } from './web-state.js';
 
 const KEY_STORAGE = 'centraid.web.v1.iroh-device-key';
@@ -137,9 +134,17 @@ async function bridgeFetch(message: BridgeRequest): Promise<BrowserResponse> {
     throw new Error('No Iroh gateway is connected.');
   }
   const headers = { ...message.headers };
+  // Every request on this path originates from a generated app in the SW
+  // bridge, so the auth mode is fixed by PROVENANCE, not by whether a cookie
+  // happens to be in memory. The marker must be set unconditionally: the
+  // desktop tunnel keys off it to STRIP the device bearer. Gating it on the
+  // cookie (which the browser wipes when it kills an idle service worker)
+  // would let an idle app's requests fall through to the full device bearer —
+  // a privilege escalation. No cookie means the gateway rejects with 401,
+  // never an escalation. Do not "optimize" this back behind the cookie check.
+  headers['x-centraid-tunnel-auth-mode'] = 'web-session';
   if (message.sessionCookie) {
     headers['cookie'] = message.sessionCookie;
-    headers['x-centraid-tunnel-auth-mode'] = 'web-session';
   }
   return (await endpoint()).request(
     connection.endpointTicket,
@@ -164,7 +169,8 @@ function isIrohWorker(worker: ServiceWorker | null): boolean {
 }
 
 export async function ensureIrohServiceWorker(): Promise<void> {
-  if (!('serviceWorker' in navigator)) throw new Error('This browser does not support PWA workers.');
+  if (!('serviceWorker' in navigator))
+    throw new Error('This browser does not support PWA workers.');
   const registration = await navigator.serviceWorker.register(SERVICE_WORKER_URL);
   await registration.update();
   await navigator.serviceWorker.ready;
@@ -215,7 +221,8 @@ export function installIrohServiceWorkerBridge(): void {
   navigator.serviceWorker.addEventListener('message', (event: MessageEvent<BridgeRequest>) => {
     const message = event.data;
     const port = event.ports[0];
-    if (!port || message?.type !== 'centraid:iroh-request' || message.bridgeId !== bridgeId()) return;
+    if (!port || message?.type !== 'centraid:iroh-request' || message.bridgeId !== bridgeId())
+      return;
     void (async () => {
       const response = await bridgeFetch(message);
       port.postMessage({

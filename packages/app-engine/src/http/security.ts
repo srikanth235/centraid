@@ -106,10 +106,9 @@ export function contentTypeFor(filePath: string): string {
  */
 export function staticSecurityHeaders(
   opts: { inlineScriptNonce?: string; frameAncestor?: string } = {},
-  frameAncestor = opts.frameAncestor,
 ): Record<string, string> {
   const scriptSrc = opts.inlineScriptNonce ? `'self' 'nonce-${opts.inlineScriptNonce}'` : "'self'";
-  const frameAncestors = frameAncestor ? `'self' ${frameAncestor}` : "'self'";
+  const frameAncestors = opts.frameAncestor ? `'self' ${opts.frameAncestor}` : "'self'";
   return {
     'X-Content-Type-Options': 'nosniff',
     'Content-Security-Policy': `default-src 'self'; script-src ${scriptSrc}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors ${frameAncestors}`,

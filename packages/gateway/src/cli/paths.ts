@@ -25,6 +25,7 @@
  *     devices.json          — device enrollments: device key ↔ vault (#289)
  *     pairing-tickets.json  — one-time pairing tickets, secret hashes only (#289)
  *     device-tokens.json    — per-device HTTP bearer tokens, secret hashes only (#376)
+ *     web-sessions.json     — durable PWA control-browser sessions, cookie hashes only (#376)
  *     endpoint-key.bin      — the gateway's persistent iroh secret key (#289)
  *     endpoint.json         — the live endpoint's id + dial ticket, for the pair CLI (#289)
  */
@@ -41,6 +42,12 @@ export interface DaemonLayout extends GatewayPaths {
   pairingTicketsFile: string;
   /** Per-device HTTP bearer tokens — secret hashes only (issue #376). */
   deviceTokensFile: string;
+  /**
+   * Durable PWA control-browser sessions — cookie hashes only (issue #376).
+   * Lets a web pairing survive a gateway restart / the sliding idle window
+   * instead of forcing a fresh pairing ticket every time.
+   */
+  webSessionsFile: string;
   /** The gateway's persistent iroh secret key (32 bytes, mode 0o600). */
   endpointKeyFile: string;
   /**
@@ -69,6 +76,7 @@ export function daemonLayoutFor(dataDir: string): DaemonLayout {
     devicesFile: path.join(abs, 'devices.json'),
     pairingTicketsFile: path.join(abs, 'pairing-tickets.json'),
     deviceTokensFile: path.join(abs, 'device-tokens.json'),
+    webSessionsFile: path.join(abs, 'web-sessions.json'),
     endpointKeyFile: path.join(abs, 'endpoint-key.bin'),
     endpointStateFile: path.join(abs, 'endpoint.json'),
   };

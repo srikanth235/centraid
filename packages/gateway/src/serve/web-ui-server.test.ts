@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
+import http from 'node:http';
 import { promises as fs } from 'node:fs';
+import { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { startWebUiServer, type WebUiServerHandle } from './web-ui-server.js';
@@ -12,6 +14,10 @@ beforeEach(async () => {
   await fs.mkdir(path.join(root, 'assets'));
   await fs.writeFile(path.join(root, 'index.html'), '<!doctype html><div id="root"></div>');
   await fs.writeFile(path.join(root, 'assets', 'app.js'), 'export {};');
+  await fs.writeFile(path.join(root, 'assets', 'centraid_web_iroh_bg.wasm'), '\0asm');
+  await fs.writeFile(path.join(root, 'sw.js'), 'self.addEventListener("fetch", () => {});');
+  await fs.writeFile(path.join(root, 'manifest.webmanifest'), '{"name":"Centraid"}');
+  await fs.writeFile(path.join(root, 'centraid.svg'), '<svg/>');
   server = await startWebUiServer({
     rootDir: root,
     apiUrl: 'http://127.0.0.1:8765',
@@ -29,9 +35,46 @@ test('serves the PWA shell with a strict API-and-frame CSP', async () => {
   expect(await response.text()).toContain('id="root"');
   const csp = response.headers.get('content-security-policy') ?? '';
   expect(csp).toContain("connect-src 'self' http://127.0.0.1:8765");
-  expect(csp).toContain('frame-src http://127.0.0.1:8765');
+  expect(csp).toContain("frame-src 'self' http://127.0.0.1:8765");
   expect(csp).toContain("frame-ancestors 'none'");
   expect(response.headers.get('cache-control')).toBe('no-store');
+});
+
+test('CSP admits the Iroh/WASM transport (wasm-eval, relay wss, same-origin frame)', async () => {
+  const csp = (await fetch(server.url)).headers.get('content-security-policy') ?? '';
+  // WebAssembly.instantiate needs 'wasm-unsafe-eval' in script-src.
+  expect(csp).toContain("script-src 'self' 'wasm-unsafe-eval'");
+  // Browser Iroh is relay-only: it opens a wss:// WebSocket + https to the n0
+  // relay. connect-src must admit both while keeping 'self' and the API origin.
+  expect(csp).toContain("connect-src 'self' http://127.0.0.1:8765 https: wss:");
+  // Iroh-mode apps iframe a same-origin virtual URL, so frame-src needs 'self'
+  // alongside the direct-HTTP API origin.
+  expect(csp).toContain("frame-src 'self' http://127.0.0.1:8765");
+});
+
+test('serves .wasm with the application/wasm MIME type for streaming instantiation', async () => {
+  const wasm = await fetch(`${server.url}/assets/centraid_web_iroh_bg.wasm`);
+  expect(wasm.status).toBe(200);
+  expect(wasm.headers.get('content-type')).toBe('application/wasm');
+});
+
+test('never pins unhashed root files as year-immutable', async () => {
+  // Content-hashed /assets/ files are safe to pin forever.
+  const hashed = await fetch(`${server.url}/assets/app.js`);
+  expect(hashed.headers.get('cache-control')).toContain('immutable');
+
+  // Stable-URL root files must revalidate — a year-immutable copy would strand
+  // redeploys. The service worker + manifest gate updates, so they no-cache.
+  const sw = await fetch(`${server.url}/sw.js`);
+  expect(sw.headers.get('cache-control')).not.toContain('immutable');
+  expect(sw.headers.get('cache-control')).toBe('no-cache');
+
+  const manifest = await fetch(`${server.url}/manifest.webmanifest`);
+  expect(manifest.headers.get('cache-control')).not.toContain('immutable');
+  expect(manifest.headers.get('cache-control')).toBe('no-cache');
+
+  const icon = await fetch(`${server.url}/centraid.svg`);
+  expect(icon.headers.get('cache-control')).not.toContain('immutable');
 });
 
 test('publishes gateway discovery and immutable versioned assets', async () => {
@@ -42,6 +85,29 @@ test('publishes gateway discovery and immutable versioned assets', async () => {
   const asset = await fetch(`${server.url}/assets/app.js`);
   expect(asset.status).toBe(200);
   expect(asset.headers.get('cache-control')).toContain('immutable');
+});
+
+test('degrades to an ephemeral port instead of failing on a collision', async () => {
+  // Occupy a port, then ask the web UI to bind exactly that port. It must not
+  // reject (which would take down the whole gateway) — it falls back to an
+  // ephemeral port and comes up on a different, listening URL.
+  const squatter = http.createServer((_req, res) => res.end());
+  await new Promise<void>((resolve) => squatter.listen(0, '127.0.0.1', resolve));
+  const taken = (squatter.address() as AddressInfo).port;
+
+  const collided = await startWebUiServer({
+    rootDir: root,
+    apiUrl: 'http://127.0.0.1:8765',
+    host: '127.0.0.1',
+    port: taken,
+  });
+  try {
+    expect(collided.url).not.toBe(`http://127.0.0.1:${taken}`);
+    expect((await fetch(collided.url)).status).toBe(200);
+  } finally {
+    await collided.close();
+    await new Promise<void>((resolve) => squatter.close(() => resolve()));
+  }
 });
 
 test('unknown client routes fall back to index without escaping the web root', async () => {

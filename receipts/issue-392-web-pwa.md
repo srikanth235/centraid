@@ -78,3 +78,13 @@ issue 354's receipt crosswalk, and the existing oversized `turn-routes.test.ts`.
 REFUTED — a fresh-context sub-agent audit was not run because the active execution
 environment explicitly prohibits delegation. The diff, checklist, and verification
 were reviewed in the primary agent context before PR creation.
+
+## Accounting
+
+<!-- Accounting rows are maintained by the agent-token-accounting and agent-steering-accounting pre-commit hooks. Keys are opaque — do not parse. -->
+
+### Costs
+
+| cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| claude-code-32b1005d-19c-1783943674-1 | claude-code | 32b1005d-19c8-430d-bc41-840babc3d08f | #392 | claude-opus-4-8 | 57488 | 2932551 | 77049713 | 493549 | 3483588 | 69.4795 | 57488 | 2932551 | 77049713 | 493549 |  |

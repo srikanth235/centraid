@@ -10,8 +10,39 @@ const TYPES: Record<string, string> = {
   '.json': 'application/json; charset=utf-8',
   '.map': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
+  // `application/wasm` is required for `WebAssembly.instantiateStreaming`,
+  // which the browser Iroh/WASM transport uses to load `*_bg.wasm`. Without
+  // it the file is served as `application/octet-stream` and wasm-bindgen
+  // falls back (with a console warning) to a slower non-streaming path.
+  '.wasm': 'application/wasm',
   '.webmanifest': 'application/manifest+json',
 };
+
+/**
+ * Cache policy for a served asset.
+ *
+ * Invariant: never hand a browser a year-immutable copy of a file whose URL
+ * never changes. Only Vite's content-hashed assets (emitted under `/assets/`
+ * with a hash in the filename) get `immutable`. Everything else at the web
+ * root has a stable URL (`sw.js`, `manifest.webmanifest`, `centraid.svg`, the
+ * stable-named `*_bg.wasm`), so a long immutable cache would strand updates.
+ * `.html` is always revalidated (`no-store`); the service worker and manifest
+ * must revalidate on every load so a redeploy is picked up promptly; other
+ * unhashed root files get a modest, revalidating cache.
+ */
+function cacheControlFor(rootDir: string, served: string, extension: string): string {
+  if (extension === '.html') return 'no-store';
+  const relative = path.relative(rootDir, served);
+  if (relative.startsWith(`assets${path.sep}`)) {
+    return 'public, max-age=31536000, immutable';
+  }
+  const base = path.basename(served);
+  // The service worker and web manifest gate app updates — always revalidate.
+  if (base === 'sw.js' || extension === '.webmanifest') return 'no-cache';
+  // Other unhashed root files (icons, the stable-named wasm) can be cached
+  // briefly but must revalidate rather than be pinned for a year.
+  return 'public, max-age=3600, must-revalidate';
+}
 
 export interface WebUiServerOptions {
   rootDir: string;
@@ -61,19 +92,28 @@ export async function startWebUiServer(options: WebUiServerOptions): Promise<Web
           return;
         }
       }
-      const extension = path.extname(served ?? path.join(options.rootDir, 'index.html'));
+      const servedPath = served ?? path.join(options.rootDir, 'index.html');
+      const extension = path.extname(servedPath);
       const apiOrigin = new URL(options.apiUrl).origin;
       res.setHeader('content-type', TYPES[extension] ?? 'application/octet-stream');
-      res.setHeader(
-        'cache-control',
-        extension === '.html' ? 'no-store' : 'public, max-age=31536000, immutable',
-      );
+      res.setHeader('cache-control', cacheControlFor(options.rootDir, servedPath, extension));
       res.setHeader('x-content-type-options', 'nosniff');
       res.setHeader('referrer-policy', 'no-referrer');
       if (extension === '.html') {
+        // The PWA's headline feature is ticket-only, relay-only Iroh/WASM
+        // pairing/transport. That requires three relaxations vs. a plain
+        // static-app CSP:
+        //   - `'wasm-unsafe-eval'` in `script-src` so `WebAssembly.instantiate`
+        //     may run the Iroh WASM module.
+        //   - `https:`/`wss:` in `connect-src` so browser Iroh (relay-only) can
+        //     open its `wss://` WebSocket + HTTP to the n0 relay. Broad `wss:`/
+        //     `https:` is acceptable for a self-hosted personal gateway.
+        //   - `'self'` in `frame-src` so Iroh-mode generated apps loading from
+        //     the same-origin virtual `/__centraid_iroh__/...` URL can iframe.
+        //     `${apiOrigin}` stays for direct-HTTP mode.
         res.setHeader(
           'content-security-policy',
-          `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ${apiOrigin}; frame-src ${apiOrigin}; object-src 'none'; base-uri 'self'; frame-ancestors 'none'`,
+          `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ${apiOrigin} https: wss:; frame-src 'self' ${apiOrigin}; object-src 'none'; base-uri 'self'; frame-ancestors 'none'`,
         );
       }
       res.writeHead(200);
@@ -81,13 +121,38 @@ export async function startWebUiServer(options: WebUiServerOptions): Promise<Web
     })().catch(() => res.writeHead(500).end());
   });
 
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(options.port ?? 0, host, () => {
-      server.off('error', reject);
-      resolve();
+  // Bind the requested port, but degrade gracefully on a collision. The daemon
+  // derives the web port from its API port (`config.port + 1`); if some
+  // unrelated process already holds that port we must NOT let the rejection
+  // propagate and take down the whole gateway — the API is the critical plane,
+  // the web UI is secondary. On `EADDRINUSE` we retry once on an ephemeral
+  // port (0) and log a warning so the moved port is never silently surprising;
+  // `handle.url` then reflects the real, listening port.
+  const requestedPort = options.port ?? 0;
+  const listenOn = (port: number): Promise<void> =>
+    new Promise<void>((resolve, reject) => {
+      const onError = (error: NodeJS.ErrnoException): void => {
+        reject(error);
+      };
+      server.once('error', onError);
+      server.listen(port, host, () => {
+        server.off('error', onError);
+        resolve();
+      });
     });
-  });
+  try {
+    await listenOn(requestedPort);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'EADDRINUSE' && requestedPort !== 0) {
+      process.stderr.write(
+        `[centraid-web-ui] port ${requestedPort} is in use — falling back to an ephemeral port\n`,
+      );
+      await listenOn(0);
+    } else {
+      throw error;
+    }
+  }
   const address = server.address() as AddressInfo;
   return {
     url: `http://${host}:${address.port}`,

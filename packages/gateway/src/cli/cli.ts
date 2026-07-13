@@ -32,7 +32,7 @@
  * output is unchanged.
  */
 
-import { promises as fs } from 'node:fs';
+import { promises as fs, readFileSync } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -257,13 +257,40 @@ async function commandServe(args: string[]): Promise<void> {
     token,
     logTag: 'centraid-gateway',
     deviceAccess: devicePlane.deviceAccess,
-    devicePairing: devicePlane.pairing,
+    devicePairing: {
+      ...devicePlane.pairing,
+      // The gateway's iroh EndpointTicket for a HTTP-minted pairing ticket's
+      // `gw` field. Read lazily from the endpoint state file (written by
+      // `startEndpoint`) at mint time, well after boot — so it need not have
+      // run yet when we wire this getter.
+      endpointTicket: () => {
+        try {
+          const raw = readFileSync(layout.endpointStateFile, 'utf8');
+          const parsed = JSON.parse(raw) as { ticket?: unknown };
+          return typeof parsed.ticket === 'string' ? parsed.ticket : undefined;
+        } catch {
+          return undefined;
+        }
+      },
+    },
     authorizeBearer,
+    // Durable PWA control sessions (issue #376): persist control cookies so
+    // a web pairing survives a restart, and propagate `devices revoke` to
+    // live cookies via the SAME enrollment store the endpoint admits from.
+    webSessions: {
+      controlsFile: layout.webSessionsFile,
+      isDeviceValid: (key) => devicePlane.pairing.enrollments.isEnrolled(key),
+    },
     ...(webRoot
       ? {
           web: {
             rootDir: webRoot,
             ...(config.host ? { host: config.host } : {}),
+            // The web UI rides on the API port + 1. If that derived port is
+            // already taken, `startWebUiServer` degrades gracefully — it falls
+            // back to an ephemeral port instead of rejecting — so a web-port
+            // collision can never take down the gateway's API. `handle.webUrl`
+            // (printed below) reflects the real listening port.
             ...(config.port !== undefined && config.port < 65_535
               ? { port: config.port === 0 ? 0 : config.port + 1 }
               : {}),

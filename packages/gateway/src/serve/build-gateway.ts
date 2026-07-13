@@ -92,6 +92,7 @@ import type { PairingTicketStore } from './pairing-store.js';
 import type { DeviceTokenStore } from './device-token-store.js';
 import { makeVaultRouteHandler } from '../routes/vault-routes.js';
 import { makePairRouteHandler } from '../routes/pair-routes.js';
+import { makeDevicesRouteHandler } from '../routes/devices-routes.js';
 import { makeConnectionsRouteHandler } from '../routes/connections-routes.js';
 import { makeDemoRouteHandler } from '../routes/demo-routes.js';
 import { makeImportRouteHandler } from '../routes/import-routes.js';
@@ -191,6 +192,25 @@ export interface BuildGatewayOptions {
     enrollments: EnrollmentStore;
     tickets: PairingTicketStore;
     deviceTokens: DeviceTokenStore;
+    /**
+     * The gateway's iroh EndpointTicket for a HTTP-minted pairing ticket's
+     * `gw` field (`POST /centraid/_gateway/devices/ticket`), read lazily at
+     * mint time. Undefined before the daemon has an endpoint.
+     */
+    endpointTicket?: () => string | undefined;
+  };
+  /**
+   * Durable PWA control sessions (issue #376). When `controlsFile` is set,
+   * `WebAppSessions` persists CONTROL cookies there so a web pairing
+   * survives a gateway restart / the sliding 30-day idle window instead of
+   * forcing a fresh pairing ticket every 12h. `isDeviceValid` propagates
+   * `devices revoke` to live control/app cookies (a revoked device's cookie
+   * stops authorizing at once). Absent (desktop embed, tests) → in-memory
+   * control sessions with no revocation hook, exactly the prior behavior.
+   */
+  webSessions?: {
+    controlsFile?: string;
+    isDeviceValid?: (deviceKey: string) => boolean;
   };
   /**
    * Offsite backup engine (PROTOCOL.md/FORMAT.md), off by default. When
@@ -348,7 +368,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // aggregates it all. Hosts push externally-owned components (e.g. the
   // desktop's iroh tunnel) through `BuiltGateway.health`.
   const health = new HealthRegistry();
-  const webAppSessions = new WebAppSessions();
+  const webAppSessions = new WebAppSessions(options.webSessions ?? {});
 
   // Second-gateway detection (issue #351 tier 1): "one gateway per user" is
   // an owner-stated topology, never enforced — nothing stops a copied vault
@@ -1683,6 +1703,17 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             tickets: options.devicePairing.tickets,
             enrollments: options.devicePairing.enrollments,
             deviceTokens: options.devicePairing.deviceTokens,
+          }),
+          // Paired-device roster + revoke (issue #376): the wire twin of
+          // `cli/device-admin.ts`'s list/revoke, scoped to the caller's plane
+          // (device caller sees only its vaults; admin sees all). Mounted only
+          // when the daemon wired its device-pairing stores.
+          makeDevicesRouteHandler({
+            enrollments: options.devicePairing.enrollments,
+            deviceTokens: options.devicePairing.deviceTokens,
+            tickets: options.devicePairing.tickets,
+            endpointTicket: options.devicePairing.endpointTicket,
+            vaultName: (id) => vaultRegistry.get(id)?.name,
           }),
         ]
       : []),

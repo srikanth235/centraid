@@ -532,3 +532,14 @@ export * from './gateway-client-backup.js';
 // Storage card and the Settings → Storage screen import it from the same
 // barrel.
 export * from './gateway-client-storage.js';
+
+// The paired-device roster + revoke surface (issue #376) lives in
+// `gateway-client-devices.ts`. Re-exported here so the Gateway page's
+// Devices card imports it from the same barrel.
+export {
+  listGatewayDevices,
+  revokeGatewayDevice,
+  createGatewayDeviceTicket,
+  type CentraidGatewayDevice,
+  type GatewayDeviceTicket,
+} from './gateway-client-devices.js';
