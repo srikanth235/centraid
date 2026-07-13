@@ -28,6 +28,7 @@ function makeProps(over: Partial<AutomationEditorBridgeProps> = {}): AutomationE
     onDelete: vi.fn().mockResolvedValue(false),
     onOpenBuilder: vi.fn(),
     onOpenRun: vi.fn(),
+    onReadSource: vi.fn().mockResolvedValue({ handler: null, manifest: null }),
     onRotateWebhook: vi.fn().mockResolvedValue(true),
     onRunNow: vi.fn().mockResolvedValue(true),
     onSearchEntities: vi.fn().mockResolvedValue([]),
@@ -281,7 +282,7 @@ describe('AutomationEditorScreen — edit mode', () => {
     expect(el.textContent).not.toContain('Recompile plan');
   });
 
-  it('preserves and edits every loaded trigger, including condition where', async () => {
+  it('renders loaded condition/data triggers read-only and preserves them on save', async () => {
     const props = makeProps({
       loadData: vi.fn().mockResolvedValue(
         editData({
@@ -302,8 +303,10 @@ describe('AutomationEditorScreen — edit mode', () => {
     expect(el.querySelectorAll('[data-trigger-kind]').length).toBe(3);
     expect(button(el, '+ Webhook').disabled).toBe(false);
 
-    const where = el.querySelector('input[placeholder^="[{"]') as HTMLInputElement;
-    setValue(where, '[{"column":"status","op":"eq","value":"closed"}]');
+    // Condition/data triggers are compiler output — read-only, no editable
+    // entity/where inputs, but preserved verbatim on save.
+    expect(el.querySelector('input[placeholder^="[{"]')).toBeNull();
+    expect(el.textContent).toContain('Watches');
     await act(async () =>
       button(el, 'Save changes').dispatchEvent(new MouseEvent('click', { bubbles: true })),
     );
@@ -317,7 +320,7 @@ describe('AutomationEditorScreen — edit mode', () => {
           entity: 'core.event',
           every: '*/5 * * * *',
           kind: 'condition',
-          where: [{ column: 'status', op: 'eq', value: 'closed' }],
+          where: [{ column: 'status', op: 'eq', value: 'open' }],
         },
         { entities: ['core.party'], kind: 'data' },
       ],

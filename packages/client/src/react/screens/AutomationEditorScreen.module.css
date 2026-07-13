@@ -267,6 +267,24 @@
   font-weight: 600;
   cursor: pointer;
 }
+.triggerDerivedLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.triggerDerivedTag {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
 .fieldError {
   margin: 0;
   color: var(--c-red);
@@ -689,4 +707,126 @@
   gap: 10px;
   padding-top: 6px;
   border-top: 0.5px solid var(--line);
+}
+
+/* Compiled-plan viewer (Plan tab): read-only handler.js / automation.json. */
+.codeViewer {
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--bg-sunken);
+}
+.codeChrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px 6px 10px;
+  border-bottom: 0.5px solid var(--line);
+  background: var(--bg-elev);
+}
+.codeTabs {
+  display: inline-flex;
+  gap: 2px;
+}
+.codeTab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding: 5px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.codeTab:hover {
+  color: var(--ink);
+}
+.codeTabOn {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.codeMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.codeLang {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.codeCopy {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  appearance: none;
+  border: 0.5px solid var(--line);
+  background: var(--bg-sunken);
+  color: var(--ink-2);
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.codeCopy:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+.codeCopy:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.codeBody {
+  max-height: 420px;
+  overflow: auto;
+}
+.codePre {
+  margin: 0;
+  padding: 10px 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  tab-size: 2;
+}
+.codeLine {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 12px;
+}
+.codeLine:hover {
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+.codeGutter {
+  text-align: right;
+  color: var(--ink-4);
+  user-select: none;
+  opacity: 0.6;
+}
+.codeText {
+  white-space: pre;
+  color: var(--ink);
+  padding-right: 14px;
+}
+.codeEmpty {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+.tkCom {
+  color: var(--ink-4);
+  font-style: italic;
+}
+.tkStr {
+  color: color-mix(in srgb, var(--accent) 78%, var(--ink));
+}
+.tkNum {
+  color: color-mix(in srgb, #e0a458 80%, var(--ink));
+}
+.tkKw {
+  color: color-mix(in srgb, #7aa2f7 82%, var(--ink));
+  font-weight: 600;
 }

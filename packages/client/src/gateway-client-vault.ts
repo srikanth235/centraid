@@ -98,6 +98,16 @@ export interface VaultEntityHit {
 }
 
 /** Owner-trust entity search used by stable @-tokens in automation instructions. */
+export async function listVaultEntityTypes(): Promise<string[]> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, '/centraid/_vault/entities', {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  const body = await readJson<{ entities: string[] }>(res, 'list vault entity types');
+  return body.entities;
+}
+
 export async function searchVaultEntities(term: string): Promise<VaultEntityHit[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_vault/picker?term=${enc(term)}&limit=8`, {
