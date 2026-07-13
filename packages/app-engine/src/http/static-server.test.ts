@@ -132,6 +132,16 @@ describe('serveStatic — CSP + nonce', () => {
     expect(html).toMatch(/<script nonce="[^"]+">\(function\(\)\{var w=window;w\.centraid/);
   });
 
+  it('derives the app id when a browser transport prefixes the app path', async () => {
+    const dir = newAppDir({ 'index.html': '<html><head></head><body></body></html>' });
+    const { res, data } = mockRes();
+    await serveStatic(mockReq(), res, dir, 'index.html', { settingsInject: {} });
+    const html = data.body.toString('utf8');
+    // Iroh serves the app under /__centraid_iroh__/<bridge>/centraid/<app>/.
+    // The bridge must still identify the app for its scoped tool calls.
+    expect(html).toContain('(?:^|\\/)centraid\\/([^/]+)\\/');
+  });
+
   it('skips the bridge inject for HTML without a <head> tag', async () => {
     const dir = newAppDir({ 'index.html': '<html><body>no head</body></html>' });
     const { res, data } = mockRes();

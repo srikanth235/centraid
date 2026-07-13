@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; connect-src 'self' http://127.0.0.1:* http://localhost:*; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; frame-src http://127.0.0.1:* http://localhost:*;"
+    />
+    <title>Centraid</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <!-- Co-located component styles, bundled by Vite from the React island's
+         `*.module.css` imports (issue #325, Phase 4 CSS refactor). Blocking +
+         ahead of the module scripts below, so scoped component styles are
+         present before first paint — no FOUC as the monolithic `styles.css`
+         shrinks and per-component modules take over. -->
+    <link rel="stylesheet" href="react-boot.css" />
+  </head>
+  <body>
+    <main id="root"></main>
+    <!-- React coexistence island (issue #325, Phase 0). Hidden until the URL
+         hash is #ui-preview; the vanilla shell above owns everything else. -->
+    <div id="react-preview-root" style="display: none"></div>
+
+    <!-- app.js (the vanilla shell IIFE) retired at the #325 flip — React owns
+         #root now; onboarding and the builder are React screens mounted by
+         react-boot. chrome/profiles/app-chat stay: they register the window
+         globals the per-app chat + remaining vanilla surfaces use. -->
+    <!-- React shell bundle (Vite → dist/renderer/react-boot.js): mounts the App
+         on #root and hosts the #ui-preview gallery. -->
+    <script type="module" src="react-boot.js"></script>
+  </body>
+</html>

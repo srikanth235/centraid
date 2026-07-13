@@ -1,0 +1,62 @@
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg, #111317);
+}
+
+.web-notice {
+  align-items: center;
+  background: color-mix(in srgb, var(--bg-elev, #20242b) 94%, transparent);
+  border: 1px solid var(--line-strong, rgb(255 255 255 / 14%));
+  border-radius: 10px;
+  bottom: 18px;
+  box-shadow: var(--shadow-md, 0 12px 32px rgb(0 0 0 / 35%));
+  color: var(--ink, #f4f6f8);
+  display: flex;
+  font: var(--t-small, 400 13px/18px system-ui);
+  gap: 10px;
+  left: 50%;
+  max-width: min(520px, calc(100vw - 32px));
+  padding: 10px 12px;
+  position: fixed;
+  transform: translateX(-50%);
+  z-index: 10000;
+}
+
+.web-notice span {
+  flex: 1;
+}
+.web-notice button {
+  background: var(--accent, #3ec8b4);
+  border: 0;
+  border-radius: 6px;
+  color: #07120f;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 650;
+  padding: 6px 10px;
+}
+.web-notice button.web-notice-quiet {
+  background: transparent;
+  color: var(--ink-2, #bbc0c8);
+}
+.web-notice-offline {
+  display: none;
+}
+.web-notice-offline[data-visible] {
+  display: flex;
+}
+
+@media (display-mode: browser) and (max-width: 720px) {
+  body::before {
+    background: var(--accent, #c9ff74);
+    content: '';
+    display: block;
+    height: env(safe-area-inset-top, 0);
+  }
+}

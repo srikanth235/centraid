@@ -132,6 +132,7 @@ import { StorageUsagePoller } from '../backup/storage-usage.js';
 import { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
 import { makeStorageCredentialsResolver } from '../backup/storage-credentials.js';
 import { makeStorageRouteHandler } from '../routes/storage-routes.js';
+import { WebAppSessions } from './web-app-sessions.js';
 
 export type { DeviceAccess } from './vault-context.js';
 
@@ -280,6 +281,8 @@ export interface BuiltGateway {
    * paths) call it to settle the registry without a restart.
    */
   syncApps(vaultId?: string): Promise<void>;
+  /** Scoped cookie sessions used only by generated apps embedded in the browser PWA. */
+  webAppSessions: WebAppSessions;
   /**
    * Route handlers run after auth, before `runtime.handle` (vault routes,
    * templates, agents, then the request vault's store-backed handlers).
@@ -340,6 +343,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // aggregates it all. Hosts push externally-owned components (e.g. the
   // desktop's iroh tunnel) through `BuiltGateway.health`.
   const health = new HealthRegistry();
+  const webAppSessions = new WebAppSessions();
 
   // Second-gateway detection (issue #351 tier 1): "one gateway per user" is
   // an owner-stated topology, never enforced — nothing stops a copied vault
@@ -1578,6 +1582,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
 
   // ── Route chain ───────────────────────────────────────────────────────
   const extraHandlers: RouteHandler[] = [
+    webAppSessions.handler,
     // Gateway identity + version handshake (issue #289): cheap static
     // JSON, mounted first — health polling hits it every few seconds.
     makeGatewayInfoRouteHandler({ instanceId: instanceLease.instanceId }),
@@ -1875,6 +1880,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     appsStore: async () => (await currentVaultHost()).store,
     codeAppsDir: () => currentSettledHost().codeAppsDir(),
     syncApps,
+    webAppSessions,
     extraHandlers,
     composedHandler,
     webhookHandler,

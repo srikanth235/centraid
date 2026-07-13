@@ -105,12 +105,14 @@ export function contentTypeFor(filePath: string): string {
  * so the runtime never needs to know which specific scripts an app contains.
  */
 export function staticSecurityHeaders(
-  opts: { inlineScriptNonce?: string } = {},
+  opts: { inlineScriptNonce?: string; frameAncestor?: string } = {},
+  frameAncestor = opts.frameAncestor,
 ): Record<string, string> {
   const scriptSrc = opts.inlineScriptNonce ? `'self' 'nonce-${opts.inlineScriptNonce}'` : "'self'";
+  const frameAncestors = frameAncestor ? `'self' ${frameAncestor}` : "'self'";
   return {
     'X-Content-Type-Options': 'nosniff',
-    'Content-Security-Policy': `default-src 'self'; script-src ${scriptSrc}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'`,
+    'Content-Security-Policy': `default-src 'self'; script-src ${scriptSrc}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors ${frameAncestors}`,
     'Referrer-Policy': 'no-referrer',
   };
 }

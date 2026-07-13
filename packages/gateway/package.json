@@ -14,7 +14,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && rm -rf dist/web && cp -R ../../apps/web/dist dist/web",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run",
     "clean": "rm -rf dist"
@@ -31,6 +31,7 @@
   },
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",
+    "@centraid/web": "workspace:*",
     "@types/node": "^22.0.0",
     "typescript": "catalog:"
   },

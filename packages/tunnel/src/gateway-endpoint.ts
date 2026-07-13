@@ -32,6 +32,8 @@ import {
   readBodyToEnd,
   readHeaderFrame,
   sanitizeHeaders,
+  TUNNEL_AUTH_MODE_HEADER,
+  TUNNEL_AUTH_WEB_SESSION,
   TUNNEL_ALPN,
 } from './protocol.js';
 import type { TunnelUpstream } from './desktop-tunnel.js';
@@ -222,6 +224,8 @@ class GatewayEndpoint {
     }
     const base = new URL(upstream.baseUrl);
     const headers = sanitizeHeaders(header.headers ?? {});
+    const authMode = headers[TUNNEL_AUTH_MODE_HEADER];
+    delete headers[TUNNEL_AUTH_MODE_HEADER];
     // Identity injection: strip any client-supplied copy FIRST, then stamp
     // the connection's cryptographic identity — the device key is what the
     // QUIC handshake proved, never what the client claims.
@@ -229,7 +233,11 @@ class GatewayEndpoint {
     for (const name of Object.keys(injected)) delete headers[name.toLowerCase()];
     Object.assign(headers, injected);
     headers.host = base.host;
-    headers.authorization = `Bearer ${upstream.token}`;
+    // Browser-generated apps carry a one-app cookie minted by WebAppSessions.
+    // Omitting the broad device bearer lets the HTTP authorizer apply that
+    // cookie's route scope. The marker itself is always stripped upstream.
+    if (authMode === TUNNEL_AUTH_WEB_SESSION) delete headers.authorization;
+    else headers.authorization = `Bearer ${upstream.token}`;
     if (body.length > 0) headers['content-length'] = String(body.length);
     else delete headers['content-length'];
 

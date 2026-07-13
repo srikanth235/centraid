@@ -1,0 +1,23 @@
+{
+  "name": "Centraid",
+  "short_name": "Centraid",
+  "description": "Personal software connected to your sovereign gateway.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#111317",
+  "theme_color": "#111317",
+  "icons": [
+    {
+      "src": "/centraid.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    { "name": "Home", "url": "/#home" },
+    { "name": "Assistant", "url": "/#assistant" },
+    { "name": "Automations", "url": "/#automations" }
+  ]
+}

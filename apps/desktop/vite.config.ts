@@ -42,7 +42,7 @@ export default defineConfig({
     emptyOutDir: false,
     outDir: 'dist/renderer',
     rollupOptions: {
-      input: fromHere('src/renderer/react/boot.tsx'),
+      input: fromHere('../../packages/client/src/react/boot.tsx'),
       output: {
         assetFileNames: 'react-[name][extname]',
         chunkFileNames: 'react-[name]-[hash].js',

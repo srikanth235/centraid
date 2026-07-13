@@ -35,6 +35,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import type { BearerAuthorization } from '@centraid/app-engine';
 import { serve } from '../serve/serve.js';
 import { daemonLayoutFor, type DaemonLayout } from './paths.js';
@@ -57,6 +58,22 @@ interface ParsedServe {
   dataDir?: string;
   host?: string;
   port?: number;
+}
+
+async function bundledWebRoot(): Promise<string | undefined> {
+  const candidates = [
+    fileURLToPath(new URL('../web', import.meta.url)),
+    fileURLToPath(new URL('../../dist/web', import.meta.url)),
+  ];
+  for (const candidate of candidates) {
+    try {
+      await fs.access(path.join(candidate, 'index.html'));
+      return candidate;
+    } catch {
+      // Try the source-runner/built-package alternative.
+    }
+  }
+  return undefined;
 }
 
 function fail(message: string, code = 1): never {
@@ -230,6 +247,7 @@ async function commandServe(args: string[]): Promise<void> {
     const device = devicePlane.pairing.deviceTokens.authorize(bearer);
     return device ? { plane: 'device', deviceKey: device.deviceKey } : undefined;
   };
+  const webRoot = await bundledWebRoot();
 
   const handle = await serve({
     paths: layout,
@@ -241,6 +259,17 @@ async function commandServe(args: string[]): Promise<void> {
     deviceAccess: devicePlane.deviceAccess,
     devicePairing: devicePlane.pairing,
     authorizeBearer,
+    ...(webRoot
+      ? {
+          web: {
+            rootDir: webRoot,
+            ...(config.host ? { host: config.host } : {}),
+            ...(config.port !== undefined && config.port < 65_535
+              ? { port: config.port === 0 ? 0 : config.port + 1 }
+              : {}),
+          },
+        }
+      : {}),
   });
   vaultsRef = handle.vaults;
 
@@ -269,7 +298,7 @@ async function commandServe(args: string[]): Promise<void> {
   }
 
   process.stdout.write(
-    `[centraid-gateway] listening on ${handle.url}\n[centraid-gateway] token: ${handle.token}\n[centraid-gateway] dataDir: ${path.resolve(config.dataDir)}\n`,
+    `[centraid-gateway] listening on ${handle.url}\n${handle.webUrl ? `[centraid-gateway] web app: ${handle.webUrl}\n` : ''}[centraid-gateway] token: ${handle.token}\n[centraid-gateway] dataDir: ${path.resolve(config.dataDir)}\n`,
   );
 
   const shutdown = async (signal: NodeJS.Signals): Promise<void> => {

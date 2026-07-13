@@ -19,6 +19,9 @@
 
 export const TUNNEL_ALPN = 'centraid/tunnel/1';
 export const PAIR_ALPN = 'centraid/pair/1';
+/** Ask the tunnel to defer auth to a gateway-scoped browser app session cookie. */
+export const TUNNEL_AUTH_MODE_HEADER = 'x-centraid-tunnel-auth-mode';
+export const TUNNEL_AUTH_WEB_SESSION = 'web-session';
 
 /** QUIC close code for a tunnel connection from an endpoint not in the allowlist. */
 export const CLOSE_UNAUTHORIZED = 401n;

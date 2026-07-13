@@ -79,6 +79,8 @@ export interface RuntimeHttpServerOptions {
    * single-shared-token behavior (`opts.token`).
    */
   authorizeBearer?: (bearer: string) => BearerAuthorization | undefined;
+  /** Optional cookie/request authorizer used by gateway-scoped browser app sessions. */
+  authorizeRequest?: (req: IncomingMessage) => BearerAuthorization | undefined;
 }
 
 export interface RuntimeHttpServerHandle {
@@ -102,6 +104,8 @@ const USER_STORE_PREFIX = '/_centraid-user';
  * to trust.
  */
 export const AUTHED_DEVICE_HEADER = 'x-centraid-authed-device';
+const WEB_APP_HEADER = 'x-centraid-web-app';
+const WEB_SHELL_ORIGIN_HEADER = 'x-centraid-web-shell-origin';
 
 /** What a presented bearer resolved to — the shared landlord token, or one tenant's device. */
 export type BearerAuthorization = { plane: 'admin' } | { plane: 'device'; deviceKey: string };
@@ -120,11 +124,18 @@ export type BearerAuthorization = { plane: 'admin' } | { plane: 'device'; device
  * Remote gateways must emit their own CORS — this only governs the local
  * embedded server.
  */
-function setCorsHeaders(res: ServerResponse): void {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+function setCorsHeaders(req: IncomingMessage, res: ServerResponse): void {
+  const origin = req.headers.origin;
+  res.setHeader(
+    'Access-Control-Allow-Origin',
+    typeof origin === 'string' && origin !== 'null' ? origin : '*',
+  );
+  if (typeof origin === 'string' && origin !== 'null') {
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
   res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type');
+  res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type, x-centraid-vault');
   res.setHeader('Access-Control-Max-Age', '86400');
 }
 
@@ -171,7 +182,7 @@ export async function startRuntimeHttpServer(
   });
 
   async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    setCorsHeaders(res);
+    setCorsHeaders(req, res);
     // Preflight carries no Authorization header — answer it before the
     // Bearer check, or the browser never sends the real request.
     if ((req.method ?? '').toUpperCase() === 'OPTIONS') {
@@ -187,10 +198,18 @@ export async function startRuntimeHttpServer(
     // before auth runs; only the `authorizeBearer` branch below re-sets it,
     // and only after verifying the bearer names a device token (#376).
     delete req.headers[AUTHED_DEVICE_HEADER];
+    delete req.headers[WEB_APP_HEADER];
+    delete req.headers[WEB_SHELL_ORIGIN_HEADER];
     const raw = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
     if (!isPublic) {
-      if (opts.authorizeBearer) {
-        const authz = raw ? opts.authorizeBearer(raw) : undefined;
+      if (opts.authorizeBearer || opts.authorizeRequest) {
+        const authz = raw
+          ? opts.authorizeBearer
+            ? opts.authorizeBearer(raw)
+            : timingSafeEqual(raw, token)
+              ? { plane: 'admin' as const }
+              : undefined
+          : opts.authorizeRequest?.(req);
         if (!authz) {
           res.statusCode = 401;
           res.setHeader('Content-Type', 'application/json; charset=utf-8');
