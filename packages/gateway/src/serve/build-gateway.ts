@@ -648,23 +648,20 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     };
   });
 
-  // Offsite backup engine (PROTOCOL.md/FORMAT.md) — constructed only when
-  // enabled; registers its own 'backups' health component (push + a
-  // staleness probe), started/stopped alongside the gateway below.
-  const backupService = options.backup?.enabled
-    ? new BackupService({
-        config: options.backup,
-        backupDir: paths.backupDir ?? path.join(path.dirname(paths.vaultDir), 'backup'),
-        vaults: vaultRegistry,
-        health,
-        logger: health.loggerFor('backups', logger),
-        // Recovery-kit confirmation is gateway-level now (issue #367 §C10) —
-        // the Backup card's `recoveryKit` field keeps reading through
-        // `BackupService.recoveryKitStatus()` unchanged, it just resolves
-        // through the same store the storage-connection routes gate on.
-        recoveryKit,
-      })
-    : undefined;
+  // Offsite backup engine (PROTOCOL.md/FORMAT.md). A static daemon config
+  // still takes precedence; otherwise the service resolves the provider
+  // storage connection marked for backup on every operation. This makes a
+  // connection created in the desktop immediately effective without a
+  // process restart or a second, hidden configuration source.
+  const backupService = new BackupService({
+    ...(options.backup?.enabled ? { config: options.backup } : {}),
+    backupDir: paths.backupDir ?? path.join(path.dirname(paths.vaultDir), 'backup'),
+    vaults: vaultRegistry,
+    health,
+    logger: health.loggerFor('backups', logger),
+    recoveryKit,
+    storageConnections,
+  });
 
   const currentWorkspace = (): VaultWorkspace => vaultRegistry.currentWorkspace();
 
@@ -807,7 +804,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     },
     set: async (model: string | null): Promise<void> => {
       const runnerPrefs = (await prefsLoader()) ?? { kind: 'codex' as const };
-      prefs.setPrefs({ [`model.${runnerPrefs.kind}.ask`]: model && model.length > 0 ? model : null });
+      prefs.setPrefs({
+        [`model.${runnerPrefs.kind}.ask`]: model && model.length > 0 ? model : null,
+      });
     },
   };
 
@@ -1612,7 +1611,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     makeBackupRouteHandler({
       vaults: vaultRegistry,
       recoveryKitStore: recoveryKit,
-      ...(backupService ? { backupService } : {}),
+      backupService,
     }),
     // Gateway-level storage connections (issue #367 §C1): CRUD + real
     // connectivity probe + per-vault replication status. Same bearer gate,
@@ -1851,13 +1850,13 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     }
 
     // Offsite backup engine: hourly scheduler, started only when enabled.
-    backupService?.start();
+    backupService.start();
   };
 
   const stop = async (): Promise<void> => {
     await Promise.all([...schedulers.values()].map((sched) => sched.stop()));
     if (outboxTimer) clearInterval(outboxTimer);
-    backupService?.stop();
+    backupService.stop();
     // Release the lease so a fresh start (or another instance) sees an
     // absent file instead of waiting out LEASE_FRESH_WINDOW_MS.
     instanceLease.stop();
@@ -1868,7 +1867,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   return {
     runtime,
     health,
-    ...(backupService ? { backup: backupService } : {}),
+    backup: backupService,
     prefs,
     analyticsStore,
     conversationHistoryStore,

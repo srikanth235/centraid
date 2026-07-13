@@ -1,16 +1,8 @@
 /*
  * `BackupService` — the gateway-side owner of the offsite backup engine
- * (`@centraid/backup`, PROTOCOL.md + FORMAT.md). One instance per gateway,
- * constructed only when `backup.enabled` — it holds the provider handle,
- * the keyring, the per-vault state file, and the hourly scheduler; `runBackup`
- * / `runVerify` are also the CLI's entry points (`cli/backup-admin.ts`),
- * so a manual `backup run` and the scheduler share one code path.
- *
- * Health (mirrors the outbox pattern in `build-gateway.ts`): PUSH —
- * `reportOk`/`reportError` around every run; PULL — a probe flags
- * `lastBackupAt` older than 2x `intervalHours` as `error` ("backups are
- * stale") and `lastVerifiedAt` older than 2x `verifyEveryDays` as
- * `degraded`. Registered ONLY when backup is enabled.
+ * (`@centraid/backup`, PROTOCOL.md + FORMAT.md). Static CLI configuration
+ * or the desktop's live provider connection resolves through one engine;
+ * manual runs and the scheduler intentionally share the same code path.
  */
 
 import path from 'node:path';
@@ -23,10 +15,8 @@ import {
   openRemoteBackupProvider,
   restoreSnapshot,
   verifySnapshot,
-  writeRecoveryKit,
   type BackupProvider,
   type Keyring,
-  type RecoveryKitTarget,
   type RestoreResult,
   type SnapshotRow,
   type SourceEntry,
@@ -37,6 +27,8 @@ import type { RuntimeLogger } from '@centraid/app-engine';
 import {
   intervalHoursOf,
   verifyEveryDaysOf,
+  DEFAULT_INTERVAL_HOURS,
+  DEFAULT_VERIFY_EVERY_DAYS,
   type BackupConfig,
   type BackupProviderConfig,
 } from './backup-config.js';
@@ -53,6 +45,7 @@ import { assembleSourceEntries, resetStagingDir, type AssembleOptions } from './
 import type { HealthRegistry } from '../serve/health-registry.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
 import type { VaultPlane } from '../serve/vault-plane.js';
+import type { StorageConnectionStore } from './storage-connections.js';
 import { GATEWAY_VERSION } from '../version.js';
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -64,13 +57,13 @@ export function buildBackupProvider(config: BackupProviderConfig): BackupProvide
     : openRemoteBackupProvider({ baseUrl: config.endpoint, apiKey: config.apiKey });
 }
 
-/** Human-readable provider label for the recovery kit (FORMAT.md's `targets[].provider`). */
-function providerLabel(config: BackupProviderConfig): string {
-  return config.kind === 'remote' ? config.endpoint : `local:${config.dir}`;
-}
+import { resolveBackupBackend } from './backup-backend.js';
+import { evaluateBackupHealth } from './backup-health.js';
+import { recoveryKitDocument, writeBackupRecoveryKit } from './backup-recovery-kit.js';
 
 export interface BackupServiceOptions {
-  config: BackupConfig;
+  /** Static daemon/CLI configuration. When omitted, the active provider storage connection is resolved live. */
+  config?: BackupConfig;
   /** `<dataDir>/backup` — holds `keyring.json`, `state.json`, `staging/`. */
   backupDir: string;
   vaults: VaultRegistry;
@@ -78,38 +71,24 @@ export interface BackupServiceOptions {
   logger: RuntimeLogger;
   /** Clock override (tests). */
   now?: () => number;
-  /**
-   * Injectable seam over `assembleSourceEntries` (tests). Defaults to the
-   * real one, which stages fresh VACUUM INTO DB copies every run — a real
-   * vault's `journal.db` therefore never hashes byte-identical twice in a
-   * row (staging itself receipts into the ledger, FORMAT.md's ordering
-   * rule notwithstanding), so exercising "no visible change → no new
-   * manifest" needs static fixture files a test controls directly instead.
-   */
+  /** Injectable source assembly seam for deterministic snapshot tests. */
   assembleEntries?: (opts: AssembleOptions) => Promise<SourceEntry[]>;
   /** Injectable provider (tests) — defaults to `buildBackupProvider(config.provider)`. */
   provider?: BackupProvider;
-  /**
-   * Generalized recovery-kit confirmation store (issue #367 §C10). When
-   * set (the live gateway always sets this — `build-gateway.ts`),
-   * `recoveryKitStatus`/`confirmRecoveryKit` delegate here instead of the
-   * per-backup `state.json` field, so the SAME flag gates both the Backup
-   * card and the CAS-attach flow. Omitted (the standalone CLI's one-shot
-   * `BackupService`, tests) falls back to the legacy `backupDir`-scoped
-   * field — unchanged behavior for callers that never adopted storage
-   * connections.
-   */
+  storageConnections?: StorageConnectionStore;
+  /** Shared confirmation store; CLI-only callers fall back to backup state. */
   recoveryKit?: RecoveryKitStateStore;
 }
 
 export class BackupService {
-  private readonly config: BackupConfig;
+  private readonly config: BackupConfig | undefined;
   private readonly backupDir: string;
   private readonly vaults: VaultRegistry;
   private readonly health: HealthRegistry;
   private readonly logger: RuntimeLogger;
   private readonly now: () => number;
-  private readonly provider: BackupProvider;
+  private readonly provider: BackupProvider | undefined;
+  private readonly storageConnections: StorageConnectionStore | undefined;
   private readonly keyringPath: string;
   private readonly assembleEntries: (opts: AssembleOptions) => Promise<SourceEntry[]>;
   private readonly recoveryKit: RecoveryKitStateStore | undefined;
@@ -128,52 +107,38 @@ export class BackupService {
     this.health = opts.health;
     this.logger = opts.logger;
     this.now = opts.now ?? Date.now;
-    this.provider = opts.provider ?? buildBackupProvider(this.config.provider);
-    this.keyringPath = this.config.keyringPath ?? path.join(this.backupDir, 'keyring.json');
+    this.provider =
+      opts.provider ?? (this.config ? buildBackupProvider(this.config.provider) : undefined);
+    this.storageConnections = opts.storageConnections;
+    this.keyringPath = this.config?.keyringPath ?? path.join(this.backupDir, 'keyring.json');
     this.assembleEntries = opts.assembleEntries ?? assembleSourceEntries;
     this.recoveryKit = opts.recoveryKit;
 
     this.health.registerProbe('backups', async () => this.probe());
   }
 
+  private async backend(): Promise<
+    { provider: BackupProvider; providerRef: string; label: string; dynamic: boolean } | undefined
+  > {
+    return resolveBackupBackend({
+      ...(this.config ? { config: this.config } : {}),
+      ...(this.provider ? { provider: this.provider } : {}),
+      ...(this.storageConnections ? { storageConnections: this.storageConnections } : {}),
+    });
+  }
+
+  async configured(): Promise<{ configured: boolean; provider?: string }> {
+    const backend = await this.backend();
+    return backend ? { configured: true, provider: backend.label } : { configured: false };
+  }
+
   private async probe(): Promise<{ status: 'ok' | 'degraded' | 'error'; detail?: string }> {
-    const state = await loadBackupState(this.backupDir);
-    const rows = Object.entries(state.targets);
-    if (rows.length === 0) return { status: 'ok', detail: 'no vaults backed up yet' };
-    const staleBackupMs = intervalHoursOf(this.config) * HOUR_MS * 2;
-    const staleVerifyMs = verifyEveryDaysOf(this.config) * DAY_MS * 2;
-    let worst: 'ok' | 'degraded' | 'error' = 'ok';
-    const notes: string[] = [];
-    for (const [vaultId, target] of rows) {
-      if (target.fenced) {
-        worst = 'error';
-        notes.push(`${vaultId}: fenced — another machine has taken over this vault`);
-        continue;
-      }
-      const backupAgeMs = target.lastBackupAt
-        ? this.now() - Date.parse(target.lastBackupAt)
-        : Number.POSITIVE_INFINITY;
-      if (backupAgeMs >= staleBackupMs) {
-        worst = 'error';
-        notes.push(`${vaultId}: backups are stale`);
-        continue;
-      }
-      // Never-verified targets start their staleness clock at the first
-      // backup, not at "the dawn of time" — a target one tick old hasn't
-      // had a chance to verify yet and shouldn't read as degraded.
-      const verifyBaseline = target.lastVerifiedAt ?? target.lastBackupAt;
-      const verifyAgeMs = verifyBaseline
-        ? this.now() - Date.parse(verifyBaseline)
-        : Number.POSITIVE_INFINITY;
-      if (verifyAgeMs >= staleVerifyMs) {
-        if (worst !== 'error') worst = 'degraded';
-        notes.push(`${vaultId}: verification is stale`);
-      }
-    }
-    return {
-      status: worst,
-      detail: notes.length > 0 ? notes.join('; ') : `${rows.length} vault(s) backed up`,
-    };
+    if (!(await this.backend())) return { status: 'ok', detail: 'backup is not configured' };
+    return evaluateBackupHealth({
+      state: await loadBackupState(this.backupDir),
+      ...(this.config ? { config: this.config } : {}),
+      now: this.now(),
+    });
   }
 
   private async ensureKeyring(): Promise<Keyring> {
@@ -229,6 +194,8 @@ export class BackupService {
   }
 
   private async doRunBackup(vaultId: string): Promise<void> {
+    const backend = await this.backend();
+    if (!backend) throw new Error('backup is not configured — add a provider backup connection');
     const plane = this.vaults.get(vaultId);
     if (!plane) {
       this.logger.warn(`backup: unknown vault "${vaultId}" — skipped`);
@@ -242,11 +209,23 @@ export class BackupService {
       );
       return;
     }
+    if (
+      target &&
+      (target.providerRef ? target.providerRef !== backend.providerRef : backend.dynamic)
+    ) {
+      const message =
+        'backup destination changed; refusing to reuse the prior target automatically';
+      target.lastError = message;
+      state.targets[vaultId] = target;
+      await saveBackupState(this.backupDir, state);
+      this.health.reportError('backups', `vault ${vaultId}: ${message}`);
+      throw new Error(message);
+    }
     const keyring = await this.ensureKeyring();
     if (!target) {
       const label = opaqueLabel();
-      const { targetId } = await this.provider.createTarget({ label });
-      target = { targetId, label, generation: 1 };
+      const { targetId } = await backend.provider.createTarget({ label });
+      target = { targetId, label, generation: 1, providerRef: backend.providerRef };
       state.targets[vaultId] = target;
       await saveBackupState(this.backupDir, state);
     }
@@ -260,7 +239,7 @@ export class BackupService {
         log: { info: (m) => this.logger.info(m), warn: (m) => this.logger.warn(m) },
       });
       const row = await createSnapshot({
-        provider: this.provider,
+        provider: backend.provider,
         targetId: target.targetId,
         keyring,
         vaultId,
@@ -330,7 +309,17 @@ export class BackupService {
     return result;
   }
 
+  /** Manual integrity check for every vault that already has a snapshot. */
+  async verifyAll(): Promise<void> {
+    const state = await loadBackupState(this.backupDir);
+    for (const plane of this.vaults.planesList()) {
+      if (state.targets[plane.boot.vaultId]) await this.runVerify(plane.boot.vaultId);
+    }
+  }
+
   private async doRunVerify(vaultId: string): Promise<VerifySnapshotResult | undefined> {
+    const backend = await this.backend();
+    if (!backend) throw new Error('backup is not configured — add a provider backup connection');
     const state = await loadBackupState(this.backupDir);
     const target = state.targets[vaultId];
     if (!target) {
@@ -340,7 +329,7 @@ export class BackupService {
     const keyring = await this.ensureKeyring();
     try {
       const result = await verifySnapshot({
-        provider: this.provider,
+        provider: backend.provider,
         targetId: target.targetId,
         keyring,
         vaultId,
@@ -389,8 +378,11 @@ export class BackupService {
   }
 
   async tick(): Promise<void> {
-    const intervalMs = intervalHoursOf(this.config) * HOUR_MS;
-    const verifyMs = verifyEveryDaysOf(this.config) * DAY_MS;
+    if (!(await this.backend())) return;
+    const intervalMs =
+      (this.config ? intervalHoursOf(this.config) : DEFAULT_INTERVAL_HOURS) * HOUR_MS;
+    const verifyMs =
+      (this.config ? verifyEveryDaysOf(this.config) : DEFAULT_VERIFY_EVERY_DAYS) * DAY_MS;
     for (const plane of this.vaults.planesList()) {
       const vaultId = plane.boot.vaultId;
       let state = await loadBackupState(this.backupDir);
@@ -441,15 +433,19 @@ export class BackupService {
   }
 
   async listSnapshots(vaultId: string, opts?: { includePruned?: boolean }): Promise<SnapshotRow[]> {
+    const backend = await this.backend();
+    if (!backend) throw new Error('backup is not configured — add a provider backup connection');
     const target = await this.requireTarget(vaultId);
-    return this.provider.listSnapshots(target.targetId, opts);
+    return backend.provider.listSnapshots(target.targetId, opts);
   }
 
   async restore(opts: { vaultId: string; destDir: string; seq?: number }): Promise<RestoreResult> {
+    const backend = await this.backend();
+    if (!backend) throw new Error('backup is not configured — add a provider backup connection');
     const target = await this.requireTarget(opts.vaultId);
     const keyring = await this.ensureKeyring();
     return restoreSnapshot({
-      provider: this.provider,
+      provider: backend.provider,
       targetId: target.targetId,
       keyring,
       vaultId: opts.vaultId,
@@ -466,15 +462,20 @@ export class BackupService {
   }
 
   async writeKit(destFile: string): Promise<void> {
+    const backend = await this.backend();
+    if (!backend) throw new Error('backup is not configured — add a provider backup connection');
     const keyring = await this.ensureKeyring();
     const state = await loadBackupState(this.backupDir);
-    const targets: RecoveryKitTarget[] = Object.entries(state.targets).map(([vaultId, t]) => ({
-      provider: providerLabel(this.config.provider),
-      targetId: t.targetId,
-      vaultId,
-      label: t.label,
-    }));
-    await writeRecoveryKit({ keyring, targets, destFile });
+    await writeBackupRecoveryKit({ keyring, state, provider: backend.label, destFile });
+  }
+
+  /** Recovery-kit document for owner-facing HTTP export. Contains live key material. */
+  async recoveryKitDocument(): Promise<Record<string, unknown>> {
+    const backend = await this.backend();
+    if (!backend) throw new Error('backup is not configured — add a provider backup connection');
+    const keyring = await this.ensureKeyring();
+    const state = await loadBackupState(this.backupDir);
+    return recoveryKitDocument({ keyring, state, provider: backend.label, now: this.now() });
   }
 
   private async requireTarget(vaultId: string): Promise<BackupTargetState> {

@@ -94,7 +94,10 @@ test('POST create refuses without a confirmed recovery kit; {force:true} bypasse
     body: JSON.stringify({ ...body, force: true }),
   });
   expect(forced.status).toBe(201);
-  const forcedJson = (await forced.json()) as { connection: Record<string, unknown>; recoveryKitConfirmed: boolean };
+  const forcedJson = (await forced.json()) as {
+    connection: Record<string, unknown>;
+    recoveryKitConfirmed: boolean;
+  };
   expect(forcedJson.recoveryKitConfirmed).toBe(false); // still unconfirmed — force only bypassed the refusal
   expect(forcedJson.connection.kind).toBe('byo-s3');
   expect(forcedJson.connection.endpoint).toBe(body.endpoint);
@@ -157,7 +160,9 @@ test('confirmed recovery kit: create proceeds without force; list/get/patch/dele
   expect(deleted.status).toBe(200);
   expect((await deleted.json()) as { ok: boolean }).toEqual({ ok: true });
 
-  const goneAfterDelete = await fetch(`${base}/centraid/_gateway/storage/connections/${connection.id}`);
+  const goneAfterDelete = await fetch(
+    `${base}/centraid/_gateway/storage/connections/${connection.id}`,
+  );
   expect(goneAfterDelete.status).toBe(404);
 });
 
@@ -196,7 +201,7 @@ test('GET status answers per-vault shape even with zero mounted vaults', async (
   expect((await res.json()) as { vaults: unknown[] }).toEqual({ vaults: [] });
 });
 
-test('a connection usable ONLY for backup (uses excludes cas) is not gated by the recovery-kit confirmation', async () => {
+test('BYO S3 cannot claim backup support because it has no registry, retention, or fencing plane', async () => {
   const dir = await tempDir();
   const storageConnections = await openStorageConnectionStore(dir);
   const recoveryKit = new RecoveryKitStateStore(dir);
@@ -221,7 +226,38 @@ test('a connection usable ONLY for backup (uses excludes cas) is not gated by th
       uses: ['backup'],
     }),
   });
-  expect(res.status).toBe(201);
+  expect(res.status).toBe(400);
+  expect(((await res.json()) as { message: string }).message).toMatch(/CAS replication only/);
+});
+
+test('only one provider backup destination can be active', async () => {
+  const dir = await tempDir();
+  const storageConnections = await openStorageConnectionStore(dir);
+  const recoveryKit = new RecoveryKitStateStore(dir);
+  await recoveryKit.confirm();
+  const base = await startHandlerServer(
+    makeStorageRouteHandler({
+      storageConnections,
+      recoveryKit,
+      vaults: fakeVaults(),
+      storageUsage: new StorageUsagePoller({ storageConnections }),
+    }),
+  );
+  const create = (name: string) =>
+    fetch(`${base}/centraid/_gateway/storage/connections`, {
+      method: 'POST',
+      body: JSON.stringify({
+        kind: 'provider',
+        name,
+        baseUrl: `https://${name}.example.com`,
+        apiKey: `sk-${name}`,
+        uses: ['backup'],
+      }),
+    });
+  expect((await create('first')).status).toBe(201);
+  const second = await create('second');
+  expect(second.status).toBe(400);
+  expect(((await second.json()) as { message: string }).message).toMatch(/only one backup/);
 });
 
 test('GET usage answers an empty list with zero connections', async () => {
@@ -269,7 +305,12 @@ test('GET usage: a byo-s3 connection reports providerReported: null with localRe
   const res = await fetch(`${base}/centraid/_gateway/storage/usage`);
   expect(res.status).toBe(200);
   const body = (await res.json()) as {
-    connections: { connectionId: string; kind: string; providerReported: unknown; localReplicatedBytes: number }[];
+    connections: {
+      connectionId: string;
+      kind: string;
+      providerReported: unknown;
+      localReplicatedBytes: number;
+    }[];
   };
   expect(body.connections.length).toBe(1);
   expect(body.connections[0]?.kind).toBe('byo-s3');

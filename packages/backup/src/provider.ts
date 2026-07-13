@@ -76,7 +76,7 @@ export interface Usage {
   meteredAt?: number;
 }
 
-/** One row of `GET /v1/backup/vaults` — a target ("vault" on the wire). */
+/** One row of `GET /v1/backup/vaults` — a storage target. */
 export interface TargetInfo {
   id: string;
   name: string;

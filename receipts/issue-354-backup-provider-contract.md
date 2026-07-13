@@ -1,8 +1,8 @@
-# Issue #354 — Standardized backup provider contract: centraid-backup-provider/1 + snapshot engine
+# Issue #354 — Standardized storage provider contract: centraid-storage-provider/1 + snapshot engine
 
 ## Checklist
 
-- [x] `packages/backup/PROTOCOL.md` — centraid-backup-provider/1 normative spec
+- [x] `packages/backup/PROTOCOL.md` — centraid-storage-provider/1 normative spec
 - [x] `packages/backup/FORMAT.md` — centraid-snapshot/1 normative spec
 - [x] `BackupProvider` seam, `LocalBackupProvider`, `RemoteBackupProvider`, `S3ObjectStore` (SigV4)
 - [x] `chunkStream` FastCDC chunker (frozen gear table), keyring epochs, canonical-JSON manifest
@@ -19,13 +19,13 @@
 - [x] fix `manifestKey` prefix bug + the matching conformance-kit fixture bug (found by a real provider rejecting it)
 - [x] fix seal-key-entry-on-every-vault bug in `backup-sources.ts` (found by the first real test of that module)
 - [ ] automations auto-pause on restored-vault mount (needs code-store session; manual review for now)
-- [ ] desktop Gateway page backup card (backup age / verify age / restore UX)
+- [x] desktop Gateway page backup card (provider, backup/verify age, manual run/verify, native recovery-kit export)
 
 ## What changed
 
-- `packages/backup/PROTOCOL.md` — centraid-backup-provider/1 normative spec,
+- `packages/backup/PROTOCOL.md` — centraid-storage-provider/1 normative spec,
   and `packages/backup/FORMAT.md` — centraid-snapshot/1 normative spec.
-  PROTOCOL.md (centraid-backup-provider/1) covers: dumb control plane +
+  PROTOCOL.md (centraid-storage-provider/1) covers: dumb control plane +
   client-owned S3 data plane, discovery/capabilities, api-key vs interactive
   auth tiers with interactive-only purge, reserved error codes, generation
   fencing for split-brain detection, epoch-second wire timestamps, GC
@@ -66,6 +66,13 @@
   flagged for manual review via a persistent health error.
 - docs-site `backups` chapter (fourth chapter in the reading chain), wired
   into nav + smoke, cross-linked from start/data/devices/understand.
+- Desktop backup operations now resolve the active storage-provider
+  connection dynamically, show which provider protects each vault, expose
+  explicit backup and verification controls, and export the recovery kit
+  through a native save dialog before recording confirmation. Direct S3 is
+  CAS-only because it cannot supply the registry, retention, or fencing
+  guarantees required by the backup store class; only one backup
+  destination may be active.
 - Bug fixes found during the follow-up honesty pass: fix cross-process
   registry staleness in `LocalBackupProvider` (generation fencing was
   silently broken across processes); fix `manifestKey` prefix bug + the
@@ -103,8 +110,6 @@
   WorktreeStore session + publish per automation, which is not available at
   plane construction. The quarantine marker + health error carry the review
   obligation instead.
-- Desktop Gateway page backup card (backup age / verify age / restore UX) —
-  UI follow-up.
 - The Clawgnition-side protocol delta is Clawgnition/clawgnition#94.
 
 ## Verification
@@ -117,13 +122,16 @@
   verify detects deliberately missing and corrupted chunks; two independent
   `LocalBackupProvider` instances on one rootDir observing each other's
   generation writes.
-- `interop-clawgnition.test.ts` (15 tests, `CLAWGNITION_INTEROP=1`, skips
+- `interop-clawgnition.test.ts` (19 tests, `CLAWGNITION_INTEROP=1`, skips
   cleanly otherwise): the full conformance kit plus a real snapshot→restore
   round trip, verify catching real chunk loss, generation fencing incl.
   replay-before-fencing, a read-mode grant, and account/usage/generation
   shape — all run against a real `wrangler dev` Clawgnition Worker with
   local D1 and a real coordinator DO, zero fakes of either side's code. Run
   clean twice from a fresh boot.
+- Desktop/gateway follow-up: all 22 workspace typecheck tasks; 38 focused
+  gateway tests; 38 focused desktop tests; recovery-kit export, provider
+  activation, one-destination enforcement, and direct-S3 refusal covered.
 - `packages/gateway`: 290 tests / 50 files green incl. `backup-e2e.test.ts`
   (7 tests, real seeded vault → real backup → real CLI restore → adopted
   live vault: mounts, data/blobs/sealed-value round-trip, quarantine parks

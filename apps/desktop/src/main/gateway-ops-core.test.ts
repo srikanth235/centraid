@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   diagnosticsFileName,
   exportGatewayDiagnostics,
+  exportGatewayRecoveryKit,
   fetchDiagnosticsText,
   type ExportDiagnosticsDeps,
 } from './gateway-ops-core.js';
@@ -131,5 +132,27 @@ describe('exportGatewayDiagnostics', () => {
       }),
     );
     expect(result).toEqual({ ok: false, error: 'EACCES: permission denied' });
+  });
+});
+
+describe('exportGatewayRecoveryKit', () => {
+  it('fetches the key-bearing document from the backup endpoint and saves it', async () => {
+    let requested = '';
+    const writes: Array<{ path: string; data: string }> = [];
+    const kit = { version: 1, kind: 'centraid-recovery-kit', targets: [] };
+    const result = await exportGatewayRecoveryKit(
+      makeDeps({
+        fetchImpl: async (url) => {
+          requested = url.toString();
+          return Response.json(kit);
+        },
+        writeFile: async (path, data) => void writes.push({ path, data }),
+      }),
+    );
+    expect(requested).toBe('http://127.0.0.1:4000/centraid/_gateway/backup/kit');
+    expect(result).toEqual({ ok: true, path: '/tmp/centraid-recovery-kit.json' });
+    expect(writes).toEqual([
+      { path: '/tmp/centraid-recovery-kit.json', data: JSON.stringify(kit, null, 2) },
+    ]);
   });
 });

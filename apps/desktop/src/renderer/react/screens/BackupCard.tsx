@@ -39,6 +39,7 @@ export interface RecoveryKitStatusDTO {
 
 export interface BackupStatusDTO {
   configured: boolean;
+  provider?: string;
   vaults: BackupVaultStatusDTO[];
   /** Optional so a pre-wave-4 fixture / stub still type-checks; treated as
    *  "never confirmed" when absent. */
@@ -50,6 +51,8 @@ export interface BackupCardProps {
   now: number;
   loadStatus: () => Promise<BackupStatusDTO>;
   onRunNow: () => Promise<{ accepted: boolean; alreadyRunning?: boolean }>;
+  onVerifyNow?: () => Promise<{ accepted: boolean; alreadyRunning?: boolean }>;
+  onExportRecoveryKit?: () => Promise<{ ok: boolean; canceled?: boolean; error?: string }>;
   /** POSTs `_gateway/backup/kit-confirmed` — the recovery-kit gate's confirm button. */
   onConfirmRecoveryKit: () => Promise<{ confirmedAt: number }>;
 }
@@ -72,10 +75,12 @@ function RecoveryKitGate({
   configured,
   recoveryKit,
   onConfirm,
+  onExport,
 }: {
   configured: boolean;
   recoveryKit: RecoveryKitStatusDTO;
   onConfirm: () => Promise<{ confirmedAt: number }>;
+  onExport?: () => Promise<{ ok: boolean; canceled?: boolean; error?: string }>;
 }): JSX.Element {
   const [confirmedAt, setConfirmedAt] = useState(recoveryKit.confirmedAt);
   const [confirming, setConfirming] = useState(false);
@@ -90,6 +95,13 @@ function RecoveryKitGate({
     setConfirming(true);
     setError(null);
     try {
+      if (onExport) {
+        const exported = await onExport();
+        if (!exported.ok) {
+          if (exported.canceled) return;
+          throw new Error(exported.error ?? 'Recovery kit export failed');
+        }
+      }
       const result = await onConfirm();
       setConfirmedAt(result.confirmedAt);
     } catch (err) {
@@ -113,9 +125,8 @@ function RecoveryKitGate({
       <Icon name="Key" size={13} />
       <div className={styles.sealNudgeBody}>
         <span>
-          Backups are ciphertext without the seal key — export it once with{' '}
-          <code>centraid-gateway backup kit</code> (or <code>key export</code>) and store it
-          offline.
+          Save this recovery kit somewhere offline. It is the only way to decrypt a backup on a new
+          machine.
         </span>
         {configured ? (
           <>
@@ -125,7 +136,11 @@ function RecoveryKitGate({
               disabled={confirming}
               onClick={() => void confirm()}
             >
-              {confirming ? 'Saving…' : "I've saved my recovery kit"}
+              {confirming
+                ? 'Exporting…'
+                : onExport
+                  ? 'Export recovery kit'
+                  : "I've saved my recovery kit"}
             </button>
             {error ? <div className={styles.runError}>{error}</div> : null}
           </>
@@ -158,12 +173,15 @@ export default function BackupCard({
   now,
   loadStatus,
   onRunNow,
+  onVerifyNow,
+  onExportRecoveryKit,
   onConfirmRecoveryKit,
 }: BackupCardProps): JSX.Element {
   const [status, setStatus] = useState<BackupStatusDTO | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [triggering, setTriggering] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
 
   // Guards the two async setState paths (the interval poll and the
   // post-run follow-up) against firing after unmount — the follow-up in
@@ -212,22 +230,50 @@ export default function BackupCard({
 
   const anyRunning = triggering || (status?.vaults.some((v) => v.running) ?? false);
 
+  const verifyNow = async (): Promise<void> => {
+    if (!onVerifyNow) return;
+    setVerifying(true);
+    setRunError(null);
+    try {
+      await onVerifyNow();
+      refresh();
+      followupTimerRef.current = setTimeout(refresh, FOLLOWUP_MS);
+    } catch (err) {
+      if (mountedRef.current) setRunError(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (mountedRef.current) setVerifying(false);
+    }
+  };
+
   return (
     <section className={cx(gwStyles.panel, styles.card)}>
       <div className={gwStyles.panelHead}>
         <h2>Backups</h2>
         {status?.configured ? (
-          <button
-            type="button"
-            className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
-            disabled={anyRunning}
-            onClick={() => void runNow()}
-          >
-            <span className={styles.runIcon} data-spin={anyRunning || undefined}>
-              <Icon name={anyRunning ? 'Loader' : 'Save'} size={13} />
-            </span>
-            <span>{anyRunning ? 'Backing up…' : 'Back up now'}</span>
-          </button>
+          <div className={styles.actions}>
+            {onVerifyNow ? (
+              <button
+                type="button"
+                className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
+                disabled={anyRunning || verifying}
+                onClick={() => void verifyNow()}
+              >
+                <Icon name="CheckCircle" size={13} />
+                <span>{verifying ? 'Verifying…' : 'Verify now'}</span>
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
+              disabled={anyRunning || verifying}
+              onClick={() => void runNow()}
+            >
+              <span className={styles.runIcon} data-spin={anyRunning || undefined}>
+                <Icon name={anyRunning ? 'Loader' : 'Save'} size={13} />
+              </span>
+              <span>{anyRunning ? 'Backing up…' : 'Back up now'}</span>
+            </button>
+          </div>
         ) : null}
       </div>
 
@@ -238,13 +284,20 @@ export default function BackupCard({
           <div className={gwStyles.panelEmpty}>Checking backup status…</div>
         ) : !status.configured ? (
           <p className={styles.notConfigured}>
-            Backups aren’t set up for this gateway. Add a <code>backup</code> block to the gateway
-            config to enable encrypted, offsite snapshots — see the docs site’s Backups chapter.
+            Backups aren’t set up yet. In Settings → Storage, add a storage provider and enable
+            “Encrypted backup snapshots.” The desktop will start protecting every vault
+            automatically.
           </p>
         ) : status.vaults.length === 0 ? (
           <div className={gwStyles.panelEmpty}>No vaults mounted yet.</div>
         ) : (
           <>
+            {status.provider ? (
+              <div className={styles.providerLine}>
+                <Icon name="Key" size={13} />
+                <span>Protected by {status.provider}</span>
+              </div>
+            ) : null}
             {runError ? <div className={styles.runError}>{runError}</div> : null}
             <div className={styles.vaultList}>
               {status.vaults.map((v) => (
@@ -257,6 +310,7 @@ export default function BackupCard({
           configured={status?.configured ?? false}
           recoveryKit={status?.recoveryKit ?? { confirmedAt: null }}
           onConfirm={onConfirmRecoveryKit}
+          onExport={onExportRecoveryKit}
         />
       </div>
     </section>

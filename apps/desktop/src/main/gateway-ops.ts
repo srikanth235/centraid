@@ -12,6 +12,7 @@ import { dialog } from 'electron';
 import { promises as fs } from 'node:fs';
 import { loadSettings } from './settings.js';
 import { exportGatewayDiagnostics as exportGatewayDiagnosticsCore } from './gateway-ops-core.js';
+import { exportGatewayRecoveryKit as exportGatewayRecoveryKitCore } from './gateway-ops-core.js';
 
 export type { ExportDiagnosticsResult } from './gateway-ops-core.js';
 
@@ -34,5 +35,22 @@ export function exportActiveGatewayDiagnostics() {
       };
     },
     writeFile: (path, data) => fs.writeFile(path, data, 'utf8'),
+  });
+}
+
+export function exportActiveGatewayRecoveryKit() {
+  return exportGatewayRecoveryKitCore({
+    loadSettings,
+    showSaveDialog: async (defaultPath) => {
+      const result = await dialog.showSaveDialog({
+        defaultPath,
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      });
+      return {
+        canceled: result.canceled,
+        ...(result.filePath ? { filePath: result.filePath } : {}),
+      };
+    },
+    writeFile: (file, data) => fs.writeFile(file, data, { encoding: 'utf8', mode: 0o600 }),
   });
 }

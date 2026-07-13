@@ -738,6 +738,10 @@ interface CentraidApi {
   exportGatewayDiagnostics(): Promise<
     { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
   >;
+  /** Export the live backup keyring + target map through a native 0600 file save. */
+  exportGatewayRecoveryKit(): Promise<
+    { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
+  >;
   /**
    * Switch the vault this client addresses on the active gateway (issue
    * #289). A pure client-side pointer flip — no server call, no re-root:

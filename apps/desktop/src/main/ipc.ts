@@ -160,6 +160,7 @@ export const Channel = {
   // + save-dialog export of the gateway's diagnostics bundle.
   GATEWAY_RESTART: 'centraid:gateway-runtime:restart',
   GATEWAY_DIAGNOSTICS_EXPORT: 'centraid:gateway-runtime:export-diagnostics',
+  GATEWAY_RECOVERY_KIT_EXPORT: 'centraid:gateway-runtime:export-recovery-kit',
 
   // Phone link (issue #263): the iroh tunnel that lets the mobile app reach
   // this desktop's loopback gateway from anywhere. Pairing is a one-time
@@ -733,6 +734,10 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(Channel.GATEWAY_DIAGNOSTICS_EXPORT, async () => {
     const { exportActiveGatewayDiagnostics } = await import('./gateway-ops.js');
     return exportActiveGatewayDiagnostics();
+  });
+  ipcMain.handle(Channel.GATEWAY_RECOVERY_KIT_EXPORT, async () => {
+    const { exportActiveGatewayRecoveryKit } = await import('./gateway-ops.js');
+    return exportActiveGatewayRecoveryKit();
   });
 
   ipcMain.handle(
