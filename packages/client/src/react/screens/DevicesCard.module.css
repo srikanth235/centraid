@@ -1,0 +1,198 @@
+/* Gateway → Overview → Paired devices. Co-located with DevicesCard.tsx;
+   reuses GatewayScreen.module.css's .panel/.panelHead/.panelEmpty shells
+   (imported there as `gwStyles`) so the card reads as a sibling of
+   Backups/Storage rather than a bolted-on style. */
+
+.card {
+  grid-column: 1 / -1;
+}
+
+.body {
+  padding: 14px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.loadError {
+  font-size: 12px;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+}
+.row + .row {
+  border-top: 1px solid var(--line);
+}
+/* The current device gets a quiet accent rail + wash so signing yourself
+   out reads as the deliberate act it is. */
+.row[data-current] {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.glyph {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  color: var(--ink-2);
+  background: var(--surface-2, color-mix(in srgb, var(--ink) 6%, transparent));
+  border: 0.5px solid var(--line);
+}
+.row[data-current] .glyph {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+
+.main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nameLine {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.currentChip,
+.transportChip {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+.currentChip {
+  color: var(--accent-deep, var(--accent));
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+/* Relay (Iroh) vs Direct (HTTP) — the transport a device paired over. Relay
+   carries a faint success tint (the private-by-default path); direct is
+   neutral ink. */
+.transportChip {
+  color: var(--ink-3);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.transportChip[data-transport='iroh'] {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.meta span[data-quiet='true'] {
+  color: color-mix(in srgb, var(--ink-3) 72%, transparent);
+}
+.metaVault {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.metaVault svg {
+  color: var(--ink-3);
+  opacity: 0.8;
+}
+
+.rowError {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+.rowAction {
+  flex: none;
+  align-self: center;
+}
+
+/* Revoke stays quiet until hovered/confirmed — a destructive action that
+   doesn't shout, but turns unmistakably danger-red on the confirm step. */
+.revokeBtn:hover {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+}
+.revokeBtn svg {
+  opacity: 0.85;
+}
+
+.confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.confirmAsk {
+  font-size: 11.5px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.confirmYes {
+  color: #fff;
+  background: var(--danger);
+  border-color: var(--danger);
+}
+.confirmYes:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 88%, #000);
+}
+
+.spin {
+  display: inline-flex;
+  animation: devices-spin 0.9s linear infinite;
+}
+@keyframes devices-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}
+
+/* Narrow: let the action drop below the row body instead of crushing the
+   meta line. */
+@media (max-width: 560px) {
+  .row {
+    flex-wrap: wrap;
+  }
+  .rowAction {
+    align-self: flex-start;
+    padding-left: 46px;
+  }
+}

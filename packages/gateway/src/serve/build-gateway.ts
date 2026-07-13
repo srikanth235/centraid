@@ -92,6 +92,7 @@ import type { PairingTicketStore } from './pairing-store.js';
 import type { DeviceTokenStore } from './device-token-store.js';
 import { makeVaultRouteHandler } from '../routes/vault-routes.js';
 import { makePairRouteHandler } from '../routes/pair-routes.js';
+import { makeDevicesRouteHandler } from '../routes/devices-routes.js';
 import { makeConnectionsRouteHandler } from '../routes/connections-routes.js';
 import { makeDemoRouteHandler } from '../routes/demo-routes.js';
 import { makeImportRouteHandler } from '../routes/import-routes.js';
@@ -1610,6 +1611,15 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             tickets: options.devicePairing.tickets,
             enrollments: options.devicePairing.enrollments,
             deviceTokens: options.devicePairing.deviceTokens,
+          }),
+          // Paired-device roster + revoke (issue #376): the wire twin of
+          // `cli/device-admin.ts`'s list/revoke, scoped to the caller's plane
+          // (device caller sees only its vaults; admin sees all). Mounted only
+          // when the daemon wired its device-pairing stores.
+          makeDevicesRouteHandler({
+            enrollments: options.devicePairing.enrollments,
+            deviceTokens: options.devicePairing.deviceTokens,
+            vaultName: (id) => vaultRegistry.get(id)?.name,
           }),
         ]
       : []),

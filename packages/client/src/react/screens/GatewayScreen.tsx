@@ -22,6 +22,7 @@ import SettingsDiagnosticsScreen, {
 import LogsScreen, { type LogsBridgeProps } from './LogsScreen.js';
 import BackupCard, { type BackupCardProps } from './BackupCard.js';
 import StorageCard, { type StorageCardProps } from './StorageCard.js';
+import DevicesCard, { type DevicesCardProps } from './DevicesCard.js';
 import AlertHistoryPanel from './AlertHistoryPanel.js';
 import RestartGatewayButton from './RestartGatewayButton.js';
 import styles from './GatewayScreen.module.css';
@@ -77,6 +78,11 @@ export interface GatewayScreenProps {
   loadStorageStatus: StorageCardProps['loadStatus'];
   /** Navigates to Settings → Storage — the card's "Manage" link and empty state. */
   onOpenStorageSettings: StorageCardProps['onOpenSettings'];
+  /** Paired-devices card data (Overview tab) — `GET/DELETE _gateway/devices`.
+   *  Optional so callers/tests that predate the card render the tab
+   *  unchanged; the card is simply omitted when unwired. */
+  loadDevices?: DevicesCardProps['loadDevices'];
+  onRevokeDevice?: DevicesCardProps['onRevokeDevice'];
   /**
    * Restart the local embedded gateway (Overview tab, near the runtime
    * status). Refused for a remote gateway — main answers `{ok: false}`
@@ -359,6 +365,17 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
               loadStatus={props.loadStorageStatus}
               onOpenSettings={props.onOpenStorageSettings}
             />
+
+            {/* Paired devices — the roster of browsers/phones enrolled with
+                this gateway, with one-click revocation (issue #392 follow-up).
+                Only rendered where the host wired the device routes. */}
+            {props.loadDevices && props.onRevokeDevice ? (
+              <DevicesCard
+                now={now}
+                loadDevices={props.loadDevices}
+                onRevokeDevice={props.onRevokeDevice}
+              />
+            ) : null}
           </div>
         </>
       ) : null}
