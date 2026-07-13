@@ -29,7 +29,7 @@ That does build (if needed), setup, exec, verdict, teardown. Verdict at `runs/<r
 
 ## Authoring a flow
 
-1. Read the existing renderer source for the screen you're testing — selectors live there. Don't guess class names. [`apps/desktop/src/renderer/react/shell/routes/HomeRoute.tsx`](../../apps/desktop/src/renderer/react/shell/routes/HomeRoute.tsx) and [`apps/desktop/src/renderer/react/shell/routes/BuilderRoute.tsx`](../../apps/desktop/src/renderer/react/shell/routes/BuilderRoute.tsx) are the two big ones.
+1. Read the existing client source for the screen you're testing — selectors live there. Don't guess class names. [`packages/client/src/react/shell/routes/HomeRoute.tsx`](../../packages/client/src/react/shell/routes/HomeRoute.tsx) and [`packages/client/src/react/shell/routes/BuilderRoute.tsx`](../../packages/client/src/react/shell/routes/BuilderRoute.tsx) are the two big ones.
 2. Write `flows/<slug>.md` first — Goal, Setup, Steps, Expectations, Verdict. The prose stays the source of intent.
 3. Encode it as `flows/<slug>.mjs` using `runFlow`. Skeleton in [README.md](README.md#authoring-a-flow).
 4. Run it. Iterate until PASS. The first run's screenshots tell you whether the selectors actually found what you meant.

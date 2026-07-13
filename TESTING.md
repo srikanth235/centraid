@@ -81,6 +81,7 @@ repo. Per-package `bun run test` (via turbo) runs that package's project alone.
 | Surface                    | Unit / logic                       | Real app (e2e)         |
 | -------------------------- | ---------------------------------- | ---------------------- |
 | Backend / shared packages  | vitest                             | —                      |
+| Shared client / web PWA    | vitest + jsdom                     | Playwright Chromium    |
 | Electron (desktop)         | vitest + jsdom (extracted logic)   | Playwright `_electron` |
 | Expo (mobile)              | vitest (logic only)                | Maestro                |
 
@@ -89,6 +90,13 @@ repo. Per-package `bun run test` (via turbo) runs that package's project alone.
 - **Playwright `_electron`** — app boots + one core journey (clone/create app →
   renders → run it). Scripted invariants that must never flake live under
   `apps/desktop/tests/e2e/`.
+- **Playwright Chromium** — the production PWA boots against a real gateway,
+  establishes its HttpOnly control session, previews/publishes an app, runs the
+  injected SDK, and proves the app session cannot reach shell/admin routes.
+  The durable smoke lives under `apps/web/tests/e2e/`.
+- **Browser Iroh transport** — unit tests fake the WASM boundary while the
+  tunnel integration suite proves the shared framing, device enrollment,
+  revocation, and generated-app session-auth handoff against real Iroh endpoints.
 - **Maestro** — 3–5 critical mobile journeys (the MCP is already wired; see
   `tests/agent-e2e-mobile/`).
 - Keep the count **small**; run them **nightly + on-demand**, _not_ blocking

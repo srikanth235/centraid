@@ -233,8 +233,8 @@ export interface ServeStaticOptions {
    * Omit to disable the fallback (a missing file then 404s as usual).
    */
   sharedAssetsDir?: string;
+  frameAncestor?: string;
 }
-
 export async function serveStatic(
   req: IncomingMessage,
   res: ServerResponse,
@@ -322,15 +322,14 @@ export async function serveStatic(
     html = stampInlineScriptNonces(html, inlineScriptNonce);
     buf = Buffer.from(html, 'utf8');
 
-    // No ETag, no conditional handling: the document embeds a fresh
-    // per-response CSP nonce and serve-time-baked settings (theme, prefs,
-    // draft wiring), so no two responses are ever byte-identical — a
-    // validator would never hit. `no-store`, not `no-cache`: nothing here is
-    // worth revalidating against, so the browser shouldn't keep a copy at all.
+    // The fresh CSP nonce and baked settings make responses unique, so an ETag
+    // cannot hit. `no-store` ensures browsers do not retain the document.
     res.statusCode = 200;
     res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'no-store');
-    for (const [k, v] of Object.entries(staticSecurityHeaders({ inlineScriptNonce }))) {
+    for (const [k, v] of Object.entries(
+      staticSecurityHeaders({ inlineScriptNonce }, opts.frameAncestor),
+    )) {
       res.setHeader(k, v);
     }
     res.end(buf);
@@ -400,7 +399,7 @@ function changeBridgeScript(draft?: { appId: string; toolUrl: string }): string 
   // draft shim so the session worktree's handlers run.
   const idAndTool = draft
     ? `var appId=${JSON.stringify(draft.appId)};w.centraid.appId=appId;var toolUrl=${JSON.stringify(draft.toolUrl)};`
-    : `var m=/^\\/centraid\\/([^/]+)\\//.exec(w.location.pathname);var appId=m?decodeURIComponent(m[1]):null;w.centraid.appId=appId;var toolUrl='/centraid/_tool/';`;
+    : `var m=/(?:^|\\/)centraid\\/([^/]+)\\//.exec(w.location.pathname);var appId=m?decodeURIComponent(m[1]):null;w.centraid.appId=appId;var toolUrl='/centraid/_tool/';`;
   return `<script>(function(){var w=window;w.centraid=w.centraid||{};var listeners=new Set();w.centraid.onChange=function(cb){if(typeof cb!=='function')return function(){};listeners.add(cb);return function(){listeners.delete(cb);};};${idAndTool}function callTool(name,body){return fetch(toolUrl+name,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.text().then(function(t){var j=null;try{j=t?JSON.parse(t):null;}catch(_){}if(!r.ok){var err=j&&j.message?j.message:('tool '+name+' failed: '+r.status);var e=new Error(err);e.code=j&&j.code;e.status=r.status;throw e;}return j;});});}w.centraid.write=function(opts){if(!opts||!opts.action)return Promise.reject(new Error('write requires {action}'));return callTool('centraid_write',{app:appId,action:opts.action,input:opts.input});};w.centraid.read=function(opts){if(!opts||!opts.query)return Promise.reject(new Error('read requires {query}'));return callTool('centraid_read',{app:appId,query:opts.query,input:opts.input});};w.centraid.describe=function(filter){var body=Object.assign({},filter||{});if(!body.app&&appId)body.app=appId;return callTool('centraid_describe',body);};if(typeof EventSource!=='function')return;var es;function connect(){try{es=new EventSource('_changes');}catch(_){return;}es.addEventListener('change',function(ev){var d;try{d=JSON.parse(ev.data);}catch(_){d={tables:[],ts:Date.now()};}try{w.dispatchEvent(new CustomEvent('centraid:datachange',{detail:d}));}catch(_){}listeners.forEach(function(cb){try{cb(d);}catch(_){}});});es.addEventListener('error',function(){if(es&&es.readyState===2){setTimeout(function(){if(es&&es.readyState===2){try{es.close();}catch(_){}connect();}},5000);}});}connect();})();</script>`;
 }
 

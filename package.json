@@ -2,7 +2,7 @@
   "name": "centraid-monorepo",
   "version": "0.1.0",
   "private": true,
-  "description": "Centraid — personal app builder. Monorepo containing desktop (Electron), mobile (Expo), and shared design tokens.",
+  "description": "Centraid — personal app builder for desktop, installable web, and mobile clients.",
   "workspaces": {
     "packages": [
       "packages/*",
@@ -15,6 +15,7 @@
   "scripts": {
     "dev:desktop": "turbo run dev --filter=@centraid/desktop",
     "dev:mobile": "turbo run dev --filter=@centraid/mobile",
+    "dev:web": "turbo run dev --filter=@centraid/web",
     "build": "turbo run build",
     "test": "turbo run test",
     "coverage": "vitest run --coverage",

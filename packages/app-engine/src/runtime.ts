@@ -27,6 +27,9 @@ import type { ConversationRunner } from './conversation/runner.js';
 import type { VaultBridge } from './handlers/vault-bridge.js';
 import type { AppRef, RegistryEntry } from './types.js';
 
+const WEB_APP_HEADER = 'x-centraid-web-app';
+const WEB_SHELL_ORIGIN_HEADER = 'x-centraid-web-shell-origin';
+
 export interface RuntimeLogger {
   info(message: string): void;
   warn(message: string): void;
@@ -454,6 +457,14 @@ export class Runtime {
       return;
     }
 
+    const webApp = req.headers[WEB_APP_HEADER];
+    if (typeof webApp === 'string') {
+      if (typeof body.app !== 'string' || body.app !== webApp) {
+        sendError(res, 403, 'app_session_scope', 'This browser session is scoped to another app.');
+        return;
+      }
+    }
+
     const result = await this.dispatchTool(toolName, body, draftSessionId);
     if (result.isError) {
       res.statusCode = statusForToolError(result.structuredContent.code);
@@ -617,8 +628,10 @@ export class Runtime {
             const appSettings = readAppSettings(entry.path);
             const queryOverrides = route.query as Record<string, unknown>;
             const settingsInject = buildSettingsInject([globalPrefs, appSettings, queryOverrides]);
+            const shellOrigin = req.headers[WEB_SHELL_ORIGIN_HEADER];
             await serveStatic(req, res, codeDir, rel, {
               settingsInject,
+              ...(typeof shellOrigin === 'string' ? { frameAncestor: shellOrigin } : {}),
               ...draftServe,
               ...sharedServe,
             });

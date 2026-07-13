@@ -25,6 +25,7 @@
         "@centraid/agent-runtime": "workspace:*",
         "@centraid/app-engine": "workspace:*",
         "@centraid/automation": "workspace:*",
+        "@centraid/client": "workspace:*",
         "@centraid/design-tokens": "workspace:*",
         "@centraid/gateway": "workspace:*",
         "@centraid/tunnel": "workspace:*",
@@ -77,6 +78,25 @@
         "@types/react": "~19.1.0",
         "babel-preset-expo": "^55.0.21",
         "typescript": "catalog:",
+      },
+    },
+    "apps/web": {
+      "name": "@centraid/web",
+      "version": "0.1.0",
+      "dependencies": {
+        "@centraid/client": "workspace:*",
+        "@centraid/design-tokens": "workspace:*",
+        "react": "19.1.0",
+        "react-dom": "19.1.0",
+      },
+      "devDependencies": {
+        "@centraid/tsconfig": "workspace:*",
+        "@playwright/test": "^1.60.0",
+        "@types/react": "~19.1.0",
+        "@types/react-dom": "~19.1.0",
+        "@vitejs/plugin-react": "^5.0.0",
+        "typescript": "catalog:",
+        "vite": "^7.0.0",
       },
     },
     "packages/agent-runtime": {
@@ -149,6 +169,21 @@
         "typescript": "catalog:",
       },
     },
+    "packages/client": {
+      "name": "@centraid/client",
+      "version": "0.1.0",
+      "dependencies": {
+        "@centraid/design-tokens": "workspace:*",
+        "react": "19.1.0",
+        "react-dom": "19.1.0",
+      },
+      "devDependencies": {
+        "@centraid/tsconfig": "workspace:*",
+        "@types/react": "~19.1.0",
+        "@types/react-dom": "~19.1.0",
+        "typescript": "catalog:",
+      },
+    },
     "packages/design-tokens": {
       "name": "@centraid/design-tokens",
       "version": "0.1.0",
@@ -161,7 +196,7 @@
       "name": "@centraid/gateway",
       "version": "0.1.0",
       "bin": {
-        "centraid-gateway": "./dist/cli.js",
+        "centraid-gateway": "./dist/cli/cli.js",
       },
       "dependencies": {
         "@centraid/agent-runtime": "workspace:*",
@@ -175,6 +210,7 @@
       },
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
+        "@centraid/web": "workspace:*",
         "@types/node": "^22.0.0",
         "typescript": "catalog:",
       },
@@ -499,6 +535,8 @@
 
     "@centraid/blueprints": ["@centraid/blueprints@workspace:packages/blueprints"],
 
+    "@centraid/client": ["@centraid/client@workspace:packages/client"],
+
     "@centraid/design-tokens": ["@centraid/design-tokens@workspace:packages/design-tokens"],
 
     "@centraid/desktop": ["@centraid/desktop@workspace:apps/desktop"],
@@ -514,6 +552,8 @@
     "@centraid/tunnel": ["@centraid/tunnel@workspace:packages/tunnel"],
 
     "@centraid/vault": ["@centraid/vault@workspace:packages/vault"],
+
+    "@centraid/web": ["@centraid/web@workspace:apps/web"],
 
     "@clack/core": ["@clack/core@1.3.0", "", { "dependencies": { "fast-wrap-ansi": "^0.2.0", "sisteransi": "^1.0.5" } }, "sha512-xJPHpAmEQUBrXSLx0gF+q5K/IyihXpsHZcha+jB+tyahsKRK3Dxo4D0coZDewHo12NhiuzC3dTtMPbm53GEAAA=="],
 
@@ -2511,11 +2551,19 @@
 
     "@bruits/satteri-wasm32-wasi/@emnapi/runtime": ["@emnapi/runtime@1.11.1", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-vgj7R3y3Wgx24IQaGPA/R6YFXLHVMOZ0uVEyIQPaWs+rd1AzfEMXlAC22FYwO1XkKR6NPsq7mUandH8oIRdZFw=="],
 
+    "@centraid/client/react": ["react@19.1.0", "", {}, "sha512-FS+XFBNvn3GTAWq26joslQgWNoFu08F4kl0J4CgdNKADkdSGXQyTCnKteIAJy96Br6YbpEU1LSzV5dYtjMkMDg=="],
+
+    "@centraid/client/react-dom": ["react-dom@19.1.0", "", { "dependencies": { "scheduler": "^0.26.0" }, "peerDependencies": { "react": "^19.1.0" } }, "sha512-Xs1hdnE+DyKgeHJeJznQmYMIBG3TKIHJJT95Q58nHLSrElKlGQqDTR2HQ9fx5CN/Gk6Vh/kupBTDLU11/nDk/g=="],
+
     "@centraid/desktop/react": ["react@19.1.0", "", {}, "sha512-FS+XFBNvn3GTAWq26joslQgWNoFu08F4kl0J4CgdNKADkdSGXQyTCnKteIAJy96Br6YbpEU1LSzV5dYtjMkMDg=="],
 
     "@centraid/desktop/react-dom": ["react-dom@19.1.0", "", { "dependencies": { "scheduler": "^0.26.0" }, "peerDependencies": { "react": "^19.1.0" } }, "sha512-Xs1hdnE+DyKgeHJeJznQmYMIBG3TKIHJJT95Q58nHLSrElKlGQqDTR2HQ9fx5CN/Gk6Vh/kupBTDLU11/nDk/g=="],
 
     "@centraid/mobile/react": ["react@19.1.0", "", {}, "sha512-FS+XFBNvn3GTAWq26joslQgWNoFu08F4kl0J4CgdNKADkdSGXQyTCnKteIAJy96Br6YbpEU1LSzV5dYtjMkMDg=="],
+
+    "@centraid/web/react": ["react@19.1.0", "", {}, "sha512-FS+XFBNvn3GTAWq26joslQgWNoFu08F4kl0J4CgdNKADkdSGXQyTCnKteIAJy96Br6YbpEU1LSzV5dYtjMkMDg=="],
+
+    "@centraid/web/react-dom": ["react-dom@19.1.0", "", { "dependencies": { "scheduler": "^0.26.0" }, "peerDependencies": { "react": "^19.1.0" } }, "sha512-Xs1hdnE+DyKgeHJeJznQmYMIBG3TKIHJJT95Q58nHLSrElKlGQqDTR2HQ9fx5CN/Gk6Vh/kupBTDLU11/nDk/g=="],
 
     "@electron/get/semver": ["semver@6.3.1", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA=="],
 
@@ -2803,7 +2851,11 @@
 
     "@babel/highlight/chalk/supports-color": ["supports-color@5.5.0", "", { "dependencies": { "has-flag": "^3.0.0" } }, "sha512-QjVjwdXIt408MIiAqCX4oUKsgU2EqAGzs2Ppkm4aQYbjm+ZEWEcW4SfFNTr4uMNZma0ey4f5lgLrkB0aX0QMow=="],
 
+    "@centraid/client/react-dom/scheduler": ["scheduler@0.26.0", "", {}, "sha512-NlHwttCI/l5gCPR3D1nNXtWABUmBwvZpEQiD4IXSbIDq8BzLIK/7Ir5gTFSGZDUu37K5cMNp0hFtzO38sC7gWA=="],
+
     "@centraid/desktop/react-dom/scheduler": ["scheduler@0.26.0", "", {}, "sha512-NlHwttCI/l5gCPR3D1nNXtWABUmBwvZpEQiD4IXSbIDq8BzLIK/7Ir5gTFSGZDUu37K5cMNp0hFtzO38sC7gWA=="],
+
+    "@centraid/web/react-dom/scheduler": ["scheduler@0.26.0", "", {}, "sha512-NlHwttCI/l5gCPR3D1nNXtWABUmBwvZpEQiD4IXSbIDq8BzLIK/7Ir5gTFSGZDUu37K5cMNp0hFtzO38sC7gWA=="],
 
     "@expo/cli/minimatch/brace-expansion": ["brace-expansion@2.1.0", "", { "dependencies": { "balanced-match": "^1.0.0" } }, "sha512-TN1kCZAgdgweJhWWpgKYrQaMNHcDULHkWwQIspdtjV4Y5aurRdZpjAqn6yX3FPqTA9ngHCc4hJxMAMgGfve85w=="],
 

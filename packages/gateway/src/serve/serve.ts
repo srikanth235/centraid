@@ -18,6 +18,8 @@ import { startRuntimeHttpServer, type RuntimeHttpServerOptions } from '@centraid
 import { WEBHOOK_ROUTE_PREFIX } from '@centraid/automation';
 import { OAUTH_CALLBACK_PATH } from '../routes/connections-routes.js';
 import { PAIR_ROUTE_PATH } from '../routes/pair-routes.js';
+import { WEB_SESSION_REDEEM_PATH } from './web-app-sessions.js';
+import { startWebUiServer } from './web-ui-server.js';
 import { buildGateway, type BuildGatewayOptions, type BuiltGateway } from './build-gateway.js';
 
 export interface ServeOptions extends BuildGatewayOptions {
@@ -39,16 +41,20 @@ export interface ServeOptions extends BuildGatewayOptions {
    * behavior (the desktop embed keeps this).
    */
   authorizeBearer?: RuntimeHttpServerOptions['authorizeBearer'];
+  /** Optional dedicated-origin PWA listener. Generated apps remain on the API origin. */
+  web?: { rootDir: string; host?: string; port?: number };
 }
 
 export interface GatewayServeHandle extends Omit<
   BuiltGateway,
-  'extraHandlers' | 'composedHandler' | 'webhookHandler' | 'start' | 'stop'
+  'extraHandlers' | 'composedHandler' | 'webhookHandler' | 'webAppSessions' | 'start' | 'stop'
 > {
   /** Bound base URL — `http://<host>:<port>`. */
   url: string;
   /** Bearer token the renderer must send on every request. */
   token: string;
+  /** Dedicated PWA origin when web hosting is enabled. */
+  webUrl?: string;
   /** Stop the HTTP server. Idempotent in callers. */
   close(): Promise<void>;
 }
@@ -79,23 +85,39 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
     // reason: its own one-time ticket secret IS the auth, checked by
     // `makePairRouteHandler` itself. Only present when the daemon wired
     // `devicePairing` — the desktop embed never adds this path.
-    publicPaths: [OAUTH_CALLBACK_PATH, ...(options.devicePairing ? [PAIR_ROUTE_PATH] : [])],
+    publicPaths: [
+      OAUTH_CALLBACK_PATH,
+      WEB_SESSION_REDEEM_PATH,
+      ...(options.devicePairing ? [PAIR_ROUTE_PATH] : []),
+    ],
     publicPathPrefixes: [WEBHOOK_ROUTE_PREFIX],
   };
   if (options.host !== undefined) serverOptions.host = options.host;
   if (options.port !== undefined) serverOptions.port = options.port;
   if (options.token !== undefined) serverOptions.token = options.token;
-  if (options.authorizeBearer !== undefined) serverOptions.authorizeBearer = options.authorizeBearer;
+  if (options.authorizeBearer !== undefined)
+    serverOptions.authorizeBearer = options.authorizeBearer;
+  serverOptions.authorizeRequest = (req) => gateway.webAppSessions.authorize(req);
   const server = await startRuntimeHttpServer(serverOptions);
   await gateway.start(server.url);
+  const web = options.web
+    ? await startWebUiServer({
+        rootDir: options.web.rootDir,
+        apiUrl: server.url,
+        ...(options.web.host ? { host: options.web.host } : {}),
+        ...(options.web.port !== undefined ? { port: options.web.port } : {}),
+      })
+    : undefined;
 
   return {
     url: server.url,
     token: server.token,
+    ...(web ? { webUrl: web.url } : {}),
     // Stop the cron timers before the HTTP server so no fire is dispatched
     // mid-teardown.
     close: async () => {
       await gateway.stop();
+      await web?.close();
       await server.close();
     },
     runtime: gateway.runtime,

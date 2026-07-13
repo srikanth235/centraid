@@ -3,7 +3,7 @@
 > **⚠️ Stale premise — verify before running.** Commit `4397329` ("'Use
 > template' installs app templates directly as published apps") removed the
 > draft stage for app templates entirely: `installAppTemplate`
-> ([templatesData.ts](../../../apps/desktop/src/renderer/react/shell/routes/templatesData.ts))
+> ([templatesData.ts](../../../packages/client/src/react/shell/routes/templatesData.ts))
 > now clones with `publish: true` and pins the result straight onto Home as a
 > `UserAppMeta`, never a `__draft`; `DiscoverRoute.tsx`'s `applyAppTemplate`
 > confirms there is no builder detour. `loadAppTemplates` also no longer
@@ -18,7 +18,7 @@
 ## Goal
 Multiple template clones produce independent drafts on disk and on home. The
 TEMPLATES section is NOT consumed by cloning — `loadAvailableTemplates`
-([templatesData.ts](../../../apps/desktop/src/renderer/react/shell/routes/templatesData.ts) at line 15) filters by
+([templatesData.ts](../../../packages/client/src/react/shell/routes/templatesData.ts) at line 15) filters by
 **published** `userApps`, not by drafts. Only Publish removes a template from
 the available list. All three drafts (and the three template tiles) must
 survive a full restart.

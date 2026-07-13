@@ -12,11 +12,13 @@ export default defineConfig({
       'packages/automation',
       'packages/backup',
       'packages/blueprints',
+      'packages/client',
       'packages/gateway',
       'packages/skills',
       'packages/tunnel',
       'packages/vault',
       'apps/desktop',
+      'apps/web',
     ],
     coverage: {
       provider: 'v8',

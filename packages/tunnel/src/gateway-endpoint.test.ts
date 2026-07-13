@@ -21,6 +21,7 @@ import { createTunnelClient, tunnelRequest } from './client.js';
 import type { TunnelClient } from './client.js';
 import { startGatewayEndpoint } from './gateway-endpoint.js';
 import type { GatewayEndpointHandle, GatewayPairResponse } from './gateway-endpoint.js';
+import { TUNNEL_AUTH_MODE_HEADER, TUNNEL_AUTH_WEB_SESSION } from './protocol.js';
 
 const TOKEN = crypto.randomBytes(16).toString('hex');
 const PROOF = crypto.randomBytes(16).toString('hex');
@@ -29,17 +30,30 @@ interface SeenRequest {
   url: string;
   device?: string;
   proof?: string;
+  authorization?: string;
+  cookie?: string;
+  tunnelAuthMode?: string;
 }
 
 function startFakeGateway(seen: SeenRequest[]): Promise<{ server: http.Server; baseUrl: string }> {
   const server = http.createServer((req, res) => {
-    if ((req.headers.authorization ?? '') !== `Bearer ${TOKEN}`) {
+    if (
+      (req.headers.authorization ?? '') !== `Bearer ${TOKEN}` &&
+      req.headers.cookie !== '__centraid_app=test-session'
+    ) {
       res.statusCode = 401;
       res.end(JSON.stringify({ error: 'unauthorized' }));
       return;
     }
     seen.push({
       url: req.url ?? '',
+      ...(typeof req.headers.authorization === 'string'
+        ? { authorization: req.headers.authorization }
+        : {}),
+      ...(typeof req.headers.cookie === 'string' ? { cookie: req.headers.cookie } : {}),
+      ...(typeof req.headers[TUNNEL_AUTH_MODE_HEADER] === 'string'
+        ? { tunnelAuthMode: req.headers[TUNNEL_AUTH_MODE_HEADER] }
+        : {}),
       ...(typeof req.headers['x-centraid-device'] === 'string'
         ? { device: req.headers['x-centraid-device'] }
         : {}),
@@ -167,6 +181,26 @@ describe('gateway endpoint', () => {
       device: device.endpointId,
       proof: PROOF,
     });
+  });
+
+  it('defers generated-app auth to its scoped web session and strips the mode marker', async () => {
+    const connection = await device.connect(endpoint.ticket());
+    seen.length = 0;
+    const res = await tunnelRequest(connection, {
+      method: 'GET',
+      target: '/centraid/todos/',
+      headers: {
+        cookie: '__centraid_app=test-session',
+        [TUNNEL_AUTH_MODE_HEADER]: TUNNEL_AUTH_WEB_SESSION,
+      },
+    });
+    expect(res.status).toBe(200);
+    expect(seen[0]).toMatchObject({
+      cookie: '__centraid_app=test-session',
+      device: device.endpointId,
+    });
+    expect(seen[0]?.authorization).toBeUndefined();
+    expect(seen[0]?.tunnelAuthMode).toBeUndefined();
   });
 
   it('revocation lands on live connections', async () => {
