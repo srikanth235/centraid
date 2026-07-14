@@ -3,7 +3,13 @@ import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as esbuild from 'esbuild';
-import { contentTypeFor, resolveStaticPath, staticSecurityHeaders } from './security.js';
+import {
+  contentTypeFor,
+  resolveStaticPath,
+  SHARED_ASSET_FILES,
+  staticSecurityHeaders,
+} from './security.js';
+import { BUNDLE_REL_RE, findBundleByHash, prepareBundledIndex } from './app-bundle.js';
 import { sendError } from './http-utils.js';
 import { DYNAMIC_QUALITY } from './compression.js';
 import {
@@ -53,16 +59,12 @@ import { injectChangeBridge } from './bridge-script.js';
  * shared the same way — an app with its own `wall.css` (e.g. people, for its
  * warm-blush light-mode override) still wins via the per-app-copy precedence
  * above.
+ *
+ * The set itself is defined in security.ts (the leaf module) so the
+ * whole-graph bundler (app-bundle.ts) resolves through the SAME list as this
+ * per-file server without an import cycle. This comment stays here because
+ * the serving semantics it documents live here.
  */
-const SHARED_ASSET_FILES = new Set([
-  'kit.js',
-  'kit.css',
-  'elements.js',
-  'react-core.min.js',
-  'jsx-runtime.js',
-  'tokens.css',
-  'wall.css',
-]);
 
 /**
  * Per-file JSX transform cache, keyed by the absolute resolved file path
@@ -219,6 +221,28 @@ export async function serveStatic(
   rel: string,
   opts: ServeStaticOptions = {},
 ): Promise<true> {
+  // Whole-app bundle URLs (`_bundle.<hash>.js`, minted by the live
+  // index.html rewrite below) are content-addressed and never touch the
+  // filesystem — see app-bundle.ts. Live serving only: a draft never
+  // references one (its HTML isn't rewritten), so under `_draft/` this
+  // shape falls through to normal resolution and 404s loudly.
+  const bundleMatch = opts.draft ? null : BUNDLE_REL_RE.exec(rel.replace(/^\.?\/+/, ''));
+  if (bundleMatch) {
+    const bundle = findBundleByHash(appDir, bundleMatch[1]!);
+    if (!bundle) return sendError(res, 404, 'not_found', 'Unknown bundle hash.');
+    return finishStaticAsset(req, res, {
+      contentType: 'application/javascript; charset=utf-8',
+      etag: bundle.etag,
+      rawSize: bundle.code.length,
+      loadRaw: () => bundle.code,
+      variants: bundle.variants,
+      // Safe because the URL embeds the content hash: new content = new URL.
+      // The ETag still rides along for the PWA service worker's URL+ETag
+      // asset cache.
+      cacheControl: 'private, max-age=31536000, immutable',
+    });
+  }
+
   let file = resolveStaticPath(appDir, rel);
   if (!file) return sendError(res, 404, 'not_found', 'Asset not found.');
 
@@ -263,6 +287,17 @@ export async function serveStatic(
   // future injection.
   if (contentType.startsWith('text/html')) {
     let html = (await fs.readFile(file)).toString('utf8');
+    // LIVE serving collapses the app's request waterfall (issue #404): the
+    // entry `<script type="module">` is rewritten to a content-hashed
+    // whole-graph bundle and the render-blocking stylesheet `<link>`s are
+    // inlined into one `<style>` block (CSP already carries `style-src
+    // 'unsafe-inline'`). Best-effort — a failed bundle leaves the original
+    // per-file tags in place. DRAFT previews are exempt: the builder edits
+    // files one at a time and the preview must reflect each save without a
+    // whole-graph rebuild getting in the way of file-level semantics.
+    if (!opts.draft) {
+      html = await prepareBundledIndex(html, appDir, opts.sharedAssetsDir);
+    }
     if (opts.settingsInject) {
       html = injectSettings(html, opts.settingsInject);
     }

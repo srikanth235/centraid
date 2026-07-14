@@ -71,13 +71,19 @@ export function variantCacheFor(
  * Finish a cacheable non-HTML asset response: conditional 304 (no body read),
  * else content-negotiated compression drawn from / filled into `variants`.
  *
- * `no-cache` (still cacheable — just always revalidate first) rather than
- * `max-age`/`immutable`, because the same URL's bytes DO change under this
- * gateway: reinstall/republish swaps the code-store worktree a file resolves
- * from, and a draft file is mutated live by the builder while the preview
- * iframe keeps polling the same path. An etag match turns a repeat request
- * into a 304 with no body. `private`: per-gateway, bearer-auth'd responses,
- * never a shared/CDN cache.
+ * Default `no-cache` (still cacheable — just always revalidate first) rather
+ * than `max-age`/`immutable`, because the same URL's bytes DO change under
+ * this gateway: reinstall/republish swaps the code-store worktree a file
+ * resolves from, and a draft file is mutated live by the builder while the
+ * preview iframe keeps polling the same path. An etag match turns a repeat
+ * request into a 304 with no body. `private`: per-gateway, bearer-auth'd
+ * responses, never a shared/CDN cache.
+ *
+ * `cacheControl` overrides that default for the one asset family whose URL
+ * embeds its own content hash (the `_bundle.<hash>.js` whole-app bundle, see
+ * app-bundle.ts) — those are genuinely immutable: a content change changes
+ * the URL, so `max-age`/`immutable` is safe and lets warm opens skip the
+ * revalidation round-trip entirely.
  */
 export async function finishStaticAsset(
   req: IncomingMessage,
@@ -88,6 +94,7 @@ export async function finishStaticAsset(
     rawSize: number;
     loadRaw: () => Buffer | Promise<Buffer>;
     variants: Map<Encoding, Buffer>;
+    cacheControl?: string;
   },
 ): Promise<true> {
   const { contentType, etag, rawSize, loadRaw, variants } = opts;
@@ -99,7 +106,7 @@ export async function finishStaticAsset(
 
   res.setHeader('Content-Type', contentType);
   res.setHeader('ETag', etag);
-  res.setHeader('Cache-Control', 'private, no-cache');
+  res.setHeader('Cache-Control', opts.cacheControl ?? 'private, no-cache');
   // Content negotiation applies to compressible types → caches must key on
   // Accept-Encoding even when this particular response wasn't compressed.
   if (isCompressibleType(contentType)) res.setHeader('Vary', 'Accept-Encoding');
@@ -156,4 +163,3 @@ export function writeCompressible(
   res.setHeader('Content-Encoding', encoding);
   res.end(compress(raw, encoding, quality));
 }
-

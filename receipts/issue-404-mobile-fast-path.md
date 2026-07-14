@@ -16,6 +16,14 @@ the 2026-07-14 audit's file:line ground truth.
 - [x] Commit 4 — blueprints: photos grid never fetches originals
 - [x] Commit 5 — blueprints: app data hygiene + kit helpers across the other 7 apps
 
+Wave 2 — the rest of the issue's scope:
+
+- [x] Commit 6 — app-engine: serve-time app bundling, hashed immutable assets, inlined CSS
+- [x] Commit 7 — app-engine: warm worker pool + bridge read() dedup/abort
+- [x] Commit 8 — web: activate wasm-opt, iOS splash images
+- [x] Commit 9 — blueprints: optimistic tally add-expense; fix visual-harness vs compression
+- [x] Commit 10 — perf: PWA waterfall probe, CI budgets, connect-vs-stream instrumentation
+
 ## What changed
 
 ### Commit 1 — app-engine + tunnel: wire compression, ETag memoization, SSE radio discipline
@@ -219,6 +227,155 @@ Files: `packages/blueprints/kit/kit.js`,
   gated focus refresh, and ResizeObserver width tracking replacing the
   perpetual 4 Hz `setInterval` layout pollers.
 
+### Commit 6 — app-engine: serve-time app bundling, hashed immutable assets, inlined CSS
+
+Files: `packages/app-engine/src/http/app-bundle.ts` (new),
+`packages/app-engine/src/http/app-bundle.test.ts` (new),
+`packages/app-engine/src/http/static-server.ts`,
+`packages/app-engine/src/http/security.ts`,
+`packages/app-engine/src/http/asset-variants.ts`.
+
+- Each blueprint app previously loaded as a raw per-file ESM graph (photos:
+  41-module boot graph, 3-4 levels deep) plus 4 render-blocking CSS links,
+  every file revalidating `private, no-cache` on each boot. Serving a live
+  `index.html` now esbuild-bundles the whole local import graph (kit +
+  vendored React included) and rewrites the entry `<script type="module">`
+  to `./_bundle.<hash>.js`; the app's CSS is inlined into a single
+  `<style>` block (CSP already carries `style-src 'unsafe-inline'`; no
+  kit/app CSS uses `url()`/`@import`, so base-URL rewriting is not needed).
+  A successful rewrite leaves zero external modules, so no modulepreload
+  hints are required.
+- **Photos: 46 requests → 2** (HTML + bundle). Bundle 439 KB raw /
+  **91 KB brotli**, 41 ms cold build, ~1 ms warm. All 8 apps bundle.
+- Cache key = manifest of the app's `.js/.jsx/.mjs` tree (rel + mtime +
+  size, excluding handler dirs) + shared kit stats; the hashed URL is
+  content-addressed and served `max-age=31536000, immutable` with a full
+  sha256 ETag, so warm opens never revalidate it and the SW's URL+ETag
+  cache stores it permanently. Stale hashes 404 cleanly.
+- Resolution parity with the per-file path: esbuild resolves through
+  `resolveStaticPath` (escape/reserved guards), per-app copy beats the
+  shared dir, root-only shared fallback, `automatic` JSX runtime so a
+  single React instance survives. Roots are realpath'd (symlinked
+  worktrees would otherwise fail containment).
+- **Drafts are exempt everywhere** — the builder's live-editing path keeps
+  per-file serving with the depth-aware jsx-runtime climb; `_bundle.*.js`
+  404s under `_draft/`. A bundle build failure leaves the tag untouched
+  and degrades to exactly the pre-change behavior.
+- `SHARED_ASSET_FILES` moved to `security.ts` (leaf module) so the server
+  and the bundler share one list without an import cycle.
+
+### Commit 7 — app-engine: warm worker pool + bridge read() dedup/abort
+
+Files: `packages/app-engine/src/handlers/worker-pool.ts` (new),
+`packages/app-engine/src/handlers/handler-pool.test.ts` (new),
+`packages/app-engine/src/handlers/handler-runner.ts`,
+`packages/app-engine/src/worker/runner.ts`,
+`packages/app-engine/src/http/bridge-script.ts`,
+`packages/app-engine/src/http/bridge-script.test.ts` (new).
+
+- Every tool call spawned a fresh `worker_threads` Worker and terminated
+  it. Investigation found the worker loads handler code via dynamic
+  `import`, so a worker's module registry accumulates every handler it
+  runs — **reuse would leak one app's module-level state into another**.
+  The pool therefore keeps workers **single-use** and instead pre-boots
+  **warm spares**: N pre-started workers finish thread-start + runner-module
+  evaluation and park; `acquire()` hands one out and schedules its
+  replacement, so boot cost is paid off the request's critical path.
+  Isolation is byte-for-byte identical to the old model (a handler still
+  executes in a thread that imported no other handler) — only the spawn
+  moves earlier in time.
+- Dispatch latency (50 sequential reads): **~84 ms → ~29-35 ms** at the
+  default pool size (~2.8x); size 0 reproduces the old path exactly.
+  Config `CENTRAID_WORKER_POOL_SIZE` (default 2, clamp 0-8). Timeout kill,
+  crash survival, and the #351 admission gate all preserved.
+- **Bridge `read()`**: identical concurrent `(query, input)` calls now share
+  one in-flight fetch; `{signal}` is supported and the returned promise
+  carries `.abort()`. The shared fetch aborts only when *every* sharer has
+  aborted (ref-counted) — one caller cancelling rejects only itself.
+  `write()` is never deduped but passes `{signal}` through. Purely
+  additive; the `read({query,input})` / `write({action,input})` contract is
+  unchanged.
+
+### Commit 8 — web: activate wasm-opt, iOS splash images
+
+Files: `apps/web/scripts/build-iroh-wasm.sh`,
+`apps/web/src/generated/centraid_web_iroh_bg.wasm`,
+`apps/web/index.html`,
+`apps/web/public/splash-*.png` (6 new).
+
+- Installed binaryen and fixed the `wasm-opt` invocation — it needs
+  `--all-features` (the bindgen output uses bulk-memory/reference-types;
+  without the flag wasm-opt rejects the module). The pass is now live:
+  the WASM the phone downloads and compiles drops **2,182,419 →
+  1,982,399 bytes (-9.2 %)**.
+- iOS PWAs launched to a white flash with no startup images. Six portrait
+  splash PNGs (1290x2796, 1179x2556, 1170x2532, 1125x2436, 828x1792,
+  750x1334) on the manifest's `#111317` background with the centered mark,
+  palette-quantized to **40 KB total**, wired via media-queried
+  `apple-touch-startup-image` links.
+
+### Commit 9 — blueprints: optimistic tally add-expense; fix visual-harness vs compression
+
+Files: `packages/blueprints/apps/tally/logic.js`,
+`packages/blueprints/apps/tally/app.jsx`,
+`packages/blueprints/apps/tally/components/ExpenseRow.jsx`,
+`packages/blueprints/visual-harness/server.mjs`,
+`packages/blueprints/visual-harness/mock-centraid.js`.
+
+- **Tally add-expense is optimistic**: the decorated row lands in a pending
+  overlay and the ledger + dashboard totals repaint with the shared kit
+  pending chip *before* the write resolves; the modal closes immediately.
+  Reconcile: executed → doorbell refresh clears the overlay only once the
+  refresh lands (no blink-out); parked → row keeps the chip, is excluded
+  from dashboard totals (a parked write moved no balance) and shows the
+  existing approval banner; failed/denied → row is removed with the
+  existing error narration. **Critical path 2 serial RTTs → 0.**
+  Edit-expense stays cold-path; settle-up/add-friend are deliberately not
+  converted (settle nets balances, add-friend has no party id until the
+  server mints one).
+- **Visual-harness regression fixed** (introduced by wave 1's compression):
+  `serveAppAsset` captured `serveStatic`'s output and did
+  `body.toString('utf8')` to inject the mock — but with a browser's
+  `Accept-Encoding` that body is now brotli, so the text conversion
+  corrupted it into replacement chars while `Content-Encoding: br` was
+  passed through, and every harness page died with
+  `ERR_CONTENT_DECODING_FAILED`. The harness re-encodes nothing, so it now
+  asks `serveStatic` for identity bytes. Also corrected the mock's change
+  feed to fire `tables: []` (what the real runtime emits for an app's own
+  handler writes, and what the kit's table filter always lets through)
+  instead of a bare app id, and refreshed its stale "neither app registers
+  a listener" comment — seven apps subscribe through the kit now.
+
+### Commit 10 — perf: PWA waterfall probe, CI budgets, connect-vs-stream instrumentation
+
+Files: `apps/web/tests/e2e/perf-waterfall.spec.ts` (new),
+`apps/web/tests/e2e/perf-budgets.ts` (new),
+`apps/web/src/iroh-transport.ts`,
+`scripts/perf/run-waterfall.mjs` (new),
+`scripts/perf/summarize.mjs` (new),
+`scripts/perf/README.md` (new).
+
+- The committed waterfall probe only ever measured Electron — the surface
+  that benefits most from the HTTP cache and least from our work. A PWA
+  probe now runs on the real e2e harness (shell + app iframe, cold and
+  warm), emits a JSON report, and asserts budgets from a single documented
+  module: request-count and transfer-byte ceilings (measured + 20 %
+  headroom) and warm/cold ratios. Timing budgets ship **soft/log-only**
+  until CI proves stable; a `>0 bytes` guard stops a silently-warm run from
+  passing as a cold one.
+- **Transport instrumentation proves the wave-1 pool**: `__centraidIrohStats`
+  ({connects, streams, reconnects}) plus `centraid:iroh-connect` /
+  `centraid:iroh-request` User Timing marks. Live measurement in headless
+  Chromium: **1 connect / 12 streams** (ratio 0.08) — before the pool this
+  was one connect per request. SW tunnel cache measured cold
+  `calls=2, bytes=12288` → warm `calls=1, bytes=0`.
+- The spec auto-runs under the existing `apps/web` e2e script (shared
+  Playwright `testDir`); `node scripts/perf/run-waterfall.mjs` runs it
+  standalone. **CI gap flagged, not closed:** the repo has no web-e2e job
+  at all today (`e2e.yml` runs only the nightly desktop suite), so the
+  budgets do not gate CI until that job exists — the exact workflow steps
+  are recorded in `scripts/perf/README.md`.
+
 ## Decisions
 
 - **Compression gate is negotiation-only** (no custom header flag).
@@ -232,13 +389,34 @@ Files: `packages/blueprints/kit/kit.js`,
 - **Photos "Show more" keeps the full re-read**: the vault read API has no
   offset/cursor; incremental rendering via stable keys mitigates. Flagged
   for the replica protocol (#406) where reads go local anyway.
-- **`wasm-opt` wired but inactive**: binaryen is not installed on this
-  machine; the build script warns and skips. Install binaryen and rebuild
-  to shrink the 2.08 MB wasm ~10–20 %.
+- **`wasm-opt` now active** (wave 2): binaryen installed and the
+  invocation fixed with `--all-features` — the bindgen output uses
+  post-MVP features and wasm-opt rejects the module without it. -9.2 %.
 - **File-size cap compliance by extraction**: `static-server.ts` and
   `web-host.ts` crossed 500 lines from legitimate additions; both were
   split mechanically (asset-variants/bridge-script, sw-lifecycle/
   connectivity) rather than waived.
+- **Worker pool keeps workers single-use** (wave 2): handler code loads via
+  dynamic `import`, so reusing a worker would let one app's module-level
+  state leak into another's run. Chose warm-spare pre-booting (same
+  isolation, boot cost off the critical path) over pooled reuse — the
+  latency win is nearly identical and the isolation semantics are
+  unchanged. Correctness over the last few milliseconds.
+- **Bundling applies to installed apps only** (wave 2): drafts keep per-file
+  serving so the builder's live editing keeps working, and a bundle build
+  failure degrades to the per-file path rather than failing the request.
+- **CSS inlined rather than concatenated** (wave 2): the CSP already allows
+  `style-src 'unsafe-inline'` and no kit/app CSS uses `url()`/`@import`, so
+  inlining is base-URL-safe and removes the last 4 render-blocking round
+  trips. Cost: ~12 KB brotli added to each (no-store) HTML response.
+- **Perf budgets do not gate CI yet** (wave 2): the repo has no web-e2e job;
+  the spec and budgets are in place and run locally / in the `apps/web` e2e
+  script, and the workflow steps needed are documented. Adding a CI job is
+  a repo-infra change left to the owner.
+- **Visual-harness regression was ours** (wave 2): wave 1's compression broke
+  every real-browser harness page (`ERR_CONTENT_DECODING_FAILED`). Fixed
+  here rather than deferred, since the harness is the verification surface
+  for the blueprint apps. All 8 apps re-verified in real Chromium.
 - **Pre-existing repo red, not addressed here** (verified present on the
   clean base with all wave-1 changes stashed): `turn-routes.test.ts` over
   the 500-line cap, a `TODO` and two `eslint-disable`s inside the
@@ -278,6 +456,12 @@ cd apps/web && bun run e2e
 # blueprints (apps + kit + new query-handler tests) — 139 pass
 cd packages/blueprints && npx vitest run
 
+# wave 2: PWA perf probe standalone (waterfall + budgets + pool proof)
+node scripts/perf/run-waterfall.mjs
+
+# wave 2: visual harness in a real browser (all 8 apps must load clean)
+bun packages/blueprints/visual-harness/server.mjs   # then open /centraid/<app>/
+
 # whole-repo gate (root)
 npx vitest run
 ```
@@ -294,27 +478,40 @@ npx vitest run
   harness at 375 px and desktop widths with screenshots read as ground
   truth: 0 grid originals loaded across normal/thumbless/error paths,
   53/53 images `decoding=async` with dimensions.
-- Root suite: 2,920 tests pass; the 2 failing files (`tokens-sync`,
+- Wave 2: app-engine **355 tests** green (12 new bundling + 6 pool + 9
+  bridge); apps/web e2e **9/9** (6 original + 3 new perf specs); blueprints
+  139 green; typecheck clean across app-engine, apps/web, blueprints.
+- Wave 2 measurements: photos app open **46 → 2 requests** (bundle 91 KB
+  brotli); handler dispatch **~84 ms → ~29-35 ms**; iroh **1 connect /
+  12 streams** (pool reuse proven live in headless Chromium); SW warm open
+  **0 bytes**; wasm **2,182,419 → 1,982,399 bytes**.
+- Visual harness re-verified in real Chromium after the compression fix:
+  all 8 apps reach `readyState: complete` with **zero console errors**
+  (photos renders 759 nodes through the new bundle URL, so the bundling
+  path is browser-verified end to end). Tally's optimistic flow verified on
+  the harness at 375x812 across executed/parked/failed with screenshots
+  read as ground truth.
+- Root suite: **2,947 tests pass**; the 2 failing files (`tokens-sync`,
   `packages/client ShellApp`) fail identically on the clean base with all
-  wave-1 changes stashed — pre-existing, not introduced here.
+  changes stashed — pre-existing, not introduced here.
 
 ## Audit
 
-Three checks on the receipt's fidelity to the work.
+Three checks on the receipt's fidelity to the full 10-commit work (waves 1–2).
 
-- **What changed accurately describes the diff** — PASS: git diff --stat lists 41 files (1642 +, 707 −); receipt lists per-commit files and spot-checks confirm compression.ts negotiates Accept-Encoding (lines 21–26), photos media.js removes makeThumb entirely (8 deleted function + 3 deleted callers), kit.js exports onDataChange with debounce (lines 190–196). File-size splits are structural (static-server.ts 448 lines post-split, web-host.ts 484 lines post-split, both under 500-line cap).
+- **What changed accurately describes the diff across both waves** — PASS: Wave 1 git diff lists 41 files (1642 +, 707 −); wave 2 working tree shows 16 new files (splash PNGs, perf specs, bundle/pool/bridge helpers) + 15 modified files. Receipt lists per-commit files and spot-checks confirm compression.ts negotiates Accept-Encoding (wave 1, lines 21–26), photos media.js removes makeThumb entirely (wave 1), kit.js exports onDataChange/onFocusRefresh/observeWidth (wave 1, lines 255–293), app-bundle.ts esbuild-bundles apps (wave 2, exists + mentioned), worker-pool.ts keeps workers single-use with warm spares (wave 2, exists), wasm-opt invoked with --all-features (wave 2, scripts/build-iroh-wasm.sh line 33), splash-*.png (6 files) exist, perf-waterfall.spec.ts and perf-budgets.ts exist. File-size splits are structural (static-server.ts 448 lines, web-host.ts 484 lines post-split, both under cap).
 
-- **Each of the 5 checklist items is realized in the diff** — PASS: Commit 1 (compression.ts exists; compression.test.ts + 17 new tests green), Commit 2 (lib.rs QUIC Connection pool, 6 references to connection cache per diff), Commit 3 (sw.js cache buckets SHELL_CACHE/ASSET_CACHE/BLOB_CACHE + stale-while-revalidate), Commit 4 (media.js makeThumb + setThumbSrc deleted entirely), Commit 5 (kit.js onDataChange + onFocusRefresh + observeWidth, 88-line addition, verified in notes/agenda/tasks/tally/locker/people/docs).
+- **Each of the 10 checklist items is realized in the working tree** — PASS: Commits 1–5 (wave 1) committed; commits 6–10 (wave 2) staged/modified. Commit 1 (compression.ts + 17 tests), Commit 2 (QUIC Connection pool caching), Commit 3 (sw.js SHELL_CACHE/ASSET_CACHE/BLOB_CACHE + stale-while-revalidate), Commit 4 (photos makeThumb + setThumbSrc deleted), Commit 5 (kit.js 88-line addition to 7 apps), Commit 6 (app-bundle.ts creates hashed immutable bundles, 46→2 requests verified), Commit 7 (worker-pool.ts single-use with warm spares + bridge-script.ts read() dedup/AbortController), Commit 8 (wasm-opt -Oz --all-features + 6 splash PNGs), Commit 9 (tally optimistic logic + visual-harness compression fix), Commit 10 (perf-waterfall.spec.ts + perf-budgets.ts + instrumentation marks).
 
-- **Checklist honestly maps the issue's workstreams as wave 1** — PASS: Issue #404 defines 6 workstreams (T/C/R/S/A/I); receipt covers T (QUIC pool, wire compression), C (PWA caching, gzip decode, persist, icons), R (SSE radio discipline, health poll gating), A (photos/notes/agenda/all-apps hygiene + kit helpers); S (bundle apps, worker pool) and I (instrumentation) deferred to wave 2 per "Out of scope" section. Mapping is honest-but-partial, faithful to issue structure without claiming unfinished work.
+- **Checklist covers all issue workstreams; deferred items honestly disclosed** — PASS: Issue #404 defines T/C/R/S/A/I. Receipt covers T (compression, QUIC pool, wasm-opt), C (PWA cache, gzip decode, splash, persist), R (SSE radio discipline, health poll gating), S (app bundling, worker pool, eTag cache), A (photos/notes/agenda/all-apps hygiene), I (PWA perf waterfall probe + CI budgets). The receipt openly discloses that "the repo has no web-e2e job at all today... the budgets do not gate CI until that job exists" (line 374–377) — the instrumentation is complete and landing, but CI integration is deferred, not claimed done. Mapping is comprehensive across all workstreams; no claimed items are actually deferred.
 
 ## Steering
 
 Two checks on mid-task steering events in the session transcript.
 
-- **Every steering event in the session is recorded** — PASS: User messages extracted from transcript (ignoring task-notification blocks). Four user messages: (1) initial audit request "look at our all 8 blueprint apps...", (2) "okay no suggestions for clawgnition...", (3) "okay, this is fine. now let'ts take all you findings...", (4) "create a separate worktree first...act as orchestrator...". None are mid-task interrupts or corrections — all are task requests/approvals at session boundaries. No steering rows needed.
+- **Every steering event in the session is recorded** — PASS: User messages extracted from transcript (ignoring task-notification and goal-hook blocks). One genuine mid-task correction identified and recorded: the visual-harness regression report (ordinal 669, 2026-07-14T16:16:19.714Z). User reported that wave 1's compression broke every real-browser harness page with `ERR_CONTENT_DECODING_FAILED`, provided root cause (CaptureResponse's `body.toString('utf8')` corrupts brotli/gzip), reproduction, and fix options. This correction redirected the agent to fix it as part of Commit 9. Row recorded in the Steering table below.
 
-- **No non-steering message is recorded as a steering event** — PASS: The receipt has no "### Steering" table under "## Accounting" yet (no steering rows pre-existing); task-notification blocks are correctly excluded from user-message interpretation.
+- **No non-steering message is recorded as a steering event** — PASS: The "### Steering" table under "## Accounting" is empty (no pre-existing rows); task-notification blocks and goal-setting commands are correctly excluded from steering-event interpretation.
 
 ## Accounting
 
@@ -327,3 +524,9 @@ Two checks on mid-task steering events in the session transcript.
 | claude-code-4f297cb4-d1d-1784042607-1 | claude-code | 4f297cb4-d1d1-4823-be8d-6087c00b4fc0 | #404 | claude-fable-5 | 244 | 2189690 | 21955487 | 363190 | 2553124 | 67.4886 | 244 | 2189690 | 21955487 | 363190 | perf(app-engine,tunnel): wire compression, ETag memoization, SSE radio disciplin |
 | claude-code-4f297cb4-d1d-1784042644-1 | claude-code | 4f297cb4-d1d1-4823-be8d-6087c00b4fc0 | #404 | claude-fable-5 | 8 | 6220 | 1030740 | 2156 | 8384 | 1.2164 | 252 | 2195910 | 22986227 | 365346 | perf(app-engine,tunnel): wire compression, ETag memoization, SSE radio disciplin |
 | claude-code-4f297cb4-d1d-1784042765-1 | claude-code | 4f297cb4-d1d1-4823-be8d-6087c00b4fc0 | #404 | claude-fable-5 | 20 | 22660 | 2641360 | 10439 | 33119 | 3.4468 | 272 | 2218570 | 25627587 | 375785 | perf(app-engine,tunnel): wire compression, ETag memoization, SSE radio disciplin |
+
+### Steering
+
+| steer-key | session | issue | type | tier | user-reason | commit | ordinal | timestamp |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| steer-4f297cb4-1-1 | 4f297cb4-d1d1-4823-be8d-6087c00b4fc0 | #404 | correction | classifier | Wave 1 compression broke harness; needs fix | perf(blueprints): tally + harness fix | 669 | 2026-07-14T16:16:19.714Z |
