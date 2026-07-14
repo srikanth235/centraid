@@ -1,5 +1,5 @@
 /* tslint:disable */
-/* eslint-disable -- governance: allow-no-unjustified-suppressions wasm-bindgen generated declaration */
+/* eslint-disable */
 /**
  * The `ReadableStreamType` enum.
  *
@@ -89,13 +89,13 @@ export interface InitOutput {
     readonly intounderlyingsink_write: (a: number, b: number) => number;
     readonly intounderlyingsource_cancel: (a: number) => void;
     readonly intounderlyingsource_pull: (a: number, b: number) => number;
-    readonly __wasm_bindgen_func_elem_1978: (a: number, b: number) => void;
-    readonly __wasm_bindgen_func_elem_6195: (a: number, b: number) => void;
-    readonly __wasm_bindgen_func_elem_4977: (a: number, b: number) => void;
-    readonly __wasm_bindgen_func_elem_4283: (a: number, b: number, c: number, d: number) => void;
-    readonly __wasm_bindgen_func_elem_1979: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_4978: (a: number, b: number) => void;
-    readonly __wasm_bindgen_func_elem_4995: (a: number, b: number) => void;
+    readonly __wasm_bindgen_func_elem_1985: (a: number, b: number) => void;
+    readonly __wasm_bindgen_func_elem_6202: (a: number, b: number) => void;
+    readonly __wasm_bindgen_func_elem_4982: (a: number, b: number) => void;
+    readonly __wasm_bindgen_func_elem_4288: (a: number, b: number, c: number, d: number) => void;
+    readonly __wasm_bindgen_func_elem_1986: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_4983: (a: number, b: number) => void;
+    readonly __wasm_bindgen_func_elem_5000: (a: number, b: number) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number) => void;

@@ -1,8 +1,13 @@
+use std::cell::RefCell;
 use std::str::FromStr;
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use futures_util::stream;
-use iroh::{Endpoint, SecretKey, endpoint::Connection};
+use iroh::{
+    Endpoint, SecretKey,
+    endpoint::{Connection, QuicTransportConfig, RecvStream, SendStream},
+};
 use iroh_tickets::endpoint::EndpointTicket;
 use js_sys::Uint8Array;
 use serde::{Deserialize, Serialize};
@@ -43,12 +48,29 @@ fn start() {
 #[wasm_bindgen]
 pub struct BrowserEndpoint {
     endpoint: Endpoint,
+    // Pooled tunnel connection. A BrowserEndpoint dials exactly one gateway,
+    // so a single cached slot suffices; every request opens a fresh bi-stream
+    // on this shared QUIC connection instead of a new 2-3 RTT handshake.
+    tunnel: RefCell<Option<Connection>>,
 }
 
 #[wasm_bindgen]
 impl BrowserEndpoint {
     pub async fn spawn(secret_key: Option<Vec<u8>>) -> Result<BrowserEndpoint, JsError> {
         let mut builder = Endpoint::builder(iroh::endpoint::presets::N0);
+        // Keep the pooled connection warm across brief idle gaps (heartbeat)
+        // and let it die cleanly instead of hanging when the app is
+        // abandoned; resume after an idle death is covered by the redial path
+        // in `open_tunnel_stream`.
+        let transport = QuicTransportConfig::builder()
+            .keep_alive_interval(Duration::from_secs(15))
+            .max_idle_timeout(Some(
+                Duration::from_secs(60)
+                    .try_into()
+                    .map_err(|_| JsError::new("invalid idle timeout"))?,
+            ))
+            .build();
+        builder = builder.transport_config(transport);
         if let Some(bytes) = secret_key {
             let bytes: [u8; 32] = bytes
                 .try_into()
@@ -56,7 +78,10 @@ impl BrowserEndpoint {
             builder = builder.secret_key(SecretKey::from_bytes(&bytes));
         }
         let endpoint = builder.bind().await.map_err(to_js_error)?;
-        Ok(Self { endpoint })
+        Ok(Self {
+            endpoint,
+            tunnel: RefCell::new(None),
+        })
     }
 
     pub fn endpoint_id(&self) -> String {
@@ -98,18 +123,49 @@ impl BrowserEndpoint {
             .context("invalid request headers")
             .map_err(to_js_error)?;
         let ticket = parse_ticket(&endpoint_ticket).map_err(to_js_error)?;
-        let connection = self
-            .endpoint
-            .connect(ticket.endpoint_addr().clone(), TUNNEL_ALPN)
+        let (send, recv, connection) = self
+            .open_tunnel_stream(&ticket)
             .await
-            .context("could not connect to gateway tunnel")
             .map_err(to_js_error)?;
-        open_request(connection, method, target, headers, body)
+        open_request(send, recv, connection, method, target, headers, body)
             .await
             .map_err(to_js_error)
     }
 
+    /// Open a bi-stream on the pooled tunnel connection, redialing once if the
+    /// cached connection is dead (gateway restart, idle-timeout death, or
+    /// device revocation). Mirrors the native Swift client's `openTunnelStream`.
+    async fn open_tunnel_stream(
+        &self,
+        ticket: &EndpointTicket,
+    ) -> Result<(SendStream, RecvStream, Connection)> {
+        let cached = {
+            let slot = self.tunnel.borrow();
+            match slot.as_ref() {
+                Some(conn) if conn.close_reason().is_none() => Some(conn.clone()),
+                _ => None,
+            }
+        };
+        if let Some(conn) = cached {
+            if let Ok((send, recv)) = conn.open_bi().await {
+                return Ok((send, recv, conn));
+            }
+            // The pooled connection went stale between the check and the open;
+            // drop it so the redial below installs a fresh one.
+            self.tunnel.borrow_mut().take();
+        }
+        let conn = self
+            .endpoint
+            .connect(ticket.endpoint_addr().clone(), TUNNEL_ALPN)
+            .await
+            .context("could not connect to gateway tunnel")?;
+        let (send, recv) = conn.open_bi().await?;
+        *self.tunnel.borrow_mut() = Some(conn.clone());
+        Ok((send, recv, conn))
+    }
+
     pub async fn close(&self) {
+        self.tunnel.borrow_mut().take();
         self.endpoint.close().await;
     }
 }
@@ -153,13 +209,14 @@ async fn pair_gateway(connection: Connection, request: GatewayPairRequest) -> Re
 }
 
 async fn open_request(
+    mut send: SendStream,
+    mut recv: RecvStream,
     connection: Connection,
     method: String,
     target: String,
     headers: serde_json::Value,
     body: Vec<u8>,
 ) -> Result<BrowserResponse> {
-    let (mut send, mut recv) = connection.open_bi().await?;
     write_frame(
         &mut send,
         &TunnelRequestHeader {
@@ -174,14 +231,16 @@ async fn open_request(
     }
     send.finish()?;
     let response: TunnelResponseHeader = read_frame(&mut recv).await?;
+    // The stream holds a clone of the pooled connection only to keep it
+    // referenced for the life of the body. When the response stream ends we
+    // finish THIS stream (by dropping recv) but must NOT close the shared
+    // connection: sibling requests and held-open SSE streams ride the same
+    // QUIC connection. Closing here would tear those down.
     let body_stream = stream::unfold(Some((recv, connection)), |state| async move {
         let (mut recv, connection) = state?;
         let mut bytes = vec![0; 64 * 1024];
         match recv.read(&mut bytes).await {
-            Ok(None) => {
-                connection.close(0u8.into(), b"response complete");
-                None
-            }
+            Ok(None) => None,
             Ok(Some(read)) => {
                 bytes.truncate(read);
                 let value: JsValue = Uint8Array::from(bytes.as_slice()).into();

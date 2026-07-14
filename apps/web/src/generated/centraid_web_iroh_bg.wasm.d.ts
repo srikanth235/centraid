@@ -1,5 +1,5 @@
 /* tslint:disable */
-/* eslint-disable -- governance: allow-no-unjustified-suppressions wasm-bindgen generated declaration */
+/* eslint-disable */
 export const memory: WebAssembly.Memory;
 export const __wbg_browserendpoint_free: (a: number, b: number) => void;
 export const __wbg_browserresponse_free: (a: number, b: number) => void;
@@ -27,13 +27,13 @@ export const intounderlyingsink_close: (a: number) => number;
 export const intounderlyingsink_write: (a: number, b: number) => number;
 export const intounderlyingsource_cancel: (a: number) => void;
 export const intounderlyingsource_pull: (a: number, b: number) => number;
-export const __wasm_bindgen_func_elem_1978: (a: number, b: number) => void;
-export const __wasm_bindgen_func_elem_6195: (a: number, b: number) => void;
-export const __wasm_bindgen_func_elem_4977: (a: number, b: number) => void;
-export const __wasm_bindgen_func_elem_4283: (a: number, b: number, c: number, d: number) => void;
-export const __wasm_bindgen_func_elem_1979: (a: number, b: number, c: number) => void;
-export const __wasm_bindgen_func_elem_4978: (a: number, b: number) => void;
-export const __wasm_bindgen_func_elem_4995: (a: number, b: number) => void;
+export const __wasm_bindgen_func_elem_1985: (a: number, b: number) => void;
+export const __wasm_bindgen_func_elem_6202: (a: number, b: number) => void;
+export const __wasm_bindgen_func_elem_4982: (a: number, b: number) => void;
+export const __wasm_bindgen_func_elem_4288: (a: number, b: number, c: number, d: number) => void;
+export const __wasm_bindgen_func_elem_1986: (a: number, b: number, c: number) => void;
+export const __wasm_bindgen_func_elem_4983: (a: number, b: number) => void;
+export const __wasm_bindgen_func_elem_5000: (a: number, b: number) => void;
 export const __wbindgen_export: (a: number, b: number) => number;
 export const __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
 export const __wbindgen_export3: (a: number) => void;
