@@ -1,6 +1,7 @@
-// governance: allow-repo-hygiene file-size-limit one suite per served-asset concern of a single module — CSP/nonce, shared fallback, depth-aware JSX transform, and ETag/conditional tiers all exercise serveStatic and share its fixtures
-import { describe, expect, it } from 'vitest';
-import { mkdtempSync, writeFileSync, mkdirSync, utimesSync, statSync } from 'node:fs';
+// governance: allow-repo-hygiene file-size-limit one suite per served-asset concern of a single module — CSP/nonce, shared fallback, depth-aware JSX transform, ETag/conditional, and compression tiers all exercise serveStatic and share its fixtures
+import { describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, writeFileSync, mkdirSync, utimesSync, statSync, promises as fsp } from 'node:fs';
+import zlib from 'node:zlib';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { IncomingMessage, ServerResponse } from 'node:http';
@@ -668,6 +669,127 @@ describe('serveStatic — ETag / conditional revalidation (issue #356)', () => {
     expect(fixed.data.statusCode).toBe(200);
     expect(fixed.data.headers['ETag']).not.toBe(shimEtag);
     expect(fixed.data.body.toString('utf8')).not.toMatch(/console\.error\(/);
+  });
+});
+
+describe('serveStatic — compression', () => {
+  // A comfortably-over-1KB, highly-compressible JS body.
+  const bigJs = `/* banner */\n${'export const x = "yyyyyyyyyy";\n'.repeat(200)}`;
+
+  it('brotli-encodes a large .js asset when the client offers br, with Vary', async () => {
+    const dir = newAppDir({ 'app.js': bigJs });
+    const { res, data } = mockRes();
+    await serveStatic(mockReq({ 'accept-encoding': 'gzip, deflate, br' }), res, dir, 'app.js');
+    expect(data.statusCode).toBe(200);
+    expect(data.headers['Content-Encoding']).toBe('br');
+    expect(data.headers['Vary']).toBe('Accept-Encoding');
+    expect(data.body.length).toBeLessThan(Buffer.byteLength(bigJs));
+    expect(zlib.brotliDecompressSync(data.body).toString('utf8')).toBe(bigJs);
+    // ETag is keyed to the RAW bytes (content identity), not the encoded form.
+    expect(data.headers['ETag']).toMatch(/^"[0-9a-f]{16,}"$/);
+  });
+
+  it('gzip-encodes when only gzip is offered', async () => {
+    const dir = newAppDir({ 'app.js': bigJs });
+    const { res, data } = mockRes();
+    await serveStatic(mockReq({ 'accept-encoding': 'gzip' }), res, dir, 'app.js');
+    expect(data.headers['Content-Encoding']).toBe('gzip');
+    expect(zlib.gunzipSync(data.body).toString('utf8')).toBe(bigJs);
+  });
+
+  it('ships raw bytes (no Content-Encoding) when the request offers no encoding — SW-path safety', async () => {
+    const dir = newAppDir({ 'app.js': bigJs });
+    const { res, data } = mockRes();
+    await serveStatic(mockReq(), res, dir, 'app.js');
+    expect(data.headers['Content-Encoding']).toBeUndefined();
+    // Vary is still advertised for the compressible type.
+    expect(data.headers['Vary']).toBe('Accept-Encoding');
+    expect(data.body.toString('utf8')).toBe(bigJs);
+  });
+
+  it('skips compression for a sub-1KB asset even when br is offered', async () => {
+    const dir = newAppDir({ 'app.js': 'export const x = 1;' });
+    const { res, data } = mockRes();
+    await serveStatic(mockReq({ 'accept-encoding': 'br' }), res, dir, 'app.js');
+    expect(data.headers['Content-Encoding']).toBeUndefined();
+    expect(data.body.toString('utf8')).toBe('export const x = 1;');
+  });
+
+  it('never compresses (or Varies) an already-encoded type like PNG', async () => {
+    const dir = newAppDir({ 'pic.png': 'P'.repeat(3000) });
+    const { res, data } = mockRes();
+    await serveStatic(mockReq({ 'accept-encoding': 'br' }), res, dir, 'pic.png');
+    expect(data.headers['Content-Encoding']).toBeUndefined();
+    expect(data.headers['Vary']).toBeUndefined();
+    expect(data.body.length).toBe(3000);
+  });
+
+  it('a 304 revalidation still 304s with Accept-Encoding present', async () => {
+    const dir = newAppDir({ 'app.js': bigJs });
+    const first = mockRes();
+    await serveStatic(mockReq({ 'accept-encoding': 'br' }), first.res, dir, 'app.js');
+    const etag = first.data.headers['ETag']!;
+    const second = mockRes();
+    await serveStatic(
+      mockReq({ 'accept-encoding': 'br', 'if-none-match': etag }),
+      second.res,
+      dir,
+      'app.js',
+    );
+    expect(second.data.statusCode).toBe(304);
+    expect(second.data.body.length).toBe(0);
+  });
+});
+
+describe('serveStatic — ETag cache (no re-read on 304 / cached variant)', () => {
+  const bigJs = `${'export const x = "zzzzzzzz";\n'.repeat(200)}`;
+
+  it('a matching 304 does not re-read (or re-hash) the file', async () => {
+    const dir = newAppDir({ 'app.js': bigJs });
+    const warm = mockRes();
+    await serveStatic(mockReq(), warm.res, dir, 'app.js'); // populates the cache
+    const etag = warm.data.headers['ETag']!;
+
+    const spy = vi.spyOn(fsp, 'readFile');
+    try {
+      const cond = mockRes();
+      await serveStatic(mockReq({ 'if-none-match': etag }), cond.res, dir, 'app.js');
+      expect(cond.data.statusCode).toBe(304);
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('a repeat compressed hit reuses the cached variant without re-reading', async () => {
+    const dir = newAppDir({ 'app.js': bigJs });
+    const warm = mockRes();
+    await serveStatic(mockReq({ 'accept-encoding': 'br' }), warm.res, dir, 'app.js');
+
+    const spy = vi.spyOn(fsp, 'readFile');
+    try {
+      const again = mockRes();
+      await serveStatic(mockReq({ 'accept-encoding': 'br' }), again.res, dir, 'app.js');
+      expect(again.data.headers['Content-Encoding']).toBe('br');
+      expect(again.data.body.equals(warm.data.body)).toBe(true);
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('an edit (mtime+size change) invalidates the cached etag and serves fresh bytes', async () => {
+    const dir = newAppDir({ 'app.js': bigJs });
+    const first = mockRes();
+    await serveStatic(mockReq(), first.res, dir, 'app.js');
+    const etag1 = first.data.headers['ETag']!;
+
+    // Edit to a different length so both mtime and size move.
+    writeFileSync(join(dir, 'app.js'), `${bigJs}// appended\n`);
+    const after = mockRes();
+    await serveStatic(mockReq({ 'if-none-match': etag1 }), after.res, dir, 'app.js');
+    expect(after.data.statusCode).toBe(200);
+    expect(after.data.headers['ETag']).not.toBe(etag1);
   });
 });
 

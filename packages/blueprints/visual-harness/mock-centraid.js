@@ -71,11 +71,13 @@
 
   // ---------------------------------------------------------------------
   // Change feed — mirrors window.centraid.onChange(cb) from the real bridge
-  // (static-server.ts's injectChangeBridge), but fired directly in-page
-  // instead of over an SSE round trip. Neither blueprint app currently
-  // registers a listener (both apps just call their own refresh() right
-  // after a write), so this is mostly a hook future apps/testers can use —
-  // see window.__fixtures below for a manual trigger.
+  // (bridge-script.ts's injectChangeBridge), but fired directly in-page
+  // instead of over an SSE round trip. Since issue #404 seven apps subscribe
+  // through the kit's `onDataChange(tables, cb)`, which filters on the
+  // event's `tables`: a NON-EMPTY list must intersect the app's declared
+  // tables, while an EMPTY list always fires (production emits `[]` for an
+  // app's own handler writes). `fireChange([])` below therefore matches
+  // production semantics; see window.__fixtures for a manual trigger.
   // ---------------------------------------------------------------------
   var listeners = new Set();
   function fireChange(tables) {
@@ -3995,7 +3997,10 @@
       // the app's onChange→refresh handler and clear the pending state it
       // just set (tasks treats any change event as "an outstanding parked
       // write may have resolved" — see app.jsx).
-      if (result.status !== 'parked') fireChange([appId]);
+      // Empty `tables` = "this app's own write" — the shape the real runtime
+      // emits for handler writes, and the one the kit's table filter always
+      // lets through (a bare app id would match no declared table name).
+      if (result.status !== 'parked') fireChange([]);
       return result;
     },
     async describe() {

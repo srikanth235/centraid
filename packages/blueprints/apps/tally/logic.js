@@ -225,6 +225,38 @@ export function createLogic({ state, dash, render, renderModals, loadView, refre
     renderModals();
   }
 
+  // Build the decorated row shape the group/friend ledger queries return, so
+  // an optimistic add renders through the exact same components (ExpenseRow)
+  // as a fetched row — plus `pending`/`parked` flags for the kit chip.
+  function optimisticExpenseRow(exp, base) {
+    const myShare = base.splits.find((s) => s.party_id === dash.me)?.share_minor ?? 0;
+    let your_role = 'none';
+    let your_amount_minor = 0;
+    if (base.paid_by === dash.me) {
+      your_role = 'lent';
+      your_amount_minor = base.amount_minor - myShare;
+    } else if (myShare > 0) {
+      your_role = 'borrowed';
+      your_amount_minor = myShare;
+    }
+    return {
+      expense_id: `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      group_id: exp.groupId,
+      group_name: dash.groups.find((g) => g.group_id === exp.groupId)?.name ?? '',
+      description: base.description,
+      amount_minor: base.amount_minor,
+      paid_by: base.paid_by,
+      paid_by_name: displayName(base.paid_by),
+      category: base.category,
+      spent_on: base.spent_on,
+      splits: base.splits.map((s) => ({ ...s })),
+      your_role,
+      your_amount_minor,
+      pending: true,
+      parked: false,
+    };
+  }
+
   async function saveExpense() {
     const exp = state.expense;
     const cents = toCents(exp.amount);
@@ -238,14 +270,45 @@ export function createLogic({ state, dash, render, renderModals, loadView, refre
       spent_on: exp.spent_on,
       splits,
     };
-    let outcome;
-    if (exp.mode === 'edit')
-      outcome = await act('edit-expense', { expense_id: exp.expense_id, ...base });
-    else outcome = await act('add-expense', { group_id: exp.groupId, ...base });
-    if (!narrate(outcome)) return;
-    toast(exp.mode === 'edit' ? 'Expense updated · receipted.' : 'Expense added · receipted.');
+    if (exp.mode === 'edit') {
+      // Edit is the cold path — patching a fetched row in place is not worth
+      // the divergence risk, so it keeps the plain write→narrate→refresh flow.
+      const outcome = await act('edit-expense', { expense_id: exp.expense_id, ...base });
+      if (!narrate(outcome)) return;
+      toast('Expense updated · receipted.');
+      closeExpense();
+      await refreshAll();
+      return;
+    }
+    // Optimistic add — the hot path (issue #404). The row lands in local
+    // state and the modal closes BEFORE the write resolves, so the click
+    // costs zero round trips; the write itself then reconciles:
+    //   executed → the write's own change doorbell (onDataChange in app.jsx)
+    //              refetches and swaps the optimistic row for server truth;
+    //   parked   → the row stays, chip and all, exactly like tasks' parked
+    //              ghost adds, until some later change resolves it;
+    //   failed/denied/threw → the row is removed and the notice banner
+    //              carries the existing plain-language reason.
+    const row = optimisticExpenseRow(exp, base);
+    state.pendingExpenses.push(row);
     closeExpense();
-    await refreshAll();
+    render();
+    const outcome = await act('add-expense', { group_id: exp.groupId, ...base });
+    if (outcome?.status === 'executed') {
+      notice('');
+      toast('Expense added · receipted.');
+      return;
+    }
+    if (outcome?.status === 'parked') {
+      row.parked = true;
+      narrate(outcome); // the existing parked banner copy
+      render();
+      return;
+    }
+    const i = state.pendingExpenses.indexOf(row);
+    if (i >= 0) state.pendingExpenses.splice(i, 1);
+    if (outcome) narrate(outcome); // a thrown transport error already hit the banner via act()
+    render();
   }
 
   async function deleteExpense(expenseId) {

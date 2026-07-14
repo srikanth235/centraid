@@ -728,6 +728,13 @@ body.has-selection .kit-toasts {
   display: flex;
   gap: 4px;
   margin-bottom: 4px;
+  /* Timeline windowing without a virtualization lib: the browser skips
+     layout/paint/decode for rows that are off-screen and remembers each row's
+     real height once measured (the `auto` keyword), so scrolling a deep
+     library stays cheap and the scrollbar stays stable. Progressive — ignored
+     where unsupported, where the `loading="lazy"` tiles still defer bytes. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 160px;
 }
 .ph-tile {
   position: relative;
@@ -738,6 +745,47 @@ body.has-selection .kit-toasts {
   transition:
     transform 0.16s var(--ease),
     border-radius 0.16s var(--ease);
+}
+/* Thumbless / thumb-404 / video tiles: a neutral shimmer instead of pulling a
+   full original into the grid (media.js). The `is-placeholder` class lands on
+   the media container (`.ph-tile-media` / `.picker-tile` / `.dup-tile-media`),
+   which fills the tile's justified box, so the shimmer keeps its aspect. */
+.dup-tile-media.is-placeholder {
+  position: relative;
+}
+.ph-tile-ph,
+.ph-lb-frame.is-placeholder::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    var(--bg-sunken) 30%,
+    color-mix(in srgb, var(--bg-sunken) 82%, var(--ink-3)) 50%,
+    var(--bg-sunken) 70%
+  );
+  background-size: 220% 100%;
+  animation: ph-shimmer 1.4s var(--ease) infinite;
+}
+.ph-lb-frame.is-placeholder {
+  position: relative;
+  overflow: hidden;
+}
+.ph-lb-frame.is-placeholder::after {
+  content: '';
+}
+@keyframes ph-shimmer {
+  from {
+    background-position: 180% 0;
+  }
+  to {
+    background-position: -60% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ph-tile-ph,
+  .ph-lb-frame.is-placeholder::after {
+    animation: none;
+  }
 }
 .ph-tile.is-selected {
   border-radius: var(--ph-tile-r-sel);

@@ -44,6 +44,24 @@ const CONTENT_TYPES: Record<string, string> = {
   '.map': 'application/json; charset=utf-8',
 };
 
+/**
+ * Assets shared verbatim by every app and served from the canonical
+ * `sharedAssetsDir` when an app folder carries no copy of its own (the
+ * per-app copy wins). The full serving story lives on the doc comment in
+ * static-server.ts; the set itself lives here (the leaf module) so both the
+ * per-file server (static-server.ts) and the whole-graph bundler
+ * (app-bundle.ts) resolve through the SAME list without an import cycle.
+ */
+export const SHARED_ASSET_FILES = new Set([
+  'kit.js',
+  'kit.css',
+  'elements.js',
+  'react-core.min.js',
+  'jsx-runtime.js',
+  'tokens.css',
+  'wall.css',
+]);
+
 /** Files whose names are reserved and never served as static.
  *
  * `app.json` is intentionally *not* reserved — the desktop's per-app

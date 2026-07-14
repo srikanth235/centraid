@@ -1,22 +1,64 @@
-const CACHE = 'centraid-shell-v6';
-const SHELL = ['/', '/manifest.webmanifest', '/centraid.svg'];
+// Single source of truth for cache-bucket versioning. Bumping VERSION purges
+// every prior bucket on activate. The worker's own script URL carries a
+// separate ?v= token minted in src/iroh-transport.ts (SERVICE_WORKER_VERSION);
+// that token gates the virtual-Iroh route and lives outside this file. Keep
+// the two in step when either changes.
+const VERSION = 'v7';
+const SHELL_CACHE = `centraid-shell-${VERSION}`;
+const ASSET_CACHE = `centraid-tunnel-assets-${VERSION}`;
+const BLOB_CACHE = `centraid-tunnel-blobs-${VERSION}`;
+const CURRENT_CACHES = new Set([SHELL_CACHE, ASSET_CACHE, BLOB_CACHE]);
+
+// Static shell entries that never change name across builds. Hashed Vite
+// assets are not known to a static worker at install time, so they are
+// runtime-cached (stale-while-revalidate) on first navigation instead.
+const SHELL = [
+  '/',
+  '/manifest.webmanifest',
+  '/centraid.svg',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/icon-maskable-512.png',
+  '/apple-touch-icon-180.png',
+];
 const IROH_PREFIX = '/__centraid_iroh__/';
+const BLOB_MARKER = '/_vault/blobs/';
+
+// Per-entry buffering cap. Anything larger streams straight through uncached
+// so a big video or blob never balloons SW memory.
+const MAX_ENTRY_BYTES = 20 * 1024 * 1024;
+// Rough LRU ceiling for the content-addressed blob bucket.
+const MAX_BLOB_BYTES = 300 * 1024 * 1024;
+const MAX_BLOB_ENTRIES = 2000;
+
 const appCookies = new Map();
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));
+  event.waitUntil(caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL)));
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches
-      .keys()
-      .then((keys) =>
-        Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))),
-      )
-      .then(() => self.clients.claim()),
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(keys.filter((key) => !CURRENT_CACHES.has(key)).map((key) => caches.delete(key)));
+      // Speeds up navigations that fall through to the network branch.
+      if (self.registration.navigationPreload) {
+        await self.registration.navigationPreload.enable().catch(() => undefined);
+      }
+      await self.clients.claim();
+    })(),
   );
+});
+
+self.addEventListener('message', (event) => {
+  // Sent by web-host.ts when the gateway is unpaired: the tunnel caches may
+  // hold another gateway/vault's assets, so drop them. Shell cache is generic
+  // and stays. This is a separate channel from the iroh-request bridge.
+  if (event.data?.type === 'centraid:purge-tunnel-cache') {
+    event.waitUntil(Promise.all([caches.delete(ASSET_CACHE), caches.delete(BLOB_CACHE)]));
+  }
 });
 
 function virtualRoute(url) {
@@ -85,9 +127,61 @@ async function tunnelRequest(route, method, headers, body) {
   return Promise.any(attempts);
 }
 
+// Drains a bridge port's chunk stream into the browser Response stream.
+function portStream(port) {
+  return new ReadableStream({
+    start(controller) {
+      port.addEventListener('message', (message) => {
+        if (message.data?.type === 'chunk') controller.enqueue(new Uint8Array(message.data.body));
+        if (message.data?.type === 'end') controller.close();
+        if (message.data?.type === 'error') controller.error(new Error(message.data.message));
+      });
+      port.start();
+    },
+    cancel() {
+      port.close();
+    },
+  });
+}
+
+// Reads a bridge port's chunk stream fully into one buffer (background use).
+function drainPort(port) {
+  return new Response(portStream(port)).arrayBuffer();
+}
+
+// A tunneled response arrives gzip-encoded whenever the request advertised
+// `accept-encoding: gzip` (see tunnel()/revalidateAsset()). The browser does
+// NOT auto-decode Content-Encoding on a Response synthesized in JS from opaque
+// tunnel bytes, so decode here — the single choke point where tunnel frames
+// become a Response, and BEFORE the caching layer sees it, so both cache
+// buckets store plain bytes and the SWR 200-replace path caches decoded bytes.
+// content-encoding + content-length describe the compressed form and are
+// stripped. ETag is intentionally kept: the gateway keys it to the RAW
+// (decoded) bytes, so If-None-Match revalidation from a cached decoded entry
+// stays correct. gzip only — DecompressionStream has no brotli, and the
+// request only ever offers gzip (so the server negotiates gzip, never br).
+function decodedResponse(stream, status, headers) {
+  if ((headers.get('content-encoding') || '').toLowerCase() === 'gzip') {
+    headers.delete('content-encoding');
+    headers.delete('content-length');
+    stream = stream.pipeThrough(new DecompressionStream('gzip'));
+  }
+  return new Response(stream, { status, headers });
+}
+
 function firstHeader(headers, name) {
   const value = headers[name];
   return Array.isArray(value) ? value[0] : value;
+}
+
+function buildResponseHeaders(rawHeaders) {
+  const headers = new Headers();
+  for (const [name, value] of Object.entries(rawHeaders)) {
+    if (name.toLowerCase() === 'set-cookie') continue;
+    if (Array.isArray(value)) for (const item of value) headers.append(name, item);
+    else headers.set(name, value);
+  }
+  return headers;
 }
 
 function redirectTarget(location) {
@@ -111,9 +205,127 @@ function themedRedirectTarget(location, requestUrl) {
   return `${target.pathname}${target.search}`;
 }
 
+// The stable cache key for a tunneled request: the gateway path with the
+// per-session bridge id stripped, so a warm relaunch (fresh bridge id) still
+// hits the same entry. Cross-vault collisions are bounded by single-gateway
+// topology and the unpair purge above.
+function tunnelCacheKey(route) {
+  return new URL(route.target, self.location.origin).toString();
+}
+
+function isBlobTarget(route) {
+  return new URL(route.target, self.location.origin).pathname.includes(BLOB_MARKER);
+}
+
+// Decides whether/where a freshly tunneled response may be cached, from its
+// headers alone.
+function tunnelCachePlan(status, headers, isBlob) {
+  if (status !== 200) return undefined; // no redirects, 206/Range, or errors
+  const type = (headers.get('content-type') || '').toLowerCase();
+  if (type.includes('text/event-stream')) return undefined; // SSE must stay live
+  const control = (headers.get('cache-control') || '').toLowerCase();
+  // App HTML is no-store with a per-response nonce — it must never be cached.
+  if (control.includes('no-store')) return undefined;
+  const length = Number(headers.get('content-length'));
+  if (!Number.isFinite(length) || length <= 0 || length > MAX_ENTRY_BYTES) return undefined;
+  if (isBlob) return { bucket: BLOB_CACHE, immutable: true };
+  // Non-blob assets are cacheable only with a validator to revalidate against.
+  if (!headers.get('etag')) return undefined;
+  return { bucket: ASSET_CACHE, immutable: false };
+}
+
+async function storeTunnelResponse(plan, key, response) {
+  try {
+    const body = await response.arrayBuffer();
+    const headers = new Headers(response.headers);
+    headers.set('x-centraid-cached-at', String(Date.now()));
+    const cache = await caches.open(plan.bucket);
+    await cache.put(key, new Response(body, { status: 200, headers }));
+    if (plan.bucket === BLOB_CACHE) await trimBlobCache(cache);
+  } catch {
+    /* cache write is best-effort */
+  }
+}
+
+async function trimBlobCache(cache) {
+  const requests = await cache.keys();
+  const entries = [];
+  let total = 0;
+  for (const request of requests) {
+    const cached = await cache.match(request);
+    if (!cached) continue;
+    const size = Number(cached.headers.get('content-length')) || 0;
+    const at = Number(cached.headers.get('x-centraid-cached-at')) || 0;
+    entries.push({ request, size, at });
+    total += size;
+  }
+  entries.sort((a, b) => a.at - b.at); // oldest first
+  while (entries.length && (total > MAX_BLOB_BYTES || entries.length > MAX_BLOB_ENTRIES)) {
+    const victim = entries.shift();
+    await cache.delete(victim.request);
+    total -= victim.size;
+  }
+}
+
+// Stale-while-revalidate for a cached asset: issue a conditional GET through
+// the same bridge contract and replace the entry only when the gateway sends
+// fresh bytes (200); a 304 keeps what we served.
+async function revalidateAsset(route, key, etag) {
+  const { head, port } = await tunnelRequest(
+    route,
+    'GET',
+    // Advertise gzip so the gateway may compress the fresh bytes; the reply is
+    // decoded below. Revalidation only ever targets assets, never SSE.
+    etag ? { 'if-none-match': etag, 'accept-encoding': 'gzip' } : { 'accept-encoding': 'gzip' },
+    new ArrayBuffer(0),
+  );
+  if (head.status === 304) {
+    await drainPort(port).catch(() => undefined); // drain empty body, release port
+    return;
+  }
+  const headers = buildResponseHeaders(head.headers);
+  // Plan off the on-wire headers (they still carry content-length) before
+  // decodedResponse strips the compression headers.
+  const plan = tunnelCachePlan(head.status, headers, false);
+  if (!plan) {
+    await drainPort(port).catch(() => undefined);
+    return;
+  }
+  await storeTunnelResponse(plan, key, decodedResponse(portStream(port), 200, headers));
+}
+
 async function tunnel(event, initialRoute) {
   const method = event.request.method;
+  const cacheable = method === 'GET' && !event.request.headers.has('range');
+  const isBlob = cacheable && isBlobTarget(initialRoute);
+  const cacheKey = cacheable ? tunnelCacheKey(initialRoute) : undefined;
+
+  // Blobs are content-addressed and immutable: serve straight from cache,
+  // never touching the relay.
+  if (isBlob) {
+    const hit = await caches.open(BLOB_CACHE).then((cache) => cache.match(cacheKey));
+    if (hit) return hit;
+  }
+  // Assets already cached are served immediately, then revalidated in the
+  // background (stale-while-revalidate).
+  if (cacheable && !isBlob) {
+    const hit = await caches.open(ASSET_CACHE).then((cache) => cache.match(cacheKey));
+    if (hit) {
+      event.waitUntil(
+        revalidateAsset(initialRoute, cacheKey, hit.headers.get('etag')).catch(() => undefined),
+      );
+      return hit;
+    }
+  }
+
   const headers = Object.fromEntries(event.request.headers.entries());
+  // Browsers strip Accept-Encoding from JS-visible request headers, so the
+  // tunnel would otherwise forward none and the gateway would ship raw bytes.
+  // Advertise gzip explicitly (decodedResponse decodes the reply). Skip SSE:
+  // the server exempts text/event-stream anyway, but keep the request honest.
+  if (!(event.request.headers.get('accept') || '').includes('text/event-stream')) {
+    headers['accept-encoding'] = 'gzip';
+  }
   const body =
     method === 'GET' || method === 'HEAD' ? new ArrayBuffer(0) : await event.request.arrayBuffer();
   const { head, port } = await tunnelRequest(initialRoute, method, headers, body);
@@ -135,42 +347,47 @@ async function tunnel(event, initialRoute) {
     return new Response(null, { status: head.status, headers: { location: virtual } });
   }
 
-  const responseHeaders = new Headers();
-  for (const [name, value] of Object.entries(head.headers)) {
-    if (name.toLowerCase() === 'set-cookie') continue;
-    if (Array.isArray(value)) for (const item of value) responseHeaders.append(name, item);
-    else responseHeaders.set(name, value);
+  const responseHeaders = buildResponseHeaders(head.headers);
+  // Plan off the on-wire headers (they still carry content-length) before
+  // decodedResponse strips the compression headers.
+  const plan = cacheable ? tunnelCachePlan(head.status, responseHeaders, isBlob) : undefined;
+  const response = decodedResponse(portStream(port), head.status, responseHeaders);
+
+  if (plan && cacheKey) {
+    // clone() tees the stream, so the browser gets its copy while we buffer
+    // ours; the size guard in the plan keeps the buffered branch bounded.
+    event.waitUntil(storeTunnelResponse(plan, cacheKey, response.clone()));
   }
-  const responseBody = new ReadableStream({
-    start(controller) {
-      port.addEventListener('message', (message) => {
-        if (message.data?.type === 'chunk') controller.enqueue(new Uint8Array(message.data.body));
-        if (message.data?.type === 'end') controller.close();
-        if (message.data?.type === 'error') controller.error(new Error(message.data.message));
-      });
-      port.start();
-    },
-    cancel() {
-      port.close();
-    },
-  });
-  return new Response(responseBody, { status: head.status, headers: responseHeaders });
+  return response;
 }
 
-async function shell(request) {
-  return fetch(request)
-    .then((response) => {
-      const url = new URL(request.url);
-      // Never cache /web-config.json: the server marks it no-store because it
-      // carries the (mutable) gateway URL. A stale copy could pin the app to a
-      // dead gateway.
-      if (response.ok && url.origin === self.location.origin && url.pathname !== '/web-config.json') {
-        const copy = response.clone();
-        void caches.open(CACHE).then((cache) => cache.put(request, copy));
-      }
-      return response;
-    })
-    .catch(() => caches.match(request).then((cached) => cached || caches.match('/')));
+async function shell(event) {
+  const request = event.request;
+  const url = new URL(request.url);
+  const cache = await caches.open(SHELL_CACHE);
+  const cached = await cache.match(request);
+  // Never cache /web-config.json: the server marks it no-store because it
+  // carries the (mutable) gateway URL. A stale copy could pin the app to a
+  // dead gateway.
+  const noStore = url.pathname === '/web-config.json';
+
+  const fromNetwork = async () => {
+    const preloaded = await event.preloadResponse;
+    const response = preloaded || (await fetch(request));
+    if (response && response.ok && url.origin === self.location.origin && !noStore) {
+      void cache.put(request, response.clone());
+    }
+    return response;
+  };
+
+  if (noStore) return fromNetwork().catch(() => cached || cache.match('/'));
+  if (cached) {
+    // Stale-while-revalidate: paint from cache now, refresh the entry (and
+    // consume any navigation preload) in the background.
+    event.waitUntil(fromNetwork().catch(() => undefined));
+    return cached;
+  }
+  return fromNetwork().catch(() => cache.match('/'));
 }
 
 self.addEventListener('fetch', (event) => {
@@ -180,7 +397,7 @@ self.addEventListener('fetch', (event) => {
       const route = virtualRoute(url) ?? (await inheritedRoute(event));
       if (route) return tunnel(event, route);
       if (event.request.method !== 'GET' || event.request.destination === '') return fetch(event.request);
-      return shell(event.request);
+      return shell(event);
     })().catch(
       (error) =>
         new Response(JSON.stringify({ error: 'iroh_tunnel_error', message: String(error) }), {

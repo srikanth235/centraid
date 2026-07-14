@@ -14,7 +14,7 @@
 // keyboard/resize listeners; `format.js`/`icons.js` are stateless.
 // `components/` holds pure functions of props.
 import { createRoot } from './react-core.min.js';
-import { readFailed, showSkeleton, wireAttachInput } from './kit.js';
+import { onDataChange, readFailed, showSkeleton, wireAttachInput } from './kit.js';
 import { createLogic, buildSections, sidebarCounts, todayProgress } from './logic.js';
 import { wireChrome } from './chrome.js';
 import { Board } from './components/Board.jsx';
@@ -22,6 +22,17 @@ import { Detail } from './components/Detail.jsx';
 import { SidebarFoot, SidebarNav } from './components/Sidebar.jsx';
 
 const $ = (id) => document.getElementById(id);
+
+// Vault entities this app's queries read — the doorbell filter re-derives
+// only when a change names one of these (or names none, i.e. "this app acted").
+const CHANGE_TABLES = [
+  'schedule.task',
+  'core.tag',
+  'core.concept',
+  'core.attachment',
+  'core.content_item',
+  'core.link',
+];
 
 const VIEW_TITLES = {
   today: 'Today',
@@ -325,7 +336,7 @@ wireAttachInput($('attachInput'), () => logic.getAttachTarget(), {
 // outstanding parked write (the owner approved or discarded it via another
 // surface; there is no per-invocation poll wired here, so this is the
 // honest, bounded way to clear a stale pending chip without guessing).
-window.centraid.onChange?.(() => {
+onDataChange(CHANGE_TABLES, () => {
   logic.clearPending();
   refresh();
 });

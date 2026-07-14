@@ -436,6 +436,7 @@
         "logic.js",
         "package.json",
         "queries/library.js",
+        "queries/note.js",
         "queries/search.js",
         "seed.js",
         "wall.css"

@@ -7,7 +7,7 @@
 // (`sidebarCounts`/`buildWall`) need no closure and are exported standalone
 // so components can call them too.
 import { debounce, outcomeMessage, toast } from './kit.js';
-import { deriveTitle } from './format.js';
+import { checkStats, deriveTitle, previewText } from './format.js';
 
 export function createLogic({ state, data, render, refresh }) {
   function notice(text) {
@@ -125,7 +125,13 @@ export function createLogic({ state, data, render, refresh }) {
       const note = findNote(noteId);
       if (note) {
         if (patch.title != null) note.title = patch.title;
-        if (patch.body_text != null) note.body = patch.body_text;
+        if (patch.body_text != null) {
+          note.body = patch.body_text;
+          // Keep the card's preview + checklist tally in step with the edit
+          // without a full library refetch (issue #404).
+          note.preview = previewText(patch.body_text);
+          note.check = checkStats(patch.body_text);
+        }
         note.updated_at = new Date().toISOString();
       }
     } else if (outcome?.status === 'parked') {
@@ -160,9 +166,29 @@ export function createLogic({ state, data, render, refresh }) {
     render();
   }
 
-  function openEditor(noteId) {
+  // Open the editor and lazily pull the canonical body (issue #404: the
+  // library projection no longer ships it). The list row is patched in place
+  // with `body` so the Editor mounts with content — the editor is keyed on
+  // `note_id + body-loaded`, so it remounts once the body arrives. A note
+  // whose body is already cached (opened before, or just edited) skips the
+  // round trip. A denial/failure leaves the editor usable with an empty body.
+  async function openEditor(noteId) {
     state.editorId = noteId;
     render();
+    const note = findNote(noteId);
+    if (!note || typeof note.body === 'string') return;
+    let res;
+    try {
+      res = await window.centraid.read({ query: 'note', input: { note_id: noteId } });
+    } catch {
+      return;
+    }
+    if (state.editorId !== noteId) return; // closed/switched while loading
+    const fresh = findNote(noteId);
+    if (fresh && res && !res.vaultDenied) {
+      fresh.body = typeof res.body === 'string' ? res.body : '';
+      render();
+    }
   }
   function closeEditor() {
     state.editorId = null;
@@ -396,8 +422,6 @@ export function createLogic({ state, data, render, refresh }) {
 
 // ---------- Pure derivations (no closure — components may call directly) ----------
 
-import { checkStats } from './format.js';
-
 /** Sidebar summary. `all`/`checks` are bounded by the library window (honest
  * about the projection's own edge — see data.window/truncated); `pinned`
  * is exact (the library query always includes every pinned note beside the
@@ -409,7 +433,9 @@ export function sidebarCounts(data) {
     pinned: notes.filter((n) => n.pinned === 1).length,
     notebooks: (data.notebooks ?? []).length,
     checks: notes.reduce((sum, n) => {
-      const s = checkStats(n.body);
+      // The list projection ships a `check` tally (issue #404); fall back to
+      // deriving from a full `body` when an older payload carried one.
+      const s = n.check ?? checkStats(n.body);
       return sum + (s.total - s.done);
     }, 0),
   };

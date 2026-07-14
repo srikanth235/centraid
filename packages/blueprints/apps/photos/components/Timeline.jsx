@@ -8,8 +8,8 @@
 // month headers can `position: sticky` against the scroll pane — same
 // constraint the old Grid.jsx's `.tile-wrap` had against `#grid`.
 import { restoreAsset, toggleFavorite } from '../assets-actions.js';
-import { cls, dayKey, fmtDay, fmtMonth, isVideoAsset } from '../format.js';
-import { CheckIcon, HeartIcon, PlayIcon } from '../icons.jsx';
+import { cls, dayKey, fmtDay, fmtMonth } from '../format.js';
+import { CheckIcon, HeartIcon } from '../icons.jsx';
 import { justify } from '../layout.js';
 import { mountMedia } from '../media.js';
 import { act, narrate } from '../outcomes.js';
@@ -29,13 +29,14 @@ function Tile({
   onToggleSelect,
   onOpen,
 }) {
-  const isVideo = isVideoAsset(asset);
   return (
     <div
       className={cls('ph-tile', selected && 'is-selected', isTrash && 'is-trash')}
       style={{ width: `${width}px`, height: `${height}px` }}
       data-asset-id={asset.asset_id}
     >
+      {/* The media fill (thumb or placeholder) and any video glyph are drawn
+          imperatively by mountMedia/fillTileMedia (media.js). */}
       <button
         type="button"
         className="ph-tile-media"
@@ -47,11 +48,6 @@ function Tile({
         }}
       ></button>
       <span className="ph-tile-scrim" aria-hidden="true" />
-      {isVideo ? (
-        <span className="ph-tile-video-badge" aria-hidden="true">
-          <PlayIcon size={15} />
-        </span>
-      ) : null}
       {!isTrash ? (
         <button
           type="button"

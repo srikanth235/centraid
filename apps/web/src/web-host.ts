@@ -9,17 +9,26 @@ import {
   subscribe,
 } from './web-state.js';
 import type {
-  CentraidConnectivityReport,
   CentraidGatewayRuntime,
   CentraidGatewayVaultEntry,
   CentraidSettings,
   CentraidTestConnectionInput,
 } from '../../../packages/client/src/centraid-api.js';
 import { pairGatewayOverIroh } from './iroh-transport.js';
+import {
+  isUpdateAvailable,
+  onSwUpdateAvailable,
+  purgeTunnelCaches,
+  requestPersistentStorage,
+  watchServiceWorkerUpdates,
+} from './sw-lifecycle.js';
+import { testUrl } from './connectivity.js';
 
 const GATEWAY_EVENT = 'gateway-changed';
 const VAULT_EVENT = 'vault-changed';
 const METADATA_EVENT = 'vault-metadata';
+
+const HEALTH_POLL_INTERVAL_MS = 15000;
 
 function settings(): CentraidSettings {
   const connection = loadConnection();
@@ -58,7 +67,7 @@ async function healthSnapshot(): Promise<CentraidGatewayRuntime> {
       samples: [],
       outages: [],
       alert: { enabled: false, thresholdSeconds: 120 },
-      pollIntervalMs: 5000,
+      pollIntervalMs: HEALTH_POLL_INTERVAL_MS,
       alertHistory: [],
       healthStatus: health.status,
       componentIssues: health.components
@@ -83,56 +92,8 @@ async function healthSnapshot(): Promise<CentraidGatewayRuntime> {
       samples: [],
       outages: [],
       alert: { enabled: false, thresholdSeconds: 120 },
-      pollIntervalMs: 5000,
+      pollIntervalMs: HEALTH_POLL_INTERVAL_MS,
       alertHistory: [],
-    };
-  }
-}
-
-async function testUrl(url: string, token?: string): Promise<CentraidConnectivityReport> {
-  try {
-    const response = await fetch(
-      new URL('/centraid/_gateway/info', `${url.replace(/\/+$/, '')}/`),
-      {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      },
-    );
-    if (response.status === 401 || response.status === 403) {
-      return {
-        ok: false,
-        error: 'auth_failed',
-        stages: [
-          { id: 'reach', label: 'Reach gateway', status: 'pass' },
-          {
-            id: 'auth',
-            label: 'Authenticate',
-            status: 'fail',
-            detail: 'The gateway rejected the credential.',
-          },
-        ],
-      };
-    }
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return {
-      ok: true,
-      stages: [
-        { id: 'reach', label: 'Reach gateway', status: 'pass' },
-        { id: 'identify', label: 'Identify gateway', status: 'pass' },
-        { id: 'auth', label: 'Authenticate', status: 'pass' },
-      ],
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      error: 'unreachable',
-      stages: [
-        {
-          id: 'reach',
-          label: 'Reach gateway',
-          status: 'fail',
-          detail: error instanceof Error ? error.message : String(error),
-        },
-      ],
     };
   }
 }
@@ -217,6 +178,9 @@ export function installWebHost(): void {
         endpointId: undefined,
         control: false,
       });
+      // The tunnel caches may hold this gateway/vault's assets and blobs; drop
+      // them so a later pairing to a different vault can't serve stale bytes.
+      purgeTunnelCaches();
       publish(GATEWAY_EVENT, { activeGatewayId: 'web' });
       return { activeGatewayId: 'web' };
     },
@@ -288,6 +252,7 @@ export function installWebHost(): void {
             label: input.label ?? response.gatewayName ?? 'Web gateway',
           });
           saveSettingsPatch({ onboardingCompletedAt: new Date().toISOString() });
+          void requestPersistentStorage();
           publish(GATEWAY_EVENT, { activeGatewayId: 'web' });
           publish(VAULT_EVENT, { activeGatewayId: 'web', activeVaultId: response.vaultId });
           return {
@@ -338,6 +303,7 @@ export function installWebHost(): void {
           label: input.label ?? 'Web gateway',
         });
         saveSettingsPatch({ onboardingCompletedAt: new Date().toISOString() });
+        void requestPersistentStorage();
         publish(GATEWAY_EVENT, { activeGatewayId: 'web' });
         publish(VAULT_EVENT, { activeGatewayId: 'web', activeVaultId: body.vaultId });
         return {
@@ -443,9 +409,32 @@ export function installWebHost(): void {
     },
     getGatewayRuntime: healthSnapshot,
     onGatewayRuntime: (callback: (snapshot: CentraidGatewayRuntime) => void) => {
+      // Each poll is a full tunnel round trip. Consumers (status pill, Gateway
+      // page) only need up/down, so pause polling while the tab is hidden and
+      // refresh immediately on return. Nothing depends on sub-15s freshness.
       const poll = async (): Promise<void> => callback(await healthSnapshot());
-      const timer = window.setInterval(() => void poll(), 5000);
-      return () => window.clearInterval(timer);
+      let timer: number | undefined;
+      const stop = (): void => {
+        if (timer !== undefined) {
+          window.clearInterval(timer);
+          timer = undefined;
+        }
+      };
+      const start = (): void => {
+        stop();
+        void poll();
+        timer = window.setInterval(() => void poll(), HEALTH_POLL_INTERVAL_MS);
+      };
+      const onVisibility = (): void => {
+        if (document.hidden) stop();
+        else start();
+      };
+      document.addEventListener('visibilitychange', onVisibility);
+      if (!document.hidden) start();
+      return () => {
+        stop();
+        document.removeEventListener('visibilitychange', onVisibility);
+      };
     },
     onGatewayChanged: (callback: (detail: unknown) => void) => subscribe(GATEWAY_EVENT, callback),
     onVaultChanged: (callback: (detail: unknown) => void) => subscribe(VAULT_EVENT, callback),
@@ -476,8 +465,10 @@ export function installWebHost(): void {
     deleteVault: async () => {
       throw new Error('Delete vaults on the gateway host.');
     },
-    getUpdateStatus: async () => ({ available: false, version: 'web' }),
-    onUpdateAvailable: () => () => {},
+    getUpdateStatus: async () => ({ available: isUpdateAvailable(), version: 'web' }),
+    onUpdateAvailable: (callback: (msg: { available: boolean; version: string }) => void) => {
+      return onSwUpdateAvailable(callback);
+    },
     relaunchToUpdate: async () => window.location.reload(),
     getChangelog: async () => ({ currentVersion: 'web', releases: [] }),
     sshConnectGateway: async () => ({
@@ -488,4 +479,5 @@ export function installWebHost(): void {
   };
 
   window.CentraidApi = api as unknown as typeof window.CentraidApi;
+  watchServiceWorkerUpdates();
 }

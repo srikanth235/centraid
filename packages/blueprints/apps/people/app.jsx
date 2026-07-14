@@ -26,7 +26,14 @@
 // `chrome.js` wires the toolbar/keyboard/resize listeners; `format.js`/
 // `icons.js` are stateless. `components/` holds pure functions of props.
 import { createRoot } from './react-core.min.js';
-import { closePopover, debounce, emptyState, readFailed, showSkeleton } from './kit.js';
+import {
+  closePopover,
+  debounce,
+  emptyState,
+  onDataChange,
+  readFailed,
+  showSkeleton,
+} from './kit.js';
 import { createLogic } from './logic.js';
 import { wireChrome } from './chrome.js';
 import { avatarColor, circleName, hashInt, PALETTE } from './format.js';
@@ -43,6 +50,24 @@ import { Activity } from './components/Activity.jsx';
 import { AddPersonModal } from './components/AddPersonModal.jsx';
 
 const $ = (id) => document.getElementById(id);
+
+// Vault entities this app's queries read — the doorbell filter re-derives
+// only when a change names one of these (or names none, i.e. "this app acted").
+const CHANGE_TABLES = [
+  'people.profile',
+  'people.relationship',
+  'people.interaction',
+  'people.important_date',
+  'people.gift',
+  'people.debt',
+  'people.journal_entry',
+  'people.task',
+  'core.party',
+  'core.party_identifier',
+  'core.tag',
+  'core.concept',
+  'knowledge.annotation',
+];
 
 // ---------- State ----------
 
@@ -522,5 +547,9 @@ wireChrome({
   closeAddModal: logic.closeAddModal,
   applySearch,
 });
+
+// Reactive data: a write elsewhere (chat agent, a second window) fires the
+// doorbell — re-derive. Debounced + tables-filtered by the kit helper.
+onDataChange(CHANGE_TABLES, refresh);
 
 refresh();

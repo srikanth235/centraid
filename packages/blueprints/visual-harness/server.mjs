@@ -88,7 +88,15 @@ async function mockScriptSource() {
 async function serveAppAsset(req, res, appId, rel) {
   const appDir = path.join(APPS_DIR, appId);
   const cap = new CaptureResponse();
-  await serveStatic(req, cap, appDir, rel, { sharedAssetsDir: KIT_DIR });
+  // serveStatic content-negotiates compression (issue #404): with the browser's
+  // Accept-Encoding it would hand back a brotli/gzip buffer, which the HTML
+  // post-processing below cannot decode (and re-emitting it with the captured
+  // Content-Encoding would corrupt the body). The harness re-encodes nothing,
+  // so ask for identity bytes and let node send them plain.
+  const headers = { ...req.headers };
+  delete headers['accept-encoding'];
+  const plainReq = Object.create(req, { headers: { value: headers, enumerable: true } });
+  await serveStatic(plainReq, cap, appDir, rel, { sharedAssetsDir: KIT_DIR });
 
   const contentType = String(cap.headers['Content-Type'] || '');
   let body = cap.body;

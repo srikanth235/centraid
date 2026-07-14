@@ -60,6 +60,50 @@ function decodeBody(uri) {
   }
 }
 
+// Same list-row discipline as library.js: results carry a short preview + the
+// checklist tally, never the whole body (issue #404). See library.js for the
+// shape's home.
+const CHECK_RE = /^\s*[-*] \[( |x|X)\]\s?(.*)$/;
+
+function previewOf(body) {
+  const lines = String(body ?? '').split('\n');
+  const out = [];
+  for (const line of lines) {
+    if (out.length >= 6) break;
+    const check = CHECK_RE.exec(line);
+    if (check) {
+      out.push((/x/i.test(check[1]) ? '☑ ' : '☐ ') + check[2]);
+      continue;
+    }
+    if (/^#{1,3}\s+/.test(line)) continue;
+    const li = /^\s*(?:[-*]|\d+\.)\s+(.*)$/.exec(line);
+    if (li) {
+      out.push('• ' + li[1]);
+      continue;
+    }
+    if (line.trim() === '') continue;
+    out.push(line);
+  }
+  const text = out
+    .join('\n')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/`(.+?)`/g, '$1');
+  return text.length > 200 ? text.slice(0, 200) : text;
+}
+
+function checkOf(body) {
+  let total = 0;
+  let done = 0;
+  for (const line of String(body ?? '').split('\n')) {
+    const m = CHECK_RE.exec(line);
+    if (!m) continue;
+    total += 1;
+    if (/x/i.test(m[1])) done += 1;
+  }
+  return { total, done };
+}
+
 export default async ({ input, ctx }) => {
   const purpose = 'dpv:ServiceProvision';
   const term = String(input?.term ?? '').trim();
@@ -119,6 +163,7 @@ export default async ({ input, ctx }) => {
     // Vault order is rank order (best match first) — keep it.
     const notes = hits.map((n) => {
       const notebookIds = notebooksByNote.get(n.note_id) ?? [];
+      const decoded = decodeBody(contentById.get(n.body_content_id)?.content_uri);
       return {
         note_id: n.note_id,
         title: n.title,
@@ -126,7 +171,8 @@ export default async ({ input, ctx }) => {
         pinned: n.pinned,
         created_at: n.created_at,
         updated_at: n.updated_at,
-        body: decodeBody(contentById.get(n.body_content_id)?.content_uri),
+        preview: previewOf(decoded),
+        check: checkOf(decoded),
         notebook_ids: notebookIds,
         notebook_names: notebookIds.map((id) => nameByNotebook.get(id) ?? 'Notebook'),
         attachments: attByNote.get(n.note_id) ?? [],

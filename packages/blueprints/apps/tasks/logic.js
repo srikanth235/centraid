@@ -153,12 +153,31 @@ export function createLogic({ state, data, render, refresh }) {
 
   // ---------- Status transitions ----------
 
+  // The one hot, high-frequency write path (issue #404). Checking a box used
+  // to await the POST AND a full board refetch before the click resolved (two
+  // serial round trips). Now the circle fills optimistically in Row.jsx the
+  // instant it's clicked; we fire the write and let the write's own (debounced)
+  // change doorbell reconcile the board — the task sliding to/from the logbook
+  // — with no inline refetch on the click. Returning truthy keeps the fill;
+  // falsy reverts it. Parked/failed are honest first-class outcomes, not the
+  // completed state: parked surfaces the app's existing per-row pending chip,
+  // failed/denied revert and narrate.
   async function toggleComplete(task) {
     const wasOpen = task.status === 'needs-action' || task.status === 'in-process';
     const nextStatus = wasOpen ? 'completed' : 'needs-action';
     const prevStatus = task.status;
-    const outcome = await write('set-status', { task_id: task.task_id, status: nextStatus });
+    let outcome;
+    try {
+      outcome = await window.centraid.write({
+        action: 'set-status',
+        input: { task_id: task.task_id, status: nextStatus },
+      });
+    } catch (err) {
+      notice(String(err?.message ?? err));
+      return false;
+    }
     if (outcome?.status === 'executed') {
+      notice('');
       logActivity(
         task.task_id,
         nextStatus === 'completed' ? 'Marked complete' : 'Reopened',
@@ -170,8 +189,17 @@ export function createLogic({ state, data, render, refresh }) {
           onUndo: () => write('set-status', { task_id: task.task_id, status: prevStatus }),
         });
       }
+      return true;
     }
-    return outcome?.status === 'executed';
+    if (outcome?.status === 'parked') {
+      markPending('set-status', { task_id: task.task_id }, outcome);
+      toast('Sent to the owner for confirmation.');
+      render();
+      return false;
+    }
+    narrate(outcome);
+    render();
+    return false;
   }
 
   async function cancelTask(task) {

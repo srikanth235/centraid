@@ -1,4 +1,3 @@
-import { Worker } from 'node:worker_threads';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -6,6 +5,7 @@ import type { AppRef } from '../types.js';
 import { appendLogs, type LogEntry } from '../data/log-store.js';
 import type { VaultBridge, VaultOp } from './vault-bridge.js';
 import { sharedWorkerAdmission, type WorkerAdmission } from './worker-admission.js';
+import { WorkerPool, workerPoolSizeFromEnv } from './worker-pool.js';
 
 function resolveWorkerFile(): string {
   // `here` is this module's dir (`src/handlers` → `dist/handlers` once built);
@@ -20,6 +20,28 @@ function resolveWorkerFile(): string {
 }
 
 const WORKER_FILE = resolveWorkerFile();
+
+/**
+ * Absolute path to the worker-runner entry. Exported so tests can build their
+ * own {@link WorkerPool} against the same runner the production dispatch uses.
+ */
+export const HANDLER_WORKER_FILE = WORKER_FILE;
+
+/**
+ * The one warm-spare pool guarding every real handler dispatch (issue #404).
+ * Lazily constructed so the module import doesn't spawn threads (tests /
+ * tools that never dispatch pay nothing), and so `CENTRAID_WORKER_POOL_SIZE`
+ * is read at first use. Tests pass their own `pool` to keep spare counts
+ * cheap and deterministic.
+ */
+let sharedWorkerPoolInstance: WorkerPool | undefined;
+function sharedWorkerPool(): WorkerPool {
+  if (!sharedWorkerPoolInstance) {
+    sharedWorkerPoolInstance = new WorkerPool(WORKER_FILE, workerPoolSizeFromEnv());
+    sharedWorkerPoolInstance.prewarm();
+  }
+  return sharedWorkerPoolInstance;
+}
 
 export interface RunHandlerOptions {
   app: AppRef;
@@ -43,6 +65,13 @@ export interface RunHandlerOptions {
   vault?: VaultBridge;
   /** Overridable for tests; production callers take the shared default (issue #351). */
   admission?: WorkerAdmission;
+  /**
+   * Warm-spare worker pool (issue #404). Overridable for tests; production
+   * callers take the lazily-built shared default. Every run still gets a
+   * single-use worker — the pool only pre-pays the thread/module boot on a
+   * spare so it's off the request's critical path.
+   */
+  pool?: WorkerPool;
 }
 
 export interface HandlerOutcome {
@@ -84,14 +113,22 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
 
   const logs: HandlerOutcome['logs'] = [];
 
-  const worker = new Worker(WORKER_FILE, {
-    workerData: {
+  // Take a pre-booted, single-use worker from the warm-spare pool and hand it
+  // the request. The pool has already paid the thread/module boot on a spare
+  // thread (issue #404); this worker runs exactly this one handler and is then
+  // terminated at finish() — isolation identical to spawn-per-run.
+  const pool = opts.pool ?? sharedWorkerPool();
+  const worker = pool.acquire();
+  const runMessage = {
+    type: 'run',
+    request: {
       handlerFile: opts.handlerFile,
       handlerKind: opts.handlerKind,
       args: { ...opts.args, app: { id: opts.app.id, dir: opts.app.dir } },
     },
-    resourceLimits: { maxOldGenerationSizeMb: 256, maxYoungGenerationSizeMb: 32 },
-  });
+  };
+  // eslint-disable-next-line unicorn/require-post-message-target-origin -- node:worker_threads postMessage has no targetOrigin (#252)
+  worker.postMessage(runMessage);
 
   let timeoutHandle: NodeJS.Timeout | undefined;
   if (opts.timeoutMs && opts.timeoutMs > 0) {

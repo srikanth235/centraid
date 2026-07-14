@@ -15,7 +15,7 @@
 // listeners; `format.js`/`icons.js` are stateless. `components/` holds pure
 // functions of props.
 import { createRoot } from './react-core.min.js';
-import { readFailed, showSkeleton, wireAttachInput } from './kit.js';
+import { onDataChange, readFailed, showSkeleton, wireAttachInput } from './kit.js';
 import {
   buildWall,
   createLogic,
@@ -30,6 +30,19 @@ import { Wall } from './components/Wall.jsx';
 import { Editor } from './components/Editor.jsx';
 
 const $ = (id) => document.getElementById(id);
+
+// Vault entities this app's queries read — the doorbell filter re-derives
+// only when a change names one of these (or names none, i.e. "this app acted").
+const CHANGE_TABLES = [
+  'knowledge.note',
+  'core.content_item',
+  'core.attachment',
+  'core.link',
+  'core.collection',
+  'core.collection_entry',
+  'core.tag',
+  'core.concept',
+];
 
 // ---------- State ----------
 // The last successful library read (never reassigned — mutated in place so
@@ -98,7 +111,7 @@ function renderEditor() {
   editorRoot.render(
     note ? (
       <Editor
-        key={note.note_id}
+        key={`${note.note_id}:${typeof note.body === 'string' ? 'full' : 'lite'}`}
         note={note}
         notebooks={data.notebooks}
         pending={state.pendingNoteIds.has(note.note_id)}
@@ -306,8 +319,9 @@ wireAttachInput($('attachInput'), () => logic.getAttachTarget(), {
 // second window) fires this — re-read, and treat it as the resolution of any
 // outstanding parked write (the owner approved or discarded it via another
 // surface; there is no per-invocation poll wired here, so this is the
-// honest, bounded way to clear a stale pending chip without guessing).
-window.centraid.onChange?.(() => {
+// honest, bounded way to clear a stale pending chip without guessing). The
+// kit helper debounces the doorbell and filters by the tables this app reads.
+onDataChange(CHANGE_TABLES, () => {
   logic.clearPending();
   refresh();
 });
