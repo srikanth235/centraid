@@ -10,6 +10,19 @@ const VIRTUAL_PREFIX = '/__centraid_iroh__/';
 const SERVICE_WORKER_VERSION = 'iroh-bridge-v5';
 const SERVICE_WORKER_URL = `/sw.js?v=${SERVICE_WORKER_VERSION}`;
 
+// Transient tunnel failures (a redialed-then-still-dead connection, a stream
+// reset) are retried a bounded number of times with jittered backoff. The
+// pooled connection in the WASM layer already redials once on a stale cache,
+// so a failure that reaches here is worth a short pause before retrying.
+const MAX_RETRIES = 2;
+const RETRY_BACKOFF_MS = [250, 750];
+// A dead radio must fail fast instead of hanging forever. request() resolves
+// as soon as the response HEADER is read, so this bounds connect + send +
+// first-header, not the (possibly long-lived) body stream.
+const CONNECT_TIMEOUT_MS = 15_000;
+// Replaying these methods cannot duplicate a side effect.
+const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE']);
+
 let endpointPromise: Promise<BrowserEndpoint> | undefined;
 
 function decodeBytes(raw: string): Uint8Array {
@@ -73,6 +86,61 @@ export async function pairGatewayOverIroh(
   return { response, endpointId: node.endpoint_id() };
 }
 
+// The WASM connect path stamps this context onto a dial failure, which is the
+// only failure we can prove happened BEFORE the request body went on the wire.
+function isConnectFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('could not connect to gateway tunnel');
+}
+
+function jitteredBackoff(base: number): number {
+  return Math.round(base * (0.75 + Math.random() * 0.5));
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withConnectTimeout(pending: Promise<BrowserResponse>): Promise<BrowserResponse> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error('Iroh gateway connect timed out.')), CONNECT_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([pending, timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+// Wraps node.request() with a connect timeout and bounded, jittered retries.
+// A rejection here means the BrowserResponse header never resolved, so NO
+// response bytes have reached the caller yet — retrying cannot duplicate
+// delivered output. We still refuse to replay a non-idempotent request whose
+// body may already be on the wire: only a clear pre-send connect failure is
+// retried for those.
+async function requestWithRetry(
+  node: BrowserEndpoint,
+  endpointTicket: string,
+  method: string,
+  target: string,
+  headersJson: string,
+  body: Uint8Array,
+): Promise<BrowserResponse> {
+  const idempotent = IDEMPOTENT_METHODS.has(method);
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await withConnectTimeout(
+        node.request(endpointTicket, method, target, headersJson, body),
+      );
+    } catch (error) {
+      const retryable = idempotent || isConnectFailure(error);
+      if (attempt >= MAX_RETRIES || !retryable) throw error;
+      await sleep(jitteredBackoff(RETRY_BACKOFF_MS[attempt] ?? 750));
+    }
+  }
+}
+
 function responseHeaders(raw: string): Headers {
   const headers = new Headers();
   const values = JSON.parse(raw) as Record<string, string | string[]>;
@@ -101,6 +169,12 @@ async function requestParts(init: RequestInit): Promise<{
   // The transport bypasses browser HTTP, so stamp the trusted shell origin
   // explicitly for gateway-minted browser app sessions.
   headers['origin'] = window.location.origin;
+  // Browsers never expose Accept-Encoding to JS, so advertise gzip explicitly
+  // — otherwise the gateway ships raw bytes. irohFetch decodes the reply. Skip
+  // SSE (the server exempts text/event-stream anyway; keep the request honest).
+  if (!(headers['accept'] || '').toLowerCase().includes('text/event-stream')) {
+    headers['accept-encoding'] = 'gzip';
+  }
   const body =
     method === 'GET' || method === 'HEAD'
       ? new Uint8Array()
@@ -115,17 +189,27 @@ export async function irohFetch(pathname: string, init: RequestInit = {}): Promi
   }
   const node = await endpoint();
   const parts = await requestParts(init);
-  const response: BrowserResponse = await node.request(
+  const response: BrowserResponse = await requestWithRetry(
+    node,
     connection.endpointTicket,
     parts.method,
     pathname,
     JSON.stringify(parts.headers),
     parts.body,
   );
-  return new Response(response.take_body(), {
-    status: response.status,
-    headers: responseHeaders(response.headers_json),
-  });
+  const headers = responseHeaders(response.headers_json);
+  let body: ReadableStream = response.take_body();
+  // The browser does not auto-decode Content-Encoding on a Response we build in
+  // JS from tunnel bytes, so decode gzip here. Strip content-encoding +
+  // content-length (they describe the compressed form); ETag is kept — the
+  // gateway keys it to the RAW bytes, so revalidation stays correct. gzip only:
+  // DecompressionStream has no brotli, and requestParts only offers gzip.
+  if ((headers.get('content-encoding') || '').toLowerCase() === 'gzip') {
+    headers.delete('content-encoding');
+    headers.delete('content-length');
+    body = body.pipeThrough(new DecompressionStream('gzip'));
+  }
+  return new Response(body, { status: response.status, headers });
 }
 
 async function bridgeFetch(message: BridgeRequest): Promise<BrowserResponse> {
@@ -146,7 +230,8 @@ async function bridgeFetch(message: BridgeRequest): Promise<BrowserResponse> {
   if (message.sessionCookie) {
     headers['cookie'] = message.sessionCookie;
   }
-  return (await endpoint()).request(
+  return requestWithRetry(
+    await endpoint(),
     connection.endpointTicket,
     message.method,
     message.target,
