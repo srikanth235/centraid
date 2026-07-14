@@ -8,9 +8,11 @@ import {
   listAgents,
   listTemplates,
   listOutboxGrants,
+  readAutomationSource,
   rotateAutomationWebhookSecret,
   runAutomationNow,
   setAutomationEnabled,
+  listVaultEntityTypes,
   searchVaultEntities,
   updateAutomation,
 } from '../../../gateway-client.js';
@@ -78,6 +80,10 @@ function vaultForTriggers(triggers: readonly (AuEditorTriggerDTO | AuEditorTrigg
 // does. Lane B (editor) owns this file going forward — the screen it renders
 // is still the AutomationEditorScreen placeholder until Lane B lands the
 // real form.
+// Canonical entity-type list is small and static per gateway — fetch once and
+// reuse across every @-search keystroke.
+let entityTypeCache: string[] | null = null;
+
 export default function AutomationEditorRoute({
   automationId,
   templateId,
@@ -215,7 +221,26 @@ export default function AutomationEditorRoute({
             return false;
           }
         }}
-        onSearchEntities={searchVaultEntities}
+        onSearchEntities={async (term) => {
+          // Two kinds of tag: canonical entity TYPES (the domain model, e.g.
+          // `core.event` — grant read scope on the kind) and specific
+          // INSTANCES (a row found by full-text search). Types come first.
+          if (entityTypeCache === null) {
+            entityTypeCache = await listVaultEntityTypes().catch(() => []);
+          }
+          const q = term.toLowerCase();
+          const typeHits = entityTypeCache
+            .filter((name) => name.toLowerCase().includes(q))
+            .slice(0, 6)
+            .map((name) => ({ id: '*', subtitle: 'Domain model', title: name, type: name }));
+          const instanceHits = await searchVaultEntities(term).catch(() => []);
+          return [...typeHits, ...instanceHits];
+        }}
+        onReadSource={async () => {
+          const ref = refIdRef.current;
+          if (!ref) return { manifest: null, handler: null };
+          return readAutomationSource(ref);
+        }}
         onOpenBuilder={(seedMessage) => {
           // The builder route keys on the BARE app id (`row.id`), not the
           // compound `ref` — useBuilder compares it against `row.ownerApp`

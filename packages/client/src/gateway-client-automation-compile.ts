@@ -17,3 +17,20 @@ export async function compileAutomation(input: {
   );
   return readJson<{ runId: string }>(res, 'compile automation');
 }
+
+/** The compiled plan the headless compiler wrote for this automation — the
+ *  deterministic `automation.json` + `handler.js` that actually run. Either
+ *  field is null before a successful first compile. */
+export async function readAutomationSource(
+  automationId: string,
+): Promise<{ manifest: string | null; handler: string | null }> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_automations/source?ref=${enc(automationId)}`, {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  return readJson<{ manifest: string | null; handler: string | null }>(
+    res,
+    'read automation source',
+  );
+}

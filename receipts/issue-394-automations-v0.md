@@ -255,6 +255,12 @@ limits, and manual Browser verification statement match the diff.
 | steer-key | session | issue | type | tier | user-reason | commit | ordinal | timestamp |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 
+### Costs
+
+| cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| claude-code-386e1dab-73a-1783963700-1 | claude-code | 386e1dab-73a0-4032-990b-e0c5fba6cb33 | #394 | claude-opus-4-8 | 43725 | 914707 | 43656804 | 249120 | 1207552 | 33.9919 | 43725 | 914707 | 43656804 | 249120 |  |
+| claude-code-386e1dab-73a-1783966428-1 | claude-code | 386e1dab-73a0-4032-990b-e0c5fba6cb33 | #394 | claude-opus-4-8 | 12106 | 1367982 | 97137081 | 379972 | 1760060 | 66.6783 | 55831 | 2282689 | 140793885 | 629092 |  |
 ## Steering
 
 PASS — the supplied transcript fact pattern contains one initial user request

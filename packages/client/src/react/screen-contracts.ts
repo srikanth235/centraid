@@ -490,6 +490,8 @@ export interface AutomationEditorBridgeProps {
   onSearchEntities: (
     term: string,
   ) => Promise<Array<{ type: string; id: string; title: string | null; subtitle: string | null }>>;
+  /** The compiled plan (automation.json + handler.js) for the read-only viewer. */
+  onReadSource: () => Promise<{ manifest: string | null; handler: string | null }>;
   /** Internal-only builder handoff retained for a future surface; hidden in v0. */
   onOpenBuilder: (seedMessage?: string) => void;
   onRunNow: () => Promise<boolean>;

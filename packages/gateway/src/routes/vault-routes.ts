@@ -59,6 +59,7 @@ import {
   type OutboxWireRequest,
 } from '../serve/outbox-edit.js';
 import {
+  listVaultEntities,
   mediaLocationPolicy,
   readBlobStoreSettings,
   readEnrichSettings,
@@ -236,7 +237,8 @@ export function makeVaultRouteHandler(
               });
             }
             const status = await options.recoveryKit?.status();
-            recoveryKitConfirmed = status?.confirmedAt !== null && status?.confirmedAt !== undefined;
+            recoveryKitConfirmed =
+              status?.confirmedAt !== null && status?.confirmedAt !== undefined;
             const force = body.force === true;
             if (options.recoveryKit && !recoveryKitConfirmed && !force) {
               return sendJson(res, 409, {
@@ -560,6 +562,13 @@ export function makeVaultRouteHandler(
       // The cross-referencing shell surface (issue #272): the picker is an
       // owner-trust search/browse, and link writes ride the owner-device
       // credential — the pick itself is the consent, scoped to one row.
+      // Canonical domain entity types (`schema.table`) — the ontology model,
+      // surfaced by the automation editor's @-tagging so the owner can reference
+      // an entity kind ("@core.event") without a matching vault row to search.
+      if (method === 'GET' && segments[0] === 'entities' && segments.length === 1) {
+        return sendJson(res, 200, { entities: listVaultEntities() });
+      }
+
       if (method === 'GET' && segments[0] === 'picker' && segments.length === 1) {
         const term = url.searchParams.get('term') ?? undefined;
         const kindsParam = url.searchParams.get('kinds');

@@ -28,6 +28,7 @@
 
 import crypto from 'node:crypto';
 import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
@@ -405,6 +406,24 @@ export function makeAutomationsRouteHandler(
           .readAppOwned(codeAppsDir(), ref.appId, ref.automationId)
           .catch(() => undefined);
         return sendJson(res, 200, { row: row ?? null });
+      }
+
+      // The compiler's output made legible: the instructions-first editor
+      // owns intent, but the deterministic plan the headless compiler writes
+      // (`automation.json` + `handler.js`) is what actually runs. Surfacing it
+      // read-only lets the owner see exactly what their prose became.
+      if (sub === 'source' && method === 'GET') {
+        const ref = automation.parseRef(url.searchParams.get('ref') ?? '');
+        if (!ref)
+          return sendJson(res, 400, { error: 'bad_request', message: 'source needs ?ref=' });
+        const dir = path.join(codeAppsDir(), ref.appId, 'automations', ref.automationId);
+        const read = (file: string): Promise<string | null> =>
+          readFile(path.join(dir, file), 'utf8').catch(() => null);
+        const [manifest, handler] = await Promise.all([
+          read(automation.MANIFEST_FILE),
+          read(automation.HANDLER_FILE),
+        ]);
+        return sendJson(res, 200, { manifest, handler });
       }
 
       if (sub === 'run-now' && method === 'POST') {

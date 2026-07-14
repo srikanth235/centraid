@@ -40,12 +40,13 @@ type TriggerDraft = {
   every: string;
   entities: string;
 };
-type TabId = 'connectors' | 'behavior' | 'notifications';
+type TabId = 'connectors' | 'behavior' | 'notifications' | 'plan';
 
 const TABS: readonly { id: TabId; label: string }[] = [
   { id: 'connectors', label: 'Connectors' },
   { id: 'behavior', label: 'Behavior' },
   { id: 'notifications', label: 'Notifications' },
+  { id: 'plan', label: 'Plan' },
 ];
 
 let triggerKey = 0;
@@ -268,11 +269,129 @@ function BehaviorPanel({
   );
 }
 
+// Minimal, dependency-free tokenizer — enough to give the read-only plan
+// viewer life without pulling in a highlighter. Anything it doesn't match
+// renders as plain text, so mis-tokenizing only ever means "less colour".
+const CODE_TOKEN =
+  /(\/\/[^\n]*)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)|(-?\b\d+(?:\.\d+)?\b)|(\b(?:const|let|var|function|return|if|else|for|of|in|await|async|import|export|from|new|class|extends|try|catch|throw|typeof|true|false|null|undefined)\b)/g;
+
+function highlightLine(line: string): (string | JSX.Element)[] {
+  const out: (string | JSX.Element)[] = [];
+  let last = 0;
+  let key = 0;
+  for (const m of line.matchAll(CODE_TOKEN)) {
+    const idx = m.index ?? 0;
+    if (idx > last) out.push(line.slice(last, idx));
+    const cls = m[1] ? styles.tkCom : m[2] ? styles.tkStr : m[3] ? styles.tkNum : styles.tkKw;
+    out.push(
+      <span key={key++} className={cls}>
+        {m[0]}
+      </span>,
+    );
+    last = idx + m[0].length;
+  }
+  if (last < line.length) out.push(line.slice(last));
+  return out;
+}
+
+function PlanPanel({
+  mode,
+  source,
+  file,
+  onFile,
+}: {
+  mode: 'create' | 'edit';
+  source: { manifest: string | null; handler: string | null } | null;
+  file: 'handler' | 'manifest';
+  onFile: (f: 'handler' | 'manifest') => void;
+}): JSX.Element {
+  const [copied, setCopied] = useState(false);
+  if (mode === 'create') {
+    return (
+      <div className={styles.emptyPanel}>
+        <p>
+          The compiler turns your instructions into a deterministic plan when you create the
+          automation. Its <code>handler.js</code> and <code>automation.json</code> will show here.
+        </p>
+      </div>
+    );
+  }
+  if (!source) {
+    return (
+      <div className={styles.emptyPanel}>
+        <p>Loading compiled plan…</p>
+      </div>
+    );
+  }
+  const code = file === 'handler' ? source.handler : source.manifest;
+  const lang = file === 'handler' ? 'JavaScript' : 'JSON';
+  const copy = (): void => {
+    if (!code) return;
+    void navigator.clipboard.writeText(code).then(() => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    });
+  };
+  const lines = (code ?? '').split('\n');
+  return (
+    <div className={styles.codeViewer}>
+      <div className={styles.codeChrome}>
+        <div className={styles.codeTabs} role="tablist" aria-label="Compiled files">
+          {(['handler', 'manifest'] as const).map((f) => (
+            <button
+              key={f}
+              type="button"
+              role="tab"
+              aria-selected={file === f}
+              className={cx(styles.codeTab, file === f && styles.codeTabOn)}
+              onClick={() => onFile(f)}
+            >
+              {f === 'handler' ? 'handler.js' : 'automation.json'}
+            </button>
+          ))}
+        </div>
+        <div className={styles.codeMeta}>
+          <span className={styles.codeLang}>{lang}</span>
+          <button
+            type="button"
+            className={styles.codeCopy}
+            disabled={!code}
+            onClick={copy}
+            title="Copy to clipboard"
+          >
+            <Icon name="Copy" size={12} />
+            <span>{copied ? 'Copied' : 'Copy'}</span>
+          </button>
+        </div>
+      </div>
+      {code ? (
+        <div className={styles.codeBody}>
+          <pre className={styles.codePre}>
+            {lines.map((ln, i) => (
+              <div key={i} className={styles.codeLine}>
+                <span className={styles.codeGutter} aria-hidden="true">
+                  {i + 1}
+                </span>
+                <code className={styles.codeText}>{ln ? highlightLine(ln) : '\u00A0'}</code>
+              </div>
+            ))}
+          </pre>
+        </div>
+      ) : (
+        <div className={styles.codeEmpty}>
+          <p>Not compiled yet — save the automation to compile its plan.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AutomationEditorScreen({
   loadData,
   onSave,
   onCompile,
   onSearchEntities,
+  onReadSource,
   onRunNow,
   onToggleEnabled,
   onDecideConsent,
@@ -292,6 +411,10 @@ export default function AutomationEditorScreen({
   >([]);
   const [enabled, setEnabled] = useState(false);
   const [tab, setTab] = useState<TabId>('connectors');
+  const [source, setSource] = useState<{ manifest: string | null; handler: string | null } | null>(
+    null,
+  );
+  const [sourceFile, setSourceFile] = useState<'handler' | 'manifest'>('handler');
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -338,13 +461,32 @@ export default function AutomationEditorScreen({
     }
   }, [applyLoaded, loadData]);
 
+  const didInitialLoad = useRef(false);
   useEffect(() => {
+    if (didInitialLoad.current) return;
+    didInitialLoad.current = true;
     void reload();
   }, [reload]);
 
   useEffect(() => {
     if (instructionsRef.current) autogrow(instructionsRef.current);
   }, [instructions]);
+
+  // Lazy-load the compiled plan the first time the Plan tab is opened.
+  useEffect(() => {
+    if (tab !== 'plan' || source) return;
+    let active = true;
+    void onReadSource()
+      .then((s) => {
+        if (active) setSource(s);
+      })
+      .catch(() => {
+        if (active) setSource({ handler: null, manifest: null });
+      });
+    return () => {
+      active = false;
+    };
+  }, [tab, source, onReadSource]);
 
   useEffect(() => {
     if (!mention || mention.query.length < 1) {
@@ -550,7 +692,7 @@ export default function AutomationEditorScreen({
         </div>
       ) : null}
 
-      <label className={cx(styles.field, styles.instructionsField)}>
+      <label className={styles.field}>
         <span className={styles.fieldLabel}>Name</span>
         <input
           className={styles.input}
@@ -561,7 +703,7 @@ export default function AutomationEditorScreen({
         />
       </label>
 
-      <label className={styles.field}>
+      <label className={cx(styles.field, styles.instructionsField)}>
         <span className={styles.fieldLabel}>Instructions</span>
         <textarea
           ref={instructionsRef}
@@ -576,7 +718,7 @@ export default function AutomationEditorScreen({
             {Array.from(instructions.matchAll(/@\[([^/\]]+)\/([^\]]+)\]/g), (match) => (
               <span key={match[0]} className={styles.entityToken}>
                 <code>@{match[1]}</code>
-                <span>{match[2]}</span>
+                <span>{match[2] === '*' ? 'type' : match[2]}</span>
               </span>
             ))}
           </div>
@@ -594,7 +736,7 @@ export default function AutomationEditorScreen({
                 onClick={() => insertMention(hit)}
               >
                 <span>{hit.title ?? hit.id}</span>
-                <code>{hit.type}</code>
+                <code>{hit.subtitle ?? hit.type}</code>
               </button>
             ))}
           </div>
@@ -605,10 +747,13 @@ export default function AutomationEditorScreen({
         <div className={styles.sectionHeading}>
           <div>
             <h2 className={styles.sectionTitle}>Triggers</h2>
-            <p className={styles.sectionHint}>Any trigger can start this automation.</p>
+            <p className={styles.sectionHint}>
+              Add a Schedule or Webhook. Data-change and condition triggers are written by the
+              compiler from your instructions.
+            </p>
           </div>
           <div className={styles.addTrigger} aria-label="Add trigger">
-            {(['cron', 'condition', 'data', 'webhook'] as const).map((kind) => (
+            {(['cron', 'webhook'] as const).map((kind) => (
               <button
                 key={kind}
                 type="button"
@@ -617,7 +762,7 @@ export default function AutomationEditorScreen({
                 }
                 onClick={() => setTriggers((current) => [...current, draftTrigger(kind)])}
               >
-                + {kind === 'cron' ? 'Schedule' : kind[0]?.toUpperCase() + kind.slice(1)}
+                + {kind === 'cron' ? 'Schedule' : 'Webhook'}
               </button>
             ))}
           </div>
@@ -635,32 +780,41 @@ export default function AutomationEditorScreen({
               trigger.kind === 'cron' && trigger.expr.trim()
                 ? cronNextRuns(trigger.expr.trim(), 3).map(relativeRunLabel)
                 : [];
+            // Condition/data triggers are compiler output — the owner declares
+            // intent in Instructions, not here — so they render read-only
+            // (still preserved on save; see buildTriggers).
+            const derived = trigger.kind === 'condition' || trigger.kind === 'data';
             return (
               <div key={trigger.key} className={styles.triggerRow} data-trigger-kind={trigger.kind}>
                 <div className={styles.triggerRowHead}>
                   <span className={styles.triggerIndex}>{String(index + 1).padStart(2, '0')}</span>
-                  <select
-                    className={styles.triggerSelect}
-                    value={trigger.kind}
-                    onChange={(event) => {
-                      const kind = event.target.value as TriggerKind;
-                      if (kind === 'webhook' && triggers.some((item) => item.kind === 'webhook'))
-                        return;
-                      update({ ...draftTrigger(kind), key: trigger.key });
-                    }}
-                  >
-                    <option value="cron">Schedule</option>
-                    <option value="condition">Condition</option>
-                    <option value="data">Data change</option>
-                    <option
-                      value="webhook"
-                      disabled={triggers.some(
-                        (item) => item.kind === 'webhook' && item.key !== trigger.key,
-                      )}
+                  {derived ? (
+                    <span className={styles.triggerDerivedLabel}>
+                      {trigger.kind === 'data' ? 'Data change' : 'Condition'}
+                      <span className={styles.triggerDerivedTag}>from instructions</span>
+                    </span>
+                  ) : (
+                    <select
+                      className={styles.triggerSelect}
+                      value={trigger.kind}
+                      onChange={(event) => {
+                        const kind = event.target.value as TriggerKind;
+                        if (kind === 'webhook' && triggers.some((item) => item.kind === 'webhook'))
+                          return;
+                        update({ ...draftTrigger(kind), key: trigger.key });
+                      }}
                     >
-                      Webhook
-                    </option>
-                  </select>
+                      <option value="cron">Schedule</option>
+                      <option
+                        value="webhook"
+                        disabled={triggers.some(
+                          (item) => item.kind === 'webhook' && item.key !== trigger.key,
+                        )}
+                      >
+                        Webhook
+                      </option>
+                    </select>
+                  )}
                   <IconButton
                     icon="Trash"
                     ariaLabel={`Remove trigger ${index + 1}`}
@@ -693,61 +847,27 @@ export default function AutomationEditorScreen({
                     ) : null}
                   </div>
                 ) : null}
-                {trigger.kind === 'condition' ? (
+                {derived ? (
                   <div className={styles.trigFields}>
-                    <label className={styles.subField}>
-                      <span className={styles.subFieldLabel}>Entity</span>
-                      <input
-                        className={cx(styles.input, styles.mono)}
-                        value={trigger.entity}
-                        onChange={(event) => update({ entity: event.target.value })}
-                        placeholder="core.event"
-                      />
-                    </label>
-                    <label className={styles.subField}>
-                      <span className={styles.subFieldLabel}>Where (JSON array)</span>
-                      <input
-                        className={cx(styles.input, styles.mono)}
-                        value={trigger.where}
-                        onChange={(event) => {
-                          setWhereError(null);
-                          update({ where: event.target.value });
-                        }}
-                        placeholder='[{"column":"status","op":"eq","value":"open"}]'
-                        aria-invalid={whereError !== null}
-                      />
-                    </label>
-                    <label className={styles.subField}>
-                      <span className={styles.subFieldLabel}>Every</span>
-                      <input
-                        className={cx(styles.input, styles.mono)}
-                        value={trigger.every}
-                        onChange={(event) => update({ every: event.target.value })}
-                        placeholder="*/5 * * * *"
-                      />
-                    </label>
-                  </div>
-                ) : null}
-                {trigger.kind === 'data' ? (
-                  <div className={styles.trigFields}>
-                    <label className={styles.subField}>
-                      <span className={styles.subFieldLabel}>Entities</span>
-                      <input
-                        className={styles.input}
-                        value={trigger.entities}
-                        onChange={(event) => update({ entities: event.target.value })}
-                        placeholder="core.event, core.content_derivative"
-                      />
-                    </label>
-                    <label className={styles.subField}>
-                      <span className={styles.subFieldLabel}>Every</span>
-                      <input
-                        className={cx(styles.input, styles.mono)}
-                        value={trigger.every}
-                        onChange={(event) => update({ every: event.target.value })}
-                        placeholder="*/5 * * * *"
-                      />
-                    </label>
+                    <p className={styles.trigHint}>
+                      {trigger.kind === 'data' ? (
+                        <>
+                          Watches <code>{trigger.entities || 'vault data'}</code> for changes.
+                        </>
+                      ) : (
+                        <>
+                          Watches <code>{trigger.entity || 'vault data'}</code>
+                          {trigger.where ? ' matching a filter' : ''}.
+                        </>
+                      )}
+                      {trigger.every ? (
+                        <>
+                          {' '}
+                          Checked <code>{trigger.every}</code>.
+                        </>
+                      ) : null}{' '}
+                      Edit your instructions and recompile to change it.
+                    </p>
                   </div>
                 ) : null}
                 {trigger.kind === 'webhook' ? (
@@ -820,6 +940,9 @@ export default function AutomationEditorScreen({
           ) : null}
           {tab === 'notifications' ? (
             <NotificationsPanel onFailure={d.onFailure ?? null} model={d.model ?? null} />
+          ) : null}
+          {tab === 'plan' ? (
+            <PlanPanel mode={d.mode} source={source} file={sourceFile} onFile={setSourceFile} />
           ) : null}
         </div>
       </section>
