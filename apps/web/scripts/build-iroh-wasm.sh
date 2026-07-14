@@ -28,7 +28,9 @@ wasm-bindgen \
 # Shrink the bindgen output. Optional: skip with a warning if wasm-opt is
 # absent so the build still produces a working (larger) artifact.
 if command -v wasm-opt >/dev/null 2>&1; then
-  wasm-opt -Oz "$OUT/centraid_web_iroh_bg.wasm" -o "$OUT/centraid_web_iroh_bg.wasm"
+  # --all-features: the bindgen output uses post-MVP features (bulk memory,
+  # reference types); without this wasm-opt rejects the module outright.
+  wasm-opt -Oz --all-features "$OUT/centraid_web_iroh_bg.wasm" -o "$OUT/centraid_web_iroh_bg.wasm"
 else
   echo "wasm-opt not found; skipping -Oz size pass (brew install binaryen to enable)." >&2
 fi

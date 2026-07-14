@@ -12,6 +12,28 @@
     <link rel="icon" href="/icon-192.png" sizes="192x192" type="image/png" />
     <!-- iOS home-screen icon must be a real raster PNG (no SVG support). -->
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180.png" />
+    <!--
+      iOS PWA launch screens: without apple-touch-startup-image entries an
+      installed PWA flashes solid white while WebKit boots, even though the
+      manifest declares background_color. Each image must exactly match the
+      device's pixel size, selected via device-width/height (CSS points) +
+      device-pixel-ratio media queries. Solid #111317 + centered mark,
+      palette-quantized PNGs (~5-7KB each). Portrait only — the app installs
+      portrait on iPhone. Regenerate by rasterizing /centraid.svg onto a
+      #111317 canvas at the sizes below (logo = 28% of the short edge).
+    -->
+    <!-- iPhone 14 Pro Max / 15 Plus / 15 Pro Max / 16 Plus (430x932 @3x) -->
+    <link rel="apple-touch-startup-image" href="/splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <!-- iPhone 14 Pro / 15 / 15 Pro / 16 (393x852 @3x) -->
+    <link rel="apple-touch-startup-image" href="/splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <!-- iPhone 12 / 12 Pro / 13 / 13 Pro / 14 (390x844 @3x) -->
+    <link rel="apple-touch-startup-image" href="/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <!-- iPhone X / XS / 11 Pro / 12 mini / 13 mini (375x812 @3x) -->
+    <link rel="apple-touch-startup-image" href="/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <!-- iPhone XR / 11 (414x896 @2x) -->
+    <link rel="apple-touch-startup-image" href="/splash-828x1792.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    <!-- iPhone SE 2/3 / 8 / 7 / 6s (375x667 @2x) -->
+    <link rel="apple-touch-startup-image" href="/splash-750x1334.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
     <title>Centraid</title>
   </head>
   <body>
