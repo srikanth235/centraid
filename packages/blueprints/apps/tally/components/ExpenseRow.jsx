@@ -26,8 +26,17 @@ export function ExpenseRow({ row, currency, groupSuffix = false, onOpen }) {
   }
   if (groupSuffix && row.group_name) sub = `${sub} · ${row.group_name}`;
 
+  // Optimistic / parked rows (issue #404): the kit's shared pending
+  // treatment — accent rail on the row, spinning mono chip where the role
+  // label sits — and no detail popover (there is no receipt or server row to
+  // show yet; the doorbell refresh swaps in the real one).
+  const pending = Boolean(row.pending);
   return (
-    <button type="button" className="s-exrow" onClick={() => onOpen(row)}>
+    <button
+      type="button"
+      className={pending ? 's-exrow kit-pending' : 's-exrow'}
+      onClick={pending ? undefined : () => onOpen(row)}
+    >
       <span className="s-exdate">
         <span className="mo">{MS[d.getMonth()]}</span>
         <span className="dy">{String(d.getDate())}</span>
@@ -40,7 +49,11 @@ export function ExpenseRow({ row, currency, groupSuffix = false, onOpen }) {
         <span className="s-exsub">{sub}</span>
       </span>
       <span className="s-exright">
-        <span className="s-exlabel">{rLabel}</span>
+        {pending ? (
+          <span className="kit-pending-chip">pending</span>
+        ) : (
+          <span className="s-exlabel">{rLabel}</span>
+        )}
         <span className={`s-examt ${cls}`}>{amt}</span>
       </span>
     </button>

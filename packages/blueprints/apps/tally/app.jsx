@@ -49,6 +49,12 @@ const CHANGE_TABLES = [
   'social.circle_member',
   'core.party',
   'core.vault',
+  // The bare app id too: the real bridge names fully-qualified tables (or
+  // nothing at all for this app's own handler writes, which always passes the
+  // kit filter), but the visual harness's mock change feed names the app —
+  // without this the harness never reconciles an optimistic add. Harmless in
+  // production: no real change ever carries a bare 'tally'.
+  'tally',
 ];
 
 // ---------- State ----------
@@ -82,6 +88,14 @@ const state = {
   addFriend: null,
   // Members of the group chosen in the expense/settle modal (fetched on demand).
   modalMembers: [],
+  // Optimistic adds (issue #404): decorated expense rows applied to local
+  // state the instant Save is clicked, before the write resolves. Rendered
+  // through the same ExpenseRow with the kit pending chip; merged over the
+  // fetched ledger/dashboard by render(). Cleared by the change doorbell
+  // (after its refresh lands, so a row never blinks out mid-reconcile) —
+  // the same "any change resolves outstanding parked writes" discipline as
+  // tasks. Failed/denied writes splice their row back out immediately.
+  pendingExpenses: [],
 };
 
 // ---------- Logic instance ----------
@@ -178,6 +192,36 @@ function renderTopbar() {
 
 // ---------- Main content ----------
 
+// The optimistic rows that belong on the currently visible ledger.
+function pendingForView() {
+  if (!state.pendingExpenses.length) return [];
+  if (state.view === 'group')
+    return state.pendingExpenses.filter((r) => r.group_id === state.groupId);
+  if (state.view === 'friend')
+    return state.pendingExpenses.filter(
+      (r) =>
+        r.paid_by === state.friendId ||
+        (r.splits ?? []).some((s) => s.party_id === state.friendId),
+    );
+  return [];
+}
+
+// The dashboard hero totals with in-flight optimistic adds folded in (parked
+// rows are excluded — a parked write hasn't moved any balance yet, only the
+// per-row chip narrates it). Per-friend nets and group cards stay fetched
+// truth; the doorbell refresh reconciles everything within a beat.
+function dashWithPending() {
+  const inflight = state.pendingExpenses.filter((r) => !r.parked);
+  if (!inflight.length) return dash;
+  let owe = dash.owe_total_minor;
+  let owed = dash.owed_total_minor;
+  for (const r of inflight) {
+    if (r.your_role === 'lent') owed += r.your_amount_minor;
+    else if (r.your_role === 'borrowed') owe += r.your_amount_minor;
+  }
+  return { ...dash, owe_total_minor: owe, owed_total_minor: owed };
+}
+
 function render() {
   renderSidebar();
   renderTopbar();
@@ -197,7 +241,7 @@ function render() {
   if (state.view === 'dashboard') {
     wrapRoot.render(
       <Dashboard
-        dash={dash}
+        dash={dashWithPending()}
         onOpenFriend={(friendId) => logic.setNav({ view: 'friend', friendId, search: '' })}
         onOpenGroup={(groupId) => logic.setNav({ view: 'group', groupId, search: '' })}
         onOpenAddFriend={logic.openAddFriend}
@@ -213,10 +257,17 @@ function render() {
     return;
   }
   if (state.view === 'group' || state.view === 'friend') {
+    // Optimistic adds render on top of the fetched ledger, newest first —
+    // never mutating state.viewData, so a refresh replaces it wholesale.
+    const pend = pendingForView();
+    const viewData =
+      pend.length && state.viewData
+        ? { ...state.viewData, ledger: [...pend, ...(state.viewData.ledger ?? [])] }
+        : state.viewData;
     wrapRoot.render(
       <Ledger
         view={state.view}
-        viewData={state.viewData}
+        viewData={viewData}
         currency={dash.currency}
         onOpenDetail={logic.openDetail}
       />,
@@ -292,23 +343,38 @@ function renderModals() {
 
 // ---------- View loading ----------
 
-// Fetch the payload for the active view, then render.
+// Fetch the payload for the active view, then render. Navigating to a NEW
+// view wipes to a skeleton immediately; re-fetching the SAME view (doorbell /
+// focus refresh) keeps the current rows painted until the fresh payload
+// lands — the reconcile after an optimistic add (issue #404) must not flash
+// the whole ledger back to shimmer. `viewSeq` drops a stale fetch that a
+// newer navigation superseded.
+let viewSeq = 0;
+let lastViewKey = '';
 async function loadView() {
-  state.viewData = null;
-  render(); // paint chrome + a skeleton immediately
+  const key = `${state.view}|${state.groupId}|${state.friendId}|${state.search.trim()}`;
+  const seq = ++viewSeq;
+  if (key !== lastViewKey) {
+    lastViewKey = key;
+    state.viewData = null;
+  }
+  render(); // paint chrome + (on navigation) a skeleton immediately
+  let next = null;
   try {
     if (state.view === 'group' && state.groupId) {
-      state.viewData = await logic.read('group', { group_id: state.groupId });
+      next = await logic.read('group', { group_id: state.groupId });
     } else if (state.view === 'friend' && state.friendId) {
-      state.viewData = await logic.read('friend', { party_id: state.friendId });
+      next = await logic.read('friend', { party_id: state.friendId });
     } else if (state.view === 'activity') {
-      state.viewData = await logic.read('activity');
+      next = await logic.read('activity');
     } else if (state.search.trim()) {
-      state.viewData = await logic.read('search', { term: state.search.trim() });
+      next = await logic.read('search', { term: state.search.trim() });
     }
   } catch (err) {
     logic.notice(String(err?.message ?? err));
   }
+  if (seq !== viewSeq) return;
+  state.viewData = next;
   if (state.viewData?.me) dash.me = state.viewData.me;
   if (state.viewData?.vaultDenied) return logic.applyDenied(state.viewData.vaultDenied);
   render();
@@ -362,7 +428,14 @@ showSkeleton($('wrap'), 4);
 ({ setThemeIcon } = wireChrome({ state, logic, renderModals, refreshAll }));
 
 // Reactive data: a write elsewhere (chat agent, a second window) fires the
-// doorbell — re-derive. Debounced + tables-filtered by the kit helper.
-onDataChange(CHANGE_TABLES, refreshAll);
+// doorbell — re-derive. Debounced + tables-filtered by the kit helper. Any
+// change also resolves outstanding optimistic/parked adds (tasks' honest
+// discipline), but only AFTER the refresh lands: clearing first would blink
+// the new row out for a round trip before server truth repaints it.
+onDataChange(CHANGE_TABLES, async () => {
+  await refreshAll();
+  state.pendingExpenses = [];
+  render();
+});
 
 refreshAll();
