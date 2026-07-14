@@ -6,6 +6,7 @@
 // swap this region for a different one (slideshow.jsx / this file's own
 // EditorView), which only the shell here can do.
 import { toast } from '../kit.js';
+import { gridSrc } from '../media.js';
 import { toggleFavorite } from '../assets-actions.js';
 import { EditorView } from './Editor.jsx';
 import { LightboxInfo } from './LightboxInfo.jsx';
@@ -97,6 +98,7 @@ export function Stage({ asset, onDims }) {
       <img
         src={asset.content_uri}
         alt={asset.title ?? asset.kind ?? 'Photo'}
+        decoding="async"
         ref={(el) => {
           if (!el || el.dataset.zoomWired) return;
           el.dataset.zoomWired = '1';
@@ -316,21 +318,26 @@ export function LightboxShell({
 
       {!editing ? (
         <div className="ph-lb-filmstrip">
-          {list.map((a) => (
-            <button
-              key={a.asset_id}
-              type="button"
-              className="ph-lb-frame"
-              data-active={a.asset_id === asset.asset_id ? 'true' : 'false'}
-              onClick={(e) => {
-                e.stopPropagation();
-                const i = list.findIndex((x) => x.asset_id === a.asset_id);
-                onStep(i - idx);
-              }}
-            >
-              <img src={a.thumb_uri ?? a.content_uri} loading="lazy" alt="" />
-            </button>
-          ))}
+          {list.map((a) => {
+            // Same cheap-source rule as the grid: a thumb (or inline data URI),
+            // never a full remote original, and a placeholder for videos.
+            const src = gridSrc(a);
+            return (
+              <button
+                key={a.asset_id}
+                type="button"
+                className={src ? 'ph-lb-frame' : 'ph-lb-frame is-placeholder'}
+                data-active={a.asset_id === asset.asset_id ? 'true' : 'false'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const i = list.findIndex((x) => x.asset_id === a.asset_id);
+                  onStep(i - idx);
+                }}
+              >
+                {src ? <img src={src} loading="lazy" decoding="async" alt="" /> : null}
+              </button>
+            );
+          })}
         </div>
       ) : null}
     </div>

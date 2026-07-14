@@ -32,7 +32,7 @@
 import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from './constants.js';
 import { $ } from './dom.js';
 import { createDuplicates } from './duplicates.jsx';
-import { readFailed } from './kit.js';
+import { debounce, readFailed } from './kit.js';
 import { DEFAULT_ZOOM, gridWidthFallback, ZOOM_LEVELS } from './layout.js';
 import { createLightbox } from './lightbox.jsx';
 import { notice } from './outcomes.js';
@@ -82,7 +82,33 @@ let paneWidth = gridWidthFallback(typeof window !== 'undefined' ? window.innerWi
 let libraryWindow = 500;
 let libraryTruncated = false;
 
-async function refresh() {
+// Focus-refresh staleness gate (issue #404): switching back to Photos must not
+// refetch the whole library on every app switch. A write elsewhere already
+// arrives via onChange (Boot, below); focus only needs to cover a change
+// missed while the SSE was disconnected, so a granted load within this window
+// is skipped. `lastFreshLoadAt` records only focus/change/action loads, never
+// the initial boot load — so the boot's granted → denied → granted consent
+// walk (driven purely by focus in the boot harness) always re-reads.
+const FOCUS_STALE_MS = 30_000;
+let lastFreshLoadAt = 0;
+
+// The vault tables the library projection actually reads (queries/library.js +
+// queries/_shared.js). A `centraid:datachange` touching none of these can't
+// change what this app shows, so onChange skips the refetch (issue #404).
+const PHOTOS_READ_TABLES = new Set([
+  'media.media_asset',
+  'core.content_item',
+  'core.collection',
+  'core.collection_entry',
+  'core.place',
+  'core.concept_scheme',
+  'core.concept',
+  'core.tag',
+  'blob.custody_state',
+]);
+
+async function refresh(opts) {
+  const record = opts?.record !== false;
   let data;
   try {
     data = await window.centraid.read({ query: 'library', input: { limit: libraryWindow } });
@@ -125,6 +151,7 @@ async function refresh() {
   for (const id of [...selectedIds]) {
     if (!assets.some((a) => a.asset_id === id)) selectedIds.delete(id);
   }
+  if (record) lastFreshLoadAt = Date.now();
   sidebar.renderSidebar();
   renderToolbarBar();
   renderMain();
@@ -509,11 +536,20 @@ const { run: runSearch, invalidate: invalidateSearch } = createSearch({
   renderGrid: renderMain,
 });
 
+// The local match (day/month/album-name/loaded-title) re-sorts, re-buckets and
+// re-justifies the whole loaded window — up to 2,000 tiles. Debounced so a
+// burst of keystrokes rebuilds the grid once, not once per key; the <input> is
+// uncontrolled, so its text still echoes instantly (issue #404). The server
+// FTS round trip (runSearch) is already debounced in search.js.
+const debouncedLocalRender = debounce(() => {
+  renderToolbarBar();
+  renderMain();
+}, 180);
+
 $('searchInput').addEventListener('input', () => {
   searchQuery = $('searchInput').value.trim();
   $('searchClear').hidden = searchQuery === '';
-  renderToolbarBar();
-  renderMain();
+  debouncedLocalRender();
   runSearch();
 });
 
@@ -667,11 +703,38 @@ wireUpload({
 // lightbox's own Slideshow icon covers every width.
 $('slideshowBtn').addEventListener('click', () => lightbox.startSlideshow(null));
 
-window.addEventListener('focus', refresh);
+// Refocusing Photos re-reads only if the last library load is stale (issue
+// #404) — a fresh load within FOCUS_STALE_MS is skipped, so hopping between
+// apps doesn't reship the whole library each time. Real changes elsewhere
+// arrive via onChange below, independent of focus.
+window.addEventListener('focus', () => {
+  if (lastFreshLoadAt && Date.now() - lastFreshLoadAt < FOCUS_STALE_MS) return;
+  refresh();
+});
+
+// Reactive data (SKILL.md "Reactive data"): a write elsewhere (chat agent, a
+// second window) fires this. Debounced so a burst of writes coalesces into one
+// refetch, and skipped entirely when the change touches no table this app
+// reads — a note/task/expense write must not reship the photo library.
+const onDataChange = debounce(() => refresh(), 200);
+window.centraid.onChange?.((detail) => {
+  const tables = detail?.tables;
+  // Unknown/empty table set: refetch to stay honest. Otherwise only when the
+  // change intersects the library projection's tables.
+  if (!Array.isArray(tables) || tables.length === 0) {
+    onDataChange();
+    return;
+  }
+  if (tables.some((t) => PHOTOS_READ_TABLES.has(t))) onDataChange();
+});
+
 // Shimmer rows while the first read is in flight — the genuine
 // `<kit-skeleton>` custom element, rendered as ordinary JSX (not the
 // `showSkeleton()` DOM-mutating helper, which must never target a
 // React-owned node); `renderMain` replaces it with real content once
 // `refresh()` resolves.
 mainRoot.render(<kit-skeleton rows={6}></kit-skeleton>);
-refresh();
+// The initial load doesn't arm the focus gate — the first refocus after boot
+// still verifies (the user may have been away since the page mounted), then
+// the gate suppresses rapid subsequent app switches.
+refresh({ record: false });
