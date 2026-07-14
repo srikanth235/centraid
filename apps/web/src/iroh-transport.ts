@@ -25,6 +25,68 @@ const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE']);
 
 let endpointPromise: Promise<BrowserEndpoint> | undefined;
 
+// --- Perf instrumentation (issue #404 workstream I) --------------------------
+// Lightweight, guarded probes proving the QUIC connection pool is reused: many
+// request STREAMS ride a single endpoint CONNECT. Surfaced two ways so a test
+// or a console can observe pool reuse without touching internals:
+//   * globalThis.__centraidIrohStats — running counters {connects, streams,
+//     reconnects}. After N pooled requests, connects should be ≪ streams.
+//   * performance marks/measures — `centraid:iroh-connect` (endpoint spawn) and
+//     `centraid:iroh-request` (stream open → first response header/byte), so
+//     the User Timing timeline carries per-phase durations.
+// These never change transport behavior and never throw (every call is wrapped).
+interface IrohStats {
+  /** Endpoint spawns — a fresh QUIC endpoint. Memoized, so this stays ~1. */
+  connects: number;
+  /** node.request() calls — one bidirectional QUIC stream each (retries included). */
+  streams: number;
+  /** Retry rounds after a transient connect/stream failure. */
+  reconnects: number;
+}
+
+function irohStats(): IrohStats {
+  const holder = globalThis as unknown as { __centraidIrohStats?: IrohStats };
+  if (!holder.__centraidIrohStats) {
+    holder.__centraidIrohStats = { connects: 0, streams: 0, reconnects: 0 };
+  }
+  return holder.__centraidIrohStats;
+}
+
+function markConnectStart(): number {
+  try {
+    performance.mark('centraid:iroh-connect-start');
+  } catch {
+    /* User Timing may be unavailable; instrumentation is best-effort. */
+  }
+  return nowMs();
+}
+
+function measureConnect(startMs: number): void {
+  irohStats().connects += 1;
+  try {
+    performance.mark('centraid:iroh-connect-end');
+    performance.measure('centraid:iroh-connect', { start: startMs, end: nowMs() });
+  } catch {
+    /* best-effort */
+  }
+}
+
+function measureRequest(startMs: number): void {
+  try {
+    performance.measure('centraid:iroh-request', { start: startMs, end: nowMs() });
+  } catch {
+    /* best-effort */
+  }
+}
+
+function nowMs(): number {
+  try {
+    return performance.now();
+  } catch {
+    return Date.now();
+  }
+}
+
 function decodeBytes(raw: string): Uint8Array {
   return Uint8Array.from(atob(raw), (char) => char.charCodeAt(0));
 }
@@ -38,10 +100,12 @@ function encodeBytes(bytes: Uint8Array): string {
 async function endpoint(): Promise<BrowserEndpoint> {
   if (!endpointPromise) {
     endpointPromise = (async () => {
+      const connectStart = markConnectStart();
       await initWasm();
       const stored = localStorage.getItem(KEY_STORAGE);
       const node = await BrowserEndpoint.spawn(stored ? decodeBytes(stored) : undefined);
       if (!stored) localStorage.setItem(KEY_STORAGE, encodeBytes(node.secret_key()));
+      measureConnect(connectStart);
       return node;
     })().catch((error) => {
       endpointPromise = undefined;
@@ -129,13 +193,20 @@ async function requestWithRetry(
 ): Promise<BrowserResponse> {
   const idempotent = IDEMPOTENT_METHODS.has(method);
   for (let attempt = 0; ; attempt += 1) {
+    // Each node.request() opens one QUIC stream on the pooled endpoint; count
+    // it (retries included) so a probe can prove streams ≫ connects.
+    irohStats().streams += 1;
+    const requestStart = nowMs();
     try {
-      return await withConnectTimeout(
+      const response = await withConnectTimeout(
         node.request(endpointTicket, method, target, headersJson, body),
       );
+      measureRequest(requestStart);
+      return response;
     } catch (error) {
       const retryable = idempotent || isConnectFailure(error);
       if (attempt >= MAX_RETRIES || !retryable) throw error;
+      irohStats().reconnects += 1;
       await sleep(jitteredBackoff(RETRY_BACKOFF_MS[attempt] ?? 750));
     }
   }
@@ -302,6 +373,10 @@ function postError(port: MessagePort, error: unknown): void {
 }
 
 export function installIrohServiceWorkerBridge(): void {
+  // Eagerly surface the perf counters (issue #404) the moment the shell boots,
+  // so a probe can tell an instrumented bundle apart from a stale one before
+  // any request has run. Creating the object changes no transport behavior.
+  irohStats();
   if (!('serviceWorker' in navigator)) return;
   navigator.serviceWorker.addEventListener('message', (event: MessageEvent<BridgeRequest>) => {
     const message = event.data;
