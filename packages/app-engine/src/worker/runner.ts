@@ -14,6 +14,21 @@
  * projections over the owner's vault — the per-app data.sqlite is gone).
  * Every call is async message passing to the parent, which holds the
  * credential and enforces consent.
+ *
+ * Warm-spare pooling (issue #404): a worker runs EXACTLY ONE handler and is
+ * then discarded — the parent never reuses a worker across handler runs, so a
+ * handler always executes in a thread whose module registry has imported no
+ * other handler (isolation identical to the spawn-per-run model). Two boot
+ * shapes:
+ *  - **inline** — `workerData` carries `{ handlerFile, handlerKind, args }`;
+ *    the worker imports and runs immediately (legacy path, still used by any
+ *    direct caller / test).
+ *  - **pooled** — `workerData` is `{ pooled: true }`; the worker finishes
+ *    booting (thread start + this module's evaluation — the cost the pool
+ *    pays ahead of time), posts `{ type: 'ready' }`, then waits for a single
+ *    `{ type: 'run', request }` message carrying the handler to execute. The
+ *    warmth win is that the expensive boot happens on a spare thread while a
+ *    previous request runs, off the acquiring request's critical path.
  */
 
 import { parentPort, workerData } from 'node:worker_threads';
@@ -23,6 +38,12 @@ interface WorkerRequest {
   handlerFile: string;
   handlerKind: 'query' | 'action';
   args: unknown;
+}
+
+/** Parent → pooled-worker kickoff carrying the handler to run. */
+interface RunMessage {
+  type: 'run';
+  request: WorkerRequest;
 }
 
 interface VaultCallMessage {
@@ -68,9 +89,9 @@ if (!parentPort) {
 }
 
 const port = parentPort;
-const req = workerData as WorkerRequest;
+const boot = workerData as { pooled?: boolean } & Partial<WorkerRequest>;
 
-port.on('message', (msg: VaultReplyMessage) => {
+port.on('message', (msg: VaultReplyMessage | RunMessage) => {
   if (msg.type === 'vault-reply') {
     const pending = pendingVaultCalls.get(msg.id);
     if (!pending) return;
@@ -81,6 +102,9 @@ port.on('message', (msg: VaultReplyMessage) => {
       if (msg.code) err.code = msg.code;
       pending.reject(err);
     }
+  } else if (msg.type === 'run') {
+    // Pooled kickoff — exactly one per worker (single-use, see header).
+    execute(msg.request);
   }
 });
 
@@ -171,24 +195,35 @@ const ctx = {
   vault,
 };
 
-void (async () => {
-  try {
-    const mod = (await import(pathToFileURL(req.handlerFile).href)) as {
-      default?: (args: unknown) => Promise<unknown>;
-    };
-    if (typeof mod.default !== 'function') {
-      throw new Error(`${req.handlerFile} has no default export`);
+function execute(req: WorkerRequest): void {
+  void (async () => {
+    try {
+      const mod = (await import(pathToFileURL(req.handlerFile).href)) as {
+        default?: (args: unknown) => Promise<unknown>;
+      };
+      if (typeof mod.default !== 'function') {
+        throw new Error(`${req.handlerFile} has no default export`);
+      }
+      const fullArgs = { ...(req.args as object), log, ctx };
+      const value = await mod.default(fullArgs);
+      port.postMessage({ type: 'result', ok: true, value } satisfies ResultMessage);
+    } catch (err) {
+      port.postMessage({
+        type: 'result',
+        ok: false,
+        error: err instanceof Error ? (err.stack ?? err.message) : String(err),
+      } satisfies ResultMessage);
+    } finally {
+      abortController.abort();
     }
-    const fullArgs = { ...(req.args as object), log, ctx };
-    const value = await mod.default(fullArgs);
-    port.postMessage({ type: 'result', ok: true, value } satisfies ResultMessage);
-  } catch (err) {
-    port.postMessage({
-      type: 'result',
-      ok: false,
-      error: err instanceof Error ? (err.stack ?? err.message) : String(err),
-    } satisfies ResultMessage);
-  } finally {
-    abortController.abort();
-  }
-})();
+  })();
+}
+
+if (boot.pooled) {
+  // Warm spare: booted and idle. Announce readiness (the parent ignores this
+  // until it hands over a run), then wait for the single `run` kickoff above.
+  port.postMessage({ type: 'ready' });
+} else {
+  // Inline boot: the request rode in on workerData — run it now.
+  execute(boot as WorkerRequest);
+}
