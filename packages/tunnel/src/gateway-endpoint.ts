@@ -260,7 +260,7 @@ class GatewayEndpoint {
             // Sequential for-await keeps chunk ordering; SSE stays live
             // because each chunk is written the moment it arrives.
             for await (const chunk of response) {
-              await send.writeAll(Array.from(chunk as Buffer));
+              await send.writeAll(bytesToArray(chunk as Buffer));
             }
             await send.finish();
           })()
@@ -286,10 +286,26 @@ class GatewayEndpoint {
           headers: { 'content-type': 'application/json', 'content-length': String(body.length) },
         } satisfies TunnelResponseHeader),
       );
-      await send.writeAll(Array.from(body));
+      await send.writeAll(bytesToArray(body));
       await send.finish();
     } catch {
       // Stream already gone.
     }
   }
+}
+
+/**
+ * Convert response bytes to the `Array<number>` the iroh `SendStream.writeAll`
+ * binding requires. The native `Vec<u8>` parameter rejects a `Buffer` /
+ * `Uint8Array` at runtime ("Failed to get Array length" — it validates
+ * `Array.isArray`), so a copy-free write of the Buffer itself is not possible
+ * through this binding; the conversion is an unavoidable single copy. A
+ * preallocated loop is used over `Array.from(buf)` to skip the iterator
+ * protocol on this per-chunk hot path. Compression (issue #404) is what
+ * actually shrinks the byte volume crossing here.
+ */
+function bytesToArray(buf: Buffer): Array<number> {
+  const out = new Array<number>(buf.length);
+  for (let i = 0; i < buf.length; i++) out[i] = buf[i]!;
+  return out;
 }

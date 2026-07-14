@@ -13,6 +13,7 @@ import {
 } from './handlers/dispatcher.js';
 import { serveStatic } from './http/static-server.js';
 import { readBody, sendError, sendJson } from './http/http-utils.js';
+import { sendJsonNegotiated } from './http/compression.js';
 import { appDataDir } from './registry/app-paths.js';
 import { cleanupDeregisteredApp } from './registry/deregister-cleanup.js';
 import { handleLogsRoute, handleSettingsWrite } from './http/cloud-routes.js';
@@ -466,13 +467,21 @@ export class Runtime {
     }
 
     const result = await this.dispatchTool(toolName, body, draftSessionId);
+    // Tool JSON is the headline compressible payload (a `centraid_read`
+    // result can be large) — negotiate br/gzip off the request's
+    // Accept-Encoding (issue #404). Skips small bodies internally; the PWA
+    // service-worker path never forwards Accept-Encoding, so it opts out and
+    // receives raw JSON — see http/compression.ts.
     if (result.isError) {
-      res.statusCode = statusForToolError(result.structuredContent.code);
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify(result.structuredContent));
+      sendJsonNegotiated(
+        req,
+        res,
+        statusForToolError(result.structuredContent.code),
+        result.structuredContent,
+      );
       return;
     }
-    sendJson(res, 200, result.structuredContent ?? null);
+    sendJsonNegotiated(req, res, 200, result.structuredContent ?? null);
   }
 
   private async dispatchTool(

@@ -1,10 +1,20 @@
 import { promises as fs } from 'node:fs';
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as esbuild from 'esbuild';
 import { contentTypeFor, resolveStaticPath, staticSecurityHeaders } from './security.js';
 import { sendError } from './http-utils.js';
+import { DYNAMIC_QUALITY } from './compression.js';
+import {
+  computeEtag,
+  finishStaticAsset,
+  jsxVariantCache,
+  plainCache,
+  variantCacheFor,
+  writeCompressible,
+} from './asset-variants.js';
+import { injectChangeBridge } from './bridge-script.js';
 
 /**
  * Assets that are shared verbatim by every app and therefore served from a
@@ -174,39 +184,6 @@ function errorShim(message: string): string {
  * well under a millisecond) — no separate content cache needed; `.jsx`
  * responses get theirs memoized for free by riding along in {@link jsxCache}.
  */
-function computeEtag(buf: Buffer): string {
-  return `"${createHash('sha256').update(buf).digest('hex')}"`;
-}
-
-/**
- * Does the request's `If-None-Match` header cover `etag`? Handles `*`
- * (matches anything) and the comma-separated multi-value form. Our etags
- * never contain commas or quotes, so a plain split+trim parse is correct —
- * no need for a real structured-header parser. Node also folds repeated
- * `If-None-Match` headers into one comma-joined string, which this covers.
- */
-function ifNoneMatchHits(header: string | undefined, etag: string): boolean {
-  if (!header) return false;
-  const trimmed = header.trim();
-  if (trimmed === '*') return true;
-  return trimmed.split(',').some((tok) => tok.trim() === etag);
-}
-
-/**
- * Settings to bake into the served HTML's `<html>` tag. Two parallel maps:
- *
- *   - `dataAttrs` becomes `<html data-<key>="<value>">`. Used for theme,
- *     density, accent-key, card variant, anything driven by CSS attribute
- *     selectors.
- *   - `cssVars` becomes inline `style="--<key>:<value>"` on the same tag.
- *     Used for `--bg-l`, `--accent`, anything that drives variables.
- *
- * Keys and values are validated before injection — see the regexes below.
- * Anything that fails validation is silently dropped rather than escaped,
- * because the server is the only writer and the renderer is the only
- * reader. Garbage in HTML attributes is a much worse failure mode than
- * an attribute simply not appearing.
- */
 export interface SettingsInject {
   dataAttrs?: Record<string, string>;
   cssVars?: Record<string, string>;
@@ -245,10 +222,13 @@ export async function serveStatic(
   let file = resolveStaticPath(appDir, rel);
   if (!file) return sendError(res, 404, 'not_found', 'Asset not found.');
 
-  let buf: Buffer;
-  try {
-    buf = await fs.readFile(file);
-  } catch {
+  // Stat first (not read): the file's `mtimeMs`+`size` key the etag/variant
+  // cache below, and a 304 revalidation for an unchanged file must never
+  // touch its bytes (issue #404 — a repeat load of a 313KB vendored bundle
+  // shouldn't re-read+re-hash it). `stat` also stands in for the old
+  // read+catch existence probe used by the shared-asset fallback.
+  let stat = await statOrNull(file);
+  if (!stat) {
     // Fall back to the shared canonical copy for whitelisted assets an app
     // folder doesn't carry itself (kit.js / kit.css). Resolved through
     // `resolveStaticPath` so the same escape/allowlist guards apply.
@@ -266,30 +246,14 @@ export async function serveStatic(
         ? resolveStaticPath(opts.sharedAssetsDir, base)
         : null;
     if (!shared) return sendError(res, 404, 'not_found', 'Asset not found.');
-    try {
-      buf = await fs.readFile(shared);
-      file = shared;
-    } catch {
-      return sendError(res, 404, 'not_found', 'Asset not found.');
-    }
-  }
-
-  // Builder-generated apps may ship `app.jsx` source directly — the git code
-  // store stays source-only (no persisted build artifacts), so the compile
-  // to plain JS happens transparently at serve time, per-request, cached by
-  // mtime (see {@link transformJsx}). Applies identically to the live
-  // `/centraid/<id>/...` path and the draft `/centraid/_draft/<sid>/<id>/...`
-  // path — both funnel through this same `serveStatic` call. The transform
-  // also hands back its etag, memoized in {@link jsxCache} alongside the
-  // code, so it isn't re-hashed per request.
-  let jsxEtag: string | undefined;
-  if (file.endsWith('.jsx')) {
-    const transformed = await transformJsx(file, buf, rel);
-    buf = Buffer.from(transformed.code, 'utf8');
-    jsxEtag = transformed.etag;
+    const sharedStat = await statOrNull(shared);
+    if (!sharedStat) return sendError(res, 404, 'not_found', 'Asset not found.');
+    file = shared;
+    stat = sharedStat;
   }
 
   const contentType = contentTypeFor(file);
+
   // For HTML responses we mint a per-response CSP nonce, stamp it onto every
   // inline `<script>` tag in the served document, and forward it to the
   // security headers so `script-src` accepts those tagged inline scripts.
@@ -297,9 +261,8 @@ export async function serveStatic(
   // `index.html` would be blocked by the default `script-src 'self'`. The
   // nonce is fresh per response so a leaked old nonce can't whitelist a
   // future injection.
-  let inlineScriptNonce: string | undefined;
   if (contentType.startsWith('text/html')) {
-    let html = buf.toString('utf8');
+    let html = (await fs.readFile(file)).toString('utf8');
     if (opts.settingsInject) {
       html = injectSettings(html, opts.settingsInject);
     }
@@ -318,12 +281,14 @@ export async function serveStatic(
           }
         : undefined,
     );
-    inlineScriptNonce = randomBytes(16).toString('base64');
+    const inlineScriptNonce = randomBytes(16).toString('base64');
     html = stampInlineScriptNonces(html, inlineScriptNonce);
-    buf = Buffer.from(html, 'utf8');
+    const raw = Buffer.from(html, 'utf8');
 
     // The fresh CSP nonce and baked settings make responses unique, so an ETag
     // cannot hit. `no-store` ensures browsers do not retain the document.
+    // The doc shell is compressible (3-5x) — compress inline (no variant
+    // cache; it's unique per response) with the fast dynamic quality.
     res.statusCode = 200;
     res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'no-store');
@@ -332,85 +297,60 @@ export async function serveStatic(
     )) {
       res.setHeader(k, v);
     }
-    res.end(buf);
+    writeCompressible(req, res, raw, contentType, DYNAMIC_QUALITY);
     return true;
   }
 
-  // Non-HTML assets: content-validated revalidation, not time-based
-  // freshness. `no-cache` (still cacheable — just always revalidate first)
-  // rather than `max-age`/`immutable`, because the same URL's bytes DO
-  // change under this gateway: reinstall/republish swaps the code-store
-  // worktree a file resolves from, and a draft file is mutated live by the
-  // builder while the preview iframe keeps polling the same path. An etag
-  // match turns a repeat request into a 304 with no body — same
-  // zero-transfer win as long-lived caching, minus the staleness risk.
-  // `private`: per-gateway, bearer-auth'd responses, never a shared/CDN cache.
-  const etag = jsxEtag ?? computeEtag(buf);
-  const ifNoneMatch = req.headers['if-none-match'];
-  const notModified = ifNoneMatchHits(
-    Array.isArray(ifNoneMatch) ? ifNoneMatch.join(',') : ifNoneMatch,
-    etag,
-  );
-
-  res.statusCode = notModified ? 304 : 200;
-  res.setHeader('Content-Type', contentType);
-  res.setHeader('ETag', etag);
-  res.setHeader('Cache-Control', 'private, no-cache');
-  for (const [k, v] of Object.entries(staticSecurityHeaders({ inlineScriptNonce }))) {
-    res.setHeader(k, v);
+  // Builder-generated apps may ship `app.jsx` source directly — the git code
+  // store stays source-only (no persisted build artifacts), so the compile
+  // to plain JS happens transparently at serve time, cached by mtime (see
+  // {@link transformJsx}). Applies identically to the live `/centraid/<id>/…`
+  // path and the draft `/centraid/_draft/<sid>/<id>/…` path — both funnel
+  // through this same `serveStatic` call. The transform hands back its etag,
+  // memoized in {@link jsxCache}, so it isn't re-hashed per request; its
+  // compressed variants ride the etag-keyed {@link jsxVariantCache}.
+  if (file.endsWith('.jsx')) {
+    const transformed = await transformJsx(file, await fs.readFile(file), rel);
+    const raw = Buffer.from(transformed.code, 'utf8');
+    return finishStaticAsset(req, res, {
+      contentType,
+      etag: transformed.etag,
+      rawSize: raw.length,
+      loadRaw: () => raw,
+      variants: variantCacheFor(jsxVariantCache, transformed.etag),
+    });
   }
-  res.end(notModified ? Buffer.alloc(0) : buf);
-  return true;
+
+  // Plain assets: etag memoized per (path, mtime, size) so a 304 skips the
+  // read+hash, and compressed variants cached on the same entry so an
+  // unchanged file is compressed at most once per encoding.
+  const cacheKey = `${file}\0${stat.mtimeMs}\0${stat.size}`;
+  let entry = plainCache.get(cacheKey);
+  if (!entry) {
+    const raw = await fs.readFile(file);
+    entry = { etag: computeEtag(raw), raw, variants: new Map() };
+    plainCache.set(cacheKey, entry);
+  }
+  return finishStaticAsset(req, res, {
+    contentType,
+    etag: entry.etag,
+    rawSize: stat.size,
+    // Raw bytes are retained on the cache entry (bounded app set — same
+    // rationale as jsxCache), so neither a 304, an uncompressed hit, nor a
+    // first compression ever re-reads an unchanged file. The `?? readFile`
+    // is a belt-and-braces fallback that can't actually fire here.
+    loadRaw: () => entry.raw ?? fs.readFile(file),
+    variants: entry.variants,
+  });
 }
 
-/**
- * Inline `<script>` that wires the runtime's `_changes` SSE stream into the
- * page as both a `CustomEvent('centraid:datachange')` and a sugar API:
- *
- *     window.centraid.onChange(refresh)   // returns an unsubscribe fn
- *     window.addEventListener('centraid:datachange', e => …)   // vanilla
- *
- * Auto-injected into every served HTML right after `<head>` so it runs
- * before user `<script>`s parse. The CSP nonce stamper (which runs after
- * this) tags the tag so `script-src 'self'` accepts it. The script also
- * augments — never overwrites — `window.centraid`, so the mobile bridge's
- * `centraid.haptic` / `centraid.notify` namespace coexists.
- *
- * Reconnect: EventSource auto-reconnects on transient drops; we additionally
- * re-open after 5s if it lands in CLOSED (`readyState === 2`) so the iframe
- * recovers from gateway restarts without a page reload.
- */
-// Inline bridge baked into every served HTML. Two responsibilities:
-//
-// 1. **Change feed.** Subscribes to `_changes` SSE and exposes
-//    `window.centraid.onChange(cb)` + the `centraid:datachange` event.
-//
-// 2. **Three-tool helpers.** Issue #107 removed the per-handler
-//    `_run` / `_data/<name>` routes; in their place is one shim at
-//    `/centraid/_tool/<toolName>`. To keep templates terse we inject
-//    `window.centraid.write({action,input})`, `.read({query,input})`,
-//    and `.describe(filter?)`. They derive the app id from
-//    `location.pathname` (`/centraid/<id>/...`) so the bridge is
-//    portable across apps without per-app code-gen.
-function changeBridgeScript(draft?: { appId: string; toolUrl: string }): string {
-  // Live mode sniffs the app id from `/centraid/<id>/…` and posts tools at
-  // `/centraid/_tool/`. Draft mode pins both: the path's first segment is
-  // `_draft`, so the sniff would mis-read it, and tool calls must hit the
-  // draft shim so the session worktree's handlers run.
-  const idAndTool = draft
-    ? `var appId=${JSON.stringify(draft.appId)};w.centraid.appId=appId;var toolUrl=${JSON.stringify(draft.toolUrl)};`
-    : `var m=/(?:^|\\/)centraid\\/([^/]+)\\//.exec(w.location.pathname);var appId=m?decodeURIComponent(m[1]):null;w.centraid.appId=appId;var toolUrl='/centraid/_tool/';`;
-  return `<script>(function(){var w=window;w.centraid=w.centraid||{};var listeners=new Set();w.centraid.onChange=function(cb){if(typeof cb!=='function')return function(){};listeners.add(cb);return function(){listeners.delete(cb);};};${idAndTool}function callTool(name,body){return fetch(toolUrl+name,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.text().then(function(t){var j=null;try{j=t?JSON.parse(t):null;}catch(_){}if(!r.ok){var err=j&&j.message?j.message:('tool '+name+' failed: '+r.status);var e=new Error(err);e.code=j&&j.code;e.status=r.status;throw e;}return j;});});}w.centraid.write=function(opts){if(!opts||!opts.action)return Promise.reject(new Error('write requires {action}'));return callTool('centraid_write',{app:appId,action:opts.action,input:opts.input});};w.centraid.read=function(opts){if(!opts||!opts.query)return Promise.reject(new Error('read requires {query}'));return callTool('centraid_read',{app:appId,query:opts.query,input:opts.input});};w.centraid.describe=function(filter){var body=Object.assign({},filter||{});if(!body.app&&appId)body.app=appId;return callTool('centraid_describe',body);};if(typeof EventSource!=='function')return;var es;function connect(){try{es=new EventSource('_changes');}catch(_){return;}es.addEventListener('change',function(ev){var d;try{d=JSON.parse(ev.data);}catch(_){d={tables:[],ts:Date.now()};}try{w.dispatchEvent(new CustomEvent('centraid:datachange',{detail:d}));}catch(_){}listeners.forEach(function(cb){try{cb(d);}catch(_){}});});es.addEventListener('error',function(){if(es&&es.readyState===2){setTimeout(function(){if(es&&es.readyState===2){try{es.close();}catch(_){}connect();}},5000);}});}connect();})();</script>`;
-}
-
-function injectChangeBridge(html: string, draft?: { appId: string; toolUrl: string }): string {
-  // Inject right after the opening <head>. If the document has no <head>
-  // (rare in practice but legal HTML) the script falls through unchanged
-  // — better to leave the doc intact than guess where to splice.
-  const m = /<head\b[^>]*>/i.exec(html);
-  if (!m) return html;
-  const insertAt = m.index + m[0].length;
-  return html.slice(0, insertAt) + changeBridgeScript(draft) + html.slice(insertAt);
+/** `fs.stat` or `null` when the path doesn't exist / isn't reachable. */
+async function statOrNull(file: string): Promise<import('node:fs').Stats | null> {
+  try {
+    return await fs.stat(file);
+  } catch {
+    return null;
+  }
 }
 
 /**

@@ -6,7 +6,7 @@
  *     event: change
  *     data: {"tables":["todos"],"ts":1715812345678}
  *
- * Plus a periodic heartbeat comment line (`: ping\n\n`) every 30s so
+ * Plus a periodic heartbeat comment line (`: ping\n\n`) every 55s so
  * proxies / browsers don't time the idle connection out. The client side
  * pattern in app code is just:
  *
@@ -27,7 +27,10 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ChangeBus } from '../changes/change-bus.js';
 import { sendJson } from './http-utils.js';
 
-const HEARTBEAT_MS = 30_000;
+// 55s keeps the stream warm while staying under the ~60s idle cut common to
+// mobile carrier NATs and reverse proxies (issue #404) — one heartbeat still
+// lands inside every idle window, at roughly half the wakeups of the old 30s.
+const HEARTBEAT_MS = 55_000;
 
 /**
  * Concurrent `_changes` subscribers a single app accepts (issue #351 Tier 4
