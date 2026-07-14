@@ -4,7 +4,7 @@
 // (closes modals, else the sidebar) and the component-width narrow
 // measurement. Pure event-listener glue — no JSX — factored out purely to
 // keep app.jsx under the file-size cap, same shape as tasks/chrome.js.
-import { wireThemeToggle } from './kit.js';
+import { observeWidth, onFocusRefresh, wireThemeToggle } from './kit.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -26,7 +26,7 @@ export function wireChrome({ state, logic, renderModals, refreshAll }) {
     logic.clearSearch();
   });
 
-  window.addEventListener('focus', refreshAll);
+  onFocusRefresh(refreshAll);
   window.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (logic.anyModalOpen()) {
@@ -38,20 +38,15 @@ export function wireChrome({ state, logic, renderModals, refreshAll }) {
   });
 
   // Component-width driven responsive: blueprints render inside a panel, so we
-  // measure the root's own width (not the viewport) and toggle the phone layout.
-  function measure() {
-    const root = $('root');
-    const forced = document.documentElement.getAttribute('data-app-width') === 'narrow';
-    const narrow = forced || root.clientWidth < 900;
-    if (narrow !== state.narrow) {
-      state.narrow = narrow;
-      root.classList.toggle('is-narrow', narrow);
-      if (!narrow) root.classList.remove('side-open');
-    }
-  }
-  window.addEventListener('resize', measure);
-  measure();
-  setInterval(measure, 250);
+  // measure the root's own width (not the viewport) and toggle the phone
+  // layout. A ResizeObserver replaces the old 4Hz poll (issue #404).
+  const root = $('root');
+  observeWidth(root, 900, (narrow) => {
+    if (narrow === state.narrow) return;
+    state.narrow = narrow;
+    root.classList.toggle('is-narrow', narrow);
+    if (!narrow) root.classList.remove('side-open');
+  });
 
   return { setThemeIcon };
 }

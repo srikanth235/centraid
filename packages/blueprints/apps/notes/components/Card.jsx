@@ -9,7 +9,11 @@ import { Highlighted, Icon } from './Shared.jsx';
 
 export function Card({ note, search, pending, onOpen, onTogglePin }) {
   const pinned = note.pinned === 1;
-  const stats = checkStats(note.body);
+  // The list projection ships a `preview` + `check` tally (issue #404); older
+  // payloads carried the full `body` — fall back to deriving from it so the
+  // card renders either shape.
+  const stats = note.check ?? checkStats(note.body);
+  const preview = note.preview ?? previewText(note.body);
   const hasChecks = stats.total > 0;
   const notebookId = note.notebook_ids?.[0];
   const notebookName = note.notebook_names?.[0];
@@ -46,7 +50,7 @@ export function Card({ note, search, pending, onOpen, onTogglePin }) {
         </button>
       </div>
       <div className="nt-card-preview">
-        <Highlighted text={previewText(note.body)} term={search} />
+        <Highlighted text={preview} term={search} />
       </div>
       {hasChecks ? (
         <div className="nt-card-progress">

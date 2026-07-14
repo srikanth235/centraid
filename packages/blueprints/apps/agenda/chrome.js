@@ -4,7 +4,7 @@
 // narrow measurement. Pure event-listener glue — no JSX — factored out
 // purely to keep app.jsx under the file-size cap, same shape as tasks/notes'
 // chrome.js.
-import { wireThemeToggle } from './kit.js';
+import { observeWidth, onFocusRefresh, wireThemeToggle } from './kit.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -34,7 +34,7 @@ export function wireChrome({
     clearSearch();
   });
 
-  window.addEventListener('focus', load);
+  onFocusRefresh(load);
 
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -70,17 +70,13 @@ export function wireChrome({
 
   // Component-width driven responsive: blueprints render inside a panel, so
   // measure the shell's own width (not the viewport) and toggle the phone
-  // layout, same convention as tasks/notes' chrome.js.
-  function measure() {
-    const shell = $('shell');
-    const forced = document.documentElement.getAttribute('data-app-width') === 'narrow';
-    const narrow = forced || shell.clientWidth < 860;
-    if (narrow !== state.narrow) {
-      state.narrow = narrow;
-      shell.classList.toggle('is-narrow', narrow);
-      if (!narrow) shell.classList.remove('side-open');
-    }
-  }
-  measure();
-  setInterval(measure, 250);
+  // layout, same convention as tasks/notes' chrome.js. A ResizeObserver
+  // replaces the old 4Hz poll (issue #404).
+  const shell = $('shell');
+  observeWidth(shell, 860, (narrow) => {
+    if (narrow === state.narrow) return;
+    state.narrow = narrow;
+    shell.classList.toggle('is-narrow', narrow);
+    if (!narrow) shell.classList.remove('side-open');
+  });
 }

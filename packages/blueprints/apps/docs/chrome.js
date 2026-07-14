@@ -5,7 +5,7 @@
 // callback it invokes (render/refresh/renderRows/renderNewMenu/closeQuick/
 // closeDetails/quickStep/applySearch/uploadFiles/folderName) is passed in by
 // app.jsx, which is the only module that defines them.
-import { wireThemeToggle } from './kit.js';
+import { observeWidth, onFocusRefresh, wireThemeToggle } from './kit.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -85,7 +85,7 @@ export function wireChrome({
     input.value = '';
     await uploadFiles(files);
   });
-  window.addEventListener('focus', refresh);
+  onFocusRefresh(refresh);
 
   // Drag-and-drop onto the current folder.
   let dragDepth = 0;
@@ -151,18 +151,13 @@ export function wireChrome({
 
   // Component-width driven responsive: blueprints render inside a panel, so
   // we measure the root's own width (not the viewport) and toggle the phone
-  // layout.
-  function measure() {
-    const root = $('root');
-    const forced = document.documentElement.getAttribute('data-app-width') === 'narrow';
-    const narrow = forced || root.clientWidth < 860;
-    if (narrow !== state.narrow) {
-      state.narrow = narrow;
-      root.classList.toggle('is-narrow', narrow);
-      if (!narrow) root.classList.remove('side-open');
-      renderRows();
-    }
-  }
-  measure();
-  setInterval(measure, 250);
+  // layout. A ResizeObserver replaces the old 4Hz poll (issue #404).
+  const root = $('root');
+  observeWidth(root, 860, (narrow) => {
+    if (narrow === state.narrow) return;
+    state.narrow = narrow;
+    root.classList.toggle('is-narrow', narrow);
+    if (!narrow) root.classList.remove('side-open');
+    renderRows();
+  });
 }

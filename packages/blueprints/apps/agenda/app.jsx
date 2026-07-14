@@ -14,7 +14,15 @@
 // helpers; `chrome.js` wires the drawer/keyboard/resize listeners.
 // `components/` holds pure functions of props.
 import { createRoot } from './react-core.min.js';
-import { closePopover, h, openPopover, readFailed, showSkeleton, wireAttachInput } from './kit.js';
+import {
+  closePopover,
+  h,
+  onDataChange,
+  openPopover,
+  readFailed,
+  showSkeleton,
+  wireAttachInput,
+} from './kit.js';
 import { createLogic } from './logic.js';
 import { wireChrome } from './chrome.js';
 import {
@@ -36,6 +44,19 @@ import { EventDrawer } from './components/EventDrawer.jsx';
 import { CreateModal } from './components/CreateModal.jsx';
 
 const $ = (id) => document.getElementById(id);
+
+// Vault entities this app's queries read — the doorbell filter re-derives
+// only when a change names one of these (or names none, i.e. "this app acted").
+const CHANGE_TABLES = [
+  'core.event',
+  'schedule.event_ext',
+  'schedule.attendee',
+  'schedule.calendar',
+  'core.party',
+  'core.attachment',
+  'core.content_item',
+  'core.vault',
+];
 
 // ---------- State ----------
 // The last successful reads (never reassigned — mutated in place so logic.js's
@@ -422,7 +443,7 @@ wireAttachInput($('attachInput'), () => logic.getAttachTarget(), {
 // outstanding parked write (the owner approved or discarded it via another
 // surface; there is no per-invocation poll wired here, so this is the
 // honest, bounded way to clear a stale pending chip without guessing).
-window.centraid.onChange?.(() => {
+onDataChange(CHANGE_TABLES, () => {
   logic.clearPending();
   load();
 });

@@ -3,7 +3,7 @@
 // JSX — factored out purely to keep app.jsx under the file-size cap. Every
 // callback it invokes is passed in by app.jsx, which is the only module that
 // defines them (same shape as docs/tasks/notes' chrome.js).
-import { closePopover, isPopoverOpen, wireThemeToggle } from './kit.js';
+import { closePopover, isPopoverOpen, observeWidth, onFocusRefresh, wireThemeToggle } from './kit.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -62,7 +62,7 @@ export function wireChrome({
     render();
   });
 
-  window.addEventListener('focus', refresh);
+  onFocusRefresh(refresh);
 
   // Layered Escape.
   window.addEventListener('keydown', (e) => {
@@ -89,18 +89,13 @@ export function wireChrome({
 
   // Component-width driven responsive: blueprints render inside a panel, so
   // we measure the root's own width (not the viewport) and toggle the phone
-  // layout.
-  function measure() {
-    const root = $('root');
-    const forced = document.documentElement.getAttribute('data-app-width') === 'narrow';
-    const narrow = forced || root.clientWidth < 860;
-    if (narrow !== state.narrow) {
-      state.narrow = narrow;
-      root.classList.toggle('is-narrow', narrow);
-      if (!narrow) root.classList.remove('side-open');
-      renderRows();
-    }
-  }
-  measure();
-  setInterval(measure, 250);
+  // layout. A ResizeObserver replaces the old 4Hz poll (issue #404).
+  const root = $('root');
+  observeWidth(root, 860, (narrow) => {
+    if (narrow === state.narrow) return;
+    state.narrow = narrow;
+    root.classList.toggle('is-narrow', narrow);
+    if (!narrow) root.classList.remove('side-open');
+    renderRows();
+  });
 }

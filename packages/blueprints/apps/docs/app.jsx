@@ -37,7 +37,15 @@
 // `components/` holds pure functions of props — none reach for `state`/
 // `data` or import this module.
 import { createRoot } from './react-core.min.js';
-import { closePopover, debounce, emptyState, h, readFailed, showSkeleton } from './kit.js';
+import {
+  closePopover,
+  debounce,
+  emptyState,
+  h,
+  onDataChange,
+  readFailed,
+  showSkeleton,
+} from './kit.js';
 import { emptyStateFor } from './format.js';
 import { createLogic } from './logic.js';
 import { createNav } from './nav.js';
@@ -53,6 +61,19 @@ import { FolderList, SmartNav, Storage } from './components/Sidebar.jsx';
 import { TagChips, TypeChips } from './components/Toolbar.jsx';
 
 const $ = (id) => document.getElementById(id);
+
+// Vault entities this app's queries read — the doorbell filter re-derives
+// only when a change names one of these (or names none, i.e. "this app acted").
+const CHANGE_TABLES = [
+  'core.document',
+  'core.content_item',
+  'core.tag',
+  'core.concept',
+  'core.concept_scheme',
+  'core.link',
+  'blob.custody_state',
+  'consent.provenance',
+];
 
 // ---------- State ----------
 
@@ -581,4 +602,9 @@ wireChrome({
   uploadFiles,
   folderName,
 });
+
+// Reactive data: a write elsewhere (chat agent, a second window) fires the
+// doorbell — re-derive. Debounced + tables-filtered by the kit helper.
+onDataChange(CHANGE_TABLES, refresh);
+
 refresh();

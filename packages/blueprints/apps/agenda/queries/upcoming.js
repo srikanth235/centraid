@@ -83,6 +83,45 @@ function attendeesByEvent(attendees, nameById, mePartyId) {
 // multi-day events are not cut off at the window edge.
 const SPAN_BUFFER_MS = 31 * 24 * 60 * 60 * 1000;
 
+// The open-ended "upcoming" (schedule) view has no `to`, so recurring series
+// were expanded a full YEAR out on every load, nav and doorbell (issue #404).
+// A quarter is generous forward runway for a list; the month/week views pass
+// their own bounded `to` and are unaffected. expandRrule's per-series
+// maxInstances still backstops a runaway DAILY rule regardless.
+const DEFAULT_EXPAND_MS = 120 * 24 * 60 * 60 * 1000;
+
+// Hard ceiling on the recurring anchors pulled — a vault has no upper bound,
+// and this read cannot be date-bounded (a series anchors in the past), so cap
+// the row count rather than walk the whole table.
+const RECURRING_ANCHOR_CAP = 1000;
+
+// Global ceiling on materialized instances across ALL series for one read —
+// keeps a handful of dense rules from ballooning the payload.
+const MAX_TOTAL_INSTANCES = 1500;
+
+// Memoize each series' occurrence starts across navs/doorbells, keyed by the
+// series identity + range. A nav back to a month already visited, or a
+// doorbell that touched an unrelated table, then reuses the expansion instead
+// of re-walking the rule. Bounded LRU so it can't grow without limit.
+const EXPANSION_CACHE = new Map();
+const EXPANSION_CACHE_MAX = 500;
+
+function cachedStarts(ev, rangeFrom, rangeTo) {
+  const key = `${ev.event_id}|${ev.updated_at}|${ev.dtstart}|${ev.rrule}|${rangeFrom.getTime()}|${rangeTo.getTime()}`;
+  const hit = EXPANSION_CACHE.get(key);
+  if (hit) {
+    EXPANSION_CACHE.delete(key); // refresh recency
+    EXPANSION_CACHE.set(key, hit);
+    return hit;
+  }
+  const starts = expandRrule(ev.rrule, ev.dtstart, rangeFrom, rangeTo);
+  EXPANSION_CACHE.set(key, starts);
+  if (EXPANSION_CACHE.size > EXPANSION_CACHE_MAX) {
+    EXPANSION_CACHE.delete(EXPANSION_CACHE.keys().next().value);
+  }
+  return starts;
+}
+
 // ---------- Recurrence (RFC 5545 §3.3.10 subset, DAILY/WEEKLY/MONTHLY/YEARLY
 // with INTERVAL/COUNT/UNTIL/BYDAY) ----------
 //
@@ -202,6 +241,13 @@ function expandRrule(rrule, dtstartIso, rangeFrom, rangeTo, maxInstances = 200) 
  * instances now share one `event_id`.
  */
 function expandRecurringEvents(rows, rangeFrom, rangeTo) {
+  // `rangeFrom`/`rangeTo` arrive as ISO strings from the caller; expandRrule
+  // (and the memo key) compare via `.getTime()`, so normalize to Date once
+  // here. (Passing the raw strings threw `String.getTime is not a function`,
+  // which the outer catch silently turned into an empty agenda whenever a
+  // recurring series existed — issue #404.)
+  const fromDate = rangeFrom instanceof Date ? rangeFrom : new Date(rangeFrom);
+  const toDate = rangeTo instanceof Date ? rangeTo : new Date(rangeTo);
   const out = [];
   for (const ev of rows) {
     if (!ev.rrule) {
@@ -209,9 +255,10 @@ function expandRecurringEvents(rows, rangeFrom, rangeTo) {
       continue;
     }
     const durationMs = ev.dtend ? new Date(ev.dtend).getTime() - new Date(ev.dtstart).getTime() : 0;
-    const starts = expandRrule(ev.rrule, ev.dtstart, rangeFrom, rangeTo);
+    const starts = cachedStarts(ev, fromDate, toDate);
     if (starts.length === 0) continue;
     for (const startIso of starts) {
+      if (out.length >= MAX_TOTAL_INSTANCES) return out;
       const isAnchor = startIso === new Date(ev.dtstart).toISOString();
       out.push({
         ...ev,
@@ -256,6 +303,9 @@ export default async ({ query, ctx }) => {
           { column: 'status', op: 'ne', value: 'cancelled' },
           { column: 'rrule', op: 'not-null' },
         ],
+        // Cannot date-bound (a series anchors in the past); cap the row count.
+        orderBy: { column: 'dtstart', dir: 'desc' },
+        limit: RECURRING_ANCHOR_CAP,
         purpose,
       }),
       ctx.vault.read({ entity: 'schedule.calendar', purpose }),
@@ -334,10 +384,10 @@ export default async ({ query, ctx }) => {
       };
     });
     // Open-ended "upcoming" (no `to`) still needs a real ceiling to expand
-    // against — a year out is generous runway without walking an unbounded
-    // DAILY series forever (expandRrule's own maxInstances backstops that
-    // regardless).
-    const expandTo = to ?? new Date(fromMs + 366 * 24 * 60 * 60 * 1000).toISOString();
+    // against — a bounded forward window (issue #404) keeps a doorbell from
+    // re-expanding a year of a DAILY series; the month/week views pass their
+    // own tighter `to`. expandRrule's own maxInstances backstops it regardless.
+    const expandTo = to ?? new Date(fromMs + DEFAULT_EXPAND_MS).toISOString();
     const rows = expandRecurringEvents(enriched, fromLower, expandTo)
       .filter((e) => {
         // True lower bound: keep anything still running at `from`. Only

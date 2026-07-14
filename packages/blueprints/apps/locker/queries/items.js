@@ -79,29 +79,41 @@ export function decorate(rows, tagsByItem, starredIds, watchByItem) {
 }
 
 /**
- * Read tags for a set of item ids into item_id → string[]. Tags are SKOS
- * concepts in the locker-tags scheme carried by core_tag rows (issue #310
- * S3) — the same canonical mechanism the star already rides.
+ * Read the two SKOS vocabulary tables once. `readTags` and `readStarred` both
+ * need `core.concept` + `core.concept_scheme` (issue #310 S3) — read them
+ * together and hand the result to both so a single items read doesn't hit each
+ * table twice (issue #404).
  */
-export async function readTags(ctx, ids, purpose) {
-  const map = new Map();
-  if (ids.length === 0) return map;
-  const [concepts, schemes, tags] = await Promise.all([
+export async function readConceptTables(ctx, purpose) {
+  const [concepts, schemes] = await Promise.all([
     ctx.vault.read({ entity: 'core.concept', purpose }),
     ctx.vault.read({ entity: 'core.concept_scheme', purpose }),
-    ctx.vault.read({
-      entity: 'core.tag',
-      where: [
-        { column: 'target_type', op: 'eq', value: ITEM_TYPE },
-        { column: 'target_id', op: 'in', value: ids },
-      ],
-      purpose,
-    }),
   ]);
-  const tagScheme = (schemes.rows ?? []).find((s) => s.uri === LOCKER_TAGS_SCHEME_URI);
+  return { concepts: concepts.rows ?? [], schemes: schemes.rows ?? [] };
+}
+
+/**
+ * Read tags for a set of item ids into item_id → string[]. Tags are SKOS
+ * concepts in the locker-tags scheme carried by core_tag rows (issue #310
+ * S3) — the same canonical mechanism the star already rides. Pass `tables`
+ * (from `readConceptTables`) to share the vocabulary read with `readStarred`.
+ */
+export async function readTags(ctx, ids, purpose, tables) {
+  const map = new Map();
+  if (ids.length === 0) return map;
+  const vocab = tables ?? (await readConceptTables(ctx, purpose));
+  const tags = await ctx.vault.read({
+    entity: 'core.tag',
+    where: [
+      { column: 'target_type', op: 'eq', value: ITEM_TYPE },
+      { column: 'target_id', op: 'in', value: ids },
+    ],
+    purpose,
+  });
+  const tagScheme = vocab.schemes.find((s) => s.uri === LOCKER_TAGS_SCHEME_URI);
   if (!tagScheme) return map;
   const labelByConcept = new Map(
-    (concepts.rows ?? [])
+    vocab.concepts
       .filter((c) => c.scheme_id === tagScheme.scheme_id)
       .map((c) => [c.concept_id, c.pref_label]),
   );
@@ -115,17 +127,18 @@ export async function readTags(ctx, ids, purpose) {
   return map;
 }
 
-/** Read the starred flag ids for a set of item ids (flags-scheme star). */
-export async function readStarred(ctx, ids, purpose) {
+/**
+ * Read the starred flag ids for a set of item ids (flags-scheme star). Pass
+ * `tables` (from `readConceptTables`) to share the vocabulary read with
+ * `readTags`.
+ */
+export async function readStarred(ctx, ids, purpose, tables) {
   const starred = new Set();
   if (ids.length === 0) return starred;
-  const [concepts, schemes] = await Promise.all([
-    ctx.vault.read({ entity: 'core.concept', purpose }),
-    ctx.vault.read({ entity: 'core.concept_scheme', purpose }),
-  ]);
-  const flagsScheme = (schemes.rows ?? []).find((s) => s.uri === FLAGS_SCHEME_URI);
+  const vocab = tables ?? (await readConceptTables(ctx, purpose));
+  const flagsScheme = vocab.schemes.find((s) => s.uri === FLAGS_SCHEME_URI);
   const starredConcept = flagsScheme
-    ? (concepts.rows ?? []).find(
+    ? vocab.concepts.find(
         (c) => c.scheme_id === flagsScheme.scheme_id && c.notation === 'starred',
       )
     : undefined;
@@ -156,13 +169,25 @@ export default async ({ input, ctx }) => {
     });
     const rows = res.rows ?? [];
     const ids = rows.map((r) => r.item_id);
+    // One vocabulary read shared by readTags + readStarred, and ONE watchtower
+    // unseal — the sidebar badge + Watchtower panel are derived from this same
+    // decorated set instead of a second full read + second receipted unseal
+    // (issue #404).
+    const vocab = await readConceptTables(ctx, purpose);
     const [tagsByItem, starredIds, watchByItem] = await Promise.all([
-      readTags(ctx, ids, purpose),
-      readStarred(ctx, ids, purpose),
+      readTags(ctx, ids, purpose, vocab),
+      readStarred(ctx, ids, purpose, vocab),
       readWatchtower(ctx, purpose),
     ]);
     const items = decorate(rows, tagsByItem, starredIds, watchByItem);
-    return { items, truncated: rows.length >= window, window };
+    const affected = items.filter((it) => it.compromised || it.weak || it.reused);
+    const watchtower = {
+      compromised: items.filter((it) => it.compromised).length,
+      weak: items.filter((it) => it.weak).length,
+      reused: items.filter((it) => it.reused).length,
+      items: affected,
+    };
+    return { items, watchtower, truncated: rows.length >= window, window };
   } catch (err) {
     return { items: [], vaultDenied: { code: err.code, message: err.message } };
   }

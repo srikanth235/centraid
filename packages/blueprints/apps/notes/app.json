@@ -523,7 +523,7 @@
   "queries": [
     {
       "name": "library",
-      "description": "A bounded recent window of notes (newest by updated_at, pinned always included) with their notebook names, decoded bodies and tags (`[{tag_id, concept_id, label}]`), plus the notebooks for filtering and the distinct tag list (`[{concept_id, label}]`) seen within the window — never a whole-table pull; `truncated` says older notes exist beyond the window.",
+      "description": "A bounded recent window of notes (newest by updated_at, pinned always included) with their notebook names, a short body preview (`preview`) and checklist tally (`check`), and tags (`[{tag_id, concept_id, label}]`), plus the notebooks for filtering and the distinct tag list (`[{concept_id, label}]`) seen within the window — never a whole-table pull, and never full bodies (the editor pulls those via `note`); `truncated` says older notes exist beyond the window.",
       "input": {
         "type": "object",
         "properties": {
@@ -560,8 +560,40 @@
       }
     },
     {
+      "name": "note",
+      "description": "One note's canonical body, decoded — the editor's on-open pull. The library/search projections ship only a preview, so the full text is fetched lazily here when a note is opened.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "note_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["note_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "note_id": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
       "name": "search",
-      "description": "Full-text note search through the vault's FTS5 index (title + body) — returns only the ranked matches in the library row shape plus a hit snippet, never a whole-table pull.",
+      "description": "Full-text note search through the vault's FTS5 index (title + body) — returns only the ranked matches in the library row shape (preview + checklist tally, not full bodies) plus a hit snippet, never a whole-table pull.",
       "input": {
         "type": "object",
         "properties": {

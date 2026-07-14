@@ -23,7 +23,7 @@
 // helpers; `totp.js` the real crypto (TOTP + password generation).
 // `components/` holds pure functions of props.
 import { createRoot } from './react-core.min.js';
-import { readFailed, showSkeleton } from './kit.js';
+import { observeWidth, onDataChange, onFocusRefresh, readFailed, showSkeleton } from './kit.js';
 import {
   copy,
   createLogic,
@@ -41,6 +41,10 @@ import { Generator } from './components/Generator.jsx';
 import { EditModal } from './components/EditModal.jsx';
 
 const $ = (id) => document.getElementById(id);
+
+// Vault entities this app's queries read — the doorbell filter re-derives
+// only when a change names one of these (or names none, i.e. "this app acted").
+const CHANGE_TABLES = ['locker.item', 'core.tag', 'core.concept', 'core.concept_scheme'];
 
 // ---------- State ----------
 // `data.items` are the secret-free decorated rows from the `items` query.
@@ -305,30 +309,25 @@ async function refresh() {
   data.items = next?.items ?? [];
   data.truncated = Boolean(next?.truncated);
 
-  // Pull the derived views used by the sidebar badge, watchtower and trash.
-  // Watchtower counts feed the sidebar badge so it's fetched every refresh
-  // (bounded and cheap); trash is only needed for its own list.
-  await Promise.all([
-    window.centraid
-      .read({ query: 'watchtower' })
-      .then((r) => {
-        if (r && !r.vaultDenied) {
-          state.watch = {
-            compromised: r.compromised ?? 0,
-            weak: r.weak ?? 0,
-            reused: r.reused ?? 0,
-            items: r.items ?? [],
-          };
-        }
-      })
-      .catch(() => {}),
-    window.centraid
-      .read({ query: 'trash' })
-      .then((r) => {
-        if (r && !r.vaultDenied) state.trashRows = r.items ?? [];
-      })
-      .catch(() => {}),
-  ]);
+  // Watchtower counts feed the sidebar badge + panel. They come free with the
+  // items read now (issue #404): that query already unseals passwords once to
+  // derive weak/reused, so it returns the summary rather than the app hitting
+  // `watchtower` for a second full read AND a second receipted unseal. Trash
+  // is a separate list, still its own bounded read.
+  if (next?.watchtower) {
+    state.watch = {
+      compromised: next.watchtower.compromised ?? 0,
+      weak: next.watchtower.weak ?? 0,
+      reused: next.watchtower.reused ?? 0,
+      items: next.watchtower.items ?? [],
+    };
+  }
+  await window.centraid
+    .read({ query: 'trash' })
+    .then((r) => {
+      if (r && !r.vaultDenied) state.trashRows = r.items ?? [];
+    })
+    .catch(() => {});
 
   // Drop a selection whose item vanished (unless it now lives in trash).
   if (
@@ -340,19 +339,6 @@ async function refresh() {
     state.detail = null;
   }
   render();
-}
-
-// ---------- Responsive: component-width driven ----------
-
-function measure() {
-  const root = $('root');
-  const forced = document.documentElement.getAttribute('data-app-width') === 'narrow';
-  const narrow = forced || root.clientWidth < 860;
-  if (narrow !== state.narrow) {
-    state.narrow = narrow;
-    if (!narrow) state.sideOpen = false;
-    render();
-  }
 }
 
 // ---------- Global keydown (layered Escape) ----------
@@ -372,14 +358,24 @@ window.addEventListener('keydown', (e) => {
     render();
   }
 });
-window.addEventListener('resize', measure);
-window.addEventListener('focus', refresh);
+
+// Refresh on focus (staleness-gated) and on the change doorbell (debounced +
+// tables-filtered) — the kit helpers replace a blind focus refetch (issue #404).
+onFocusRefresh(refresh);
+onDataChange(CHANGE_TABLES, refresh);
 
 // ---------- Boot ----------
 
 state.narrow = $('root').clientWidth < 860;
 $('root').classList.toggle('is-narrow', state.narrow);
 showSkeleton($('stage'), 6);
-measure();
-setInterval(measure, 250);
+// Component-width driven responsive via a ResizeObserver (replaces the old 4Hz
+// poll, issue #404).
+observeWidth($('root'), 860, (narrow) => {
+  if (narrow === state.narrow) return;
+  state.narrow = narrow;
+  $('root').classList.toggle('is-narrow', narrow);
+  if (!narrow) state.sideOpen = false;
+  render();
+});
 refresh();

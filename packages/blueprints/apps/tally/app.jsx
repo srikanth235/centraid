@@ -20,7 +20,7 @@
 // when the read actually carries one" guard, just living on the object that
 // closures already share instead of a second free variable.
 import { createRoot } from './react-core.min.js';
-import { readFailed, showSkeleton } from './kit.js';
+import { onDataChange, readFailed, showSkeleton } from './kit.js';
 import { createLogic } from './logic.js';
 import { wireChrome } from './chrome.js';
 import { first, money } from './format.js';
@@ -36,6 +36,20 @@ import { GroupModal } from './components/GroupModal.jsx';
 import { FriendModal } from './components/FriendModal.jsx';
 
 const $ = (id) => document.getElementById(id);
+
+// Vault entities this app's queries read — the doorbell filter re-derives
+// only when a change names one of these (or names none, i.e. "this app acted").
+const CHANGE_TABLES = [
+  'tally.expense',
+  'tally.expense_split',
+  'tally.settlement',
+  'tally.friend',
+  'tally.group',
+  'social.circle',
+  'social.circle_member',
+  'core.party',
+  'core.vault',
+];
 
 // ---------- State ----------
 // The sidebar/dashboard snapshot (dashboard query) plus `me` — never
@@ -328,9 +342,11 @@ async function refreshDashboard() {
 }
 
 async function refreshAll() {
-  const ok = await refreshDashboard();
-  if (!ok) return;
-  await loadView();
+  // The sidebar snapshot and the active detail view are independent reads —
+  // run them together (issue #404) instead of dashboard-then-view serially.
+  // A final render reconciles the sidebar regardless of which resolved first.
+  await Promise.all([refreshDashboard(), loadView()]);
+  render();
 }
 
 // ---------- Boot ----------
@@ -344,5 +360,9 @@ modalRoot = createRoot($('modalRoot'));
 showSkeleton($('wrap'), 4);
 
 ({ setThemeIcon } = wireChrome({ state, logic, renderModals, refreshAll }));
+
+// Reactive data: a write elsewhere (chat agent, a second window) fires the
+// doorbell — re-derive. Debounced + tables-filtered by the kit helper.
+onDataChange(CHANGE_TABLES, refreshAll);
 
 refreshAll();
