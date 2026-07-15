@@ -465,6 +465,17 @@
             re-keying and the meaning never moves: lose a blob store and you've lost re-fetchable
             bytes, never a relationship.
           </p>
+          <p>
+            With a remote tier configured, the local store becomes a <b>bounded cache</b>, not a
+            second full copy: a budget (yours to set, or derived from free disk) caps the spool,
+            tiny previews are pinned so the grid always renders, and everything else ages out
+            least-recently-used — but nothing is ever evicted unless the remote provably holds it,
+            and imports back-pressure rather than drop when the uplink can't keep up. Remote blobs
+            are sealed in ranged-readable encrypted frames, compressed when the bytes allow, so
+            scrubbing a video or opening one page fetches only the covering slices. A new device
+            restores the vault snapshot, warms every tiny preview first — a usable library in
+            minutes — and leaves originals to stream in on demand.
+          </p>
         </div>
       </section>
 
