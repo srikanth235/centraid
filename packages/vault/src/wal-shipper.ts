@@ -61,7 +61,7 @@ import {
   writeSync,
 } from 'node:fs';
 import path from 'node:path';
-import type { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync } from 'node:sqlite';
 import {
   newWalGeneration,
   parseWalCloserKey,
@@ -697,6 +697,78 @@ export class WalShipper {
   }
 
   /**
+   * A micro read-lock over the byte copy (issue #411 action 2), belt-and-
+   * suspenders to the after-the-fact detection in `capture` — NOT a
+   * replacement for it. A FOREIGN checkpointer (journal.db is multi-process:
+   * app-engine workers, the key-admin CLI open it by path) could RESTART or
+   * TRUNCATE the WAL mid-copy and reset it under our read. `capture`'s re-stat +
+   * header re-read (and `detectForeign`) already CATCH that race after the fact
+   * and heal it with a generation break — that detection stays authoritative
+   * (action 1's verify-don't-enforce). This eliminates the race BY CONSTRUCTION
+   * for the copy's duration: an open WAL read snapshot holds a read mark that no
+   * checkpointer in ANY process can reset or truncate past — a foreign TRUNCATE
+   * under it returns busy and leaves the bytes AND salts untouched (measured on
+   * this runtime before it was relied on).
+   *
+   * A SEPARATE read-only connection, deliberately NOT the gateway's shared write
+   * handle. Two reasons it must be separate: (1) a `readOnly` connection cannot
+   * checkpoint — so `wal_autocheckpoint` is moot on it — and node:sqlite runs no
+   * `PRAGMA optimize` on close, so it writes NOTHING to the WAL on open or close
+   * (verified: `data_version` is unmoved across its open+close); (2) an
+   * exception in here can never strand the gateway's write handle inside a
+   * transaction, which a `BEGIN` on the shared handle could. The lock lives only
+   * for the milliseconds of the copy (this is NOT Litestream's long-held read
+   * lock) and MUST be released before the shipper's OWN `truncate` runs, or that
+   * TRUNCATE would find our reader and come back busy under its own lock —
+   * `capture` and `truncate` are separate calls, and `capture`'s finally always
+   * releases first.
+   *
+   * Acquisition failure (busy open, momentary unavailability) is not fatal:
+   * return null and copy WITHOUT the pin — the post-copy detection is the
+   * correctness mechanism; the pin is only belt-and-suspenders.
+   */
+  private acquireWalReadLock(db: WalDbName): { release: () => void } | null {
+    let conn: DatabaseSync | undefined;
+    try {
+      conn = new DatabaseSync(this.dbPath(db), { readOnly: true });
+      // `BEGIN` is DEFERRED — it takes no read mark until a read runs. The
+      // SELECT is what materializes the snapshot and grabs the WAL read mark
+      // that pins the file against a foreign checkpointer's reset/truncate.
+      conn.exec('BEGIN');
+      conn.prepare('SELECT 1 FROM sqlite_schema LIMIT 1').get();
+      const held = conn;
+      return {
+        release: () => {
+          // The snapshot ends when the connection closes regardless; ending the
+          // transaction first is tidy and drops the read mark immediately.
+          try {
+            held.exec('ROLLBACK');
+          } catch {
+            /* connection may already be gone — close still frees the mark */
+          }
+          try {
+            held.close();
+          } catch {
+            /* best-effort: a leaked read-only handle holds no write lock */
+          }
+        },
+      };
+    } catch (err) {
+      try {
+        conn?.close();
+      } catch {
+        /* nothing was acquired */
+      }
+      this.log.warn(
+        `wal-ship: ${db} capture read-lock unavailable ` +
+          `(${err instanceof Error ? err.message : String(err)}) — ` +
+          `relying on post-copy race detection`,
+      );
+      return null;
+    }
+  }
+
+  /**
    * Capture the committed delta `[offset, lastCommitBoundary(head))` into a
    * local segment file. G7 ordering: segment bytes fsync, then state fsync
    * (via the caller's persistState) — after `capture` returns, `offset`
@@ -709,6 +781,10 @@ export class WalShipper {
     let bytes: Buffer;
     let head: number;
     let headerStable = true;
+    // Pinned across the byte copy only (see acquireWalReadLock). Released in the
+    // finally BEFORE this method returns, so it is never held when the caller
+    // later runs the shipper's own TRUNCATE.
+    let readLock: { release: () => void } | null = null;
     try {
       head = fstatSync(fd).size;
       stream.lastSize = Math.max(stream.lastSize, head);
@@ -716,6 +792,12 @@ export class WalShipper {
       if (head > MAX_CAPTURE_BYTES) {
         return { kind: 'break', reason: 'wal-exceeds-safe-capture-window' };
       }
+      // Acquire the read mark now: after the size checks, before the FIRST read
+      // of bytes. A reset in the sliver between the `head` stat and this pin is
+      // still caught by the re-stat/header-compare below (a shorter file makes
+      // readSync return 0 ⇒ break); the pin closes the far larger window of the
+      // multi-syscall copy itself.
+      readLock = this.acquireWalReadLock(db);
       bytes = Buffer.alloc(head);
       let at = 0;
       while (at < head) {
@@ -732,6 +814,7 @@ export class WalShipper {
       headerStable = bytes.subarray(0, WAL_HEADER_BYTES).equals(headerAfter);
     } finally {
       closeSync(fd);
+      readLock?.release();
     }
     if (!headerStable) return { kind: 'break', reason: 'wal-reset-during-capture' };
 
