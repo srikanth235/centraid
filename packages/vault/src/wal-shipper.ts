@@ -13,9 +13,16 @@
  *   I2 — nobody checkpoints but this shipper, always with TRUNCATE, so the
  *        WAL is strictly append-only between our checkpoints and byte
  *        offsets are never reused within a group.
- * I2 is enforced (every opener sets `wal_autocheckpoint = 0`) AND detected:
- * violations break the generation — a fresh base snapshot — never a silent
- * gap. The tick body is fully synchronous, which on a synchronous
+ * I2 is VERIFIED, not enforced (issue #411 action 1). Verification is the
+ * single authoritative mechanism: every capture re-checks the WAL salts, the
+ * offset chain, and the main-file identity, and ANY foreign checkpoint breaks
+ * the generation — a fresh base snapshot — never a silent gap. Correctness
+ * therefore does NOT depend on the `wal_autocheckpoint = 0` convention every
+ * opener carries; that pragma is a perf hint that keeps generation churn (base
+ * re-clones) near zero, not a precondition — a stray default-config connection
+ * resetting the WAL is a churn event the detectors catch and heal, counted in
+ * `foreignCheckpointCount` and surfaced to health. The tick body is fully
+ * synchronous, which on a synchronous
  * `node:sqlite` write path means no gateway write can interleave with it
  * (event-loop atomicity): the per-tick stat pair over the two databases is
  * a coordinated restore point without any locking.
@@ -181,7 +188,60 @@ interface ShipperState {
   /** Monotonicized tick clock — survives restarts and wall-clock rewinds. */
   lastTickMs: number;
   dbs: Partial<Record<WalDbName, DbStreamState>>;
+  /**
+   * Issue #411 action 1: how many FOREIGN checkpoints this shipper has detected
+   * and healed across ALL generations (see `FOREIGN_CHECKPOINT_REASONS`).
+   *
+   * TOP-LEVEL, not per-stream, ON PURPOSE: a generation break REPLACES both
+   * stream records wholesale (`mintBase`), so a per-stream counter would reset
+   * to zero on the very event it exists to count. A monotone churn signal — the
+   * gateway copies it into persisted backup state where the health probe
+   * recomputes a degraded verdict from it, per the #408 lesson that probes
+   * override pushed reports.
+   *
+   * Optional so a `state.json` written before this field defaults to 0 on load
+   * (still `version: 1` — the tolerant default-on-load, like the gateway's
+   * `recoveryKit`). `undefined` is read as 0 everywhere.
+   */
+  foreignCheckpointCount?: number;
+  /** The most recent foreign checkpoint: when (tick ms), which database, and
+   *  the break reason — drives the gateway's degraded window. */
+  lastForeignCheckpoint?: { atMs: number; db: WalDbName; reason: string };
 }
+
+/**
+ * Break reasons that mean SOMETHING ELSE checkpointed one of our databases: a
+ * foreign checkpoint reset the WAL in place — salts jumped, offsets got reused,
+ * or frames were folded into the main file we never observed. Issue #411
+ * action 1: these are exactly the reasons whose whole cost is a generation
+ * break (base re-clone), i.e. a PERF/churn event, not a correctness threat —
+ * verification (not the `wal_autocheckpoint = 0` convention) is what keeps them
+ * safe. They feed `ShipperState.foreignCheckpointCount`.
+ *
+ * DELIBERATELY EXCLUDED, and why each is not a foreign CHECKPOINT:
+ *   - `first-run` / `base-cadence` / `local-budget` / `key-epoch-rotation` /
+ *     `journal-archival` / `backup-enabled-after-discard`: OUR OWN scheduled or
+ *     requested re-bases.
+ *   - `checkpoint-raced-writer`: a foreign WRITER committed inside OUR
+ *     checkpoint's lock window — OUR checkpoint folded its frames, not a foreign
+ *     one. A raced writer is not a foreign checkpointer (issue #411: be precise).
+ *   - `wal-exceeds-safe-capture-window`: a single oversized transaction we chose
+ *     to re-base past — nobody else's checkpoint.
+ *   - `wal-checksum-invalid-before-captured-offset`: WAL byte corruption before
+ *     our offset — an integrity break of ambiguous cause, not evidence of a
+ *     foreign CHECKPOINT specifically.
+ *   - `coordinated:*`: the SIBLING database re-bases in lockstep with the
+ *     trigger; counting it would double-count one event (`mintBase` runs for
+ *     both databases on every break), so the `coordinated:` prefix keeps it out
+ *     of this set.
+ */
+const FOREIGN_CHECKPOINT_REASONS: ReadonlySet<string> = new Set([
+  'main-db-file-changed-without-our-checkpoint',
+  'wal-file-vanished',
+  'wal-shrank-without-our-checkpoint',
+  'wal-salts-changed-without-our-checkpoint',
+  'wal-reset-during-capture',
+]);
 
 function isNonNegativeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 0;
@@ -243,6 +303,27 @@ function isShipperState(value: unknown): value is ShipperState {
   const state = value as Record<string, unknown>;
   if (state['version'] !== 1 || !isNonNegativeInteger(state['lastTickMs'])) return false;
   if (typeof state['dbs'] !== 'object' || state['dbs'] === null) return false;
+  // Issue #411 action 1: optional fields — absent on pre-#411 state files
+  // (default-on-load to 0/undefined), so tolerate absence but reject a
+  // malformed shape.
+  if (
+    state['foreignCheckpointCount'] !== undefined &&
+    !isNonNegativeInteger(state['foreignCheckpointCount'])
+  ) {
+    return false;
+  }
+  if (state['lastForeignCheckpoint'] !== undefined) {
+    const lfc = state['lastForeignCheckpoint'];
+    if (typeof lfc !== 'object' || lfc === null) return false;
+    const rec = lfc as Record<string, unknown>;
+    if (
+      !isNonNegativeInteger(rec['atMs']) ||
+      !WAL_DB_NAMES.includes(rec['db'] as WalDbName) ||
+      typeof rec['reason'] !== 'string'
+    ) {
+      return false;
+    }
+  }
   const dbs = state['dbs'] as Record<string, unknown>;
   return WAL_DB_NAMES.every((db) => dbs[db] === undefined || isStreamState(dbs[db], db));
 }
@@ -1179,6 +1260,20 @@ export class WalShipper {
     }
     const olds = { vault: this.state.dbs.vault, journal: this.state.dbs.journal };
     for (const db of WAL_CAPTURE_ORDER) this.mintBase(db, reasons[db]!, report);
+    // Issue #411 action 1: tally the foreign checkpoints THIS break healed. One
+    // increment per database that INDEPENDENTLY established a foreign reason —
+    // the coordinated sibling carries a `coordinated:*` reason and is excluded
+    // by `FOREIGN_CHECKPOINT_REASONS` (it would double-count the same event).
+    // This runs only on the success path (a break DEFERRED by a busy sibling
+    // returns from `abortBreak` before `mintBase`, so a deferred foreign break
+    // is counted exactly once — when its retry finally lands here), and BEFORE
+    // `persistState` so the counter is durable.
+    for (const db of WAL_CAPTURE_ORDER) {
+      const reason = reasons[db]!;
+      if (!FOREIGN_CHECKPOINT_REASONS.has(reason)) continue;
+      this.state.foreignCheckpointCount = (this.state.foreignCheckpointCount ?? 0) + 1;
+      this.state.lastForeignCheckpoint = { atMs: report.tickMs, db, reason };
+    }
     if (olds.vault && olds.journal && olds.vault.basePending && olds.journal.basePending) {
       // The retired pair was never registered ⇒ never restorable ⇒ its pair
       // markers are dead weight, exactly like its segments.
@@ -1720,6 +1815,11 @@ export class WalShipper {
       Record<WalDbName, { generation: string; group: number; offset: number; basePending: boolean }>
     >;
     localBytes: number;
+    /** Issue #411 action 1: foreign checkpoints detected+healed over this
+     *  shipper's whole life (all generations). A churn signal the gateway
+     *  persists and surfaces through backup health. */
+    foreignCheckpointCount: number;
+    lastForeignCheckpoint?: { atMs: number; db: WalDbName; reason: string };
   } {
     const localBytes = this.localSegmentBytes;
     const dbs: ReturnType<WalShipper['status']>['dbs'] = {};
@@ -1734,6 +1834,13 @@ export class WalShipper {
         };
       }
     }
-    return { dbs, localBytes };
+    return {
+      dbs,
+      localBytes,
+      foreignCheckpointCount: this.state.foreignCheckpointCount ?? 0,
+      ...(this.state.lastForeignCheckpoint
+        ? { lastForeignCheckpoint: this.state.lastForeignCheckpoint }
+        : {}),
+    };
   }
 }

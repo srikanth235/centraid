@@ -239,6 +239,65 @@ test('[G5] a foreign checkpoint breaks the generation and mints a fresh pending 
   expect(r2.shipped.some((k) => k.startsWith(`wal/journal/${after.generation}/`))).toBe(true);
 });
 
+test('[G5][#411] a foreign checkpoint increments foreignCheckpointCount, and it survives a restart', () => {
+  const shipper = makeShipper();
+  shipper.tick();
+  // A clean stream has never seen a foreign checkpoint.
+  expect(shipper.status().foreignCheckpointCount).toBe(0);
+  expect(shipper.status().lastForeignCheckpoint).toBeUndefined();
+
+  insertJournal(2, 200, 'shipped');
+  clock += 1000;
+  shipper.tick();
+
+  // A foreign actor checkpoints journal.db behind the shipper's back.
+  insertJournal(2, 200, 'folded');
+  const c2 = new DatabaseSync(path.join(vaultDir, 'journal.db'));
+  try {
+    c2.exec('PRAGMA busy_timeout = 5000');
+    c2.exec('PRAGMA wal_checkpoint(RESTART)');
+  } finally {
+    c2.close();
+  }
+
+  clock += 1000;
+  const r = shipper.tick();
+  expect(r.breaks.find((b) => b.db === 'journal')).toBeDefined();
+
+  const status = shipper.status();
+  // Counted exactly once: journal carried the foreign reason, vault re-based in
+  // lockstep under a `coordinated:*` reason that must NOT be counted.
+  expect(status.foreignCheckpointCount).toBe(1);
+  expect(status.lastForeignCheckpoint).toMatchObject({ atMs: clock, db: 'journal' });
+  expect(status.lastForeignCheckpoint!.reason).toMatch(/main-db|salt|shrank/);
+
+  // Persisted on top-level state (not per-stream, which mintBase replaced): a
+  // fresh shipper over the same dir reads the tally straight back.
+  const shipper2 = makeShipper();
+  expect(shipper2.status().foreignCheckpointCount).toBe(1);
+  expect(shipper2.status().lastForeignCheckpoint).toEqual(status.lastForeignCheckpoint);
+});
+
+test('[G5][#411] deliberate breaks (first-run, rollGeneration) do NOT increment the counter', () => {
+  const shipper = makeShipper();
+  // The first tick mints both generations — a deliberate first-run break.
+  const r0 = shipper.tick();
+  expect(r0.breaks.map((b) => b.reason).sort()).toEqual(['first-run', 'first-run']);
+  expect(shipper.status().foreignCheckpointCount).toBe(0);
+
+  insertVault(2);
+  clock += 1000;
+  shipper.tick();
+
+  // An explicit, requested generation roll (the key-epoch-rotation hook's path)
+  // re-bases both databases — deliberate, so it is not a foreign checkpoint.
+  clock += 1000;
+  const rolled = shipper.rollGeneration('vault', 'key-epoch-rotation');
+  expect(rolled.breaks.length).toBeGreaterThan(0);
+  expect(shipper.status().foreignCheckpointCount).toBe(0);
+  expect(shipper.status().lastForeignCheckpoint).toBeUndefined();
+});
+
 test('[G5] a vanished WAL file (with shipped offset) breaks the generation', () => {
   const shipper = makeShipper();
   shipper.tick();
