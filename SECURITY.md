@@ -37,3 +37,24 @@ segment stream (issue #408) sharpens that into **write volume and cadence**
 owner writes. This is an accepted trade for continuous, point-in-time
 backup; the shipper's tick/threshold knobs are where padding or batching
 would land if a deployment needs that correlation blunted.
+
+The snapshot format compresses chunk objects *before* encrypting them
+(entropy-gated zstd, issue #405 §1), which introduces a **compressibility
+side channel**: because compression happens inside the seal, a chunk object's
+ciphertext *length* now reveals how compressible — how redundant — its
+plaintext was. Two 16 MiB parts seal to visibly different object sizes if one
+is highly repetitive (a text-heavy SQLite base) and the other is high-entropy
+(already-compressed media, random blobs). The provider learns nothing about
+*what* the bytes are, only a coarse redundancy estimate per object, on top of
+the size/cadence it already saw. This is accepted for Centraid's threat model:
+a **personal, single-tenant** vault where the owner holds the keys and there is
+no cross-tenant secret to sift out via a chosen-plaintext/CRIME-style
+adaptive-injection attack (the classic setting where compress-then-encrypt is
+dangerous — an attacker mixing controlled and secret data in one compression
+context). The gain — materially smaller, cheaper, faster backups of the bulk
+data — outweighs a redundancy estimate a provider could largely infer from
+raw sizes anyway. The escape hatch is in the format: the per-chunk algorithm-id
+byte carries a **stored-raw** encoding (`0x00`), and the keep-if-smaller gate
+already selects it for any part compression does not shrink, so incompressible
+data is stored verbatim and a deployment that wants to forgo the channel
+entirely can force raw storage without a format change.

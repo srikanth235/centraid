@@ -1,14 +1,17 @@
 /*
- * Fixed-size file parts (FORMAT.md § Parts — centraid-snapshot/1).
+ * Fixed-size file parts (FORMAT.md § Parts — centraid-snapshot/2).
  *
- * Format /1 uses fixed parts instead of FastCDC content-defined chunking:
+ * The format uses fixed parts instead of FastCDC content-defined chunking:
  * objects left in a snapshot are SQLite base files, git bundles and the seal
  * key. SQLite updates pages IN PLACE (no insert-shift), so fixed boundaries
  * dedup consecutive bases at ~O(changed pages) via the existing HMAC content
  * addressing — CDC's insert-resilience bought nothing here while costing a
  * frozen gear table and a cross-repo parameter-unification liability
- * (#405 §1). Part size is part of the format: same bytes must produce the
- * same part ids everywhere, so it MUST NOT change within format `/1`.
+ * (#405 §1). Part boundaries are unchanged by /2's entropy-gated compression:
+ * ids and boundaries key off RAW plaintext, and compression lives INSIDE the
+ * per-part seal (compress.ts), downstream of splitting. Part size is part of
+ * the format: same bytes must produce the same part ids everywhere, so it MUST
+ * NOT change within the format.
  */
 
 export const PART_BYTES = 16 * 1024 * 1024;

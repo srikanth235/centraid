@@ -1,6 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit (#408) WAL restore is one integrity boundary: authenticated planning, checksum-verified spooling, SQLite replay, and coordinated pair validation must remain auditable as one pipeline
 /*
- * WAL replay materialization (centraid-snapshot/1, issue #408): fetch the
+ * WAL replay materialization (centraid-snapshot/2, issue #408): fetch the
  * planned segments for both databases, spool + verify them, then let SQLITE
  * perform the replay — per group, the segments are concatenated back into
  * `<db>-wal`, the database is opened (recovery runs), checkpointed with

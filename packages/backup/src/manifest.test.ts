@@ -109,7 +109,7 @@ describe('sealManifest / openManifest', () => {
       entries,
     });
     expect(sha256Hex(bytes)).toBe(manifestHash);
-    expect(manifest.format).toBe('centraid-snapshot/1');
+    expect(manifest.format).toBe('centraid-snapshot/2');
 
     const opened = openManifest(bytes, keyring, 'vault-1', manifestHash);
     expect(opened.public.generation).toBe(3);
@@ -149,7 +149,7 @@ describe('sealManifest / openManifest', () => {
       entries: [],
     });
     const parsed = JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
-    parsed['format'] = 'centraid-snapshot/1';
+    parsed['format'] = 'centraid-snapshot/2';
     parsed['generation'] = 99;
     parsed['appMeta'] = { ontologyVersion: '0.1' };
     const rewritten = new TextEncoder().encode(canonicalJson(parsed));

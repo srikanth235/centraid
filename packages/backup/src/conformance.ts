@@ -153,8 +153,9 @@ export function providerConformanceCases(
     },
 
     {
-      // centraid-snapshot/1 (issue #408) stores WAL segments as plain
-      // data-plane objects under `wal/…` — providers never parse them, but
+      // The snapshot format (issue #408, carried unchanged into /2) stores WAL
+      // segments as plain data-plane objects under `wal/…` — providers never
+      // parse them (and /2's chunk compression does not reach them), but
       // MUST round-trip the deeper key shape and serve ordered prefix LISTs
       // (restore planning is a LIST, no per-object reads).
       name: 'data-plane wal-segment namespace: deep keys round-trip + prefix list',
@@ -205,7 +206,7 @@ export function providerConformanceCases(
             totalBytes: 100,
             objectCount: 1,
             generation: 1,
-            format: 'centraid-snapshot/1',
+            format: 'centraid-snapshot/2',
             appMeta: { gatewayVersion: '0.1.0' },
           };
           const first = await provider.registerSnapshot(targetId, reg);
@@ -233,7 +234,7 @@ export function providerConformanceCases(
             manifestHash: 'b'.repeat(64),
             totalBytes: 1,
             objectCount: 1,
-            format: 'centraid-snapshot/1',
+            format: 'centraid-snapshot/2',
             appMeta: {},
           };
           const r1 = await provider.registerSnapshot(targetId, {
@@ -295,7 +296,7 @@ export function providerConformanceCases(
               totalBytes: 1,
               objectCount: 1,
               generation: i + 1,
-              format: 'centraid-snapshot/1',
+              format: 'centraid-snapshot/2',
               appMeta: {},
             });
             seqs.push(row.seq);
@@ -328,7 +329,7 @@ export function providerConformanceCases(
             totalBytes: 1,
             objectCount: 1,
             generation: 1,
-            format: 'centraid-snapshot/1',
+            format: 'centraid-snapshot/2',
             appMeta: {},
           });
           const fetched = await provider.getSnapshot(targetId, row.seq);

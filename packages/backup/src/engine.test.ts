@@ -5,10 +5,20 @@ import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, test } from 'vitest';
-import { createKeyring, type Keyring } from './crypto.js';
+import { ALGO_STORE, ALGO_ZSTD, unframeChunkPayload } from './compress.js';
+import {
+  activeMasterKey,
+  chunkId,
+  createKeyring,
+  decrypt,
+  deriveDataKey,
+  deriveDedupKey,
+  type Keyring,
+} from './crypto.js';
 import { createSnapshot, restoreSnapshot, verifySnapshot, type SourceEntry } from './engine.js';
 import { LocalBackupProvider } from './local-provider.js';
 import { openManifest, READABLE_SNAPSHOT_FORMATS, SNAPSHOT_FORMAT } from './manifest.js';
+import { partBuffer } from './parts.js';
 import type { ObjectStore } from './object-store.js';
 import type { BackupProvider, StoreClass } from './provider.js';
 
@@ -599,7 +609,7 @@ describe('/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs', (
       appMeta: APP_META,
     });
     expect(row).not.toBeNull();
-    expect(row!.format).toBe('centraid-snapshot/1');
+    expect(row!.format).toBe('centraid-snapshot/2');
     expect(row!.format).toBe(SNAPSHOT_FORMAT);
 
     const destDir = await tempDir('backup-engine-v2-restore-');
@@ -873,9 +883,9 @@ describe('/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs', (
 });
 
 describe('snapshot format gate', () => {
-  test('v0 reads and writes only the first authenticated WAL format', () => {
-    expect(READABLE_SNAPSHOT_FORMATS).toEqual(['centraid-snapshot/1']);
-    expect(SNAPSHOT_FORMAT).toBe('centraid-snapshot/1');
+  test('v0 reads and writes only the current compressed snapshot format', () => {
+    expect(READABLE_SNAPSHOT_FORMATS).toEqual(['centraid-snapshot/2']);
+    expect(SNAPSHOT_FORMAT).toBe('centraid-snapshot/2');
   });
 
   test('restore refuses a row whose format is outside the reader guarantee', async () => {
@@ -1099,6 +1109,247 @@ describe('deterministic objects (G7 — idempotent uploads)', () => {
       // the nonce derives from the chunk's own keyed content hash. A crash
       // retry re-PUTs the exact same object instead of a fresh ciphertext.
       expect(second.get(key)!.equals(bytes)).toBe(true);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Entropy-gated compression (FORMAT.md § Chunk payload framing — /2, #405 §1).
+// These ride the real seal path (createSnapshot → chunks/ objects), so they
+// prove the framing survives encryption, dedup and restore — not just the unit
+// framing in compress.test.ts.
+// ---------------------------------------------------------------------------
+
+/**
+ * A REAL SQLite file stuffed with repetitive rows (the compressible shape a
+ * vault base actually has — text columns, repeated tokens, page slack). Written
+ * with journal_mode=DELETE so the file is a single self-contained base.
+ */
+function makeCompressibleDb(file: string, rows: number): void {
+  const db = new DatabaseSync(file);
+  db.exec('PRAGMA journal_mode=DELETE; CREATE TABLE t (id INTEGER PRIMARY KEY, note TEXT)');
+  const insert = db.prepare('INSERT INTO t (note) VALUES (?)');
+  const line = 'the quick brown fox jumps over the lazy dog — '.repeat(6);
+  db.exec('BEGIN');
+  for (let i = 0; i < rows; i++) insert.run(`${line}${i % 97}`);
+  db.exec('COMMIT');
+  db.close();
+}
+
+/** Sum the stored (encrypted, framed) sizes of every chunk object under `chunks/`. */
+async function sumStoredChunkBytes(store: ObjectStore): Promise<number> {
+  let total = 0;
+  for await (const obj of store.list('chunks/')) total += obj.size;
+  return total;
+}
+
+describe('entropy-gated compression (/2, #405 §1)', () => {
+  test('a repetitive SQLite base compresses to well under a third of its raw size', async () => {
+    const rootDir = await tempDir('backup-compress-root-');
+    const provider = new LocalBackupProvider({ rootDir });
+    const { targetId } = await provider.createTarget({ label: 'compress' });
+    const keyringDir = await tempDir('backup-compress-keyring-');
+    const keyring = await createKeyring(path.join(keyringDir, 'keyring.json'));
+    const sourceDir = await tempDir('backup-compress-source-');
+
+    const vaultPath = path.join(sourceDir, 'vault.db');
+    const journalPath = path.join(sourceDir, 'journal.db');
+    makeCompressibleDb(vaultPath, 40_000); // multi-MB, highly compressible
+    makeCompressibleDb(journalPath, 200);
+    const rawBytes = (await fs.stat(vaultPath)).size + (await fs.stat(journalPath)).size;
+
+    const entries: SourceEntry[] = [
+      {
+        path: 'vault.db',
+        kind: 'db',
+        absolutePath: vaultPath,
+        sha256: await fileSha256(vaultPath),
+        walGeneration: '33'.repeat(16),
+        baseTickMs: 1_752_480_000_000,
+      },
+      {
+        path: 'journal.db',
+        kind: 'db',
+        absolutePath: journalPath,
+        sha256: await fileSha256(journalPath),
+        walGeneration: '44'.repeat(16),
+        baseTickMs: 1_752_480_000_000,
+      },
+    ];
+
+    await createSnapshot({
+      provider,
+      targetId,
+      keyring,
+      vaultId: 'vault-1',
+      entries,
+      generation: 1,
+      appMeta: APP_META,
+    });
+
+    const store = await provider.openDataPlane(targetId, 'backup', 'read');
+    const storedBytes = await sumStoredChunkBytes(store);
+    // Acceptance: SQLite fixture ≥3×. Encryption adds only ~28 bytes/object
+    // (nonce+tag), so the ratio is dominated by zstd on the row text.
+    expect(rawBytes / storedBytes).toBeGreaterThanOrEqual(3);
+  });
+
+  test('mixed compressed + stored chunks in one snapshot round-trip byte-identically', async () => {
+    const rootDir = await tempDir('backup-mixed-root-');
+    const provider = new LocalBackupProvider({ rootDir });
+    const { targetId } = await provider.createTarget({ label: 'mixed' });
+    const keyringDir = await tempDir('backup-mixed-keyring-');
+    const keyring = await createKeyring(path.join(keyringDir, 'keyring.json'));
+    const sourceDir = await tempDir('backup-mixed-source-');
+
+    const vaultPath = path.join(sourceDir, 'vault.db');
+    const journalPath = path.join(sourceDir, 'journal.db');
+    makeCompressibleDb(vaultPath, 8_000); // compressible → stored as zstd
+    makeCompressibleDb(journalPath, 50);
+    // An incompressible blob alongside → stored raw. One snapshot, both algos.
+    const blobPath = path.join(sourceDir, 'random.bin');
+    await fs.writeFile(blobPath, pseudoRandomBuffer(300_000, 99));
+
+    const entries: SourceEntry[] = [
+      {
+        path: 'vault.db',
+        kind: 'db',
+        absolutePath: vaultPath,
+        sha256: await fileSha256(vaultPath),
+        walGeneration: '55'.repeat(16),
+        baseTickMs: 1_752_480_000_000,
+      },
+      {
+        path: 'journal.db',
+        kind: 'db',
+        absolutePath: journalPath,
+        sha256: await fileSha256(journalPath),
+        walGeneration: '66'.repeat(16),
+        baseTickMs: 1_752_480_000_000,
+      },
+      { path: 'random.bin', kind: 'blob', absolutePath: blobPath },
+    ];
+
+    await createSnapshot({
+      provider,
+      targetId,
+      keyring,
+      vaultId: 'vault-1',
+      entries,
+      generation: 1,
+      appMeta: APP_META,
+    });
+
+    // Inspect the raw sealed objects: unseal → read the frame's id byte and
+    // confirm BOTH a zstd (0x01) and a stored (0x00) object were written.
+    const { key: master } = activeMasterKey(keyring);
+    const dataKey = deriveDataKey(master, 'vault-1');
+    const store = await provider.openDataPlane(targetId, 'backup', 'read');
+    const algos = new Set<number>();
+    for await (const obj of store.list('chunks/')) {
+      const sealed = decrypt(dataKey, await store.get(obj.key));
+      algos.add(sealed[0]!); // the frame's algo id byte
+      expect(unframeChunkPayload(sealed).length).toBeGreaterThan(0); // and it still unframes
+    }
+    expect(algos.has(ALGO_ZSTD)).toBe(true);
+    expect(algos.has(ALGO_STORE)).toBe(true);
+
+    const destDir = await tempDir('backup-mixed-restore-');
+    await fs.rm(destDir, { recursive: true, force: true });
+    await restoreSnapshot({
+      provider,
+      targetId,
+      keyring,
+      vaultId: 'vault-1',
+      destDir,
+      current: CURRENT,
+    });
+    for (const entry of entries) {
+      const original = await fs.readFile(entry.absolutePath);
+      const restored = await fs.readFile(path.join(destDir, ...entry.path.split('/')));
+      expect(restored.equals(original)).toBe(true);
+    }
+
+    const verified = await verifySnapshot({ provider, targetId, keyring, vaultId: 'vault-1' });
+    expect(verified.missing).toEqual([]);
+    expect(verified.corrupt).toEqual([]);
+  });
+
+  test('chunk ids key off RAW plaintext — identical whether or not compression kicked in', async () => {
+    const rootDir = await tempDir('backup-id-root-');
+    const provider = new LocalBackupProvider({ rootDir });
+    const { targetId } = await provider.createTarget({ label: 'ids' });
+    const keyringDir = await tempDir('backup-id-keyring-');
+    const keyring = await createKeyring(path.join(keyringDir, 'keyring.json'));
+    const sourceDir = await tempDir('backup-id-source-');
+
+    // A compressible blob whose bytes we hold, so we can recompute the id the
+    // "no compression" way (HMAC over the raw part) and demand it MATCHES the
+    // id the compressed snapshot recorded.
+    const raw = new Uint8Array(2 * 1024 * 1024);
+    raw.fill(0x41);
+    const vaultPath = path.join(sourceDir, 'vault.db');
+    const journalPath = path.join(sourceDir, 'journal.db');
+    makeCompressibleDb(vaultPath, 100);
+    makeCompressibleDb(journalPath, 20);
+    const blobPath = path.join(sourceDir, 'flat.bin');
+    await fs.writeFile(blobPath, raw);
+
+    const entries: SourceEntry[] = [
+      {
+        path: 'vault.db',
+        kind: 'db',
+        absolutePath: vaultPath,
+        sha256: await fileSha256(vaultPath),
+        walGeneration: '77'.repeat(16),
+        baseTickMs: 1_752_480_000_000,
+      },
+      {
+        path: 'journal.db',
+        kind: 'db',
+        absolutePath: journalPath,
+        sha256: await fileSha256(journalPath),
+        walGeneration: '88'.repeat(16),
+        baseTickMs: 1_752_480_000_000,
+      },
+      { path: 'flat.bin', kind: 'blob', absolutePath: blobPath },
+    ];
+
+    const row = await createSnapshot({
+      provider,
+      targetId,
+      keyring,
+      vaultId: 'vault-1',
+      entries,
+      generation: 1,
+      appMeta: APP_META,
+    });
+
+    // Recompute the blob's expected chunk ids the compression-free way.
+    const { key: master } = activeMasterKey(keyring);
+    const dedupKey = deriveDedupKey(master, 'vault-1');
+    const dataKey = deriveDataKey(master, 'vault-1');
+    const expectedIds = (await partBuffer(raw)).map((part) => chunkId(dedupKey, part));
+
+    const store = await provider.openDataPlane(targetId, 'backup', 'read');
+    const opened = openManifest(
+      await store.get(row!.manifestKey),
+      keyring,
+      'vault-1',
+      row!.manifestHash,
+    );
+    const blobEntry = opened.entries.find((e) => e.path === 'flat.bin')!;
+    // Byte-identical ids — compression changed the stored bytes, never the id.
+    expect(blobEntry.chunks).toEqual(expectedIds);
+
+    // And the stored object really was compressed (proving the id is
+    // compression-independent, not "compression didn't run"): unseal it and
+    // confirm the zstd frame byte, while the id still recomputes over raw.
+    for (const id of blobEntry.chunks) {
+      const sealed = decrypt(dataKey, await store.get(`chunks/${id}`));
+      expect(sealed[0]).toBe(ALGO_ZSTD);
+      const plain = unframeChunkPayload(sealed);
+      expect(chunkId(dedupKey, plain)).toBe(id);
     }
   });
 });

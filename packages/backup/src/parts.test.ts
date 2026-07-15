@@ -1,9 +1,9 @@
 /*
- * Fixed-size part splitting (FORMAT.md § Parts — centraid-snapshot/1).
+ * Fixed-size part splitting (FORMAT.md § Parts — centraid-snapshot/2).
  * The part boundary math is format-normative: same bytes MUST produce the
  * same parts (and therefore the same keyed part ids) everywhere, forever
- * within /1 — so these tests pin exact boundary arithmetic, not just "it
- * splits". The aliasing tests exist because the engine's readFileStream
+ * within the format — so these tests pin exact boundary arithmetic, not just
+ * "it splits". The aliasing tests exist because the engine's readFileStream
  * reuses one read buffer across yields: a part that aliases the source
  * buffer would silently back up bytes from the WRONG read.
  */

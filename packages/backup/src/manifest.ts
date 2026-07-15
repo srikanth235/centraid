@@ -106,10 +106,21 @@ function manifestPublicBytes(publicEnvelope: ManifestPublic): Uint8Array {
   return new TextEncoder().encode(canonicalJson(publicEnvelope));
 }
 
+/** The base-plus-WAL format (issue #408). Its chunk objects seal RAW part bytes. */
 export const SNAPSHOT_FORMAT_V1 = 'centraid-snapshot/1';
+/**
+ * `/2` (issue #405 §1) adds entropy-gated compression INSIDE the chunk seal:
+ * the sealed plaintext is a framed payload `[algo-id][body]` rather than the
+ * bare part. That is a payload-framing change, so the string bumps and `/1`
+ * becomes unreadable — a `/1` reader would treat the algo byte as content, and
+ * a `/2` reader would treat a `/1` object's first byte as an algo id. v0 is
+ * pre-release with no shipped predecessor, so there is no dual-format reader:
+ * the bump plus FORMAT.md IS the whole migration story.
+ */
+export const SNAPSHOT_FORMAT_V2 = 'centraid-snapshot/2';
 /** The format new snapshots are written as. */
-export const SNAPSHOT_FORMAT = SNAPSHOT_FORMAT_V1;
-/** v0 has one format: no compatibility branch for an unreleased predecessor. */
+export const SNAPSHOT_FORMAT = SNAPSHOT_FORMAT_V2;
+/** v0 has one readable format at a time: a reader MUST reject every other string. */
 export const READABLE_SNAPSHOT_FORMATS: readonly string[] = [SNAPSHOT_FORMAT];
 
 export interface SnapshotRegistryIdentity {

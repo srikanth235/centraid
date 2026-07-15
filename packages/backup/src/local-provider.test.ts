@@ -47,7 +47,7 @@ describe('LocalBackupProvider lifecycle edge cases', () => {
       totalBytes: 1,
       objectCount: 1,
       generation: 5,
-      format: 'centraid-snapshot/1',
+      format: 'centraid-snapshot/2',
       appMeta: {},
     };
     const first = await provider.registerSnapshot(targetId, reg);
@@ -94,7 +94,7 @@ describe('LocalBackupProvider lifecycle edge cases', () => {
       totalBytes: 3,
       objectCount: 1,
       generation: 1,
-      format: 'centraid-snapshot/1',
+      format: 'centraid-snapshot/2',
       appMeta: {},
     });
     await provider.purgeTarget(targetId);
@@ -116,7 +116,7 @@ describe('LocalBackupProvider lifecycle edge cases', () => {
       totalBytes: 1,
       objectCount: 1,
       generation: 4,
-      format: 'centraid-snapshot/1',
+      format: 'centraid-snapshot/2',
       appMeta: {},
     });
     try {
@@ -127,7 +127,7 @@ describe('LocalBackupProvider lifecycle edge cases', () => {
         totalBytes: 1,
         objectCount: 1,
         generation: 2,
-        format: 'centraid-snapshot/1',
+        format: 'centraid-snapshot/2',
         appMeta: {},
       });
       expect.unreachable('should have thrown');
@@ -148,7 +148,7 @@ describe('LocalBackupProvider lifecycle edge cases', () => {
       totalBytes: 1,
       objectCount: 1,
       generation: 1,
-      format: 'centraid-snapshot/1',
+      format: 'centraid-snapshot/2',
       appMeta: {},
     });
     const rows = await provider.listSnapshots(targetId);
@@ -177,7 +177,7 @@ describe('LocalBackupProvider lifecycle edge cases', () => {
       totalBytes: 1,
       objectCount: 1,
       generation: 1,
-      format: 'centraid-snapshot/1',
+      format: 'centraid-snapshot/2',
       appMeta: {},
     });
     const provider2 = new LocalBackupProvider({ rootDir: dir });
@@ -204,7 +204,7 @@ describe('LocalBackupProvider lifecycle edge cases', () => {
       totalBytes: 1,
       objectCount: 1,
       generation: 1,
-      format: 'centraid-snapshot/1',
+      format: 'centraid-snapshot/2',
       appMeta: {},
     });
 
@@ -222,7 +222,7 @@ describe('LocalBackupProvider lifecycle edge cases', () => {
       totalBytes: 1,
       objectCount: 1,
       generation: 2,
-      format: 'centraid-snapshot/1',
+      format: 'centraid-snapshot/2',
       appMeta: {},
     });
 
@@ -242,7 +242,7 @@ describe('LocalBackupProvider lifecycle edge cases', () => {
         totalBytes: 1,
         objectCount: 1,
         generation: 1,
-        format: 'centraid-snapshot/1',
+        format: 'centraid-snapshot/2',
         appMeta: {},
       }),
     ).rejects.toMatchObject({ code: 'conflict_generation', details: { currentGeneration: 2 } });
