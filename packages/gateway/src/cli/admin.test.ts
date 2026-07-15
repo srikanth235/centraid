@@ -6,7 +6,7 @@
  * assert on their stdout + the files they write.
  */
 
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs, readFileSync } from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -19,12 +19,6 @@ import { daemonLayoutFor } from './paths.ts';
 import { openVaultRegistry, type VaultRegistry } from '../serve/vault-registry.ts';
 import { EnrollmentStore } from '../serve/enrollment-store.ts';
 import { DeviceTokenStore } from '../serve/device-token-store.ts';
-
-// Each vault plane these cases mount now pays a first-run WAL generation
-// break (#408) per database — TRUNCATE checkpoint, base clone, fsync, hash —
-// and a case mounts several. That is ~1.5 s alone but crosses vitest's 5 s
-// default when the whole suite runs 8-way parallel and the disk is contended.
-vi.setConfig({ testTimeout: 30_000 });
 
 const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
 

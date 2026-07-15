@@ -368,6 +368,7 @@ export class VaultPlane {
   private readonly ownsWalLifecycle: boolean;
   private sweepTimer: NodeJS.Timeout | undefined;
   private walTimer: NodeJS.Timeout | undefined;
+  private firstWalTick: NodeJS.Immediate | undefined;
   private lastJournalArchivalAt = 0;
   private closed = false;
   private displayName: string;
@@ -1630,9 +1631,23 @@ export class VaultPlane {
     this.sweepTimer = setInterval(() => this.runSweep(), this.sweepIntervalMs);
     this.sweepTimer.unref();
     if (!this.ownsWalLifecycle) return;
-    // Schedule the fallback too: if shipper construction failed, walTick()
-    // remains the only bound on WAL growth after autocheckpoint was disabled.
-    this.walTick();
+    // Issue #411 action 3: defer the first capture off the mount critical
+    // path. On a fresh vault the first tick mints the generation base — a
+    // TRUNCATE checkpoint + reflink base clone + fsync + sha256 (~150-200 ms
+    // /db, #408) — and mount awaits start(). setImmediate runs it after the
+    // current I/O phase, so mount only REGISTERS the db; the base is built
+    // just after. Correctness is unaffected: a generation is not advertised
+    // to the provider until its base exists (basePending), and BackupService
+    // drives walTick() itself before registering when bases aren't yet
+    // coordinated (backup-service.ts ~:283) — so a backup racing ahead of
+    // this deferred tick still mints its own base. walTick() is closed-guarded
+    // (a stop() before the immediate fires makes it a no-op); we also clear
+    // the handle in stop() to mirror the walTimer teardown.
+    this.firstWalTick = setImmediate(() => {
+      this.firstWalTick = undefined;
+      this.walTick();
+    });
+    this.firstWalTick.unref();
     this.walTimer = setInterval(() => this.walTick(), this.walTickMs);
     this.walTimer.unref();
   }
@@ -1766,6 +1781,7 @@ export class VaultPlane {
     this.closed = true;
     if (this.sweepTimer) clearInterval(this.sweepTimer);
     if (this.walTimer) clearInterval(this.walTimer);
+    if (this.firstWalTick) clearImmediate(this.firstWalTick);
     if (this.walShipper) {
       // Shipper-owned shutdown (issue #408): run optimize + a final ship +
       // TRUNCATE inside the shipper (invariant I2 — it is the only
