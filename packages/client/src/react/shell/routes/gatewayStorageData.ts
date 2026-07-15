@@ -45,6 +45,9 @@ export async function loadStorageCardStatus(): Promise<StorageCardStatusDTO> {
         error: v.lastSweep.error,
         consecutiveFailures: v.lastSweep.consecutiveFailures,
       },
+      // Bounded storage-tier health (issue #405 §7) — passed straight through
+      // when the gateway reports it (older gateways omit it, card degrades).
+      ...(v.cache ? { cache: v.cache } : {}),
     })),
   };
 }
