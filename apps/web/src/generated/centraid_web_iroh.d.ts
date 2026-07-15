@@ -1,4 +1,5 @@
-/* eslint-disable -- generated wasm-bindgen declarations (#408) */
+/* tslint:disable */
+/* eslint-disable -- wasm-bindgen generated declarations (#406) */
 /**
  * The `ReadableStreamType` enum.
  *
@@ -119,13 +120,13 @@ export interface InitOutput {
   readonly intounderlyingsink_write: (a: number, b: number) => number;
   readonly intounderlyingsource_cancel: (a: number) => void;
   readonly intounderlyingsource_pull: (a: number, b: number) => number;
-  readonly __wasm_bindgen_func_elem_1985: (a: number, b: number) => void;
-  readonly __wasm_bindgen_func_elem_6202: (a: number, b: number) => void;
-  readonly __wasm_bindgen_func_elem_4982: (a: number, b: number) => void;
-  readonly __wasm_bindgen_func_elem_4288: (a: number, b: number, c: number, d: number) => void;
-  readonly __wasm_bindgen_func_elem_1986: (a: number, b: number, c: number) => void;
-  readonly __wasm_bindgen_func_elem_4983: (a: number, b: number) => void;
-  readonly __wasm_bindgen_func_elem_5000: (a: number, b: number) => void;
+  readonly __wasm_bindgen_func_elem_1991: (a: number, b: number) => void;
+  readonly __wasm_bindgen_func_elem_6208: (a: number, b: number) => void;
+  readonly __wasm_bindgen_func_elem_4988: (a: number, b: number) => void;
+  readonly __wasm_bindgen_func_elem_4294: (a: number, b: number, c: number, d: number) => void;
+  readonly __wasm_bindgen_func_elem_1992: (a: number, b: number, c: number) => void;
+  readonly __wasm_bindgen_func_elem_4989: (a: number, b: number) => void;
+  readonly __wasm_bindgen_func_elem_5006: (a: number, b: number) => void;
   readonly __wbindgen_export: (a: number, b: number) => number;
   readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
   readonly __wbindgen_export3: (a: number) => void;

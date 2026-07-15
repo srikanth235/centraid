@@ -169,7 +169,11 @@ describe('OnboardingScreen', () => {
     await flush();
     click([...el.querySelectorAll('button')].find((b) => b.textContent === 'Enter Centraid'));
     await flush(3);
-    expect(redeemGatewayPairing).toHaveBeenCalledWith({ label: undefined, ticket: 'a-ticket' });
+    expect(redeemGatewayPairing).toHaveBeenCalledWith({
+      label: undefined,
+      rememberDevice: false,
+      ticket: 'a-ticket',
+    });
     expect(onComplete).toHaveBeenCalledWith({
       avatarColor: expect.any(String),
       displayName: 'Ada',

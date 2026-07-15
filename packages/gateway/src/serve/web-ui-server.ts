@@ -1,4 +1,5 @@
 import http from 'node:http';
+import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { AddressInfo } from 'node:net';
@@ -64,6 +65,24 @@ function fileFor(rootDir: string, pathname: string): string | undefined {
   return resolved === root || resolved.startsWith(`${root}${path.sep}`) ? resolved : undefined;
 }
 
+function stampShellNonce(bytes: Buffer, nonce: string): Buffer {
+  let html = bytes.toString('utf8').replace(/<script\b([^>]*)>/gi, (tag, attributes: string) => {
+    if (/\bnonce\s*=/i.test(attributes)) return tag;
+    return `<script${attributes} nonce="${nonce}">`;
+  });
+  const marker = `<meta name="centraid-csp-nonce" content="${nonce}">`;
+  const head = /<head\b[^>]*>/i.exec(html);
+  if (head) {
+    const at = head.index + head[0].length;
+    html = html.slice(0, at) + marker + html.slice(at);
+  } else {
+    const doctype = /<!doctype\s+html\s*>/i.exec(html);
+    const at = doctype ? doctype.index + doctype[0].length : 0;
+    html = html.slice(0, at) + marker + html.slice(at);
+  }
+  return Buffer.from(html, 'utf8');
+}
+
 export async function startWebUiServer(options: WebUiServerOptions): Promise<WebUiServerHandle> {
   const host = options.host ?? '127.0.0.1';
   const server = http.createServer((req, res) => {
@@ -100,6 +119,8 @@ export async function startWebUiServer(options: WebUiServerOptions): Promise<Web
       res.setHeader('x-content-type-options', 'nosniff');
       res.setHeader('referrer-policy', 'no-referrer');
       if (extension === '.html') {
+        const scriptNonce = crypto.randomBytes(16).toString('base64');
+        bytes = stampShellNonce(bytes, scriptNonce);
         // The PWA's headline feature is ticket-only, relay-only Iroh/WASM
         // pairing/transport. That requires three relaxations vs. a plain
         // static-app CSP:
@@ -108,12 +129,16 @@ export async function startWebUiServer(options: WebUiServerOptions): Promise<Web
         //   - `https:`/`wss:` in `connect-src` so browser Iroh (relay-only) can
         //     open its `wss://` WebSocket + HTTP to the n0 relay. Broad `wss:`/
         //     `https:` is acceptable for a self-hosted personal gateway.
-        //   - `'self'` in `frame-src` so Iroh-mode generated apps loading from
-        //     the same-origin virtual `/__centraid_iroh__/...` URL can iframe.
-        //     `${apiOrigin}` stays for direct-HTTP mode.
+        //   - `data:` in `frame-src` plus the response nonce and `blob:` in
+        //     `script-src` for the self-contained, opaque-origin app document.
+        //     Data documents inherit this policy container, so their inlined
+        //     scripts carry the shell nonce and query modules use blob URLs.
+        //     The shell itself retains nonce-only inline execution; it never
+        //     admits `unsafe-inline`. `${apiOrigin}` stays for naturally
+        //     cross-origin direct-HTTP mode.
         res.setHeader(
           'content-security-policy',
-          `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ${apiOrigin} https: wss:; frame-src 'self' ${apiOrigin}; object-src 'none'; base-uri 'self'; frame-ancestors 'none'`,
+          `default-src 'self'; script-src 'self' 'nonce-${scriptNonce}' blob: 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data: blob:; connect-src 'self' ${apiOrigin} https: wss:; frame-src 'self' data: ${apiOrigin}; object-src blob:; base-uri 'self'; frame-ancestors 'none'`,
         );
       }
       res.writeHead(200);

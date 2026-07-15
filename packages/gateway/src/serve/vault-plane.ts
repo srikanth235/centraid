@@ -40,6 +40,7 @@ import {
   purposeConceptId,
   clearAllScopeTombstones,
   clearScopeTombstones,
+  deleteReplicaIntentOutcomesForDevice,
   closeObsoleteScopeRequest,
   getOpenScopeRequest,
   hasGrantHistory,
@@ -75,6 +76,7 @@ import {
   registerSyncCommands,
   registerTallyCommands,
   registerTaskCommands,
+  pruneReplicaChanges,
   type AgentSummary,
   type AppSummary,
   type ChangesRequest,
@@ -126,6 +128,7 @@ import {
   type PickerRequest,
 } from './vault-picker.js';
 import { applyRestoreQuarantine, type QuarantineStatus } from './vault-quarantine.js';
+import { replicaIntentContext } from './replica-intent-context.js';
 
 /** Blob-sweep failure backoff (issue #367 §C5) — one step per consecutive failure, flat-capped. */
 const BLOB_SWEEP_BACKOFF_STEP_MS = 60_000;
@@ -894,6 +897,11 @@ export class VaultPlane {
     return this.gateway.confirm(this.ownerCredential, invocationId, approve);
   }
 
+  /** Remove every durable offline-intent outcome owned by a revoked device. */
+  forgetReplicaDevice(deviceId: string): number {
+    return deleteReplicaIntentOutcomesForDevice(this.db.vault, deviceId);
+  }
+
   /**
    * The outbox surface (issue #306): items as the owner reads them — the
    * artifact itself, WHO staged it, and where it would go. Host-plane
@@ -1442,6 +1450,9 @@ export class VaultPlane {
    * a stale worker could keep using.
    */
   bridgeFor(appId: string): VaultBridge {
+    // Dispatcher construction happens inside the replica-intent async scope.
+    // Capture it here so worker-message scheduling cannot lose the binding.
+    const replicaIntent = replicaIntentContext();
     return async (call): Promise<VaultCallResult> => {
       const app = lookupAppByName(this.db, appId);
       if (!app) {
@@ -1465,7 +1476,10 @@ export class VaultPlane {
           case 'search':
             return this.gateway.search(cred, call.payload as unknown as SearchRequest);
           case 'invoke':
-            return this.gateway.invoke(cred, call.payload as unknown as InvokeRequest);
+            return this.gateway.invoke(cred, {
+              ...(call.payload as unknown as InvokeRequest),
+              ...(replicaIntent?.appId === appId ? { intentId: replicaIntent.intentId } : {}),
+            });
           case 'query':
             return this.gateway.queryView(
               cred,
@@ -1681,6 +1695,20 @@ export class VaultPlane {
             `contentPurged=${result.contentPurged} notesPurged=${result.notesPurged} ` +
             `documentsPurged=${result.documentsPurged} retentionDeleted=${result.retentionDeleted} ` +
             `blobsReclaimed=${result.blobsReclaimed} stagingExpired=${result.stagingExpired}`,
+        );
+      }
+      const replicaPrune = pruneReplicaChanges(this.db.vault);
+      if (
+        replicaPrune.expired +
+          replicaPrune.compacted +
+          replicaPrune.overflow +
+          replicaPrune.discardedPriorEpochs >
+        0
+      ) {
+        this.logger.info(
+          `vault plane: replica prune expired=${replicaPrune.expired} ` +
+            `compacted=${replicaPrune.compacted} overflow=${replicaPrune.overflow} ` +
+            `priorEpochs=${replicaPrune.discardedPriorEpochs} retained=${replicaPrune.retained}`,
         );
       }
       // Blob custody maintenance (issue #296): replicate to the remote tier

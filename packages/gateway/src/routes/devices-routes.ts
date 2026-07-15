@@ -58,6 +58,14 @@ interface DeviceDTO {
   addedAt?: string;
   lastUsedAt?: string;
   current?: boolean;
+  trust: 'full' | 'readonly' | 'revoked';
+  rememberDevice: boolean;
+  checkpoint?: {
+    epoch: string;
+    seq: number;
+    schemaEpoch: number;
+    updatedAt: string;
+  };
 }
 
 export interface DevicesRouteDeps {
@@ -73,6 +81,8 @@ export interface DevicesRouteDeps {
    * has an endpoint (or on the desktop embed).
    */
   endpointTicket?: () => string | undefined;
+  /** Purge vault-local protocol state owned by removed enrollment rows. */
+  onRevoked?: (rows: DeviceEnrollment[]) => void;
 }
 
 /** The caller's device key when it authorized as the device plane, else undefined (admin). */
@@ -195,6 +205,7 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
       // Already gone — idempotent, not an error.
       return sendJson(res, 200, { removed: false });
     }
+    deps.onRevoked?.(removed);
     // A device key that no longer holds ANY enrollment loses its HTTP token
     // too (mirrors device-admin.ts): the ACL bit is gone; the token dies with
     // it. A key still holding another vault's row keeps its token.
@@ -224,6 +235,9 @@ function toDto(
     addedAt: row.addedAt,
     ...(lastUsedAt !== undefined ? { lastUsedAt } : {}),
     current: callerKey !== undefined && row.endpointId === callerKey,
+    trust: row.trust,
+    rememberDevice: row.rememberDevice,
+    ...(row.checkpoint ? { checkpoint: row.checkpoint } : {}),
   };
 }
 

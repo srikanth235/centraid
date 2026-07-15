@@ -15,6 +15,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { VaultDb } from '../db.js';
 import { nowIso } from '../ids.js';
+import { refreshReplicaTriggers } from '../replica/change-log.js';
 import {
   canonicalSpecJson,
   dropExtFtsDdl,
@@ -208,6 +209,10 @@ export function applyExtBand(
         .run(specJson, now, appId, band, spec.name);
       clearColumnCache(prior.physical);
     }
+    // Live ext tables join the durable vault change log before their DDL
+    // transaction becomes visible. Draft tables are intentionally absent
+    // from listVaultEntities and therefore never replicated.
+    refreshReplicaTriggers(db.vault);
     db.vault.exec('COMMIT');
   } catch (err) {
     db.vault.exec('ROLLBACK');
@@ -679,6 +684,7 @@ export function recreateExtTables(db: VaultDb): string[] {
       created.push(row.physical);
     }
   }
+  refreshReplicaTriggers(db.vault);
   return created;
 }
 

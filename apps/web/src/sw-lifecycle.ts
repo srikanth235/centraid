@@ -17,6 +17,24 @@ export async function requestPersistentStorage(): Promise<void> {
 
 export function purgeTunnelCaches(): void {
   navigator.serviceWorker?.controller?.postMessage({ type: 'centraid:purge-tunnel-cache' });
+  // A newly opened page may not be controlled yet. Delete the origin caches
+  // directly as well so a consent downgrade cannot depend on SW timing.
+  if ('caches' in globalThis) {
+    void caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter(
+              (key) =>
+                key.startsWith('centraid-tunnel-assets-') ||
+                key.startsWith('centraid-tunnel-blobs-'),
+            )
+            .map((key) => caches.delete(key)),
+        ),
+      )
+      .catch(() => undefined);
+  }
 }
 
 // A service worker update: the shell's SW calls skipWaiting()+clients.claim(),

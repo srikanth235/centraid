@@ -32,8 +32,14 @@ export interface GatewayConnectFailure {
 export type GatewayConnectResult = GatewayConnectSuccess | GatewayConnectFailure;
 
 export type GatewayPairingInput =
-  | { kind: 'ticket'; ticket: string; label?: string }
-  | { kind: 'ticket-url'; ticket: string; url: string; label?: string }
+  | { kind: 'ticket'; ticket: string; label?: string; rememberDevice?: boolean }
+  | {
+      kind: 'ticket-url';
+      ticket: string;
+      url: string;
+      label?: string;
+      rememberDevice?: boolean;
+    }
   | { kind: 'token'; url: string; token: string; label: string };
 
 // Copy for `redeemGatewayPairing`'s stable error codes (centraid-api.d.ts).
@@ -89,8 +95,18 @@ export async function connectGateway(input: GatewayPairingInput): Promise<Gatewa
   }
   const res = await window.CentraidApi.redeemGatewayPairing(
     input.kind === 'ticket-url'
-      ? { label: input.label, mode: 'http', ticket: input.ticket, url: input.url }
-      : { label: input.label, ticket: input.ticket },
+      ? {
+          label: input.label,
+          mode: 'http',
+          rememberDevice: input.rememberDevice ?? false,
+          ticket: input.ticket,
+          url: input.url,
+        }
+      : {
+          label: input.label,
+          rememberDevice: input.rememberDevice ?? false,
+          ticket: input.ticket,
+        },
   );
   return foldRedeemResult(res);
 }

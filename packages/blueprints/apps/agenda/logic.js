@@ -5,6 +5,12 @@
 // same factory shape tasks/logic.js and notes/logic.js use.
 import { debounce, outcomeMessage, toast } from './kit.js';
 import { colorForCalendar } from './format.js';
+import {
+  clearPendingState,
+  reconcilePendingChange,
+  settlePendingChange,
+  trackPendingOutcome,
+} from './pending.js';
 
 export function createLogic({ state, data, render, refresh }) {
   function notice(text) {
@@ -40,8 +46,19 @@ export function createLogic({ state, data, render, refresh }) {
   }
 
   function clearPending() {
-    state.pendingIds.clear();
-    state.pendingCancelIds.clear();
+    clearPendingState(state);
+  }
+
+  function trackPending(eventId, kind, outcome) {
+    return trackPendingOutcome(state, eventId, kind, outcome);
+  }
+
+  function settlePending(detail) {
+    return settlePendingChange(state, detail);
+  }
+
+  function reconcilePending(detail, managed) {
+    return reconcilePendingChange(state, detail, managed);
   }
 
   function colorFor(calendarId) {
@@ -53,17 +70,17 @@ export function createLogic({ state, data, render, refresh }) {
   }
 
   /** Like write(), but returns the raw outcome for callers that narrate + refresh themselves. */
-  async function act(action, input) {
+  async function act(action, input, optimistic) {
     try {
-      return await window.centraid.write({ action, input });
+      return await window.centraid.write({ action, input, optimistic });
     } catch (err) {
       notice(String(err?.message ?? err));
       return undefined;
     }
   }
 
-  async function write(action, input) {
-    const outcome = await act(action, input);
+  async function write(action, input, optimistic) {
+    const outcome = await act(action, input, optimistic);
     const executed = narrate(outcome);
     if (executed || outcome?.status === 'denied') await refresh();
     else render();
@@ -81,6 +98,8 @@ export function createLogic({ state, data, render, refresh }) {
         undoLabel: newId ? 'Undo' : undefined,
         onUndo: newId ? () => write('cancel-event', { event_id: newId }) : undefined,
       });
+    } else if (outcome?.status === 'queued' || outcome?.status === 'in-flight') {
+      toast('Event saved on this device — it will sync when the gateway is reachable.');
     }
     return outcome;
   }
@@ -90,26 +109,63 @@ export function createLogic({ state, data, render, refresh }) {
     if (outcome?.status === 'executed') {
       logActivity(eventId, 'Rescheduled', outcome);
       toast('Event moved · receipt');
-    } else if (outcome?.status === 'parked') {
-      state.pendingIds.add(eventId);
-      logActivity(eventId, 'Move asked — parked for the owner', outcome);
-      toast('Sent to the owner for confirmation — it stays at its current time until approved.', {
-        duration: 7000,
-      });
+    } else if (
+      outcome?.status === 'parked' ||
+      outcome?.status === 'queued' ||
+      outcome?.status === 'in-flight'
+    ) {
+      trackPending(eventId, 'reschedule', outcome);
+      logActivity(
+        eventId,
+        outcome.status === 'parked' ? 'Move asked — parked for the owner' : 'Move saved locally',
+        outcome,
+      );
+      toast(
+        outcome.status === 'parked'
+          ? 'Sent to the owner for confirmation — it stays at its current time until approved.'
+          : 'Move saved on this device — it will sync when the gateway is reachable.',
+        { duration: 7000 },
+      );
+      render();
     }
     return outcome;
   }
 
   async function respondRsvp(eventId, partyId, partstat) {
-    const outcome = await write('rsvp', { event_id: eventId, party_id: partyId, partstat });
+    const attendee = findEvent(eventId)?.attendees?.find((item) => item.party_id === partyId);
+    const optimistic = attendee?.attendee_id
+      ? [
+          {
+            op: 'upsert',
+            entity: 'schedule.attendee',
+            rowId: attendee.attendee_id,
+            values: { partstat, responded_at: new Date().toISOString() },
+            purpose: 'dpv:ServiceProvision',
+          },
+        ]
+      : [];
+    const outcome = await write(
+      'rsvp',
+      { event_id: eventId, party_id: partyId, partstat },
+      optimistic,
+    );
     if (outcome?.status === 'executed') {
       const label =
         partstat === 'accepted' ? 'Going' : partstat === 'declined' ? 'Not going' : 'Maybe';
       logActivity(eventId, `RSVP: ${label}`, outcome);
       toast(`RSVP recorded: ${label} · receipt`);
-    } else if (outcome?.status === 'parked') {
-      state.pendingIds.add(eventId);
-      toast('Sent to the owner for confirmation.');
+    } else if (
+      outcome?.status === 'parked' ||
+      outcome?.status === 'queued' ||
+      outcome?.status === 'in-flight'
+    ) {
+      trackPending(eventId, 'rsvp', outcome);
+      toast(
+        outcome.status === 'parked'
+          ? 'Sent to the owner for confirmation.'
+          : 'RSVP saved on this device — it will sync when the gateway is reachable.',
+      );
+      render();
     }
     return outcome;
   }
@@ -117,13 +173,25 @@ export function createLogic({ state, data, render, refresh }) {
   async function cancelEvent(eventId) {
     const outcome = await act('cancel-event', { event_id: eventId });
     const executed = narrate(outcome);
-    if (outcome?.status === 'parked') {
-      state.pendingIds.add(eventId);
-      state.pendingCancelIds.add(eventId);
-      logActivity(eventId, 'Cancellation asked — parked for the owner', outcome);
-      toast('Sent to the owner for confirmation — it stays on the agenda until approved.', {
-        duration: 7000,
-      });
+    if (
+      outcome?.status === 'parked' ||
+      outcome?.status === 'queued' ||
+      outcome?.status === 'in-flight'
+    ) {
+      trackPending(eventId, 'cancel', outcome);
+      logActivity(
+        eventId,
+        outcome.status === 'parked'
+          ? 'Cancellation asked — parked for the owner'
+          : 'Cancellation saved offline',
+        outcome,
+      );
+      toast(
+        outcome.status === 'parked'
+          ? 'Sent to the owner for confirmation — it stays on the agenda until approved.'
+          : 'Cancellation saved on this device — it will sync when the gateway is reachable.',
+        { duration: 7000 },
+      );
       render();
     } else if (executed) {
       logActivity(eventId, 'Cancelled', outcome);
@@ -196,6 +264,8 @@ export function createLogic({ state, data, render, refresh }) {
     findEvent,
     logActivity,
     clearPending,
+    settlePending,
+    reconcilePending,
     proposeEvent,
     rescheduleEvent,
     respondRsvp,

@@ -48,11 +48,15 @@ export interface GatewayPairRequest {
   secret: string;
   deviceName: string;
   platform: string;
+  rememberDevice?: boolean;
+  trust?: 'full' | 'readonly';
 }
 
 export interface GatewayPairResponse {
   ok: boolean;
   error?: string;
+  /** Stable sovereign gateway EndpointId; relay-bearing tickets may rotate. */
+  gatewayId?: string;
   /** Owner-facing gateway name. */
   gatewayName?: string;
   /** The vault the redeemed ticket enrolled the device into. */

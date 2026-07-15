@@ -63,6 +63,7 @@ function attendeesByEvent(attendees, nameById, mePartyId) {
   for (const a of attendees) {
     if (!byEvent.has(a.event_id)) byEvent.set(a.event_id, []);
     byEvent.get(a.event_id).push({
+      attendee_id: a.attendee_id,
       party_id: a.party_id,
       name: nameById.get(a.party_id) ?? 'Guest',
       partstat: a.partstat,

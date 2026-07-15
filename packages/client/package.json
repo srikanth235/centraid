@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./boot": "./src/react/boot.tsx",
+    "./replica": "./src/replica/index.ts",
     "./styles.css": "./src/styles.css"
   },
   "scripts": {
@@ -15,6 +16,7 @@
   },
   "dependencies": {
     "@centraid/design-tokens": "workspace:*",
+    "@sqlite.org/sqlite-wasm": "3.53.0-build1",
     "react": "19.1.0",
     "react-dom": "19.1.0"
   },

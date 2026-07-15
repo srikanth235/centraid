@@ -8,6 +8,7 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import {
   BackupProviderError,
   createKeyring,
@@ -28,6 +29,7 @@ import {
 import {
   ONTOLOGY_VERSION,
   VAULT_MIGRATIONS,
+  bumpReplicaEpoch,
   verifyRestoredPair,
   type RemoteTier,
 } from '@centraid/vault';
@@ -67,7 +69,16 @@ const DAY_MS = 24 * HOUR_MS;
 const WAL_DRAIN_MS = 60 * 1000;
 /** Restore-verification cadence + staleness alarm (issue #408 G9). */
 const RESTORE_VERIFY_EVERY_MS = 7 * DAY_MS;
-/** Bounded wait for the in-flight run at stop() — see stop()'s doc. */
+
+/** A materialized restore is a new replica history, never a continuation. */
+function invalidateRestoredReplica(destDir: string): void {
+  const vault = new DatabaseSync(path.join(destDir, 'vault.db'));
+  try {
+    bumpReplicaEpoch(vault, { reason: 'backup-restore' });
+  } finally {
+    vault.close();
+  }
+}
 
 export function buildBackupProvider(config: BackupProviderConfig): BackupProvider {
   return config.kind === 'local'
@@ -1143,6 +1154,9 @@ export class BackupService {
         ontologyVersion: ONTOLOGY_VERSION,
       },
     });
+    // Exactly once, after the base + selected WAL prefix are materialized
+    // and before the restored directory can be adopted or lazy-warmed.
+    invalidateRestoredReplica(opts.destDir);
     if (!lazy) return result;
     // The DB is restored and WAL-replayed; the grid is only USABLE once its
     // tinies are local. Measure new-device time-to-usable-grid from here.

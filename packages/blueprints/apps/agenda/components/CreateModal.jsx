@@ -121,7 +121,12 @@ export function CreateModal({ calendars, prefill, onClose, onSubmit }) {
       ...(conferencingUri.trim() ? { conferencing_uri: conferencingUri.trim() } : {}),
     });
     setBusy(false);
-    if (outcome?.status === 'executed' || outcome?.status === 'denied') {
+    if (
+      outcome?.status === 'executed' ||
+      outcome?.status === 'parked' ||
+      outcome?.status === 'queued' ||
+      outcome?.status === 'in-flight'
+    ) {
       onClose();
       return;
     }

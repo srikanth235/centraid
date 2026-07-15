@@ -286,12 +286,14 @@ test('a handler error echoing a sealed input reaches journal and response scrubb
 
 // ── transcript-sensitive derivative output (issue #298 item 6) ──────────
 
-test('totp_code returns the live code but redacts it from the durable journal receipt', () => {
+test('totp_code returns the live code but receipts only a replay-safe redaction', () => {
   const itemId = addLogin();
+  const invocationId = 'ordinary-totp-replay';
   const out = gw.invoke(owner, {
     command: 'locker.totp_code',
     input: { item_id: itemId },
     purpose: PURPOSE,
+    invocationId,
   });
   expect(out.status).toBe('executed');
   const code = (out as { output: { code: string } }).output.code;
@@ -302,23 +304,45 @@ test('totp_code returns the live code but redacts it from the durable journal re
     .prepare('SELECT detail_json FROM consent_receipt ORDER BY receipt_id DESC LIMIT 1')
     .get() as { detail_json: string };
   expect(receipt.detail_json).not.toContain(code);
-  expect(receipt.detail_json).toContain('transcript-sensitive');
+  expect(JSON.parse(receipt.detail_json)).toMatchObject({
+    output: { redacted: 'transcript-sensitive derivative (issue #298 item 6)' },
+  });
+  const replay = gw.invoke(owner, {
+    command: 'locker.totp_code',
+    input: { item_id: itemId },
+    purpose: PURPOSE,
+    invocationId,
+  });
+  expect(replay).toMatchObject({
+    status: 'replayed',
+    output: { redacted: 'transcript-sensitive derivative (issue #298 item 6)' },
+  });
 });
 
-test('a normal command still stores its output in the receipt', () => {
+test('a normal online command preserves its receipt and replay output', () => {
   const itemId = addLogin();
-  gw.invoke(owner, {
+  const invocationId = 'ordinary-star-replay';
+  const first = gw.invoke(owner, {
     command: 'locker.star_item',
     input: { item_id: itemId },
     purpose: PURPOSE,
+    invocationId,
   });
+  expect(first).toMatchObject({ status: 'executed', output: { item_id: itemId } });
   const receipt = db.journal
     .prepare(
       "SELECT detail_json FROM consent_receipt WHERE action = 'act locker.star_item' ORDER BY receipt_id DESC LIMIT 1",
     )
     .get() as { detail_json: string } | undefined;
-  expect(receipt?.detail_json).toContain('output');
+  expect(JSON.parse(receipt?.detail_json ?? '{}')).toMatchObject({ output: { item_id: itemId } });
   expect(receipt?.detail_json).not.toContain('transcript-sensitive');
+  const replay = gw.invoke(owner, {
+    command: 'locker.star_item',
+    input: { item_id: itemId },
+    purpose: PURPOSE,
+    invocationId,
+  });
+  expect(replay).toMatchObject({ status: 'replayed', output: { item_id: itemId } });
 });
 
 // ── stable connector aliases (issue #298 item 4) ────────────────────────

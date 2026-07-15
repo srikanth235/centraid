@@ -31,6 +31,8 @@ export interface SshConnectInput {
   dataDir?: string;
   remoteCli?: string;
   label?: string;
+  /** Explicit consent for durable replica, outbox, and media state. */
+  rememberDevice?: boolean;
   vault: SshVaultSelection;
 }
 
@@ -49,11 +51,16 @@ export async function sshEnrollIntoVault(
   profile: SshHostProfile,
   vaultId: string,
   label: string | undefined,
+  rememberDevice = false,
 ): Promise<SshConnectResult> {
   const paired = await sshPair(profile, vaultId, SSH_PAIR_TTL_MINUTES);
   if (!paired.ok) return { ok: false, error: paired.error, message: paired.message };
 
-  const redeemed = await redeemGatewayPairing({ ticket: paired.value.ticket, label });
+  const redeemed = await redeemGatewayPairing({
+    ticket: paired.value.ticket,
+    label,
+    rememberDevice,
+  });
   if (!redeemed.ok) return { ok: false, error: redeemed.error, message: redeemed.message };
 
   // Best-effort: the pairing itself already succeeded (device is enrolled,
@@ -93,7 +100,7 @@ export async function sshConnectGateway(input: SshConnectInput): Promise<SshConn
     } else {
       vaultId = input.vault.vaultId;
     }
-    return await sshEnrollIntoVault(profile, vaultId, input.label);
+    return await sshEnrollIntoVault(profile, vaultId, input.label, input.rememberDevice === true);
   } catch (err) {
     return {
       ok: false,

@@ -84,6 +84,64 @@ function transformJsxLikeTheGateway(source: string, depth: number): string {
 
 const DENIED = { vaultDenied: { message: 'Grant revoked.' } };
 
+const AGENDA_EVENT_ID = 'event-airplane';
+const AGENDA_INTENT_ID = 'intent-airplane-cancel';
+const AGENDA_TITLE = 'Airplane-mode planning';
+const PHOTO_ASSET_ID = 'asset-airplane';
+const PHOTO_TITLE = 'Airplane-mode photo';
+
+/** Populated, clone-safe rows shaped exactly like each app's local query. */
+function replicaFixture(app: string): unknown {
+  if (app === 'agenda') {
+    return {
+      events: [
+        {
+          event_id: AGENDA_EVENT_ID,
+          calendar_id: 'calendar-local',
+          summary: AGENDA_TITLE,
+          description: 'Already present in the local replica.',
+          dtstart: '2099-01-15T09:00:00.000Z',
+          dtend: '2099-01-15T10:00:00.000Z',
+          status: 'confirmed',
+          attendees: [],
+          attachments: [],
+        },
+      ],
+      calendars: [{ calendar_id: 'calendar-local', name: 'Local calendar', color: '#6f5bf6' }],
+    };
+  }
+  if (app === 'photos') {
+    return {
+      assets: [
+        {
+          asset_id: PHOTO_ASSET_ID,
+          content_id: 'content-airplane',
+          title: PHOTO_TITLE,
+          media_type: 'image/gif',
+          content_uri: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
+          thumb_uri: null,
+          preview_uri: null,
+          width: 320,
+          height: 240,
+          taken_at: '2026-07-15T08:00:00.000Z',
+          favorite: 0,
+          album_ids: ['album-airplane'],
+          album_titles: ['Offline picks'],
+          tags: [],
+          place: null,
+          custody_state: 'available',
+        },
+      ],
+      albums: [{ album_id: 'album-airplane', title: 'Offline picks' }],
+      places: [],
+      trash: [],
+      truncated: false,
+      window: 500,
+    };
+  }
+  return {};
+}
+
 // Handler dirs are node-side modules dispatched by the gateway, never
 // imported by the page — don't copy them into the boot scratch tree.
 const NON_UI_DIRS = new Set(['queries', 'actions', 'automations']);
@@ -112,10 +170,11 @@ function bodyOf(app: string) {
 /** Lets a test settle an app's un-awaited `refresh()` and its timers. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 80));
 
-export function describeAppBoot(app: string) {
+export function describeAppBoot(app: string, options: { expectLive?: boolean } = {}) {
   describe(`${app} boots`, () => {
     let dir: string;
     let entry: string;
+    let originalFetch: typeof fetch;
     const errors: unknown[] = [];
     const intervals: unknown[] = [];
     const push = (e: unknown) => errors.push(e);
@@ -126,6 +185,7 @@ export function describeAppBoot(app: string) {
     };
 
     beforeAll(() => {
+      originalFetch = globalThis.fetch;
       // Inside the package, not os.tmpdir(): vite resolves the dynamic import
       // below and refuses to load a module outside the project root.
       dir = path.join(PKG, '.app-boot', app);
@@ -189,26 +249,171 @@ export function describeAppBoot(app: string) {
     });
 
     afterAll(() => {
+      globalThis.fetch = originalFetch;
       for (const id of intervals) clearInterval(id);
       process.off('unhandledRejection', push);
       process.off('uncaughtException', push);
       rmSync(dir, { recursive: true, force: true });
     });
 
-    it('renders an empty granted vault, survives revoke, and re-renders', async () => {
+    it('renders its replica while offline, survives revoke, and re-renders', async () => {
       document.body.innerHTML = bodyOf(app);
-      // Granted but empty: every collection falls back to []. Drives the real
-      // template commit and the one-shot mount guards over the boot skeleton.
-      let response: unknown = {};
+      if (app === 'agenda') {
+        // Schedule view renders the populated fixture independent of the
+        // machine's current month, keeping this browser journey deterministic.
+        document.documentElement.dataset.appDefaultView = 'schedule';
+      }
+      const granted = options.expectLive ? replicaFixture(app) : {};
+      let response: unknown = granted;
+      let nextReadError: Error | undefined;
+      let readCalls = 0;
+      const networkCalls: unknown[] = [];
+      const writeCalls: unknown[] = [];
+      const live = new Set<(value: unknown) => void>();
+      const changes = new Set<(detail: unknown) => void>();
+      Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
+      globalThis.fetch = async (...args: unknown[]) => {
+        networkCalls.push(args[0]);
+        throw new Error('synthetic airplane mode');
+      };
       window.centraid = {
         appId: app,
-        read: async () => response,
-        write: async () => ({}),
+        read: () => {
+          readCalls += 1;
+          const error = nextReadError;
+          nextReadError = undefined;
+          const result = error
+            ? Promise.reject(new Error(error.message))
+            : Promise.resolve(response);
+          result.subscribe = (listener: (value: unknown) => void) => {
+            live.add(listener);
+            void result.then(listener, () => undefined);
+            return () => live.delete(listener);
+          };
+          return result;
+        },
+        write: async (request: unknown) => {
+          writeCalls.push(request);
+          if (app === 'agenda' && (request as { action?: string }).action === 'cancel-event') {
+            return { status: 'queued', intentId: AGENDA_INTENT_ID };
+          }
+          return {};
+        },
+        onChange: (listener: (detail: unknown) => void) => {
+          changes.add(listener);
+          return () => changes.delete(listener);
+        },
       };
 
       await import(pathToFileURL(path.join(dir, entry)).href);
       await settle();
-      expectNoErrors('rendering an empty granted vault');
+      expectNoErrors('rendering its granted replica in airplane mode');
+
+      if (options.expectLive) {
+        const bootReads = readCalls;
+        expect(bootReads, `${app} issued an unbounded initial read fanout`).toBeLessThanOrEqual(2);
+        expect(networkCalls, `${app} blocked local paint on the network`).toEqual([]);
+        expect(live.size, `${app} never subscribed to its replica read`).toBeGreaterThan(0);
+
+        if (app === 'agenda') {
+          const event = document.querySelector('.ag-sched-title');
+          expect(event?.textContent).toBe(AGENDA_TITLE);
+          event?.closest('button')?.click();
+          await settle();
+          const cancel = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
+            (button) => button.textContent?.trim() === 'Ask to cancel',
+          );
+          expect(cancel, 'populated Agenda event did not open its drawer').toBeTruthy();
+          cancel?.click();
+          cancel?.click();
+          await settle();
+          expect(writeCalls).toEqual([
+            { action: 'cancel-event', input: { event_id: AGENDA_EVENT_ID }, optimistic: undefined },
+          ]);
+          expect(readCalls, 'offline interaction unexpectedly re-read the replica').toBe(bootReads);
+          expect(networkCalls, 'offline interaction attempted a network request').toEqual([]);
+          expect(document.querySelector('.kit-pending-chip')?.textContent).toBe('cancel asked');
+          expect(document.body.textContent).toContain(AGENDA_TITLE);
+
+          // Reconnect admission parks the exact queued intent: the event stays
+          // canonical and the chip remains until a terminal owner decision.
+          Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
+          for (const listener of changes) {
+            listener({
+              tables: ['core.event'],
+              source: 'overlay',
+              intentId: AGENDA_INTENT_ID,
+              intentState: 'parked',
+            });
+          }
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          expect(document.querySelector('.kit-pending-chip')?.textContent).toBe('cancel asked');
+
+          // An exact denial is the rollback signal: only this chip settles and
+          // the unchanged canonical event remains visible.
+          for (const listener of changes) {
+            listener({
+              tables: ['core.event'],
+              source: 'overlay',
+              intentId: AGENDA_INTENT_ID,
+              intentState: 'denied',
+            });
+          }
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          expect(document.querySelector('.kit-pending-chip')).toBeNull();
+          expect(document.body.textContent).toContain(AGENDA_TITLE);
+          expect(readCalls, 'exact intent settlement unexpectedly re-read the replica').toBe(
+            bootReads,
+          );
+        } else if (app === 'photos') {
+          const tile = document.querySelector(`[data-asset-id="${PHOTO_ASSET_ID}"]`);
+          expect(tile, 'the populated local Photos row did not render').toBeTruthy();
+          expect(tile?.querySelector('img')?.alt).toBe(PHOTO_TITLE);
+        }
+
+        response = DENIED;
+        for (const listener of Array.from(live)) listener(response);
+        await settle();
+        expectNoErrors('applying a denied live replica value');
+        const liveBanner = document.querySelector('#consentBanner');
+        expect(liveBanner, `${app}/index.html lost its #consentBanner`).toBeTruthy();
+        expect(liveBanner.hidden, `${app} ignored a denied live replica value`).toBe(false);
+
+        response = granted;
+        for (const listener of Array.from(live)) listener(response);
+        await settle();
+        expectNoErrors('applying a re-granted live replica value');
+        expect(liveBanner.hidden, `${app} ignored a re-granted live replica value`).toBe(true);
+
+        // A replacement live read can fail before it registers any upstream
+        // dependency. The app must release that dead subscription and let a
+        // later compatibility doorbell retry it.
+        const beforeFailure = readCalls;
+        nextReadError = new Error('synthetic initial replica read failure');
+        if (app === 'photos') {
+          const realNow = Date.now;
+          const afterStaleWindow = realNow() + 31_000;
+          Date.now = () => afterStaleWindow;
+          window.dispatchEvent(new Event('focus'));
+          Date.now = realNow;
+        } else {
+          window.dispatchEvent(new Event('focus'));
+        }
+        await settle();
+        expect(readCalls, `${app} did not attempt the replacement live read`).toBeGreaterThan(
+          beforeFailure,
+        );
+        const afterFailure = readCalls;
+        const table = app === 'photos' ? 'core.content_item' : 'core.event';
+        for (const listener of changes) listener({ tables: [table] });
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        expect(
+          readCalls,
+          `${app} suppressed the compatibility retry after its live read rejected`,
+        ).toBeGreaterThan(afterFailure);
+        expect(live.size, `${app} did not restore a managed live dependency`).toBeGreaterThan(0);
+        return;
+      }
 
       // Revoke: every app clears its containers.
       response = DENIED;

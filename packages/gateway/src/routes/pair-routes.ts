@@ -43,14 +43,26 @@ interface PairRequestBody {
   /** Owner-facing device label. */
   deviceLabel: string;
   platform?: string;
+  /** Persist the replica/intent queue on this device. Omission is an explicit opt-out. */
+  rememberDevice?: boolean;
+  /** A companion may voluntarily enroll read-only; full remains the legacy default. */
+  trust?: 'full' | 'readonly';
 }
 
 function parseBody(body: Record<string, unknown>): PairRequestBody | undefined {
-  const { ticket, deviceLabel, platform } = body;
+  const { ticket, deviceLabel, platform, rememberDevice, trust } = body;
   if (typeof ticket !== 'string' || ticket.length === 0) return undefined;
   if (typeof deviceLabel !== 'string' || deviceLabel.trim().length === 0) return undefined;
   if (platform !== undefined && typeof platform !== 'string') return undefined;
-  return { ticket, deviceLabel, ...(platform !== undefined ? { platform } : {}) };
+  if (rememberDevice !== undefined && typeof rememberDevice !== 'boolean') return undefined;
+  if (trust !== undefined && trust !== 'full' && trust !== 'readonly') return undefined;
+  return {
+    ticket,
+    deviceLabel,
+    ...(platform !== undefined ? { platform } : {}),
+    ...(rememberDevice !== undefined ? { rememberDevice } : {}),
+    ...(trust !== undefined ? { trust } : {}),
+  };
 }
 
 export function makePairRouteHandler(deps: PairRouteDeps): RouteHandler {
@@ -98,11 +110,13 @@ export function makePairRouteHandler(deps: PairRouteDeps): RouteHandler {
     // No iroh identity of its own — mint a synthetic key in the same
     // namespace `EnrollmentStore` rows already key off.
     const deviceKey = `http:${crypto.randomUUID()}`;
-    deps.enrollments.enroll({
+    const enrollment = deps.enrollments.enroll({
       endpointId: deviceKey,
       vaultId: redeemed.vaultId,
       label: body.deviceLabel,
       ...(body.platform !== undefined ? { platform: body.platform } : {}),
+      ...(body.rememberDevice !== undefined ? { rememberDevice: body.rememberDevice } : {}),
+      ...(body.trust !== undefined ? { trust: body.trust } : {}),
     });
     const minted = deps.deviceTokens.mint({ deviceKey, label: body.deviceLabel });
 
@@ -112,6 +126,8 @@ export function makePairRouteHandler(deps: PairRouteDeps): RouteHandler {
       deviceKey,
       vaultId: redeemed.vaultId,
       vaultName: plane.name,
+      trust: enrollment.trust,
+      rememberDevice: enrollment.rememberDevice,
     });
     return true;
   };

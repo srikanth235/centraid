@@ -21,6 +21,8 @@ import type { PreviewCodec } from './blob/preview.js';
 import { S3BlobStore, type S3Credentials } from './blob/s3.js';
 import { registerHammingFn } from './enrich/similarity.js';
 import { asVaultDiskFullError } from './errors.js';
+import { initializeReplicaProtocol } from './replica/change-log.js';
+import { repairReplicaInvocationCommits } from './replica/invocation-commits.js';
 import { registerContentTextFn } from './schema/fts.js';
 import { JOURNAL_MIGRATIONS, migrate, VAULT_MIGRATIONS } from './schema/migrate.js';
 import { ephemeralSealKey, resolveSealKey, sealKeyFileFor } from './schema/sealed.js';
@@ -214,6 +216,22 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   registerHammingFn(vault);
   migrate(vault, VAULT_MIGRATIONS);
   migrate(journal, JOURNAL_MIGRATIONS);
+  // Issue #406: database-level triggers are the durable write choke point.
+  // Install them after each fresh-schema open (including live ext tables
+  // restored from a registry); a replica contract-epoch bump invalidates old
+  // derived state. Trigger inserts share the mutating statement's transaction.
+  initializeReplicaProtocol(vault);
+  // A canonical vault commit can survive a process crash before its derived
+  // journal S5/audit transaction. Drain those durable proofs before returning
+  // handles to any gateway. An unprovable marker fails the open closed and is
+  // retained for diagnosis/recovery; no request is served atop an audit gap.
+  try {
+    repairReplicaInvocationCommits({ vault, journal });
+  } catch (error) {
+    vault.close();
+    journal.close();
+    throw error;
+  }
   // Key custody resolves AFTER migration so the stamped fingerprint (issue
   // #298 item 1) is readable: a vault that has ever sealed refuses to open
   // with a missing or regenerated key, loudly, instead of minting a fresh

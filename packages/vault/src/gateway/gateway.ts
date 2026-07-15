@@ -26,14 +26,14 @@ import { ONTOLOGY_VERSION } from '../schema/migrate.js';
 import { resolveEntity } from '../schema/tables.js';
 import { resolveRefCards, type RefRequest, type ResolveResult } from './cards.js';
 import { evaluateConsent, type ConsentAllow } from './consent.js';
-import { lookupCommand, type CommandRow } from './contract.js';
+import { lookupCommand } from './contract.js';
 import {
   revokeGrantCascade,
   sweepLifecycle,
   type RevocationResult,
   type SweepResult,
 } from './duties.js';
-import { writeExplanation, writeReceipt } from './evidence.js';
+import { writeReceipt } from './evidence.js';
 import {
   insertInvocation,
   invocationExists,
@@ -52,7 +52,12 @@ import {
   stampSealKeyFingerprint,
   unsealValue,
 } from '../schema/sealed.js';
-import { applyFieldMask, compileFilters, compileOrderBy } from './filters.js';
+import {
+  applyFieldMask,
+  compileFilters,
+  compileOrderBy,
+  scalarPrimaryKeyColumn,
+} from './filters.js';
 import { authenticate } from './identity.js';
 import { searchEntity } from './search.js';
 import {
@@ -82,6 +87,16 @@ import {
 import type { ExtTableSpec } from '../schema/ext.js';
 import { exportVault, type VaultExport } from './portability.js';
 import { queryAppView, registerAppView, type ViewDefinition, type ViewResult } from './views.js';
+import {
+  deleteDurableParkedPayloadsForGrant,
+  listDurableParkedPayloads,
+  readDurableParkedDenial,
+  readDurableParkedPayload,
+  recordDurableParkedDenial,
+  saveDurableParkedPayload,
+  settleDurableParkedPayload,
+} from '../replica/parked.js';
+import { transitionReplicaIntentOutcomeInTransaction } from '../replica/intents.js';
 import type {
   ChangeEntry,
   ChangesRequest,
@@ -102,14 +117,6 @@ import type {
   SearchResult,
 } from './types.js';
 import { DEFAULT_PURPOSE, GatewayError } from './types.js';
-
-interface Parked {
-  identity: Identity;
-  request: InvokeRequest;
-  grantId: string | null;
-  command: CommandRow;
-  parkedAt: string;
-}
 
 /**
  * Structural guard for reading `consent.provenance` (issue #352 phase 3/4 —
@@ -164,8 +171,6 @@ function provenanceScopeFailure(
 export class Gateway {
   /** Registered commands: handler + sealed-class declarations (issue #293). */
   private readonly commands = new Map<string, RegisteredCommand>();
-  /** The pause between draft and send is gateway state (§10 standing duties). */
-  private readonly parked = new Map<string, Parked>();
 
   constructor(private readonly db: VaultDb) {}
 
@@ -328,9 +333,19 @@ export class Gateway {
       now,
     );
     const callerFilter = compileFilters(target, ref.physical, request.where ?? [], now);
+    const sealedCols = sealedColumnsOf(request.entity, this.db.vault);
+    const scalarPrimaryKey = scalarPrimaryKeyColumn(target, ref.physical);
+    const exposedPrimaryKey =
+      scalarPrimaryKey !== undefined &&
+      !sealedCols.includes(scalarPrimaryKey) &&
+      (consent.fieldMask === null || consent.fieldMask.includes(scalarPrimaryKey))
+        ? scalarPrimaryKey
+        : undefined;
     // Ordering is what turns a bounded read into a RECENT window (issue
     // #262) — validated like a filter column, so it can't widen anything.
-    const order = compileOrderBy(target, ref.physical, request.orderBy);
+    // An exposed scalar PK is the stable secondary key shared with browser
+    // replicas. Hidden/composite keys stay opaque and local ties rerun here.
+    const order = compileOrderBy(target, ref.physical, request.orderBy, exposedPrimaryKey);
     const select = applyFieldMask(target, ref.physical, consent.fieldMask);
     const limit = Math.min(Math.max(request.limit ?? 1000, 1), 10_000);
     // The automation plane never sees demo data (issue #290 phase 1):
@@ -355,7 +370,6 @@ export class Gateway {
       ) as Record<string, unknown>[];
     // Sealed columns never ride a read (issue #293): default reads show a
     // placeholder; plaintext takes the `reveal` verb and its per-item receipt.
-    const sealedCols = sealedColumnsOf(request.entity, this.db.vault);
     if (sealedCols.length > 0) {
       for (const row of rows) {
         for (const col of sealedCols) {
@@ -722,27 +736,36 @@ export class Gateway {
       .prepare(`SELECT requires_confirmation FROM agent_capability WHERE command_id = ?`)
       .get(command.command_id) as { requires_confirmation: number } | undefined;
     if (identity.kind !== 'owner-device' && capability?.requires_confirmation === 1) {
-      const invocationId = insertInvocation(
-        this.db,
-        request,
-        command,
-        identity,
-        consent.grantId,
-        'proposed',
-        undefined,
-        sealedInput,
-      );
-      this.parked.set(invocationId, {
+      const invocationId = request.invocationId ?? uuidv7();
+      if (!invocationExists(this.db, invocationId)) {
+        insertInvocation(
+          this.db,
+          { ...request, invocationId },
+          command,
+          identity,
+          consent.grantId,
+          'proposed',
+          invocationId,
+          sealedInput,
+        );
+      }
+      const parkedAt = nowIso();
+      const reason = `${command.name} requires owner confirmation (loud on purpose)`;
+      saveDurableParkedPayload(this.db, {
+        invocationId,
+        ...(request.intentId ? { intentId: request.intentId } : {}),
         identity,
         request: { ...request, invocationId },
         grantId: consent.grantId,
-        command,
-        parkedAt: nowIso(),
+        commandId: command.command_id,
+        commandName: command.name,
+        reason,
+        parkedAt,
       });
       return {
         status: 'parked',
         invocationId,
-        reason: `${command.name} requires owner confirmation (loud on purpose)`,
+        reason,
       };
     }
 
@@ -786,31 +809,90 @@ export class Gateway {
     const owner = this.identify(cred);
     if (owner.kind !== 'owner-device')
       throw new GatewayError('consent', 'only the owner confirms parked invocations');
-    const entry = this.parked.get(invocationId);
+    // Journal denial commits before vault settlement. A crash in that gap
+    // leaves the encrypted payload present, but it is no longer executable:
+    // any retry (even an accidental approve) finishes the original denial.
+    const priorDenial = readDurableParkedDenial(this.db, invocationId);
+    if (priorDenial) {
+      const pending = readDurableParkedPayload(this.db, invocationId);
+      if (pending) {
+        settleDurableParkedPayload(
+          this.db,
+          invocationId,
+          pending.intentId
+            ? {
+                intentId: pending.intentId,
+                outcome: {
+                  status: 'denied',
+                  invocationId,
+                  reason: priorDenial.reason,
+                },
+              }
+            : undefined,
+        );
+      }
+      return { status: 'denied', ...priorDenial };
+    }
+    const entry = readDurableParkedPayload(this.db, invocationId);
     if (!entry) throw new GatewayError('contract', `no parked invocation ${invocationId}`);
-    this.parked.delete(invocationId);
-    if (!approve) {
-      setInvocationStatus(this.db, invocationId, 'failed');
-      const receiptId = writeReceipt(this.db.journal, {
-        grantId: entry.grantId,
+    const replayed = replayInvocation(this.db, invocationId);
+    if (replayed?.status === 'replayed') {
+      settleDurableParkedPayload(
+        this.db,
         invocationId,
-        action: `act ${entry.command.name}`,
-        objectType: 'agent.command',
-        objectId: entry.command.command_id,
-        purpose: entry.request.purpose,
-        decision: 'deny',
-        detail: {
-          failing: 'owner denied confirmation',
-          confirmedBy: owner.partyId,
-          confirmedAt: nowIso(),
-        },
-      });
-      writeExplanation(
-        this.db.journal,
-        invocationId,
-        `Owner denied ${entry.command.name} at confirmation.`,
+        entry.intentId
+          ? {
+              intentId: entry.intentId,
+              outcome: { status: 'executed', invocationId },
+            }
+          : undefined,
       );
-      return { status: 'denied', invocationId, receiptId, reason: 'owner denied confirmation' };
+      return replayed;
+    }
+    const command = lookupCommand(this.db.vault, entry.commandName);
+    if (
+      !command ||
+      command.command_id !== entry.commandId ||
+      !this.commands.has(entry.commandName)
+    ) {
+      throw new GatewayError('contract', `handler missing for parked command ${entry.commandName}`);
+    }
+    // A durable confirmation may outlive the grant that originally admitted
+    // it. Re-check at decision time so a crash between revoking the grant and
+    // deleting its parked payload can never let a later approval execute.
+    const decisionAt = nowIso();
+    const grantStillActive =
+      entry.grantId === null ||
+      this.db.vault
+        .prepare(
+          `SELECT 1 AS active FROM consent_access_grant
+            WHERE grant_id = ? AND status = 'active' AND revoked_at IS NULL
+              AND (expires_at IS NULL OR expires_at > ?)`,
+        )
+        .get(entry.grantId, decisionAt) !== undefined;
+    if (!approve || !grantStillActive) {
+      const denialReason = approve ? 'consent grant no longer active' : 'owner denied confirmation';
+      const denial = recordDurableParkedDenial(this.db, {
+        payload: entry,
+        confirmedBy: owner.partyId,
+        confirmedAt: decisionAt,
+        reason: denialReason,
+      });
+      settleDurableParkedPayload(
+        this.db,
+        invocationId,
+        entry.intentId
+          ? {
+              intentId: entry.intentId,
+              outcome: {
+                status: 'denied',
+                invocationId,
+                reason: denialReason,
+              },
+            }
+          : undefined,
+      );
+      return { status: 'denied', ...denial };
     }
     const consent: ConsentAllow = {
       decision: 'allow',
@@ -818,16 +900,34 @@ export class Gateway {
       rowFilter: [],
       fieldMask: null,
     };
-    return runContractAndExecute(
+    const outcome = runContractAndExecute(
       this.db,
       this.commands,
       entry.identity,
       entry.request,
-      entry.command,
+      command,
       consent,
       invocationId,
       { confirmedBy: owner.partyId, confirmedAt: nowIso() },
     );
+    settleDurableParkedPayload(
+      this.db,
+      invocationId,
+      entry.intentId
+        ? {
+            intentId: entry.intentId,
+            outcome: {
+              status:
+                outcome.status === 'executed' || outcome.status === 'replayed'
+                  ? 'executed'
+                  : outcome.status,
+              invocationId,
+              ...('reason' in outcome ? { reason: outcome.reason } : {}),
+            },
+          }
+        : undefined,
+    );
+    return outcome;
   }
 
   /** Standing duty: revocation cascade — owner-only, instant and total. */
@@ -836,15 +936,30 @@ export class Gateway {
     if (owner.kind !== 'owner-device')
       throw new GatewayError('consent', 'only the owner revokes grants');
     const result = revokeGrantCascade(this.db, owner, grantId, (revoked) => {
-      let dropped = 0;
-      for (const [invocationId, entry] of this.parked) {
-        if (entry.grantId === revoked) {
-          this.parked.delete(invocationId);
-          setInvocationStatus(this.db, invocationId, 'failed');
-          dropped += 1;
+      let invocationIds: string[];
+      this.db.vault.exec('BEGIN IMMEDIATE');
+      try {
+        const parked = listDurableParkedPayloads(this.db).filter(
+          (entry) => entry.grantId === revoked,
+        );
+        invocationIds = deleteDurableParkedPayloadsForGrant(this.db, revoked);
+        for (const entry of parked) {
+          if (!entry.intentId) continue;
+          transitionReplicaIntentOutcomeInTransaction(this.db.vault, entry.intentId, {
+            status: 'failed',
+            invocationId: entry.invocationId,
+            reason: 'consent grant revoked while awaiting confirmation',
+          });
         }
+        this.db.vault.exec('COMMIT');
+      } catch (error) {
+        this.db.vault.exec('ROLLBACK');
+        throw error;
       }
-      return dropped;
+      for (const invocationId of invocationIds) {
+        setInvocationStatus(this.db, invocationId, 'failed');
+      }
+      return invocationIds.length;
     });
     // A retained band's write trio goes with the app's access.
     if (result.extRetained.length > 0 && result.appId) {
@@ -1325,9 +1440,9 @@ export class Gateway {
   }
 
   listParked(): ParkedSummary[] {
-    return [...this.parked.entries()].map(([invocationId, p]) => ({
-      invocationId,
-      command: p.command.name,
+    return listDurableParkedPayloads(this.db).map((p) => ({
+      invocationId: p.invocationId,
+      command: p.commandName,
       parkedAt: p.parkedAt,
       callerKind: this.callerKind(p.identity),
       callerId: p.identity.callerId,
@@ -1337,9 +1452,9 @@ export class Gateway {
       // secrets included (issue #298 item 9).
       input: redactCommandInput(
         this.db.sealKey,
-        p.command.name,
+        p.commandName,
         p.request.input,
-        this.commands.get(p.command.name)?.sealedInput ?? [],
+        this.commands.get(p.commandName)?.sealedInput ?? [],
         this.db.vault,
       ),
     }));

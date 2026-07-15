@@ -33,6 +33,7 @@ export interface SshConnectInput {
   destination: string;
   dataDir?: string;
   label?: string;
+  rememberDevice?: boolean;
   vault: SshVaultInput;
 }
 
@@ -141,8 +142,19 @@ async function commitGateway(state: ConnectFlowState): Promise<ConnectFlowResult
       })
     : await connectGateway(
         state.advancedOpen
-          ? { kind: 'ticket-url', label, ticket: state.ticket.trim(), url: state.url.trim() }
-          : { kind: 'ticket', label, ticket: state.ticket.trim() },
+          ? {
+              kind: 'ticket-url',
+              label,
+              rememberDevice: state.rememberDevice,
+              ticket: state.ticket.trim(),
+              url: state.url.trim(),
+            }
+          : {
+              kind: 'ticket',
+              label,
+              rememberDevice: state.rememberDevice,
+              ticket: state.ticket.trim(),
+            },
       );
   if (!result.ok) throw new Error(result.message);
   // Token connects only add + switch the gateway (no ticket payload naming a
@@ -169,6 +181,7 @@ async function commitSsh(state: ConnectFlowState): Promise<ConnectFlowResult> {
     dataDir: state.sshDataDir.trim() || undefined,
     destination: state.sshDestination.trim(),
     label: state.label.trim() || undefined,
+    rememberDevice: state.rememberDevice,
     vault,
   });
   if (!result.ok) throw new Error(friendlyGatewayError(result.error, result.message));

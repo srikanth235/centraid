@@ -11,7 +11,9 @@ async function installFakeBridge(page: import('@playwright/test').Page): Promise
       ifNoneMatch: string | null;
       acceptEncoding: string | null;
     }
-    (window as unknown as { __calls: Call[] }).__calls = [];
+    const fixture = window as unknown as { __calls: Call[]; __bridgeOffline: boolean };
+    fixture.__calls = [];
+    fixture.__bridgeOffline = false;
     async function gzipBytes(bytes: Uint8Array): Promise<Uint8Array> {
       const stream = new Response(bytes).body!.pipeThrough(new CompressionStream('gzip'));
       return new Uint8Array(await new Response(stream).arrayBuffer());
@@ -30,6 +32,61 @@ async function installFakeBridge(page: import('@playwright/test').Page): Promise
         ifNoneMatch,
         acceptEncoding: msg.headers?.['accept-encoding'] ?? null,
       });
+      if (fixture.__bridgeOffline) {
+        port.postMessage({ type: 'error', message: 'synthetic airplane mode' });
+        return;
+      }
+
+      const pathname = new URL(msg.target, 'https://gateway.invalid').pathname;
+      if (pathname === '/centraid/_web/session') {
+        port.postMessage({
+          type: 'head',
+          status: 303,
+          headers: {
+            location: '/centraid/app-fixture/',
+            'set-cookie': '__centraid_app=fake; Path=/centraid/; HttpOnly',
+          },
+        });
+        port.postMessage({ type: 'end' });
+        return;
+      }
+      if (pathname === '/centraid/app-fixture/') {
+        const bytes = new TextEncoder().encode(
+          '<!doctype html><html><head><script type="module" src="_bundle.fixture.js"></script></head><body>offline-app</body></html>',
+        );
+        port.postMessage({
+          type: 'head',
+          status: 200,
+          headers: {
+            'content-type': 'text/html; charset=utf-8',
+            'content-length': String(bytes.length),
+            'cache-control': 'no-store',
+          },
+        });
+        const buffer = bytes.buffer.slice(0);
+        port.postMessage({ type: 'chunk', body: buffer }, [buffer]);
+        port.postMessage({ type: 'end' });
+        return;
+      }
+      if (pathname === '/centraid/app-fixture/_bundle.fixture.js') {
+        const bytes = new TextEncoder().encode(
+          "let blocked=false;try{void parent.document}catch(_){blocked=true}parent.postMessage({type:'sandbox-module-loaded',blocked},'*');",
+        );
+        port.postMessage({
+          type: 'head',
+          status: 200,
+          headers: {
+            'content-type': 'text/javascript',
+            'content-length': String(bytes.length),
+            'cache-control': 'private,max-age=31536000,immutable',
+            etag: '"bundle-etag"',
+          },
+        });
+        const buffer = bytes.buffer.slice(0);
+        port.postMessage({ type: 'chunk', body: buffer }, [buffer]);
+        port.postMessage({ type: 'end' });
+        return;
+      }
 
       // A gzip-encoded asset: the gateway compressed it because the request
       // advertised `accept-encoding: gzip`. The SW must decode it before the
@@ -108,7 +165,7 @@ test.beforeEach(async ({ page }) => {
 test('immutable blobs are served from cache without a second relay round trip', async ({
   page,
 }) => {
-  const url = '/__centraid_iroh__/bridge-a/centraid/_vault/blobs/sha-fixture';
+  const url = '/__centraid_iroh__/d-bridge-a/centraid/_vault/blobs/sha-fixture';
   const first = await page.evaluate((u) => fetch(u).then((r) => r.text()), url);
   expect(first).toBe('BLOBDATA');
 
@@ -123,9 +180,20 @@ test('immutable blobs are served from cache without a second relay round trip', 
   expect(blobCalls.length).toBe(1);
 });
 
-test('assets are served from cache and revalidated with If-None-Match', async ({ page }) => {
-  const url = '/__centraid_iroh__/bridge-a/centraid/app-fixture/app.js';
-  expect(await page.evaluate((u) => fetch(u).then((r) => r.text()), url)).toBe('asset-body');
+test('prewarmed query bundles replay in airplane mode and revalidate with If-None-Match', async ({
+  page,
+}) => {
+  const url = '/__centraid_iroh__/d-bridge-a/centraid/app-fixture/_query/search.mjs';
+  expect(
+    await page.evaluate(
+      (u) =>
+        fetch(u).then(async (r) => ({
+          body: await r.text(),
+          cors: r.headers.get('access-control-allow-origin'),
+        })),
+      url,
+    ),
+  ).toEqual({ body: 'asset-body', cors: '*' });
 
   // Second fetch is served immediately from cache; a background conditional
   // request is issued via the bridge.
@@ -140,12 +208,16 @@ test('assets are served from cache and revalidated with If-None-Match', async ({
     })
     .toBe(true);
 
-  // A 304 keeps the cached bytes intact.
+  // A 304 keeps the cached bytes intact, and the next (first user-visible)
+  // search can import it after the relay disappears.
+  await page.evaluate(() => {
+    (window as unknown as { __bridgeOffline: boolean }).__bridgeOffline = true;
+  });
   expect(await page.evaluate((u) => fetch(u).then((r) => r.text()), url)).toBe('asset-body');
 });
 
 test('gzip-encoded tunnel responses are decoded before caching', async ({ page }) => {
-  const url = '/__centraid_iroh__/bridge-a/centraid/gzip-fixture/asset.js';
+  const url = '/__centraid_iroh__/d-bridge-a/centraid/gzip-fixture/asset.js';
 
   // The page receives the decoded body, not the still-gzipped bytes.
   expect(await page.evaluate((u) => fetch(u).then((r) => r.text()), url)).toBe('gzip-decoded-body');
@@ -163,36 +235,129 @@ test('gzip-encoded tunnel responses are decoded before caching', async ({ page }
   await expect
     .poll(() =>
       page.evaluate(async () => {
-        const cache = await caches.open('centraid-tunnel-assets-v7');
-        const cached = await cache.match(
-          new URL('/centraid/gzip-fixture/asset.js', location.origin).toString(),
-        );
+        const cache = await caches.open('centraid-tunnel-assets-v10');
+        const key = new URL('/centraid/gzip-fixture/asset.js', location.origin);
+        key.searchParams.set('__centraid_scope', 'd-bridge-a');
+        const cached = await cache.match(key.toString());
         if (!cached) return null;
-        return { body: await cached.text(), encoding: cached.headers.get('content-encoding') };
+        return {
+          body: await cached.text(),
+          encoding: cached.headers.get('content-encoding'),
+          length: cached.headers.get('content-length'),
+        };
       }),
     )
-    .toEqual({ body: 'gzip-decoded-body', encoding: null });
+    .toEqual({ body: 'gzip-decoded-body', encoding: null, length: '17' });
 
   // Second fetch is served from that cache entry — still decoded.
   expect(await page.evaluate((u) => fetch(u).then((r) => r.text()), url)).toBe('gzip-decoded-body');
 });
 
+test('remembered app launch, no-store document, and assets replay in airplane mode', async ({
+  page,
+}) => {
+  const launch =
+    '/__centraid_iroh__/d-offline/centraid/_web/session?code=launch-one&theme=dark&bgL=5';
+  const online = await page.evaluate(
+    (u) => fetch(u).then(async (response) => ({ url: response.url, body: await response.text() })),
+    launch,
+  );
+  expect(online.body).toContain('offline-app');
+  expect(new URL(online.url).pathname).toBe('/__centraid_iroh__/d-offline/centraid/app-fixture/');
+
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const cache = await caches.open('centraid-tunnel-assets-v10');
+        const keys = await cache.keys();
+        return keys.filter((key) => key.url.includes('__centraid_scope=d-offline')).length;
+      }),
+    )
+    .toBeGreaterThanOrEqual(2);
+
+  await page.evaluate(() => {
+    (window as unknown as { __bridgeOffline: boolean }).__bridgeOffline = true;
+  });
+  const changedTheme =
+    '/__centraid_iroh__/d-offline/centraid/_web/session?code=launch-one&theme=light&bgL=95';
+  const offline = await page.evaluate(
+    (u) => fetch(u).then(async (response) => ({ url: response.url, body: await response.text() })),
+    changedTheme,
+  );
+  expect(offline.body).toContain('offline-app');
+  expect(new URL(offline.url).pathname).toBe('/__centraid_iroh__/d-offline/centraid/app-fixture/');
+});
+
+test('parent-fetched app bundle runs in an opaque document without shell access', async ({
+  page,
+}) => {
+  const result = await page.evaluate(async (src) => {
+    const response = await fetch(src);
+    const parsed = new DOMParser().parseFromString(await response.text(), 'text/html');
+    const nonce = document
+      .querySelector<HTMLMetaElement>('meta[name="centraid-csp-nonce"]')
+      ?.getAttribute('content');
+    if (!nonce) throw new Error('shell CSP nonce missing');
+    for (const script of parsed.querySelectorAll<HTMLScriptElement>('script[src]')) {
+      const bundle = await fetch(new URL(script.getAttribute('src')!, response.url));
+      script.removeAttribute('src');
+      script.textContent = await bundle.text();
+      script.setAttribute('nonce', nonce);
+    }
+    const csp = parsed.createElement('meta');
+    csp.httpEquiv = 'Content-Security-Policy';
+    csp.content = `default-src 'none'; script-src 'nonce-${nonce}' blob:`;
+    parsed.head.prepend(csp);
+    const html = `<!doctype html>${parsed.documentElement.outerHTML}`;
+    const dataUrl = `data:text/html;charset=utf-8;base64,${btoa(html)}`;
+    return new Promise<{ blocked: boolean; opaque: boolean }>((resolve, reject) => {
+      const timeout = window.setTimeout(() => reject(new Error('sandbox module timeout')), 5000);
+      const onMessage = (event: MessageEvent): void => {
+        if (event.data?.type !== 'sandbox-module-loaded') return;
+        window.clearTimeout(timeout);
+        window.removeEventListener('message', onMessage);
+        resolve({
+          blocked: event.data.blocked === true,
+          opaque: frame.contentDocument === null,
+        });
+      };
+      window.addEventListener('message', onMessage);
+      const frame = document.createElement('iframe');
+      frame.setAttribute('sandbox', 'allow-scripts');
+      frame.src = dataUrl;
+      document.body.append(frame);
+    });
+  }, '/__centraid_iroh__/d-sandbox/centraid/_web/session?code=sandbox-one');
+  expect(result).toEqual({ blocked: true, opaque: true });
+});
+
+test('ephemeral bridge scopes neither read nor write tunnel caches', async ({ page }) => {
+  const url = '/__centraid_iroh__/e-private/centraid/app-fixture/app.js';
+  expect(await page.evaluate((u) => fetch(u).then((r) => r.text()), url)).toBe('asset-body');
+  await page.evaluate(() => {
+    (window as unknown as { __bridgeOffline: boolean }).__bridgeOffline = true;
+  });
+  expect(await page.evaluate((u) => fetch(u).then((r) => r.status), url)).toBe(502);
+});
+
 test('unpair purges the tunnel caches but keeps the shell cache', async ({ page }) => {
   await page.evaluate(
     (u) => fetch(u).then((r) => r.text()),
-    '/__centraid_iroh__/b/centraid/_vault/blobs/x',
+    '/__centraid_iroh__/d-b/centraid/_vault/blobs/x',
   );
 
-  await expect.poll(() => page.evaluate(() => caches.has('centraid-tunnel-blobs-v7'))).toBe(true);
+  await expect.poll(() => page.evaluate(() => caches.has('centraid-tunnel-blobs-v10'))).toBe(true);
 
   await page.evaluate(() =>
     navigator.serviceWorker.controller?.postMessage({ type: 'centraid:purge-tunnel-cache' }),
   );
 
-  await expect.poll(() => page.evaluate(() => caches.has('centraid-tunnel-blobs-v7'))).toBe(false);
-  await expect.poll(() => page.evaluate(() => caches.has('centraid-tunnel-assets-v7'))).toBe(false);
+  await expect.poll(() => page.evaluate(() => caches.has('centraid-tunnel-blobs-v10'))).toBe(false);
+  await expect
+    .poll(() => page.evaluate(() => caches.has('centraid-tunnel-assets-v10')))
+    .toBe(false);
   // The generic shell cache is not gateway-specific and survives an unpair.
-  expect(await page.evaluate(() => caches.has('centraid-shell-v7'))).toBe(true);
+  expect(await page.evaluate(() => caches.has('centraid-shell-v10'))).toBe(true);
 });
 
 test('a fresh worker install purges stale-version caches', async ({ page }) => {
@@ -211,5 +376,5 @@ test('a fresh worker install purges stale-version caches', async ({ page }) => {
   });
 
   await expect.poll(() => page.evaluate(() => caches.has('centraid-shell-legacy'))).toBe(false);
-  expect(await page.evaluate(() => caches.has('centraid-shell-v7'))).toBe(true);
+  expect(await page.evaluate(() => caches.has('centraid-shell-v10'))).toBe(true);
 });

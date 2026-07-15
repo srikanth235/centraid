@@ -32,7 +32,7 @@ const ok = (at: number, extra: Partial<GatewayProbe> = {}): GatewayProbe => ({
   gatewayStartedAt: T0 - 60_000,
   gatewayUptimeMs: at - (T0 - 60_000),
   version: '0.1.0',
-  schemaEpoch: 1,
+  schemaEpoch: EXPECTED_SCHEMA_EPOCH,
   ...extra,
 });
 const fail = (at: number, detail = 'fetch failed'): GatewayProbe => ({ at, ok: false, detail });

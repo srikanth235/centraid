@@ -80,6 +80,8 @@ export interface ConnectFlowState {
   credMode: GatewayCredMode;
   url: string;
   token: string;
+  /** Explicit consent for a durable replica, intent queue, and media cache. */
+  rememberDevice: boolean;
 
   // "ssh" method details.
   sshDestination: string;
@@ -111,6 +113,7 @@ export function createInitialConnectFlowState(): ConnectFlowState {
     newVaultName: '',
     report: null,
     result: null,
+    rememberDevice: false,
     sshDataDir: '',
     sshDestination: '',
     step: 'method',
@@ -138,6 +141,7 @@ export type ConnectFlowEvent =
   | { type: 'setField'; field: ConnectFlowTextField; value: string }
   | { type: 'setAdvancedOpen'; open: boolean }
   | { type: 'setCredMode'; mode: GatewayCredMode }
+  | { type: 'setRememberDevice'; value: boolean }
   | { type: 'startTest' }
   | { type: 'testSettled'; report: ConnectivityReport }
   | { type: 'localVaultsLoaded'; vaults: ConnectivityVaultPreview[] }
@@ -193,6 +197,8 @@ export function connectFlowReducer(
       return { ...state, advancedOpen: event.open };
     case 'setCredMode':
       return { ...state, credMode: event.mode };
+    case 'setRememberDevice':
+      return { ...state, rememberDevice: event.value };
     case 'startTest':
       return { ...state, report: null, step: 'test', testError: null, testing: true };
     case 'testSettled':

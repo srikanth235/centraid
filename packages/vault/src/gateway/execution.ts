@@ -14,13 +14,7 @@ import { ONTOLOGY_VERSION } from '../schema/migrate.js';
 import { resolveEntity } from '../schema/tables.js';
 import type { ConsentAllow } from './consent.js';
 import { evaluateConditions, judgmentVeto, type CommandRow } from './contract.js';
-import {
-  writeCheck,
-  writeEvidence,
-  writeExplanation,
-  writeProvenance,
-  writeReceipt,
-} from './evidence.js';
+import { writeCheck, writeExplanation, writeReceipt } from './evidence.js';
 import { validateJson } from './json-schema.js';
 import { SEED_DEMO_ACTIVITY } from '../schema/seed.js';
 import {
@@ -44,6 +38,13 @@ import type {
   InvokeRequest,
 } from './types.js';
 import { DEFAULT_PURPOSE } from './types.js';
+import { readDurableParkedDenial, readDurableParkedPayload } from '../replica/parked.js';
+import {
+  finalizeReplicaInvocationCommit,
+  readReplicaInvocationCommit,
+  recordReplicaInvocationCommitInTransaction,
+  type ReplicaInvocationAudit,
+} from '../replica/invocation-commits.js';
 
 /**
  * A registered command as the gateway executes it: the handler plus the
@@ -244,21 +245,68 @@ export function setInvocationStatus(db: VaultDb, invocationId: string, status: s
     .run(status, invocationId);
 }
 
+/** Recursively scrub sealed values before crash-repair metadata becomes durable. */
+function scrubAuditValue(value: unknown, scrub: (text: string) => string): unknown {
+  if (typeof value === 'string') return scrub(value);
+  if (Array.isArray(value)) return value.map((item) => scrubAuditValue(item, scrub));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        scrubAuditValue(item, scrub),
+      ]),
+    );
+  }
+  return value;
+}
+
+/** Recover the ordinary online replay value from its allow receipt. */
+function receiptOutput(journal: DatabaseSync, receiptId: string | null): unknown {
+  if (!receiptId) return null;
+  const receipt = journal
+    .prepare('SELECT detail_json FROM consent_receipt WHERE receipt_id = ?')
+    .get(receiptId) as { detail_json: string | null } | undefined;
+  if (!receipt?.detail_json) return null;
+  return (JSON.parse(receipt.detail_json) as { output?: unknown }).output ?? null;
+}
+
 /** Idempotent replay (§10 S4): a re-sent invocation id never double-writes. */
 export function replayInvocation(db: VaultDb, invocationId: string): InvokeOutcome | null {
+  const denied = readDurableParkedDenial(db, invocationId);
+  if (denied) return { status: 'denied', ...denied };
+  // Canonical commit proof takes precedence over journal status. It carries
+  // the S5 material needed to atomically repair a crash-left audit prefix
+  // before replay is allowed to return. Replica markers omit output, while
+  // ordinary online invocations preserve their established receipt replay.
+  const committed = readReplicaInvocationCommit(db.vault, invocationId);
+  if (committed) {
+    const finalized = finalizeReplicaInvocationCommit(db, invocationId);
+    const output = receiptOutput(db.journal, finalized.receiptId);
+    if (!committed.intentId) {
+      db.vault
+        .prepare(
+          `DELETE FROM replica_invocation_commit
+            WHERE invocation_id = ? AND journal_finalized_at IS NOT NULL`,
+        )
+        .run(invocationId);
+    }
+    return {
+      status: 'replayed',
+      invocationId,
+      output,
+    };
+  }
   const row = db.journal
     .prepare('SELECT status, receipt_id FROM agent_command_invocation WHERE invocation_id = ?')
     .get(invocationId) as { status: string; receipt_id: string | null } | undefined;
-  if (!row || row.status !== 'executed') return null;
-  let output: unknown = null;
-  if (row.receipt_id) {
-    const receipt = db.journal
-      .prepare('SELECT detail_json FROM consent_receipt WHERE receipt_id = ?')
-      .get(row.receipt_id) as { detail_json: string | null } | undefined;
-    if (receipt?.detail_json)
-      output = (JSON.parse(receipt.detail_json) as { output?: unknown }).output ?? null;
+  if (row?.status === 'executed') {
+    return { status: 'replayed', invocationId, output: receiptOutput(db.journal, row.receipt_id) };
   }
-  return { status: 'replayed', invocationId, output };
+  if (row) {
+    const parked = readDurableParkedPayload(db, invocationId);
+    return parked ? { status: 'parked', invocationId, reason: parked.reason } : null;
+  }
+  return null;
 }
 
 export function runContractAndExecute(
@@ -410,8 +458,12 @@ export function runContractAndExecute(
       has: (sha256) => db.blobs.hasSync(sha256),
     },
   };
-  let output: Record<string, unknown>;
+  let output!: Record<string, unknown>;
+  let audit!: ReplicaInvocationAudit;
+  let postResults: ReturnType<typeof evaluateConditions> = [];
+  let vaultTransactionOpen = false;
   db.vault.exec('BEGIN');
+  vaultTransactionOpen = true;
   try {
     output = handler(ctx);
     // §10 S4: polymorphic refs validated before the transaction may commit.
@@ -425,10 +477,11 @@ export function runContractAndExecute(
     // clear secret, however the handler wrote it.
     sealWrites(db, writes);
     const postSpecs = JSON.parse(command.postconditions_json) as ConditionSpec[];
-    const postResults = evaluateConditions(db.vault, postSpecs, { ...request.input, ...output });
+    postResults = evaluateConditions(db.vault, postSpecs, { ...request.input, ...output });
     const failedPost = postResults.find((r) => !r.passed);
     if (failedPost) {
       db.vault.exec('ROLLBACK');
+      vaultTransactionOpen = false;
       for (const r of postResults)
         writeCheck(db.journal, invocationId, 'post', r.predicate, r.passed, r.observed);
       setInvocationStatus(db, invocationId, 'rolled_back');
@@ -467,11 +520,60 @@ export function runContractAndExecute(
         seedStmt.run(uuidv7(), request.demo.appId, write.entityType, write.entityId, ctx.now);
       }
     }
+
+    const provenance = {
+      activity: request.demo ? SEED_DEMO_ACTIVITY : `command.${command.name}`,
+      used: request.demo
+        ? { invocation: invocationId, command: command.name, app: request.demo.appId }
+        : { invocation: invocationId },
+    };
+    // Existing online idempotent replay reads output back from the receipt.
+    // Transcript-sensitive commands persist only the established redaction.
+    // Replica intents deliberately omit the field from both their marker and
+    // receipt; their caller reconciles canonical rows and replay returns null.
+    const durableOutput = registered.transcriptSensitive
+      ? { redacted: 'transcript-sensitive derivative (issue #298 item 6)' }
+      : output;
+    audit = {
+      commandName: command.name,
+      agentId: identity.callerId,
+      agentKind: identity.provAgentKind,
+      grantId: consent.grantId,
+      purpose,
+      preconditionCount: preResults.length,
+      postChecks: postResults.map((result) => ({
+        predicate: result.predicate,
+        passed: result.passed,
+        observed: scrubAuditValue(result.observed, scrub) as Record<string, unknown>,
+      })),
+      writes: writes.map((write) => ({ ...write })),
+      citations: citations.map((citation) => ({ ...citation })),
+      provenance,
+      receiptDetail: {
+        ...(!request.intentId ? { output: durableOutput } : {}),
+        writes: writes.map((write) => ({ ...write })),
+        // The salience marker (issue #306 decision 2): what the review feed
+        // surfaces first, now that risk no longer gates execution.
+        risk: command.risk,
+        ...(unsealed.size > 0 ? { unsealed: [...unsealed] } : {}),
+        ...(confirmation ? { confirmation } : {}),
+      },
+    };
+
+    // The marker is part of every canonical transaction, not only replica
+    // intents. Replica intents retain it until their durable outcome is
+    // terminal; ordinary invocations reclaim it after journal proof below.
+    recordReplicaInvocationCommitInTransaction(db.vault, {
+      invocationId,
+      commandId: command.command_id,
+      ...(request.intentId ? { intentId: request.intentId } : {}),
+      audit,
+      committedAt: ctx.now,
+    });
     db.vault.exec('COMMIT');
-    for (const r of postResults)
-      writeCheck(db.journal, invocationId, 'post', r.predicate, r.passed, r.observed);
+    vaultTransactionOpen = false;
   } catch (err) {
-    db.vault.exec('ROLLBACK');
+    if (vaultTransactionOpen) db.vault.exec('ROLLBACK');
     setInvocationStatus(db, invocationId, 'failed');
     // A handler (or SQLite constraint message) that echoes its input would
     // put a submitted secret into the journal and the HTTP error — scrub
@@ -495,56 +597,17 @@ export function runContractAndExecute(
     return { status: 'failed', invocationId, receiptId, reason };
   }
 
-  // S5 — evidence: provenance per write, receipt, evidence, explanation.
-  // Demo-register writes stamp `seed.demo` — the journal-side truth that a
-  // row is scenario data; the command still names itself in `used_json`.
-  for (const write of writes) {
-    writeProvenance(
-      db.journal,
-      identity,
-      write.entityType,
-      write.entityId,
-      request.demo ? SEED_DEMO_ACTIVITY : `command.${command.name}`,
-      request.demo
-        ? { invocation: invocationId, command: command.name, app: request.demo.appId }
-        : { invocation: invocationId },
-    );
+  // Everything after the canonical COMMIT is one idempotent journal
+  // transaction. If it aborts, the marker survives and replay repairs it
+  // before returning; the command handler is never re-entered.
+  const finalized = finalizeReplicaInvocationCommit(db, invocationId);
+  if (!request.intentId) {
+    db.vault
+      .prepare(
+        `DELETE FROM replica_invocation_commit
+          WHERE invocation_id = ? AND journal_finalized_at IS NOT NULL`,
+      )
+      .run(invocationId);
   }
-  // A transcript-sensitive command's output is secret-derived (issue #298
-  // item 6): the caller still gets the live value below, but it must NOT
-  // persist in the journal receipt (a durable store, read back on replay).
-  const receiptOutput = registered.transcriptSensitive
-    ? { redacted: 'transcript-sensitive derivative (issue #298 item 6)' }
-    : output;
-  const receiptId = writeReceipt(db.journal, {
-    grantId: consent.grantId,
-    invocationId,
-    action: `act ${command.name}`,
-    objectType: 'agent.command',
-    objectId: command.command_id,
-    purpose,
-    decision: 'allow',
-    detail: {
-      output: receiptOutput,
-      writes,
-      // The salience marker (issue #306 decision 2): what the review feed
-      // surfaces first, now that risk no longer gates execution.
-      risk: command.risk,
-      ...(unsealed.size > 0 ? { unsealed: [...unsealed] } : {}),
-      ...(confirmation ? { confirmation } : {}),
-    },
-  });
-  writeEvidence(db.journal, invocationId, citations);
-  writeExplanation(
-    db.journal,
-    invocationId,
-    `${command.name}: ${preResults.length} precondition(s) held, ` +
-      `${writes.length} row(s) written, ${citations.length} evidence citation(s). Receipt ${receiptId}.`,
-  );
-  db.journal
-    .prepare(
-      `UPDATE agent_command_invocation SET status='executed', executed_at=?, receipt_id=? WHERE invocation_id=?`,
-    )
-    .run(nowIso(), receiptId, invocationId);
-  return { status: 'executed', invocationId, receiptId, output };
+  return { status: 'executed', invocationId, receiptId: finalized.receiptId, output };
 }

@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#406) cohesive web host bridge owns connection identity, lifecycle events, and storage-consent teardown together
 import {
   decodeTicket,
   gatewayJson,
@@ -7,6 +8,7 @@ import {
   saveConnection,
   saveSettingsPatch,
   subscribe,
+  webGatewayId,
 } from './web-state.js';
 import type {
   CentraidGatewayRuntime,
@@ -14,7 +16,7 @@ import type {
   CentraidSettings,
   CentraidTestConnectionInput,
 } from '../../../packages/client/src/centraid-api.js';
-import { pairGatewayOverIroh } from './iroh-transport.js';
+import { pairGatewayOverIroh, purgeIrohDeviceState } from './iroh-transport.js';
 import {
   isUpdateAvailable,
   onSwUpdateAvailable,
@@ -108,12 +110,15 @@ export function installWebHost(): void {
     },
     getGatewayAuth: async () => {
       const connection = loadConnection();
+      const gatewayId = webGatewayId(connection);
       return {
         baseUrl: connection.baseUrl || window.location.origin,
+        ...(gatewayId ? { gatewayId } : {}),
         ...(connection.token ? { token: connection.token } : {}),
         ...(connection.vaultId ? { vaultId: connection.vaultId } : {}),
         ...(connection.control ? { webControl: true } : {}),
         ...(connection.transport === 'iroh' ? { iroh: true } : {}),
+        rememberDevice: connection.rememberDevice === true,
       };
     },
     listGateways: async () => {
@@ -136,7 +141,13 @@ export function installWebHost(): void {
         : [];
     },
     setActiveGateway: async () => settings(),
-    addGateway: async (input: { label: string; url?: string; token: string }) => {
+    addGateway: async (input: {
+      label: string;
+      url?: string;
+      token: string;
+      rememberDevice?: boolean;
+    }) => {
+      const previousGatewayId = webGatewayId(loadConnection());
       const next = saveConnection({
         baseUrl: input.url ?? '',
         label: input.label,
@@ -144,9 +155,20 @@ export function installWebHost(): void {
         transport: 'direct',
         endpointTicket: undefined,
         endpointId: undefined,
+        gatewayId: undefined,
         control: false,
+        rememberDevice: input.rememberDevice === true,
       });
-      publish(GATEWAY_EVENT, { activeGatewayId: 'web' });
+      if (!next.rememberDevice) purgeTunnelCaches();
+      const gatewayId = webGatewayId(next);
+      publish(GATEWAY_EVENT, {
+        activeGatewayId: 'web',
+        ...(gatewayId ? { gatewayId } : {}),
+        ...(previousGatewayId && previousGatewayId !== gatewayId
+          ? { removedGatewayId: previousGatewayId }
+          : {}),
+        ...(!next.rememberDevice && gatewayId ? { purgeReplicaGatewayId: gatewayId } : {}),
+      });
       return {
         id: 'web',
         kind: 'remote' as const,
@@ -163,6 +185,7 @@ export function installWebHost(): void {
       // clearing localStorage alone leaves the session valid on the gateway.
       // Fire a best-effort DELETE to drop it; never block or fail removal.
       const prev = loadConnection();
+      const removedGatewayId = webGatewayId(prev);
       if (prev.control && prev.baseUrl) {
         void fetch(new URL('/centraid/_web/control', `${prev.baseUrl.replace(/\/+$/, '')}/`), {
           method: 'DELETE',
@@ -176,12 +199,18 @@ export function installWebHost(): void {
         transport: undefined,
         endpointTicket: undefined,
         endpointId: undefined,
+        gatewayId: undefined,
         control: false,
+        rememberDevice: false,
       });
       // The tunnel caches may hold this gateway/vault's assets and blobs; drop
       // them so a later pairing to a different vault can't serve stale bytes.
       purgeTunnelCaches();
-      publish(GATEWAY_EVENT, { activeGatewayId: 'web' });
+      purgeIrohDeviceState();
+      publish(GATEWAY_EVENT, {
+        activeGatewayId: 'web',
+        ...(removedGatewayId ? { removedGatewayId } : {}),
+      });
       return { activeGatewayId: 'web' };
     },
     renameGateway: async ({ label }: { id: string; label: string }) => {
@@ -201,7 +230,10 @@ export function installWebHost(): void {
       label?: string;
       mode?: 'auto' | 'iroh' | 'http';
       url?: string;
+      rememberDevice?: boolean;
     }) => {
+      const previous = loadConnection();
+      const previousGatewayId = webGatewayId(previous);
       const decoded = decodeTicket(input.ticket);
       if (!decoded)
         return {
@@ -237,24 +269,42 @@ export function installWebHost(): void {
             ticketId: decoded.ticketId,
             secret: decoded.secret,
             deviceName: input.label ?? 'Web browser',
+            rememberDevice: input.rememberDevice ?? false,
           });
           if (!response.ok || !response.vaultId) {
             throw new Error(response.error ?? 'Gateway rejected the pairing ticket.');
           }
-          saveConnection({
+          const next = saveConnection({
             baseUrl: '',
             token: undefined,
             control: false,
             transport: 'iroh',
             endpointTicket: decoded.gw,
             endpointId,
+            gatewayId: response.gatewayId,
             vaultId: response.vaultId,
             label: input.label ?? response.gatewayName ?? 'Web gateway',
+            rememberDevice: input.rememberDevice ?? false,
           });
+          if (input.rememberDevice !== true) purgeTunnelCaches();
           saveSettingsPatch({ onboardingCompletedAt: new Date().toISOString() });
-          void requestPersistentStorage();
-          publish(GATEWAY_EVENT, { activeGatewayId: 'web' });
-          publish(VAULT_EVENT, { activeGatewayId: 'web', activeVaultId: response.vaultId });
+          if (input.rememberDevice) void requestPersistentStorage();
+          const gatewayId = webGatewayId(next);
+          publish(GATEWAY_EVENT, {
+            activeGatewayId: 'web',
+            ...(gatewayId ? { gatewayId } : {}),
+            ...(previousGatewayId && previousGatewayId !== gatewayId
+              ? { removedGatewayId: previousGatewayId }
+              : {}),
+            ...(input.rememberDevice !== true && gatewayId
+              ? { purgeReplicaGatewayId: gatewayId }
+              : {}),
+          });
+          publish(VAULT_EVENT, {
+            activeGatewayId: 'web',
+            ...(gatewayId ? { gatewayId } : {}),
+            activeVaultId: response.vaultId,
+          });
           return {
             ok: true as const,
             gatewayId: 'web',
@@ -271,6 +321,7 @@ export function installWebHost(): void {
               ticket: input.ticket,
               deviceLabel: input.label ?? 'Web browser',
               platform: 'web',
+              rememberDevice: input.rememberDevice ?? false,
             }),
           },
         );
@@ -292,20 +343,37 @@ export function installWebHost(): void {
         );
         if (!control.ok)
           throw new Error(`Could not establish browser session (HTTP ${control.status})`);
-        saveConnection({
+        const next = saveConnection({
           baseUrl: input.url!,
           token: undefined,
           control: true,
           transport: 'direct',
           endpointTicket: undefined,
           endpointId: undefined,
+          gatewayId: undefined,
           vaultId: body.vaultId,
           label: input.label ?? 'Web gateway',
+          rememberDevice: input.rememberDevice ?? false,
         });
+        if (input.rememberDevice !== true) purgeTunnelCaches();
         saveSettingsPatch({ onboardingCompletedAt: new Date().toISOString() });
-        void requestPersistentStorage();
-        publish(GATEWAY_EVENT, { activeGatewayId: 'web' });
-        publish(VAULT_EVENT, { activeGatewayId: 'web', activeVaultId: body.vaultId });
+        if (input.rememberDevice) void requestPersistentStorage();
+        const gatewayId = webGatewayId(next);
+        publish(GATEWAY_EVENT, {
+          activeGatewayId: 'web',
+          ...(gatewayId ? { gatewayId } : {}),
+          ...(previousGatewayId && previousGatewayId !== gatewayId
+            ? { removedGatewayId: previousGatewayId }
+            : {}),
+          ...(input.rememberDevice !== true && gatewayId
+            ? { purgeReplicaGatewayId: gatewayId }
+            : {}),
+        });
+        publish(VAULT_EVENT, {
+          activeGatewayId: 'web',
+          ...(gatewayId ? { gatewayId } : {}),
+          activeVaultId: body.vaultId,
+        });
         return {
           ok: true as const,
           gatewayId: 'web',
@@ -403,8 +471,15 @@ export function installWebHost(): void {
       }
     },
     setActiveVault: async ({ vaultId }: { vaultId?: string }) => {
-      saveConnection({ vaultId });
-      publish(VAULT_EVENT, { activeGatewayId: 'web', activeVaultId: vaultId });
+      const connection = loadConnection();
+      const previous = connection.vaultId;
+      const next = saveConnection({ vaultId });
+      if (previous !== vaultId) purgeTunnelCaches();
+      publish(VAULT_EVENT, {
+        activeGatewayId: 'web',
+        ...(webGatewayId(next) ? { gatewayId: webGatewayId(next) } : {}),
+        activeVaultId: vaultId,
+      });
       return settings();
     },
     getGatewayRuntime: healthSnapshot,

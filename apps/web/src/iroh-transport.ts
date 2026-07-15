@@ -1,5 +1,5 @@
 import initWasm, { BrowserEndpoint, type BrowserResponse } from './generated/centraid_web_iroh.js';
-import { loadConnection } from './web-state.js';
+import { loadConnection, webGatewayId } from './web-state.js';
 
 const KEY_STORAGE = 'centraid.web.v1.iroh-device-key';
 const BRIDGE_STORAGE = 'centraid.web.v1.iroh-bridge';
@@ -7,7 +7,7 @@ const VIRTUAL_PREFIX = '/__centraid_iroh__/';
 // A versioned script URL prevents an older shell worker from being treated as
 // ready merely because it controls the page. The virtual Iroh route only
 // exists in this worker generation.
-const SERVICE_WORKER_VERSION = 'iroh-bridge-v5';
+const SERVICE_WORKER_VERSION = 'iroh-bridge-v8';
 const SERVICE_WORKER_URL = `/sw.js?v=${SERVICE_WORKER_VERSION}`;
 
 // Transient tunnel failures (a redialed-then-still-dead connection, a stream
@@ -97,14 +97,19 @@ function encodeBytes(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-async function endpoint(): Promise<BrowserEndpoint> {
+async function endpoint(
+  rememberDevice = loadConnection().rememberDevice === true,
+): Promise<BrowserEndpoint> {
+  const stored = moveIrohDeviceKeyForConsent(rememberDevice);
+  // Consent changes move the same key between session/durable storage. Keep
+  // the live endpoint as well: rotating it would strand an enrolled identity.
   if (!endpointPromise) {
     endpointPromise = (async () => {
       const connectStart = markConnectStart();
       await initWasm();
-      const stored = localStorage.getItem(KEY_STORAGE);
+      const storage = rememberDevice ? localStorage : sessionStorage;
       const node = await BrowserEndpoint.spawn(stored ? decodeBytes(stored) : undefined);
-      if (!stored) localStorage.setItem(KEY_STORAGE, encodeBytes(node.secret_key()));
+      if (!stored) storage.setItem(KEY_STORAGE, encodeBytes(node.secret_key()));
       measureConnect(connectStart);
       return node;
     })().catch((error) => {
@@ -112,7 +117,21 @@ async function endpoint(): Promise<BrowserEndpoint> {
       throw error;
     });
   }
-  return endpointPromise;
+  const node = await endpointPromise;
+  // Cover a consent toggle while the first WASM spawn was still pending: its
+  // closure may have written to the old bucket after the pre-spawn move.
+  moveIrohDeviceKeyForConsent(rememberDevice);
+  return node;
+}
+
+/** Move (never copy) the stable browser device key into its consented bucket. */
+export function moveIrohDeviceKeyForConsent(rememberDevice: boolean): string | null {
+  const target = rememberDevice ? localStorage : sessionStorage;
+  const stale = rememberDevice ? sessionStorage : localStorage;
+  const stored = target.getItem(KEY_STORAGE) ?? stale.getItem(KEY_STORAGE);
+  if (stored !== null) target.setItem(KEY_STORAGE, stored);
+  stale.removeItem(KEY_STORAGE);
+  return stored;
 }
 
 export interface IrohPairingInput {
@@ -120,11 +139,13 @@ export interface IrohPairingInput {
   ticketId: string;
   secret: string;
   deviceName: string;
+  rememberDevice: boolean;
 }
 
 export interface IrohPairingResponse {
   ok: boolean;
   error?: string;
+  gatewayId?: string;
   gatewayName?: string;
   vaultId?: string;
   vaultName?: string;
@@ -135,7 +156,7 @@ export interface IrohPairingResponse {
 export async function pairGatewayOverIroh(
   input: IrohPairingInput,
 ): Promise<{ response: IrohPairingResponse; endpointId: string }> {
-  const node = await endpoint();
+  const node = await endpoint(input.rememberDevice);
   const response = JSON.parse(
     await node.pair_gateway(
       input.endpointTicket,
@@ -144,6 +165,7 @@ export async function pairGatewayOverIroh(
         secret: input.secret,
         deviceName: input.deviceName,
         platform: 'web',
+        rememberDevice: input.rememberDevice,
       }),
     ),
   ) as IrohPairingResponse;
@@ -315,12 +337,58 @@ async function bridgeFetch(message: BridgeRequest): Promise<BrowserResponse> {
 }
 
 function bridgeId(): string {
-  let id = sessionStorage.getItem(BRIDGE_STORAGE);
-  if (!id) {
-    id = crypto.randomUUID();
-    sessionStorage.setItem(BRIDGE_STORAGE, id);
+  const connection = loadConnection();
+  const durable = connection.rememberDevice === true;
+  const storage = durable ? localStorage : sessionStorage;
+  const stale = durable ? sessionStorage : localStorage;
+  // Relay-bearing endpoint tickets can be refreshed without changing the
+  // sovereign gateway. Keep the cache namespace warm across those re-dials.
+  const scope = `${webGatewayId(connection) ?? connection.endpointTicket ?? ''}\u0000${connection.vaultId ?? ''}`;
+  let saved: { scope?: string; id?: string } = {};
+  try {
+    saved = JSON.parse(storage.getItem(BRIDGE_STORAGE) ?? '{}') as typeof saved;
+  } catch {
+    saved = {};
+  }
+  const prefix = durable ? 'd-' : 'e-';
+  const id =
+    saved.scope === scope && saved.id?.startsWith(prefix)
+      ? saved.id
+      : irohBridgeIdForConsent(durable);
+  if (saved.scope !== scope || saved.id !== id) {
+    saved = { scope, id };
+    storage.setItem(BRIDGE_STORAGE, JSON.stringify(saved));
+    stale.removeItem(BRIDGE_STORAGE);
   }
   return id;
+}
+
+/** The service worker treats only `d-` bridge scopes as cache-readable/writable. */
+export function irohBridgeIdForConsent(
+  rememberDevice: boolean,
+  randomId = crypto.randomUUID(),
+): string {
+  return `${rememberDevice ? 'd' : 'e'}-${randomId}`;
+}
+
+/** Wipe all device-key/bridge state after unpair or remote revocation. */
+export function purgeIrohDeviceState(): void {
+  const current = endpointPromise;
+  endpointPromise = undefined;
+  const clear = (): void => {
+    for (const storage of [localStorage, sessionStorage]) {
+      storage.removeItem(KEY_STORAGE);
+      storage.removeItem(BRIDGE_STORAGE);
+    }
+  };
+  clear();
+  void current
+    ?.then(async (node) => {
+      await node.close().catch(() => undefined);
+      // A pending spawn can write its key after the eager clear.
+      clear();
+    })
+    .catch(() => undefined);
 }
 
 function isIrohWorker(worker: ServiceWorker | null): boolean {

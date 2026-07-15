@@ -18,6 +18,7 @@ import { existsSync, promises as fs } from 'node:fs';
 import crypto, { randomBytes } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import {
   loadKeyring,
   openLocalBackupProvider,
@@ -26,7 +27,7 @@ import {
   verifySnapshot,
   type BackupProvider,
 } from '@centraid/backup';
-import { sealAad, unsealValue } from '@centraid/vault';
+import { currentReplicaLogState, sealAad, unsealValue } from '@centraid/vault';
 import { openVaultRegistry, type VaultRegistry } from '../serve/vault-registry.js';
 import type { VaultPlane } from '../serve/vault-plane.js';
 import { HealthRegistry } from '../serve/health-registry.js';
@@ -358,6 +359,7 @@ test('incremental backup: a new blob registers a small delta, not a re-upload of
 });
 
 test('CLI restore materializes a fresh dest, and adopting it as a live vault mounts, returns real data, and fires quarantine', async () => {
+  const sourceReplica = currentReplicaLogState(h.plane.db.vault);
   // Stop the shared registry before the CLI opens its own on the same
   // vaultDir (mirrors backup-admin.test.ts's pattern — avoid two live
   // connections to the same vault.db at once).
@@ -379,6 +381,11 @@ test('CLI restore materializes a fresh dest, and adopting it as a live vault mou
   expect(result.entries).toContain('seal.key');
   expect(existsSync(path.join(destDir, 'RESTORE_QUARANTINE.json'))).toBe(true);
   h.restoredDestDir = destDir;
+  const restoredDb = new DatabaseSync(path.join(destDir, 'vault.db'));
+  const restoredReplica = currentReplicaLogState(restoredDb);
+  restoredDb.close();
+  expect(restoredReplica.epoch).not.toBe(sourceReplica.epoch);
+  expect(restoredReplica.epochReason).toBe('backup-restore');
 
   // Adopt the restored directory as a live vault — mirroring recovery onto
   // a fresh machine: a fresh registry root, the vault files placed under
@@ -426,6 +433,9 @@ test('CLI restore materializes a fresh dest, and adopting it as a live vault mou
     const adopted = adoptedRegistry.get(h.vaultId);
     expect(adopted).toBeTruthy();
     const plane = adopted!;
+    // Adoption/migration must not invalidate it again: restore performed the
+    // one epoch bump after WAL materialization.
+    expect(currentReplicaLogState(plane.db.vault).epoch).toBe(restoredReplica.epoch);
 
     // Quarantine fired on this mount, and the pre-staged approved outbox
     // item got parked for real.

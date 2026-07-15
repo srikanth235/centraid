@@ -38,11 +38,14 @@ async function makeVaultApp(codeRoot: string, appId: string): Promise<void> {
   await fs.writeFile(
     path.join(dir, 'actions', 'propose.js'),
     `export default async ({ body, ctx }) => {
-       const outcome = await ctx.vault.invoke({
+       const invoke = (ordinal) => ctx.vault.invoke({
          command: 'schedule.propose_event',
          input: { summary: body?.summary },
          purpose: 'dpv:ServiceProvision',
+         invocationId: 'handler-selected-' + ordinal,
        });
+       const outcome = await invoke('first');
+       if (body?.summary === 'Twice') await invoke('second');
        return { status: 200, body: outcome };
      };\n`,
     'utf8',
@@ -109,6 +112,66 @@ describe('ctx.vault worker channel', () => {
         payload: { command: 'schedule.propose_event', input: { summary: 'Standup' } },
       },
     });
+  });
+
+  it('binds an offline action intent to a deterministic vault invocation id', async () => {
+    const calls: VaultCall[] = [];
+    const dispatcher = new Dispatcher({
+      registry,
+      codeDirOverride: async (appId) => path.join(codeRoot, appId),
+      vaultFor: () => async (call) => {
+        calls.push(call);
+        return { ok: true, result: { status: 'executed', output: { event_id: 'ev1' } } };
+      },
+    });
+    await dispatcher.write({
+      app: 'planner',
+      action: 'propose',
+      input: { summary: 'Offline standup' },
+      intentId: 'intent-offline-1',
+    });
+    await dispatcher.write({
+      app: 'planner',
+      action: 'propose',
+      input: { summary: 'Offline standup retry' },
+      intentId: 'intent-offline-1',
+    });
+    await dispatcher.write({
+      app: 'planner',
+      action: 'propose',
+      input: { summary: 'Collision probe' },
+      intentId: 'intent-offline-1:1',
+    });
+    await dispatcher.write({
+      app: 'planner',
+      action: 'propose',
+      input: { summary: 'Twice' },
+      intentId: 'intent-multi',
+    });
+    await dispatcher.write({
+      app: 'planner',
+      action: 'propose',
+      input: { summary: 'Twice' },
+      intentId: 'intent-multi',
+    });
+
+    const invocationIds = calls.map((call) => String(call.payload.invocationId));
+    expect(invocationIds[0]).toMatch(/^replica:v1:[a-f0-9]{64}$/);
+    expect(invocationIds[0]).not.toBe('handler-selected-first');
+    expect(invocationIds[1]).toBe(invocationIds[0]);
+    expect(invocationIds[2]).not.toBe(invocationIds[0]);
+    expect(invocationIds.slice(3, 5)).toEqual(invocationIds.slice(5, 7));
+    expect(invocationIds[3]).not.toBe(invocationIds[4]);
+    expect(invocationIds.slice(3, 5)).not.toContain('handler-selected-first');
+    expect(invocationIds.slice(3, 5)).not.toContain('handler-selected-second');
+    expect(calls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          op: 'invoke',
+          payload: expect.objectContaining({ intentId: 'intent-offline-1' }),
+        }),
+      ]),
+    );
   });
 
   it('a bridge refusal rejects in the handler with code + receipted message', async () => {

@@ -37,6 +37,16 @@ export interface CentraidGatewayDevice {
   lastUsedAt?: string;
   /** True for the device making the request (never set for the admin caller). */
   current?: boolean;
+  /** Server-enforced device tier used to clamp replica shapes and intents. */
+  trust: 'full' | 'readonly' | 'revoked';
+  /** Whether this device consented to durable OPFS/IndexedDB state. */
+  rememberDevice: boolean;
+  checkpoint?: {
+    epoch: string;
+    seq: number;
+    schemaEpoch: number;
+    updatedAt: string;
+  };
 }
 
 /** Every paired device the caller may see; `[]` when the gateway has no device plane. */

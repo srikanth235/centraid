@@ -19,6 +19,7 @@ import { cleanupDeregisteredApp } from './registry/deregister-cleanup.js';
 import { handleLogsRoute, handleSettingsWrite } from './http/cloud-routes.js';
 import { ChangeBus } from './changes/change-bus.js';
 import { handleAppChanges } from './http/changes-sse.js';
+import { serveQueryBundle } from './http/query-bundle.js';
 import type { PrefsStore } from './stores/prefs-store.js';
 import type { ConversationHistoryStore } from './conversation/history.js';
 import { readAppSettings } from './settings/app-settings.js';
@@ -504,6 +505,7 @@ export class Runtime {
             app: String(body.app ?? ''),
             action: String(body.action ?? ''),
             input: body.input,
+            ...(typeof body.intentId === 'string' ? { intentId: body.intentId } : {}),
           },
           overrideCodeDir,
         );
@@ -600,6 +602,37 @@ export class Runtime {
 
         case 'app-logs': {
           await handleLogsRoute(res, this.registry, route.appId, route.query);
+          return;
+        }
+
+        case 'app-query-bundle': {
+          const webApp = req.headers[WEB_APP_HEADER];
+          if (typeof webApp === 'string' && webApp !== route.appId) {
+            sendError(
+              res,
+              403,
+              'app_session_scope',
+              'This browser session is scoped to another app.',
+            );
+            return;
+          }
+          const entry = this.registry.get(route.appId);
+          if (!entry) {
+            sendError(res, 404, 'not_found', 'App not registered.');
+            return;
+          }
+          const codeDir = draftSessionId
+            ? await draftCodeDirFor(entry.id)
+            : await this.resolveCodeDir(entry);
+          if (!codeDir) {
+            sendError(res, 503, 'no_active_version', 'App has no active version yet.');
+            return;
+          }
+          await serveQueryBundle(req, res, {
+            codeDir,
+            appId: entry.id,
+            queryName: route.queryName,
+          });
           return;
         }
 

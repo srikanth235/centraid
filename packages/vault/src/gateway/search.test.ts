@@ -59,6 +59,72 @@ describe('match expression', () => {
 });
 
 describe('index-backed matching', () => {
+  test('matches photo captions on content items and excludes soft-deleted bytes', () => {
+    const insert = db.vault.prepare(
+      `INSERT INTO core_content_item
+         (content_id, media_type, content_uri, sha256, byte_size, title, created_at)
+       VALUES (?, 'image/jpeg', ?, ?, 4, ?, ?)`,
+    );
+    insert.run(
+      'photo-caption',
+      'data:image/jpeg;base64,dGVzdA==',
+      'hash-photo-caption',
+      'Moonlit campsite in Ladakh',
+      '2026-07-15T00:00:00.000Z',
+    );
+    expect(
+      gw
+        .search(owner, {
+          entity: 'core.content_item',
+          query: 'moon camp',
+          purpose: PURPOSE,
+        })
+        .rows.map((row) => row.content_id),
+    ).toEqual(['photo-caption']);
+    db.vault
+      .prepare(`UPDATE core_content_item SET deleted_at = ? WHERE content_id = ?`)
+      .run('2026-07-15T01:00:00.000Z', 'photo-caption');
+    expect(
+      gw.search(owner, {
+        entity: 'core.content_item',
+        query: 'moon',
+        purpose: PURPOSE,
+      }).rows,
+    ).toHaveLength(0);
+  });
+
+  test('breaks equal-rank search ties by the canonical primary key', () => {
+    const insert = db.vault.prepare(
+      `INSERT INTO core_content_item
+         (content_id, media_type, content_uri, sha256, byte_size, title, created_at)
+       VALUES (?, 'image/jpeg', ?, ?, 4, 'Same caption', ?)`,
+    );
+    // Reverse insertion order makes a rowid/implicit-order implementation
+    // observably wrong at LIMIT 1.
+    insert.run(
+      'photo-b',
+      'data:image/jpeg;base64,Yg==',
+      'hash-photo-b',
+      '2026-07-15T00:00:00.000Z',
+    );
+    insert.run(
+      'photo-a',
+      'data:image/jpeg;base64,YQ==',
+      'hash-photo-a',
+      '2026-07-15T00:00:01.000Z',
+    );
+    expect(
+      gw
+        .search(owner, {
+          entity: 'core.content_item',
+          query: 'same',
+          limit: 1,
+          purpose: PURPOSE,
+        })
+        .rows.map((row) => row.content_id),
+    ).toEqual(['photo-a']);
+  });
+
   test('matches title and canonical body, ranked, with a snippet', () => {
     createNote('Money things', 'the quarterly budget plan for Diwali');
     createNote('Shopping', 'grocery list: dal, rice');

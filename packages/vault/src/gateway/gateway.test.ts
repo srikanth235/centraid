@@ -11,6 +11,12 @@ import {
 } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { uuidv7 } from '../ids.js';
+import {
+  deleteReplicaIntentOutcomesForDevice,
+  readReplicaIntentOutcome,
+  recordReplicaIntentOutcome,
+} from '../replica/intents.js';
+import { readDurableParkedPayload } from '../replica/parked.js';
 import { createGateway, Gateway } from './gateway.js';
 import type { Credential } from './types.js';
 
@@ -290,15 +296,269 @@ describe('S3/S4 command execution', () => {
       invocationId,
     });
     expect(first.status).toBe('executed');
+    if (first.status !== 'executed') return;
     const replay = gw.invoke(owner, {
       command: 'schedule.propose_event',
       input: proposeInput(),
       purpose: 'dpv:ServiceProvision',
       invocationId,
     });
-    expect(replay.status).toBe('replayed');
+    expect(replay).toMatchObject({ status: 'replayed', output: first.output });
     const events = db.vault.prepare('SELECT count(*) AS n FROM core_event').get() as { n: number };
     expect(events.n).toBe(1);
+  });
+
+  test('replay atomically repairs a crash-left journal gap before returning', () => {
+    const invocationId = uuidv7();
+    const first = gw.invoke(owner, {
+      command: 'schedule.propose_event',
+      input: proposeInput(),
+      purpose: 'dpv:ServiceProvision',
+      invocationId,
+      intentId: 'offline-intent-crash-gap',
+    });
+    expect(first.status).toBe('executed');
+    if (first.status !== 'executed') return;
+
+    expect(
+      db.vault
+        .prepare(
+          `SELECT command_id, intent_id, audit_json, journal_finalized_at
+             FROM replica_invocation_commit WHERE invocation_id = ?`,
+        )
+        .get(invocationId),
+    ).toMatchObject({
+      intent_id: 'offline-intent-crash-gap',
+      journal_finalized_at: expect.any(String),
+    });
+    expect(
+      db.vault
+        .prepare(
+          `SELECT count(*) AS n
+             FROM pragma_table_info('replica_invocation_commit')
+            WHERE name = 'output_json'`,
+        )
+        .get(),
+    ).toEqual({ n: 0 });
+    const replicaReceipt = db.journal
+      .prepare('SELECT detail_json FROM consent_receipt WHERE invocation_id = ?')
+      .get(invocationId) as { detail_json: string };
+    expect(JSON.parse(replicaReceipt.detail_json)).not.toHaveProperty('output');
+
+    // Rewind only the derived journal side to model a process dying after
+    // vault.db COMMIT and before any post-check/S5 row committed. The marker
+    // remains the canonical proof and carries redacted reconstruction data.
+    db.journal
+      .prepare(
+        `UPDATE agent_command_invocation
+            SET status = 'checked', executed_at = NULL, receipt_id = NULL
+          WHERE invocation_id = ?`,
+      )
+      .run(invocationId);
+    db.journal.prepare(`DELETE FROM agent_evidence WHERE invocation_id = ?`).run(invocationId);
+    db.journal.prepare(`DELETE FROM agent_explanation WHERE invocation_id = ?`).run(invocationId);
+    db.journal
+      .prepare(`DELETE FROM agent_invocation_check WHERE invocation_id = ? AND phase = 'post'`)
+      .run(invocationId);
+    db.journal.prepare(`DELETE FROM consent_receipt WHERE invocation_id = ?`).run(invocationId);
+    db.journal
+      .prepare(
+        `DELETE FROM consent_provenance
+          WHERE json_extract(used_json, '$.invocation') = ?`,
+      )
+      .run(invocationId);
+    db.vault
+      .prepare(
+        `UPDATE replica_invocation_commit
+            SET journal_finalized_at = NULL
+          WHERE invocation_id = ?`,
+      )
+      .run(invocationId);
+
+    // Abort late in repair. Every earlier insert must roll back with it, the
+    // proof stamp must remain NULL, and replay must not claim success.
+    db.journal.exec(`
+      CREATE TRIGGER fail_repair_evidence
+      BEFORE INSERT ON agent_evidence
+      BEGIN
+        SELECT RAISE(ABORT, 'synthetic repair crash');
+      END;
+    `);
+    expect(() =>
+      gw.invoke(owner, {
+        command: 'schedule.propose_event',
+        input: proposeInput(),
+        purpose: 'dpv:ServiceProvision',
+        invocationId,
+        intentId: 'offline-intent-crash-gap',
+      }),
+    ).toThrow(/synthetic repair crash/);
+    db.journal.exec('DROP TRIGGER fail_repair_evidence');
+
+    const count = (table: string, where = 'invocation_id = ?'): number =>
+      (
+        db.journal
+          .prepare(`SELECT count(*) AS n FROM ${table} WHERE ${where}`)
+          .get(invocationId) as {
+          n: number;
+        }
+      ).n;
+    expect(count('agent_invocation_check', `invocation_id = ? AND phase = 'post'`)).toBe(0);
+    expect(count('consent_provenance', `json_extract(used_json, '$.invocation') = ?`)).toBe(0);
+    expect(count('consent_receipt')).toBe(0);
+    expect(count('agent_evidence')).toBe(0);
+    expect(count('agent_explanation')).toBe(0);
+    expect(
+      db.journal
+        .prepare(
+          `SELECT status, executed_at, receipt_id
+             FROM agent_command_invocation WHERE invocation_id = ?`,
+        )
+        .get(invocationId),
+    ).toEqual({ status: 'checked', executed_at: null, receipt_id: null });
+    expect(
+      db.vault
+        .prepare(
+          `SELECT journal_finalized_at FROM replica_invocation_commit WHERE invocation_id = ?`,
+        )
+        .get(invocationId),
+    ).toEqual({ journal_finalized_at: null });
+
+    const replay = gw.invoke(owner, {
+      command: 'schedule.propose_event',
+      input: proposeInput(),
+      purpose: 'dpv:ServiceProvision',
+      invocationId,
+      intentId: 'offline-intent-crash-gap',
+    });
+
+    expect(replay).toMatchObject({
+      status: 'replayed',
+      invocationId,
+      output: null,
+    });
+    expect(count('agent_invocation_check', `invocation_id = ? AND phase = 'post'`)).toBe(2);
+    expect(count('consent_provenance', `json_extract(used_json, '$.invocation') = ?`)).toBe(2);
+    expect(count('consent_receipt')).toBe(1);
+    expect(count('agent_evidence')).toBe(1);
+    expect(count('agent_explanation')).toBe(1);
+    expect(
+      db.journal
+        .prepare(`SELECT status, receipt_id FROM agent_command_invocation WHERE invocation_id = ?`)
+        .get(invocationId),
+    ).toMatchObject({ status: 'executed', receipt_id: expect.any(String) });
+    expect(
+      db.vault
+        .prepare(
+          `SELECT journal_finalized_at FROM replica_invocation_commit WHERE invocation_id = ?`,
+        )
+        .get(invocationId),
+    ).toMatchObject({ journal_finalized_at: expect.any(String) });
+    const events = db.vault.prepare('SELECT count(*) AS n FROM core_event').get() as { n: number };
+    expect(events.n).toBe(1);
+  });
+
+  test('post-canonical finalization failure retries the marker without a second write', () => {
+    const invocationId = 'offline-intent-finalize-ambiguous';
+    db.journal.exec(`CREATE TEMP TRIGGER fail_finalization_receipt
+      BEFORE INSERT ON consent_receipt BEGIN
+        SELECT RAISE(ABORT, 'synthetic post-canonical finalization failure');
+      END`);
+
+    expect(() =>
+      gw.invoke(owner, {
+        command: 'schedule.propose_event',
+        input: proposeInput(),
+        purpose: 'dpv:ServiceProvision',
+        invocationId,
+        intentId: invocationId,
+      }),
+    ).toThrow(/post-canonical finalization failure/);
+    expect(db.vault.prepare('SELECT count(*) AS n FROM core_event').get()).toEqual({ n: 1 });
+    expect(
+      db.vault
+        .prepare(
+          `SELECT journal_finalized_at
+             FROM replica_invocation_commit WHERE invocation_id = ?`,
+        )
+        .get(invocationId),
+    ).toEqual({ journal_finalized_at: null });
+
+    db.journal.exec('DROP TRIGGER fail_finalization_receipt');
+    gw = createGateway(db);
+    registerScheduleCommands(gw);
+    const retry = gw.invoke(owner, {
+      command: 'schedule.propose_event',
+      input: proposeInput(),
+      purpose: 'dpv:ServiceProvision',
+      invocationId,
+      intentId: invocationId,
+    });
+
+    expect(retry).toMatchObject({ status: 'replayed', invocationId, output: null });
+    expect(db.vault.prepare('SELECT count(*) AS n FROM core_event').get()).toEqual({ n: 1 });
+    expect(
+      db.journal
+        .prepare('SELECT status FROM agent_command_invocation WHERE invocation_id = ?')
+        .get(invocationId),
+    ).toEqual({ status: 'executed' });
+  });
+
+  test('ordinary post-canonical recovery preserves receipt replay output', () => {
+    const invocationId = 'ordinary-finalize-ambiguous';
+    db.journal.exec(`CREATE TEMP TRIGGER fail_ordinary_finalization_receipt
+      BEFORE INSERT ON consent_receipt BEGIN
+        SELECT RAISE(ABORT, 'synthetic ordinary finalization failure');
+      END`);
+
+    expect(() =>
+      gw.invoke(owner, {
+        command: 'schedule.propose_event',
+        input: proposeInput(),
+        purpose: 'dpv:ServiceProvision',
+        invocationId,
+      }),
+    ).toThrow(/ordinary finalization failure/);
+    const event = db.vault.prepare('SELECT event_id FROM core_event').get() as {
+      event_id: string;
+    };
+    const marker = db.vault
+      .prepare(
+        `SELECT intent_id, audit_json, journal_finalized_at
+           FROM replica_invocation_commit WHERE invocation_id = ?`,
+      )
+      .get(invocationId) as {
+      intent_id: string | null;
+      audit_json: string;
+      journal_finalized_at: string | null;
+    };
+    expect(marker.intent_id).toBeNull();
+    expect(marker.journal_finalized_at).toBeNull();
+    expect(JSON.parse(marker.audit_json)).toMatchObject({
+      receiptDetail: { output: { event_id: event.event_id } },
+    });
+
+    db.journal.exec('DROP TRIGGER fail_ordinary_finalization_receipt');
+    gw = createGateway(db);
+    registerScheduleCommands(gw);
+    const retry = gw.invoke(owner, {
+      command: 'schedule.propose_event',
+      input: proposeInput(),
+      purpose: 'dpv:ServiceProvision',
+      invocationId,
+    });
+
+    expect(retry).toMatchObject({
+      status: 'replayed',
+      invocationId,
+      output: { event_id: event.event_id },
+    });
+    expect(db.vault.prepare('SELECT count(*) AS n FROM core_event').get()).toEqual({ n: 1 });
+    expect(
+      db.vault
+        .prepare(`SELECT 1 AS present FROM replica_invocation_commit WHERE invocation_id = ?`)
+        .get(invocationId),
+    ).toBeUndefined();
   });
 
   test('judgment veto blocks an otherwise-valid call', () => {
@@ -349,10 +609,19 @@ describe('confirmation routing + revocation + sweeps', () => {
       )
       .run();
     const { cred } = grantedAgent();
+    recordReplicaIntentOutcome(db.vault, {
+      intentId: 'offline-intent-1',
+      deviceId: 'remote-device-1',
+      appId: 'agenda',
+      action: 'propose',
+      payloadHash: 'sha256:offline-intent-1',
+      status: 'sending',
+    });
     const parked = gw.invoke(cred, {
       command: 'schedule.propose_event',
       input: proposeInput(),
       purpose: 'dpv:ServiceProvision',
+      intentId: 'offline-intent-1',
     });
     expect(parked.status).toBe('parked');
     if (parked.status !== 'parked') return;
@@ -367,6 +636,11 @@ describe('confirmation routing + revocation + sweeps', () => {
       caller: 'assistant',
       input: proposeInput(),
     });
+    // The approval payload is vault state, not process memory: a daemon
+    // restart must leave the same review surface and resumable invocation.
+    gw = createGateway(db);
+    registerScheduleCommands(gw);
+    expect(gw.listParked()).toMatchObject(listed);
     const outcome = gw.confirm(owner, parked.invocationId, true);
     expect(outcome.status).toBe('executed');
     if (outcome.status !== 'executed') return;
@@ -374,6 +648,44 @@ describe('confirmation routing + revocation + sweeps', () => {
       .prepare('SELECT detail_json FROM consent_receipt WHERE receipt_id = ?')
       .get(outcome.receiptId) as { detail_json: string };
     expect(JSON.parse(receipt.detail_json).confirmation.confirmedBy).toBe(boot.ownerPartyId);
+    expect(readReplicaIntentOutcome(db.vault, 'offline-intent-1', 'remote-device-1')).toMatchObject(
+      { status: 'executed', invocationId: parked.invocationId },
+    );
+  });
+
+  test('confirmation retry recreates payload after the journal-only crash gap', () => {
+    db.vault
+      .prepare(
+        `UPDATE agent_capability SET requires_confirmation=1
+          WHERE command_id = (SELECT command_id FROM agent_command WHERE name='schedule.propose_event')`,
+      )
+      .run();
+    const { cred } = grantedAgent();
+    const request = {
+      command: 'schedule.propose_event',
+      input: proposeInput(),
+      purpose: 'dpv:ServiceProvision',
+      invocationId: 'offline-intent-journal-gap',
+      intentId: 'offline-intent-journal-gap',
+    } as const;
+    const first = gw.invoke(cred, request);
+    expect(first.status).toBe('parked');
+    db.vault
+      .prepare('DELETE FROM replica_parked_payload WHERE invocation_id = ?')
+      .run(request.invocationId);
+
+    const retried = gw.invoke(cred, request);
+
+    expect(retried).toMatchObject({
+      status: 'parked',
+      invocationId: request.invocationId,
+    });
+    expect(
+      db.journal
+        .prepare('SELECT count(*) AS n FROM agent_command_invocation WHERE invocation_id = ?')
+        .get(request.invocationId),
+    ).toEqual({ n: 1 });
+    expect(readDurableParkedPayload(db, request.invocationId)).toBeDefined();
   });
 
   test('listParked resolves callerKind "assistant" for the vault assistant identity, distinct from an automation agent (issue: parked-invocation trust legibility)', () => {
@@ -511,6 +823,158 @@ describe('confirmation routing + revocation + sweeps', () => {
     expect(outcome.status).toBe('denied');
     const events = db.vault.prepare('SELECT count(*) AS n FROM core_event').get() as { n: number };
     expect(events.n).toBe(0);
+  });
+
+  test('denial survives a journal-to-vault settlement crash and an approval retry', () => {
+    db.vault
+      .prepare(
+        `UPDATE agent_capability SET requires_confirmation=1
+          WHERE command_id = (SELECT command_id FROM agent_command WHERE name='schedule.propose_event')`,
+      )
+      .run();
+    const { cred } = grantedAgent();
+    const intentId = 'offline-intent-denial-crash';
+    recordReplicaIntentOutcome(db.vault, {
+      intentId,
+      deviceId: 'remote-device-denial-crash',
+      appId: 'agenda',
+      action: 'propose',
+      payloadHash: 'sha256:offline-intent-denial-crash',
+      status: 'sending',
+    });
+    const parked = gw.invoke(cred, {
+      command: 'schedule.propose_event',
+      input: proposeInput(),
+      purpose: 'dpv:ServiceProvision',
+      invocationId: intentId,
+      intentId,
+    });
+    if (parked.status !== 'parked') throw new Error('expected parked');
+    db.vault.exec(`CREATE TEMP TRIGGER fail_denial_settlement
+      BEFORE UPDATE ON replica_intent_outcome BEGIN
+        SELECT RAISE(ABORT, 'synthetic denial settlement crash');
+      END`);
+
+    expect(() => gw.confirm(owner, parked.invocationId, false)).toThrow(/denial settlement crash/);
+    expect(readDurableParkedPayload(db, parked.invocationId)).toBeDefined();
+    expect(
+      readReplicaIntentOutcome(db.vault, intentId, 'remote-device-denial-crash'),
+    ).toMatchObject({ status: 'sending' });
+    expect(
+      db.journal
+        .prepare(
+          `SELECT count(*) AS n FROM consent_receipt
+            WHERE invocation_id = ? AND decision = 'deny'`,
+        )
+        .get(parked.invocationId),
+    ).toEqual({ n: 1 });
+
+    db.vault.exec('DROP TRIGGER fail_denial_settlement');
+    gw = createGateway(db);
+    registerScheduleCommands(gw);
+    const recovered = gw.confirm(owner, parked.invocationId, true);
+
+    expect(recovered).toMatchObject({
+      status: 'denied',
+      invocationId: parked.invocationId,
+      reason: 'owner denied confirmation',
+    });
+    expect(readDurableParkedPayload(db, parked.invocationId)).toBeUndefined();
+    expect(
+      readReplicaIntentOutcome(db.vault, intentId, 'remote-device-denial-crash'),
+    ).toMatchObject({ status: 'denied', invocationId: parked.invocationId });
+    expect(db.vault.prepare('SELECT count(*) AS n FROM core_event').get()).toEqual({ n: 0 });
+    expect(
+      db.journal
+        .prepare('SELECT count(*) AS n FROM agent_explanation WHERE invocation_id = ?')
+        .get(parked.invocationId),
+    ).toEqual({ n: 1 });
+  });
+
+  test('revoking a replica device makes all of its parked payloads unapprovable', () => {
+    db.vault
+      .prepare(
+        `UPDATE agent_capability SET requires_confirmation=1
+          WHERE command_id = (SELECT command_id FROM agent_command WHERE name='schedule.propose_event')`,
+      )
+      .run();
+    const { cred } = grantedAgent();
+    const intentId = 'offline-intent-device-revoked';
+    const deviceId = 'remote-device-unpaired';
+    recordReplicaIntentOutcome(db.vault, {
+      intentId,
+      deviceId,
+      appId: 'agenda',
+      action: 'propose',
+      payloadHash: 'sha256:offline-intent-device-revoked',
+      status: 'sending',
+    });
+    const parked = gw.invoke(cred, {
+      command: 'schedule.propose_event',
+      input: proposeInput(),
+      purpose: 'dpv:ServiceProvision',
+      invocationId: intentId,
+      intentId,
+    });
+    if (parked.status !== 'parked') throw new Error('expected parked');
+
+    expect(deleteReplicaIntentOutcomesForDevice(db.vault, deviceId)).toBe(1);
+
+    expect(gw.listParked()).toEqual([]);
+    expect(readDurableParkedPayload(db, parked.invocationId)).toBeUndefined();
+    expect(() => gw.confirm(owner, parked.invocationId, true)).toThrow(/no parked invocation/);
+    expect(db.vault.prepare('SELECT count(*) AS n FROM core_event').get()).toEqual({ n: 0 });
+  });
+
+  test('a parked invocation cannot execute after its consent grant is revoked', () => {
+    db.vault
+      .prepare(
+        `UPDATE agent_capability SET requires_confirmation=1
+          WHERE command_id = (SELECT command_id FROM agent_command WHERE name='schedule.propose_event')`,
+      )
+      .run();
+    const { cred, grantId } = grantedAgent();
+    recordReplicaIntentOutcome(db.vault, {
+      intentId: 'offline-intent-revoked-before-confirm',
+      deviceId: 'remote-device-revoked',
+      appId: 'agenda',
+      action: 'propose',
+      payloadHash: 'sha256:offline-intent-revoked-before-confirm',
+      status: 'sending',
+    });
+    const parked = gw.invoke(cred, {
+      command: 'schedule.propose_event',
+      input: proposeInput(),
+      purpose: 'dpv:ServiceProvision',
+      intentId: 'offline-intent-revoked-before-confirm',
+    });
+    if (parked.status !== 'parked') throw new Error('expected parked');
+
+    // Model a process crash after the grant row committed but before the
+    // revocation cascade removed this durable parked payload.
+    db.vault
+      .prepare(
+        `UPDATE consent_access_grant
+            SET status = 'revoked', revoked_at = ?
+          WHERE grant_id = ?`,
+      )
+      .run(new Date().toISOString(), grantId);
+
+    const outcome = gw.confirm(owner, parked.invocationId, true);
+
+    expect(outcome).toMatchObject({
+      status: 'denied',
+      reason: 'consent grant no longer active',
+    });
+    expect(db.vault.prepare('SELECT count(*) AS n FROM core_event').get()).toEqual({ n: 0 });
+    expect(readDurableParkedPayload(db, parked.invocationId)).toBeUndefined();
+    expect(
+      readReplicaIntentOutcome(
+        db.vault,
+        'offline-intent-revoked-before-confirm',
+        'remote-device-revoked',
+      ),
+    ).toMatchObject({ status: 'denied', reason: 'consent grant no longer active' });
   });
 
   test('revocation cascade: agent goes dark instantly, receipts remain', () => {

@@ -51,6 +51,7 @@ import {
   type ConversationRunner,
   type ModelSubsystem,
   type RuntimeLogger,
+  type ToolResult,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
   type VaultWorkspace,
@@ -94,6 +95,8 @@ import type { DeviceTokenStore } from './device-token-store.js';
 import { makeVaultRouteHandler } from '../routes/vault-routes.js';
 import { makePairRouteHandler } from '../routes/pair-routes.js';
 import { makeDevicesRouteHandler } from '../routes/devices-routes.js';
+import { makeReplicaRouteHandler } from '../routes/replica-routes.js';
+import type { ReplicaIntentDispatchOutcome } from '../routes/replica-intent-route.js';
 import { makeConnectionsRouteHandler } from '../routes/connections-routes.js';
 import { makeDemoRouteHandler } from '../routes/demo-routes.js';
 import { makeImportRouteHandler } from '../routes/import-routes.js';
@@ -237,6 +240,61 @@ export type FireAutomation = (
 
 /** A route handler in the gateway chain: `true` when it owned the response. */
 export type RouteHandler = (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
+
+export function replicaDispatchOutcome(result: ToolResult): ReplicaIntentDispatchOutcome {
+  if (result.isError) {
+    const denied = new Set([
+      'UNKNOWN_APP',
+      'UNKNOWN_ACTION',
+      'WRONG_KIND',
+      'INVALID_INPUT',
+      'INVALID_MANIFEST',
+      'NO_ACTIVE_VERSION',
+    ]).has(result.structuredContent.code);
+    return denied
+      ? { status: 'denied', reason: result.structuredContent.message }
+      : {
+          // HANDLER_ERROR includes a vault bridge failure after the canonical
+          // command committed but before journal finalization/transport
+          // completed. GATEWAY_BUSY and any future infrastructure error are
+          // likewise safe to retry. The route keeps the admitted intent in
+          // `sending`; deterministic intent-bound invocation ids dedupe it.
+          status: 'retryable',
+          reason: result.structuredContent.message,
+        };
+  }
+  const value = result.structuredContent;
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const outcome = value as {
+      status?: unknown;
+      invocationId?: unknown;
+      reason?: unknown;
+      output?: unknown;
+    };
+    const reason = typeof outcome.reason === 'string' ? outcome.reason : undefined;
+    if (outcome.status === 'parked') {
+      return {
+        status: 'parked',
+        ...(typeof outcome.invocationId === 'string' ? { invocationId: outcome.invocationId } : {}),
+        ...(reason ? { reason } : {}),
+      };
+    }
+    if (outcome.status === 'denied' || outcome.status === 'failed') {
+      return {
+        status: outcome.status,
+        reason: reason ?? `app action ${outcome.status}`,
+        ...(outcome.output !== undefined ? { output: outcome.output } : {}),
+      };
+    }
+    if (outcome.status === 'executed' || outcome.status === 'replayed') {
+      return {
+        status: 'executed',
+        ...(outcome.output !== undefined ? { output: outcome.output } : {}),
+      };
+    }
+  }
+  return { status: 'executed', ...(value !== undefined ? { output: value } : {}) };
+}
 
 // Prefixes the chat-history + prefs routes answer to, mirrored from
 // app-engine's http-server.ts so `composedHandler` matches the same URLs
@@ -1724,6 +1782,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             tickets: options.devicePairing.tickets,
             endpointTicket: options.devicePairing.endpointTicket,
             vaultName: (id) => vaultRegistry.get(id)?.name,
+            onRevoked: (rows) => {
+              for (const row of rows) {
+                vaultRegistry.get(row.vaultId)?.forgetReplicaDevice(row.endpointId);
+              }
+            },
           }),
         ]
       : []),
@@ -1787,6 +1850,22 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // BEFORE the generic `_vault` handler (same prefix family).
     makeConnectionsRouteHandler(vaultRegistry, connectionBroker, {
       onConnectionChanged: invalidateToolCatalog,
+    }),
+    // Consent-derived offline replica protocol (#406). Mounted before the
+    // generic owner `_vault` handler because both share that prefix. The
+    // intent lane executes through the ordinary app dispatcher; the route
+    // only adds durable device-scoped admission/dedupe around it.
+    makeReplicaRouteHandler(vaultRegistry, {
+      ...(options.devicePairing ? { enrollments: options.devicePairing.enrollments } : {}),
+      dispatchIntent: async (input) =>
+        replicaDispatchOutcome(
+          await getDispatcher().write({
+            app: input.appId,
+            action: input.action,
+            input: input.input,
+            intentId: input.intentId,
+          }),
+        ),
     }),
     // Owner consent surface for the vault plane (grants, parked
     // confirmations, rename/presentation). Its `_vault` prefix

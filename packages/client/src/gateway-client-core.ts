@@ -22,6 +22,8 @@
  */
 export interface GatewayAuth {
   baseUrl: string;
+  /** Stable gateway/profile identity; unlike baseUrl it survives transport re-dials. */
+  gatewayId?: string;
   token?: string;
   /** The `x-centraid-vault` header value; undefined = let the gateway pick. */
   vaultId?: string;
@@ -29,6 +31,8 @@ export interface GatewayAuth {
   webControl?: boolean;
   /** Browser requests use the page's Iroh/WASM transport instead of HTTP. */
   iroh?: boolean;
+  /** Explicit pairing consent for durable replica/outbox/cache state. */
+  rememberDevice?: boolean;
 }
 
 declare global {

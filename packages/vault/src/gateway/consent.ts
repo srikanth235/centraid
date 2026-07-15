@@ -39,8 +39,12 @@ export interface ConsentDeny {
 }
 export type ConsentDecision = ConsentAllow | ConsentDeny;
 
-function activeGrants(vault: DatabaseSync, identity: Identity, purpose: string): GrantRow[] {
-  const now = nowIso();
+function activeGrants(
+  vault: DatabaseSync,
+  identity: Identity,
+  purpose: string,
+  evaluatedAt: string,
+): GrantRow[] {
   const selector =
     identity.kind === 'app'
       ? { column: 'g.app_id', value: identity.callerId }
@@ -56,7 +60,7 @@ function activeGrants(vault: DatabaseSync, identity: Identity, purpose: string):
           AND g.revoked_at IS NULL
           AND (g.expires_at IS NULL OR g.expires_at > ?)`,
     )
-    .all(selector.value, now) as unknown as GrantRow[];
+    .all(selector.value, evaluatedAt) as unknown as GrantRow[];
   return rows.filter((g) => g.purpose_notation === purpose);
 }
 
@@ -81,14 +85,19 @@ function scopesFor(
  * covers it. This is how "condition rows are excluded from default scopes"
  * (§03/§07) is data, not code.
  */
-function requiresExplicitScope(vault: DatabaseSync, schema: string, table: string): boolean {
+function requiresExplicitScope(
+  vault: DatabaseSync,
+  schema: string,
+  table: string,
+  evaluatedAt: string,
+): boolean {
   const row = vault
     .prepare(
       `SELECT count(*) AS n FROM consent_policy
         WHERE kind = 'minimization' AND applies_schema = ? AND applies_table = ?
           AND effective_from <= ?`,
     )
-    .get(schema, table, nowIso()) as { n: number };
+    .get(schema, table, evaluatedAt) as { n: number };
   return row.n > 0;
 }
 
@@ -98,6 +107,7 @@ function purposePermitted(
   schema: string,
   table: string,
   purpose: string,
+  evaluatedAt: string,
 ): boolean {
   const rows = vault
     .prepare(
@@ -107,7 +117,7 @@ function purposePermitted(
           AND effective_from <= ?
         ORDER BY priority ASC`,
     )
-    .all(schema, table, nowIso()) as { rule_json: string }[];
+    .all(schema, table, evaluatedAt) as { rule_json: string }[];
   for (const row of rows) {
     const rule = JSON.parse(row.rule_json) as { allowed_purposes?: string[] };
     if (Array.isArray(rule.allowed_purposes) && !rule.allowed_purposes.includes(purpose))
@@ -128,6 +138,7 @@ export function evaluateConsent(
   table: string,
   verb: 'read' | 'act' | 'reveal',
   declaredPurpose?: string,
+  evaluatedAt = nowIso(),
 ): ConsentDecision {
   // Purposes are dormant, not deleted (issue #306 decision 4): an undeclared
   // purpose evaluates as the default, so policy rules still bite either way.
@@ -137,7 +148,7 @@ export function evaluateConsent(
   if ((verb === 'act' || verb === 'reveal') && !identity.mayAct) {
     return { decision: 'deny', failing: 'device is readonly', grantId: null };
   }
-  if (!purposePermitted(vault, schema, table, purpose)) {
+  if (!purposePermitted(vault, schema, table, purpose, evaluatedAt)) {
     return {
       decision: 'deny',
       failing: `policy forbids purpose ${purpose} on ${schema}.${table}`,
@@ -147,11 +158,11 @@ export function evaluateConsent(
   if (identity.kind === 'owner-device') {
     return { decision: 'allow', grantId: null, rowFilter: [], fieldMask: null };
   }
-  const grants = activeGrants(vault, identity, purpose);
+  const grants = activeGrants(vault, identity, purpose, evaluatedAt);
   if (grants.length === 0) {
     return { decision: 'deny', failing: `no active grant for purpose ${purpose}`, grantId: null };
   }
-  const explicitOnly = requiresExplicitScope(vault, schema, table);
+  const explicitOnly = requiresExplicitScope(vault, schema, table, evaluatedAt);
   for (const grant of grants) {
     for (const scope of scopesFor(vault, grant.grant_id, schema, table)) {
       // Reveal never rides read or act (issue #293): only an explicit

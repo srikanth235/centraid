@@ -58,6 +58,11 @@ export {
   type VaultInfo,
 } from './serve/vault-registry.js';
 export { makeVaultRouteHandler } from './routes/vault-routes.js';
+export {
+  makeReplicaRouteHandler,
+  REPLICA_INTENTS_PATH,
+  type ReplicaRouteOptions,
+} from './routes/replica-routes.js';
 // The vault-register tool runners, giving chat turns `vault_sql` /
 // `vault_invoke` / `vault_content` capability through the same
 // consent/receipt pipeline the codex/claude runners use (issue #319).

@@ -16,4 +16,4 @@ export const GATEWAY_VERSION = '0.1.0';
  * the gateway HTTP/tunnel contract; clients refuse a gateway whose epoch
  * differs from their own.
  */
-export const GATEWAY_SCHEMA_EPOCH = 1;
+export const GATEWAY_SCHEMA_EPOCH = 2;

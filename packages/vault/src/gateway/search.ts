@@ -118,7 +118,7 @@ export function searchEntity(
               snippet(${spec.fts}, -1, '⟦', '⟧', '…', 12) AS _snippet
          FROM ${spec.fts} JOIN "${ref.physical}" b ON b."${spec.idColumn}" = ${spec.fts}."${spec.idColumn}"
         WHERE ${spec.fts} MATCH ? AND ${grantFilter.where} AND ${callerFilter.where}
-        ORDER BY ${spec.fts}.rank LIMIT ${limit}`,
+        ORDER BY ${spec.fts}.rank, b."${spec.idColumn}" LIMIT ${limit}`,
     )
     .all(match, ...grantFilter.params, ...callerFilter.params) as Record<string, unknown>[];
   const receiptId = writeReceipt(db.journal, {

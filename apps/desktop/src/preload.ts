@@ -146,6 +146,7 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     token: string;
     displayName?: string;
     avatarColor?: string;
+    rememberDevice?: boolean;
   }) => ipcRenderer.invoke(Channel.GATEWAYS_ADD, input),
   removeGateway: (input: { id: string }) => ipcRenderer.invoke(Channel.GATEWAYS_REMOVE, input),
   renameGateway: (input: { id: string; label: string }) =>
@@ -167,6 +168,7 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     label?: string;
     mode?: 'auto' | 'iroh' | 'http';
     url?: string;
+    rememberDevice?: boolean;
   }) => ipcRenderer.invoke(Channel.GATEWAY_PAIR_REDEEM, input),
   // Preview a gateway's vault list WITHOUT switching to it (issue #376) —
   // the flat (gateway, vault) switcher.
@@ -189,6 +191,7 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     destination: string;
     dataDir?: string;
     label?: string;
+    rememberDevice?: boolean;
     vault: { kind: 'existing'; vaultId: string } | { kind: 'create'; name: string };
   }) => ipcRenderer.invoke(Channel.GATEWAY_SSH_CONNECT, input),
   // Gateway runtime watch: latest heartbeat snapshot for first paint, plus
@@ -212,6 +215,9 @@ contextBridge.exposeInMainWorld('CentraidApi', {
       activeGatewayLabel: string;
       activeProfileDisplayName: string;
       activeProfileAvatarColor: string;
+      gatewayId?: string;
+      removedGatewayId?: string;
+      purgeReplicaGatewayId?: string;
     }) => void,
   ) => {
     const handler = (_e: IpcRendererEvent, msg: unknown): void =>
@@ -222,6 +228,9 @@ contextBridge.exposeInMainWorld('CentraidApi', {
           activeGatewayLabel: string;
           activeProfileDisplayName: string;
           activeProfileAvatarColor: string;
+          gatewayId?: string;
+          removedGatewayId?: string;
+          purgeReplicaGatewayId?: string;
         },
       );
     ipcRenderer.on(Channel.GATEWAY_CHANGED, handler);
@@ -241,9 +250,17 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // Deliberately separate from VAULT_CHANGED — no addressing changed here,
   // so this must not trigger `reScope`'s navigate-Home in App.tsx.
   notifyVaultMetadataChanged: () => ipcRenderer.invoke(Channel.VAULT_METADATA_CHANGED),
-  onVaultChanged: (cb: (msg: { activeGatewayId: string; activeVaultId?: string }) => void) => {
+  onVaultChanged: (
+    cb: (msg: { activeGatewayId: string; gatewayId?: string; activeVaultId?: string }) => void,
+  ) => {
     const handler = (_e: IpcRendererEvent, msg: unknown): void =>
-      cb(msg as { activeGatewayId: string; activeVaultId?: string });
+      cb(
+        msg as {
+          activeGatewayId: string;
+          gatewayId?: string;
+          activeVaultId?: string;
+        },
+      );
     ipcRenderer.on(Channel.VAULT_CHANGED, handler);
     return () => ipcRenderer.off(Channel.VAULT_CHANGED, handler);
   },
