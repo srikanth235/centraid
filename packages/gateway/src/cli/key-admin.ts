@@ -124,8 +124,9 @@ function receiptKeyGesture(
     // autocheckpoint off is a PERF HINT, not a correctness requirement (issue
     // #411 action 1): the shipper VERIFIES salts/offsets every capture and
     // breaks the generation on any foreign checkpoint, so were this short-lived
-    // write connection to autocheckpoint it would be caught and healed, never a
-    // silent gap — the pragma just spares a base re-upload. (Its close, if it is
+    // write connection to autocheckpoint it would be caught and healed by a
+    // ticking shipper (and is harmless with none running — no stream to hole);
+    // the pragma just spares a base re-upload. (Its close, if it is
     // the LAST connection — gateway down — still runs SQLite's close-checkpoint;
     // the shipper detects that on next start and heals with a fresh base.)
     journal.exec('PRAGMA wal_autocheckpoint = 0');

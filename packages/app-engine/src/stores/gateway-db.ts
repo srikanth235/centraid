@@ -304,8 +304,9 @@ export function openJournalDb(dbPath: string): DatabaseSync {
   // requirement (issue #411 action 1): the shipper VERIFIES salts/offsets at
   // every capture and breaks the generation on any foreign checkpoint, so a
   // default-autocheckpointing ledger connection (this one commits!) resetting
-  // the WAL in place at the 1000-page threshold is caught and healed, never a
-  // silent gap. The pragma just keeps that heal — a full base re-upload — rare.
+  // the WAL in place at the 1000-page threshold is caught and healed while a
+  // shipper is ticking (and harmless when none is — no stream exists to hole).
+  // The pragma just keeps that heal — a full base re-upload — rare.
   // Per connection, so EVERY by-path opener sets it, not just the vault's.
   db.exec(`
     PRAGMA journal_mode=WAL;

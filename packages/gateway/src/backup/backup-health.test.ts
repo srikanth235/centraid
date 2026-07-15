@@ -9,7 +9,6 @@ import type { BackupState, BackupTargetState } from './backup-state.js';
 
 const NOW = 1_800_000_000_000;
 const HOUR_MS = 60 * 60 * 1000;
-const DAY_MS = 24 * HOUR_MS;
 
 /** An otherwise-healthy target: fresh backup, fresh verify, fresh restore-verify. */
 function healthyTarget(over: Partial<BackupTargetState> = {}): BackupTargetState {
