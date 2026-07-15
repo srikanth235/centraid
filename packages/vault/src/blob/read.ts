@@ -138,6 +138,68 @@ export function resolveServableBlob(
   };
 }
 
+/** One derivative rung resolved for a content id — the sha + how to serve it. */
+export interface DerivativeRef {
+  sha256: string;
+  mediaType: string;
+  byteSize: number;
+}
+
+/**
+ * Chunk size for the batched derivative resolve (issue #405 §2). SQLite's
+ * default `SQLITE_MAX_VARIABLE_NUMBER` is comfortably above this, but a
+ * bounded IN list keeps the prepared statement small and the plan stable
+ * across arbitrarily large id sets.
+ */
+const DERIVATIVE_IN_CHUNK = 500;
+
+/**
+ * Resolve one binary rung (`thumb` or `preview`) for MANY content ids in a
+ * single pass (issue #405 §2: "tinies for these N content ids in one pass").
+ * The browse grid (and #405's later previews-first restore wave) paints N
+ * tiles at once — asking `resolveServableBlob` per id would be N statements
+ * and N reachability derivations; this is one indexed sweep over
+ * `core_content_derivative` (chunked at `DERIVATIVE_IN_CHUNK`). Ids with no
+ * such rung are simply absent from the map (the caller renders a placeholder,
+ * the #404 contract). Deliberately does NOT re-run the serve-reachability
+ * check — a derivative is only ever reachable through its parent, so the
+ * caller filters ids to reachable ones before batching (the grid already
+ * queries only reachable assets).
+ */
+export function resolveDerivativeShas(
+  vault: DatabaseSync,
+  contentIds: readonly string[],
+  variant: 'thumb' | 'preview',
+): Map<string, DerivativeRef> {
+  const out = new Map<string, DerivativeRef>();
+  for (let i = 0; i < contentIds.length; i += DERIVATIVE_IN_CHUNK) {
+    const chunk = contentIds.slice(i, i + DERIVATIVE_IN_CHUNK);
+    if (chunk.length === 0) continue;
+    const placeholders = chunk.map(() => '?').join(',');
+    const rows = vault
+      .prepare(
+        `SELECT content_id, sha256, media_type, byte_size
+           FROM core_content_derivative
+          WHERE variant = ? AND sha256 IS NOT NULL
+            AND content_id IN (${placeholders})`,
+      )
+      .all(variant, ...chunk) as {
+      content_id: string;
+      sha256: string;
+      media_type: string;
+      byte_size: number;
+    }[];
+    for (const r of rows) {
+      out.set(r.content_id, {
+        sha256: r.sha256,
+        mediaType: r.media_type,
+        byteSize: r.byte_size,
+      });
+    }
+  }
+  return out;
+}
+
 /**
  * Every sha the model still claims — original blobs, binary variants, staged
  * bytes (their TTL is their claim). This is the live set reconciliation

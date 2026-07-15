@@ -292,16 +292,26 @@ interface FakeS3 {
   url: string;
   objects: Map<string, Buffer>;
   authHeaders: string[];
+  /**
+   * Every request recorded for the ranged-read / single-flight acceptance
+   * tests (issue #405 §1/§4): method, object key, and the raw Range header
+   * (empty string = a whole-object fetch). A framed ranged read must show up
+   * here as (trailer + directory + covering-frame) ranges and NEVER a
+   * rangeless GET of the object.
+   */
+  requests: { method: string; key: string; range: string }[];
   close(): Promise<void>;
 }
 
 function startFakeS3(): Promise<FakeS3> {
   const objects = new Map<string, Buffer>();
   const authHeaders: string[] = [];
+  const requests: { method: string; key: string; range: string }[] = [];
   const server = http.createServer((req, res) => {
     authHeaders.push(String(req.headers.authorization ?? ''));
     const url = new URL(req.url ?? '/', 'http://s3.local');
     const key = decodeURIComponent(url.pathname).replace(/^\/test-bucket\/?/, '');
+    requests.push({ method: req.method ?? '', key, range: String(req.headers.range ?? '') });
     const chunks: Buffer[] = [];
     req.on('data', (c: Buffer) => chunks.push(c));
     req.on('end', () => {
@@ -348,6 +358,7 @@ function startFakeS3(): Promise<FakeS3> {
         url: `http://127.0.0.1:${addr.port}`,
         objects,
         authHeaders,
+        requests,
         close: () => new Promise<void>((resolve) => server.close(() => resolve())),
       });
     });
@@ -429,3 +440,121 @@ test('s3 driver: throttleBytesPerSec paces sustained PUT throughput (issue #367 
     await fake.close();
   }
 });
+
+// ---------- issue #405: framed rangeable seal + single-flight ----------
+
+function s3RemoteTier(fake: FakeS3, prefix: string, extra: Partial<RemoteTier>): RemoteTier {
+  return {
+    store: new S3BlobStore({
+      endpoint: fake.url,
+      bucket: 'test-bucket',
+      prefix,
+      credentials: () => Promise.resolve({ accessKeyId: 'AK', secretAccessKey: 'SK' }),
+    }),
+    ...extra,
+  };
+}
+
+test('#405 §1: a ranged read of a sealed remote fetches only covering frames', async () => {
+  const fake = await startFakeS3();
+  try {
+    const key = Buffer.alloc(32, 0x33);
+    const remote = s3RemoteTier(fake, 'ranged', { encryptKey: key, frameSize: 32 });
+    const local = new MemoryBlobStore();
+    const custody = new BlobCustody(local, () => remote);
+
+    // 200 bytes over 32-byte frames = 7 frames; random so nothing compresses
+    // the frame lengths into a surprise.
+    const plain = randomBytesOf(200);
+    const sha = custody.ingestSync(plain).sha256;
+    await custody.replicate();
+
+    // A fresh device: local lost the bytes. Range spans a single interior
+    // frame (bytes 40..60 → frame index 1 only).
+    local.deleteSync(sha);
+    fake.requests.length = 0;
+    const slice = await custody.open(sha, { start: 40, end: 60 });
+    expect(slice?.equals(plain.subarray(40, 61))).toBe(true);
+
+    // Prove it: every GET carried a Range header and NO GET fetched the whole
+    // object. For a single-frame range that's exactly three GETs — the trailer
+    // suffix, the directory, and the one covering frame — never the 200-byte
+    // object whole (which would be a rangeless GET).
+    const gets = fake.requests.filter((r) => r.method === 'GET' && r.key.endsWith(sha));
+    for (const g of gets) expect(g.range).toMatch(/^bytes=\d+-/);
+    expect(gets.some((g) => g.range === '')).toBe(false);
+    expect(gets.length).toBe(3); // trailer + directory + 1 covering frame
+    // The blob was NOT promoted whole into local (a partial read can't verify
+    // the whole-blob sha — issue #405 §1).
+    expect(local.hasSync(sha)).toBe(false);
+  } finally {
+    await fake.close();
+  }
+});
+
+test('#405 §4: two concurrent open() for a cold sha = one provider GET', async () => {
+  const fake = await startFakeS3();
+  try {
+    const key = Buffer.alloc(32, 0x44);
+    const remote = s3RemoteTier(fake, 'single-flight', { encryptKey: key, frameSize: 64 });
+    const local = new MemoryBlobStore();
+    const custody = new BlobCustody(local, () => remote);
+
+    const plain = randomBytesOf(300);
+    const sha = custody.ingestSync(plain).sha256;
+    await custody.replicate();
+    local.deleteSync(sha);
+    fake.requests.length = 0;
+
+    const [a, b] = await Promise.all([custody.open(sha), custody.open(sha)]);
+    expect(a?.equals(plain)).toBe(true);
+    expect(b?.equals(plain)).toBe(true);
+    // Coalesced: exactly ONE whole-object GET reached the provider, and the
+    // read-through promoted the verified bytes back into local.
+    const gets = fake.requests.filter((r) => r.method === 'GET' && r.key.endsWith(sha));
+    expect(gets.length).toBe(1);
+    expect(gets[0]?.range).toBe('');
+    expect(local.hasSync(sha)).toBe(true);
+  } finally {
+    await fake.close();
+  }
+});
+
+test('#405 §1: streaming replicate → remote → ranged read round-trip', async () => {
+  const fake = await startFakeS3();
+  try {
+    const key = Buffer.alloc(32, 0x55);
+    // threshold 0 forces the streaming seal path; FsBlobStore local supplies
+    // openReadStreamSync, S3BlobStore remote supplies putStream.
+    const remote = s3RemoteTier(fake, 'streamed', {
+      encryptKey: key,
+      frameSize: 16,
+      streamThresholdBytes: 0,
+    });
+    const local = new FsBlobStore(path.join(tmp, 'stream-local'));
+    const custody = new BlobCustody(local, () => remote);
+
+    const plain = randomBytesOf(160); // 10 frames of 16 bytes
+    const sha = custody.ingestSync(plain).sha256;
+    expect(await custody.replicate()).toEqual([sha]);
+    local.deleteSync(sha);
+
+    // Whole read-through reconstructs the full blob and verifies its sha.
+    const whole = await custody.open(sha);
+    expect(whole?.equals(plain)).toBe(true);
+    local.deleteSync(sha); // drop the promoted copy, force remote again
+
+    // Ranged read straddling a frame boundary (bytes 30..48 → frames 1..3).
+    const slice = await custody.open(sha, { start: 30, end: 48 });
+    expect(slice?.equals(plain.subarray(30, 49))).toBe(true);
+  } finally {
+    await fake.close();
+  }
+});
+
+/** Deterministic-enough incompressible payload for range-offset assertions. */
+function randomBytesOf(n: number): Buffer {
+  const b = Buffer.allocUnsafe(n);
+  for (let i = 0; i < n; i++) b[i] = (i * 37 + 11) & 0xff;
+  return b;
+}

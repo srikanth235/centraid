@@ -11,11 +11,13 @@
 // never see a connection (§10). Everything outside this package should go
 // through createGateway().
 
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, statfsSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { BlobCustody, type RemoteTier } from './blob/custody.js';
+import { BlobCache, readBlobCacheSettings } from './blob/cache.js';
 import { FsBlobStore, MemoryBlobStore, type LocalBlobStore } from './blob/local.js';
+import type { PreviewCodec } from './blob/preview.js';
 import { S3BlobStore, type S3Credentials } from './blob/s3.js';
 import { registerHammingFn } from './enrich/similarity.js';
 import { asVaultDiskFullError } from './errors.js';
@@ -42,6 +44,16 @@ export interface VaultDb {
    * backends needs no reopen.
    */
   blobs: BlobCustody;
+  /**
+   * The preview ladder's raster codec (issue #405 §2), or undefined when no
+   * codec is wired (the vault package carries none of its own). The gateway
+   * host injects its jpeg-js/pngjs implementation here so the blob sweep's
+   * preview backstop (gateway.ts `sweepBlobs` → `backfillPreviews`) can fill
+   * missing tiny/medium derivatives for imported / weak-client / server-side
+   * image originals. Absent = no backstop; capable clients still produce
+   * their own rungs at capture time.
+   */
+  previewCodec?: PreviewCodec;
   /**
    * `skipOptimize` is for the WAL-shipper shutdown path (issue #408): the
    * shipper runs `PRAGMA optimize` itself BEFORE its final checkpoint, so
@@ -91,6 +103,16 @@ export interface BlobStoreSettings {
    * simple token bucket in `S3BlobStore`). Omitted/0 = unthrottled.
    */
   throttleBytesPerSec?: number;
+  /**
+   * S3 storage class for object-creating writes (issue #405 §6) — passed
+   * straight to `S3BlobStore` as `x-amz-storage-class` on PUT and
+   * CreateMultipartUpload. camelCase in the settings JSON to match
+   * `throttleBytesPerSec` (the bag is cast 1:1 from JSON, so the wire key and
+   * this field are the same string). Free-form: S3-compatibles define their
+   * own class names, so no enum is enforced here. Omitted ⇒ no header ⇒
+   * today's behavior.
+   */
+  storageClass?: string;
 }
 
 export interface OpenVaultOptions {
@@ -107,6 +129,13 @@ export interface OpenVaultOptions {
    * replication sweep reports the gap instead of failing writes.
    */
   s3Credentials?: (settings: BlobStoreSettings) => Promise<S3Credentials>;
+  /**
+   * The preview ladder's raster codec (issue #405 §2) — the gateway host
+   * passes its jpeg-js/pngjs implementation so the blob sweep's backstop can
+   * generate missing thumb/preview derivatives. Omitted for hosts (and tests)
+   * with no codec: the backstop simply doesn't run.
+   */
+  previewCodec?: PreviewCodec;
 }
 
 function openFile(location: string): DatabaseSync {
@@ -223,6 +252,9 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
         ...(settings.throttleBytesPerSec
           ? { throttleBytesPerSec: settings.throttleBytesPerSec }
           : {}),
+        // Storage class passthrough (issue #405 §6): unset ⇒ omitted ⇒ the
+        // driver sends no x-amz-storage-class header (today's behavior).
+        ...(settings.storageClass ? { storageClass: settings.storageClass } : {}),
       }),
       encryptKey: encryptOn ? sealKey : undefined,
     };
@@ -230,12 +262,42 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     return tier;
   };
 
+  // The bounded storage tier's cache coordinator (issue #405 §3/§4). Only a
+  // file-backed vault has a volume to measure, so the derived budget's `statfs`
+  // probe is wired ONLY for fs vaults (in-memory vaults get an unlimited budget
+  // unless a test sets `blob_cache.budgetBytes` explicitly). The budget's
+  // settings read is the CURRENT `blob_cache` row on every check, so changing
+  // it needs no reopen — same lazy-settings contract as `remoteTier`.
+  const blobsDir = dir === undefined ? undefined : path.join(dir, 'blobs');
+  const blobCache = new BlobCache(vault, local, {
+    settings: () => readBlobCacheSettings(vault),
+    ...(blobsDir
+      ? {
+          statfs: () => {
+            try {
+              const s = statfsSync(blobsDir);
+              return { bavail: s.bavail, bsize: s.bsize };
+            } catch {
+              // The blobs dir may not exist until the first write — treat an
+              // unreadable volume as "no measurement" (unlimited) rather than
+              // failing a budget check; the disk-full floor (VaultDiskFullError)
+              // still guards the real ENOSPC edge.
+              return null;
+            }
+          },
+        }
+      : {}),
+  });
+
   return {
     vault,
     journal,
     dir: dir ?? ':memory:',
     sealKey,
-    blobs: new BlobCustody(local, remoteTier),
+    blobs: new BlobCustody(local, remoteTier, blobCache),
+    // Injected raster codec for the preview backstop (issue #405 §2), or
+    // undefined — a codec-less open just never runs the backstop.
+    ...(options.previewCodec ? { previewCodec: options.previewCodec } : {}),
     close(opts) {
       // PRAGMA optimize (issue #374 tier 5a): a cheap, targeted ANALYZE that
       // only touches tables whose stats look stale — recommended by SQLite

@@ -13,6 +13,7 @@ export {
   isDiskFullError,
   asVaultDiskFullError,
   VaultDiskFullError,
+  VaultBlobBackpressureError,
   DiskFullTracker,
   sharedDiskFullTracker,
   type DiskFullEvent,
@@ -48,6 +49,18 @@ export {
   type RemoteTier,
 } from './blob/custody.js';
 export {
+  BlobCache,
+  readBlobCacheSettings,
+  CACHE_BUDGET_FLOOR_BYTES,
+  CACHE_BUDGET_CEILING_BYTES,
+  DEFAULT_REPLICATION_CONCURRENCY,
+  type BlobCacheSettings,
+  type BlobCacheOptions,
+  type BlobMetrics,
+  type CacheStatfs,
+} from './blob/cache.js';
+export { ReplicaIndex, AccessIndex } from './blob/replica-index.js';
+export {
   stageBlobBytes,
   sweepBlobStaging,
   releaseBatchHold,
@@ -61,10 +74,22 @@ export { promoteStagedBlob, type PromotedContent } from './blob/promote.js';
 export { sniffMediaType, extractBlobMeta, type BlobMeta } from './blob/pipeline.js';
 export {
   resolveServableBlob,
+  resolveDerivativeShas,
   liveBlobShas,
   type BlobResolveOutcome,
   type ServableBlob,
+  type DerivativeRef,
 } from './blob/read.js';
+export {
+  backfillPreviews,
+  TINY_EDGE,
+  MEDIUM_EDGE,
+  PREVIEW_LADDER,
+  PREVIEW_BACKFILL_BATCH,
+  type PreviewCodec,
+  type PreviewOutput,
+  type PreviewBackfillResult,
+} from './blob/preview.js';
 export { uuidv7, nowIso, sha256Hex } from './ids.js';
 export {
   ONTOLOGY_VERSION,

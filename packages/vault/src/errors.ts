@@ -61,6 +61,30 @@ export function asVaultDiskFullError(context: string, err: unknown): Error {
   return err instanceof Error ? err : new Error(String(err));
 }
 
+/**
+ * Ingest backpressure (issue #405 §3/§5): the bounded storage tier's spool is
+ * at its cache budget AND the pass could free nothing — everything local is
+ * either pinned (tinies), un-replicated (deleting it would lose the last
+ * copy), or still in staging. This is BACKPRESSURE, never loss: the caller
+ * must pace ingest against the uplink (retry once replication catches up), so
+ * routes map it to a retryable 429, distinct from `VaultDiskFullError`'s 507
+ * (the disk is genuinely full — a different, non-retryable-by-pacing failure).
+ *
+ * The invariant this error PROTECTS: no ingest ever deletes an un-replicated
+ * blob to make room. When there is nothing safely evictable, we refuse the
+ * write instead — the last local copy of a `local-only` blob is sacred (§3,
+ * "evict-only-if-replicated enforced in the custody layer").
+ */
+export class VaultBlobBackpressureError extends Error {
+  constructor(
+    readonly context: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'VaultBlobBackpressureError';
+  }
+}
+
 /** One recorded disk-full event — what the gateway's `disk` health probe surfaces. */
 export interface DiskFullEvent {
   /** ISO timestamp the event was recorded. */

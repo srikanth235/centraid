@@ -48,6 +48,45 @@ const REFRESH_DOCUMENT_FTS = (contentIdRef: string) => `
     FROM core_document d
    WHERE d.current_content_id = ${contentIdRef} AND d."deleted_at" IS NULL;`;
 
+// Bounded-storage-tier cache tables (issue #405 §3/§4). Deliberately
+// SELF-CONTAINED — no FKs into the core spine, no triggers — so a test can
+// create them on a bare `:memory:` handle without the whole migration ladder,
+// and so they are pure plumbing (like `blob_staging`, NOT registered logical
+// entities the app plane can read).
+//
+//   blob_replica — the DURABLE replication index (§4): one row per sha we have
+//     pushed to the remote tier and got a 2xx back for. This is the local
+//     EVIDENCE that a copy exists off-disk; `statusFor()`/`replicate()` read it
+//     instead of a live `remote.list()` (which is O(all-objects) — 100+ round
+//     trips per sweep at 500 GB). It is a CACHE of evidence, not truth: the
+//     remote listing is truth, and `reconcile()`'s deep pass heals this table
+//     from it. Evict-only-if-replicated (§3) consults THIS table — durable
+//     proof we replicated — never a live listing.
+//
+//   blob_access — LRU access tracking (§3): last-access time per sha, so the
+//     eviction pass can evict least-recently-used mediums/originals first. The
+//     hot sync read path (`getSync`/`open`) must NEVER pay a synchronous SQLite
+//     write per read, so touches accumulate in an in-memory write-behind Map
+//     (blob/replica-index.ts `AccessIndex`) and flush at sweep time. The
+//     staleness trade-off: a blob read since the last flush may sort older than
+//     it truly is until the next flush — acceptable, because eviction only runs
+//     at sweep boundaries (which flush first) and cache pressure, not per read.
+//     A sha with no row sorts OLDEST (never touched since it landed).
+export const BLOB_CACHE_DDL = `
+CREATE TABLE IF NOT EXISTS blob_replica (
+  sha256        TEXT PRIMARY KEY CHECK (length(sha256) = 64),
+  replicated_at TEXT NOT NULL,
+  byte_size     INTEGER NOT NULL CHECK (byte_size >= 0)
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS blob_access (
+  sha256         TEXT PRIMARY KEY CHECK (length(sha256) = 64),
+  last_access_at TEXT NOT NULL,
+  byte_size      INTEGER
+) STRICT;
+CREATE INDEX IF NOT EXISTS idx_blob_access_lru ON blob_access(last_access_at);
+`;
+
 export const BLOB_DDL = `
 CREATE TABLE IF NOT EXISTS blob_staging (
   sha256        TEXT PRIMARY KEY CHECK (length(sha256) = 64),
@@ -124,7 +163,7 @@ CREATE TRIGGER IF NOT EXISTS trg_fts_document_derivative_ad AFTER DELETE ON core
 WHEN OLD.variant = 'text'
 BEGIN${REFRESH_DOCUMENT_FTS('OLD.content_id')}
 END;
-`;
+${BLOB_CACHE_DDL}`;
 
 /**
  * Rebuild path for `fts_core_document` (issue #367 §E3) — the
