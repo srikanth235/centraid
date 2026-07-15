@@ -10,6 +10,7 @@
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { frameChunkPayload, unframeChunkPayload } from './compress.js';
 import {
   activeMasterKey,
   chunkId as computeChunkId,
@@ -263,9 +264,15 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
       // Deterministic nonce from the chunk's own keyed content hash (G7):
       // same plaintext ⇒ same id ⇒ byte-identical object (retries and dedup
       // races converge); different plaintext ⇒ different id ⇒ fresh nonce —
-      // the (key, nonce) pair can never repeat with different content.
+      // the (key, nonce) pair can never repeat with different content. Both id
+      // and nonce derive from the RAW plaintext, so entropy-gated compression
+      // (below) is invisible to identity: it changes only the sealed byte
+      // count, never where the object lands (#405 §1).
       const nonce = deriveNonce(dataKey, `centraid-backup:chunk-nonce:${id}`);
-      const encrypted = encryptWithNonce(dataKey, nonce, plain);
+      // /2 (#405 §1): compress-then-seal. The sealed plaintext is the framed
+      // payload `[algo-id][possibly-compressed body]`, not the raw part —
+      // keep-if-smaller, so incompressible parts cost at most one extra byte.
+      const encrypted = encryptWithNonce(dataKey, nonce, frameChunkPayload(plain));
       uploads.push(
         store
           .head(objectKey)
@@ -389,6 +396,20 @@ export interface RestoreSnapshotOptions {
   pointInTimeMs?: number;
   destDir: string;
   current: RestoreCurrentVersions;
+  /**
+   * Lazy/partial restore predicate (issue #405 §5). Consulted ONCE per `blob`
+   * entry, keyed by the blob's content sha (parsed from its
+   * `blobs/sha256/<fan>/<sha>` path). Return true to SKIP materializing that
+   * blob's bytes to disk — its chunks are never downloaded and no file is
+   * created. This is what lets a >30 GB library restore onto a small disk: a
+   * blob the remote CAS already holds stays remote-only (the vault's custody
+   * read-through fetches it on demand), while a blob NOT in the remote (the
+   * snapshot is its ONLY copy) must NOT be skipped or it is lost. The engine is
+   * deliberately format-neutral about the decision — it only ever consults this
+   * for `kind: 'blob'`, never for `db`/`git-bundle`/`seal-key` entries (those
+   * are load-bearing for the restore itself and are always materialized).
+   */
+  skipBlob?: (blob: { path: string; sha: string }) => boolean | Promise<boolean>;
   log?: EngineLogger;
 }
 
@@ -398,6 +419,12 @@ export interface RestoreResult {
   entries: string[];
   /** WAL replay outcome for the authenticated coordinated base pair. */
   walReplay: WalReplayOutcome;
+  /**
+   * Blob shas the `skipBlob` predicate held back (issue #405 §5) — materialized
+   * remotely-only, to be served on demand by the vault's custody read-through.
+   * Empty on a full restore (no predicate, or nothing skipped).
+   */
+  skippedBlobs: string[];
 }
 
 /** `x.y` (or bare `x`) numeric version compare: -1/0/1. Non-numeric parts compare as 0. */
@@ -539,11 +566,23 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
   const dataKey = deriveDataKey(master, opts.vaultId);
   const dedupKey = deriveDedupKey(master, opts.vaultId);
 
+  const skippedBlobs: string[] = [];
   for (const entry of opened.entries) {
     // 2 (continued). Reject path traversal entries — openManifest already
     // validated this, but re-check defensively at the point we touch disk.
     if (!isSafeEntryPath(entry.path)) {
       throw new Error(`restoreSnapshot: entry path rejected: "${entry.path}"`);
+    }
+    // Lazy/partial restore (issue #405 §5): a blob the caller says the remote
+    // CAS already holds is left remote-only — never downloaded, never written.
+    // The custody read-through serves it on demand later. Only `blob` entries
+    // are ever eligible; the sha is the file name of the content-addressed path.
+    if (opts.skipBlob && entry.kind === 'blob') {
+      const sha = entry.path.split('/').pop() ?? '';
+      if (await opts.skipBlob({ path: entry.path, sha })) {
+        skippedBlobs.push(sha);
+        continue;
+      }
     }
     const dest = path.join(opts.destDir, ...entry.path.split('/'));
     await fs.mkdir(path.dirname(dest), { recursive: true });
@@ -555,7 +594,10 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
     try {
       for (const id of entry.chunks) {
         const ciphertext = await store.get(`chunks/${id}`);
-        const plain = decrypt(dataKey, ciphertext);
+        // Unseal, then unframe: the sealed plaintext is `[algo-id][body]`
+        // (/2, #405 §1); the raw part is what the keyed id is recomputed over,
+        // so decompression happens BEFORE the integrity check.
+        const plain = unframeChunkPayload(decrypt(dataKey, ciphertext));
         const recomputed = computeChunkId(dedupKey, plain);
         if (recomputed !== id) {
           throw new Error(
@@ -614,6 +656,7 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
     generation: row.generation,
     entries: opened.entries.map((e) => e.path),
     walReplay,
+    skippedBlobs,
   };
 }
 
@@ -683,7 +726,10 @@ export async function verifySnapshot(opts: VerifySnapshotOptions): Promise<Verif
   for (const chunk of sample) {
     try {
       const ciphertext = await store.get(`chunks/${chunk.id}`);
-      const plain = decrypt(dataKey, ciphertext);
+      // Unseal → unframe → recompute the keyed id over the raw plaintext
+      // (/2, #405 §1): a sample that decompresses and re-addresses proves the
+      // object is both readable and the content it claims to be.
+      const plain = unframeChunkPayload(decrypt(dataKey, ciphertext));
       const recomputed = computeChunkId(dedupKey, plain);
       if (recomputed !== chunk.id) corrupt.push(chunk.id);
     } catch {

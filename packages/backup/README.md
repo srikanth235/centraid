@@ -3,13 +3,22 @@
 Offsite storage: the **`centraid-storage-provider/1`** wire protocol seam
 (`PROTOCOL.md`) — an account+grant layer (Layer 1) with workload semantics
 layered on top per store class (Layer 2: `backup`, `cas`) — plus the
-**`centraid-snapshot/1`** snapshot format engine (`FORMAT.md`) for the
+**`centraid-snapshot/2`** snapshot format engine (`FORMAT.md`) for the
 `backup` store class. Read those two files first — they are normative; this
 package is their reference implementation, and `conformance.ts` is the
 protocol's own definition of "certified provider" (PROTOCOL.md § Conformance).
 
-Zero runtime dependencies — Node >=22 builtins only (`node:crypto` webcrypto,
-`node:fs`, `node:http` for test fakes, `fetch`).
+Zero runtime dependencies — Node builtins only (`node:crypto` webcrypto,
+`node:zlib` for chunk compression, `node:fs`, `node:http` for test fakes,
+`fetch`).
+
+**Runtime floor: Node ≥22.15** (or Bun ≥1.3). `centraid-snapshot/2` compresses
+chunk objects with `node:zlib` zstd, which landed in Node 22.15; the writer
+feature-detects at load and falls back to raw-deflate under its own
+algorithm-id byte on an older runtime, but zstd is the intended path and the
+test suite assumes the ≥22.15 floor. A reader on any supported runtime handles
+every algorithm-id byte (stored / zstd / deflate) regardless of what it can
+itself emit — see `FORMAT.md` § Chunk payload framing.
 
 ## What's here
 
@@ -26,8 +35,11 @@ Zero runtime dependencies — Node >=22 builtins only (`node:crypto` webcrypto,
 - **`cas-grant.ts`** — `requestStorageGrant` / `requestCasGrant`: a standalone
   Layer-1 grant path for a `cas` consumer (e.g. the vault's `S3BlobStore`)
   that has no business pulling in the snapshot engine.
-- **`parts.ts`** — deterministic fixed-size splitting (format `/1`: 16 MiB)
-  for encrypted, keyed-content-addressed snapshot objects.
+- **`parts.ts`** — deterministic fixed-size splitting (16 MiB) for encrypted,
+  keyed-content-addressed snapshot objects.
+- **`compress.ts`** — entropy-gated chunk payload framing (`/2`, #405 §1):
+  `[algo-id][body]` with a keep-if-smaller gate, zstd preferred and raw-deflate
+  fallback, sealed inside encryption downstream of the content-addressed id.
 - **`crypto.ts`** — AES-256-GCM object encryption, HKDF-SHA256 per-vault key
   derivation, keyed chunk ids, and keyring (epoch) custody.
 - **`manifest.ts`** — canonical-JSON manifest build/seal/open/verify.

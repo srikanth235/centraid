@@ -47,6 +47,21 @@ export interface StorageConnectionCardDTO {
   error?: string;
 }
 
+/** Bounded storage-tier health for one vault (issue #405 §7) — process-
+ *  lifetime custody counters. `budgetBytes` is `null` for an unlimited tier. */
+export interface StorageCacheCardDTO {
+  spoolBytes: number;
+  budgetBytes: number | null;
+  localHits: number;
+  readThroughs: number;
+  rangedRemoteReads: number;
+  bytesServedLocal: number;
+  bytesServedRemote: number;
+  evictedBlobs: number;
+  evictedBytes: number;
+  backpressureEvents: number;
+}
+
 export interface StorageVaultCardDTO {
   vaultId: string;
   name: string;
@@ -59,6 +74,8 @@ export interface StorageVaultCardDTO {
     error: string | null;
     consecutiveFailures: number;
   };
+  /** Bounded storage-tier metrics (issue #405 §7); absent on older gateways. */
+  cache?: StorageCacheCardDTO;
 }
 
 export interface StorageCardStatusDTO {
@@ -237,6 +254,81 @@ function ConnectionPanel({ connection }: { connection: StorageConnectionCardDTO 
   );
 }
 
+/** Cache-tier health (issue #405 §7 — "tier health is invisible today"). The
+ *  spool-vs-budget bar mirrors the connection quota bar's anatomy so the two
+ *  reads feel of a piece; the hit-rate is derived here from the raw counters
+ *  (the route ships counts, not a ratio) with the counts kept in a subline so
+ *  a percentage never floats free of its sample size. On a local-only vault
+ *  the remote-facing numbers are all-zero noise, so only the spool bar shows —
+ *  the one metric that still means something without a remote tier. */
+function CacheSection({
+  cache,
+  configured,
+}: {
+  cache: StorageCacheCardDTO;
+  configured: boolean;
+}): JSX.Element {
+  const unlimited = cache.budgetBytes === null;
+  const budget = cache.budgetBytes ?? 0;
+  const spoolPct =
+    !unlimited && budget > 0 ? Math.min(100, Math.round((cache.spoolBytes / budget) * 100)) : 0;
+  const spoolSeverity = spoolPct >= 95 ? 'error' : spoolPct >= 80 ? 'warn' : 'ok';
+
+  const reads = cache.localHits + cache.readThroughs;
+  // Trivially 100% before any read, and on a local-only vault (nothing reads
+  // through a remote that isn't there) — sensible, not a divide-by-zero.
+  const hitRate = reads > 0 ? Math.round((cache.localHits / reads) * 100) : 100;
+  const hasEvictions = cache.evictedBlobs > 0;
+  const hasBackpressure = cache.backpressureEvents > 0;
+
+  return (
+    <div className={styles.cacheSection} data-testid="storage-cache-section">
+      <div className={styles.cacheSpoolFoot}>
+        <span className={styles.cacheSpoolLabel}>cache</span>
+        <span className={styles.cacheSpoolUsed}>
+          {formatBytes(cache.spoolBytes)}
+          {unlimited ? ' cached · unlimited budget' : ` of ${formatBytes(budget)} budget`}
+        </span>
+        {!unlimited ? (
+          <span className={styles.cacheSpoolPct} data-severity={spoolSeverity}>
+            {spoolPct}%
+          </span>
+        ) : null}
+      </div>
+      {!unlimited ? (
+        <div
+          className={styles.cacheTrack}
+          data-severity={spoolSeverity}
+          data-testid="cache-spool-track"
+        >
+          <span className={styles.cacheFill} style={{ width: `${spoolPct}%` }} />
+        </div>
+      ) : null}
+      {configured ? (
+        <div className={styles.cacheMeta}>
+          <span
+            title={`${cache.localHits} local hits · ${cache.readThroughs} remote read-throughs · ${cache.rangedRemoteReads} ranged`}
+          >
+            hit rate {hitRate}%
+          </span>
+          <span>
+            served {formatBytes(cache.bytesServedLocal)} local ·{' '}
+            {formatBytes(cache.bytesServedRemote)} remote
+          </span>
+          {hasEvictions ? (
+            <span>
+              evicted {cache.evictedBlobs} · {formatBytes(cache.evictedBytes)}
+            </span>
+          ) : null}
+          {hasBackpressure ? (
+            <span data-emphasis="warn">backpressure {cache.backpressureEvents}×</span>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function VaultRow({ vault, now }: { vault: StorageVaultCardDTO; now: number }): JSX.Element {
   const hasBacklog = vault.backlog.count > 0;
   const failing = vault.lastSweep.consecutiveFailures > 0;
@@ -266,6 +358,7 @@ function VaultRow({ vault, now }: { vault: StorageVaultCardDTO; now: number }): 
           {vault.lastSweep.consecutiveFailures}x failing: {vault.lastSweep.error}
         </div>
       ) : null}
+      {vault.cache ? <CacheSection cache={vault.cache} configured={vault.configured} /> : null}
     </div>
   );
 }

@@ -19,7 +19,17 @@
  *                                                              (or, for `provider`, a freshly granted) bucket
  *   GET    /centraid/_gateway/storage/status                 — per-vault replication progress: configured,
  *                                                              replicated/backlog (count + bytes), lastSweep,
- *                                                              throttleBytesPerSec
+ *                                                              throttleBytesPerSec, and (issue #405 §7) a
+ *                                                              `cache` block making the bounded storage tier
+ *                                                              visible: spool occupancy vs. budget
+ *                                                              (`budgetBytes` is `null` when the tier is
+ *                                                              unlimited — no disk to measure), the
+ *                                                              process-lifetime hit-rate counters
+ *                                                              (localHits / readThroughs / rangedRemoteReads —
+ *                                                              raw counts, the UI derives the ratio), bytes
+ *                                                              served local vs. remote, and eviction /
+ *                                                              backpressure tallies. Counters reset on gateway
+ *                                                              restart (process-lifetime, not durable).
  *   GET    /centraid/_gateway/storage/usage                  — per-connection usage (issue #367 §D1): a
  *                                                              provider-kind connection's cached
  *                                                              `centraid-storage-provider/1` usage report
@@ -161,6 +171,14 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
           const counts = custodyStateCounts(plane.db.vault);
           const bytes = custodyStateByteCounts(plane.db.vault);
           const sweep = plane.db.blobs.sweepStatus();
+          // Bounded storage-tier health (issue #405 §7 — "tier health is
+          // invisible today"). custody exposes state counts/bytes only; the
+          // cache counters are the missing read. `budgetBytes` surfaces as
+          // `null` for an unlimited tier (the cache's UNLIMITED sentinel is
+          // Number.MAX_SAFE_INTEGER — a vault with no disk to measure, e.g. a
+          // MemoryBlobStore), so the UI shows an "unlimited" state instead of
+          // a nonsensically-huge budget bar.
+          const metrics = plane.db.blobs.metrics();
           return {
             vaultId: plane.boot.vaultId,
             name: plane.name,
@@ -180,6 +198,19 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
             ...(settings.throttleBytesPerSec
               ? { throttleBytesPerSec: settings.throttleBytesPerSec }
               : {}),
+            cache: {
+              spoolBytes: metrics.spoolBytes,
+              budgetBytes:
+                metrics.budgetBytes === Number.MAX_SAFE_INTEGER ? null : metrics.budgetBytes,
+              localHits: metrics.localHits,
+              readThroughs: metrics.readThroughs,
+              rangedRemoteReads: metrics.rangedRemoteReads,
+              bytesServedLocal: metrics.bytesServedLocal,
+              bytesServedRemote: metrics.bytesServedRemote,
+              evictedBlobs: metrics.evictedBlobs,
+              evictedBytes: metrics.evictedBytes,
+              backpressureEvents: metrics.backpressureEvents,
+            },
           };
         });
         return sendJson(res, 200, { vaults });

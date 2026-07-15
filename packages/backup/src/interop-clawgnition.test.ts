@@ -343,14 +343,24 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
 
       sourceDir = await fs.mkdtemp(path.join(os.tmpdir(), 'interop-source-'));
       await fs.mkdir(path.join(sourceDir, 'blobs'), { recursive: true });
-      // >1MiB, incompressible-ish content — FastCDC's min chunk is 512KiB
-      // (FORMAT.md), so this reliably spans multiple chunks.
       await fs.writeFile(
         path.join(sourceDir, 'vault.db'),
         pseudoRandomBuffer(1.5 * 1024 * 1024, 1),
       );
       await fs.writeFile(path.join(sourceDir, 'journal.db'), pseudoRandomBuffer(8_000, 2));
       await fs.writeFile(path.join(sourceDir, 'blobs', 'photo.bin'), pseudoRandomBuffer(40_000, 3));
+      // Large blob: 33 MiB of incompressible bytes so a SINGLE entry spans
+      // MULTIPLE 16 MiB parts (#405 §1 acceptance — the old interop topped out
+      // at 1.5 MiB, one part). Incompressible on purpose: it stores RAW under
+      // the keep-if-smaller gate (each part costs the 1 frame byte, no
+      // inflation) while still exercising many-object seal/upload/restore
+      // reassembly against the real S3 server. (Fixed 16 MiB parts — centraid
+      // no longer content-defined-chunks, so size, not entropy, sets the part
+      // count.)
+      await fs.writeFile(
+        path.join(sourceDir, 'blobs', 'big.bin'),
+        pseudoRandomBuffer(33 * 1024 * 1024, 4),
+      );
       entries = [
         { path: 'vault.db', kind: 'db', absolutePath: path.join(sourceDir, 'vault.db') },
         { path: 'journal.db', kind: 'db', absolutePath: path.join(sourceDir, 'journal.db') },
@@ -358,6 +368,11 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
           path: 'blobs/photo.bin',
           kind: 'blob',
           absolutePath: path.join(sourceDir, 'blobs', 'photo.bin'),
+        },
+        {
+          path: 'blobs/big.bin',
+          kind: 'blob',
+          absolutePath: path.join(sourceDir, 'blobs', 'big.bin'),
         },
       ];
 
@@ -387,7 +402,11 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
       // `startsWith`, below.
       const putKeys = s3.listDirect(BUCKET, `u/${targetId}/backup/`);
       expect(putKeys.some((k) => k.includes('/manifests/'))).toBe(true);
-      expect(putKeys.filter((k) => k.includes('/chunks/')).length).toBeGreaterThan(1); // multi-chunked
+      // The 33 MiB blob alone splits into ceil(33/16)=3 fixed parts, so the
+      // snapshot lands several distinct chunk objects — a single entry now
+      // genuinely spans multiple parts (not four one-part files masquerading
+      // as "multi-chunked").
+      expect(putKeys.filter((k) => k.includes('/chunks/')).length).toBeGreaterThanOrEqual(5);
 
       const destDir = path.join(os.tmpdir(), `interop-restore-${Date.now()}`);
       const result = await restoreSnapshot({
@@ -441,7 +460,7 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
       manifestHash: 'd'.repeat(64),
       totalBytes: 1,
       objectCount: 1,
-      format: 'centraid-snapshot/1',
+      format: 'centraid-snapshot/2',
       appMeta: {},
     };
     const manifestKeyFor = (name: string) => `u/${targetId}/backup/manifests/${name}`;
@@ -531,7 +550,7 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
       totalBytes: 4096,
       objectCount: 2,
       generation: 1,
-      format: 'centraid-snapshot/1',
+      format: 'centraid-snapshot/2',
       appMeta: {},
     });
 

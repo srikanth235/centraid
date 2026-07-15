@@ -31,8 +31,18 @@ export type { S3ObjectStoreOptions } from './s3-store.js';
 export { requestCasGrant, requestStorageGrant } from './cas-grant.js';
 export type { RequestCasGrantOptions, RequestStorageGrantOptions } from './cas-grant.js';
 
-// Parts (FORMAT.md § Parts — fixed-size, /1).
+// Parts (FORMAT.md § Parts — fixed-size, /1 boundaries kept in /2).
 export { PART_BYTES, partBuffer, partStream } from './parts.js';
+
+// Entropy-gated chunk payload framing (FORMAT.md § Chunk payload framing — /2, #405 §1).
+export {
+  ALGO_DEFLATE,
+  ALGO_STORE,
+  ALGO_ZSTD,
+  frameChunkPayload,
+  unframeChunkPayload,
+  zstdAvailable,
+} from './compress.js';
 
 // WAL segments (FORMAT.md § WAL segments — /1, issue #408).
 export {
@@ -110,6 +120,7 @@ export {
   sha256Hex,
   SNAPSHOT_FORMAT,
   SNAPSHOT_FORMAT_V1,
+  SNAPSHOT_FORMAT_V2,
   verifyManifest,
 } from './manifest.js';
 export type {

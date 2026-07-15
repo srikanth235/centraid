@@ -295,3 +295,162 @@ describe('StorageCard — per-vault replication rows', () => {
     expect(el.textContent).toContain('local only');
   });
 });
+
+describe('StorageCard — bounded cache-tier health (issue #405 §7)', () => {
+  const withCache = (
+    cache: StorageCardStatusDTO['vaults'][number]['cache'],
+  ): StorageCardStatusDTO => ({
+    connections: [
+      {
+        id: 'c1',
+        kind: 'byo-s3',
+        name: 'My Bucket',
+        uses: ['cas'],
+        providerReported: null,
+        localReplicatedBytes: 0,
+      },
+    ],
+    vaults: [
+      {
+        vaultId: 'v1',
+        name: 'Main',
+        configured: true,
+        connectionId: 'c1',
+        replicated: { count: 10, bytes: 1000 },
+        backlog: { count: 0, bytes: 0 },
+        lastSweep: { completedAt: null, error: null, consecutiveFailures: 0 },
+        cache,
+      },
+    ],
+  });
+
+  it('renders a spool-vs-budget bar, a derived hit rate, and bytes served local vs remote', async () => {
+    const el = await mount({
+      loadStatus: vi.fn().mockResolvedValue(
+        withCache({
+          spoolBytes: 400_000,
+          budgetBytes: 1_000_000,
+          localHits: 80,
+          readThroughs: 20,
+          rangedRemoteReads: 5,
+          bytesServedLocal: 4_000_000,
+          bytesServedRemote: 1_000_000,
+          evictedBlobs: 0,
+          evictedBytes: 0,
+          backpressureEvents: 0,
+        }),
+      ),
+    });
+    const section = el.querySelector<HTMLElement>('[data-testid="storage-cache-section"]');
+    expect(section).toBeTruthy();
+    expect(section?.textContent).toContain('40%'); // 400k / 1M spool
+    expect(section?.textContent).toContain('of'); // "X of Y budget"
+    expect(section?.textContent).toContain('hit rate 80%'); // 80 / (80+20)
+    expect(section?.textContent).toContain('local');
+    expect(section?.textContent).toContain('remote');
+    // Raw counts live in the tooltip so the percentage never floats free.
+    const hit = [...section!.querySelectorAll('span')].find((s) =>
+      s.textContent?.includes('hit rate'),
+    );
+    expect(hit?.getAttribute('title')).toContain('80 local hits');
+    expect(hit?.getAttribute('title')).toContain('20 remote read-throughs');
+  });
+
+  it('shows an "unlimited budget" state with no bar when budgetBytes is null', async () => {
+    const el = await mount({
+      loadStatus: vi.fn().mockResolvedValue(
+        withCache({
+          spoolBytes: 250_000,
+          budgetBytes: null,
+          localHits: 3,
+          readThroughs: 0,
+          rangedRemoteReads: 0,
+          bytesServedLocal: 250_000,
+          bytesServedRemote: 0,
+          evictedBlobs: 0,
+          evictedBytes: 0,
+          backpressureEvents: 0,
+        }),
+      ),
+    });
+    const section = el.querySelector<HTMLElement>('[data-testid="storage-cache-section"]');
+    expect(section?.textContent).toContain('unlimited budget');
+    // No spool bar / percentage when the budget is unbounded.
+    expect(section?.querySelector('[data-testid="cache-spool-track"]')).toBeNull();
+    expect(section?.textContent).not.toContain('of 0 budget');
+  });
+
+  it('surfaces evictions and backpressure only when nonzero', async () => {
+    const el = await mount({
+      loadStatus: vi.fn().mockResolvedValue(
+        withCache({
+          spoolBytes: 950_000,
+          budgetBytes: 1_000_000,
+          localHits: 50,
+          readThroughs: 50,
+          rangedRemoteReads: 0,
+          bytesServedLocal: 5_000_000,
+          bytesServedRemote: 5_000_000,
+          evictedBlobs: 12,
+          evictedBytes: 3_000_000,
+          backpressureEvents: 2,
+        }),
+      ),
+    });
+    const section = el.querySelector<HTMLElement>('[data-testid="storage-cache-section"]');
+    expect(section?.textContent).toContain('evicted 12');
+    expect(section?.textContent).toContain('backpressure 2×');
+    expect(section?.textContent).toContain('hit rate 50%');
+    // 95% spool ⇒ error severity on the bar.
+    expect(
+      section?.querySelector('[data-testid="cache-spool-track"][data-severity="error"]'),
+    ).toBeTruthy();
+  });
+
+  it('on a local-only vault shows spool occupancy but hides the remote-facing noise', async () => {
+    const status: StorageCardStatusDTO = {
+      // A connection exists on the gateway (so the card renders vault rows),
+      // but this particular vault isn't attached to it — a local-only vault.
+      connections: [
+        {
+          id: 'c1',
+          kind: 'byo-s3',
+          name: 'My Bucket',
+          uses: ['cas'],
+          providerReported: null,
+          localReplicatedBytes: 0,
+        },
+      ],
+      vaults: [
+        {
+          vaultId: 'v2',
+          name: 'Side',
+          configured: false,
+          replicated: { count: 0, bytes: 0 },
+          backlog: { count: 0, bytes: 0 },
+          lastSweep: { completedAt: null, error: null, consecutiveFailures: 0 },
+          cache: {
+            spoolBytes: 120_000,
+            budgetBytes: null,
+            localHits: 4,
+            readThroughs: 0,
+            rangedRemoteReads: 0,
+            bytesServedLocal: 120_000,
+            bytesServedRemote: 0,
+            evictedBlobs: 0,
+            evictedBytes: 0,
+            backpressureEvents: 0,
+          },
+        },
+      ],
+    };
+    const el = await mount({ loadStatus: vi.fn().mockResolvedValue(status) });
+    const section = el.querySelector<HTMLElement>('[data-testid="storage-cache-section"]');
+    expect(section).toBeTruthy();
+    expect(section?.textContent).toContain('unlimited budget');
+    // The remote read (hit rate / served / evictions) is all-zero noise on a
+    // local-only vault — hidden, not shown as a misleading "100%".
+    expect(section?.textContent).not.toContain('hit rate');
+    expect(section?.textContent).not.toContain('served');
+  });
+});

@@ -2,7 +2,7 @@
   "name": "@centraid/backup",
   "version": "0.1.0",
   "private": true,
-  "description": "Offsite storage engine: the centraid-storage-provider/1 wire protocol seam plus the centraid-snapshot/1 authenticated base-and-WAL format — fixed-size parts, AES-256-GCM keyring/epochs, PITR, restore/verify, local and remote providers, and the provider conformance kit. Zero runtime dependencies — Node >=22 builtins only.",
+  "description": "Offsite storage engine: the centraid-storage-provider/1 wire protocol seam plus the centraid-snapshot/2 authenticated base-and-WAL format — fixed-size parts, entropy-gated zstd chunk compression, AES-256-GCM keyring/epochs, PITR, restore/verify, local and remote providers, and the provider conformance kit. Zero runtime dependencies — Node builtins only.",
   "files": [
     "dist",
     "README.md",
@@ -25,6 +25,6 @@
     "typescript": "catalog:"
   },
   "engines": {
-    "node": ">=22.5"
+    "node": ">=22.15"
   }
 }

@@ -434,7 +434,7 @@ describe('RemoteBackupProvider against the fake gateway', () => {
       totalBytes: 1,
       objectCount: 1,
       generation: 3,
-      format: 'centraid-snapshot/1',
+      format: 'centraid-snapshot/2',
       appMeta: {},
     });
     await expect(
@@ -445,7 +445,7 @@ describe('RemoteBackupProvider against the fake gateway', () => {
         totalBytes: 1,
         objectCount: 1,
         generation: 1,
-        format: 'centraid-snapshot/1',
+        format: 'centraid-snapshot/2',
         appMeta: {},
       }),
     ).rejects.toMatchObject({ code: 'conflict_generation', details: { currentGeneration: 3 } });

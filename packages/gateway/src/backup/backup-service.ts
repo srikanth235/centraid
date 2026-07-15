@@ -25,7 +25,13 @@ import {
   type SourceEntry,
   type VerifySnapshotResult,
 } from '@centraid/backup';
-import { ONTOLOGY_VERSION, VAULT_MIGRATIONS, verifyRestoredPair } from '@centraid/vault';
+import {
+  ONTOLOGY_VERSION,
+  VAULT_MIGRATIONS,
+  verifyRestoredPair,
+  type RemoteTier,
+} from '@centraid/vault';
+import { warmPreviewTinies, type PreviewsWarmResult } from './restore-warm.js';
 import type { RuntimeLogger } from '@centraid/app-engine';
 import {
   intervalHoursOf,
@@ -98,6 +104,15 @@ export interface BackupServiceOptions {
   /** Shared confirmation store; CLI-only callers fall back to backup state. */
   recoveryKit?: RecoveryKitStateStore;
 }
+
+/**
+ * A `restore()` result, plus — for a lazy/partial restore (issue #405 §5) — the
+ * previews-first warm-pass outcome: `result.skippedBlobs` names the blobs left
+ * remote-only, and `previewsWarm` reports how many tinies were pulled and the
+ * time-to-usable-grid a new device waited. `previewsWarm` is absent on a full
+ * restore (no `lazy` option).
+ */
+export type LazyRestoreResult = RestoreResult & { previewsWarm?: PreviewsWarmResult };
 
 export class BackupService {
   private readonly config: BackupConfig | undefined;
@@ -1030,13 +1045,30 @@ export class BackupService {
     seq?: number;
     /** Point-in-time restore (issue #408): replay WAL segments only up to this instant. */
     pointInTimeMs?: number;
-  }): Promise<RestoreResult> {
+    /**
+     * Previews-first, lazy/partial restore (issue #405 §5). Present ⇒ every
+     * blob the given remote CAS already holds is DEFERRED (never materialized
+     * locally — the vault's custody read-through serves it on demand), so a
+     * library far larger than the local disk restores onto a small gateway;
+     * blobs the remote does NOT hold are still materialized (the snapshot is
+     * their only copy). After the DB is up, a warm pass pulls ALL `thumb`
+     * tinies into the local spool so the grid is usable in minutes. Absent ⇒
+     * the full restore materializes every blob byte the snapshot carries.
+     */
+    lazy?: {
+      /** The vault's remote blob CAS — the skip oracle AND the warm-pass source. */
+      remote: RemoteTier;
+      /** Bounded warm-pass read-through fan-out (issue #405 §5/§7). */
+      warmConcurrency?: number;
+    };
+  }): Promise<LazyRestoreResult> {
     const backend = await this.backend();
     if (!backend) throw new Error('backup is not configured — add a provider backup connection');
     const target = await this.requireTarget(opts.vaultId);
     this.assertTargetBackend(target, backend);
     const keyring = await this.ensureKeyring();
-    return restoreSnapshot({
+    const lazy = opts.lazy;
+    const result = await restoreSnapshot({
       provider: backend.provider,
       targetId: target.targetId,
       keyring,
@@ -1044,6 +1076,11 @@ export class BackupService {
       ...(opts.seq !== undefined ? { seq: opts.seq } : {}),
       ...(opts.pointInTimeMs !== undefined ? { pointInTimeMs: opts.pointInTimeMs } : {}),
       destDir: opts.destDir,
+      // Lazy mode: defer any blob the remote CAS already holds — a live
+      // `has(sha)` against the remote is the durability evidence a snapshot's
+      // registry row still cannot carry (see backup-sources.ts). A blob the
+      // remote lacks is NOT skipped: the snapshot is its only copy.
+      ...(lazy ? { skipBlob: ({ sha }) => lazy.remote.store.has(sha) } : {}),
       log: { info: (m) => this.logger.info(m), warn: (m) => this.logger.warn(m) },
       current: {
         gatewayVersion: GATEWAY_VERSION,
@@ -1053,6 +1090,19 @@ export class BackupService {
         ontologyVersion: ONTOLOGY_VERSION,
       },
     });
+    if (!lazy) return result;
+    // The DB is restored and WAL-replayed; the grid is only USABLE once its
+    // tinies are local. Measure new-device time-to-usable-grid from here.
+    const restoreCompleteMs = this.now();
+    const previewsWarm = await warmPreviewTinies({
+      destDir: opts.destDir,
+      remote: lazy.remote,
+      startedAtMs: restoreCompleteMs,
+      now: () => this.now(),
+      ...(lazy.warmConcurrency !== undefined ? { concurrency: lazy.warmConcurrency } : {}),
+      log: { info: (m) => this.logger.info(m), warn: (m) => this.logger.warn(m) },
+    });
+    return { ...result, previewsWarm };
   }
 
   async writeKit(destFile: string): Promise<void> {

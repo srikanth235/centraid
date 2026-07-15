@@ -27,12 +27,15 @@
     "@centraid/blueprints": "workspace:*",
     "@centraid/skills": "workspace:*",
     "@centraid/tunnel": "workspace:*",
-    "@centraid/vault": "workspace:*"
+    "@centraid/vault": "workspace:*",
+    "jpeg-js": "^0.4.4",
+    "pngjs": "^7.0.0"
   },
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",
     "@centraid/web": "workspace:*",
     "@types/node": "^22.0.0",
+    "@types/pngjs": "^6.0.5",
     "typescript": "catalog:"
   },
   "engines": {

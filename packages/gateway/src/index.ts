@@ -69,4 +69,9 @@ export {
   type VaultRequestContext,
   type DeviceAccess,
 } from './serve/vault-context.js';
+// The preview ladder's raster codec (issue #405 §2): pure-JS jpeg-js/pngjs
+// downscaler the host injects into vault planes so the blob sweep's backstop
+// can generate missing tiny/medium derivatives for imported / weak-client /
+// server-ingested images.
+export { createImagePreviewCodec } from './preview/codec.js';
 export { GATEWAY_VERSION, GATEWAY_SCHEMA_EPOCH } from './version.js';

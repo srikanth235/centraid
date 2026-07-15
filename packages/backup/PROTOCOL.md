@@ -261,7 +261,7 @@ Request:
   "manifestHash": "sha256-hex",
   "totalBytes": 123, "objectCount": 45,
   "generation": 3,                   // fencing token, ≥ 1 (see below)
-  "format": "centraid-snapshot/1",   // stored + echoed, never parsed
+  "format": "centraid-snapshot/2",   // stored + echoed, never parsed
   "appMeta": { "gatewayVersion": "0.1.0", "vaultUserVersion": "1", "ontologyVersion": "1.2", "sourceInstanceId": "…" }
 }
 ```

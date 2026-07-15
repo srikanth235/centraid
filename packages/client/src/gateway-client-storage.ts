@@ -154,6 +154,25 @@ export async function testStorageConnection(id: string): Promise<StorageConnecti
   return readJson<StorageConnectionTestResult>(res, 'test storage connection');
 }
 
+/**
+ * Bounded storage-tier metrics (issue #405 §7) — process-lifetime custody
+ * counters that make cache health visible. All byte/count fields reset on
+ * gateway restart. `budgetBytes` is `null` for an unlimited tier (no disk to
+ * measure); the card shows an "unlimited" state rather than a budget bar.
+ */
+export interface StorageCacheStatusDTO {
+  spoolBytes: number;
+  budgetBytes: number | null;
+  localHits: number;
+  readThroughs: number;
+  rangedRemoteReads: number;
+  bytesServedLocal: number;
+  bytesServedRemote: number;
+  evictedBlobs: number;
+  evictedBytes: number;
+  backpressureEvents: number;
+}
+
 export interface StorageVaultStatusDTO {
   vaultId: string;
   name: string;
@@ -168,6 +187,8 @@ export interface StorageVaultStatusDTO {
     consecutiveFailures: number;
   };
   throttleBytesPerSec?: number;
+  /** Bounded storage-tier health (issue #405 §7); absent on older gateways. */
+  cache?: StorageCacheStatusDTO;
 }
 
 /** Per-vault replication progress — backs the Storage card's per-vault rows. */

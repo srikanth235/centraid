@@ -12,8 +12,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import type { AddressInfo } from 'node:net';
+import { bootstrapVault, openVaultDb, type VaultDb } from '@centraid/vault';
 import type { RouteHandler } from '../serve/build-gateway.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
+import type { VaultPlane } from '../serve/vault-plane.js';
 import { openStorageConnectionStore } from '../backup/storage-connections.js';
 import { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
 import { StorageUsagePoller } from '../backup/storage-usage.js';
@@ -54,6 +56,17 @@ async function tempDir(): Promise<string> {
 
 function fakeVaults(): VaultRegistry {
   return { planesList: () => [] } as unknown as VaultRegistry;
+}
+
+/** A real in-memory VaultDb (migrated schema + a live BlobCustody/BlobCache),
+ *  wrapped as the minimal `VaultPlane` shape the status route reads — enough
+ *  to exercise the real `custodyState*`/`metrics()` reads without a disk. */
+function planeFromDb(name: string, vaultId: string, db: VaultDb): VaultPlane {
+  return { name, boot: { vaultId }, db } as unknown as VaultPlane;
+}
+
+function vaultsFrom(planes: VaultPlane[]): VaultRegistry {
+  return { planesList: () => planes } as unknown as VaultRegistry;
 }
 
 test('POST create refuses without a confirmed recovery kit; {force:true} bypasses; connection never carries secrets back', async () => {
@@ -316,4 +329,88 @@ test('GET usage: a byo-s3 connection reports providerReported: null with localRe
   expect(body.connections[0]?.kind).toBe('byo-s3');
   expect(body.connections[0]?.providerReported).toBeNull();
   expect(body.connections[0]?.localReplicatedBytes).toBe(0);
+});
+
+// ── Bounded storage-tier metrics on GET status (issue #405 §7) ─────────────
+// The `cache` block makes tier health visible: spool vs. budget, the hit-rate
+// counters, bytes served local vs. remote, evictions and backpressure.
+
+interface StatusCacheDTO {
+  spoolBytes: number;
+  budgetBytes: number | null;
+  localHits: number;
+  readThroughs: number;
+  rangedRemoteReads: number;
+  bytesServedLocal: number;
+  bytesServedRemote: number;
+  evictedBlobs: number;
+  evictedBytes: number;
+  backpressureEvents: number;
+}
+
+test('GET status carries the #405 §7 cache block per vault; in-memory vault reports an unlimited (null) budget with live spool + hit counters', async () => {
+  const dir = await tempDir();
+  const storageConnections = await openStorageConnectionStore(dir);
+  const recoveryKit = new RecoveryKitStateStore(dir);
+
+  const db = openVaultDb();
+  cleanups.push(() => db.close());
+  const blob = Buffer.from('cache-metrics-fixture-blob');
+  const { sha256 } = db.blobs.ingestSync(blob);
+  db.blobs.getSync(sha256); // one local hit — bumps localHits + bytesServedLocal
+
+  const base = await startHandlerServer(
+    makeStorageRouteHandler({
+      storageConnections,
+      recoveryKit,
+      vaults: vaultsFrom([planeFromDb('Main', 'v1', db)]),
+      storageUsage: new StorageUsagePoller({ storageConnections }),
+    }),
+  );
+
+  const res = await fetch(`${base}/centraid/_gateway/storage/status`);
+  expect(res.status).toBe(200);
+  const out = (await res.json()) as { vaults: { vaultId: string; cache: StatusCacheDTO }[] };
+  const cache = out.vaults[0]?.cache;
+  expect(cache).toBeDefined();
+  // In-memory vault has no volume to measure ⇒ unlimited ⇒ null (never the
+  // Number.MAX_SAFE_INTEGER sentinel on the wire).
+  expect(cache?.budgetBytes).toBeNull();
+  expect(cache?.spoolBytes).toBe(blob.length);
+  expect(cache?.localHits).toBe(1);
+  expect(cache?.bytesServedLocal).toBe(blob.length);
+  expect(cache?.readThroughs).toBe(0);
+  expect(cache?.rangedRemoteReads).toBe(0);
+  expect(cache?.bytesServedRemote).toBe(0);
+  expect(cache?.evictedBlobs).toBe(0);
+  expect(cache?.backpressureEvents).toBe(0);
+});
+
+test('GET status surfaces a real (non-null) budget when blob_cache.budgetBytes is set explicitly', async () => {
+  const dir = await tempDir();
+  const storageConnections = await openStorageConnectionStore(dir);
+  const recoveryKit = new RecoveryKitStateStore(dir);
+
+  const db = openVaultDb();
+  cleanups.push(() => db.close());
+  // The explicit budget lives in `core_vault.settings_json`, which only exists
+  // after bootstrap — mint the vault, then set the operator's budget (it wins
+  // over the derived one, issue #405 §3).
+  bootstrapVault(db, { ownerName: 'Tester' });
+  db.vault
+    .prepare('UPDATE core_vault SET settings_json = ?')
+    .run(JSON.stringify({ blob_cache: { budgetBytes: 1_000_000 } }));
+
+  const base = await startHandlerServer(
+    makeStorageRouteHandler({
+      storageConnections,
+      recoveryKit,
+      vaults: vaultsFrom([planeFromDb('Main', 'v1', db)]),
+      storageUsage: new StorageUsagePoller({ storageConnections }),
+    }),
+  );
+
+  const res = await fetch(`${base}/centraid/_gateway/storage/status`);
+  const out = (await res.json()) as { vaults: { cache: StatusCacheDTO }[] };
+  expect(out.vaults[0]?.cache.budgetBytes).toBe(1_000_000);
 });

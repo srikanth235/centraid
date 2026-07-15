@@ -1,8 +1,11 @@
-// governance: allow-repo-hygiene file-size-limit (#408) the /1 WAL wire format is one normative unit — the key codecs, the sealing AAD/nonce derivations, the frame-boundary math, and the replay planner that consumes all three are a single argument about what a restore may trust; splitting them lets the format drift from the planner that enforces it
+// governance: allow-repo-hygiene file-size-limit (#408) the WAL wire format is one normative unit — the key codecs, the sealing AAD/nonce derivations, the frame-boundary math, and the replay planner that consumes all three are a single argument about what a restore may trust; splitting them lets the format drift from the planner that enforces it
 /*
- * WAL segment format (FORMAT.md § WAL segments — centraid-snapshot/1,
- * issue #408): addressing, sealing, frame-boundary math, and replay planning
- * for shipped SQLite write-ahead-log byte ranges.
+ * WAL segment format (FORMAT.md § WAL segments — centraid-snapshot/2,
+ * issue #408; carried unchanged into /2): addressing, sealing, frame-boundary
+ * math, and replay planning for shipped SQLite write-ahead-log byte ranges.
+ * /2's entropy-gated compression (#405 §1) deliberately does NOT reach these —
+ * segments seal raw byte ranges so the address-bound deterministic-nonce
+ * idempotency contract stays exactly as #408 shipped it (see FORMAT.md).
  *
  * A segment is a raw byte range `[startOffset, endOffset)` of a database's
  * `-wal` file, ending on a COMMIT-frame boundary, captured between

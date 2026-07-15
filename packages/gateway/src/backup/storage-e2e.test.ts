@@ -239,16 +239,27 @@ describe('BlobCustody replication against a real S3-compatible server', () => {
     expect(await makeS3(server, 'vaultE-new').list()).toEqual([sha]);
   });
 
-  test('sealBlob/sealBlobStream produce the same wire shape (nonce|ciphertext|tag) and both decrypt with unsealBlob', async () => {
+  test('sealBlob/sealBlobStream produce the same framed wire shape (modulo per-frame nonces) and both round-trip through unsealBlob', async () => {
+    // Issue #405 §1: the remote-tier seal is now FRAMED (CBSF header, per-frame
+    // GCM `nonce|ct|tag` + `[algoId]` compression, sealed directory + trailer)
+    // rather than a single whole-blob `nonce|ct|tag` envelope. The buffered and
+    // streaming sealers are two implementations of ONE format, so they must
+    // agree on the wire shape byte-for-byte EXCEPT for the random per-frame
+    // nonces — same frame count, same compression verdicts (content-derived,
+    // deterministic), so identical sealed lengths. Both must round-trip.
     const key = ephemeralSealKey();
     const sha = crypto.createHash('sha256').update('stream-vs-buffer').digest('hex');
-    const plaintext = crypto.randomBytes(1024 * 1024); // 1 MiB — exercises multiple transform chunks
+    // Multiple frames at a small frame size, with an odd tail, so the streaming
+    // frame carver is exercised across chunk boundaries — and incompressible
+    // (random) so both paths store frames verbatim and land on equal lengths.
+    const frameSize = 64 * 1024;
+    const plaintext = crypto.randomBytes(frameSize * 3 + 777);
 
-    const buffered = sealBlob(key, sha, plaintext);
+    const buffered = sealBlob(key, sha, plaintext, frameSize);
 
     const chunks: Buffer[] = [];
-    const transform = sealBlobStream(key, sha);
-    const source = Readable.from(chunkEvery(plaintext, 64 * 1024));
+    const transform = sealBlobStream(key, sha, plaintext.length, frameSize);
+    const source = Readable.from(chunkEvery(plaintext, 7 * 1024)); // awkward chunk size
     await new Promise<void>((resolve, reject) => {
       source
         .pipe(transform)
@@ -258,8 +269,11 @@ describe('BlobCustody replication against a real S3-compatible server', () => {
     });
     const streamed = Buffer.concat(chunks);
 
-    // Both decrypt to the same plaintext (nonces differ, so the sealed bytes
-    // themselves are NOT expected to be identical).
+    // Same framed wire shape: identical total length (per-frame nonces differ,
+    // but nonce size is fixed, so the byte COUNT is invariant across paths).
+    expect(streamed.length).toBe(buffered.length);
+    // Both decrypt back to the same plaintext (the nonces differ, so the sealed
+    // bytes themselves are NOT expected to be identical).
     expect(unsealBlob(key, sha, buffered).equals(plaintext)).toBe(true);
     expect(unsealBlob(key, sha, streamed).equals(plaintext)).toBe(true);
   });

@@ -287,3 +287,75 @@
   color: var(--danger);
   overflow-wrap: anywhere;
 }
+
+/* ── Cache-tier health (issue #405 §7) — the spool-vs-budget bar mirrors the
+   connection quota bar's anatomy (track + fill + severity) at a lighter weight,
+   since it lives inside a vault row rather than being the card's hero. ── */
+.cacheSection {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 2px;
+}
+.cacheSpoolFoot {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+.cacheSpoolLabel {
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.cacheSpoolUsed {
+  color: var(--ink-2);
+}
+.cacheSpoolPct {
+  margin-left: auto;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.cacheSpoolPct[data-severity='warn'] {
+  color: var(--icon-amber);
+}
+.cacheSpoolPct[data-severity='error'] {
+  color: var(--danger);
+}
+.cacheTrack {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  overflow: hidden;
+}
+.cacheFill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s var(--ease, ease);
+}
+.cacheTrack[data-severity='warn'] .cacheFill {
+  background: var(--icon-amber);
+}
+.cacheTrack[data-severity='error'] .cacheFill {
+  background: var(--danger);
+}
+.cacheMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+.cacheMeta span[data-emphasis='warn'] {
+  color: var(--icon-amber);
+}

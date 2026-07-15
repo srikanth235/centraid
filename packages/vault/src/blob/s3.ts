@@ -10,8 +10,8 @@
 // at worst lose bytes (which the reconciliation sweep reports), never
 // corrupt identity.
 
-import { createHash, createHmac } from 'node:crypto';
 import { assertSha, type BlobRange, type BlobStat, type BlobStore } from './store.js';
+import { signS3Request } from './sigv4.js';
 
 export interface S3Credentials {
   accessKeyId: string;
@@ -39,6 +39,27 @@ export interface S3BlobStoreOptions {
    * store's writes serve needs pacing against the owner's uplink.
    */
   throttleBytesPerSec?: number;
+  /**
+   * S3 storage class (issue #405 §6): sent as the `x-amz-storage-class`
+   * header — SigV4-signed like every other header — on the two requests that
+   * CREATE an object: the single `put()` PUT and multipart's
+   * `CreateMultipartUpload`. Never sent on uploadPart/complete/get/head/
+   * delete/list (S3 fixes an object's class at creation). Unset ⇒ header
+   * absent ⇒ byte-identical to today's behavior. Deliberately un-validated
+   * and free-form: S3-compatibles define their own class names (STANDARD_IA,
+   * GLACIER, R2's single implicit class, and clawgnition may grow `derived`/
+   * IA-style tiers per clawgnition#118), so this driver passes the string
+   * through and lets the endpoint accept or reject it.
+   */
+  storageClass?: string;
+  /**
+   * Bounded-retry knobs (issue #405 §4) — a test seam. `retryAttempts` is
+   * the TOTAL number of tries (default 3); `sleepImpl` backs the backoff
+   * wait so tests can run instantly / assert the schedule. Both default to
+   * production values; callers never set them outside tests.
+   */
+  retryAttempts?: number;
+  sleepImpl?: (ms: number) => Promise<void>;
 }
 
 /** Bodies over this size use multipart upload (issue #367 §C8) instead of one PUT. */
@@ -124,37 +145,25 @@ async function* chunkReadable(
   if (bufferedLen > 0) yield Buffer.concat(buffered, bufferedLen);
 }
 
-function hmac(key: Buffer | string, data: string): Buffer {
-  return createHmac('sha256', key).update(data, 'utf8').digest();
-}
-
-function sha256HexOf(data: Buffer | string): string {
-  return createHash('sha256').update(data).digest('hex');
-}
-
-/** RFC 3986 encode one S3 key segment (SigV4 canonical form). */
-function encodeKeyPath(key: string): string {
-  return key
-    .split('/')
-    .map((seg) =>
-      encodeURIComponent(seg).replace(
-        /[!'()*]/g,
-        (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
-      ),
-    )
-    .join('/');
-}
+/** Retry defaults (issue #405 §4): 3 tries total, ~200ms→~2s jittered backoff. */
+const RETRY_ATTEMPTS_DEFAULT = 3;
+const BACKOFF_BASE_MS = 200;
+const BACKOFF_CAP_MS = 2000;
 
 export class S3BlobStore implements BlobStore {
   readonly kind = 's3';
   private readonly base: URL;
   private readonly throttle: TokenBucket | undefined;
+  private readonly retryAttempts: number;
+  private readonly sleepImpl: (ms: number) => Promise<void>;
 
   constructor(private readonly options: S3BlobStoreOptions) {
     this.base = new URL(options.endpoint);
     this.throttle = options.throttleBytesPerSec
       ? new TokenBucket(options.throttleBytesPerSec)
       : undefined;
+    this.retryAttempts = Math.max(1, options.retryAttempts ?? RETRY_ATTEMPTS_DEFAULT);
+    this.sleepImpl = options.sleepImpl ?? delay;
   }
 
   private keyFor(sha: string): string {
@@ -173,74 +182,111 @@ export class S3BlobStore implements BlobStore {
     opts: { body?: Buffer; headers?: Record<string, string>; query?: Record<string, string> } = {},
   ): Promise<Response> {
     const creds = await this.options.credentials();
-    const now = new Date();
-    const amzDate = now
-      .toISOString()
-      .replace(/[-:]/g, '')
-      .replace(/\.\d{3}/, '');
-    const dateStamp = amzDate.slice(0, 8);
-    const region = this.options.region ?? 'us-east-1';
-    const service = 's3';
-
-    const canonicalPath = `/${encodeKeyPath(
-      key === '' ? this.options.bucket : `${this.options.bucket}/${key}`,
-    )}`;
-    const query = opts.query ?? {};
-    const canonicalQuery = Object.keys(query)
-      .sort()
-      .map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(query[k] ?? '')}`)
-      .join('&');
-
-    const payloadHash = sha256HexOf(opts.body ?? Buffer.alloc(0));
-    const headers: Record<string, string> = {
-      host: this.base.host,
-      'x-amz-content-sha256': payloadHash,
-      'x-amz-date': amzDate,
-      ...(creds.sessionToken ? { 'x-amz-security-token': creds.sessionToken } : {}),
-      ...Object.fromEntries(
-        Object.entries(opts.headers ?? {}).map(([k, v]) => [k.toLowerCase(), v]),
-      ),
-    };
-    const signedHeaderNames = Object.keys(headers).sort();
-    const canonicalHeaders = signedHeaderNames.map((k) => `${k}:${headers[k]!.trim()}\n`).join('');
-    const signedHeaders = signedHeaderNames.join(';');
-    const canonicalRequest = [
+    // Path-style addressing (`/bucket/key`) — the '' key is the bucket root
+    // (ListObjectsV2). SigV4 signing lives in sigv4.ts (issue #405 §4 split).
+    const signed = signS3Request({
       method,
-      canonicalPath,
-      canonicalQuery,
-      canonicalHeaders,
-      signedHeaders,
-      payloadHash,
-    ].join('\n');
-    const scope = `${dateStamp}/${region}/${service}/aws4_request`;
-    const stringToSign = ['AWS4-HMAC-SHA256', amzDate, scope, sha256HexOf(canonicalRequest)].join(
-      '\n',
-    );
-    const kDate = hmac(`AWS4${creds.secretAccessKey}`, dateStamp);
-    const kRegion = hmac(kDate, region);
-    const kService = hmac(kRegion, service);
-    const kSigning = hmac(kService, 'aws4_request');
-    const signature = createHmac('sha256', kSigning).update(stringToSign, 'utf8').digest('hex');
-
-    const url = new URL(this.base.origin);
-    url.pathname = canonicalPath;
-    url.search = canonicalQuery;
+      base: this.base,
+      path: key === '' ? this.options.bucket : `${this.options.bucket}/${key}`,
+      region: this.options.region ?? 'us-east-1',
+      credentials: creds,
+      ...(opts.body ? { body: opts.body } : {}),
+      ...(opts.headers ? { headers: opts.headers } : {}),
+      ...(opts.query ? { query: opts.query } : {}),
+    });
     const fetchImpl = this.options.fetchImpl ?? fetch;
-    return fetchImpl(url, {
+    return fetchImpl(signed.url, {
       method,
-      headers: {
-        ...headers,
-        Authorization: `AWS4-HMAC-SHA256 Credential=${creds.accessKeyId}/${scope}, SignedHeaders=${signedHeaders}, Signature=${signature}`,
-      },
+      headers: signed.headers,
       body: opts.body ? new Uint8Array(opts.body) : undefined,
     });
   }
 
+  /**
+   * `request()` with bounded retry (issue #405 §4). Today a single transient
+   * fault — one 503 from the endpoint, one dropped socket — fails a whole
+   * reconciliation sweep or restore. This retries the RETRYABLE faults:
+   *
+   *   - a thrown fetch/network error (connection refused, socket destroyed);
+   *   - HTTP 429 (throttled) and any 5xx (server-side transient).
+   *
+   * Every other status — 2xx, 3xx, and 4xx OTHER than 429 (incl. 404, which
+   * callers read as "absent") — is a definitive answer and returns
+   * immediately: retrying a 400/403 only burns budget on a request the
+   * endpoint will keep rejecting. Backoff is exponential with full jitter
+   * (base→cap), so a fleet of stores doesn't resynchronize its retries.
+   *
+   * Idempotency, per op that routes through here:
+   *   - get / stat(HEAD) / list — pure reads, trivially safe to repeat.
+   *   - put — content-addressed: a retried PUT overwrites the same key with
+   *     byte-identical bytes (same sha), so at-most/at-least-once collapse.
+   *   - delete — idempotent by design (404 counts as success upstream).
+   *   - uploadPart — keyed by (uploadId, partNumber); a retry overwrites the
+   *     same part, and we keep the ETag from the try that actually returned.
+   *   - createMultipartUpload — the one NON-idempotent op: if a create
+   *     SUCCEEDED server-side but its response was lost, the retry mints a
+   *     SECOND uploadId and the first is orphaned. That orphan is bounded and
+   *     swept — putStream aborts on any later failure, and a bucket lifecycle
+   *     rule reaps incomplete multipart uploads — which is strictly better
+   *     than failing the entire sweep on a single transient 503.
+   *   - completeMultipartUpload — the parts list is fixed for the call, so a
+   *     retry re-submits the same manifest; completing an already-completed
+   *     upload is the endpoint's call to accept or 4xx (not retried).
+   *
+   * Throttle budget is consumed by callers BEFORE this wrapper (see `put` /
+   * `uploadPart`), so retried bytes are NOT re-charged against the token
+   * bucket — a retry re-sends the body but the pacing already accounted for
+   * it once, which is the conservative (never over-throttles) choice.
+   */
+  private async send(
+    method: string,
+    key: string,
+    opts: { body?: Buffer; headers?: Record<string, string>; query?: Record<string, string> } = {},
+  ): Promise<Response> {
+    let lastErr: unknown;
+    for (let attempt = 1; attempt <= this.retryAttempts; attempt += 1) {
+      const last = attempt === this.retryAttempts;
+      let res: Response;
+      try {
+        res = await this.request(method, key, opts);
+      } catch (err) {
+        // A fetch/network fault never reached the server — always retryable.
+        lastErr = err;
+        if (last) throw err;
+        await this.backoff(attempt);
+        continue;
+      }
+      if (!last && (res.status === 429 || res.status >= 500)) {
+        // Drain the body so the underlying socket can be reused (keep-alive),
+        // then back off. The caller never sees this response.
+        await res.text().catch(() => undefined);
+        await this.backoff(attempt);
+        continue;
+      }
+      // Definitive answer (incl. a 5xx on the final try) — hand it back so the
+      // caller applies its own ok/404/206 logic and surfaces the status.
+      return res;
+    }
+    // Unreachable: the loop either returns a Response or throws above.
+    throw lastErr ?? new Error(`s3 ${method} ${key}: retries exhausted`);
+  }
+
+  /** Exponential backoff with full jitter (issue #405 §4), injectable sleep. */
+  private async backoff(attempt: number): Promise<void> {
+    const ceiling = Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * 2 ** (attempt - 1));
+    await this.sleepImpl(Math.random() * ceiling);
+  }
+
   async put(sha: string, bytes: Buffer): Promise<void> {
     if (this.throttle) await this.throttle.consume(bytes.length);
-    const res = await this.request('PUT', this.keyFor(sha), {
+    const res = await this.send('PUT', this.keyFor(sha), {
       body: bytes,
-      headers: { 'content-type': 'application/octet-stream' },
+      headers: {
+        'content-type': 'application/octet-stream',
+        // Storage class rides the object-creating PUT (issue #405 §6); the
+        // signer folds it into SignedHeaders like any other header.
+        ...(this.options.storageClass ? { 'x-amz-storage-class': this.options.storageClass } : {}),
+      },
     });
     if (!res.ok) throw new Error(`s3 put ${sha}: ${res.status} ${await res.text()}`);
   }
@@ -283,7 +329,15 @@ export class S3BlobStore implements BlobStore {
   }
 
   private async createMultipartUpload(key: string): Promise<string> {
-    const res = await this.request('POST', key, { query: { uploads: '' } });
+    const res = await this.send('POST', key, {
+      query: { uploads: '' },
+      // The multipart twin of `put`'s storage class (issue #405 §6): S3 fixes
+      // the class at CreateMultipartUpload, so it goes here and nowhere else
+      // in the multipart dance (uploadPart/complete never carry it).
+      ...(this.options.storageClass
+        ? { headers: { 'x-amz-storage-class': this.options.storageClass } }
+        : {}),
+    });
     if (!res.ok) {
       throw new Error(`s3 create-multipart-upload: ${res.status} ${await res.text()}`);
     }
@@ -300,7 +354,7 @@ export class S3BlobStore implements BlobStore {
     body: Buffer,
   ): Promise<string> {
     if (this.throttle) await this.throttle.consume(body.length);
-    const res = await this.request('PUT', key, {
+    const res = await this.send('PUT', key, {
       body,
       query: { partNumber: String(partNumber), uploadId },
     });
@@ -324,7 +378,7 @@ export class S3BlobStore implements BlobStore {
         .join('')}</CompleteMultipartUpload>`,
       'utf8',
     );
-    const res = await this.request('POST', key, { body, query: { uploadId } });
+    const res = await this.send('POST', key, { body, query: { uploadId } });
     if (!res.ok) {
       throw new Error(`s3 complete-multipart-upload: ${res.status} ${await res.text()}`);
     }
@@ -340,7 +394,7 @@ export class S3BlobStore implements BlobStore {
   async get(sha: string, range?: BlobRange): Promise<Buffer | null> {
     const headers: Record<string, string> = {};
     if (range) headers.range = `bytes=${range.start}-${range.end ?? ''}`;
-    const res = await this.request('GET', this.keyFor(sha), { headers });
+    const res = await this.send('GET', this.keyFor(sha), { headers });
     if (res.status === 404) return null;
     if (!res.ok && res.status !== 206) {
       throw new Error(`s3 get ${sha}: ${res.status} ${await res.text()}`);
@@ -353,7 +407,7 @@ export class S3BlobStore implements BlobStore {
   }
 
   async delete(sha: string): Promise<void> {
-    const res = await this.request('DELETE', this.keyFor(sha));
+    const res = await this.send('DELETE', this.keyFor(sha));
     // 404 is success for an idempotent delete.
     if (!res.ok && res.status !== 404) {
       throw new Error(`s3 delete ${sha}: ${res.status} ${await res.text()}`);
@@ -367,7 +421,7 @@ export class S3BlobStore implements BlobStore {
     do {
       const query: Record<string, string> = { 'list-type': '2', prefix, 'max-keys': '1000' };
       if (token) query['continuation-token'] = token;
-      const res = await this.request('GET', '', { query });
+      const res = await this.send('GET', '', { query });
       if (!res.ok) throw new Error(`s3 list: ${res.status} ${await res.text()}`);
       const xml = await res.text();
       for (const m of xml.matchAll(/<Key>([^<]+)<\/Key>/g)) {
@@ -383,7 +437,7 @@ export class S3BlobStore implements BlobStore {
   }
 
   async stat(sha: string): Promise<BlobStat | null> {
-    const res = await this.request('HEAD', this.keyFor(sha));
+    const res = await this.send('HEAD', this.keyFor(sha));
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`s3 head ${sha}: ${res.status}`);
     const len = res.headers.get('content-length');

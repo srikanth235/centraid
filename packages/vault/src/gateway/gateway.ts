@@ -21,6 +21,7 @@ import {
 import { recomputeDuplicateClusters } from '../enrich/clusters.js';
 import { stageBlobBytes, type StageBlobOptions, type StagedBlob } from '../blob/staging.js';
 import { refreshCustodyState, type ReconcileResult } from '../blob/custody.js';
+import { backfillPreviews } from '../blob/preview.js';
 import { ONTOLOGY_VERSION } from '../schema/migrate.js';
 import { resolveEntity } from '../schema/tables.js';
 import { resolveRefCards, type RefRequest, type ResolveResult } from './cards.js';
@@ -1248,6 +1249,32 @@ export class Gateway {
     // AFTER reconcile — the snapshot reflects the post-sweep steady state,
     // not a stale pre-sweep gap.
     await refreshCustodyState(this.db);
+    // Preview backstop (issue #405 §2): fill missing tiny/medium derivatives
+    // for image content a capable client never produced — Takeout imports,
+    // weak/old clients, server-side ingestion. Bounded per sweep (cheap edge
+    // CPU QoS) and only when the host wired a raster codec (the vault package
+    // carries none). Best-effort maintenance: a codec failure is swallowed so
+    // it can never fail the custody sweep it rides along with. Real work lives
+    // in blob/preview.ts — gateway.ts stays over its line cap on a waiver, so
+    // this addition is deliberately a thin call-through.
+    let previewsGenerated = 0;
+    if (this.db.previewCodec) {
+      try {
+        const backfill = await backfillPreviews(this.db, this.db.previewCodec);
+        previewsGenerated = backfill.generated;
+      } catch {
+        // swallowed on purpose — see the comment above.
+      }
+    }
+    // Bounded-cache eviction (issue #405 §3): run LAST, after reconcile has
+    // healed the replication index and the preview backstop has generated this
+    // sweep's new rungs — so the pass evicts against fresh replication evidence
+    // and never sheds a tiny it just made. Sheds replicated LRU mediums/
+    // originals until the spool is under budget; pinned tinies, staged bytes and
+    // un-replicated last copies are untouchable. The evicted rows read back
+    // `remote-only` on the NEXT sweep's `refreshCustodyState` (custody-state.ts
+    // doc). No-op when the vault is local-only or the budget isn't exceeded.
+    const evicted = this.db.blobs.evict();
     const receiptId = writeReceipt(this.db.journal, {
       grantId: null,
       invocationId: null,
@@ -1261,6 +1288,13 @@ export class Gateway {
         orphansSkipped: result.orphansSkipped.length,
         replicated: result.replicated.length,
         missing: result.missing,
+        // The preview backstop's per-sweep yield (issue #405 §2) — 0 when no
+        // codec is wired or no image was missing a rung.
+        previewsGenerated,
+        // The bounded-cache eviction yield (issue #405 §3) — 0 when the spool
+        // is under budget or the vault is local-only.
+        evictedBlobs: evicted.evictedBlobs,
+        evictedBytes: evicted.evictedBytes,
       },
     });
     return { ...result, receiptId };

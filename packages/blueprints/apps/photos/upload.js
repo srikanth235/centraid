@@ -5,7 +5,7 @@
 // via `$`, exactly like the pre-split code did.
 import { BLOB_ROUTE, stageFileBytes, toast } from './kit.js';
 import { act, narrate } from './outcomes.js';
-import { THUMB_EDGE } from './media.js';
+import { CLIENT_TINY_EDGE, CLIENT_MEDIUM_EDGE } from './media.js';
 import { $ } from './dom.js';
 
 // Client-side ceiling per file. Bytes stream to the blob staging route
@@ -43,9 +43,36 @@ function dHashFromImage(img) {
   }
 }
 
-// The grid's thumbnail, produced at upload time on this device (the canvas
-// is the one raster codec every client has) and staged as the `thumb`
-// variant beside the original. Dimensions + perceptual hash ride for free.
+// Downscale a decoded bitmap to `edge` on its long side and POST it as one
+// preview-ladder rung beside the original. No-op (and no upload) when the
+// source is already within `edge` — the client never upscales, and the
+// gateway backstop won't either; a source already small enough IS its own
+// rung. JPEG q0.82 matches the gateway codec's ~0.8 output band (issue #405
+// §2). One bad rung never fails the upload.
+async function stageRung(bitmap, parentSha, edge, variant) {
+  const long = Math.max(bitmap.width, bitmap.height);
+  if (long <= edge) return; // already within this rung — nothing to downscale
+  const scale = edge / long;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.82));
+  if (!blob) return;
+  await fetch(`${BLOB_ROUTE}?variant=${variant}&variant_of=${parentSha}&media_type=image/jpeg`, {
+    method: 'POST',
+    headers: { 'content-type': 'image/jpeg' },
+    body: blob,
+  });
+}
+
+// Both preview-ladder rungs (issue #405 §2), produced at upload time on this
+// device (the canvas is the one raster codec every client has) and staged as
+// the `thumb` (~256 px, the grid) and `preview` (~2048 px, the lightbox)
+// variants beside the original. Dimensions + perceptual hash ride for free
+// off the same single decode. A client that produces these first always wins
+// the hot path (upsert semantics keep the last writer) — the gateway backstop
+// only fills what a client couldn't.
 //
 // Decodes via createImageBitmap(file) — NOT `img.src = URL.createObjectURL()`:
 // the gateway serves apps under `img-src 'self' data:` (no `blob:`), so a
@@ -53,31 +80,19 @@ function dHashFromImage(img) {
 // thumb variant, no dims, no phash — and every grid load then 404s on
 // `?variant=thumb` before falling back to the originals). createImageBitmap
 // reads the File directly, no URL fetch for CSP to police.
-async function stageClientThumb(file, parentSha) {
+async function stageClientPreviews(file, parentSha) {
   try {
     const bitmap = await createImageBitmap(file);
     const dims = bitmap.width > 0 ? { width: bitmap.width, height: bitmap.height } : null;
     const phash = dHashFromImage(bitmap);
-    const long = Math.max(bitmap.width, bitmap.height);
-    if (long > THUMB_EDGE) {
-      const scale = THUMB_EDGE / long;
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-      canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-      const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.82));
-      if (blob) {
-        await fetch(`${BLOB_ROUTE}?variant=thumb&variant_of=${parentSha}&media_type=image/jpeg`, {
-          method: 'POST',
-          headers: { 'content-type': 'image/jpeg' },
-          body: blob,
-        });
-      }
-    }
+    // Tiny first (the grid is what paints on return), then medium. Both skip
+    // themselves when the original is already smaller than their edge.
+    await stageRung(bitmap, parentSha, CLIENT_TINY_EDGE, 'thumb');
+    await stageRung(bitmap, parentSha, CLIENT_MEDIUM_EDGE, 'preview');
     bitmap.close();
     return dims ? { ...dims, ...(phash ? { phash } : {}) } : phash ? { phash } : null;
   } catch {
-    return null; // no thumb is a slower grid, never a failed upload
+    return null; // no previews is a slower grid, never a failed upload
   }
 }
 
@@ -122,7 +137,13 @@ export async function runUpload(files, { refresh, setUploading }) {
       : file.type.startsWith('audio/')
         ? 'audio'
         : 'photo';
-    const dims = kind === 'photo' ? await stageClientThumb(file, staged.sha256) : null;
+    // Only rasters get client-side preview rungs. Video poster frames are
+    // deliberately OUT of v0 (issue #405 §2): capturing one means loading the
+    // decoded video, seeking to a frame and racing loadeddata/seeked events —
+    // fiddly, flaky under the blueprint harness, and no cheaper than the
+    // gateway (which itself skips video decode in v0). A thumbless video keeps
+    // rendering the placeholder-with-play-badge the grid already draws.
+    const dims = kind === 'photo' ? await stageClientPreviews(file, staged.sha256) : null;
     const outcome = await act('upload', {
       staged_sha: staged.sha256,
       kind,

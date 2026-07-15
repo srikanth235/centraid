@@ -1,15 +1,24 @@
-# centraid-snapshot/1 — Snapshot Format
+# centraid-snapshot/2 — Snapshot Format
 
-**Status:** Normative. Version string: `centraid-snapshot/1`.
+**Status:** Normative. Version string: `centraid-snapshot/2`.
 
 What a Centraid backup actually *is*: the object layout, key custody,
 part-splitting, WAL segment stream, encryption, and manifest format the
 engine writes to a provider's data plane (see `PROTOCOL.md` for the provider
 seam — unchanged by this revision). Providers never parse any of this.
-Centraid is unreleased v0, so there is no public predecessor to preserve:
-the authenticated base-plus-WAL design introduced by issue #408 is the sole
-`/1` format. A reader MUST reject every other format string. Compatibility
-policy starts only after a format has shipped to users.
+Centraid is unreleased v0, so there is no public predecessor to preserve.
+`/1` (issue #408) introduced the authenticated base-plus-WAL design; `/2`
+(issue #405 §1) adds **entropy-gated compression inside the chunk seal** —
+the sealed plaintext of a chunk object is now a one-byte-tagged frame
+`[algo-id][body]` rather than the bare part (see § Chunk payload framing).
+That is a payload-framing change, so the version string bumps and there is
+exactly ONE readable format: **a reader MUST reject every format string other
+than `centraid-snapshot/2`.** A `/1` reader would mistake `/2`'s algo byte for
+content, and a `/2` reader would mistake a `/1` object's first content byte
+for an algo id — the formats are mutually unreadable by construction, and v0
+keeps no dual-format reader. This document plus the version bump is the whole
+migration story. Compatibility policy starts only after a format has shipped
+to users.
 
 The database path is **base snapshots + a continuous stream of WAL segments**
 (point-in-time recovery, upload volume proportional to change, no
@@ -65,23 +74,78 @@ wal/tick/{vaultGeneration}-{journalGeneration}/{tick:013}
 ```
 
 Manifest keys MUST live under `manifests/`; part objects under `chunks/`
-(the `/1` name kept — the addressing scheme is identical, only boundaries
-changed); WAL segments, closers and pair markers under `wal/`. The registry
-(provider-side) maps `seq → manifestKey`; keys otherwise carry no
+(the `chunks/` name is stable across format versions — the addressing scheme
+is unchanged); WAL segments, closers and pair markers under `wal/`. The
+registry (provider-side) maps `seq → manifestKey`; keys otherwise carry no
 provider-visible semantics.
 
 ## Parts
 
 Fixed-size splitting: every entry's bytes are cut at exact **16 MiB**
 boundaries (final part short). The part size is format-normative and MUST
-NOT change within `/1` — same bytes must produce the same part ids
+NOT change within the format — same bytes must produce the same part ids
 everywhere. SQLite base files update pages in place (no insert-shift), so
 fixed boundaries dedup consecutive bases at ~O(changed pages); nothing else
 in a snapshot is both large and shift-prone.
 
 `chunkId = HMAC-SHA256(dedupKey, plaintextPartBytes)` (hex). Keyed ids leak
 nothing to the provider while enabling client-side dedup and GC planning
-against the *public* chunk index without decryption.
+against the *public* chunk index without decryption. The id is computed over
+the **raw** part bytes, upstream of both compression and encryption, so it is
+identical whether or not a part ends up compressed (see next section).
+
+## Chunk payload framing (compression) — `/2`, issue #405 §1
+
+Chunk objects compress *inside* the seal. The plaintext a chunk object seals
+is not the bare part but a one-byte-tagged frame; the writer compresses, then
+keeps the compressed body only if it is **strictly smaller** than storing raw:
+
+```
+sealed plaintext = [algo-id : 1 byte][body : possibly-compressed part bytes]
+```
+
+| algo-id | meaning | body |
+|---|---|---|
+| `0x00` | stored raw | the part bytes, verbatim |
+| `0x01` | zstd | `node:zlib` zstd stream (level 3) of the part |
+| `0x02` | raw-deflate | `node:zlib` deflateRaw of the part (fallback) |
+
+**Keep-if-smaller gate.** Both candidate frames carry the same 1-byte header,
+so the decision reduces to `compressedBody.length < rawPart.length`: strictly
+smaller keeps the compressed body, ties and inflation store raw under `0x00`.
+Consequently an incompressible part costs **at most one byte** over its raw
+size, and can never inflate the stored object.
+
+**Identity is unaffected.** `chunkId`, `blob:` addresses and dedup all key off
+the raw part bytes, and the deterministic chunk nonce is derived from that
+raw-plaintext id. So the same plaintext converges on the same object key and
+the same nonce regardless of whether compression fired — compression changes
+only how many ciphertext bytes land at that key. Restore/verify recompute the
+keyed id over the *decompressed* plaintext.
+
+**Writer vs reader obligations.** The writer prefers zstd (`0x01`) and falls
+back to raw-deflate (`0x02`) only on a runtime whose `node:zlib` lacks zstd
+(pre-Node-22.15). A reader **MUST** handle every id byte — `0x00`, `0x01`,
+`0x02` — regardless of what the local runtime can itself produce, because a
+snapshot is routinely restored on a different machine than the one that wrote
+it, and **MUST** reject any other id byte as a corrupt object. Compressed-body
+bytes are not guaranteed identical across zstd library versions; this never
+breaks dedup or idempotency, because the object key addresses the raw
+plaintext (a differing machine's write lands at the same key and is skipped via
+`head()`, and a same-machine retry re-compresses identically → byte-identical
+G7 PUT).
+
+**Scope.** Only `chunks/` objects are framed. WAL segments, group closers and
+pair markers are **not** compressed: segments are incremental deltas already
+bounded by change volume, and their address-bound deterministic-nonce
+idempotency contract (§ Encryption) is deliberately left exactly as `/1`
+shipped it — the marginal ratio on a few KiB of WAL pages is not worth
+perturbing that. Manifest objects are **not** framed either: the manifest's
+sealed payload is small canonical JSON whose byte-exact encoding is
+load-bearing for its content-addressed nonce, and its public envelope must
+stay plaintext-parseable by a key-less GC/verifier. Compression buys the win
+where the bulk actually is — the SQLite base files, git bundle and blobs that
+all flow through `chunks/`.
 
 ## WAL segments
 
@@ -196,7 +260,10 @@ reuse with different plaintext is structurally impossible:
 
 - Part objects: `info = "centraid-backup:chunk-nonce:" + chunkId` — the
   nonce follows the keyed content hash; identical plaintext converges on one
-  identical object, different plaintext gets a different id and nonce.
+  identical object, different plaintext gets a different id and nonce. The
+  sealed plaintext is the **framed** payload `[algo-id][body]` (§ Chunk payload
+  framing), but both `chunkId` and this nonce derive from the RAW part, so
+  framing never moves the object or repeats a (key, nonce) pair.
 - Manifest sealed payload:
   `info = "centraid-backup:manifest-nonce:" + sha256hex(payloadPlain)`.
 - WAL segments:
@@ -237,8 +304,11 @@ reuse with different plaintext is structurally impossible:
   most once: a second, different payload under the same address would reuse a
   (key, nonce) pair.
 
-`/1` objects (random nonces, no AAD) remain readable — decryption never
-depended on how the nonce was chosen.
+The cipher is agnostic to how the nonce was chosen and to what the sealed
+plaintext contains — `decrypt()` recovers whatever was sealed. What separates
+`/2` from `/1` is therefore not the cipher but the **sealed-plaintext
+framing** of chunk objects (§ Chunk payload framing); the format-string gate,
+not any in-band signal, is what refuses a `/1` object to a `/2` reader.
 
 ## Manifest
 
@@ -247,7 +317,7 @@ Canonical JSON (sorted keys, no insignificant whitespace); the registered
 
 ```jsonc
 {
-  "format": "centraid-snapshot/1",
+  "format": "centraid-snapshot/2",
   "keyEpoch": 2,
   "createdAt": "2026-07-14T12:00:00.000Z",
   "generation": 3,                       // must equal the registered generation (fencing)
@@ -307,10 +377,11 @@ snapshot (generation start) and whenever the non-DB entries change.
    than the reader guarantee. Point-in-time restore picks the newest
    snapshot with `createdAt ≤ T`.
 2. Verify the manifest object against the registered `manifestHash`; decrypt
-   the payload; after decrypting each part, recompute its keyed id and
-   refuse mismatches; verify each `db` entry's `sha256` after materializing
-   the base and BEFORE replaying anything onto it; reject path-traversal
-   entries (`..`, absolute paths).
+   the payload; after decrypting each part, **unframe it** (§ Chunk payload
+   framing — strip the algo byte and decompress `0x01`/`0x02`), recompute its
+   keyed id over the RAW plaintext and refuse mismatches; verify each `db`
+   entry's `sha256` after materializing the base and BEFORE replaying anything
+   onto it; reject path-traversal entries (`..`, absolute paths).
 3. Materialize into a **fresh directory** — never over a live vault.
 4. Replay WAL segments. The two `db` entries' `baseTickMs` MUST be
    equal; a snapshot violating that MUST be **refused, not restored** — its two
@@ -371,9 +442,13 @@ signals, not log lines.
 
 Object sizes already told a provider roughly how much a vault stores; WAL
 segments sharpen that into **write volume and cadence** (segment sizes and
-upload timing correlate with vault activity). See `SECURITY.md` — this is an
-accepted trade for continuous backup; padding/batching knobs exist at the
-shipper if it ever needs blunting.
+upload timing correlate with vault activity). `/2`'s chunk compression adds a
+third, smaller signal: a compressed object's *length* now reveals its
+plaintext's **compressibility** (a highly redundant base is visibly smaller
+than a high-entropy one of the same raw size). See `SECURITY.md` — all three
+are an accepted trade for a personal single-tenant vault; padding/batching
+knobs exist at the shipper, and the stored-raw escape hatch (`0x00`) is always
+available, if a deployment ever needs blunting.
 
 ## Recovery kit
 
