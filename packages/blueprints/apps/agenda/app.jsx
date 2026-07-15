@@ -21,6 +21,7 @@ import {
   openPopover,
   readFailed,
   showSkeleton,
+  subscribeReadUpdates,
   wireAttachInput,
 } from './kit.js';
 import { createLogic } from './logic.js';
@@ -83,6 +84,7 @@ const state = {
   // "cancel asked" chip / "Cancellation pending" button label).
   pendingIds: new Set(),
   pendingCancelIds: new Set(),
+  pendingByIntent: new Map(),
   // Session-scoped, receipted activity per event — see logic.js's logActivity.
   // Never fabricated: only writes this session actually made appear here.
   activityLog: new Map(),
@@ -190,7 +192,12 @@ function onSlotCreate(date, at) {
 
 async function submitCreate(payload) {
   const outcome = await logic.proposeEvent(payload);
-  if (outcome?.status === 'executed' || outcome?.status === 'parked') {
+  if (
+    outcome?.status === 'executed' ||
+    outcome?.status === 'parked' ||
+    outcome?.status === 'queued' ||
+    outcome?.status === 'in-flight'
+  ) {
     state.cursor = new Date(payload.dtstart);
     await load();
   }
@@ -344,37 +351,21 @@ function render() {
 // ---------- Data ----------
 
 let loadSeq = 0;
+let liveUnsubscribers = [];
+let liveReadsOwnData = false;
 
-async function load() {
-  const seq = ++loadSeq;
-  const miniRange = monthGridRange(state.cursor);
-  const canvasRange =
-    state.view === 'month'
-      ? miniRange
-      : state.view === 'week'
-        ? weekRange(state.cursor)
-        : { from: scheduleFrom(state.cursor) };
-  const needsSecondRead = state.view !== 'month';
+function replaceLiveReads(reads) {
+  for (const unsubscribe of liveUnsubscribers) unsubscribe();
+  liveUnsubscribers = reads.map((read) => read.unsubscribe);
+  liveReadsOwnData = reads.length > 0 && reads.every((read) => read.managed);
+}
 
-  let canvasData;
-  let miniData;
-  try {
-    if (needsSecondRead) {
-      [canvasData, miniData] = await Promise.all([
-        window.centraid.read({ query: 'upcoming', input: canvasRange }),
-        window.centraid.read({ query: 'upcoming', input: miniRange }),
-      ]);
-    } else {
-      canvasData = await window.centraid.read({ query: 'upcoming', input: canvasRange });
-      miniData = canvasData;
-    }
-  } catch {
-    // A broken vault must not look like an empty one.
-    readFailed($('noticeBanner'));
-    state.readFailedShown = true;
-    return;
-  }
-  if (seq !== loadSeq) return; // a newer navigation superseded this read
+function subscribeRead(read, callback) {
+  return subscribeReadUpdates(read, callback);
+}
+
+function applyLoadedData(seq, canvasData, miniData) {
+  if (seq !== loadSeq) return;
   if (state.readFailedShown) {
     state.readFailedShown = false;
     logic.notice('');
@@ -399,6 +390,65 @@ async function load() {
   data.calById = new Map(data.calendars.map((c) => [c.calendar_id, c]));
   if (state.detailEventId && !logic.findEvent(state.detailEventId)) state.detailEventId = null;
   render();
+}
+
+async function load() {
+  const seq = ++loadSeq;
+  const miniRange = monthGridRange(state.cursor);
+  const canvasRange =
+    state.view === 'month'
+      ? miniRange
+      : state.view === 'week'
+        ? weekRange(state.cursor)
+        : { from: scheduleFrom(state.cursor) };
+  const needsSecondRead = state.view !== 'month';
+
+  let canvasData;
+  let miniData;
+  const publish = () => {
+    if (canvasData !== undefined && miniData !== undefined) {
+      applyLoadedData(seq, canvasData, miniData);
+    }
+  };
+  try {
+    if (needsSecondRead) {
+      const canvasRead = window.centraid.read({ query: 'upcoming', input: canvasRange });
+      const miniRead = window.centraid.read({ query: 'upcoming', input: miniRange });
+      replaceLiveReads([
+        subscribeRead(canvasRead, (value) => {
+          canvasData = value;
+          publish();
+        }),
+        subscribeRead(miniRead, (value) => {
+          miniData = value;
+          publish();
+        }),
+      ]);
+      [canvasData, miniData] = await Promise.all([canvasRead, miniRead]);
+    } else {
+      const read = window.centraid.read({ query: 'upcoming', input: canvasRange });
+      replaceLiveReads([
+        subscribeRead(read, (value) => {
+          canvasData = value;
+          miniData = value;
+          publish();
+        }),
+      ]);
+      canvasData = await read;
+      miniData = canvasData;
+    }
+  } catch {
+    if (seq !== loadSeq) return;
+    // The attempted live reads never established dependencies. Drop their
+    // listeners and re-enable the compatibility doorbell so a later change
+    // can retry instead of leaving this view permanently inert.
+    replaceLiveReads([]);
+    // A broken vault must not look like an empty one.
+    readFailed($('noticeBanner'));
+    state.readFailedShown = true;
+    return;
+  }
+  applyLoadedData(seq, canvasData, miniData);
 }
 
 // ---------- Boot ----------
@@ -438,13 +488,18 @@ wireAttachInput($('attachInput'), () => logic.getAttachTarget(), {
   refresh: load,
 });
 
-// Reactive data (SKILL.md "Reactive data"): a write elsewhere (chat agent, a
-// second window) fires this — re-read, and treat it as the resolution of any
-// outstanding parked write (the owner approved or discarded it via another
-// surface; there is no per-invocation poll wired here, so this is the
-// honest, bounded way to clear a stale pending chip without guessing).
-onDataChange(CHANGE_TABLES, () => {
-  logic.clearPending();
+// Live reads own data invalidation. Keep the compatibility doorbell only for
+// older/non-managed hosts, and use exact terminal intent ids solely to settle
+// this session's pending chips.
+onDataChange(CHANGE_TABLES, (detail) => {
+  const pendingChanged = logic.reconcilePending(detail, liveReadsOwnData);
+  if (liveReadsOwnData) {
+    if (pendingChanged) render();
+    return;
+  }
+  // A legacy/server `_changes` doorbell cannot name the replica intent. Its
+  // relevant table change is the bounded compatibility signal used before
+  // exact overlay invalidations existed.
   load();
 });
 

@@ -35,6 +35,7 @@ const {
   popItem,
   renderAttachments,
   snippetInto,
+  subscribeReadUpdates,
 } = await import(kitUrl);
 const { KitElement } = await import(elementsUrl);
 
@@ -159,6 +160,38 @@ describe('kit smoke', () => {
     expect(fmtBytes(0, '—')).toBe('—');
     expect(fmtBytes(500)).toBe('500 B');
     expect(fmtBytes(1024 * 1024 * 1.3)).toBe('1.3 MB');
+  });
+
+  it('live reads apply their awaited current value once and forward only reruns', async () => {
+    const listeners = new Set<(value: string) => void>();
+    const read = Promise.resolve('current');
+    read.subscribe = (listener: (value: string) => void) => {
+      listeners.add(listener);
+      void read.then(listener);
+      return () => listeners.delete(listener);
+    };
+    const updates: string[] = [];
+    const subscription = subscribeReadUpdates(read, (value: string) => updates.push(value));
+
+    expect(await read).toBe('current');
+    await Promise.resolve();
+    expect(subscription.managed).toBe(true);
+    expect(updates).toEqual([]);
+
+    for (const listener of listeners) listener('rerun');
+    expect(updates).toEqual(['rerun']);
+    subscription.unsubscribe();
+    expect(listeners.size).toBe(0);
+  });
+
+  it('plain Promise reads retain the compatibility path', async () => {
+    const updates: unknown[] = [];
+    const subscription = subscribeReadUpdates(Promise.resolve('current'), (value: unknown) =>
+      updates.push(value),
+    );
+    expect(subscription.managed).toBe(false);
+    subscription.unsubscribe();
+    expect(updates).toEqual([]);
   });
 
   it('KitElement subclasses render light DOM and stamp data-kit-host', () => {

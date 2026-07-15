@@ -19,7 +19,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { scaffoldAppFiles } from './scaffold-files.js';
 
 // Resolved from this module's own path, not process.cwd(): cwd differs
@@ -109,10 +109,16 @@ describe('scaffolded React app boots through the real transform', () => {
     };
 
     await import(pathToFileURL(path.join(DIR, 'app.js')).href);
-    await settle();
+    await vi.waitFor(
+      () => {
+        expect(document.querySelector('main h1'), 'App component never committed').toBeTruthy();
+        expect(onChangeCb, 'scaffold never subscribed via centraid.onChange').toBeTypeOf(
+          'function',
+        );
+      },
+      { timeout: 2_000 },
+    );
     expect(errors, `scaffold threw booting: ${errors.map(String).join(' | ')}`).toEqual([]);
-    expect(document.querySelector('main h1'), 'App component never committed').toBeTruthy();
-    expect(onChangeCb, 'scaffold never subscribed via centraid.onChange').toBeTypeOf('function');
 
     const banner = document.querySelector('#consentBanner');
     expect(banner, 'scaffold lost its #consentBanner').toBeTruthy();

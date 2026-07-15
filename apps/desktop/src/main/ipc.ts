@@ -206,7 +206,10 @@ export function registerIpcHandlers(): void {
   // Broadcast helper for "active gateway changed" — fires after any
   // mutation that affects the active gateway's URL/token/identity so
   // the renderer can drop and re-fetch gateway-scoped state.
-  const broadcastGatewayChanged = (next: DesktopSettings): void => {
+  const broadcastGatewayChanged = (
+    next: DesktopSettings,
+    detail: { removedGatewayId?: string; purgeReplicaGatewayId?: string } = {},
+  ): void => {
     for (const win of BrowserWindow.getAllWindows()) {
       if (win.isDestroyed()) continue;
       win.webContents.send(Channel.GATEWAY_CHANGED, {
@@ -215,6 +218,8 @@ export function registerIpcHandlers(): void {
         activeGatewayLabel: next.activeGatewayLabel,
         activeProfileDisplayName: next.activeProfileDisplayName,
         activeProfileAvatarColor: next.activeProfileAvatarColor,
+        gatewayId: next.activeGatewayId,
+        ...detail,
       });
     }
   };
@@ -256,6 +261,7 @@ export function registerIpcHandlers(): void {
       if (win.isDestroyed()) continue;
       win.webContents.send(Channel.VAULT_CHANGED, {
         activeGatewayId: next.activeGatewayId,
+        gatewayId: next.activeGatewayId,
         ...(next.activeVaultId !== undefined ? { activeVaultId: next.activeVaultId } : {}),
       });
     }
@@ -306,6 +312,7 @@ export function registerIpcHandlers(): void {
         token: string;
         displayName?: string;
         avatarColor?: string;
+        rememberDevice?: boolean;
       },
     ): Promise<GatewayProfile> => addGateway(input),
   );
@@ -352,7 +359,7 @@ export function registerIpcHandlers(): void {
         next = await setActiveGatewayId('local');
       }
       await invalidateGatewayCaches();
-      broadcastGatewayChanged(next);
+      broadcastGatewayChanged(next, { removedGatewayId: input.id });
       return { activeGatewayId: next.activeGatewayId };
     },
   );
@@ -440,7 +447,10 @@ export function registerIpcHandlers(): void {
           next.activeGatewayKind === 'remote' ? next.activeGatewayId : undefined,
         );
         await invalidateGatewayCaches();
-        broadcastGatewayChanged(next);
+        broadcastGatewayChanged(
+          next,
+          input.rememberDevice === true ? {} : { purgeReplicaGatewayId: result.gatewayId },
+        );
         broadcastVaultChanged(next);
         nudgeGatewayMonitor();
       }
@@ -478,6 +488,7 @@ export function registerIpcHandlers(): void {
         destination: string;
         dataDir?: string;
         label?: string;
+        rememberDevice?: boolean;
         vault: { kind: 'existing'; vaultId: string } | { kind: 'create'; name: string };
       },
     ): Promise<SshConnectResult> => {
@@ -493,7 +504,10 @@ export function registerIpcHandlers(): void {
           next.activeGatewayKind === 'remote' ? next.activeGatewayId : undefined,
         );
         await invalidateGatewayCaches();
-        broadcastGatewayChanged(next);
+        broadcastGatewayChanged(
+          next,
+          input.rememberDevice === true ? {} : { purgeReplicaGatewayId: result.gatewayId },
+        );
         broadcastVaultChanged(next);
         nudgeGatewayMonitor();
       }
@@ -540,7 +554,12 @@ export function registerIpcHandlers(): void {
   // the same message `assertLocalAdmin` throws.
   const resolveVaultCreateRoute = async (): Promise<
     | { mode: 'local'; gatewayId: string }
-    | { mode: 'ssh'; gatewayId: string; profile: GatewayProfile['ssh'] }
+    | {
+        mode: 'ssh';
+        gatewayId: string;
+        profile: GatewayProfile['ssh'];
+        rememberDevice: boolean;
+      }
   > => {
     const settings = await loadSettings();
     if (settings.activeGatewayKind === 'local') {
@@ -548,7 +567,14 @@ export function registerIpcHandlers(): void {
     }
     const profiles = await listGateways();
     const active = profiles.find((p) => p.id === settings.activeGatewayId);
-    if (active?.ssh) return { mode: 'ssh', gatewayId: active.id, profile: active.ssh };
+    if (active?.ssh) {
+      return {
+        mode: 'ssh',
+        gatewayId: active.id,
+        profile: active.ssh,
+        rememberDevice: active.rememberDevice === true,
+      };
+    }
     throw new Error(
       'Vault create/delete on a remote gateway is a server-side admin act — ' +
         'run `centraid-gateway vault …` on that box over SSH.',
@@ -574,7 +600,12 @@ export function registerIpcHandlers(): void {
       const profile = route.profile as NonNullable<GatewayProfile['ssh']>;
       const created = await sshVaultCreate(profile, input.name);
       if (!created.ok) throw new Error(created.message);
-      const enrolled = await sshEnrollIntoVault(profile, created.value.vaultId, undefined);
+      const enrolled = await sshEnrollIntoVault(
+        profile,
+        created.value.vaultId,
+        undefined,
+        route.rememberDevice,
+      );
       if (!enrolled.ok) throw new Error(enrolled.message);
       const next = await loadSettings();
       const { shutdownAllLocalGatewaysExcept } = await import('./local-gateway.js');
@@ -742,11 +773,22 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(
     Channel.GATEWAY_AUTH_GET,
-    async (): Promise<{ baseUrl: string; token?: string; vaultId?: string }> => {
+    async (): Promise<{
+      baseUrl: string;
+      gatewayId: string;
+      token?: string;
+      vaultId?: string;
+      rememberDevice: boolean;
+    }> => {
       const settings = await loadSettings();
+      const profile = (await listGateways()).find(
+        (candidate) => candidate.id === settings.activeGatewayId,
+      );
       return {
         baseUrl: settings.gatewayUrl.replace(/\/+$/, ''),
+        gatewayId: profile?.id ?? settings.activeGatewayId,
         token: settings.gatewayToken || undefined,
+        rememberDevice: profile?.rememberDevice === true,
         // The vault the renderer addresses on this gateway (#289) — sent as
         // the `x-centraid-vault` header. Undefined = let the gateway pick.
         ...(settings.activeVaultId !== undefined ? { vaultId: settings.activeVaultId } : {}),

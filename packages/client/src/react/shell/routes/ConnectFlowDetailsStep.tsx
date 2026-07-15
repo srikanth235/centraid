@@ -123,6 +123,22 @@ export function GatewayDetailsStep({
           ) : null}
         </div>
       </details>
+      {!isTokenMode(state) ? (
+        <label className={styles.rememberRow}>
+          <input
+            type="checkbox"
+            aria-label="Remember this device"
+            checked={state.rememberDevice}
+            onChange={(event) =>
+              dispatch({ type: 'setRememberDevice', value: event.target.checked })
+            }
+          />
+          <span>
+            <strong>Remember this device</strong>
+            <small>Keep an encrypted offline replica, queued changes, and cached previews.</small>
+          </span>
+        </label>
+      ) : null}
       <div className={styles.foot}>
         <button
           type="button"

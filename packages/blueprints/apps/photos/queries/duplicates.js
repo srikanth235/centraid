@@ -73,7 +73,7 @@ export default async ({ ctx }) => {
       const asset = assetById.get(assetId);
       const content = asset ? contentById.get(asset.content_id) : undefined;
       if (!asset || !content || content.deleted_at != null) return null;
-      const { src, thumb } = srcOf(content);
+      const { src, thumb, preview } = srcOf(content);
       return {
         asset_id: asset.asset_id,
         content_id: asset.content_id,
@@ -86,6 +86,7 @@ export default async ({ ctx }) => {
         taken_at: asset.captured_at ?? content.created_at ?? null,
         content_uri: src,
         thumb_uri: thumb,
+        preview_uri: preview,
       };
     };
 

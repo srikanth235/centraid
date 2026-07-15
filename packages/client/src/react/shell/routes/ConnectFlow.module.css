@@ -168,6 +168,26 @@
   flex-direction: column;
   gap: 12px;
 }
+
+.rememberRow {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+  line-height: 1.25;
+}
+
+.rememberRow input {
+  margin-top: 3px;
+}
+
+.rememberRow span {
+  display: grid;
+  gap: 3px;
+}
+
+.rememberRow small {
+  color: var(--text-muted);
+}
 .modeToggle {
   display: flex;
   gap: 6px;

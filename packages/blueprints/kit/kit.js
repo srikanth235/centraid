@@ -126,6 +126,9 @@ export function toast(text, { undoLabel, onUndo, duration = 5000 } = {}) {
 
 /** The shared translation of a typed-command outcome into a human sentence. */
 export function outcomeMessage(outcome) {
+  if (outcome?.status === 'queued' || outcome?.status === 'in-flight') {
+    return outcome.reason ?? 'Saved on this device — it will sync when the gateway is reachable.';
+  }
   if (outcome?.status === 'parked') {
     return 'Waiting for your approval — it lands once you confirm it in vault settings.';
   }
@@ -161,6 +164,28 @@ export function readFailed(bannerEl) {
   if (!bannerEl) return;
   bannerEl.textContent = 'Couldn’t reach the vault — retrying when you come back.';
   bannerEl.hidden = false;
+}
+
+/**
+ * Subscribe to a live read's future values without applying its current value
+ * twice. The replica bridge deliberately emits the current value to a new
+ * subscriber; callers also await the same read for their initial paint, so
+ * this helper consumes that first subscription emission and forwards reruns.
+ * Plain-Promise compatibility reads remain unmanaged.
+ */
+export function subscribeReadUpdates(read, onUpdate) {
+  if (typeof read?.subscribe !== 'function') {
+    return { managed: false, unsubscribe: () => {} };
+  }
+  let current = true;
+  const unsubscribe = read.subscribe((value) => {
+    if (current) {
+      current = false;
+      return;
+    }
+    onUpdate(value);
+  });
+  return { managed: true, unsubscribe };
 }
 
 // ---------- Confirm-to-act (arm on first click, run on second) ----------

@@ -256,6 +256,20 @@ export async function commandDevices(
   if (!target) fail('usage: devices revoke --data-dir <path> <enrollment-or-endpoint-id>', 2);
   const removed = devices.revoke(target);
   if (removed.length === 0) fail(`no enrollment matches "${target}"`, 1);
+  // Enrollment revocation is also a vault-local data erasure boundary: an
+  // offline intent outcome is device-scoped and must not survive unpairing.
+  const cleanupRegistry = openVaultRegistry({
+    rootDir: layout.vaultDir,
+    logger: quietLogger,
+    enableWalShipper: false,
+  });
+  try {
+    for (const row of removed) {
+      cleanupRegistry.get(row.vaultId)?.forgetReplicaDevice(row.endpointId);
+    }
+  } finally {
+    cleanupRegistry.stop();
+  }
   // A device key that no longer holds ANY enrollment loses its HTTP token
   // too (issue #376) — the ACL bit is gone; the token that rode it dies
   // with it. A key that still holds another vault's row keeps its token

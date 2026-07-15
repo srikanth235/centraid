@@ -26,6 +26,7 @@ import { TALLY_DDL } from './domains-tally.js';
 import { SOCIAL_DDL, KNOWLEDGE_DDL, MEDIA_DDL } from './domains-social-knowledge-media.js';
 import { JOURNAL_DDL } from './journal.js';
 import { OUTBOX_DDL } from './outbox.js';
+import { REPLICA_DDL } from './replica.js';
 import { SEED_DDL } from './seed.js';
 import { SYNC_CREDENTIAL_DDL, SYNC_DDL } from './sync.js';
 
@@ -78,6 +79,7 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     TALLY_DDL,
     ENRICH_DDL,
     OUTBOX_DDL,
+    REPLICA_DDL,
     FTS_DDL,
     BLOB_DDL,
   ].join('\n'),

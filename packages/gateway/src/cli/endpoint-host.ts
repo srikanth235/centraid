@@ -144,12 +144,17 @@ export function makeDaemonDevicePlane(input: {
             vaultId: redeemed.vaultId,
             label: request.deviceName || `device ${endpointId.slice(0, 10)}…`,
             platform: request.platform,
+            ...(request.rememberDevice !== undefined
+              ? { rememberDevice: request.rememberDevice }
+              : {}),
+            ...(request.trust !== undefined ? { trust: request.trust } : {}),
           });
           logger.info(
             `device plane: enrolled ${endpointId.slice(0, 10)}… into vault ${redeemed.vaultId}`,
           );
           return {
             ok: true,
+            gatewayId: handle.endpointId,
             gatewayName: os.hostname().replace(/\.local$/, ''),
             vaultId: redeemed.vaultId,
             vaultName: plane.name,

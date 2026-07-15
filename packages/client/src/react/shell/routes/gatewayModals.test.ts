@@ -38,7 +38,11 @@ describe('connectGateway', () => {
       vaultName: 'Home',
     });
     const result = await connectGateway({ kind: 'ticket', label: 'Mine', ticket: 't.icket' });
-    expect(redeemGatewayPairing).toHaveBeenCalledWith({ label: 'Mine', ticket: 't.icket' });
+    expect(redeemGatewayPairing).toHaveBeenCalledWith({
+      label: 'Mine',
+      rememberDevice: false,
+      ticket: 't.icket',
+    });
     expect(result).toEqual({ gatewayId: 'gw1', label: 'Home', ok: true, vaultId: 'v1' });
   });
 
@@ -64,6 +68,7 @@ describe('connectGateway', () => {
     expect(redeemGatewayPairing).toHaveBeenCalledWith({
       label: undefined,
       mode: 'http',
+      rememberDevice: false,
       ticket: 't',
       url: 'https://gw.example',
     });

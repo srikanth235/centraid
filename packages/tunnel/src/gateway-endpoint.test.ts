@@ -94,6 +94,7 @@ describe('gateway endpoint', () => {
         enrolled.add(endpointId);
         return {
           ok: true,
+          gatewayId: 'gateway-endpoint',
           gatewayName: 'test-vps',
           vaultId: ticket.vaultId,
           vaultName: 'Family',
@@ -144,6 +145,7 @@ describe('gateway endpoint', () => {
     });
     expect(ok).toMatchObject({
       ok: true,
+      gatewayId: 'gateway-endpoint',
       vaultId: 'v-family',
       vaultName: 'Family',
       version: '0.1.0',

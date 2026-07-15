@@ -93,10 +93,12 @@ export function Stage({ asset, onDims }) {
     );
   }
   if (isRenderableUri(asset.content_uri)) {
-    const needsProbe = asset.width == null || asset.height == null;
+    const displaySrc = asset.preview_uri ?? asset.content_uri;
+    const needsProbe =
+      displaySrc === asset.content_uri && (asset.width == null || asset.height == null);
     return (
       <img
-        src={asset.content_uri}
+        src={displaySrc}
         alt={asset.title ?? asset.kind ?? 'Photo'}
         decoding="async"
         ref={(el) => {
@@ -106,6 +108,11 @@ export function Stage({ asset, onDims }) {
         }}
         onLoad={(e) => {
           if (needsProbe) onDims(e.target.naturalWidth, e.target.naturalHeight);
+        }}
+        onError={(e) => {
+          if (e.currentTarget.dataset.originalFallback || displaySrc === asset.content_uri) return;
+          e.currentTarget.dataset.originalFallback = '1';
+          e.currentTarget.src = asset.content_uri;
         }}
       />
     );

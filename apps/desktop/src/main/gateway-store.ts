@@ -75,6 +75,8 @@ export interface GatewayProfile {
   readonly endpointTicket?: string;
   /** Remote iroh EndpointId (iroh transport), for display + `devices add`. */
   readonly endpointId?: string;
+  /** Explicit pairing consent for durable replica, outbox, and media caches. */
+  readonly rememberDevice?: boolean;
   /**
    * SSH admin channel (issue #382) — set once a gateway has been reached
    * over SSH (the ConnectFlow "Over SSH" method, or the switcher's "New
@@ -263,6 +265,7 @@ async function readProfile(id: string): Promise<GatewayProfile | undefined> {
       ...(typeof parsed.endpointId === 'string' && parsed.endpointId.length > 0
         ? { endpointId: parsed.endpointId }
         : {}),
+      rememberDevice: parsed.rememberDevice === true,
       ...(ssh ? { ssh } : {}),
       createdAt: parsed.createdAt,
     };
@@ -336,6 +339,8 @@ export interface AddGatewayInput {
   displayName?: string;
   /** Optional avatar color as `#RRGGBB`. Defaults to a deterministic palette pick. */
   avatarColor?: string;
+  /** Explicit pairing consent for durable client-side state. */
+  rememberDevice?: boolean;
 }
 
 /**
@@ -384,6 +389,7 @@ export async function addGateway(input: AddGatewayInput): Promise<GatewayProfile
     ...(url ? { url } : {}),
     ...(endpointTicket ? { endpointTicket } : {}),
     ...(input.endpointId ? { endpointId: input.endpointId } : {}),
+    rememberDevice: input.rememberDevice === true,
     createdAt: new Date().toISOString(),
   };
   await fs.mkdir(gatewayDir(id), { recursive: true });
@@ -396,6 +402,18 @@ export async function addGateway(input: AddGatewayInput): Promise<GatewayProfile
     await setGatewayToken(id, input.token);
   }
   return profile;
+}
+
+/** Persist a renewed pairing ceremony's remember-device choice. */
+export async function updateGatewayRememberDevice(
+  id: string,
+  rememberDevice: boolean,
+): Promise<GatewayProfile> {
+  const current = await readProfile(id);
+  if (!current) throw new GatewayError('unknown_gateway', `Unknown gateway "${id}".`);
+  const next = { ...current, rememberDevice };
+  await writeProfile(next);
+  return next;
 }
 
 /**

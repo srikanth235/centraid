@@ -8,9 +8,9 @@
  * There are no roles and no permission matrix — enrollment is one bit.
  *
  * Persistence mirrors the phone tunnel's `devices.json` (issue #263):
- * a JSON file with mode 0600 and atomic replace. The store re-reads the
- * file when its mtime moves, so the admin CLI (a separate process) and
- * the daemon see each other's writes without coordination.
+ * a JSON file with mode 0600 and atomic replace. Mutations take an atomic
+ * lock-directory around reload → update → replace so a CLI checkpoint/trust
+ * change cannot race the daemon and resurrect stale authorization state.
  */
 
 import fs from 'node:fs';
@@ -28,8 +28,32 @@ export interface DeviceEnrollment {
   label: string;
   /** Client platform, when the pairing ceremony reported one. */
   platform?: string;
+  /**
+   * Device trust is part of the server-side replica shape (#406). A
+   * read-only device may bootstrap and tail its consented rows but may not
+   * submit an intent. Revoked rows are normally removed immediately; the
+   * value remains in the type so a future tombstone-backed revocation can
+   * fail closed without widening an older client.
+   */
+  trust: 'full' | 'readonly' | 'revoked';
+  /**
+   * Whether durable client state was explicitly requested at pairing time.
+   * The daemon persists the choice alongside enrollment; clients use it to
+   * decide between OPFS/IndexedDB and session-memory state.
+   */
+  rememberDevice: boolean;
+  /** Last replica cursor the authenticated device explicitly acknowledged. */
+  checkpoint?: ReplicaCheckpoint;
   /** ISO enrollment time. */
   addedAt: string;
+}
+
+export interface ReplicaCheckpoint {
+  epoch: string;
+  seq: number;
+  /** Build/schema compatibility epoch used to derive the replica. */
+  schemaEpoch: number;
+  updatedAt: string;
 }
 
 interface EnrollmentFile {
@@ -39,7 +63,7 @@ interface EnrollmentFile {
 
 export class EnrollmentStore {
   private enrollments: DeviceEnrollment[] = [];
-  private loadedMtimeMs = -1;
+  private loadedRevision = '';
 
   private constructor(private readonly file: string) {}
 
@@ -51,33 +75,27 @@ export class EnrollmentStore {
 
   /** Re-read the file when another process (CLI ↔ daemon) rewrote it. */
   private reloadIfChanged(): void {
-    let mtimeMs: number;
+    let revision: string;
     try {
-      mtimeMs = fs.statSync(this.file).mtimeMs;
+      const stat = fs.statSync(this.file, { bigint: true });
+      revision = `${stat.mtimeNs}:${stat.size}`;
     } catch {
       this.enrollments = [];
-      this.loadedMtimeMs = -1;
+      this.loadedRevision = '';
       return;
     }
-    if (mtimeMs === this.loadedMtimeMs) return;
+    if (revision === this.loadedRevision) return;
     try {
       const raw = JSON.parse(fs.readFileSync(this.file, 'utf8')) as Partial<EnrollmentFile>;
       this.enrollments = Array.isArray(raw.enrollments)
-        ? raw.enrollments.filter(
-            (e): e is DeviceEnrollment =>
-              typeof e === 'object' &&
-              e !== null &&
-              typeof (e as DeviceEnrollment).enrollmentId === 'string' &&
-              typeof (e as DeviceEnrollment).endpointId === 'string' &&
-              typeof (e as DeviceEnrollment).vaultId === 'string',
-          )
+        ? raw.enrollments.filter(validEnrollment)
         : [];
-      this.loadedMtimeMs = mtimeMs;
+      this.loadedRevision = revision;
     } catch {
       // Unreadable file: keep the last good in-memory set (never widen
       // access on a parse failure — an empty set only denies).
       this.enrollments = [];
-      this.loadedMtimeMs = mtimeMs;
+      this.loadedRevision = revision;
     }
   }
 
@@ -87,7 +105,19 @@ export class EnrollmentStore {
     const tmp = `${this.file}.${process.pid}.tmp`;
     fs.writeFileSync(tmp, `${JSON.stringify(payload, null, 2)}\n`, { mode: 0o600 });
     fs.renameSync(tmp, this.file);
-    this.loadedMtimeMs = fs.statSync(this.file).mtimeMs;
+    const stat = fs.statSync(this.file, { bigint: true });
+    this.loadedRevision = `${stat.mtimeNs}:${stat.size}`;
+  }
+
+  private mutate<T>(change: () => T): T {
+    return withEnrollmentFileLock(this.file, () => {
+      // Never trust an in-memory snapshot after waiting for another process.
+      this.loadedRevision = '';
+      this.reloadIfChanged();
+      const result = change();
+      this.persist();
+      return result;
+    });
   }
 
   /** Every enrollment, oldest first. */
@@ -122,28 +152,105 @@ export class EnrollmentStore {
     vaultId: string;
     label: string;
     platform?: string;
+    trust?: 'full' | 'readonly';
+    rememberDevice?: boolean;
   }): DeviceEnrollment {
+    return this.mutate(() => {
+      const existing = this.enrollments.find(
+        (e) => e.endpointId === input.endpointId && e.vaultId === input.vaultId,
+      );
+      if (existing) {
+        existing.label = input.label;
+        if (input.platform !== undefined) existing.platform = input.platform;
+        if (input.trust !== undefined) existing.trust = input.trust;
+        if (input.rememberDevice !== undefined) existing.rememberDevice = input.rememberDevice;
+        return { ...existing };
+      }
+      const row: DeviceEnrollment = {
+        enrollmentId: crypto.randomUUID(),
+        endpointId: input.endpointId,
+        vaultId: input.vaultId,
+        label: input.label,
+        ...(input.platform !== undefined ? { platform: input.platform } : {}),
+        trust: input.trust ?? 'full',
+        rememberDevice: input.rememberDevice === true,
+        addedAt: new Date().toISOString(),
+      };
+      this.enrollments.push(row);
+      return { ...row };
+    });
+  }
+
+  /** The enrollment for one authenticated device/vault pair. */
+  get(endpointId: string, vaultId: string): DeviceEnrollment | undefined {
+    return this.list().find((e) => e.endpointId === endpointId && e.vaultId === vaultId);
+  }
+
+  /**
+   * Stamp the cursor returned by a fresh bootstrap. This is the only method
+   * allowed to replace an enrollment's epoch; ordinary acknowledgements may
+   * only advance monotonically within the bootstrapped epoch.
+   */
+  resetCheckpoint(
+    endpointId: string,
+    vaultId: string,
+    cursor: Omit<ReplicaCheckpoint, 'updatedAt'>,
+  ): ReplicaCheckpoint {
+    return this.mutate(() => {
+      const enrollment = this.mutableEnrollment(endpointId, vaultId);
+      const checkpoint = checkpointNow(cursor);
+      enrollment.checkpoint = checkpoint;
+      return checkpoint;
+    });
+  }
+
+  /** Persist an authenticated device's monotonically advancing cursor. */
+  advanceCheckpoint(
+    endpointId: string,
+    vaultId: string,
+    cursor: Omit<ReplicaCheckpoint, 'updatedAt'>,
+  ): ReplicaCheckpoint {
+    return this.mutate(() => {
+      const enrollment = this.mutableEnrollment(endpointId, vaultId);
+      const previous = enrollment.checkpoint;
+      if (!previous) {
+        throw new Error('replica checkpoint must be initialized by bootstrap');
+      }
+      if (previous.epoch !== cursor.epoch || previous.schemaEpoch !== cursor.schemaEpoch) {
+        throw new Error('replica checkpoint epoch changed; rebootstrap required');
+      }
+      if (!Number.isSafeInteger(cursor.seq) || cursor.seq < previous.seq) {
+        throw new Error('replica checkpoint must advance monotonically');
+      }
+      const checkpoint = checkpointNow(cursor);
+      enrollment.checkpoint = checkpoint;
+      return checkpoint;
+    });
+  }
+
+  /** Owner-controlled trust downgrade/upgrade for an enrolled device. */
+  setTrust(
+    endpointId: string,
+    vaultId: string,
+    trust: 'full' | 'readonly' | 'revoked',
+  ): DeviceEnrollment {
+    return this.mutate(() => {
+      const enrollment = this.mutableEnrollment(endpointId, vaultId);
+      enrollment.trust = trust;
+      if (trust === 'revoked') delete enrollment.checkpoint;
+      return { ...enrollment };
+    });
+  }
+
+  private mutableEnrollment(endpointId: string, vaultId: string): DeviceEnrollment {
     this.reloadIfChanged();
-    const existing = this.enrollments.find(
-      (e) => e.endpointId === input.endpointId && e.vaultId === input.vaultId,
+    const enrollment = this.enrollments.find(
+      (e) => e.endpointId === endpointId && e.vaultId === vaultId,
     );
-    if (existing) {
-      existing.label = input.label;
-      if (input.platform !== undefined) existing.platform = input.platform;
-      this.persist();
-      return existing;
+    if (!enrollment || enrollment.trust === 'revoked') {
+      throw new Error('device is not enrolled for this vault');
     }
-    const row: DeviceEnrollment = {
-      enrollmentId: crypto.randomUUID(),
-      endpointId: input.endpointId,
-      vaultId: input.vaultId,
-      label: input.label,
-      ...(input.platform !== undefined ? { platform: input.platform } : {}),
-      addedAt: new Date().toISOString(),
-    };
-    this.enrollments.push(row);
-    this.persist();
-    return row;
+    return enrollment;
   }
 
   /**
@@ -151,13 +258,108 @@ export class EnrollmentStore {
    * key holds — "lost laptop"). Returns the removed rows.
    */
   revoke(idOrEndpointId: string): DeviceEnrollment[] {
-    this.reloadIfChanged();
-    const removed = this.enrollments.filter(
-      (e) => e.enrollmentId === idOrEndpointId || e.endpointId === idOrEndpointId,
-    );
-    if (removed.length === 0) return [];
-    this.enrollments = this.enrollments.filter((e) => !removed.includes(e));
-    this.persist();
-    return removed;
+    return this.mutate(() => {
+      const removed = this.enrollments.filter(
+        (e) => e.enrollmentId === idOrEndpointId || e.endpointId === idOrEndpointId,
+      );
+      if (removed.length === 0) return [];
+      this.enrollments = this.enrollments.filter((e) => !removed.includes(e));
+      return removed.map((row) => ({ ...row }));
+    });
   }
+}
+
+const ENROLLMENT_LOCK_TIMEOUT_MS = 5_000;
+const ENROLLMENT_STALE_LOCK_MS = 60_000;
+const lockWaiter = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
+
+function withEnrollmentFileLock<T>(file: string, work: () => T): T {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const lock = `${file}.lock`;
+  const deadline = Date.now() + ENROLLMENT_LOCK_TIMEOUT_MS;
+  for (;;) {
+    try {
+      fs.mkdirSync(lock, { mode: 0o700 });
+      break;
+    } catch (error) {
+      if (!isFileExistsError(error)) throw error;
+      try {
+        if (Date.now() - fs.statSync(lock).mtimeMs > ENROLLMENT_STALE_LOCK_MS) {
+          fs.rmSync(lock, { recursive: true, force: true });
+          continue;
+        }
+      } catch {
+        continue;
+      }
+      if (Date.now() >= deadline) {
+        throw new Error('timed out locking device enrollment store', { cause: error });
+      }
+      Atomics.wait(lockWaiter, 0, 0, 10);
+    }
+  }
+  try {
+    return work();
+  } finally {
+    try {
+      fs.rmdirSync(lock);
+    } catch {
+      /* A stale-lock recovery racing process may already have removed it. */
+    }
+  }
+}
+
+function isFileExistsError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === 'EEXIST'
+  );
+}
+
+function validCheckpoint(value: unknown): value is ReplicaCheckpoint {
+  if (typeof value !== 'object' || value === null) return false;
+  const checkpoint = value as Partial<ReplicaCheckpoint>;
+  return (
+    typeof checkpoint.epoch === 'string' &&
+    checkpoint.epoch.length > 0 &&
+    typeof checkpoint.seq === 'number' &&
+    Number.isSafeInteger(checkpoint.seq) &&
+    checkpoint.seq >= 0 &&
+    typeof checkpoint.schemaEpoch === 'number' &&
+    Number.isSafeInteger(checkpoint.schemaEpoch) &&
+    checkpoint.schemaEpoch >= 0 &&
+    typeof checkpoint.updatedAt === 'string'
+  );
+}
+
+function validEnrollment(value: unknown): value is DeviceEnrollment {
+  if (typeof value !== 'object' || value === null) return false;
+  const enrollment = value as Partial<DeviceEnrollment>;
+  return (
+    typeof enrollment.enrollmentId === 'string' &&
+    typeof enrollment.endpointId === 'string' &&
+    typeof enrollment.vaultId === 'string' &&
+    typeof enrollment.label === 'string' &&
+    typeof enrollment.addedAt === 'string' &&
+    (enrollment.platform === undefined || typeof enrollment.platform === 'string') &&
+    (enrollment.trust === 'full' ||
+      enrollment.trust === 'readonly' ||
+      enrollment.trust === 'revoked') &&
+    typeof enrollment.rememberDevice === 'boolean' &&
+    (enrollment.checkpoint === undefined || validCheckpoint(enrollment.checkpoint))
+  );
+}
+
+function checkpointNow(cursor: Omit<ReplicaCheckpoint, 'updatedAt'>): ReplicaCheckpoint {
+  if (
+    !cursor.epoch ||
+    !Number.isSafeInteger(cursor.seq) ||
+    cursor.seq < 0 ||
+    !Number.isSafeInteger(cursor.schemaEpoch) ||
+    cursor.schemaEpoch < 0
+  ) {
+    throw new Error('invalid replica checkpoint');
+  }
+  return { ...cursor, updatedAt: new Date().toISOString() };
 }

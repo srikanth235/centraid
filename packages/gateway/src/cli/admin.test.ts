@@ -6,7 +6,7 @@
  * assert on their stdout + the files they write.
  */
 
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs, readFileSync } from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -21,6 +21,12 @@ import { EnrollmentStore } from '../serve/enrollment-store.ts';
 import { DeviceTokenStore } from '../serve/device-token-store.ts';
 
 const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+
+// These filesystem-heavy CLI cases create several complete vaults. Installing
+// the issue #406 all-entity trigger catalog is real bootstrap work, and the
+// package suite runs many other SQLite/WAL fixtures in parallel; retain a
+// bounded timeout without making correctness depend on shared-runner load.
+vi.setConfig({ testTimeout: 15_000 });
 
 let dataDir: string;
 let out: string[];

@@ -6,12 +6,16 @@ export interface WebConnection {
   /** Iroh EndpointTicket; contains dial information, never the one-time pairing secret. */
   endpointTicket?: string;
   endpointId?: string;
+  /** Sovereign gateway EndpointId returned by Iroh pairing. */
+  gatewayId?: string;
   token?: string;
   vaultId?: string;
   label: string;
   displayName: string;
   avatarColor: string;
   control?: boolean;
+  /** Explicit durable-storage consent from pairing. */
+  rememberDevice?: boolean;
 }
 
 const DEFAULT_CONNECTION: WebConnection = {
@@ -19,13 +23,16 @@ const DEFAULT_CONNECTION: WebConnection = {
   label: 'Web gateway',
   displayName: 'Centraid',
   avatarColor: '#6f5bf6',
+  rememberDevice: false,
 };
 
 export function loadConnection(): WebConnection {
   try {
-    const parsed = JSON.parse(
-      localStorage.getItem(`${PREFIX}connection`) ?? '{}',
-    ) as Partial<WebConnection>;
+    const raw =
+      sessionStorage.getItem(`${PREFIX}connection`) ??
+      localStorage.getItem(`${PREFIX}connection`) ??
+      '{}';
+    const parsed = JSON.parse(raw) as Partial<WebConnection>;
     return { ...DEFAULT_CONNECTION, ...parsed };
   } catch {
     return { ...DEFAULT_CONNECTION };
@@ -34,8 +41,30 @@ export function loadConnection(): WebConnection {
 
 export function saveConnection(patch: Partial<WebConnection>): WebConnection {
   const next = { ...loadConnection(), ...patch };
-  localStorage.setItem(`${PREFIX}connection`, JSON.stringify(next));
+  const key = `${PREFIX}connection`;
+  const durable = next.rememberDevice === true;
+  const target = durable ? localStorage : sessionStorage;
+  const stale = durable ? sessionStorage : localStorage;
+  target.setItem(key, JSON.stringify(next));
+  stale.removeItem(key);
   return next;
+}
+
+/** Stable replica identity for the sovereign gateway behind a web transport. */
+export function webGatewayId(connection: WebConnection): string | undefined {
+  if (connection.transport === 'iroh' && (connection.gatewayId || connection.endpointTicket)) {
+    return `iroh:${connection.gatewayId ?? connection.endpointTicket}`;
+  }
+  if (!connection.baseUrl) return undefined;
+  try {
+    const url = new URL(connection.baseUrl);
+    url.hash = '';
+    url.search = '';
+    url.pathname = url.pathname.replace(/\/+$/, '') || '/';
+    return `direct:${url.toString()}`;
+  } catch {
+    return `direct:${connection.baseUrl.replace(/\/+$/, '')}`;
+  }
 }
 
 export function loadSettingsPatch(): Record<string, unknown> {

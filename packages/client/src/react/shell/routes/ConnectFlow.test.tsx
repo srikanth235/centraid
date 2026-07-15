@@ -202,7 +202,11 @@ describe('ConnectFlow', () => {
     );
     click(connectBtn);
     await flush(3);
-    expect(redeemGatewayPairing).toHaveBeenCalledWith({ label: undefined, ticket: 'a-ticket' });
+    expect(redeemGatewayPairing).toHaveBeenCalledWith({
+      label: undefined,
+      rememberDevice: false,
+      ticket: 'a-ticket',
+    });
     expect(onDone).toHaveBeenCalledWith({
       displayLabel: 'Office',
       gatewayId: 'gw1',
@@ -272,6 +276,7 @@ describe('ConnectFlow', () => {
       dataDir: undefined,
       destination: 'me@box',
       label: undefined,
+      rememberDevice: false,
       vault: { kind: 'existing', vaultId: 'r1' },
     });
     expect(onDone).toHaveBeenCalledWith({

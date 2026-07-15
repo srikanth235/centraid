@@ -62,6 +62,21 @@ describe('parseRoute — old per-app routes are gone (issue #107)', () => {
 });
 
 describe('parseRoute — unaffected routes still work', () => {
+  it('parses the query-only browser module route', () => {
+    const r = parseRoute('GET', '/centraid/todos/_query/upcoming.mjs');
+    expect(r).toEqual({
+      kind: 'app-query-bundle',
+      appId: 'todos',
+      queryName: 'upcoming',
+    });
+  });
+
+  it('never falls malformed query-module routes through to static serving', () => {
+    expect(parseRoute('GET', '/centraid/todos/_query/upcoming.js').kind).toBe('not-found');
+    expect(parseRoute('POST', '/centraid/todos/_query/upcoming.mjs').kind).toBe('not-found');
+    expect(parseRoute('GET', '/centraid/todos/_query/a/b.mjs').kind).toBe('not-found');
+  });
+
   it('parses /_changes', () => {
     const r = parseRoute('GET', '/centraid/todos/_changes');
     expect(r.kind).toBe('app-changes');
@@ -102,6 +117,19 @@ describe('parseWithDraft — draft-preview prefix (issue #141)', () => {
     expect(draftSessionId).toBe('s1');
     expect(route.kind).toBe('app-static');
     expect((route as { rel: string }).rel).toBe('app.css');
+  });
+
+  it('peels the draft prefix off a query bundle request', () => {
+    const { route, draftSessionId } = parseWithDraft(
+      'GET',
+      '/centraid/_draft/s1/todos/_query/upcoming.mjs',
+    );
+    expect(draftSessionId).toBe('s1');
+    expect(route).toEqual({
+      kind: 'app-query-bundle',
+      appId: 'todos',
+      queryName: 'upcoming',
+    });
   });
 
   it('peels the draft prefix off a tool-invoke and preserves the inner shape', () => {

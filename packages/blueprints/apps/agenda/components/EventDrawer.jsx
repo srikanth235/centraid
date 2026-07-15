@@ -132,7 +132,12 @@ export function EventDrawer({
     setSaving(true);
     const outcome = await onReschedule(ev.event_id, dtstart, dtend);
     setSaving(false);
-    if (outcome?.status === 'executed' || outcome?.status === 'parked') {
+    if (
+      outcome?.status === 'executed' ||
+      outcome?.status === 'parked' ||
+      outcome?.status === 'queued' ||
+      outcome?.status === 'in-flight'
+    ) {
       onClose();
       return;
     }

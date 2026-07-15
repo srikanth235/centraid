@@ -105,9 +105,93 @@ export {
   JOURNAL_TABLES,
   type EntityRef,
 } from './schema/tables.js';
+export {
+  formatReplicaCursor,
+  parseReplicaCursor,
+  InvalidReplicaCursorError,
+  type ReplicaCursor,
+  type ReplicaCursorInput,
+} from './replica/cursor.js';
+export {
+  REPLICA_RETENTION_DAYS,
+  REPLICA_RETENTION_MAX_ENTRIES,
+  ReplicaRebootstrapRequiredError,
+  appendReplicaChange,
+  bumpReplicaEpoch,
+  currentReplicaLogState,
+  initializeReplicaProtocol,
+  pruneReplicaChanges,
+  readReplicaChanges,
+  refreshReplicaTriggers,
+  type AppendReplicaChangeInput,
+  type BumpReplicaEpochOptions,
+  type PruneReplicaChangesOptions,
+  type ReadReplicaChangesOptions,
+  type ReplicaChangeEntry,
+  type ReplicaChangeOp,
+  type ReplicaChangePage,
+  type ReplicaLogState,
+  type ReplicaPruneResult,
+  type ReplicaRebootstrapReason,
+} from './replica/change-log.js';
+export { REPLICA_SCHEMA_EPOCH } from './schema/replica.js';
+export {
+  DEFAULT_REPLICA_MAX_VALUE_BYTES,
+  readReplicaRow,
+  readReplicaRows,
+  withReplicaSnapshot,
+  type ReadReplicaRowsOptions,
+  type ReplicaRow,
+  type ReplicaRowsPage,
+  type ReplicaSnapshotReader,
+  type ReplicaSnapshotResult,
+} from './replica/snapshot.js';
+export { replicaUnavailableColumnsOf } from './replica/unavailable-columns.js';
+export {
+  deleteReplicaIntentOutcomesForDevice,
+  listReplicaIntentOutcomes,
+  readReplicaIntentOutcome,
+  recordReplicaIntentOutcome,
+  recordReplicaIntentOutcomeInTransaction,
+  transitionReplicaIntentOutcome,
+  type ListReplicaIntentOutcomesOptions,
+  type RecordReplicaIntentOutcomeInput,
+  type ReplicaIntentOutcome,
+  type ReplicaIntentStatus,
+  type TransitionReplicaIntentOutcomeInput,
+} from './replica/intents.js';
+export {
+  DEFAULT_REPLICA_INVOCATION_REPAIR_BATCH_SIZE,
+  ReplicaInvocationRepairError,
+  repairReplicaInvocationCommits,
+  readReplicaInvocationCommit,
+  recordReplicaInvocationCommitInTransaction,
+  type RecordReplicaInvocationCommitInput,
+  type ReplicaInvocationAudit,
+  type ReplicaInvocationAuditCheck,
+  type ReplicaInvocationAuditCitation,
+  type ReplicaInvocationAuditWrite,
+  type ReplicaInvocationCommit,
+  type ReplicaInvocationRepairFailure,
+  type ReplicaInvocationRepairResult,
+} from './replica/invocation-commits.js';
+export {
+  saveDurableParkedPayload,
+  readDurableParkedPayload,
+  listDurableParkedPayloads,
+  deleteDurableParkedPayload,
+  deleteDurableParkedPayloadsForGrant,
+  type DurableParkedPayload,
+} from './replica/parked.js';
 
 export { createGateway, Gateway } from './gateway/gateway.js';
 export { GatewayError, DEFAULT_PURPOSE } from './gateway/types.js';
+export { evaluateConsent, type ConsentAllow, type ConsentDecision } from './gateway/consent.js';
+export {
+  compileFilters,
+  compileReplicaHistoricalFilters,
+  type CompiledFilter,
+} from './gateway/filters.js';
 export type {
   Credential,
   Identity,

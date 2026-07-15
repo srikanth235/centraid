@@ -3,6 +3,7 @@
 // render. JSX-free by design — shared by every component that renders a tile
 // (Timeline.jsx, Picker.jsx, Duplicates.jsx).
 import { isVideoAsset } from './format.js';
+import { observeNextScreen, stopNextScreenObservation } from './media-observer.js';
 
 // The grid NEVER fetches a full original. Blob-backed assets carry a server
 // thumb variant (issue #296) — a few KB; a `data:` URI already rode inline
@@ -87,6 +88,7 @@ export function fillTileMedia(tile, asset) {
   const img = document.createElement('img');
   img.loading = 'lazy';
   img.decoding = 'async';
+  img.fetchPriority = 'low';
   img.alt = asset.title ?? asset.kind ?? 'Photo';
   // Reserve the intrinsic aspect box before the bytes decode (no CLS). The
   // tile container is already fixed-size (justify()), so these attributes only
@@ -99,11 +101,12 @@ export function fillTileMedia(tile, asset) {
   // swap in a placeholder instead of pulling multi-MB bytes into the grid.
   img.onerror = () => {
     img.onerror = null;
+    stopNextScreenObservation(img);
     img.remove();
     renderPlaceholder(tile, asset);
   };
-  img.src = src;
   tile.appendChild(img);
+  observeNextScreen(img, src);
 }
 
 // A tile's media fill (fillTileMedia, above) is imperative — image decode,

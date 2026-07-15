@@ -32,7 +32,7 @@
 import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from './constants.js';
 import { $ } from './dom.js';
 import { createDuplicates } from './duplicates.jsx';
-import { debounce, readFailed } from './kit.js';
+import { debounce, readFailed, subscribeReadUpdates } from './kit.js';
 import { DEFAULT_ZOOM, gridWidthFallback, ZOOM_LEVELS } from './layout.js';
 import { createLightbox } from './lightbox.jsx';
 import { notice } from './outcomes.js';
@@ -91,6 +91,9 @@ let libraryTruncated = false;
 // walk (driven purely by focus in the boot harness) always re-reads.
 const FOCUS_STALE_MS = 30_000;
 let lastFreshLoadAt = 0;
+let libraryLiveUnsubscribe = () => {};
+let libraryLiveOwnsData = false;
+let libraryRefreshSeq = 0;
 
 // The vault tables the library projection actually reads (queries/library.js +
 // queries/_shared.js). A `centraid:datachange` touching none of these can't
@@ -107,17 +110,7 @@ const PHOTOS_READ_TABLES = new Set([
   'blob.custody_state',
 ]);
 
-async function refresh(opts) {
-  const record = opts?.record !== false;
-  let data;
-  try {
-    data = await window.centraid.read({ query: 'library', input: { limit: libraryWindow } });
-  } catch {
-    // A broken vault must not look like an empty one.
-    readFailed($('noticeBanner'));
-    readErrorShown = true;
-    return;
-  }
+function applyLibraryData(data, { record = true } = {}) {
   if (readErrorShown) {
     notice('');
     readErrorShown = false;
@@ -157,6 +150,35 @@ async function refresh(opts) {
   renderMain();
   renderSelectionBar();
   lightbox.renderIfOpen();
+}
+
+async function refresh(opts) {
+  const seq = ++libraryRefreshSeq;
+  const record = opts?.record !== false;
+  let data;
+  try {
+    const read = window.centraid.read({ query: 'library', input: { limit: libraryWindow } });
+    libraryLiveUnsubscribe();
+    const subscription = subscribeReadUpdates(read, (value) => {
+      if (seq === libraryRefreshSeq) applyLibraryData(value, { record: true });
+    });
+    libraryLiveOwnsData = subscription.managed;
+    libraryLiveUnsubscribe = subscription.unsubscribe;
+    data = await read;
+  } catch {
+    if (seq !== libraryRefreshSeq) return;
+    // A rejected initial live read has no dependency registered upstream.
+    // Release it and restore the legacy change/focus retry path.
+    libraryLiveUnsubscribe();
+    libraryLiveUnsubscribe = () => {};
+    libraryLiveOwnsData = false;
+    // A broken vault must not look like an empty one.
+    readFailed($('noticeBanner'));
+    readErrorShown = true;
+    return;
+  }
+  if (seq !== libraryRefreshSeq) return;
+  applyLibraryData(data, { record });
 }
 
 function albumAssets() {
@@ -718,6 +740,9 @@ window.addEventListener('focus', () => {
 // reads — a note/task/expense write must not reship the photo library.
 const onDataChange = debounce(() => refresh(), 200);
 window.centraid.onChange?.((detail) => {
+  // A live read reruns itself for replica/server invalidations. The legacy
+  // doorbell remains only for older hosts that return a plain Promise.
+  if (libraryLiveOwnsData) return;
   const tables = detail?.tables;
   // Unknown/empty table set: refetch to stay honest. Otherwise only when the
   // change intersects the library projection's tables.

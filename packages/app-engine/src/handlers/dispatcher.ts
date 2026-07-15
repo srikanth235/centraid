@@ -11,6 +11,7 @@
  */
 
 import { promises as fs } from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { runHandler } from './handler-runner.js';
 import type { Registry } from '../registry/registry.js';
@@ -93,6 +94,8 @@ export interface CentraidWriteInput {
   readonly app: string;
   readonly action: string;
   readonly input?: unknown;
+  /** Durable browser intent; binds every vault invocation to replay-safe ids. */
+  readonly intentId?: string;
 }
 
 export interface CentraidReadInput {
@@ -292,7 +295,7 @@ export class Dispatcher {
   // --------- write (action) ---------
 
   async write(input: CentraidWriteInput, overrideCodeDir?: string): Promise<ToolResult> {
-    const { app: appId, action: actionName, input: handlerInput } = input;
+    const { app: appId, action: actionName, input: handlerInput, intentId } = input;
     if (!appId || !actionName) {
       return errorResult('INVALID_INPUT', 'centraid_write requires { app, action }');
     }
@@ -335,7 +338,13 @@ export class Dispatcher {
       args: { params: {}, body: handlerInput },
       timeoutMs: 30_000,
       ...(this.onWriteFor ? { onWrite: this.onWriteFor(appId) } : {}),
-      ...(this.vaultFor ? { vault: this.vaultFor(appId) } : {}),
+      ...(this.vaultFor
+        ? {
+            vault: intentId
+              ? bindIntentToVaultBridge(this.vaultFor(appId), intentId)
+              : this.vaultFor(appId),
+          }
+        : {}),
     });
     if (!outcome.ok) {
       if (outcome.busy) {
@@ -455,6 +464,38 @@ export class Dispatcher {
       path || undefined,
     );
   }
+}
+
+/**
+ * An app action normally makes one typed vault invocation. Offline retries
+ * derive a domain-separated id from the authenticated intent and call
+ * ordinal; uncommon multi-command actions therefore get stable, disjoint
+ * ids. This keeps a crash after canonical commit but before the HTTP outcome
+ * from executing the command twice.
+ */
+function bindIntentToVaultBridge(bridge: VaultBridge, intentId: string): VaultBridge {
+  let invocationIndex = 0;
+  return (call) => {
+    if (call.op !== 'invoke') return bridge(call);
+    // JSON framing makes [intent, ordinal] injective before hashing. The
+    // domain prefix prevents these ids colliding with any other future hash
+    // lane; hashing keeps arbitrary client ids out of the journal key.
+    const generatedInvocationId = `replica:v1:${createHash('sha256')
+      .update(JSON.stringify(['centraid.replica-invocation.v1', intentId, invocationIndex]))
+      .digest('hex')}`;
+    invocationIndex += 1;
+    return bridge({
+      ...call,
+      payload: {
+        ...call.payload,
+        intentId,
+        // The authenticated outer intent owns this idempotency namespace.
+        // Never trust a handler-selected id: a random value would execute a
+        // second canonical write on every offline retry.
+        invocationId: generatedInvocationId,
+      },
+    });
+  };
 }
 
 function manifestErrorToResult(appId: string, err: unknown): ToolErrorResult {

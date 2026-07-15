@@ -14,6 +14,7 @@ export type Route =
   | { kind: 'app-logs'; appId: string; query: Record<string, string> }
   | { kind: 'app-index'; appId: string; query: Record<string, string> }
   | { kind: 'app-static'; appId: string; rel: string }
+  | { kind: 'app-query-bundle'; appId: string; queryName: string }
   | { kind: 'app-changes'; appId: string }
   | { kind: 'tool-invoke'; toolName: string }
   | {
@@ -137,6 +138,23 @@ export function parseRoute(method: string, rawUrl: string): Route {
   if (second === '_changes') {
     if (m !== 'GET' || segments.length !== 2) return { kind: 'not-found' };
     return { kind: 'app-changes', appId };
+  }
+
+  // /centraid/<id>/_query/<name>.mjs — the only browser-readable handler
+  // surface. Runtime validation requires <name> to be a declared query and
+  // bundles a graph contained wholly within queries/. Any malformed shape is
+  // intercepted here instead of falling through to raw static serving.
+  if (second === '_query') {
+    if (m !== 'GET' || segments.length !== 3) return { kind: 'not-found' };
+    const moduleName = decodeURIComponent(segments[2] ?? '');
+    if (!moduleName.endsWith('.mjs') || moduleName.length === '.mjs'.length) {
+      return { kind: 'not-found' };
+    }
+    return {
+      kind: 'app-query-bundle',
+      appId,
+      queryName: moduleName.slice(0, -'.mjs'.length),
+    };
   }
 
   // /centraid/<id>/_turn[/...] — per-app chat surface. The sub-route parser

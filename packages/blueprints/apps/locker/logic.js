@@ -28,9 +28,13 @@ export function createLogic({ state, data, render, refresh }) {
     return false;
   }
 
-  async function act(action, input) {
+  async function act(action, input, { onlineOnly = false } = {}) {
     try {
-      return await window.centraid.write({ action, input });
+      return await window.centraid.write({
+        action,
+        input,
+        ...(onlineOnly ? { onlineOnly: true } : {}),
+      });
     } catch (err) {
       notice(String(err?.message ?? err));
       return undefined;
@@ -116,9 +120,9 @@ export function createLogic({ state, data, render, refresh }) {
     if (aliasTrimmed) input.alias = aliasTrimmed;
     let outcome;
     if (mode === 'edit') {
-      outcome = await act('edit-item', { item_id: id, ...input });
+      outcome = await act('edit-item', { item_id: id, ...input }, { onlineOnly: true });
     } else {
-      outcome = await act('add-item', { type, ...input });
+      outcome = await act('add-item', { type, ...input }, { onlineOnly: true });
     }
     if (!narrate(outcome)) return outcome;
     const savedId = mode === 'edit' ? id : (outcome?.output?.item_id ?? null);

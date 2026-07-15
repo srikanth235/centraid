@@ -27,6 +27,8 @@ function device(over: Partial<CentraidGatewayDevice> = {}): CentraidGatewayDevic
     vaultName: 'Personal',
     addedAt: new Date(NOW - 86_400_000).toISOString(),
     lastUsedAt: new Date(NOW - 3_600_000).toISOString(),
+    trust: 'full',
+    rememberDevice: true,
     ...over,
   };
 }
@@ -34,6 +36,7 @@ function device(over: Partial<CentraidGatewayDevice> = {}): CentraidGatewayDevic
 async function mount(props: {
   loadDevices: () => Promise<CentraidGatewayDevice[]>;
   onRevokeDevice?: (id: string) => Promise<{ removed: boolean }>;
+  onCurrentDeviceRevoked?: () => Promise<void>;
 }): Promise<HTMLDivElement> {
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -44,6 +47,9 @@ async function mount(props: {
         now={NOW}
         loadDevices={props.loadDevices}
         onRevokeDevice={props.onRevokeDevice ?? (() => Promise.resolve({ removed: true }))}
+        {...(props.onCurrentDeviceRevoked
+          ? { onCurrentDeviceRevoked: props.onCurrentDeviceRevoked }
+          : {})}
       />,
     );
   });
@@ -77,10 +83,11 @@ describe('DevicesCard', () => {
 
   it('requires a confirm step before revoking, then calls onRevokeDevice', async () => {
     const onRevoke = vi.fn().mockResolvedValue({ removed: true });
+    const onCurrentDeviceRevoked = vi.fn().mockResolvedValue(undefined);
     // The gateway drops the row once revoked, so the post-revoke refresh
     // returns the shorter list — the first load has the device, the rest don't.
     const loadDevices = vi.fn().mockResolvedValueOnce([device()]).mockResolvedValue([]);
-    const el = await mount({ loadDevices, onRevokeDevice: onRevoke });
+    const el = await mount({ loadDevices, onRevokeDevice: onRevoke, onCurrentDeviceRevoked });
     const revokeBtn = [...el.querySelectorAll('button')].find((b) =>
       b.textContent?.includes('Revoke'),
     );
@@ -98,11 +105,40 @@ describe('DevicesCard', () => {
       await Promise.resolve();
     });
     expect(onRevoke).toHaveBeenCalledWith('enr_1');
+    expect(onCurrentDeviceRevoked).not.toHaveBeenCalled();
     // Row is optimistically dropped.
     await act(async () => {
       await Promise.resolve();
     });
     expect(el.textContent).not.toContain('Priya’s browser');
+  });
+
+  it('eagerly purges only after the current device was revoked successfully', async () => {
+    const onRevoke = vi.fn().mockResolvedValue({ removed: true });
+    const onCurrentDeviceRevoked = vi.fn().mockResolvedValue(undefined);
+    const loadDevices = vi
+      .fn()
+      .mockResolvedValueOnce([device({ current: true })])
+      .mockResolvedValue([]);
+    const el = await mount({ loadDevices, onRevokeDevice: onRevoke, onCurrentDeviceRevoked });
+
+    const revokeBtn = [...el.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Revoke'),
+    );
+    await act(async () => revokeBtn!.click());
+    const confirmBtn = [...el.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === 'Remove',
+    );
+    await act(async () => {
+      confirmBtn!.click();
+      await Promise.resolve();
+    });
+
+    expect(onRevoke).toHaveBeenCalledWith('enr_1');
+    expect(onCurrentDeviceRevoked).toHaveBeenCalledOnce();
+    expect(onRevoke.mock.invocationCallOrder[0]!).toBeLessThan(
+      onCurrentDeviceRevoked.mock.invocationCallOrder[0]!,
+    );
   });
 
   it('surfaces a load error', async () => {

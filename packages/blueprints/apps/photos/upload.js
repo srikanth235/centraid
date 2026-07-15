@@ -116,6 +116,7 @@ export async function runUpload(files, { refresh, setUploading }) {
   let added = 0;
   let deduped = 0;
   let parked = 0;
+  let queued = 0;
   let failed = 0;
   let unreadable = 0;
   let lastBad = null;
@@ -158,6 +159,8 @@ export async function runUpload(files, { refresh, setUploading }) {
       if (outcome.output?.deduped) deduped += 1;
     } else if (outcome?.status === 'parked') {
       parked += 1;
+    } else if (outcome?.status === 'queued' || outcome?.status === 'in-flight') {
+      queued += 1;
     } else {
       failed += 1;
       lastBad = outcome;
@@ -175,6 +178,7 @@ export async function runUpload(files, { refresh, setUploading }) {
     parts.push(`Added ${added} ${added === 1 ? 'item' : 'items'}${dedupeNote}`);
   }
   if (parked > 0) parts.push(`${parked} awaiting approval`);
+  if (queued > 0) parts.push(`${queued} saved offline`);
   if (failed > 0) parts.push(`${failed} refused`);
   if (unreadable > 0) parts.push(`${unreadable} unreadable`);
   if (oversized.length > 0) parts.push(`${oversized.length} over the 512 MB cap`);

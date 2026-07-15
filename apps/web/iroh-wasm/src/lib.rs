@@ -25,6 +25,10 @@ struct GatewayPairRequest {
     secret: String,
     device_name: String,
     platform: String,
+    #[serde(default)]
+    remember_device: Option<bool>,
+    #[serde(default)]
+    trust: Option<String>,
 }
 
 #[derive(Serialize)]

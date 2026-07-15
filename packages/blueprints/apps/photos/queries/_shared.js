@@ -27,10 +27,10 @@ const TAGS_SCHEME_URI = 'centraid:tags:v1';
  */
 export function srcOf(content) {
   const uri = content?.content_uri;
-  if (typeof uri !== 'string') return { src: null, thumb: null };
-  if (!uri.startsWith('blob:')) return { src: uri, thumb: null };
+  if (typeof uri !== 'string') return { src: null, thumb: null, preview: null };
+  if (!uri.startsWith('blob:')) return { src: uri, thumb: null, preview: null };
   const src = `${BLOB_ROUTE}/${content.content_id}`;
-  return { src, thumb: `${src}?variant=thumb` };
+  return { src, thumb: `${src}?variant=thumb`, preview: `${src}?variant=preview` };
 }
 
 /**

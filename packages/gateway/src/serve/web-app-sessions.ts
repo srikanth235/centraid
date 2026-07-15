@@ -19,6 +19,13 @@ const CONTROL_COOKIE = '__centraid_control';
 const MINT_RE = /^\/centraid\/_apps\/([^/]+)\/web-session$/;
 const PENDING_TTL_MS = 60_000;
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const REPLICA_APP_PATHS = new Set([
+  '/centraid/_vault/replica/bootstrap',
+  '/centraid/_vault/changes',
+  '/centraid/_vault/replica/row',
+  '/centraid/_vault/replica/checkpoint',
+  '/centraid/_vault/replica/intents',
+]);
 
 export interface WebAppSessionsOptions {
   /**
@@ -109,6 +116,11 @@ function permits(scope: SessionScope, pathname: string): boolean {
   if (pathname === '/centraid/_vault/blobs' || pathname.startsWith('/centraid/_vault/blobs/')) {
     return true;
   }
+  // App sessions may use only the replica protocol's exact paths. The
+  // authorizer stamps x-centraid-web-app after the cookie/origin checks;
+  // replica routes derive their shape and intent app from that trusted
+  // header, so this does not open the rest of the owner `_vault` surface.
+  if (REPLICA_APP_PATHS.has(pathname)) return true;
   return pathname.startsWith('/centraid/_tool/');
 }
 

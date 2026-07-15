@@ -16,6 +16,12 @@ import { Gallery } from './ui/index.js';
 import App from './shell/App.js';
 import OnboardingScreen from './screens/OnboardingScreen.js';
 
+// Install terminal replica cleanup before any AppFrame asks for a local read;
+// inactive gateway removal and vault switches must also reach dormant storage.
+void import('../replica/shell-session.js')
+  .then((module) => module.installReplicaStorageLifecycle())
+  .catch(() => undefined);
+
 const PREVIEW_HASH = '#ui-preview';
 const HOST_SELECTOR = '#react-preview-root';
 const SHELL_SELECTOR = '#root';

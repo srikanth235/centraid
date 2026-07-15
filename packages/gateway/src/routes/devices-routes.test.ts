@@ -5,7 +5,7 @@
  * its vaults) and the revoke → token cascade that mirrors device-admin.ts.
  */
 
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import http from 'node:http';
 import crypto from 'node:crypto';
 import os from 'node:os';
@@ -131,9 +131,17 @@ test('DELETE cascades: enrollment gone AND the device token revoked when no enro
   const row = enrollments.enroll({ endpointId: 'http:lone', vaultId: 'vault-a', label: 'Lone' });
   const { token } = deviceTokens.mint({ deviceKey: 'http:lone', label: 'Lone' });
   expect(deviceTokens.authorize(token)).toEqual({ deviceKey: 'http:lone' });
+  const onRevoked = vi.fn();
 
   const base = await startHandlerServer(
-    makeDevicesRouteHandler({ enrollments, deviceTokens, tickets, vaultName, endpointTicket }),
+    makeDevicesRouteHandler({
+      enrollments,
+      deviceTokens,
+      tickets,
+      vaultName,
+      endpointTicket,
+      onRevoked,
+    }),
   );
   const res = await fetch(`${base}/centraid/_gateway/devices/${row.enrollmentId}`, {
     method: 'DELETE',
@@ -143,6 +151,7 @@ test('DELETE cascades: enrollment gone AND the device token revoked when no enro
 
   expect(enrollments.list()).toHaveLength(0);
   expect(deviceTokens.authorize(token)).toBeUndefined();
+  expect(onRevoked).toHaveBeenCalledWith([row]);
 });
 
 test('DELETE keeps the token when the device still holds another vault', async () => {

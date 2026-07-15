@@ -259,6 +259,8 @@ export interface CentraidGatewayProfile {
   url?: string;
   /** The gateway's iroh EndpointId (`iroh` transport) — shown for `devices add`. */
   endpointId?: string;
+  /** Explicit pairing consent for durable replica, outbox, and media caches. */
+  rememberDevice?: boolean;
   /**
    * SSH admin channel (issue #382) — present once this gateway has been
    * reached over SSH (the ConnectFlow "Over SSH" method, or a prior
@@ -625,6 +627,7 @@ interface CentraidApi {
     token: string;
     displayName?: string;
     avatarColor?: string;
+    rememberDevice?: boolean;
   }): Promise<CentraidGatewayProfile>;
   /**
    * Remove a gateway (connection). Refuses to remove the primordial
@@ -671,12 +674,16 @@ interface CentraidApi {
    */
   getGatewayAuth(): Promise<{
     baseUrl: string;
+    /** Stable gateway/profile identity, independent of its current transport URL. */
+    gatewayId?: string;
     token?: string;
     vaultId?: string;
     /** Web-only browser control session. */
     webControl?: boolean;
     /** Web-only Iroh/WASM data plane. */
     iroh?: boolean;
+    /** Explicit pairing consent for durable replica, outbox, and cache state. */
+    rememberDevice?: boolean;
   }>;
   /**
    * Redeem a pairing ticket minted by `centraid-gateway pair --vault <name>`
@@ -695,6 +702,8 @@ interface CentraidApi {
     mode?: 'auto' | 'iroh' | 'http';
     /** Required for (and only meaningful with) the `http` transport. */
     url?: string;
+    /** Explicit consent for a durable replica, outbox, and preview cache. */
+    rememberDevice?: boolean;
   }): Promise<CentraidRedeemGatewayPairingResult>;
   /**
    * Read a gateway's vault list WITHOUT switching to it (issue #376) — the
@@ -721,6 +730,7 @@ interface CentraidApi {
     destination: string;
     dataDir?: string;
     label?: string;
+    rememberDevice?: boolean;
     vault: { kind: 'existing'; vaultId: string } | { kind: 'create'; name: string };
   }): Promise<CentraidSshConnectResult>;
   /**
@@ -826,6 +836,12 @@ interface CentraidApi {
       activeGatewayLabel: string;
       activeProfileDisplayName: string;
       activeProfileAvatarColor: string;
+      /** Stable identity used by replica storage (web may differ from activeGatewayId). */
+      gatewayId?: string;
+      /** Present when an inactive or active profile was removed. */
+      removedGatewayId?: string;
+      /** Present when durable replica consent was explicitly withdrawn. */
+      purgeReplicaGatewayId?: string;
     }) => void,
   ): () => void;
 
@@ -836,7 +852,7 @@ interface CentraidApi {
    * wipe a gateway switch triggers. Returns the unsubscribe.
    */
   onVaultChanged(
-    cb: (msg: { activeGatewayId: string; activeVaultId?: string }) => void,
+    cb: (msg: { activeGatewayId: string; gatewayId?: string; activeVaultId?: string }) => void,
   ): () => void;
 
   /**

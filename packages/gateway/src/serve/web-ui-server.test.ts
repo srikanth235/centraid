@@ -12,7 +12,10 @@ let server: WebUiServerHandle;
 beforeEach(async () => {
   root = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-web-ui-'));
   await fs.mkdir(path.join(root, 'assets'));
-  await fs.writeFile(path.join(root, 'index.html'), '<!doctype html><div id="root"></div>');
+  await fs.writeFile(
+    path.join(root, 'index.html'),
+    '<!doctype html><head><script type="module" src="/assets/app.js"></script></head><div id="root"></div>',
+  );
   await fs.writeFile(path.join(root, 'assets', 'app.js'), 'export {};');
   await fs.writeFile(path.join(root, 'assets', 'centraid_web_iroh_bg.wasm'), '\0asm');
   await fs.writeFile(path.join(root, 'sw.js'), 'self.addEventListener("fetch", () => {});');
@@ -35,21 +38,28 @@ test('serves the PWA shell with a strict API-and-frame CSP', async () => {
   expect(await response.text()).toContain('id="root"');
   const csp = response.headers.get('content-security-policy') ?? '';
   expect(csp).toContain("connect-src 'self' http://127.0.0.1:8765");
-  expect(csp).toContain("frame-src 'self' http://127.0.0.1:8765");
+  expect(csp).toContain("frame-src 'self' data: http://127.0.0.1:8765");
   expect(csp).toContain("frame-ancestors 'none'");
   expect(response.headers.get('cache-control')).toBe('no-store');
 });
 
-test('CSP admits the Iroh/WASM transport (wasm-eval, relay wss, same-origin frame)', async () => {
-  const csp = (await fetch(server.url)).headers.get('content-security-policy') ?? '';
+test('CSP admits the Iroh/WASM transport and opaque self-contained app frame', async () => {
+  const response = await fetch(server.url);
+  const html = await response.text();
+  const csp = response.headers.get('content-security-policy') ?? '';
   // WebAssembly.instantiate needs 'wasm-unsafe-eval' in script-src.
-  expect(csp).toContain("script-src 'self' 'wasm-unsafe-eval'");
+  expect(csp).toContain("script-src 'self' 'nonce-");
+  expect(csp).toContain("blob: 'wasm-unsafe-eval'");
   // Browser Iroh is relay-only: it opens a wss:// WebSocket + https to the n0
   // relay. connect-src must admit both while keeping 'self' and the API origin.
   expect(csp).toContain("connect-src 'self' http://127.0.0.1:8765 https: wss:");
-  // Iroh-mode apps iframe a same-origin virtual URL, so frame-src needs 'self'
-  // alongside the direct-HTTP API origin.
-  expect(csp).toContain("frame-src 'self' http://127.0.0.1:8765");
+  // Iroh-mode apps use a sandboxed data document; direct HTTP retains its API origin.
+  expect(csp).toContain("frame-src 'self' data: http://127.0.0.1:8765");
+  const nonce = /<meta name="centraid-csp-nonce" content="([^"]+)">/.exec(html)?.[1];
+  expect(nonce).toBeTruthy();
+  expect(html).toContain(`<script type="module" src="/assets/app.js" nonce="${nonce}">`);
+  expect(csp).toContain(`'nonce-${nonce}'`);
+  expect(csp).not.toContain("'unsafe-inline' blob:");
 });
 
 test('serves .wasm with the application/wasm MIME type for streaming instantiation', async () => {

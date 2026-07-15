@@ -1,0 +1,359 @@
+import crypto from 'node:crypto';
+import { promises as fs } from 'node:fs';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
+import { Readable } from 'node:stream';
+import { currentReplicaLogState, recordReplicaIntentOutcome } from '@centraid/vault';
+import { afterEach, expect, test, vi } from 'vitest';
+import { EnrollmentStore } from '../serve/enrollment-store.js';
+import { openVaultPlane, type VaultPlane } from '../serve/vault-plane.js';
+import { runWithVaultContext } from '../serve/vault-context.js';
+import type { VaultRegistry } from '../serve/vault-registry.js';
+import { makeReplicaRouteHandler } from './replica-routes.js';
+
+const logger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+const cleanups: Array<() => Promise<void> | void> = [];
+
+afterEach(async () => {
+  while (cleanups.length > 0) await cleanups.pop()?.();
+});
+
+async function fixture(): Promise<{
+  plane: VaultPlane;
+  enrollments: EnrollmentStore;
+  handler: ReturnType<typeof makeReplicaRouteHandler>;
+}> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `replica-routes-${crypto.randomUUID()}-`));
+  const plane = openVaultPlane({ dir, logger, enableWalShipper: false });
+  const enrollments = EnrollmentStore.open(path.join(dir, 'devices.json'));
+  const vaults = { current: () => plane } as unknown as VaultRegistry;
+  const handler = makeReplicaRouteHandler(vaults, {
+    enrollments,
+    dispatchIntent: vi.fn().mockResolvedValue({ status: 'executed' }),
+    pollIntervalMs: 1,
+    heartbeatMs: 5,
+  });
+  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
+  cleanups.push(() => plane.stop());
+  plane.approveGrant('agenda', {
+    purpose: 'dpv:ServiceProvision',
+    scopes: [{ schema: 'schedule', table: 'task', verbs: 'read+act' }],
+  });
+  return { plane, enrollments, handler };
+}
+
+function task(plane: VaultPlane, id: string, title: string): void {
+  plane.db.vault
+    .prepare(
+      `INSERT INTO schedule_task
+         (task_id, owner_party_id, title, status, priority)
+       VALUES (?, ?, ?, 'needs-action', 0)`,
+    )
+    .run(id, plane.boot.ownerPartyId, title);
+}
+
+function request(
+  url: string,
+  init: { method?: string; body?: unknown; accept?: string } = {},
+): IncomingMessage {
+  const req = Readable.from(init.body === undefined ? [] : [JSON.stringify(init.body)]);
+  return Object.assign(req, {
+    url,
+    method: init.method ?? 'GET',
+    headers: init.accept ? { accept: init.accept } : {},
+  }) as unknown as IncomingMessage;
+}
+
+class MockResponse extends EventTarget {
+  statusCode = 200;
+  readonly headers = new Map<string, string>();
+  body = '';
+  onWrite?: (chunk: string) => void;
+
+  on(type: string, listener: () => void): this {
+    this.addEventListener(type, listener);
+    return this;
+  }
+
+  off(type: string, listener: () => void): this {
+    this.removeEventListener(type, listener);
+    return this;
+  }
+
+  setHeader(name: string, value: string | number | readonly string[]): this {
+    this.headers.set(name.toLowerCase(), Array.isArray(value) ? value.join(', ') : String(value));
+    return this;
+  }
+
+  flushHeaders(): void {}
+
+  write(value: string | Buffer): boolean {
+    const chunk = String(value);
+    this.body += chunk;
+    this.onWrite?.(chunk);
+    return true;
+  }
+
+  end(value?: string | Buffer): this {
+    if (value !== undefined) this.body += String(value);
+    return this;
+  }
+
+  json<T>(): T {
+    return JSON.parse(this.body) as T;
+  }
+}
+
+test('bootstrap at N, filtered pull, checkpoint, and the single resumable SSE tail agree', async () => {
+  const { plane, enrollments, handler } = await fixture();
+  const deviceKey = 'device-1';
+  enrollments.enroll({
+    endpointId: deviceKey,
+    vaultId: plane.boot.vaultId,
+    label: 'Offline browser',
+    rememberDevice: true,
+  });
+  task(plane, 'task-1', 'Already present');
+
+  const bootstrapRes = new MockResponse();
+  await runWithVaultContext({ vaultId: plane.boot.vaultId, deviceKey }, () =>
+    handler(
+      request('/centraid/_vault/replica/bootstrap'),
+      bootstrapRes as unknown as ServerResponse,
+    ),
+  );
+  expect(bootstrapRes.statusCode).toBe(200);
+  const bootstrap = bootstrapRes.json<{
+    cursor: { epoch: string; seq: number };
+    schemaEpoch: string;
+    shapes: Array<{ appId: string; entities: Array<{ entity: string }> }>;
+    rows: Array<{ entity: string; rowId: string; values: Record<string, unknown> }>;
+  }>();
+  expect(bootstrap.shapes).toEqual([
+    expect.objectContaining({
+      appId: 'agenda',
+      entities: [expect.objectContaining({ entity: 'schedule.task' })],
+    }),
+  ]);
+  expect(bootstrap.rows).toContainEqual(
+    expect.objectContaining({
+      entity: 'schedule.task',
+      rowId: 'task-1',
+      values: expect.objectContaining({ title: 'Already present' }),
+    }),
+  );
+  // Merely receiving a snapshot is not an acknowledgement; the client stamps
+  // its checkpoint only after the local SQLite bootstrap commits.
+  expect(enrollments.get(deviceKey, plane.boot.vaultId)?.checkpoint).toBeUndefined();
+
+  task(plane, 'task-2', 'Arrived after bootstrap');
+  const since = encodeURIComponent(`${bootstrap.cursor.epoch}:${bootstrap.cursor.seq}`);
+  const changesRes = new MockResponse();
+  await runWithVaultContext({ vaultId: plane.boot.vaultId, deviceKey }, () =>
+    handler(
+      request(`/centraid/_vault/changes?since=${since}`),
+      changesRes as unknown as ServerResponse,
+    ),
+  );
+  const changes = changesRes.json<{
+    from: { epoch: string; seq: number };
+    to: { epoch: string; seq: number };
+    changes: Array<{ op: string; entity: string; rowId: string; values: Record<string, unknown> }>;
+  }>();
+  expect(changes.from).toEqual(bootstrap.cursor);
+  expect(changes.to.seq).toBeGreaterThan(bootstrap.cursor.seq);
+  expect(changes.changes).toContainEqual(
+    expect.objectContaining({
+      op: 'upsert',
+      entity: 'schedule.task',
+      rowId: 'task-2',
+      values: expect.objectContaining({ title: 'Arrived after bootstrap' }),
+    }),
+  );
+
+  const checkpointRes = new MockResponse();
+  await runWithVaultContext({ vaultId: plane.boot.vaultId, deviceKey }, () =>
+    handler(
+      request('/centraid/_vault/replica/checkpoint', {
+        method: 'POST',
+        body: { cursor: changes.to, schemaEpoch: bootstrap.schemaEpoch },
+      }),
+      checkpointRes as unknown as ServerResponse,
+    ),
+  );
+  expect(checkpointRes.json<{ persisted: boolean }>().persisted).toBe(true);
+  expect(enrollments.get(deviceKey, plane.boot.vaultId)?.checkpoint?.seq).toBe(changes.to.seq);
+
+  task(plane, 'task-3', 'SSE doorbell');
+  const sseReq = request(
+    `/centraid/_vault/changes?since=${encodeURIComponent(`${changes.to.epoch}:${changes.to.seq}`)}&stream=1`,
+    { accept: 'text/event-stream' },
+  );
+  const sseRes = new MockResponse();
+  sseRes.onWrite = (chunk) => {
+    if (chunk.includes('event: cursor')) sseReq.emit('close');
+  };
+  await runWithVaultContext({ vaultId: plane.boot.vaultId, deviceKey }, () =>
+    handler(sseReq, sseRes as unknown as ServerResponse),
+  );
+  expect(sseRes.headers.get('content-type')).toContain('text/event-stream');
+  expect(sseRes.body).toContain('event: change');
+  expect(sseRes.body).toContain('"rowId":"task-3"');
+  expect(sseRes.body).toContain('event: cursor');
+});
+
+test('the bootstrap sentinel explicitly requests rebootstrap instead of guessing an epoch', async () => {
+  const { handler } = await fixture();
+  const res = new MockResponse();
+  await handler(request('/centraid/_vault/changes?since=0%3A0'), res as unknown as ServerResponse);
+  expect(res.statusCode).toBe(409);
+  expect(res.json<{ error: string; reason: string }>()).toMatchObject({
+    error: 'replica_rebootstrap_required',
+    reason: 'initial',
+  });
+});
+
+test('lazy fields resolve by opaque masked-PK row id without disclosing the canonical key', async () => {
+  const { plane, handler } = await fixture();
+  const initial = plane.listApps().find((app) => app.name === 'agenda')?.grants[0];
+  expect(initial).toBeDefined();
+  plane.revokeGrant(initial!.grantId);
+  plane.approveGrant('agenda', {
+    purpose: 'dpv:ServiceProvision',
+    scopes: [
+      {
+        schema: 'schedule',
+        table: 'task',
+        verbs: 'read',
+        fieldMask: ['title', 'description'],
+      },
+    ],
+  });
+  const description = 'd'.repeat(70_000);
+  plane.db.vault
+    .prepare(
+      `INSERT INTO schedule_task
+         (task_id, owner_party_id, title, description, status, priority)
+       VALUES ('lazy-canonical-secret', ?, 'Lazy', ?, 'needs-action', 0)`,
+    )
+    .run(plane.boot.ownerPartyId, description);
+
+  const bootstrapRes = new MockResponse();
+  await handler(
+    request('/centraid/_vault/replica/bootstrap?appId=agenda'),
+    bootstrapRes as unknown as ServerResponse,
+  );
+  const bootstrap = bootstrapRes.json<{
+    shapes: Array<{ shapeId: string }>;
+    rows: Array<{ entity: string; rowId: string; oversizedFields?: string[] }>;
+  }>();
+  const row = bootstrap.rows.find((candidate) => candidate.entity === 'schedule.task')!;
+  expect(row.rowId).toMatch(/^r_/);
+  expect(row.oversizedFields).toContain('description');
+  expect(bootstrapRes.body).not.toContain('lazy-canonical-secret');
+
+  const params = new URLSearchParams({
+    appId: 'agenda',
+    shapeId: bootstrap.shapes[0]!.shapeId,
+    entity: 'schedule.task',
+    rowId: row.rowId,
+    column: 'description',
+  });
+  const lazyRes = new MockResponse();
+  await handler(
+    request(`/centraid/_vault/replica/row?${params}`),
+    lazyRes as unknown as ServerResponse,
+  );
+  expect(lazyRes.statusCode).toBe(200);
+  expect(lazyRes.json<{ row: { rowId: string; values: { description: string } } }>().row).toEqual({
+    shapeId: bootstrap.shapes[0]!.shapeId,
+    entity: 'schedule.task',
+    rowId: row.rowId,
+    values: { description },
+  });
+  expect(lazyRes.body).not.toContain('lazy-canonical-secret');
+});
+
+test('reconciles only explicitly pending, device-scoped outcomes through the snapshot cursor', async () => {
+  const { plane, enrollments, handler } = await fixture();
+  const deviceKey = 'device-outcomes';
+  enrollments.enroll({
+    endpointId: deviceKey,
+    vaultId: plane.boot.vaultId,
+    label: 'Offline browser',
+    rememberDevice: true,
+  });
+  recordReplicaIntentOutcome(plane.db.vault, {
+    intentId: 'historical-pending',
+    deviceId: deviceKey,
+    appId: 'agenda',
+    action: 'task.complete',
+    payloadHash: 'a'.repeat(64),
+    status: 'executed',
+  });
+
+  const bootstrapRes = new MockResponse();
+  await runWithVaultContext({ vaultId: plane.boot.vaultId, deviceKey }, () =>
+    handler(
+      request('/centraid/_vault/replica/bootstrap'),
+      bootstrapRes as unknown as ServerResponse,
+    ),
+  );
+  const bootstrap = bootstrapRes.json<{ cursor: { epoch: string; seq: number } }>();
+  const outcomesRes = new MockResponse();
+  await runWithVaultContext({ vaultId: plane.boot.vaultId, deviceKey }, () =>
+    handler(
+      request('/centraid/_vault/replica/outcomes', {
+        method: 'POST',
+        body: { intentIds: ['historical-pending', 'unknown'], through: bootstrap.cursor },
+      }),
+      outcomesRes as unknown as ServerResponse,
+    ),
+  );
+
+  expect(outcomesRes.statusCode).toBe(200);
+  expect(outcomesRes.json<{ outcomes: unknown[] }>().outcomes).toEqual([
+    { intentId: 'historical-pending', status: 'executed' },
+  ]);
+});
+
+test('a stale persisted shape catalog forces pull conflict and stream rebootstrap', async () => {
+  const { plane, handler } = await fixture();
+  const bootstrapRes = new MockResponse();
+  await handler(
+    request('/centraid/_vault/replica/bootstrap'),
+    bootstrapRes as unknown as ServerResponse,
+  );
+  const bootstrap = bootstrapRes.json<{
+    cursor: { epoch: string; seq: number };
+    shapeIds: string[];
+  }>();
+  expect(bootstrap.shapeIds).toHaveLength(1);
+
+  const grant = plane.listApps().find((app) => app.name === 'agenda')?.grants[0];
+  expect(grant).toBeDefined();
+  plane.revokeGrant(grant!.grantId);
+  const current = currentReplicaLogState(plane.db.vault).watermark;
+  const query = new URLSearchParams({
+    since: `${current.epoch}:${current.seq}`,
+    shapeIds: bootstrap.shapeIds.join(','),
+  });
+
+  const pullRes = new MockResponse();
+  await handler(request(`/centraid/_vault/changes?${query}`), pullRes as unknown as ServerResponse);
+  expect(pullRes.statusCode).toBe(409);
+  expect(pullRes.json<{ error: string; reason: string }>()).toMatchObject({
+    error: 'replica_rebootstrap_required',
+    reason: 'shape-changed',
+  });
+
+  query.set('stream', '1');
+  const streamRes = new MockResponse();
+  await handler(
+    request(`/centraid/_vault/changes?${query}`, { accept: 'text/event-stream' }),
+    streamRes as unknown as ServerResponse,
+  );
+  expect(streamRes.body).toContain('event: rebootstrap');
+  expect(streamRes.body).toContain('"reason":"shape-changed"');
+});

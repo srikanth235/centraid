@@ -24,6 +24,11 @@ function ctxOf(rowsByEntity: Record<string, unknown[]>) {
 
 const dataUri = (text: string) => `data:text/markdown,${encodeURIComponent(text)}`;
 
+// Keep browser-JS fixtures out of the TypeScript program while still loading
+// the real module at runtime. oxlint's type-aware host otherwise tries to emit
+// imported JavaScript beside the source despite this test config using noEmit.
+const importQuery = (relativePath: string) => import(relativePath);
+
 describe('notes library query (issue #404)', () => {
   const body = ['- [ ] buy milk', '- [x] call bob', '# A heading', 'x'.repeat(250)].join('\n');
   const note = {
@@ -38,7 +43,7 @@ describe('notes library query (issue #404)', () => {
   const content = { content_id: 'c1', content_uri: dataUri(body) };
 
   it('ships a bounded preview + checklist tally, never the full body', async () => {
-    const { default: library } = await import('../apps/notes/queries/library.js');
+    const { default: library } = await importQuery('../apps/notes/queries/library.js');
     const ctx = ctxOf({ 'knowledge.note': [note], 'core.content_item': [content] });
     const res = await library({ input: { limit: 50 }, query: {}, ctx });
     expect(res.notes).toHaveLength(1);
@@ -56,7 +61,7 @@ describe('notes library query (issue #404)', () => {
   });
 
   it('note query decodes and returns the full canonical body on open', async () => {
-    const { default: noteQuery } = await import('../apps/notes/queries/note.js');
+    const { default: noteQuery } = await importQuery('../apps/notes/queries/note.js');
     const ctx = ctxOf({ 'knowledge.note': [note], 'core.content_item': [content] });
     const res = await noteQuery({ input: { note_id: 'n1' }, query: { note_id: 'n1' }, ctx });
     expect(res.note_id).toBe('n1');
@@ -78,7 +83,7 @@ describe('agenda upcoming query — range-bounded recurrence (issue #404)', () =
   };
 
   async function run(range: { from: string; to?: string }) {
-    const { default: upcoming } = await import('../apps/agenda/queries/upcoming.js');
+    const { default: upcoming } = await importQuery('../apps/agenda/queries/upcoming.js');
     const ctx = ctxOf({ 'core.event': [ev] });
     return upcoming({ query: range, input: range, ctx });
   }
@@ -109,5 +114,71 @@ describe('agenda upcoming query — range-bounded recurrence (issue #404)', () =
     const a = await run({ from: '2026-06-01T00:00:00.000Z', to: '2026-06-08T00:00:00.000Z' });
     const b = await run({ from: '2026-06-01T00:00:00.000Z', to: '2026-06-08T00:00:00.000Z' });
     expect(b.events.map((e) => e.instance_key)).toEqual(a.events.map((e) => e.instance_key));
+  });
+});
+
+describe('replica-local search projections (issue #406)', () => {
+  it('renders an Agenda search hit using only airplane-safe vault reads', async () => {
+    const { default: search } = await importQuery('../apps/agenda/queries/search.js');
+    const event = {
+      event_id: 'event-offline',
+      summary: 'Quarterly budget review',
+      description: 'Bring the forecast',
+      status: 'confirmed',
+      dtstart: '2026-07-20T09:00:00.000Z',
+      dtend: '2026-07-20T10:00:00.000Z',
+      _snippet: 'Quarterly ⟦budget⟧ review',
+    };
+    // No fetch/online capability is present on this context. Every join the
+    // real handler performs is satisfiable by eager replica rows.
+    const ctx = ctxOf({ __search__: [event] });
+    const result = await search({ input: { term: 'budg' }, query: {}, ctx });
+
+    expect(result.vaultDenied).toBeUndefined();
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0]).toMatchObject({
+      event_id: 'event-offline',
+      summary: 'Quarterly budget review',
+      snippet: 'Quarterly ⟦budget⟧ review',
+      attachments: [],
+      attendees: [],
+    });
+  });
+
+  it('joins an off-window photo caption hit back into the real grid row', async () => {
+    const { default: search } = await importQuery('../apps/photos/queries/search.js');
+    const content = {
+      content_id: 'content-off-window',
+      title: 'Moonlit campsite in Ladakh',
+      content_uri: 'blob:sha256:photo',
+      media_type: 'image/jpeg',
+      byte_size: 42,
+      created_at: '2024-01-01T00:00:00.000Z',
+      deleted_at: null,
+    };
+    const asset = {
+      asset_id: 'asset-off-window',
+      content_id: content.content_id,
+      captured_at: '2024-01-01T00:00:00.000Z',
+      deleted_at: null,
+      place_id: null,
+    };
+    // `__search__` represents the complete replica FTS result, while the
+    // normal recency window is intentionally absent from the fixture.
+    const ctx = ctxOf({
+      __search__: [content],
+      'core.content_item': [content],
+      'media.media_asset': [asset],
+    });
+    const result = await search({ input: { term: 'moon camp' }, query: {}, ctx });
+
+    expect(result.vaultDenied).toBeUndefined();
+    expect(result.assets).toHaveLength(1);
+    expect(result.assets[0]).toMatchObject({
+      asset_id: 'asset-off-window',
+      content_id: 'content-off-window',
+      title: 'Moonlit campsite in Ladakh',
+      thumb_uri: '/centraid/_vault/blobs/content-off-window?variant=thumb',
+    });
   });
 });

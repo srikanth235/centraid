@@ -3,7 +3,7 @@
 // separate ?v= token minted in src/iroh-transport.ts (SERVICE_WORKER_VERSION);
 // that token gates the virtual-Iroh route and lives outside this file. Keep
 // the two in step when either changes.
-const VERSION = 'v7';
+const VERSION = 'v10';
 const SHELL_CACHE = `centraid-shell-${VERSION}`;
 const ASSET_CACHE = `centraid-tunnel-assets-${VERSION}`;
 const BLOB_CACHE = `centraid-tunnel-blobs-${VERSION}`;
@@ -211,30 +211,57 @@ function themedRedirectTarget(location, requestUrl) {
   return `${target.pathname}${target.search}`;
 }
 
-// The stable cache key for a tunneled request: the gateway path with the
-// per-session bridge id stripped, so a warm relaunch (fresh bridge id) still
-// hits the same entry. Cross-vault collisions are bounded by single-gateway
-// topology and the unpair purge above.
+// The stable cache key for a tunneled request, namespaced by the opaque
+// gateway+vault bridge id (#406). A remembered device reuses that id across
+// launches; a vault switch rotates it. Parent-fetched opaque resources also
+// carry a shell-overwritten `__centraid_app`, so one app cannot consume a
+// shared blob/resource cache entry authorized for another app.
 function tunnelCacheKey(route) {
-  return new URL(route.target, self.location.origin).toString();
+  const target = new URL(route.target, self.location.origin);
+  // Presentation parameters are re-asserted by the parent after load. Keeping
+  // them out of the key lets a remembered app reopen after an offline theme
+  // change and prevents duplicate copies of the same document.
+  target.searchParams.delete('theme');
+  target.searchParams.delete('bgL');
+  target.searchParams.set('__centraid_scope', route.bridgeId);
+  return target.toString();
 }
 
 function isBlobTarget(route) {
   return new URL(route.target, self.location.origin).pathname.includes(BLOB_MARKER);
 }
 
+function isAppDocumentTarget(target) {
+  const pathname = new URL(target, self.location.origin).pathname;
+  return /^\/centraid\/(?!_)[^/]+\/$/.test(pathname);
+}
+
+// A sandboxed same-origin iframe has an opaque principal. Module scripts and
+// dynamic query imports therefore use CORS even though their URL is on the PWA
+// origin. The virtual tunnel is already restricted by its app-session cookie;
+// exposing those shaped response bytes does not widen gateway authority.
+function exposeToOpaqueApp(headers) {
+  headers.set('access-control-allow-origin', '*');
+  headers.set('cross-origin-resource-policy', 'cross-origin');
+}
+
 // Decides whether/where a freshly tunneled response may be cached, from its
 // headers alone.
-function tunnelCachePlan(status, headers, isBlob) {
+function tunnelCachePlan(status, headers, isBlob, target) {
   if (status !== 200) return undefined; // no redirects, 206/Range, or errors
   const type = (headers.get('content-type') || '').toLowerCase();
   if (type.includes('text/event-stream')) return undefined; // SSE must stay live
   const control = (headers.get('cache-control') || '').toLowerCase();
-  // App HTML is no-store with a per-response nonce — it must never be cached.
-  if (control.includes('no-store')) return undefined;
+  const appDocument = isAppDocumentTarget(target) && type.includes('text/html');
+  // The gateway's app document is intentionally browser-no-store because its
+  // CSP nonce changes per response. A remembered device's scope-private SW
+  // bucket is the one explicit exception: replaying the whole response keeps
+  // its matching nonce intact and enables airplane-mode app switching.
+  if (control.includes('no-store') && !appDocument) return undefined;
   const length = Number(headers.get('content-length'));
   if (!Number.isFinite(length) || length <= 0 || length > MAX_ENTRY_BYTES) return undefined;
   if (isBlob) return { bucket: BLOB_CACHE, immutable: true };
+  if (appDocument) return { bucket: ASSET_CACHE, immutable: false };
   // Non-blob assets are cacheable only with a validator to revalidate against.
   if (!headers.get('etag')) return undefined;
   return { bucket: ASSET_CACHE, immutable: false };
@@ -244,6 +271,9 @@ async function storeTunnelResponse(plan, key, response) {
   try {
     const body = await response.arrayBuffer();
     const headers = new Headers(response.headers);
+    // decodedResponse removes the compressed wire length. Persist the actual
+    // cached size so the blob LRU cannot treat gzip-decoded entries as free.
+    headers.set('content-length', String(body.byteLength));
     headers.set('x-centraid-cached-at', String(Date.now()));
     const cache = await caches.open(plan.bucket);
     await cache.put(key, new Response(body, { status: 200, headers }));
@@ -292,7 +322,8 @@ async function revalidateAsset(route, key, etag) {
   const headers = buildResponseHeaders(head.headers);
   // Plan off the on-wire headers (they still carry content-length) before
   // decodedResponse strips the compression headers.
-  const plan = tunnelCachePlan(head.status, headers, false);
+  exposeToOpaqueApp(headers);
+  const plan = tunnelCachePlan(head.status, headers, false, route.target);
   if (!plan) {
     await drainPort(port).catch(() => undefined);
     return;
@@ -302,7 +333,10 @@ async function revalidateAsset(route, key, etag) {
 
 async function tunnel(event, initialRoute) {
   const method = event.request.method;
-  const cacheable = method === 'GET' && !event.request.headers.has('range');
+  // Ephemeral bridge ids are deliberately cache-blind: neither reads nor
+  // writes may touch Cache Storage when "Remember this device" is off.
+  const durableCache = initialRoute.bridgeId.startsWith('d-');
+  const cacheable = durableCache && method === 'GET' && !event.request.headers.has('range');
   const isBlob = cacheable && isBlobTarget(initialRoute);
   const cacheKey = cacheable ? tunnelCacheKey(initialRoute) : undefined;
 
@@ -350,13 +384,30 @@ async function tunnel(event, initialRoute) {
       `${IROH_PREFIX}${initialRoute.bridgeId}${target}`,
       self.location.origin,
     ).toString();
-    return new Response(null, { status: head.status, headers: { location: virtual } });
+    const redirectHeaders = new Headers({ location: virtual });
+    exposeToOpaqueApp(redirectHeaders);
+    const redirect = new Response(null, { status: head.status, headers: redirectHeaders });
+    // The launch URL contains a one-time code. Retain its already-redeemed
+    // redirect only inside a durable device scope so the persisted URL can
+    // reach the cached stable app document after the network disappears.
+    if (cacheable && cacheKey) {
+      event.waitUntil(
+        caches
+          .open(ASSET_CACHE)
+          .then((cache) => cache.put(cacheKey, redirect.clone()))
+          .catch(() => undefined),
+      );
+    }
+    return redirect;
   }
 
   const responseHeaders = buildResponseHeaders(head.headers);
+  exposeToOpaqueApp(responseHeaders);
   // Plan off the on-wire headers (they still carry content-length) before
   // decodedResponse strips the compression headers.
-  const plan = cacheable ? tunnelCachePlan(head.status, responseHeaders, isBlob) : undefined;
+  const plan = cacheable
+    ? tunnelCachePlan(head.status, responseHeaders, isBlob, initialRoute.target)
+    : undefined;
   const response = decodedResponse(portStream(port), head.status, responseHeaders);
 
   if (plan && cacheKey) {

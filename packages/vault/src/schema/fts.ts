@@ -56,6 +56,15 @@ export interface FtsEntitySpec {
 
 const SPECS: readonly FtsEntitySpec[] = [
   {
+    // Photo captions are stored as the content item's title. Keeping this a
+    // direct-column surface makes the Photos grid search complete without
+    // indexing blob bytes; soft-deleted content leaves the index immediately.
+    entity: 'core.content_item',
+    idColumn: 'content_id',
+    columns: [{ name: 'title', kind: 'column' }],
+    deletedColumn: 'deleted_at',
+  },
+  {
     entity: 'knowledge.note',
     idColumn: 'note_id',
     columns: [

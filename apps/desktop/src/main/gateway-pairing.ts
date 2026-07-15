@@ -29,6 +29,7 @@ import { createTunnelClient, sanitizeDeviceName } from '@centraid/tunnel';
 import {
   addGateway,
   listGateways,
+  updateGatewayRememberDevice,
   updateGatewayToken,
   type GatewayProfile,
 } from './gateway-store.js';
@@ -55,6 +56,8 @@ export interface RedeemGatewayPairingInput {
   mode?: 'auto' | 'iroh' | 'http';
   /** Required (and only meaningful) for the `http` transport. */
   url?: string;
+  /** Explicit consent for a durable device replica and caches. */
+  rememberDevice?: boolean;
 }
 
 /** This device's name as presented to a gateway during pairing (also the fallback profile label). */
@@ -85,14 +88,15 @@ export async function redeemGatewayPairing(
         message: 'A gateway URL is required for http pairing.',
       };
     }
-    return redeemHttp(input.url, input.ticket, input.label);
+    return redeemHttp(input.url, input.ticket, input.label, input.rememberDevice ?? false);
   }
-  return redeemIroh(payload, input.label);
+  return redeemIroh(payload, input.label, input.rememberDevice ?? false);
 }
 
 async function redeemIroh(
   payload: NonNullable<ReturnType<typeof decodePairingTicket>>,
   label: string | undefined,
+  rememberDevice: boolean,
 ): Promise<RedeemGatewayPairingResult> {
   const profiles = await listGateways();
   const existing = findReusableProfile(profiles, { endpointTicket: payload.gw });
@@ -106,6 +110,7 @@ async function redeemIroh(
       secret: payload.s,
       deviceName: localDeviceName(label),
       platform: process.platform,
+      rememberDevice,
     });
   } catch (err) {
     await client.close().catch(() => undefined);
@@ -135,8 +140,10 @@ async function redeemIroh(
       label: label?.trim() || folded.gatewayName?.trim() || folded.vaultName || payload.vaultName,
       endpointTicket: payload.gw,
       endpointId,
+      rememberDevice,
       token: '',
     }));
+  if (existing) await updateGatewayRememberDevice(existing.id, rememberDevice);
 
   await setActiveGatewayId(profile.id);
   await setActiveVaultId(folded.vaultId);
@@ -153,6 +160,7 @@ async function redeemHttp(
   url: string,
   rawTicket: string,
   label: string | undefined,
+  rememberDevice: boolean,
 ): Promise<RedeemGatewayPairingResult> {
   const base = url.replace(/\/+$/, '');
   let res: Response;
@@ -164,6 +172,7 @@ async function redeemHttp(
         ticket: rawTicket,
         deviceLabel: localDeviceName(label),
         platform: process.platform,
+        rememberDevice,
       }),
     });
   } catch (err) {
@@ -192,9 +201,11 @@ async function redeemHttp(
     existing ??
     (await addGateway({
       label: label?.trim() || folded.vaultName || 'Gateway',
+      rememberDevice,
       url: base,
       token: deviceToken,
     }));
+  if (existing) await updateGatewayRememberDevice(existing.id, rememberDevice);
   if (existing) await updateGatewayToken(existing.id, deviceToken);
 
   await setActiveGatewayId(profile.id);

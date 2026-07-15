@@ -6,6 +6,7 @@ import { beforeEach, expect, test } from 'vitest';
 import { registerKnowledgeCommands } from '../commands/knowledge.js';
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
+import { compileFilters, compileOrderBy } from './filters.js';
 import { createGateway, Gateway } from './gateway.js';
 import type { Credential } from './types.js';
 
@@ -93,4 +94,49 @@ test('ordering composes with caller filters', () => {
     purpose: PURPOSE,
   });
   expect(result.rows.map((r) => r.title)).toEqual(['middle', 'oldest']);
+});
+
+test('ties use the exposed scalar primary key before LIMIT', () => {
+  db.vault.prepare('UPDATE knowledge_note SET updated_at = ?').run('2026-04-01T00:00:00Z');
+  const expected = db.vault
+    .prepare('SELECT note_id FROM knowledge_note ORDER BY note_id COLLATE BINARY ASC LIMIT 2')
+    .all()
+    .map((row) => String((row as { note_id: string }).note_id));
+
+  const result = gw.read(owner, {
+    entity: 'knowledge.note',
+    orderBy: { column: 'updated_at', dir: 'desc' },
+    limit: 2,
+    purpose: PURPOSE,
+  });
+  expect(result.rows.map((row) => row.note_id)).toEqual(expected);
+});
+
+test('fixed query grammar overrides a declared NOCASE collation with BINARY', () => {
+  db.vault.exec(`
+    CREATE TABLE _read_collation_probe (
+      probe_id TEXT PRIMARY KEY,
+      label TEXT COLLATE NOCASE NOT NULL
+    );
+    INSERT INTO _read_collation_probe(probe_id, label)
+    VALUES ('z', 'Alpha'), ('a', 'alpha');
+  `);
+
+  const filter = compileFilters(
+    db.vault,
+    '_read_collation_probe',
+    [{ column: 'label', op: 'eq', value: 'alpha' }],
+    '2026-01-01T00:00:00.000Z',
+  );
+  const filtered = db.vault
+    .prepare(`SELECT label FROM _read_collation_probe WHERE ${filter.where}`)
+    .all(...filter.params);
+  expect(filtered.map((row) => (row as { label: string }).label)).toEqual(['alpha']);
+
+  const order = compileOrderBy(db.vault, '_read_collation_probe', { column: 'label' }, 'probe_id');
+  const ordered = db.vault
+    .prepare(`SELECT label FROM _read_collation_probe${order}`)
+    .all()
+    .map((row) => (row as { label: string }).label);
+  expect(ordered).toEqual(['Alpha', 'alpha']);
 });

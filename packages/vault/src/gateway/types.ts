@@ -63,7 +63,7 @@ export interface FilterClause {
  */
 export interface OrderBy {
   column: string;
-  /** Default `asc`. */
+  /** Default `asc`. Ties use an exposed scalar primary key in ascending BINARY order. */
   dir?: 'asc' | 'desc';
 }
 
@@ -109,6 +109,12 @@ export interface InvokeRequest {
    * id returns the recorded outcome instead of re-executing (§10 S4).
    */
   invocationId?: string;
+  /**
+   * Browser-replica intent that caused this invocation. The gateway keeps it
+   * with a confirmation-gated payload so a later owner decision can publish
+   * the terminal intent outcome through the replica log.
+   */
+  intentId?: string;
   /**
    * The demo register (issue #290 phase 1): rows this invocation writes are
    * scenario-seed data — provenance stamps `seed.demo` instead of the

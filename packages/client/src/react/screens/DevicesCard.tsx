@@ -30,6 +30,8 @@ export interface DevicesCardProps {
   now: number;
   loadDevices: () => Promise<CentraidGatewayDevice[]>;
   onRevokeDevice: (deviceId: string) => Promise<{ removed: boolean }>;
+  /** Eager local cleanup after this renderer successfully revokes itself. */
+  onCurrentDeviceRevoked?: () => Promise<void>;
   /**
    * Mint a one-time pairing ticket for the active vault (`POST
    * _gateway/devices/ticket`). Optional so a host that can't mint (or a test)
@@ -319,6 +321,7 @@ export default function DevicesCard({
   now,
   loadDevices,
   onRevokeDevice,
+  onCurrentDeviceRevoked,
   onCreateTicket,
 }: DevicesCardProps): JSX.Element {
   const [devices, setDevices] = useState<CentraidGatewayDevice[] | null>(null);
@@ -351,13 +354,14 @@ export default function DevicesCard({
   const revoke = useCallback(
     async (device: CentraidGatewayDevice): Promise<void> => {
       await onRevokeDevice(device.deviceId);
+      if (device.current) await onCurrentDeviceRevoked?.();
       // Optimistically drop the row; a background refresh reconciles.
       if (mountedRef.current) {
         setDevices((prev) => prev?.filter((d) => d.deviceId !== device.deviceId) ?? prev);
       }
       refresh();
     },
-    [onRevokeDevice, refresh],
+    [onCurrentDeviceRevoked, onRevokeDevice, refresh],
   );
 
   const count = devices?.length ?? 0;

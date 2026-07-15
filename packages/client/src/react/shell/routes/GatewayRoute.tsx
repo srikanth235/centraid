@@ -114,6 +114,11 @@ export default function GatewayRoute(): JSX.Element {
         onOpenStorageSettings={() => navigate({ kind: 'settings', page: 'storage' })}
         loadDevices={listGatewayDevices}
         onRevokeDevice={revokeGatewayDevice}
+        onCurrentDeviceRevoked={() =>
+          import('../../../replica/shell-session.js').then((replica) =>
+            replica.purgeCurrentReplicaDevice(),
+          )
+        }
         onCreateDeviceTicket={createGatewayDeviceTicket}
         onRestartGateway={() => window.CentraidApi.restartGateway()}
         onExportDiagnostics={() => window.CentraidApi.exportGatewayDiagnostics()}

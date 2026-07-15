@@ -78,6 +78,98 @@ test("enrollment: a second process's writes are visible without restart", async 
   expect(daemon.vaultsFor('ep-new')).toEqual(['v1']);
 });
 
+test('enrollment: replica checkpoints only advance within their bootstrap epoch', async () => {
+  const file = await tempFile('devices.json');
+  const store = EnrollmentStore.open(file);
+  store.enroll({
+    endpointId: 'ep-device',
+    vaultId: 'v1',
+    label: 'laptop',
+    rememberDevice: true,
+  });
+
+  const boot = store.resetCheckpoint('ep-device', 'v1', {
+    epoch: 'epoch-a',
+    seq: 7,
+    schemaEpoch: 2,
+  });
+  expect(boot).toMatchObject({ epoch: 'epoch-a', seq: 7, schemaEpoch: 2 });
+  expect(
+    store.advanceCheckpoint('ep-device', 'v1', {
+      epoch: 'epoch-a',
+      seq: 9,
+      schemaEpoch: 2,
+    }),
+  ).toMatchObject({ seq: 9 });
+  expect(() =>
+    store.advanceCheckpoint('ep-device', 'v1', {
+      epoch: 'epoch-a',
+      seq: 8,
+      schemaEpoch: 2,
+    }),
+  ).toThrow(/monotonically/);
+  expect(() =>
+    store.advanceCheckpoint('ep-device', 'v1', {
+      epoch: 'epoch-b',
+      seq: 10,
+      schemaEpoch: 2,
+    }),
+  ).toThrow(/rebootstrap/);
+
+  const reopened = EnrollmentStore.open(file);
+  expect(reopened.get('ep-device', 'v1')?.checkpoint).toMatchObject({
+    epoch: 'epoch-a',
+    seq: 9,
+  });
+});
+
+test('enrollment: a stale daemon checkpoint cannot resurrect a CLI revocation', async () => {
+  const file = await tempFile('devices.json');
+  const daemon = EnrollmentStore.open(file);
+  const row = daemon.enroll({
+    endpointId: 'ep-lost',
+    vaultId: 'v1',
+    label: 'lost laptop',
+    rememberDevice: true,
+  });
+  daemon.resetCheckpoint('ep-lost', 'v1', {
+    epoch: 'epoch-a',
+    seq: 4,
+    schemaEpoch: 2,
+  });
+
+  const cli = EnrollmentStore.open(file);
+  expect(cli.revoke(row.enrollmentId)).toHaveLength(1);
+  expect(() =>
+    daemon.advanceCheckpoint('ep-lost', 'v1', {
+      epoch: 'epoch-a',
+      seq: 5,
+      schemaEpoch: 2,
+    }),
+  ).toThrow(/not enrolled/);
+  expect(EnrollmentStore.open(file).get('ep-lost', 'v1')).toBeUndefined();
+  await expect(fs.stat(`${file}.lock`)).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
+test('enrollment: remember and trust choices persist across re-pair', async () => {
+  const file = await tempFile('devices.json');
+  const store = EnrollmentStore.open(file);
+  store.enroll({
+    endpointId: 'ep-session',
+    vaultId: 'v1',
+    label: 'borrowed tablet',
+    trust: 'readonly',
+    rememberDevice: false,
+  });
+  expect(EnrollmentStore.open(file).get('ep-session', 'v1')).toMatchObject({
+    trust: 'readonly',
+    rememberDevice: false,
+  });
+  expect(
+    store.enroll({ endpointId: 'ep-default', vaultId: 'v1', label: 'default device' }),
+  ).toMatchObject({ rememberDevice: false });
+});
+
 test('pairing tickets: one-time, secret-checked, TTL-bound', async () => {
   const file = await tempFile('pairing-tickets.json');
   const store = PairingTicketStore.open(file);

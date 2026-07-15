@@ -16,7 +16,7 @@
 export const EXPECTED_GATEWAY_VERSION = '0.1.0';
 
 /** The vault schema epoch this desktop build expects. */
-export const EXPECTED_SCHEMA_EPOCH = 1;
+export const EXPECTED_SCHEMA_EPOCH = 2;
 
 export interface GatewayInfo {
   version: string;
