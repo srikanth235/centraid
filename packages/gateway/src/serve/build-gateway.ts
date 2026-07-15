@@ -73,6 +73,7 @@ import {
   type SurfaceStatus,
 } from '@centraid/agent-runtime';
 import { readBlobStoreSettings, custodyStateCounts } from '@centraid/vault';
+import { createImagePreviewCodec } from '../preview/codec.js';
 import { WorktreeStore } from '../worktree-store/index.js';
 import { openVaultRegistry, type VaultRegistry } from './vault-registry.js';
 import { createDiskHealthProbe } from './disk-health.js';
@@ -423,6 +424,13 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // `blob_store.connectionId` is set; vaults without one keep working off
     // the env-var default (`vault-plane.ts`'s `defaultEnvS3Credentials`).
     s3Credentials: makeStorageCredentialsResolver(storageConnections),
+    // Preview backstop codec (issue #405 §2): the gateway holds plaintext on
+    // ingest inside the owner's trust boundary, so generating tiny/medium
+    // derivatives here leaks nothing to the provider. One shared stateless
+    // codec instance fans out to every mounted plane's blob sweep, closing the
+    // "no raster codec in the runtime" gap for imported / weak-client /
+    // server-ingested images (capable clients still generate at capture).
+    previewCodec: createImagePreviewCodec(),
   });
 
   // Vault mounts are pull-checked at snapshot time — nothing pushes when a

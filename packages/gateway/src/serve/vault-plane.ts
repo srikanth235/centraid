@@ -100,6 +100,7 @@ import {
   type DemoPurgeResult,
   type BlobStoreSettings,
   type S3Credentials,
+  type PreviewCodec,
   runJournalArchival,
   WalShipper,
   type WalShipperOptions,
@@ -217,6 +218,13 @@ export interface VaultPlaneOptions {
    * that haven't adopted storage connections yet.
    */
   s3Credentials?: (settings: BlobStoreSettings) => Promise<S3Credentials>;
+  /**
+   * The preview ladder's raster codec (issue #405 §2) — the host's pure-JS
+   * jpeg-js/pngjs downscaler (`createImagePreviewCodec`), forwarded into
+   * `openVaultDb` so this plane's blob sweep runs the preview backstop.
+   * Omitted for hosts/tests without one: the backstop simply doesn't run.
+   */
+  previewCodec?: PreviewCodec;
 }
 
 /** A grant request the owner approves — scopes as the manifest declares them. */
@@ -399,6 +407,9 @@ export class VaultPlane {
     this.db = openVaultDb({
       dir: options.dir,
       s3Credentials: options.s3Credentials ?? defaultEnvS3Credentials,
+      // Preview backstop codec (issue #405 §2) — forwarded only when the host
+      // wired one; a codec-less open just never runs the backstop.
+      ...(options.previewCodec ? { previewCodec: options.previewCodec } : {}),
     });
     this.boot = ensureVaultBootstrapped(this.db, {
       ownerName: options.ownerName ?? 'Owner',

@@ -18,6 +18,7 @@
 //        subresource loads, so app tiles need no token plumbing.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { VaultBlobBackpressureError, VaultDiskFullError } from '@centraid/vault';
 import type { RouteHandler } from '../serve/build-gateway.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
 import { readBody, readJson, sendJson } from './route-helpers.js';
@@ -152,6 +153,20 @@ export function makeBlobRouteHandler(vaults: Pick<VaultRegistry, 'current'>): Ro
         return true;
       }
     } catch (err) {
+      // Ingest backpressure (issue #405 §3/§5): the bounded cache spool is full
+      // and nothing is safely evictable (un-replicated backlog). This is
+      // retryable once replication drains — a 429 with Retry-After, NOT a 400
+      // (the request was well-formed) and NOT a 507 (the disk isn't full, the
+      // BUDGET is). Never a lost byte: the client re-POSTs and succeeds later.
+      if (err instanceof VaultBlobBackpressureError) {
+        res.setHeader('Retry-After', '5');
+        return sendJson(res, 429, { error: err.message, retryable: true });
+      }
+      // A genuine ENOSPC on the vault volume (issue #351 wave 4) — the disk is
+      // full, not the budget; surface it as 507 Insufficient Storage.
+      if (err instanceof VaultDiskFullError) {
+        return sendJson(res, 507, { error: err.message });
+      }
       return sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
     }
     return sendJson(res, 405, { error: `unsupported ${method} on ${url.pathname}` });

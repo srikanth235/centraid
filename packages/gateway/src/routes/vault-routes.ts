@@ -203,6 +203,23 @@ export function makeVaultRouteHandler(
                 message: 'blob_store.kind must be "fs" or "s3"',
               });
             }
+            // Storage class (issue #405 §6): an optional non-empty string,
+            // trimmed and stored as `blob_store.storageClass` (camelCase,
+            // matching throttleBytesPerSec). NO enum — S3-compatibles define
+            // their own class names (STANDARD_IA, GLACIER, R2's single
+            // implicit class, and clawgnition may grow `derived`/IA-style
+            // tiers per clawgnition#118), so the endpoint, not this route, is
+            // the authority on which names it accepts.
+            const storageClass = (blobStore as Record<string, unknown>).storageClass;
+            if (storageClass !== undefined && storageClass !== null) {
+              if (typeof storageClass !== 'string' || storageClass.trim() === '') {
+                return sendJson(res, 400, {
+                  error: 'bad_request',
+                  message: 'blob_store.storageClass must be a non-empty string',
+                });
+              }
+              (blobStore as Record<string, unknown>).storageClass = storageClass.trim();
+            }
           }
           const mediaLocation = body.media_location;
           if (

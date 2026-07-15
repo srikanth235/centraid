@@ -26,6 +26,7 @@ import {
   VaultSchemaAheadError,
   type BlobStoreSettings,
   type S3Credentials,
+  type PreviewCodec,
 } from '@centraid/vault';
 import type { RuntimeLogger, VaultBridge, VaultWorkspace } from '@centraid/app-engine';
 import { openVaultPlane, VaultPlane } from './vault-plane.js';
@@ -86,6 +87,8 @@ export interface VaultRegistryOptions {
   leaseConflicted?: () => boolean;
   /** Forwarded to every plane (issue #367 §C3) — see `VaultPlaneOptions.s3Credentials`. */
   s3Credentials?: (settings: BlobStoreSettings) => Promise<S3Credentials>;
+  /** Forwarded to every plane (issue #405 §2) — see `VaultPlaneOptions.previewCodec`. */
+  previewCodec?: PreviewCodec;
 }
 
 /** One row of the vault list. */
@@ -122,6 +125,7 @@ export class VaultRegistry {
   private readonly s3Credentials:
     | ((settings: BlobStoreSettings) => Promise<S3Credentials>)
     | undefined;
+  private readonly previewCodec: PreviewCodec | undefined;
   private readonly planes = new Map<string, VaultPlane>();
   /** Directories already MOUNTED — lets `scan()` skip them cheaply on rescan. */
   private readonly scannedDirs = new Set<string>();
@@ -142,6 +146,7 @@ export class VaultRegistry {
     this.enableWalShipper = options.enableWalShipper ?? true;
     this.leaseConflicted = options.leaseConflicted;
     this.s3Credentials = options.s3Credentials;
+    this.previewCodec = options.previewCodec;
     mkdirSync(this.rootDir, { recursive: true });
     if (existsSync(path.join(this.rootDir, 'vault.db'))) {
       // Pre-multi-vault layout (v0: no data migrations) — the files stay put
@@ -232,6 +237,7 @@ export class VaultRegistry {
       enableWalShipper: this.enableWalShipper,
       ...(this.leaseConflicted ? { leaseConflicted: this.leaseConflicted } : {}),
       ...(this.s3Credentials ? { s3Credentials: this.s3Credentials } : {}),
+      ...(this.previewCodec ? { previewCodec: this.previewCodec } : {}),
       ...boot,
     });
   }
