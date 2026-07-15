@@ -390,7 +390,7 @@ describe('request count over a served app', () => {
       const bundle = (await serve(photosDir, `_bundle.${hash}.js`, opts)).body.toString('utf8');
       const esbuild = await import('esbuild');
       await expect(esbuild.transform(bundle, { loader: 'js' })).resolves.toBeTruthy();
-      // eslint-disable-next-line no-console
+      // eslint-disable-next-line no-console -- benchmark evidence is intentional (#408)
       console.info(`photos boot requests: before(per-file)=${before} after(bundled)=${after}`);
     },
   );

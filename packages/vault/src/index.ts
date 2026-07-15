@@ -277,7 +277,16 @@ export { parseVcards, normalizeHandle, type Vcard, type VcardIdentifier } from '
 export { importIcsEvents, importVcardParties, type ImportResult } from './ingest/import.js';
 export { importVaultExport, canonicalJson, type VaultExport } from './gateway/portability.js';
 export type { ViewDefinition, ViewJoin, ViewResult } from './gateway/views.js';
-export { stageVaultDbs, type BackupResult, type StageDbsResult } from './gateway/custody.js';
+export { checkpointVault, sha256File, type BackupResult } from './gateway/custody.js';
+export {
+  WalShipper,
+  type PendingBase,
+  type UploadableWalFile,
+  type WalShipperLogger,
+  type WalShipperOptions,
+  type WalTickReport,
+} from './wal-shipper.js';
+export { verifyRestoredPair, type RestoredPairReport } from './restore-check.js';
 export {
   validateExtSpecs,
   canonicalSpecJson,
@@ -322,11 +331,7 @@ export {
   type ArchivedSegmentRows,
   type ArchiveVerification,
 } from './journal-archive.js';
-export {
-  FTS_BODY_INDEX_BUDGET_CHARS,
-  truncateForIndex,
-  rebuildFtsIndex,
-} from './schema/fts.js';
+export { FTS_BODY_INDEX_BUDGET_CHARS, truncateForIndex, rebuildFtsIndex } from './schema/fts.js';
 export { rebuildDocumentFtsIndex } from './schema/blob.js';
 export {
   INLINE_BODY_BUDGET_BYTES,

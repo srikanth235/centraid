@@ -25,16 +25,18 @@ function setup() {
 
 test('truncateForIndex passes short values through untouched', () => {
   const db = openVaultDb();
-  const row = db.vault.prepare(`SELECT ${truncateForIndex("'hello'", 100)} AS v`).get() as { v: string };
+  const row = db.vault.prepare(`SELECT ${truncateForIndex("'hello'", 100)} AS v`).get() as {
+    v: string;
+  };
   expect(row.v).toBe('hello');
 });
 
 test('truncateForIndex caps at the budget and appends a marker', () => {
   const db = openVaultDb();
   const long = 'x'.repeat(50);
-  const row = db.vault
-    .prepare(`SELECT ${truncateForIndex(`'${long}'`, 10)} AS v`)
-    .get() as { v: string };
+  const row = db.vault.prepare(`SELECT ${truncateForIndex(`'${long}'`, 10)} AS v`).get() as {
+    v: string;
+  };
   expect(row.v.startsWith('x'.repeat(10))).toBe(true);
   expect(row.v).toContain('truncated for search index');
   expect(row.v.length).toBeLessThan(long.length);
@@ -58,8 +60,9 @@ test('a note body over budget is fully preserved in the canonical row but trunca
     purpose: 'dpv:ServiceProvision',
   });
   expect(outcome.status).toBe('executed');
-  const { note_id, body_content_id } = (outcome as { output: { note_id: string; body_content_id: string } })
-    .output;
+  const { note_id, body_content_id } = (
+    outcome as { output: { note_id: string; body_content_id: string } }
+  ).output;
 
   // The canonical body is untouched.
   const content = db.vault
@@ -69,14 +72,16 @@ test('a note body over budget is fully preserved in the canonical row but trunca
 
   // The FTS row, at the real (generous) budget, also holds it whole since
   // this body is far under FTS_BODY_INDEX_BUDGET_CHARS.
-  const indexed = db.vault.prepare('SELECT body FROM fts_knowledge_note WHERE note_id = ?').get(note_id) as {
+  const indexed = db.vault
+    .prepare('SELECT body FROM fts_knowledge_note WHERE note_id = ?')
+    .get(note_id) as {
     body: string;
   };
   expect(indexed.body).toBe(bodyText);
   expect(bodyText.length).toBeLessThan(FTS_BODY_INDEX_BUDGET_CHARS);
 });
 
-test('rebuildFtsIndex re-derives a live entity\'s rows from the base table', () => {
+test("rebuildFtsIndex re-derives a live entity's rows from the base table", () => {
   const { db, gw, owner } = setup();
   const outcome = gw.invoke(owner, {
     command: 'knowledge.create_note',
@@ -87,7 +92,9 @@ test('rebuildFtsIndex re-derives a live entity\'s rows from the base table', () 
 
   // Corrupt the index row directly (simulating drift) — a rebuild must fix it.
   db.vault.exec(`UPDATE fts_knowledge_note SET body = 'stale' WHERE note_id = '${note_id}'`);
-  let row = db.vault.prepare('SELECT body FROM fts_knowledge_note WHERE note_id = ?').get(note_id) as {
+  let row = db.vault
+    .prepare('SELECT body FROM fts_knowledge_note WHERE note_id = ?')
+    .get(note_id) as {
     body: string;
   };
   expect(row.body).toBe('stale');
@@ -121,9 +128,11 @@ test('rebuildDocumentFtsIndex re-derives fts_core_document, extracted text still
     purpose: 'dpv:ServiceProvision',
   });
   expect(outcome.status).toBe('executed');
-  const { document_id, content_id } = (outcome as {
-    output: { document_id: string; content_id: string };
-  }).output;
+  const { document_id, content_id } = (
+    outcome as {
+      output: { document_id: string; content_id: string };
+    }
+  ).output;
 
   // Attach an extracted-text derivative directly (the enricher's path).
   db.vault
@@ -133,7 +142,9 @@ test('rebuildDocumentFtsIndex re-derives fts_core_document, extracted text still
     )
     .run(content_id, new Date().toISOString());
 
-  let row = db.vault.prepare('SELECT body FROM fts_core_document WHERE document_id = ?').get(document_id) as {
+  let row = db.vault
+    .prepare('SELECT body FROM fts_core_document WHERE document_id = ?')
+    .get(document_id) as {
     body: string;
   };
   expect(row.body).toBe('extracted pdf text');
@@ -141,7 +152,9 @@ test('rebuildDocumentFtsIndex re-derives fts_core_document, extracted text still
   db.vault.exec(`UPDATE fts_core_document SET body = 'stale' WHERE document_id = '${document_id}'`);
   rebuildDocumentFtsIndex(db.vault);
 
-  row = db.vault.prepare('SELECT body FROM fts_core_document WHERE document_id = ?').get(document_id) as {
+  row = db.vault
+    .prepare('SELECT body FROM fts_core_document WHERE document_id = ?')
+    .get(document_id) as {
     body: string;
   };
   expect(row.body).toBe('extracted pdf text');

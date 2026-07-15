@@ -300,11 +300,19 @@ test('a directory whose vault.db duplicates an already-mounted vault id is recor
   const firstDir = path.join(root, first.vaultId);
 
   // Clone the mounted vault's files into a second directory — same
-  // vaultId, so it can never cleanly mount alongside the original.
+  // vaultId, so it can never cleanly mount alongside the original. The
+  // `-wal` siblings are part of the clone: with `wal_autocheckpoint = 0`
+  // (issue #408 — only the WAL shipper checkpoints), a live vault's recent
+  // writes live in the WAL until the next shipper checkpoint, so a bare
+  // `vault.db` copy would be an EMPTY database that bootstraps fresh under
+  // a new id instead of colliding.
   const dupeDir = path.join(root, 'dupe-of-first');
   await fs.mkdir(dupeDir, { recursive: true });
-  await fs.copyFile(path.join(firstDir, 'vault.db'), path.join(dupeDir, 'vault.db'));
-  await fs.copyFile(path.join(firstDir, 'journal.db'), path.join(dupeDir, 'journal.db'));
+  for (const name of ['vault.db', 'journal.db', 'vault.db-wal', 'journal.db-wal']) {
+    await fs.copyFile(path.join(firstDir, name), path.join(dupeDir, name)).catch((err) => {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    });
+  }
 
   registry.rescan();
 

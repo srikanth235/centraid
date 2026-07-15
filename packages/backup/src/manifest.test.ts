@@ -87,9 +87,12 @@ describe('sealManifest / openManifest', () => {
 
   test('seal then open roundtrips public fields and sealed entries', async () => {
     const keyring = await keyringFixture();
+    const aa = 'aa'.repeat(32);
+    const bb = 'bb'.repeat(32);
+    const cc = 'cc'.repeat(32);
     const entries: ManifestEntry[] = [
-      { path: 'vault.db', kind: 'db', size: 100, mtimeMs: 1000, chunks: ['aa', 'bb'] },
-      { path: 'blobs/x', kind: 'blob', size: 50, mtimeMs: 2000, chunks: ['cc'] },
+      { path: 'vault.db', kind: 'db', size: 100, mtimeMs: 1000, chunks: [aa, bb] },
+      { path: 'blobs/x', kind: 'blob', size: 50, mtimeMs: 2000, chunks: [cc] },
     ];
     const { bytes, manifestHash, manifest } = sealManifest({
       keyring,
@@ -98,9 +101,9 @@ describe('sealManifest / openManifest', () => {
       generation: 3,
       prevManifestHash: null,
       chunkIndex: [
-        { id: 'aa', size: 10 },
-        { id: 'bb', size: 20 },
-        { id: 'cc', size: 50 },
+        { id: aa, size: 10 },
+        { id: bb, size: 20 },
+        { id: cc, size: 50 },
       ],
       appMeta: { gatewayVersion: '0.1.0' },
       entries,
@@ -133,17 +136,39 @@ describe('sealManifest / openManifest', () => {
     expect(() => openManifest(tampered, keyring, 'vault-1', manifestHash)).toThrow(/hash mismatch/);
   });
 
+  test('authenticated public envelope rejects a provider-rehashed metadata rewrite', async () => {
+    const keyring = await keyringFixture();
+    const { bytes } = sealManifest({
+      keyring,
+      vaultId: 'vault-1',
+      keyEpoch: 1,
+      generation: 1,
+      prevManifestHash: null,
+      chunkIndex: [],
+      appMeta: { ontologyVersion: '1.2' },
+      entries: [],
+    });
+    const parsed = JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
+    parsed['format'] = 'centraid-snapshot/1';
+    parsed['generation'] = 99;
+    parsed['appMeta'] = { ontologyVersion: '0.1' };
+    const rewritten = new TextEncoder().encode(canonicalJson(parsed));
+
+    expect(() => openManifest(rewritten, keyring, 'vault-1', sha256Hex(rewritten))).toThrow();
+  });
+
   test('openManifest rejects a hostile entry path even if the hash is valid', async () => {
     const keyring = await keyringFixture();
+    const zz = 'dd'.repeat(32);
     const { bytes, manifestHash } = sealManifest({
       keyring,
       vaultId: 'vault-1',
       keyEpoch: 1,
       generation: 1,
       prevManifestHash: null,
-      chunkIndex: [{ id: 'zz', size: 1 }],
+      chunkIndex: [{ id: zz, size: 1 }],
       appMeta: {},
-      entries: [{ path: '../../etc/passwd', kind: 'blob', size: 1, mtimeMs: 1, chunks: ['zz'] }],
+      entries: [{ path: '../../etc/passwd', kind: 'blob', size: 1, mtimeMs: 1, chunks: [zz] }],
     });
     expect(() => openManifest(bytes, keyring, 'vault-1', manifestHash)).toThrow(
       /path traversal|rejected/,

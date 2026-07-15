@@ -55,7 +55,7 @@ An app declares **queries** (bounded reads) and **actions** (typed writes) in it
 
 ### Dependency shape
 
-`@centraid/app-engine` is the foundation (depends only on `ajv`), and `@centraid/vault` stands beside it with no workspace dependencies — the gateway is where the two meet (handlers reach the vault through an injected `ctx.vault` bridge, never a package import). `@centraid/automation` builds on app-engine + blueprints; `@centraid/agent-runtime` on app-engine + automation; `@centraid/gateway` on app-engine + agent-runtime + automation + blueprints + skills + vault. The desktop app depends on gateway + agent-runtime + app-engine + automation + design-tokens + tunnel. Both apps share `@centraid/design-tokens` (mobile resolves it from `src` for React Native).
+`@centraid/app-engine` is the foundation (depends only on `ajv`). `@centraid/backup` is a Node-builtins-only leaf containing both the opaque provider seam and the pure authenticated WAL codecs; `@centraid/vault` depends on that codec surface for capture and otherwise stands beside app-engine. The gateway is where the vault and app engine meet (handlers reach the vault through an injected `ctx.vault` bridge, never an app-engine package import). `@centraid/automation` builds on app-engine + blueprints; `@centraid/agent-runtime` on app-engine + automation; `@centraid/gateway` on app-engine + agent-runtime + automation + backup + blueprints + skills + vault. The desktop app depends on gateway + agent-runtime + app-engine + automation + design-tokens + tunnel. Both apps share `@centraid/design-tokens` (mobile resolves it from `src` for React Native).
 
 ## On-disk layout
 

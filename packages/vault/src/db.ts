@@ -42,7 +42,15 @@ export interface VaultDb {
    * backends needs no reopen.
    */
   blobs: BlobCustody;
-  close(): void;
+  /**
+   * `skipOptimize` is for the WAL-shipper shutdown path (issue #408): the
+   * shipper runs `PRAGMA optimize` itself BEFORE its final checkpoint, so
+   * that optimize's ANALYZE writes don't sit in the WAL at handle close,
+   * where SQLite's close-checkpoint would fold them into the main file
+   * behind the shipper's back (a spurious foreign-checkpoint detection on
+   * every restart).
+   */
+  close(opts?: { skipOptimize?: boolean }): void;
 }
 
 /** The `blob_store` settings bag shape (issue #296 §2, extended #367). */
@@ -116,6 +124,16 @@ function openFile(location: string): DatabaseSync {
       // transcripts.db folded in), which worker subprocesses open by path —
       // wait for their locks instead of failing immediately.
       db.exec('PRAGMA busy_timeout = 30000');
+      // Checkpointing is the WAL shipper's exclusive duty (issue #408, I2):
+      // segments are raw WAL byte ranges, and they are only valid while the
+      // WAL is strictly append-only between checkpoints THE SHIPPER performs
+      // (TRUNCATE-only — PASSIVE/RESTART reuse byte offsets in place). An
+      // autocheckpointing connection would reset the WAL behind the
+      // shipper's back; it detects that (salt/size/main-file detectors) and
+      // heals with a full base snapshot, but every such heal is a whole-DB
+      // upload — so autocheckpoint is OFF on every connection, here and in
+      // every by-path opener (app-engine's openJournalDb, key-admin).
+      db.exec('PRAGMA wal_autocheckpoint = 0');
     }
     return db;
   } catch (err) {
@@ -218,7 +236,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     dir: dir ?? ':memory:',
     sealKey,
     blobs: new BlobCustody(local, remoteTier),
-    close() {
+    close(opts) {
       // PRAGMA optimize (issue #374 tier 5a): a cheap, targeted ANALYZE that
       // only touches tables whose stats look stale — recommended by SQLite
       // to run "occasionally", and connection-close is the one point every
@@ -227,16 +245,20 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
       // on. Harmless (near-instant, no-op) on `:memory:` too, so it's left
       // unconditional rather than special-cased. Never let a failure here —
       // this is best-effort maintenance, not correctness — block the actual
-      // close of the handle underneath it.
-      try {
-        vault.exec('PRAGMA optimize');
-      } catch {
-        // best-effort; the handle still needs to close below.
-      }
-      try {
-        journal.exec('PRAGMA optimize');
-      } catch {
-        // best-effort; the handle still needs to close below.
+      // close of the handle underneath it. A WAL-shipper shutdown passes
+      // `skipOptimize` because it already ran optimize before its final
+      // checkpoint (see the interface doc).
+      if (!opts?.skipOptimize) {
+        try {
+          vault.exec('PRAGMA optimize');
+        } catch {
+          // best-effort; the handle still needs to close below.
+        }
+        try {
+          journal.exec('PRAGMA optimize');
+        } catch {
+          // best-effort; the handle still needs to close below.
+        }
       }
       vault.close();
       journal.close();

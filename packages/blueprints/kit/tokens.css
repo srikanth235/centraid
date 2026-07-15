@@ -73,7 +73,7 @@
   --line: hsl(var(--app-hue) 26% 74% / 0.11);
   --line-strong: hsl(var(--app-hue) 26% 76% / 0.2);
   --danger: #f0645b;
-  --accent-deep: color-mix(in oklab, var(--_accent) 75%, hsl(var(--app-hue) 40% 12%));
+  --accent-deep: color-mix(in oklab, var(--_accent) 82%, hsl(var(--app-hue) 60% 96%));
   --shadow-md: 0 12px 30px -14px rgba(0, 0, 0, 0.6), 0 2px 8px -3px rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 30px 70px -24px rgba(0, 0, 0, 0.7);
 }
@@ -91,7 +91,7 @@
     --line: hsl(var(--app-hue) 26% 74% / 0.11);
     --line-strong: hsl(var(--app-hue) 26% 76% / 0.2);
     --danger: #f0645b;
-    --accent-deep: color-mix(in oklab, var(--_accent) 75%, hsl(var(--app-hue) 40% 12%));
+    --accent-deep: color-mix(in oklab, var(--_accent) 82%, hsl(var(--app-hue) 60% 96%));
     --shadow-md: 0 12px 30px -14px rgba(0, 0, 0, 0.6), 0 2px 8px -3px rgba(0, 0, 0, 0.5);
     --shadow-lg: 0 30px 70px -24px rgba(0, 0, 0, 0.7);
   }

@@ -89,10 +89,16 @@ export function providerConformanceCases(
           assert.ok(['api-key', 'interactive'].includes(caps.purgeAuthTier));
           assert.ok(Array.isArray(caps.capabilities), 'capabilities must declare an array');
           for (const flag of caps.capabilities) {
-            assert.ok(['backup', 'cas', 'usage'].includes(flag), `unknown capability flag "${flag}"`);
+            assert.ok(
+              ['backup', 'cas', 'usage'].includes(flag),
+              `unknown capability flag "${flag}"`,
+            );
           }
           if (caps.capabilities.includes('backup')) {
-            assert.ok(caps.backup, '"backup" capability declared but `backup` discovery block missing');
+            assert.ok(
+              caps.backup,
+              '"backup" capability declared but `backup` discovery block missing',
+            );
             assert.ok(caps.backup.softDeleteWindowDays > 0);
             assert.ok(['free-egress', 'metered-egress'].includes(caps.backup.restoreCostClass));
             if (caps.backup.retention.kind === 'ladder') {
@@ -143,6 +149,47 @@ export function providerConformanceCases(
             () => ro.put('chunks/nope', payload),
             'read-mode store must refuse put',
           );
+        }),
+    },
+
+    {
+      // centraid-snapshot/1 (issue #408) stores WAL segments as plain
+      // data-plane objects under `wal/…` — providers never parse them, but
+      // MUST round-trip the deeper key shape and serve ordered prefix LISTs
+      // (restore planning is a LIST, no per-object reads).
+      name: 'data-plane wal-segment namespace: deep keys round-trip + prefix list',
+      run: () =>
+        withProvider(makeProvider, async (provider) => {
+          const { targetId } = await provider.createTarget({ label: 'wal' });
+          const rw = await provider.openDataPlane(targetId, 'backup', 'read-write');
+          const gen = 'ab'.repeat(16);
+          const jgen = 'cd'.repeat(16);
+          const keys = [
+            `wal/vault/${gen}/00000000/000000000000-000000004128-1752480000000`,
+            `wal/vault/${gen}/00000000/000000004128-000000008256-1752480060000`,
+            `wal/vault/${gen}/00000000/closed-000000008256`,
+            `wal/vault/${gen}/00000001/000000000000-000000004128-1752480120000`,
+            `wal/journal/${gen}/00000000/000000000000-000000004128-1752480000000`,
+            // The pair marker lives OUTSIDE the per-database prefixes — its key
+            // names BOTH generations, so it must round-trip and list under its
+            // own namespace or a restore has no coordinated cut to aim at.
+            `wal/tick/${gen}-${jgen}/1752480060000`,
+          ];
+          for (const key of keys) await rw.put(key, TEXT.encode(key));
+          const listed: string[] = [];
+          for await (const obj of rw.list(`wal/vault/${gen}/`)) listed.push(obj.key);
+          assert.deepEqual(
+            [...listed].sort(),
+            keys.slice(0, 4).sort(),
+            'prefix list must return exactly the vault generation objects',
+          );
+          const markers: string[] = [];
+          for await (const obj of rw.list(`wal/tick/${gen}-${jgen}/`)) markers.push(obj.key);
+          assert.deepEqual(markers, [keys[5]], 'pair-marker prefix list must return the marker');
+          const got = await rw.get(keys[1]!);
+          assert.equal(new TextDecoder().decode(got), keys[1]);
+          for (const key of keys) await rw.delete(key);
+          assert.equal(await rw.head(keys[0]!), null);
         }),
     },
 

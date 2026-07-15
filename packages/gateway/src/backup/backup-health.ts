@@ -29,6 +29,11 @@ export function evaluateBackupHealth(opts: {
       notes.push(`${vaultId}: fenced — another machine has taken over this vault`);
       continue;
     }
+    if (target.lastError || target.lastVerifyError) {
+      worst = 'error';
+      notes.push(`${vaultId}: ${target.lastVerifyError ?? target.lastError}`);
+      continue;
+    }
     const backupAgeMs = target.lastBackupAt
       ? opts.now - Date.parse(target.lastBackupAt)
       : Number.POSITIVE_INFINITY;
@@ -44,6 +49,41 @@ export function evaluateBackupHealth(opts: {
     if (verifyAgeMs >= staleVerifyMs) {
       if (worst !== 'error') worst = 'degraded';
       notes.push(`${vaultId}: verification is stale`);
+    }
+    // Issue #408 G9: a FAILED restore-verification (damaged wal object,
+    // integrity failure) is persisted state until the next success — real
+    // evidence the backup does not restore cleanly, so it alarms at ERROR
+    // immediately, not after the staleness window below.
+    if (target.lastRestoreVerifyError) {
+      worst = 'error';
+      notes.push(`${vaultId}: restore-verification failed: ${target.lastRestoreVerifyError}`);
+      continue;
+    }
+    // Issue #408 G8: the last restore-verification SUCCEEDED but found
+    // receipts naming vault rows the restored vault does not have. Legitimate
+    // when the rows were hard-deleted after their receipt; evidence of a
+    // capture-ordering bug otherwise — so it survives here, in persisted
+    // state, rather than in a pushed report the next probe would overwrite.
+    const dangling = target.lastRestoreVerifyDangling ?? 0;
+    if (dangling > 0) {
+      if (worst !== 'error') worst = 'degraded';
+      notes.push(
+        `${vaultId}: last restore-verification found ${dangling} receipt(s) referencing absent vault rows`,
+      );
+    }
+    // Issue #408 G9: "a vault that has not been successfully restored within
+    // N days raises an alert" — a backup that has never been restored is a
+    // hypothesis, so restore-verification staleness alarms at ERROR, not
+    // degraded. Baseline falls back to first-backup time so a fresh target
+    // gets its 14-day grace instead of alarming immediately.
+    const restoreBaseline =
+      target.lastRestoreVerifiedAt ?? target.firstBackupAt ?? target.lastBackupAt;
+    const restoreAgeMs = restoreBaseline
+      ? opts.now - Date.parse(restoreBaseline)
+      : Number.POSITIVE_INFINITY;
+    if (restoreAgeMs >= 14 * DAY_MS) {
+      worst = 'error';
+      notes.push(`${vaultId}: no successful restore-verification within 14 days`);
     }
   }
   return {

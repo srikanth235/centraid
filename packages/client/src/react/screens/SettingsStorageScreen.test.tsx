@@ -88,8 +88,8 @@ describe('SettingsStorageScreen — connection list', () => {
     await act(async () => {
       await Promise.resolve();
     });
-    const result = el.querySelector('[data-testid="storage-test-result"]');
-    expect(result?.getAttribute('data-ok')).toBe('true');
+    const result = el.querySelector<HTMLElement>('[data-testid="storage-test-result"]');
+    expect(result?.dataset.ok).toBe('true');
     expect(result?.textContent).toContain('signed request accepted');
   });
 
@@ -105,8 +105,8 @@ describe('SettingsStorageScreen — connection list', () => {
     await act(async () => {
       await Promise.resolve();
     });
-    const result = el.querySelector('[data-testid="storage-test-result"]');
-    expect(result?.getAttribute('data-ok')).toBe('false');
+    const result = el.querySelector<HTMLElement>('[data-testid="storage-test-result"]');
+    expect(result?.dataset.ok).toBe('false');
     expect(result?.textContent).toContain('connection refused');
   });
 

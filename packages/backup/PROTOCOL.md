@@ -30,9 +30,9 @@ Across both layers:
   quota/metering, and the delete/undelete/purge lifecycle.
 
 The protocol and the snapshot format are versioned **independently**. A
-provider that stores `centraid-snapshot/1` objects today must not need any
-change when the snapshot format moves to `/2` — that is the test of whether
-a proposed provider feature belongs in this document at all.
+provider stores opaque snapshot objects and must not need any change when a
+future snapshot format is introduced — that is the test of whether a proposed
+provider feature belongs in this document at all.
 
 ## Terminology
 

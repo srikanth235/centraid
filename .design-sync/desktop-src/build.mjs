@@ -8,7 +8,15 @@
 // inlined from source, react/react-dom external — the converter provides
 // React via _vendor/), and tsc emits the .d.ts tree for prop extraction.
 import { execSync } from 'node:child_process';
-import { writeFileSync, readFileSync, copyFileSync, mkdirSync, rmSync, readdirSync, existsSync } from 'node:fs';
+import {
+  writeFileSync,
+  readFileSync,
+  copyFileSync,
+  mkdirSync,
+  rmSync,
+  readdirSync,
+  existsSync,
+} from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -135,7 +143,10 @@ const parts = ['tokens.css', 'fonts.css', 'styles.css'].map(
 );
 if (componentCss) parts.push(`/* ==== dist/index.css (CSS Modules) ==== */\n${componentCss}`);
 writeFileSync(resolve(stylesDir, 'bundle.css'), parts.join('\n\n'));
-console.log('[build] wrote styles/bundle.css (cssEntry)', componentCss ? '(incl. CSS Modules output)' : '');
+console.log(
+  '[build] wrote styles/bundle.css (cssEntry)',
+  componentCss ? '(incl. CSS Modules output)' : '',
+);
 
 // 8. .d.ts tree for prop extraction (ts-morph reads these).
 execSync('npx tsc -p tsconfig.json', { cwd: here, stdio: 'inherit' });

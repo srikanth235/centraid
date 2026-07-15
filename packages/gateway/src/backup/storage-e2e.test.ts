@@ -52,7 +52,11 @@ async function startServer(): Promise<S3TestServer> {
 const BUCKET = 'test-bucket';
 const CREDS = { accessKeyId: 'AKIA_TEST', secretAccessKey: 'secret_test' };
 
-function makeS3(server: S3TestServer, prefix: string, opts: { throttleBytesPerSec?: number } = {}): S3BlobStore {
+function makeS3(
+  server: S3TestServer,
+  prefix: string,
+  opts: { throttleBytesPerSec?: number } = {},
+): S3BlobStore {
   return new S3BlobStore({
     endpoint: server.url,
     bucket: BUCKET,
@@ -87,8 +91,12 @@ describe('S3BlobStore round-trip (real server, incl. multipart)', () => {
     // Prove multipart actually ran, not a silent fallback to one PUT: the
     // test server saw a `?uploads` initiate, at least 2 part PUTs, and a
     // `?uploadId=` complete POST.
-    const initiated = server.requests.some((r) => r.method === 'POST' && r.path.includes('uploads'));
-    const partPuts = server.requests.filter((r) => r.method === 'PUT' && r.path.includes('partNumber'));
+    const initiated = server.requests.some(
+      (r) => r.method === 'POST' && r.path.includes('uploads'),
+    );
+    const partPuts = server.requests.filter(
+      (r) => r.method === 'PUT' && r.path.includes('partNumber'),
+    );
     const completed = server.requests.some(
       (r) => r.method === 'POST' && r.path.includes('uploadId') && !r.path.includes('uploads'),
     );

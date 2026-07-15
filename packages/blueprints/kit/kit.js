@@ -1028,7 +1028,7 @@ export function wireThemeToggle(btn, { onChange } = {}) {
           '<button type="button" role="menuitemradio" class="kit-ask-model-item' +
             (!state.current ? ' is-active' : '') +
             '" aria-checked="' +
-            (!state.current) +
+            !state.current +
             '"><span>Use default</span><span class="kit-ask-model-hint">' +
             esc(state.defaultModel || 'gateway default') +
             '</span></button>',

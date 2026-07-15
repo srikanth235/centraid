@@ -1,10 +1,19 @@
 /*
  * Key custody and object encryption (FORMAT.md § Key custody, § Encryption).
- * AES-256-GCM everywhere: `iv (12 random bytes) || ciphertext || tag (16
- * bytes)`. Per-vault keys derive from the keyring's active epoch via
- * HKDF-SHA256 with the exact info strings FORMAT.md specifies — changing
- * either string would silently re-key every vault, so they're `const`, not
- * templated loosely.
+ * AES-256-GCM everywhere: `iv (12 bytes) || ciphertext || tag (16 bytes)`.
+ * Per-vault keys derive from the keyring's active epoch via HKDF-SHA256 with
+ * the exact info strings FORMAT.md specifies — changing either string would
+ * silently re-key every vault, so they're `const`, not templated loosely.
+ *
+ * Format /1 (issue #408) makes every object nonce DETERMINISTIC — derived by HKDF
+ * from the object's identity rather than `randomBytes` — so a retried upload
+ * is byte-identical to the first attempt (G7). Safety rests on the derivation
+ * inputs never repeating with different plaintext: chunk nonces derive from
+ * the chunk's own keyed content hash, WAL-segment nonces from the full
+ * `(db, generation, group, startOffset, endOffset)` address (offsets are
+ * monotonic within a group, generations are random 128-bit — and including
+ * BOTH offsets means a crash-retry that re-reads a LONGER range from the
+ * same start gets a fresh nonce, never a reused one).
  */
 
 import { createCipheriv, createDecipheriv, createHmac, hkdfSync, randomBytes } from 'node:crypto';
@@ -15,25 +24,58 @@ const KEY_BYTES = 32;
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
 
-/** Encrypt `plain` under `key` (32 bytes): `iv || ciphertext || tag`. */
+/** Encrypt `plain` under `key` (32 bytes) with a random nonce: `iv || ciphertext || tag`. */
 export function encrypt(key: Uint8Array, plain: Uint8Array): Uint8Array {
-  const iv = randomBytes(IV_BYTES);
-  const cipher = createCipheriv('aes-256-gcm', key, iv);
-  const ct = Buffer.concat([cipher.update(plain), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return new Uint8Array(Buffer.concat([iv, ct, tag]));
+  return encryptWithNonce(key, randomBytes(IV_BYTES), plain);
 }
 
-/** Decrypt an `encrypt()` blob. Throws (auth tag failure) on any tampering. */
-export function decrypt(key: Uint8Array, blob: Uint8Array): Uint8Array {
+/**
+ * Encrypt with a caller-supplied 12-byte nonce (use `deriveNonce` — never a
+ * counter, never a reused tuple) and optional additional authenticated data.
+ * Same wire shape as `encrypt`: `nonce || ciphertext || tag`.
+ */
+export function encryptWithNonce(
+  key: Uint8Array,
+  nonce: Uint8Array,
+  plain: Uint8Array,
+  aad?: Uint8Array,
+): Uint8Array {
+  if (nonce.length !== IV_BYTES) throw new Error(`nonce must be ${IV_BYTES} bytes`);
+  const cipher = createCipheriv('aes-256-gcm', key, nonce);
+  if (aad) cipher.setAAD(aad);
+  const ct = Buffer.concat([cipher.update(plain), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return new Uint8Array(Buffer.concat([nonce, ct, tag]));
+}
+
+/** Decrypt an `encrypt()`/`encryptWithNonce()` blob. Throws (auth tag failure) on any tampering. */
+export function decrypt(key: Uint8Array, blob: Uint8Array, aad?: Uint8Array): Uint8Array {
   if (blob.length < IV_BYTES + TAG_BYTES) throw new Error('encrypted blob truncated');
   const buf = Buffer.from(blob.buffer, blob.byteOffset, blob.byteLength);
   const iv = buf.subarray(0, IV_BYTES);
   const tag = buf.subarray(buf.length - TAG_BYTES);
   const ct = buf.subarray(IV_BYTES, buf.length - TAG_BYTES);
   const decipher = createDecipheriv('aes-256-gcm', key, iv);
+  if (aad) decipher.setAAD(aad);
   decipher.setAuthTag(tag);
   return new Uint8Array(Buffer.concat([decipher.update(ct), decipher.final()]));
+}
+
+/**
+ * A deterministic 12-byte GCM nonce: `HKDF(key, salt=∅, info)[0..12)`. The
+ * caller's `info` string IS the uniqueness argument — it must be injective
+ * over everything ever sealed under `key` (FORMAT.md § Encryption lists the
+ * exact info strings per object kind; they are format-normative).
+ */
+export function deriveNonce(key: Uint8Array, info: string): Uint8Array {
+  const out = hkdfSync(
+    'sha256',
+    Buffer.from(key.buffer, key.byteOffset, key.byteLength),
+    Buffer.alloc(0),
+    Buffer.from(info, 'utf8'),
+    IV_BYTES,
+  );
+  return new Uint8Array(out);
 }
 
 /** `dataKey = HKDF(master, salt=∅, info="centraid-backup:data:" + vaultId)`. */

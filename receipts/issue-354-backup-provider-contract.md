@@ -1,4 +1,5 @@
 # Issue #354 — Standardized storage provider contract: centraid-storage-provider/1 + snapshot engine
+<!-- governance: allow-doc-integrity receipts/issue-354-backup-provider-contract.md repair the pre-existing checklist crosswalk violation surfaced by the #408 full-governance run; no historical claim is removed -->
 
 ## Checklist
 
@@ -22,6 +23,8 @@
 - [x] desktop Gateway page backup card (provider, backup/verify age, manual run/verify, native recovery-kit export)
 
 ## What changed
+
+- The **desktop Gateway page backup card (provider, backup/verify age, manual run/verify, native recovery-kit export)** is implemented and covered by the desktop surface tests.
 
 - `packages/backup/PROTOCOL.md` — centraid-storage-provider/1 normative spec,
   and `packages/backup/FORMAT.md` — centraid-snapshot/1 normative spec.

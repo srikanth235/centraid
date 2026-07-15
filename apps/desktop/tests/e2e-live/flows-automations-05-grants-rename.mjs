@@ -224,7 +224,7 @@ async function putDraftFile(appId, sessionId, rel, content) {
   );
 }
 
-async function getDraftFile(appId, sessionId, rel) {
+async function _getDraftFile(appId, sessionId, rel) {
   const res = await gwFetch(
     `/centraid/_apps/${encodeURIComponent(appId)}/files?sessionId=${encodeURIComponent(sessionId)}`,
   );

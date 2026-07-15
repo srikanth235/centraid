@@ -120,6 +120,13 @@ function receiptKeyGesture(
 ): string {
   const journal = new DatabaseSync(path.join(vaultDir, 'journal.db'));
   try {
+    // The WAL shipper (issue #408) is journal.db's sole checkpointer; this
+    // short-lived write connection must never autocheckpoint behind it.
+    // (Its close, if it is the LAST connection — gateway down — still runs
+    // SQLite's close-checkpoint; the shipper detects that on next start and
+    // heals with a fresh base rather than a silent gap.)
+    journal.exec('PRAGMA wal_autocheckpoint = 0');
+    journal.exec('PRAGMA busy_timeout = 30000');
     return writeReceipt(journal, {
       grantId: null,
       invocationId: null,

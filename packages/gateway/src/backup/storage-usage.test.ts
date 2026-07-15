@@ -39,7 +39,11 @@ function startFakeUsageServer(opts: {
     const auth = req.headers.authorization;
     if (auth !== `Bearer ${opts.apiKey}`) {
       res.writeHead(401, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ error: { type: 'invalid_request_error', code: 'auth_expired', message: 'bad key' } }));
+      res.end(
+        JSON.stringify({
+          error: { type: 'invalid_request_error', code: 'auth_expired', message: 'bad key' },
+        }),
+      );
       return;
     }
     if (req.method === 'GET' && req.url === `/v1/backup/vaults/${opts.targetId}/usage`) {
@@ -49,16 +53,20 @@ function startFakeUsageServer(opts: {
       return;
     }
     res.writeHead(404, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ error: { type: 'invalid_request_error', code: 'not_found', message: 'no route' } }));
+    res.end(
+      JSON.stringify({
+        error: { type: 'invalid_request_error', code: 'not_found', message: 'no route' },
+      }),
+    );
   });
   return new Promise((resolve) => {
     server.listen(0, '127.0.0.1', () => {
       const { port } = server.address() as AddressInfo;
-      cleanups.push(() => new Promise<void>((r) => server.close(() => r())));
+      cleanups.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
       resolve({
         url: `http://127.0.0.1:${port}`,
         requestCount: () => requests,
-        close: () => new Promise<void>((r) => server.close(() => r())),
+        close: () => new Promise<void>((resolve) => server.close(() => resolve())),
       });
     });
   });
@@ -82,7 +90,12 @@ test('first read fetches inline and caches the report', async () => {
     apiKey: 'sk-test',
     targetId: 'target-1',
     usage: {
-      backup: { bytesStored: 1000, objectCount: 5, quotaBytes: 10_000, period: { start: 0, end: 1 } },
+      backup: {
+        bytesStored: 1000,
+        objectCount: 5,
+        quotaBytes: 10_000,
+        period: { start: 0, end: 1 },
+      },
       cas: { bytesStored: 2000, objectCount: 9, quotaBytes: null, period: { start: 0, end: 1 } },
     },
   });
@@ -109,7 +122,9 @@ test('stale-while-refresh: a read past pollIntervalMs returns the cached value i
   const fake = await startFakeUsageServer({
     apiKey: 'sk-test',
     targetId: 'target-1',
-    usage: { backup: { bytesStored: 500, objectCount: 1, quotaBytes: null, period: { start: 0, end: 1 } } },
+    usage: {
+      backup: { bytesStored: 500, objectCount: 1, quotaBytes: null, period: { start: 0, end: 1 } },
+    },
   });
   const connectionId = await makeProviderConnection(store, fake.url, 'sk-test', 'target-1');
 
@@ -130,7 +145,7 @@ test('stale-while-refresh: a read past pollIntervalMs returns the cached value i
   const stale = await poller.usageFor(connectionId);
   expect(stale.providerReported?.backup?.bytesStored).toBe(500); // still the old number, served instantly
   // Let the background refresh's microtasks/IO settle.
-  await new Promise((r) => setTimeout(r, 50));
+  await new Promise((resolve) => setTimeout(resolve, 50));
   expect(fake.requestCount()).toBe(2);
 });
 
@@ -173,19 +188,25 @@ test('a failed refresh keeps serving the last-known-good report with an error no
   const fake = await startFakeUsageServer({
     apiKey: 'sk-test',
     targetId: 'target-1',
-    usage: { backup: { bytesStored: 777, objectCount: 2, quotaBytes: null, period: { start: 0, end: 1 } } },
+    usage: {
+      backup: { bytesStored: 777, objectCount: 2, quotaBytes: null, period: { start: 0, end: 1 } },
+    },
   });
   const connectionId = await makeProviderConnection(store, fake.url, 'sk-test', 'target-1');
 
   let now = 0;
-  const poller = new StorageUsagePoller({ storageConnections: store, pollIntervalMs: 1000, now: () => now });
+  const poller = new StorageUsagePoller({
+    storageConnections: store,
+    pollIntervalMs: 1000,
+    now: () => now,
+  });
   const first = await poller.usageFor(connectionId);
   expect(first.providerReported?.backup?.bytesStored).toBe(777);
 
   await fake.close();
   now = 5000;
   await poller.usageFor(connectionId); // triggers the background refresh
-  await new Promise((r) => setTimeout(r, 50));
+  await new Promise((resolve) => setTimeout(resolve, 50));
   const afterFailedRefresh = await poller.usageFor(connectionId);
   expect(afterFailedRefresh.providerReported?.backup?.bytesStored).toBe(777); // last-known-good preserved
 });
@@ -196,7 +217,9 @@ test('a wrong api key surfaces as an error without throwing out of usageFor', as
   const fake = await startFakeUsageServer({
     apiKey: 'sk-correct',
     targetId: 'target-1',
-    usage: { backup: { bytesStored: 1, objectCount: 1, quotaBytes: null, period: { start: 0, end: 1 } } },
+    usage: {
+      backup: { bytesStored: 1, objectCount: 1, quotaBytes: null, period: { start: 0, end: 1 } },
+    },
   });
   const connectionId = await makeProviderConnection(store, fake.url, 'sk-wrong', 'target-1');
   const poller = new StorageUsagePoller({ storageConnections: store });

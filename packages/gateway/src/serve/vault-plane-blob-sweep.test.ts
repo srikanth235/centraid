@@ -38,16 +38,18 @@ async function until(check: () => boolean | Promise<boolean>, timeoutMs = 3000):
   const deadline = Date.now() + timeoutMs;
   while (!(await check())) {
     if (Date.now() > deadline) throw new Error('timed out waiting for condition');
-    await new Promise((r) => setTimeout(r, 15));
+    await new Promise((resolve) => setTimeout(resolve, 15));
   }
 }
 
 describe('blobSweepBackoff (pure)', () => {
   test('no failures yet — never skips', () => {
-    expect(blobSweepBackoff({ consecutiveFailures: 0, lastAttemptedAt: null }, Date.now())).toEqual({
-      skip: false,
-      retryInMs: 0,
-    });
+    expect(blobSweepBackoff({ consecutiveFailures: 0, lastAttemptedAt: null }, Date.now())).toEqual(
+      {
+        skip: false,
+        retryInMs: 0,
+      },
+    );
   });
 
   test('one failure, just attempted — skips, retry window > 0', () => {
@@ -63,7 +65,9 @@ describe('blobSweepBackoff (pure)', () => {
   test('one failure, long enough ago — proceeds', () => {
     const now = Date.now();
     const longAgo = new Date(now - 10 * 60_000).toISOString(); // 10 minutes ago
-    expect(blobSweepBackoff({ consecutiveFailures: 1, lastAttemptedAt: longAgo }, now).skip).toBe(false);
+    expect(blobSweepBackoff({ consecutiveFailures: 1, lastAttemptedAt: longAgo }, now).skip).toBe(
+      false,
+    );
   });
 
   test('many consecutive failures cap at the max backoff window, not unbounded growth', () => {
@@ -71,9 +75,9 @@ describe('blobSweepBackoff (pure)', () => {
     // 100 failures would be a huge linear window uncapped — assert it's
     // capped at 30 minutes (BLOB_SWEEP_MAX_BACKOFF_MS), not ~100 minutes.
     const recentEnough = new Date(now - 31 * 60_000).toISOString(); // 31 minutes ago
-    expect(blobSweepBackoff({ consecutiveFailures: 100, lastAttemptedAt: recentEnough }, now).skip).toBe(
-      false,
-    );
+    expect(
+      blobSweepBackoff({ consecutiveFailures: 100, lastAttemptedAt: recentEnough }, now).skip,
+    ).toBe(false);
   });
 });
 
@@ -91,7 +95,13 @@ describe('VaultPlane blob sweep — real S3, lease gate + resumability', () => {
       s3Credentials: async () => ({ accessKeyId: 'AKIA_TEST', secretAccessKey: 'secret_test' }),
     });
     updateBlobStoreSettings(plane.db, {
-      blob_store: { kind: 's3', endpoint: opts.endpoint, region: 'us-east-1', bucket: 'b', prefix: 'p' },
+      blob_store: {
+        kind: 's3',
+        endpoint: opts.endpoint,
+        region: 'us-east-1',
+        bucket: 'b',
+        prefix: 'p',
+      },
     });
     cleanups.push(() => plane.stop());
     return plane;
@@ -108,7 +118,7 @@ describe('VaultPlane blob sweep — real S3, lease gate + resumability', () => {
 
     plane.start();
     // Give the sweep clock a few ticks while conflicted — the orphan must survive.
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
     expect(server.hasObjectDirect('b', `p/blobs/sha256/${orphanSha}`)).toBe(true);
 
     conflicted = false;

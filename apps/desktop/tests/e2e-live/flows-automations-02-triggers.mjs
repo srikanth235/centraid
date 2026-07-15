@@ -694,8 +694,7 @@ async function main() {
         const chipsKind = await page
           .locator('div[data-trigger-kind]')
           .first()
-          .getAttribute('data-trigger-kind')
-          .catch(() => null);
+          .dataset.triggerKind.catch(() => null);
         const looksManualOnly = /manual only/i.test(bodyTxt);
         const looksCronSchedule = /cron schedule/i.test(bodyTxt);
         const looksWatches = /watches/i.test(bodyTxt);

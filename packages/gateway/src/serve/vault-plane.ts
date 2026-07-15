@@ -101,8 +101,10 @@ import {
   type BlobStoreSettings,
   type S3Credentials,
   runJournalArchival,
+  WalShipper,
+  type WalShipperOptions,
 } from '@centraid/vault';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import {
@@ -189,6 +191,12 @@ export interface VaultPlaneOptions {
   vaultName?: string;
   /** Sweep cadence for lifecycle duties. Default: hourly. */
   sweepIntervalMs?: number;
+  /** WAL shipper capture cadence (issue #408). Default: 60 s. */
+  walTickMs?: number;
+  /** Disable WAL ownership for short-lived admin/read-only registry opens. */
+  enableWalShipper?: boolean;
+  /** WAL shipper overrides (tests: thresholds, clock). */
+  walShipper?: Partial<Omit<WalShipperOptions, 'db' | 'log'>>;
   /**
    * Whether the gateway instance lease (issue #351 tier 1) is CURRENTLY
    * conflicted — a fresh foreign lease means a second gateway process may
@@ -344,10 +352,22 @@ export class VaultPlane {
    * (outbox parking) versus what still needs an operator (automations).
    */
   readonly quarantine: QuarantineStatus | null;
+  /**
+   * The WAL segment shipper (issue #408) — always constructed for a
+   * file-backed vault, backup configured or not: with `wal_autocheckpoint`
+   * off on every connection, its threshold rollovers are what keeps the two
+   * WALs bounded. Capture runs on `walTimer` (60 s); the BackupService's
+   * drain loop uploads (or, unconfigured, discards) what it captured.
+   */
+  readonly walShipper: WalShipper | undefined;
   private readonly logger: RuntimeLogger;
   private readonly sweepIntervalMs: number;
+  private readonly walTickMs: number;
   private readonly leaseConflicted: () => boolean;
+  /** Whether this process is allowed to capture or checkpoint these WALs. */
+  private readonly ownsWalLifecycle: boolean;
   private sweepTimer: NodeJS.Timeout | undefined;
+  private walTimer: NodeJS.Timeout | undefined;
   private lastJournalArchivalAt = 0;
   private closed = false;
   private displayName: string;
@@ -430,6 +450,34 @@ export class VaultPlane {
     // the automations gap (see vault-quarantine.ts header for why that
     // part stays manual).
     this.quarantine = applyRestoreQuarantine(options.dir, this.db, this.logger);
+    // WAL shipper (issue #408). A restored-and-adopted directory has no
+    // wal-ship state, so its first tick mints a fresh generation — which is
+    // exactly the restore-takeover stream break FORMAT.md rule 6 requires.
+    this.walTickMs = options.walTickMs ?? 60_000;
+    this.ownsWalLifecycle =
+      options.enableWalShipper !== false && !(options.leaseConflicted?.() ?? false);
+    try {
+      if (!this.ownsWalLifecycle) {
+        this.walShipper = undefined;
+      } else {
+        this.walShipper = new WalShipper({
+          db: this.db,
+          log: {
+            info: (m) => this.logger.info(m),
+            warn: (m) => this.logger.warn(m),
+          },
+          ...options.walShipper,
+        });
+      }
+    } catch (err) {
+      // In-memory vaults (tests) have no files to ship.
+      this.walShipper = undefined;
+      if (this.dir !== ':memory:') {
+        this.logger.warn(
+          `vault plane: wal shipper unavailable: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
   }
 
   /** The owner-device credential the host acts with (confirm/revoke/sweep). */
@@ -1523,11 +1571,70 @@ export class VaultPlane {
     };
   }
 
-  /** Begin the standing-duty clock: a sweep now, then one per interval. */
+  // The no-shipper fallback checkpoints at 4x the shipper's default group
+  // threshold — late enough never to fire while a healthy shipper exists.
+  static readonly FALLBACK_CHECKPOINT_WAL_BYTES = 64 * 1024 * 1024;
+
+  /**
+   * One WAL capture tick (issue #408). Public so the BackupService's drain
+   * loop and tests can force a capture at a known instant; the plane's own
+   * `walTimer` is just this on a 60 s clock.
+   */
+  walTick(): void {
+    if (this.closed) return;
+    // Admin registries and a lease-conflicted second gateway may open the
+    // databases, but must never capture, checkpoint, or mutate shipper state.
+    if (!this.ownsWalLifecycle) return;
+    if (!this.walShipper) {
+      // No shipper (its construction failed on a file-backed vault) — but
+      // `wal_autocheckpoint = 0` is set on every connection regardless, so
+      // WITHOUT a checkpointer the WALs would grow unboundedly for the
+      // whole gateway uptime. Fall back to a plain bounded checkpoint.
+      try {
+        const wal = path.join(this.dir, 'vault.db-wal');
+        const jwal = path.join(this.dir, 'journal.db-wal');
+        const oversized = (p: string) =>
+          existsSync(p) && statSync(p).size > VaultPlane.FALLBACK_CHECKPOINT_WAL_BYTES;
+        if (oversized(wal) || oversized(jwal)) {
+          this.gateway.checkpoint(this.ownerCredential);
+          this.logger.warn(
+            'vault plane: WAL checkpointed by fallback (no wal shipper — backups are NOT capturing this vault)',
+          );
+        }
+      } catch (err) {
+        this.logger.warn(
+          `vault plane: fallback checkpoint failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+      return;
+    }
+    try {
+      const report = this.walShipper.tick();
+      for (const brk of report.breaks) {
+        this.logger.warn(`vault plane: wal generation break (${brk.db}: ${brk.reason})`);
+      }
+      for (const err of report.errors) {
+        this.logger.warn(`vault plane: wal capture error (${err.db}): ${err.message}`);
+      }
+    } catch (err) {
+      this.logger.warn(
+        `vault plane: wal tick failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  /** Begin the standing-duty clocks: a sweep now, then one per interval;
+   *  WAL capture (issue #408) now, then one per `walTickMs`. */
   start(): void {
     this.runSweep();
     this.sweepTimer = setInterval(() => this.runSweep(), this.sweepIntervalMs);
     this.sweepTimer.unref();
+    if (!this.ownsWalLifecycle) return;
+    // Schedule the fallback too: if shipper construction failed, walTick()
+    // remains the only bound on WAL growth after autocheckpoint was disabled.
+    this.walTick();
+    this.walTimer = setInterval(() => this.walTick(), this.walTickMs);
+    this.walTimer.unref();
   }
 
   private runSweep(): void {
@@ -1579,12 +1686,34 @@ export class VaultPlane {
       if (Date.now() - this.lastJournalArchivalAt >= JOURNAL_ARCHIVAL_MIN_INTERVAL_MS) {
         this.lastJournalArchivalAt = Date.now();
         try {
+          // Ship the journal's pending WAL bytes BEFORE archival: the
+          // archival VACUUM rewrites the whole file through the WAL, and a
+          // generation roll right after (below) absorbs that rewrite into a
+          // fresh, now-smaller base instead of shipping a DB-sized WAL
+          // burst (issue #408 — journal archival is the one sanctioned bulk
+          // rewrite of a shipped database).
+          this.walTick();
           const archived = runJournalArchival(this.db);
           if (archived.rowsArchived > 0) {
             this.logger.info(
               `vault plane: journal archival rowsArchived=${archived.rowsArchived} ` +
                 `manifests=${archived.manifests.length} vacuum=${archived.reclaim.mode}`,
             );
+            // captureFirst: false — the JOURNAL's WAL right now holds the
+            // archival VACUUM's whole-database rewrite; the fresh base the
+            // roll takes already contains every byte of it, so capturing
+            // first would ship a DB-sized burst into a generation whose next
+            // event is its own retirement. (The VAULT's pending bytes still
+            // ship: the flag names one database, and the vault's WAL holds
+            // nothing unusual.)
+            //
+            // This re-bases the VAULT too, and that is required, not
+            // incidental (issue #408): the two generations break together or
+            // the snapshot that follows would pair a journal base from after
+            // the archival with a vault base from before it — two instants,
+            // no coordinated restore point between them, and the producer
+            // refuses to register such a pair at all.
+            this.walShipper?.rollGeneration('journal', 'journal-archival', { captureFirst: false });
           }
         } catch (err) {
           this.logger.warn(
@@ -1631,19 +1760,40 @@ export class VaultPlane {
       });
   }
 
-  /** Stop the clock, checkpoint the WALs, close the files. Idempotent. */
+  /** Stop the clocks, checkpoint the WALs, close the files. Idempotent. */
   stop(): void {
     if (this.closed) return;
     this.closed = true;
     if (this.sweepTimer) clearInterval(this.sweepTimer);
-    try {
-      this.gateway.checkpoint(this.ownerCredential);
-    } catch (err) {
-      this.logger.warn(
-        `vault plane: checkpoint on stop failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
+    if (this.walTimer) clearInterval(this.walTimer);
+    if (this.walShipper) {
+      // Shipper-owned shutdown (issue #408): run optimize + a final ship +
+      // TRUNCATE inside the shipper (invariant I2 — it is the only
+      // checkpointer), then close the handles without a second optimize
+      // (whose WAL writes would be folded by SQLite's close-checkpoint
+      // behind the shipper's back — a spurious foreign-checkpoint per
+      // restart).
+      try {
+        this.walShipper.close();
+      } catch (err) {
+        this.logger.warn(
+          `vault plane: wal shipper close failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+      this.db.close({ skipOptimize: true });
+      return;
     }
-    this.db.close();
+    if (this.ownsWalLifecycle) {
+      try {
+        this.gateway.checkpoint(this.ownerCredential);
+      } catch (err) {
+        this.logger.warn(
+          `vault plane: checkpoint on stop failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+    // A non-owner must not run optimize/checkpoint work during close either.
+    this.db.close({ skipOptimize: !this.ownsWalLifecycle });
   }
 }
 

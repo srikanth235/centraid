@@ -233,7 +233,10 @@ const TRUNCATION_MARKER = ' ...(truncated for search index)';
  * for a trigger that runs once per write, and keeps this a pure SQL
  * expression with no bound parameters (trigger bodies are static DDL).
  */
-export function truncateForIndex(expr: string, budgetChars: number = FTS_BODY_INDEX_BUDGET_CHARS): string {
+export function truncateForIndex(
+  expr: string,
+  budgetChars: number = FTS_BODY_INDEX_BUDGET_CHARS,
+): string {
   return `(CASE WHEN ${expr} IS NULL THEN NULL
                  WHEN length(${expr}) > ${budgetChars}
                  THEN substr(${expr}, 1, ${budgetChars}) || '${TRUNCATION_MARKER}'

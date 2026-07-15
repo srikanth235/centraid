@@ -66,13 +66,17 @@ async function main() {
     const settingsLink = page.getByRole('button', { name: 'Settings → Storage' });
     await settingsLink.waitFor({ state: 'visible', timeout: 10_000 });
     await settingsLink.click();
-    await page.getByRole('heading', { name: 'Storage' }).waitFor({ state: 'visible', timeout: 15_000 });
+    await page
+      .getByRole('heading', { name: 'Storage' })
+      .waitFor({ state: 'visible', timeout: 15_000 });
     await page.getByText('No storage connections configured yet.').waitFor({
       state: 'visible',
       timeout: 10_000,
     });
     await page.screenshot({ path: path.join(OUT_DIR, 'gw02-2-settings-storage-empty.png') });
-    console.log('[gw02] deep-linked straight into Settings → Storage, empty state renders there too');
+    console.log(
+      '[gw02] deep-linked straight into Settings → Storage, empty state renders there too',
+    );
 
     // 3 — open the add-connection form and fill in a byo-s3 connection
     // pointed at the real local S3TestServer.
@@ -125,14 +129,18 @@ async function main() {
       { timeout: 10_000 },
     );
     await page.screenshot({ path: path.join(OUT_DIR, 'gw02-5-confirm-kit-409.png') });
-    console.log('[gw02] confirming the recovery kit 409s honestly (backup not wired on the embedded gateway) — dialog stays open with the real error');
+    console.log(
+      '[gw02] confirming the recovery kit 409s honestly (backup not wired on the embedded gateway) — dialog stays open with the real error',
+    );
 
     // 6 — "Proceed anyway" bypasses the gate with {force: true} and the
     // connection is created for real.
     await page.getByRole('button', { name: 'Proceed anyway' }).click();
     await page.getByRole('dialog').waitFor({ state: 'hidden', timeout: 10_000 });
     const connectionRow = page.getByTestId('storage-connection-row');
-    await connectionRow.getByText('Local S3 test bucket').waitFor({ state: 'visible', timeout: 10_000 });
+    await connectionRow
+      .getByText('Local S3 test bucket')
+      .waitFor({ state: 'visible', timeout: 10_000 });
     await connectionRow.getByText('BYO S3').waitFor({ state: 'visible', timeout: 5000 });
     await page.screenshot({ path: path.join(OUT_DIR, 'gw02-6-connection-created.png') });
     console.log('[gw02] "Proceed anyway" created the connection for real (force:true bypass)');
@@ -148,16 +156,26 @@ async function main() {
     const s3SawRequest = s3.requests.some((r) => r.method === 'HEAD');
     assert(s3SawRequest, 'the real S3TestServer actually received a signed HEAD request');
     await page.screenshot({ path: path.join(OUT_DIR, 'gw02-7-test-connection-ok.png') });
-    console.log(`[gw02] Test connection: "${testResult}" — S3TestServer saw ${s3.requests.length} real request(s)`);
+    console.log(
+      `[gw02] Test connection: "${testResult}" — S3TestServer saw ${s3.requests.length} real request(s)`,
+    );
 
     // 8 — back on the Gateway page, the Storage card reflects the new
     // connection: byo-s3 has no provider usage endpoint, so it renders the
     // "locally verified" line, no quota bar.
     await gatewayNav.click();
     await page.getByText('Local S3 test bucket').waitFor({ state: 'visible', timeout: 15_000 });
-    const storageCardText = await page.locator('[data-testid="storage-connection-panel"]').textContent();
-    assert(storageCardText.includes('locally verified'), 'Storage card shows the locally-verified drift line');
-    assert(!storageCardText.includes('of') || !(await page.locator('[data-testid="quota-bar"]').count()), 'no quota bar for a byo-s3 connection');
+    const storageCardText = await page
+      .locator('[data-testid="storage-connection-panel"]')
+      .textContent();
+    assert(
+      storageCardText.includes('locally verified'),
+      'Storage card shows the locally-verified drift line',
+    );
+    assert(
+      !storageCardText.includes('of') || !(await page.locator('[data-testid="quota-bar"]').count()),
+      'no quota bar for a byo-s3 connection',
+    );
     await page.screenshot({ path: path.join(OUT_DIR, 'gw02-8-storage-card-with-connection.png') });
     console.log('[gw02] Gateway page Storage card reflects the configured connection');
 
@@ -173,7 +191,9 @@ async function main() {
     const storageNavItem = page.getByRole('button', { name: 'Storage', exact: true });
     await storageNavItem.waitFor({ state: 'visible', timeout: 10_000 });
     await storageNavItem.click();
-    await page.getByText('stores blobs locally only').waitFor({ state: 'visible', timeout: 10_000 });
+    await page
+      .getByText('stores blobs locally only')
+      .waitFor({ state: 'visible', timeout: 10_000 });
 
     await page.getByRole('button', { name: 'Attach' }).click();
     await page.getByRole('dialog', { name: 'Confirm your recovery kit' }).waitFor({
@@ -182,15 +202,19 @@ async function main() {
     });
     await page.getByRole('button', { name: 'Proceed anyway' }).click();
     await page.getByRole('dialog').waitFor({ state: 'hidden', timeout: 10_000 });
-    await page.getByText('This vault\'s blobs replicate through').waitFor({
+    await page.getByText("This vault's blobs replicate through").waitFor({
       state: 'visible',
       timeout: 10_000,
     });
     await page.screenshot({ path: path.join(OUT_DIR, 'gw02-9-vault-attached.png') });
-    console.log('[gw02] per-vault CAS attach: gated the same way, "proceed anyway" attached it for real');
+    console.log(
+      '[gw02] per-vault CAS attach: gated the same way, "proceed anyway" attached it for real',
+    );
 
     await page.getByRole('button', { name: 'Detach' }).click();
-    await page.getByText('stores blobs locally only').waitFor({ state: 'visible', timeout: 10_000 });
+    await page
+      .getByText('stores blobs locally only')
+      .waitFor({ state: 'visible', timeout: 10_000 });
     console.log('[gw02] Detach reverted the vault to local-only (ungated, as expected)');
 
     console.log('[gw02] PASS');

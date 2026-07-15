@@ -144,13 +144,17 @@ function RecoveryKitGateDialog({
   };
 
   return (
-    <div className={modalCss.backdrop} onClick={onClose}>
-      <div
-        className={modalCss.card}
-        role="dialog"
-        aria-label="Confirm your recovery kit"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div
+      className={modalCss.backdrop}
+      role="presentation"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') onClose();
+      }}
+    >
+      <div className={modalCss.card} role="dialog" aria-label="Confirm your recovery kit">
         <button
           type="button"
           className={cx(buttonCss.icon, modalCss.close)}
@@ -676,12 +680,16 @@ export default function SettingsStorageScreen({
 
   const onDetach = (): void => {
     setAttachBusy(true);
-    void detachVaultConnection()
-      .then((next) => {
+    void (async () => {
+      try {
+        const next = await detachVaultConnection();
         if (mountedRef.current) setBlobStore(next);
-      })
-      .catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)))
-      .finally(() => setAttachBusy(false));
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : String(err));
+      } finally {
+        setAttachBusy(false);
+      }
+    })();
   };
 
   return (

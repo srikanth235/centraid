@@ -115,7 +115,9 @@ export function scanInlineBodyViolations(
     ['core.document', 'core_document', 'current_content_id'],
   ] as const) {
     const hits = vault
-      .prepare(`SELECT DISTINCT ${column} AS content_id FROM ${table} WHERE ${column} IN (${placeholders})`)
+      .prepare(
+        `SELECT DISTINCT ${column} AS content_id FROM ${table} WHERE ${column} IN (${placeholders})`,
+      )
       .all(...ids) as { content_id: string }[];
     for (const h of hits) add(entity, h.content_id);
   }

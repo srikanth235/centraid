@@ -41,7 +41,9 @@ export function sealBlobStream(key: Buffer, sha: string): Transform {
       callback(null, Buffer.concat(out));
     },
     flush(callback) {
-      const out = prefixSent ? [cipher.final(), cipher.getAuthTag()] : [nonce, cipher.final(), cipher.getAuthTag()];
+      const out = prefixSent
+        ? [cipher.final(), cipher.getAuthTag()]
+        : [nonce, cipher.final(), cipher.getAuthTag()];
       callback(null, Buffer.concat(out));
     },
   });
@@ -57,4 +59,3 @@ export function unsealBlob(key: Buffer, sha: string, sealed: Buffer): Buffer {
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(ct), decipher.final()]);
 }
-

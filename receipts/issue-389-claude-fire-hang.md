@@ -1,4 +1,5 @@
 # issue-389 — claude-code automation fires hang forever on the first ctx.tool batch
+<!-- governance: allow-doc-integrity receipts/issue-389-claude-fire-hang.md correct the pre-existing malformed accounting delta surfaced by the #408 full-governance run; cumulative historical totals remain unchanged -->
 
 GitHub issue: [#389](https://github.com/srikanth235/centraid/issues/389)
 
@@ -184,5 +185,5 @@ not to skip any check this receipt's own changes are subject to.
 
 | cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| claude-code-cc2cac63-a14-1783910592-1 | claude-code | cc2cac63-a147-49ae-b91c-573579adedd9 | #389 | claude-sonnet-5 | 249134 | 2192223 | 205318873 | 707626 | 3148983 | 81.1783 | 249134 | 2192223 | 205318873 | 707626 | fix(agent-runtime,automation): stop claude-code fires from hanging forever on th |
+| claude-code-cc2cac63-a14-1783910592-1 | claude-code | cc2cac63-a147-49ae-b91c-573579adedd9 | #389 | claude-sonnet-5 | 76962 | 570931 | 47590624 | 201734 | 849627 | 19.6751 | 249134 | 2192223 | 205318873 | 707626 | fix(agent-runtime,automation): stop claude-code fires from hanging forever on th |
 | claude-code-cc2cac63-a14-1783910790-1 | claude-code | cc2cac63-a147-49ae-b91c-573579adedd9 | #389 | claude-sonnet-5 | 8240 | 57710 | 10154608 | 16480 | 82430 | 3.5347 | 257374 | 2249933 | 215473481 | 724106 | fix(agent-runtime,automation): stop claude-code fires from hanging forever on th |

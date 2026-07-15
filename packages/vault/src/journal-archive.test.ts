@@ -38,7 +38,13 @@ function seedProvenance(
 function seedInvocationCluster(
   db: VaultDb,
   args: { requestedAt: string; receiptAt: string },
-): { invocationId: string; receiptId: string; checkId: string; evidenceId: string; explanationId: string } {
+): {
+  invocationId: string;
+  receiptId: string;
+  checkId: string;
+  evidenceId: string;
+  explanationId: string;
+} {
   const invocationId = uuidv7();
   const receiptId = uuidv7();
   // Insert order respects the mutual FK at CREATE time (no defer here, only
@@ -137,7 +143,10 @@ test('a provenance row is kept when a live row still chains back to it', () => {
 
 test('archives a full invocation cluster (invocation, receipt, check, evidence, explanation) as one unit', () => {
   const db = openVaultDb({});
-  const old = seedInvocationCluster(db, { requestedAt: daysAgoIso(120), receiptAt: daysAgoIso(120) });
+  const old = seedInvocationCluster(db, {
+    requestedAt: daysAgoIso(120),
+    receiptAt: daysAgoIso(120),
+  });
   const fresh = seedInvocationCluster(db, { requestedAt: daysAgoIso(1), receiptAt: daysAgoIso(1) });
 
   const result = runJournalArchival(db, { windowDays: 90 });
@@ -165,9 +174,9 @@ test('archives a full invocation cluster (invocation, receipt, check, evidence, 
 
   const segment = readArchivedSegment(db, manifest);
   expect(segment.rows.agent_command_invocation).toHaveLength(1);
-  expect((segment.rows.agent_command_invocation![0] as { invocation_id: string }).invocation_id).toBe(
-    old.invocationId,
-  );
+  expect(
+    (segment.rows.agent_command_invocation![0] as { invocation_id: string }).invocation_id,
+  ).toBe(old.invocationId);
   expect(verifyArchivedSegment(db, manifest).ok).toBe(true);
 });
 
@@ -208,7 +217,10 @@ test('the manifest chain links across archival runs — each chain_hash folds th
   expect(second.manifests[0]!.prevManifestId).toBe(first.manifests[0]!.manifestId);
 
   const all = listArchiveManifests(db.journal, 'provenance');
-  expect(all.map((m) => m.manifestId)).toEqual([first.manifests[0]!.manifestId, second.manifests[0]!.manifestId]);
+  expect(all.map((m) => m.manifestId)).toEqual([
+    first.manifests[0]!.manifestId,
+    second.manifests[0]!.manifestId,
+  ]);
   expect(verifyArchivedSegment(db, all[1]!).ok).toBe(true);
 });
 

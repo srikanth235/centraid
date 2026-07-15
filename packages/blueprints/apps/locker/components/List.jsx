@@ -79,7 +79,9 @@ export function LockerList({
             <div className="ic">
               <Icon name={search.trim() ? 'search' : 'lock'} sw={1.6} size={20} />
             </div>
-            <div className="v-list-empty-title">{search.trim() ? 'No matches' : 'Nothing here'}</div>
+            <div className="v-list-empty-title">
+              {search.trim() ? 'No matches' : 'Nothing here'}
+            </div>
             <div className="v-list-empty-sub">
               {search.trim()
                 ? 'Try a different search term.'

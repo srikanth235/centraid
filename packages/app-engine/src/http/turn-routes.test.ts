@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#408) one HTTP turn-routing suite sharing the same runtime and conversation-runner fixture; splitting would duplicate the protocol harness and its state assertions
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs, mkdirSync, mkdtempSync } from 'node:fs';
 import path from 'node:path';

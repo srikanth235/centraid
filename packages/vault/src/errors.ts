@@ -1,3 +1,4 @@
+/* eslint-disable max-classes-per-file -- domain error and disk-full classifier are one error surface (#408) */
 // Disk-full classification (issue #351 wave 4): a vault that runs out of
 // free space must fail closed — never corrupt vault.db (SQLite's own
 // atomicity already guarantees that: a failed transaction auto-rolls-back

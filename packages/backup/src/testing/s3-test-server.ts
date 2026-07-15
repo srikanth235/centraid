@@ -183,7 +183,11 @@ export class S3TestServer {
       return;
     }
 
-    if (req.method === 'PUT' && url.searchParams.has('uploadId') && url.searchParams.has('partNumber')) {
+    if (
+      req.method === 'PUT' &&
+      url.searchParams.has('uploadId') &&
+      url.searchParams.has('partNumber')
+    ) {
       const uploadId = url.searchParams.get('uploadId') ?? '';
       const partNumber = Number(url.searchParams.get('partNumber'));
       const upload = this.multipart.get(uploadId);

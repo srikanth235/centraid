@@ -218,7 +218,10 @@ async function startFakeGateway(): Promise<FakeGateway> {
 
     // GET /v1/backup/vaults/:id/usage — Layer-1 optional `usage` capability
     if (req.method === 'GET' && rest === '/usage') {
-      jsonBody(res, 200, { backup: usageReportFor(targetId, 'backup'), cas: usageReportFor(targetId, 'cas') });
+      jsonBody(res, 200, {
+        backup: usageReportFor(targetId, 'backup'),
+        cas: usageReportFor(targetId, 'cas'),
+      });
       return;
     }
 

@@ -108,5 +108,10 @@ export async function ensureProviderCasTarget(
     targetId,
     mode: 'read-write',
   });
-  return { endpoint: grant.endpoint, region: grant.region, bucket: grant.bucket, prefix: grant.prefix };
+  return {
+    endpoint: grant.endpoint,
+    region: grant.region,
+    bucket: grant.bucket,
+    prefix: grant.prefix,
+  };
 }

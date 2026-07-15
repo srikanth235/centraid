@@ -119,7 +119,9 @@ export class RemoteBackupProvider implements BackupProvider {
     mode: 'read' | 'read-write',
   ): Promise<ObjectStore> {
     const grant = await this.requestGrant(targetId, store, mode);
-    return new S3ObjectStore(grant, { refreshGrant: () => this.requestGrant(targetId, store, mode) });
+    return new S3ObjectStore(grant, {
+      refreshGrant: () => this.requestGrant(targetId, store, mode),
+    });
   }
 
   async registerSnapshot(targetId: string, reg: SnapshotRegistration): Promise<SnapshotRow> {

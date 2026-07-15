@@ -178,22 +178,19 @@ test('gzip-encoded tunnel responses are decoded before caching', async ({ page }
 });
 
 test('unpair purges the tunnel caches but keeps the shell cache', async ({ page }) => {
-  await page.evaluate((u) => fetch(u).then((r) => r.text()), '/__centraid_iroh__/b/centraid/_vault/blobs/x');
+  await page.evaluate(
+    (u) => fetch(u).then((r) => r.text()),
+    '/__centraid_iroh__/b/centraid/_vault/blobs/x',
+  );
 
-  await expect
-    .poll(() => page.evaluate(() => caches.has('centraid-tunnel-blobs-v7')))
-    .toBe(true);
+  await expect.poll(() => page.evaluate(() => caches.has('centraid-tunnel-blobs-v7'))).toBe(true);
 
   await page.evaluate(() =>
     navigator.serviceWorker.controller?.postMessage({ type: 'centraid:purge-tunnel-cache' }),
   );
 
-  await expect
-    .poll(() => page.evaluate(() => caches.has('centraid-tunnel-blobs-v7')))
-    .toBe(false);
-  await expect
-    .poll(() => page.evaluate(() => caches.has('centraid-tunnel-assets-v7')))
-    .toBe(false);
+  await expect.poll(() => page.evaluate(() => caches.has('centraid-tunnel-blobs-v7'))).toBe(false);
+  await expect.poll(() => page.evaluate(() => caches.has('centraid-tunnel-assets-v7'))).toBe(false);
   // The generic shell cache is not gateway-specific and survives an unpair.
   expect(await page.evaluate(() => caches.has('centraid-shell-v7'))).toBe(true);
 });
@@ -213,8 +210,6 @@ test('a fresh worker install purges stale-version caches', async ({ page }) => {
     await navigator.serviceWorker.ready;
   });
 
-  await expect
-    .poll(() => page.evaluate(() => caches.has('centraid-shell-legacy')))
-    .toBe(false);
+  await expect.poll(() => page.evaluate(() => caches.has('centraid-shell-legacy'))).toBe(false);
   expect(await page.evaluate(() => caches.has('centraid-shell-v7'))).toBe(true);
 });

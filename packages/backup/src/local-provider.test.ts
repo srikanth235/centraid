@@ -100,7 +100,9 @@ describe('LocalBackupProvider lifecycle edge cases', () => {
     await provider.purgeTarget(targetId);
     const rows = await provider.listSnapshots(targetId, { includePruned: true });
     expect(rows).toEqual([]);
-    const roAfterPurge = await provider.openDataPlane(targetId, 'backup', 'read').catch((e: unknown) => e);
+    const roAfterPurge = await provider
+      .openDataPlane(targetId, 'backup', 'read')
+      .catch((e: unknown) => e);
     expect(roAfterPurge).toBeInstanceOf(BackupProviderError);
   });
 

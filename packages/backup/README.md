@@ -26,13 +26,16 @@ Zero runtime dependencies — Node >=22 builtins only (`node:crypto` webcrypto,
 - **`cas-grant.ts`** — `requestStorageGrant` / `requestCasGrant`: a standalone
   Layer-1 grant path for a `cas` consumer (e.g. the vault's `S3BlobStore`)
   that has no business pulling in the snapshot engine.
-- **`chunker.ts`** — FastCDC content-defined chunking with a frozen,
-  deterministic gear table (format `/1`: min 512 KiB, avg 1 MiB, max 4 MiB).
+- **`parts.ts`** — deterministic fixed-size splitting (format `/1`: 16 MiB)
+  for encrypted, keyed-content-addressed snapshot objects.
 - **`crypto.ts`** — AES-256-GCM object encryption, HKDF-SHA256 per-vault key
   derivation, keyed chunk ids, and keyring (epoch) custody.
 - **`manifest.ts`** — canonical-JSON manifest build/seal/open/verify.
 - **`engine.ts`** — provider-agnostic `createSnapshot` / `restoreSnapshot` /
   `verifySnapshot` / `writeRecoveryKit`.
+- **`wal-format.ts`** / **`wal-restore.ts`** — authenticated WAL segment,
+  closer and pair-marker codecs; rolling SQLite checksum validation; and
+  coordinated two-database PITR replay.
 - **`local-provider.ts`** — a full `BackupProvider` backed by the local
   filesystem (`purgeAuthTier: 'api-key'` — the local disk IS the user's own
   custody). Doubles as this package's conformance reference implementation.

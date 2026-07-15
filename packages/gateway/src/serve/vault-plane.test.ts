@@ -30,6 +30,28 @@ function openPlane(dir: string): VaultPlane {
   return plane;
 }
 
+test("a WAL-disabled admin plane never checkpoints another process's stream on stop", async () => {
+  const dir = await tempDir();
+  const plane = openVaultPlane({
+    dir,
+    logger: silentLogger,
+    ownerName: 'Priya',
+    enableWalShipper: false,
+  });
+  cleanups.push(() => plane.stop());
+  expect(plane.walShipper).toBeUndefined();
+
+  let checkpoints = 0;
+  plane.gateway.checkpoint = () => {
+    checkpoints++;
+    return { vault: 'ok', journal: 'ok' };
+  };
+
+  plane.stop();
+
+  expect(checkpoints).toBe(0);
+});
+
 function seedCalendar(plane: VaultPlane): string {
   const id = uuidv7();
   plane.db.vault

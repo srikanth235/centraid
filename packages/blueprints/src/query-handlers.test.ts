@@ -1,3 +1,4 @@
+// eslint-disable-next-line typescript-eslint/ban-ts-comment -- browser-JS fixtures intentionally lack TS declarations (#408)
 // @ts-nocheck
 // Directly exercises a few blueprint query handlers (browser ES modules under
 // apps/*/queries) with a mocked `ctx.vault`, the way the runtime invokes them

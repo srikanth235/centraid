@@ -296,10 +296,19 @@ export function openJournalDb(dbPath: string): DatabaseSync {
   // immediately. Load-bearing twice over: the multi-client gateway
   // (standalone daemon) and the worker subprocesses that open the SAME
   // journal file the gateway's vault plane holds open.
+  //
+  // wal_autocheckpoint=0: the vault's WAL shipper (issue #408) is the sole
+  // checkpointer of journal.db — its backup segments are raw WAL byte
+  // ranges, valid only while the WAL is append-only between the shipper's
+  // own TRUNCATE checkpoints. A default-autocheckpointing ledger connection
+  // (this one commits!) would reset the WAL in place at the 1000-page
+  // threshold and force the shipper into a full base re-upload. Per
+  // connection, so EVERY by-path opener needs it, not just the vault's.
   db.exec(`
     PRAGMA journal_mode=WAL;
     PRAGMA foreign_keys=ON;
     PRAGMA busy_timeout=30000;
+    PRAGMA wal_autocheckpoint=0;
   `);
   ensureConversationLedger(db);
   return db;

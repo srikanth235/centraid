@@ -11,8 +11,10 @@
 import { dialog } from 'electron';
 import { promises as fs } from 'node:fs';
 import { loadSettings } from './settings.js';
-import { exportGatewayDiagnostics as exportGatewayDiagnosticsCore } from './gateway-ops-core.js';
-import { exportGatewayRecoveryKit as exportGatewayRecoveryKitCore } from './gateway-ops-core.js';
+import {
+  exportGatewayDiagnostics as exportGatewayDiagnosticsCore,
+  exportGatewayRecoveryKit as exportGatewayRecoveryKitCore,
+} from './gateway-ops-core.js';
 
 export type { ExportDiagnosticsResult } from './gateway-ops-core.js';
 

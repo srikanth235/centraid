@@ -36,7 +36,12 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { S3BlobStore, custodyStateByteCounts, custodyStateCounts, readBlobStoreSettings } from '@centraid/vault';
+import {
+  S3BlobStore,
+  custodyStateByteCounts,
+  custodyStateCounts,
+  readBlobStoreSettings,
+} from '@centraid/vault';
 import { requestCasGrant } from '@centraid/backup';
 import type { RouteHandler } from '../serve/build-gateway.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
@@ -172,7 +177,9 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
               error: sweep.lastError,
               consecutiveFailures: sweep.consecutiveFailures,
             },
-            ...(settings.throttleBytesPerSec ? { throttleBytesPerSec: settings.throttleBytesPerSec } : {}),
+            ...(settings.throttleBytesPerSec
+              ? { throttleBytesPerSec: settings.throttleBytesPerSec }
+              : {}),
           };
         });
         return sendJson(res, 200, { vaults });
@@ -262,7 +269,10 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
         if (method === 'GET') {
           const connection = await deps.storageConnections.get(id);
           if (!connection) {
-            return sendJson(res, 404, { error: 'not_found', message: `unknown storage connection "${id}"` });
+            return sendJson(res, 404, {
+              error: 'not_found',
+              message: `unknown storage connection "${id}"`,
+            });
           }
           return sendJson(res, 200, { connection });
         }
@@ -283,7 +293,10 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
             return sendConnectionError(res, err);
           }
         }
-        return sendJson(res, 405, { error: 'method_not_allowed', message: 'GET, PATCH, DELETE only' });
+        return sendJson(res, 405, {
+          error: 'method_not_allowed',
+          message: 'GET, PATCH, DELETE only',
+        });
       }
 
       if (segments.length === 2 && segments[1] === 'test') {

@@ -103,7 +103,11 @@ function buildDataDirSummary(dataDir: string): DataDirSummary {
 
   let vaultCount: number | undefined;
   try {
-    const registry = openVaultRegistry({ rootDir: layout.vaultDir, logger: quietLogger });
+    const registry = openVaultRegistry({
+      rootDir: layout.vaultDir,
+      logger: quietLogger,
+      enableWalShipper: false,
+    });
     try {
       vaultCount = registry.list().length;
     } finally {

@@ -138,9 +138,7 @@ export async function readStarred(ctx, ids, purpose, tables) {
   const vocab = tables ?? (await readConceptTables(ctx, purpose));
   const flagsScheme = vocab.schemes.find((s) => s.uri === FLAGS_SCHEME_URI);
   const starredConcept = flagsScheme
-    ? vocab.concepts.find(
-        (c) => c.scheme_id === flagsScheme.scheme_id && c.notation === 'starred',
-      )
+    ? vocab.concepts.find((c) => c.scheme_id === flagsScheme.scheme_id && c.notation === 'starred')
     : undefined;
   if (!starredConcept) return starred;
   const tags = await ctx.vault.read({

@@ -9,7 +9,9 @@ import {
   decrypt,
   deriveDataKey,
   deriveDedupKey,
+  deriveNonce,
   encrypt,
+  encryptWithNonce,
   loadKeyring,
   masterKeyForEpoch,
   rotateKeyring,
@@ -76,6 +78,69 @@ describe('encrypt/decrypt', () => {
   test('truncated blob throws', () => {
     const key = new Uint8Array(32).fill(1);
     expect(() => decrypt(key, new Uint8Array(10))).toThrow();
+  });
+});
+
+describe('deriveNonce / encryptWithNonce (deterministic sealing — /1, issue #408)', () => {
+  const key = new Uint8Array(32).fill(0x11);
+
+  test('deriveNonce yields 12 bytes and is deterministic for the same (key, info)', () => {
+    const a = deriveNonce(key, 'centraid-backup:wal-nonce:vault:g:0:0:100');
+    const b = deriveNonce(key, 'centraid-backup:wal-nonce:vault:g:0:0:100');
+    expect(a.length).toBe(12);
+    expect([...a]).toEqual([...b]);
+  });
+
+  test('deriveNonce is info-sensitive — one character of drift means a fresh nonce', () => {
+    const a = deriveNonce(key, 'centraid-backup:wal-nonce:vault:g:0:0:100');
+    const b = deriveNonce(key, 'centraid-backup:wal-nonce:vault:g:0:0:101');
+    expect([...a]).not.toEqual([...b]);
+  });
+
+  test('deriveNonce is key-sensitive', () => {
+    const otherKey = new Uint8Array(32).fill(0x12);
+    const info = 'same info string';
+    expect([...deriveNonce(key, info)]).not.toEqual([...deriveNonce(otherKey, info)]);
+  });
+
+  test('encryptWithNonce is fully deterministic and exposes the nonce as the first 12 bytes', () => {
+    const nonce = deriveNonce(key, 'nonce-info');
+    const plain = new TextEncoder().encode('deterministic payload');
+    const aad = new TextEncoder().encode('bound address');
+    const a = encryptWithNonce(key, nonce, plain, aad);
+    const b = encryptWithNonce(key, nonce, plain, aad);
+    // G7: a retried upload is byte-identical (idempotent PUTs).
+    expect([...a]).toEqual([...b]);
+    expect([...a.subarray(0, 12)]).toEqual([...nonce]);
+    expect(a.length).toBe(12 + plain.length + 16);
+  });
+
+  test('AAD roundtrip: decrypt succeeds only with the exact AAD it was sealed under', () => {
+    const nonce = deriveNonce(key, 'aad-roundtrip');
+    const plain = new TextEncoder().encode('wal segment bytes');
+    const aad = new TextEncoder().encode('centraid-wal/1:vault-1:vault:g:0:0:17');
+    const blob = encryptWithNonce(key, nonce, plain, aad);
+    expect([...decrypt(key, blob, aad)]).toEqual([...plain]);
+  });
+
+  test('AAD mismatch throws — a swapped address must fail the tag check', () => {
+    const nonce = deriveNonce(key, 'aad-mismatch');
+    const plain = new TextEncoder().encode('wal segment bytes');
+    const aad = new TextEncoder().encode('centraid-wal/1:vault-1:vault:g:0:0:17');
+    const blob = encryptWithNonce(key, nonce, plain, aad);
+    const otherAad = new TextEncoder().encode('centraid-wal/1:vault-1:vault:g:1:0:17');
+    expect(() => decrypt(key, blob, otherAad)).toThrow();
+    // Dropping the AAD entirely must fail too.
+    expect(() => decrypt(key, blob)).toThrow();
+    // And supplying an AAD for a blob sealed without one.
+    const noAadBlob = encryptWithNonce(key, nonce, plain);
+    expect(() => decrypt(key, noAadBlob, aad)).toThrow();
+  });
+
+  test('encryptWithNonce rejects a nonce that is not 12 bytes', () => {
+    const plain = new TextEncoder().encode('x');
+    expect(() => encryptWithNonce(key, new Uint8Array(11), plain)).toThrow(/12 bytes/);
+    expect(() => encryptWithNonce(key, new Uint8Array(16), plain)).toThrow(/12 bytes/);
   });
 });
 

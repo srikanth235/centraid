@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#404) one performance-waterfall suite sharing a single timing vocabulary and browser fixture; splitting the assertions would obscure the cross-flow budget comparison
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -173,7 +174,9 @@ async function ensureInstalled(page: Page): Promise<void> {
   await expect(page.locator(`[data-app-id="${APP_ID}"]`).first()).toBeVisible();
 }
 
-async function openInstalledAndMeasure(page: Page): Promise<{ summary: OpenSummary; elapsedMs: number }> {
+async function openInstalledAndMeasure(
+  page: Page,
+): Promise<{ summary: OpenSummary; elapsedMs: number }> {
   const started = Date.now();
   await page.locator(`[data-app-id="${APP_ID}"] [data-testid="app-tile"]`).first().click();
   const iframe = await page.waitForSelector('iframe[title="app"]', {
@@ -232,7 +235,11 @@ test('app-open waterfall — shell + iframe, cold vs warm (real installed app)',
     navTransferBytes: s.navTransferBytes,
     grandTotalTransferBytes: s.grandTotalTransferBytes,
     elapsedMs,
-    resources: s.resources.map((r) => ({ name: r.name, transferSize: r.transferSize, status: r.responseStatus })),
+    resources: s.resources.map((r) => ({
+      name: r.name,
+      transferSize: r.transferSize,
+      status: r.responseStatus,
+    })),
   });
 
   const report = {
@@ -349,7 +356,11 @@ test('sw tunnel cache — warm re-open collapses relay round trips and bytes', a
     const ASSET_BODY = 'a'.repeat(4096);
     const BLOB_BODY = 'b'.repeat(8192);
     navigator.serviceWorker.addEventListener('message', (event) => {
-      const msg = event.data as { type?: string; target?: string; headers?: Record<string, string> };
+      const msg = event.data as {
+        type?: string;
+        target?: string;
+        headers?: Record<string, string>;
+      };
       const port = event.ports[0];
       if (!port || msg?.type !== 'centraid:iroh-request' || !msg.target) return;
       const tally = (window as unknown as { __tunnel: Tally }).__tunnel;
@@ -392,7 +403,9 @@ test('sw tunnel cache — warm re-open collapses relay round trips and bytes', a
 
   const read = (u: string) => page.evaluate((url) => fetch(url).then((r) => r.text()), u);
   const tunnel = () =>
-    page.evaluate(() => (window as unknown as { __tunnel: { calls: number; bytes: number } }).__tunnel);
+    page.evaluate(
+      () => (window as unknown as { __tunnel: { calls: number; bytes: number } }).__tunnel,
+    );
   const reset = () =>
     page.evaluate(() => {
       (window as unknown as { __tunnel: { calls: number; bytes: number } }).__tunnel = {
@@ -474,9 +487,9 @@ test('iroh pool — connects stay far below streams (or contract is present)', a
   await page.evaluate(async (count) => {
     for (let i = 0; i < count; i += 1) {
       try {
-        await (window as unknown as { CentraidIroh: { fetch: (p: string) => Promise<Response> } }).CentraidIroh.fetch(
-          `/centraid/perf-probe/${i}`,
-        );
+        await (
+          window as unknown as { CentraidIroh: { fetch: (p: string) => Promise<Response> } }
+        ).CentraidIroh.fetch(`/centraid/perf-probe/${i}`);
       } catch {
         /* expected: no live gateway. The stream was still opened + counted. */
       }

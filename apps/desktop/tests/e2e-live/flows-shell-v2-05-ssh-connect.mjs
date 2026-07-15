@@ -96,7 +96,7 @@ async function startSecondGateway(dataDir) {
     if (child.exitCode !== null) {
       throw new Error(`second gateway exited early (code ${child.exitCode}): ${stdout}\n${stderr}`);
     }
-    await new Promise((r) => setTimeout(r, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
   const urlMatch = /listening on (\S+)/.exec(stdout);
   const tokenMatch = /token: (\S+)/.exec(stdout);
@@ -235,13 +235,13 @@ async function main() {
         // instant the poll loop above noticed the Continue button enable.
         await page.waitForTimeout(500);
         await shot('03-handshake-ladder');
-        const bodyText = await page.locator('body').innerText();
+        const bodyText = await page.locator('body').textContent();
         console.log(`[v2-05] handshake ladder state: ${JSON.stringify(bodyText.slice(0, 600))}`);
 
         const summary = page.locator('[class*="testSummary"]');
         const summaryVisible = await summary.isVisible().catch(() => false);
         if (summaryVisible) {
-          console.log(`[v2-05] test summary: ${await summary.innerText()}`);
+          console.log(`[v2-05] test summary: ${await summary.textContent()}`);
         }
 
         // If a stage failed, the retry button reads "Retry"; on success the
@@ -284,7 +284,7 @@ async function main() {
           .isVisible()
           .catch(() => false);
         if (stillOpenModal) {
-          const errText = await page.locator('body').innerText();
+          const errText = await page.locator('body').textContent();
           throw new Error(
             `ConnectFlow modal still open after Connect — error state? ${errText.slice(0, 1000)}`,
           );
@@ -297,7 +297,7 @@ async function main() {
         await page.getByRole('menu').first().waitFor({ state: 'visible', timeout: 5_000 });
         await page.waitForTimeout(600); // let stale-while-revalidate fill in
         await shot('07-switcher-two-gateways');
-        const menuText = await page.getByRole('menu').first().innerText();
+        const menuText = await page.getByRole('menu').first().textContent();
         console.log(`[v2-05] switcher after SSH connect: ${JSON.stringify(menuText)}`);
         assert(
           /SPACES\s*·\s*2/.test(menuText),
@@ -344,7 +344,7 @@ async function main() {
           await page
             .getByRole('heading', { name: 'What should we build?' })
             .waitFor({ state: 'visible', timeout: 15_000 });
-          const bodyText = await page.locator('body').innerText();
+          const bodyText = await page.locator('body').textContent();
           assert(/SSH Space/.test(bodyText), 'sidebar head does not show the SSH space as active');
           await shot('08-home-on-ssh-gateway');
         },
