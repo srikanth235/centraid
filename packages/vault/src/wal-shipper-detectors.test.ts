@@ -8,11 +8,14 @@
 
 import { createHash } from 'node:crypto';
 import {
+  closeSync,
   copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
+  readSync,
   rmSync,
   statSync,
   utimesSync,
@@ -28,6 +31,8 @@ import {
   sealWalCloser,
   sealWalPairMarker,
   sealWalSegment,
+  WAL_HEADER_BYTES,
+  walSalts,
   type WalDbName,
 } from '@centraid/backup';
 import { bootstrapVault } from './bootstrap.js';
@@ -81,6 +86,18 @@ function walPath(name: WalDbName): string {
 
 function walSize(name: WalDbName): number {
   return existsSync(walPath(name)) ? statSync(walPath(name)).size : 0;
+}
+
+/** The current WAL header's salts — the shipper's reset fingerprint. */
+function readWalSalts(name: WalDbName): { salt1: number; salt2: number } {
+  const fd = openSync(walPath(name), 'r');
+  try {
+    const header = Buffer.alloc(WAL_HEADER_BYTES);
+    readSync(fd, header, 0, WAL_HEADER_BYTES, 0);
+    return walSalts(header);
+  } finally {
+    closeSync(fd);
+  }
 }
 
 function segsOf(shipper: WalShipper, name: WalDbName): UploadableWalFile[] {
@@ -220,6 +237,65 @@ test('[G5] a foreign checkpoint breaks the generation and mints a fresh pending 
   expect(r2.breaks).toEqual([]);
   expect(r2.errors).toEqual([]);
   expect(r2.shipped.some((k) => k.startsWith(`wal/journal/${after.generation}/`))).toBe(true);
+});
+
+test('[G5][#411] a foreign checkpoint increments foreignCheckpointCount, and it survives a restart', () => {
+  const shipper = makeShipper();
+  shipper.tick();
+  // A clean stream has never seen a foreign checkpoint.
+  expect(shipper.status().foreignCheckpointCount).toBe(0);
+  expect(shipper.status().lastForeignCheckpoint).toBeUndefined();
+
+  insertJournal(2, 200, 'shipped');
+  clock += 1000;
+  shipper.tick();
+
+  // A foreign actor checkpoints journal.db behind the shipper's back.
+  insertJournal(2, 200, 'folded');
+  const c2 = new DatabaseSync(path.join(vaultDir, 'journal.db'));
+  try {
+    c2.exec('PRAGMA busy_timeout = 5000');
+    c2.exec('PRAGMA wal_checkpoint(RESTART)');
+  } finally {
+    c2.close();
+  }
+
+  clock += 1000;
+  const r = shipper.tick();
+  expect(r.breaks.find((b) => b.db === 'journal')).toBeDefined();
+
+  const status = shipper.status();
+  // Counted exactly once: journal carried the foreign reason, vault re-based in
+  // lockstep under a `coordinated:*` reason that must NOT be counted.
+  expect(status.foreignCheckpointCount).toBe(1);
+  expect(status.lastForeignCheckpoint).toMatchObject({ atMs: clock, db: 'journal' });
+  expect(status.lastForeignCheckpoint!.reason).toMatch(/main-db|salt|shrank/);
+
+  // Persisted on top-level state (not per-stream, which mintBase replaced): a
+  // fresh shipper over the same dir reads the tally straight back.
+  const shipper2 = makeShipper();
+  expect(shipper2.status().foreignCheckpointCount).toBe(1);
+  expect(shipper2.status().lastForeignCheckpoint).toEqual(status.lastForeignCheckpoint);
+});
+
+test('[G5][#411] deliberate breaks (first-run, rollGeneration) do NOT increment the counter', () => {
+  const shipper = makeShipper();
+  // The first tick mints both generations — a deliberate first-run break.
+  const r0 = shipper.tick();
+  expect(r0.breaks.map((b) => b.reason).sort()).toEqual(['first-run', 'first-run']);
+  expect(shipper.status().foreignCheckpointCount).toBe(0);
+
+  insertVault(2);
+  clock += 1000;
+  shipper.tick();
+
+  // An explicit, requested generation roll (the key-epoch-rotation hook's path)
+  // re-bases both databases — deliberate, so it is not a foreign checkpoint.
+  clock += 1000;
+  const rolled = shipper.rollGeneration('vault', 'key-epoch-rotation');
+  expect(rolled.breaks.length).toBeGreaterThan(0);
+  expect(shipper.status().foreignCheckpointCount).toBe(0);
+  expect(shipper.status().lastForeignCheckpoint).toBeUndefined();
 });
 
 test('[G5] a vanished WAL file (with shipped offset) breaks the generation', () => {
@@ -452,6 +528,85 @@ test('[G5] the quiet path does NOT break: our own TRUNCATE and our own writes ne
   expect(rolled).toBeGreaterThan(0); // rollovers really ran, so TRUNCATE really ran
   expect(shipper.status().dbs.vault!.generation).toBe(before.vault);
   expect(shipper.status().dbs.journal!.generation).toBe(before.journal);
+});
+
+// -------------------------------- I2: the capture micro read-lock (issue #411)
+
+test('[I2] the capture read-mark pins the WAL: a foreign TRUNCATE/RESTART busys, no reset', () => {
+  // Action 2 of issue #411, belt-and-suspenders to the after-the-fact detection.
+  // capture() holds a short read snapshot over the byte copy — the SAME
+  // acquisition the shipper uses: a read-only connection, BEGIN, then a read
+  // that materializes the snapshot and grabs the WAL read mark. While that mark
+  // is held, NO checkpointer in ANY process may reset or truncate the WAL past
+  // it. This proves the mechanism the shipper leans on, on this exact
+  // node:sqlite runtime, with real files (the real cross-process case lives in
+  // the gateway e2e rig).
+  insertJournal(6, 200, 'pinned'); // WAL now carries a header + committed frames
+  expect(walSize('journal')).toBeGreaterThan(WAL_HEADER_BYTES);
+  const saltsBefore = readWalSalts('journal');
+  const sizeBefore = walSize('journal');
+
+  const lock = new DatabaseSync(path.join(vaultDir, 'journal.db'), { readOnly: true });
+  lock.exec('BEGIN');
+  lock.prepare('SELECT 1 FROM sqlite_schema LIMIT 1').get();
+
+  const foreign = openSecondJournal();
+  foreign.exec('PRAGMA busy_timeout = 100'); // don't block the test on the pin
+  try {
+    for (const mode of ['TRUNCATE', 'RESTART']) {
+      const row = foreign.prepare(`PRAGMA wal_checkpoint(${mode})`).get() as { busy: number };
+      expect(row.busy).toBe(1); // pinned — the checkpoint cannot proceed
+    }
+    // The WAL is byte-for-byte what it was: nothing reset it under the reader.
+    expect(walSize('journal')).toBe(sizeBefore);
+    expect(readWalSalts('journal')).toEqual(saltsBefore);
+  } finally {
+    lock.exec('ROLLBACK');
+    lock.close();
+  }
+
+  // Once the mark is released the SAME TRUNCATE succeeds and resets the WAL —
+  // proving the read mark, not some unrelated lock, was what held it.
+  foreign.exec('PRAGMA busy_timeout = 5000');
+  const after = foreign.prepare('PRAGMA wal_checkpoint(TRUNCATE)').get() as { busy: number };
+  expect(after.busy).toBe(0);
+  expect(walSize('journal')).toBe(0);
+  foreign.close();
+});
+
+test('[I2] capture ships correct committed bytes with the read-lock in place', async () => {
+  // The lock wraps every real capture now; the copy it protects must still be
+  // byte-correct end to end. Insert, tick, and prove a full seal→replay
+  // round-trip carries exactly the committed rows.
+  const shipper = makeShipper();
+  shipper.tick();
+  insertJournal(3, 200, 'locked-capture');
+  clock += 1000;
+  const r = shipper.tick();
+  expect(r.breaks).toEqual([]);
+  expect(r.errors).toEqual([]);
+  expect(r.shipped.length).toBeGreaterThan(0);
+
+  const rows = restoredJournalRows(await restoreCurrent(shipper, 'locked'));
+  expect(rows.filter((v) => v.startsWith('locked-capture')).length).toBe(3);
+});
+
+test('[I2] the read-lock never blocks the shipper OWN truncate — a rollover still cuts', () => {
+  // The one scoping invariant the lock must honor: it is released BEFORE the
+  // shipper's own TRUNCATE. capture() and truncate() are separate calls, and
+  // capture()'s finally releases first — so a rollover checkpoint is NOT busy
+  // against our own reader. Widening the lock to span the truncate would turn
+  // this rollover busy and red.
+  const shipper = makeShipper({ walSizeThresholdBytes: 8192 });
+  shipper.tick();
+  insertJournal(4, 4000, 'roll-under-lock');
+  clock += 1000;
+  const r = shipper.tick();
+  expect(r.busy).toEqual([]);
+  expect(r.breaks).toEqual([]);
+  expect(r.errors).toEqual([]);
+  expect(r.rolled.some((x) => x.db === 'journal')).toBe(true);
+  expect(walSize('journal')).toBe(0); // truncated cleanly by our own checkpoint
 });
 
 // --------------------------------------------------------------------- G7

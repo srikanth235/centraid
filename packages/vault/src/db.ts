@@ -153,15 +153,18 @@ function openFile(location: string): DatabaseSync {
       // transcripts.db folded in), which worker subprocesses open by path —
       // wait for their locks instead of failing immediately.
       db.exec('PRAGMA busy_timeout = 30000');
-      // Checkpointing is the WAL shipper's exclusive duty (issue #408, I2):
-      // segments are raw WAL byte ranges, and they are only valid while the
-      // WAL is strictly append-only between checkpoints THE SHIPPER performs
-      // (TRUNCATE-only — PASSIVE/RESTART reuse byte offsets in place). An
-      // autocheckpointing connection would reset the WAL behind the
-      // shipper's back; it detects that (salt/size/main-file detectors) and
-      // heals with a full base snapshot, but every such heal is a whole-DB
-      // upload — so autocheckpoint is OFF on every connection, here and in
-      // every by-path opener (app-engine's openJournalDb, key-admin).
+      // Checkpointing is the WAL shipper's exclusive duty (issue #408): segments
+      // are raw WAL byte ranges, valid only while the WAL is strictly
+      // append-only between checkpoints THE SHIPPER performs (TRUNCATE-only —
+      // PASSIVE/RESTART reuse byte offsets in place). This pragma is a
+      // PERFORMANCE HINT, not a correctness requirement (issue #411 action 1):
+      // correctness rests on the shipper VERIFYING salts/offsets/main-file
+      // identity at every capture and breaking the generation on any foreign
+      // checkpoint — a stray autocheckpointing connection is caught and healed,
+      // never a silent gap. What the pragma buys is keeping that healing rare:
+      // each heal is a whole-DB base re-upload, so turning autocheckpoint OFF on
+      // every connection — here and in every by-path opener (app-engine's
+      // openJournalDb, key-admin) — keeps generation churn near zero.
       db.exec('PRAGMA wal_autocheckpoint = 0');
     }
     return db;

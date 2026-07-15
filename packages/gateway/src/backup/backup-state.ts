@@ -80,6 +80,24 @@ export interface BackupTargetState {
    * pruned generations fall out of the map.
    */
   walMarkerTips?: Record<string, number>;
+  /**
+   * Issue #411 action 1: how many FOREIGN checkpoints the vault's WAL shipper
+   * has detected and healed — something other than the shipper checkpointed one
+   * of the databases, forcing a generation break (base re-clone). Copied from
+   * `WalShipper.status().foreignCheckpointCount` whenever it advances. Persisted
+   * — exactly like `lastRestoreVerify*` above — because the health PROBE
+   * recomputes from this state and overrides pushed reports (see
+   * `HealthRegistry.registerProbe`): a degrade that lived only in a pushed
+   * report would be repainted green by the very next probe. Monotone; a
+   * perf/churn signal, never a correctness failure (verification already
+   * re-based). `evaluateBackupHealth` ages it out on the last occurrence.
+   */
+  walForeignCheckpointCount?: number;
+  /** The most recent foreign checkpoint the shipper detected: when (epoch ms),
+   *  which database, and the break reason. Drives the degraded window in
+   *  `evaluateBackupHealth`. `db` is a plain string (the vault's `WalDbName`)
+   *  to avoid a cross-package type dependency, matching `walGenerationEpochs`. */
+  walLastForeignCheckpoint?: { atMs: number; db: string; reason: string };
 }
 
 /**

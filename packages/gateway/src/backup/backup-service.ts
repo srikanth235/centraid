@@ -303,6 +303,19 @@ export class BackupService {
       );
     }
 
+    // Issue #411 action 1: fold the shipper's foreign-checkpoint tally into THIS
+    // in-memory `target`. NOT via `syncWalForeignCheckpoints` (a separate fresh
+    // load+save): the register path re-saves `state` several times below, which
+    // would clobber a separately-written counter. The drain pass uses the helper
+    // because there its save is the last write of the vault's turn.
+    const shipStatus = shipper.status();
+    if (shipStatus.foreignCheckpointCount > 0) {
+      target.walForeignCheckpointCount = shipStatus.foreignCheckpointCount;
+      if (shipStatus.lastForeignCheckpoint) {
+        target.walLastForeignCheckpoint = { ...shipStatus.lastForeignCheckpoint };
+      }
+    }
+
     // Issue #408: pin each WAL generation to ONE keyring epoch — AFTER the
     // tick, so a generation the tick just minted gets pinned before its
     // manifest registers. A rotation breaks the streams to fresh
@@ -515,6 +528,42 @@ export class BackupService {
     const journal = bases.find((b) => b.db === 'journal');
     if (!vault || !journal) return undefined;
     return target.walMarkerTips?.[walPairKey(vault.generation, journal.generation)];
+  }
+
+  /**
+   * Issue #411 action 1: copy the shipper's foreign-checkpoint tally into the
+   * persisted target when it has advanced. Mirrors the `lastRestoreVerify*` /
+   * `lastError` pattern — sticky signals live in persisted `BackupTargetState`
+   * so the health probe recomputes them from state rather than a pushed report
+   * the next probe would overwrite. Called after every WAL tick this service
+   * drives (the drain pass at `walTimer` cadence, and a manual backup run), and
+   * idempotent: it reads a FRESH state, no-ops when nothing changed, and merges
+   * only these two fields so concurrent runs cannot clobber each other.
+   */
+  private async syncWalForeignCheckpoints(
+    vaultId: string,
+    shipper: NonNullable<VaultPlane['walShipper']>,
+  ): Promise<void> {
+    const st = shipper.status();
+    if (st.foreignCheckpointCount === 0) return; // nothing ever detected
+    const fresh = await loadBackupState(this.backupDir);
+    const target = fresh.targets[vaultId];
+    if (!target) return; // no target yet — nothing to hang the signal on
+    if (
+      target.walForeignCheckpointCount === st.foreignCheckpointCount &&
+      target.walLastForeignCheckpoint?.atMs === st.lastForeignCheckpoint?.atMs
+    ) {
+      return; // already persisted — avoid a needless state write per tick
+    }
+    target.walForeignCheckpointCount = st.foreignCheckpointCount;
+    if (st.lastForeignCheckpoint) {
+      target.walLastForeignCheckpoint = {
+        atMs: st.lastForeignCheckpoint.atMs,
+        db: st.lastForeignCheckpoint.db,
+        reason: st.lastForeignCheckpoint.reason,
+      };
+    }
+    await saveBackupState(this.backupDir, fresh);
   }
 
   private appMetaFor(plane: VaultPlane, sourceInstanceId: string): Record<string, string> {
@@ -907,6 +956,10 @@ export class BackupService {
             `backup: drained ${result.uploaded} wal object(s), ${result.bytes} sealed byte(s) (${vaultId})`,
           );
         }
+        // Issue #411 action 1: the WAL ticks this pass just ran (via the plane's
+        // walTimer, and any this service drove) may have healed foreign
+        // checkpoints — persist the tally so health can surface it.
+        await this.syncWalForeignCheckpoints(vaultId, shipper);
       } catch (err) {
         this.logger.warn(
           `backup: wal drain for ${vaultId} failed (will retry): ` +

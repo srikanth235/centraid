@@ -120,11 +120,15 @@ function receiptKeyGesture(
 ): string {
   const journal = new DatabaseSync(path.join(vaultDir, 'journal.db'));
   try {
-    // The WAL shipper (issue #408) is journal.db's sole checkpointer; this
-    // short-lived write connection must never autocheckpoint behind it.
-    // (Its close, if it is the LAST connection — gateway down — still runs
-    // SQLite's close-checkpoint; the shipper detects that on next start and
-    // heals with a fresh base rather than a silent gap.)
+    // The WAL shipper (issue #408) is journal.db's sole checkpointer. Turning
+    // autocheckpoint off is a PERF HINT, not a correctness requirement (issue
+    // #411 action 1): the shipper VERIFIES salts/offsets every capture and
+    // breaks the generation on any foreign checkpoint, so were this short-lived
+    // write connection to autocheckpoint it would be caught and healed by a
+    // ticking shipper (and is harmless with none running — no stream to hole);
+    // the pragma just spares a base re-upload. (Its close, if it is
+    // the LAST connection — gateway down — still runs SQLite's close-checkpoint;
+    // the shipper detects that on next start and heals with a fresh base.)
     journal.exec('PRAGMA wal_autocheckpoint = 0');
     journal.exec('PRAGMA busy_timeout = 30000');
     return writeReceipt(journal, {

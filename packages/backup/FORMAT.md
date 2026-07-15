@@ -150,12 +150,16 @@ all flow through `chunks/`.
 ## WAL segments
 
 The two vault databases (`vault.db`, `journal.db`) ship continuously as raw
-byte ranges of their SQLite write-ahead logs. The stream's correctness rests
-on two writer-side invariants (enforced and *detected* by the shipper —
-multi-writer is detected, never supported): the gateway process is the only
-writer that checkpoints, `wal_autocheckpoint` is 0 on every connection, and
-every checkpoint is `TRUNCATE` (the WAL is strictly append-only between
-checkpoints; byte offsets are never reused within a group).
+byte ranges of their SQLite write-ahead logs. The stream's correctness rests on
+the shipper VERIFYING one writer-side invariant at every capture, not on
+enforcing it (issue #411 action 1): the shipper is the only actor that
+checkpoints, always with `TRUNCATE`, so the WAL is strictly append-only between
+its checkpoints and byte offsets are never reused within a group. It confirms
+this each capture by pinning the WAL salts and offset chain and re-checking the
+main-file identity; ANY foreign checkpoint is detected and healed with a clean
+generation break, never a silent gap. `wal_autocheckpoint = 0` on every
+connection is a *performance hint* that keeps such breaks (and their base
+re-clones) rare — not a correctness precondition.
 
 - **generation** — 32 hex chars, random per stream era. Minted at first
   ship, after any detected invariant violation (foreign checkpoint, WAL

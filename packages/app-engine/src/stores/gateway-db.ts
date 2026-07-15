@@ -300,10 +300,14 @@ export function openJournalDb(dbPath: string): DatabaseSync {
   // wal_autocheckpoint=0: the vault's WAL shipper (issue #408) is the sole
   // checkpointer of journal.db — its backup segments are raw WAL byte
   // ranges, valid only while the WAL is append-only between the shipper's
-  // own TRUNCATE checkpoints. A default-autocheckpointing ledger connection
-  // (this one commits!) would reset the WAL in place at the 1000-page
-  // threshold and force the shipper into a full base re-upload. Per
-  // connection, so EVERY by-path opener needs it, not just the vault's.
+  // own TRUNCATE checkpoints. This is a PERFORMANCE HINT, not a correctness
+  // requirement (issue #411 action 1): the shipper VERIFIES salts/offsets at
+  // every capture and breaks the generation on any foreign checkpoint, so a
+  // default-autocheckpointing ledger connection (this one commits!) resetting
+  // the WAL in place at the 1000-page threshold is caught and healed while a
+  // shipper is ticking (and harmless when none is — no stream exists to hole).
+  // The pragma just keeps that heal — a full base re-upload — rare.
+  // Per connection, so EVERY by-path opener sets it, not just the vault's.
   db.exec(`
     PRAGMA journal_mode=WAL;
     PRAGMA foreign_keys=ON;

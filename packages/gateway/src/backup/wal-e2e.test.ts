@@ -518,6 +518,17 @@ test('G5 multi-process: a real child process checkpointing journal.db breaks the
   // Healed — the next backup registers a NEW base anchoring the fresh generation.
   await f.service.runBackup(f.vaultId);
   expect((await f.service.status())[f.vaultId]!.lastSeq).toBe(seqBefore + 1);
+
+  // Issue #411 action 1: the foreign checkpoint the shipper just healed is a
+  // churn signal — persisted into the target and surfaced through the health
+  // PROBE as DEGRADED (not error: correctness held, the stream self-re-based).
+  const foreignTarget = (await f.service.status())[f.vaultId]!;
+  expect(foreignTarget.walForeignCheckpointCount).toBeGreaterThanOrEqual(1);
+  expect(foreignTarget.walLastForeignCheckpoint?.db).toBe('journal');
+  const foreignSnap = await f.health.snapshot();
+  const foreignBackups = foreignSnap.components.find((c) => c.component === 'backups');
+  expect(foreignBackups?.status).toBe('degraded');
+  expect(foreignBackups?.detail).toMatch(/foreign checkpoint/);
   const manifest = await openNewestManifest(f);
   const journalEntry = manifest.entries.find((e) => e.kind === 'db' && e.path === 'journal.db')!;
   const vaultEntry = manifest.entries.find((e) => e.kind === 'db' && e.path === 'vault.db')!;

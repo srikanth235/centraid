@@ -71,6 +71,27 @@ export function evaluateBackupHealth(opts: {
         `${vaultId}: last restore-verification found ${dangling} receipt(s) referencing absent vault rows`,
       );
     }
+    // Issue #411 action 1: the WAL shipper detected a FOREIGN checkpoint —
+    // something other than the shipper checkpointed one of this vault's
+    // databases, forcing a generation break (base re-clone). Correctness is
+    // intact (verification caught it and re-based), so this is DEGRADED, not
+    // error: it is a churn/perf signal that something else is checkpointing our
+    // databases — most likely a stray connection with `wal_autocheckpoint`
+    // unset — and someone should find it. Persisted in target state so the
+    // probe recomputes it (a pushed report would be repainted green next probe).
+    // Aged out on the LAST occurrence: a foreign checkpoint that stopped
+    // recurring clears after 24 h, while an ongoing one keeps refreshing `atMs`
+    // and stays degraded — simpler and self-clearing versus a "nonzero forever"
+    // rule that would pin a months-old transient at degraded permanently.
+    const lastForeign = target.walLastForeignCheckpoint;
+    if (lastForeign && opts.now - lastForeign.atMs < DAY_MS) {
+      if (worst !== 'error') worst = 'degraded';
+      notes.push(
+        `${vaultId}: ${target.walForeignCheckpointCount ?? 1} foreign checkpoint(s) detected ` +
+          `(last: ${lastForeign.db} — ${lastForeign.reason}) — something else is checkpointing ` +
+          `this vault's databases`,
+      );
+    }
     // Issue #408 G9: "a vault that has not been successfully restored within
     // N days raises an alert" — a backup that has never been restored is a
     // hypothesis, so restore-verification staleness alarms at ERROR, not
