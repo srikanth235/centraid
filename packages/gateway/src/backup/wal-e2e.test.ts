@@ -23,6 +23,7 @@ import {
   loadKeyring,
   openLocalBackupProvider,
   openManifest,
+  SNAPSHOT_FORMAT,
   type BackupProvider,
   type ObjectStore,
 } from '@centraid/backup';
@@ -266,7 +267,7 @@ test('continuous loop: post-manifest writes survive a restore via segments alone
   const targetId = (await f.service.status())[f.vaultId]!.targetId;
   const rows = await provider.listSnapshots(targetId);
   expect(rows).toHaveLength(1);
-  expect(rows[0]!.format).toBe('centraid-snapshot/1');
+  expect(rows[0]!.format).toBe(SNAPSHOT_FORMAT);
   const manifest = await openNewestManifest(f);
   const dbEntries = manifest.entries.filter((e) => e.kind === 'db');
   expect(dbEntries.map((e) => e.path).sort()).toEqual(['journal.db', 'vault.db']);

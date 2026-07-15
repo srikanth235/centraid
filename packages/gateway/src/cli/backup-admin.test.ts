@@ -12,6 +12,7 @@ import { promises as fs, existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { SNAPSHOT_FORMAT } from '@centraid/backup';
 import { openVaultRegistry } from '../serve/vault-registry.js';
 import { commandBackup } from './backup-admin.js';
 import { daemonLayoutFor } from './paths.js';
@@ -107,7 +108,7 @@ test('run backs up every vault, status reports it, list shows the registry row',
   const [row] = lines(listOut) as [Record<string, unknown>];
   expect(row['vaultId']).toBe(vaultId);
   expect(row['seq']).toBe(1);
-  expect(row['format']).toBe('centraid-snapshot/1');
+  expect(row['format']).toBe(SNAPSHOT_FORMAT);
 });
 
 test('verify reports a clean snapshot', async () => {
