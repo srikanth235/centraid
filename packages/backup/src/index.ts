@@ -31,8 +31,56 @@ export type { S3ObjectStoreOptions } from './s3-store.js';
 export { requestCasGrant, requestStorageGrant } from './cas-grant.js';
 export type { RequestCasGrantOptions, RequestStorageGrantOptions } from './cas-grant.js';
 
-// Chunking (FORMAT.md § Chunking).
-export { CHUNKER_PARAMS, chunkBuffer, chunkStream, findCut, GEAR } from './chunker.js';
+// Parts (FORMAT.md § Parts — fixed-size, /1).
+export { PART_BYTES, partBuffer, partStream } from './parts.js';
+
+// WAL segments (FORMAT.md § WAL segments — /1, issue #408).
+export {
+  isWalGeneration,
+  lastCommitBoundary,
+  scanWalPrefix,
+  validateCommittedWal,
+  newWalGeneration,
+  openWalCloser,
+  openWalPairMarker,
+  openWalSegment,
+  parseWalCloserKey,
+  parseWalPairMarkerKey,
+  parseWalSegmentKey,
+  planCoordinatedReplay,
+  planWalReplay,
+  reachedPosition,
+  sealWalCloser,
+  sealWalPairMarker,
+  sealWalSegment,
+  WAL_CAPTURE_ORDER,
+  WAL_DB_FILES,
+  WAL_DB_NAMES,
+  WAL_HEADER_BYTES,
+  walDbPrefix,
+  walGroupCloserKey,
+  walPageSize,
+  walPairMarkerKey,
+  walPairMarkerPrefix,
+  walPairMarkerRootPrefix,
+  walSalts,
+  walSegmentKey,
+  walSegmentPrefix,
+} from './wal-format.js';
+export type {
+  CoordinatedReplayResult,
+  WalDbName,
+  WalGroupCloser,
+  WalPairMarker,
+  WalPairMarkerAddress,
+  WalPairPosition,
+  WalReplayPlan,
+  WalPrefixScan,
+  WalSegmentAddress,
+  WalStreamListing,
+} from './wal-format.js';
+export { replayWalSegments } from './wal-restore.js';
+export type { ReplayWalOptions, WalReplayDbOutcome, WalReplayOutcome } from './wal-restore.js';
 
 // Crypto + keyring (FORMAT.md § Key custody, § Encryption).
 export {
@@ -42,7 +90,9 @@ export {
   decrypt,
   deriveDataKey,
   deriveDedupKey,
+  deriveNonce,
   encrypt,
+  encryptWithNonce,
   loadKeyring,
   masterKeyForEpoch,
   rotateKeyring,
@@ -55,9 +105,11 @@ export {
   canonicalJson,
   isSafeEntryPath,
   openManifest,
+  READABLE_SNAPSHOT_FORMATS,
   sealManifest,
   sha256Hex,
   SNAPSHOT_FORMAT,
+  SNAPSHOT_FORMAT_V1,
   verifyManifest,
 } from './manifest.js';
 export type {

@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#408) pre-existing cohesive Tally business-logic module; the repo-wide CI cleanup made the existing boundary visible but did not expand its behavior
 // Non-visual business logic: vault IO (write/act/read), navigation, the
 // people directory, and every modal's open/patch/save/close flow (expense,
 // detail, settle, new-group, add-friend). `createLogic` closes over app.jsx's

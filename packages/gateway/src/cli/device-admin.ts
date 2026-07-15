@@ -143,7 +143,11 @@ export async function commandPair(
     if (!parsed.dataDir) localFail('--data-dir is required', 2);
     const layout = daemonLayoutFor(parsed.dataDir);
     const endpoint = readEndpointState(layout, localFail);
-    const registry = openVaultRegistry({ rootDir: layout.vaultDir, logger: quietLogger });
+    const registry = openVaultRegistry({
+      rootDir: layout.vaultDir,
+      logger: quietLogger,
+      enableWalShipper: false,
+    });
     try {
       const vault = resolveVault(registry, parsed.vault, localFail);
       const tickets = PairingTicketStore.open(layout.pairingTicketsFile);
@@ -204,7 +208,11 @@ export async function commandDevices(
   if (action === 'list') {
     let rows = devices.list();
     if (parsed.vault !== undefined) {
-      const registry = openVaultRegistry({ rootDir: layout.vaultDir, logger: quietLogger });
+      const registry = openVaultRegistry({
+        rootDir: layout.vaultDir,
+        logger: quietLogger,
+        enableWalShipper: false,
+      });
       try {
         const vault = resolveVault(registry, parsed.vault, fail);
         rows = devices.listByVault(vault.vaultId);
@@ -221,7 +229,11 @@ export async function commandDevices(
     if (!endpointId) {
       fail('usage: devices add --data-dir <path> <endpoint-id> --vault <name-or-id>', 2);
     }
-    const registry = openVaultRegistry({ rootDir: layout.vaultDir, logger: quietLogger });
+    const registry = openVaultRegistry({
+      rootDir: layout.vaultDir,
+      logger: quietLogger,
+      enableWalShipper: false,
+    });
     try {
       const vault = resolveVault(registry, parsed.vault, fail);
       const row = devices.enroll({

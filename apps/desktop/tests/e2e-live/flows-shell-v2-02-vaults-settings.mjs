@@ -348,7 +348,7 @@ async function main() {
         // pair manager now, not just a mirror of the head).
         await openSwitcher();
         const menu = page.getByRole('menu').first();
-        const menuText = await menu.innerText();
+        const menuText = await menu.textContent();
         assert(
           /QA Renamed Space/.test(menuText),
           `switcher vault row did not pick up the Settings -> Space rename, got ${JSON.stringify(menuText)}`,
@@ -377,7 +377,7 @@ async function main() {
       async () => {
         await openSwitcher();
         const menu = page.getByRole('menu').first();
-        const menuText = await menu.innerText();
+        const menuText = await menu.textContent();
         console.log(`[v2-02] vault switcher menu: ${JSON.stringify(menuText)}`);
         assert(/Owner/.test(menuText), 'switcher does not list the primary vault');
         assert(/QA Second Space/.test(menuText), 'switcher does not list the new space');
@@ -408,7 +408,7 @@ async function main() {
         await testDialog.waitFor({ state: 'visible', timeout: 5_000 });
         await page.waitForTimeout(1_500);
         await shot('10-test-connection-local');
-        const testText = await testDialog.innerText();
+        const testText = await testDialog.textContent();
         console.log(`[v2-02] test-connection modal: ${JSON.stringify(testText)}`);
         assert(/Reach gateway/.test(testText), 'handshake ladder missing "Reach gateway" stage');
         assert(/List vaults/.test(testText), 'handshake ladder missing "List vaults" stage');
@@ -433,7 +433,7 @@ async function main() {
         await shot('11-after-rename');
 
         await openSwitcher();
-        const menuAfterRename = await page.getByRole('menu').first().innerText();
+        const menuAfterRename = await page.getByRole('menu').first().textContent();
         assert(
           /My Mac/.test(menuAfterRename),
           `switcher header did not pick up the rename, got ${JSON.stringify(menuAfterRename)}`,
@@ -513,7 +513,7 @@ async function main() {
           `sidebar head did not fall back to the remaining vault after deleting the active one, got ${JSON.stringify(headLabel)}`,
         );
         await openSwitcher();
-        const menuAfterDelete = await page.getByRole('menu').first().innerText();
+        const menuAfterDelete = await page.getByRole('menu').first().textContent();
         assert(
           !/QA Second Space/.test(menuAfterDelete),
           'deleted space row still present in the switcher',
@@ -552,7 +552,7 @@ async function main() {
         // Deleted space must not resurrect, and the gateway rename ("My
         // Mac") must have persisted, in the switcher.
         await openSwitcher();
-        const menuText = await page.getByRole('menu').first().innerText();
+        const menuText = await page.getByRole('menu').first().textContent();
         assert(!/QA Second Space/.test(menuText), 'deleted space resurrected after relaunch');
         assert(/My Mac/.test(menuText), 'gateway rename did not persist across relaunch');
         await page.keyboard.press('Escape');

@@ -81,7 +81,7 @@ async function startSecondGateway(dataDir) {
     if (child.exitCode !== null) {
       throw new Error(`second gateway exited early (code ${child.exitCode}): ${stdout}\n${stderr}`);
     }
-    await new Promise((r) => setTimeout(r, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
   const urlMatch = /listening on (\S+)/.exec(stdout);
   const tokenMatch = /token: (\S+)/.exec(stdout);
@@ -151,11 +151,11 @@ async function main() {
         const retryBtn = page.getByRole('button', { name: 'Retry', exact: true });
         await retryBtn.waitFor({ state: 'visible', timeout: 15_000 });
         await shot('03-wrong-port-ladder-failed');
-        const bodyText = await page.locator('body').innerText();
+        const bodyText = await page.locator('body').textContent();
         console.log(`[v2-06] wrong-port ladder state: ${JSON.stringify(bodyText.slice(0, 500))}`);
 
         const summary = page.locator('[class*="testSummary"]');
-        const summaryText = await summary.innerText().catch(() => '');
+        const summaryText = await summary.textContent().catch(() => '');
         console.log(`[v2-06] wrong-port summary: ${JSON.stringify(summaryText)}`);
         assert(
           summaryText.trim().length > 0,
@@ -199,7 +199,7 @@ async function main() {
         await proceedBtn.waitFor({ state: 'visible', timeout: 15_000 });
         await page.waitForTimeout(300);
         await shot('05-correct-url-ladder-passed');
-        const bodyText = await page.locator('body').innerText();
+        const bodyText = await page.locator('body').textContent();
         console.log(`[v2-06] correct-url ladder state: ${JSON.stringify(bodyText.slice(0, 600))}`);
 
         const retryVisible = await page
@@ -242,7 +242,7 @@ async function main() {
           .isVisible()
           .catch(() => false);
         if (stillOpenModal) {
-          const errText = await page.locator('body').innerText();
+          const errText = await page.locator('body').textContent();
           throw new Error(
             `ConnectFlow modal still open after Connect — error state? ${errText.slice(0, 1000)}`,
           );
@@ -252,7 +252,7 @@ async function main() {
         await page.getByRole('menu').first().waitFor({ state: 'visible', timeout: 5_000 });
         await page.waitForTimeout(500);
         await shot('08-switcher-after-url-connect');
-        const menuText = await page.getByRole('menu').first().innerText();
+        const menuText = await page.getByRole('menu').first().textContent();
         console.log(`[v2-06] switcher after url+token connect: ${JSON.stringify(menuText)}`);
         assert(/SPACES\s*·\s*2/.test(menuText), 'switcher does not report 2 total spaces');
         assert(

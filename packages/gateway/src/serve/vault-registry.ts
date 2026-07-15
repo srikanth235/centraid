@@ -21,7 +21,12 @@
 
 import { mkdirSync, readdirSync, rmSync, existsSync } from 'node:fs';
 import path from 'node:path';
-import { uuidv7, VaultSchemaAheadError, type BlobStoreSettings, type S3Credentials } from '@centraid/vault';
+import {
+  uuidv7,
+  VaultSchemaAheadError,
+  type BlobStoreSettings,
+  type S3Credentials,
+} from '@centraid/vault';
 import type { RuntimeLogger, VaultBridge, VaultWorkspace } from '@centraid/app-engine';
 import { openVaultPlane, VaultPlane } from './vault-plane.js';
 import { vaultContext } from './vault-context.js';
@@ -75,6 +80,8 @@ export interface VaultRegistryOptions {
   ownerName?: string;
   /** Sweep cadence forwarded to every plane. */
   sweepIntervalMs?: number;
+  /** False for admin/read-only opens that must never own or checkpoint WALs. */
+  enableWalShipper?: boolean;
   /** Forwarded to every plane (issue #367 §C6) — see `VaultPlaneOptions.leaseConflicted`. */
   leaseConflicted?: () => boolean;
   /** Forwarded to every plane (issue #367 §C3) — see `VaultPlaneOptions.s3Credentials`. */
@@ -110,8 +117,11 @@ export class VaultRegistry {
   private readonly logger: RuntimeLogger;
   private readonly ownerName: string | undefined;
   private readonly sweepIntervalMs: number | undefined;
+  private readonly enableWalShipper: boolean;
   private readonly leaseConflicted: (() => boolean) | undefined;
-  private readonly s3Credentials: ((settings: BlobStoreSettings) => Promise<S3Credentials>) | undefined;
+  private readonly s3Credentials:
+    | ((settings: BlobStoreSettings) => Promise<S3Credentials>)
+    | undefined;
   private readonly planes = new Map<string, VaultPlane>();
   /** Directories already MOUNTED — lets `scan()` skip them cheaply on rescan. */
   private readonly scannedDirs = new Set<string>();
@@ -129,6 +139,7 @@ export class VaultRegistry {
     this.logger = options.logger;
     this.ownerName = options.ownerName;
     this.sweepIntervalMs = options.sweepIntervalMs;
+    this.enableWalShipper = options.enableWalShipper ?? true;
     this.leaseConflicted = options.leaseConflicted;
     this.s3Credentials = options.s3Credentials;
     mkdirSync(this.rootDir, { recursive: true });
@@ -218,6 +229,7 @@ export class VaultRegistry {
       logger: this.logger,
       ...(this.ownerName ? { ownerName: this.ownerName } : {}),
       ...(this.sweepIntervalMs !== undefined ? { sweepIntervalMs: this.sweepIntervalMs } : {}),
+      enableWalShipper: this.enableWalShipper,
       ...(this.leaseConflicted ? { leaseConflicted: this.leaseConflicted } : {}),
       ...(this.s3Credentials ? { s3Credentials: this.s3Credentials } : {}),
       ...boot,

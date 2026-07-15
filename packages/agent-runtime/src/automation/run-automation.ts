@@ -130,7 +130,7 @@ export async function runAutomation(
       // The manifest's `requires.model` (already folded into `args.model` by
       // `runFire`) always wins; `opts.model` is the caller's prefs-resolved
       // fallback for when the manifest doesn't specify one.
-      ...(args.model ?? opts.model ? { model: args.model ?? opts.model } : {}),
+      ...((args.model ?? opts.model) ? { model: args.model ?? opts.model } : {}),
       onLog: args.onLog,
     });
 

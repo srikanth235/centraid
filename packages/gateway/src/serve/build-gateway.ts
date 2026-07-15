@@ -386,6 +386,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     health,
     logger: health.loggerFor('instance', logger),
   });
+  // WAL ownership must be known before the registry opens any vault plane.
+  instanceLease.claim();
 
   // Gateway-level storage state (issue #367 §C1/§C10): the storage-
   // connections entity (sealed byo-s3 creds / provider api keys, shared by
@@ -1978,7 +1980,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   const stop = async (): Promise<void> => {
     await Promise.all([...schedulers.values()].map((sched) => sched.stop()));
     if (outboxTimer) clearInterval(outboxTimer);
-    backupService.stop();
+    // Await the in-flight backup run (if any): its post-registration steps
+    // write shipper + backup state, and the vault registry teardown below
+    // closes the very planes it would touch.
+    await backupService.stop();
     // Release the lease so a fresh start (or another instance) sees an
     // absent file instead of waiting out LEASE_FRESH_WINDOW_MS.
     instanceLease.stop();

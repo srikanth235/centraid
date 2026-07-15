@@ -109,10 +109,10 @@ describe('StorageCard — provider connection with quota', () => {
 
   it('shows an honest drift read when provider and local bytes agree (both 5,000,000)', async () => {
     const el = await mount({ loadStatus: vi.fn().mockResolvedValue(status) });
-    const drift = el.querySelector('[data-testid="drift-line"]');
+    const drift = el.querySelector<HTMLElement>('[data-testid="drift-line"]');
     expect(drift?.textContent).toContain('provider reports');
     expect(drift?.textContent).toContain('locally verified');
-    expect(drift?.getAttribute('data-emphasis')).toBeNull(); // no drift flag — they match
+    expect(drift?.dataset.emphasis).toBeUndefined(); // no drift flag — they match
   });
 
   it('flags a real gap between provider-reported and locally-verified CAS bytes', async () => {
@@ -126,8 +126,8 @@ describe('StorageCard — provider connection with quota', () => {
       vaults: [],
     };
     const el = await mount({ loadStatus: vi.fn().mockResolvedValue(drifted) });
-    const drift = el.querySelector('[data-testid="drift-line"]');
-    expect(drift?.getAttribute('data-emphasis')).toBe('warn');
+    const drift = el.querySelector<HTMLElement>('[data-testid="drift-line"]');
+    expect(drift?.dataset.emphasis).toBe('warn');
     expect(drift?.textContent).toContain('drift worth a look');
   });
 

@@ -174,7 +174,7 @@ async function main() {
           .waitFor({ state: 'visible', timeout: 10_000 });
         const methodGroup = page.getByRole('radiogroup', { name: 'Where does your data live?' });
         await methodGroup.waitFor({ state: 'visible', timeout: 5_000 });
-        const cardText = await methodGroup.innerText();
+        const cardText = await methodGroup.textContent();
         assert(/This Mac/.test(cardText), 'method cards missing "This Mac"');
         assert(/Existing gateway/.test(cardText), 'method cards missing "Existing gateway"');
         assert(/Over SSH/.test(cardText), 'method cards missing "Over SSH"');

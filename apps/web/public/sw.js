@@ -42,7 +42,9 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
       const keys = await caches.keys();
-      await Promise.all(keys.filter((key) => !CURRENT_CACHES.has(key)).map((key) => caches.delete(key)));
+      await Promise.all(
+        keys.filter((key) => !CURRENT_CACHES.has(key)).map((key) => caches.delete(key)),
+      );
       // Speeds up navigations that fall through to the network branch.
       if (self.registration.navigationPreload) {
         await self.registration.navigationPreload.enable().catch(() => undefined);
@@ -89,7 +91,10 @@ async function inheritedRoute(event) {
 
 function waitForHead(port) {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('No browser tab owns this Iroh session.')), 30000);
+    const timeout = setTimeout(
+      () => reject(new Error('No browser tab owns this Iroh session.')),
+      30000,
+    );
     port.addEventListener('message', (event) => {
       if (event.data?.type === 'head') {
         clearTimeout(timeout);
@@ -104,9 +109,9 @@ function waitForHead(port) {
 }
 
 async function tunnelRequest(route, method, headers, body) {
-  const candidates = (await self.clients.matchAll({ type: 'window', includeUncontrolled: true })).filter(
-    (client) => !new URL(client.url).pathname.startsWith(IROH_PREFIX),
-  );
+  const candidates = (
+    await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+  ).filter((client) => !new URL(client.url).pathname.startsWith(IROH_PREFIX));
   if (candidates.length === 0) throw new Error('Open the Centraid PWA to use this app.');
   const attempts = candidates.map((client) => {
     const channel = new MessageChannel();
@@ -161,12 +166,13 @@ function drainPort(port) {
 // stays correct. gzip only — DecompressionStream has no brotli, and the
 // request only ever offers gzip (so the server negotiates gzip, never br).
 function decodedResponse(stream, status, headers) {
+  let decoded = stream;
   if ((headers.get('content-encoding') || '').toLowerCase() === 'gzip') {
     headers.delete('content-encoding');
     headers.delete('content-length');
-    stream = stream.pipeThrough(new DecompressionStream('gzip'));
+    decoded = stream.pipeThrough(new DecompressionStream('gzip'));
   }
-  return new Response(stream, { status, headers });
+  return new Response(decoded, { status, headers });
 }
 
 function firstHeader(headers, name) {
@@ -396,7 +402,8 @@ self.addEventListener('fetch', (event) => {
       const url = new URL(event.request.url);
       const route = virtualRoute(url) ?? (await inheritedRoute(event));
       if (route) return tunnel(event, route);
-      if (event.request.method !== 'GET' || event.request.destination === '') return fetch(event.request);
+      if (event.request.method !== 'GET' || event.request.destination === '')
+        return fetch(event.request);
       return shell(event);
     })().catch(
       (error) =>

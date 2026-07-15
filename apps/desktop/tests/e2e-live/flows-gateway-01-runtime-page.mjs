@@ -191,7 +191,7 @@ async function main() {
     // 5 — point the app at the flaky gateway WHILE IT'S STILL CLOSED: the
     // monitor's probe fails immediately (connection refused), so it flips
     // to Unreachable and opens a real, durable outage (issue #351 wave 4).
-    const flakyPort = await flaky.reservePort();
+    const _flakyPort = await flaky.reservePort();
     await page.evaluate(async (url) => {
       const profile = await window.CentraidApi.addGateway({
         label: 'Flaky Gateway',

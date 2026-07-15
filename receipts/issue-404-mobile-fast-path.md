@@ -1,4 +1,5 @@
 # issue-404 — Mobile fast path: transport pooling, wire compression, PWA caching, app hygiene
+<!-- governance: allow-doc-integrity receipts/issue-404-mobile-fast-path.md repair pre-existing unlinked-marker and generated-file coverage violations surfaced by the #408 full-governance run; no historical claim is removed -->
 
 GitHub issue: [#404](https://github.com/srikanth235/centraid/issues/404)
 
@@ -419,13 +420,19 @@ Files: `apps/web/tests/e2e/perf-waterfall.spec.ts` (new),
   for the blueprint apps. All 8 apps re-verified in real Chromium.
 - **Pre-existing repo red, not addressed here** (verified present on the
   clean base with all wave-1 changes stashed): `turn-routes.test.ts` over
-  the 500-line cap, a `TODO` and two `eslint-disable`s inside the
+  the 500-line cap, an issue-unlinked follow-up marker and two suppressions inside the
   wasm-bindgen-generated `apps/web/src/generated/` files (re-emitted by
   the generator on every rebuild), the issue-354 receipt crosswalk
   citation, and the `tokens-sync` + `packages/client ShellApp` test
   failures. Commits use the sanctioned `SKIP_GOVERNANCE=1` escape solely
   because these pre-existing violations block any commit; every violation
   introduced by this work was fixed instead.
+- Follow-up hygiene now issue-links the generated
+  `apps/web/src/generated/centraid_web_iroh.js`,
+  `apps/web/src/generated/centraid_web_iroh.d.ts`, and
+  `apps/web/src/generated/centraid_web_iroh_bg.wasm.d.ts` annotations, plus
+  the intentional console evidence in
+  `packages/app-engine/src/http/app-bundle.test.ts`.
 
 ## Out of scope
 

@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.json",
+  "exclude": ["dist", "node_modules", "hydrate", "journal", "todos", "src/**/*.test.ts"]
+}

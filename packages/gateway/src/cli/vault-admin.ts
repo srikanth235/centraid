@@ -83,7 +83,11 @@ export async function commandVault(
     const parsed = parseVaultArgs(rest, localFail);
     if (!parsed.dataDir) localFail('--data-dir is required', 2);
     const layout = daemonLayoutFor(parsed.dataDir);
-    const registry = openVaultRegistry({ rootDir: layout.vaultDir, logger: quietLogger });
+    const registry = openVaultRegistry({
+      rootDir: layout.vaultDir,
+      logger: quietLogger,
+      enableWalShipper: false,
+    });
     try {
       switch (action) {
         case 'list': {

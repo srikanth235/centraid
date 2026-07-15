@@ -1,16 +1,18 @@
-// File custody (§10): `stageVaultDbs` is the narrow half of `backupVault`
-// the offsite backup engine uses — VACUUM INTO copies of the two SQLite
-// files only, named to match the `centraid-snapshot/1` entry paths
-// (`vault.db` / `journal.db`, FORMAT.md), receipted the same way.
+// File custody (§10): `backupVault` is the user-facing export ramp — VACUUM
+// INTO copies of the two SQLite files plus the blob CAS, hashed so the copy
+// is verifiable with standard tools. (`stageVaultDbs`, the old offsite
+// staging half, left with issue #408 — the backup path ships WAL segments
+// via wal-shipper.ts instead of rewriting the database per snapshot.)
 
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { bootstrapVault } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
-import { backupVault, checkpointVault, stageVaultDbs } from './custody.js';
+import { backupVault, checkpointVault, sha256File } from './custody.js';
 
 let root: string;
 let vaultDir: string;
@@ -28,20 +30,26 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-test('stageVaultDbs writes openable vault.db + journal.db copies, receipted', () => {
+test('backupVault writes openable copies, blobs, and shasum-reproducible hashes', () => {
   checkpointVault(db); // truncate the WAL so VACUUM INTO sees committed rows
-  const destDir = path.join(root, 'staging');
+  db.blobs.ingestSync(Buffer.from('hello export ramp'));
+  const destDir = path.join(root, 'full-backup');
   mkdirSync(destDir, { recursive: true });
 
-  const result = stageVaultDbs(db, destDir);
+  const result = backupVault(db, destDir);
 
-  expect(result.vaultPath).toBe(path.join(destDir, 'vault.db'));
-  expect(result.journalPath).toBe(path.join(destDir, 'journal.db'));
+  expect(result.vaultPath).toBe(path.join(destDir, 'vault.backup.db'));
   expect(existsSync(result.vaultPath)).toBe(true);
   expect(existsSync(result.journalPath)).toBe(true);
-  expect(result.vaultSha256).toMatch(/^[0-9a-f]{64}$/);
-  expect(result.journalSha256).toMatch(/^[0-9a-f]{64}$/);
+  expect(result.blobsCopied).toBe(1);
+  expect(existsSync(path.join(destDir, 'blobs'))).toBe(true);
   expect(result.receiptId).toBeTruthy();
+
+  // "Verifiable independently" means the recorded hash IS the file's
+  // SHA-256 — what `shasum -a 256` prints — not an implementation artifact.
+  const rawHash = createHash('sha256').update(readFileSync(result.vaultPath)).digest('hex');
+  expect(result.vaultSha256).toBe(rawHash);
+  expect(sha256File(result.journalPath)).toBe(result.journalSha256);
 
   // The copy is a real, independently openable SQLite file carrying the
   // vault's own row — not just bytes that happen to exist.
@@ -59,29 +67,13 @@ test('stageVaultDbs writes openable vault.db + journal.db copies, receipted', ()
   const receiptRow = db.journal
     .prepare('SELECT action FROM consent_receipt WHERE receipt_id = ?')
     .get(result.receiptId) as { action: string } | undefined;
-  expect(receiptRow?.action).toBe('act consent.backup_stage_dbs');
+  expect(receiptRow?.action).toBe('act consent.backup_vault');
 });
 
-test('stageVaultDbs does NOT touch the blob CAS (backupVault does)', () => {
-  checkpointVault(db);
-  db.blobs.ingestSync(Buffer.from('hello offsite backup'));
-
-  const stageDest = path.join(root, 'stage-only');
-  mkdirSync(stageDest, { recursive: true });
-  stageVaultDbs(db, stageDest);
-  expect(existsSync(path.join(stageDest, 'blobs'))).toBe(false);
-
-  const fullDest = path.join(root, 'full-backup');
-  mkdirSync(fullDest, { recursive: true });
-  const full = backupVault(db, fullDest);
-  expect(full.blobsCopied).toBe(1);
-  expect(existsSync(path.join(fullDest, 'blobs'))).toBe(true);
-});
-
-test('stageVaultDbs refuses an in-memory vault (no files to stage)', () => {
+test('backupVault refuses an in-memory vault (no files to copy)', () => {
   const mem = openVaultDb();
   try {
-    expect(() => stageVaultDbs(mem, root)).toThrow(/file-backed vault/);
+    expect(() => backupVault(mem, root)).toThrow(/file-backed vault/);
   } finally {
     mem.close();
   }

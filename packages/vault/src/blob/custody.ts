@@ -36,7 +36,6 @@ export { sealBlob, sealBlobStream, unsealBlob } from './seal.js';
  */
 const STREAMING_REPLICATE_THRESHOLD_BYTES = 32 * 1024 * 1024;
 
-
 /** How the host resolves the (settings-declared) remote tier on demand. */
 export interface RemoteTier {
   store: BlobStore;
@@ -239,7 +238,10 @@ export class BlobCustody {
     }
     const bytes = this.local.getSync(sha);
     if (!bytes) return false;
-    await remote.store.put(sha, remote.encryptKey ? sealBlob(remote.encryptKey, sha, bytes) : bytes);
+    await remote.store.put(
+      sha,
+      remote.encryptKey ? sealBlob(remote.encryptKey, sha, bytes) : bytes,
+    );
     return true;
   }
 

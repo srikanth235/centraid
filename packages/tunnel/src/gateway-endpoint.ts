@@ -305,7 +305,7 @@ class GatewayEndpoint {
  * actually shrinks the byte volume crossing here.
  */
 function bytesToArray(buf: Buffer): Array<number> {
-  const out = new Array<number>(buf.length);
+  const out = Array.from<number>({ length: buf.length });
   for (let i = 0; i < buf.length; i++) out[i] = buf[i]!;
   return out;
 }

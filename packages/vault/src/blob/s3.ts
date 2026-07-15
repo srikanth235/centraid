@@ -1,3 +1,4 @@
+/* eslint-disable max-classes-per-file -- throttle and S3 driver share one request pipeline (#408) */
 // The S3-compatible remote driver (issue #296 phase 3). Talks AWS Signature
 // v4 over plain fetch — no SDK dependency — so any S3-compatible endpoint
 // (AWS, MinIO, R2, B2, Garage) works with `{endpoint, bucket, region,
@@ -97,6 +98,7 @@ async function streamToBuffer(source: NodeJS.ReadableStream): Promise<Buffer> {
  * Re-chunk a Readable into fixed-size Buffers, bounding resident memory to
  * roughly one part size regardless of the source's total length (issue #367
  * §C8: "never materializing the whole blob in memory").
+ * @yields Fixed-size upload parts, with one final short part when needed.
  */
 async function* chunkReadable(
   source: NodeJS.ReadableStream,
@@ -150,7 +152,9 @@ export class S3BlobStore implements BlobStore {
 
   constructor(private readonly options: S3BlobStoreOptions) {
     this.base = new URL(options.endpoint);
-    this.throttle = options.throttleBytesPerSec ? new TokenBucket(options.throttleBytesPerSec) : undefined;
+    this.throttle = options.throttleBytesPerSec
+      ? new TokenBucket(options.throttleBytesPerSec)
+      : undefined;
   }
 
   private keyFor(sha: string): string {

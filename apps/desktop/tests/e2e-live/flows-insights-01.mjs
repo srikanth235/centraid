@@ -93,9 +93,7 @@ async function adoptSystemHealthCheck() {
   await navTo(page, 'Discover');
   await page.getByRole('tab', { name: /^Automations/ }).click();
   await page.waitForTimeout(200);
-  const card = page
-    .locator('button[data-kind="automation"]', { hasText: 'Trip albums' })
-    .first();
+  const card = page.locator('button[data-kind="automation"]', { hasText: 'Trip albums' }).first();
   await card.waitFor({ state: 'visible', timeout: 10_000 });
   await card.click();
   const dialog = page.getByRole('dialog', { name: /Trip albums/ });

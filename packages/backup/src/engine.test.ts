@@ -1,10 +1,14 @@
+// governance: allow-repo-hygiene file-size-limit (#408) the engine's behavior suite — snapshot/restore/verify roundtrips plus the /1 WAL+PITR+determinism cases all share the same provider/keyring/tempdir fixtures; splitting by topic would duplicate the fixture plumbing in every shard
+import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, test } from 'vitest';
 import { createKeyring, type Keyring } from './crypto.js';
 import { createSnapshot, restoreSnapshot, verifySnapshot, type SourceEntry } from './engine.js';
 import { LocalBackupProvider } from './local-provider.js';
+import { openManifest, READABLE_SNAPSHOT_FORMATS, SNAPSHOT_FORMAT } from './manifest.js';
 import type { ObjectStore } from './object-store.js';
 import type { BackupProvider, StoreClass } from './provider.js';
 
@@ -107,17 +111,42 @@ interface Fixture {
 
 async function buildSourceTree(sourceDir: string): Promise<SourceEntry[]> {
   await fs.mkdir(path.join(sourceDir, 'blobs', 'ab'), { recursive: true });
-  // "db-like" file — big enough to span multiple FastCDC chunks.
-  const dbBytes = pseudoRandomBuffer(3 * 1024 * 1024, 1);
-  await fs.writeFile(path.join(sourceDir, 'vault.db'), dbBytes);
-  await fs.writeFile(path.join(sourceDir, 'journal.db'), pseudoRandomBuffer(10_000, 2));
+  // Real SQLite bases — /1 requires a complete, verifiable WAL base pair.
+  const vaultPath = path.join(sourceDir, 'vault.db');
+  const vault = new DatabaseSync(vaultPath);
+  vault.exec('PRAGMA journal_mode=DELETE; CREATE TABLE payload (bytes BLOB NOT NULL)');
+  vault
+    .prepare('INSERT INTO payload (bytes) VALUES (?)')
+    .run(Buffer.from(pseudoRandomBuffer(3 * 1024 * 1024, 1)));
+  vault.close();
+  const journalPath = path.join(sourceDir, 'journal.db');
+  const journal = new DatabaseSync(journalPath);
+  journal.exec('PRAGMA journal_mode=DELETE; CREATE TABLE payload (bytes BLOB NOT NULL)');
+  journal
+    .prepare('INSERT INTO payload (bytes) VALUES (?)')
+    .run(Buffer.from(pseudoRandomBuffer(10_000, 2)));
+  journal.close();
   await fs.writeFile(path.join(sourceDir, 'blobs', 'ab', 'cdef'), pseudoRandomBuffer(50_000, 3));
   await fs.writeFile(path.join(sourceDir, 'apps.bundle'), pseudoRandomBuffer(20_000, 4)); // fake git bundle
   await fs.writeFile(path.join(sourceDir, 'seal.key'), pseudoRandomBuffer(32, 5));
 
   return [
-    { path: 'vault.db', kind: 'db', absolutePath: path.join(sourceDir, 'vault.db') },
-    { path: 'journal.db', kind: 'db', absolutePath: path.join(sourceDir, 'journal.db') },
+    {
+      path: 'vault.db',
+      kind: 'db',
+      absolutePath: vaultPath,
+      sha256: await fileSha256(vaultPath),
+      walGeneration: '11'.repeat(16),
+      baseTickMs: 1_752_480_000_000,
+    },
+    {
+      path: 'journal.db',
+      kind: 'db',
+      absolutePath: journalPath,
+      sha256: await fileSha256(journalPath),
+      walGeneration: '22'.repeat(16),
+      baseTickMs: 1_752_480_000_000,
+    },
     {
       path: 'blobs/ab/cdef',
       kind: 'blob',
@@ -212,21 +241,29 @@ describe('createSnapshot / restoreSnapshot roundtrip', () => {
     const firstPutCount = provider.lastStore!.putCount;
     expect(firstPutCount).toBeGreaterThan(0);
 
-    // Flip one byte in the middle of vault.db; touch mtime forward so the
-    // fast-path's mtime check can't accidentally reuse it either.
+    // Change one row through SQLite; touch mtime forward so the fast-path's
+    // mtime check can't accidentally reuse it either.
     const dbPath = path.join(sourceDir, 'vault.db');
-    const buf = await fs.readFile(dbPath);
-    buf[Math.floor(buf.length / 2)] = (buf[Math.floor(buf.length / 2)]! ^ 0xff) & 0xff;
-    await fs.writeFile(dbPath, buf);
+    const db = new DatabaseSync(dbPath);
+    db.prepare('UPDATE payload SET bytes = ?').run(
+      Buffer.from(pseudoRandomBuffer(3 * 1024 * 1024, 99)),
+    );
+    db.close();
     const future = new Date(Date.now() + 5000);
     await fs.utimes(dbPath, future, future);
+
+    const updatedEntries = await Promise.all(
+      entries.map(async (entry) =>
+        entry.path === 'vault.db' ? { ...entry, sha256: await fileSha256(dbPath) } : entry,
+      ),
+    );
 
     const row2 = await createSnapshot({
       provider,
       targetId,
       keyring,
       vaultId: 'vault-1',
-      entries,
+      entries: updatedEntries,
       generation: 1,
       appMeta: APP_META,
     });
@@ -467,5 +504,601 @@ describe('verifySnapshot', () => {
     expect(result.missing).toEqual([]);
     expect(result.corrupt).toEqual([]);
     expect(result.checkedObjects).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// /1 WAL format (issue #408): anchored db entries, format gating,
+// point-in-time row selection, deterministic objects.
+// ---------------------------------------------------------------------------
+
+/** A real, cleanly-closed SQLite database file (close checkpoints + deletes the WAL). */
+function makeSqliteDbFile(filePath: string, vals: string[]): void {
+  const conn = new DatabaseSync(filePath);
+  conn.exec('PRAGMA journal_mode=WAL');
+  conn.exec('CREATE TABLE rows (id INTEGER PRIMARY KEY, val TEXT NOT NULL)');
+  const stmt = conn.prepare('INSERT INTO rows (val) VALUES (?)');
+  for (const v of vals) stmt.run(v);
+  conn.close();
+}
+
+function readSqliteRows(filePath: string): string[] {
+  const conn = new DatabaseSync(filePath);
+  try {
+    return (conn.prepare('SELECT val FROM rows ORDER BY id').all() as { val: string }[]).map(
+      (r) => r.val,
+    );
+  } finally {
+    conn.close();
+  }
+}
+
+async function fileSha256(filePath: string): Promise<string> {
+  return createHash('sha256')
+    .update(await fs.readFile(filePath))
+    .digest('hex');
+}
+
+describe('/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs', () => {
+  const GEN_VAULT = '11'.repeat(16);
+  const GEN_JOURNAL = '22'.repeat(16);
+  const BASE_TICK = 1752480000000;
+
+  async function buildSqliteFixture(): Promise<Fixture & { genByPath: Map<string, string> }> {
+    const rootDir = await tempDir('backup-engine-provider-');
+    const provider = new SpyProvider(new LocalBackupProvider({ rootDir }));
+    const { targetId } = await provider.createTarget({ label: 'engine-v2-test' });
+    const keyringDir = await tempDir('backup-engine-keyring-');
+    const keyring = await createKeyring(path.join(keyringDir, 'keyring.json'));
+    const sourceDir = await tempDir('backup-engine-source-');
+
+    makeSqliteDbFile(path.join(sourceDir, 'vault.db'), ['v1', 'v2', 'v3']);
+    makeSqliteDbFile(path.join(sourceDir, 'journal.db'), ['j1']);
+    // Closing the last connection checkpoints and deletes the WAL — the base
+    // file is WAL-quiet, exactly the state the shipper snapshots from.
+    await expect(fs.access(path.join(sourceDir, 'vault.db-wal'))).rejects.toThrow();
+    await fs.writeFile(path.join(sourceDir, 'seal.key'), pseudoRandomBuffer(32, 5));
+
+    const entries: SourceEntry[] = [
+      {
+        path: 'vault.db',
+        kind: 'db',
+        absolutePath: path.join(sourceDir, 'vault.db'),
+        sha256: await fileSha256(path.join(sourceDir, 'vault.db')),
+        walGeneration: GEN_VAULT,
+        baseTickMs: BASE_TICK,
+      },
+      {
+        path: 'journal.db',
+        kind: 'db',
+        absolutePath: path.join(sourceDir, 'journal.db'),
+        sha256: await fileSha256(path.join(sourceDir, 'journal.db')),
+        walGeneration: GEN_JOURNAL,
+        // The SAME tick as the vault's: the shipper breaks both generations
+        // together, and restore refuses a pair that cannot show it.
+        baseTickMs: BASE_TICK,
+      },
+      { path: 'seal.key', kind: 'seal-key', absolutePath: path.join(sourceDir, 'seal.key') },
+    ];
+    const genByPath = new Map([
+      ['vault.db', GEN_VAULT],
+      ['journal.db', GEN_JOURNAL],
+    ]);
+    return { provider, targetId, keyring, sourceDir, entries, genByPath };
+  }
+
+  test('roundtrip: registers /1, verifies the base sha256, and runs WAL replay', async () => {
+    const { provider, targetId, keyring, sourceDir, entries } = await buildSqliteFixture();
+    const row = await createSnapshot({
+      provider,
+      targetId,
+      keyring,
+      vaultId: 'vault-1',
+      entries,
+      generation: 1,
+      appMeta: APP_META,
+    });
+    expect(row).not.toBeNull();
+    expect(row!.format).toBe('centraid-snapshot/1');
+    expect(row!.format).toBe(SNAPSHOT_FORMAT);
+
+    const destDir = await tempDir('backup-engine-v2-restore-');
+    await fs.rm(destDir, { recursive: true, force: true });
+    const result = await restoreSnapshot({
+      provider,
+      targetId,
+      keyring,
+      vaultId: 'vault-1',
+      destDir,
+      current: CURRENT,
+    });
+
+    // /1 restore performs WAL replay (empty streams here — no segments were
+    // shipped — but the generations from the sealed entries flow through and
+    // both bases pass SQLite integrity checks).
+    expect(result.walReplay).not.toBeNull();
+    expect(result.walReplay!.perDb.vault.generation).toBe(GEN_VAULT);
+    expect(result.walReplay!.perDb.journal.generation).toBe(GEN_JOURNAL);
+    expect(result.walReplay!.perDb.vault.integrityCheck).toBe('ok');
+    expect(result.walReplay!.perDb.journal.integrityCheck).toBe('ok');
+    expect(result.walReplay!.perDb.vault.segmentsApplied).toBe(0);
+    expect(result.walReplay!.damaged).toEqual([]);
+
+    expect(readSqliteRows(path.join(destDir, 'vault.db'))).toEqual(['v1', 'v2', 'v3']);
+    expect(readSqliteRows(path.join(destDir, 'journal.db'))).toEqual(['j1']);
+    const originalSeal = await fs.readFile(path.join(sourceDir, 'seal.key'));
+    expect((await fs.readFile(path.join(destDir, 'seal.key'))).equals(originalSeal)).toBe(true);
+  });
+
+  test('db entries carry baseTickMs, and the two agree', async () => {
+    const { provider, targetId, keyring, entries } = await buildSqliteFixture();
+    await createSnapshot({
+      provider,
+      targetId,
+      keyring,
+      vaultId: 'vault-1',
+      entries,
+      generation: 1,
+      appMeta: APP_META,
+    });
+    const row = (await provider.listSnapshots(targetId))[0]!;
+    const store = await provider.openDataPlane(targetId, 'backup', 'read');
+    const opened = openManifest(
+      await store.get(row.manifestKey),
+      keyring,
+      'vault-1',
+      row.manifestHash,
+    );
+    const dbEntries = opened.entries.filter((e) => e.kind === 'db');
+    expect(dbEntries).toHaveLength(2);
+    expect(dbEntries.map((e) => e.baseTickMs)).toEqual([BASE_TICK, BASE_TICK]);
+  });
+
+  test('a snapshot whose two db bases are from DIFFERENT ticks is REFUSED, not restored', async () => {
+    // The corruption this exists to make unconstructible: a journal base minted
+    // after the vault's already holds receipts for rows that live only in the
+    // vault's segments. Lose one of those segments and the restore hands back
+    // history asserting data it does not have — silently, because an empty
+    // listing has no "hole" to detect. There is no coordinated instant between
+    // two bases from two ticks, so this is refused rather than degraded.
+    const { provider, targetId, keyring, entries } = await buildSqliteFixture();
+    const skewed = entries.map((e) =>
+      e.path === 'journal.db' ? { ...e, baseTickMs: BASE_TICK + 60_000 } : e,
+    );
+    await expect(
+      createSnapshot({
+        provider,
+        targetId,
+        keyring,
+        vaultId: 'vault-1',
+        entries: skewed,
+        generation: 1,
+        appMeta: APP_META,
+      }),
+    ).rejects.toThrow(/bases are from DIFFERENT ticks/);
+  });
+
+  test('a /1 snapshot with NO base ticks at all is refused (it cannot prove coherence)', async () => {
+    const { provider, targetId, keyring, entries } = await buildSqliteFixture();
+    const stripped = entries.map(({ baseTickMs: _drop, ...rest }) => rest);
+    await expect(
+      createSnapshot({
+        provider,
+        targetId,
+        keyring,
+        vaultId: 'vault-1',
+        entries: stripped,
+        generation: 1,
+        appMeta: APP_META,
+      }),
+    ).rejects.toThrow(/missing a valid base tick/);
+  });
+
+  test('a WRONG sha256 in the db entry fails the restore before any replay', async () => {
+    const { provider, targetId, keyring, entries } = await buildSqliteFixture();
+    const tampered = entries.map((e) =>
+      e.path === 'vault.db' ? { ...e, sha256: 'ab'.repeat(32) } : e,
+    );
+    await createSnapshot({
+      provider,
+      targetId,
+      keyring,
+      vaultId: 'vault-1',
+      entries: tampered,
+      generation: 1,
+      appMeta: APP_META,
+    });
+    const destDir = await tempDir('backup-engine-v2-badsha-');
+    await fs.rm(destDir, { recursive: true, force: true });
+    await expect(
+      restoreSnapshot({
+        provider,
+        targetId,
+        keyring,
+        vaultId: 'vault-1',
+        destDir,
+        current: CURRENT,
+      }),
+    ).rejects.toThrow(/"vault\.db" hash mismatch/);
+    // The restore aborted before completing: no quarantine marker was written.
+    await expect(fs.access(path.join(destDir, 'RESTORE_QUARANTINE.json'))).rejects.toThrow();
+  });
+
+  // ── the no-change test is over ENTRY METADATA, not just chunk bytes ───────
+
+  test('a generation-only change (identical bytes, size and mtime) still REGISTERS a snapshot', async () => {
+    // The reuse fast path keys on `(size, mtimeMs)`, and a base clone taken
+    // over an idle database has the same bytes — and can have the same stat —
+    // as its predecessor. If "the chunk index is unchanged" were the whole
+    // no-change test, the run would register NOTHING and no manifest would
+    // ever name the live generation: `basePending` would never clear, the
+    // prune's keep-set (built from manifests) would never learn about the
+    // generation, and its segments would be deleted the moment it was
+    // superseded. What changed is the ENTRY, not the bytes — and the entry is
+    // what a restore reads.
+    const { provider, targetId, keyring, entries } = await buildSqliteFixture();
+    const row1 = await createSnapshot({
+      provider,
+      targetId,
+      keyring,
+      vaultId: 'vault-1',
+      entries,
+      generation: 1,
+      appMeta: APP_META,
+    });
+    expect(row1).not.toBeNull();
+
+    // Freeze the stat of both base files so `(size, mtimeMs)` is bit-for-bit
+    // what the previous manifest recorded — the coarse-timestamp filesystem,
+    // made deterministic. ONLY `walGeneration` differs.
+    const pinned = new Date(BASE_TICK);
+    for (const entry of entries) await fs.utimes(entry.absolutePath, pinned, pinned);
+    const rolled = entries.map((e) =>
+      e.kind === 'db' ? { ...e, walGeneration: `${e.walGeneration!.slice(0, 30)}ff` } : e,
+    );
+
+    const row2 = await createSnapshot({
+      provider,
+      targetId,
+      keyring,
+      vaultId: 'vault-1',
+      entries: rolled,
+      generation: 1,
+      appMeta: APP_META,
+    });
+    expect(row2).not.toBeNull();
+    const rows = await provider.listSnapshots(targetId);
+    expect(rows).toHaveLength(2);
+    const store = await provider.openDataPlane(targetId, 'backup', 'read');
+    const opened = openManifest(
+      await store.get(rows[0]!.manifestKey),
+      keyring,
+      'vault-1',
+      rows[0]!.manifestHash,
+    );
+    // The NEW generation is the one the newest manifest anchors…
+    expect(opened.entries.find((e) => e.path === 'vault.db')!.walGeneration).toBe(
+      rolled.find((e) => e.path === 'vault.db')!.walGeneration,
+    );
+    // …and the unchanged bytes were still deduped: no chunk was re-uploaded.
+    expect(provider.lastStore!.putKeys.filter((k) => k.startsWith('chunks/'))).toEqual([]);
+  });
+
+  test('a same-stat base with DIFFERENT bytes is re-chunked, not reused (coarse mtime is not identity)', async () => {
+    // Two base clones of one database routinely share a size (same page
+    // count). On a filesystem whose mtime granularity is coarser than the gap
+    // between two checkpoints they share an mtime too — and then a fast path
+    // keyed on `(size, mtimeMs)` alone hands the new generation's entry the
+    // PREVIOUS generation's chunk refs: a manifest that claims the new base's
+    // sha256 and its segments, but whose objects reassemble the old base.
+    // Restore catches the lie (the hash is verified), which makes the snapshot
+    // unrestorable rather than silently wrong — a destroyed restore point that
+    // registered green. The caller vouches for the content with `sha256`; that
+    // hash, not the stat, is the identity test.
+    const { provider, targetId, keyring, sourceDir, entries } = await buildSqliteFixture();
+
+    // Pin the mtime BEFORE the first snapshot, not just after the rewrite: the
+    // first manifest records whatever mtime it sees, and the fast path compares
+    // against THAT. Pinning only the second base leaves the two mtimes
+    // different, the fast path is never reached, and this test would pass
+    // against the very bug it exists to catch.
+    const pinned = new Date(BASE_TICK);
+    for (const entry of entries) await fs.utimes(entry.absolutePath, pinned, pinned);
+
+    await createSnapshot({
+      provider,
+      targetId,
+      keyring,
+      vaultId: 'vault-1',
+      entries,
+      generation: 1,
+      appMeta: APP_META,
+    });
+
+    // A brand-new base for the next generation: different rows, and (SQLite
+    // pages being fixed-size) the same file length.
+    const vaultDb = path.join(sourceDir, 'vault.db');
+    const sizeBefore = (await fs.stat(vaultDb)).size;
+    const staleSha = await fileSha256(vaultDb);
+    await fs.rm(vaultDb, { force: true });
+    makeSqliteDbFile(vaultDb, ['w1', 'w2', 'w3']);
+    expect((await fs.stat(vaultDb)).size).toBe(sizeBefore); // same size, new bytes
+    expect(await fileSha256(vaultDb)).not.toBe(staleSha);
+    // Re-pin: the rewrite reset the mtime. Now BOTH bases present the identical
+    // (size, mtime) stat — the coarse-mtime collision this guards against.
+    for (const entry of entries) await fs.utimes(entry.absolutePath, pinned, pinned);
+
+    const next = await Promise.all(
+      entries.map(async (e) =>
+        e.path === 'vault.db'
+          ? {
+              ...e,
+              sha256: await fileSha256(vaultDb),
+              walGeneration: `${GEN_VAULT.slice(0, 30)}ff`,
+            }
+          : e,
+      ),
+    );
+    expect(next.find((e) => e.path === 'vault.db')!.sha256).not.toBe(
+      entries.find((e) => e.path === 'vault.db')!.sha256,
+    );
+
+    const row = await createSnapshot({
+      provider,
+      targetId,
+      keyring,
+      vaultId: 'vault-1',
+      entries: next,
+      generation: 1,
+      appMeta: APP_META,
+    });
+    expect(row).not.toBeNull();
+
+    // THE assertion: the registered snapshot actually restores. Reusing the
+    // stale chunk refs makes this throw `"vault.db" hash mismatch`.
+    const destDir = await tempDir('backup-engine-v2-samestat-');
+    await fs.rm(destDir, { recursive: true, force: true });
+    await restoreSnapshot({
+      provider,
+      targetId,
+      keyring,
+      vaultId: 'vault-1',
+      destDir,
+      current: CURRENT,
+    });
+    expect(await fileSha256(path.join(destDir, 'vault.db'))).toBe(
+      await fileSha256(vaultDb), // the NEW base, not its same-stat predecessor
+    );
+  });
+});
+
+describe('snapshot format gate', () => {
+  test('v0 reads and writes only the first authenticated WAL format', () => {
+    expect(READABLE_SNAPSHOT_FORMATS).toEqual(['centraid-snapshot/1']);
+    expect(SNAPSHOT_FORMAT).toBe('centraid-snapshot/1');
+  });
+
+  test('restore refuses a row whose format is outside the reader guarantee', async () => {
+    const { provider, targetId, keyring, entries } = await buildFixture();
+    await createSnapshot({
+      provider,
+      targetId,
+      keyring,
+      vaultId: 'vault-1',
+      entries,
+      generation: 1,
+      appMeta: APP_META,
+    });
+    await provider.registerSnapshot(targetId, {
+      idempotencyKey: 'format-9',
+      manifestKey: `u/${targetId}/backup/manifests/9.json`,
+      manifestHash: 'f'.repeat(64),
+      totalBytes: 1,
+      objectCount: 0,
+      generation: 1,
+      format: 'centraid-snapshot/9',
+      appMeta: APP_META,
+    });
+    const destDir = await tempDir('backup-engine-fmt9-');
+    await fs.rm(destDir, { recursive: true, force: true });
+    await expect(
+      restoreSnapshot({
+        provider,
+        targetId,
+        keyring,
+        vaultId: 'vault-1',
+        destDir,
+        current: CURRENT,
+      }),
+    ).rejects.toThrow(/unknown format "centraid-snapshot\/9"/);
+  });
+});
+
+describe('point-in-time snapshot row selection', () => {
+  interface PitrFixture {
+    provider: LocalBackupProvider;
+    targetId: string;
+    keyring: Awaited<ReturnType<typeof createKeyring>>;
+    contentV1: Buffer;
+    contentV2: Buffer;
+  }
+
+  /**
+   * Two snapshots of one file, seq 1 at createdAt 1000s and seq 2 at 2000s.
+   * LocalBackupProvider stamps createdAt from the real clock (epoch seconds),
+   * which two back-to-back registrations cannot distinguish — so after
+   * registering, rewrite the provider's own persisted registry.json with
+   * controlled values (it re-reads from disk on every call; this is its real
+   * cross-process contract, not a mock).
+   */
+  async function pitrFixture(): Promise<PitrFixture> {
+    const rootDir = await tempDir('backup-engine-pitr-');
+    const provider = new LocalBackupProvider({ rootDir });
+    const { targetId } = await provider.createTarget({ label: 'pitr-test' });
+    const keyringDir = await tempDir('backup-engine-keyring-');
+    const keyring = await createKeyring(path.join(keyringDir, 'keyring.json'));
+    const sourceDir = await tempDir('backup-engine-source-');
+    const filePath = path.join(sourceDir, 'seal.key');
+    const vaultPath = path.join(sourceDir, 'vault.db');
+    const journalPath = path.join(sourceDir, 'journal.db');
+    makeSqliteDbFile(vaultPath, ['base']);
+    makeSqliteDbFile(journalPath, ['base']);
+    const baseEntries: SourceEntry[] = [
+      {
+        path: 'vault.db',
+        kind: 'db',
+        absolutePath: vaultPath,
+        sha256: await fileSha256(vaultPath),
+        walGeneration: '33'.repeat(16),
+        baseTickMs: 1_000_000,
+      },
+      {
+        path: 'journal.db',
+        kind: 'db',
+        absolutePath: journalPath,
+        sha256: await fileSha256(journalPath),
+        walGeneration: '44'.repeat(16),
+        baseTickMs: 1_000_000,
+      },
+      { path: 'seal.key', kind: 'seal-key', absolutePath: filePath },
+    ];
+    const contentV1 = Buffer.from('generation-one-content');
+    const contentV2 = Buffer.from('generation-TWO-content');
+
+    await fs.writeFile(filePath, contentV1);
+    const row1 = await createSnapshot({
+      provider,
+      targetId,
+      keyring,
+      vaultId: 'vault-1',
+      entries: baseEntries,
+      generation: 1,
+      appMeta: APP_META,
+    });
+    await fs.writeFile(filePath, contentV2);
+    const future = new Date(Date.now() + 5000);
+    await fs.utimes(filePath, future, future);
+    const secondEntries = baseEntries.map((entry) =>
+      entry.kind === 'db' ? { ...entry, baseTickMs: 2_000_000 } : entry,
+    );
+    const row2 = await createSnapshot({
+      provider,
+      targetId,
+      keyring,
+      vaultId: 'vault-1',
+      entries: secondEntries,
+      generation: 1,
+      appMeta: APP_META,
+    });
+    expect(row1?.seq).toBe(1);
+    expect(row2?.seq).toBe(2);
+
+    const registryFile = path.join(rootDir, 'registry.json');
+    const registry = JSON.parse(await fs.readFile(registryFile, 'utf8')) as {
+      snapshots: Record<string, { seq: number; createdAt: number }[]>;
+    };
+    for (const r of registry.snapshots[targetId]!) {
+      r.createdAt = r.seq === 1 ? 1000 : 2000; // epoch seconds, newest-first list
+    }
+    await fs.writeFile(registryFile, JSON.stringify(registry, null, 2));
+    return { provider, targetId, keyring, contentV1, contentV2 };
+  }
+
+  async function restoreWith(
+    f: PitrFixture,
+    opts: { seq?: number; pointInTimeMs?: number },
+  ): Promise<Buffer> {
+    const destDir = await tempDir('backup-engine-pitr-dest-');
+    await fs.rm(destDir, { recursive: true, force: true });
+    await restoreSnapshot({
+      provider: f.provider,
+      targetId: f.targetId,
+      keyring: f.keyring,
+      vaultId: 'vault-1',
+      ...opts,
+      destDir,
+      current: CURRENT,
+    });
+    return fs.readFile(path.join(destDir, 'seal.key'));
+  }
+
+  test('pointInTimeMs picks the newest snapshot created at or before T', async () => {
+    const f = await pitrFixture();
+    const restoreAt = (pointInTimeMs: number): Promise<Buffer> => restoreWith(f, { pointInTimeMs });
+
+    // Between the two snapshots → the older row (seq 1).
+    expect((await restoreAt(1_500_000)).equals(f.contentV1)).toBe(true);
+    // Exactly at a snapshot's createdAt → that snapshot (<=, not <).
+    expect((await restoreAt(1_000_000)).equals(f.contentV1)).toBe(true);
+    // After both → the newest (seq 2).
+    expect((await restoreAt(2_500_000)).equals(f.contentV2)).toBe(true);
+    // Before every snapshot → refuse, never "helpfully" restore something newer.
+    await expect(restoreAt(500_000)).rejects.toThrow(/no snapshot exists at or before/);
+  });
+
+  test('seq + pointInTimeMs: a base NEWER than the requested instant is refused, not served', async () => {
+    const f = await pitrFixture();
+
+    // seq 2's base was taken at 2000s — after T. The WAL cut would stop the
+    // REPLAY at T, but the base already carries every write made up to 2000s,
+    // and a base cannot be rewound: serving it would answer "the state at T"
+    // with a state that only existed later. Refuse.
+    await expect(restoreWith(f, { seq: 2, pointInTimeMs: 1_500_000 })).rejects.toThrow(
+      /seq 2 has a base at .* NEWER than the requested point in time/,
+    );
+
+    // The combination stays legal where it means something: an explicitly
+    // named base at or before T, replayed up to T.
+    expect((await restoreWith(f, { seq: 1, pointInTimeMs: 1_500_000 })).equals(f.contentV1)).toBe(
+      true,
+    );
+    // Exactly at the base's createdAt → allowed (<=, same boundary as above).
+    expect((await restoreWith(f, { seq: 2, pointInTimeMs: 2_000_000 })).equals(f.contentV2)).toBe(
+      true,
+    );
+    // And seq alone is untouched by the check.
+    expect((await restoreWith(f, { seq: 2 })).equals(f.contentV2)).toBe(true);
+  });
+});
+
+describe('deterministic objects (G7 — idempotent uploads)', () => {
+  test('the same content under the same keyring/vault produces byte-identical chunk objects', async () => {
+    const keyringDir = await tempDir('backup-engine-keyring-');
+    const keyring = await createKeyring(path.join(keyringDir, 'keyring.json'));
+    const sourceDir = await tempDir('backup-engine-source-');
+    const entries = await buildSourceTree(sourceDir);
+
+    async function snapshotIntoFreshProvider(): Promise<Map<string, Buffer>> {
+      const rootDir = await tempDir('backup-engine-det-');
+      const provider = new LocalBackupProvider({ rootDir });
+      const { targetId } = await provider.createTarget({ label: 'det-test' });
+      const row = await createSnapshot({
+        provider,
+        targetId,
+        keyring,
+        vaultId: 'vault-1',
+        entries,
+        generation: 1,
+        appMeta: APP_META,
+      });
+      expect(row).not.toBeNull();
+      const store = await provider.openDataPlane(targetId, 'backup', 'read');
+      const chunks = new Map<string, Buffer>();
+      for await (const obj of store.list('chunks/')) {
+        chunks.set(obj.key, Buffer.from(await store.get(obj.key)));
+      }
+      return chunks;
+    }
+
+    const first = await snapshotIntoFreshProvider();
+    const second = await snapshotIntoFreshProvider();
+    expect(first.size).toBeGreaterThan(0);
+    expect([...second.keys()].sort()).toEqual([...first.keys()].sort());
+    for (const [key, bytes] of first) {
+      // Not just the same ids — the ENCRYPTED bytes are identical, because
+      // the nonce derives from the chunk's own keyed content hash. A crash
+      // retry re-PUTs the exact same object instead of a fresh ciphertext.
+      expect(second.get(key)!.equals(bytes)).toBe(true);
+    }
   });
 });

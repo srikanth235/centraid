@@ -14,7 +14,9 @@ import { registerKnowledgeCommands } from './knowledge.js';
 import { registerSocialCommands } from './social.js';
 
 test('assertTextBodyWithinBudget allows bodies at or under budget', () => {
-  expect(() => assertTextBodyWithinBudget('x'.repeat(INLINE_BODY_BUDGET_BYTES), 'text/plain')).not.toThrow();
+  expect(() =>
+    assertTextBodyWithinBudget('x'.repeat(INLINE_BODY_BUDGET_BYTES), 'text/plain'),
+  ).not.toThrow();
 });
 
 test('assertTextBodyWithinBudget refuses a body over budget with a typed error', () => {
@@ -46,7 +48,9 @@ test('assertInlineDataUriWithinBudget refuses an oversized text/* data URI', () 
 });
 
 test('a custom budget is honored', () => {
-  expect(() => assertTextBodyWithinBudget('12345', 'text/plain', 4)).toThrow(InlineBodyTooLargeError);
+  expect(() => assertTextBodyWithinBudget('12345', 'text/plain', 4)).toThrow(
+    InlineBodyTooLargeError,
+  );
   expect(() => assertTextBodyWithinBudget('1234', 'text/plain', 4)).not.toThrow();
 });
 
@@ -93,7 +97,10 @@ test('social.draft_message refuses an oversized body', () => {
   const other = { party_id: 'p2' };
   const outcome = gw.invoke(owner, {
     command: 'social.draft_message',
-    input: { recipient_party_id: other.party_id, body_text: 'w'.repeat(INLINE_BODY_BUDGET_BYTES + 1) },
+    input: {
+      recipient_party_id: other.party_id,
+      body_text: 'w'.repeat(INLINE_BODY_BUDGET_BYTES + 1),
+    },
     purpose: 'dpv:ServiceProvision',
   });
   expect(outcome.status).toBe('failed');
@@ -113,7 +120,12 @@ test('scanInlineBodyViolations finds pre-existing oversized inline bodies and at
          (content_id, media_type, content_uri, sha256, byte_size, title, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
        VALUES (?, 'text/plain', ?, 'deadbeef', ?, NULL, NULL, NULL, NULL, NULL, NULL, ?)`,
     )
-    .run(contentId, `data:text/plain;charset=utf-8,${encodeURIComponent(bigText)}`, Buffer.byteLength(bigText, 'utf8'), new Date().toISOString());
+    .run(
+      contentId,
+      `data:text/plain;charset=utf-8,${encodeURIComponent(bigText)}`,
+      Buffer.byteLength(bigText, 'utf8'),
+      new Date().toISOString(),
+    );
   db.vault
     .prepare(
       `INSERT INTO knowledge_note (note_id, author_party_id, title, body_content_id, format, pinned, created_at, updated_at)

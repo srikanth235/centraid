@@ -46,7 +46,10 @@ describe('foldVaultsResponse', () => {
 
   it('treats a missing/non-array vaults field as bad_response', () => {
     expect(foldVaultsResponse(200, {})).toEqual({ ok: false, error: 'bad_response' });
-    expect(foldVaultsResponse(200, { vaults: 'nope' })).toEqual({ ok: false, error: 'bad_response' });
+    expect(foldVaultsResponse(200, { vaults: 'nope' })).toEqual({
+      ok: false,
+      error: 'bad_response',
+    });
   });
 });
 

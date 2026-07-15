@@ -35,6 +35,7 @@
         "package.json",
         "queries/parties.js",
         "queries/search.js",
+        "queries/upcoming.d.ts",
         "queries/upcoming.js",
         "wall.css"
       ],
@@ -435,7 +436,9 @@
         "index.html",
         "logic.js",
         "package.json",
+        "queries/library.d.ts",
         "queries/library.js",
+        "queries/note.d.ts",
         "queries/note.js",
         "queries/search.js",
         "seed.js",

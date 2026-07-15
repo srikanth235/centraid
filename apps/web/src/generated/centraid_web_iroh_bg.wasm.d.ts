@@ -1,19 +1,43 @@
-/* tslint:disable */
-/* eslint-disable */
+/* eslint-disable -- generated wasm-bindgen declarations (#408) */
 export const memory: WebAssembly.Memory;
 export const __wbg_browserendpoint_free: (a: number, b: number) => void;
 export const __wbg_browserresponse_free: (a: number, b: number) => void;
 export const browserendpoint_close: (a: number) => number;
 export const browserendpoint_endpoint_id: (a: number, b: number) => void;
-export const browserendpoint_pair_gateway: (a: number, b: number, c: number, d: number, e: number) => number;
-export const browserendpoint_request: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => number;
+export const browserendpoint_pair_gateway: (
+  a: number,
+  b: number,
+  c: number,
+  d: number,
+  e: number,
+) => number;
+export const browserendpoint_request: (
+  a: number,
+  b: number,
+  c: number,
+  d: number,
+  e: number,
+  f: number,
+  g: number,
+  h: number,
+  i: number,
+  j: number,
+  k: number,
+) => number;
 export const browserendpoint_secret_key: (a: number, b: number) => void;
 export const browserendpoint_spawn: (a: number, b: number) => number;
 export const browserresponse_headers_json: (a: number, b: number) => void;
 export const browserresponse_status: (a: number) => number;
 export const browserresponse_take_body: (a: number, b: number) => void;
 export const start: () => void;
-export const ring_core_0_17_14__bn_mul_mont: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
+export const ring_core_0_17_14__bn_mul_mont: (
+  a: number,
+  b: number,
+  c: number,
+  d: number,
+  e: number,
+  f: number,
+) => void;
 export const __wbg_intounderlyingbytesource_free: (a: number, b: number) => void;
 export const __wbg_intounderlyingsink_free: (a: number, b: number) => void;
 export const __wbg_intounderlyingsource_free: (a: number, b: number) => void;

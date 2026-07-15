@@ -248,6 +248,7 @@
       "name": "@centraid/vault",
       "version": "0.1.0",
       "dependencies": {
+        "@centraid/backup": "workspace:*",
         "uuid": "^14.0.0",
       },
       "devDependencies": {

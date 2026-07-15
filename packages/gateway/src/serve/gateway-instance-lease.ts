@@ -86,6 +86,7 @@ export class GatewayInstanceLease {
   private readonly hostname: string;
   private readonly startedAtIso: string;
   private timer: NodeJS.Timeout | undefined;
+  private claimed = false;
   /** True once a fresh foreign lease is in play — renew backs off to
    *  read-only checks while this holds (never clobber-write a live rival). */
   private conflicted = false;
@@ -112,9 +113,16 @@ export class GatewayInstanceLease {
    * second gateway must never brick the first).
    */
   start(): void {
-    this.checkAndRenew();
+    this.claim();
     this.timer = setInterval(() => this.checkAndRenew(), LEASE_RENEW_INTERVAL_MS);
     this.timer.unref();
+  }
+
+  /** Claim once before vault planes mount, so WAL ownership is decided first. */
+  claim(): void {
+    if (this.claimed) return;
+    this.checkAndRenew();
+    this.claimed = true;
   }
 
   /**

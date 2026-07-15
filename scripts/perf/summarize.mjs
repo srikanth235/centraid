@@ -28,12 +28,7 @@ console.log(`harness: ${report.harness.apiUrl}  app: ${report.harness.appId}\n`)
 
 const rows = [
   ['phase', 'requests', 'transfer', 'warm/cold'],
-  [
-    'shell cold',
-    report.shell.cold.requestCount,
-    kb(report.shell.cold.transferBytes),
-    '',
-  ],
+  ['shell cold', report.shell.cold.requestCount, kb(report.shell.cold.transferBytes), ''],
   [
     'shell warm',
     report.shell.warm.requestCount,

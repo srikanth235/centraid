@@ -229,7 +229,10 @@ test('_turn resolves the model through resolveModel, passing the assistant subsy
     },
   };
   const calls: Array<{ subsystem: string; explicit?: string }> = [];
-  const resolveModel = async (subsystem: string, explicit?: string): Promise<string | undefined> => {
+  const resolveModel = async (
+    subsystem: string,
+    explicit?: string,
+  ): Promise<string | undefined> => {
     calls.push({ subsystem, explicit });
     return explicit ?? 'prefs-resolved-model';
   };

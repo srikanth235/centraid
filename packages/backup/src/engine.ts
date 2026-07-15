@@ -7,29 +7,57 @@
  * against `LocalBackupProvider` or `RemoteBackupProvider`.
  */
 
+import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { chunkStream } from './chunker.js';
 import {
   activeMasterKey,
   chunkId as computeChunkId,
   decrypt,
   deriveDataKey,
   deriveDedupKey,
-  encrypt,
+  deriveNonce,
+  encryptWithNonce,
   type Keyring,
   masterKeyForEpoch,
 } from './crypto.js';
+import type { EngineLogger } from './engine-log.js';
 import {
+  assertManifestMatchesRegistry,
   canonicalJson,
   isSafeEntryPath,
   type ManifestEntry,
   type ManifestEntryKind,
   openManifest,
+  READABLE_SNAPSHOT_FORMATS,
   sealManifest,
   SNAPSHOT_FORMAT,
+  validateSnapshotBasePair,
 } from './manifest.js';
+import { partStream } from './parts.js';
 import type { BackupProvider, SnapshotRow } from './provider.js';
+import type { ObjectStore } from './object-store.js';
+import {
+  openWalCloser,
+  openWalPairMarker,
+  openWalSegment,
+  parseWalCloserKey,
+  parseWalPairMarkerKey,
+  parseWalSegmentKey,
+  planCoordinatedReplay,
+  planWalReplay,
+  type WalDbName,
+  type WalGroupCloser,
+  type WalPairMarker,
+  type WalSegmentAddress,
+  type WalStreamListing,
+  WAL_DB_FILES,
+  WAL_DB_NAMES,
+  walPairMarkerPrefix,
+  walSegmentKey,
+  walSegmentPrefix,
+} from './wal-format.js';
+import { replayWalSegments, type WalReplayOutcome } from './wal-restore.js';
 
 export interface SourceEntry {
   /** Path recorded in the manifest — relative, forward-slash, no traversal. */
@@ -37,12 +65,17 @@ export interface SourceEntry {
   kind: ManifestEntryKind;
   /** Where to actually read the bytes from on this machine. */
   absolutePath: string;
+  /** /1, `kind: 'db'` only: plaintext SHA-256 of the base file (G9 marker). */
+  sha256?: string;
+  /** /1, `kind: 'db'` only: the WAL stream generation this base anchors. */
+  walGeneration?: string;
+  /** /1, `kind: 'db'` only: the tick this base was cloned at. MUST match the sibling's. */
+  baseTickMs?: number;
+  /** /1, `kind: 'db'` only: newest pair-marker tick CONFIRMED uploaded (a floor the store owes). */
+  walTipTickMs?: number;
 }
 
-export interface EngineLogger {
-  info?: (msg: string) => void;
-  warn?: (msg: string) => void;
-}
+export type { EngineLogger } from './engine-log.js';
 
 const noopLog: Required<EngineLogger> = { info: () => undefined, warn: () => undefined };
 
@@ -109,8 +142,7 @@ async function loadPreviousManifest(
   const newest = rows[0];
   if (!newest) return null;
   const store = await provider.openDataPlane(targetId, 'backup', 'read');
-  const bytes = await store.get(newest.manifestKey);
-  const opened = openManifest(bytes, keyring, vaultId, newest.manifestHash);
+  const { opened } = await openSnapshotRow(newest, store, keyring, vaultId);
   const entriesByPath = new Map(opened.entries.map((e) => [e.path, e] as const));
   const chunkSizes = new Map(opened.public.chunkIndex.map((c) => [c.id, c.size] as const));
   return { row: newest, keyEpoch: opened.public.keyEpoch, entriesByPath, chunkSizes };
@@ -178,8 +210,26 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
     totalBytes += stat.size;
     const prior = sameEpochPrevious?.entriesByPath.get(entry.path);
 
-    if (prior && prior.size === stat.size && prior.mtimeMs === stat.mtimeMs) {
-      // Fast path: reuse recorded chunk refs without reading the file.
+    // `(size, mtimeMs)` is a HEURISTIC for "unchanged", not an identity — and
+    // for the WAL-backed db path it is a heuristic over a file the caller REPLACED:
+    // each generation's base is a fresh clone at a fresh path, and two clones
+    // of one database routinely share a size (same page count). On a
+    // filesystem whose mtime granularity is coarser than the gap between two
+    // checkpoints they share an mtime too, and then the fast path below would
+    // reuse the PREVIOUS generation's chunk refs while stamping the CURRENT
+    // generation's `sha256`/`walGeneration` into the entry — a manifest whose
+    // chunks restore the old base under the new generation's segments. Restore
+    // catches it (the base hash is verified), so the failure is loud rather
+    // than silent, but the snapshot it registered can never be restored: a
+    // destroyed restore point that every surface reports as healthy.
+    // When the caller vouches for the content — the WAL shipper always hashes
+    // its base clones — that hash IS the identity test, so require it.
+    const contentUnchanged = entry.sha256 === undefined || prior?.sha256 === entry.sha256;
+    if (prior && contentUnchanged && prior.size === stat.size && prior.mtimeMs === stat.mtimeMs) {
+      // Fast path: reuse recorded chunk refs without reading the file. The
+      // WAL db-entry fields come from the CURRENT source (not `prior`): the
+      // file's bytes are the ones `prior` chunked (checked above), and its
+      // walGeneration is the caller's live truth.
       for (const id of prior.chunks) {
         if (!newChunkIndex.has(id)) {
           newChunkIndex.set(id, sameEpochPrevious?.chunkSizes.get(id) ?? 0);
@@ -191,6 +241,10 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
         size: stat.size,
         mtimeMs: stat.mtimeMs,
         chunks: prior.chunks,
+        ...(entry.sha256 !== undefined ? { sha256: entry.sha256 } : {}),
+        ...(entry.walGeneration !== undefined ? { walGeneration: entry.walGeneration } : {}),
+        ...(entry.baseTickMs !== undefined ? { baseTickMs: entry.baseTickMs } : {}),
+        ...(entry.walTipTickMs !== undefined ? { walTipTickMs: entry.walTipTickMs } : {}),
       });
       continue;
     }
@@ -198,7 +252,7 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
     everyEntryReused = false;
     const chunkIds: string[] = [];
     const uploads: Promise<void>[] = [];
-    for await (const plain of chunkStream(readFileStream(entry.absolutePath))) {
+    for await (const plain of partStream(readFileStream(entry.absolutePath))) {
       const id = computeChunkId(dedupKey, plain);
       chunkIds.push(id);
       newChunkIndex.set(id, plain.length);
@@ -206,7 +260,12 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
       knownChunkIds.add(id);
       const release = await uploadSem.acquire();
       const objectKey = `chunks/${id}`;
-      const encrypted = encrypt(dataKey, plain);
+      // Deterministic nonce from the chunk's own keyed content hash (G7):
+      // same plaintext ⇒ same id ⇒ byte-identical object (retries and dedup
+      // races converge); different plaintext ⇒ different id ⇒ fresh nonce —
+      // the (key, nonce) pair can never repeat with different content.
+      const nonce = deriveNonce(dataKey, `centraid-backup:chunk-nonce:${id}`);
+      const encrypted = encryptWithNonce(dataKey, nonce, plain);
       uploads.push(
         store
           .head(objectKey)
@@ -221,6 +280,10 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
       size: stat.size,
       mtimeMs: stat.mtimeMs,
       chunks: chunkIds,
+      ...(entry.sha256 !== undefined ? { sha256: entry.sha256 } : {}),
+      ...(entry.walGeneration !== undefined ? { walGeneration: entry.walGeneration } : {}),
+      ...(entry.baseTickMs !== undefined ? { baseTickMs: entry.baseTickMs } : {}),
+      ...(entry.walTipTickMs !== undefined ? { walTipTickMs: entry.walTipTickMs } : {}),
     });
   }
 
@@ -232,13 +295,31 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
     previousChunkIdSet !== null &&
     previousChunkIdSet.size === newChunkIndex.size &&
     [...newChunkIndex.keys()].every((id) => previousChunkIdSet.has(id));
+  // The bytes can be identical while the ENTRY METADATA is not, and one of
+  // those fields is load-bearing: `walTipTickMs` is the floor a verification
+  // holds the provider to, and it only advances as markers are confirmed
+  // uploaded. A generation's base file never changes, so a chunk-only
+  // no-change test would freeze that floor at whatever it was when the
+  // generation was first registered — and a provider could then delete every
+  // marker written since, undetected. A run whose only change is a fresher tip
+  // therefore still registers (a small manifest object, at the backup
+  // interval); a genuinely idle vault still registers nothing, because an idle
+  // vault ships no markers and its tip does not move.
+  const entriesIdentical =
+    sameEpochPrevious !== null &&
+    sealedEntries.length === sameEpochPrevious.entriesByPath.size &&
+    sealedEntries.every((entry) => {
+      const prior = sameEpochPrevious.entriesByPath.get(entry.path);
+      return prior !== undefined && canonicalJson(prior) === canonicalJson(entry);
+    });
 
-  if (chunkIndexIdentical) {
+  if (chunkIndexIdentical && entriesIdentical) {
     log.info('createSnapshot: no change since previous snapshot — skipping registration');
     return null;
   }
 
   const chunkIndex = [...newChunkIndex.entries()].map(([id, size]) => ({ id, size }));
+  validateSnapshotBasePair(sealedEntries);
   const { bytes, manifestHash } = sealManifest({
     keyring: opts.keyring,
     vaultId: opts.vaultId,
@@ -298,14 +379,25 @@ export interface RestoreSnapshotOptions {
   keyring: Keyring;
   vaultId: string;
   seq?: number;
+  /**
+   * Point-in-time restore: pick the newest snapshot created at or
+   * before this instant, then replay WAL segments only up to it. Omit for
+   * restore-to-tip (newest snapshot + every shipped segment). With `seq`, the
+   * named snapshot is used as the base and the WAL cut still applies — but
+   * only if that base is itself at or before the instant; see below.
+   */
+  pointInTimeMs?: number;
   destDir: string;
   current: RestoreCurrentVersions;
+  log?: EngineLogger;
 }
 
 export interface RestoreResult {
   seq: number;
   generation: number;
   entries: string[];
+  /** WAL replay outcome for the authenticated coordinated base pair. */
+  walReplay: WalReplayOutcome;
 }
 
 /** `x.y` (or bare `x`) numeric version compare: -1/0/1. Non-numeric parts compare as 0. */
@@ -324,23 +416,16 @@ function compareVersion(a: string, b: string): number {
 const MIN_SUPPORTED_VAULT_USER_VERSION = '1';
 const MIN_SUPPORTED_ONTOLOGY_VERSION = '1.0';
 
-export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<RestoreResult> {
-  const row =
-    opts.seq !== undefined
-      ? await opts.provider.getSnapshot(opts.targetId, opts.seq)
-      : (await opts.provider.listSnapshots(opts.targetId))[0];
-  if (!row) throw new Error('restoreSnapshot: no snapshot available');
-
-  // 1. Compatibility gate BEFORE downloading anything.
-  if (row.format !== SNAPSHOT_FORMAT) {
-    throw new Error(`restoreSnapshot: unknown format "${row.format}" — update the gateway first`);
-  }
-  const vaultUserVersion = row.appMeta['vaultUserVersion'];
-  const ontologyVersion = row.appMeta['ontologyVersion'];
+function assertCompatibleAppMeta(
+  appMeta: Record<string, string>,
+  current: RestoreCurrentVersions,
+): void {
+  const vaultUserVersion = appMeta['vaultUserVersion'];
+  const ontologyVersion = appMeta['ontologyVersion'];
   if (vaultUserVersion !== undefined) {
-    if (compareVersion(vaultUserVersion, opts.current.vaultUserVersion) > 0) {
+    if (compareVersion(vaultUserVersion, current.vaultUserVersion) > 0) {
       throw new Error(
-        `restoreSnapshot: snapshot vaultUserVersion ${vaultUserVersion} is newer than running ${opts.current.vaultUserVersion} — update the gateway first (no migrations, v0 stance)`,
+        `restoreSnapshot: snapshot vaultUserVersion ${vaultUserVersion} is newer than running ${current.vaultUserVersion} — update the gateway first (no migrations, v0 stance)`,
       );
     }
     if (compareVersion(vaultUserVersion, MIN_SUPPORTED_VAULT_USER_VERSION) < 0) {
@@ -350,9 +435,9 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
     }
   }
   if (ontologyVersion !== undefined) {
-    if (compareVersion(ontologyVersion, opts.current.ontologyVersion) > 0) {
+    if (compareVersion(ontologyVersion, current.ontologyVersion) > 0) {
       throw new Error(
-        `restoreSnapshot: snapshot ontologyVersion ${ontologyVersion} is newer than running ${opts.current.ontologyVersion} — update the gateway first`,
+        `restoreSnapshot: snapshot ontologyVersion ${ontologyVersion} is newer than running ${current.ontologyVersion} — update the gateway first`,
       );
     }
     if (compareVersion(ontologyVersion, MIN_SUPPORTED_ONTOLOGY_VERSION) < 0) {
@@ -361,6 +446,76 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
       );
     }
   }
+}
+
+interface OpenedSnapshot {
+  row: SnapshotRow;
+  opened: ReturnType<typeof openManifest>;
+  baseTimeMs: number;
+}
+
+async function openSnapshotRow(
+  row: SnapshotRow,
+  store: ObjectStore,
+  keyring: Keyring,
+  vaultId: string,
+  current?: RestoreCurrentVersions,
+): Promise<OpenedSnapshot> {
+  if (!READABLE_SNAPSHOT_FORMATS.includes(row.format)) {
+    throw new Error(`restoreSnapshot: unknown format "${row.format}" — update the gateway first`);
+  }
+  // Registry metadata is only an early refusal gate: it can prevent a futile
+  // download, never authorize a restore. The authenticated envelope is checked
+  // again below and must match this row exactly.
+  if (current) assertCompatibleAppMeta(row.appMeta, current);
+  const bytes = await store.get(row.manifestKey);
+  const opened = openManifest(bytes, keyring, vaultId, row.manifestHash);
+  if (!READABLE_SNAPSHOT_FORMATS.includes(opened.public.format)) {
+    throw new Error(
+      `restoreSnapshot: unknown authenticated format "${opened.public.format}" — update the gateway first`,
+    );
+  }
+  if (current) assertCompatibleAppMeta(opened.public.appMeta, current);
+  assertManifestMatchesRegistry(opened.public, opened.entries, row);
+  const baseTimeMs = validateSnapshotBasePair(opened.entries).baseTickMs;
+  return { row, opened, baseTimeMs };
+}
+
+export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<RestoreResult> {
+  const log = { ...noopLog, ...opts.log };
+  const store = await opts.provider.openDataPlane(opts.targetId, 'backup', 'read');
+  let selected: OpenedSnapshot | undefined;
+  if (opts.seq !== undefined) {
+    const row = await opts.provider.getSnapshot(opts.targetId, opts.seq);
+    if (row) selected = await openSnapshotRow(row, store, opts.keyring, opts.vaultId, opts.current);
+    if (selected && opts.pointInTimeMs !== undefined && selected.baseTimeMs > opts.pointInTimeMs) {
+      throw new Error(
+        `restoreSnapshot: snapshot seq ${opts.seq} has a base at ` +
+          `${new Date(selected.baseTimeMs).toISOString()}, which is NEWER than the requested ` +
+          `point in time ${new Date(opts.pointInTimeMs).toISOString()} — its base already ` +
+          'contains later writes and cannot be rewound; drop --seq to pick the newest snapshot ' +
+          'at or before that instant',
+      );
+    }
+  } else if (opts.pointInTimeMs !== undefined) {
+    const rows = await opts.provider.listSnapshots(opts.targetId);
+    const candidates: OpenedSnapshot[] = [];
+    for (const row of rows) {
+      const candidate = await openSnapshotRow(row, store, opts.keyring, opts.vaultId, opts.current);
+      if (candidate.baseTimeMs <= opts.pointInTimeMs) candidates.push(candidate);
+    }
+    selected = candidates.sort((a, b) => b.baseTimeMs - a.baseTimeMs)[0];
+    if (!selected) {
+      throw new Error(
+        `restoreSnapshot: no snapshot exists at or before ${new Date(opts.pointInTimeMs).toISOString()}`,
+      );
+    }
+  } else {
+    const row = (await opts.provider.listSnapshots(opts.targetId))[0];
+    if (row) selected = await openSnapshotRow(row, store, opts.keyring, opts.vaultId, opts.current);
+  }
+  if (!selected) throw new Error('restoreSnapshot: no snapshot available');
+  const { row, opened } = selected;
 
   // 3. Fresh directory only — never over a live vault.
   let destEntries: string[];
@@ -380,11 +535,6 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
     );
   }
 
-  const store = await opts.provider.openDataPlane(opts.targetId, 'backup', 'read');
-  const manifestBytes = await store.get(row.manifestKey);
-
-  // 2. Manifest hash verification, then decrypt.
-  const opened = openManifest(manifestBytes, opts.keyring, opts.vaultId, row.manifestHash);
   const master = masterKeyForEpoch(opts.keyring, opened.public.keyEpoch);
   const dataKey = deriveDataKey(master, opts.vaultId);
   const dedupKey = deriveDedupKey(master, opts.vaultId);
@@ -395,22 +545,58 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
     if (!isSafeEntryPath(entry.path)) {
       throw new Error(`restoreSnapshot: entry path rejected: "${entry.path}"`);
     }
-    const parts: Buffer[] = [];
-    for (const id of entry.chunks) {
-      const ciphertext = await store.get(`chunks/${id}`);
-      const plain = decrypt(dataKey, ciphertext);
-      const recomputed = computeChunkId(dedupKey, plain);
-      if (recomputed !== id) {
-        throw new Error(
-          `restoreSnapshot: chunk integrity mismatch for "${entry.path}" (chunk ${id})`,
-        );
-      }
-      parts.push(Buffer.from(plain.buffer, plain.byteOffset, plain.byteLength));
-    }
     const dest = path.join(opts.destDir, ...entry.path.split('/'));
     await fs.mkdir(path.dirname(dest), { recursive: true });
-    await fs.writeFile(dest, Buffer.concat(parts));
+    // Stream parts straight to disk (bases can be GBs — never buffer whole
+    // files), hashing as we go so db entries verify against their
+    // capture-time sha256 before any WAL replay mutates the file.
+    const hash = createHash('sha256');
+    const handle = await fs.open(dest, 'w');
+    try {
+      for (const id of entry.chunks) {
+        const ciphertext = await store.get(`chunks/${id}`);
+        const plain = decrypt(dataKey, ciphertext);
+        const recomputed = computeChunkId(dedupKey, plain);
+        if (recomputed !== id) {
+          throw new Error(
+            `restoreSnapshot: chunk integrity mismatch for "${entry.path}" (chunk ${id})`,
+          );
+        }
+        const buf = Buffer.from(plain.buffer, plain.byteOffset, plain.byteLength);
+        hash.update(buf);
+        await handle.write(buf);
+      }
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    if (entry.sha256 !== undefined) {
+      const actual = hash.digest('hex');
+      if (actual !== entry.sha256) {
+        throw new Error(
+          `restoreSnapshot: "${entry.path}" hash mismatch (expected ${entry.sha256}, got ${actual})`,
+        );
+      }
+    }
   }
+
+  // Replay shipped WAL segments on top of the restored base files —
+  // SQLite itself performs and validates the replay (wal-restore.ts).
+  const pair = validateSnapshotBasePair(opened.entries);
+  const walReplay = await replayWalSegments({
+    store,
+    dataKey,
+    vaultId: opts.vaultId,
+    destDir: opts.destDir,
+    generationByDb: {
+      vault: pair.vault.walGeneration!,
+      journal: pair.journal.walGeneration!,
+    },
+    baseTickMsByDb: { vault: pair.baseTickMs, journal: pair.baseTickMs },
+    ...(pair.walTipTickMs !== undefined ? { walTipTickMs: pair.walTipTickMs } : {}),
+    ...(opts.pointInTimeMs !== undefined ? { pointInTimeMs: opts.pointInTimeMs } : {}),
+    log,
+  });
 
   // 4. Side-effect quarantine marker for the gateway to act on at mount.
   const marker = {
@@ -423,7 +609,12 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
     `${JSON.stringify(marker, null, 2)}\n`,
   );
 
-  return { seq: row.seq, generation: row.generation, entries: opened.entries.map((e) => e.path) };
+  return {
+    seq: row.seq,
+    generation: row.generation,
+    entries: opened.entries.map((e) => e.path),
+    walReplay,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -444,6 +635,10 @@ export interface VerifySnapshotResult {
   missing: string[];
   corrupt: string[];
   sampled: number;
+  /** Shipped WAL segments seen for the snapshot's generations. */
+  walSegments: number;
+  /** WAL segments sample-unsealed (counted into `corrupt` on failure). */
+  walSampled: number;
 }
 
 export async function verifySnapshot(opts: VerifySnapshotOptions): Promise<VerifySnapshotResult> {
@@ -462,10 +657,17 @@ export async function verifySnapshot(opts: VerifySnapshotOptions): Promise<Verif
   checkedObjects++;
   if (!manifestHead) {
     missing.push(row.manifestKey);
-    return { checkedObjects, missing, corrupt, sampled: 0 };
+    return { checkedObjects, missing, corrupt, sampled: 0, walSegments: 0, walSampled: 0 };
   }
   const manifestBytes = await store.get(row.manifestKey);
   const opened = openManifest(manifestBytes, opts.keyring, opts.vaultId, row.manifestHash);
+  if (!READABLE_SNAPSHOT_FORMATS.includes(opened.public.format)) {
+    throw new Error(
+      `verifySnapshot: unknown authenticated format "${opened.public.format}" — update the gateway first`,
+    );
+  }
+  assertManifestMatchesRegistry(opened.public, opened.entries, row);
+  const basePair = validateSnapshotBasePair(opened.entries);
   const master = masterKeyForEpoch(opts.keyring, opened.public.keyEpoch);
   const dataKey = deriveDataKey(master, opts.vaultId);
   const dedupKey = deriveDedupKey(master, opts.vaultId);
@@ -489,7 +691,109 @@ export async function verifySnapshot(opts: VerifySnapshotOptions): Promise<Verif
     }
   }
 
-  return { checkedObjects, missing, corrupt, sampled: sample.length };
+  // The snapshot's WAL streams. Existence is NOT just "the LIST
+  // returned keys" — a lost mid-stream segment or closer silently truncates
+  // every future restore to an earlier point, so verify PLANS the replay
+  // over the listing (authenticating closers, exactly like restore) and
+  // treats a hole-truncated plan as missing objects. A small sample of
+  // segments is additionally unsealed end-to-end.
+  //
+  // The per-chain hole check is NOT sufficient on its own, and believing it
+  // was is what let an entirely-lost stream verify GREEN: a listing with no
+  // segments has no hole, and neither does one whose newest objects are gone.
+  // The pair marker is the only thing that can tell "idle" from "erased", so
+  // verify runs the SAME coordinated planner restore does and reports when the
+  // newest point the producer proved it shipped can no longer be reassembled.
+  let walSegments = 0;
+  let walSampled = 0;
+  {
+    const generationByDb: Partial<Record<WalDbName, string>> = {};
+    const listingByDb: Partial<Record<WalDbName, WalStreamListing>> = {};
+    const walTipTickMs = basePair.walTipTickMs ?? -1;
+    for (const db of WAL_DB_NAMES) {
+      const entry = opened.entries.find((e) => e.kind === 'db' && e.path === WAL_DB_FILES[db]);
+      if (entry?.walGeneration === undefined) continue;
+      const generation = entry.walGeneration;
+      generationByDb[db] = generation;
+      const segments: WalSegmentAddress[] = [];
+      const closers: WalGroupCloser[] = [];
+      for await (const obj of store.list(walSegmentPrefix(db, generation))) {
+        const addr = parseWalSegmentKey(obj.key);
+        if (addr) {
+          segments.push(addr);
+          continue;
+        }
+        const closer = parseWalCloserKey(obj.key);
+        if (!closer) continue;
+        try {
+          openWalCloser(dataKey, opts.vaultId, closer, await store.get(obj.key));
+          closers.push(closer);
+        } catch {
+          corrupt.push(obj.key);
+        }
+      }
+      listingByDb[db] = { segments, closers };
+      walSegments += segments.length;
+      const plan = planWalReplay({ segments, closers }, { db, generation });
+      if (plan.truncatedByHole) {
+        missing.push(
+          `wal/${db}/${generation}: stream hole — replay reaches tick ${plan.lastTickMs} ` +
+            `but ${segments.length - plan.segments.length} listed segment(s) lie beyond it`,
+        );
+      }
+      for (const addr of sampleWithoutReplacement(segments, Math.min(4, segments.length))) {
+        walSampled++;
+        const key = walSegmentKey(addr);
+        try {
+          openWalSegment(dataKey, opts.vaultId, addr, await store.get(key));
+        } catch {
+          corrupt.push(key);
+        }
+      }
+    }
+
+    const { vault: gv, journal: gj } = generationByDb;
+    if (gv !== undefined && gj !== undefined) {
+      const markers: WalPairMarker[] = [];
+      for await (const obj of store.list(walPairMarkerPrefix(gv, gj))) {
+        const addr = parseWalPairMarkerKey(obj.key);
+        if (!addr) continue;
+        try {
+          markers.push(openWalPairMarker(dataKey, opts.vaultId, addr, await store.get(obj.key)));
+        } catch {
+          corrupt.push(obj.key);
+        }
+      }
+      const coordinated = planCoordinatedReplay({ listingByDb, generationByDb, markers });
+      if (
+        coordinated.newestMarkerTickMs >= 0 &&
+        coordinated.coordinatedCutMs < coordinated.newestMarkerTickMs
+      ) {
+        missing.push(
+          `wal/tick/${gv}-${gj}: the newest coordinated point the producer shipped ` +
+            `(tick ${coordinated.newestMarkerTickMs}) cannot be reassembled — the pair can only ` +
+            `be restored at tick ${coordinated.coordinatedCutMs}; segments are missing`,
+        );
+      }
+      // …and the markers THEMSELVES can be deleted, which the check above
+      // cannot see: with no markers there is no "newest marker", the plan
+      // quietly falls back to the base pair, and every object the manifest
+      // names is still present. Nothing is missing; the restore is just
+      // silently hours stale. `walTipTickMs` is the floor that closes it — the
+      // newest marker tick the producer WATCHED this store accept. Falling
+      // short of it means the store lost something it acknowledged.
+      if (walTipTickMs >= 0 && coordinated.coordinatedCutMs < walTipTickMs) {
+        missing.push(
+          `wal/tick/${gv}-${gj}: pair marker(s) this snapshot registered are GONE — the producer ` +
+            `confirmed the pair reached tick ${walTipTickMs}, but the store can only be replayed ` +
+            `to tick ${coordinated.coordinatedCutMs}. A restore would silently return an earlier ` +
+            'state.',
+        );
+      }
+    }
+  }
+
+  return { checkedObjects, missing, corrupt, sampled: sample.length, walSegments, walSampled };
 }
 
 function sampleWithoutReplacement<T>(items: readonly T[], count: number): T[] {

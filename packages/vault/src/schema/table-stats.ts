@@ -49,7 +49,11 @@ interface PragmaRow {
   page_size?: number;
 }
 
-function fileTotals(db: DatabaseSync): { pageCount: number; pageSize: number; fileBytesTotal: number } {
+function fileTotals(db: DatabaseSync): {
+  pageCount: number;
+  pageSize: number;
+  fileBytesTotal: number;
+} {
   const pageCount = (db.prepare('PRAGMA page_count').get() as PragmaRow).page_count ?? 0;
   const pageSize = (db.prepare('PRAGMA page_size').get() as PragmaRow).page_size ?? 0;
   return { pageCount, pageSize, fileBytesTotal: pageCount * pageSize };
@@ -71,7 +75,9 @@ function dbstatBreakdown(db: DatabaseSync): TableSizeEntry[] {
   const stats = db
     .prepare('SELECT name, pageno, pgsize FROM dbstat WHERE aggregate = TRUE')
     .all() as unknown as DbstatRow[];
-  const master = db.prepare('SELECT name, tbl_name FROM sqlite_master').all() as unknown as MasterRow[];
+  const master = db
+    .prepare('SELECT name, tbl_name FROM sqlite_master')
+    .all() as unknown as MasterRow[];
   const tblNameOf = new Map(master.map((m) => [m.name, m.tbl_name]));
   const byTable = new Map<string, { bytes: number; pages: number }>();
   for (const row of stats) {
@@ -112,6 +118,12 @@ export function dbSizeBreakdown(db: DatabaseSync): DbSizeBreakdown {
   try {
     return { method: 'dbstat', fileBytesTotal, pageSize, pageCount, tables: dbstatBreakdown(db) };
   } catch {
-    return { method: 'estimate', fileBytesTotal, pageSize, pageCount, tables: estimateBreakdown(db) };
+    return {
+      method: 'estimate',
+      fileBytesTotal,
+      pageSize,
+      pageCount,
+      tables: estimateBreakdown(db),
+    };
   }
 }

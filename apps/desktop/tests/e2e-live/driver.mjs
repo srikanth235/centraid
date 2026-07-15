@@ -78,7 +78,7 @@ export async function launchApp(opts = {}) {
 
   const app = await _electron.launch({
     args: [DESKTOP_ROOT, `--user-data-dir=${userDataDir}`],
-    env: { ...process.env, NODE_ENV: 'test', ...(opts.env ?? {}) },
+    env: { ...process.env, NODE_ENV: 'test', ...opts.env },
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');

@@ -1,13 +1,8 @@
 // `BackupService` (PROTOCOL.md/FORMAT.md wiring): a real `VaultRegistry` +
 // `LocalBackupProvider` over temp dirs, with an INJECTED `assembleEntries`
-// seam standing in for the real `stageVaultDbs`/blob-walk/git-bundle
-// assembly. The real assembly VACUUM-INTOs a fresh `vault.db`/`journal.db`
-// on every run (and `stageVaultDbs` itself receipts into the journal —
-// FORMAT.md's ordering rule notwithstanding), so a real vault's staged
-// files never hash byte-identical twice in a row; the "no visible change
-// registers nothing" and "a real change is incremental" contracts belong
-// to the engine (`packages/backup`, 107 tests) and are exercised here
-// against a fixture file this test controls directly instead.
+// seam standing in for the real pinned-base/blob-walk/git-bundle assembly.
+// The shipper bases remain real; the extra fixture gives these service tests
+// one deterministic source they can mutate without duplicating capture tests.
 
 import { afterEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
@@ -17,6 +12,7 @@ import crypto from 'node:crypto';
 import {
   BackupProviderError,
   openLocalBackupProvider,
+  WAL_DB_FILES,
   type BackupProvider,
 } from '@centraid/backup';
 import { openVaultRegistry, type VaultRegistry } from '../serve/vault-registry.js';
@@ -123,8 +119,20 @@ async function harness(
     provider: wrapProvider ? wrapProvider(realProvider) : realProvider,
     // The seam FORMAT.md's engine needs a `SourceEntry[]` for — a single
     // "db" entry over the fixture file the test mutates directly.
-    assembleEntries: () =>
-      Promise.resolve([{ path: 'vault.db', kind: 'db', absolutePath: fixtureFile }]),
+    assembleEntries: ({ plane }) => {
+      const bases = plane.walShipper!.currentBases();
+      return Promise.resolve([
+        ...bases.map((base) => ({
+          path: WAL_DB_FILES[base.db],
+          kind: 'db' as const,
+          absolutePath: base.file,
+          sha256: base.sha256,
+          walGeneration: base.generation,
+          baseTickMs: base.createdAtMs,
+        })),
+        { path: 'fixture.bin', kind: 'blob' as const, absolutePath: fixtureFile },
+      ]);
+    },
   });
 
   return { service, registry, health, vaultId, fixtureFile, clock, providerDir, backupDir };
@@ -148,6 +156,15 @@ test('first run creates a target, mints a keyring, and registers a snapshot', as
   expect(backups?.status).toBe('ok');
 });
 
+test('stop refuses new backup work after the in-flight chain is drained', async () => {
+  const h = await harness();
+  await h.service.stop();
+
+  await expect(h.service.runBackup(h.vaultId)).rejects.toThrow('backup service is stopped');
+  await expect(h.service.runVerify(h.vaultId)).rejects.toThrow('backup service is stopped');
+  await expect(h.service.runRestoreVerify(h.vaultId)).rejects.toThrow('backup service is stopped');
+});
+
 test('a second run with nothing changed registers no new snapshot', async () => {
   const h = await harness();
   await h.service.runBackup(h.vaultId);
@@ -158,6 +175,23 @@ test('a second run with nothing changed registers no new snapshot', async () => 
 
   expect(second?.lastSeq).toBe(first?.lastSeq); // still seq 1 — no registration
   expect(second?.generation).toBe(1);
+});
+
+test('scheduled backups do not postpone the first restore-verification forever', async () => {
+  const h = await harness();
+  await h.service.runBackup(h.vaultId);
+  const firstBackupAt = (await h.service.status())[h.vaultId]!.firstBackupAt;
+  let restoreVerifies = 0;
+  h.service.runRestoreVerify = () => {
+    restoreVerifies++;
+    return Promise.resolve();
+  };
+
+  h.clock.now += 8 * 24 * 60 * 60 * 1000;
+  await h.service.tick(); // performs a fresh backup first, then checks restore due-ness
+
+  expect(restoreVerifies).toBe(1);
+  expect((await h.service.status())[h.vaultId]!.firstBackupAt).toBe(firstBackupAt);
 });
 
 test('a real change registers an incremental snapshot', async () => {
@@ -222,6 +256,7 @@ test('verify-only staleness (backup fresh, verify old) degrades without erroring
   // immediately refresh lastBackupAt so only verification looks stale.
   h.clock.now += 20 * 24 * 60 * 60 * 1000;
   await h.service.runBackup(h.vaultId); // no fixture change — refreshes lastBackupAt only
+  await h.service.runRestoreVerify(h.vaultId); // isolate ordinary verify staleness
 
   const snap = await h.health.snapshot();
   const backups = snap.components.find((c) => c.component === 'backups');

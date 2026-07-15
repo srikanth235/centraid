@@ -74,7 +74,10 @@ async function bodyText() {
 }
 
 async function openSettingsAgents() {
-  await page.getByRole('button', { name: /^Settings/ }).first().click();
+  await page
+    .getByRole('button', { name: /^Settings/ })
+    .first()
+    .click();
   await page.getByRole('button', { name: 'Agents', exact: true }).click();
   await page.waitForTimeout(600);
 }

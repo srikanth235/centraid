@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { expect, test } from 'vitest';
 import { dbSizeBreakdown } from './table-stats.js';
 
-test('dbstat is available in this repo\'s node:sqlite build (issue #367 probe)', () => {
+test("dbstat is available in this repo's node:sqlite build (issue #367 probe)", () => {
   const db = new DatabaseSync(':memory:');
   // Throws if ENABLE_DBSTAT_VTAB is not compiled in — this asserts the
   // probe finding stays true rather than silently bit-rotting.
@@ -16,7 +16,7 @@ test('dbSizeBreakdown reports per-table bytes via dbstat, indexes rolled into th
   db.exec('CREATE TABLE tiny(a INTEGER PRIMARY KEY)');
   const stmt = db.prepare('INSERT INTO big(b) VALUES (?)');
   for (let i = 0; i < 300; i++) stmt.run('x'.repeat(200) + i);
-  db.exec("INSERT INTO tiny(a) VALUES (1)");
+  db.exec('INSERT INTO tiny(a) VALUES (1)');
 
   const breakdown = dbSizeBreakdown(db);
 

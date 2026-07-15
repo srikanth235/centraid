@@ -276,10 +276,7 @@ async function main() {
         console.log(
           `[fix1] Starred page body after starring automation: ${JSON.stringify(bodyTxt.slice(0, 300))}`,
         );
-        assert(
-          /Trip albums/.test(bodyTxt),
-          'Starred page missing the starred automation card',
-        );
+        assert(/Trip albums/.test(bodyTxt), 'Starred page missing the starred automation card');
         const autoCardOnStarred = page.locator('[data-kind="automation"]', {
           hasText: 'Trip albums',
         });

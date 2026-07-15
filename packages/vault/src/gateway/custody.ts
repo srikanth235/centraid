@@ -7,11 +7,19 @@
 // (schema/ext.ts + gateway/ext.ts), so export, FTS, links and consent see
 // them like any canonical table. R09 survives band-shaped: ext tables may
 // reference the vault, the vault never references them.
+//
+// `stageVaultDbs` (VACUUM INTO staging for the offsite backup engine) is
+// gone (issue #408): the backup path ships WAL segments continuously
+// (wal-shipper.ts) instead of rewriting the whole database per snapshot —
+// the SSD-wear cliff a 5-minute VACUUM cadence implied (~288 GB/day for a
+// 1 GB vault) is the reason it left. `backupVault` stays: it is the
+// user-facing export ramp ("copy two files and a directory"), not the
+// backup path.
 
-import { readFileSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { closeSync, openSync, readSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import type { VaultDb } from '../db.js';
-import { sha256Hex } from '../ids.js';
 import { writeReceipt } from './evidence.js';
 import { GatewayError } from './types.js';
 
@@ -22,12 +30,46 @@ function requireDir(db: VaultDb, action: string): string {
   return db.dir;
 }
 
-/** Truncate both WAL files back into their databases. */
+/**
+ * Truncate both WAL files back into their databases.
+ *
+ * With a WAL shipper attached (issue #408) this MUST NOT be called
+ * directly — the shipper is the sole checkpointer (invariant I2) and a
+ * checkpoint behind its back destroys unshipped WAL bytes' append-only
+ * addressing (detected as a generation break, at the cost of a full base
+ * snapshot). Hosts route through `WalShipper.checkpointNow()`, which ships
+ * the remainder first; this function remains for shipper-less contexts
+ * (tests, one-shot CLI vault surgery).
+ */
 export function checkpointVault(db: VaultDb): { vault: string; journal: string } {
   requireDir(db, 'checkpoint');
   db.vault.exec('PRAGMA wal_checkpoint(TRUNCATE)');
   db.journal.exec('PRAGMA wal_checkpoint(TRUNCATE)');
   return { vault: 'truncated', journal: 'truncated' };
+}
+
+/**
+ * SHA-256 of a file's raw bytes, streamed (never the whole file in RAM).
+ * This matches `shasum -a 256` — the point of recording it is that the
+ * owner can verify the copy with standard tools. (The old
+ * `readFileSync(p).toString('binary')` implementation UTF-8-re-encoded the
+ * latin1 string inside the hash, producing a digest NO external tool could
+ * reproduce — and pulled multi-GB files into memory to do it.)
+ */
+export function sha256File(file: string): string {
+  const hash = createHash('sha256');
+  const fd = openSync(file, 'r');
+  try {
+    const buf = Buffer.alloc(4 * 1024 * 1024);
+    for (;;) {
+      const n = readSync(fd, buf, 0, buf.length, null);
+      if (n === 0) break;
+      hash.update(buf.subarray(0, n));
+    }
+  } finally {
+    closeSync(fd);
+  }
+  return hash.digest('hex');
 }
 
 export interface BackupResult {
@@ -53,8 +95,8 @@ export function backupVault(db: VaultDb, destDir: string): BackupResult {
   for (const p of [vaultPath, journalPath]) rmSync(p, { force: true });
   db.vault.exec(`VACUUM INTO '${vaultPath.replaceAll("'", "''")}'`);
   db.journal.exec(`VACUUM INTO '${journalPath.replaceAll("'", "''")}'`);
-  const vaultSha256 = sha256Hex(readFileSync(vaultPath).toString('binary'));
-  const journalSha256 = sha256Hex(readFileSync(journalPath).toString('binary'));
+  const vaultSha256 = sha256File(vaultPath);
+  const journalSha256 = sha256File(journalPath);
   // Blobs are content-addressed: every copy is verifiable by its filename.
   const { copied } = db.blobs.exportTo(destDir);
   const receiptId = writeReceipt(db.journal, {
@@ -68,43 +110,4 @@ export function backupVault(db: VaultDb, destDir: string): BackupResult {
     detail: { vaultSha256, journalSha256, destDir, blobsCopied: copied },
   });
   return { vaultPath, journalPath, vaultSha256, journalSha256, blobsCopied: copied, receiptId };
-}
-
-export interface StageDbsResult {
-  vaultPath: string;
-  journalPath: string;
-  vaultSha256: string;
-  journalSha256: string;
-  receiptId: string;
-}
-
-/**
- * A narrower `backupVault`: consistent VACUUM INTO copies of the two SQLite
- * files ONLY — named `vault.db` / `journal.db` (the offsite backup engine's
- * `centraid-snapshot/1` entry paths, FORMAT.md), receipted the same way.
- * Deliberately does NOT touch the blob CAS: at 100+ GB, copying every blob
- * into a staging dir on every backup tick is exactly the duplication the
- * offsite engine exists to avoid — its `SourceEntry` assembly reads CAS
- * files IN PLACE instead (see `packages/gateway/src/backup`).
- */
-export function stageVaultDbs(db: VaultDb, destDir: string): StageDbsResult {
-  requireDir(db, 'stage');
-  const vaultPath = path.join(destDir, 'vault.db');
-  const journalPath = path.join(destDir, 'journal.db');
-  for (const p of [vaultPath, journalPath]) rmSync(p, { force: true });
-  db.vault.exec(`VACUUM INTO '${vaultPath.replaceAll("'", "''")}'`);
-  db.journal.exec(`VACUUM INTO '${journalPath.replaceAll("'", "''")}'`);
-  const vaultSha256 = sha256Hex(readFileSync(vaultPath).toString('binary'));
-  const journalSha256 = sha256Hex(readFileSync(journalPath).toString('binary'));
-  const receiptId = writeReceipt(db.journal, {
-    grantId: null,
-    invocationId: null,
-    action: 'act consent.backup_stage_dbs',
-    objectType: 'core.vault',
-    objectId: null,
-    purpose: null,
-    decision: 'allow',
-    detail: { vaultSha256, journalSha256, destDir },
-  });
-  return { vaultPath, journalPath, vaultSha256, journalSha256, receiptId };
 }

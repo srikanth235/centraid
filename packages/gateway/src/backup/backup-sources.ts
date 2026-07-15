@@ -1,16 +1,17 @@
 /*
  * Assemble one vault's `SourceEntry[]` for `createSnapshot` (FORMAT.md
- * "What a Centraid vault snapshot contains" + its ordering rule): staged DB
- * copies first, then the blob CAS (read in place — never duplicated into
- * staging, issue: the 100+GB duplication `backupVault()` would cost), then
- * the code store's git bundle, then the seal key. Blobs added mid-snapshot
- * are extras never holes because the DB staging copy is taken first.
+ * "What a Centraid vault snapshot contains"): the WAL shipper's pinned base
+ * clones first (each anchors that database's segment stream — issue #408;
+ * the old `stageVaultDbs` VACUUM INTO staging is gone with the /1 format),
+ * then the local blob CAS read in place, the code store's git bundle, and the
+ * seal key. Remote-CAS configuration alone is not authenticated durability
+ * evidence, so it never removes a blob from a restorable snapshot.
  */
 
 import { existsSync, promises as fs } from 'node:fs';
 import path from 'node:path';
-import { readSealKeyFingerprint, sealKeyFileFor, stageVaultDbs } from '@centraid/vault';
-import type { EngineLogger, SourceEntry } from '@centraid/backup';
+import { readSealKeyFingerprint, sealKeyFileFor } from '@centraid/vault';
+import { WAL_DB_FILES, type EngineLogger, type SourceEntry } from '@centraid/backup';
 import { GitError, run } from '../worktree-store/git.js';
 import type { VaultPlane } from '../serve/vault-plane.js';
 
@@ -103,6 +104,13 @@ export interface AssembleOptions {
   plane: VaultPlane;
   /** `<backupDir>/staging/<vaultId>/` — reset by the caller before this runs. */
   stagingDir: string;
+  /**
+   * The newest pair-marker tick the provider has CONFIRMED accepting for the
+   * shipper's current base pair (backup state's `walMarkerTips`). Stamped into
+   * the `db` entries so every later verification can hold the store to it.
+   * Absent until the first marker of this generation pair has actually drained.
+   */
+  walTipTickMs?: number;
   log: EngineLogger;
 }
 
@@ -111,14 +119,71 @@ export async function assembleSourceEntries(opts: AssembleOptions): Promise<Sour
   const { plane, stagingDir, log } = opts;
   const entries: SourceEntry[] = [];
 
-  // (a) DB staging FIRST (FORMAT.md ordering rule) — point-in-time,
-  // consistent VACUUM INTO copies; the CAS is append-only from here on, so
-  // every blob these DBs reference already exists on disk.
-  const staged = stageVaultDbs(plane.db, stagingDir);
-  entries.push({ path: 'vault.db', kind: 'db', absolutePath: staged.vaultPath });
-  entries.push({ path: 'journal.db', kind: 'db', absolutePath: staged.journalPath });
+  // (a) DB base clones FIRST (issue #408): the shipper pinned each database
+  // right after a TRUNCATE checkpoint (WAL-quiet, immutable until the next
+  // checkpoint), so the clone IS a point-in-time copy — no VACUUM INTO
+  // rewrite, no staging. `sha256` + `walGeneration` ride into the sealed
+  // manifest entry: the generation is what restore lists segments under,
+  // the hash is the capture-time marker restore + the G9 verifier check.
+  const shipper = plane.walShipper;
+  if (!shipper) {
+    throw new Error('backup: vault has no WAL shipper (in-memory vault?) — nothing to snapshot');
+  }
+  // The capture tick that mints/refreshes bases runs in doRunBackup, NOT
+  // here — this function's contract is "list the sources", and its
+  // injectable seam (BackupServiceOptions.assembleEntries) must not be the
+  // only thing standing between a backup run and a checkpoint. What IS
+  // enforced here: a snapshot may never register with a database missing.
+  // A busy first-run truncate (a subprocess holding journal.db past the
+  // 250 ms checkpoint wait) leaves that stream uninitialized for a tick —
+  // registering "healthy" without journal.db would restore a vault with
+  // every receipt and ledger row silently gone.
+  const bases = shipper.currentBases();
+  if (bases.length < 2) {
+    throw new Error(
+      `backup: only ${bases.length}/2 database base(s) are pinned (busy checkpoint on first run?) — retrying later instead of registering a partial snapshot`,
+    );
+  }
+  // …and the two bases MUST be from ONE tick. The shipper breaks both
+  // generations together precisely so they are (`coordinatedBreak`), but a
+  // busy checkpoint can DEFER that break by a tick, and a manifest registered
+  // in that window would pair a journal base with a vault base from a different
+  // instant. Such a pair has no coordinated restore point: the newer base
+  // already contains receipts for rows that live only in the older one's
+  // SEGMENTS, so losing any one of those segments hands back history asserting
+  // data the restore does not have. Refuse and retry — the next tick's break
+  // re-bases both.
+  if (bases[0]!.createdAtMs !== bases[1]!.createdAtMs) {
+    throw new Error(
+      `backup: the two database bases are from different ticks (` +
+        bases.map((b) => `${b.db} @ ${b.createdAtMs}`).join(', ') +
+        ') — a coordinated generation break is still pending; retrying later instead of ' +
+        'registering an uncoordinated base pair',
+    );
+  }
+  for (const base of bases) {
+    entries.push({
+      path: WAL_DB_FILES[base.db],
+      kind: 'db',
+      absolutePath: base.file,
+      sha256: base.sha256,
+      walGeneration: base.generation,
+      // The tick both bases were cloned at — restore ASSERTS these are equal
+      // before it touches a byte (`replayWalSegments`).
+      baseTickMs: base.createdAtMs,
+      // The newest pair marker this provider CONFIRMED accepting. It becomes a
+      // floor: a later restore or verification that cannot reach it is looking
+      // at a store that lost objects it acknowledged. Without it, deleting the
+      // whole `wal/tick/` prefix is perfectly silent — every object the manifest
+      // names is still there, and the restore just quietly returns the base pair.
+      ...(opts.walTipTickMs !== undefined ? { walTipTickMs: opts.walTipTickMs } : {}),
+    });
+  }
 
-  // (b) Blob CAS, read IN PLACE — never duplicated into staging.
+  // (b) Blob CAS, read IN PLACE. A configured remote resolver is not proof
+  // that every freshly-ingested blob has replicated; snapshots therefore
+  // include local custody bytes until the manifest can carry per-blob remote
+  // durability evidence. Correctness wins over temporary cross-store dedup.
   entries.push(...(await listBlobEntries(plane.dir)));
 
   // (c) Code store bundle.

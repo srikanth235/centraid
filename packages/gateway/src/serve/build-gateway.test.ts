@@ -89,6 +89,8 @@ test('mounts the vault registry and recovers it across rebuilds (#280)', async (
   try {
     expect(again.vaults.current().boot.fresh).toBe(false);
     expect(again.vaults.current().boot.vaultId).toBe(gateway.vaults.current().boot.vaultId);
+    expect(gateway.vaults.current().walShipper).toBeDefined();
+    expect(again.vaults.current().walShipper).toBeUndefined();
   } finally {
     await again.stop();
   }
@@ -141,9 +143,11 @@ test('composedHandler serves the kit Ask panel model picker (GET/PUT /centraid/<
   try {
     // No override yet — `current` is null, no defaultModel (no prefs, no
     // catalog in this hermetic test — the CLI probe/warmer never runs).
-    const before = (await (
-      await fetch(`${srv.url}/centraid/demo/_turn/model`)
-    ).json()) as { runnerKind: string; current: string | null; catalog: unknown[] };
+    const before = (await (await fetch(`${srv.url}/centraid/demo/_turn/model`)).json()) as {
+      runnerKind: string;
+      current: string | null;
+      catalog: unknown[];
+    };
     expect(before.runnerKind).toBe('codex'); // prefsLoader's default when unset
     expect(before.current).toBeNull();
     expect(before.catalog).toEqual([]);

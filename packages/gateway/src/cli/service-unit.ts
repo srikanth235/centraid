@@ -33,7 +33,10 @@ export interface ServiceUnitSpec {
   workingDirectory: string;
 }
 
-export function launchAgentPlistPath(homeDir: string, label: string = DEFAULT_LAUNCHD_LABEL): string {
+export function launchAgentPlistPath(
+  homeDir: string,
+  label: string = DEFAULT_LAUNCHD_LABEL,
+): string {
   return path.join(homeDir, 'Library', 'LaunchAgents', `${label}.plist`);
 }
 

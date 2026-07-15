@@ -56,7 +56,10 @@ export function decodePairingTicket(raw: string): PairingTicketPayload | undefin
  * redemption regardless (the ticket store burns on any redemption attempt),
  * so this only exists to fail a stale paste instantly, before ever dialing.
  */
-export function isTicketExpired(payload: Pick<PairingTicketPayload, 'exp'>, now = Date.now()): boolean {
+export function isTicketExpired(
+  payload: Pick<PairingTicketPayload, 'exp'>,
+  now = Date.now(),
+): boolean {
   return payload.exp <= now;
 }
 
@@ -73,7 +76,13 @@ export type RedeemGatewayPairingResult =
   | { ok: false; error: RedeemPairingErrorCode; message: string };
 
 type FoldedPairing =
-  | { vaultId: string; vaultName: string; gatewayName?: string; deviceToken?: string; deviceKey?: string }
+  | {
+      vaultId: string;
+      vaultName: string;
+      gatewayName?: string;
+      deviceToken?: string;
+      deviceKey?: string;
+    }
   | { error: RedeemPairingErrorCode; message: string };
 
 /**

@@ -30,10 +30,9 @@ describe('createStorageQuotaHealthProbe', () => {
   });
 
   it('ignores byo-s3 connections entirely (no usage endpoint to watch)', async () => {
-    const probe = probeWith(
-      [{ connectionId: 'c1', name: 'My bucket', kind: 'byo-s3' }],
-      { c1: { backup: report(999_999, 1_000_000) } },
-    );
+    const probe = probeWith([{ connectionId: 'c1', name: 'My bucket', kind: 'byo-s3' }], {
+      c1: { backup: report(999_999, 1_000_000) },
+    });
     const result = await probe();
     expect(result.status).toBe('ok');
     expect(result.detail).toContain('no provider-kind');
@@ -47,10 +46,9 @@ describe('createStorageQuotaHealthProbe', () => {
   });
 
   it('reports ok "unmetered" when the provider reports quotaBytes: null', async () => {
-    const probe = probeWith(
-      [{ connectionId: 'c1', name: 'Clawgnition', kind: 'provider' }],
-      { c1: { backup: report(50_000, null) } },
-    );
+    const probe = probeWith([{ connectionId: 'c1', name: 'Clawgnition', kind: 'provider' }], {
+      c1: { backup: report(50_000, null) },
+    });
     const result = await probe();
     expect(result.status).toBe('ok');
     expect(result.detail).toContain('unmetered');
@@ -68,10 +66,9 @@ describe('createStorageQuotaHealthProbe', () => {
 
   it('reports degraded at the 80% watermark', async () => {
     const quota = 1000;
-    const probe = probeWith(
-      [{ connectionId: 'c1', name: 'Clawgnition', kind: 'provider' }],
-      { c1: { backup: report(Math.ceil(quota * QUOTA_DEGRADED_AT), quota) } },
-    );
+    const probe = probeWith([{ connectionId: 'c1', name: 'Clawgnition', kind: 'provider' }], {
+      c1: { backup: report(Math.ceil(quota * QUOTA_DEGRADED_AT), quota) },
+    });
     const result = await probe();
     expect(result.status).toBe('degraded');
     expect(result.detail).toContain('Clawgnition/backup');
@@ -79,34 +76,29 @@ describe('createStorageQuotaHealthProbe', () => {
 
   it('reports error at the 95% watermark', async () => {
     const quota = 1000;
-    const probe = probeWith(
-      [{ connectionId: 'c1', name: 'Clawgnition', kind: 'provider' }],
-      { c1: { backup: report(Math.ceil(quota * QUOTA_ERROR_AT), quota) } },
-    );
+    const probe = probeWith([{ connectionId: 'c1', name: 'Clawgnition', kind: 'provider' }], {
+      c1: { backup: report(Math.ceil(quota * QUOTA_ERROR_AT), quota) },
+    });
     const result = await probe();
     expect(result.status).toBe('error');
   });
 
   it('stays ok just under the degraded watermark (strict-greater-or-equal thresholds)', async () => {
     const quota = 1000;
-    const probe = probeWith(
-      [{ connectionId: 'c1', name: 'Clawgnition', kind: 'provider' }],
-      { c1: { backup: report(Math.floor(quota * QUOTA_DEGRADED_AT) - 1, quota) } },
-    );
+    const probe = probeWith([{ connectionId: 'c1', name: 'Clawgnition', kind: 'provider' }], {
+      c1: { backup: report(Math.floor(quota * QUOTA_DEGRADED_AT) - 1, quota) },
+    });
     const result = await probe();
     expect(result.status).toBe('ok');
   });
 
   it('worst-of across store classes: cas over quota wins even when backup is fine', async () => {
-    const probe = probeWith(
-      [{ connectionId: 'c1', name: 'Clawgnition', kind: 'provider' }],
-      {
-        c1: {
-          backup: report(10, 1000), // 1%, fine
-          cas: report(980, 1000), // 98%, error
-        },
+    const probe = probeWith([{ connectionId: 'c1', name: 'Clawgnition', kind: 'provider' }], {
+      c1: {
+        backup: report(10, 1000), // 1%, fine
+        cas: report(980, 1000), // 98%, error
       },
-    );
+    });
     const result = await probe();
     expect(result.status).toBe('error');
     expect(result.detail).toContain('cas');

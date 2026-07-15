@@ -200,8 +200,7 @@ function pendingForView() {
   if (state.view === 'friend')
     return state.pendingExpenses.filter(
       (r) =>
-        r.paid_by === state.friendId ||
-        (r.splits ?? []).some((s) => s.party_id === state.friendId),
+        r.paid_by === state.friendId || (r.splits ?? []).some((s) => s.party_id === state.friendId),
     );
   return [];
 }

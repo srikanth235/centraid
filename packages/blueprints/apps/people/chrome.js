@@ -3,7 +3,13 @@
 // JSX — factored out purely to keep app.jsx under the file-size cap. Every
 // callback it invokes is passed in by app.jsx, which is the only module that
 // defines them (same shape as docs/tasks/notes' chrome.js).
-import { closePopover, isPopoverOpen, observeWidth, onFocusRefresh, wireThemeToggle } from './kit.js';
+import {
+  closePopover,
+  isPopoverOpen,
+  observeWidth,
+  onFocusRefresh,
+  wireThemeToggle,
+} from './kit.js';
 
 const $ = (id) => document.getElementById(id);
 

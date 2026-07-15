@@ -1,3 +1,4 @@
+/* eslint-disable max-classes-per-file -- error and encrypted store form one persistence boundary (#408) */
 /*
  * Gateway-level storage connections (issue #367 §C1): ONE persisted entity
  * — endpoint + region + bucket + a credential reference — that BOTH the

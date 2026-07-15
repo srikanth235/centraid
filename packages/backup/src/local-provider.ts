@@ -394,7 +394,12 @@ export class LocalBackupProvider implements BackupProvider {
     const out: UsageByStore = {};
     for (const store of ['backup', 'cas'] as const) {
       const { bytesStored, objectCount } = await this.countStore(targetId, store);
-      const report: StoreUsageReport = { bytesStored, objectCount, quotaBytes: null, period: { start, end } };
+      const report: StoreUsageReport = {
+        bytesStored,
+        objectCount,
+        quotaBytes: null,
+        period: { start, end },
+      };
       out[store] = report;
     }
     return out;

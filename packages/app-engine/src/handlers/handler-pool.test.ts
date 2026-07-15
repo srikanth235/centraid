@@ -135,10 +135,7 @@ test('a hung handler is still terminated on timeout without poisoning the pool',
 test('a worker that crashes mid-run leaves the pool usable for the next run', async () => {
   pool = new WorkerPool(HANDLER_WORKER_FILE, 2);
   pool.prewarm();
-  const crash = await writeHandler(
-    'crash.js',
-    `export default async () => { process.exit(1); };`,
-  );
+  const crash = await writeHandler('crash.js', `export default async () => { process.exit(1); };`);
   const crashed = await runHandler({
     app: { id: 'demo', dir: appDir },
     handlerFile: crash,

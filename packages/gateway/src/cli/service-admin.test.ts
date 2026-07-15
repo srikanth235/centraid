@@ -49,7 +49,9 @@ test('service install --dry-run on darwin prints the plist and the bootstrap com
   await commandService(['install', '--data-dir', dataDir, '--dry-run'], fail);
   const out = writes.join('');
   expect(out).toContain('would write');
-  expect(out).toContain(path.join(fakeHome, 'Library', 'LaunchAgents', 'dev.centraid.gateway.plist'));
+  expect(out).toContain(
+    path.join(fakeHome, 'Library', 'LaunchAgents', 'dev.centraid.gateway.plist'),
+  );
   expect(out).toContain('<?xml');
   expect(out).toContain('launchctl bootstrap gui/');
   await expect(
@@ -71,7 +73,9 @@ test('service install --dry-run on linux prints the systemd unit and the enable 
   await commandService(['install', '--data-dir', dataDir, '--dry-run'], fail);
   const out = writes.join('');
   expect(out).toContain('would write');
-  expect(out).toContain(path.join(fakeHome, '.config', 'systemd', 'user', 'centraid-gateway.service'));
+  expect(out).toContain(
+    path.join(fakeHome, '.config', 'systemd', 'user', 'centraid-gateway.service'),
+  );
   expect(out).toContain('[Unit]');
   expect(out).toContain('Restart=on-failure');
   expect(out).toContain('systemctl --user daemon-reload');
@@ -130,6 +134,9 @@ test('service install rejects an unknown subcommand', async () => {
 
 test('--label overrides the default launchd label and systemd unit name', async () => {
   stubPlatform('darwin');
-  await commandService(['install', '--data-dir', dataDir, '--dry-run', '--label', 'dev.centraid.gateway.e2e-test'], fail);
+  await commandService(
+    ['install', '--data-dir', dataDir, '--dry-run', '--label', 'dev.centraid.gateway.e2e-test'],
+    fail,
+  );
   expect(writes.join('')).toContain('dev.centraid.gateway.e2e-test.plist');
 });

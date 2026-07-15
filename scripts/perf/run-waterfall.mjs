@@ -35,13 +35,7 @@ function run(cmd, args) {
 run('bunx', ['vite', 'build']);
 
 // 2. Run the perf spec under the same Playwright config as the rest of the e2e suite.
-const testArgs = [
-  'playwright',
-  'test',
-  'perf-waterfall',
-  '-c',
-  'tests/e2e/playwright.config.ts',
-];
+const testArgs = ['playwright', 'test', 'perf-waterfall', '-c', 'tests/e2e/playwright.config.ts'];
 if (grepShell) testArgs.push('-g', 'app-open waterfall');
 run('bunx', testArgs);
 

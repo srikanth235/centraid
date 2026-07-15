@@ -112,6 +112,8 @@ test('a fresh vault (no blobs, no code store, nothing sealed) yields only the tw
   const stagingDir = await tempDir('backup-sources-staging');
   const captured = capturingLogger();
 
+  // The capture tick lives in doRunBackup now — run it here as the service would.
+  plane.walTick();
   const entries = await assembleSourceEntries({ plane, stagingDir, log: captured.log });
 
   expect(entries.map((e) => e.kind)).toEqual(['db', 'db']);
@@ -153,7 +155,7 @@ test(
     const stagingDir = await tempDir('backup-sources-staging');
 
     // (b) Two real blobs: one through the small inline data_uri door, one
-    // through the staged-bytes door (> 1 FastCDC chunk — avg chunk is 1MiB).
+    // through the staged-bytes door (large enough to exercise file custody).
     const taskId = addTask(plane, 'Frame the print');
     const inlineOut = plane.gateway.invoke(plane.ownerCredential, {
       command: 'core.attach',
@@ -167,7 +169,7 @@ test(
         .get(inlineContentId) as { content_uri: string }
     ).content_uri.slice('blob:sha256-'.length);
 
-    const bigBytes = randomBytes(1_500_000); // > 1MiB — spans multiple FastCDC chunks
+    const bigBytes = randomBytes(1_500_000);
     const bigSha = stageAndAttachBigBlob(plane, taskId, bigBytes);
     expect(bigSha).toBe(sha256Of(bigBytes));
 
@@ -182,6 +184,7 @@ test(
     });
     if (lockerOut.status !== 'executed') throw new Error('locker.add_item failed');
 
+    plane.walTick();
     const entries = await assembleSourceEntries({ plane, stagingDir, log: silentLogger });
 
     expect(entries.map((e) => e.kind)).toEqual([
@@ -282,6 +285,7 @@ test('the staging dir is wiped between runs — a stale marker file never surviv
   await resetStagingDir(stagingDir);
   await expect(fs.access(marker)).rejects.toThrow();
 
+  plane.walTick();
   const entries = await assembleSourceEntries({ plane, stagingDir, log: silentLogger });
   expect(entries.map((e) => e.path)).toEqual(['vault.db', 'journal.db']);
   expect(
@@ -299,5 +303,40 @@ test('the staging dir is wiped between runs — a stale marker file never surviv
   expect(second.map((e) => e.path)).toEqual(['vault.db', 'journal.db']);
   const filesOnDisk = await fs.readdir(stagingDir);
   expect(filesOnDisk).not.toContain('stale-marker.txt');
-  expect(filesOnDisk).toEqual(expect.arrayContaining(['vault.db', 'journal.db']));
+  // Issue #408: db entries read the WAL shipper's pinned base clones IN
+  // PLACE (under <vaultDir>/wal-ship/), never staged copies — staging now
+  // holds only what assembly itself produces (the git bundle, when any).
+  expect(filesOnDisk).not.toContain('vault.db');
+  for (const entry of second) {
+    expect(entry.absolutePath).toContain(path.join('wal-ship', 'bases'));
+    expect(entry.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(entry.walGeneration).toMatch(/^[0-9a-f]{32}$/);
+    expect(entry.baseTickMs).toBeGreaterThan(0);
+  }
+  // Both bases from ONE tick — the coordination the restore asserts.
+  expect(second[0]!.baseTickMs).toBe(second[1]!.baseTickMs);
+});
+
+test('assembly REFUSES an uncoordinated base pair rather than registering it', async () => {
+  const plane = await openPlane();
+  const stagingDir = await tempDir('backup-sources-staging');
+  plane.walTick();
+
+  // The pair the producer must never register: two bases from two ticks. It is
+  // unreachable through the shipper now (generations break together), and a
+  // busy checkpoint DEFERS a break rather than half-completing one — but that
+  // is a claim about the shipper, and this is the assertion that stands
+  // regardless of it. Such a pair has no coordinated restore point: the newer
+  // base already holds receipts for rows that live only in the older one's
+  // SEGMENTS, so losing any one of those hands back a dangling receipt.
+  const shipper = plane.walShipper!;
+  const real = shipper.currentBases.bind(shipper);
+  shipper.currentBases = () => {
+    const bases = real();
+    return bases.map((b, i) => (i === 0 ? { ...b, createdAtMs: b.createdAtMs + 60_000 } : b));
+  };
+  await expect(assembleSourceEntries({ plane, stagingDir, log: silentLogger })).rejects.toThrow(
+    /bases are from different ticks/,
+  );
+  shipper.currentBases = real;
 });

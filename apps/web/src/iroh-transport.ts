@@ -168,7 +168,10 @@ function sleep(ms: number): Promise<void> {
 async function withConnectTimeout(pending: Promise<BrowserResponse>): Promise<BrowserResponse> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => reject(new Error('Iroh gateway connect timed out.')), CONNECT_TIMEOUT_MS);
+    timer = setTimeout(
+      () => reject(new Error('Iroh gateway connect timed out.')),
+      CONNECT_TIMEOUT_MS,
+    );
   });
   try {
     return await Promise.race([pending, timeout]);

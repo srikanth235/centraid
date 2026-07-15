@@ -22,6 +22,8 @@ export interface BackupTargetState {
   label: string;
   /** Fencing generation (PROTOCOL.md § Generation fencing) — starts at 1. */
   generation: number;
+  /** Immutable baseline for first scheduled restore-verification. */
+  firstBackupAt?: string;
   lastBackupAt?: string;
   lastVerifiedAt?: string;
   lastSeq?: number;
@@ -33,6 +35,51 @@ export interface BackupTargetState {
    */
   fenced?: boolean;
   lastError?: string;
+  /** Last snapshot-object verification failure; cleared only by a clean verify. */
+  lastVerifyError?: string;
+  /** Last SUCCESSFUL restore-verification (issue #408 G9) — a real restore
+   *  from the remote into a scratch dir that passed every check. */
+  lastRestoreVerifiedAt?: string;
+  /**
+   * Why the last restore-verification FAILED (issue #408 G9), cleared on the
+   * next success. Persisted so the health PROBE (which recomputes from this
+   * state at snapshot time and overrides pushed reports — see
+   * `HealthRegistry.registerProbe`) stays red on real damage instead of
+   * reverting to green until the 14-day staleness alarm.
+   */
+  lastRestoreVerifyError?: string;
+  /**
+   * How many journal receipts the last restore-verification found naming a
+   * vault row absent from the restored vault (issue #408 G8). Not a failed
+   * restore — hard-deletes explain it (see `verifyRestoredPair`) — so it is a
+   * DEGRADED signal for human review, and persisted for the same reason
+   * `lastRestoreVerifyError` is: the health probe recomputes from this state
+   * and overrides pushed reports, so a degrade that lived only in a pushed
+   * report would be repainted green by the very next probe. Cleared (deleted)
+   * by the next restore-verification that finds none.
+   */
+  lastRestoreVerifyDangling?: number;
+  /**
+   * WAL generation → the keyring epoch it seals under (issue #408): restore
+   * derives segment keys from the MANIFEST's `keyEpoch`, so each generation
+   * must seal under exactly one epoch for its whole life. Recorded at first
+   * drain/registration; rotation forces fresh generations (see
+   * BackupService), and pruned generations fall out of the map.
+   */
+  walGenerationEpochs?: Record<string, number>;
+  /**
+   * `"{vaultGeneration}-{journalGeneration}"` → the newest pair-marker tick the
+   * provider has CONFIRMED accepting for that base pair (issue #408).
+   *
+   * Only `drainWalFiles` writes it, and only after a PUT returns — never from
+   * local intent. That provenance is the whole point: the value is stamped into
+   * the next manifest as `walTipTickMs`, where it becomes a floor the store is
+   * held to, so a drain interrupted between a tick's segments and its marker
+   * must yield a LOWER tip rather than a claim the store cannot honour.
+   * Generation breaks mint a new pair key (so the tip resets naturally), and
+   * pruned generations fall out of the map.
+   */
+  walMarkerTips?: Record<string, number>;
 }
 
 /**
