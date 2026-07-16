@@ -1516,6 +1516,62 @@ kit-reference-strip,
   color: var(--kit-accent-deep-fg, #2a2);
 }
 
+/* GFM — ordered/nested lists, links, images, blockquote, hr, strikethrough (#420 W2). */
+.kit-msg.ai .asstOl {
+  margin: 0 0 0.5rem;
+  padding-left: 1.4rem;
+}
+.kit-msg.ai .asstOl .asstOl,
+.kit-msg.ai .asstOl .asstUl,
+.kit-msg.ai .asstUl .asstOl,
+.kit-msg.ai .asstUl .asstUl {
+  margin-bottom: 0;
+}
+.kit-msg.ai .asstA {
+  color: var(--kit-accent, #2563eb);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.kit-msg.ai .asstImg {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 0.25rem 0;
+}
+.kit-msg.ai .asstQuote {
+  margin: 0 0 0.5rem;
+  padding: 2px 0 2px 12px;
+  border-left: 2.5px solid color-mix(in oklab, var(--kit-accent) 40%, transparent);
+  color: var(--muted, #555);
+}
+.kit-msg.ai .asstHr {
+  border: 0;
+  border-top: 0.5px solid var(--kit-line-strong, #ddd);
+  margin: 0.75rem 0;
+}
+.kit-msg.ai .asstDel {
+  text-decoration: line-through;
+  opacity: 0.75;
+}
+
+/* Dependency-free syntax highlighting tokens (#420 W2). */
+.kit-msg.ai .asstPre .hlKeyword {
+  color: #9333ea;
+}
+.kit-msg.ai .asstPre .hlString {
+  color: #16a34a;
+}
+.kit-msg.ai .asstPre .hlComment {
+  color: var(--muted, #888);
+  font-style: italic;
+}
+.kit-msg.ai .asstPre .hlNumber {
+  color: #d97706;
+}
+.kit-msg.ai .asstPre .hlBuiltin {
+  color: #2563eb;
+}
+
 /* The proposed write — dashed accent, consent-gated, same feel as parked. */
 .kit-ask-action {
   align-self: stretch;

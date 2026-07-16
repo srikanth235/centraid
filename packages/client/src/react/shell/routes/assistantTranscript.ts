@@ -4,7 +4,7 @@
 // that cohesive route stays under the file-size cap while gaining the Wave 1
 // transcript affordances (copy, feedback, regenerate/retry pager, timestamps).
 
-import type { AsstMsgDTO } from '../../screen-contracts.js';
+import type { AsstMsgDTO, AsstUsageDTO } from '../../screen-contracts.js';
 import { richAnswerHtml } from './assistantRich.js';
 
 export interface AsstToolCall {
@@ -28,9 +28,12 @@ export interface Attempt {
   text: string;
   error?: boolean;
   feedback: 'up' | 'down' | null;
+  usage?: AsstUsageDTO;
 }
 export type AsstMsg =
   | { kind: 'user'; text: string; attachments?: AsstAttachment[]; createdAt?: number }
+  /** Live-only streaming reasoning row (issue #420, Wave 2). */
+  | { kind: 'thinking'; text: string; streaming?: boolean }
   | {
       kind: 'ai';
       text: string;
@@ -40,6 +43,8 @@ export type AsstMsg =
       /** Turn id of the shown answer — feedback/regenerate target. */
       turnId?: string;
       feedback?: 'up' | 'down' | null;
+      /** Token/cost usage for the shown answer's turn (issue #420, Wave 2). */
+      usage?: AsstUsageDTO;
       /** Retry siblings (oldest→newest); when set, `activeAttempt` selects one. */
       attempts?: Attempt[];
       activeAttempt?: number;
@@ -58,6 +63,8 @@ export interface PendingAttachment {
   state: 'uploading' | 'ready' | 'error';
   errorText?: string;
   ref?: AsstAttachment;
+  /** Local object-URL preview for an image attachment (issue #420, Wave 2). */
+  previewUrl?: string;
 }
 
 /** The active attempt of an AI message with a retry pager, or null when plain. */
@@ -98,6 +105,7 @@ export function hydrateMessages(
         ...(payload.error ? { error: true } : {}),
         ...(payload.turnId ? { turnId: payload.turnId } : {}),
         ...(payload.feedback ? { feedback: payload.feedback } : {}),
+        ...(payload.usage ? { usage: payload.usage } : {}),
       };
       if (payload.retry?.attempts?.length) {
         msg.attempts = payload.retry.attempts.map((a) => ({
@@ -105,6 +113,7 @@ export function hydrateMessages(
           text: a.text,
           ...(a.error ? { error: true } : {}),
           feedback: a.feedback ?? null,
+          ...(a.usage ? { usage: a.usage } : {}),
         }));
         msg.activeAttempt = msg.attempts.length - 1;
       }
@@ -171,6 +180,8 @@ export function msgToDTO(msg: AsstMsg, isLastAnswer: boolean): AsstMsgDTO {
       })),
     };
   }
+  if (msg.kind === 'thinking')
+    return { kind: 'thinking', text: msg.text, streaming: !!msg.streaming };
   if (msg.streaming) return { kind: 'ai', streaming: true, text: msg.text };
   // Final AI answer — resolve the shown attempt for the retry pager.
   const active = activeAttemptOf(msg);
@@ -178,6 +189,7 @@ export function msgToDTO(msg: AsstMsg, isLastAnswer: boolean): AsstMsgDTO {
   const error = active ? Boolean(active.error) : Boolean(msg.error);
   const turnId = active ? active.turnId : msg.turnId;
   const feedback = active ? active.feedback : (msg.feedback ?? null);
+  const usage = active ? active.usage : msg.usage;
   return {
     kind: 'ai',
     streaming: false,
@@ -186,6 +198,7 @@ export function msgToDTO(msg: AsstMsg, isLastAnswer: boolean): AsstMsgDTO {
     copyText: text,
     ...(msg.createdAt ? { createdAt: msg.createdAt } : {}),
     ...(turnId ? { turnId } : {}),
+    ...(usage ? { usage } : {}),
     feedback,
     ...(msg.attempts?.length
       ? {

@@ -79,6 +79,57 @@ describe('richAnswerHtml', () => {
     expect(html).toContain('asstCopyBtn');
     expect(html).toContain('const x = 1;');
   });
+
+  it('syntax-highlights a fenced code block for a known language (#420 W2)', () => {
+    const html = richAnswerHtml('```js\nconst x = "hi"; // note\n```');
+    expect(html).toContain('hlKeyword'); // const
+    expect(html).toContain('hlString'); // "hi"
+    expect(html).toContain('hlComment'); // // note
+    expect(html).toContain('data-lang="js"');
+  });
+
+  it('leaves an unknown-language fence as plain escaped text (#420 W2)', () => {
+    const html = richAnswerHtml('```wat\n<b>x</b>\n```');
+    expect(html).not.toContain('hlKeyword');
+    expect(html).not.toContain('<b>x</b>'); // escaped
+    expect(html).toContain('&lt;b&gt;');
+  });
+
+  it('renders GFM links, images, ordered/nested lists, blockquote, hr, strike (#420 W2)', () => {
+    const html = richAnswerHtml(
+      [
+        '[docs](https://example.com)',
+        '',
+        '![pic](/centraid/x.png)',
+        '',
+        '1. one',
+        '2. two',
+        '   - nested',
+        '',
+        '> quoted',
+        '',
+        '---',
+        '',
+        '~~gone~~',
+      ].join('\n'),
+    );
+    expect(html).toContain('<a class="asstA" href="https://example.com"');
+    expect(html).toContain('target="_blank"');
+    expect(html).toContain('rel="noopener noreferrer"');
+    expect(html).toContain('<img class="asstImg" src="/centraid/x.png"');
+    expect(html).toContain('<ol');
+    expect(html).toContain('<ul'); // nested
+    expect(html).toContain('<blockquote');
+    expect(html).toContain('<hr');
+    expect(html).toContain('<del');
+  });
+
+  it('renders a markdown pipe table (#420 W2)', () => {
+    const html = richAnswerHtml('| A | B |\n| --- | --- |\n| 1 | 2 |');
+    expect(html).toContain('asstTable');
+    expect(html).toContain('<th>A</th>');
+    expect(html).toContain('<td>1</td>');
+  });
 });
 
 describe('wireCodeCopy', () => {

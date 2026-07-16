@@ -10,7 +10,7 @@ Issue #420's suggested phasing, each wave discharged by the named subsection in
 
 - [x] **Wave 0 — shared conversation core**
 - [x] **Wave 1 — transcript table stakes**
-- [ ] **Wave 2 — rendering**
+- [x] **Wave 2 — rendering**
 - [ ] **Wave 3 — management & search**
 - [ ] **Wave 4 — resilience**
 - [ ] **Wave 5 — design issues to spin out**
@@ -137,6 +137,55 @@ updates to `packages/client/src/react/screens/AssistantScreen.tsx`,
 `packages/blueprints/src/assistant-rich.test.ts`,
 `packages/app-engine/src/http/turn-routes.test.ts`.
 
+### Wave 2 — rendering
+
+All §2 items in the SHARED renderer, so both surfaces gain them at once:
+
+- **Full GFM** — new kit sibling `packages/blueprints/kit/gfm.js`: links,
+  images, ordered/nested/mixed lists, blockquotes, pipe tables with alignment,
+  horizontal rules, strikethrough; existing `block:*`/ref-chip paths preserved.
+- **Syntax highlighting** — new dependency-free
+  `packages/blueprints/kit/code-highlight.js` +
+  `packages/blueprints/kit/code-highlight.d.ts` (js/ts/jsx/tsx, json, python,
+  sql, bash, html, css, rust, go; plain fallback), wired into the code-block
+  path of `packages/blueprints/kit/assistant-rich.js` /
+  `packages/blueprints/kit/assistant-rich.d.ts`; token classes themed in
+  `packages/blueprints/kit/kit.css` and
+  `packages/client/src/react/shell/routes/assistantRich.module.css` (+ adapter
+  `packages/client/src/react/shell/routes/assistantRich.ts`).
+- **Sanitization contract** — escape-by-default everywhere; `sanitizeUrl`
+  allowlist (http/https/mailto/relative; javascript:/data:/vbscript:/
+  protocol-relative rejected, control chars stripped pre-scheme-detection);
+  external links get `rel="noopener noreferrer"`; documented as a SECURITY
+  CONTRACT header in `assistant-rich.js`; adversarial tests in
+  `packages/blueprints/src/assistant-sanitize.test.ts` and
+  `packages/blueprints/src/code-highlight.test.ts` (+ extended
+  `packages/blueprints/src/assistant-rich.test.ts`).
+- **Reasoning/thinking display** — `reasoning.delta` streams into a
+  collapsible ThinkingRow in the vault assistant (BuilderChatPane pattern),
+  via `packages/client/src/react/shell/routes/assistantTranscript.ts`,
+  `packages/client/src/react/shell/routes/AssistantRoute.tsx`,
+  `packages/client/src/react/screens/AssistantMessage.tsx`,
+  `packages/client/src/react/screens/AssistantScreen.tsx`,
+  `packages/client/src/react/screens/AssistantScreen.module.css`,
+  `packages/client/src/react/screens/AssistantScreen.test.tsx`.
+- **Per-turn usage/cost** — live `usage` event → client estimate
+  (`packages/client/src/react/screens/assistantUsage.ts`); reload path returns
+  the frozen ledger rollup: `getSession` attaches per-turn usage in
+  `packages/app-engine/src/conversation/history.ts` (+
+  `packages/app-engine/src/conversation/history.test.ts`), wire types in
+  `packages/client/src/centraid-api.d.ts`,
+  `packages/client/src/react/screen-contracts.ts`.
+- **Image attachment previews** — composer thumbnails via local object URLs;
+  transcript image attachments fetch bytes auth-aware
+  (`fetchAssistantAttachmentUrl` in
+  `packages/client/src/gateway-client-conversation.ts`). No image-output
+  ItemKind exists, so user-attached previews are the complete surface.
+- Allowlists updated for the two new kit siblings in
+  `packages/app-engine/src/http/security.ts`,
+  `packages/blueprints/src/app-boot-harness.ts`,
+  `packages/blueprints/scripts/lint-apps.mjs`.
+
 ## Out of scope
 
 - Backend/runner changes — `makeAssistantConversationRunner`, tools, prompt
@@ -146,7 +195,12 @@ updates to `packages/client/src/react/screens/AssistantScreen.tsx`,
 - Wave 5 topics (context-window management, cross-conversation memory, full
   edit/branching UX, mobile/PWA assistant layout, subagent items) — spun out
   as separate design issues per the umbrella's phasing.
-- Voice input, math rendering (noted in the issue as future, not v0).
+- Voice input (noted in the issue as future, not v0).
+- Math rendering — deferred: KaTeX/MathJax is infeasible under the kit's
+  dependency-free constraint and a hand-rolled TeX subset was judged not worth
+  the added attack surface; not part of the issue's Wave 2 plan.
+- Reasoning rows are live-only (reasoning is not persisted to the ledger), so
+  they intentionally do not replay on reload.
 
 ## Verification
 
@@ -175,6 +229,16 @@ bunx vitest run packages/gateway/src/routes/assistant-routes.test.ts  # pass
 
 New Wave 1 tests: retry-collapse + feedback (store/facade/route/end-to-end),
 `wireCodeCopy`, transcript codec, screen action-bar interactions.
+
+Wave 2 — from the worktree root, all green:
+
+```bash
+bun run typecheck        # 26/26 turbo tasks pass
+bun run lint:types       # all packages ok
+node packages/blueprints/scripts/lint-apps.mjs   # 0 errors
+bunx vitest run packages/blueprints/src packages/client packages/app-engine
+# 1416 passed / 1 failed = the pre-existing docs-media.test.ts env issue
+```
 
 Pre-existing, unrelated: `packages/blueprints/src/docs-media.test.ts` times out
 (`Promise.try` missing in vendored `pdf.min.mjs`) — fails identically on the

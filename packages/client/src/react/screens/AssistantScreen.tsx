@@ -6,6 +6,7 @@ import type {
 } from '../screen-contracts.js';
 import styles from './AssistantScreen.module.css';
 import Icon from '../ui/Icon.js';
+import { cx } from '../ui/cx.js';
 import Message, { type MessageCallbacks } from './AssistantMessage.js';
 import { useAssistantScroll } from './useAssistantScroll.js';
 import { clearDraft, loadDraft, saveDraft } from './assistantDrafts.js';
@@ -153,6 +154,7 @@ export default function AssistantScreen({
   onRemovePendingAttachment,
   hydrateRefs,
   wireCodeCopy,
+  loadAttachmentImage,
   onCopyMessage,
   onFeedback,
   onRegenerate,
@@ -220,6 +222,7 @@ export default function AssistantScreen({
   const messageCallbacks: MessageCallbacks = {
     hydrateRefs,
     wireCodeCopy,
+    loadAttachmentImage,
     onCopyMessage,
     onFeedback,
     onRegenerate,
@@ -288,10 +291,13 @@ export default function AssistantScreen({
                 {snap.pendingAttachments.map((a) => (
                   <div
                     key={a.id}
-                    className={styles.attachChip}
+                    className={cx(styles.attachChip, a.previewUrl && styles.attachChipImage)}
                     data-state={a.state}
                     title={a.state === 'error' ? (a.errorText ?? 'Upload failed') : a.filename}
                   >
+                    {a.previewUrl ? (
+                      <img className={styles.attachThumb} src={a.previewUrl} alt={a.filename} />
+                    ) : null}
                     {a.state === 'uploading' ? <span className={styles.attachSpinner} /> : null}
                     <span className={styles.attachName}>{a.filename}</span>
                     <span className={styles.attachSize}>

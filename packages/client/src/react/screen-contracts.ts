@@ -834,9 +834,22 @@ export interface AsstRetryDTO {
   /** Total attempts in this turn's family. */
   count: number;
 }
+/** Per-turn token/cost usage surfaced under an answer (issue #420, Wave 2). */
+export interface AsstUsageDTO {
+  inputTokens?: number;
+  outputTokens?: number;
+  /** USD cost — frozen from the ledger on reload, or a client estimate live. */
+  costUsd?: number;
+  /** True when `costUsd` is a live client-side estimate (ledger cost is exact). */
+  estimated?: boolean;
+  model?: string;
+}
 export type AsstMsgDTO =
   | { kind: 'user'; text: string; attachments?: AsstAttachmentDTO[]; createdAt?: number }
   | { kind: 'tools'; label: string; calls: AsstToolCallDTO[] }
+  /** A live streaming reasoning/thinking row (issue #420, Wave 2). Live-only —
+   *  reasoning is not persisted in the ledger, so it never comes back on reload. */
+  | { kind: 'thinking'; text: string; streaming: boolean }
   | { kind: 'ai'; streaming: true; text: string }
   | {
       kind: 'ai';
@@ -845,6 +858,8 @@ export type AsstMsgDTO =
       error: boolean;
       /** Source text for "copy message" (issue #420). */
       copyText: string;
+      /** Token/cost usage for the answer's turn (issue #420, Wave 2). */
+      usage?: AsstUsageDTO;
       /** ms epoch of the answer, for the hover timestamp. */
       createdAt?: number;
       /** Turn id — the feedback/regenerate target; absent for a just-streamed
@@ -866,6 +881,10 @@ export interface AsstPendingAttachmentDTO {
   sizeBytes: number;
   state: 'uploading' | 'ready' | 'error';
   errorText?: string;
+  /** MIME type — drives the composer image thumbnail (issue #420, Wave 2). */
+  mime?: string;
+  /** Local object-URL preview for an image attachment (issue #420, Wave 2). */
+  previewUrl?: string;
 }
 export interface AssistantSnapshot {
   empty: boolean;
@@ -908,6 +927,9 @@ export interface AssistantBridgeProps {
   hydrateRefs: (node: HTMLElement) => void;
   /** Wire code-block "Copy" buttons inside a just-rendered answer node (#420). */
   wireCodeCopy: (node: HTMLElement) => void;
+  /** Fetch an image attachment's bytes (auth-aware) as an object URL for an
+   *  inline transcript thumbnail; revoke it on cleanup (issue #420, Wave 2). */
+  loadAttachmentImage: (hash: string, mime: string) => Promise<string>;
   /** Copy a message's source text to the clipboard (issue #420). */
   onCopyMessage: (text: string) => void;
   /** Set 👍/👎 on an answer turn (toggles off when re-clicking the same). */

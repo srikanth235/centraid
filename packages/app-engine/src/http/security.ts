@@ -60,6 +60,8 @@ export const SHARED_ASSET_FILES = new Set([
   // Shared chat-client core (issue #420) — vanilla ESM siblings kit.js imports.
   'turn-stream.js',
   'assistant-rich.js',
+  'gfm.js',
+  'code-highlight.js',
   'consent-cards.js',
   'conversation-client.js',
   'pdf.min.mjs',

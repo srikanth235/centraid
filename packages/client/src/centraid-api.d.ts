@@ -420,12 +420,21 @@ export interface CentraidConversationHistoryAttachment {
   url?: string;
 }
 
+/** Per-turn token/cost usage on a terminal `ai` answer (issue #420, Wave 2). */
+export interface CentraidConversationTurnUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  costUsd?: number;
+  model?: string;
+}
+
 /** One prior attempt of a regenerated answer — a sibling in the "<2/2>" pager. */
 export interface CentraidConversationHistoryRetryAttempt {
   turnId: string;
   text: string;
   error?: boolean;
   feedback: 'up' | 'down' | null;
+  usage?: CentraidConversationTurnUsage;
 }
 
 /** Coarse-grained persisted shape per message in a chat session. */
@@ -447,6 +456,8 @@ export type CentraidConversationHistoryMessage =
         count: number;
         attempts: CentraidConversationHistoryRetryAttempt[];
       };
+      /** Token/cost usage for this answer's turn (issue #420, Wave 2). */
+      usage?: CentraidConversationTurnUsage;
     }
   | {
       kind: 'tool';
@@ -1265,11 +1276,18 @@ declare global {
     sizeBytes: number;
     url?: string;
   }
+  interface CentraidConversationTurnUsage {
+    inputTokens?: number;
+    outputTokens?: number;
+    costUsd?: number;
+    model?: string;
+  }
   interface CentraidConversationHistoryRetryAttempt {
     turnId: string;
     text: string;
     error?: boolean;
     feedback: 'up' | 'down' | null;
+    usage?: CentraidConversationTurnUsage;
   }
   type CentraidConversationHistoryMessage =
     | { kind: 'user'; text: string; attachments?: CentraidConversationHistoryAttachment[] }
@@ -1284,6 +1302,7 @@ declare global {
           count: number;
           attempts: CentraidConversationHistoryRetryAttempt[];
         };
+        usage?: CentraidConversationTurnUsage;
       }
     | {
         kind: 'tool';

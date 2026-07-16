@@ -1,19 +1,45 @@
 // Shared assistant rich-answer renderer (issue #420) — the ONE string→HTML
 // renderer for every chat surface. Canonical copy: packages/blueprints/kit/
 // assistant-rich.js. Both the kit's Ask panel and the React shell render
-// assistant answers through this, so ref-chips and typed `block:*` blocks look
-// identical on both. Ported from the React shell's assistantRich.ts (which now
-// re-exports this) to framework-free vanilla ESM.
+// assistant answers through this, so GFM, typed `block:*` blocks, code
+// highlighting, and ref-chips look identical on both. Framework-free vanilla
+// ESM (no npm dependency); the React shell re-exports it (assistantRich.ts).
 //
 // The shared prompt tells the model to emit `@[Title](ref:type/id)` citations
 // and ```block:table|chart|stat``` JSON fences. This renderer turns those into
 // interactive ref-chips and typed blocks; `hydrateRefs` resolves each chip to a
-// live vault card title.
+// live vault card title. Wave 2 added full GFM (links, images, ordered/nested
+// lists, blockquotes, pipe tables, hr, strikethrough) via gfm.js and
+// dependency-free syntax highlighting via code-highlight.js.
 //
-// Class names: the renderer emits the DEFAULT_CLASSES literal names (styled by
-// kit.css for the Ask panel). The React shell passes its CSS-module `styles`
-// object as the `classes` argument, so its scoped/hashed class names come out
-// instead — one renderer, two stylesheets, no React ever flowing into the kit.
+// ── SECURITY CONTRACT (model output is UNTRUSTED input) ──────────────────────
+// The React shell injects this renderer's output via `dangerouslySetInnerHTML`
+// and the kit via `innerHTML`, so the output must be provably safe. The
+// guarantees, audited across every path:
+//   1. Escape-by-default. Every text fragment is HTML-escaped (`escapeHtml`)
+//      BEFORE any pattern-matching or tag injection. The parser only ever adds
+//      a fixed, closed set of tags — p, h3–h6, ul, ol, li, blockquote, hr,
+//      table/thead/tbody/tr/th/td, a, img, strong, em, del, code, pre, the ref
+//      <button>, and the block:* SVG/table/stat nodes it builds itself. No text
+//      the model supplies is ever placed unescaped into markup.
+//   2. URL allowlist. Link/image hrefs pass through `sanitizeUrl` (gfm.js):
+//      only http/https(/mailto for links) schemes or scheme-less relative
+//      gateway paths survive; `javascript:`, `data:`, `vbscript:`, and
+//      protocol-relative `//host` are rejected (link → plain text, image →
+//      alt). Control/whitespace chars are stripped first so `java\tscript:`
+//      can't slip past scheme detection. Attribute-break-out is structurally
+//      impossible: the URL is drawn from the already-escaped string, so any
+//      `"` is already `&#34;`.
+//   3. External links carry `rel="noopener noreferrer"` + `target="_blank"`.
+//   4. Syntax highlighting (code-highlight.js) is escape-by-default too: it
+//      emits only `<span class="hl…">` with static class names around escaped
+//      source, so a fenced code block can never inject markup.
+//   5. block:* JSON is parsed with a try/catch; a malformed block degrades to a
+//      visible (escaped) code block, never silent loss and never eval.
+// Adversarial coverage lives in packages/blueprints/src/assistant-sanitize.test.ts.
+
+import { cx, el, escapeHtml, inlineHtml, blockNodes } from './gfm.js';
+import { highlightCode } from './code-highlight.js';
 
 /** The literal class names the kit's kit.css styles. Callers may override any. */
 export const DEFAULT_CLASSES = {
@@ -21,6 +47,12 @@ export const DEFAULT_CLASSES = {
   asstP: 'asstP',
   asstH: 'asstH',
   asstUl: 'asstUl',
+  asstOl: 'asstOl',
+  asstQuote: 'asstQuote',
+  asstHr: 'asstHr',
+  asstA: 'asstA',
+  asstImg: 'asstImg',
+  asstDel: 'asstDel',
   asstRef: 'asstRef',
   asstBlock: 'asstBlock',
   asstTableWrap: 'asstTableWrap',
@@ -40,88 +72,26 @@ export const DEFAULT_CLASSES = {
   asstCopyBtn: 'asstCopyBtn',
 };
 
-/** Join truthy class names (a tiny `cx`). */
-function cx(...names) {
-  return names.filter(Boolean).join(' ');
-}
-
-/** DOM helper mirroring the shell renderer's `el` — string/element children. */
-function el(tag, attrs = {}, children = []) {
-  const node = document.createElement(tag);
-  if (attrs.class) node.className = attrs.class;
-  if (attrs.trustedHtml !== undefined) node.innerHTML = attrs.trustedHtml;
-  if (attrs.style) Object.assign(node.style, attrs.style);
-  for (const c of Array.isArray(children) ? children : [children]) {
-    if (c == null || c === false) continue;
-    node.append(typeof c === 'string' ? document.createTextNode(c) : c);
-  }
-  return node;
-}
-
-const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-
 /**
- * A fenced code block wrapped with a hover copy button. The button carries no
- * text payload — `wireCodeCopy` reads the sibling `<pre>`'s textContent on
- * click, so nothing needs re-escaping. Shared by both chat surfaces.
+ * A fenced code block wrapped with a hover copy button. When `lang` is a known
+ * language the `<pre>` gets escape-by-default syntax highlighting (hl… spans);
+ * otherwise it stays a plain escaped text node. `wireCodeCopy` reads the
+ * `<pre>`'s textContent (unchanged by the spans) on click, so copy still works.
  * @param {string} code
+ * @param {string} lang
  * @param {typeof DEFAULT_CLASSES} C
  * @returns {HTMLElement}
  */
-function codeBlock(code, C) {
+function codeBlock(code, lang, C) {
   const btn = el('button', { class: C.asstCopyBtn }, 'Copy');
   btn.type = 'button';
   btn.setAttribute('aria-label', 'Copy code');
-  return el('div', { class: C.asstCodeWrap }, [btn, el('pre', { class: C.asstPre }, code)]);
-}
-
-function inlineHtml(raw, C) {
-  let s = escapeHtml(raw);
-  s = s.replace(
-    /@\[([^\]]+)\]\(ref:([a-z_]+\.[a-z_]+)\/([A-Za-z0-9_-]+)\)/g,
-    (_m, label, type, id) =>
-      `<button type="button" class="${C.asstRef}" data-ref-type="${type}" data-ref-id="${id}">${label}</button>`,
-  );
-  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  s = s.replace(/(^|[\s(])\*([^*\n]+)\*/g, '$1<em>$2</em>');
-  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
-  return s;
-}
-
-function proseNodes(text, C) {
-  const out = [];
-  let list = null;
-  const flushList = () => {
-    if (list) out.push(list);
-    list = null;
-  };
-  for (const rawLine of text.split('\n')) {
-    const line = rawLine.trimEnd();
-    if (line.trim() === '') {
-      flushList();
-      continue;
-    }
-    const bullet = line.match(/^\s*[-*]\s+(.*)$/);
-    if (bullet) {
-      list ??= el('ul', { class: C.asstUl });
-      list.append(el('li', { trustedHtml: inlineHtml(bullet[1] ?? '', C) }));
-      continue;
-    }
-    flushList();
-    const heading = line.match(/^(#{1,3})\s+(.*)$/);
-    if (heading) {
-      out.push(
-        el(`h${Math.min(heading[1].length + 2, 5)}`, {
-          class: C.asstH,
-          trustedHtml: inlineHtml(heading[2] ?? '', C),
-        }),
-      );
-      continue;
-    }
-    out.push(el('p', { class: C.asstP, trustedHtml: inlineHtml(line, C) }));
-  }
-  flushList();
-  return out;
+  const highlighted = lang ? highlightCode(code, lang) : null;
+  const pre = highlighted
+    ? el('pre', { class: C.asstPre, trustedHtml: highlighted })
+    : el('pre', { class: C.asstPre }, code);
+  if (lang) pre.dataset.lang = lang;
+  return el('div', { class: C.asstCodeWrap }, [btn, pre]);
 }
 
 function tableBlock(spec, C) {
@@ -234,7 +204,8 @@ function chartBlock(spec, C) {
 }
 
 /**
- * Full answer → prose + typed blocks + plain code fences, as an HTML string.
+ * Full answer → GFM prose + typed blocks + highlighted code fences, as an HTML
+ * string. Untrusted input — see the SECURITY CONTRACT above.
  * @param {string} text
  * @param {Partial<typeof DEFAULT_CLASSES>} [classes]
  * @returns {string}
@@ -249,11 +220,11 @@ export function richAnswerHtml(text, classes) {
     for (const k in classes) if (classes[k]) C[k] = classes[k];
   }
   const host = el('div', { class: C.asstRich });
-  const fence = /```(block:table|block:chart|block:stat|[a-z]*)\n([\s\S]*?)```/g;
+  const fence = /```(block:table|block:chart|block:stat|[A-Za-z0-9+#_-]*)\n([\s\S]*?)```/g;
   let last = 0;
   let m;
   const pushProse = (seg) => {
-    for (const node of proseNodes(seg, C)) host.append(node);
+    for (const node of blockNodes(seg, C)) host.append(node);
   };
   while ((m = fence.exec(text)) !== null) {
     pushProse(text.slice(last, m.index));
@@ -273,9 +244,9 @@ export function richAnswerHtml(text, classes) {
       } catch {
         node = null;
       }
-      host.append(node ?? codeBlock(payload.trim(), C));
+      host.append(node ?? codeBlock(payload.trim(), '', C));
     } else {
-      host.append(codeBlock(payload.replace(/\n$/, ''), C));
+      host.append(codeBlock(payload.replace(/\n$/, ''), tag, C));
     }
   }
   pushProse(text.slice(last));

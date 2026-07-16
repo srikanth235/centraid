@@ -3,6 +3,7 @@ import { type JSX, useEffect, useRef } from 'react';
 import {
   ASSISTANT_APP_ID,
   createConversation,
+  fetchAssistantAttachmentUrl,
   loadConversation,
   setConversationFeedback,
   streamAssistantTurn,
@@ -11,6 +12,7 @@ import {
   type ConversationAttachmentRef,
   type TurnStreamEvent,
 } from '../../../gateway-client.js';
+import { estimateCostUsd } from '../../screens/assistantUsage.js';
 import mainScrollCss from '../../styles/mainScroll.module.css';
 import type {
   AssistantSnapshot,
@@ -86,6 +88,8 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
         filename: a.filename,
         sizeBytes: a.sizeBytes,
         state: a.state,
+        mime: a.mime,
+        ...(a.previewUrl ? { previewUrl: a.previewUrl } : {}),
         ...(a.errorText ? { errorText: a.errorText } : {}),
       })),
     };
@@ -135,12 +139,16 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
       }
       const localId = crypto.randomUUID();
       const mime = file.type || 'application/octet-stream';
+      // Image attachments get a local object-URL thumbnail in the composer
+      // staging area straight away — no round-trip needed (issue #420, W2).
+      const previewUrl = mime.startsWith('image/') ? URL.createObjectURL(file) : undefined;
       m.current.pendingAttachments.push({
         localId,
         filename: file.name,
         sizeBytes: file.size,
         mime,
         state: 'uploading',
+        ...(previewUrl ? { previewUrl } : {}),
       });
       push();
       void (async () => {
@@ -197,11 +205,17 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     setSubsystemModel(modelPickerRunnerRef.current, 'assistant', modelId);
 
   const removePendingAttachment = (localId: string): void => {
+    const gone = m.current.pendingAttachments.find((a) => a.localId === localId);
+    if (gone?.previewUrl) URL.revokeObjectURL(gone.previewUrl);
     m.current.pendingAttachments = m.current.pendingAttachments.filter(
       (a) => a.localId !== localId,
     );
     push();
   };
+
+  /** Auth-aware fetch of an image attachment's bytes → an object URL thumbnail. */
+  const loadAttachmentImage = (hash: string, mime: string): Promise<string> =>
+    fetchAssistantAttachmentUrl(ASSISTANT_APP_ID, hash, mime);
 
   /** The shared streaming core — every send/regenerate/retry flows through here. */
   const runTurn = async (opts: {
@@ -245,17 +259,55 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
       }
       return ai;
     };
+    // Live reasoning row (issue #420, Wave 2) — ported from BuilderChatPane. It
+    // streams `reasoning.delta`, collapses once the answer/tools begin, and (as
+    // reasoning is not persisted) vanishes when the turn reloads from the ledger.
+    let thinking: { kind: 'thinking'; text: string; streaming?: boolean } | null = null;
+    const collapseThinking = (): void => {
+      if (thinking && thinking.streaming) {
+        thinking.streaming = false;
+        push();
+      }
+    };
     const byCall = new Map<string, AsstToolCall>();
     let errored = false;
 
     const onEvent = (event: TurnStreamEvent): void => {
       if (m.current.disposed || m.current.currentId !== conversationId) return;
       switch (event.type) {
+        case 'reasoning.delta':
+          if (!thinking) {
+            thinking = { kind: 'thinking', text: event.delta, streaming: true };
+            m.current.msgs.push(thinking);
+          } else {
+            thinking.text += event.delta;
+          }
+          push();
+          return;
         case 'assistant.delta':
+          collapseThinking();
           ensureAi().text += event.delta;
           push();
           return;
+        case 'usage': {
+          const msg = ensureAi();
+          const inputTokens = event.inputTokens;
+          const outputTokens = event.outputTokens;
+          const costUsd = estimateCostUsd(event.model, {
+            ...(inputTokens !== undefined ? { inputTokens } : {}),
+            ...(outputTokens !== undefined ? { outputTokens } : {}),
+          });
+          msg.usage = {
+            ...(inputTokens !== undefined ? { inputTokens } : {}),
+            ...(outputTokens !== undefined ? { outputTokens } : {}),
+            ...(costUsd !== undefined ? { costUsd, estimated: true } : {}),
+            ...(event.model ? { model: event.model } : {}),
+          };
+          push();
+          return;
+        }
         case 'tool.start': {
+          collapseThinking();
           const call: AsstToolCall = {
             id: event.toolCallId,
             tool: event.toolName,
@@ -282,6 +334,7 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
           return;
         }
         case 'final': {
+          collapseThinking();
           const msg = ensureAi();
           msg.text = msg.text || event.text;
           msg.streaming = false;
@@ -301,7 +354,7 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
           break;
         }
         default:
-          // start/phase/usage/reasoning/aborted/webhooks — no UI surface yet.
+          // start/phase/aborted/webhooks — no UI surface yet.
           break;
       }
     };
@@ -330,6 +383,9 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
       }
     } finally {
       if (!m.current.disposed && m.current.currentId === conversationId) {
+        for (const msg of m.current.msgs) {
+          if (msg.kind === 'thinking' && msg.streaming) msg.streaming = false;
+        }
         const live = m.current.msgs.find(
           (msg): msg is Extract<AsstMsg, { kind: 'ai' }> =>
             msg.kind === 'ai' && msg.streaming === true,
@@ -501,6 +557,7 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
         onRemovePendingAttachment={removePendingAttachment}
         hydrateRefs={(node) => hydrateRefs(node)}
         wireCodeCopy={(node) => wireCodeCopy(node)}
+        loadAttachmentImage={loadAttachmentImage}
         onCopyMessage={copyMessage}
         onFeedback={setFeedback}
         onRegenerate={regenerate}

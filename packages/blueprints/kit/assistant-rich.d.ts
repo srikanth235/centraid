@@ -8,6 +8,12 @@ export interface AssistantRichClasses {
   asstP: string;
   asstH: string;
   asstUl: string;
+  asstOl: string;
+  asstQuote: string;
+  asstHr: string;
+  asstA: string;
+  asstImg: string;
+  asstDel: string;
   asstRef: string;
   asstBlock: string;
   asstTableWrap: string;

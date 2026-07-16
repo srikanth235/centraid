@@ -74,6 +74,20 @@ export interface ConversationAttachmentPayload {
   url: string;
 }
 
+/**
+ * Per-turn token/cost usage on a reconstructed terminal `ai` transcript entry
+ * (issue #420, Wave 2). Token sums + `costUsd` are the frozen denormalized
+ * rollup on the turn (`model-pricing.ts` cost, frozen at write); `model` is the
+ * serving model off the terminal step. Every field is optional — a legacy or
+ * unpriced turn simply omits what it doesn't have.
+ */
+export interface ConversationTurnUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  costUsd?: number;
+  model?: string;
+}
+
 /** A file already landed in the blob CAS, to attach to a turn's inbound message. */
 export interface ConversationTurnAttachment {
   hash: string;
@@ -234,6 +248,20 @@ export class ConversationHistoryStore {
       return parseStepOutput(last?.outputJson);
     };
 
+    // Per-turn token/cost usage for the "this turn cost X" line (issue #420,
+    // Wave 2). Token sums + cost are the frozen denormalized rollup on the turn;
+    // the serving model comes off the terminal step. Absent on unpriced/legacy.
+    const usageOf = (turn: Turn): ConversationTurnUsage | undefined => {
+      const step = (itemsByTurn.get(turn.turnId) ?? []).findLast((it) => it.kind === 'step');
+      const usage: ConversationTurnUsage = {
+        ...(turn.totalInputTokens !== undefined ? { inputTokens: turn.totalInputTokens } : {}),
+        ...(turn.totalOutputTokens !== undefined ? { outputTokens: turn.totalOutputTokens } : {}),
+        ...(turn.totalCostUsd !== undefined ? { costUsd: turn.totalCostUsd } : {}),
+        ...(step?.model ? { model: step.model } : {}),
+      };
+      return Object.keys(usage).length > 0 ? usage : undefined;
+    };
+
     // Collapse retries linear-with-retry: one row per *family*, showing the
     // latest attempt inline, with sibling attempts carried for a client pager.
     for (const family of groupRetryFamilies(turns)) {
@@ -248,11 +276,13 @@ export class ConversationHistoryStore {
               count: family.length,
               attempts: family.map((t) => {
                 const ans = answerOf(t.turnId);
+                const usage = usageOf(t);
                 return {
                   turnId: t.turnId,
                   text: ans.text,
                   ...(ans.error ? { error: true } : {}),
                   feedback: t.feedback ?? null,
+                  ...(usage ? { usage } : {}),
                 };
               }),
             }
@@ -291,6 +321,7 @@ export class ConversationHistoryStore {
                     turnId: active.turnId,
                     feedback: active.feedback ?? null,
                     ...(retry ? { retry } : {}),
+                    ...(usageOf(active) ? { usage: usageOf(active) } : {}),
                   }
                 : {}),
             },

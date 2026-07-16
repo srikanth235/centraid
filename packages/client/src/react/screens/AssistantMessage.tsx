@@ -2,12 +2,13 @@
 // of AssistantScreen so that screen stays under the file-size cap while gaining
 // copy / feedback / regenerate / retry / retry-pager / timestamp affordances.
 
-import type { JSX } from 'react';
-import type { AsstMsgDTO } from '../screen-contracts.js';
+import { useEffect, useState, type JSX } from 'react';
+import type { AsstAttachmentDTO, AsstMsgDTO } from '../screen-contracts.js';
 import styles from './AssistantScreen.module.css';
 import { cx } from '../ui/cx.js';
 import Icon from '../ui/Icon.js';
 import asstPreCss from '../styles/asstPre.module.css';
+import { formatUsageLabel, formatUsageTitle } from './assistantUsage.js';
 
 // Thumbs glyphs — not in the design-tokens icon set, so small local SVGs
 // (mirrors AssistantScreen's PaperclipGlyph pattern).
@@ -61,11 +62,77 @@ function formatTime(ms: number): string {
 export interface MessageCallbacks {
   hydrateRefs: (node: HTMLElement) => void;
   wireCodeCopy: (node: HTMLElement) => void;
+  loadAttachmentImage: (hash: string, mime: string) => Promise<string>;
   onCopyMessage: (text: string) => void;
   onFeedback: (turnId: string, value: 'up' | 'down') => void;
   onRegenerate: () => void;
   onRetryError: (messageIndex: number) => void;
   onPagerNav: (messageIndex: number, delta: number) => void;
+}
+
+/** A collapsible streaming reasoning row (issue #420, Wave 2). Open while the
+ *  model reasons, auto-collapses once the answer starts, expandable after. */
+function ThinkingRow({ text, streaming }: { text: string; streaming: boolean }): JSX.Element {
+  const [open, setOpen] = useState(true);
+  useEffect(() => {
+    if (!streaming) setOpen(false);
+  }, [streaming]);
+  return (
+    <div className={cx(styles.msg, styles.msgThinking)}>
+      <details
+        className={styles.thinking}
+        open={open}
+        data-streaming={streaming ? 'true' : undefined}
+      >
+        <summary className={styles.thinkingSummary}>
+          <span className={styles.thinkingDot} />
+          {streaming ? 'Thinking…' : 'Thought process'}
+        </summary>
+        <div className={styles.thinkingBody}>{text}</div>
+      </details>
+    </div>
+  );
+}
+
+/** An inline image-attachment thumbnail (issue #420, Wave 2). Fetches the bytes
+ *  auth-aware into an object URL and revokes it on unmount. */
+function AttachmentImage({
+  attachment,
+  load,
+}: {
+  attachment: AsstAttachmentDTO;
+  load: (hash: string, mime: string) => Promise<string>;
+}): JSX.Element {
+  const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let live = true;
+    let objectUrl: string | null = null;
+    void load(attachment.hash, attachment.mime).then(
+      (u) => {
+        if (live) {
+          objectUrl = u;
+          setUrl(u);
+        } else {
+          URL.revokeObjectURL(u);
+        }
+      },
+      () => live && setFailed(true),
+    );
+    return () => {
+      live = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [attachment.hash, attachment.mime, load]);
+  if (failed) return <span className={styles.attachName}>{attachment.filename}</span>;
+  return (
+    <img
+      className={styles.msgAttachThumb}
+      src={url ?? undefined}
+      alt={attachment.filename}
+      data-loading={url ? undefined : 'true'}
+    />
+  );
 }
 
 function ToolsMsg({
@@ -185,6 +252,11 @@ function AiActions({
           <Icon name="Refresh" size={13} />
         </button>
       ) : null}
+      {formatUsageLabel(m.usage) ? (
+        <span className={styles.msgUsage} title={formatUsageTitle(m.usage)}>
+          {formatUsageLabel(m.usage)}
+        </span>
+      ) : null}
       {m.createdAt ? <span className={styles.msgTime}>{formatTime(m.createdAt)}</span> : null}
     </div>
   );
@@ -204,12 +276,22 @@ export default function Message({
       <div className={cx(styles.msg, styles.msgUser)}>
         {m.attachments?.length ? (
           <div className={styles.msgAttachments}>
-            {m.attachments.map((a, i) => (
-              <div key={`${a.hash}-${i}`} className={styles.msgAttachChip} title={a.filename}>
-                <span className={styles.attachName}>{a.filename}</span>
-                <span className={styles.attachSize}>{formatBytes(a.sizeBytes)}</span>
-              </div>
-            ))}
+            {m.attachments.map((a, i) =>
+              a.mime.startsWith('image/') ? (
+                <div
+                  key={`${a.hash}-${i}`}
+                  className={cx(styles.msgAttachChip, styles.msgAttachChipImage)}
+                  title={a.filename}
+                >
+                  <AttachmentImage attachment={a} load={cb.loadAttachmentImage} />
+                </div>
+              ) : (
+                <div key={`${a.hash}-${i}`} className={styles.msgAttachChip} title={a.filename}>
+                  <span className={styles.attachName}>{a.filename}</span>
+                  <span className={styles.attachSize}>{formatBytes(a.sizeBytes)}</span>
+                </div>
+              ),
+            )}
           </div>
         ) : null}
         {m.text ? <div>{m.text}</div> : null}
@@ -231,6 +313,7 @@ export default function Message({
     );
   }
   if (m.kind === 'tools') return <ToolsMsg label={m.label} calls={m.calls} />;
+  if (m.kind === 'thinking') return <ThinkingRow text={m.text} streaming={m.streaming} />;
   if (m.streaming) {
     return (
       <div className={cx(styles.msg, styles.msgAi)}>

@@ -145,6 +145,37 @@ describe('ConversationHistoryStore', () => {
     expect(ai.retry).toBeUndefined();
   });
 
+  it('reconstruction attaches per-turn token/cost usage to the terminal answer (#420 W2)', () => {
+    const s = store.createSession(APP);
+    store.recordTurn(APP, {
+      conversationId: s.id,
+      userMessage: 'cost?',
+      startedAt: 1_000,
+      endedAt: 1_020,
+      ok: true,
+      finalText: 'answer',
+      nodes: [
+        {
+          kind: 'step',
+          text: 'answer',
+          model: 'claude-sonnet-4-7',
+          inputTokens: 1200,
+          outputTokens: 340,
+          startedAt: 1_000,
+          endedAt: 1_010,
+        },
+      ],
+    });
+    const ai = store.getSession(APP, s.id)?.messages[1]!.payload as {
+      usage?: { inputTokens?: number; outputTokens?: number; costUsd?: number; model?: string };
+    };
+    expect(ai.usage?.inputTokens).toBe(1200);
+    expect(ai.usage?.outputTokens).toBe(340);
+    expect(ai.usage?.model).toBe('claude-sonnet-4-7');
+    // Frozen cost = 1200/1e6*3 + 340/1e6*15 = 0.0036 + 0.0051 = 0.0087.
+    expect(ai.usage?.costUsd).toBeCloseTo(0.0087, 6);
+  });
+
   it('collapses a regenerate into a retry pager showing the latest attempt (#420)', () => {
     const s = store.createSession(APP);
     const first = store.recordTurn(APP, turn(s.id, 'why?', 'because A', 1_000));

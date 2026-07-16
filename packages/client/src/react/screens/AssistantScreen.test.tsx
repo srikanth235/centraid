@@ -35,6 +35,7 @@ function makeProps(over: Partial<AssistantBridgeProps> = {}): AssistantBridgePro
     onRemovePendingAttachment: vi.fn(),
     hydrateRefs: vi.fn(),
     wireCodeCopy: vi.fn(),
+    loadAttachmentImage: vi.fn().mockResolvedValue('blob:mock'),
     onCopyMessage: vi.fn(),
     onFeedback: vi.fn(),
     onRegenerate: vi.fn(),

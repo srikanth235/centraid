@@ -277,6 +277,28 @@ export async function createConversation(
   return readJson<CentraidConversationSummary>(res, 'create chat');
 }
 
+/**
+ * Fetch an attachment blob's bytes (auth-aware) and return an object URL for an
+ * inline `<img>` thumbnail (issue #420, Wave 2). The blob GET route lives behind
+ * the same bearer auth as the rest of the conversation surface, so an `<img
+ * src>` cannot carry it — we fetch the bytes and mint a local object URL. The
+ * caller must `URL.revokeObjectURL` it when the image unmounts.
+ */
+export async function fetchAssistantAttachmentUrl(
+  appId: string,
+  hash: string,
+  mime: string,
+): Promise<string> {
+  const { baseUrl, token } = await auth();
+  const path = `${blobsPath(appId)}/${encodeURIComponent(hash)}?mime=${encodeURIComponent(mime)}`;
+  const res = await doFetch(baseUrl, path, { method: 'GET', headers: authHeaders(token) });
+  if (!res.ok) {
+    throw new GatewayClientError('gateway_error', `attachment fetch failed (HTTP ${res.status})`);
+  }
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
 /** Load one chat session with its reconstructed transcript. */
 export async function loadConversation(
   appId: string,

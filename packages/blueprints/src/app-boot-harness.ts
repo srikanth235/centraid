@@ -60,6 +60,8 @@ const SHARED = [
   'edge-upload.js',
   'turn-stream.js',
   'assistant-rich.js',
+  'gfm.js',
+  'code-highlight.js',
   'consent-cards.js',
   'conversation-client.js',
   'pdf.min.mjs',
