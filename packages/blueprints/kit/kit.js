@@ -1285,6 +1285,18 @@ export function wireThemeToggle(btn, { onChange } = {}) {
       ai: function (html) {
         return bubble('ai', html);
       },
+      /**
+       * Append a muted system-note row (issue #424) — e.g. a context-reset
+       * warning. Rendered the same way live and on reload so a persisted
+       * `notice` looks identical to the one the live stream showed.
+       */
+      notice: function (t) {
+        var m = el('<div class="kit-ask-toolnote kit-ask-notice"></div>');
+        m.textContent = '⚠ ' + (t || 'Notice');
+        log.appendChild(m);
+        log.scrollTop = log.scrollHeight;
+        return m;
+      },
       /** show a typing indicator; returns { done() } */
       typing: function () {
         var t = el('<div class="kit-ask-typing"><i></i><i></i><i></i></div>');
@@ -1623,6 +1635,10 @@ export function wireThemeToggle(btn, { onChange } = {}) {
           var note = el('<div class="kit-ask-toolnote"></div>');
           note.textContent = '⚙ used ' + n + (n === 1 ? ' tool' : ' tools');
           log.appendChild(note);
+        } else if (payload.kind === 'notice') {
+          // Persisted system note (issue #424) — same muted row as live.
+          api.notice(payload.text || '');
+          i++;
         } else {
           // 'ai' (and any future kind) render as a plain assistant bubble.
           bubble('ai', esc(payload.text || ''));
@@ -1994,9 +2010,10 @@ export function wireThemeToggle(btn, { onChange } = {}) {
             finalizeRich(ev.text);
             return;
           case 'notice':
-            // Non-fatal runner notice (issue #420), e.g. "can't read PDFs".
+            // Non-fatal system note (issue #420: "can't read PDFs"; #424:
+            // context-reset). A muted note, matching the reload rendering.
             typing.done();
-            api.ai(esc(ev.message || 'Notice'));
+            api.notice(ev.message);
             return;
           case 'error':
             say('The agent hit an error: ' + (ev.message || 'unknown'));

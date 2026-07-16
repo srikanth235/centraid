@@ -478,7 +478,11 @@ export type CentraidConversationHistoryMessage =
       state: 'ok' | 'error';
       result?: unknown;
       errorText?: string;
-    };
+    }
+  /** A persisted non-fatal system note (issue #424) — e.g. a context-reset
+   *  warning when a turn ran without the model's prior context. Rendered as
+   *  the same system-note row the live `notice` stream event shows. */
+  | { kind: 'notice'; level: 'warn' | 'info'; text: string };
 
 export interface CentraidVersionRecord {
   versionId: string;
@@ -1328,7 +1332,8 @@ declare global {
         state: 'ok' | 'error';
         result?: unknown;
         errorText?: string;
-      };
+      }
+    | { kind: 'notice'; level: 'warn' | 'info'; text: string };
   // Mirror of the module-level automation types so screens can
   // reference them by bare name without imports (issue #91).
   interface CentraidAutomationManifest {

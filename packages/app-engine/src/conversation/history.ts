@@ -25,7 +25,7 @@
 import { randomUUID } from 'node:crypto';
 import type { WorkspaceProvider } from '../stores/vault-workspace.js';
 import { ConversationStore, type ConversationMeta } from './store.js';
-import type { Item, RunKind, Turn } from './schema.js';
+import type { Item, RunKind, Turn, TurnNotice } from './schema.js';
 import { ASSISTANT_APP_ID, isValidAppOrAssistantId } from '../registry/app-paths.js';
 import { costForUsage } from '../model-pricing.js';
 import {
@@ -110,6 +110,8 @@ export interface RecordedTurnReplay {
   /** The recorded error message (present when `ok` is false). */
   error?: string;
   usage?: ConversationTurnUsage;
+  /** Persisted non-fatal system notes (issue #424) — replayed before `final`. */
+  notices?: TurnNotice[];
 }
 
 /** A file already landed in the blob CAS, to attach to a turn's inbound message. */
@@ -184,6 +186,12 @@ export interface RecordTurnInput {
   error?: string;
   /** The assistant's final reply text (the turn's terminal output). */
   finalText?: string;
+  /**
+   * Non-fatal system notes emitted during the turn (issue #424) — the
+   * accumulated `notice` stream events. Persisted on the turn so a reload
+   * replays them as the same system-note rows the live stream showed.
+   */
+  notices?: TurnNotice[];
   /** The turn's ordered trace (assistant steps + tool calls). */
   nodes: TurnNode[];
 }
@@ -330,6 +338,17 @@ export class ConversationHistoryStore {
             ...(attachments.length > 0 ? { attachments } : {}),
           },
           createdAt: userItem.startedAt,
+        });
+      }
+
+      // Persisted system notes (issue #424) ride between the user message and
+      // the assistant answer, matching where the live `notice` stream event
+      // lands — a context-reset note precedes the fresh-context reply.
+      for (const notice of active.notices ?? []) {
+        messages.push({
+          idx: idx++,
+          payload: { kind: 'notice', level: notice.level, text: notice.message },
+          createdAt: active.startedAt,
         });
       }
 
@@ -530,6 +549,7 @@ export class ConversationHistoryStore {
         ...(input.finalText !== undefined
           ? { outputJson: JSON.stringify({ text: input.finalText }) }
           : {}),
+        ...(input.notices?.length ? { noticesJson: JSON.stringify(input.notices) } : {}),
       });
       const now = Date.now();
       if (!existingTitle) {
@@ -571,6 +591,7 @@ export class ConversationHistoryStore {
       ...(parsed.text ? { finalText: parsed.text } : {}),
       ...(turn.error !== undefined ? { error: turn.error } : {}),
       ...(Object.keys(usage).length > 0 ? { usage } : {}),
+      ...(turn.notices?.length ? { notices: turn.notices } : {}),
     };
   }
 

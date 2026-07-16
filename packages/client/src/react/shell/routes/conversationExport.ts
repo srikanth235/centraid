@@ -89,6 +89,10 @@ export function conversationToMarkdown(conv: ExportableConversation): string {
           lines.push(`_${bits.join(' · ')}_`);
         }
       }
+    } else if (p.kind === 'notice') {
+      lines.push(`## ⚠️ Notice · ${when}`);
+      lines.push('');
+      lines.push(`> ${p.text}`);
     } else if (p.kind === 'tool') {
       lines.push(`## 🔧 Tool · ${p.tool} · ${when} · ${p.state}`);
       lines.push('');

@@ -31,6 +31,36 @@ test('buildReplayEvents replays an errored turn as a single error event (#420)',
   expect(events).toEqual([{ type: 'error', message: 'kaboom' }]);
 });
 
+test('buildReplayEvents replays persisted notices before the final answer (#424)', () => {
+  const events = buildReplayEvents({
+    turnId: 't1',
+    ok: true,
+    finalText: 'fresh start',
+    notices: [{ level: 'warn', code: 'context.reset', message: 'Starting a fresh context.' }],
+  });
+  expect(events.map((e) => e.type)).toEqual([
+    'assistant.start',
+    'notice',
+    'assistant.delta',
+    'final',
+  ]);
+  expect(events.find((e) => e.type === 'notice')).toMatchObject({
+    level: 'warn',
+    code: 'context.reset',
+    message: 'Starting a fresh context.',
+  });
+});
+
+test('buildReplayEvents replays notices ahead of an errored turn (#424)', () => {
+  const events = buildReplayEvents({
+    turnId: 't',
+    ok: false,
+    error: 'kaboom',
+    notices: [{ level: 'warn', code: 'context.reset', message: 'reset' }],
+  });
+  expect(events.map((e) => e.type)).toEqual(['notice', 'error']);
+});
+
 test('TurnLimiter admits up to max, then refuses; release frees a slot (#420)', () => {
   const limiter = new TurnLimiter(2);
   const a = limiter.tryAcquire();

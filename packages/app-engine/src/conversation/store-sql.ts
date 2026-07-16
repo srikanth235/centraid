@@ -19,6 +19,7 @@ import { type DatabaseSync, type StatementSync } from 'node:sqlite';
 import type {
   Conversation,
   Turn,
+  TurnNotice,
   Item,
   Attachment,
   AutomationStateEntry,
@@ -27,6 +28,28 @@ import type {
   ItemKind,
   RunKind,
 } from './schema.js';
+
+/**
+ * Decode a turn's persisted `notices` JSON (issue #424). Tolerant: a
+ * malformed/legacy blob reads as no notices rather than throwing on read.
+ */
+function parseNotices(raw: string | null): TurnNotice[] | undefined {
+  if (raw === null) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return undefined;
+    const notices = parsed.filter(
+      (n): n is TurnNotice =>
+        !!n &&
+        typeof n === 'object' &&
+        typeof (n as TurnNotice).level === 'string' &&
+        typeof (n as TurnNotice).message === 'string',
+    );
+    return notices.length > 0 ? notices : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export interface RawConversation {
   id: string;
@@ -59,6 +82,7 @@ export interface RawTurn {
   ok: number;
   error: string | null;
   feedback: string | null;
+  notices: string | null;
   pinned: number;
   started_at: number;
   ended_at: number | null;
@@ -152,6 +176,10 @@ export function turnFromRaw(raw: RawTurn): Turn {
     ok: raw.ok !== 0,
     ...(raw.error !== null ? { error: raw.error } : {}),
     ...(raw.feedback === 'up' || raw.feedback === 'down' ? { feedback: raw.feedback } : {}),
+    ...((): { notices?: TurnNotice[] } => {
+      const notices = parseNotices(raw.notices);
+      return notices ? { notices } : {};
+    })(),
     ...(raw.summary !== null ? { summary: raw.summary } : {}),
     ...(raw.output_json !== null ? { outputJson: raw.output_json } : {}),
     pinned: raw.pinned !== 0,
@@ -375,7 +403,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     finishTurn: db.prepare(`
       UPDATE turns SET
         ended_at = $endedAt, ok = $ok, error = $error, summary = $summary,
-        output_json = $outputJson,
+        output_json = $outputJson, notices = $notices,
         total_input_tokens = (
           SELECT SUM(input_tokens) FROM items
           WHERE turn_id = $tid AND kind IN ('step','agent')),
