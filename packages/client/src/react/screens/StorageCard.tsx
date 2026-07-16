@@ -231,7 +231,11 @@ function ConnectionPanel({ connection }: { connection: StorageConnectionCardDTO 
             {(['backup', 'cas'] as const)
               .filter((s) => connection.providerReported?.[s])
               .map((s) => (
-                <span key={s} className={styles.unmeteredItem}>
+                // Unclassed on purpose: `.unmetered` is already the flex row,
+                // and inline flow inside the span puts the tag on the byte
+                // count's line. The span is here to group each store into ONE
+                // flex item, so the row's gap separates stores, not words.
+                <span key={s}>
                   {STORE_LABEL[s]} {formatBytes(connection.providerReported?.[s]?.bytesStored ?? 0)}{' '}
                   <span className={styles.unmeteredTag}>unmetered</span>
                 </span>

@@ -295,6 +295,7 @@ export {
   PrefsStore,
   makeUserStoreRouteHandler,
   resolveSubsystemModel,
+  resolveSubsystemRunner,
   type ModelSubsystem,
 } from './stores/prefs-store.js';
 

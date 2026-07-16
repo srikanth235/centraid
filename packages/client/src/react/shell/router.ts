@@ -41,6 +41,7 @@ export function routeKey(route: ShellRoute): string {
     case 'automations':
     case 'approvals':
     case 'gateway':
+    case 'backups':
     case 'templates':
       return route.kind;
     case 'automation-editor':

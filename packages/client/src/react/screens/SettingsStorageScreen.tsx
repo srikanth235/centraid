@@ -1,11 +1,12 @@
 // governance: allow-repo-hygiene file-size-limit single cohesive screen (list + add wizard + recovery-kit gate + per-vault attach) — splitting would fragment one storage-connection flow, same call SettingsConnectionsScreen.tsx makes
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
-import { Icon } from '../ui/index.js';
+import { Button, IconButton } from '../ui/index.js';
 import { cx } from '../ui/cx.js';
 import styles from './SettingsStorageScreen.module.css';
 import drawerGroupCss from '../styles/drawerGroup.module.css';
 import controlsCss from '../styles/controls.module.css';
-import buttonCss from '../ui/Button.module.css';
+import inlineEmptyCss from '../styles/inlineEmpty.module.css';
+import selectCss from '../styles/select.module.css';
 import modalCss from '../styles/modal.module.css';
 
 // Settings → Storage (issue #367 §D4): the owner surface over the
@@ -155,14 +156,7 @@ function RecoveryKitGateDialog({
       }}
     >
       <div className={modalCss.card} role="dialog" aria-label="Confirm your recovery kit">
-        <button
-          type="button"
-          className={cx(buttonCss.icon, modalCss.close)}
-          aria-label="Close"
-          onClick={onClose}
-        >
-          <Icon name="X" size={16} />
-        </button>
+        <IconButton icon="X" ariaLabel="Close" className={modalCss.close} onClick={onClose} />
         <h3>Before this ships bytes off this machine</h3>
         <p className={styles.gateReason}>{gate.message}</p>
         <p>
@@ -173,23 +167,19 @@ function RecoveryKitGateDialog({
         </p>
         {error ? <div className={styles.gateError}>{error}</div> : null}
         <div className={modalCss.actions}>
-          <button
-            type="button"
-            className={cx(buttonCss.btn, buttonCss.ghost)}
+          <Button
+            variant="ghost"
+            label={busy === 'force' ? 'Proceeding…' : 'Proceed anyway'}
             disabled={busy !== null}
             onClick={() => void proceedAnyway()}
             title="Skip the confirmation and continue anyway — only do this if you've already exported the kit through another gateway or CLI session."
-          >
-            {busy === 'force' ? 'Proceeding…' : 'Proceed anyway'}
-          </button>
-          <button
-            type="button"
-            className={cx(buttonCss.btn, buttonCss.primary)}
+          />
+          <Button
+            variant="primary"
+            label={busy === 'confirm' ? 'Confirming…' : "I've saved my recovery kit"}
             disabled={busy !== null}
             onClick={() => void confirmAndRetry()}
-          >
-            {busy === 'confirm' ? 'Confirming…' : "I've saved my recovery kit"}
-          </button>
+          />
         </div>
       </div>
     </div>
@@ -239,17 +229,16 @@ function ConnectionRow({
         ) : null}
       </div>
       <div className={styles.rowActions}>
-        <button
-          type="button"
-          className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
+        <Button
+          variant="soft"
+          size="sm"
+          label={testResult === 'testing' ? 'Testing…' : 'Test connection'}
           disabled={busy || testResult === 'testing'}
           onClick={onTest}
-        >
-          {testResult === 'testing' ? 'Testing…' : 'Test connection'}
-        </button>
+        />
         <button
           type="button"
-          className={cx(controlsCss.chip, styles.removeBtn)}
+          className={cx(controlsCss.chip, controlsCss.chipDanger)}
           disabled={busy}
           onClick={onDelete}
         >
@@ -328,14 +317,16 @@ function AddConnectionForm({
       <div className={styles.kindToggle} role="radiogroup" aria-label="Connection kind">
         <button
           type="button"
-          className={cx(styles.kindOption, kind === 'byo-s3' && styles.kindOptionActive)}
+          className={styles.kindOption}
+          data-active={String(kind === 'byo-s3')}
           onClick={() => setKind('byo-s3')}
         >
           Bring your own S3
         </button>
         <button
           type="button"
-          className={cx(styles.kindOption, kind === 'provider' && styles.kindOptionActive)}
+          className={styles.kindOption}
+          data-active={String(kind === 'provider')}
           onClick={() => setKind('provider')}
         >
           Storage provider
@@ -461,17 +452,14 @@ function AddConnectionForm({
       </div>
 
       <div className={styles.wizardFoot}>
-        <button type="button" className={controlsCss.chip} onClick={onCancel}>
-          Cancel
-        </button>
-        <button
-          type="button"
-          className={cx(buttonCss.btn, buttonCss.primary, buttonCss.sm)}
+        <Button variant="ghost" size="sm" label="Cancel" onClick={onCancel} />
+        <Button
+          variant="primary"
+          size="sm"
+          label={busy ? 'Saving…' : 'Add connection'}
           disabled={!ready || busy}
           onClick={submit}
-        >
-          {busy ? 'Saving…' : 'Add connection'}
-        </button>
+        />
       </div>
     </div>
   );
@@ -527,28 +515,29 @@ function VaultAttachSection({
         )}
       </div>
       <div className={styles.attachControls}>
-        <select
-          className={styles.select}
-          value={selected}
-          onChange={(e) => setSelected(e.target.value)}
-          disabled={busy}
-        >
-          {casConnections.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
+        <span className={selectCss.selectWrap}>
+          <select
+            className={selectCss.select}
+            value={selected}
+            onChange={(e) => setSelected(e.target.value)}
+            disabled={busy}
+          >
+            {casConnections.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </span>
+        <Button
+          variant="soft"
+          size="sm"
+          label="Attach"
           disabled={busy || !selected}
           onClick={() => onAttach(selected)}
-        >
-          Attach
-        </button>
+        />
         {blobStore?.kind === 's3' ? (
-          <button type="button" className={cx(controlsCss.chip)} disabled={busy} onClick={onDetach}>
+          <button type="button" className={controlsCss.chip} disabled={busy} onClick={onDetach}>
             Detach
           </button>
         ) : null}
@@ -705,7 +694,7 @@ export default function SettingsStorageScreen({
           {rows === null ? (
             <div className={controlsCss.note}>Reading connections…</div>
           ) : rows.length === 0 ? (
-            <div className={styles.empty}>No storage connections configured yet.</div>
+            <div className={inlineEmptyCss.inlineEmpty}>No storage connections configured yet.</div>
           ) : (
             rows.map((row) => (
               <ConnectionRow
@@ -727,14 +716,13 @@ export default function SettingsStorageScreen({
             onSubmit={onSubmitWizard}
           />
         ) : (
-          <button
-            type="button"
-            className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
+          <Button
+            variant="soft"
+            size="sm"
+            icon="Plus"
+            label="Add connection"
             onClick={() => setWizardOpen(true)}
-          >
-            <Icon name="Plus" size={13} />
-            <span>Add connection</span>
-          </button>
+          />
         )}
       </div>
 

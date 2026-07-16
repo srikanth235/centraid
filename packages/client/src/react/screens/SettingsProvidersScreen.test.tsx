@@ -10,6 +10,7 @@ function makeStatus(over: Partial<AgentsStatusDTO> = {}): AgentsStatusDTO {
     anyLoading: false,
     savedModelByKind: { codex: 'gpt-5' },
     subsystemModelByKind: { codex: { assistant: 'gpt-5-mini' } },
+    subsystemRunnerByKey: {},
     cards: [
       {
         kind: 'codex',
@@ -44,6 +45,25 @@ function makeStatus(over: Partial<AgentsStatusDTO> = {}): AgentsStatusDTO {
   };
 }
 
+/** makeStatus, but with Claude Code present so it can be routed to. */
+function makeStatusBothConnected(over: Partial<AgentsStatusDTO> = {}): AgentsStatusDTO {
+  const base = makeStatus();
+  return {
+    ...base,
+    cards: base.cards.map((c) =>
+      c.kind === 'claude-code'
+        ? {
+            ...c,
+            connected: true,
+            subtitle: 'claude 1.0',
+            models: [{ id: 'opus-4-8', name: 'Opus 4.8', tier: 'smart', default: true }],
+          }
+        : c,
+    ),
+    ...over,
+  };
+}
+
 function makeProps(over: Partial<SettingsProvidersBridgeProps> = {}): SettingsProvidersBridgeProps {
   return {
     loadStatus: vi.fn().mockResolvedValue(makeStatus()),
@@ -52,6 +72,7 @@ function makeProps(over: Partial<SettingsProvidersBridgeProps> = {}): SettingsPr
     activateRunner: vi.fn().mockResolvedValue(true),
     setAgentModel: vi.fn(),
     setSubsystemModel: vi.fn(),
+    setSubsystemRunner: vi.fn(),
     ...over,
   };
 }
@@ -78,41 +99,155 @@ async function mount(props: SettingsProvidersBridgeProps): Promise<HTMLDivElemen
   return container;
 }
 
+function sel(el: HTMLElement, label: string): HTMLSelectElement {
+  const found = el.querySelector(`select[aria-label="${label}"]`);
+  if (!found) throw new Error(`no select labelled "${label}"`);
+  return found as HTMLSelectElement;
+}
+
+/** Drive a native <select> the way React's onChange listener expects. */
+async function pick(select: HTMLSelectElement, value: string): Promise<void> {
+  const setter = Object.getOwnPropertyDescriptor(
+    globalThis.HTMLSelectElement.prototype,
+    'value',
+  )?.set;
+  await act(async () => {
+    setter?.call(select, value);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+}
+
 describe('SettingsProvidersScreen', () => {
-  it('renders the agent switch, agent entries, model selects, and the saved model', async () => {
+  it('renders a routing lane per subsystem plus the default lane, and the agent inventory', async () => {
     const el = await mount(makeProps());
-    expect(el.querySelectorAll('.switchSeg').length).toBe(2);
+    // 1 default lane + 4 subsystem lanes.
+    expect(el.querySelectorAll('.routeRow').length).toBe(5);
+    expect(el.querySelector('.routeRow[data-default="true"]')).toBeTruthy();
+    expect(el.textContent).toContain('Routing');
+    for (const label of ['Assistant', 'In-app Ask', 'Builder', 'Automations']) {
+      expect(el.textContent).toContain(label);
+    }
+    // Inventory still lists every detected agent with its tools + default model.
     expect(el.querySelectorAll('.entry').length).toBe(2);
-    // codex is active + connected; claude-code is unavailable (disabled switch)
-    const codexSeg = el.querySelectorAll('.switchSeg')[0] as HTMLButtonElement;
-    expect(codexSeg.dataset.active).toBe('true');
-    const claudeSeg = el.querySelectorAll('.switchSeg')[1] as HTMLButtonElement;
-    expect(claudeSeg.disabled).toBe(true);
-    // saved model reflected
-    const select = el.querySelector('.modelSelect') as HTMLSelectElement;
-    expect(select.value).toBe('gpt-5');
-    // tiered optgroups present
+    expect(sel(el, 'Default model for Codex').value).toBe('gpt-5');
     expect(el.querySelectorAll('optgroup').length).toBeGreaterThan(0);
   });
 
-  it('switches the active agent', async () => {
+  it('has no exclusive active-agent switch — routing is per lane now', async () => {
+    const el = await mount(makeProps());
+    expect(el.querySelector('.switchSeg')).toBeNull();
+    expect(el.textContent).not.toContain('Active agent');
+  });
+
+  it('changes the default agent through the default lane', async () => {
     const props = makeProps({
-      loadStatus: vi.fn().mockResolvedValue(
-        makeStatus({
-          cards: makeStatus().cards.map((c) =>
-            c.kind === 'claude-code' ? { ...c, connected: true, subtitle: 'claude 1.0' } : c,
-          ),
-        }),
-      ),
+      loadStatus: vi.fn().mockResolvedValue(makeStatusBothConnected()),
     });
     const el = await mount(props);
-    const claudeSeg = el.querySelectorAll('.switchSeg')[1] as HTMLButtonElement;
-    expect(claudeSeg.disabled).toBe(false);
-    await act(async () => claudeSeg.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await pick(sel(el, 'Default agent'), 'claude-code');
     expect(props.activateRunner).toHaveBeenCalledWith('claude-code');
   });
 
-  it('expands an agent tool list and saves a model change', async () => {
+  it('routes a single subsystem to a different agent than the default', async () => {
+    const props = makeProps({
+      loadStatus: vi.fn().mockResolvedValue(makeStatusBothConnected()),
+    });
+    const el = await mount(props);
+    await pick(sel(el, 'Agent for Builder'), 'claude-code');
+    expect(props.setSubsystemRunner).toHaveBeenCalledWith('builder', 'claude-code');
+    // The default lane is untouched — this is the whole point of the change.
+    expect(props.activateRunner).not.toHaveBeenCalled();
+  });
+
+  it('clears a lane back to inheriting the default', async () => {
+    const props = makeProps({
+      loadStatus: vi
+        .fn()
+        .mockResolvedValue(
+          makeStatusBothConnected({ subsystemRunnerByKey: { builder: 'claude-code' } }),
+        ),
+    });
+    const el = await mount(props);
+    expect(sel(el, 'Agent for Builder').value).toBe('claude-code');
+    await pick(sel(el, 'Agent for Builder'), '');
+    expect(props.setSubsystemRunner).toHaveBeenCalledWith('builder', '');
+  });
+
+  it('names what an inheriting lane resolves to rather than saying "use default"', async () => {
+    const el = await mount(makeProps());
+    // Agent inherit option names the default agent…
+    const agent = sel(el, 'Agent for Assistant');
+    expect(agent.value).toBe('');
+    expect(agent.querySelector('option[value=""]')?.textContent).toBe('Use default · Codex');
+    // …and the model inherit option names the resolved agent's default model.
+    expect(sel(el, 'Model for Builder').querySelector('option[value=""]')?.textContent).toBe(
+      'Use default · GPT-5',
+    );
+  });
+
+  it("offers the resolved agent's models once a lane overrides the agent", async () => {
+    const props = makeProps({
+      loadStatus: vi
+        .fn()
+        .mockResolvedValue(
+          makeStatusBothConnected({ subsystemRunnerByKey: { builder: 'claude-code' } }),
+        ),
+    });
+    const el = await mount(props);
+    const model = sel(el, 'Model for Builder');
+    // Claude Code's model, not Codex's — the lane resolved to a new agent.
+    expect([...model.querySelectorAll('option')].map((o) => o.value)).toContain('opus-4-8');
+    expect([...model.querySelectorAll('option')].map((o) => o.value)).not.toContain('gpt-5-mini');
+  });
+
+  it("saves a subsystem model against the lane's resolved agent, not the default", async () => {
+    const props = makeProps({
+      loadStatus: vi
+        .fn()
+        .mockResolvedValue(
+          makeStatusBothConnected({ subsystemRunnerByKey: { builder: 'claude-code' } }),
+        ),
+    });
+    const el = await mount(props);
+    await pick(sel(el, 'Model for Builder'), 'opus-4-8');
+    // Keyed by 'claude-code' (the lane's resolved agent) — not 'codex' (the
+    // default). Writing it against the default would strand the override.
+    expect(props.setSubsystemModel).toHaveBeenCalledWith('claude-code', 'builder', 'opus-4-8');
+  });
+
+  it('reports which lanes land on each agent instead of a single Active pill', async () => {
+    const props = makeProps({
+      loadStatus: vi
+        .fn()
+        .mockResolvedValue(
+          makeStatusBothConnected({ subsystemRunnerByKey: { builder: 'claude-code' } }),
+        ),
+    });
+    const el = await mount(props);
+    const [codex, claude] = [...el.querySelectorAll('.entry')] as HTMLElement[];
+    // Codex is the default and keeps the three lanes that inherit.
+    const codexChips = [...(codex?.querySelectorAll('.usedByChip') ?? [])].map(
+      (c) => c.textContent,
+    );
+    expect(codexChips).toContain('Default');
+    expect(codexChips).toContain('Assistant');
+    expect(codexChips).not.toContain('Builder');
+    // Claude Code holds only the lane pointed at it.
+    const claudeChips = [...(claude?.querySelectorAll('.usedByChip') ?? [])].map(
+      (c) => c.textContent,
+    );
+    expect(claudeChips).toEqual(['Builder']);
+  });
+
+  it('marks an agent nothing routes to as unused', async () => {
+    const el = await mount(
+      makeProps({ loadStatus: vi.fn().mockResolvedValue(makeStatusBothConnected()) }),
+    );
+    const claude = [...el.querySelectorAll('.entry')][1] as HTMLElement;
+    expect(claude.querySelector('.usedByNone')?.textContent).toBe('Unused');
+  });
+
+  it('expands an agent tool list and saves its default model', async () => {
     const props = makeProps();
     const el = await mount(props);
     const toggle = el.querySelector('.toolsToggle') as HTMLButtonElement;
@@ -120,46 +255,8 @@ describe('SettingsProvidersScreen', () => {
     expect(el.querySelector('.groups')).toBeTruthy();
     expect(el.textContent).toContain('shell');
 
-    const select = el.querySelector('.modelSelect') as HTMLSelectElement;
-    const setter = Object.getOwnPropertyDescriptor(
-      globalThis.HTMLSelectElement.prototype,
-      'value',
-    )?.set;
-    await act(async () => {
-      setter?.call(select, 'gpt-5-mini');
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    await pick(sel(el, 'Default model for Codex'), 'gpt-5-mini');
     expect(props.setAgentModel).toHaveBeenCalledWith('codex', 'gpt-5-mini');
-  });
-
-  it('renders per-subsystem overrides for the active runner and saves a change', async () => {
-    const props = makeProps();
-    const el = await mount(props);
-    expect(el.textContent).toContain('Chat & agent subsystems');
-    expect(el.textContent).toContain('Assistant');
-    expect(el.textContent).toContain('In-app Ask');
-    expect(el.textContent).toContain('Builder');
-    expect(el.textContent).toContain('Automations');
-
-    // 2 per-card selects (codex + claude-code) + 4 subsystem selects for the
-    // active runner (codex).
-    const selects = [...el.querySelectorAll('.modelSelect')] as HTMLSelectElement[];
-    expect(selects.length).toBe(6);
-    const assistantSelect = selects[2] as HTMLSelectElement;
-    expect(assistantSelect.value).toBe('gpt-5-mini');
-    expect(assistantSelect.querySelector('option[value=""]')?.textContent).toBe(
-      'Use default model',
-    );
-
-    const setter = Object.getOwnPropertyDescriptor(
-      globalThis.HTMLSelectElement.prototype,
-      'value',
-    )?.set;
-    await act(async () => {
-      setter?.call(assistantSelect, 'gpt-5');
-      assistantSelect.dispatchEvent(new Event('change', { bubbles: true }));
-    });
-    expect(props.setSubsystemModel).toHaveBeenCalledWith('codex', 'assistant', 'gpt-5');
   });
 
   it('fires the two refreshes', async () => {

@@ -9,88 +9,71 @@
   }
 }
 
-.switch {
-  position: relative;
-  display: flex;
-  width: 100%;
-  max-width: 380px;
-  padding: 3px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--bg-sunken);
-}
-.switchInd {
-  position: absolute;
-  top: 3px;
-  bottom: 3px;
-  left: 3px;
-  /* Two equal segments (each seg is flex:1). The pill matches one segment and
-     slides via translateX(100%) — measurement-free, so it positions correctly
-     even while the settings page is hidden. */
-  width: calc(50% - 3px);
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--seg-accent, var(--accent)) 12%, var(--bg-elev));
-  border: 1px solid color-mix(in oklab, var(--seg-accent, var(--accent)) 55%, var(--line-strong));
-  box-shadow:
-    var(--shadow-sm),
-    0 0 0 3px color-mix(in oklab, var(--seg-accent, var(--accent)) 12%, transparent);
-  transition:
-    transform 0.26s cubic-bezier(0.2, 0.7, 0.3, 1),
-    background 0.2s ease,
-    border-color 0.2s ease;
-  pointer-events: none;
-}
-.switch[data-active-index='1'] .switchInd {
-  transform: translateX(100%);
-}
-.switchSeg {
-  position: relative;
-  z-index: 1;
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  border: 0;
-  background: transparent;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ink-3);
-  padding: 8px 14px;
-  border-radius: 999px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: color 0.18s ease;
-}
-.switchSeg:not([data-active='true']):not([data-unavail='true']):hover {
-  color: var(--ink-2);
-}
-.switchSeg[data-active='true'] {
-  color: var(--ink);
-  font-weight: 600;
-  cursor: default;
-}
-.switchSeg[data-unavail='true'] {
-  color: var(--ink-4);
-  cursor: default;
-}
-.switchDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex: none;
-  transition: background 0.18s ease;
-}
-.switchSeg[data-unavail='true'] .switchDot {
-  background: var(--ink-4) !important;
-}
+/* ── Shared card shell — the routing table and the agent inventory are the
+   same object visually, so they share one row idiom. ───────────────────── */
 .panel {
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   overflow: hidden;
 }
+
+/* ── Routing ───────────────────────────────────────────────────────────────
+   Each subsystem is a lane resolving to an (agent, model) pair. The default
+   is the first lane, not a separate switch: it is the fallback every unset
+   lane inherits, so it belongs in the same table rather than above it. */
+.routeRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 170px) minmax(0, 210px);
+  gap: 12px;
+  align-items: center;
+  padding: 12px 16px;
+}
+.routeRow + .routeRow {
+  border-top: 1px solid var(--line);
+}
+.routeRow[data-default='true'] {
+  background: color-mix(in oklab, var(--ink) 3%, transparent);
+  border-bottom: 1px solid var(--line-strong);
+}
+.routeMeta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.routeName {
+  font: var(--t-small);
+  font-weight: 500;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+/* Raw px, not `font: var(--t-tiny)`: the --t-* tokens are `font` shorthands
+   (css.ts:88-95) and --t-tiny carries weight 500 — too heavy for a hint. */
+.routeHint {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+.routeDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--route-accent, var(--accent));
+}
+
+/* The select shell/chevron comes from the shared `styles/select.module.css`.
+   This is the one genuine delta, passed as an extra class per CSS-CONVENTIONS
+   rule 1: an inheriting lane reads its value from the default lane, so mute it
+   and let the explicitly-set lanes be what the eye lands on. */
+.selectInherited[data-inherited='true'] {
+  color: var(--ink-3);
+}
+
+/* ── Agent inventory ───────────────────────────────────────────────────── */
 .entry + .entry {
   border-top: 1px solid var(--line);
 }
@@ -100,19 +83,6 @@
   align-items: center;
   gap: 12px;
   padding: 14px 16px;
-  transition: background 0.18s ease;
-}
-.row[data-active='true'] {
-  background: color-mix(in oklab, var(--row-accent, var(--accent)) 7%, transparent);
-}
-.row[data-active='true']::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--row-accent, var(--accent));
 }
 .row[data-unavail='true'] {
   opacity: 0.55;
@@ -129,23 +99,13 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 .rowName {
   font-family: var(--font-display);
   font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.01em;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.rowActive {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--row-accent, var(--accent));
 }
 .rowSub {
   font-family: var(--font-mono);
@@ -155,40 +115,40 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.rowModel {
-  flex: none;
+
+/* Used-by chips replace the old "Active" pill. Under one global runner
+   "Active" was the useful fact; once every lane routes independently, the
+   useful fact is which lanes land here — it answers what breaks if this
+   agent goes away. */
+.usedBy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
 }
-.modelSelect {
-  appearance: none;
-  -webkit-appearance: none;
-  min-width: 180px;
-  max-width: 240px;
-  padding: 8px 32px 8px 12px;
-  border: 1px solid var(--line-strong);
-  border-radius: 8px;
-  background-color: var(--bg-sunken);
-  color: var(--ink);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a8f98' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 11px center;
-  transition:
-    border-color 0.15s,
-    box-shadow 0.15s;
+.usedByChip {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+  color: var(--row-accent, var(--accent));
+  background: color-mix(in oklab, var(--row-accent, var(--accent)) 14%, transparent);
+  border-radius: var(--r-sm);
+  padding: 2px 6px;
 }
-.modelSelect:hover:not(:disabled) {
-  border-color: var(--ink-4);
+.usedByChip[data-default='true'] {
+  color: var(--ink-2);
+  background: color-mix(in oklab, var(--ink) 10%, transparent);
 }
-.modelSelect:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 15%, transparent);
-}
-.modelSelect:disabled {
-  opacity: 0.5;
-  cursor: default;
+.usedByNone {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+  color: var(--ink-4);
 }
 .rowTools {
   flex: none;
@@ -217,6 +177,9 @@
 }
 .toolsToggle svg {
   display: block;
+}
+.toolsCount {
+  font-family: var(--font-mono);
 }
 .toolsChev {
   display: inline-flex;
@@ -274,7 +237,7 @@
 .groupCount {
   font-size: 9px;
   font-weight: 600;
-  color: var(--ink-4, var(--ink-3));
+  color: var(--ink-4);
   background: color-mix(in oklab, var(--ink-3) 12%, transparent);
   border-radius: 999px;
   padding: 1px 7px;
@@ -296,8 +259,7 @@
   gap: 8px;
 }
 .name {
-  font-family: var(--font-mono);
-  font-size: 12px;
+  font: var(--t-mono);
   color: var(--ink);
   word-break: break-word;
 }
@@ -310,7 +272,7 @@
   text-transform: uppercase;
   color: var(--row-accent, var(--accent));
   background: color-mix(in oklab, var(--row-accent, var(--accent)) 14%, transparent);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   padding: 1px 5px;
 }
 .desc {
@@ -318,15 +280,8 @@
   line-height: 1.45;
   color: var(--ink-3);
 }
-.toolsEmpty {
-  font-size: 11px;
-  color: var(--ink-3);
-  font-style: italic;
-  padding: 8px 0;
-}
 
-/* Action row under the provider cards — Refresh models / tools. Values
-   restored from the historical global `.sheet-actions` rule. */
+/* Action row under the agent inventory — Refresh models / tools. */
 .actionsRow {
   display: flex;
   align-items: center;

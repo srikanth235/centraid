@@ -143,7 +143,7 @@ function ToolsMsg({
   calls: { tool: string; sql?: string; state: string; meta: string }[];
 }): JSX.Element {
   return (
-    <div className={cx(styles.msg, styles.msgTools)}>
+    <div className={styles.msg}>
       <details className={styles.tools}>
         <summary>{label}</summary>
         <div className={styles.toolsBody}>

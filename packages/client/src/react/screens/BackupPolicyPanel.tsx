@@ -1,6 +1,8 @@
 import { useEffect, useState, type JSX } from 'react';
 import { formatBytes } from '../../format.js';
 import { formatDuration } from '../shell/routes/gatewayData.js';
+import { cx } from '../ui/cx.js';
+import selectCss from '../styles/select.module.css';
 import styles from './BackupCard.module.css';
 
 export interface BackupPolicyDTO {
@@ -61,18 +63,22 @@ function SelectSetting({
         <strong>{label}</strong>
         {hint ? <small>{hint}</small> : null}
       </span>
-      <select
-        className={styles.policySelect}
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+      {/* The chevron is an `::after` on the wrap — a <select> is a replaced
+          element and renders no pseudo-elements of its own. */}
+      <span className={cx(selectCss.selectWrap, styles.policySelectWrap)}>
+        <select
+          className={cx(selectCss.select, styles.policySelect)}
+          value={value}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </span>
     </label>
   );
 }

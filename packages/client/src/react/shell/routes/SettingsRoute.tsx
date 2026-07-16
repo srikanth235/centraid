@@ -28,6 +28,7 @@ import {
   loadProviders,
   setAgentModel,
   setSubsystemModel,
+  setSubsystemRunner,
 } from './settingsProvidersData.js';
 import {
   attachVaultConnection,
@@ -315,6 +316,7 @@ export default function SettingsRoute({
                 activateRunner={activateRunner}
                 setAgentModel={setAgentModel}
                 setSubsystemModel={setSubsystemModel}
+                setSubsystemRunner={setSubsystemRunner}
               />
             ) : page === 'phone' ? (
               <PhoneScreen {...phoneProps} />

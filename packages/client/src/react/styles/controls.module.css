@@ -32,6 +32,17 @@
   background: color-mix(in srgb, var(--ink) 5%, transparent);
   color: var(--ink);
 }
+/* The destructive chip — Remove / Delete. Composes with `.chip`; it only
+   re-tints, so the geometry stays in one place. Was copied byte-for-byte
+   into SettingsConnectionsScreen and SettingsStorageScreen as `.removeBtn`. */
+.chipDanger {
+  color: var(--danger);
+  border-color: color-mix(in oklab, var(--danger) 30%, var(--line));
+}
+.chipDanger:hover {
+  background: color-mix(in oklab, var(--danger) 10%, transparent);
+  color: var(--danger);
+}
 .soft {
   background: color-mix(in oklab, var(--ink) 6%, transparent);
   color: var(--ink);

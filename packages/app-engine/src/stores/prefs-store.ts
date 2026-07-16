@@ -75,7 +75,7 @@ export class PrefsStore {
   }
 }
 
-/* ---------- Per-subsystem model resolution ---------- */
+/* ---------- Per-subsystem runner + model resolution ---------- */
 
 /**
  * The chat/automation surfaces that can each carry their own model
@@ -84,6 +84,34 @@ export class PrefsStore {
  * `'automations'` the fire pipeline's `ctx.agent` calls.
  */
 export type ModelSubsystem = 'assistant' | 'ask' | 'builder' | 'automations';
+
+/**
+ * Resolve which agent runner a subsystem's turn runs on, in priority order:
+ *
+ *   1. `runner.<subsystem>` — the per-subsystem runner override;
+ *   2. `agent.runner.kind`  — the DEFAULT agent (the host-wide fallback every
+ *      subsystem inherits when it hasn't been pinned);
+ *   3. `'codex'` — the built-in default, matching the settings panel's
+ *      "Codex preferred when both present" copy.
+ *
+ * Empty-string pref values are treated as unset (a cleared override), same
+ * as `undefined`/`null` at the prefs-store level — so clearing a subsystem's
+ * pin falls back to the default agent rather than pinning `''`.
+ *
+ * The `runner.` prefix is deliberate: the daemon's config seeder owns the
+ * whole `agent.runner.*` namespace (it nulls every key it knows on boot), so
+ * a per-subsystem key parked under that prefix would be wiped on restart.
+ */
+export function resolveSubsystemRunner(
+  prefs: Record<string, unknown>,
+  subsystem: ModelSubsystem,
+): string {
+  const scoped = prefs[`runner.${subsystem}`];
+  if (typeof scoped === 'string' && scoped.length > 0) return scoped;
+  const fallback = prefs['agent.runner.kind'];
+  if (typeof fallback === 'string' && fallback.length > 0) return fallback;
+  return 'codex';
+}
 
 /**
  * Resolve the model id/alias for one LLM turn, in priority order:

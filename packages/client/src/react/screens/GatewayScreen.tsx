@@ -20,15 +20,15 @@ import SettingsDiagnosticsScreen, {
   type SettingsDiagnosticsBridgeProps,
 } from './SettingsDiagnosticsScreen.js';
 import LogsScreen, { type LogsBridgeProps } from './LogsScreen.js';
-import BackupCard, { type BackupCardProps } from './BackupCard.js';
-import StorageCard, { type StorageCardProps } from './StorageCard.js';
 import DevicesCard, { type DevicesCardProps } from './DevicesCard.js';
 import AlertHistoryPanel from './AlertHistoryPanel.js';
 import RestartGatewayButton from './RestartGatewayButton.js';
 import styles from './GatewayScreen.module.css';
 
-// Gateway runtime, component health, backup/storage custody, paired devices,
-// logs, and alerts share one instrument panel (#341/#344/#347).
+// Gateway runtime, component health, paired devices, logs, and alerts share
+// one instrument panel (#341/#344/#347). Backup/storage custody used to live
+// on the Overview tab too; it's its own page now (BackupsScreen) — "is the
+// gateway up" and "are my bytes safe" are different questions.
 
 export interface GatewayScreenProps {
   snapshot: GatewayRuntimeSnapshot;
@@ -48,21 +48,6 @@ export interface GatewayScreenProps {
   health: GatewayHealthDTO | null;
   loadHealth: SettingsDiagnosticsBridgeProps['loadHealth'];
   streamLogs: LogsBridgeProps['streamLogs'];
-  /** Backup card data (Overview tab) — `GET/POST _gateway/backup`. */
-  loadBackupStatus: BackupCardProps['loadStatus'];
-  streamBackupCustody?: BackupCardProps['streamCustody'];
-  onRunBackupNow: BackupCardProps['onRunNow'];
-  onVerifyBackupNow?: BackupCardProps['onVerifyNow'];
-  onUpdateBackupPolicy?: BackupCardProps['onUpdatePolicy'];
-  onVerifyBackupBucket?: BackupCardProps['onVerifyBucket'];
-  onExportRecoveryKit?: BackupCardProps['onExportRecoveryKit'];
-  /** Recovery-kit confirmation gate (Backups card) — `POST _gateway/backup/kit-confirmed`. */
-  onConfirmRecoveryKit: BackupCardProps['onConfirmRecoveryKit'];
-  /** Storage card data (Overview tab) — per-connection usage + per-vault
-   *  replication status (issue #367 §D3). */
-  loadStorageStatus: StorageCardProps['loadStatus'];
-  /** Navigates to Settings → Storage — the card's "Manage" link and empty state. */
-  onOpenStorageSettings: StorageCardProps['onOpenSettings'];
   /** Paired-devices card data (Overview tab) — `GET/DELETE _gateway/devices`.
    *  Optional so callers/tests that predate the card render the tab
    *  unchanged; the card is simply omitted when unwired. */
@@ -335,26 +320,6 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
               </div>
             </section>
 
-            {/* Offsite snapshot and byte-custody status (#351/#414). */}
-            <BackupCard
-              now={now}
-              loadStatus={props.loadBackupStatus}
-              streamCustody={props.streamBackupCustody}
-              onRunNow={props.onRunBackupNow}
-              onVerifyNow={props.onVerifyBackupNow}
-              onUpdatePolicy={props.onUpdateBackupPolicy}
-              onVerifyBucket={props.onVerifyBackupBucket}
-              onExportRecoveryKit={props.onExportRecoveryKit}
-              onConfirmRecoveryKit={props.onConfirmRecoveryKit}
-            />
-
-            {/* Remote quota and replication drift (#367 §D3). */}
-            <StorageCard
-              now={now}
-              loadStatus={props.loadStorageStatus}
-              onOpenSettings={props.onOpenStorageSettings}
-            />
-
             {/* Paired devices and their contributed-compute status (#392/#414). */}
             {props.loadDevices && props.onRevokeDevice ? (
               <DevicesCard
@@ -396,7 +361,7 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
       ) : null}
 
       {tab === 'alerts' ? (
-        <div className={styles.tabPane}>
+        <div className={cx(styles.tabPane, styles.tabPaneForm)}>
           {/* Down alert — the configurable notification threshold. */}
           <section className={styles.panel}>
             <div className={styles.panelHead}>

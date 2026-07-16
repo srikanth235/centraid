@@ -67,7 +67,7 @@ function push(snap: AppSettingsSnapshot): void {
   act(() => update?.(snap));
 }
 function clickTab(el: HTMLElement, label: string): void {
-  const btn = [...el.querySelectorAll<HTMLButtonElement>('.settingsTab')].find((b) =>
+  const btn = [...el.querySelectorAll<HTMLButtonElement>('.settingsTabs button')].find((b) =>
     b.textContent?.includes(label),
   )!;
   void act(() => btn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
@@ -96,10 +96,12 @@ describe('AppSettingsPanel', () => {
     const el = mount(makeProps());
     push(makeSnapshot({ vaultVisible: false }));
     expect(
-      [...el.querySelectorAll('.settingsTab')].some((b) => b.textContent?.includes('Vault')),
+      [...el.querySelectorAll('.settingsTabs button')].some((b) =>
+        b.textContent?.includes('Vault'),
+      ),
     ).toBe(false);
     push(makeSnapshot({ vaultVisible: true, vaultBadge: 3 }));
-    const vaultTab = [...el.querySelectorAll('.settingsTab')].find((b) =>
+    const vaultTab = [...el.querySelectorAll('.settingsTabs button')].find((b) =>
       b.textContent?.includes('Vault'),
     )!;
     expect(vaultTab).toBeTruthy();

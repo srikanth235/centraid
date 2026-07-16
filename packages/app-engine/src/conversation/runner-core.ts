@@ -29,6 +29,7 @@
 
 import { randomUUID } from 'node:crypto';
 import type { Dispatcher } from '../handlers/dispatcher.js';
+import type { ModelSubsystem } from '../stores/prefs-store.js';
 import type { RunKind } from './schema.js';
 import type {
   ConversationRunner,
@@ -55,9 +56,25 @@ export interface TurnContext {
 }
 
 export interface ConversationRunnerCoreOptions {
-  /** Loader for the user's persisted runner prefs. Called per turn so the
-   *  runner picks up settings changes without a runtime restart. */
-  prefsLoader: () => Promise<RunnerPrefs | undefined>;
+  /**
+   * Loader for the user's persisted runner prefs. Called per turn so the
+   * runner picks up settings changes without a runtime restart — including a
+   * change to WHICH runner this register rides, since the loader resolves
+   * `runner.<subsystem>` fresh on every call.
+   *
+   * The `subsystem` argument is this register's identity (`opts.subsystem`),
+   * so a host that scopes runner selection per subsystem can answer with the
+   * right kind. Optional on both sides: hosts with one global runner ignore
+   * it, and a runner built without `subsystem` calls the loader bare — which
+   * is exactly the pre-existing behavior.
+   */
+  prefsLoader: (subsystem?: ModelSubsystem) => Promise<RunnerPrefs | undefined>;
+  /**
+   * Which subsystem's prefs this runner rides — passed to `prefsLoader` on
+   * every turn. Left unset by registers with no per-subsystem identity
+   * (the data-only chat adapter), which then inherit the host default.
+   */
+  subsystem?: ModelSubsystem;
   /**
    * Resolve the shared app-engine dispatcher. Threaded into the per-turn
    * `ToolContext` so the agent's structured tools dispatch through the same
@@ -133,7 +150,7 @@ export function makeConversationRunnerCore(
   return {
     ...(opts.runKind ? { runKind: opts.runKind } : {}),
     async run(input: ConversationTurnInput): Promise<ConversationTurnResult> {
-      const prefs = await opts.prefsLoader();
+      const prefs = await opts.prefsLoader(opts.subsystem);
       if (!prefs) {
         input.onEvent({
           type: 'error',
@@ -151,7 +168,11 @@ export function makeConversationRunnerCore(
         : input.extraSystemPrompt;
 
       // Resume only when the previous turn used the same runner kind — a
-      // mid-session runner switch starts a fresh conversation.
+      // mid-session runner switch starts a fresh conversation. Now that
+      // `prefsLoader` resolves this register's runner per turn, re-pinning
+      // just this subsystem (`runner.<subsystem>`) invalidates the session
+      // exactly like flipping the default agent always has: the session id
+      // is the OTHER backend's and would be meaningless to resume against.
       const resumeId =
         input.prevAdapterKind === prefs.kind ? input.prevAdapterSessionId : undefined;
 

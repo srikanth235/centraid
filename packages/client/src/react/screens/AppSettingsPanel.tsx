@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
-import { Icon } from '../ui/index.js';
+import { Icon, IconButton } from '../ui/index.js';
 import type {
   AppKnobDTO,
   AppSettingsBridgeProps,
@@ -273,18 +273,13 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
             <div className={styles.settingsName}>{snap.appName}</div>
             <div className={styles.settingsEyebrow}>App settings</div>
           </div>
-          <button
-            type="button"
-            className={styles.settingsClose}
-            aria-label="Close"
-            onClick={onClose}
-          >
+          <IconButton ariaLabel="Close" className={styles.settingsClose} onClick={onClose}>
             <Icon name="X" size={12} />
-          </button>
+          </IconButton>
         </div>
 
         <div className={styles.settingsTabsWrap}>
-          <div className={styles.settingsTabs}>
+          <div className={cx(segCss.seg, styles.settingsTabs)}>
             {TABS.map((t) => {
               if (t.id === 'vault' && !snap.vaultVisible) return null;
               const badge =
@@ -297,7 +292,6 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
                 <button
                   key={t.id}
                   type="button"
-                  className={styles.settingsTab}
                   data-active={String(tab === t.id)}
                   onClick={() => setTab(t.id)}
                 >
@@ -306,7 +300,7 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
                     // eslint-disable-next-line react/no-danger -- (#325) static inline glyph
                     dangerouslySetInnerHTML={{ __html: TAB_GLYPH[t.id] }}
                   />
-                  <span className={styles.settingsTabLabel}>{t.label}</span>
+                  <span>{t.label}</span>
                   {badge != null && badge > 0 && (
                     <span className={styles.settingsTabBadge}>{badge}</span>
                   )}
@@ -317,7 +311,7 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
         </div>
 
         <div className={styles.settingsPane} hidden={tab !== 'appearance'}>
-          <div className={styles.settingsSectionHost}>
+          <div>
             {snap.knobs && snap.knobs.length > 0 ? (
               <div className={cx(appSettingsCss.appSettingsSection, styles.paneSection)}>
                 <div className={styles.settingsSectionLabel}>Preferences</div>
@@ -337,7 +331,7 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
         </div>
 
         <div className={styles.settingsPane} hidden={tab !== 'automations'}>
-          <div className={styles.settingsSectionHost}>
+          <div>
             {snap.orders.length === 0 ? (
               <div className={appSettingsCss.appSettingsNote}>
                 No automations linked to this app yet.
@@ -371,7 +365,6 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
 
         <div className={styles.settingsPane} hidden={tab !== 'vault'}>
           <div
-            className={styles.settingsSectionHost}
             ref={(node) => {
               if (node && snap.vaultVisible && !vaultMounted.current) {
                 vaultMounted.current = true;

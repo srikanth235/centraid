@@ -180,6 +180,62 @@ test('composedHandler serves the kit Ask panel model picker (GET/PUT /centraid/<
   }
 });
 
+test('the ask model picker follows ask’s OWN runner pin, not the default agent', async () => {
+  await gateway.start('http://127.0.0.1:0');
+  await gateway.runtime.registry.ensureUploaded('demo');
+  const srv = await mountUnauthed(gateway.composedHandler);
+  try {
+    // The default agent stays codex; only the `ask` register is re-pinned.
+    gateway.prefs.setPrefs({ 'agent.runner.kind': 'codex', 'runner.ask': 'claude-code' });
+
+    // GET reports ask's resolved runner — the picker must offer the models of
+    // the backend the ask turn will actually run on.
+    const info = (await (await fetch(`${srv.url}/centraid/demo/_turn/model`)).json()) as {
+      runnerKind: string;
+    };
+    expect(info.runnerKind).toBe('claude-code');
+
+    // ...and PUT writes THAT runner's key. Reading one key while writing
+    // another is the exact bug per-subsystem resolution has to avoid.
+    const putRes = await fetch(`${srv.url}/centraid/demo/_turn/model`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-6' }),
+    });
+    expect(putRes.status).toBe(200);
+    expect(gateway.prefs.getAllPrefs()['model.claude-code.ask']).toBe('claude-sonnet-4-6');
+    // The default agent's key is untouched — no cross-runner bleed.
+    expect(gateway.prefs.getAllPrefs()['model.codex.ask']).toBeUndefined();
+
+    // The round-trip agrees: GET reads back what PUT wrote.
+    const after = (await (await fetch(`${srv.url}/centraid/demo/_turn/model`)).json()) as {
+      current: string | null;
+    };
+    expect(after.current).toBe('claude-sonnet-4-6');
+  } finally {
+    await srv.close();
+  }
+});
+
+test('with no runner.* pins the ask picker still rides the default agent (back-compat)', async () => {
+  await gateway.start('http://127.0.0.1:0');
+  await gateway.runtime.registry.ensureUploaded('demo');
+  const srv = await mountUnauthed(gateway.composedHandler);
+  try {
+    // Back-compat is the hard requirement: a prefs file that predates
+    // per-subsystem selection carries only `agent.runner.kind`, and every
+    // register must resolve to it exactly as it did before.
+    gateway.prefs.setPrefs({ 'agent.runner.kind': 'claude-code' });
+
+    const info = (await (await fetch(`${srv.url}/centraid/demo/_turn/model`)).json()) as {
+      runnerKind: string;
+    };
+    expect(info.runnerKind).toBe('claude-code');
+  } finally {
+    await srv.close();
+  }
+});
+
 test('start() activates the vault workspace so its apps dir exists', async () => {
   await gateway.start('http://127.0.0.1:0');
   const vaultId = gateway.vaults.current().boot.vaultId;

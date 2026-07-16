@@ -415,7 +415,9 @@ export default function HomeScreen({
         </div>
       </div>
 
-      <section className={cx(styles.hsec, styles.homeLib)}>
+      {/* .hsec is the whole section envelope; the homeLib* children carry the
+          rest. The `.homeLib` modifier it used to name never had a rule. */}
+      <section className={styles.hsec}>
         <div className={styles.homeLibHead}>
           <div
             className={cx(libCss.discSeg, styles.homeLibSeg)}

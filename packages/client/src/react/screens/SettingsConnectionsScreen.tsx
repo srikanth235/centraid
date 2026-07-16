@@ -1,12 +1,13 @@
 // governance: allow-repo-hygiene file-size-limit (#363) single cohesive screen component for the Connections settings surface; splitting would fragment one visual unit
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
-import { Icon } from '../ui/index.js';
+import { Button, Icon } from '../ui/index.js';
 import { relativeTime } from '../format.js';
 import { cx } from '../ui/cx.js';
 import styles from './SettingsConnectionsScreen.module.css';
 import drawerGroupCss from '../styles/drawerGroup.module.css';
 import controlsCss from '../styles/controls.module.css';
-import buttonCss from '../ui/Button.module.css';
+import inlineEmptyCss from '../styles/inlineEmpty.module.css';
+import selectCss from '../styles/select.module.css';
 
 // Settings → Connections (issue #304's missing renderer half): the owner
 // surface over the gateway's broker-owned OAuth / BYO-client connections.
@@ -142,26 +143,24 @@ function ConnectionRow({
       </span>
       <div className={styles.rowActions}>
         {row.credKind === 'oauth2' && row.health !== 'ok' ? (
-          <button
-            type="button"
-            className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
+          <Button
+            variant="soft"
+            size="sm"
+            label={authorizing ? 'Waiting…' : 'Authorize'}
             disabled={busy}
             onClick={onAuthorize}
-          >
-            {authorizing ? 'Waiting…' : 'Authorize'}
-          </button>
+          />
         ) : null}
-        <button
-          type="button"
-          className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
+        <Button
+          variant="soft"
+          size="sm"
+          label={row.health === 'paused' ? 'Resume' : 'Pause'}
           disabled={busy}
           onClick={onToggleStatus}
-        >
-          {row.health === 'paused' ? 'Resume' : 'Pause'}
-        </button>
+        />
         <button
           type="button"
-          className={cx(controlsCss.chip, styles.removeBtn)}
+          className={cx(controlsCss.chip, controlsCss.chipDanger)}
           disabled={busy}
           title="Remove this connection entirely — deletes it and its credential. Refused if it still has undecided outbox items or sync history."
           onClick={onDetach}
@@ -264,32 +263,36 @@ function AddConnectionWizard({
       <div className={styles.wizardRow}>
         <label className={styles.wizardField}>
           <span className={styles.wizardLabel}>Provider</span>
-          <select
-            className={styles.select}
-            value={providerId}
-            onChange={(e) => setProviderId(e.target.value)}
-          >
-            {providers.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+          <span className={selectCss.selectWrap}>
+            <select
+              className={selectCss.select}
+              value={providerId}
+              onChange={(e) => setProviderId(e.target.value)}
+            >
+              {providers.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </span>
         </label>
         {provider.connectors.length > 1 ? (
           <label className={styles.wizardField}>
             <span className={styles.wizardLabel}>Data source</span>
-            <select
-              className={styles.select}
-              value={connectorKind}
-              onChange={(e) => setConnectorKind(e.target.value)}
-            >
-              {provider.connectors.map((c) => (
-                <option key={c.kind} value={c.kind}>
-                  {connectorLabel(c.kind)}
-                </option>
-              ))}
-            </select>
+            <span className={selectCss.selectWrap}>
+              <select
+                className={selectCss.select}
+                value={connectorKind}
+                onChange={(e) => setConnectorKind(e.target.value)}
+              >
+                {provider.connectors.map((c) => (
+                  <option key={c.kind} value={c.kind}>
+                    {connectorLabel(c.kind)}
+                  </option>
+                ))}
+              </select>
+            </span>
           </label>
         ) : null}
       </div>
@@ -343,17 +346,14 @@ function AddConnectionWizard({
       <SetupGuide steps={[...provider.setup]} />
 
       <div className={styles.wizardFoot}>
-        <button type="button" className={controlsCss.chip} onClick={onCancel}>
-          Cancel
-        </button>
-        <button
-          type="button"
-          className={cx(buttonCss.btn, buttonCss.primary, buttonCss.sm)}
+        <Button variant="ghost" size="sm" label="Cancel" onClick={onCancel} />
+        <Button
+          variant="primary"
+          size="sm"
+          label={busy ? 'Saving…' : 'Save connection'}
           disabled={!ready || busy}
           onClick={submit}
-        >
-          {busy ? 'Saving…' : 'Save connection'}
-        </button>
+        />
       </div>
     </div>
   );
@@ -488,7 +488,7 @@ export default function SettingsConnectionsScreen({
           {rows === null ? (
             <div className={controlsCss.note}>Reading connections…</div>
           ) : rows.length === 0 ? (
-            <div className={styles.empty}>No connections configured yet.</div>
+            <div className={inlineEmptyCss.inlineEmpty}>No connections configured yet.</div>
           ) : (
             rows.map((row) => (
               <ConnectionRow
@@ -527,14 +527,13 @@ export default function SettingsConnectionsScreen({
             />
           )
         ) : (
-          <button
-            type="button"
-            className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
+          <Button
+            variant="soft"
+            size="sm"
+            icon="Plus"
+            label="Add connection"
             onClick={openWizard}
-          >
-            <Icon name="Plus" size={13} />
-            <span>Add connection</span>
-          </button>
+          />
         )}
       </div>
     </div>

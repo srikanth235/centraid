@@ -87,7 +87,9 @@ function TimelineNode({ node }: { node: RunNodeDTO }): JSX.Element {
         </div>
         {node.streaming && node.liveText ? (
           <div className={styles.tlStream}>
-            <span className={styles.tlStreamTx}>{node.liveText}</span>
+            {/* Unclassed: .tlStream already carries the type + pre-wrap; this
+                span only separates the text run from the caret. */}
+            <span>{node.liveText}</span>
             <span className={styles.tlCaret} aria-hidden="true" />
           </div>
         ) : null}
@@ -96,6 +98,14 @@ function TimelineNode({ node }: { node: RunNodeDTO }): JSX.Element {
   );
 }
 
+/**
+ * One log row. Note that `label`, `sub` and `response` are deliberately
+ * unstyled: they referenced `.logLabel`/`.logSub`/`.logResponse`, none of which
+ * were ever written, so they have always rendered as plain inherited text —
+ * `sub` reads identically to `label`. The dead references are gone rather than
+ * invented into rules, since writing them would change the render. If these are
+ * meant to be visually distinct, that is a design change, not a cleanup.
+ */
 function LogRow({ row }: { row: RunLogRowDTO }): JSX.Element {
   const [openIn, setOpenIn] = useState(false);
   const [openOut, setOpenOut] = useState(false);
@@ -105,11 +115,11 @@ function LogRow({ row }: { row: RunLogRowDTO }): JSX.Element {
       <div className={styles.logMain}>
         <div className={styles.logHead}>
           <span className={styles.logGlyph} data-status={row.tone} aria-hidden="true" />
-          <span className={styles.logLabel}>{row.label}</span>
-          {row.sub ? <span className={styles.logSub}>{row.sub}</span> : null}
+          <span>{row.label}</span>
+          {row.sub ? <span>{row.sub}</span> : null}
         </div>
         {row.error ? <div className={styles.tlError}>{row.error}</div> : null}
-        {row.response ? <div className={styles.logResponse}>{row.response}</div> : null}
+        {row.response ? <div>{row.response}</div> : null}
         {row.input ? (
           <>
             <button
@@ -361,7 +371,9 @@ export default function RunViewScreen({
     <div className={styles.rv}>
       {header}
       <div className={detailsHidden ? cx(styles.rvGrid, styles.rvGridNarrow) : styles.rvGrid}>
-        <div className={styles.rvThreadCol}>
+        {/* Unclassed: this is .rvGrid's first grid item — the track sizing and
+            `align-items: start` come from the grid, not from the item. */}
+        <div>
           <div className={styles.tl}>
             <div className={styles.tlItem} data-status="trigger">
               <span className={styles.tlRail} aria-hidden="true">
@@ -389,7 +401,8 @@ export default function RunViewScreen({
             ))}
 
             <div
-              className={cx(styles.tlItem, styles.tlItemFinal)}
+              className={styles.tlItem}
+              data-testid="timeline-final"
               data-status={snap.final.kind === 'pending' ? 'running' : snap.final.kind}
             >
               <span className={styles.tlRail} aria-hidden="true">

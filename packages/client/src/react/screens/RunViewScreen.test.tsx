@@ -202,7 +202,7 @@ describe('RunViewScreen', () => {
   it('dedupes the final attribution label when provider and model are the same string', () => {
     const el = mount(makeProps());
     push(makeSnapshot({ final: { kind: 'ok', model: 'Centraid', summary: 'Done.' } }));
-    const name = el.querySelector('.tlItemFinal .tlName');
+    const name = el.querySelector('[data-testid="timeline-final"] .tlName');
     expect(name?.textContent).toBe('Centraid');
     expect(name?.textContent).not.toContain('Centraid · Centraid');
   });
@@ -210,7 +210,7 @@ describe('RunViewScreen', () => {
   it('keeps the provider · model attribution when they differ', () => {
     const el = mount(makeProps());
     push(makeSnapshot());
-    const name = el.querySelector('.tlItemFinal .tlName');
+    const name = el.querySelector('[data-testid="timeline-final"] .tlName');
     expect(name?.textContent).toBe('Centraid · claude-opus-4-8');
   });
 

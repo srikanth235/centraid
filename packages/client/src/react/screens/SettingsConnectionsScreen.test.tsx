@@ -94,7 +94,7 @@ describe('SettingsConnectionsScreen', () => {
 
   it('shows the empty state when there are no connections', async () => {
     const el = await mount(makeProps({ loadConnections: vi.fn().mockResolvedValue([]) }));
-    expect(el.querySelector('.empty')).toBeTruthy();
+    expect(el.querySelector('.inlineEmpty')).toBeTruthy();
     expect(el.textContent).toContain('No connections configured yet.');
   });
 

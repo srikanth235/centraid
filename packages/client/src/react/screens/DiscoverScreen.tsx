@@ -280,7 +280,9 @@ export default function DiscoverScreen({
             order.map((cat) => {
               const bucket = groups.get(cat) ?? [];
               return (
-                <section key={cat} className={styles.cat}>
+                // Unclassed: .cats is the flex column whose 30px gap spaces
+                // these sections; .catHead carries the internal rhythm.
+                <section key={cat}>
                   <div className={styles.catHead}>
                     <span className={styles.catLabel}>{cat}</span>
                     <span className={styles.catCount}>

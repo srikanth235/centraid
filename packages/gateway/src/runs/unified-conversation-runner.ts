@@ -53,6 +53,7 @@ import {
   type ConversationRunner,
   type TurnStreamEvent,
   type Dispatcher,
+  type ModelSubsystem,
   type RunnerKind,
   type RunnerPrefs,
   type RunTurnFn,
@@ -72,8 +73,13 @@ export interface UnifiedConversationRunnerOptions {
   /** Git store backing app code; the draft worktree lives in its sessions. */
   store: WorktreeStore;
   /** Per-turn runner prefs (kind + provider). Loaded fresh so settings
-   *  changes apply without a restart — mirrors `makeConversationRunner`. */
-  prefsLoader: () => Promise<RunnerPrefs | undefined>;
+   *  changes apply without a restart — mirrors `makeConversationRunner`.
+   *  Receives `subsystem` so a host that pins a runner per subsystem
+   *  answers with THIS register's kind. */
+  prefsLoader: (subsystem?: ModelSubsystem) => Promise<RunnerPrefs | undefined>;
+  /** Which subsystem's runner/model prefs builder turns ride. The gateway
+   *  passes `'builder'`; unset → the host's default agent. */
+  subsystem?: ModelSubsystem;
   /** Resolve the shared app-engine dispatcher for the `centraid_*` tools.
    *  Called per turn so the host can cycle-break on first use. */
   getDispatcher: () => Dispatcher;
@@ -181,6 +187,7 @@ export function makeUnifiedConversationRunner(
   // `@centraid/skills`), and post-turn webhook minting.
   return makeConversationRunnerCore({
     prefsLoader: opts.prefsLoader,
+    ...(opts.subsystem ? { subsystem: opts.subsystem } : {}),
     getDispatcher: opts.getDispatcher,
     ...(extraPath ? { extraPath } : {}),
 

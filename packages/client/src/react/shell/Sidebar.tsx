@@ -22,11 +22,12 @@ export type ShellMenuAnchor =
   | { kind: 'point'; x: number; y: number }
   | { kind: 'rect'; rect: DOMRect };
 
-// The shell sidebar — Build new / Search, a Pages section, the live Apps
-// list (folding drafts in), a disabled Chats placeholder, and Settings
-// pinned to the bottom with a `live` pill. Styled by the shared
-// chrome.module.css (one module for the whole window-chrome family,
-// co-imported by ShellFrame).
+// The shell sidebar — Build new / Search, a Pages section, an Operations
+// section (Gateway + Backups — the two "how is my infrastructure doing"
+// pages), the live Apps list (folding drafts in), a disabled Chats
+// placeholder, and Settings pinned to the bottom with a `live` pill. Styled
+// by the shared chrome.module.css (one module for the whole window-chrome
+// family, co-imported by ShellFrame).
 
 export type SidebarPage =
   | 'home'
@@ -37,6 +38,7 @@ export type SidebarPage =
   | 'automations'
   | 'approvals'
   | 'gateway'
+  | 'backups'
   | 'settings';
 
 export interface SidebarApp {
@@ -95,6 +97,7 @@ export interface SidebarProps {
   onGateway?: () => void;
   /** Live heartbeat status pill next to "Gateway" — omitted shows no pill. */
   gatewayStatus?: 'up' | 'down' | 'unknown';
+  onBackups?: () => void;
   onAppClick: (id: string) => void;
   onAppContext?: (id: string, anchor: ShellMenuAnchor) => void;
   onSettings: () => void;
@@ -399,6 +402,7 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         disabled={!props.onApprovals}
         onClick={props.onApprovals}
       />
+      <SbSection label="Operations" />
       <SbItem
         icon={<Icon name="Cellular" size={15} />}
         label="Gateway"
@@ -412,6 +416,13 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
             </StatusPill>
           ) : undefined
         }
+      />
+      <SbItem
+        icon={<Icon name="Save" size={15} />}
+        label="Backups"
+        active={props.activePage === 'backups'}
+        disabled={!props.onBackups}
+        onClick={props.onBackups}
       />
 
       <SbSection label={`Apps · ${appList.length}`} onAction={props.onNewApp} />
