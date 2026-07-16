@@ -25,6 +25,9 @@ export type TurnStreamEvent =
   | { type: 'final'; text: string }
   | { type: 'error'; message: string }
   | { type: 'aborted' }
+  /** Non-fatal, human-readable notice (issue #420) — e.g. a runner that can't
+   *  read PDF attachments. Rendered in the transcript, never persisted. */
+  | { type: 'notice'; level: 'warn' | 'info'; code?: string; message: string }
   | {
       type: 'usage';
       model?: string;
@@ -51,12 +54,19 @@ export function frameData(rawFrame: string): string;
 /** Parse one raw SSE frame into an event, or null (heartbeat/end/malformed). */
 export function parseFrame(rawFrame: string): TurnStreamEvent | null;
 
+/** True when a raw frame is the terminal `event: end` frame (server finished). */
+export function isEndFrame(rawFrame: string): boolean;
+
 /** Parse a whole SSE text blob into events (pure; used by tests). */
 export function parseSseText(text: string): TurnStreamEvent[];
 
-/** Read a `_turn` SSE body to completion, dispatching each parsed event. */
+/**
+ * Read a `_turn` SSE body to completion, dispatching each parsed event.
+ * Resolves `{ ended: true }` when the terminal `event: end` frame was seen,
+ * `{ ended: false }` when the body closed mid-turn (the catch-up signal).
+ */
 export function consumeSse(
   body: ReadableStream<Uint8Array>,
   onEvent: (event: TurnStreamEvent) => void,
   opts?: { signal?: AbortSignal },
-): Promise<void>;
+): Promise<{ ended: boolean }>;

@@ -149,6 +149,28 @@ export function makeConversationRouteHandler(getStore: () => ConversationHistory
         return true;
       }
 
+      // Lightweight turn-settle poll (issue #420, Wave 6): the client's
+      // reconnect catch-up path polls this after a mid-stream drop to learn
+      // whether the turn finished server-side (its `turnCount` climbed) before
+      // reloading the full transcript. Cheap — one conversations-row read, no
+      // item reconstruction. Matched BEFORE the generic sessions/<id> route.
+      const statusMatch = sub.match(/^\/apps\/([^/]+)\/sessions\/([^/]+)\/status\/?$/);
+      if (statusMatch && statusMatch[1] && statusMatch[2]) {
+        if (method !== 'GET') {
+          sendError(res, 405, 'method not allowed');
+          return true;
+        }
+        const stAppId = decodeURIComponent(statusMatch[1]);
+        const stId = decodeURIComponent(statusMatch[2]);
+        const meta = store.getSessionMeta(stAppId, stId);
+        if (!meta) {
+          sendError(res, 404, 'session not found');
+          return true;
+        }
+        sendJson(res, 200, { turnCount: meta.turnCount, updatedAt: meta.updatedAt });
+        return true;
+      }
+
       // Conversation FTS search (issue #420) — matched BEFORE the generic
       // sessions/<id> route so "search" isn't read as a session id:
       //   GET /apps/<appId>/sessions/search?q=<query>&limit=<n>  → { results }

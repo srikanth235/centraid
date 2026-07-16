@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit prepared-statement block + row mappers for every conversation-ledger column; splitting the statement table from its mappers would decouple the two halves that must change together
 /*
  * Prepared-statement block + raw-row mappers for `ConversationStore`.
  *
@@ -54,6 +55,7 @@ export interface RawTurn {
   summary: string | null;
   output_json: string | null;
   retry_of: string | null;
+  idempotency_key: string | null;
   ok: number;
   error: string | null;
   feedback: string | null;
@@ -144,6 +146,7 @@ export function turnFromRaw(raw: RawTurn): Turn {
       : {}),
     ...(raw.note !== null ? { note: raw.note } : {}),
     ...(raw.retry_of !== null ? { retryOf: raw.retry_of } : {}),
+    ...(raw.idempotency_key !== null ? { idempotencyKey: raw.idempotency_key } : {}),
     startedAt: raw.started_at,
     ...(raw.ended_at !== null ? { endedAt: raw.ended_at } : {}),
     ok: raw.ok !== 0,
@@ -241,6 +244,7 @@ export interface PreparedStatements {
   insertTurn: StatementSync;
   finishTurn: StatementSync;
   getTurn: StatementSync;
+  getTurnByIdempotency: StatementSync;
   listTurnsAsc: StatementSync;
   listTurnsFiltered: StatementSync;
   listTurnsByAutomation: StatementSync;
@@ -363,8 +367,8 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     insertTurn: db.prepare(`
       INSERT INTO turns
         (id, conversation_id, seq, parent_turn_id, trigger, trigger_origin,
-         retry_of, note, started_at, ok)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+         retry_of, idempotency_key, note, started_at, ok)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
     `),
     // Σ over this turn's own step/agent items; step/tool counts. SUM over an
     // empty set yields NULL — correct in-flight semantics.
@@ -392,6 +396,14 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       WHERE id = $tid
     `),
     getTurn: db.prepare(`SELECT * FROM turns WHERE id = ?`),
+    // Idempotency lookup (issue #420): the most recent recorded turn on a
+    // conversation carrying the given key. A key is written once per user send;
+    // newest-first is defensive against any accidental reuse.
+    getTurnByIdempotency: db.prepare(`
+      SELECT * FROM turns
+      WHERE conversation_id = ? AND idempotency_key = ?
+      ORDER BY seq DESC LIMIT 1
+    `),
     // Ascending by seq — a transcript is replayed oldest-turn-first.
     listTurnsAsc: db.prepare(`
       SELECT * FROM turns WHERE conversation_id = ? ORDER BY seq ASC

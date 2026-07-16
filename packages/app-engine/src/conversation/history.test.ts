@@ -221,6 +221,38 @@ describe('ConversationHistoryStore', () => {
     expect(store.setTurnFeedback(APP, s.id, 'no-such-turn', 'down')).toBe(false);
   });
 
+  it('findRecordedTurn returns the replayable answer for a recorded idempotency key (#420)', () => {
+    const s = store.createSession(APP);
+    const key = 'idem-key-1';
+    store.recordTurn(APP, { ...turn(s.id, 'q', 'the answer'), idempotencyKey: key });
+    const found = store.findRecordedTurn(APP, s.id, key);
+    expect(found?.ok).toBe(true);
+    expect(found?.finalText).toBe('the answer');
+    // An unknown key (and a wrong app) both read as not-found.
+    expect(store.findRecordedTurn(APP, s.id, 'no-such-key')).toBeUndefined();
+    expect(store.findRecordedTurn('other', s.id, key)).toBeUndefined();
+  });
+
+  it('findRecordedTurn surfaces a recorded error turn as ok:false (#420)', () => {
+    const s = store.createSession(APP);
+    const key = 'idem-key-err';
+    store.recordTurn(APP, {
+      conversationId: s.id,
+      userMessage: 'q',
+      startedAt: Date.now(),
+      endedAt: Date.now() + 10,
+      ok: false,
+      error: 'nope',
+      idempotencyKey: key,
+      nodes: [
+        { kind: 'step', text: 'nope', isError: true, startedAt: Date.now(), endedAt: Date.now() },
+      ],
+    });
+    const found = store.findRecordedTurn(APP, s.id, key);
+    expect(found?.ok).toBe(false);
+    expect(found?.error).toBe('nope');
+  });
+
   it('recordTurn attachments surface on the reconstructed user message (hash/mime/sizeBytes/filename/url)', () => {
     const s = store.createSession(APP);
     store.recordTurn(APP, {

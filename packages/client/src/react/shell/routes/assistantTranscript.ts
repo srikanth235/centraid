@@ -34,11 +34,15 @@ export type AsstMsg =
   | { kind: 'user'; text: string; attachments?: AsstAttachment[]; createdAt?: number }
   /** Live-only streaming reasoning row (issue #420, Wave 2). */
   | { kind: 'thinking'; text: string; streaming?: boolean }
+  /** Live-only runner notice (issue #420, Wave 6) — e.g. dropped-PDF warning. */
+  | { kind: 'notice'; level: 'warn' | 'info'; text: string }
   | {
       kind: 'ai';
       text: string;
       error?: boolean;
       streaming?: boolean;
+      /** Reconnect catch-up in progress after a mid-turn drop (issue #420). */
+      catchingUp?: boolean;
       createdAt?: number;
       /** Turn id of the shown answer — feedback/regenerate target. */
       turnId?: string;
@@ -51,6 +55,11 @@ export type AsstMsg =
       /** Error bubble: the failed user text to resend + the retry-of turn id. */
       failedText?: string;
       retryOf?: string;
+      /** Idempotency key of the failed send — REUSED on one-tap resend so the
+       *  retry replays a completed turn instead of double-running it (#420). */
+      idempotencyKey?: string;
+      /** The failed send happened while the browser was offline (issue #420). */
+      offline?: boolean;
     }
   | { kind: 'tools'; calls: AsstToolCall[] };
 
@@ -182,7 +191,14 @@ export function msgToDTO(msg: AsstMsg, isLastAnswer: boolean): AsstMsgDTO {
   }
   if (msg.kind === 'thinking')
     return { kind: 'thinking', text: msg.text, streaming: !!msg.streaming };
-  if (msg.streaming) return { kind: 'ai', streaming: true, text: msg.text };
+  if (msg.kind === 'notice') return { kind: 'notice', level: msg.level, text: msg.text };
+  if (msg.streaming)
+    return {
+      kind: 'ai',
+      streaming: true,
+      text: msg.text,
+      ...(msg.catchingUp ? { catchingUp: true } : {}),
+    };
   // Final AI answer — resolve the shown attempt for the retry pager.
   const active = activeAttemptOf(msg);
   const text = active ? active.text : msg.text;
@@ -210,5 +226,6 @@ export function msgToDTO(msg: AsstMsg, isLastAnswer: boolean): AsstMsgDTO {
       : {}),
     ...(isLastAnswer && !error && turnId ? { canRegenerate: true } : {}),
     ...(error && msg.failedText !== undefined ? { canRetry: true } : {}),
+    ...(error && msg.offline ? { offline: true } : {}),
   };
 }

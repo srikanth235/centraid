@@ -2,6 +2,7 @@
 import { type JSX, useEffect, useRef, useState } from 'react';
 import {
   ASSISTANT_APP_ID,
+  conversationStatus,
   createConversation,
   fetchAssistantAttachmentUrl,
   getUserPrefs,
@@ -16,6 +17,7 @@ import {
   type TurnStreamEvent,
 } from '../../../gateway-client.js';
 import { openPrompt } from '../prompt.js';
+import { catchUpAfterDrop } from './assistantCatchUp.js';
 import { downloadConversation } from './conversationExport.js';
 import { DEFAULT_STARTERS, resolveStarters } from './assistantStarters.js';
 import { estimateCostUsd } from '../../screens/assistantUsage.js';
@@ -61,6 +63,8 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     busy: false,
     abort: null as AbortController | null,
     disposed: false,
+    /** Server turn count of the open thread — the reconnect catch-up baseline. */
+    turnCount: 0,
   });
   const updateRef = useRef<((s: AssistantSnapshot) => void) | null>(null);
   const suppressSelectRef = useRef<string | null>(null);
@@ -106,6 +110,7 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
       const loaded = await loadConversation(ASSISTANT_APP_ID, id);
       if (m.current.disposed || m.current.currentId !== id || m.current.busy) return;
       m.current.msgs = hydrateMessages(loaded.messages);
+      m.current.turnCount = loaded.turnCount;
       push();
     } catch {
       /* keep the live model if the reload fails */
@@ -118,12 +123,14 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     m.current.currentId = id;
     m.current.msgs = [];
     m.current.pendingAttachments = [];
+    m.current.turnCount = 0;
     push();
     if (!id) return;
     try {
       const loaded = await loadConversation(ASSISTANT_APP_ID, id);
       if (m.current.disposed || m.current.currentId !== id) return;
       m.current.msgs = hydrateMessages(loaded.messages);
+      m.current.turnCount = loaded.turnCount;
     } catch (err) {
       if (m.current.disposed) return;
       m.current.msgs = [{ kind: 'ai', text: `Failed to load: ${String(err)}`, error: true }];
@@ -222,11 +229,15 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     text: string;
     attachments: ReadyAttachment[];
     retryOf?: string;
+    /** Idempotency key (issue #420). Fresh per user send; REUSED on a resend of
+     *  the same message so a retry-after-drop replays instead of double-running. */
+    idempotencyKey: string;
     appendUser: boolean;
     removeFromIndex?: number;
   }): Promise<void> => {
     const conversationId = m.current.currentId;
     if (!conversationId) return;
+    const baselineTurnCount = m.current.turnCount;
     if (opts.removeFromIndex !== undefined)
       m.current.msgs = m.current.msgs.slice(0, opts.removeFromIndex);
     if (opts.appendUser) {
@@ -271,10 +282,22 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     };
     const byCall = new Map<string, AsstToolCall>();
     let errored = false;
+    // Whether the stream produced ANY turn activity before it (maybe) dropped —
+    // distinguishes a mid-turn connection loss (catch up from the ledger) from a
+    // request that never started (plain failure → resend). Issue #420.
+    let sawActivity = false;
 
     const onEvent = (event: TurnStreamEvent): void => {
       if (m.current.disposed || m.current.currentId !== conversationId) return;
+      if (event.type !== 'error' && event.type !== 'aborted') sawActivity = true;
       switch (event.type) {
+        case 'notice': {
+          // A non-fatal runner notice (e.g. codex can't read PDF attachments).
+          // Live-only — not persisted, so it won't replay on reload.
+          m.current.msgs.push({ kind: 'notice', level: event.level, text: event.message });
+          push();
+          return;
+        }
         case 'reasoning.delta':
           if (!thinking) {
             thinking = { kind: 'thinking', text: event.delta, streaming: true };
@@ -348,6 +371,7 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
             text: event.message,
             error: true,
             failedText: opts.text,
+            idempotencyKey: opts.idempotencyKey,
             ...(opts.retryOf ? { retryOf: opts.retryOf } : {}),
           });
           push();
@@ -359,45 +383,94 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
       }
     };
 
+    let streamEnded = false;
+    let threw: unknown = null;
     try {
-      await streamAssistantTurn(
+      const res = await streamAssistantTurn(
         {
           conversationId,
           message: opts.text,
+          idempotencyKey: opts.idempotencyKey,
           ...(opts.retryOf ? { retryOf: opts.retryOf } : {}),
           ...(opts.attachments.length ? { attachments: opts.attachments.map((a) => a.ref) } : {}),
         },
         onEvent,
         m.current.abort.signal,
       );
+      streamEnded = res.ended;
     } catch (err) {
-      if (!m.current.disposed && !(err instanceof DOMException && err.name === 'AbortError')) {
-        errored = true;
+      if (!(err instanceof DOMException && err.name === 'AbortError')) threw = err;
+    }
+
+    if (m.current.disposed || m.current.currentId !== conversationId) return;
+    for (const msg of m.current.msgs) {
+      if (msg.kind === 'thinking' && msg.streaming) msg.streaming = false;
+    }
+    const aborted = m.current.abort?.signal.aborted ?? false;
+    // A mid-turn drop: the stream carried activity then closed WITHOUT the
+    // terminal `event: end` (or threw a network error). The backend finished the
+    // turn and folded it into the ledger, so catch up rather than fail (#420).
+    const droppedMidTurn = !errored && !aborted && sawActivity && (threw !== null || !streamEnded);
+
+    if (droppedMidTurn) {
+      // Mark the live answer "catching up" and poll the ledger until the turn
+      // settles, then reload to materialize the completed answer.
+      const live = m.current.msgs.find(
+        (msg): msg is Extract<AsstMsg, { kind: 'ai' }> =>
+          msg.kind === 'ai' && msg.streaming === true,
+      );
+      if (live) live.catchingUp = true;
+      else m.current.msgs.push({ kind: 'ai', text: '', streaming: true, catchingUp: true });
+      push();
+      const settled = await catchUpAfterDrop({
+        baselineTurnCount,
+        getStatus: () => conversationStatus(ASSISTANT_APP_ID, conversationId),
+        isCancelled: () => m.current.disposed || m.current.currentId !== conversationId,
+      });
+      if (m.current.disposed || m.current.currentId !== conversationId) return;
+      m.current.busy = false;
+      if (settled) {
+        await reloadTranscript(conversationId);
+      } else {
+        // Give up: drop the catch-up row and offer a one-tap resend (same key).
+        m.current.msgs = m.current.msgs.filter((msg) => !(msg.kind === 'ai' && msg.catchingUp));
         m.current.msgs.push({
           kind: 'ai',
-          text: err instanceof Error ? err.message : String(err),
+          text: "Connection lost and the turn didn't come back. You can resend.",
           error: true,
           failedText: opts.text,
+          idempotencyKey: opts.idempotencyKey,
+          offline: typeof navigator !== 'undefined' && navigator.onLine === false,
           ...(opts.retryOf ? { retryOf: opts.retryOf } : {}),
         });
       }
-    } finally {
-      if (!m.current.disposed && m.current.currentId === conversationId) {
-        for (const msg of m.current.msgs) {
-          if (msg.kind === 'thinking' && msg.streaming) msg.streaming = false;
-        }
-        const live = m.current.msgs.find(
-          (msg): msg is Extract<AsstMsg, { kind: 'ai' }> =>
-            msg.kind === 'ai' && msg.streaming === true,
-        );
-        if (live) live.streaming = false;
-        setBusy(false);
-        push();
-        refreshAssistantThreads?.();
-        // On a clean turn, re-fetch so answers gain turn ids + retry pagers.
-        if (!errored) void reloadTranscript(conversationId);
-      }
+      push();
+      refreshAssistantThreads?.();
+      return;
     }
+
+    const live = m.current.msgs.find(
+      (msg): msg is Extract<AsstMsg, { kind: 'ai' }> => msg.kind === 'ai' && msg.streaming === true,
+    );
+    if (live) live.streaming = false;
+    // A request that never started (threw before any activity) → resend bubble.
+    if (threw !== null && !errored && !aborted) {
+      m.current.msgs.push({
+        kind: 'ai',
+        text: threw instanceof Error ? threw.message : String(threw),
+        error: true,
+        failedText: opts.text,
+        idempotencyKey: opts.idempotencyKey,
+        offline: typeof navigator !== 'undefined' && navigator.onLine === false,
+        ...(opts.retryOf ? { retryOf: opts.retryOf } : {}),
+      });
+      errored = true;
+    }
+    setBusy(false);
+    push();
+    refreshAssistantThreads?.();
+    // On a clean turn, re-fetch so answers gain turn ids + retry pagers.
+    if (!errored && !aborted) void reloadTranscript(conversationId);
   };
 
   const submit = async (textArg?: string): Promise<void> => {
@@ -424,7 +497,13 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
       }
     }
     m.current.pendingAttachments = m.current.pendingAttachments.filter((a) => a.state !== 'ready');
-    await runTurn({ text, attachments: ready, appendUser: true });
+    // Fresh idempotency key per user send (issue #420) — reused only on resend.
+    await runTurn({
+      text,
+      attachments: ready,
+      appendUser: true,
+      idempotencyKey: crypto.randomUUID(),
+    });
   };
 
   // Regenerate: re-run the most recent user message as a retry of the last
@@ -455,13 +534,15 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     }
     if (!userText) return;
     // Trim from the first tool/answer row after the user message so the retry
-    // stream replaces just this turn's output.
+    // stream replaces just this turn's output. Regenerate is a deliberate NEW
+    // attempt, so it gets a fresh idempotency key (issue #420).
     void runTurn({
       text: userText,
       attachments: [],
       retryOf,
       appendUser: false,
       removeFromIndex: answerIdx,
+      idempotencyKey: crypto.randomUUID(),
     });
   };
 
@@ -469,9 +550,13 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     if (m.current.busy) return;
     const msg = m.current.msgs[messageIndex];
     if (!msg || msg.kind !== 'ai' || !msg.error || msg.failedText === undefined) return;
+    // One-tap resend REUSES the failed send's idempotency key (issue #420) so a
+    // turn that actually completed server-side replays instead of double-running;
+    // a legacy bubble with no key falls back to a fresh one.
     void runTurn({
       text: msg.failedText,
       attachments: [],
+      idempotencyKey: msg.idempotencyKey ?? crypto.randomUUID(),
       ...(msg.retryOf ? { retryOf: msg.retryOf } : {}),
       appendUser: false,
       removeFromIndex: messageIndex,

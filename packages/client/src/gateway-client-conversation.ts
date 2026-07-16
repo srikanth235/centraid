@@ -30,6 +30,7 @@ import {
   conversationsPath,
   conversationPath,
   conversationSearchPath,
+  conversationStatusPath,
   blobsPath,
 } from '@centraid/blueprints/kit/conversation-client.js';
 
@@ -110,6 +111,82 @@ export interface StreamTurnInput {
   /** Regenerate: the turn id this turn re-runs (issue #420). Recorded as
    *  `turns.retry_of` so the transcript collapses it into a sibling pager. */
   retryOf?: string;
+  /**
+   * Idempotency key (issue #420). A fresh UUID per user send, REUSED on every
+   * automatic/one-tap resend of the same message — so a retry-after-network-blip
+   * replays the already-recorded turn instead of double-running it.
+   */
+  idempotencyKey?: string;
+}
+
+/** Result of a driven turn: whether the stream ended cleanly server-side. */
+export interface StreamTurnResult {
+  /** True when the terminal `event: end` arrived; false on a mid-turn drop. */
+  ended: boolean;
+}
+
+/** Bounded auto-retries on a `429` turn-busy before surfacing the error. */
+const TURN_BUSY_MAX_RETRIES = 4;
+
+/** Sleep helper for the bounded 429 backoff. */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * POST a `_turn` body, transparently auto-retrying a `429` turn-busy up to
+ * `TURN_BUSY_MAX_RETRIES` times honoring `Retry-After` (issue #420). Because the
+ * body carries a stable `idempotencyKey`, a retry can only ever replay — never
+ * double-run. Returns the OK streaming `Response`; throws `GatewayClientError`
+ * on a non-429 failure or once retries are exhausted.
+ */
+async function postTurnWithRetry(
+  path: string,
+  body: string,
+  signal: AbortSignal,
+  errLabel: string,
+): Promise<Response> {
+  const { baseUrl, token } = await auth();
+  for (let attempt = 0; ; attempt++) {
+    const res = await doFetch(baseUrl, path, {
+      method: 'POST',
+      headers: authHeaders(token, 'application/json'),
+      body,
+      signal,
+    });
+    if (res.status === 429 && attempt < TURN_BUSY_MAX_RETRIES) {
+      const retryAfter = Number(res.headers.get('retry-after'));
+      const waitMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 3000;
+      await res.body?.cancel().catch(() => undefined);
+      await delay(waitMs);
+      continue;
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      if (res.status === 401 || res.status === 403) {
+        throw new GatewayClientError(
+          'auth_required',
+          `${errLabel}: gateway rejected request (HTTP ${res.status}).`,
+        );
+      }
+      if (res.status === 429) {
+        throw new GatewayClientError(
+          'gateway_error',
+          `${errLabel}: still busy after ${TURN_BUSY_MAX_RETRIES} retries — try again shortly.`,
+        );
+      }
+      throw new GatewayClientError(
+        'gateway_error',
+        `${errLabel} failed (HTTP ${res.status}): ${text || res.statusText}`,
+      );
+    }
+    if (!res.body)
+      throw new GatewayClientError(
+        'gateway_error',
+        `${errLabel}: gateway returned no stream body.`,
+      );
+    return res;
+  }
 }
 
 /**
@@ -148,38 +225,24 @@ export async function streamTurn(
   input: StreamTurnInput,
   onEvent: (event: TurnStreamEvent) => void,
   signal: AbortSignal,
-): Promise<void> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, appTurnPath(appId), {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({
+): Promise<StreamTurnResult> {
+  const res = await postTurnWithRetry(
+    appTurnPath(appId),
+    JSON.stringify({
       conversationId: input.conversationId,
       message: input.message,
       ...(input.register ? { register: input.register } : {}),
       ...(input.model ? { model: input.model } : {}),
       ...(input.thinking ? { thinking: input.thinking } : {}),
       ...(input.retryOf ? { retryOf: input.retryOf } : {}),
+      ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
     }),
     signal,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    if (res.status === 401 || res.status === 403) {
-      throw new GatewayClientError(
-        'auth_required',
-        `chat: gateway rejected request (HTTP ${res.status}).`,
-      );
-    }
-    throw new GatewayClientError(
-      'gateway_error',
-      `chat failed (HTTP ${res.status}): ${text || res.statusText}`,
-    );
-  }
-  if (!res.body)
-    throw new GatewayClientError('gateway_error', 'chat: gateway returned no stream body.');
-  await consumeSse(res.body, onEvent, { signal });
+    'chat',
+  );
+  // `res.body` is guaranteed by postTurnWithRetry.
+  return consumeSse(res.body!, onEvent, { signal });
 }
 
 // ───────────────────────── vault assistant ─────────────────────
@@ -208,31 +271,39 @@ export async function streamAssistantTurn(
   input: StreamTurnInput,
   onEvent: (event: TurnStreamEvent) => void,
   signal: AbortSignal,
-): Promise<void> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, assistantTurnPath(), {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({
+): Promise<StreamTurnResult> {
+  const res = await postTurnWithRetry(
+    assistantTurnPath(),
+    JSON.stringify({
       conversationId: input.conversationId,
       message: input.message,
       ...(input.model ? { model: input.model } : {}),
       ...(input.thinking ? { thinking: input.thinking } : {}),
       ...(input.retryOf ? { retryOf: input.retryOf } : {}),
+      ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
     }),
     signal,
+    'assistant',
+  );
+  return consumeSse(res.body!, onEvent, { signal });
+}
+
+/**
+ * Poll a conversation's turn-settle status (issue #420) — cheap enough to loop
+ * during reconnect catch-up. Returns the current `turnCount` so the caller can
+ * detect a turn landing server-side after a dropped stream.
+ */
+export async function conversationStatus(
+  appId: string,
+  sessionId: string,
+): Promise<{ turnCount: number; updatedAt: number }> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, conversationStatusPath(appId, sessionId), {
+    method: 'GET',
+    headers: authHeaders(token),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new GatewayClientError(
-      res.status === 401 || res.status === 403 ? 'auth_required' : 'gateway_error',
-      `assistant turn failed (HTTP ${res.status}): ${text || res.statusText}`,
-    );
-  }
-  if (!res.body)
-    throw new GatewayClientError('gateway_error', 'assistant: gateway returned no stream body.');
-  await consumeSse(res.body, onEvent, { signal });
+  return readJson(res, 'conversation status');
 }
 
 /** Resolve answer refs (`ref:type/id`) to renderable entity cards. */

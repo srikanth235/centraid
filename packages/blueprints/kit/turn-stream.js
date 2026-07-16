@@ -52,6 +52,23 @@ export function parseFrame(rawFrame) {
 }
 
 /**
+ * True when a raw frame is the gateway's terminal `event: end` frame — the
+ * clean "the server finished this turn" marker (issue #420). Its `data: {}`
+ * carries no `type`, so `parseFrame` returns null for it; catch-up-on-reconnect
+ * needs to tell "stream closed AFTER the server finished" (end seen) from
+ * "connection dropped mid-turn" (end never seen).
+ * @param {string} rawFrame
+ * @returns {boolean}
+ */
+export function isEndFrame(rawFrame) {
+  for (const line of rawFrame.split('\n')) {
+    // `event:end` and `event: end` are both valid — trim one leading space.
+    if (line.slice(0, 6) === 'event:' && line.slice(6).replace(/^ /, '') === 'end') return true;
+  }
+  return false;
+}
+
+/**
  * Parse a whole SSE text blob into events — the pure, stream-free core used by
  * both `consumeSse` and unit tests. Frames are separated by a blank line.
  * @param {string} text
@@ -74,16 +91,23 @@ export function parseSseText(text) {
  * in-flight `reader.read()` rejects on abort, which we swallow so cancel is
  * clean rather than a thrown error.
  *
+ * Returns `{ ended }`: `true` when the terminal `event: end` frame was seen
+ * (the server finished the turn), `false` when the body closed WITHOUT it — the
+ * mid-turn-drop signal the shell uses to trigger catch-up-from-ledger. A thrown
+ * network error (connection reset) also means `ended` never became true, so the
+ * caller's catch block treats a throw the same as a `false` return.
+ *
  * @param {ReadableStream<Uint8Array>} body
  * @param {(event: import('./turn-stream.js').TurnStreamEvent) => void} onEvent
  * @param {{ signal?: AbortSignal }} [opts]
- * @returns {Promise<void>}
+ * @returns {Promise<{ ended: boolean }>}
  */
 export async function consumeSse(body, onEvent, opts = {}) {
   const { signal } = opts;
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buf = '';
+  let ended = false;
   try {
     for (;;) {
       if (signal && signal.aborted) break;
@@ -94,6 +118,7 @@ export async function consumeSse(body, onEvent, opts = {}) {
       while ((sep = buf.indexOf('\n\n')) >= 0) {
         const frame = buf.slice(0, sep);
         buf = buf.slice(sep + 2);
+        if (isEndFrame(frame)) ended = true;
         const evt = parseFrame(frame);
         if (evt) onEvent(evt);
       }
@@ -109,4 +134,5 @@ export async function consumeSse(body, onEvent, opts = {}) {
       /* reader already released */
     }
   }
+  return { ended };
 }

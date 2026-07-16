@@ -12,7 +12,7 @@ Issue #420's suggested phasing, each wave discharged by the named subsection in
 - [x] **Wave 1 — transcript table stakes**
 - [x] **Wave 2 — rendering**
 - [x] **Wave 3 — management & search**
-- [ ] **Wave 4 — resilience**
+- [x] **Wave 4 — resilience**
 - [ ] **Wave 5 — design issues to spin out**
 
 ## What changed
@@ -269,6 +269,87 @@ New Wave 3 tests: FTS search + pin/archive (store + route), auto-title unit
 source, composer mention/slash helpers, starters resolver; the ledger-tables
 snapshot test updated for the FTS plane.
 
+### Wave 4 — resilience & correctness (§6)
+
+All five §6 items.
+
+- **Idempotency enforced at the turn route.** New `turns.idempotency_key`
+  column (v0, no migration) + `idx_turns_idempotency(conversation_id,
+  idempotency_key)` in `packages/app-engine/src/stores/gateway-db.ts`;
+  threaded `Turn.idempotencyKey` through `schema.ts`, `store-sql.ts`
+  (`RawTurn`/`turnFromRaw`/`insertTurn` + a `getTurnByIdempotency` statement),
+  `store.ts` (`InsertTurnInput.idempotencyKey`, `getTurnByIdempotencyKey`),
+  `history.ts` (`RecordTurnInput.idempotencyKey`, `recordTurn` persistence, a
+  new `findRecordedTurn` facade returning a `RecordedTurnReplay`). The shared
+  driver `driveTurnOverSse` (`http/turn-sse.ts`) now, INSIDE the
+  per-conversation lock and BEFORE running, looks up a recorded turn for the
+  key and — if found — replays its recorded answer as a short SSE stream
+  (`http/turn-replay.ts` `buildReplayEvents`: `assistant.start` → `delta` →
+  `usage` → `final`, or a bare `error`) then returns without re-running or
+  re-recording. **In-flight semantics:** chosen = "attach via the lock". A
+  duplicate arriving while the first turn is still running queues behind the
+  SAME per-conversation lock, so by the time it acquires the lock the first has
+  recorded → it replays. No 409, no double-run, and the client consumes a
+  replay identically to a fresh turn (why 409 was rejected: it would force the
+  client to special-case a normal-looking duplicate). The assistant route now
+  also threads `idempotencyKey` (it previously dropped it). Client mints a
+  fresh UUID per user send and REUSES it on resend/retry
+  (`gateway-client-conversation.ts` `StreamTurnInput.idempotencyKey`,
+  `AssistantRoute` submit/regenerate=new key, retryError=reuse; kit `ask` send
+  + 404 re-mint reuse the same key; `useBuilder` per-send key).
+- **Resend-on-failure / flaky-network.** `AssistantRoute.runTurn` reworked: a
+  transport failure that produced NO stream activity surfaces the failed text +
+  a Resend button reusing the same key (safe now); `navigator.onLine === false`
+  adds an "offline" hint (DTO `offline`, styled in `AssistantScreen.module.css`,
+  button label flips to "Resend"). Composer re-enable + failed-text preservation
+  (Wave 1) verified to compose with key reuse. Full replica/outbox integration
+  is OUT of scope (noted below).
+- **Stream resumption / ledger catch-up.** The shared `consumeSse`
+  (`kit/turn-stream.js`) now returns `{ ended }` (true iff the terminal
+  `event: end` was seen) via a new `isEndFrame` helper — the "stream died
+  mid-turn" signal both surfaces read (`turn-stream.d.ts` updated). New
+  lightweight `GET .../sessions/<id>/status` route (`conversation-routes.ts`,
+  matched before the generic `sessions/<id>`) returns `{turnCount, updatedAt}`;
+  client `conversationStatus` + `conversationStatusPath`. On a mid-turn drop the
+  shell marks the answer "Connection lost — catching up…", polls the status via
+  `assistantCatchUp.ts` `catchUpAfterDrop` until `turnCount` climbs past the
+  pre-send baseline (or a 30s timeout), then `reloadConversation` materializes
+  the completed answer; on timeout it falls back to the resend bubble. Kit keeps
+  simpler behavior (no catch-up loop) — the shared signal is exposed for it.
+- **Rate limiting / backpressure.** New `http/turn-limiter.ts` `TurnLimiter`
+  (default max 4 concurrent running turns, `TURN_RETRY_AFTER_SECONDS = 3`,
+  mirrors `SseSubscriberCap`) + `writeTurnBusy` (429 + `Retry-After`). One
+  limiter per vault id, resolved from the ambient vault in `build-gateway.ts`
+  and shared by BOTH the per-app `_turn` route (via `Runtime.turnLimiter` →
+  `TurnRouteContext.turnLimiter`) and the assistant route
+  (`AssistantRouteOptions.limiter`). `driveTurnOverSse` acquires a slot before
+  opening the stream (429 if saturated) and releases it when the stream ends.
+  The Wave-3 auto-titler yields: `generateAssistantTitle` skips generation when
+  `turnLimiterForCurrentVault().atCapacity()`. Client auto-retries a 429 up to
+  4× honoring `Retry-After` (`postTurnWithRetry` in
+  `gateway-client-conversation.ts`); the reused idempotency key makes each retry
+  replay-safe. Kit shows a "vault is busy" nudge on 429.
+- **PDF-attachment notice on Codex.** New `notice` event on the wire union
+  (`conversation/runner.ts` + `kit/turn-stream.d.ts`:
+  `{type:'notice'; level:'warn'|'info'; code?; message}`), folded as a
+  pass-through in the `turn-sse` accumulator. Server-side seam: the codex
+  backend (`backends/codex/backend.ts`) detects dropped PDFs via a new pure
+  `codexUnsupportedPdfs` (`multimodal.ts`) and emits a `notice`
+  (`code:'attachment_unsupported'`) before `turn/start`, so both surfaces get it
+  through the shared parser. Shell renders a `notice` transcript row
+  (`AssistantMessage.tsx` + `AsstMsg`/DTO `notice` kind); kit renders it as a
+  plain assistant line.
+
+New Wave 4 tests: idempotency replay + in-flight dedup + errored-turn replay +
+limiter 429/slot-release (`http/turn-routes.test.ts`), `buildReplayEvents` +
+`TurnLimiter` units (`http/turn-replay.test.ts`), `findRecordedTurn`
+(`conversation/history.test.ts`), `consumeSse` ended/drop signal + `isEndFrame`
+(`blueprints/src/turn-stream.test.ts`), `conversationStatusPath`
+(`blueprints/src/conversation-client.test.ts`), `codexUnsupportedPdfs`
+(`agent-runtime/src/multimodal.test.ts`), `catchUpAfterDrop`
+(`assistantCatchUp.test.ts`), client key-threading + 429 auto-retry
+(`gateway-client-conversation.test.ts`).
+
 ## Out of scope
 
 - Backend/runner changes — `makeAssistantConversationRunner`, tools, prompt
@@ -278,6 +359,13 @@ snapshot test updated for the FTS plane.
 - Wave 5 topics (context-window management, cross-conversation memory, full
   edit/branching UX, mobile/PWA assistant layout, subagent items) — spun out
   as separate design issues per the umbrella's phasing.
+- Wave 4: full replica/outbox integration on the turn path (the client's
+  `packages/client/src/replica/` outbox) — the issue's "at minimum" is
+  keep-the-message + one-tap resend + reused idempotency key, which is what
+  landed. True resumable SSE is likewise out — catch-up-from-ledger (poll +
+  transcript reload) is the chosen substitute per the issue. The kit keeps the
+  simpler resilience surface (no catch-up loop / no auto-429-retry); the shared
+  `consumeSse` `{ended}` signal is exposed so it can adopt them later.
 - Voice input (noted in the issue as future, not v0).
 - Math rendering — deferred: KaTeX/MathJax is infeasible under the kit's
   dependency-free constraint and a hand-rolled TeX subset was judged not worth

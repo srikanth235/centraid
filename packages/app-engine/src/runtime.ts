@@ -25,6 +25,7 @@ import type { ConversationHistoryStore } from './conversation/history.js';
 import { readAppSettings } from './settings/app-settings.js';
 import { buildSettingsInject } from './settings/settings-merge.js';
 import { handleTurnRoute, parseTurnSubRoute, type AskModelPrefs } from './http/turn-routes.js';
+import type { TurnLimiter } from './http/turn-limiter.js';
 import type { ConversationRunner } from './conversation/runner.js';
 import type { VaultBridge } from './handlers/vault-bridge.js';
 import type { AppRef, RegistryEntry } from './types.js';
@@ -149,6 +150,12 @@ export interface RuntimeOptions {
    * picker and the actual turn always agree. Without it those routes 503.
    */
   askModel?: AskModelPrefs;
+  /**
+   * Optional per-vault turn-concurrency gate (issue #420). Resolved per request
+   * so it bounds running turns per ambient vault. Wired by the gateway; absent
+   * in embedded/hermetic hosts → unbounded.
+   */
+  turnLimiter?: () => TurnLimiter | undefined;
 }
 
 /** Provider-agnostic capability tier a model is classified into. */
@@ -273,6 +280,8 @@ export class Runtime {
   readonly runnerStatus?: (opts?: RunnerStatusOptions) => Promise<RunnerStatus>;
   /** Optional ask-model picker backing. See `RuntimeOptions.askModel`. */
   readonly askModel?: AskModelPrefs;
+  /** Optional per-vault turn-concurrency gate. See `RuntimeOptions.turnLimiter`. */
+  private readonly turnLimiter?: () => TurnLimiter | undefined;
   private readonly appsDirProvider: () => string;
   private readonly sessionDirProvider: () => string;
   /**
@@ -315,6 +324,7 @@ export class Runtime {
     this.appMeta = opts.appMeta;
     this.runnerStatus = opts.runnerStatus;
     this.askModel = opts.askModel;
+    if (opts.turnLimiter) this.turnLimiter = opts.turnLimiter;
     if (opts.codeDirOverride) this.codeDirOverride = opts.codeDirOverride;
     if (opts.draftCodeDir) this.draftCodeDir = opts.draftCodeDir;
     this.dispatcher = new Dispatcher({
@@ -399,6 +409,7 @@ export class Runtime {
       appMeta: this.appMeta,
       conversationLocks: this.conversationLocks,
       ...(this.askModel ? { askModel: this.askModel } : {}),
+      ...(this.turnLimiter ? { turnLimiter: this.turnLimiter } : {}),
     };
   }
 

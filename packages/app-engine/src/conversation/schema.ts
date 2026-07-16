@@ -102,6 +102,12 @@ export interface Turn {
   readonly note?: string;
   /** When this turn is a retry, the turn id it re-runs. */
   readonly retryOf?: string;
+  /**
+   * Client-supplied idempotency key (issue #420). A duplicate turn POST with
+   * the same key on the same conversation replays this recorded turn rather
+   * than re-running. Absent on automation turns and pre-#420 rows.
+   */
+  readonly idempotencyKey?: string;
   readonly startedAt: number;
   readonly endedAt?: number;
   readonly ok: boolean;

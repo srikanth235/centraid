@@ -229,6 +229,39 @@
   animation: cd-asst-blink 1s steps(2) infinite;
   vertical-align: text-bottom;
 }
+/* Runner notice row (issue #420, Wave 6) — e.g. dropped-PDF warning. */
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-sunken);
+  font-size: 12.5px;
+  color: var(--ink-3);
+  align-self: flex-start;
+  max-width: 90%;
+}
+.notice[data-level='warn'] {
+  color: var(--warn, #a06a00);
+}
+/* Offline hint beside a resend button (issue #420, Wave 6). */
+.offlineHint {
+  font-size: 11px;
+  color: var(--warn, #a06a00);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+/* Reconnect catch-up hint (issue #420, Wave 6). */
+.catchUp {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  font-style: italic;
+}
 .tools {
   border: 0.5px solid var(--line);
   border-radius: 10px;

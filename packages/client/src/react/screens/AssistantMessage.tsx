@@ -178,8 +178,13 @@ function AiActions({
           aria-label="Retry"
           onClick={() => cb.onRetryError(index)}
         >
-          <Icon name="Refresh" size={13} /> Retry
+          <Icon name="Refresh" size={13} /> {m.offline ? 'Resend' : 'Retry'}
         </button>
+        {m.offline ? (
+          <span className={styles.offlineHint} title="Your device appears to be offline">
+            offline
+          </span>
+        ) : null}
       </div>
     ) : null;
   }
@@ -314,7 +319,28 @@ export default function Message({
   }
   if (m.kind === 'tools') return <ToolsMsg label={m.label} calls={m.calls} />;
   if (m.kind === 'thinking') return <ThinkingRow text={m.text} streaming={m.streaming} />;
+  if (m.kind === 'notice') {
+    return (
+      <div className={styles.notice} data-level={m.level} role="status">
+        <Icon name={m.level === 'warn' ? 'AlertTriangle' : 'AlertCircle'} size={14} />
+        <span>{m.text}</span>
+      </div>
+    );
+  }
   if (m.streaming) {
+    // Reconnect catch-up (issue #420): the stream dropped mid-turn; we poll the
+    // ledger and reload once the turn settles. Show a quiet "catching up" hint
+    // rather than a hard error while we wait.
+    if (m.catchingUp) {
+      return (
+        <div className={cx(styles.msg, styles.msgAi)}>
+          <div className={styles.catchUp} role="status">
+            <span className={styles.cursor} />
+            <span>Connection lost — catching up…</span>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className={cx(styles.msg, styles.msgAi)}>
         <div className={styles.live}>{m.text}</div>

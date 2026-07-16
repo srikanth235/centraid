@@ -50,6 +50,7 @@ import {
   makeJournalDbProvider,
   makeUserStoreRouteHandler,
   resolveSubsystemModel,
+  TurnLimiter,
   type AskModelInfo,
   type ConversationRunner,
   type ModelSubsystem,
@@ -1632,6 +1633,21 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     return webhookHandlerForVault(targetVaultId)(req, res);
   };
 
+  // Turn backpressure (issue #420, Wave 6): a modest per-vault ceiling on
+  // concurrently-running turns, shared by BOTH the per-app `_turn` route
+  // (via Runtime) and the vault-assistant route. One limiter per vault id so
+  // busy tabs on vault A never starve vault B; the auto-titler yields to it.
+  const turnLimiters = new Map<string, TurnLimiter>();
+  const turnLimiterForCurrentVault = (): TurnLimiter => {
+    const id = vaultRegistry.current().boot.vaultId;
+    let limiter = turnLimiters.get(id);
+    if (!limiter) {
+      limiter = new TurnLimiter();
+      turnLimiters.set(id, limiter);
+    }
+    return limiter;
+  };
+
   // ── The runtime ───────────────────────────────────────────────────────
   // One Runtime for the gateway's lifetime; its apps dir, registry, chat
   // runner, and session scratch all resolve through the request's vault
@@ -1692,6 +1708,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       (await currentVaultHost()).draftCodeDir(appId, sessionId),
     vaultFor: (appId: string) => vaultRegistry.bridgeFor(appId),
     askModel: askModelPrefs,
+    turnLimiter: turnLimiterForCurrentVault,
   });
 
   runtimeRef = runtime;
@@ -1722,6 +1739,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   }): void => {
     void (async () => {
       try {
+        // Yield to interactive turns (issue #420, Wave 6): the titler is a
+        // nice-to-have one-shot, so it skips generation whenever the vault is at
+        // its turn ceiling rather than competing for a slot.
+        if (turnLimiterForCurrentVault().atCapacity()) return;
         const runnerPrefs = await prefsLoader();
         if (!runnerPrefs) return;
         const slot = prefs.getAllPrefs()[`model.${runnerPrefs.kind}.title`];
@@ -1892,6 +1913,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       conversationLocks: new Map(),
       resolveModel,
       generateTitle: generateAssistantTitle,
+      limiter: turnLimiterForCurrentVault,
     }),
     // Scenario seeds (issue #290 phase 1): load/reset an app's demo data.
     // Mounted BEFORE the generic `_vault` handler (same prefix family).

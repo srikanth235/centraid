@@ -29,6 +29,15 @@ export function conversationSearchPath(appId, query, limit) {
   return `${conversationsPath(appId)}/search?${params.toString()}`;
 }
 
+/**
+ * Lightweight turn-settle poll for a session (issue #420). The reconnect
+ * catch-up path GETs this after a mid-stream drop to learn whether the turn
+ * finished server-side (`turnCount` climbed) before reloading the transcript.
+ */
+export function conversationStatusPath(appId, sessionId) {
+  return `${conversationPath(appId, sessionId)}/status`;
+}
+
 /** This app's per-conversation attachment blob CAS (POST uploads). */
 export function blobsPath(appId) {
   return `/_centraid-conversations/apps/${enc(appId ?? '')}/blobs`;

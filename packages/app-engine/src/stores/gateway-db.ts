@@ -142,6 +142,7 @@ export const CONVERSATION_LEDGER_DDL = `
       summary                  TEXT,
       output_json              TEXT,
       retry_of                 TEXT,
+      idempotency_key          TEXT,
       ok                       INTEGER NOT NULL DEFAULT 0,
       error                    TEXT,
       feedback                 TEXT,
@@ -164,6 +165,11 @@ export const CONVERSATION_LEDGER_DDL = `
       ON turns(started_at DESC);
     CREATE INDEX IF NOT EXISTS idx_turns_parent
       ON turns(parent_turn_id);
+    -- Idempotency lookup (issue #420, Wave 6): a duplicate turn POST with the
+    -- same key on the same conversation resolves to the already-recorded turn
+    -- instead of re-running. Not UNIQUE — automations/legacy rows leave it NULL.
+    CREATE INDEX IF NOT EXISTS idx_turns_idempotency
+      ON turns(conversation_id, idempotency_key);
 
     CREATE TABLE IF NOT EXISTS items (
       id                 TEXT PRIMARY KEY,

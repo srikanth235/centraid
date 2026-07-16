@@ -98,6 +98,20 @@ export interface ConversationTurnUsage {
   model?: string;
 }
 
+/**
+ * The replayable result of an already-recorded turn, keyed by idempotency key
+ * (issue #420). A duplicate turn POST streams this straight from the ledger.
+ */
+export interface RecordedTurnReplay {
+  turnId: string;
+  ok: boolean;
+  /** The recorded final answer text (absent when the turn errored). */
+  finalText?: string;
+  /** The recorded error message (present when `ok` is false). */
+  error?: string;
+  usage?: ConversationTurnUsage;
+}
+
 /** A file already landed in the blob CAS, to attach to a turn's inbound message. */
 export interface ConversationTurnAttachment {
   hash: string;
@@ -157,6 +171,11 @@ export interface RecordTurnInput {
    * sibling pager (ChatGPT-style "<2/2>", issue #420).
    */
   retryOf?: string;
+  /**
+   * Client-supplied idempotency key (issue #420). Persisted on the turn so a
+   * duplicate POST with the same key replays this recorded turn.
+   */
+  idempotencyKey?: string;
   /** Files that rode in on this turn's inbound message (already in the CAS). */
   attachments?: ConversationTurnAttachment[];
   startedAt: number;
@@ -483,6 +502,7 @@ export class ConversationHistoryStore {
         triggerKind: 'interactive',
         startedAt: input.startedAt,
         ...(input.retryOf !== undefined ? { retryOf: input.retryOf } : {}),
+        ...(input.idempotencyKey !== undefined ? { idempotencyKey: input.idempotencyKey } : {}),
       });
       const messageItemId = store.insertMessageIn({
         turnId,
@@ -519,6 +539,39 @@ export class ConversationHistoryStore {
       }
     });
     return { turnId };
+  }
+
+  /**
+   * Look up an already-recorded turn by its client idempotency key (issue #420).
+   * Returns the replayable answer (final text or error + usage) so the turn
+   * route can stream a duplicate POST's result straight from the ledger instead
+   * of re-running the model. Undefined when no turn with that key exists on the
+   * conversation, or the conversation isn't owned by `appId`.
+   */
+  findRecordedTurn(
+    appId: string,
+    conversationId: string,
+    idempotencyKey: string,
+  ): RecordedTurnReplay | undefined {
+    const { store } = this.appConversation(appId);
+    if (!this.ownedMeta(appId, conversationId)) return undefined;
+    const turn = store.getTurnByIdempotencyKey(conversationId, idempotencyKey);
+    if (!turn) return undefined;
+    const parsed = parseStepOutput(turn.outputJson);
+    const step = store.listItems(turn.turnId).findLast((it) => it.kind === 'step');
+    const usage: ConversationTurnUsage = {
+      ...(turn.totalInputTokens !== undefined ? { inputTokens: turn.totalInputTokens } : {}),
+      ...(turn.totalOutputTokens !== undefined ? { outputTokens: turn.totalOutputTokens } : {}),
+      ...(turn.totalCostUsd !== undefined ? { costUsd: turn.totalCostUsd } : {}),
+      ...(step?.model ? { model: step.model } : {}),
+    };
+    return {
+      turnId: turn.turnId,
+      ok: turn.ok,
+      ...(parsed.text ? { finalText: parsed.text } : {}),
+      ...(turn.error !== undefined ? { error: turn.error } : {}),
+      ...(Object.keys(usage).length > 0 ? { usage } : {}),
+    };
   }
 
   /** Bump turn_count + persist the runner-resume handle. */

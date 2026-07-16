@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
 
 const PKG = path.resolve(import.meta.dirname, '..');
 const url = pathToFileURL(path.resolve(PKG, 'kit/turn-stream.js')).href;
-const { frameData, parseFrame, parseSseText, consumeSse } = await import(url);
+const { frameData, parseFrame, parseSseText, consumeSse, isEndFrame } = await import(url);
 
 // A gateway SSE frame carries both `event: <type>` and a JSON body with `type`.
 const frame = (evt: unknown) =>
@@ -71,19 +71,44 @@ describe('consumeSse', () => {
     // Split mid-frame to prove the internal buffer stitches partial frames.
     const mid = Math.floor(full.length / 2);
     const events: Array<{ type: string }> = [];
-    await consumeSse(streamOf([full.slice(0, mid), full.slice(mid)]), (e) => events.push(e));
+    const res = await consumeSse(streamOf([full.slice(0, mid), full.slice(mid)]), (e) =>
+      events.push(e),
+    );
     expect(events.map((e) => e.type)).toEqual(['assistant.delta', 'assistant.delta', 'final']);
     expect(events[2]).toEqual({ type: 'final', text: 'Hello' });
+    // The terminal `event: end` frame was seen → the turn finished cleanly.
+    expect(res.ended).toBe(true);
   });
 
-  it('stops cleanly on an aborted signal without throwing', async () => {
+  it('reports ended:false when the body closes WITHOUT the end frame (mid-turn drop) (#420)', async () => {
+    const events: Array<{ type: string }> = [];
+    // A stream that carries a delta then just stops — no `final`, no `end`.
+    const res = await consumeSse(
+      streamOf([frame({ type: 'assistant.delta', delta: 'partial' }) + '\n\n']),
+      (e) => events.push(e),
+    );
+    expect(events.map((e) => e.type)).toEqual(['assistant.delta']);
+    expect(res.ended).toBe(false);
+  });
+
+  it('stops cleanly on an aborted signal, reporting ended:false (#420)', async () => {
     const controller = new AbortController();
     controller.abort();
     const events: unknown[] = [];
-    await expect(
-      consumeSse(streamOf([frame({ type: 'final', text: 'x' }) + '\n\n']), (e) => events.push(e), {
-        signal: controller.signal,
-      }),
-    ).resolves.toBeUndefined();
+    const res = await consumeSse(
+      streamOf([frame({ type: 'final', text: 'x' }) + '\n\n']),
+      (e) => events.push(e),
+      { signal: controller.signal },
+    );
+    expect(res.ended).toBe(false);
+  });
+});
+
+describe('isEndFrame', () => {
+  it('detects the terminal end frame, tolerating "event:end" and "event: end"', () => {
+    expect(isEndFrame('event: end\ndata: {}')).toBe(true);
+    expect(isEndFrame('event:end\ndata: {}')).toBe(true);
+    expect(isEndFrame(frame({ type: 'final', text: 'x' }))).toBe(false);
+    expect(isEndFrame(': ping')).toBe(false);
   });
 });

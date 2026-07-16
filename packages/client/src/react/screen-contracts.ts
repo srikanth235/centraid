@@ -850,7 +850,10 @@ export type AsstMsgDTO =
   /** A live streaming reasoning/thinking row (issue #420, Wave 2). Live-only —
    *  reasoning is not persisted in the ledger, so it never comes back on reload. */
   | { kind: 'thinking'; text: string; streaming: boolean }
-  | { kind: 'ai'; streaming: true; text: string }
+  /** A non-fatal runner notice (issue #420) — e.g. "this model can't read PDF
+   *  attachments". Live-only; not persisted, so it never replays on reload. */
+  | { kind: 'notice'; level: 'warn' | 'info'; text: string }
+  | { kind: 'ai'; streaming: true; text: string; catchingUp?: boolean }
   | {
       kind: 'ai';
       streaming: false;
@@ -873,6 +876,8 @@ export type AsstMsgDTO =
       canRegenerate?: boolean;
       /** An error bubble whose failed message can be retried (issue #420). */
       canRetry?: boolean;
+      /** The failed send happened while the browser was offline (issue #420). */
+      offline?: boolean;
     };
 /** A file the composer has uploaded (or is uploading) ahead of the next send. */
 export interface AsstPendingAttachmentDTO {

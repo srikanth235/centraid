@@ -7,6 +7,7 @@ import {
   blockFor,
   buildUserContent,
   codexImageItems,
+  codexUnsupportedPdfs,
 } from './multimodal.js';
 
 describe('multimodal blockFor', () => {
@@ -133,5 +134,20 @@ describe('codexImageItems', () => {
       { path: '/b.pdf', mime: 'application/pdf' },
     ]);
     expect(items).toEqual([{ type: 'localImage', path: '/a.png' }]);
+  });
+});
+
+describe('codexUnsupportedPdfs (#420)', () => {
+  it('flags PDF attachments codex would silently drop, carrying their filenames', () => {
+    const dropped = codexUnsupportedPdfs([
+      { path: '/a.png', mime: 'image/png' },
+      { path: '/spec.pdf', mime: 'application/pdf', filename: 'spec.pdf' },
+      { path: '/x.pdf', mime: 'APPLICATION/PDF' },
+    ]);
+    expect(dropped).toEqual([{ filename: 'spec.pdf' }, {}]);
+  });
+
+  it('is empty when there are no PDF attachments', () => {
+    expect(codexUnsupportedPdfs([{ path: '/a.png', mime: 'image/png' }])).toEqual([]);
   });
 });

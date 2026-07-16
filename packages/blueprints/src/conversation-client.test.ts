@@ -13,6 +13,7 @@ const url = pathToFileURL(path.resolve(PKG, 'kit/conversation-client.js')).href;
 const {
   conversationsPath,
   conversationPath,
+  conversationStatusPath,
   blobsPath,
   appTurnPath,
   appModelPath,
@@ -42,6 +43,10 @@ describe('route builders', () => {
     expect(parkedDecisionPath('inv 1')).toBe('/centraid/_vault/parked/inv%201');
     expect(vaultStatusPath()).toBe('/centraid/_vault/status');
     expect(vaultAppsPath()).toBe('/centraid/_vault/apps');
+    // Turn-settle poll for reconnect catch-up (#420).
+    expect(conversationStatusPath('todo', 'abc')).toBe(
+      '/_centraid-conversations/apps/todo/sessions/abc/status',
+    );
   });
 
   it('treats a null/empty app id as an empty segment (bare preview)', () => {

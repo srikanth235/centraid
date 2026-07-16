@@ -394,6 +394,9 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
             {
               conversationId: sessionId,
               message: text,
+              // Fresh idempotency key per builder send (issue #420) — a re-POST
+              // after a network blip replays instead of double-running.
+              idempotencyKey: crypto.randomUUID(),
               ...(attachments?.length ? { attachments } : {}),
             },
             handleStreamEvent,

@@ -1906,6 +1906,12 @@ export function wireThemeToggle(btn, { onChange } = {}) {
       var stream = null; // the streaming assistant bubble element
       var streamText = ''; // accumulated raw answer text
       var finalized = false;
+      // One idempotency key per user send (issue #420), REUSED on the 404
+      // re-mint retry below so a duplicate turn replays instead of re-running.
+      var idempotencyKey =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : 'k-' + Date.now() + '-' + Math.random().toString(16).slice(2);
       function say(t) {
         typing.done();
         return api.ai(esc(t));
@@ -1951,6 +1957,11 @@ export function wireThemeToggle(btn, { onChange } = {}) {
           case 'final':
             finalizeRich(ev.text);
             return;
+          case 'notice':
+            // Non-fatal runner notice (issue #420), e.g. "can't read PDFs".
+            typing.done();
+            api.ai(esc(ev.message || 'Notice'));
+            return;
           case 'error':
             say('The agent hit an error: ' + (ev.message || 'unknown'));
             return;
@@ -1970,7 +1981,12 @@ export function wireThemeToggle(btn, { onChange } = {}) {
        * `consumeSse` (#420), which also honors `signal` for clean cancel.
        */
       function runTurn(id, isRetry) {
-        var body = { conversationId: id, message: text, register: 'ask' };
+        var body = {
+          conversationId: id,
+          message: text,
+          register: 'ask',
+          idempotencyKey: idempotencyKey,
+        };
         if (attachments && attachments.length) body.attachments = attachments;
         return fetch(appBase() + '_turn', {
           method: 'POST',
@@ -1990,7 +2006,11 @@ export function wireThemeToggle(btn, { onChange } = {}) {
                   return runTurn(freshId, true);
                 });
               }
-              if (res.status === 503 && j && j.error === 'no_conversation_runner') {
+              if (res.status === 429) {
+                // Turn backpressure (issue #420): the vault is busy. The React
+                // shell auto-retries; the kit keeps it simple with a nudge.
+                say('The vault is busy running other turns — try again in a moment.');
+              } else if (res.status === 503 && j && j.error === 'no_conversation_runner') {
                 say(
                   'No coding agent is configured to answer yet — open Settings → Agents, pick one, and ask again.',
                 );

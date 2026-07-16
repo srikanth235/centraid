@@ -37,7 +37,7 @@ import type { Readable, Writable } from 'node:stream';
 import type { TurnStreamEvent, TurnAttachment } from '@centraid/app-engine';
 import type { ToolContext } from '../../runtime.js';
 import { centraidDynamicToolSpecs, handleCentraidToolCall } from './host-tools.js';
-import { codexImageItems } from '../../multimodal.js';
+import { codexImageItems, codexUnsupportedPdfs } from '../../multimodal.js';
 import { agentSpawnEnv } from '../../spawn-env.js';
 
 export interface CodexTurnInput {
@@ -430,6 +430,20 @@ export async function runCodexTurn(
     }
 
     const completion = waitForTurnCompleted(input.abortSignal);
+
+    // PDF attachments get no codex input item (issue #420): surface a visible
+    // notice rather than dropping them silently, so the user can switch models
+    // or paste the text. Claude's backend renders these as `document` blocks.
+    const droppedPdfs = input.attachments?.length ? codexUnsupportedPdfs(input.attachments) : [];
+    if (droppedPdfs.length > 0) {
+      const names = droppedPdfs.map((a) => a.filename ?? 'a PDF').join(', ');
+      emit({
+        type: 'notice',
+        level: 'warn',
+        code: 'attachment_unsupported',
+        message: `This model can't read PDF attachments (${names}). Switch to a model that supports documents, or paste the text.`,
+      });
+    }
 
     await request('turn/start', {
       threadId,

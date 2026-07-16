@@ -83,6 +83,8 @@ export interface InsertTurnInput {
   readonly triggerOrigin?: AutomationTriggerOrigin;
   readonly parentTurnId?: string;
   readonly retryOf?: string;
+  /** Client-supplied idempotency key (issue #420). */
+  readonly idempotencyKey?: string;
   readonly note?: string;
   readonly startedAt: number;
 }
@@ -455,9 +457,23 @@ export class ConversationStore {
       input.triggerKind,
       input.triggerOrigin ?? null,
       input.retryOf ?? null,
+      input.idempotencyKey ?? null,
       input.note ?? null,
       input.startedAt,
     );
+  }
+
+  /**
+   * The most recent recorded turn on `conversationId` that carries
+   * `idempotencyKey`, or undefined (issue #420). Backs replay-on-duplicate at
+   * the turn route — a re-POST with the same key never re-runs the model.
+   */
+  getTurnByIdempotencyKey(conversationId: string, idempotencyKey: string): Turn | undefined {
+    const { stmts } = this.ensureReady();
+    const raw = stmts.getTurnByIdempotency.get(conversationId, idempotencyKey) as
+      | RawTurn
+      | undefined;
+    return raw ? turnFromRaw(raw) : undefined;
   }
 
   finishTurn(input: FinishTurnInput): void {

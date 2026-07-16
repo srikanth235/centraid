@@ -24,6 +24,8 @@ import type {
   TurnStreamEvent,
 } from '../conversation/runner.js';
 import type { ConversationHistoryStore, TurnNode } from '../conversation/history.js';
+import { buildReplayEvents } from './turn-replay.js';
+import { writeTurnBusy, type TurnLimiter } from './turn-limiter.js';
 
 /** A file uploaded to the blob CAS before the turn, referenced by its hash. */
 export interface TurnAttachmentRef {
@@ -128,6 +130,13 @@ export interface DriveTurnOptions {
   model?: string | undefined;
   thinking?: string | undefined;
   idempotencyKey?: string | undefined;
+  /**
+   * Modest per-vault turn-concurrency gate (issue #420). When set and already
+   * at capacity, the driver writes a `429` + `Retry-After` and never opens the
+   * SSE stream. The slot is held for the whole drive and released when the
+   * stream ends. Absent in hermetic tests → unbounded (the old behavior).
+   */
+  limiter?: TurnLimiter | undefined;
   /** When set, this turn is a regenerate of the given turn id — recorded as
    *  `turns.retry_of` so the transcript collapses it into a sibling pager
    *  (issue #420). */
@@ -159,6 +168,25 @@ export interface DriveTurnOptions {
  * here, always).
  */
 export async function driveTurnOverSse(opts: DriveTurnOptions): Promise<void> {
+  const { res } = opts;
+
+  // Backpressure (issue #420): a modest per-vault ceiling on running turns.
+  // Beyond it, 429 + Retry-After BEFORE any SSE header — the client retries
+  // (with the same idempotency key, so a retry can only ever replay). The slot
+  // is held for the whole drive and released in the finally below.
+  const releaseSlot = opts.limiter?.tryAcquire();
+  if (opts.limiter && !releaseSlot) {
+    writeTurnBusy(res);
+    return;
+  }
+  try {
+    await driveTurnInner(opts);
+  } finally {
+    releaseSlot?.();
+  }
+}
+
+async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
   const { req, res, appId, conversationId, message, runner, conversationStore } = opts;
 
   // Start the SSE stream up-front so the harness sees `connected` even if
@@ -264,6 +292,7 @@ export async function driveTurnOverSse(opts: DriveTurnOptions): Promise<void> {
       case 'reasoning.delta':
       case 'phase':
       case 'aborted':
+      case 'notice':
       case 'webhooks':
         break;
     }
@@ -304,6 +333,31 @@ export async function driveTurnOverSse(opts: DriveTurnOptions): Promise<void> {
   };
 
   await withConversationLock(opts.conversationLocks, appId, conversationId, async () => {
+    // Idempotency (issue #420): a duplicate POST with a key that already names a
+    // recorded turn on this conversation replays the recorded answer instead of
+    // re-running the model. The per-conversation lock makes the in-flight case
+    // fall out for free — a duplicate that arrives while the first turn is still
+    // running QUEUES behind this same lock, so by the time it acquires the lock
+    // the first turn has recorded and this branch replays it (no 409 needed, no
+    // double-run). Replay skips the runner AND recordTurn, so no duplicate row.
+    if (opts.idempotencyKey && conversationStore) {
+      const recorded = conversationStore.findRecordedTurn(
+        appId,
+        conversationId,
+        opts.idempotencyKey,
+      );
+      if (recorded) {
+        for (const ev of buildReplayEvents(recorded)) writeEvent(ev);
+        clearInterval(heartbeat);
+        req.off('close', onClientClose);
+        req.off('error', onClientClose);
+        if (!res.writableEnded) {
+          res.write(`event: end\ndata: {}\n\n`);
+          res.end();
+        }
+        return;
+      }
+    }
     let runResult: { adapterSessionId?: string; adapterKind?: string } | undefined;
     try {
       const out = await runner.run(input);
@@ -357,6 +411,7 @@ export async function driveTurnOverSse(opts: DriveTurnOptions): Promise<void> {
             // runner so an errored turn (no `ConversationTurnResult`) is still tagged.
             ...(runner.runKind ? { kind: runner.runKind } : {}),
             ...(opts.retryOf !== undefined ? { retryOf: opts.retryOf } : {}),
+            ...(opts.idempotencyKey !== undefined ? { idempotencyKey: opts.idempotencyKey } : {}),
             userMessage: message,
             ...(opts.attachmentRefs?.length
               ? {

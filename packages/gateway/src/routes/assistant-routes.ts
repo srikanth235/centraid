@@ -28,6 +28,7 @@ import {
   type ConversationRunner,
   type ModelSubsystem,
   type TurnAttachmentRef,
+  type TurnLimiter,
 } from '@centraid/app-engine';
 import type { RouteHandler } from '../serve/build-gateway.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
@@ -62,6 +63,12 @@ export interface AssistantRouteOptions {
     userMessage: string;
     assistantText: string;
   }) => void;
+  /**
+   * Per-vault turn-concurrency gate (issue #420). Resolved per request so it
+   * bounds running turns per ambient vault, shared with the per-app `_turn`
+   * route. Optional so hermetic tests omit it (unbounded).
+   */
+  limiter?: () => TurnLimiter | undefined;
 }
 
 export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHandler {
@@ -134,9 +141,11 @@ export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHan
           appId: ASSISTANT_APP_ID,
           conversationId,
           message,
+          idempotencyKey: typeof body.idempotencyKey === 'string' ? body.idempotencyKey : undefined,
           dataDir: assistantCwd(opts.vaults),
           extraSystemPrompt,
           runner: opts.runner,
+          ...(opts.limiter ? { limiter: opts.limiter() } : {}),
           conversationStore: opts.conversationStore,
           conversationRunnerSessionDir: opts.vaults.currentWorkspace().runnerSessionDir,
           conversationLocks: opts.conversationLocks,

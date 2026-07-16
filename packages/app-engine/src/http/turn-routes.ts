@@ -35,6 +35,7 @@ import {
   resolveTurnAttachments,
   type TurnAttachmentRef,
 } from './turn-sse.js';
+import type { TurnLimiter } from './turn-limiter.js';
 import type { Registry } from '../registry/registry.js';
 import { appDataDir } from '../registry/app-paths.js';
 import type { RegistryEntry } from '../types.js';
@@ -130,6 +131,12 @@ export interface TurnRouteContext {
    * same template and end up with the same id.
    */
   conversationLocks: Map<string, Promise<void>>;
+  /**
+   * Optional per-vault turn-concurrency gate (issue #420). Resolved per request
+   * (the ambient vault decides which limiter), so it bounds running turns per
+   * vault, not per gateway. Absent → unbounded (the pre-#420 behavior).
+   */
+  turnLimiter?: () => TurnLimiter | undefined;
   /**
    * Optional ask-model picker backing (subsystem `ask`). Wired by the
    * gateway from the same prefs-store + model-catalog machinery that
@@ -340,6 +347,7 @@ async function handlePostTurn(
     thinking: body.thinking,
     idempotencyKey: body.idempotencyKey,
     ...(typeof body.retryOf === 'string' && body.retryOf ? { retryOf: body.retryOf } : {}),
+    ...(ctx.turnLimiter ? { limiter: ctx.turnLimiter() } : {}),
     prevAdapterSessionId,
     prevAdapterKind,
     ...(attachmentRefs.length > 0 ? { attachmentRefs } : {}),
