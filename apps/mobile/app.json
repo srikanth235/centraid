@@ -41,7 +41,7 @@
           "photosPermission": "Centraid reads your library to show and back up the albums you choose.",
           "savePhotosPermission": "Centraid saves selected vault photos back to your library.",
           "isAccessMediaLocationEnabled": true,
-          "granularPermissions": ["photo", "video", "audio"]
+          "granularPermissions": ["photo", "video"]
         }
       ],
       [

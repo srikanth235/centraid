@@ -31,7 +31,7 @@ function useDeviceLibrary(): { rows: PhotoAsset[]; loading: boolean; permission:
   const [rows, setRows] = useState<PhotoAsset[]>([]);
   const [loading, setLoading] = useState(true);
   const [permission, requestPermission] = MediaLibrary.usePermissions({
-    granularPermissions: ['photo', 'video', 'audio'],
+    granularPermissions: ['photo', 'video'],
   });
 
   useEffect(() => {

@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useFonts } from 'expo-font';
@@ -261,26 +262,28 @@ export default function App(): React.JSX.Element | null {
   }
 
   return (
-    <SafeAreaProvider>
-      <View style={{ backgroundColor: colors.bg, flex: 1 }} onLayout={onReady}>
-        <ShareIntentProvider options={{ scheme: 'centraid', resetOnBackground: false }}>
-          <ReplicaProvider>
-            <UploadReconciliation />
-            <ShareIntentIngest />
-            <NavigationContainer theme={navThemeFor(scheme)}>
-              <StatusBar style="auto" />
-              <RootStack.Navigator screenOptions={{ headerShown: false }}>
-                <RootStack.Screen name="Tabs" component={Tabs} />
-                <RootStack.Screen
-                  name="MobileFallback"
-                  component={MobileFallbackScreen}
-                  options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
-                />
-              </RootStack.Navigator>
-            </NavigationContainer>
-          </ReplicaProvider>
-        </ShareIntentProvider>
-      </View>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <View style={{ backgroundColor: colors.bg, flex: 1 }} onLayout={onReady}>
+          <ShareIntentProvider options={{ scheme: 'centraid', resetOnBackground: false }}>
+            <ReplicaProvider>
+              <UploadReconciliation />
+              <ShareIntentIngest />
+              <NavigationContainer theme={navThemeFor(scheme)}>
+                <StatusBar style="auto" />
+                <RootStack.Navigator screenOptions={{ headerShown: false }}>
+                  <RootStack.Screen name="Tabs" component={Tabs} />
+                  <RootStack.Screen
+                    name="MobileFallback"
+                    component={MobileFallbackScreen}
+                    options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
+                  />
+                </RootStack.Navigator>
+              </NavigationContainer>
+            </ReplicaProvider>
+          </ShareIntentProvider>
+        </View>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

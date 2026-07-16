@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import com.facebook.react.bridge.Arguments
 import com.facebook.react.HeadlessJsTaskService
 import com.facebook.react.jstasks.HeadlessJsTaskConfig
 
@@ -46,6 +47,6 @@ class UploadForegroundService : HeadlessJsTaskService() {
   }
 
   override fun getTaskConfig(intent: Intent?): HeadlessJsTaskConfig = HeadlessJsTaskConfig(
-    "CentraidUploadDrain", null, 6L * 60L * 60L * 1000L, true
+    "CentraidUploadDrain", Arguments.createMap(), 6L * 60L * 60L * 1000L, true
   )
 }

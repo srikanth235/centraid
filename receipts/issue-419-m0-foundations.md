@@ -80,6 +80,8 @@ Docs receives an additive shape for content, document, SKOS folder concepts/sche
 
 Platform config now generates a real iOS ShareExtension target with the shared app-group entitlement and Android MIME share filters. Android's checked-in service/module/manifest can resume the queue under the six-hour cap. Expo prebuild confirms iOS 17.5 and the extension target. `NATIVE_V0.md` records recurrence, compound-camera, backup/deletion, and platform decisions, while the agent-E2E flow covers all five tabs, restart, network handoff, kill-mid-upload, and soak instructions.
 
+The simulator continuation exercised both native shells rather than stopping at static checks. Metro now resolves the source TypeScript behind workspace-relative `.js` ESM specifiers; React Navigation packages are pinned to one compatible generation; the app root supplies `GestureHandlerRootView`; Android declares the API 33+ image/video permissions; and the headless upload service supplies the non-null task payload required by the current React Native Kotlin API. CocoaPods regenerated the iOS project integration and lockfile. With those runtime-only gaps closed, Centraid built, installed, launched, requested photo access, and rendered populated Photos timelines on Android API 35 and iOS 26.5 simulators.
+
 ### Continuation checklist crosswalk
 
 - **Wire native AES-GCM and SHA through Quick Crypto.** `index.ts` installs Quick Crypto before queue boot and `native-digest.ts` uses its native hash.
@@ -355,8 +357,10 @@ Navigation is now Photos, Apps, and Settings tabs, with the WebView app grid and
 - `apps/mobile/android/app/src/main/java/com/centraid/mobile/upload/UploadForegroundService.kt`
 - `apps/mobile/android/app/src/main/res/drawable/splashscreen_logo.xml`
 - `apps/mobile/app.json`
+- `apps/mobile/metro.config.js`
 - `apps/mobile/index.ts`
 - `apps/mobile/ios/Centraid.xcodeproj/project.pbxproj`
+- `apps/mobile/ios/Podfile.lock`
 - `apps/mobile/ios/Centraid/Centraid.entitlements`
 - `apps/mobile/ios/Centraid/Images.xcassets/AppIcon.appiconset/App-Icon-1024x1024@1x.png`
 - `apps/mobile/ios/Centraid/Images.xcassets/SplashScreenBackground.colorset/Contents.json`
@@ -462,7 +466,7 @@ Navigation is now Photos, Apps, and Settings tabs, with the WebView app grid and
 - Adopting `computer.iroh:iroh` for Android. The published artifact carries no Android natives, so the cargo-ndk step cannot be deleted until n0 ships an AAR.
 - Switching the web shell to windowed bootstrap. The single-shot path carries admission and storage-manifest behavior that deserves its own review, and the row ceiling is a mobile-library problem today.
 - The issue's explicit non-goals remain unchanged: public links/collaborative albums, native editing, push infrastructure, upload leases, BGProcessingTask/UIDT orchestration, device calendar two-way sync, document editing/collaboration, and a native ask panel.
-- On-device simulator/device measurements are not represented as passed. The automated five-tab resilience flow is checked in, but this worktree had no booted simulator/emulator; cold-start, LTE lightbox, multipath walk, OEM kill behavior, and six-hour soak remain release-device QA.
+- Release-device measurements are not represented as passed. Android API 35 and iOS 26.5 simulator smoke runs now cover native build/install/launch, photo permission, timeline rendering, and Android lightbox rendering; LTE lightbox, multipath walk, OEM kill behavior, 50k-device measurement, and the six-hour soak remain release-device QA.
 
 ## Decisions
 
@@ -493,8 +497,11 @@ Continuation verification on 2026-07-16:
 - `bun run --cwd packages/blueprints build:manifest && bun run --cwd packages/blueprints lint && bun run --cwd packages/blueprints typecheck` — generated 24 templates; lint/typecheck passed.
 - `bunx expo config --type public` — resolved iOS 17.5, ShareExtension app group, Android MIME filters, MediaLibrary permissions, and foreground-service permissions.
 - `bunx expo prebuild --platform ios --no-install` — generated and linked the ShareExtension target and entitlements successfully.
-- `./gradlew :app:compileDebugKotlin` — Android resource linking passed after adding the checked-in splash drawable; Kotlin compilation then reached the pre-existing tunnel module and stopped because its separately provisioned `computer.iroh` generated bindings were not present. Excluding that task cannot isolate the app service because Expo autolinking still resolves the module class, so a complete Android compile remains part of release-device provisioning rather than being reported as passed here.
-- `node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs` — harness reached device discovery; execution was blocked because no iOS Simulator or Android emulator was booted. The manual network/kill/soak matrix is recorded beside the flow.
+- `bun run android -- --no-bundler` — after locally generating the documented pinned iroh-ffi 1.0.0 Android bindings, Gradle completed 481 tasks, assembled and installed the debug APK, and opened `com.centraid.mobile/.MainActivity` on the API 35 `Centraid_API_35` emulator. The app requested API 33+ media access, rendered five indexed images in the Photos timeline, and opened the gesture-driven lightbox.
+- `bun run ios -- --no-bundler --device C041CC61-F9E1-4277-A00E-D1535CAA7C3D` — CocoaPods and Xcode completed the first native build with 0 errors / 7 warnings, installed `Centraid.app`, and opened `com.centraid.mobile` on an iPhone 17 running iOS 26.5. After full photo access was granted, the timeline rendered all six seeded simulator photos.
+- Metro development bundles completed on both targets: Android loaded 2,075 modules and iOS loaded 2,074 modules through the workspace-source resolver.
+- `pod install` — regenerated the native Expo/React Native integration and `Podfile.lock`, including MediaLibrary, Gesture Handler, Quick Crypto, op-sqlite, tunnel, and ShareExtension dependencies.
+- `node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs` — the prior device-discovery blocker is retired by the successful simulator smoke runs above; the longer network/kill/soak matrix remains recorded beside the flow for release-device execution.
 
 ```sh
 bun run --cwd packages/tunnel test
@@ -520,7 +527,7 @@ bun run lint:types
 - `bun run typecheck` — 26/26 Turbo tasks passed.
 - `bun run lint:types` — all packages ok.
 - Gateway `src/serve/vault-registry.test.ts` and `src/cli/admin.test.ts` time out only under full parallel load and pass in isolation; a clean checkout at `74a596db` fails four different backup tests under the same load, so the suite's parallel flakiness is inherited.
-- Swift `xcodebuild test`, Kotlin `./gradlew test`, op-sqlite on device, and the iOS `pod install` prepare step are not runnable in this environment.
+- Swift `xcodebuild test`, Kotlin `./gradlew test`, op-sqlite behavior on a release device, and the long network/kill/soak matrix were not run in this simulator pass.
 
 ## Audit
 
@@ -560,3 +567,4 @@ bun run lint:types
 | claude-code-80311240-f7e-1784193790-1 | claude-code | 80311240-f7e2-4eec-a3d3-3c75870a9a4e | #419 | claude-opus-4-8 | 10 | 7604 | 1550699 | 4937 | 12551 | 0.9463 | 593 | 962461 | 58071399 | 357466 |  |
 | claude-code-80311240-f7e-1784194698-1 | claude-code | 80311240-f7e2-4eec-a3d3-3c75870a9a4e | #419 | claude-opus-4-8 | 224 | 162564 | 11120918 | 49940 | 212728 | 7.8261 | 817 | 1125025 | 69192317 | 407406 |  |
 | codex-019f6ab8-3b3-1784211462-1 | codex | 019f6ab8-3b3d-7522-aab1-56bd726a3a9b | #419 | gpt-5.6-sol | 2714701 | 0 | 89450240 | 224910 | 2939611 | 32.5230 | 2714701 | 0 | 89450240 | 224910 | feat(mobile): ship native Photos, Docs, and Agenda v0 (#419) -m governance: allo |
+| codex-019f6ab8-3b3-1784219910-1 | codex | 019f6ab8-3b3d-7522-aab1-56bd726a3a9b | #419 | gpt-5.6-sol | 1745383 | 0 | 61581824 | 57169 | 1802552 | 20.6164 | 4460084 | 0 | 151032064 | 282079 | fix(mobile): complete native simulator paths (#419) -m governance: allow-doc-int |
