@@ -164,7 +164,7 @@ describe('SqliteReplicaStore', () => {
           rowMode: 'object',
           returnValue: 'resultRows',
         }),
-      ).toEqual([{ user_version: 3 }]);
+      ).toEqual([{ user_version: 4 }]);
       expect(
         db
           .exec({

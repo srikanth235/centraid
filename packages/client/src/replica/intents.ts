@@ -1,4 +1,10 @@
-import type { IntentRecordStore } from './intent-store.js';
+import {
+  webCryptoDigest,
+  webCryptoIdFactory,
+  type ReplicaDigest,
+  type ReplicaIdFactory,
+} from './digest.js';
+import type { IntentRecordStore } from './intent-record-store.js';
 import { intentPayloadHash } from './payload-hash.js';
 import type {
   EnqueueIntentInput,
@@ -12,22 +18,26 @@ const OVERLAY_STATES = new Set<IntentState>(['queued', 'sending', 'awaiting-chan
 const TERMINAL_OUTCOMES = new Set<IntentOutcome['status']>(['executed', 'denied', 'failed']);
 
 export interface IntentQueueOptions {
-  idFactory?: () => string;
+  idFactory?: ReplicaIdFactory;
+  /** RN Hermes has no `crypto.subtle`; native hosts inject an expo-crypto digest. */
+  digest?: ReplicaDigest;
 }
 
 export class IntentQueue {
-  readonly #idFactory: () => string;
+  readonly #idFactory: ReplicaIdFactory;
+  readonly #digest: ReplicaDigest;
 
   constructor(
     private readonly store: IntentRecordStore,
     options: IntentQueueOptions = {},
   ) {
-    this.#idFactory = options.idFactory ?? (() => crypto.randomUUID());
+    this.#idFactory = options.idFactory ?? webCryptoIdFactory;
+    this.#digest = options.digest ?? webCryptoDigest;
   }
 
   async enqueue(input: EnqueueIntentInput): Promise<ReplicaIntent> {
     const intentId = input.intentId ?? this.#idFactory();
-    const payloadHash = await intentPayloadHash(input);
+    const payloadHash = await intentPayloadHash(input, this.#digest);
     return this.store.add({
       intentId,
       payloadHash,

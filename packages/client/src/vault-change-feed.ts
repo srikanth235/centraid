@@ -1,28 +1,23 @@
 import { auth, authHeaders, doFetch, type GatewayAuth } from './gateway-client-core.js';
+import {
+  consumeVaultChangeSse,
+  INITIAL_VAULT_CURSOR,
+  parseChange,
+  parseCursor,
+  type SseFrame,
+  type VaultChangeCursor,
+  type VaultChangeMessage,
+} from './vault-change-sse.js';
 
-export interface VaultChangeCursor {
-  epoch: string;
-  seq: number;
-}
-
-export interface VaultChangeEntry {
-  cursor: VaultChangeCursor;
-  entity: string;
-  rowId: string;
-  op: 'insert' | 'update' | 'delete';
-  changedAt: string;
-}
-
-export type VaultChangeMessage =
-  | { type: 'centraid:vault-change'; detail: VaultChangeEntry }
-  | { type: 'centraid:vault-cursor'; cursor: VaultChangeCursor }
-  | { type: 'centraid:vault-rebootstrap'; detail: unknown };
-
-export interface SseFrame {
-  event: string;
-  data: string;
-  id?: string;
-}
+export {
+  consumeVaultChangeSse,
+  parseChange,
+  parseCursor,
+  type SseFrame,
+  type VaultChangeCursor,
+  type VaultChangeEntry,
+  type VaultChangeMessage,
+} from './vault-change-sse.js';
 
 type Subscriber = {
   active: boolean;
@@ -33,72 +28,10 @@ type Subscriber = {
 
 const MIN_RECONNECT_MS = 1_000;
 const MAX_RECONNECT_MS = 30_000;
-const INITIAL_CURSOR: VaultChangeCursor = { epoch: '0', seq: 0 };
+const INITIAL_CURSOR: VaultChangeCursor = INITIAL_VAULT_CURSOR;
 const feeds = new Map<string, VaultFeed>();
 const shapeIdsByScope = new Map<string, string[]>();
 const subscribers = new Set<Subscriber>();
-
-function frameBoundary(buffer: string): { index: number; length: number } | undefined {
-  const match = /\r?\n\r?\n/.exec(buffer);
-  return match ? { index: match.index, length: match[0].length } : undefined;
-}
-
-function decodeFrame(raw: string): SseFrame | undefined {
-  let event = 'message';
-  let id: string | undefined;
-  const data: string[] = [];
-  for (const rawLine of raw.split(/\r?\n/)) {
-    if (!rawLine || rawLine.startsWith(':')) continue;
-    const colon = rawLine.indexOf(':');
-    const field = colon < 0 ? rawLine : rawLine.slice(0, colon);
-    let value = colon < 0 ? '' : rawLine.slice(colon + 1);
-    if (value.startsWith(' ')) value = value.slice(1);
-    if (field === 'event') event = value || 'message';
-    else if (field === 'data') data.push(value);
-    else if (field === 'id') id = value;
-  }
-  if (data.length === 0) return undefined;
-  return { event, data: data.join('\n'), ...(id === undefined ? {} : { id }) };
-}
-
-/** Parse a fetch-backed SSE response, including split CRLF and multi-line data frames. */
-export async function consumeVaultChangeSse(
-  body: ReadableStream<Uint8Array>,
-  onFrame: (frame: SseFrame) => void,
-  signal?: AbortSignal,
-): Promise<void> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  const abort = (): void => {
-    void reader.cancel().catch(() => undefined);
-  };
-  signal?.addEventListener('abort', abort, { once: true });
-  try {
-    for (;;) {
-      if (signal?.aborted) return;
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      for (;;) {
-        const boundary = frameBoundary(buffer);
-        if (!boundary) break;
-        const raw = buffer.slice(0, boundary.index);
-        buffer = buffer.slice(boundary.index + boundary.length);
-        const frame = decodeFrame(raw);
-        if (frame) onFrame(frame);
-      }
-    }
-    buffer += decoder.decode();
-    if (!signal?.aborted && buffer.trim()) {
-      const frame = decodeFrame(buffer);
-      if (frame) onFrame(frame);
-    }
-  } finally {
-    signal?.removeEventListener('abort', abort);
-    reader.releaseLock();
-  }
-}
 
 function scopeKey(gatewayAuth: GatewayAuth): string {
   return `${gatewayAuth.gatewayId ?? gatewayAuth.baseUrl}\u0000${gatewayAuth.vaultId ?? '<default>'}`;
@@ -106,23 +39,6 @@ function scopeKey(gatewayAuth: GatewayAuth): string {
 
 function cursorStorageKey(key: string): string {
   return `centraid:vault-change-cursor:${encodeURIComponent(key)}`;
-}
-
-function parseCursor(value: unknown): VaultChangeCursor | undefined {
-  if (typeof value === 'string') {
-    const separator = value.lastIndexOf(':');
-    if (separator <= 0) return undefined;
-    const seq = Number(value.slice(separator + 1));
-    if (!Number.isSafeInteger(seq) || seq < 0) return undefined;
-    return { epoch: value.slice(0, separator), seq };
-  }
-  if (!value || typeof value !== 'object') return undefined;
-  const candidate = value as { epoch?: unknown; seq?: unknown; cursor?: unknown };
-  if (candidate.cursor) return parseCursor(candidate.cursor);
-  if (typeof candidate.epoch !== 'string') return undefined;
-  const seq = typeof candidate.seq === 'number' ? candidate.seq : Number(candidate.seq);
-  if (!Number.isSafeInteger(seq) || seq < 0) return undefined;
-  return { epoch: candidate.epoch, seq };
 }
 
 function readStoredCursor(key: string): VaultChangeCursor {
@@ -178,36 +94,6 @@ function changeStreamPath(
   // Presence is significant: `shapeIds=` attests a persisted empty catalog.
   if (shapeIds) params.set('shapeIds', shapeIds.join(','));
   return `/centraid/_vault/changes?${params}`;
-}
-
-function parseChange(
-  value: unknown,
-  fallbackCursor: VaultChangeCursor,
-): VaultChangeEntry | undefined {
-  if (!value || typeof value !== 'object') return undefined;
-  const change = value as Record<string, unknown>;
-  const cursor =
-    parseCursor(change.cursor) ??
-    parseCursor({ epoch: change.epoch, seq: change.seq }) ??
-    fallbackCursor;
-  const entity = change.entity;
-  const rowId = change.rowId ?? change.row_id;
-  const op = change.op;
-  const changedAt = change.changedAt ?? change.changed_at;
-  if (
-    typeof entity !== 'string' ||
-    typeof rowId !== 'string' ||
-    (op !== 'insert' && op !== 'update' && op !== 'delete')
-  ) {
-    return undefined;
-  }
-  return {
-    cursor,
-    entity,
-    rowId,
-    op,
-    changedAt: typeof changedAt === 'string' ? changedAt : new Date().toISOString(),
-  };
 }
 
 class VaultFeed {

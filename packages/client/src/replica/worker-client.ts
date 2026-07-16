@@ -8,6 +8,7 @@ import {
 } from './errors.js';
 import { replicaDatabaseName } from './key.js';
 import { guardReplicaRow } from './query.js';
+import type { ReplicaStore } from './store.js';
 import type {
   ReplicaWorkerRequest,
   ReplicaWorkerResponse,
@@ -17,9 +18,11 @@ import type {
 import type {
   ApplyChangesResult,
   OptimisticMutation,
+  ReplicaBootstrapHeader,
   ReplicaChangeBatch,
   ReplicaCursor,
   ReplicaIdentity,
+  ReplicaSnapshotRow,
   ReplicaReadRequest,
   ReplicaReadResult,
   ReplicaReadWireResult,
@@ -53,7 +56,7 @@ interface PendingRpc {
   reject(error: unknown): void;
 }
 
-export class ReplicaWorkerClient {
+export class ReplicaWorkerClient implements ReplicaStore {
   readonly #worker: ReplicaWorkerLike;
   readonly #pending = new Map<number, PendingRpc>();
   #nextId = 1;
@@ -119,6 +122,18 @@ export class ReplicaWorkerClient {
 
   bootstrap(snapshot: ReplicaSnapshot): Promise<ReplicaCursor> {
     return this.rpc('bootstrap', snapshot);
+  }
+
+  bootstrapBegin(header: ReplicaBootstrapHeader): Promise<undefined> {
+    return this.rpc('bootstrap-begin', header);
+  }
+
+  bootstrapPage(rows: ReplicaSnapshotRow[]): Promise<undefined> {
+    return this.rpc('bootstrap-page', rows);
+  }
+
+  bootstrapCommit(cursor: ReplicaCursor): Promise<ReplicaCursor> {
+    return this.rpc('bootstrap-commit', cursor);
   }
 
   applyChanges(batch: ReplicaChangeBatch): Promise<ApplyChangesResult> {

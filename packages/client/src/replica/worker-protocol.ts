@@ -1,8 +1,10 @@
 import type {
   ApplyChangesResult,
   OptimisticMutation,
+  ReplicaBootstrapHeader,
   ReplicaChangeBatch,
   ReplicaCursor,
+  ReplicaSnapshotRow,
   ReplicaReadRequest,
   ReplicaReadWireResult,
   ReplicaSearchRequest,
@@ -18,6 +20,9 @@ export type ReplicaWorkerRequest =
   | { id: number; op: 'status'; payload: undefined }
   | { id: number; op: 'catalog'; payload: undefined }
   | { id: number; op: 'bootstrap'; payload: ReplicaSnapshot }
+  | { id: number; op: 'bootstrap-begin'; payload: ReplicaBootstrapHeader }
+  | { id: number; op: 'bootstrap-page'; payload: ReplicaSnapshotRow[] }
+  | { id: number; op: 'bootstrap-commit'; payload: ReplicaCursor }
   | { id: number; op: 'apply-changes'; payload: ReplicaChangeBatch }
   | {
       id: number;
@@ -38,6 +43,9 @@ export interface ReplicaWorkerResults {
   status: ReplicaStatus;
   catalog: ReplicaShape[];
   bootstrap: ReplicaCursor;
+  'bootstrap-begin': undefined;
+  'bootstrap-page': undefined;
+  'bootstrap-commit': ReplicaCursor;
   'apply-changes': ApplyChangesResult;
   read: ReplicaReadWireResult;
   search: ReplicaSearchWireResult;
