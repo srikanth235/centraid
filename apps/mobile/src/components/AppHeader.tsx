@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import type { IconName } from '@centraid/design-tokens';
 import Icon from './Icon';
-import { colors, radii, spacing, t } from '../theme';
+import { radii, spacing, t, useTheme, type ThemeColors } from '../theme';
 
 export interface AppHeaderProps {
   title: string;
@@ -19,6 +19,8 @@ export default function AppHeader({
   iconKey,
   onBack,
 }: AppHeaderProps): React.JSX.Element {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.bar}>
       <Pressable onPress={onBack} hitSlop={12} style={styles.backBtn}>
@@ -41,27 +43,28 @@ export default function AppHeader({
   );
 }
 
-const styles = StyleSheet.create({
-  backBtn: { padding: spacing[1] },
-  bar: {
-    alignItems: 'center',
-    backgroundColor: colors.bg,
-    borderBottomColor: colors.line,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    gap: spacing[3],
-    paddingBottom: spacing[3],
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[3],
-  },
-  iconWrap: {
-    alignItems: 'center',
-    borderRadius: radii.sm,
-    height: 32,
-    justifyContent: 'center',
-    width: 32,
-  },
-  subtitle: { ...t('tiny'), color: colors.ink3, marginTop: 2 },
-  title: { ...t('bodyStrong'), color: colors.ink },
-  titleWrap: { flex: 1, minWidth: 0 },
-});
+const makeStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    backBtn: { padding: spacing[1] },
+    bar: {
+      alignItems: 'center',
+      backgroundColor: colors.bg,
+      borderBottomColor: colors.line,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      flexDirection: 'row',
+      gap: spacing[3],
+      paddingBottom: spacing[3],
+      paddingHorizontal: spacing[4],
+      paddingTop: spacing[3],
+    },
+    iconWrap: {
+      alignItems: 'center',
+      borderRadius: radii.sm,
+      height: 32,
+      justifyContent: 'center',
+      width: 32,
+    },
+    subtitle: { ...t('tiny'), color: colors.ink3, marginTop: 2 },
+    title: { ...t('bodyStrong'), color: colors.ink },
+    titleWrap: { flex: 1, minWidth: 0 },
+  });
