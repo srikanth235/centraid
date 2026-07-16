@@ -1,0 +1,32 @@
+/* The Backups page — co-located styles for BackupsScreen.tsx.
+
+   Layout only. The two cards it hosts (BackupCard / StorageCard) already
+   own their card chrome and reach into GatewayScreen.module.css for the
+   shared `.panel` family, so this file deliberately holds nothing but the
+   page measure and the column split.
+
+   1080px (not the Gateway page's 1120px) because Backups wears the shell's
+   standard PageScroll head, whose `.pageHead` is capped at 1080 — the grid
+   has to line up with the title above it. Gateway owns its own header, so
+   it's free to run wider. */
+
+.grid {
+  max-width: 1080px;
+  margin: 0 auto;
+  display: grid;
+  /* Same 1.5fr / 1fr split the Gateway Overview uses, and for the same
+     reason: BackupCard is the working surface (per-vault snapshots, the
+     retention policy form, the inventory reconcile, the recovery-kit gate)
+     while StorageCard is a readout (quota bar + drift line). Equal columns
+     would starve the first and pad the second. */
+  grid-template-columns: 1.5fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+/* Narrow-window fallback — matches the Gateway page's breakpoint. */
+@media (max-width: 1080px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

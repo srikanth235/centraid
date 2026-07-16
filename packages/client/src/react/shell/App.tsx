@@ -52,6 +52,7 @@ import AssistantRoute from './routes/AssistantRoute.js';
 import AutomationEditorRoute from './routes/AutomationEditorRoute.js';
 import AutomationsRoute from './routes/AutomationsRoute.js';
 import AutomationViewRoute from './routes/AutomationViewRoute.js';
+import BackupsRoute from './routes/BackupsRoute.js';
 import BuilderRoute from './routes/BuilderRoute.js';
 import ConnectFlowModal from './routes/ConnectFlowModal.js';
 import DiscoverRoute from './routes/DiscoverRoute.js';
@@ -107,6 +108,7 @@ function activePageFor(route: ShellRoute): SidebarPage | undefined {
     case 'automations':
     case 'approvals':
     case 'gateway':
+    case 'backups':
     case 'settings':
       return route.kind;
     case 'app':
@@ -522,6 +524,7 @@ export default function App(): JSX.Element {
           approvalsCount={blockingCount}
           onGateway={go({ kind: 'gateway' })}
           gatewayStatus={gatewayStatus}
+          onBackups={go({ kind: 'backups' })}
           onSettings={go({ kind: 'settings' })}
           onAppClick={(id) => nav.navigate({ kind: 'app', id })}
           onNewApp={() => nav.navigate({ kind: 'builder' })}
@@ -575,6 +578,8 @@ export default function App(): JSX.Element {
           return <ApprovalsRoute />;
         case 'gateway':
           return <GatewayRoute />;
+        case 'backups':
+          return <BackupsRoute />;
         case 'automation-view':
           return <AutomationViewRoute automationId={nav.route.automationId} />;
         case 'automation-editor':

@@ -62,6 +62,9 @@ export type ShellRoute =
   | { kind: 'automations' }
   | { kind: 'approvals' }
   | { kind: 'gateway' }
+  // Snapshot custody + remote bytes — split out of the Gateway page's
+  // Overview tab; both sit under the sidebar's Operations section.
+  | { kind: 'backups' }
   | { kind: 'templates' }
   // Instructions-first create/edit form (Automations UI revamp). `automationId`
   // (a `ref`) is omitted for create mode; `templateId` seeds the form from a

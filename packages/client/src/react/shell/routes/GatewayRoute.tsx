@@ -1,25 +1,17 @@
-import { type JSX, useCallback, useEffect, useState } from 'react';
+import { type JSX, useEffect, useState } from 'react';
 import {
-  confirmGatewayRecoveryKit,
   createGatewayDeviceTicket,
-  getGatewayBackupStatus,
   getGatewayDeviceWorkStatus,
   listGatewayDevices,
   revokeGatewayDevice,
-  runGatewayBackupNow,
   setGatewayDeviceCompute,
-  updateGatewayBackupPolicy,
-  verifyGatewayBackupBucket,
-  verifyGatewayBackupsNow,
   streamGatewayLogs,
-  streamStorageCustody,
 } from '../../../gateway-client.js';
 import GatewayScreen from '../../screens/GatewayScreen.js';
 import { useShellActions } from '../actions.js';
 import PageScroll from '../PageScroll.js';
 import { PageLoading } from '../status.js';
 import { loadDiagnosticsData } from './settingsDiagnosticsData.js';
-import { loadStorageCardStatus } from './gatewayStorageData.js';
 import { useGatewayHealth } from '../useGatewayHealth.js';
 import { useGatewayRuntime } from '../useGatewayRuntime.js';
 
@@ -33,7 +25,7 @@ import { useGatewayRuntime } from '../useGatewayRuntime.js';
 // the next pushed snapshot). A 1s local ticker drives the running counters
 // (gateway uptime, "for 2h 14m") between polls.
 export default function GatewayRoute(): JSX.Element {
-  const { showToast, navigate } = useShellActions();
+  const { showToast } = useShellActions();
   const snapshot = useGatewayRuntime();
   const { health } = useGatewayHealth();
   const [saving, setSaving] = useState(false);
@@ -43,10 +35,6 @@ export default function GatewayRoute(): JSX.Element {
   // getSettings() surface (same one saveSettings writes through).
   const [launchAtLogin, setLaunchAtLogin] = useState(false);
   const [savingLaunchAtLogin, setSavingLaunchAtLogin] = useState(false);
-  const streamBackupCustody = useCallback(
-    (onChange: () => void, signal: AbortSignal) => streamStorageCustody(onChange, signal),
-    [],
-  );
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -114,16 +102,6 @@ export default function GatewayRoute(): JSX.Element {
         health={health}
         loadHealth={loadDiagnosticsData}
         streamLogs={streamGatewayLogs}
-        loadBackupStatus={getGatewayBackupStatus}
-        streamBackupCustody={streamBackupCustody}
-        onRunBackupNow={runGatewayBackupNow}
-        onVerifyBackupNow={verifyGatewayBackupsNow}
-        onUpdateBackupPolicy={updateGatewayBackupPolicy}
-        onVerifyBackupBucket={verifyGatewayBackupBucket}
-        onExportRecoveryKit={() => window.CentraidApi.exportGatewayRecoveryKit()}
-        onConfirmRecoveryKit={confirmGatewayRecoveryKit}
-        loadStorageStatus={loadStorageCardStatus}
-        onOpenStorageSettings={() => navigate({ kind: 'settings', page: 'storage' })}
         loadDevices={listGatewayDevices}
         onRevokeDevice={revokeGatewayDevice}
         onCurrentDeviceRevoked={() =>

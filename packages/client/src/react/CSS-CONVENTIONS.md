@@ -97,9 +97,28 @@ Vitest's `classNameStrategy: 'non-scoped'` (in `vitest.config.ts`) makes
 `bun run typecheck` (both graphs) + `bun run test` + `bun run build` +
 `oxlint src/renderer/react` in `apps/desktop`. Then an integrity pass:
 no new `:global(.class)` escapes (attribute escapes above excepted), and no
-bare hyphenated string literals in `className` positions — a class silently
-losing its rule is invisible to typecheck/tests/build, so eyeball diffs
-that move CSS. There is no live-Electron visual check in CI.
+bare hyphenated string literals in `className` positions. There is no
+live-Electron visual check in CI.
+
+**`bun run lint:css`** (`scripts/lint-css-classes.mjs`) automates the worst
+half of that pass: a `className={styles.foo}` whose module has no `.foo`
+rule. This is the one frontend bug every other gate passes —
+`typecheck` sees a permissive index signature, not a union of the rules that
+exist; `test` passes because `classNameStrategy: 'non-scoped'` makes
+`styles.foo === 'foo'`, so a test selecting `.foo` still matches with no rule
+behind it; `build` doesn't care. The element just renders unstyled. This was
+eyeballed for a long time and ten of them accumulated anyway, so it is a
+script now. It checks referenced-but-undefined only — the reverse direction
+(defined-but-unreferenced) is legitimately noisy, since descendant-only
+rules, `[data-*]` hooks, and the `:global` contracts above all look unused to
+a grep.
+
+When it fires, the fix is a judgement call, not a template: write the rule if
+the styling was genuinely intended, or drop the reference if the layout
+already comes from the parent. Dropping is always visually a no-op —
+`className={undefined}` and no `className` render identically — so a dead
+reference is a *lie about intent*, not a broken pixel. Inventing a rule to
+"fix" it changes the render.
 
 ## Serving + design-sync
 

@@ -49,15 +49,8 @@ function makeHealth(over: Partial<GatewayHealthDTO> = {}): GatewayHealthDTO {
 const noop = (): void => {};
 const noLoadHealth = (): Promise<GatewayHealthDTO> => Promise.resolve(makeHealth());
 const noStreamLogs = (): Promise<void> => new Promise<void>(() => {}); // never resolves — no lines, "live" shell only
-// Never-resolving stubs for the ops props (Backup card / restart / export)
-// — tests that don't exercise them just need the Overview render to be
-// stable (BackupCard parks on "Checking backup status…", etc.).
-const noLoadBackupStatus = (): Promise<{ configured: boolean; vaults: never[] }> =>
-  new Promise(() => {});
-const noRunBackupNow = (): Promise<{ accepted: boolean }> => new Promise(() => {});
-const noConfirmRecoveryKit = (): Promise<{ confirmedAt: number }> => new Promise(() => {});
-const noLoadStorageStatus = (): Promise<{ connections: never[]; vaults: never[] }> =>
-  new Promise(() => {});
+// Never-resolving stubs for the ops props (restart / export) — tests that
+// don't exercise them just need the Overview render to be stable.
 const noRestartGateway = (): Promise<{ ok: boolean; error?: string }> => new Promise(() => {});
 const noExportDiagnostics = (): Promise<
   { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
@@ -71,11 +64,6 @@ const stubProps = {
   health: null,
   loadHealth: noLoadHealth,
   streamLogs: noStreamLogs,
-  loadBackupStatus: noLoadBackupStatus,
-  onRunBackupNow: noRunBackupNow,
-  onConfirmRecoveryKit: noConfirmRecoveryKit,
-  loadStorageStatus: noLoadStorageStatus,
-  onOpenStorageSettings: noop,
   onRestartGateway: noRestartGateway,
   onExportDiagnostics: noExportDiagnostics,
 } as const;
@@ -90,11 +78,6 @@ const render = (snapshot: GatewayRuntimeSnapshot, health: GatewayHealthDTO | nul
       health={health}
       loadHealth={noLoadHealth}
       streamLogs={noStreamLogs}
-      loadBackupStatus={noLoadBackupStatus}
-      onRunBackupNow={noRunBackupNow}
-      onConfirmRecoveryKit={noConfirmRecoveryKit}
-      loadStorageStatus={noLoadStorageStatus}
-      onOpenStorageSettings={noop}
       onRestartGateway={noRestartGateway}
       onExportDiagnostics={noExportDiagnostics}
     />,
@@ -202,11 +185,6 @@ describe('GatewayScreen interactions', () => {
           })}
           loadHealth={noLoadHealth}
           streamLogs={noStreamLogs}
-          loadBackupStatus={noLoadBackupStatus}
-          onRunBackupNow={noRunBackupNow}
-          onConfirmRecoveryKit={noConfirmRecoveryKit}
-          loadStorageStatus={noLoadStorageStatus}
-          onOpenStorageSettings={noop}
           onRestartGateway={noRestartGateway}
           onExportDiagnostics={noExportDiagnostics}
         />,
@@ -310,26 +288,18 @@ describe('GatewayScreen interactions', () => {
     expect(search?.value).toBe('connections');
   });
 
-  it('mounts the Backup card on Overview, wired to loadBackupStatus', async () => {
-    const loadBackupStatus = vi.fn().mockResolvedValue({ configured: false, vaults: [] });
+  // Backup/Storage now live on their own page — see BackupsScreen.test.tsx.
+  // This asserts the split held: the Gateway page must not re-grow them.
+  it('no longer mounts the Backup or Storage cards', async () => {
     await act(async () => {
-      root.render(
-        <GatewayScreen
-          snapshot={base}
-          now={NOW}
-          {...stubProps}
-          loadBackupStatus={loadBackupStatus}
-        />,
-      );
+      root.render(<GatewayScreen snapshot={base} now={NOW} {...stubProps} />);
     });
     await act(async () => {
       await Promise.resolve();
     });
-    expect(loadBackupStatus).toHaveBeenCalled();
-    expect(host.textContent).toContain('Backups');
-    expect(host.textContent).toContain('Backups aren’t set up yet');
-    // The seal-key nudge is a permanent fixture, not gated on configured.
-    expect(host.textContent).toContain('Save this recovery kit somewhere offline');
+    expect(host.textContent).not.toContain('Backups');
+    expect(host.textContent).not.toContain('Save this recovery kit somewhere offline');
+    expect(host.textContent).not.toContain('Storage');
   });
 
   it('restarts the gateway and clears back to idle on success', async () => {
@@ -344,11 +314,6 @@ describe('GatewayScreen interactions', () => {
           health={null}
           loadHealth={noLoadHealth}
           streamLogs={noStreamLogs}
-          loadBackupStatus={noLoadBackupStatus}
-          onRunBackupNow={noRunBackupNow}
-          onConfirmRecoveryKit={noConfirmRecoveryKit}
-          loadStorageStatus={noLoadStorageStatus}
-          onOpenStorageSettings={noop}
           onRestartGateway={onRestartGateway}
           onExportDiagnostics={noExportDiagnostics}
         />,
@@ -381,11 +346,6 @@ describe('GatewayScreen interactions', () => {
           health={null}
           loadHealth={noLoadHealth}
           streamLogs={noStreamLogs}
-          loadBackupStatus={noLoadBackupStatus}
-          onRunBackupNow={noRunBackupNow}
-          onConfirmRecoveryKit={noConfirmRecoveryKit}
-          loadStorageStatus={noLoadStorageStatus}
-          onOpenStorageSettings={noop}
           onRestartGateway={onRestartGateway}
           onExportDiagnostics={noExportDiagnostics}
         />,
@@ -414,11 +374,6 @@ describe('GatewayScreen interactions', () => {
           health={null}
           loadHealth={noLoadHealth}
           streamLogs={noStreamLogs}
-          loadBackupStatus={noLoadBackupStatus}
-          onRunBackupNow={noRunBackupNow}
-          onConfirmRecoveryKit={noConfirmRecoveryKit}
-          loadStorageStatus={noLoadStorageStatus}
-          onOpenStorageSettings={noop}
           onRestartGateway={noRestartGateway}
           onExportDiagnostics={onExportDiagnostics}
         />,
@@ -450,11 +405,6 @@ describe('GatewayScreen interactions', () => {
           health={null}
           loadHealth={noLoadHealth}
           streamLogs={noStreamLogs}
-          loadBackupStatus={noLoadBackupStatus}
-          onRunBackupNow={noRunBackupNow}
-          onConfirmRecoveryKit={noConfirmRecoveryKit}
-          loadStorageStatus={noLoadStorageStatus}
-          onOpenStorageSettings={noop}
           onRestartGateway={noRestartGateway}
           onExportDiagnostics={onExportDiagnostics}
         />,

@@ -70,6 +70,55 @@ describe('Sidebar', () => {
     expect(onAppContext).toHaveBeenCalledWith('todos', expect.objectContaining({ kind: 'rect' }));
   });
 
+  it('groups Gateway and Backups under an Operations section', () => {
+    const el = render(<Sidebar {...base} onGateway={() => {}} onBackups={() => {}} />);
+    // Sentence case in the markup — chrome.module.css uppercases it, matching
+    // the sibling "Apps · N" label.
+    const section = [...el.querySelectorAll('.sbSection')].find((s) =>
+      s.textContent?.includes('Operations'),
+    );
+    expect(section).toBeDefined();
+    expect(section!.textContent).toContain('Operations');
+
+    const items = [...el.querySelectorAll('.sbItem')];
+    const gateway = items.find((b) => b.textContent?.includes('Gateway'))!;
+    const backups = items.find((b) => b.textContent?.includes('Backups'))!;
+    expect(gateway).toBeDefined();
+    expect(backups).toBeDefined();
+    // Both sit after the section header, and Gateway leads.
+    expect(
+      section!.compareDocumentPosition(gateway) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      gateway.compareDocumentPosition(backups) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('fires onBackups and highlights the Backups item on its route', () => {
+    const onBackups = vi.fn();
+    const el = render(<Sidebar {...base} activePage="backups" onBackups={onBackups} />);
+    const backups = [...el.querySelectorAll('.sbItem')].find((b) =>
+      b.textContent?.includes('Backups'),
+    ) as HTMLButtonElement;
+    act(() => backups.click());
+    expect(onBackups).toHaveBeenCalled();
+    expect(el.querySelector('[data-active="true"]')?.textContent).toContain('Backups');
+  });
+
+  it('disables Backups when no handler is provided, and keeps the Gateway pill to itself', () => {
+    const el = render(<Sidebar {...base} gatewayStatus="up" onGateway={() => {}} />);
+    const items = [...el.querySelectorAll('.sbItem')];
+    const backups = items.find((b) => b.textContent?.includes('Backups')) as HTMLButtonElement;
+    expect(backups.disabled).toBe(true);
+    // The `live` pill belongs to Gateway's heartbeat — Backups must not grow
+    // one. Asserted on the pill element, not the row text: "Backups" itself
+    // contains the substring "up".
+    expect(backups.querySelector('[data-tone]')).toBeNull();
+    const gateway = items.find((b) => b.textContent?.includes('Gateway'))!;
+    expect(gateway.querySelector('[data-tone="live"]')).not.toBeNull();
+    expect(gateway.textContent).toContain('up');
+  });
+
   it('disables Search when no handler is provided', () => {
     const el = render(<Sidebar {...base} />);
     const search = [...el.querySelectorAll('.sbItem')].find((b) =>
