@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit pre-existing cohesive bridge module; decomposition is outside issue #417
 /**
  * Inline bridge baked into every served app HTML.
  *
@@ -315,7 +316,7 @@ w.centraid.write=function(opts){
       intentId:opts.intentId
     },opts.signal).catch(function(error){
       if(error&&error.code!=='REPLICA_UNAVAILABLE'&&error.code!=='REPLICA_NOT_READY')throw error;
-      return callTool('centraid_write',{app:appId,action:opts.action,input:opts.input},opts.signal);
+      return callTool('centraid_write',{app:appId,action:opts.action,input:opts.input,intentId:opts.intentId},opts.signal);
     });
   }
   return callTool('centraid_write',{app:appId,action:opts.action,input:opts.input},opts.signal);

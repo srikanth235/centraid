@@ -147,7 +147,7 @@ export function makeDaemonDevicePlane(input: {
             ...(request.rememberDevice !== undefined
               ? { rememberDevice: request.rememberDevice }
               : {}),
-            ...(request.trust !== undefined ? { trust: request.trust } : {}),
+            trust: redeemed.trust,
           });
           plane.db.blobTransfers.enrollPairedDevice({
             identity: endpointId,

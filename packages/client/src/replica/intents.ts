@@ -37,6 +37,7 @@ export class IntentQueue {
       state: 'queued',
       attempts: 0,
       optimistic: input.optimistic ?? [],
+      dependencies: input.dependencies ?? [],
     });
   }
 

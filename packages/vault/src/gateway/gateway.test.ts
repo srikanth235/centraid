@@ -173,6 +173,46 @@ describe('S2 consent', () => {
 });
 
 describe('S3/S4 command execution', () => {
+  test('an app invocation is bound to the durable intent owner device and app', () => {
+    const app = enrollApp(db, { name: 'agenda' });
+    createGrant(db, {
+      appId: app.appId,
+      purposeConceptId: boot.concepts['dpv:ServiceProvision'] as string,
+      grantedByPartyId: boot.ownerPartyId,
+      scopes: [{ schema: 'schedule', verbs: 'read+act' }],
+    });
+    const cred: Credential = { kind: 'app', appId: app.appId, signingKey: app.signingKey };
+    recordReplicaIntentOutcome(db.vault, {
+      intentId: 'owned-intent',
+      deviceId: 'paired-device-a',
+      appId: 'agenda',
+      action: 'propose',
+      payloadHash: 'sha256:owned-intent',
+      status: 'sending',
+    });
+
+    expect(() =>
+      gw.invoke(cred, {
+        command: 'schedule.propose_event',
+        input: proposeInput(),
+        purpose: 'dpv:ServiceProvision',
+        intentId: 'owned-intent',
+        intentDeviceId: 'paired-device-b',
+      }),
+    ).toThrow(/not owned by this device and app/);
+    expect(db.vault.prepare('SELECT count(*) AS n FROM core_event').get()).toEqual({ n: 0 });
+
+    expect(
+      gw.invoke(cred, {
+        command: 'schedule.propose_event',
+        input: proposeInput(),
+        purpose: 'dpv:ServiceProvision',
+        intentId: 'owned-intent',
+        intentDeviceId: 'paired-device-a',
+      }),
+    ).toMatchObject({ status: 'executed' });
+  });
+
   test('propose_event executes: rows, checks, provenance, receipt, explanation', () => {
     const outcome = gw.invoke(owner, {
       command: 'schedule.propose_event',
@@ -306,6 +346,60 @@ describe('S3/S4 command execution', () => {
     expect(replay).toMatchObject({ status: 'replayed', output: first.output });
     const events = db.vault.prepare('SELECT count(*) AS n FROM core_event').get() as { n: number };
     expect(events.n).toBe(1);
+  });
+
+  test('invocation ids are bound to command, caller, and grant before execution', () => {
+    const invocationId = uuidv7();
+    const failed = gw.invoke(owner, {
+      command: 'schedule.propose_event',
+      input: proposeInput({ calendar_id: 'missing-calendar' }),
+      purpose: 'dpv:ServiceProvision',
+      invocationId,
+    });
+    expect(failed).toMatchObject({ status: 'failed', invocationId });
+
+    expect(() =>
+      gw.invoke(owner, {
+        command: 'schedule.reschedule_event',
+        input: {
+          event_id: 'would-have-mutated',
+          dtstart: '2026-07-03T10:00:00Z',
+          dtend: '2026-07-03T10:15:00Z',
+        },
+        purpose: 'dpv:ServiceProvision',
+        invocationId,
+      }),
+    ).toThrow(/already bound/);
+    expect(db.vault.prepare('SELECT count(*) AS n FROM core_event').get()).toEqual({ n: 0 });
+    expect(
+      db.vault
+        .prepare('SELECT count(*) AS n FROM replica_invocation_commit WHERE invocation_id = ?')
+        .get(invocationId),
+    ).toEqual({ n: 0 });
+
+    gw = createGateway(db);
+    registerScheduleCommands(gw);
+    expect(db.vault.prepare('SELECT count(*) AS n FROM core_event').get()).toEqual({ n: 0 });
+  });
+
+  test('ordinary failed invocation replay remains a failure, not an owner denial', () => {
+    const invocationId = uuidv7();
+    const request = {
+      command: 'schedule.propose_event',
+      input: proposeInput({ calendar_id: 'missing-calendar' }),
+      purpose: 'dpv:ServiceProvision',
+      invocationId,
+    } as const;
+    const first = gw.invoke(owner, request);
+    expect(first).toMatchObject({ status: 'failed', invocationId });
+
+    const replay = gw.invoke(owner, request);
+    expect(replay).toMatchObject({
+      status: 'failed',
+      invocationId,
+      reason: expect.stringContaining('calendar_exists'),
+    });
+    expect(replay).not.toMatchObject({ status: 'denied' });
   });
 
   test('replay atomically repairs a crash-left journal gap before returning', () => {

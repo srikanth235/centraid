@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit pre-existing cohesive SQLite store; decomposition is outside issue #417
 import type { BindingSpec, Database } from '@sqlite.org/sqlite-wasm';
 
 import {

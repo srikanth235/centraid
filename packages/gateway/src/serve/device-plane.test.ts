@@ -151,6 +151,20 @@ test('enrollment: a stale daemon checkpoint cannot resurrect a CLI revocation', 
   await expect(fs.stat(`${file}.lock`)).rejects.toMatchObject({ code: 'ENOENT' });
 });
 
+test('enrollment: a live writer lock fails fast instead of blocking the daemon thread', async () => {
+  const file = await tempFile('devices.json');
+  const store = EnrollmentStore.open(file);
+  await fs.mkdir(`${file}.lock`, { recursive: true });
+  const started = Date.now();
+
+  expect(() => store.enroll({ endpointId: 'busy-device', vaultId: 'v1', label: 'Busy' })).toThrow(
+    /busy/,
+  );
+
+  expect(Date.now() - started).toBeLessThan(500);
+  await fs.rm(`${file}.lock`, { recursive: true, force: true });
+});
+
 test('enrollment: remember and trust choices persist across re-pair', async () => {
   const file = await tempFile('devices.json');
   const store = EnrollmentStore.open(file);
@@ -170,6 +184,30 @@ test('enrollment: remember and trust choices persist across re-pair', async () =
   ).toMatchObject({ rememberDevice: false });
 });
 
+test('enrollment: pre-trust registry rows retain their historical full access', async () => {
+  const file = await tempFile('devices.json');
+  await fs.writeFile(
+    file,
+    JSON.stringify({
+      version: 1,
+      enrollments: [
+        {
+          enrollmentId: 'legacy-row',
+          endpointId: 'legacy-key',
+          vaultId: 'v1',
+          label: 'Older device',
+          addedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    }),
+  );
+
+  expect(EnrollmentStore.open(file).get('legacy-key', 'v1')).toMatchObject({
+    trust: 'full',
+    rememberDevice: false,
+  });
+});
+
 test('pairing tickets: one-time, secret-checked, TTL-bound', async () => {
   const file = await tempFile('pairing-tickets.json');
   const store = PairingTicketStore.open(file);
@@ -182,7 +220,7 @@ test('pairing tickets: one-time, secret-checked, TTL-bound', async () => {
   expect(store.redeem(minted.ticketId, minted.secret)).toBeUndefined();
 
   const second = store.mint('v2');
-  expect(store.redeem(second.ticketId, second.secret)).toEqual({ vaultId: 'v2' });
+  expect(store.redeem(second.ticketId, second.secret)).toEqual({ vaultId: 'v2', trust: 'full' });
   // …and it burned on success.
   expect(store.redeem(second.ticketId, second.secret)).toBeUndefined();
 

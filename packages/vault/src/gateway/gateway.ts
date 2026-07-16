@@ -40,8 +40,8 @@ import {
 } from './duties.js';
 import { writeReceipt } from './evidence.js';
 import {
+  assertInvocationIdentity,
   insertInvocation,
-  invocationExists,
   replayInvocation,
   pkColumn,
   runContractAndExecute,
@@ -691,9 +691,6 @@ export class Gateway {
       });
       return { status: 'denied', receiptId, reason: 'demo register is owner-only' };
     }
-    const replayed = request.invocationId ? replayInvocation(this.db, request.invocationId) : null;
-    if (replayed) return replayed;
-
     const command = lookupCommand(this.db.vault, request.command);
     if (!command || !this.commands.has(request.command)) {
       const receiptId = writeReceipt(this.db.journal, {
@@ -731,6 +728,40 @@ export class Gateway {
       return { status: 'denied', receiptId, reason: consent.failing };
     }
 
+    if (request.intentId && identity.kind === 'app') {
+      const intent = this.db.vault
+        .prepare(
+          `SELECT outcome.device_id, app.app_id AS enrolled_app_id
+             FROM replica_intent_outcome AS outcome
+             JOIN consent_app AS app ON app.name = outcome.app_id
+            WHERE outcome.intent_id = ?`,
+        )
+        .get(request.intentId) as { device_id: string; enrolled_app_id: string } | undefined;
+      if (
+        !intent ||
+        !request.intentDeviceId ||
+        intent.device_id !== request.intentDeviceId ||
+        intent.enrolled_app_id !== identity.callerId
+      ) {
+        throw new GatewayError(
+          'contract',
+          `replica intent ${request.intentId} is not owned by this device and app`,
+        );
+      }
+    }
+
+    const invocationAlreadyExists = request.invocationId
+      ? assertInvocationIdentity(
+          this.db,
+          request.invocationId,
+          command.command_id,
+          identity.callerId,
+          consent.grantId,
+        )
+      : false;
+    const replayed = request.invocationId ? replayInvocation(this.db, request.invocationId) : null;
+    if (replayed) return replayed;
+
     // Confirmation routing (issue #306 decision 2, amending #294 decision 4):
     // an installed caller's declared commands execute under the install-time
     // grant — risk is a salience marker in the journal, never a park trigger.
@@ -742,7 +773,7 @@ export class Gateway {
       .get(command.command_id) as { requires_confirmation: number } | undefined;
     if (identity.kind !== 'owner-device' && capability?.requires_confirmation === 1) {
       const invocationId = request.invocationId ?? uuidv7();
-      if (!invocationExists(this.db, invocationId)) {
+      if (!invocationAlreadyExists) {
         insertInvocation(
           this.db,
           { ...request, invocationId },
@@ -786,7 +817,7 @@ export class Gateway {
         undefined,
         sealedInput,
       );
-    if (request.invocationId && !invocationExists(this.db, invocationId)) {
+    if (request.invocationId && !invocationAlreadyExists) {
       insertInvocation(
         this.db,
         { ...request, invocationId },

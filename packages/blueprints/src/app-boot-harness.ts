@@ -26,12 +26,11 @@
 //     app re-runs `refresh()` on window 'focus', so flipping the mock and
 //     dispatching focus walks granted → denied → granted on a single instance.
 //
-// SCOPE, honestly: the vault mock returns `{}`, so every collection falls back
-// to empty. This proves each app loads, boots, commits its templates, clears
-// them on revoke and re-renders — but it renders NO ROWS, so it cannot catch a
-// regression that only manifests with content. Giving each app a populated
-// fixture would strengthen this considerably; it needs one hand-written shape
-// per app's query.
+// Agenda and Photos additionally boot populated replica fixtures. Agenda's
+// pending-chip assertions consume the production intent-invalidation
+// derivation, so the harness cannot invent a terminal browser signal that the
+// real coordinator would never publish.
+import { replicaIntentInvalidations } from '@centraid/client/replica/intent-invalidations';
 import { execFileSync } from 'node:child_process';
 import {
   cpSync,
@@ -313,6 +312,28 @@ export function describeAppBoot(app: string, options: { expectLive?: boolean } =
         },
       };
 
+      const emitAgendaIntentState = (state: 'parked' | 'denied') => {
+        const invalidations = replicaIntentInvalidations([
+          {
+            intentId: AGENDA_INTENT_ID,
+            payloadHash: 'harness-payload',
+            appId: 'agenda',
+            action: 'cancel-event',
+            input: { event_id: AGENDA_EVENT_ID },
+            state,
+            createdOrder: 1,
+            attempts: 1,
+            optimistic: [],
+            dependencies: [{ shapeId: 'shape-agenda-events', entity: 'core.event' }],
+          },
+        ]);
+        for (const invalidation of invalidations) {
+          for (const listener of changes) {
+            listener({ ...invalidation, tables: [invalidation.entity] });
+          }
+        }
+      };
+
       await import(pathToFileURL(path.join(dir, entry)).href);
       await settle();
       expectNoErrors('rendering its granted replica in airplane mode');
@@ -346,27 +367,13 @@ export function describeAppBoot(app: string, options: { expectLive?: boolean } =
           // Reconnect admission parks the exact queued intent: the event stays
           // canonical and the chip remains until a terminal owner decision.
           Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
-          for (const listener of changes) {
-            listener({
-              tables: ['core.event'],
-              source: 'overlay',
-              intentId: AGENDA_INTENT_ID,
-              intentState: 'parked',
-            });
-          }
+          emitAgendaIntentState('parked');
           await new Promise((resolve) => setTimeout(resolve, 250));
           expect(document.querySelector('.kit-pending-chip')?.textContent).toBe('cancel asked');
 
           // An exact denial is the rollback signal: only this chip settles and
           // the unchanged canonical event remains visible.
-          for (const listener of changes) {
-            listener({
-              tables: ['core.event'],
-              source: 'overlay',
-              intentId: AGENDA_INTENT_ID,
-              intentState: 'denied',
-            });
-          }
+          emitAgendaIntentState('denied');
           await new Promise((resolve) => setTimeout(resolve, 250));
           expect(document.querySelector('.kit-pending-chip')).toBeNull();
           expect(document.body.textContent).toContain(AGENDA_TITLE);

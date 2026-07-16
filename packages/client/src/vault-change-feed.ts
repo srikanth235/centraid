@@ -143,6 +143,19 @@ function storeCursor(key: string, cursor: VaultChangeCursor): void {
   }
 }
 
+/** Remove a revoked scope's resumable cursor along with its replica storage. */
+export function clearVaultChangeCursor(gatewayAuth: GatewayAuth): void {
+  const key = scopeKey(gatewayAuth);
+  feeds.get(key)?.close();
+  feeds.delete(key);
+  shapeIdsByScope.delete(key);
+  try {
+    window.sessionStorage.removeItem(cursorStorageKey(key));
+  } catch {
+    /* Session storage is optional in hardened/browser-private contexts. */
+  }
+}
+
 function normalizeShapeIds(shapeIds: readonly string[]): string[] {
   return [...new Set(shapeIds.filter((shapeId) => shapeId.length > 0))].sort();
 }
@@ -224,6 +237,12 @@ class VaultFeed {
   remove(listener: (message: VaultChangeMessage) => void): void {
     this.listeners.delete(listener);
     if (this.listeners.size === 0) this.stop();
+  }
+
+  /** Permanently tear down a revoked scope, even while subscribers still exist. */
+  close(): void {
+    this.listeners.clear();
+    this.stop();
   }
 
   resume(cursor: VaultChangeCursor): void {
@@ -393,6 +412,7 @@ class VaultFeed {
   }
 
   private stop(): void {
+    if (this.stopped) return;
     this.stopped = true;
     this.generation += 1;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);

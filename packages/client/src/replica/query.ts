@@ -149,23 +149,19 @@ export function applyOptimisticMutations(
   );
   for (const mutation of mutations) {
     if (mutation.entity !== schema.entity) continue;
+    try {
+      validateOptimisticMutation(mutation, schema, rows.has(mutation.rowId));
+    } catch (error) {
+      // A legacy/bad durable intent must not poison every read of its entity.
+      // New intents are rejected at enqueue; old records are ignored here.
+      if (error instanceof ReplicaProtocolError || error instanceof OnlineOnlyError) continue;
+      throw error;
+    }
     if (mutation.op === 'delete') {
       rows.delete(mutation.rowId);
       continue;
     }
-    for (const column of Object.keys(mutation.values)) {
-      assertColumn(schema, column);
-    }
     const current = rows.get(mutation.rowId);
-    const predictedPrimaryKey = mutation.values[schema.primaryKey];
-    if (
-      (!current && predictedPrimaryKey !== mutation.rowId) ||
-      (predictedPrimaryKey !== undefined && predictedPrimaryKey !== mutation.rowId)
-    ) {
-      throw new ReplicaProtocolError(
-        `Optimistic row id does not match ${schema.entity}.${schema.primaryKey}`,
-      );
-    }
     const supplied = new Set(Object.keys(mutation.values));
     rows.set(mutation.rowId, {
       rowId: mutation.rowId,
@@ -175,6 +171,28 @@ export function applyOptimisticMutations(
     });
   }
   return [...rows.values()];
+}
+
+/** Validate an optimistic mutation before it enters the durable outbox. */
+export function validateOptimisticMutation(
+  mutation: OptimisticMutation,
+  schema: ReplicaEntitySchema,
+  rowAlreadyExists = true,
+): void {
+  if (mutation.entity !== schema.entity) {
+    throw new ReplicaProtocolError(`Shape schema does not contain ${mutation.entity}`);
+  }
+  if (mutation.op === 'delete') return;
+  for (const column of Object.keys(mutation.values)) assertColumn(schema, column);
+  const predictedPrimaryKey = mutation.values[schema.primaryKey];
+  if (
+    (!rowAlreadyExists && predictedPrimaryKey === undefined) ||
+    (predictedPrimaryKey !== undefined && String(predictedPrimaryKey) !== mutation.rowId)
+  ) {
+    throw new ReplicaProtocolError(
+      `Optimistic row id does not match ${schema.entity}.${schema.primaryKey}`,
+    );
+  }
 }
 
 /** Fixed-grammar local equivalent of ctx.vault.read. No caller text becomes SQL. */

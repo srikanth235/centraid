@@ -11,6 +11,7 @@ import {
   type ReplicaCursor,
   type ReplicaLogState,
   type ReplicaRow,
+  type ReplicaSnapshotResult,
   type ReplicaSnapshotReader,
 } from '@centraid/vault';
 import type { RouteHandler } from '../serve/build-gateway.js';
@@ -51,12 +52,29 @@ const CHECKPOINT_PATH = '/centraid/_vault/replica/checkpoint';
 const OUTCOMES_PATH = '/centraid/_vault/replica/outcomes';
 export const REPLICA_INTENTS_PATH = '/centraid/_vault/replica/intents';
 const OUTCOME_RECONCILE_LIMIT = 500;
+const DEFAULT_MAX_BOOTSTRAP_ROWS = 100_000;
+const DEFAULT_MAX_SYNTHETIC_LOOKUP_ROWS = 25_000;
+
+class ReplicaWorkLimitError extends Error {
+  constructor(readonly kind: 'bootstrap' | 'synthetic-row') {
+    super(`replica ${kind} work limit exceeded`);
+    this.name = 'ReplicaWorkLimitError';
+  }
+}
+
+type BootstrapValue = {
+  shapes: ReplicaServerShape[];
+  rows: NonNullable<ReturnType<typeof shapeReplicaRow>>[];
+};
 
 export interface ReplicaRouteOptions {
   enrollments?: EnrollmentStore;
   dispatchIntent: ReplicaIntentDispatcher;
   pollIntervalMs?: number;
   heartbeatMs?: number;
+  /** Authenticated-DoS bounds; overrides are used by focused route tests. */
+  maxBootstrapRows?: number;
+  maxSyntheticLookupRows?: number;
 }
 
 function rebootstrapBody(reason: string, state: ReplicaLogState): Record<string, unknown> {
@@ -180,19 +198,25 @@ function rowForWireId(
   schema: ReplicaEntityShape,
   entity: string,
   wireRowId: string,
+  maxRows: number,
 ): ReplicaRow | undefined {
   if (schema.primaryKey !== REPLICA_SYNTHETIC_PRIMARY_KEY) {
     return reader.readRow(entity, wireRowId, { maxValueBytes: REPLICA_MAX_VALUE_BYTES });
   }
   let after: string | undefined;
+  let scanned = 0;
   do {
     const page = reader.readRows(entity, {
       ...(after ? { after } : {}),
-      limit: 10_000,
+      limit: Math.min(10_000, Math.max(1, maxRows - scanned)),
       maxValueBytes: REPLICA_MAX_VALUE_BYTES,
     });
     const found = page.rows.find((row) => replicaWireRowId(shape, entity, row.rowId) === wireRowId);
     if (found) return found;
+    scanned += page.rows.length;
+    if (page.nextAfter && scanned >= maxRows) {
+      throw new ReplicaWorkLimitError('synthetic-row');
+    }
     after = page.nextAfter;
   } while (after);
   return undefined;
@@ -277,6 +301,7 @@ async function streamChanges(
   db: import('node:sqlite').DatabaseSync,
   vaultId: string,
   options: ReplicaRouteOptions,
+  limit: number,
 ): Promise<true> {
   const rawSince = url.searchParams.get('since');
   res.statusCode = 200;
@@ -316,7 +341,7 @@ async function streamChanges(
       break;
     }
     try {
-      const page = projectReplicaPage(db, access.access, cursor, parseLimit(url) ?? 1_000);
+      const page = projectReplicaPage(db, access.access, cursor, limit);
       if (page.rebootstrapReason || (baseline && !sameReplicaShapeIds(page.shapes, baseline))) {
         sendSseRebootstrap(
           res,
@@ -333,14 +358,14 @@ async function streamChanges(
       cursor = page.batch.to;
       if (page.batch.hasMore) continue;
     } catch (error) {
-      const reason =
-        error instanceof ReplicaRebootstrapRequiredError ? error.reason : 'stream-error';
-      sendSseRebootstrap(
-        res,
-        reason,
-        error instanceof ReplicaRebootstrapRequiredError ? error.state : currentReplicaLogState(db),
-      );
-      break;
+      if (error instanceof ReplicaRebootstrapRequiredError) {
+        sendSseRebootstrap(res, error.reason, error.state);
+        break;
+      }
+      writeSse(res, 'retry', {
+        error: 'replica_stream_retry',
+        message: error instanceof Error ? error.message : String(error),
+      });
     }
     if (Date.now() - heartbeatAt >= (options.heartbeatMs ?? 15_000)) {
       res.write(': heartbeat\n\n');
@@ -426,37 +451,48 @@ export function makeReplicaRouteHandler(
 
     if (url.pathname === BOOTSTRAP_PATH) {
       if (method !== 'GET') return methodAllowed(res, 'GET');
-      const snapshot = withReplicaSnapshot(plane.db.vault, (reader) => {
-        const nowMs = Date.now();
-        const shapes = buildReplicaShapes(plane.db.vault, access, new Date(nowMs).toISOString());
-        const cache = new Map<string, ReplicaRow[]>();
-        const rowsFor = (entity: string): ReplicaRow[] => {
-          const found = cache.get(entity);
-          if (found) return found;
-          const rows: ReplicaRow[] = [];
-          let after: string | undefined;
-          do {
-            const page = reader.readRows(entity, {
-              ...(after ? { after } : {}),
-              limit: 10_000,
-              maxValueBytes: REPLICA_MAX_VALUE_BYTES,
-            });
-            rows.push(...page.rows);
-            after = page.nextAfter;
-          } while (after);
-          cache.set(entity, rows);
-          return rows;
-        };
-        const rows = shapes.flatMap((shape) =>
-          shape.entities.flatMap((entity) =>
-            rowsFor(entity.entity).flatMap((row) => {
-              const shaped = shapeReplicaRow(shape, entity.entity, row, nowMs);
-              return shaped ? [shaped] : [];
-            }),
-          ),
-        );
-        return { shapes, rows };
-      });
+      let snapshot: ReplicaSnapshotResult<BootstrapValue>;
+      try {
+        snapshot = withReplicaSnapshot(plane.db.vault, (reader) => {
+          const nowMs = Date.now();
+          const shapes = buildReplicaShapes(plane.db.vault, access, new Date(nowMs).toISOString());
+          const cache = new Map<string, ReplicaRow[]>();
+          const rowsFor = (entity: string): ReplicaRow[] => {
+            const found = cache.get(entity);
+            if (found) return found;
+            const rows: ReplicaRow[] = [];
+            let after: string | undefined;
+            do {
+              const page = reader.readRows(entity, {
+                ...(after ? { after } : {}),
+                limit: 10_000,
+                maxValueBytes: REPLICA_MAX_VALUE_BYTES,
+              });
+              rows.push(...page.rows);
+              if (rows.length > (options.maxBootstrapRows ?? DEFAULT_MAX_BOOTSTRAP_ROWS)) {
+                throw new ReplicaWorkLimitError('bootstrap');
+              }
+              after = page.nextAfter;
+            } while (after);
+            cache.set(entity, rows);
+            return rows;
+          };
+          const rows = shapes.flatMap((shape) =>
+            shape.entities.flatMap((entity) =>
+              rowsFor(entity.entity).flatMap((row) => {
+                const shaped = shapeReplicaRow(shape, entity.entity, row, nowMs);
+                return shaped ? [shaped] : [];
+              }),
+            ),
+          );
+          return { shapes, rows };
+        });
+      } catch (error) {
+        if (error instanceof ReplicaWorkLimitError && error.kind === 'bootstrap') {
+          return sendJson(res, 413, { error: 'replica_bootstrap_too_large' });
+        }
+        throw error;
+      }
       if (access.appId && snapshot.value.shapes.length === 0)
         return sendJson(res, 403, { error: 'replica_shape_empty' });
       return sendJson(res, 200, {
@@ -474,15 +510,16 @@ export function makeReplicaRouteHandler(
 
     if (url.pathname === CHANGES_PATH) {
       if (method !== 'GET') return methodAllowed(res, 'GET');
-      if (isSse(req, url)) return streamChanges(req, res, url, plane.db.vault, vaultId, options);
+      const limit = parseLimit(url);
+      if (Number.isNaN(limit)) return sendJson(res, 400, { error: 'invalid_replica_limit' });
+      if (isSse(req, url))
+        return streamChanges(req, res, url, plane.db.vault, vaultId, options, limit ?? 1_000);
       if (url.searchParams.get('since') === '0:0')
         return sendJson(
           res,
           409,
           rebootstrapBody('initial', currentReplicaLogState(plane.db.vault)),
         );
-      const limit = parseLimit(url);
-      if (Number.isNaN(limit)) return sendJson(res, 400, { error: 'invalid_replica_limit' });
       try {
         const page = projectReplicaPage(plane.db.vault, access, parseSince(url), limit ?? 1_000);
         const expected = expectedReplicaShapeIds(url);
@@ -524,7 +561,16 @@ export function makeReplicaRouteHandler(
           ).find((candidate) => candidate.shapeId === shapeId);
           const schema = shape?.entityMap.get(entity);
           const row =
-            shape && schema ? rowForWireId(reader, shape, schema, entity, rowId) : undefined;
+            shape && schema
+              ? rowForWireId(
+                  reader,
+                  shape,
+                  schema,
+                  entity,
+                  rowId,
+                  options.maxSyntheticLookupRows ?? DEFAULT_MAX_SYNTHETIC_LOOKUP_ROWS,
+                )
+              : undefined;
           if (!shape || !schema || !row) return undefined;
           const allowed = replicaRowColumns(shape, entity, row, nowMs);
           if (!allowed) return undefined;
@@ -541,6 +587,9 @@ export function makeReplicaRouteHandler(
           row: result.value,
         });
       } catch (error) {
+        if (error instanceof ReplicaWorkLimitError && error.kind === 'synthetic-row') {
+          return sendJson(res, 413, { error: 'replica_row_lookup_too_large' });
+        }
         if (error instanceof Error && error.message === 'field_not_in_shape')
           return sendJson(res, 403, { error: 'replica_field_not_in_shape' });
         return sendJson(res, 400, { error: 'invalid_replica_row_request' });

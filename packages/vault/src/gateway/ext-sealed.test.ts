@@ -159,6 +159,17 @@ test('declaring sealed on an already-populated column seals the existing rows', 
   // Install WITHOUT sealing, write plaintext, then declare it sealed.
   installApp({ ...CRED_TABLE, sealed: [] });
   const id = addCredential('plaintext_at_first');
+  db.vault
+    .prepare('UPDATE ext_keypass_credential SET label = ? WHERE credential_id = ?')
+    .run('Updated before sealing', id);
+  expect(
+    db.vault
+      .prepare(
+        `SELECT old_values_json FROM replica_change
+          WHERE entity = ? AND old_values_json LIKE '%plaintext_at_first%'`,
+      )
+      .get(`ext.${APP}.credential`),
+  ).toBeDefined();
   let raw = db.vault
     .prepare('SELECT api_key FROM ext_keypass_credential WHERE credential_id = ?')
     .get(id) as { api_key: string };
@@ -168,6 +179,14 @@ test('declaring sealed on an already-populated column seals the existing rows', 
     .prepare('SELECT api_key FROM ext_keypass_credential WHERE credential_id = ?')
     .get(id) as { api_key: string };
   expect(isSealedValue(raw.api_key)).toBe(true);
+  expect(
+    db.vault
+      .prepare(
+        `SELECT count(*) AS n FROM replica_change
+          WHERE entity = ? AND json_extract(old_values_json, '$.api_key') IS NOT NULL`,
+      )
+      .get(`ext.${APP}.credential`),
+  ).toEqual({ n: 0 });
   expect(readSealKeyFingerprint(db.vault)).not.toBeNull();
   // and it still reveals to the original plaintext
   const out = gw.reveal(owner, {

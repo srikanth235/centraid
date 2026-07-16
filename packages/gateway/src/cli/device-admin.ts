@@ -46,6 +46,7 @@ interface DeviceArgs {
   vault?: string;
   label?: string;
   ttlMinutes?: number;
+  trust?: 'full' | 'readonly';
   /** Emit machine-readable JSON instead of human text (issue #382, `pair` only). */
   json?: boolean;
   positional: string[];
@@ -75,6 +76,14 @@ function parseDeviceArgs(args: string[], fail: (msg: string, code?: number) => n
         const n = Number(next());
         if (!Number.isFinite(n) || n <= 0) fail('--ttl-minutes must be a positive number', 2);
         out.ttlMinutes = n;
+        break;
+      }
+      case '--trust': {
+        const trust = next();
+        if (trust !== 'full' && trust !== 'readonly') {
+          fail('--trust must be "full" or "readonly"', 2);
+        }
+        out.trust = trust;
         break;
       }
       case '--json':
@@ -153,7 +162,8 @@ export async function commandPair(
       const tickets = PairingTicketStore.open(layout.pairingTicketsFile);
       const ttlMs =
         parsed.ttlMinutes !== undefined ? parsed.ttlMinutes * 60 * 1000 : DEFAULT_TICKET_TTL_MS;
-      const minted = tickets.mint(vault.vaultId, ttlMs);
+      const trust = parsed.trust ?? 'full';
+      const minted = tickets.mint(vault.vaultId, ttlMs, trust);
       const token = encodePairingTicket({
         v: 1,
         kind: 'centraid-gw-pair',
@@ -171,6 +181,7 @@ export async function commandPair(
             vaultId: vault.vaultId,
             vaultName: vault.name,
             expiresAt: new Date(minted.expiresAt).toISOString(),
+            trust,
           })}\n`,
         );
         return;
@@ -178,6 +189,7 @@ export async function commandPair(
       process.stdout.write(
         [
           `Pairing ticket for vault "${vault.name}" (${vault.vaultId})`,
+          `Trust: ${trust}`,
           `Expires: ${new Date(minted.expiresAt).toISOString()}`,
           '',
           'Paste this one-line ticket into the client\'s "Add gateway" dialog:',

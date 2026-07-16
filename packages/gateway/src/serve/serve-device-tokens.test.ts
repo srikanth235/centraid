@@ -69,8 +69,8 @@ afterEach(async () => {
   await fs.rm(dataDir, { recursive: true, force: true });
 });
 
-function mintTicket(vaultId: string): string {
-  const minted = tickets.mint(vaultId);
+function mintTicket(vaultId: string, trust: 'full' | 'readonly' = 'full'): string {
+  const minted = tickets.mint(vaultId, undefined, trust);
   return encodePairingTicket({
     v: 1,
     kind: 'centraid-gw-pair',
@@ -82,11 +82,15 @@ function mintTicket(vaultId: string): string {
   });
 }
 
-async function redeem(ticket: string, deviceLabel = 'Test phone'): Promise<Response> {
+async function redeem(
+  ticket: string,
+  deviceLabel = 'Test phone',
+  extra: Record<string, unknown> = {},
+): Promise<Response> {
   return fetch(`${handle.url}${PAIR_ROUTE_PATH}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ ticket, deviceLabel }),
+    body: JSON.stringify({ ticket, deviceLabel, ...extra }),
   });
 }
 
@@ -130,6 +134,31 @@ test('(b) device-token caller is confined: a non-enrolled vault is 403', async (
   });
   expect(denied.status).toBe(403);
   expect(await denied.json()).toMatchObject({ error: 'vault_not_enrolled' });
+});
+
+test('ticket trust is server-bound: a read-only redemption cannot self-upgrade or mutate', async () => {
+  const ticket = mintTicket(vaultA, 'readonly');
+  const paired = await redeem(ticket, 'Read-only tablet', { trust: 'full' });
+  expect(paired.status).toBe(200);
+  const body = (await paired.json()) as { deviceToken: string; trust: string };
+  expect(body.trust).toBe('readonly');
+
+  const readable = await fetch(`${handle.url}/centraid/_vault/status`, {
+    headers: { Authorization: `Bearer ${body.deviceToken}` },
+  });
+  expect(readable.status).toBe(200);
+
+  const mutation = await fetch(`${handle.url}/centraid/_vault/vaults/${vaultA}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${body.deviceToken}`,
+      'content-type': 'application/json',
+      'x-centraid-vault': vaultA,
+    },
+    body: JSON.stringify({ name: 'Escalated' }),
+  });
+  expect(mutation.status).toBe(403);
+  expect(await mutation.json()).toMatchObject({ error: 'readonly_device' });
 });
 
 test('(c) GET /_vault/vaults is filtered to the device-token caller enrollments', async () => {

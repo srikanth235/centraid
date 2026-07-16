@@ -12,7 +12,7 @@
 // it anymore), so this file only exercises the vanilla surface.
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 // Resolved from this module's own path, not process.cwd(): cwd differs
 // between a root-run vitest (repo root) and a package-run vitest (this
@@ -32,6 +32,7 @@ const {
   letterAvatar,
   openPopover,
   closePopover,
+  onDataChange,
   popItem,
   renderAttachments,
   snippetInto,
@@ -182,6 +183,67 @@ describe('kit smoke', () => {
     expect(updates).toEqual(['rerun']);
     subscription.unsubscribe();
     expect(listeners.size).toBe(0);
+  });
+
+  it('live reads do not let a late initial result overwrite a newer subscription value', async () => {
+    let resolveInitial;
+    const listeners = new Set();
+    const read = new Promise((resolve) => {
+      resolveInitial = resolve;
+    });
+    read.subscribe = (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    };
+    const updates = [];
+    const subscription = subscribeReadUpdates(read, (value) => updates.push(value));
+
+    for (const listener of listeners) listener('fresh');
+    resolveInitial('stale');
+    await read;
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(updates).toEqual(['fresh']);
+    subscription.unsubscribe();
+  });
+
+  it('data-change debounce preserves every distinct intent settlement', () => {
+    vi.useFakeTimers();
+    let listener;
+    window.centraid = {
+      onChange(next) {
+        listener = next;
+        return () => {
+          listener = undefined;
+        };
+      },
+    };
+    const updates = [];
+    const stop = onDataChange(['schedule.task'], (detail) => updates.push(detail), {
+      debounceMs: 10,
+    });
+    listener({
+      tables: ['schedule.task'],
+      source: 'overlay',
+      intentId: 'intent-a',
+      intentState: 'executed',
+    });
+    listener({
+      tables: ['schedule.task'],
+      source: 'overlay',
+      intentId: 'intent-b',
+      intentState: 'denied',
+    });
+    vi.advanceTimersByTime(10);
+
+    expect(updates.map(({ intentId, intentState }) => ({ intentId, intentState }))).toEqual([
+      { intentId: 'intent-a', intentState: 'executed' },
+      { intentId: 'intent-b', intentState: 'denied' },
+    ]);
+    stop();
+    delete window.centraid;
+    vi.useRealTimers();
   });
 
   it('plain Promise reads retain the compatibility path', async () => {

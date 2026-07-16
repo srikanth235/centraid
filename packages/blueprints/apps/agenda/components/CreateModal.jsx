@@ -34,6 +34,7 @@ export function CreateModal({ calendars, prefill, onClose, onSubmit }) {
   const [people, setPeople] = useState([]);
   const [invited, setInvited] = useState(() => new Set());
   const [busy, setBusy] = useState(false);
+  const [queued, setQueued] = useState(false);
   const [formNotice, setFormNotice] = useState('');
   const titleRef = useRef(null);
 
@@ -121,13 +122,13 @@ export function CreateModal({ calendars, prefill, onClose, onSubmit }) {
       ...(conferencingUri.trim() ? { conferencing_uri: conferencingUri.trim() } : {}),
     });
     setBusy(false);
-    if (
-      outcome?.status === 'executed' ||
-      outcome?.status === 'parked' ||
-      outcome?.status === 'queued' ||
-      outcome?.status === 'in-flight'
-    ) {
+    if (outcome?.status === 'executed' || outcome?.status === 'parked') {
       onClose();
+      return;
+    }
+    if (outcome?.status === 'queued' || outcome?.status === 'in-flight') {
+      setQueued(true);
+      setFormNotice('Saved on this device. It will sync automatically; no need to submit again.');
       return;
     }
     setFormNotice(outcomeMessage(outcome) ?? 'Something went wrong.');
@@ -268,7 +269,7 @@ export function CreateModal({ calendars, prefill, onClose, onSubmit }) {
           <button
             type="button"
             className="kit-btn primary"
-            disabled={busy || !calendars.length}
+            disabled={busy || queued || !calendars.length}
             onClick={submit}
           >
             Propose event

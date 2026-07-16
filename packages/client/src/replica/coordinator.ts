@@ -5,6 +5,7 @@ import {
   ReplicaRebootstrapRequiredError,
 } from './errors.js';
 import { IndexedDbIntentStore, MemoryIntentStore, type IntentRecordStore } from './intent-store.js';
+import { replicaIntentInvalidations } from './intent-invalidations.js';
 import { IntentQueue, type IntentQueueOptions } from './intents.js';
 import { replicaIntentDatabaseName } from './key.js';
 import { LiveQueryRegistry } from './live-query-registry.js';
@@ -75,6 +76,9 @@ export class ReplicaCoordinator {
   #feedSync: Promise<void> | undefined;
   #feedAbort: AbortController | undefined;
   #feedRetryTimer: ReturnType<typeof setTimeout> | undefined;
+  #feedGeneration = 0;
+  #feedFailureSignature: string | undefined;
+  #feedFailureCount = 0;
   #closed = false;
 
   constructor(
@@ -142,7 +146,7 @@ export class ReplicaCoordinator {
     this.#onCursorAdvanced?.(cursor, snapshot.schemaEpoch);
     this.emitInvalidations([
       { shapeId: '*', entity: '*', source: 'purge' },
-      ...overlayInvalidations(resolved),
+      ...replicaIntentInvalidations(resolved),
     ]);
     return cursor;
   }
@@ -154,7 +158,7 @@ export class ReplicaCoordinator {
       const resolved = await this.intents.applyOutcomes(batch.outcomes ?? []);
       const applied = await this.worker.applyChanges(batch);
       this.#onCursorAdvanced?.(applied.cursor, batch.schemaEpoch);
-      this.emitInvalidations([...applied.invalidations, ...overlayInvalidations(resolved)]);
+      this.emitInvalidations([...applied.invalidations, ...replicaIntentInvalidations(resolved)]);
       return applied.cursor;
     } catch (error) {
       if (error instanceof ReplicaRebootstrapRequiredError) {
@@ -196,7 +200,7 @@ export class ReplicaCoordinator {
 
   async enqueue(input: EnqueueIntentInput): Promise<ReplicaIntent> {
     const intent = await this.intents.enqueue(input);
-    this.emitInvalidations(overlayInvalidations([intent]));
+    this.emitInvalidations(replicaIntentInvalidations([intent]));
     return intent;
   }
 
@@ -214,7 +218,7 @@ export class ReplicaCoordinator {
 
   async applyIntentOutcome(outcome: IntentOutcome): Promise<ReplicaIntent | undefined> {
     const [intent] = await this.intents.applyOutcomes([outcome]);
-    if (intent) this.emitInvalidations(overlayInvalidations([intent]));
+    if (intent) this.emitInvalidations(replicaIntentInvalidations([intent]));
     return intent;
   }
 
@@ -288,6 +292,7 @@ export class ReplicaCoordinator {
 
   private async syncFromFeed(): Promise<boolean> {
     if (!this.#pullChanges || this.#closed) return true;
+    const generation = this.#feedGeneration;
     const abort = new AbortController();
     this.#feedAbort = abort;
     try {
@@ -310,10 +315,28 @@ export class ReplicaCoordinator {
           throw error;
         }
         if (!batch) return false;
+        if (abort.signal.aborted || generation !== this.#feedGeneration) return true;
         const cursor = await this.applyChanges(batch);
+        if (!cursorAfter(cursor, status.cursor)) {
+          if (this.recordFeedFailure('non-progress')) {
+            await this.requireRebootstrap({ reason: 'replica feed made no cursor progress' });
+            return true;
+          }
+          return false;
+        }
+        this.clearFeedFailures();
         this.clearReachedFeedTarget(cursor);
       }
       return abort.signal.aborted || !this.#feedTarget;
+    } catch (error) {
+      if (
+        error instanceof ReplicaProtocolError &&
+        this.recordFeedFailure(`${error.name}:${error.message}`)
+      ) {
+        await this.requireRebootstrap(error);
+        return true;
+      }
+      throw error;
     } finally {
       if (this.#feedAbort === abort) this.#feedAbort = undefined;
     }
@@ -347,11 +370,27 @@ export class ReplicaCoordinator {
   }
 
   private resetFeedGeneration(): void {
+    this.#feedGeneration += 1;
     this.#feedAbort?.abort();
     this.#feedAbort = undefined;
     this.#feedTarget = undefined;
     if (this.#feedRetryTimer) clearTimeout(this.#feedRetryTimer);
     this.#feedRetryTimer = undefined;
+    this.clearFeedFailures();
+  }
+
+  private recordFeedFailure(signature: string): boolean {
+    if (this.#feedFailureSignature === signature) this.#feedFailureCount += 1;
+    else {
+      this.#feedFailureSignature = signature;
+      this.#feedFailureCount = 1;
+    }
+    return this.#feedFailureCount >= 3;
+  }
+
+  private clearFeedFailures(): void {
+    this.#feedFailureSignature = undefined;
+    this.#feedFailureCount = 0;
   }
 
   private emitInvalidations(invalidations: ReplicaInvalidation[]): void {
@@ -375,27 +414,6 @@ async function openIndexedDb(
   } catch {
     return new MemoryIntentStore();
   }
-}
-
-function overlayInvalidations(intents: ReplicaIntent[]): ReplicaInvalidation[] {
-  const values = new Map<string, ReplicaInvalidation>();
-  for (const intent of intents) {
-    for (const mutation of intent.optimistic) {
-      const invalidation: ReplicaInvalidation = {
-        shapeId: mutation.shapeId,
-        entity: mutation.entity,
-        rowId: mutation.rowId,
-        source: 'overlay',
-        intentId: intent.intentId,
-        intentState: intent.state,
-      };
-      values.set(
-        `${invalidation.shapeId}\u0000${invalidation.entity}\u0000${invalidation.rowId}`,
-        invalidation,
-      );
-    }
-  }
-  return [...values.values()];
 }
 
 function cursorAfter(left: ReplicaCursor, right: ReplicaCursor): boolean {

@@ -1,9 +1,10 @@
+// governance: allow-repo-hygiene file-size-limit cohesive tunnel protocol; splitting would obscure issue #417 review
 // Single source of truth for cache-bucket versioning. Bumping VERSION purges
 // every prior bucket on activate. The worker's own script URL carries a
 // separate ?v= token minted in src/iroh-transport.ts (SERVICE_WORKER_VERSION);
 // that token gates the virtual-Iroh route and lives outside this file. Keep
 // the two in step when either changes.
-const VERSION = 'v10';
+const VERSION = 'v11';
 const SHELL_CACHE = `centraid-shell-${VERSION}`;
 const ASSET_CACHE = `centraid-tunnel-assets-${VERSION}`;
 const BLOB_CACHE = `centraid-tunnel-blobs-${VERSION}`;
@@ -32,6 +33,8 @@ const MAX_BLOB_BYTES = 300 * 1024 * 1024;
 const MAX_BLOB_ENTRIES = 2000;
 
 const appCookies = new Map();
+const bridgeOwners = new Map();
+let cacheGeneration = 0;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL)));
@@ -59,19 +62,38 @@ self.addEventListener('message', (event) => {
   // hold another gateway/vault's assets, so drop them. Shell cache is generic
   // and stays. This is a separate channel from the iroh-request bridge.
   if (event.data?.type === 'centraid:purge-tunnel-cache') {
+    cacheGeneration += 1;
+    appCookies.clear();
+    bridgeOwners.clear();
     event.waitUntil(Promise.all([caches.delete(ASSET_CACHE), caches.delete(BLOB_CACHE)]));
   }
 });
+
+function appIdForTarget(target) {
+  const url = new URL(target, self.location.origin);
+  const match = /^\/centraid\/(?!_)([^/]+)(?:\/|$)/.exec(url.pathname);
+  if (match) return decodeURIComponent(match[1]);
+  const attested = url.searchParams.get('__centraid_app');
+  return attested || undefined;
+}
+
+function appCookieKey(bridgeId, appId) {
+  return `${bridgeId}\u0000${appId || ''}`;
+}
 
 function virtualRoute(url) {
   if (!url.pathname.startsWith(IROH_PREFIX)) return undefined;
   const rest = url.pathname.slice(IROH_PREFIX.length);
   const slash = rest.indexOf('/');
   if (slash < 1) return undefined;
+  const bridgeId = rest.slice(0, slash);
+  const target = `${rest.slice(slash)}${url.search}`;
+  const appId = appIdForTarget(target);
   return {
-    bridgeId: rest.slice(0, slash),
-    target: `${rest.slice(slash)}${url.search}`,
-    sessionCookie: appCookies.get(rest.slice(0, slash)),
+    bridgeId,
+    target,
+    appId,
+    sessionCookie: appCookies.get(appCookieKey(bridgeId, appId)),
   };
 }
 
@@ -82,11 +104,43 @@ async function inheritedRoute(event) {
   const owner = virtualRoute(new URL(client.url));
   if (!owner) return undefined;
   const requestUrl = new URL(event.request.url);
+  const appId = appIdForTarget(owner.target);
   return {
     bridgeId: owner.bridgeId,
     target: `${requestUrl.pathname}${requestUrl.search}`,
-    sessionCookie: appCookies.get(owner.bridgeId),
+    appId,
+    sessionCookie: appCookies.get(appCookieKey(owner.bridgeId, appId)),
   };
+}
+
+function waitForClaim(port) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('bridge claim timed out')), 1000);
+    port.addEventListener('message', (event) => {
+      if (event.data?.type !== 'claim') return;
+      clearTimeout(timeout);
+      resolve();
+    });
+    port.start();
+  });
+}
+
+async function claimBridgeOwner(route) {
+  const candidates = (
+    await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+  ).filter((client) => !new URL(client.url).pathname.startsWith(IROH_PREFIX));
+  if (candidates.length === 0) throw new Error('Open the Centraid PWA to use this app.');
+  const currentId = bridgeOwners.get(route.bridgeId);
+  const current = candidates.find((client) => client.id === currentId);
+  if (current) return current;
+  const attempts = candidates.map((client) => {
+    const channel = new MessageChannel();
+    client.postMessage({ type: 'centraid:iroh-claim', bridgeId: route.bridgeId }, [channel.port2]);
+    return waitForClaim(channel.port1).then(() => client);
+  });
+  const owner = await Promise.any(attempts);
+  bridgeOwners.set(route.bridgeId, owner.id);
+  return owner;
 }
 
 function waitForHead(port) {
@@ -109,27 +163,21 @@ function waitForHead(port) {
 }
 
 async function tunnelRequest(route, method, headers, body) {
-  const candidates = (
-    await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
-  ).filter((client) => !new URL(client.url).pathname.startsWith(IROH_PREFIX));
-  if (candidates.length === 0) throw new Error('Open the Centraid PWA to use this app.');
-  const attempts = candidates.map((client) => {
-    const channel = new MessageChannel();
-    client.postMessage(
-      {
-        type: 'centraid:iroh-request',
-        bridgeId: route.bridgeId,
-        target: route.target,
-        method,
-        headers,
-        body: body.slice(0),
-        sessionCookie: route.sessionCookie,
-      },
-      [channel.port2],
-    );
-    return waitForHead(channel.port1).then((head) => ({ head, port: channel.port1 }));
-  });
-  return Promise.any(attempts);
+  const client = await claimBridgeOwner(route);
+  const channel = new MessageChannel();
+  client.postMessage(
+    {
+      type: 'centraid:iroh-request',
+      bridgeId: route.bridgeId,
+      target: route.target,
+      method,
+      headers,
+      body: body.slice(0),
+      sessionCookie: route.sessionCookie,
+    },
+    [channel.port2],
+  );
+  return waitForHead(channel.port1).then((head) => ({ head, port: channel.port1 }));
 }
 
 // Drains a bridge port's chunk stream into the browser Response stream.
@@ -224,6 +272,7 @@ function tunnelCacheKey(route) {
   target.searchParams.delete('theme');
   target.searchParams.delete('bgL');
   target.searchParams.set('__centraid_scope', route.bridgeId);
+  if (route.appId) target.searchParams.set('__centraid_app_scope', route.appId);
   return target.toString();
 }
 
@@ -241,7 +290,7 @@ function isAppDocumentTarget(target) {
 // origin. The virtual tunnel is already restricted by its app-session cookie;
 // exposing those shaped response bytes does not widen gateway authority.
 function exposeToOpaqueApp(headers) {
-  headers.set('access-control-allow-origin', '*');
+  headers.set('access-control-allow-origin', 'null');
   headers.set('cross-origin-resource-policy', 'cross-origin');
 }
 
@@ -267,15 +316,17 @@ function tunnelCachePlan(status, headers, isBlob, target) {
   return { bucket: ASSET_CACHE, immutable: false };
 }
 
-async function storeTunnelResponse(plan, key, response) {
+async function storeTunnelResponse(plan, key, response, generation = cacheGeneration) {
   try {
     const body = await response.arrayBuffer();
+    if (generation !== cacheGeneration) return;
     const headers = new Headers(response.headers);
     // decodedResponse removes the compressed wire length. Persist the actual
     // cached size so the blob LRU cannot treat gzip-decoded entries as free.
     headers.set('content-length', String(body.byteLength));
     headers.set('x-centraid-cached-at', String(Date.now()));
     const cache = await caches.open(plan.bucket);
+    if (generation !== cacheGeneration) return;
     await cache.put(key, new Response(body, { status: 200, headers }));
     if (plan.bucket === BLOB_CACHE) await trimBlobCache(cache);
   } catch {
@@ -306,7 +357,7 @@ async function trimBlobCache(cache) {
 // Stale-while-revalidate for a cached asset: issue a conditional GET through
 // the same bridge contract and replace the entry only when the gateway sends
 // fresh bytes (200); a 304 keeps what we served.
-async function revalidateAsset(route, key, etag) {
+async function revalidateAsset(route, key, etag, isBlob = false) {
   const { head, port } = await tunnelRequest(
     route,
     'GET',
@@ -319,11 +370,18 @@ async function revalidateAsset(route, key, etag) {
     await drainPort(port).catch(() => undefined); // drain empty body, release port
     return;
   }
+  if (head.status === 401 || head.status === 403) {
+    port.close();
+    appCookies.delete(appCookieKey(route.bridgeId, route.appId));
+    cacheGeneration += 1;
+    await Promise.all([caches.delete(ASSET_CACHE), caches.delete(BLOB_CACHE)]);
+    return;
+  }
   const headers = buildResponseHeaders(head.headers);
   // Plan off the on-wire headers (they still carry content-length) before
   // decodedResponse strips the compression headers.
   exposeToOpaqueApp(headers);
-  const plan = tunnelCachePlan(head.status, headers, false, route.target);
+  const plan = tunnelCachePlan(head.status, headers, isBlob, route.target);
   if (!plan) {
     await drainPort(port).catch(() => undefined);
     return;
@@ -340,11 +398,24 @@ async function tunnel(event, initialRoute) {
   const isBlob = cacheable && isBlobTarget(initialRoute);
   const cacheKey = cacheable ? tunnelCacheKey(initialRoute) : undefined;
 
+  // Even a cache hit needs one live shell tab that owns this exact bridge.
+  // This binds inherited iframe requests to their owning app before lookup.
+  if (cacheable) await claimBridgeOwner(initialRoute);
+
   // Blobs are content-addressed and immutable: serve straight from cache,
   // never touching the relay.
   if (isBlob) {
     const hit = await caches.open(BLOB_CACHE).then((cache) => cache.match(cacheKey));
-    if (hit) return hit;
+    if (hit) {
+      // Content bytes are immutable, authorization is not. Revalidate the
+      // app session so an online revocation evicts already-cached blobs too.
+      event.waitUntil(
+        revalidateAsset(initialRoute, cacheKey, hit.headers.get('etag'), true).catch(
+          () => undefined,
+        ),
+      );
+      return hit;
+    }
   }
   // Assets already cached are served immediately, then revalidated in the
   // background (stale-while-revalidate).
@@ -370,7 +441,6 @@ async function tunnel(event, initialRoute) {
     method === 'GET' || method === 'HEAD' ? new ArrayBuffer(0) : await event.request.arrayBuffer();
   const { head, port } = await tunnelRequest(initialRoute, method, headers, body);
   const cookieLine = firstHeader(head.headers, 'set-cookie');
-  if (cookieLine) appCookies.set(initialRoute.bridgeId, cookieLine.split(';', 1)[0]);
 
   const location = firstHeader(head.headers, 'location');
   if (location && [301, 302, 303, 307, 308].includes(head.status)) {
@@ -380,6 +450,10 @@ async function tunnel(event, initialRoute) {
     // gateway URL or the app-session cookie to the browser.
     port.close();
     const target = themedRedirectTarget(location, event.request.url);
+    const appId = appIdForTarget(target);
+    if (cookieLine && appId) {
+      appCookies.set(appCookieKey(initialRoute.bridgeId, appId), cookieLine.split(';', 1)[0]);
+    }
     const virtual = new URL(
       `${IROH_PREFIX}${initialRoute.bridgeId}${target}`,
       self.location.origin,
@@ -402,6 +476,11 @@ async function tunnel(event, initialRoute) {
   }
 
   const responseHeaders = buildResponseHeaders(head.headers);
+  if (head.status === 401 || head.status === 403) {
+    appCookies.delete(appCookieKey(initialRoute.bridgeId, initialRoute.appId));
+    cacheGeneration += 1;
+    await Promise.all([caches.delete(ASSET_CACHE), caches.delete(BLOB_CACHE)]);
+  }
   exposeToOpaqueApp(responseHeaders);
   // Plan off the on-wire headers (they still carry content-length) before
   // decodedResponse strips the compression headers.
@@ -451,7 +530,21 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     (async () => {
       const url = new URL(event.request.url);
-      const route = virtualRoute(url) ?? (await inheritedRoute(event));
+      const explicit = virtualRoute(url);
+      const owner = await inheritedRoute(event);
+      // A managed iframe may know its virtual bridge URL, but it cannot use
+      // that knowledge to select another app's cookie/cache namespace. Keep
+      // an explicit resource target while binding authority to its owning
+      // document's bridge and app.
+      const route =
+        explicit && owner
+          ? {
+              bridgeId: owner.bridgeId,
+              target: explicit.target,
+              appId: owner.appId,
+              sessionCookie: owner.sessionCookie,
+            }
+          : (explicit ?? owner);
       if (route) return tunnel(event, route);
       if (event.request.method !== 'GET' || event.request.destination === '')
         return fetch(event.request);

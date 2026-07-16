@@ -19,6 +19,7 @@ import { daemonLayoutFor } from './paths.ts';
 import { openVaultRegistry, type VaultRegistry } from '../serve/vault-registry.ts';
 import { EnrollmentStore } from '../serve/enrollment-store.ts';
 import { DeviceTokenStore } from '../serve/device-token-store.ts';
+import { PairingTicketStore } from '../serve/pairing-store.ts';
 
 const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
 
@@ -282,7 +283,10 @@ test('pair needs the daemon endpoint identity, then mints a pasteable ticket', a
   await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
 
   const text = await capture(() =>
-    commandPair(['--data-dir', dataDir, '--vault', 'Family', '--ttl-minutes', '5'], fail),
+    commandPair(
+      ['--data-dir', dataDir, '--vault', 'Family', '--ttl-minutes', '5', '--trust', 'readonly'],
+      fail,
+    ),
   );
   expect(text).toMatch(/Pairing ticket for vault "Family"/);
   // The pasteable token decodes to a gw-pair payload naming the vault.
@@ -292,12 +296,17 @@ test('pair needs the daemon endpoint identity, then mints a pasteable ticket', a
     kind: string;
     gw: string;
     vaultName: string;
+    t: string;
+    s: string;
   };
   expect(payload).toMatchObject({
     kind: 'centraid-gw-pair',
     gw: 'gw-ticket-base32',
     vaultName: 'Family',
   });
+  expect(
+    PairingTicketStore.open(layout.pairingTicketsFile).redeem(payload.t, payload.s),
+  ).toMatchObject({ trust: 'readonly' });
 });
 
 test('pair --json emits one JSON line instead of the pasteable text block (issue #382)', async () => {

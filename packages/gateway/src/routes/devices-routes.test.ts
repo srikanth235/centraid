@@ -332,6 +332,41 @@ test('POST /ticket as a device: enrolled vault mints, foreign vault → 404', as
   expect(tickets.listActive().every((t) => t.vaultId === 'vault-a')).toBe(true);
 });
 
+test('POST /ticket binds owner-selected trust and refuses delegation from a read-only device', async () => {
+  const { enrollments, deviceTokens, tickets } = await makeStores();
+  enrollments.enroll({
+    endpointId: 'readonly-key',
+    vaultId: 'vault-a',
+    label: 'Viewer',
+    trust: 'readonly',
+  });
+  const base = await startHandlerServer(
+    makeDevicesRouteHandler({ enrollments, deviceTokens, tickets, vaultName, endpointTicket }),
+  );
+
+  const owner = await fetch(`${base}/centraid/_gateway/devices/ticket`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ vaultId: 'vault-a', trust: 'readonly' }),
+  });
+  expect(owner.status).toBe(200);
+  expect(tickets.listActive()).toEqual([
+    expect.objectContaining({ vaultId: 'vault-a', trust: 'readonly' }),
+  ]);
+
+  const delegated = await fetch(`${base}/centraid/_gateway/devices/ticket`, {
+    method: 'POST',
+    headers: {
+      [AUTHED_DEVICE_HEADER]: 'readonly-key',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ vaultId: 'vault-a', trust: 'full' }),
+  });
+  expect(delegated.status).toBe(403);
+  expect(await delegated.json()).toMatchObject({ error: 'readonly_device' });
+  expect(tickets.listActive()).toHaveLength(1);
+});
+
 test('POST /ticket with no vault (no body, no header) → 400 vault_required', async () => {
   const { enrollments, deviceTokens, tickets } = await makeStores();
   const base = await startHandlerServer(
@@ -365,7 +400,7 @@ test('a minted ticket round-trips through redeem(ticketId, secret)', async () =>
   const decoded = parsePairingTicket(ticket)!;
 
   // The private half (t/s) really redeems against the store → enrolls vault-b.
-  expect(tickets.redeem(decoded.t, decoded.s)).toEqual({ vaultId: 'vault-b' });
+  expect(tickets.redeem(decoded.t, decoded.s)).toEqual({ vaultId: 'vault-b', trust: 'full' });
   // Burned — a second redemption fails.
   expect(tickets.redeem(decoded.t, decoded.s)).toBeUndefined();
 });
