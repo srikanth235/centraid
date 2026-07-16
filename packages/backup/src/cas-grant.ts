@@ -40,3 +40,11 @@ export type RequestCasGrantOptions = Omit<RequestStorageGrantOptions, 'store'>;
 export async function requestCasGrant(opts: RequestCasGrantOptions): Promise<S3Grant> {
   return requestStorageGrant({ ...opts, store: 'cas' });
 }
+
+export type RequestDerivedGrantOptions = Omit<RequestStorageGrantOptions, 'store'>;
+
+/** Convenience wrapper — fixes `store: "derived"` (binary display
+ *  derivatives: thumb/preview/poster; PROTOCOL.md § derived store). */
+export async function requestDerivedGrant(opts: RequestDerivedGrantOptions): Promise<S3Grant> {
+  return requestStorageGrant({ ...opts, store: 'derived' });
+}

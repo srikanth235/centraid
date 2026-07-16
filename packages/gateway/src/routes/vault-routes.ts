@@ -324,6 +324,16 @@ export function makeVaultRouteHandler(
               ...(target.region ? { region: target.region } : {}),
               ...(target.bucket ? { bucket: target.bucket } : {}),
               ...(target.prefix ? { prefix: target.prefix } : {}),
+              // The `derived` store prefix (issue #425 Wave 2), present only when
+              // the provider advertised + granted the store; absent ⇒ derivatives
+              // stay on cas (graceful degradation).
+              ...('derivedPrefix' in target && target.derivedPrefix
+                ? { derivedPrefix: target.derivedPrefix }
+                : {}),
+              // Declared storage classes (issue #425 Wave 3): the vault's direct-to-cold heuristic engages only when STANDARD_IA is here.
+              ...('supportedStorageClasses' in target && target.supportedStorageClasses
+                ? { supportedStorageClasses: target.supportedStorageClasses }
+                : {}),
             };
           }
           if (blobStorePatch?.['kind'] === 's3') {
@@ -332,7 +342,9 @@ export function makeVaultRouteHandler(
 
           const remoteIdentity = (value: Record<string, unknown>): string =>
             JSON.stringify(
-              ['connectionId', 'endpoint', 'region', 'bucket', 'prefix'].map((key) => value[key]),
+              ['connectionId', 'endpoint', 'region', 'bucket', 'prefix', 'derivedPrefix'].map(
+                (key) => value[key],
+              ),
             );
           const attachingRemote =
             blobStorePatch?.['kind'] === 's3' &&

@@ -1,15 +1,18 @@
 import { rmSync } from 'node:fs';
+import type { DatabaseSync } from 'node:sqlite';
 import type { BlobCache } from './cache.js';
 import type { RemoteTier } from './custody-types.js';
 import type { LocalBlobStore } from './local.js';
 import { drainOutboxRow } from './outbox-drain.js';
 import { cleanupOrphanedMultipartUploads } from './orphan-multipart.js';
+import { desiredStoreForSha } from './store-routing.js';
 import type { BlobTransferState, OutboxRow } from './transfer-state.js';
 
 const ORPHAN_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 const ORPHAN_SWEEP_RETRY_MS = 60 * 1000;
 
 export interface BlobOutboxRunnerOptions {
+  vault: DatabaseSync;
   state: BlobTransferState;
   local: LocalBlobStore;
   cache: BlobCache;
@@ -48,6 +51,9 @@ export class BlobOutboxRunner {
       remote: this.options.remote,
       onReplicated: () => this.options.onStatus(),
       settlementAllowed: () => !this.closed,
+      // Route derivatives to the derived store class at drain time (issue #425
+      // Wave 2); the enqueue side stays sha+size only.
+      desiredStore: (sha: string) => desiredStoreForSha(this.options.vault, sha),
     };
   }
 

@@ -16,8 +16,13 @@
 // Layer 1 — Account & grants
 // ---------------------------------------------------------------------------
 
-/** The two store classes this revision defines (PROTOCOL.md § Terminology). */
-export type StoreClass = 'backup' | 'cas';
+/** The store classes this revision defines (PROTOCOL.md § Terminology). */
+export type StoreClass = 'backup' | 'cas' | 'derived';
+
+/** Every store class, as a runtime array — the single source of truth so
+ *  guards that must enumerate them (inventory validation, usage loops,
+ *  capability checks) can't drift from `StoreClass`. Order is stable. */
+export const STORE_CLASSES = ['backup', 'cas', 'derived'] as const satisfies readonly StoreClass[];
 
 /** Discovery's additive capability flags. A provider declares only the
  *  control-plane surfaces and store classes it actually offers. */
@@ -59,6 +64,12 @@ export interface ProviderCapabilities {
   purgeAuthTier: 'api-key' | 'interactive';
   /** Present iff `capabilities` includes `"backup"`. */
   backup?: BackupDiscovery;
+  /** OPTIONAL — the provider-declared list of S3 storage-class values
+   *  (`x-amz-storage-class`) its data plane accepts on object-creating
+   *  requests (PUT / CreateMultipartUpload / CopyObject), e.g. Cloudflare
+   *  R2's `["STANDARD", "STANDARD_IA"]`. Absent ⇒ clients MUST NOT send the
+   *  header at all; declared ⇒ the data plane MUST accept those values. */
+  storageClasses?: string[];
 }
 
 /** `accountStatus` on the target list — surfaced so backups don't stop silently. */
@@ -306,8 +317,8 @@ export interface BackupProvider {
   purgeTarget(targetId: string): Promise<void>;
 
   /** Store-class-scoped data plane handle (PROTOCOL.md § Layer 1 — per-store
-   *  isolated prefixes). Every provider MUST support `"backup"`; `"cas"`
-   *  MUST be supported when `capabilities` declares it. */
+   *  isolated prefixes). Every provider MUST support `"backup"`; `"cas"` and
+   *  `"derived"` MUST each be supported when `capabilities` declares it. */
   openDataPlane(
     targetId: string,
     store: StoreClass,

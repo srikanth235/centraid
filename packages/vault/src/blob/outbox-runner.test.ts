@@ -36,6 +36,7 @@ test('custody drain never exceeds the configured replication concurrency', async
     inFlight -= 1;
   };
   const runner = new BlobOutboxRunner({
+    vault: db.vault,
     state,
     local,
     cache,

@@ -1,5 +1,5 @@
 // Provider seam (PROTOCOL.md).
-export { BackupProviderError, CODE_STATUS } from './provider.js';
+export { BackupProviderError, CODE_STATUS, STORE_CLASSES } from './provider.js';
 export type {
   AccountStatus,
   BackupDiscovery,
@@ -38,8 +38,12 @@ export type { S3ObjectStoreOptions } from './s3-store.js';
 // Layer-1 generic grant path (PROTOCOL.md § Credential grant) — for a
 // consumer (e.g. a `cas` store client) that wants a grant without pulling in
 // the snapshot engine or `BackupProvider`.
-export { requestCasGrant, requestStorageGrant } from './cas-grant.js';
-export type { RequestCasGrantOptions, RequestStorageGrantOptions } from './cas-grant.js';
+export { requestCasGrant, requestDerivedGrant, requestStorageGrant } from './cas-grant.js';
+export type {
+  RequestCasGrantOptions,
+  RequestDerivedGrantOptions,
+  RequestStorageGrantOptions,
+} from './cas-grant.js';
 
 // Parts (FORMAT.md § Parts — fixed-size, /1 boundaries kept in /2).
 export { PART_BYTES, partBuffer, partStream } from './parts.js';

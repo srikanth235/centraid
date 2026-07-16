@@ -58,6 +58,7 @@ import {
   type ProviderPolicyDeclaration,
   type SnapshotRegistration,
   type SnapshotRow,
+  STORE_CLASSES,
   type StoreClass,
   type StoreUsageReport,
   type TargetInfo,
@@ -93,9 +94,9 @@ const CAPABILITIES: ProviderCapabilities = {
   protocol: ['centraid-storage-provider/1'],
   dataPlane: 's3',
   // Local disk has no separate wire-grant concept (openDataPlane IS the
-  // grant), but it still supports both store classes and can report cheap,
-  // real usage — all three are legitimately advertised offline.
-  capabilities: ['backup', 'cas', 'usage', 'policy', 'inventory', 'audit'],
+  // grant), but it still supports every store class and can report cheap,
+  // real usage — all are legitimately advertised offline.
+  capabilities: ['backup', 'cas', 'derived', 'usage', 'policy', 'inventory', 'audit'],
   maxCredentialTtlSeconds: 86400,
   purgeAuthTier: 'api-key',
   backup: {
@@ -426,7 +427,7 @@ export class LocalBackupProvider implements BackupProvider {
     const start = Math.floor(new Date(target.createdAt).getTime() / 1000);
     const end = Math.floor(Date.now() / 1000);
     const out: UsageByStore = {};
-    for (const store of ['backup', 'cas'] as const) {
+    for (const store of STORE_CLASSES) {
       const { bytesStored, objectCount } = await this.countStore(targetId, store);
       const report: StoreUsageReport = {
         bytesStored,

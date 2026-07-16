@@ -174,15 +174,25 @@ export class S3BlobStore implements BlobStore {
     return this.pipeline.send(method, key, opts);
   }
 
-  async put(sha: string, bytes: Buffer): Promise<void> {
+  /**
+   * The class this write carries: the per-call override wins (issue #425 Wave 3
+   * direct-to-cold heuristic), else the instance default (issue #405 §6), else
+   * none. Empty ⇒ no `x-amz-storage-class` header, byte-identical to today.
+   */
+  private classOf(override?: string): string | undefined {
+    return override ?? this.options.storageClass;
+  }
+
+  async put(sha: string, bytes: Buffer, storageClass?: string): Promise<void> {
     await this.pipeline.pace(bytes.length);
+    const cls = this.classOf(storageClass);
     const res = await this.send('PUT', this.keyFor(sha), {
       body: bytes,
       headers: {
         'content-type': 'application/octet-stream',
-        // Storage class rides the object-creating PUT (issue #405 §6); the
-        // signer folds it into SignedHeaders like any other header.
-        ...(this.options.storageClass ? { 'x-amz-storage-class': this.options.storageClass } : {}),
+        // Storage class rides the object-creating PUT; the signer folds it into
+        // SignedHeaders like any other header.
+        ...(cls ? { 'x-amz-storage-class': cls } : {}),
       },
     });
     if (!res.ok) throw new Error(`s3 put ${sha}: ${res.status} ${await res.text()}`);
@@ -196,12 +206,17 @@ export class S3BlobStore implements BlobStore {
    * at a time, never the whole blob. Aborts the multipart upload on any
    * failure so a partial upload doesn't bill/linger.
    */
-  async putStream(sha: string, source: NodeJS.ReadableStream, approxSize: number): Promise<void> {
+  async putStream(
+    sha: string,
+    source: NodeJS.ReadableStream,
+    approxSize: number,
+    storageClass?: string,
+  ): Promise<void> {
     const key = this.keyFor(sha);
     if (approxSize <= MULTIPART_THRESHOLD_BYTES) {
-      return this.put(sha, await streamToBuffer(source));
+      return this.put(sha, await streamToBuffer(source), storageClass);
     }
-    const uploadId = await this.createMultipartUpload(key);
+    const uploadId = await this.createMultipartUpload(key, storageClass);
     try {
       const parts: { partNumber: number; etag: string }[] = [];
       let partNumber = 1;
@@ -225,11 +240,9 @@ export class S3BlobStore implements BlobStore {
     }
   }
 
-  private async createMultipartUpload(key: string): Promise<string> {
-    return this.pipeline.beginMultipart(
-      key,
-      this.options.storageClass ? { 'x-amz-storage-class': this.options.storageClass } : undefined,
-    );
+  private async createMultipartUpload(key: string, storageClass?: string): Promise<string> {
+    const cls = this.classOf(storageClass);
+    return this.pipeline.beginMultipart(key, cls ? { 'x-amz-storage-class': cls } : undefined);
   }
 
   private async uploadPart(

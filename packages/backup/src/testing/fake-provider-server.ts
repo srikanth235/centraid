@@ -13,6 +13,7 @@ import {
   type ProviderInventoryQuery,
   type ProviderPolicy,
   type SnapshotRow,
+  STORE_CLASSES,
   type StoreClass,
 } from '../provider.js';
 import { S3TestServer } from './s3-test-server.js';
@@ -156,9 +157,10 @@ export async function startFakeProviderServer(): Promise<FakeProviderServer> {
       jsonBody(res, 200, {
         protocol: ['centraid-storage-provider/1'],
         dataPlane: 's3',
-        capabilities: ['backup', 'cas', 'usage', 'policy', 'inventory', 'audit'],
+        capabilities: ['backup', 'cas', 'derived', 'usage', 'policy', 'inventory', 'audit'],
         maxCredentialTtlSeconds: 86400,
         purgeAuthTier: 'interactive',
+        storageClasses: ['STANDARD', 'STANDARD_IA'],
         backup: {
           softDeleteWindowDays: SOFT_DELETE_WINDOW_DAYS,
           retention: {
@@ -240,6 +242,7 @@ export async function startFakeProviderServer(): Promise<FakeProviderServer> {
       jsonBody(res, 200, {
         backup: usageReportFor(targetId, 'backup'),
         cas: usageReportFor(targetId, 'cas'),
+        derived: usageReportFor(targetId, 'derived'),
       });
       return;
     }
@@ -261,14 +264,19 @@ export async function startFakeProviderServer(): Promise<FakeProviderServer> {
     }
     if (req.method === 'GET' && rest === '/inventory') {
       const store = url.searchParams.get('store');
-      if (store !== 'backup' && store !== 'cas') {
-        return errorBody(res, 400, 'invalid_request', 'store must be backup or cas');
+      if (!store || !(STORE_CLASSES as readonly string[]).includes(store)) {
+        return errorBody(
+          res,
+          400,
+          'invalid_request',
+          `store must be one of ${STORE_CLASSES.join(', ')}`,
+        );
       }
       return jsonBody(
         res,
         200,
         inventoryFor(target, {
-          store,
+          store: store as StoreClass,
           cursor: url.searchParams.get('cursor') ?? undefined,
           since: numberParam(url, 'since'),
           limit: numberParam(url, 'limit'),

@@ -9,6 +9,9 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { nowIso } from '../ids.js';
 
+/** Which remote store class a replica lives under (issue #425 Wave 2). */
+export type ReplicaStore = 'cas' | 'derived';
+
 /**
  * Chunked IN-list size for the LRU ordering query — SQLite's default variable
  * ceiling is far above this, but a bounded list keeps the prepared statement
@@ -27,15 +30,30 @@ const IN_CHUNK = 500;
 export class ReplicaIndex {
   constructor(private readonly db: DatabaseSync) {}
 
-  /** Record (or refresh) evidence that `sha` is replicated. Idempotent. */
-  mark(sha: string, byteSize: number): void {
+  /**
+   * Record (or refresh) evidence that `sha` is replicated. Idempotent. `store`
+   * records WHERE the bytes actually landed (issue #425 Wave 2) — originals
+   * default to `cas`, so every existing caller stays byte-for-byte unchanged;
+   * only the routed derivative write paths pass `derived`. A later mark with a
+   * different store re-stamps the row (the bytes moved), keeping the index and
+   * the real remote prefix in agreement.
+   */
+  mark(sha: string, byteSize: number, store: ReplicaStore = 'cas'): void {
     this.db
       .prepare(
-        `INSERT INTO blob_replica (sha256, replicated_at, byte_size) VALUES (?, ?, ?)
+        `INSERT INTO blob_replica (sha256, replicated_at, byte_size, store) VALUES (?, ?, ?, ?)
          ON CONFLICT (sha256) DO UPDATE SET replicated_at = excluded.replicated_at,
-           byte_size = excluded.byte_size`,
+           byte_size = excluded.byte_size, store = excluded.store`,
       )
-      .run(sha, nowIso(), byteSize);
+      .run(sha, nowIso(), byteSize, store);
+  }
+
+  /** The store class holding `sha`'s replica, or undefined when unrecorded. */
+  storeOf(sha: string): ReplicaStore | undefined {
+    const row = this.db.prepare('SELECT store FROM blob_replica WHERE sha256 = ?').get(sha) as
+      | { store: ReplicaStore }
+      | undefined;
+    return row?.store;
   }
 
   /** Drop the evidence — the remote copy is gone (delete/purge/orphan-sweep). */
@@ -48,19 +66,33 @@ export class ReplicaIndex {
     return this.db.prepare('SELECT 1 FROM blob_replica WHERE sha256 = ?').get(sha) !== undefined;
   }
 
-  /** The full set of shas the index believes are replicated. */
-  all(): Set<string> {
-    const rows = this.db.prepare('SELECT sha256 FROM blob_replica').all() as { sha256: string }[];
+  /**
+   * The set of shas the index believes are replicated. Store-agnostic by
+   * default (presence anywhere is enough for custody-state projection); pass a
+   * `store` to scope to one class — the reconciliation sweep diffs each granted
+   * store class against its own listing (issue #425 Wave 2).
+   */
+  all(store?: ReplicaStore): Set<string> {
+    const rows = (
+      store
+        ? this.db.prepare('SELECT sha256 FROM blob_replica WHERE store = ?').all(store)
+        : this.db.prepare('SELECT sha256 FROM blob_replica').all()
+    ) as { sha256: string }[];
     return new Set(rows.map((r) => r.sha256));
   }
 
-  /** Evidence rows with timestamps, used to protect marks racing an inventory walk. */
-  rows(): { sha256: string; replicatedAt: string }[] {
-    const rows = this.db.prepare('SELECT sha256, replicated_at FROM blob_replica').all() as {
+  /** Evidence rows with timestamps + store, used to protect marks racing an inventory walk. */
+  rows(): { sha256: string; replicatedAt: string; store: ReplicaStore }[] {
+    const rows = this.db.prepare('SELECT sha256, replicated_at, store FROM blob_replica').all() as {
       sha256: string;
       replicated_at: string;
+      store: ReplicaStore;
     }[];
-    return rows.map((row) => ({ sha256: row.sha256, replicatedAt: row.replicated_at }));
+    return rows.map((row) => ({
+      sha256: row.sha256,
+      replicatedAt: row.replicated_at,
+      store: row.store,
+    }));
   }
 
   /** Forget all evidence when the configured remote identity changes. */
@@ -69,24 +101,27 @@ export class ReplicaIndex {
   }
 
   /**
-   * Reconcile the index against a full remote listing (issue #404 §4 rebuild
-   * path): the remote's real object set is TRUTH, so rows for shas the remote
-   * no longer has are dropped and shas the remote has but the index missed are
-   * added. Sizes for freshly-added rows come from `sizeOf` (the local tier's
-   * stat) when known, else 0 — the index's job is presence, not accounting.
+   * Reconcile ONE store class's rows against that store's full remote listing
+   * (issue #404 §4 rebuild path, made store-aware in #425 Wave 2): the store's
+   * real object set is TRUTH, so `store`-classed rows for shas that listing no
+   * longer has are dropped and shas the listing has but the index missed are
+   * added under `store`. Scoping by store is what keeps a `derived` listing from
+   * healing away `cas` evidence (and vice-versa) — each granted class heals only
+   * its own rows. Sizes for freshly-added rows come from `sizeOf` (the local
+   * tier's stat) when known, else 0 — the index's job is presence, not accounting.
    */
-  heal(remoteShas: Set<string>, sizeOf: (sha: string) => number): void {
-    const known = this.all();
+  heal(store: ReplicaStore, remoteShas: Set<string>, sizeOf: (sha: string) => number): void {
+    const known = this.all(store);
     this.db.exec('BEGIN');
     try {
-      const del = this.db.prepare('DELETE FROM blob_replica WHERE sha256 = ?');
-      for (const sha of known) if (!remoteShas.has(sha)) del.run(sha);
+      const del = this.db.prepare('DELETE FROM blob_replica WHERE sha256 = ? AND store = ?');
+      for (const sha of known) if (!remoteShas.has(sha)) del.run(sha, store);
       const ins = this.db.prepare(
-        `INSERT INTO blob_replica (sha256, replicated_at, byte_size) VALUES (?, ?, ?)
+        `INSERT INTO blob_replica (sha256, replicated_at, byte_size, store) VALUES (?, ?, ?, ?)
          ON CONFLICT (sha256) DO NOTHING`,
       );
       const now = nowIso();
-      for (const sha of remoteShas) if (!known.has(sha)) ins.run(sha, now, sizeOf(sha));
+      for (const sha of remoteShas) if (!known.has(sha)) ins.run(sha, now, sizeOf(sha), store);
       this.db.exec('COMMIT');
     } catch (err) {
       this.db.exec('ROLLBACK');

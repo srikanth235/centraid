@@ -71,3 +71,77 @@ test('BYO CAS-only audit can be healthy without a snapshot-backup target', async
     cas: { configured: true, source: 'bucket', missing: { count: 0 }, orphans: { count: 0 } },
   });
 });
+
+// ---------- issue #425 Wave 2: per-store reconciliation ----------
+
+type CasCollect = NonNullable<Parameters<typeof runCasOnlyReconciliation>[0]['collect']>;
+
+/** A single-object live provider collection for one store class. */
+function liveObject(sha: string): {
+  source: 'provider';
+  providerAttested: true;
+  objects: {
+    key: string;
+    sizeBytes: number;
+    etagOrHash: string;
+    storedAt: number;
+    state: 'live';
+  }[];
+} {
+  return {
+    source: 'provider',
+    providerAttested: true,
+    objects: [
+      { key: `blobs/sha256/${sha}`, sizeBytes: 1, etagOrHash: sha, storedAt: 1, state: 'live' },
+    ],
+  };
+}
+
+test('the cas diff never disproves derived evidence (and vice-versa)', async () => {
+  const vault = db();
+  const index = new ReplicaIndex(vault.vault);
+  const casSha = '1'.repeat(64);
+  const derivedSha = '2'.repeat(64);
+  index.mark(casSha, 10, 'cas');
+  index.mark(derivedSha, 20, 'derived');
+  // Each store's listing carries ONLY its own object; the cas pass must not see
+  // the derived sha as "missing", nor the derived pass the cas sha.
+  const collect: CasCollect = async (opts) => ({
+    configured: true,
+    collection: liveObject(opts.store === 'derived' ? derivedSha : casSha),
+  });
+
+  await runCasOnlyReconciliation({
+    db: vault,
+    verifyBucket: false,
+    checkedAt: '2099-01-01T00:00:00.000Z',
+    collect,
+  });
+
+  expect(index.storeOf(casSha)).toBe('cas');
+  expect(index.storeOf(derivedSha)).toBe('derived');
+});
+
+test('the derived store is diffed: a derived replica absent from the derived listing is demoted', async () => {
+  const vault = db();
+  const index = new ReplicaIndex(vault.vault);
+  const derivedSha = '3'.repeat(64);
+  index.mark(derivedSha, 20, 'derived');
+  // cas listing healthy (empty); derived listing empty ⇒ the derived row is missing.
+  const collect: CasCollect = async () => ({
+    configured: true,
+    collection: { source: 'provider', providerAttested: true, objects: [] },
+  });
+
+  const state = await runCasOnlyReconciliation({
+    db: vault,
+    verifyBucket: true,
+    checkedAt: '2099-01-01T00:00:00.000Z',
+    collect,
+  });
+
+  expect(index.has(derivedSha)).toBe(false);
+  expect(state.cas.missing.count).toBeGreaterThanOrEqual(1);
+  expect(state.cas.missing.sample).toContain(derivedSha);
+  expect(state.status).toBe('error');
+});

@@ -272,7 +272,7 @@ test('stale replica evidence cannot let admission delete the last local original
 
   // Deep-list healing removes the stale evidence and pins the local copy even
   // against an explicitly reconciled sweep.
-  h.cache.replica.heal(new Set(), () => 0);
+  h.cache.replica.heal('cas', new Set(), () => 0);
   expect(h.cache.isReplicated(a.sha)).toBe(false);
   expect(h.cache.runEviction(15, 0, 0, 'reconciled-sweep').evicted).toEqual([]);
   expect(h.local.hasSync(a.sha)).toBe(true);
@@ -364,7 +364,7 @@ test('paced import: 16 MiB through a 4 MiB spool completes, spool never exceeds 
     // Replicate, heal against the remote listing, then let the authorized sweep
     // reserve room for the next original; admission itself never sheds one.
     await h.custody.replicate();
-    h.cache.replica.heal(new Set(h.remote.objects.keys()), () => BLOB);
+    h.cache.replica.heal('cas', new Set(h.remote.objects.keys()), () => BLOB);
     h.cache.runEviction(BLOB, 0, 0, 'reconciled-sweep');
   }
   // Nothing lost: every sha is on remote or still local (or both).

@@ -9,6 +9,7 @@
 
 import { ReplicaIndex, archivedSegmentShas, liveBlobShas, type VaultDb } from '@centraid/vault';
 import { collectCasInventory, type CasInventoryResult } from './backup-cas-inventory.js';
+import { reconcileDerivedInto } from './backup-derived-inventory.js';
 import { reconcileCasInventory, type BackupReconciliationState } from './backup-reconciliation.js';
 import { unavailableStore, type StoreReconciliationState } from './backup-reconciliation-state.js';
 import type { StorageConnectionStore } from './storage-connections.js';
@@ -96,7 +97,8 @@ export async function runCasOnlyReconciliation(
     for (const sha of archivedSegmentShas(opts.db.journal)) live.add(sha);
     const index = new ReplicaIndex(opts.db.vault);
     for (const sha of result.authenticatedFailures ?? []) index.unmark(sha);
-    const rows = index.rows();
+    // Scope the cas diff to `store='cas'` rows (issue #425 Wave 2).
+    const rows = index.rows().filter((row) => row.store === 'cas');
     cas = reconcileCasInventory({
       collection: result.collection,
       live,
@@ -107,6 +109,17 @@ export async function runCasOnlyReconciliation(
       unmark: (sha) => index.unmark(sha),
     });
     addAuthenticatedFailures(cas, result.authenticatedFailures ?? []);
+    // Diff the derived store class too, folding its drift into `cas`. The same
+    // `collect` seam drives it — a test's injected collector switches on `store`.
+    await reconcileDerivedInto({
+      cas,
+      db: opts.db,
+      ...(opts.storageConnections ? { storageConnections: opts.storageConnections } : {}),
+      verifyBucket: opts.verifyBucket,
+      live,
+      checkedAt: opts.checkedAt,
+      ...(opts.collect ? { collect: opts.collect } : {}),
+    });
   }
 
   return {

@@ -22,6 +22,7 @@ import {
 import { ReplicaIndex, archivedSegmentShas, liveBlobShas, type VaultDb } from '@centraid/vault';
 import type { StorageConnectionStore } from './storage-connections.js';
 import { collectCasInventory } from './backup-cas-inventory.js';
+import { reconcileDerivedInto } from './backup-derived-inventory.js';
 import {
   collectAudit,
   collectInventory,
@@ -411,7 +412,9 @@ export async function runBackupReconciliation(opts: {
     const live = liveBlobShas(opts.db.vault);
     for (const sha of archivedSegmentShas(opts.db.journal)) live.add(sha);
     const index = new ReplicaIndex(opts.db.vault);
-    const rows = index.rows();
+    // Scope the cas diff to `store='cas'` rows (issue #425 Wave 2) so the cas
+    // listing never disproves derived evidence.
+    const rows = index.rows().filter((row) => row.store === 'cas');
     cas = reconcileCasInventory({
       collection: casResult.collection,
       live,
@@ -429,6 +432,15 @@ export async function runBackupReconciliation(opts: {
           .slice(0, SAMPLE_LIMIT),
       };
     }
+    // Diff the derived store class too, folding its drift into `cas`.
+    await reconcileDerivedInto({
+      cas,
+      db: opts.db,
+      ...(opts.storageConnections ? { storageConnections: opts.storageConnections } : {}),
+      verifyBucket,
+      live,
+      checkedAt: opts.checkedAt,
+    });
   }
 
   const rows = await opts.provider.listSnapshots(opts.targetId, { includePruned: true });

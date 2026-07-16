@@ -300,11 +300,21 @@ export class DirectBlobTransfers {
         `direct upload size mismatch: expected ${row.sealed_size ?? 'an object'}, got ${temp?.size ?? 'missing'}`,
       );
     }
-    await remote.transfer.copyTemporaryToSha(row.remote_temp_id, row.expected_sha256);
+    const byteSize = row.expected_size ?? 0;
+    // Direct-to-cold heuristic (issue #425 Wave 3): the CopyObject that mints
+    // the final CAS object carries STANDARD_IA for an eligible large original.
+    // The staging row is written after custody, so the declared media type +
+    // size are handed in directly for the resolver (a session without a declared
+    // media type falls back to the DB lookup, which is empty ⇒ class-less).
+    const storageClass = remote.storageClassFor?.(
+      row.expected_sha256,
+      'cas',
+      row.media_type ? { mediaType: row.media_type, byteSize } : undefined,
+    );
+    await remote.transfer.copyTemporaryToSha(row.remote_temp_id, row.expected_sha256, storageClass);
     const final = await remote.store.stat(row.expected_sha256);
     if (!final || final.size !== temp.size)
       throw new Error('provider HEAD did not confirm final object');
-    const byteSize = row.expected_size ?? 0;
     await verifyRemoteSealedObject({
       store: remote.store,
       sha256: row.expected_sha256,

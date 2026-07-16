@@ -37,7 +37,15 @@ describe('RemoteBackupProvider against the fake gateway', () => {
     const caps = await provider.capabilities();
     expect(caps.protocol).toContain('centraid-storage-provider/1');
     expect(caps.purgeAuthTier).toBe('interactive');
-    expect(caps.capabilities).toEqual(['backup', 'cas', 'usage', 'policy', 'inventory', 'audit']);
+    expect(caps.capabilities).toEqual([
+      'backup',
+      'cas',
+      'derived',
+      'usage',
+      'policy',
+      'inventory',
+      'audit',
+    ]);
     expect(caps.backup?.retention).toEqual({
       kind: 'ladder',
       keepAllDays: 7,

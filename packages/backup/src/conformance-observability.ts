@@ -130,7 +130,7 @@ export function providerObservabilityConformanceCases(
           if (!caps.capabilities.includes('inventory')) return;
           assert.ok(provider.listInventory, 'inventory method must be present');
           const { targetId } = await provider.createTarget({ label: 'inventory' });
-          for (const store of ['backup', 'cas'] as const) {
+          for (const store of ['backup', 'cas', 'derived'] as const) {
             if (!caps.capabilities.includes(store)) continue;
             const dataPlane = await provider.openDataPlane(targetId, store, 'read-write');
             for (let index = 0; index < 5; index++) {

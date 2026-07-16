@@ -5,6 +5,7 @@
 
 import type { BlobStore } from './store.js';
 import type { RemoteBlobTransfer } from './remote-transfer.js';
+import type { ReplicaStore } from './replica-index.js';
 
 /**
  * Per-content custody state: whether a piece of content's ORIGINAL bytes sit
@@ -21,8 +22,42 @@ export type CustodyState =
 /** How the host resolves the (settings-declared) remote tier on demand. */
 export interface RemoteTier {
   store: BlobStore;
+  /**
+   * Optional second CAS-shaped store under the target's `derived` grant prefix
+   * (issue #425 Wave 2). Present only when the vault's `blob_store` settings
+   * carry a `derivedPrefix` (the target advertised + granted the `derived`
+   * store); binary display derivatives (thumb/preview/poster) route here.
+   * Absent ⇒ graceful degradation: derivatives replicate into `store` (cas),
+   * byte-for-byte today's behavior. Shares the cas store's credentials/endpoint/
+   * bucket — only the key prefix differs; it deliberately has NO transfer store
+   * (derivatives are small, so they never take the multipart/streaming path).
+   */
+  derivedStore?: BlobStore;
   /** Durable multipart/temp-copy/direct-presign operations when supported. */
   transfer?: RemoteBlobTransfer;
+  /**
+   * Resolve the S3 storage class an eligible ORIGINAL's object-creating write
+   * should carry (issue #425 Wave 3 Part B), or undefined to leave it class-less
+   * (Standard / the instance-level class). db.ts wires this to the direct-to-cold
+   * heuristic (large video/audio originals → STANDARD_IA, but only when the
+   * target declares support). `storeClass` is where the bytes actually land —
+   * the resolver returns undefined for anything but `cas`, so a derived write is
+   * never demoted to cold. Absent (legacy unit tests) ⇒ every write stays
+   * class-less, byte-for-byte pre-Wave-3 behavior.
+   *
+   * `originalHint` supplies the sha's media type + byte size for the
+   * remote-primary ingress doors (streaming/direct promotion), where the object
+   * is minted BEFORE its `blob_staging` original row is recorded — so a
+   * sha-only DB lookup would still be empty and the heuristic would never fire
+   * for exactly the large media originals it targets. When given, it stands in
+   * for the (not-yet-written) original row; the local-first replication path
+   * omits it and relies on the DB lookup, whose row already exists.
+   */
+  storageClassFor?: (
+    sha256: string,
+    storeClass: ReplicaStore,
+    originalHint?: { mediaType: string; byteSize: number },
+  ) => string | undefined;
   /** Seal remote objects with this key (settings `blob_store.encrypt`). */
   encryptKey?: Buffer;
   /** Per-blob edge-seal key; takes precedence over the legacy shared key. */
@@ -46,6 +81,18 @@ export interface RemoteTier {
 /** Resolve the encryption key without making every custody caller key-aware. */
 export function remoteEncryptionKey(remote: RemoteTier, sha256: string): Buffer | undefined {
   return remote.keyFor?.(sha256) ?? remote.encryptKey;
+}
+
+/**
+ * The `BlobStore` that holds (or should hold) `store`-classed bytes (issue #425
+ * Wave 2). `derived` resolves to `remote.derivedStore` when it exists; anything
+ * else — or a tier with no derived store — falls back to the cas `store`, which
+ * is the graceful-degradation contract (a provider without `derived` keeps
+ * everything under cas). The edge-seal key is per-sha and store-independent, so
+ * only the object prefix changes with the store class.
+ */
+export function storeForClass(remote: RemoteTier, store: 'cas' | 'derived'): BlobStore {
+  return store === 'derived' && remote.derivedStore ? remote.derivedStore : remote.store;
 }
 
 export interface ReconcileResult {

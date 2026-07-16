@@ -12,9 +12,10 @@
  */
 
 import assert from 'node:assert/strict';
+import { providerDerivedConformanceCases } from './conformance-derived.js';
 import { providerObservabilityConformanceCases } from './conformance-observability.js';
 import type { BackupProvider } from './provider.js';
-import { BackupProviderError } from './provider.js';
+import { BackupProviderError, STORE_CLASSES } from './provider.js';
 
 const TEXT = new TextEncoder();
 
@@ -42,14 +43,11 @@ async function withProvider(
 
 /**
  * `manifestKey` MUST fall under the target's `backup` store prefix
- * (PROTOCOL.md "Snapshot registration" — the same `u/{id}/backup/` the
- * credential grant's own `prefix` uses; see `engine.ts`'s `createSnapshot`).
- * A bare `manifests/…` key is protocol-invalid input — a conformant
- * provider MUST 400 it with `invalid_manifest_key` — so every case below
- * that registers a snapshot must build a key shaped like this, not a bare
- * one, to stay a valid grading input for ANY conformant provider rather
- * than only the two reference ones in this package (which happen not to
- * enforce the prefix).
+ * (PROTOCOL.md "Snapshot registration" — the same `u/{id}/backup/` the grant's
+ * `prefix` uses; see `engine.ts`'s `createSnapshot`). A bare `manifests/…` key
+ * is protocol-invalid — a conformant provider MUST 400 it with
+ * `invalid_manifest_key` — so every case below builds a prefixed key to stay a
+ * valid grading input for ANY conformant provider, not just this package's two.
  */
 function manifestKeyFor(targetId: string, name: string): string {
   return `u/${targetId}/backup/manifests/${name}`;
@@ -89,10 +87,15 @@ export function providerConformanceCases(
           assert.ok(caps.maxCredentialTtlSeconds > 0);
           assert.ok(['api-key', 'interactive'].includes(caps.purgeAuthTier));
           assert.ok(Array.isArray(caps.capabilities), 'capabilities must declare an array');
+          const allowedFlags = [...STORE_CLASSES, 'usage', 'policy', 'inventory', 'audit'];
           for (const flag of caps.capabilities) {
+            assert.ok(allowedFlags.includes(flag), `unknown capability flag "${flag}"`);
+          }
+          if (caps.storageClasses !== undefined) {
             assert.ok(
-              ['backup', 'cas', 'usage', 'policy', 'inventory', 'audit'].includes(flag),
-              `unknown capability flag "${flag}"`,
+              Array.isArray(caps.storageClasses) &&
+                caps.storageClasses.every((s) => typeof s === 'string' && s.length > 0),
+              'storageClasses, when declared, must be an array of non-empty strings',
             );
           }
           if (caps.capabilities.includes('backup')) {
@@ -390,10 +393,8 @@ export function providerConformanceCases(
     },
 
     // -- Layer 1: grant-layer cases -----------------------------------------
-    // `requestGrant` is OPTIONAL (PROTOCOL.md § Layer 1) — only providers with
-    // a literal wire-grant concept implement it (e.g. a filesystem provider's
-    // data plane IS the caller's own custody, so it has nothing to grant).
-    // Skip cleanly, not fail, when absent.
+    // `requestGrant` is OPTIONAL (PROTOCOL.md § Layer 1) — a provider whose data
+    // plane IS the caller's own custody has nothing to grant. Skip cleanly.
 
     {
       name: 'grant layer: per-store region + store echoed + disjoint prefixes',
@@ -416,10 +417,9 @@ export function providerConformanceCases(
     },
 
     // -- Layer 2: cas store cases --------------------------------------------
-    // Generic through `openDataPlane` (like the backup roundtrip above) so
-    // this runs offline against ANY provider, local or remote — for a
-    // remote-backed harness this transitively exercises real S3-compatible
-    // HTTP via the shared S3 test server (see `testing/s3-test-server.ts`).
+    // Generic through `openDataPlane` (like the backup roundtrip above) so this
+    // runs offline against ANY provider; a remote-backed harness transitively
+    // exercises real S3-compatible HTTP via the shared S3 test server.
 
     {
       name: 'cas: put/list/get/delete round-trip',
@@ -461,7 +461,6 @@ export function providerConformanceCases(
     },
 
     // -- Layer 1: usage cases -------------------------------------------------
-
     {
       name: 'usage report: skip cleanly when capability absent, shape + monotonic bytes when present',
       run: () =>
@@ -495,6 +494,7 @@ export function providerConformanceCases(
           );
         }),
     },
+    ...providerDerivedConformanceCases(makeProvider),
     ...providerObservabilityConformanceCases(makeProvider),
   ];
 }
