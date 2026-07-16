@@ -31,6 +31,7 @@ import { DatabaseSync } from 'node:sqlite';
 import {
   BlobCustody,
   FsBlobStore,
+  ReplicaIndex,
   type BlobRange,
   type BlobStat,
   type BlobStore,
@@ -305,6 +306,7 @@ test('remote-primary snapshot restores from provider bytes plus only the durable
       () => remote,
     );
     await seedCustody.replicate([remoteSha]);
+    new ReplicaIndex(plane.db.vault).mark(remoteSha, remoteBytes.length);
     plane.db.blobTransfers.state.completeOutbox(remoteSha);
     expect(plane.db.blobTransfers.pendingSnapshotShas()).toEqual([pendingSha]);
 

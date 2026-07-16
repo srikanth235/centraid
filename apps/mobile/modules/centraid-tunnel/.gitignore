@@ -1,14 +1,15 @@
-# Vendored/generated iroh-ffi 1.0.0 artifacts are NOT committed — they are
-# large generated or third-party files (some exceed the repo's 5 MB / 500-line
-# hygiene caps, and carry upstream TODOs). Only our hand-written adapters,
-# gradle/podspec config, and the fetch tooling are tracked. Reconstruct these
-# with scripts/fetch-iroh-binaries.sh before building — see BINARIES.md.
+# iroh-ffi 1.0.0 native/generated artifacts are NOT committed — they are large
+# generated or third-party binaries. Only our hand-written adapters and the
+# gradle/podspec config are tracked. How they are reconstructed (git-ignored):
+#   iOS      — the podspec's prepare_command downloads the official release
+#              xcframework + IrohLib.swift (see ios/CentraidTunnel.podspec).
+#   Android  — cargo-ndk cross-compiles the .so + uniffi generates the Kotlin
+#              bindings (see README.md "Android binding").
+
+# iOS: the official release xcframework + the uniffi-generated Swift wrapper.
+ios/Iroh.xcframework/
+ios/IrohLib.swift
 
 # Android: uniffi-generated Kotlin bindings + upstream JNI shim, and the .so.
 android/src/main/java/computer/iroh/
 android/src/main/jniLibs/
-
-# iOS: the whole xcframework (generated FFI headers + compiled binaries) and
-# the uniffi-generated Swift wrapper.
-ios/Iroh.xcframework/
-ios/IrohLib.swift

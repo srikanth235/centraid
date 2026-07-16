@@ -4,9 +4,11 @@ import {
   resumeVaultChanges,
   setVaultChangeShapeIds,
   subscribeVaultChanges,
+  clearVaultChangeCursor,
 } from '../vault-change-feed.js';
-import { ReplicaCoordinator, type ReplicaCoordinatorOptions } from './coordinator.js';
+import { createReplicaCoordinator, type ReplicaWebCoordinatorOptions } from './coordinator-web.js';
 import { ReplicaProtocolError } from './errors.js';
+import { validateOptimisticMutation } from './query.js';
 import {
   fetchReplicaBootstrap,
   fetchReplicaChanges,
@@ -108,8 +110,8 @@ export interface ReplicaShellSessionOptions {
 }
 
 export interface OpenReplicaShellSessionOptions extends ReplicaShellSessionOptions {
-  workerFactory?: ReplicaCoordinatorOptions['workerFactory'];
-  intentStore?: ReplicaCoordinatorOptions['intentStore'];
+  workerFactory?: ReplicaWebCoordinatorOptions['workerFactory'];
+  intentStore?: ReplicaWebCoordinatorOptions['intentStore'];
   idFactory?: () => string;
 }
 
@@ -140,6 +142,7 @@ export class ReplicaShellSession {
   #admissionRegistrations = 0;
   #admissionRegistrationBarrier: Promise<void> | undefined;
   #releaseAdmissionRegistrationBarrier: (() => void) | undefined;
+  #hasCursor = false;
   #closed = false;
 
   constructor(
@@ -160,6 +163,7 @@ export class ReplicaShellSession {
   async start(status: ReplicaStatus): Promise<this> {
     this.#eventTarget.addEventListener('online', this.onOnline);
     await this.coordinator.recoverSending();
+    this.#hasCursor = status.cursor !== null;
     if (status.cursor) this.#catalog = await this.coordinator.catalog();
     else await this.bootstrapWhenReachable();
     void this.flushIntents();
@@ -191,6 +195,21 @@ export class ReplicaShellSession {
         shapeId: this.resolveShapeId(appId, mutation.entity, shapeId, purpose),
       };
     }) as OptimisticMutation[];
+    for (const mutation of optimistic) {
+      const shape = this.#catalog.find((candidate) => candidate.shapeId === mutation.shapeId);
+      const schema = shape?.entities.find((candidate) => candidate.entity === mutation.entity);
+      if (!schema) {
+        throw new ReplicaProtocolError(
+          `Optimistic mutation targets unavailable shape ${mutation.shapeId}/${mutation.entity}`,
+        );
+      }
+      validateOptimisticMutation(mutation, schema);
+    }
+    const dependencies = this.#catalog
+      .filter((shape) => shape.appId === appId)
+      .flatMap((shape) =>
+        shape.entities.map((entity) => ({ shapeId: shape.shapeId, entity: entity.entity })),
+      );
     this.beginAdmissionRegistration();
     try {
       const intent = await this.coordinator.enqueue({
@@ -199,6 +218,7 @@ export class ReplicaShellSession {
         action: input.action,
         input: input.input,
         optimistic,
+        dependencies,
       });
       this.assertOpen();
       const existingAdmission = admissionResult(intent);
@@ -224,29 +244,37 @@ export class ReplicaShellSession {
     listener: (invalidations: readonly ReplicaInvalidation[]) => void,
   ): () => void {
     this.assertOpen();
-    const appShapes = new Set(this.#catalog.filter((shape) => shape.appId === appId).map(shapeId));
-    const wanted = new Set(
-      (dependencies ?? []).map((dependency) => {
-        const requested = 'shapeId' in dependency ? dependency.shapeId : undefined;
-        const purpose = 'purpose' in dependency ? dependency.purpose : undefined;
-        const resolved = this.resolveShapeId(appId, dependency.entity, requested, purpose);
-        return `${resolved}\u0000${dependency.entity}`;
-      }),
+    const requested = dependencies ?? [];
+    const explicitShapes = new Set(
+      requested.flatMap((dependency) =>
+        dependency.shapeId ? [`${dependency.shapeId}\u0000${dependency.entity}`] : [],
+      ),
+    );
+    const wildcardEntities = new Set(
+      requested.flatMap((dependency) => (dependency.shapeId ? [] : [dependency.entity])),
     );
     return this.coordinator.subscribeInvalidations((invalidations) => {
+      const appShapes = new Set(
+        this.#catalog.filter((shape) => shape.appId === appId).map(shapeId),
+      );
       const relevant = invalidations.filter(
         (invalidation) =>
           invalidation.source === 'purge' ||
           (appShapes.has(invalidation.shapeId) &&
-            (wanted.size === 0 ||
-              wanted.has(`${invalidation.shapeId}\u0000${invalidation.entity}`))),
+            (requested.length === 0 ||
+              wildcardEntities.has(invalidation.entity) ||
+              explicitShapes.has(`${invalidation.shapeId}\u0000${invalidation.entity}`))),
       );
       if (relevant.length > 0) listener(structuredClone(relevant));
     });
   }
 
   async flushIntents(): Promise<void> {
-    if (this.#closed || !this.#isOnline()) return;
+    if (this.#closed) return;
+    if (!this.#isOnline()) {
+      this.resolveAdmissionWaitersAsQueued('saved locally; waiting for a connection');
+      return;
+    }
     if (this.#drainPromise) {
       this.#drainRequested = true;
       return this.#drainPromise;
@@ -271,15 +299,19 @@ export class ReplicaShellSession {
   }
 
   async purge(): Promise<void> {
-    if (this.#closed) return;
-    this.#closed = true;
-    this.rejectAdmissionWaiters(new ReplicaProtocolError('Replica session purged'));
-    this.detach();
+    clearVaultChangeCursor(this.gatewayAuth);
     const identity = replicaIdentityForGatewayAuth(this.gatewayAuth);
     const inventoryOptions = {
       ...(this.#indexedDbFactory ? { indexedDbFactory: this.#indexedDbFactory } : {}),
       ...(this.#inventory ? { inventory: this.#inventory } : {}),
     };
+    if (this.#closed) {
+      if (this.#rememberStorage) await purgeReplicaIdentityStorage(identity, inventoryOptions);
+      return;
+    }
+    this.#closed = true;
+    this.rejectAdmissionWaiters(new ReplicaProtocolError('Replica session purged'));
+    this.detach();
     let terminalTracked = false;
     if (this.#rememberStorage) {
       terminalTracked = await markReplicaIdentityTerminal(identity, inventoryOptions);
@@ -302,6 +334,7 @@ export class ReplicaShellSession {
   }
 
   requireBootstrap(): void {
+    this.#hasCursor = false;
     if (!this.#closed) void this.bootstrapWhenReachable();
   }
 
@@ -325,7 +358,11 @@ export class ReplicaShellSession {
       );
       snapshot.outcomes = mergeIntentOutcomes(snapshot.outcomes ?? [], exactOutcomes);
       await this.coordinator.bootstrap(snapshot);
+      this.#hasCursor = true;
       this.#catalog = await this.coordinator.catalog();
+      for (const outcome of snapshot.outcomes ?? []) {
+        this.resolveAdmissionWaiter(outcome.intentId, outcome);
+      }
       this.#bootstrapRetryAttempt = 0;
     } catch (error) {
       if (isAuthorizationError(error)) await this.authorizationRevoked();
@@ -337,8 +374,18 @@ export class ReplicaShellSession {
   private async drainLoop(): Promise<void> {
     while (!this.#closed && this.#isOnline()) {
       await this.waitForAdmissionRegistrations();
-      if (this.#closed || !this.#isOnline()) return;
-      const intent = await this.coordinator.claimNextIntent();
+      if (this.#closed) return;
+      if (!this.#isOnline()) {
+        this.resolveAdmissionWaitersAsQueued('saved locally; waiting for a connection');
+        return;
+      }
+      let intent: ReplicaIntent | undefined;
+      try {
+        intent = await this.coordinator.claimNextIntent();
+      } catch (error) {
+        this.rejectAdmissionWaiters(error);
+        return;
+      }
       if (!intent) return;
       try {
         const { outcome } = await postReplicaIntent(this.gatewayAuth, intent, this.#fetcher);
@@ -455,6 +502,12 @@ export class ReplicaShellSession {
     }
   }
 
+  private resolveAdmissionWaitersAsQueued(reason: string): void {
+    for (const intentId of this.#admissionWaiters.keys()) {
+      this.resolveAdmissionWaiter(intentId, { intentId, status: 'queued', reason });
+    }
+  }
+
   private beginAdmissionRegistration(): void {
     if (this.#admissionRegistrations === 0) {
       this.#admissionRegistrationBarrier = new Promise((resolve) => {
@@ -489,7 +542,7 @@ export class ReplicaShellSession {
     if (this.#bootstrapRetryTimer) clearTimeout(this.#bootstrapRetryTimer);
     this.#bootstrapRetryTimer = undefined;
     this.#bootstrapRetryAttempt = 0;
-    void this.bootstrapWhenReachable();
+    if (!this.#hasCursor) void this.bootstrapWhenReachable();
     void this.flushIntents();
   };
 
@@ -531,7 +584,7 @@ export async function openReplicaShellSession(
   let pendingBootstrap = false;
   let persistedShapeIds: readonly string[] = [];
   const fetcher = options.fetcher ?? fetchReplicaDefault;
-  const { replica, status } = await ReplicaCoordinator.create(identity, remember, {
+  const { replica, status } = await createReplicaCoordinator(identity, remember, {
     ...(options.workerFactory ? { workerFactory: options.workerFactory } : {}),
     ...(options.intentStore ? { intentStore: options.intentStore } : {}),
     ...(options.indexedDbFactory ? { indexedDbFactory: options.indexedDbFactory } : {}),

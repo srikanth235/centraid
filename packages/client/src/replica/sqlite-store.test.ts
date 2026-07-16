@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit pre-existing cohesive SQLite regression suite; decomposition is outside issue #417
 import sqlite3InitModule, { type Database, type Sqlite3Static } from '@sqlite.org/sqlite-wasm';
 import { beforeAll, describe, expect, test } from 'vitest';
 
@@ -163,7 +164,7 @@ describe('SqliteReplicaStore', () => {
           rowMode: 'object',
           returnValue: 'resultRows',
         }),
-      ).toEqual([{ user_version: 3 }]);
+      ).toEqual([{ user_version: 4 }]);
       expect(
         db
           .exec({

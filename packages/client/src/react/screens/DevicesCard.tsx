@@ -388,9 +388,12 @@ export default function DevicesCard({
         if (!mountedRef.current) return;
         setLoadError(err instanceof Error ? err.message : String(err));
       });
-    void loadWorkStatus?.().then((depth) => {
-      if (mountedRef.current) setWorkDepth(depth);
-    });
+    void loadWorkStatus?.()
+      .then((depth) => {
+        if (mountedRef.current) setWorkDepth(depth);
+      })
+      // Poll failures are transient; retain the last successful work badge.
+      .catch(() => undefined);
   }, [loadDevices, loadWorkStatus]);
 
   useEffect(() => {

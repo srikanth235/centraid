@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#418) the ingress/direct/stream/outbox coordinator is one lifecycle boundary; splitting only its close fence would separate shutdown ordering from the runner it owns
 import {
   closeSync,
   fsyncSync,
@@ -152,6 +153,11 @@ export class BlobTransferCoordinator {
     const count = enqueueExistingLocalBlobs(this.options.vault, this.options.local, this.state);
     if (count > 0) this.emit();
     return count;
+  }
+
+  /** Remote identity changed; old target-scoped evidence is no longer valid. */
+  resetRemoteEvidence(): void {
+    this.options.cache.replica.clear();
   }
 
   /** Start/resume continuous drain after a settings transition. */
@@ -495,5 +501,10 @@ export class BlobTransferCoordinator {
 
   async close(): Promise<void> {
     await this.outbox.close();
+  }
+
+  /** Fence asynchronous transfer completion before a synchronous SQLite close. */
+  abandon(): void {
+    this.outbox.abandon();
   }
 }

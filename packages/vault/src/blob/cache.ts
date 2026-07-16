@@ -375,18 +375,6 @@ export class BlobCache {
     return { evicted, bytes };
   }
 
-  /**
-   * The public pressure primitive is deliberately derivative-only. Even stale
-   * replica evidence therefore cannot make a direct caller delete an original;
-   * original deletion is available only through `runEviction`'s explicit
-   * post-reconciliation scope. Returns bytes freed, or 0 when refused/absent.
-   */
-  evictOne(sha: string): number {
-    if (!previewShas(this.db).has(sha)) return 0;
-    if (pinnedThumbShas(this.db).has(sha) || stagingShas(this.db).has(sha)) return 0;
-    return this.deleteReplicated(sha);
-  }
-
   /** Final deletion guard shared by pre-classified policy candidates. */
   private deleteReplicated(sha: string): number {
     if (!this.replica.has(sha)) return 0;

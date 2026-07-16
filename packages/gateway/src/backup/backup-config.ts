@@ -43,6 +43,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /** Validate an untyped JSON value (the daemon config file's `"backup"` key). */
 export function validateBackupConfig(value: unknown): BackupConfig {
   if (!isRecord(value)) throw new BackupConfigError('must be an object');
+  for (const retired of ['intervalHours', 'verifyEveryDays']) {
+    if (retired in value) {
+      throw new BackupConfigError(
+        `\`${retired}\` was removed; configure cadence in each vault's backup policy`,
+      );
+    }
+  }
   if (typeof value.enabled !== 'boolean') {
     throw new BackupConfigError('`enabled` is required and must be a boolean');
   }

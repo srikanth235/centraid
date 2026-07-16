@@ -40,26 +40,39 @@ enum TunnelWire {
     "proxy-connection", "te", "trailer", "transfer-encoding", "upgrade",
   ]
 
+  /// Pure framing: u32 BE length prefix + payload bytes. Separated from the
+  /// stream I/O so it is unit-testable against the shared golden fixture
+  /// (packages/tunnel/fixtures/wire-golden.json).
+  static func frame(_ payload: Data) throws -> Data {
+    guard payload.count <= maxHeaderFrameBytes else {
+      throw TunnelError("tunnel: header frame length \(payload.count) out of bounds")
+    }
+    var frame = Data(capacity: 4 + payload.count)
+    var length = UInt32(payload.count).bigEndian
+    withUnsafeBytes(of: &length) { frame.append(contentsOf: $0) }
+    frame.append(payload)
+    return frame
+  }
+
+  /// Pure decode of the u32 BE length prefix, validating the cap. Shared by
+  /// readHeaderFrame and the conformance test.
+  static func decodeFrameLength(_ bytes: Data) throws -> Int {
+    let length = bytes.reduce(0) { ($0 << 8) | Int($1) }
+    guard length > 0, length <= maxHeaderFrameBytes else {
+      throw TunnelError("tunnel: header frame length \(length) out of bounds")
+    }
+    return length
+  }
+
   /// Encode a header frame: u32 BE length + UTF-8 JSON.
   static func encodeHeaderFrame(_ header: [String: Any]) throws -> Data {
-    let json = try JSONSerialization.data(withJSONObject: header)
-    guard json.count <= maxHeaderFrameBytes else {
-      throw TunnelError("tunnel: header frame length \(json.count) out of bounds")
-    }
-    var frame = Data(capacity: 4 + json.count)
-    var length = UInt32(json.count).bigEndian
-    withUnsafeBytes(of: &length) { frame.append(contentsOf: $0) }
-    frame.append(json)
-    return frame
+    try frame(try JSONSerialization.data(withJSONObject: header))
   }
 
   /// Read one header frame. Throws on oversized or malformed frames.
   static func readHeaderFrame(_ stream: TunnelStream) async throws -> [String: Any] {
     let lengthBytes = try await IrohAdapter.readExact(stream.recv, count: 4)
-    let length = lengthBytes.reduce(0) { ($0 << 8) | Int($1) }
-    guard length > 0, length <= maxHeaderFrameBytes else {
-      throw TunnelError("tunnel: header frame length \(length) out of bounds")
-    }
+    let length = try decodeFrameLength(lengthBytes)
     let jsonBytes = try await IrohAdapter.readExact(stream.recv, count: length)
     guard let header = try JSONSerialization.jsonObject(with: jsonBytes) as? [String: Any] else {
       throw TunnelError("tunnel: header frame is not a JSON object")

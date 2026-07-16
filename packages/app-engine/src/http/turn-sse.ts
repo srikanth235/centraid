@@ -301,12 +301,13 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
   const onEvent = (event: TurnStreamEvent): void => {
     // Price the usage event at the one allowlisted seam (model-pricing.ts) so
     // clients can show a live cost without mirroring model rate tables.
-    if (event.type === 'usage' && event.costUsd === undefined) {
-      const costUsd = costForUsage(event.model, event);
-      if (costUsd !== undefined) event = { ...event, costUsd };
+    let priced = event;
+    if (priced.type === 'usage' && priced.costUsd === undefined) {
+      const costUsd = costForUsage(priced.model, priced);
+      if (costUsd !== undefined) priced = { ...priced, costUsd };
     }
-    accumulate(event);
-    writeEvent(event);
+    accumulate(priced);
+    writeEvent(priced);
   };
 
   const abortController = new AbortController();

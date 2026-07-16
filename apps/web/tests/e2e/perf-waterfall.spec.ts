@@ -362,14 +362,22 @@ test('sw tunnel cache — warm re-open collapses relay round trips and bytes', a
         headers?: Record<string, string>;
       };
       const port = event.ports[0];
-      if (!port || msg?.type !== 'centraid:iroh-request' || !msg.target) return;
+      if (!port) return;
+      if (msg?.type === 'centraid:iroh-claim') {
+        port.postMessage({ type: 'claim' });
+        return;
+      }
+      if (msg?.type !== 'centraid:iroh-request' || !msg.target) return;
       const tally = (window as unknown as { __tunnel: Tally }).__tunnel;
       tally.calls += 1;
       const ifNoneMatch = msg.headers?.['if-none-match'] ?? null;
       const isBlob = msg.target.includes('/_vault/blobs/');
 
-      if (!isBlob && ifNoneMatch === '"perf-etag"') {
-        // Validated asset: 304, no body bytes on the wire.
+      if (
+        (!isBlob && ifNoneMatch === '"perf-etag"') ||
+        (isBlob && ifNoneMatch === '"perf-blob-etag"')
+      ) {
+        // Validated authorization/content: 304, no body bytes on the wire.
         port.postMessage({ type: 'head', status: 304, headers: {} });
         port.postMessage({ type: 'end' });
         return;
@@ -384,6 +392,7 @@ test('sw tunnel cache — warm re-open collapses relay round trips and bytes', a
               'content-type': 'application/octet-stream',
               'content-length': String(body.length),
               'cache-control': 'private,max-age=31536000,immutable',
+              etag: '"perf-blob-etag"',
             }
           : {
               'content-type': 'text/javascript',
@@ -398,8 +407,11 @@ test('sw tunnel cache — warm re-open collapses relay round trips and bytes', a
     });
   });
 
-  const assetUrl = '/__centraid_iroh__/perf/centraid/perf-app/app.js';
-  const blobUrl = '/__centraid_iroh__/perf/centraid/_vault/blobs/perf-sha';
+  // Durable bridge ids are the only scopes allowed to persist cache entries.
+  // Ephemeral ids intentionally stay cache-blind, so use the remembered-device
+  // prefix that production mints for the cache performance probe.
+  const assetUrl = '/__centraid_iroh__/d-perf/centraid/perf-app/app.js';
+  const blobUrl = '/__centraid_iroh__/d-perf/centraid/_vault/blobs/perf-sha';
 
   const read = (u: string) => page.evaluate((url) => fetch(url).then((r) => r.text()), u);
   const tunnel = () =>
@@ -424,8 +436,8 @@ test('sw tunnel cache — warm re-open collapses relay round trips and bytes', a
   await page.waitForTimeout(500);
   await reset();
 
-  // Warm: the asset is served from cache (a single 304 revalidation reaches the
-  // bridge — zero body bytes); the blob is cache-first (no bridge call at all).
+  // Warm: both bodies are served from cache; conditional checks reach the
+  // bridge with zero body bytes so revocation remains observable.
   expect(await read(assetUrl)).toBe('a'.repeat(4096));
   expect(await read(blobUrl)).toBe('b'.repeat(8192));
   await page.waitForTimeout(300);

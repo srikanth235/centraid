@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -16,9 +16,9 @@ import Tile from '../components/Tile';
 import Icon from '../components/Icon';
 import Logo from '../components/Logo';
 import Button from '../components/Button';
-import { colors, spacing, t, family } from '../theme';
+import { spacing, t, family, useTheme, type ThemeColors } from '../theme';
 import { GatewayError, listApps, resolveAppMeta, resolveGatewayBase } from '../lib/gateway';
-import type { RootScreenProps } from '../navigation';
+import type { AppsScreenProps } from '../navigation';
 
 const COLS = 4;
 const H_PADDING = 22;
@@ -29,7 +29,9 @@ type HomeState =
   | { kind: 'ready'; apps: AppMetaResolved[] }
   | { kind: 'error'; message: string };
 
-export default function HomeScreen({ navigation }: RootScreenProps<'Home'>): React.JSX.Element {
+export default function HomeScreen({ navigation }: AppsScreenProps<'Home'>): React.JSX.Element {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [state, setState] = useState<HomeState>({ kind: 'loading' });
   const [refreshing, setRefreshing] = useState(false);
   const [searching, setSearching] = useState(false);
@@ -121,7 +123,7 @@ export default function HomeScreen({ navigation }: RootScreenProps<'Home'>): Rea
             <View style={styles.headerActions}>
               {state.kind === 'ready' ? (
                 <Pressable
-                  onPress={() => navigation.navigate('Approvals')}
+                  onPress={() => navigation.navigate('SettingsTab', { screen: 'Approvals' })}
                   style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.6 }]}
                   accessibilityLabel="Approvals"
                 >
@@ -136,7 +138,7 @@ export default function HomeScreen({ navigation }: RootScreenProps<'Home'>): Rea
                 <Icon name="Search" size={18} color={colors.ink} strokeWidth={1.75} />
               </Pressable>
               <Pressable
-                onPress={() => navigation.navigate('Settings')}
+                onPress={() => navigation.navigate('SettingsTab', { screen: 'Settings' })}
                 style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.6 }]}
                 accessibilityLabel="Settings"
               >
@@ -159,7 +161,15 @@ export default function HomeScreen({ navigation }: RootScreenProps<'Home'>): Rea
           />
         }
       >
-        {renderBody(state, matches, query, () => navigation.navigate('Settings'), navigation)}
+        {renderBody(
+          state,
+          matches,
+          query,
+          () => navigation.navigate('SettingsTab', { screen: 'Settings' }),
+          navigation,
+          styles,
+          colors,
+        )}
       </ScrollView>
 
       {!searching && (
@@ -185,7 +195,9 @@ function renderBody(
   matches: AppMetaResolved[],
   query: string,
   openSettings: () => void,
-  navigation: RootScreenProps<'Home'>['navigation'],
+  navigation: AppsScreenProps<'Home'>['navigation'],
+  styles: ReturnType<typeof makeStyles>,
+  colors: ThemeColors,
 ): React.JSX.Element {
   if (state.kind === 'loading') {
     return (
@@ -250,112 +262,113 @@ function renderBody(
   );
 }
 
-const styles = StyleSheet.create({
-  cell: {
-    alignItems: 'center',
-    width: `${100 / COLS}%`,
-  },
-  center: { alignItems: 'center', paddingVertical: 80 },
-  dot: {
-    backgroundColor: colors.ink4,
-    borderRadius: 3,
-    height: 6,
-    width: 6,
-  },
-  dotActive: { backgroundColor: colors.ink2 },
-  dots: {
-    flexDirection: 'row',
-    gap: 6,
-    justifyContent: 'center',
-    paddingBottom: 14,
-  },
-  empty: {
-    alignItems: 'flex-start',
-    paddingHorizontal: 4,
-    paddingTop: 32,
-  },
-  emptyAction: { alignSelf: 'stretch', marginTop: spacing[4] },
-  emptyCopy: { ...t('body'), color: colors.ink2, marginBottom: spacing[3] },
-  emptyHint: { ...t('small'), color: colors.ink3 },
-  emptyTitle: { ...t('title'), color: colors.ink, marginBottom: spacing[2] },
-  fab: {
-    alignItems: 'center',
-    backgroundColor: colors.accent,
-    borderRadius: 28,
-    bottom: 96,
-    elevation: 6,
-    height: 56,
-    justifyContent: 'center',
-    position: 'absolute',
-    right: 22,
-    shadowColor: colors.accent,
-    shadowOffset: { height: 8, width: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 24,
-    width: 56,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    rowGap: 22,
-  },
-  gridWrap: {
-    paddingBottom: 24,
-    paddingHorizontal: H_PADDING,
-    paddingTop: 18,
-  },
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 44,
-    paddingHorizontal: H_PADDING,
-    paddingVertical: 4,
-  },
-  headerActions: { flexDirection: 'row', gap: 10 },
-  iconBtn: {
-    alignItems: 'center',
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 1,
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
-  safe: { backgroundColor: colors.bg, flex: 1 },
-  searchEmpty: {
-    ...t('small'),
-    color: colors.ink3,
-    marginTop: 32,
-    textAlign: 'center',
-  },
-  searchField: {
-    alignItems: 'center',
-    backgroundColor: colors.bgElev,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 1,
-    flex: 1,
-    flexDirection: 'row',
-    gap: 8,
-    height: 36,
-    paddingHorizontal: 10,
-  },
-  searchInput: {
-    flex: 1,
-    ...t('body'),
-    color: colors.ink,
-    padding: 0,
-  },
-  title: {
-    color: colors.ink,
-    fontFamily: family.displayBold,
-    fontSize: 18,
-    letterSpacing: -0.4,
-  },
-  wordmark: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
-});
+const makeStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    cell: {
+      alignItems: 'center',
+      width: `${100 / COLS}%`,
+    },
+    center: { alignItems: 'center', paddingVertical: 80 },
+    dot: {
+      backgroundColor: colors.ink4,
+      borderRadius: 3,
+      height: 6,
+      width: 6,
+    },
+    dotActive: { backgroundColor: colors.ink2 },
+    dots: {
+      flexDirection: 'row',
+      gap: 6,
+      justifyContent: 'center',
+      paddingBottom: 14,
+    },
+    empty: {
+      alignItems: 'flex-start',
+      paddingHorizontal: 4,
+      paddingTop: 32,
+    },
+    emptyAction: { alignSelf: 'stretch', marginTop: spacing[4] },
+    emptyCopy: { ...t('body'), color: colors.ink2, marginBottom: spacing[3] },
+    emptyHint: { ...t('small'), color: colors.ink3 },
+    emptyTitle: { ...t('title'), color: colors.ink, marginBottom: spacing[2] },
+    fab: {
+      alignItems: 'center',
+      backgroundColor: colors.accent,
+      borderRadius: 28,
+      bottom: 96,
+      elevation: 6,
+      height: 56,
+      justifyContent: 'center',
+      position: 'absolute',
+      right: 22,
+      shadowColor: colors.accent,
+      shadowOffset: { height: 8, width: 0 },
+      shadowOpacity: 0.4,
+      shadowRadius: 24,
+      width: 56,
+    },
+    grid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      rowGap: 22,
+    },
+    gridWrap: {
+      paddingBottom: 24,
+      paddingHorizontal: H_PADDING,
+      paddingTop: 18,
+    },
+    header: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      minHeight: 44,
+      paddingHorizontal: H_PADDING,
+      paddingVertical: 4,
+    },
+    headerActions: { flexDirection: 'row', gap: 10 },
+    iconBtn: {
+      alignItems: 'center',
+      borderColor: colors.line,
+      borderRadius: 8,
+      borderWidth: 1,
+      height: 36,
+      justifyContent: 'center',
+      width: 36,
+    },
+    safe: { backgroundColor: colors.bg, flex: 1 },
+    searchEmpty: {
+      ...t('small'),
+      color: colors.ink3,
+      marginTop: 32,
+      textAlign: 'center',
+    },
+    searchField: {
+      alignItems: 'center',
+      backgroundColor: colors.bgElev,
+      borderColor: colors.line,
+      borderRadius: 8,
+      borderWidth: 1,
+      flex: 1,
+      flexDirection: 'row',
+      gap: 8,
+      height: 36,
+      paddingHorizontal: 10,
+    },
+    searchInput: {
+      flex: 1,
+      ...t('body'),
+      color: colors.ink,
+      padding: 0,
+    },
+    title: {
+      color: colors.ink,
+      fontFamily: family.displayBold,
+      fontSize: 18,
+      letterSpacing: -0.4,
+    },
+    wordmark: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      gap: 8,
+    },
+  });

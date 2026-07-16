@@ -96,6 +96,22 @@ test('perceptual hash matches the Photos 9x8 left-brighter dHash contract', () =
   expect(codec.perceptualHash(makePng(9, 8), 'image/gif')).toBeNull();
 });
 
+test('thumbhash encodes a known raster to the exact reference value', () => {
+  // The fixture is what the faithful ThumbHash reference port emits for this
+  // 64×64 gradient — a regression pin on the byte-identical algorithm. 24 hash
+  // bytes → 32 unpadded base64 chars, standard alphabet.
+  const hash = codec.thumbhash(makePng(64, 64), 'image/png');
+  expect(hash).toBe('mOkFFwoywEiCh4eGeFiIV4eE0eBXA4sK');
+  expect(Buffer.from(hash!, 'base64')).toHaveLength(24);
+  // Canonical: unpadded standard base64 that round-trips exactly.
+  expect(Buffer.from(hash!, 'base64').toString('base64').replace(/=+$/, '')).toBe(hash);
+  // A landscape source sets the landscape bit — a different, still-valid hash.
+  expect(codec.thumbhash(makePng(96, 48), 'image/png')).toBe('WQkGJIhABeJzh3dziIVPikSx9w');
+  // Unsupported / undecodable inputs are null, exactly like the other rungs.
+  expect(codec.thumbhash(makePng(9, 8), 'image/gif')).toBeNull();
+  expect(codec.thumbhash(Buffer.from('definitely not a PNG'), 'image/png')).toBeNull();
+});
+
 // A generous timeout: pure-JS decode/downscale of a multi-MP source is
 // hundreds of ms and can stretch under parallel-suite CPU contention (exactly
 // why generation is a bounded background backstop, never a request path).

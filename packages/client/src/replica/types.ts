@@ -41,12 +41,20 @@ export interface ReplicaSnapshotRow {
   oversizedFields?: string[];
 }
 
-export interface ReplicaSnapshot {
+/**
+ * Everything a replica needs before any row lands: identity, the schema epoch
+ * and the shape catalog. A single-shot snapshot carries it alongside its rows;
+ * a windowed bootstrap takes it from page 1 and streams rows across pages.
+ */
+export interface ReplicaBootstrapHeader {
   protocolVersion: typeof REPLICA_PROTOCOL_VERSION;
   vaultId: string;
   schemaEpoch: string;
-  cursor: ReplicaCursor;
   shapes: ReplicaShape[];
+}
+
+export interface ReplicaSnapshot extends ReplicaBootstrapHeader {
+  cursor: ReplicaCursor;
   rows: ReplicaSnapshotRow[];
   /** Device-scoped durable results reconcile an IDB outbox after a long offline period. */
   outcomes?: IntentOutcome[];
@@ -169,7 +177,7 @@ export interface ReplicaSearchResult {
   dependency: ReplicaDependency;
 }
 
-export type ReplicaMode = 'opfs-sahpool' | 'memory';
+export type ReplicaMode = 'opfs-sahpool' | 'memory' | 'native';
 
 export interface ReplicaWorkerOpenOptions {
   dbName: string;
@@ -222,6 +230,8 @@ export interface ReplicaIntent {
   createdOrder: number;
   attempts: number;
   optimistic: OptimisticMutation[];
+  /** App-visible replica reads that must receive this intent's settlement signal. */
+  dependencies?: ReplicaDependency[];
   reason?: string;
   output?: ReplicaValue;
 }
@@ -232,6 +242,7 @@ export interface EnqueueIntentInput {
   action: string;
   input: ReplicaValue;
   optimistic?: OptimisticMutation[];
+  dependencies?: ReplicaDependency[];
 }
 
 export interface ReplicaInvalidation extends ReplicaDependency {

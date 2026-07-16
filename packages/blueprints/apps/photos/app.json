@@ -12,6 +12,7 @@
     "scopes": [
       { "schema": "media", "verbs": "read" },
       { "schema": "core", "table": "content_item", "verbs": "read" },
+      { "schema": "core", "table": "content_derivative", "verbs": "read" },
       { "schema": "core", "table": "tag", "verbs": "read" },
       { "schema": "core", "table": "concept", "verbs": "read" },
       { "schema": "core", "table": "concept_scheme", "verbs": "read" },
@@ -51,6 +52,7 @@
           "staged_sha": { "type": "string", "minLength": 64, "maxLength": 64 },
           "kind": { "type": "string", "enum": ["photo", "video", "audio", "scan"] },
           "captured_at": { "type": "string" },
+          "tz_offset_min": { "type": "integer", "minimum": -1080, "maximum": 1080 },
           "title": { "type": "string" },
           "width": { "type": "integer", "minimum": 1 },
           "height": { "type": "integer", "minimum": 1 },
@@ -61,6 +63,13 @@
             "maxLength": 64,
             "pattern": "^[0-9a-f]+$",
             "description": "Client-computed perceptual hash (issue #299 Tier 0)."
+          },
+          "thumbhash": {
+            "type": "string",
+            "minLength": 6,
+            "maxLength": 100,
+            "pattern": "^[A-Za-z0-9+/]+$",
+            "description": "Client-computed ThumbHash placeholder, unpadded base64 (issue #419)."
           }
         },
         "additionalProperties": false
@@ -85,7 +94,8 @@
           "asset_id": { "type": "string", "minLength": 1 },
           "captured_at": { "type": "string" },
           "title": { "type": "string" },
-          "favorite": { "type": "integer", "enum": [0, 1] }
+          "favorite": { "type": "integer", "enum": [0, 1] },
+          "archived": { "type": "integer", "enum": [0, 1] }
         },
         "required": ["asset_id"],
         "additionalProperties": false

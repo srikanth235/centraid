@@ -39,31 +39,46 @@ object TunnelWire {
     "proxy-connection", "te", "trailer", "transfer-encoding", "upgrade",
   )
 
-  /** Encode a header frame: u32 BE length + UTF-8 JSON. */
-  fun encodeHeaderFrame(header: JSONObject): ByteArray {
-    val json = header.toString().toByteArray(Charsets.UTF_8)
-    if (json.size > MAX_HEADER_FRAME_BYTES) {
-      throw TunnelException("tunnel: header frame length ${json.size} out of bounds")
+  /**
+   * Pure framing: u32 BE length prefix + payload bytes. Separated from the
+   * stream I/O so it is unit-testable against the shared golden fixture
+   * (packages/tunnel/fixtures/wire-golden.json).
+   */
+  fun frame(payload: ByteArray): ByteArray {
+    if (payload.size > MAX_HEADER_FRAME_BYTES) {
+      throw TunnelException("tunnel: header frame length ${payload.size} out of bounds")
     }
-    val frame = ByteArray(4 + json.size)
-    frame[0] = (json.size ushr 24).toByte()
-    frame[1] = (json.size ushr 16).toByte()
-    frame[2] = (json.size ushr 8).toByte()
-    frame[3] = json.size.toByte()
-    json.copyInto(frame, 4)
+    val frame = ByteArray(4 + payload.size)
+    frame[0] = (payload.size ushr 24).toByte()
+    frame[1] = (payload.size ushr 16).toByte()
+    frame[2] = (payload.size ushr 8).toByte()
+    frame[3] = payload.size.toByte()
+    payload.copyInto(frame, 4)
     return frame
   }
 
-  /** Read one header frame. Throws on oversized or malformed frames. */
-  suspend fun readHeaderFrame(stream: TunnelStream): JSONObject {
-    val lengthBytes = IrohAdapter.readExact(stream.recv, 4)
-    val length = ((lengthBytes[0].toInt() and 0xff) shl 24) or
-      ((lengthBytes[1].toInt() and 0xff) shl 16) or
-      ((lengthBytes[2].toInt() and 0xff) shl 8) or
-      (lengthBytes[3].toInt() and 0xff)
+  /**
+   * Pure decode of the u32 BE length prefix, validating the cap. Shared by
+   * readHeaderFrame and the conformance test.
+   */
+  fun decodeFrameLength(bytes: ByteArray): Int {
+    val length = ((bytes[0].toInt() and 0xff) shl 24) or
+      ((bytes[1].toInt() and 0xff) shl 16) or
+      ((bytes[2].toInt() and 0xff) shl 8) or
+      (bytes[3].toInt() and 0xff)
     if (length <= 0 || length > MAX_HEADER_FRAME_BYTES) {
       throw TunnelException("tunnel: header frame length $length out of bounds")
     }
+    return length
+  }
+
+  /** Encode a header frame: u32 BE length + UTF-8 JSON. */
+  fun encodeHeaderFrame(header: JSONObject): ByteArray =
+    frame(header.toString().toByteArray(Charsets.UTF_8))
+
+  /** Read one header frame. Throws on oversized or malformed frames. */
+  suspend fun readHeaderFrame(stream: TunnelStream): JSONObject {
+    val length = decodeFrameLength(IrohAdapter.readExact(stream.recv, 4))
     val jsonBytes = IrohAdapter.readExact(stream.recv, length)
     return JSONObject(String(jsonBytes, Charsets.UTF_8))
   }

@@ -1,13 +1,15 @@
+// governance: allow-repo-hygiene file-size-limit cohesive coordinator regression suite; splitting would obscure issue #417 review
 import { describe, expect, test, vi } from 'vitest';
 
 import type { VaultChangeMessage } from '../vault-change-feed.js';
 import { ReplicaCoordinator, type ReplicaChangeFeedAdapter } from './coordinator.js';
+import { createReplicaCoordinator } from './coordinator-web.js';
 import { ReplicaRebootstrapRequiredError } from './errors.js';
 import { MemoryIntentStore } from './intent-store.js';
 import { IntentQueue } from './intents.js';
 import type { ReplicaWorkerRequest, ReplicaWorkerResponse } from './worker-protocol.js';
 import { ReplicaWorkerClient, type ReplicaWorkerLike } from './worker-client.js';
-import type { ReplicaCursor, ReplicaSnapshot } from './types.js';
+import type { ReplicaChangeBatch, ReplicaCursor, ReplicaSnapshot } from './types.js';
 
 interface TestFeed extends ReplicaChangeFeedAdapter {
   readonly listener: ((message: VaultChangeMessage) => void) | undefined;
@@ -139,7 +141,7 @@ describe('ReplicaCoordinator', () => {
         throw new Error('memory fallback must not open IndexedDB');
       }),
     } as unknown as IDBFactory;
-    const { replica, status } = await ReplicaCoordinator.create(
+    const { replica, status } = await createReplicaCoordinator(
       { gatewayId: 'gateway', vaultId: 'vault' },
       true,
       { workerFactory: () => worker, indexedDbFactory, idFactory: () => 'memory-intent' },
@@ -221,7 +223,7 @@ describe('ReplicaCoordinator', () => {
         return () => undefined;
       },
     };
-    const { replica, status } = await ReplicaCoordinator.create(
+    const { replica, status } = await createReplicaCoordinator(
       { gatewayId: 'gateway', vaultId: 'vault' },
       true,
       {
@@ -417,6 +419,110 @@ describe('ReplicaCoordinator', () => {
     });
     expect(await intents.list()).toEqual([]);
     expect(await intents.overlayMutations()).toEqual([]);
+    await replica.close();
+  });
+
+  test('settles dependency-only intents individually without optimistic rows', async () => {
+    const worker = new StateWorker();
+    const { client } = await ReplicaWorkerClient.connect(
+      { dbName: '/centraid-replica-settlement.sqlite3', vaultId: 'vault', remember: false },
+      () => worker,
+    );
+    const replica = new ReplicaCoordinator(client, new IntentQueue(new MemoryIntentStore()));
+    const invalidations: unknown[] = [];
+    replica.subscribeInvalidations((items) => invalidations.push(...items));
+    for (const intentId of ['first', 'second']) {
+      await replica.enqueue({
+        intentId,
+        appId: 'agenda',
+        action: 'cancel',
+        input: { eventId: 'event-1' },
+        dependencies: [{ shapeId: 'shape', entity: 'core.event' }],
+      });
+    }
+    await replica.applyIntentOutcome({ intentId: 'first', status: 'denied' });
+    await replica.applyIntentOutcome({ intentId: 'second', status: 'executed' });
+
+    expect(invalidations).toContainEqual({
+      shapeId: 'shape',
+      entity: 'core.event',
+      source: 'overlay',
+      intentId: 'first',
+      intentState: 'denied',
+    });
+    expect(invalidations).toContainEqual({
+      shapeId: 'shape',
+      entity: 'core.event',
+      source: 'overlay',
+      intentId: 'second',
+      intentState: 'executed',
+    });
+    await replica.close();
+  });
+
+  test('drops an in-flight stale feed batch after a bootstrap generation reset', async () => {
+    const worker = new StateWorker();
+    const { client } = await ReplicaWorkerClient.connect(
+      { dbName: '/centraid-replica-feed-race.sqlite3', vaultId: 'vault', remember: false },
+      () => worker,
+    );
+    const feed = createFeed();
+    let release!: (batch: ReplicaChangeBatch) => void;
+    const pending = new Promise<ReplicaChangeBatch>((resolve) => (release = resolve));
+    const replica = new ReplicaCoordinator(client, new IntentQueue(new MemoryIntentStore()), {
+      changeFeed: feed,
+      pullChanges: () => pending,
+    });
+    await replica.bootstrap(snapshot);
+    feed.emit({ type: 'centraid:vault-cursor', cursor: { epoch: 'epoch', seq: 1 } });
+    await vi.waitFor(() =>
+      expect(worker.requests.some((request) => request.op === 'status')).toBe(true),
+    );
+    await replica.bootstrap({ ...snapshot, cursor: { epoch: 'new-epoch', seq: 0 } });
+    release({
+      protocolVersion: 1,
+      schemaEpoch: 'schema',
+      from: { epoch: 'epoch', seq: 0 },
+      to: { epoch: 'epoch', seq: 1 },
+      changes: [],
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect((await client.status()).cursor).toEqual({ epoch: 'new-epoch', seq: 0 });
+    expect(worker.requests.filter((request) => request.op === 'apply-changes')).toHaveLength(0);
+    await replica.close();
+  });
+
+  test('breaks a repeated non-progressing feed loop with one rebootstrap', async () => {
+    const worker = new StateWorker();
+    const { client } = await ReplicaWorkerClient.connect(
+      { dbName: '/centraid-replica-feed-stuck.sqlite3', vaultId: 'vault', remember: false },
+      () => worker,
+    );
+    const feed = createFeed();
+    const onRebootstrapRequired = vi.fn();
+    const pullChanges = vi.fn(
+      async (cursor: ReplicaCursor): Promise<ReplicaChangeBatch> => ({
+        protocolVersion: 1,
+        schemaEpoch: 'schema',
+        from: cursor,
+        to: cursor,
+        changes: [],
+      }),
+    );
+    const replica = new ReplicaCoordinator(client, new IntentQueue(new MemoryIntentStore()), {
+      changeFeed: feed,
+      pullChanges,
+      feedRetryDelayMs: 1,
+      onRebootstrapRequired,
+    });
+    await replica.bootstrap(snapshot);
+
+    feed.emit({ type: 'centraid:vault-cursor', cursor: { epoch: 'epoch', seq: 1 } });
+    await vi.waitFor(() => expect(onRebootstrapRequired).toHaveBeenCalledTimes(1));
+
+    expect(pullChanges).toHaveBeenCalledTimes(3);
+    expect((await client.status()).cursor).toBeNull();
     await replica.close();
   });
 });

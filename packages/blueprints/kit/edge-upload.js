@@ -2,13 +2,19 @@
 // The gateway remains the authorizer and key root; only ciphertext takes the
 // device→provider path. Store-only frames keep this dependency-free and make
 // the sealed size deterministic before the gateway mints multipart URLs.
+import {
+  CBSF_HEADER_BYTES as HEADER_BYTES,
+  CBSF_MAGIC,
+  CBSF_TRAILER_BYTES as TRAILER_BYTES,
+  CBSF_VERSION as VERSION,
+  cbsfDirectoryAad,
+  cbsfFrameAad,
+  encodeCbsfDirectory,
+} from './blob-format.js';
 
 const FRAME_BYTES = 4 * 1024 * 1024;
 const FRAMES_PER_PART = 4;
-const HEADER_BYTES = 37;
-const TRAILER_BYTES = 13;
-const MAGIC = new TextEncoder().encode('CBSF');
-const VERSION = 2;
+const MAGIC = new TextEncoder().encode(CBSF_MAGIC);
 const FALLBACK_CHUNK_BYTES = 16 * 1024 * 1024;
 
 const SHA_INITIAL = [
@@ -132,7 +138,7 @@ export async function stageFallbackFile(file, sha256) {
       ...(file.name ? { filename: file.name } : {}),
     }),
   });
-  if (!init.ok) throw new Error(`fallback upload init refused (${init.status})`);
+  if (!init.ok) return null;
   const plan = await init.json();
   if (plan.mode === 'existing') {
     return { ...plan.staged, casAck: plan.casAck, custody: plan.custody, alreadyPresent: true };
@@ -140,34 +146,48 @@ export async function stageFallbackFile(file, sha256) {
   if (!plan.sessionId || !Number.isSafeInteger(plan.offset) || plan.offset < 0) {
     throw new Error('gateway did not return a resumable fallback session');
   }
-  let offset = plan.offset;
-  const chunkSize =
-    Number.isSafeInteger(plan.chunkSize) && plan.chunkSize > 0
-      ? Math.min(plan.chunkSize, FALLBACK_CHUNK_BYTES)
-      : FALLBACK_CHUNK_BYTES;
-  while (offset < file.size) {
-    const end = Math.min(file.size, offset + chunkSize);
-    const response = await fetch(
-      `/centraid/_vault/blobs/uploads/${encodeURIComponent(plan.sessionId)}`,
-      {
-        method: 'PATCH',
-        headers: { 'upload-offset': String(offset) },
-        body: file.slice(offset, end),
-      },
-    );
-    if (!response.ok) throw new Error(`fallback upload refused at ${offset} (${response.status})`);
-    const next = Number(response.headers.get('upload-offset'));
-    if (!Number.isSafeInteger(next) || next <= offset || next > file.size) {
-      throw new Error('gateway returned an invalid fallback upload offset');
+  try {
+    let offset = plan.offset;
+    const chunkSize =
+      Number.isSafeInteger(plan.chunkSize) && plan.chunkSize > 0
+        ? Math.min(plan.chunkSize, FALLBACK_CHUNK_BYTES)
+        : FALLBACK_CHUNK_BYTES;
+    while (offset < file.size) {
+      const end = Math.min(file.size, offset + chunkSize);
+      const response = await fetch(
+        `/centraid/_vault/blobs/uploads/${encodeURIComponent(plan.sessionId)}`,
+        {
+          method: 'PATCH',
+          headers: { 'upload-offset': String(offset) },
+          body: file.slice(offset, end),
+        },
+      );
+      if (!response.ok) {
+        throw new Error(`fallback upload refused at ${offset} (${response.status})`);
+      }
+      const next = Number(response.headers.get('upload-offset'));
+      if (!Number.isSafeInteger(next) || next <= offset || next > file.size) {
+        throw new Error('gateway returned an invalid fallback upload offset');
+      }
+      offset = next;
     }
-    offset = next;
+    const committed = await fetch(
+      `/centraid/_vault/blobs/uploads/${encodeURIComponent(plan.sessionId)}/commit`,
+      { method: 'POST' },
+    );
+    if (!committed.ok) {
+      throw new Error(`fallback upload completion refused (${committed.status})`);
+    }
+    return await committed.json();
+  } catch (error) {
+    throw asResumableError(error);
   }
-  const committed = await fetch(
-    `/centraid/_vault/blobs/uploads/${encodeURIComponent(plan.sessionId)}/commit`,
-    { method: 'POST' },
-  );
-  if (!committed.ok) throw new Error(`fallback upload completion refused (${committed.status})`);
-  return committed.json();
+}
+
+function asResumableError(error) {
+  const tagged = error instanceof Error ? error : new Error(String(error));
+  tagged.resumable = true;
+  return tagged;
 }
 
 function bytesFromHex(hex) {
@@ -199,18 +219,12 @@ function u32(value) {
   return out;
 }
 
-function u64(value) {
-  const out = new Uint8Array(8);
-  new DataView(out.buffer).setBigUint64(0, BigInt(value), false);
-  return out;
-}
-
 function aad(sha, index, count) {
-  return new TextEncoder().encode(`blob:${sha}:v${VERSION}:f${index}/${count}`);
+  return new TextEncoder().encode(cbsfFrameAad(sha, index, count));
 }
 
 function directoryAad(sha, count) {
-  return new TextEncoder().encode(`blobdir:${sha}:v${VERSION}:n${count}`);
+  return new TextEncoder().encode(cbsfDirectoryAad(sha, count));
 }
 
 async function seal(key, plain, additionalData) {
@@ -236,12 +250,7 @@ function sealedSize(plainSize, frameCount) {
 }
 
 async function sealedDirectory(key, sha, fileSize, frameCount, frameLengths) {
-  const plain = concat([
-    u32(FRAME_BYTES),
-    u64(fileSize),
-    u32(frameCount),
-    ...frameLengths.map(u32),
-  ]);
+  const plain = encodeCbsfDirectory(FRAME_BYTES, fileSize, frameLengths);
   return seal(key, plain, directoryAad(sha, frameCount));
 }
 
@@ -338,8 +347,7 @@ export async function stageDirectFile(file, sha256) {
       ...(file.name ? { filename: file.name } : {}),
     }),
   });
-  if ([401, 403, 404, 409, 501, 503].includes(init.status)) return null;
-  if (!init.ok) throw new Error(`direct upload init refused (${init.status})`);
+  if (!init.ok) return null;
   const plan = await init.json();
   if (plan.alreadyPresent)
     return plan.staged ?? { sha256, byteSize: file.size, alreadyPresent: true };
@@ -360,83 +368,88 @@ export async function stageDirectFile(file, sha256) {
     frameCount,
     frameLengths(file.size, frameCount),
   );
-  if (plan.upload?.kind === 'single') {
-    try {
-      await put(
-        plan.upload.url,
-        await sealPart(file, sha256, key, 0, frameCount, directory),
-        `${plan.sessionId}-1`,
-      );
-      directBytesAccepted = true;
-    } catch (error) {
-      // Provider unavailable before accepting any ciphertext: the gateway
-      // fallback can still take durable local custody and report pending.
-      if (!directBytesAccepted) return null;
-      throw error;
-    }
-  } else if (plan.upload?.kind === 'multipart') {
-    const nativeCompletions = [];
-    for (const target of plan.upload.parts) {
-      const index = target.partNumber - 1;
-      if (index < 0 || index >= partCount) throw new Error('direct upload plan changed');
-      const body = await sealPart(file, sha256, key, index, frameCount, directory);
-      const transferId = `${plan.sessionId}-${target.partNumber}`;
-      const scheduled = await scheduleBackgroundPut(target.url, body, transferId);
-      if (scheduled) {
-        nativeCompletions.push(scheduled.completion.then((etag) => ({ target, etag })));
-        continue;
-      }
-      let etag;
+  try {
+    if (plan.upload?.kind === 'single') {
       try {
-        etag = await put(target.url, body, transferId);
+        await put(
+          plan.upload.url,
+          await sealPart(file, sha256, key, 0, frameCount, directory),
+          `${plan.sessionId}-1`,
+        );
         directBytesAccepted = true;
       } catch (error) {
+        // Provider unavailable before accepting any ciphertext: the gateway
+        // fallback can still take durable local custody and report pending.
         if (!directBytesAccepted) return null;
         throw error;
       }
-      if (!etag) throw new Error('provider did not expose the multipart ETag');
-      const receipt = await fetch(
-        `/centraid/_vault/blobs/direct/${encodeURIComponent(plan.sessionId)}/parts/${target.partNumber}`,
-        {
-          method: 'PUT',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ etag }),
-        },
-      );
-      if (!receipt.ok) throw new Error(`direct part receipt refused (${receipt.status})`);
-    }
-    const nativeResults = await Promise.allSettled(nativeCompletions);
-    for (const result of nativeResults) {
-      if (result.status === 'rejected') continue;
-      const { target, etag } = result.value;
-      directBytesAccepted = true;
-      if (!etag) throw new Error('provider did not expose the background multipart ETag');
-      const receipt = await fetch(
-        `/centraid/_vault/blobs/direct/${encodeURIComponent(plan.sessionId)}/parts/${target.partNumber}`,
-        {
-          method: 'PUT',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ etag }),
-        },
-      );
-      if (!receipt.ok) throw new Error(`direct part receipt refused (${receipt.status})`);
-    }
-    const failed = nativeResults.find((result) => result.status === 'rejected');
-    if (failed) {
-      if (!directBytesAccepted) return null;
-      throw failed.reason;
-    }
+    } else if (plan.upload?.kind === 'multipart') {
+      const nativeCompletions = [];
+      for (const target of plan.upload.parts) {
+        const index = target.partNumber - 1;
+        if (index < 0 || index >= partCount) throw new Error('direct upload plan changed');
+        const body = await sealPart(file, sha256, key, index, frameCount, directory);
+        const transferId = `${plan.sessionId}-${target.partNumber}`;
+        const scheduled = await scheduleBackgroundPut(target.url, body, transferId);
+        if (scheduled) {
+          nativeCompletions.push(scheduled.completion.then((etag) => ({ target, etag })));
+          continue;
+        }
+        let etag;
+        try {
+          etag = await put(target.url, body, transferId);
+          directBytesAccepted = true;
+        } catch (error) {
+          if (!directBytesAccepted) return null;
+          throw error;
+        }
+        if (!etag) throw new Error('provider did not expose the multipart ETag');
+        const receipt = await fetch(
+          `/centraid/_vault/blobs/direct/${encodeURIComponent(plan.sessionId)}/parts/${target.partNumber}`,
+          {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ etag }),
+          },
+        );
+        if (!receipt.ok) throw new Error(`direct part receipt refused (${receipt.status})`);
+      }
+      const nativeResults = await Promise.allSettled(nativeCompletions);
+      for (const result of nativeResults) {
+        if (result.status === 'rejected') continue;
+        const { target, etag } = result.value;
+        directBytesAccepted = true;
+        if (!etag) throw new Error('provider did not expose the background multipart ETag');
+        const receipt = await fetch(
+          `/centraid/_vault/blobs/direct/${encodeURIComponent(plan.sessionId)}/parts/${target.partNumber}`,
+          {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ etag }),
+          },
+        );
+        if (!receipt.ok) throw new Error(`direct part receipt refused (${receipt.status})`);
+      }
+      const failed = nativeResults.find((result) => result.status === 'rejected');
+      if (failed) {
+        if (!directBytesAccepted) return null;
+        throw failed.reason;
+      }
+    } else return null;
+    const committed = await fetch(
+      `/centraid/_vault/blobs/direct/${encodeURIComponent(plan.sessionId)}/complete`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      },
+    );
+    if (!committed.ok) throw new Error(`direct upload completion refused (${committed.status})`);
+    return await committed.json();
+  } catch (error) {
+    if (directBytesAccepted) throw asResumableError(error);
+    throw error;
   }
-  const committed = await fetch(
-    `/centraid/_vault/blobs/direct/${encodeURIComponent(plan.sessionId)}/complete`,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: '{}',
-    },
-  );
-  if (!committed.ok) throw new Error(`direct upload completion refused (${committed.status})`);
-  return committed.json();
 }
 
 export const CBSF_V2 = Object.freeze({ frameBytes: FRAME_BYTES, framesPerPart: FRAMES_PER_PART });

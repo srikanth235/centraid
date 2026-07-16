@@ -115,6 +115,8 @@ export interface InvokeRequest {
    * the terminal intent outcome through the replica log.
    */
   intentId?: string;
+  /** Host-authenticated device binding for a browser-replica intent. */
+  intentDeviceId?: string;
   /**
    * The demo register (issue #290 phase 1): rows this invocation writes are
    * scenario-seed data — provenance stamps `seed.demo` instead of the

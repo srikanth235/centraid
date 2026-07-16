@@ -1,14 +1,17 @@
 import React, { useCallback, useEffect } from 'react';
-import { View } from 'react-native';
+import { View, useColorScheme } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
-import type { Theme as NavTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { Feather } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
-import { colors } from '@centraid/design-tokens';
+import { navThemeFor, resolveTheme } from './src/theme';
+import { useUploadReconciliation } from './src/lib/upload/boot';
 
 // Direct sub-path imports avoid the package's barrel index.js which
 // re-exports every weight (some of which Metro fails to resolve).
@@ -26,7 +29,14 @@ import AppDetailScreen from './src/screens/AppDetail';
 import SettingsScreen from './src/screens/Settings';
 import ApprovalsScreen from './src/screens/Approvals';
 import MobileFallbackScreen from './src/screens/MobileFallback';
-import type { RootStackParamList } from './src/navigation';
+import PhotosHome from './src/screens/photos/PhotosHome';
+import type {
+  AppsStackParamList,
+  PhotosStackParamList,
+  RootStackParamList,
+  SettingsStackParamList,
+  TabParamList,
+} from './src/navigation';
 
 // Keep the native splash up until fonts have loaded — avoids a flash of
 // system-font text on first render.
@@ -46,27 +56,109 @@ Notifications.setNotificationHandler({
   }),
 });
 
-const Stack = createNativeStackNavigator<RootStackParamList>();
+const RootStack = createNativeStackNavigator<RootStackParamList>();
+const Tab = createBottomTabNavigator<TabParamList>();
+const PhotosStack = createNativeStackNavigator<PhotosStackParamList>();
+const AppsStack = createNativeStackNavigator<AppsStackParamList>();
+const SettingsStack = createNativeStackNavigator<SettingsStackParamList>();
 
-const navTheme: NavTheme = {
-  colors: {
-    background: colors.bg,
-    border: colors.line,
-    card: colors.bgElev,
-    notification: colors.accent,
-    primary: colors.accent,
-    text: colors.ink,
-  },
-  dark: false,
-  fonts: {
-    bold: { fontFamily: 'Geist_600SemiBold', fontWeight: '600' },
-    heavy: { fontFamily: 'Geist_600SemiBold', fontWeight: '600' },
-    medium: { fontFamily: 'Geist_500Medium', fontWeight: '500' },
-    regular: { fontFamily: 'Geist_400Regular', fontWeight: '400' },
-  },
-};
+function PhotosNavigator(): React.JSX.Element {
+  const { colors } = resolveTheme(useColorScheme());
+  return (
+    <PhotosStack.Navigator
+      screenOptions={{ contentStyle: { backgroundColor: colors.bg }, headerShown: false }}
+    >
+      <PhotosStack.Screen name="PhotosHome" component={PhotosHome} />
+    </PhotosStack.Navigator>
+  );
+}
+
+function AppsNavigator(): React.JSX.Element {
+  const { colors } = resolveTheme(useColorScheme());
+  return (
+    <AppsStack.Navigator
+      screenOptions={{
+        animation: 'slide_from_right',
+        contentStyle: { backgroundColor: colors.bg },
+        headerShown: false,
+      }}
+    >
+      <AppsStack.Screen name="Home" component={HomeScreen} />
+      <AppsStack.Screen name="AppDetail" component={AppDetailScreen} />
+    </AppsStack.Navigator>
+  );
+}
+
+function SettingsNavigator(): React.JSX.Element {
+  const { colors } = resolveTheme(useColorScheme());
+  return (
+    <SettingsStack.Navigator
+      screenOptions={{
+        animation: 'slide_from_right',
+        contentStyle: { backgroundColor: colors.bg },
+        headerShown: false,
+      }}
+    >
+      <SettingsStack.Screen name="Settings" component={SettingsScreen} />
+      <SettingsStack.Screen name="Approvals" component={ApprovalsScreen} />
+    </SettingsStack.Navigator>
+  );
+}
+
+function Tabs(): React.JSX.Element {
+  const { colors } = resolveTheme(useColorScheme());
+  return (
+    <Tab.Navigator
+      initialRouteName="Apps"
+      screenListeners={{
+        // `selection` haptic on tab switch — matches the bridge vocabulary
+        // WebView apps get via expo-haptics (src/lib/bridge/dispatch.ts).
+        tabPress: () => {
+          void Haptics.selectionAsync();
+        },
+      }}
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: colors.accent,
+        tabBarInactiveTintColor: colors.ink3,
+        tabBarLabelStyle: { fontFamily: 'Geist_500Medium', fontSize: 11 },
+        tabBarStyle: { backgroundColor: colors.bgElev, borderTopColor: colors.line },
+      }}
+    >
+      <Tab.Screen
+        name="Photos"
+        component={PhotosNavigator}
+        options={{
+          tabBarLabel: 'Photos',
+          tabBarIcon: ({ color, size }) => <Feather name="image" size={size} color={color} />,
+        }}
+      />
+      <Tab.Screen
+        name="Apps"
+        component={AppsNavigator}
+        options={{
+          tabBarLabel: 'Apps',
+          tabBarIcon: ({ color, size }) => <Feather name="grid" size={size} color={color} />,
+        }}
+      />
+      <Tab.Screen
+        name="SettingsTab"
+        component={SettingsNavigator}
+        options={{
+          tabBarLabel: 'Settings',
+          tabBarIcon: ({ color, size }) => <Feather name="settings" size={size} color={color} />,
+        }}
+      />
+    </Tab.Navigator>
+  );
+}
 
 export default function App(): React.JSX.Element | null {
+  const scheme = useColorScheme();
+  const { colors } = resolveTheme(scheme);
+  // Resume any backup interrupted by a process death, and settle receipts for
+  // bytes that landed while the app was gone (#419 M0.4).
+  useUploadReconciliation();
   const [fontsLoaded, fontError] = useFonts({
     Geist_400Regular,
     Geist_500Medium,
@@ -97,25 +189,16 @@ export default function App(): React.JSX.Element | null {
   return (
     <SafeAreaProvider>
       <View style={{ backgroundColor: colors.bg, flex: 1 }} onLayout={onReady}>
-        <NavigationContainer theme={navTheme}>
-          <StatusBar style="dark" />
-          <Stack.Navigator
-            screenOptions={{
-              animation: 'slide_from_right',
-              contentStyle: { backgroundColor: colors.bg },
-              headerShown: false,
-            }}
-          >
-            <Stack.Screen name="Home" component={HomeScreen} />
-            <Stack.Screen name="AppDetail" component={AppDetailScreen} />
-            <Stack.Screen name="Settings" component={SettingsScreen} />
-            <Stack.Screen name="Approvals" component={ApprovalsScreen} />
-            <Stack.Screen
+        <NavigationContainer theme={navThemeFor(scheme)}>
+          <StatusBar style="auto" />
+          <RootStack.Navigator screenOptions={{ headerShown: false }}>
+            <RootStack.Screen name="Tabs" component={Tabs} />
+            <RootStack.Screen
               name="MobileFallback"
               component={MobileFallbackScreen}
               options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
             />
-          </Stack.Navigator>
+          </RootStack.Navigator>
         </NavigationContainer>
       </View>
     </SafeAreaProvider>

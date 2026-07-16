@@ -10,12 +10,12 @@ import type {
 } from 'react-native-webview/lib/WebViewTypes';
 import AppHeader from '../components/AppHeader';
 import Button from '../components/Button';
-import { colors, spacing, t } from '../theme';
+import { spacing, t, useTheme, type ThemeColors } from '../theme';
 import { appLiveUrl, resolveGatewayBase, resolveAppMeta } from '../lib/gateway';
 import { dispatch } from '../lib/bridge/dispatch';
 import { INJECTED_JS } from '../lib/bridge/injected';
 import { CENTRAID_HANDSHAKE, type BridgeRequest } from '../lib/bridge/protocol';
-import type { RootScreenProps } from '../navigation';
+import type { AppsScreenProps } from '../navigation';
 
 /**
  * Renders a Centraid app inside a WebView. The native shell owns the
@@ -32,8 +32,10 @@ import type { RootScreenProps } from '../navigation';
 export default function AppDetailScreen({
   navigation,
   route,
-}: RootScreenProps<'AppDetail'>): React.JSX.Element {
+}: AppsScreenProps<'AppDetail'>): React.JSX.Element {
   const { appId } = route.params;
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   // Display metadata: resolution falls back to a derived tile for ids the
   // built-in catalog doesn't know — we only have the id at this layer.
@@ -151,7 +153,8 @@ export default function AppDetailScreen({
           title="Not connected"
           message="Pair with your desktop (or set a gateway URL under Advanced) to open apps."
           actionLabel="Open Settings"
-          onAction={() => navigation.navigate('Settings')}
+          onAction={() => navigation.navigate('SettingsTab', { screen: 'Settings' })}
+          styles={styles}
         />
       ) : loadError ? (
         <ErrorState
@@ -159,6 +162,7 @@ export default function AppDetailScreen({
           message={loadError}
           actionLabel="Retry"
           onAction={reload}
+          styles={styles}
         />
       ) : (
         <View style={styles.webWrap}>
@@ -199,9 +203,16 @@ interface ErrorStateProps {
   message: string;
   actionLabel: string;
   onAction: () => void;
+  styles: ReturnType<typeof makeStyles>;
 }
 
-function ErrorState({ title, message, actionLabel, onAction }: ErrorStateProps): React.JSX.Element {
+function ErrorState({
+  title,
+  message,
+  actionLabel,
+  onAction,
+  styles,
+}: ErrorStateProps): React.JSX.Element {
   return (
     <View style={styles.empty}>
       <Text style={styles.emptyTitle}>{title}</Text>
@@ -213,26 +224,27 @@ function ErrorState({ title, message, actionLabel, onAction }: ErrorStateProps):
   );
 }
 
-const styles = StyleSheet.create({
-  empty: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: spacing[5],
-  },
-  emptyAction: { alignSelf: 'stretch', marginTop: spacing[4] },
-  emptyMsg: { ...t('body'), color: colors.ink2 },
-  emptyTitle: { ...t('title'), color: colors.ink, marginBottom: spacing[2] },
-  loadingOverlay: {
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-    bottom: 0,
-    justifyContent: 'center',
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-  },
-  safe: { backgroundColor: colors.bg, flex: 1 },
-  web: { backgroundColor: colors.bg, flex: 1 },
-  webWrap: { flex: 1 },
-});
+const makeStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    empty: {
+      flex: 1,
+      justifyContent: 'center',
+      paddingHorizontal: spacing[5],
+    },
+    emptyAction: { alignSelf: 'stretch', marginTop: spacing[4] },
+    emptyMsg: { ...t('body'), color: colors.ink2 },
+    emptyTitle: { ...t('title'), color: colors.ink, marginBottom: spacing[2] },
+    loadingOverlay: {
+      alignItems: 'center',
+      backgroundColor: 'transparent',
+      bottom: 0,
+      justifyContent: 'center',
+      left: 0,
+      position: 'absolute',
+      right: 0,
+      top: 0,
+    },
+    safe: { backgroundColor: colors.bg, flex: 1 },
+    web: { backgroundColor: colors.bg, flex: 1 },
+    webWrap: { flex: 1 },
+  });

@@ -233,6 +233,9 @@ function alterExtTable(
   const oldSpec = JSON.parse(prior.spec_json) as ExtTableSpec;
   const oldCols = new Map(oldSpec.columns.map((c) => [c.name, c]));
   const newCols = new Map(spec.columns.map((c) => [c.name, c]));
+  const newlySealed = (spec.sealed ?? []).filter(
+    (column) => !(oldSpec.sealed ?? []).includes(column),
+  );
   const canonColumn = (c: ExtTableSpec['columns'][number]) =>
     canonicalSpecJson({ name: 'x', columns: [{ ...c, primaryKey: c.primaryKey }] });
   for (const [name, col] of newCols) {
@@ -281,6 +284,17 @@ function alterExtTable(
   const oldSealed = new Set(oldSpec.sealed);
   const nowSealed = (spec.sealed ?? []).filter((c) => !oldSealed.has(c) && newCols.has(c));
   if (nowSealed.length > 0) sealExistingExtColumns(db, physical, extPk(spec), nowSealed);
+  // The retro-seal UPDATE itself was observed by the old trigger contract,
+  // so scrub after sealing as well as covering earlier retained history.
+  for (const column of newlySealed) {
+    db.vault
+      .prepare(
+        `UPDATE replica_change
+            SET old_values_json = json_remove(old_values_json, '$.' || ?)
+          WHERE entity = ? AND old_values_json IS NOT NULL`,
+      )
+      .run(column, extLogical(appId, prior.table_name, band));
+  }
 }
 
 /** Seal the plaintext already present in ext columns just declared sealed. */

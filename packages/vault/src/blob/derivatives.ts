@@ -18,6 +18,7 @@ export const DERIVATIVE_VARIANTS = [
   'transcript',
   'embedding',
   'phash',
+  'thumbhash',
 ] as const;
 
 export type DerivativeVariant = (typeof DERIVATIVE_VARIANTS)[number];
@@ -85,7 +86,26 @@ export const DERIVATIVE_REGISTRY: Readonly<Record<DerivativeVariant, DerivativeS
     maxBytes: 64,
     backstop: 'raster-codec',
   },
+  // ThumbHash (issue #419): a DCT placeholder a native client paints while a
+  // real thumb streams. Canonical value is unpadded standard base64 of the
+  // 5-49 byte hash; the cap covers base64 of 64 bytes (~88 chars) with slack.
+  thumbhash: {
+    variant: 'thumbhash',
+    storage: 'inline',
+    mediaType: 'application/x-thumbhash',
+    maxBytes: 100,
+    backstop: 'raster-codec',
+  },
 };
+
+export const BINARY_DERIVATIVE_VARIANTS = DERIVATIVE_VARIANTS.filter(
+  (variant): variant is BinaryDerivativeVariant => DERIVATIVE_REGISTRY[variant].storage === 'cas',
+);
+
+/** Trusted SQL literal generated from the registry, never hand-enumerated. */
+export const BINARY_DERIVATIVE_SQL = BINARY_DERIVATIVE_VARIANTS.map(
+  (variant) => `'${variant}'`,
+).join(',');
 
 export interface ValidatedDerivative {
   readonly variant: DerivativeVariant;
@@ -167,6 +187,26 @@ function canonicalEmbedding(bytes: Buffer): string {
 }
 
 /**
+ * ThumbHash canonical form: unpadded standard base64 of 5..64 hash bytes.
+ * Decode, bound the byte length, and re-encode to reject any non-canonical
+ * spelling (padding, whitespace, base64url) so the stored value is exact.
+ */
+function canonicalThumbhash(text: string): string {
+  if (!/^[A-Za-z0-9+/]+$/.test(text)) {
+    throw new Error('thumbhash derivative must be unpadded standard base64');
+  }
+  const bytes = Buffer.from(text, 'base64');
+  if (bytes.length < 5 || bytes.length > 64) {
+    throw new Error('thumbhash derivative must decode to 5..64 bytes');
+  }
+  const canonical = bytes.toString('base64').replace(/=+$/, '');
+  if (canonical !== text) {
+    throw new Error('thumbhash derivative is not canonical base64');
+  }
+  return canonical;
+}
+
+/**
  * Validate and canonicalize one contribution before it can become model.
  * The gateway route should call this before `stageBlobBytes`; staging calls
  * it for inline variants as a structural last line of defence.
@@ -191,6 +231,9 @@ export function validateDerivativeContribution(input: {
     textContent = decodeUtf8(bytes, variant).trim();
     if (variant === 'phash' && !/^[0-9a-f]{4,64}$/.test(textContent)) {
       throw new Error('phash derivative must be 4..64 lowercase hexadecimal characters');
+    }
+    if (variant === 'thumbhash') {
+      textContent = canonicalThumbhash(textContent);
     }
     if ((variant === 'text' || variant === 'transcript') && textContent.length === 0) {
       throw new Error(`${variant} derivative is empty`);

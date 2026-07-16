@@ -96,10 +96,14 @@ export async function runCasOnlyReconciliation(
     for (const sha of archivedSegmentShas(opts.db.journal)) live.add(sha);
     const index = new ReplicaIndex(opts.db.vault);
     for (const sha of result.authenticatedFailures ?? []) index.unmark(sha);
+    const rows = index.rows();
     cas = reconcileCasInventory({
       collection: result.collection,
       live,
-      indexed: index.all(),
+      indexed: new Set(rows.map((row) => row.sha256)),
+      recentlyIndexed: new Set(
+        rows.filter((row) => row.replicatedAt >= opts.checkedAt).map((row) => row.sha256),
+      ),
       unmark: (sha) => index.unmark(sha),
     });
     addAuthenticatedFailures(cas, result.authenticatedFailures ?? []);

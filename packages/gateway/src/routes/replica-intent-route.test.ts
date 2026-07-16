@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit pre-existing cohesive route regression suite; decomposition is outside issue #417
 import { afterEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { Readable } from 'node:stream';
@@ -107,6 +108,51 @@ test('a crash-left sending row deterministically re-dispatches, then terminal re
   expect(retry.body()).toMatchObject({ outcome: { status: 'executed' } });
   expect(retry.body()).not.toHaveProperty('outcome.output');
   expect(dispatch).toHaveBeenCalledTimes(1);
+});
+
+test('a foreign intent id looks in-flight and never dispatches or mutates its owner row', async () => {
+  const vault = await plane();
+  const input = { title: 'collision probe' };
+  const payloadHash = crypto
+    .createHash('sha256')
+    .update('{"action":"add_task","appId":"planner","input":{"title":"collision probe"}}')
+    .digest('hex');
+  recordReplicaIntentOutcome(vault.db.vault, {
+    intentId: 'foreign-intent',
+    deviceId: 'device-owner',
+    appId: 'planner',
+    action: 'add_task',
+    payloadHash,
+    status: 'sending',
+  });
+  const dispatch = vi.fn();
+  const result = response();
+
+  await handleReplicaIntent(
+    request({
+      intentId: 'foreign-intent',
+      appId: 'planner',
+      action: 'add_task',
+      input,
+      payloadHash,
+    }),
+    result.res,
+    {
+      plane: vault,
+      access: { trust: 'full', rememberDevice: true, deviceId: 'device-prober', appId: 'planner' },
+      dispatch,
+    },
+  );
+
+  expect(result.res.statusCode).toBe(202);
+  expect(result.body()).toMatchObject({
+    accepted: true,
+    outcome: { intentId: 'foreign-intent', status: 'in-flight' },
+  });
+  expect(dispatch).not.toHaveBeenCalled();
+  expect(readReplicaIntentOutcome(vault.db.vault, 'foreign-intent', 'device-owner')).toMatchObject({
+    status: 'sending',
+  });
 });
 
 test('a dispatch exception stays in-flight, then retry terminalizes without durable output', async () => {

@@ -199,14 +199,26 @@ export function subscribeReadUpdates(read, onUpdate) {
   if (typeof read?.subscribe !== 'function') {
     return { managed: false, unsubscribe: () => {} };
   }
-  let current = true;
+  let settled = false;
+  let buffered = false;
+  let latest;
   const unsubscribe = read.subscribe((value) => {
-    if (current) {
-      current = false;
+    if (!settled) {
+      latest = value;
+      buffered = true;
       return;
     }
     onUpdate(value);
   });
+  Promise.resolve(read).then(
+    (initial) => {
+      settled = true;
+      if (buffered && latest !== initial) queueMicrotask(() => onUpdate(latest));
+    },
+    () => {
+      settled = true;
+    },
+  );
   return { managed: true, unsubscribe };
 }
 
@@ -302,14 +314,25 @@ export function debounce(fn, ms = 200) {
 export function onDataChange(tables, cb, { debounceMs = 200 } = {}) {
   const want = new Set(tables ?? []);
   let timer = 0;
+  const pending = new Map();
   const unsub = window.centraid?.onChange?.((detail) => {
     const named = detail && Array.isArray(detail.tables) ? detail.tables : null;
     if (named && named.length && want.size && !named.some((t) => want.has(t))) return;
+    const key =
+      detail?.source === 'overlay' && typeof detail?.intentId === 'string'
+        ? `${detail.intentId}:${detail.intentState ?? ''}`
+        : 'latest';
+    pending.set(key, detail);
     clearTimeout(timer);
-    timer = setTimeout(() => cb(detail), debounceMs);
+    timer = setTimeout(() => {
+      const details = [...pending.values()];
+      pending.clear();
+      for (const value of details) cb(value);
+    }, debounceMs);
   });
   return () => {
     clearTimeout(timer);
+    pending.clear();
     unsub?.();
   };
 }
@@ -520,7 +543,20 @@ export async function stageFileBytes(file, extra = '', { hash = true } = {}) {
     }
     const direct = await stageDirectFile(file, declaredSha);
     if (direct) return direct;
-    return stageFallbackFile(file, declaredSha);
+    const fallback = await stageFallbackFile(file, declaredSha);
+    if (fallback) return fallback;
+    // Session/direct routes are optional protocol extensions. The permanent
+    // authoritative POST remains the compatibility and backpressure fallback.
+    const legacy = await fetch(`${BLOB_ROUTE}?${q}${extra}`, {
+      method: 'POST',
+      headers: {
+        'content-type': file.type || 'application/octet-stream',
+        'x-content-sha256': declaredSha,
+      },
+      body: file,
+    });
+    if (!legacy.ok) throw new Error(`upload refused (${legacy.status})`);
+    return legacy.json();
   }
   const res = await fetch(`${BLOB_ROUTE}?${q}${extra}`, {
     method: 'POST',

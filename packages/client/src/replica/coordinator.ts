@@ -1,20 +1,21 @@
-import type { VaultChangeMessage } from '../vault-change-feed.js';
+import type { VaultChangeMessage } from '../vault-change-sse.js';
 import {
   OnlineOnlyGuard,
   ReplicaProtocolError,
   ReplicaRebootstrapRequiredError,
 } from './errors.js';
-import { IndexedDbIntentStore, MemoryIntentStore, type IntentRecordStore } from './intent-store.js';
+import { replicaIntentInvalidations } from './intent-invalidations.js';
 import { IntentQueue, type IntentQueueOptions } from './intents.js';
-import { replicaIntentDatabaseName } from './key.js';
 import { LiveQueryRegistry } from './live-query-registry.js';
 import { LiveQuery } from './live-query.js';
+import type { ReplicaStore } from './store.js';
 import type {
   EnqueueIntentInput,
   IntentOutcome,
+  ReplicaBootstrapHeader,
   ReplicaChangeBatch,
   ReplicaCursor,
-  ReplicaIdentity,
+  ReplicaSnapshotRow,
   ReplicaIntent,
   ReplicaInvalidation,
   ReplicaReadRequest,
@@ -26,7 +27,6 @@ import type {
   ReplicaSnapshot,
   ReplicaStatus,
 } from './types.js';
-import { ReplicaWorkerClient, type ReplicaWorkerFactory } from './worker-client.js';
 
 export interface ReplicaChangeFeedAdapter {
   /** Pass `subscribeVaultChanges` from the shell-owned singleton feed. */
@@ -43,9 +43,6 @@ export type ReplicaChangePuller = (
 ) => Promise<ReplicaChangeBatch | undefined>;
 
 export interface ReplicaCoordinatorOptions extends IntentQueueOptions {
-  workerFactory?: ReplicaWorkerFactory;
-  intentStore?: IntentRecordStore;
-  indexedDbFactory?: IDBFactory;
   changeFeed?: ReplicaChangeFeedAdapter;
   pullChanges?: ReplicaChangePuller;
   /** Bounded retry for a failed pull even when the shared SSE cursor already advanced. */
@@ -75,10 +72,13 @@ export class ReplicaCoordinator {
   #feedSync: Promise<void> | undefined;
   #feedAbort: AbortController | undefined;
   #feedRetryTimer: ReturnType<typeof setTimeout> | undefined;
+  #feedGeneration = 0;
+  #feedFailureSignature: string | undefined;
+  #feedFailureCount = 0;
   #closed = false;
 
   constructor(
-    readonly worker: ReplicaWorkerClient,
+    readonly worker: ReplicaStore,
     readonly intents: IntentQueue,
     options: Pick<
       ReplicaCoordinatorOptions,
@@ -100,38 +100,6 @@ export class ReplicaCoordinator {
     if (this.#feed) this.#unsubscribeFeed = this.#feed.subscribe(this.onFeedMessage);
   }
 
-  static async create(
-    identity: ReplicaIdentity,
-    remember: boolean,
-    options: ReplicaCoordinatorOptions = {},
-  ): Promise<ReplicaCoordinatorCreated> {
-    const { client, status } = await ReplicaWorkerClient.create(
-      identity,
-      remember,
-      options.workerFactory,
-    );
-    try {
-      const store =
-        options.intentStore ??
-        (status.mode === 'opfs-sahpool' && (options.indexedDbFactory ?? globalThis.indexedDB)
-          ? await openIndexedDb(identity, options.indexedDbFactory ?? globalThis.indexedDB)
-          : new MemoryIntentStore());
-      const intents = new IntentQueue(store, { idFactory: options.idFactory });
-      // A remembered OPFS cursor must attest its catalog and seed the shell
-      // feed before it attaches; otherwise a new renderer can adopt a reduced
-      // server shape and keep stale consented rows readable.
-      if (status.cursor && options.changeFeed) {
-        const shapeIds = (await client.catalog()).map((shape) => shape.shapeId);
-        await options.changeFeed.setShapeIds(shapeIds);
-        await options.changeFeed.resume(status.cursor);
-      }
-      return { replica: new ReplicaCoordinator(client, intents, options), status };
-    } catch (error) {
-      await client.close().catch(() => undefined);
-      throw error;
-    }
-  }
-
   async bootstrap(snapshot: ReplicaSnapshot): Promise<ReplicaCursor> {
     this.resetFeedGeneration();
     // Reconcile durable IDB before advancing SQLite, matching incremental apply.
@@ -142,9 +110,46 @@ export class ReplicaCoordinator {
     this.#onCursorAdvanced?.(cursor, snapshot.schemaEpoch);
     this.emitInvalidations([
       { shapeId: '*', entity: '*', source: 'purge' },
-      ...overlayInvalidations(resolved),
+      ...replicaIntentInvalidations(resolved),
     ]);
     return cursor;
+  }
+
+  /**
+   * Windowed bootstrap, page-wise. The feed stays detached and no cursor is
+   * published until {@link bootstrapCommit}, so an interrupted walk leaves the
+   * replica reporting "not bootstrapped" rather than a partial catalog.
+   */
+  async bootstrapBegin(header: ReplicaBootstrapHeader): Promise<void> {
+    this.resetFeedGeneration();
+    await this.worker.bootstrapBegin(header);
+    this.emitInvalidations([{ shapeId: '*', entity: '*', source: 'purge' }]);
+  }
+
+  async bootstrapPage(rows: ReplicaSnapshotRow[]): Promise<void> {
+    await this.worker.bootstrapPage(rows);
+  }
+
+  /**
+   * Seal at the page-1 cursor and attach the feed there. The caller must still
+   * replay changes from this cursor — later pages came from later snapshots, and
+   * only the replay repairs what slipped between them (notably deletions).
+   */
+  async bootstrapCommit(
+    cursor: ReplicaCursor,
+    header: ReplicaBootstrapHeader,
+    outcomes: IntentOutcome[] = [],
+  ): Promise<ReplicaCursor> {
+    const resolved = await this.intents.applyOutcomes(outcomes);
+    const committed = await this.worker.bootstrapCommit(cursor);
+    await this.#feed?.setShapeIds(header.shapes.map((shape) => shape.shapeId));
+    await this.#feed?.resume(committed);
+    this.#onCursorAdvanced?.(committed, header.schemaEpoch);
+    this.emitInvalidations([
+      { shapeId: '*', entity: '*', source: 'purge' },
+      ...replicaIntentInvalidations(resolved),
+    ]);
+    return committed;
   }
 
   async applyChanges(batch: ReplicaChangeBatch): Promise<ReplicaCursor> {
@@ -154,7 +159,7 @@ export class ReplicaCoordinator {
       const resolved = await this.intents.applyOutcomes(batch.outcomes ?? []);
       const applied = await this.worker.applyChanges(batch);
       this.#onCursorAdvanced?.(applied.cursor, batch.schemaEpoch);
-      this.emitInvalidations([...applied.invalidations, ...overlayInvalidations(resolved)]);
+      this.emitInvalidations([...applied.invalidations, ...replicaIntentInvalidations(resolved)]);
       return applied.cursor;
     } catch (error) {
       if (error instanceof ReplicaRebootstrapRequiredError) {
@@ -187,7 +192,7 @@ export class ReplicaCoordinator {
   liveRead(request: ReplicaReadRequest): LiveQuery<ReplicaReadResult> {
     return this.#live.track(
       new LiveQuery(async (signal) => {
-        if (signal.aborted) throw signal.reason;
+        if (signal.aborted) throw (signal as { reason?: unknown }).reason ?? new Error('aborted');
         const value = await this.read(request);
         return { value, dependencies: [value.dependency] };
       }),
@@ -196,7 +201,7 @@ export class ReplicaCoordinator {
 
   async enqueue(input: EnqueueIntentInput): Promise<ReplicaIntent> {
     const intent = await this.intents.enqueue(input);
-    this.emitInvalidations(overlayInvalidations([intent]));
+    this.emitInvalidations(replicaIntentInvalidations([intent]));
     return intent;
   }
 
@@ -214,7 +219,7 @@ export class ReplicaCoordinator {
 
   async applyIntentOutcome(outcome: IntentOutcome): Promise<ReplicaIntent | undefined> {
     const [intent] = await this.intents.applyOutcomes([outcome]);
-    if (intent) this.emitInvalidations(overlayInvalidations([intent]));
+    if (intent) this.emitInvalidations(replicaIntentInvalidations([intent]));
     return intent;
   }
 
@@ -288,6 +293,7 @@ export class ReplicaCoordinator {
 
   private async syncFromFeed(): Promise<boolean> {
     if (!this.#pullChanges || this.#closed) return true;
+    const generation = this.#feedGeneration;
     const abort = new AbortController();
     this.#feedAbort = abort;
     try {
@@ -310,10 +316,28 @@ export class ReplicaCoordinator {
           throw error;
         }
         if (!batch) return false;
+        if (abort.signal.aborted || generation !== this.#feedGeneration) return true;
         const cursor = await this.applyChanges(batch);
+        if (!cursorAfter(cursor, status.cursor)) {
+          if (this.recordFeedFailure('non-progress')) {
+            await this.requireRebootstrap({ reason: 'replica feed made no cursor progress' });
+            return true;
+          }
+          return false;
+        }
+        this.clearFeedFailures();
         this.clearReachedFeedTarget(cursor);
       }
       return abort.signal.aborted || !this.#feedTarget;
+    } catch (error) {
+      if (
+        error instanceof ReplicaProtocolError &&
+        this.recordFeedFailure(`${error.name}:${error.message}`)
+      ) {
+        await this.requireRebootstrap(error);
+        return true;
+      }
+      throw error;
     } finally {
       if (this.#feedAbort === abort) this.#feedAbort = undefined;
     }
@@ -347,11 +371,27 @@ export class ReplicaCoordinator {
   }
 
   private resetFeedGeneration(): void {
+    this.#feedGeneration += 1;
     this.#feedAbort?.abort();
     this.#feedAbort = undefined;
     this.#feedTarget = undefined;
     if (this.#feedRetryTimer) clearTimeout(this.#feedRetryTimer);
     this.#feedRetryTimer = undefined;
+    this.clearFeedFailures();
+  }
+
+  private recordFeedFailure(signature: string): boolean {
+    if (this.#feedFailureSignature === signature) this.#feedFailureCount += 1;
+    else {
+      this.#feedFailureSignature = signature;
+      this.#feedFailureCount = 1;
+    }
+    return this.#feedFailureCount >= 3;
+  }
+
+  private clearFeedFailures(): void {
+    this.#feedFailureSignature = undefined;
+    this.#feedFailureCount = 0;
   }
 
   private emitInvalidations(invalidations: ReplicaInvalidation[]): void {
@@ -364,38 +404,6 @@ export class ReplicaCoordinator {
       }
     }
   }
-}
-
-async function openIndexedDb(
-  identity: ReplicaIdentity,
-  factory: IDBFactory,
-): Promise<IntentRecordStore> {
-  try {
-    return await IndexedDbIntentStore.open(await replicaIntentDatabaseName(identity), factory);
-  } catch {
-    return new MemoryIntentStore();
-  }
-}
-
-function overlayInvalidations(intents: ReplicaIntent[]): ReplicaInvalidation[] {
-  const values = new Map<string, ReplicaInvalidation>();
-  for (const intent of intents) {
-    for (const mutation of intent.optimistic) {
-      const invalidation: ReplicaInvalidation = {
-        shapeId: mutation.shapeId,
-        entity: mutation.entity,
-        rowId: mutation.rowId,
-        source: 'overlay',
-        intentId: intent.intentId,
-        intentState: intent.state,
-      };
-      values.set(
-        `${invalidation.shapeId}\u0000${invalidation.entity}\u0000${invalidation.rowId}`,
-        invalidation,
-      );
-    }
-  }
-  return [...values.values()];
 }
 
 function cursorAfter(left: ReplicaCursor, right: ReplicaCursor): boolean {

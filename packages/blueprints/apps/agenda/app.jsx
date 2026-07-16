@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit pre-existing cohesive app blueprint; decomposition is outside issue #417
 // Agenda — a Google-Calendar-bar reinvention that is still a pure projection
 // over the personal vault. Every event rendered here lives in core.event;
 // every mutation is a typed vault command (schedule.propose_event /

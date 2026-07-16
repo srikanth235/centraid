@@ -1,0 +1,111 @@
+{
+  "_readme": [
+    "Golden wire-protocol frames for the centraid tunnel (issue #263 / #419).",
+    "Source of truth: packages/tunnel/src/wire-conformance.test.ts. Regenerate",
+    "with UPDATE_GOLDEN=1. Read identically by the Swift (XCTest) and Kotlin",
+    "(JUnit) conformance tests in apps/mobile/modules/centraid-tunnel.",
+    "",
+    "frameBase64 = base64( u32BE(jsonByteLength) ++ utf8(json) ). Every",
+    "implementation MUST reproduce frameBase64 byte-for-byte when it frames the",
+    "exact `json` string, and MUST parse jsonByteLength back from the prefix.",
+    "Object encoding is round-tripped (not byte-compared) because JSON key",
+    "order differs across serializers; `json` is the Node canonical form."
+  ],
+  "version": 1,
+  "alpns": {
+    "pair": "centraid/pair/1",
+    "tunnel": "centraid/tunnel/1",
+    "gwPair": "centraid/gw-pair/1",
+    "pairBytesBase64": "Y2VudHJhaWQvcGFpci8x",
+    "tunnelBytesBase64": "Y2VudHJhaWQvdHVubmVsLzE=",
+    "gwPairBytesBase64": "Y2VudHJhaWQvZ3ctcGFpci8x"
+  },
+  "caps": {
+    "maxHeaderFrameBytes": 262144,
+    "maxRequestBodyBytes": 33554432,
+    "readChunkBytes": 65536
+  },
+  "hopByHopHeaders": [
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "proxy-connection",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade"
+  ],
+  "vectors": [
+    {
+      "name": "tunnelRequestHeader",
+      "note": "HTTP request header frame: {method, target, headers}.",
+      "json": "{\"method\":\"GET\",\"target\":\"/centraid/notes/?limit=20\",\"headers\":{\"accept\":\"text/html\",\"x-centraid-vault\":\"personal\"}}",
+      "jsonByteLength": 116,
+      "frameBase64": "AAAAdHsibWV0aG9kIjoiR0VUIiwidGFyZ2V0IjoiL2NlbnRyYWlkL25vdGVzLz9saW1pdD0yMCIsImhlYWRlcnMiOnsiYWNjZXB0IjoidGV4dC9odG1sIiwieC1jZW50cmFpZC12YXVsdCI6InBlcnNvbmFsIn19"
+    },
+    {
+      "name": "tunnelResponseHeader",
+      "note": "HTTP response header frame: {status, headers}.",
+      "json": "{\"status\":200,\"headers\":{\"content-type\":\"application/json\",\"content-length\":\"17\"}}",
+      "jsonByteLength": 82,
+      "frameBase64": "AAAAUnsic3RhdHVzIjoyMDAsImhlYWRlcnMiOnsiY29udGVudC10eXBlIjoiYXBwbGljYXRpb24vanNvbiIsImNvbnRlbnQtbGVuZ3RoIjoiMTcifX0="
+    },
+    {
+      "name": "tunnelRequestEmptyHeaders",
+      "note": "Edge: empty headers object still frames + round-trips.",
+      "json": "{\"method\":\"DELETE\",\"target\":\"/centraid/tasks/42\",\"headers\":{}}",
+      "jsonByteLength": 62,
+      "frameBase64": "AAAAPnsibWV0aG9kIjoiREVMRVRFIiwidGFyZ2V0IjoiL2NlbnRyYWlkL3Rhc2tzLzQyIiwiaGVhZGVycyI6e319"
+    },
+    {
+      "name": "tunnelResponseMultiValueHeader",
+      "note": "Edge: a repeated header is carried as a JSON array (set-cookie).",
+      "json": "{\"status\":200,\"headers\":{\"set-cookie\":[\"a=1; HttpOnly\",\"b=2; HttpOnly\"],\"vary\":\"accept\"}}",
+      "jsonByteLength": 89,
+      "frameBase64": "AAAAWXsic3RhdHVzIjoyMDAsImhlYWRlcnMiOnsic2V0LWNvb2tpZSI6WyJhPTE7IEh0dHBPbmx5IiwiYj0yOyBIdHRwT25seSJdLCJ2YXJ5IjoiYWNjZXB0In19"
+    },
+    {
+      "name": "tunnelRequestUnicode",
+      "note": "Edge: non-ASCII in JSON — jsonByteLength is UTF-8 bytes, not chars.",
+      "json": "{\"method\":\"POST\",\"target\":\"/centraid/notes/?q=r%C3%A9sum%C3%A9\",\"headers\":{\"x-note-title\":\"résumé 🔒\",\"content-type\":\"application/json\"}}",
+      "jsonByteLength": 141,
+      "frameBase64": "AAAAjXsibWV0aG9kIjoiUE9TVCIsInRhcmdldCI6Ii9jZW50cmFpZC9ub3Rlcy8/cT1yJUMzJUE5c3VtJUMzJUE5IiwiaGVhZGVycyI6eyJ4LW5vdGUtdGl0bGUiOiJyw6lzdW3DqSDwn5SSIiwiY29udGVudC10eXBlIjoiYXBwbGljYXRpb24vanNvbiJ9fQ=="
+    },
+    {
+      "name": "pairRequest",
+      "note": "centraid/pair/1 phone→desktop: {code, deviceName, platform}.",
+      "json": "{\"code\":\"482913\",\"deviceName\":\"Sri's iPhone\",\"platform\":\"ios\"}",
+      "jsonByteLength": 62,
+      "frameBase64": "AAAAPnsiY29kZSI6IjQ4MjkxMyIsImRldmljZU5hbWUiOiJTcmkncyBpUGhvbmUiLCJwbGF0Zm9ybSI6ImlvcyJ9"
+    },
+    {
+      "name": "pairResponseOk",
+      "note": "centraid/pair/1 desktop→phone success.",
+      "json": "{\"ok\":true,\"deviceId\":\"dev_7f3a\",\"desktopName\":\"studio-mini\"}",
+      "jsonByteLength": 61,
+      "frameBase64": "AAAAPXsib2siOnRydWUsImRldmljZUlkIjoiZGV2XzdmM2EiLCJkZXNrdG9wTmFtZSI6InN0dWRpby1taW5pIn0="
+    },
+    {
+      "name": "pairResponseError",
+      "note": "centraid/pair/1 desktop→phone failure.",
+      "json": "{\"ok\":false,\"error\":\"invalid_code\"}",
+      "jsonByteLength": 35,
+      "frameBase64": "AAAAI3sib2siOmZhbHNlLCJlcnJvciI6ImludmFsaWRfY29kZSJ9"
+    },
+    {
+      "name": "gatewayPairRequest",
+      "note": "centraid/gw-pair/1 ticket redemption request (all fields).",
+      "json": "{\"ticketId\":\"tkt_1a2b\",\"secret\":\"s3cr3t-one-time\",\"deviceName\":\"Pixel 9\",\"platform\":\"android\",\"rememberDevice\":true,\"trust\":\"full\"}",
+      "jsonByteLength": 131,
+      "frameBase64": "AAAAg3sidGlja2V0SWQiOiJ0a3RfMWEyYiIsInNlY3JldCI6InMzY3IzdC1vbmUtdGltZSIsImRldmljZU5hbWUiOiJQaXhlbCA5IiwicGxhdGZvcm0iOiJhbmRyb2lkIiwicmVtZW1iZXJEZXZpY2UiOnRydWUsInRydXN0IjoiZnVsbCJ9"
+    },
+    {
+      "name": "gatewayPairResponse",
+      "note": "centraid/gw-pair/1 redemption response (all fields).",
+      "json": "{\"ok\":true,\"gatewayId\":\"gw_9c8d\",\"gatewayName\":\"home\",\"vaultId\":\"vlt_42\",\"vaultName\":\"personal\",\"version\":\"0.1.0\",\"schemaEpoch\":7}",
+      "jsonByteLength": 130,
+      "frameBase64": "AAAAgnsib2siOnRydWUsImdhdGV3YXlJZCI6Imd3XzljOGQiLCJnYXRld2F5TmFtZSI6ImhvbWUiLCJ2YXVsdElkIjoidmx0XzQyIiwidmF1bHROYW1lIjoicGVyc29uYWwiLCJ2ZXJzaW9uIjoiMC4xLjAiLCJzY2hlbWFFcG9jaCI6N30="
+    }
+  ]
+}

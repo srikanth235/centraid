@@ -107,12 +107,23 @@ CREATE TABLE media_media_asset (
   content_id       TEXT NOT NULL UNIQUE REFERENCES core_content_item(content_id),
   kind             TEXT NOT NULL CHECK (kind IN ('photo','video','audio','scan')),
   captured_at      TEXT,
+  -- Capture-local UTC offset in minutes (issue #419): captured_at is a UTC
+  -- instant, so a native client needs the offset to render the wall-clock time
+  -- the shutter fired at. NULL when the camera never recorded a zone. taken_at
+  -- stays derived (captured_at, else content.created_at) — no duplicate column.
+  tz_offset_min    INTEGER,
   place_id         TEXT REFERENCES core_place(place_id),
   camera_device_id TEXT REFERENCES consent_device(device_id),
   width            INTEGER CHECK (width > 0),
   height           INTEGER CHECK (height > 0),
   duration_s       REAL CHECK (duration_s >= 0),
   exif_json        TEXT CHECK (exif_json IS NULL OR json_valid(exif_json)),
+  -- First-class asset state (issue #419) so the Photos replica shape is
+  -- self-contained: favorite is a boolean on the asset (no more reconstructing
+  -- it from a 3-table core_tag/core_concept join), and archive hides an asset
+  -- from the timeline without trashing it. Trash is the deleted_at pair below.
+  favorite         INTEGER NOT NULL DEFAULT 0 CHECK (favorite IN (0,1)),
+  archived_at      TEXT,
   -- The standard soft-delete pair (issue #274): every owner-deletable row
   -- carries its own grace window, not just the drive's content items.
   deleted_at       TEXT,

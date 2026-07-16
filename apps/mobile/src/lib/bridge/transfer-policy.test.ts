@@ -8,8 +8,7 @@ const scope = {
       blob_store: {
         kind: 's3',
         endpoint: 'https://provider.example',
-        bucket: 'vault-cas',
-        prefix: 'owners/one',
+        allowedUploadPrefix: '/vault-cas/owners/one/tmp/blobs/',
       },
     }),
   ),

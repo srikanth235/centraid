@@ -512,6 +512,14 @@ Gateway fails are NOT from this wave:
   at the `turn-sse.ts` seam via the allowlisted `model-pricing.ts`
   (`costForUsage`); the client mirror table was deleted. Wire contract updated
   in `runner.ts` + `kit/turn-stream.d.ts`.
+- Merge with main (post-#421/#422): main's blueprints devDep on
+  `@centraid/client` (replica import in `app-boot-harness.ts`) formed a package
+  cycle with Wave 0's client→blueprints dep, so `@centraid/blueprints` was
+  removed from `packages/client/package.json` — the kit `.js`/`.d.ts` sources
+  still resolve through the workspace-hoisted root `node_modules` (they are
+  served-verbatim files, not built artifacts, so no build ordering is lost).
+  The merge also switched the usage-pricing seam to a local variable
+  (`no-param-reassign` under the merged oxlint config).
 - Per-wave commits used `SKIP_GOVERNANCE=1` solely for the repo-hygiene
   file-size violations pre-existing on main (9 files, none in this change
   set); every other directive passed on every commit (probed before each).

@@ -52,10 +52,16 @@ describe('derivative registry and validation', () => {
       'transcript',
       'embedding',
       'phash',
+      'thumbhash',
     ]);
     expect(DERIVATIVE_REGISTRY.poster).toMatchObject({ storage: 'cas', backstop: 'none' });
     expect(DERIVATIVE_REGISTRY.text).toMatchObject({ storage: 'inline' });
     expect(DERIVATIVE_REGISTRY.embedding).toMatchObject({ backstop: 'optional-model' });
+    expect(DERIVATIVE_REGISTRY.thumbhash).toMatchObject({
+      storage: 'inline',
+      mediaType: 'application/x-thumbhash',
+      backstop: 'raster-codec',
+    });
   });
 
   test('accepts bounded canonical payloads and rejects malformed contributions', () => {
@@ -78,6 +84,22 @@ describe('derivative registry and validation', () => {
     expect(() =>
       validateDerivativeContribution({ variant: 'phash', bytes: Buffer.from('ABCDEF') }),
     ).toThrow(/lowercase hexadecimal/);
+    // ThumbHash: canonical unpadded base64 of 5..64 bytes round-trips exactly.
+    expect(
+      validateDerivativeContribution({
+        variant: 'thumbhash',
+        bytes: Buffer.from('1QcSHQRnh493V4dIh4eXh1h4kJUI'),
+      }),
+    ).toMatchObject({ storage: 'inline', textContent: '1QcSHQRnh493V4dIh4eXh1h4kJUI' });
+    expect(() =>
+      validateDerivativeContribution({ variant: 'thumbhash', bytes: Buffer.from('abc') }),
+    ).toThrow(/5\.\.64 bytes/);
+    expect(() =>
+      validateDerivativeContribution({
+        variant: 'thumbhash',
+        bytes: Buffer.from('1QcSHQRnh493V4dIh4eXh1h4kJUI=='),
+      }),
+    ).toThrow(/unpadded standard base64|not canonical/);
     expect(() =>
       validateDerivativeContribution({
         variant: 'embedding',

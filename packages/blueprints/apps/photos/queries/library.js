@@ -42,7 +42,13 @@ export default async ({ input, ctx }) => {
       // the window — acceptable semantics for a recency slice.
       ctx.vault.read({
         entity: 'media.media_asset',
-        where: [{ column: 'deleted_at', op: 'is-null' }],
+        // Live timeline excludes archived assets (issue #419): archive hides
+        // from the timeline without trashing, so an archived photo is neither
+        // here nor in the trash shelf.
+        where: [
+          { column: 'deleted_at', op: 'is-null' },
+          { column: 'archived_at', op: 'is-null' },
+        ],
         orderBy: { column: 'captured_at', dir: 'desc' },
         limit: window,
         purpose,
@@ -90,7 +96,7 @@ export default async ({ input, ctx }) => {
     ]);
 
     const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
-    const { starredIds, tagsByAsset, custodyByContent } = joins;
+    const { tagsByAsset, custodyByContent } = joins;
 
     // Keep the app's album row shape over collection rows: a collection may
     // also hold notes and documents; this surface renders its photo side.
@@ -117,7 +123,7 @@ export default async ({ input, ctx }) => {
       const { src, thumb, preview, poster } = srcOf(content);
       return {
         ...asset,
-        favorite: starredIds.has(asset.content_id) ? 1 : 0,
+        favorite: asset.favorite ? 1 : 0,
         content_uri: src,
         thumb_uri: thumb,
         preview_uri: preview,

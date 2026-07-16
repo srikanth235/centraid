@@ -169,7 +169,7 @@ test('rejects /centraid/_gateway/backup without the bearer token — same gate a
   expect(backup.status).toBe(health.status);
 });
 
-test('reports {configured: false} when no backup block is set (default handle)', async () => {
+test('reports an unconfigured destination for the default vault when no backup block is set', async () => {
   const res = await fetch(`${handle.url}/centraid/_gateway/backup`, {
     headers: { Authorization: `Bearer ${handle.token}` },
   });
@@ -181,7 +181,21 @@ test('reports {configured: false} when no backup block is set (default handle)',
   };
   // recoveryKit (issue #351 wave 4) reads "never confirmed" — there's no
   // BackupService (and so no state.json) to have recorded a confirmation.
-  expect(body).toEqual({ configured: false, vaults: [], recoveryKit: { confirmedAt: null } });
+  // The status surface still inventories the active vault so the UI can show
+  // its local-only destination and policy before backup is configured.
+  expect(body).toMatchObject({
+    configured: false,
+    recoveryKit: { confirmedAt: null },
+    vaults: [
+      {
+        vaultId: handle.vaults.current().boot.vaultId,
+        name: "Owner's vault",
+        running: false,
+        destination: { kind: 'gateway-local' },
+        pendingOffsite: { count: 0, bytes: 0 },
+      },
+    ],
+  });
 });
 
 test('POST /centraid/_gateway/backup/run refuses with a clear body when not configured', async () => {

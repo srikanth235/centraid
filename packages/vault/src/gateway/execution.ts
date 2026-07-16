@@ -37,7 +37,7 @@ import type {
   InvokeOutcome,
   InvokeRequest,
 } from './types.js';
-import { DEFAULT_PURPOSE } from './types.js';
+import { DEFAULT_PURPOSE, GatewayError } from './types.js';
 import { readDurableParkedDenial, readDurableParkedPayload } from '../replica/parked.js';
 import {
   finalizeReplicaInvocationCommit,
@@ -239,6 +239,42 @@ export function invocationExists(db: VaultDb, invocationId: string): boolean {
   );
 }
 
+/**
+ * Bind a caller-supplied idempotency key to the immutable journal identity
+ * before a handler can run. Canonical commit repair repeats this check after
+ * COMMIT, but that is deliberately only a corruption guard: discovering a
+ * conflicting reuse there would leave an unaudited canonical write behind.
+ */
+export function assertInvocationIdentity(
+  db: VaultDb,
+  invocationId: string,
+  commandId: string,
+  agentId: string,
+  grantId: string | null,
+): boolean {
+  const existing = db.journal
+    .prepare(
+      `SELECT command_id, agent_id, grant_id
+         FROM agent_command_invocation
+        WHERE invocation_id = ?`,
+    )
+    .get(invocationId) as
+    | { command_id: string; agent_id: string; grant_id: string | null }
+    | undefined;
+  if (!existing) return false;
+  if (
+    existing.command_id !== commandId ||
+    existing.agent_id !== agentId ||
+    existing.grant_id !== grantId
+  ) {
+    throw new GatewayError(
+      'contract',
+      `invocation id ${invocationId} is already bound to another command, caller, or grant`,
+    );
+  }
+  return true;
+}
+
 export function setInvocationStatus(db: VaultDb, invocationId: string, status: string): void {
   db.journal
     .prepare('UPDATE agent_command_invocation SET status = ? WHERE invocation_id = ?')
@@ -301,6 +337,35 @@ export function replayInvocation(db: VaultDb, invocationId: string): InvokeOutco
     .get(invocationId) as { status: string; receipt_id: string | null } | undefined;
   if (row?.status === 'executed') {
     return { status: 'replayed', invocationId, output: receiptOutput(db.journal, row.receipt_id) };
+  }
+  if (row && (row.status === 'failed' || row.status === 'rolled_back')) {
+    const receipt = db.journal
+      .prepare(
+        `SELECT receipt_id, detail_json
+           FROM consent_receipt
+          WHERE invocation_id = ? AND decision = 'deny'
+          ORDER BY occurred_at DESC, receipt_id DESC
+          LIMIT 1`,
+      )
+      .get(invocationId) as { receipt_id: string; detail_json: string | null } | undefined;
+    if (receipt) {
+      const detail = receipt.detail_json
+        ? (JSON.parse(receipt.detail_json) as {
+            failing?: unknown;
+            error?: unknown;
+            predicate?: unknown;
+          })
+        : {};
+      const reason = [detail.failing, detail.error, detail.predicate].find(
+        (value): value is string => typeof value === 'string' && value.length > 0,
+      );
+      return {
+        status: 'failed',
+        invocationId,
+        receiptId: receipt.receipt_id,
+        reason: reason ?? `invocation ${row.status}`,
+      };
+    }
   }
   if (row) {
     const parked = readDurableParkedPayload(db, invocationId);

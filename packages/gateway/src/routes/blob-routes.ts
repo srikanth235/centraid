@@ -229,11 +229,18 @@ export function makeBlobRouteHandler(vaults: Pick<VaultRegistry, 'current'>): Ro
           );
         }
         let offset = 0;
-        for await (const value of req as AsyncIterable<Buffer | string>) {
-          const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value);
-          offset = (await plane.db.blobTransfers.appendIngress(begin.sessionId, offset, chunk))
-            .offset;
-          if (offset > MAX_BLOB_BYTES) throw new Error(`upload exceeds ${MAX_BLOB_BYTES} bytes`);
+        try {
+          for await (const value of req as AsyncIterable<Buffer | string>) {
+            const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value);
+            if (chunk.length > MAX_BLOB_BYTES - offset) {
+              throw new Error(`upload exceeds ${MAX_BLOB_BYTES} bytes`);
+            }
+            offset = (await plane.db.blobTransfers.appendIngress(begin.sessionId, offset, chunk))
+              .offset;
+          }
+        } catch (error) {
+          await plane.db.blobTransfers.abortIngress(begin.sessionId);
+          throw error;
         }
         if (offset === 0) {
           await plane.db.blobTransfers.abortIngress(begin.sessionId);

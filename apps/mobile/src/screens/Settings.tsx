@@ -1,10 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, StyleSheet, ScrollView, Pressable, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import Icon from '../components/Icon';
 import Button from '../components/Button';
-import { colors, radii, spacing, t } from '../theme';
+import { radii, spacing, t, useTheme, type ThemeColors } from '../theme';
 import {
   hydrateGatewayToken,
   hydrateGatewayUrl,
@@ -22,7 +22,7 @@ import {
   unpair,
   type TunnelStatus,
 } from '../lib/phone-link';
-import type { RootScreenProps } from '../navigation';
+import type { SettingsScreenProps } from '../navigation';
 
 // Mobile-only settings. The primary path is the desktop link: scan the
 // "Connect phone" QR on your desktop once, and everything loads through an
@@ -50,7 +50,9 @@ function tunnelStatusLabel(status: TunnelStatus | undefined): string {
 
 export default function SettingsScreen({
   navigation,
-}: RootScreenProps<'Settings'>): React.JSX.Element {
+}: SettingsScreenProps<'Settings'>): React.JSX.Element {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [paired, setPaired] = useState(false);
   const [desktopName, setDesktopName] = useState('');
   const [tunnelStatus, setTunnelStatus] = useState<TunnelStatus | undefined>(undefined);
@@ -110,7 +112,9 @@ export default function SettingsScreen({
   const saveAdvanced = (): void => {
     setGatewayUrl(urlValue);
     setGatewayToken(tokenValue);
-    navigation.goBack();
+    // Settings is a tab root now, so there's nothing to pop back to — jump to
+    // the Apps tab instead, which reloads the list against the new gateway.
+    navigation.navigate('Apps', { screen: 'Home' });
   };
 
   if (scanning) {
@@ -119,15 +123,10 @@ export default function SettingsScreen({
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
+      {/* Settings is a tab root — no back affordance; the spacers keep the
+          title centered in the same bar the scanner reuses. */}
       <View style={styles.bar}>
-        <Pressable
-          onPress={() => navigation.goBack()}
-          hitSlop={12}
-          accessibilityLabel="Back"
-          style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
-        >
-          <Icon name="ArrowLeft" size={20} color={colors.ink} strokeWidth={1.75} />
-        </Pressable>
+        <View style={styles.barSpacer} />
         <Text style={styles.title}>Settings</Text>
         <View style={styles.barSpacer} />
       </View>
@@ -246,6 +245,8 @@ function PairScanner({
   onScanned: (payload: string) => void;
   onCancel: () => void;
 }): React.JSX.Element {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [permission, requestPermission] = useCameraPermissions();
   const scannedRef = useRef(false);
 
@@ -298,72 +299,73 @@ function PairScanner({
   );
 }
 
-const styles = StyleSheet.create({
-  actions: { marginTop: spacing[5] },
-  advanced: { marginTop: spacing[4] },
-  backBtn: {
-    alignItems: 'center',
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
-  bar: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: spacing[2],
-  },
-  barSpacer: { width: 36 },
-  body: { padding: spacing[5] },
-  camera: { borderRadius: radii.md, flex: 1, overflow: 'hidden' },
-  emptyTitle: { ...t('title'), color: colors.ink, marginBottom: spacing[2] },
-  help: { ...t('small'), color: colors.ink3, marginBottom: spacing[3] },
-  input: {
-    ...t('body'),
-    backgroundColor: colors.bgElev,
-    borderColor: colors.line,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    color: colors.ink,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  linkAction: { marginTop: spacing[3] },
-  linkCard: {
-    backgroundColor: colors.bgElev,
-    borderColor: colors.line,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    padding: spacing[4],
-  },
-  linkName: { ...t('bodyStrong'), color: colors.ink },
-  linkStatus: { ...t('small'), color: colors.ink3, marginTop: 2 },
-  pairError: { ...t('small'), color: colors.danger, marginTop: spacing[3] },
-  row: {
-    alignItems: 'center',
-    backgroundColor: colors.bgElev,
-    borderColor: colors.line,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: spacing[3],
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-  },
-  rowLabel: { ...t('body'), color: colors.ink, flex: 1 },
-  safe: { backgroundColor: colors.bg, flex: 1 },
-  scanDenied: { padding: spacing[5] },
-  scanHint: {
-    ...t('small'),
-    color: colors.ink3,
-    marginTop: spacing[3],
-    textAlign: 'center',
-  },
-  scanSafe: { backgroundColor: colors.bg, flex: 1 },
-  scanWrap: { flex: 1, padding: spacing[5] },
-  sectionLabel: { ...t('small'), color: colors.ink2, fontWeight: '600', marginBottom: 6 },
-  spacer: { height: spacing[5] },
-  title: { ...t('title'), color: colors.ink },
-  unavailable: { ...t('small'), color: colors.ink3 },
-});
+const makeStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    actions: { marginTop: spacing[5] },
+    advanced: { marginTop: spacing[4] },
+    backBtn: {
+      alignItems: 'center',
+      height: 36,
+      justifyContent: 'center',
+      width: 36,
+    },
+    bar: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingHorizontal: 14,
+      paddingVertical: spacing[2],
+    },
+    barSpacer: { width: 36 },
+    body: { padding: spacing[5] },
+    camera: { borderRadius: radii.md, flex: 1, overflow: 'hidden' },
+    emptyTitle: { ...t('title'), color: colors.ink, marginBottom: spacing[2] },
+    help: { ...t('small'), color: colors.ink3, marginBottom: spacing[3] },
+    input: {
+      ...t('body'),
+      backgroundColor: colors.bgElev,
+      borderColor: colors.line,
+      borderRadius: radii.md,
+      borderWidth: 1,
+      color: colors.ink,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    linkAction: { marginTop: spacing[3] },
+    linkCard: {
+      backgroundColor: colors.bgElev,
+      borderColor: colors.line,
+      borderRadius: radii.md,
+      borderWidth: 1,
+      padding: spacing[4],
+    },
+    linkName: { ...t('bodyStrong'), color: colors.ink },
+    linkStatus: { ...t('small'), color: colors.ink3, marginTop: 2 },
+    pairError: { ...t('small'), color: colors.danger, marginTop: spacing[3] },
+    row: {
+      alignItems: 'center',
+      backgroundColor: colors.bgElev,
+      borderColor: colors.line,
+      borderRadius: radii.md,
+      borderWidth: 1,
+      flexDirection: 'row',
+      gap: spacing[3],
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+    },
+    rowLabel: { ...t('body'), color: colors.ink, flex: 1 },
+    safe: { backgroundColor: colors.bg, flex: 1 },
+    scanDenied: { padding: spacing[5] },
+    scanHint: {
+      ...t('small'),
+      color: colors.ink3,
+      marginTop: spacing[3],
+      textAlign: 'center',
+    },
+    scanSafe: { backgroundColor: colors.bg, flex: 1 },
+    scanWrap: { flex: 1, padding: spacing[5] },
+    sectionLabel: { ...t('small'), color: colors.ink2, fontWeight: '600', marginBottom: 6 },
+    spacer: { height: spacing[5] },
+    title: { ...t('title'), color: colors.ink },
+    unavailable: { ...t('small'), color: colors.ink3 },
+  });

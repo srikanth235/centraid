@@ -130,6 +130,7 @@ import {
 } from './vault-picker.js';
 import { applyRestoreQuarantine, type QuarantineStatus } from './vault-quarantine.js';
 import { replicaIntentContext } from './replica-intent-context.js';
+import { vaultContext } from './vault-context.js';
 
 /** Blob-sweep failure backoff (issue #367 §C5) — one step per consecutive failure, flat-capped. */
 const BLOB_SWEEP_BACKOFF_STEP_MS = 60_000;
@@ -1456,6 +1457,7 @@ export class VaultPlane {
     // Dispatcher construction happens inside the replica-intent async scope.
     // Capture it here so worker-message scheduling cannot lose the binding.
     const replicaIntent = replicaIntentContext();
+    const requestDeviceId = vaultContext()?.deviceKey;
     return async (call): Promise<VaultCallResult> => {
       const app = lookupAppByName(this.db, appId);
       if (!app) {
@@ -1481,7 +1483,11 @@ export class VaultPlane {
           case 'invoke':
             return this.gateway.invoke(cred, {
               ...(call.payload as unknown as InvokeRequest),
-              ...(replicaIntent?.appId === appId ? { intentId: replicaIntent.intentId } : {}),
+              ...(replicaIntent?.appId === appId
+                ? { intentId: replicaIntent.intentId, intentDeviceId: replicaIntent.deviceId }
+                : requestDeviceId
+                  ? { intentDeviceId: requestDeviceId }
+                  : {}),
             });
           case 'query':
             return this.gateway.queryView(

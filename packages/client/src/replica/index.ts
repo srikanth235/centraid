@@ -1,7 +1,10 @@
 /* eslint-disable oxc/no-barrel-file -- (#406) intentional @centraid/client/replica public subpath; governance: allow-no-unjustified-suppressions stable package API boundary */
 export * from './coordinator.js';
+export * from './coordinator-web.js';
+export * from './digest.js';
 export * from './errors.js';
 export * from './intent-store.js';
+export * from './intent-invalidations.js';
 export * from './intents.js';
 export * from './key.js';
 export * from './live-query-registry.js';
@@ -14,6 +17,9 @@ export * from './search.js';
 export * from './shell-session.js';
 export * from './shell-transport.js';
 export * from './sqlite-store.js';
+export * from './store.js';
+export * from './store-core.js';
 export * from './storage-manifest.js';
 export * from './types.js';
+export * from './windowed-bootstrap.js';
 export * from './worker-client.js';

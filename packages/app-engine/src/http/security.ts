@@ -56,6 +56,8 @@ export const SHARED_ASSET_FILES = new Set([
   'kit.js',
   'kit.css',
   'elements.js',
+  'blob-format.js',
+  'video-frame.js',
   'edge-upload.js',
   // Shared chat-client core (issue #420) — vanilla ESM siblings kit.js imports.
   'turn-stream.js',
