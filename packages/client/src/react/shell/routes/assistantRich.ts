@@ -10,6 +10,7 @@
 import {
   richAnswerHtml as sharedRichAnswerHtml,
   hydrateRefs as sharedHydrateRefs,
+  wireCodeCopy as sharedWireCodeCopy,
   type AssistantRichClassOverrides,
 } from '@centraid/blueprints/kit/assistant-rich.js';
 import { resolveAssistantRefs } from '../../../gateway-client.js';
@@ -40,6 +41,8 @@ const CLASSES: AssistantRichClassOverrides = {
   asstChartX: styles.asstChartX,
   asstChartLegend: styles.asstChartLegend,
   asstPre: asstPreCss.asstPre,
+  asstCodeWrap: styles.asstCodeWrap,
+  asstCopyBtn: styles.asstCopyBtn,
 };
 
 /** Full answer → prose + typed blocks + code fences, as an HTML string. */
@@ -50,4 +53,9 @@ export function richAnswerHtml(text: string): string {
 /** Resolve every ref chip under `host` to a live card title, batched. */
 export function hydrateRefs(host: HTMLElement): void {
   sharedHydrateRefs(host, { resolveRefs: resolveAssistantRefs, refClass: styles.asstRef });
+}
+
+/** Wire code-block "Copy" buttons under `host` to the clipboard (idempotent). */
+export function wireCodeCopy(host: HTMLElement): void {
+  sharedWireCodeCopy(host, { copyClass: styles.asstCopyBtn });
 }

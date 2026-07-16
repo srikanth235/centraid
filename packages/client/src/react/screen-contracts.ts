@@ -827,11 +827,38 @@ export interface AsstAttachmentDTO {
   mime: string;
   sizeBytes: number;
 }
+/** Retry pager position on an AI answer whose turn has siblings (issue #420). */
+export interface AsstRetryDTO {
+  /** 1-based position of the shown attempt. */
+  index: number;
+  /** Total attempts in this turn's family. */
+  count: number;
+}
 export type AsstMsgDTO =
-  | { kind: 'user'; text: string; attachments?: AsstAttachmentDTO[] }
+  | { kind: 'user'; text: string; attachments?: AsstAttachmentDTO[]; createdAt?: number }
   | { kind: 'tools'; label: string; calls: AsstToolCallDTO[] }
   | { kind: 'ai'; streaming: true; text: string }
-  | { kind: 'ai'; streaming: false; html: string; error: boolean };
+  | {
+      kind: 'ai';
+      streaming: false;
+      html: string;
+      error: boolean;
+      /** Source text for "copy message" (issue #420). */
+      copyText: string;
+      /** ms epoch of the answer, for the hover timestamp. */
+      createdAt?: number;
+      /** Turn id — the feedback/regenerate target; absent for a just-streamed
+       *  answer not yet reloaded from the ledger, or an error bubble. */
+      turnId?: string;
+      /** Reader 👍/👎 on this answer, if set. */
+      feedback?: 'up' | 'down' | null;
+      /** Retry pager, present when the turn has been regenerated. */
+      retry?: AsstRetryDTO;
+      /** Only the last non-error answer — gates the Regenerate control. */
+      canRegenerate?: boolean;
+      /** An error bubble whose failed message can be retried (issue #420). */
+      canRetry?: boolean;
+    };
 /** A file the composer has uploaded (or is uploading) ahead of the next send. */
 export interface AsstPendingAttachmentDTO {
   id: string;
@@ -868,6 +895,9 @@ export interface AsstModelPickerDTO {
 }
 export interface AssistantBridgeProps {
   suggestions: string[];
+  /** The open conversation id — keys per-thread scroll restore + draft
+   *  persistence (issue #420). `undefined` for a fresh, uncreated thread. */
+  conversationId?: string;
   onReady: (update: (s: AssistantSnapshot) => void) => void;
   onSend: (text: string) => void;
   onStop: () => void;
@@ -876,6 +906,18 @@ export interface AssistantBridgeProps {
   onRemovePendingAttachment: (id: string) => void;
   /** Wire the interactive vault refs inside a just-rendered answer node. */
   hydrateRefs: (node: HTMLElement) => void;
+  /** Wire code-block "Copy" buttons inside a just-rendered answer node (#420). */
+  wireCodeCopy: (node: HTMLElement) => void;
+  /** Copy a message's source text to the clipboard (issue #420). */
+  onCopyMessage: (text: string) => void;
+  /** Set 👍/👎 on an answer turn (toggles off when re-clicking the same). */
+  onFeedback: (turnId: string, value: 'up' | 'down') => void;
+  /** Regenerate the last answer (re-runs the last user message as a retry). */
+  onRegenerate: () => void;
+  /** Retry the failed message behind the error bubble at `messageIndex`. */
+  onRetryError: (messageIndex: number) => void;
+  /** Flip the retry pager on the AI message at `messageIndex` by `delta`. */
+  onPagerNav: (messageIndex: number, delta: number) => void;
   /** Read the assistant model picker's current state (fetched on mount). */
   loadModelPicker: () => Promise<AsstModelPickerDTO>;
   /** Persist the subsystem model override ('' clears back to the default model). */
@@ -988,12 +1030,23 @@ export interface BuilderChatSnapshot {
   /** Bumps to force a history-view re-fetch after a version op. */
   historyNonce: number;
 }
+/** A builder-composer attachment ref (mirrors ConversationAttachmentRef). */
+export interface BuilderAttachmentRef {
+  hash: string;
+  mime: string;
+  sizeBytes: number;
+  filename?: string;
+}
 export interface BuilderChatBridgeProps {
   onReady: (update: (s: BuilderChatSnapshot) => void) => void;
-  onSend: (text: string) => void;
+  /** Send a turn, optionally with files uploaded ahead of it (issue #420). */
+  onSend: (text: string, attachments?: BuilderAttachmentRef[]) => void;
   onCancel: () => void;
   onToggleGroup: (id: string) => void;
   onSetView: (view: 'chat' | 'history') => void;
   /** Fill the version-history host — vanilla owns the async renderer. */
   onMountHistory: (host: HTMLElement) => void;
+  /** Upload one file to the app's blob CAS (issue #420). When omitted, the
+   *  composer's attach button is hidden (e.g. before the app exists). */
+  onUploadAttachment?: (file: File) => Promise<BuilderAttachmentRef>;
 }

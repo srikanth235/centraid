@@ -9,7 +9,7 @@ Issue #420's suggested phasing, each wave discharged by the named subsection in
 **What changed** and the evidence in **Verification**.
 
 - [x] **Wave 0 — shared conversation core**
-- [ ] **Wave 1 — transcript table stakes**
+- [x] **Wave 1 — transcript table stakes**
 - [ ] **Wave 2 — rendering**
 - [ ] **Wave 3 — management & search**
 - [ ] **Wave 4 — resilience**
@@ -69,6 +69,74 @@ New unit tests (27 tests): `packages/blueprints/src/turn-stream.test.ts`,
 `packages/blueprints/src/consent-cards.test.ts`,
 `packages/blueprints/src/conversation-client.test.ts`.
 
+### Wave 1 — transcript table stakes
+
+All twelve §1/§3/§4/§5 quick-win items:
+
+- **Copy message + copy code block** — per-message copy button; the code-block
+  copy button is emitted by the shared renderer (`.asstCodeWrap`/`.asstCopyBtn`
+  + exported `wireCodeCopy`) in `packages/blueprints/kit/assistant-rich.js` /
+  `packages/blueprints/kit/assistant-rich.d.ts`, so the kit Ask panel
+  (`packages/blueprints/kit/kit.js`, styles in `packages/blueprints/kit/kit.css`)
+  and the shell both get it.
+- **Regenerate / retry a turn** — control on the last AI answer re-runs the
+  last user message as a `retryOf` turn; transcript reconstruction collapses
+  retries linear-with-retry with a `‹ 2/2 ›` sibling pager
+  (`groupRetryFamilies` in `packages/app-engine/src/conversation/transcript.ts`).
+  `retryOf` threads HTTP body → `DriveTurnOptions` → `recordTurn` → `insertTurn`
+  via `packages/app-engine/src/http/turn-routes.ts`,
+  `packages/app-engine/src/http/turn-sse.ts`,
+  `packages/gateway/src/routes/assistant-routes.ts`.
+- **Retry on transient stream failure** — error bubbles keep the failed text
+  and show a Retry button that re-runs it without duplicating the message.
+- **Message timestamps** — `createdAt` rendered as muted hover time per group.
+- **Message-level feedback** — new `turns.feedback` column (`up|down|null`,
+  CHECK-constrained; pre-release v0, no migration) in
+  `packages/app-engine/src/conversation/schema.ts` +
+  `packages/app-engine/src/stores/gateway-db.ts`, `setTurnFeedback` in
+  `packages/app-engine/src/conversation/store.ts` /
+  `packages/app-engine/src/conversation/store-sql.ts` /
+  `packages/app-engine/src/conversation/history.ts` (+
+  `packages/app-engine/src/conversation/history.test.ts`), a
+  `PATCH .../sessions/<id>/turns/<turnId>/feedback` route in
+  `packages/app-engine/src/http/conversation-routes.ts`, thumbs on AI answers.
+- **Lightweight transcript virtualization** — `content-visibility: auto` +
+  `contain-intrinsic-size` on message rows.
+- **Scroll-aware auto-scroll + jump-to-bottom** and **per-conversation scroll
+  restore** — `packages/client/src/react/screens/useAssistantScroll.ts`: stick
+  only when near bottom, floating ↓ pill otherwise, in-memory position map.
+- **Rename in the UI** — sidebar row menu (Rename/Delete) in
+  `packages/client/src/react/shell/Sidebar.tsx` → existing
+  `renameConversation`.
+- **Delete undo** — 6s undo toast with optimistic row-hide and deferred
+  cascade delete (`packages/client/src/react/shell/undoToast.ts`, wired in
+  `packages/client/src/react/shell/App.tsx`).
+- **Builder attach button wired** — `uploadChatAttachment` per-app blob-CAS
+  upload in `packages/client/src/react/shell/routes/builder/useBuilder.ts`,
+  staged chips + send in
+  `packages/client/src/react/screens/BuilderChatPane.tsx` /
+  `packages/client/src/react/screens/BuilderChatPane.module.css` /
+  `packages/client/src/react/screens/BuilderChatPane.test.tsx`,
+  `packages/client/src/react/shell/routes/builder/BuilderShell.tsx`.
+- **Draft persistence** — per-conversation localStorage drafts cleared on send
+  (`packages/client/src/react/screens/assistantDrafts.ts`).
+
+Shell transcript surface refactored into
+`packages/client/src/react/screens/AssistantMessage.tsx` (message + action
+bar), `packages/client/src/react/shell/routes/assistantTranscript.ts` (+
+`packages/client/src/react/shell/routes/assistantTranscript.test.ts`) with
+updates to `packages/client/src/react/screens/AssistantScreen.tsx`,
+`packages/client/src/react/screens/AssistantScreen.module.css`,
+`packages/client/src/react/screens/AssistantScreen.test.tsx`,
+`packages/client/src/react/shell/routes/AssistantRoute.tsx`,
+`packages/client/src/react/shell/routes/assistantRich.ts`,
+`packages/client/src/react/shell/routes/assistantRich.module.css`,
+`packages/client/src/react/screen-contracts.ts`,
+`packages/client/src/centraid-api.d.ts`,
+`packages/client/src/gateway-client-conversation.ts`,
+`packages/blueprints/src/assistant-rich.test.ts`,
+`packages/app-engine/src/http/turn-routes.test.ts`.
+
 ## Out of scope
 
 - Backend/runner changes — `makeAssistantConversationRunner`, tools, prompt
@@ -95,6 +163,19 @@ bunx vitest run packages/blueprints/src/turn-stream.test.ts \
 node packages/blueprints/scripts/lint-apps.mjs          # 0 errors (incl. new modules)
 ```
 
+Wave 1 — from the worktree root, all green:
+
+```bash
+bun run typecheck        # 26/26 turbo tasks pass
+bun run lint:types       # all packages ok
+bunx vitest run packages/app-engine   # 387 tests pass
+bunx vitest run packages/client       # 816 tests pass
+bunx vitest run packages/gateway/src/routes/assistant-routes.test.ts  # pass
+```
+
+New Wave 1 tests: retry-collapse + feedback (store/facade/route/end-to-end),
+`wireCodeCopy`, transcript codec, screen action-bar interactions.
+
 Pre-existing, unrelated: `packages/blueprints/src/docs-media.test.ts` times out
 (`Promise.try` missing in vendored `pdf.min.mjs`) — fails identically on the
 base commit without this branch's changes.
@@ -108,6 +189,11 @@ base commit without this branch's changes.
   from the client (blueprints has no `exports` field, so subpaths resolve
   directly) — chosen over relative cross-package imports to avoid `rootDir`
   declaration-emit errors.
+- Wave 1: `AssistantRoute.tsx` (514) and `history.ts` (543) crossed the
+  500-line cap and carry line-1 `allow-repo-hygiene file-size-limit` waivers.
+- Wave 1: retry-on-error re-sends the failed message as a plain turn (not
+  always `retryOf`) because a failed turn's recorded id isn't reliably known
+  client-side without a reload; regenerate threads `retryOf` properly.
 - Interim commits on this branch carry the receipt-shape waiver at line 1; the
   final commit removes it and adds the required `## Audit`/`## Steering`
   attestations, keeping per-wave commits reviewable without re-attesting each.
@@ -127,3 +213,4 @@ base commit without this branch's changes.
 | claude-code-8a681dbc-73c-1784183799-1 | claude-code | 8a681dbc-73cf-4589-8a6f-6e5b9bf2f6ed | #420 | claude-fable-5 | 99 | 272890 | 3489315 | 67279 | 340268 | 10.2654 | 99 | 272890 | 3489315 | 67279 | feat(chat): shared framework-free conversation core for kit and shell (#420)Extr |
 | claude-code-8a681dbc-73c-1784184001-1 | claude-code | 8a681dbc-73cf-4589-8a6f-6e5b9bf2f6ed | #420 | claude-fable-5 | 8 | 15457 | 394682 | 5121 | 20586 | 0.8440 | 107 | 288347 | 3883997 | 72400 | feat(chat): shared framework-free conversation core for kit and shell (#420)Extr |
 | claude-code-8a681dbc-73c-1784184048-1 | claude-code | 8a681dbc-73cf-4589-8a6f-6e5b9bf2f6ed | #420 | claude-fable-5 | 2 | 416 | 103881 | 161 | 579 | 0.1172 | 109 | 288763 | 3987878 | 72561 | feat(chat): shared conversation core (#420)Issue: #420 |
+| claude-code-8a681dbc-73c-1784187431-1 | claude-code | 8a681dbc-73cf-4589-8a6f-6e5b9bf2f6ed | #420 | claude-fable-5 | 42 | 38135 | 2334532 | 37845 | 76022 | 4.7039 | 151 | 326898 | 6322410 | 110406 | probe (#420)Issue: #420 |

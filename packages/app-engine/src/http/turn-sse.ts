@@ -128,6 +128,10 @@ export interface DriveTurnOptions {
   model?: string | undefined;
   thinking?: string | undefined;
   idempotencyKey?: string | undefined;
+  /** When set, this turn is a regenerate of the given turn id — recorded as
+   *  `turns.retry_of` so the transcript collapses it into a sibling pager
+   *  (issue #420). */
+  retryOf?: string | undefined;
   prevAdapterSessionId?: string | undefined;
   prevAdapterKind?: string | undefined;
   /** CAS refs recorded on the turn's `message_in` item. */
@@ -334,6 +338,7 @@ export async function driveTurnOverSse(opts: DriveTurnOptions): Promise<void> {
             // unset → recorded as `'chat'` (issue #181). Read statically off the
             // runner so an errored turn (no `ConversationTurnResult`) is still tagged.
             ...(runner.runKind ? { kind: runner.runKind } : {}),
+            ...(opts.retryOf !== undefined ? { retryOf: opts.retryOf } : {}),
             userMessage: message,
             ...(opts.attachmentRefs?.length
               ? {

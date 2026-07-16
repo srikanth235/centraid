@@ -23,6 +23,8 @@ export interface AssistantRichClasses {
   asstChartX: string;
   asstChartLegend: string;
   asstPre: string;
+  asstCodeWrap: string;
+  asstCopyBtn: string;
 }
 
 /** A ref chip resolved to a renderable card (loose shape the resolver returns). */
@@ -58,3 +60,6 @@ export function hydrateRefs(
   host: HTMLElement,
   options?: { resolveRefs?: ResolveRefs; refClass?: string },
 ): void;
+
+/** Delegate code-block "Copy" clicks under `host` to the clipboard (idempotent). */
+export function wireCodeCopy(host: HTMLElement, options?: { copyClass?: string }): void;

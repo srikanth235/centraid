@@ -55,6 +55,7 @@ export interface RawTurn {
   retry_of: string | null;
   ok: number;
   error: string | null;
+  feedback: string | null;
   pinned: number;
   started_at: number;
   ended_at: number | null;
@@ -145,6 +146,7 @@ export function turnFromRaw(raw: RawTurn): Turn {
     ...(raw.ended_at !== null ? { endedAt: raw.ended_at } : {}),
     ok: raw.ok !== 0,
     ...(raw.error !== null ? { error: raw.error } : {}),
+    ...(raw.feedback === 'up' || raw.feedback === 'down' ? { feedback: raw.feedback } : {}),
     ...(raw.summary !== null ? { summary: raw.summary } : {}),
     ...(raw.output_json !== null ? { outputJson: raw.output_json } : {}),
     pinned: raw.pinned !== 0,
@@ -239,6 +241,7 @@ export interface PreparedStatements {
   listTurnsByAutomation: StatementSync;
   listInFlightAutomationTurns: StatementSync;
   setTurnPinned: StatementSync;
+  setTurnFeedback: StatementSync;
   pruneAutomationByCount: StatementSync;
   pruneAutomationByDays: StatementSync;
   pruneAutomationErrorsOnly: StatementSync;
@@ -382,6 +385,10 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       ORDER BY t.started_at DESC LIMIT ?
     `),
     setTurnPinned: db.prepare(`UPDATE turns SET pinned = ? WHERE id = ?`),
+    // Message-level 👍/👎 (issue #420). `?1` is 'up' | 'down' | NULL (clear).
+    setTurnFeedback: db.prepare(
+      `UPDATE turns SET feedback = ? WHERE id = ? AND conversation_id = ?`,
+    ),
     // Retention is per turn within the automation's stable conversation.
     // Deleting a turn cascades its items and attachments; pinned turns survive.
     pruneAutomationByCount: db.prepare(`

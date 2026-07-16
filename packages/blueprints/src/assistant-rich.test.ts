@@ -13,7 +13,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 const PKG = path.resolve(import.meta.dirname, '..');
 const url = pathToFileURL(path.resolve(PKG, 'kit/assistant-rich.js')).href;
-const { richAnswerHtml, hydrateRefs } = await import(url);
+const { richAnswerHtml, hydrateRefs, wireCodeCopy } = await import(url);
 
 describe('richAnswerHtml', () => {
   it('renders prose paragraphs with inline formatting', () => {
@@ -71,6 +71,40 @@ describe('richAnswerHtml', () => {
     expect(html).toContain('x-rich');
     expect(html).toContain('x-p');
     expect(html).not.toContain('asstRich');
+  });
+
+  it('wraps a fenced code block with a hover copy button (#420)', () => {
+    const html = richAnswerHtml('```\nconst x = 1;\n```');
+    expect(html).toContain('asstCodeWrap');
+    expect(html).toContain('asstCopyBtn');
+    expect(html).toContain('const x = 1;');
+  });
+});
+
+describe('wireCodeCopy', () => {
+  it('copies the code block text to the clipboard on click (#420)', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    // jsdom has no clipboard by default — inject a minimal stub.
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const host = document.createElement('div');
+    host.innerHTML = richAnswerHtml('```\nSELECT 1;\n```');
+    wireCodeCopy(host);
+    const btn = host.querySelector('.asstCopyBtn');
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(writeText).toHaveBeenCalledWith('SELECT 1;');
+    await Promise.resolve();
+    expect(btn.textContent).toBe('Copied');
+  });
+
+  it('is idempotent — a second wire does not double-bind', () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const host = document.createElement('div');
+    host.innerHTML = richAnswerHtml('```\nx\n```');
+    wireCodeCopy(host);
+    wireCodeCopy(host);
+    host.querySelector('.asstCopyBtn').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(writeText).toHaveBeenCalledTimes(1);
   });
 });
 

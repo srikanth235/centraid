@@ -36,6 +36,8 @@ export const DEFAULT_CLASSES = {
   asstChartX: 'asstChartX',
   asstChartLegend: 'asstChartLegend',
   asstPre: 'asstPre',
+  asstCodeWrap: 'asstCodeWrap',
+  asstCopyBtn: 'asstCopyBtn',
 };
 
 /** Join truthy class names (a tiny `cx`). */
@@ -57,6 +59,21 @@ function el(tag, attrs = {}, children = []) {
 }
 
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+/**
+ * A fenced code block wrapped with a hover copy button. The button carries no
+ * text payload — `wireCodeCopy` reads the sibling `<pre>`'s textContent on
+ * click, so nothing needs re-escaping. Shared by both chat surfaces.
+ * @param {string} code
+ * @param {typeof DEFAULT_CLASSES} C
+ * @returns {HTMLElement}
+ */
+function codeBlock(code, C) {
+  const btn = el('button', { class: C.asstCopyBtn }, 'Copy');
+  btn.type = 'button';
+  btn.setAttribute('aria-label', 'Copy code');
+  return el('div', { class: C.asstCodeWrap }, [btn, el('pre', { class: C.asstPre }, code)]);
+}
 
 function inlineHtml(raw, C) {
   let s = escapeHtml(raw);
@@ -256,9 +273,9 @@ export function richAnswerHtml(text, classes) {
       } catch {
         node = null;
       }
-      host.append(node ?? el('pre', { class: C.asstPre }, payload.trim()));
+      host.append(node ?? codeBlock(payload.trim(), C));
     } else {
-      host.append(el('pre', { class: C.asstPre }, payload.replace(/\n$/, '')));
+      host.append(codeBlock(payload.replace(/\n$/, ''), C));
     }
   }
   pushProse(text.slice(last));
@@ -323,4 +340,44 @@ export function hydrateRefs(host, options = {}) {
       });
     })
     .catch(() => undefined);
+}
+
+/**
+ * Wire one delegated click handler under `host` so every code block's hover
+ * "Copy" button copies its `<pre>` text to the clipboard (issue #420). Shared
+ * by both chat surfaces — the shell calls it in the answer node's ref callback
+ * alongside `hydrateRefs`, the kit's Ask panel calls it after `finalizeRich`.
+ * Idempotent: a `data-copy-wired` flag guards against double-binding when a
+ * node is re-hydrated.
+ *
+ * @param {HTMLElement} host
+ * @param {{ copyClass?: string }} [options]
+ * @returns {void}
+ */
+export function wireCodeCopy(host, options = {}) {
+  if (!host || host.dataset.copyWired === 'true') return;
+  const copyClass = options.copyClass ?? DEFAULT_CLASSES.asstCopyBtn;
+  host.dataset.copyWired = 'true';
+  host.addEventListener('click', (ev) => {
+    const target = ev.target;
+    if (!(target instanceof Element)) return;
+    const btn = target.closest(`.${copyClass}`);
+    if (!btn || !host.contains(btn)) return;
+    const pre = btn.parentElement?.querySelector('pre');
+    const text = pre?.textContent ?? '';
+    if (!text) return;
+    const done = () => {
+      btn.dataset.copied = 'true';
+      btn.textContent = 'Copied';
+      setTimeout(() => {
+        delete btn.dataset.copied;
+        btn.textContent = 'Copy';
+      }, 1400);
+    };
+    try {
+      void navigator.clipboard.writeText(text).then(done, () => undefined);
+    } catch {
+      /* clipboard unavailable — leave the button as-is */
+    }
+  });
 }

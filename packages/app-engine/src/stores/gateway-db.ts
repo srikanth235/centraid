@@ -143,6 +143,7 @@ export const CONVERSATION_LEDGER_DDL = `
       retry_of                 TEXT,
       ok                       INTEGER NOT NULL DEFAULT 0,
       error                    TEXT,
+      feedback                 TEXT,
       pinned                   INTEGER NOT NULL DEFAULT 0,
       started_at               INTEGER NOT NULL,
       ended_at                 INTEGER,
@@ -153,7 +154,8 @@ export const CONVERSATION_LEDGER_DDL = `
       total_cost_usd           REAL,
       step_count               INTEGER,
       tool_count               INTEGER,
-      CHECK (trigger IN ('scheduled','manual','replay','on_failure','compile','interactive'))
+      CHECK (trigger IN ('scheduled','manual','replay','on_failure','compile','interactive')),
+      CHECK (feedback IS NULL OR feedback IN ('up','down'))
     ) STRICT;
     CREATE INDEX IF NOT EXISTS idx_turns_conversation
       ON turns(conversation_id, seq);

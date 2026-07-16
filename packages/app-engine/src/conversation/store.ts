@@ -466,6 +466,17 @@ export class ConversationStore {
   }
 
   /**
+   * Set (or clear, with `null`) the reader's 👍/👎 on one turn's answer, scoped
+   * to its conversation (issue #420). Returns whether a row was updated — false
+   * when the turn isn't in that conversation.
+   */
+  setTurnFeedback(conversationId: string, turnId: string, feedback: 'up' | 'down' | null): boolean {
+    const { stmts } = this.ensureReady();
+    const info = stmts.setTurnFeedback.run(feedback, turnId, conversationId);
+    return Number(info.changes) > 0;
+  }
+
+  /**
    * Apply `history.keep` at turn grain within the stable conversation. Cascading
    * FKs drop each pruned turn's items + attachments; pinned turns survive.
    */

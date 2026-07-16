@@ -1488,6 +1488,34 @@ kit-reference-strip,
   white-space: pre-wrap;
 }
 
+/* Fenced code block with a hover "Copy" button (#420). */
+.kit-msg.ai .asstCodeWrap {
+  position: relative;
+}
+.kit-msg.ai .asstCopyBtn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  border: 0.5px solid var(--line, #ddd);
+  border-radius: 6px;
+  background: var(--kit-surface, #fff);
+  color: var(--kit-fg-soft, #666);
+  font-family: var(--kit-mono);
+  font-size: 0.6rem;
+  padding: 3px 7px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.kit-msg.ai .asstCodeWrap:hover .asstCopyBtn,
+.kit-msg.ai .asstCopyBtn:focus-visible {
+  opacity: 1;
+}
+.kit-msg.ai .asstCopyBtn[data-copied='true'] {
+  opacity: 1;
+  color: var(--kit-accent-deep-fg, #2a2);
+}
+
 /* The proposed write — dashed accent, consent-gated, same feel as parked. */
 .kit-ask-action {
   align-self: stretch;

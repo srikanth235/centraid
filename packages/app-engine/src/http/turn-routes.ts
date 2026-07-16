@@ -180,6 +180,8 @@ interface PostBody {
   model?: string;
   thinking?: string;
   idempotencyKey?: string;
+  /** Regenerate: the turn id this turn re-runs (issue #420). */
+  retryOf?: string;
   /** Attachments uploaded ahead of this turn (issue #190). */
   attachments?: TurnAttachmentRef[];
 }
@@ -337,6 +339,7 @@ async function handlePostTurn(
     model: body.model,
     thinking: body.thinking,
     idempotencyKey: body.idempotencyKey,
+    ...(typeof body.retryOf === 'string' && body.retryOf ? { retryOf: body.retryOf } : {}),
     prevAdapterSessionId,
     prevAdapterKind,
     ...(attachmentRefs.length > 0 ? { attachmentRefs } : {}),

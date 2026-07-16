@@ -67,6 +67,8 @@ function sendError(res: ServerResponse, status: number, message: string): void {
  *   GET    /_centraid-conversations/apps/<appId>/sessions/<id>   load (with transcript)
  *   PATCH  /_centraid-conversations/apps/<appId>/sessions/<id>   rename  body: {title}
  *   DELETE /_centraid-conversations/apps/<appId>/sessions/<id>   delete
+ *   PATCH  /_centraid-conversations/apps/<appId>/sessions/<id>/turns/<turnId>/feedback
+ *                                                              set 👍/👎  body: {feedback: 'up'|'down'|null}
  *
  * The transcript is not appended over HTTP — a chat turn is recorded as a
  * `runs` row by the `/centraid/<id>/_turn` route's runner (issue #90 fold).
@@ -120,6 +122,29 @@ export function makeConversationRouteHandler(getStore: () => ConversationHistory
           return true;
         }
         sendError(res, 405, 'method not allowed');
+        return true;
+      }
+
+      // Per-turn message feedback (issue #420):
+      //   PATCH /apps/<appId>/sessions/<id>/turns/<turnId>/feedback  body {feedback}
+      const fb = sub.match(/^\/apps\/([^/]+)\/sessions\/([^/]+)\/turns\/([^/]+)\/feedback\/?$/);
+      if (fb && fb[1] && fb[2] && fb[3]) {
+        if (method !== 'PATCH') {
+          sendError(res, 405, 'method not allowed');
+          return true;
+        }
+        const fbAppId = decodeURIComponent(fb[1]);
+        const fbSessionId = decodeURIComponent(fb[2]);
+        const fbTurnId = decodeURIComponent(fb[3]);
+        const body = (await readJsonBody(req)) as { feedback?: unknown } | undefined;
+        const raw = body?.feedback;
+        const feedback = raw === 'up' || raw === 'down' ? raw : null;
+        const ok = store.setTurnFeedback(fbAppId, fbSessionId, fbTurnId, feedback);
+        if (!ok) {
+          sendError(res, 404, 'turn not found');
+          return true;
+        }
+        sendJson(res, 200, { ok: true, feedback });
         return true;
       }
 

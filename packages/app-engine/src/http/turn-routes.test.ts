@@ -190,6 +190,38 @@ test(
   },
 );
 
+test('POST /_turn threads retryOf so the transcript collapses into a retry pager (#420)', async () => {
+  const runner: ConversationRunner = {
+    async run(input) {
+      input.onEvent({ type: 'final', text: `re: ${input.message}` });
+    },
+  };
+  const { store } = await bootstrapWithStore({ runner });
+  await registerApp('demo');
+  const session = store.createSession('demo', '');
+  const post = (body: unknown): Promise<Response> =>
+    fetch(`${server.url}/centraid/demo/_turn`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  await (await post({ conversationId: session.id, message: 'why' })).text();
+  const firstAi = store.getSession('demo', session.id)?.messages[1]!.payload as { turnId: string };
+  // Regenerate: same prompt, pointing retryOf at the first answer's turn.
+  await (
+    await post({ conversationId: session.id, message: 'why', retryOf: firstAi.turnId })
+  ).text();
+
+  const loaded = store.getSession('demo', session.id);
+  // The family collapses to one user + one ai row, with a 2-attempt pager.
+  expect(loaded?.messages.length).toBe(2);
+  const ai = loaded?.messages[1]!.payload as {
+    retry?: { count: number; index: number; attempts: Array<{ turnId: string }> };
+  };
+  expect(ai.retry?.count).toBe(2);
+  expect(ai.retry?.attempts[0]?.turnId).toBe(firstAi.turnId);
+});
+
 test('POST /_turn succeeds once the session is provisioned via createSession — the canonical flow', async () => {
   const runner: ConversationRunner = {
     async run(input) {

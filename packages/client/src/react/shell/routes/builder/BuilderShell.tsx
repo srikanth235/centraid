@@ -316,7 +316,8 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
           <div className={styles.chatPane}>
             <BuilderChatPane
               onReady={(u) => vm.registerChatUpdater(u)}
-              onSend={(t) => vm.sendUserPrompt(t)}
+              onSend={(t, atts) => vm.sendUserPrompt(t, atts)}
+              {...(vm.appId ? { onUploadAttachment: (f: File) => vm.uploadChatAttachment(f) } : {})}
               onCancel={() => vm.cancelTurn()}
               onToggleGroup={(id) => vm.toggleGroup(id)}
               onSetView={(v) => vm.setChatView(v)}

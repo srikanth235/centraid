@@ -420,10 +420,34 @@ export interface CentraidConversationHistoryAttachment {
   url?: string;
 }
 
+/** One prior attempt of a regenerated answer — a sibling in the "<2/2>" pager. */
+export interface CentraidConversationHistoryRetryAttempt {
+  turnId: string;
+  text: string;
+  error?: boolean;
+  feedback: 'up' | 'down' | null;
+}
+
 /** Coarse-grained persisted shape per message in a chat session. */
 export type CentraidConversationHistoryMessage =
   | { kind: 'user'; text: string; attachments?: CentraidConversationHistoryAttachment[] }
-  | { kind: 'ai'; text: string; error?: boolean }
+  | {
+      kind: 'ai';
+      text: string;
+      error?: boolean;
+      /** The turn this answer belongs to — the target for feedback/regenerate
+       *  (issue #420). Only the terminal answer row of a turn carries it. */
+      turnId?: string;
+      /** Reader 👍/👎 on this answer, if set. */
+      feedback?: 'up' | 'down' | null;
+      /** Retry pager: present when the turn has been regenerated; carries every
+       *  attempt oldest→newest, with `index`/`count` for the active (latest). */
+      retry?: {
+        index: number;
+        count: number;
+        attempts: CentraidConversationHistoryRetryAttempt[];
+      };
+    }
   | {
       kind: 'tool';
       id: string;
@@ -1241,9 +1265,26 @@ declare global {
     sizeBytes: number;
     url?: string;
   }
+  interface CentraidConversationHistoryRetryAttempt {
+    turnId: string;
+    text: string;
+    error?: boolean;
+    feedback: 'up' | 'down' | null;
+  }
   type CentraidConversationHistoryMessage =
     | { kind: 'user'; text: string; attachments?: CentraidConversationHistoryAttachment[] }
-    | { kind: 'ai'; text: string; error?: boolean }
+    | {
+        kind: 'ai';
+        text: string;
+        error?: boolean;
+        turnId?: string;
+        feedback?: 'up' | 'down' | null;
+        retry?: {
+          index: number;
+          count: number;
+          attempts: CentraidConversationHistoryRetryAttempt[];
+        };
+      }
     | {
         kind: 'tool';
         id: string;

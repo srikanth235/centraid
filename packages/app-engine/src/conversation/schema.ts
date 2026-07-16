@@ -100,6 +100,8 @@ export interface Turn {
   readonly endedAt?: number;
   readonly ok: boolean;
   readonly error?: string;
+  /** Message-level reader feedback on the turn's answer (issue #420). */
+  readonly feedback?: 'up' | 'down';
   readonly summary?: string;
   /**
    * The turn's structured result. For an automation it is the handler's

@@ -9,11 +9,18 @@ import PaletteScreen from '../screens/PaletteScreen.js';
 import WhatsNewModal from '../screens/WhatsNewModal.js';
 import { type ShellActions, ShellActionsProvider } from './actions.js';
 import { openConfirm } from './confirm.js';
+import { openMenu } from './contextMenu.js';
+import { openPrompt } from './prompt.js';
+import { showUndoToast } from './undoToast.js';
 import { relativeTime } from '../../app-format.js';
-import { ASSISTANT_APP_ID, deleteConversation } from '../../gateway-client.js';
+import { ASSISTANT_APP_ID, deleteConversation, renameConversation } from '../../gateway-client.js';
 import { buildPaletteGroups } from './routes/paletteData.js';
 import ProfileSwitcherHead from './ProfileSwitcherHead.js';
-import Sidebar, { type SidebarConversation, type SidebarPage } from './Sidebar.js';
+import Sidebar, {
+  type ShellMenuAnchor,
+  type SidebarConversation,
+  type SidebarPage,
+} from './Sidebar.js';
 import ShellApp, { type ShellNav } from './ShellApp.js';
 import { showToast } from './toast.js';
 import { toSidebarApps } from './sidebarApps.js';
@@ -116,6 +123,11 @@ export default function App(): JSX.Element {
   const { prefs, setPrefs } = useAppearance();
   const { userApps, drafts, refresh, setUserApps } = useShellApps();
   const assistantConversations = useAssistantConversations();
+  // Conversations mid-undo-window after a delete — optimistically hidden from
+  // the sidebar until the grace timer commits or the reader undoes (§3).
+  const [pendingConversationDeletes, setPendingConversationDeletes] = useState<Set<string>>(
+    () => new Set(),
+  );
   const { isStarred, toggleStar } = useStarred();
   const activeVault = useActiveVault();
   const blockingCount = useBlockingCount();
@@ -225,28 +237,75 @@ export default function App(): JSX.Element {
   // AssistantRoute) owns the conversation list + row actions. Bounces off
   // the fresh assistant route if the conversation being deleted is the one
   // currently open.
+  // Delete with a 6s undo grace window (§3): the row hides immediately and the
+  // open thread bounces to a fresh one, but the FK-CASCADE delete only commits
+  // when the window lapses — an Undo restores the row untouched.
   const deleteAssistantConversation = useCallback(
     (id: string) => {
       const target = assistantConversations.conversations.find((c) => c.id === id);
-      void (async () => {
-        const yes = await openConfirm({
-          title: 'Delete conversation?',
-          message: `“${target?.title || 'New conversation'}” will be removed from this vault's history.`,
-          confirmLabel: 'Delete',
-          danger: true,
+      setPendingConversationDeletes((prev) => new Set(prev).add(id));
+      const cur = navRef.current?.route;
+      if (cur?.kind === 'assistant' && cur.conversationId === id) {
+        navRef.current?.navigate({ kind: 'assistant' });
+      }
+      const unhide = (): void =>
+        setPendingConversationDeletes((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
         });
-        if (!yes) return;
-        await deleteConversation(ASSISTANT_APP_ID, id).catch((err: unknown) =>
-          showToast(`Couldn't delete: ${err instanceof Error ? err.message : String(err)}`),
+      showUndoToast(`Deleted “${target?.title || 'New conversation'}”`, unhide, {
+        onExpire: () => {
+          void (async () => {
+            await deleteConversation(ASSISTANT_APP_ID, id).catch((err: unknown) =>
+              showToast(`Couldn't delete: ${err instanceof Error ? err.message : String(err)}`),
+            );
+            unhide();
+            await assistantConversations.refresh();
+          })();
+        },
+      });
+    },
+    [assistantConversations],
+  );
+
+  // Inline rename (§3) — the shared text-prompt dialog, then a PATCH + refresh.
+  const renameAssistantConversation = useCallback(
+    (id: string) => {
+      const target = assistantConversations.conversations.find((c) => c.id === id);
+      void (async () => {
+        const next = await openPrompt({
+          title: 'Rename conversation',
+          initial: target?.title ?? '',
+          placeholder: 'Conversation name',
+          confirmLabel: 'Rename',
+        });
+        if (!next) return;
+        await renameConversation(ASSISTANT_APP_ID, id, next).catch((err: unknown) =>
+          showToast(`Couldn't rename: ${err instanceof Error ? err.message : String(err)}`),
         );
         await assistantConversations.refresh();
-        const cur = navRef.current?.route;
-        if (cur?.kind === 'assistant' && cur.conversationId === id) {
-          navRef.current?.navigate({ kind: 'assistant' });
-        }
       })();
     },
     [assistantConversations],
+  );
+
+  // The sidebar row ••• / right-click menu: Rename + Delete.
+  const conversationMenu = useCallback(
+    (id: string, anchor: ShellMenuAnchor) => {
+      openMenu(
+        [
+          { id: 'rename', label: 'Rename', icon: 'Pencil' },
+          { id: 'delete', label: 'Delete', icon: 'Trash', danger: true },
+        ],
+        anchor,
+        (picked) => {
+          if (picked === 'rename') renameAssistantConversation(id);
+          else if (picked === 'delete') deleteAssistantConversation(id);
+        },
+      );
+    },
+    [renameAssistantConversation, deleteAssistantConversation],
   );
 
   const renderSidebar = useCallback(
@@ -337,13 +396,13 @@ export default function App(): JSX.Element {
           }}
         />
       );
-      const conversations: SidebarConversation[] = assistantConversations.conversations.map(
-        (c) => ({
+      const conversations: SidebarConversation[] = assistantConversations.conversations
+        .filter((c) => !pendingConversationDeletes.has(c.id))
+        .map((c) => ({
           id: c.id,
           title: c.title || 'New conversation',
           timeLabel: relativeTime(new Date(c.updatedAt).toISOString()),
-        }),
-      );
+        }));
       return (
         <Sidebar
           apps={apps}
@@ -372,6 +431,7 @@ export default function App(): JSX.Element {
           onNewChat={() => nav.navigate({ kind: 'assistant' })}
           onSelectConversation={(id) => nav.navigate({ kind: 'assistant', conversationId: id })}
           onDeleteConversation={deleteAssistantConversation}
+          onConversationMenu={conversationMenu}
           onWhatsNew={() => setWhatsNewOpen(true)}
           {...(updateStatus?.available
             ? { updateVersion: updateStatus.version, onRelaunchToUpdate: relaunchToUpdate }
@@ -389,6 +449,8 @@ export default function App(): JSX.Element {
       gatewayStatus,
       assistantConversations,
       deleteAssistantConversation,
+      conversationMenu,
+      pendingConversationDeletes,
     ],
   );
 

@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#420) cohesive conversation-history facade; the retry-collapsing transcript fold (getSession) belongs beside the record/CRUD API it mirrors — the pure helpers already live in transcript.ts
 /*
  * Centraid conversation-history facade — the conversation-container API +
  * transcript fold, over the per-vault `ConversationStore` (issue #98, reshaped
@@ -24,10 +25,15 @@
 import { randomUUID } from 'node:crypto';
 import type { WorkspaceProvider } from '../stores/vault-workspace.js';
 import { ConversationStore, type ConversationMeta } from './store.js';
-import type { RunKind } from './schema.js';
+import type { Item, RunKind, Turn } from './schema.js';
 import { ASSISTANT_APP_ID, isValidAppOrAssistantId } from '../registry/app-paths.js';
 import { costForUsage } from '../model-pricing.js';
-import { parseStepOutput, parseToolArgs, parseToolOutput } from './transcript.js';
+import {
+  groupRetryFamilies,
+  parseStepOutput,
+  parseToolArgs,
+  parseToolOutput,
+} from './transcript.js';
 import { BlobStore, blobUrl, type PutResult } from '../data/blob-store.js';
 
 export interface ConversationSummary {
@@ -121,6 +127,12 @@ export interface RecordTurnInput {
   kind?: RunKind;
   /** The user's prompt for the turn — recorded as the `message_in` item. */
   userMessage: string;
+  /**
+   * When set, this turn is a regenerate of the turn with this id — recorded
+   * as `turns.retry_of` so `getSession` collapses it into the original's
+   * sibling pager (ChatGPT-style "<2/2>", issue #420).
+   */
+  retryOf?: string;
   /** Files that rode in on this turn's inbound message (already in the CAS). */
   attachments?: ConversationTurnAttachment[];
   startedAt: number;
@@ -211,24 +223,77 @@ export class ConversationHistoryStore {
 
     const messages: ConversationMessageRow[] = [];
     let idx = 0;
-    for (const turn of store.listTurns(id)) {
-      for (const item of store.listItems(turn.turnId)) {
-        if (item.kind === 'message_in') {
-          const attachments = this.attachmentsPayload(appId, item.itemId);
+    const turns = store.listTurns(id);
+    const itemsByTurn = new Map<string, Item[]>();
+    for (const turn of turns) itemsByTurn.set(turn.turnId, store.listItems(turn.turnId));
+
+    // The terminal `step` item's parsed answer for a turn — the one attempt
+    // text the retry pager flips between (issue #420).
+    const answerOf = (turnId: string): { text: string; error: boolean } => {
+      const last = (itemsByTurn.get(turnId) ?? []).findLast((it) => it.kind === 'step');
+      return parseStepOutput(last?.outputJson);
+    };
+
+    // Collapse retries linear-with-retry: one row per *family*, showing the
+    // latest attempt inline, with sibling attempts carried for a client pager.
+    for (const family of groupRetryFamilies(turns)) {
+      const root = family[0] as Turn;
+      const active = family.at(-1) as Turn;
+      const activeItems = itemsByTurn.get(active.turnId) ?? [];
+      const terminalStepId = activeItems.findLast((it) => it.kind === 'step')?.itemId;
+      const retry =
+        family.length > 1
+          ? {
+              index: family.length,
+              count: family.length,
+              attempts: family.map((t) => {
+                const ans = answerOf(t.turnId);
+                return {
+                  turnId: t.turnId,
+                  text: ans.text,
+                  ...(ans.error ? { error: true } : {}),
+                  feedback: t.feedback ?? null,
+                };
+              }),
+            }
+          : undefined;
+
+      // The user message rides once, from the root attempt (every retry
+      // re-sends the same prompt).
+      const userItem = (itemsByTurn.get(root.turnId) ?? []).find((it) => it.kind === 'message_in');
+      if (userItem) {
+        const attachments = this.attachmentsPayload(appId, userItem.itemId);
+        messages.push({
+          idx: idx++,
+          payload: {
+            kind: 'user',
+            text: userItem.text ?? '',
+            ...(attachments.length > 0 ? { attachments } : {}),
+          },
+          createdAt: userItem.startedAt,
+        });
+      }
+
+      for (const item of activeItems) {
+        if (item.kind === 'step') {
+          const parsed = parseStepOutput(item.outputJson);
+          // Only the terminal step carries turn identity / feedback / the retry
+          // pager — interim steps stay plain.
+          const terminal = item.itemId === terminalStepId;
           messages.push({
             idx: idx++,
             payload: {
-              kind: 'user',
-              text: item.text ?? '',
-              ...(attachments.length > 0 ? { attachments } : {}),
+              kind: 'ai',
+              text: parsed.text,
+              ...(parsed.error ? { error: true } : {}),
+              ...(terminal
+                ? {
+                    turnId: active.turnId,
+                    feedback: active.feedback ?? null,
+                    ...(retry ? { retry } : {}),
+                  }
+                : {}),
             },
-            createdAt: item.startedAt,
-          });
-        } else if (item.kind === 'step') {
-          const parsed = parseStepOutput(item.outputJson);
-          messages.push({
-            idx: idx++,
-            payload: { kind: 'ai', text: parsed.text, ...(parsed.error ? { error: true } : {}) },
             createdAt: item.startedAt,
           });
         } else if (item.kind === 'tool') {
@@ -293,6 +358,22 @@ export class ConversationHistoryStore {
     return this.getSessionMeta(appId, id);
   }
 
+  /**
+   * Set (or clear, with `null`) the reader's 👍/👎 on one turn's answer in a
+   * session `appId` owns (issue #420). Returns whether it was applied — false
+   * when the session isn't owned or the turn isn't part of it.
+   */
+  setTurnFeedback(
+    appId: string,
+    id: string,
+    turnId: string,
+    feedback: 'up' | 'down' | null,
+  ): boolean {
+    const { store } = this.appConversation(appId);
+    if (!this.ownedMeta(appId, id)) return false;
+    return store.setTurnFeedback(id, turnId, feedback);
+  }
+
   deleteSession(appId: string, id: string): boolean {
     // Real FK CASCADE drops the conversation's turns, items, and attachment
     // rows; a follow-up blob GC reclaims now-unreferenced bytes (issue #190).
@@ -328,6 +409,7 @@ export class ConversationHistoryStore {
         conversationId: input.conversationId,
         triggerKind: 'interactive',
         startedAt: input.startedAt,
+        ...(input.retryOf !== undefined ? { retryOf: input.retryOf } : {}),
       });
       const messageItemId = store.insertMessageIn({
         turnId,

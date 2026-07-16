@@ -132,6 +132,7 @@ export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHan
           banner: `assistant vault ${plane.boot.vaultId} session ${conversationId}`,
           model,
           thinking: typeof body.thinking === 'string' ? body.thinking : undefined,
+          ...(typeof body.retryOf === 'string' && body.retryOf ? { retryOf: body.retryOf } : {}),
           prevAdapterSessionId: session.adapterSessionId ?? undefined,
           prevAdapterKind: session.adapterKind ?? undefined,
           ...(attachmentRefs.length > 0 ? { attachmentRefs } : {}),

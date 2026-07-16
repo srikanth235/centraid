@@ -22,6 +22,14 @@
   min-width: 0;
   flex: 1;
 }
+/* Positioning context for the floating jump-to-bottom pill (§5). */
+.scrollWrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 .scroll {
   flex: 1;
   min-height: 0;
@@ -37,6 +45,130 @@
   max-width: 880px;
   width: 100%;
   margin: 0 auto;
+  /* Cheap virtualization for long transcripts (§5): the browser skips layout +
+     paint for off-screen rows. The size hint keeps the scrollbar stable. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 48px;
+}
+
+/* Floating "jump to latest" pill — a down-chevron button shown only when the
+   reader has scrolled up and new content arrived (§5). ArrowRight is rotated
+   to point down since the icon set has no down arrow. */
+.jumpToBottom {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 0.5px solid var(--line-strong);
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  box-shadow: var(--shadow-md, var(--shadow-sm));
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+}
+.jumpToBottom svg {
+  transform: rotate(90deg);
+}
+.jumpToBottom:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+.jumpToBottom:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Per-message hover action bar (copy / feedback / regenerate / retry / pager /
+   timestamp, §1). Quiet by default, surfaced on hover or focus-within. */
+.msgActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 4px;
+  min-height: 22px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.msgUser .msgActions {
+  justify-content: flex-end;
+}
+.msg:hover .msgActions,
+.msg:focus-within .msgActions {
+  opacity: 1;
+}
+.msgActionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: var(--r-sm, 5px);
+  background: transparent;
+  color: var(--ink-4);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition:
+    color 100ms,
+    background 100ms;
+}
+.msgActionBtn:hover {
+  color: var(--ink);
+  background: color-mix(in oklab, var(--ink) 7%, transparent);
+}
+.msgActionBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.msgActionBtn.feedbackOn {
+  color: var(--accent);
+}
+.msgTime {
+  margin-left: 4px;
+  font-size: 10.5px;
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
+/* Retry pager ("‹ 2/2 ›", §1). */
+.pager {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  margin-right: 4px;
+}
+.pagerBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--r-sm, 5px);
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.pagerBtn:hover:not(:disabled) {
+  color: var(--ink);
+  background: color-mix(in oklab, var(--ink) 7%, transparent);
+}
+.pagerBtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.pagerLabel {
+  font-size: 11px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  min-width: 26px;
+  text-align: center;
 }
 .msgUser {
   display: flex;

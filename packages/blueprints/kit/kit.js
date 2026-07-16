@@ -25,7 +25,7 @@ import { sha256FileStream, stageDirectFile, stageFallbackFile } from './edge-upl
 // the React shell uses, so the Ask panel renders ref-chips + typed blocks and
 // gains stop/cancel from one canonical source.
 import { consumeSse } from './turn-stream.js';
-import { richAnswerHtml, hydrateRefs } from './assistant-rich.js';
+import { richAnswerHtml, hydrateRefs, wireCodeCopy } from './assistant-rich.js';
 import {
   outcomeOf,
   fetchParkedEntry,
@@ -1929,6 +1929,7 @@ export function wireThemeToggle(btn, { onChange } = {}) {
         var host = ensureStream();
         host.innerHTML = richAnswerHtml(full);
         hydrateRefs(host);
+        wireCodeCopy(host);
       }
       function handleEvent(ev) {
         switch (ev.type) {

@@ -106,6 +106,9 @@ export interface StreamTurnInput {
   thinking?: string;
   /** Files uploaded ahead of the turn (issue #190). */
   attachments?: ConversationAttachmentRef[];
+  /** Regenerate: the turn id this turn re-runs (issue #420). Recorded as
+   *  `turns.retry_of` so the transcript collapses it into a sibling pager. */
+  retryOf?: string;
 }
 
 /**
@@ -155,6 +158,7 @@ export async function streamTurn(
       ...(input.register ? { register: input.register } : {}),
       ...(input.model ? { model: input.model } : {}),
       ...(input.thinking ? { thinking: input.thinking } : {}),
+      ...(input.retryOf ? { retryOf: input.retryOf } : {}),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
     }),
     signal,
@@ -213,6 +217,7 @@ export async function streamAssistantTurn(
       message: input.message,
       ...(input.model ? { model: input.model } : {}),
       ...(input.thinking ? { thinking: input.thinking } : {}),
+      ...(input.retryOf ? { retryOf: input.retryOf } : {}),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
     }),
     signal,
@@ -306,6 +311,26 @@ export async function renameConversation(
     body: JSON.stringify({ title }),
   });
   await readJson(res, 'rename chat');
+}
+
+/**
+ * Set (or clear, with `null`) the reader's 👍/👎 on one answer turn
+ * (`PATCH .../sessions/<id>/turns/<turnId>/feedback`, issue #420).
+ */
+export async function setConversationFeedback(
+  appId: string,
+  sessionId: string,
+  turnId: string,
+  feedback: 'up' | 'down' | null,
+): Promise<void> {
+  const { baseUrl, token } = await auth();
+  const path = `${conversationPath(appId, sessionId)}/turns/${encodeURIComponent(turnId)}/feedback`;
+  const res = await doFetch(baseUrl, path, {
+    method: 'PATCH',
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify({ feedback }),
+  });
+  await readJson(res, 'set feedback');
 }
 
 /** Delete a chat session. */

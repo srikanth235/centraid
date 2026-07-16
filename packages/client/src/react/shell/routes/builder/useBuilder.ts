@@ -10,6 +10,8 @@ import {
   setAutomationEnabled,
   streamTurn,
   updateAppMeta,
+  uploadConversationAttachment,
+  type ConversationAttachmentRef,
   type TurnStreamEvent,
 } from '../../../../gateway-client.js';
 import { generateAppId, shortVersionTitle } from '../../../../format.js';
@@ -72,7 +74,9 @@ export interface BuilderViewModel {
   chatSnapshot: BuilderChatSnapshot;
   registerChatUpdater: (u: (s: BuilderChatSnapshot) => void) => void;
   // actions
-  sendUserPrompt: (text: string) => void;
+  sendUserPrompt: (text: string, attachments?: ConversationAttachmentRef[]) => void;
+  /** Upload one file to the app's blob CAS ahead of a turn (issue #420). */
+  uploadChatAttachment: (file: File) => Promise<ConversationAttachmentRef>;
   cancelTurn: () => void;
   toggleGroup: (id: string) => void;
   setChatView: (v: ChatView) => void;
@@ -356,8 +360,25 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     [],
   );
 
+  // Upload one file to the builder app's blob CAS ahead of a turn — the same
+  // path the assistant composer uses (issue #420, wiring the builder's attach
+  // button). Requires the app to exist (its CAS is per-app).
+  const uploadChatAttachment = useCallback(
+    async (file: File): Promise<ConversationAttachmentRef> => {
+      if (!appId.current) throw new Error('Save the app before attaching files.');
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      return uploadConversationAttachment(
+        appId.current,
+        bytes,
+        file.type || 'application/octet-stream',
+        file.name,
+      );
+    },
+    [],
+  );
+
   const sendUserPrompt = useCallback(
-    (text: string): void => {
+    (text: string, attachments?: ConversationAttachmentRef[]): void => {
       void (async () => {
         if (!appId.current) return;
         pushMessage({ kind: 'user', text });
@@ -370,7 +391,11 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
           agentAbort.current = new AbortController();
           await streamTurn(
             appId.current,
-            { conversationId: sessionId, message: text },
+            {
+              conversationId: sessionId,
+              message: text,
+              ...(attachments?.length ? { attachments } : {}),
+            },
             handleStreamEvent,
             agentAbort.current.signal,
           );
@@ -735,6 +760,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     chatSnapshot: buildChatSnapshot(),
     registerChatUpdater,
     sendUserPrompt,
+    uploadChatAttachment,
     cancelTurn: () => agentAbort.current?.abort(),
     toggleGroup,
     setChatView: setChatViewCb,

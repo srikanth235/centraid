@@ -76,6 +76,9 @@ export interface SidebarProps {
   onNewChat?: () => void;
   onSelectConversation?: (id: string) => void;
   onDeleteConversation?: (id: string) => void;
+  /** Row ••• / right-click menu (Rename + Delete). Wired by App.tsx to the
+   *  shared context menu; when present it supersedes the bare delete X. */
+  onConversationMenu?: (id: string, anchor: ShellMenuAnchor) => void;
   onSearch?: () => void;
   onAssistant?: () => void;
   onInsights?: () => void;
@@ -200,11 +203,13 @@ function ConversationRow({
   conversation,
   active,
   onClick,
+  onMenu,
   onDelete,
 }: {
   conversation: SidebarConversation;
   active: boolean;
   onClick: () => void;
+  onMenu?: (anchor: ShellMenuAnchor) => void;
   onDelete?: () => void;
 }): JSX.Element {
   const item = (
@@ -216,6 +221,34 @@ function ConversationRow({
       onClick={onClick}
     />
   );
+  // Prefer the ••• menu (Rename + Delete); fall back to the bare delete X when
+  // only a delete handler is wired (route unit-test fixtures).
+  if (onMenu) {
+    return (
+      <div
+        className={chrome.sbAppRow}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onMenu({ kind: 'point', x: e.clientX, y: e.clientY });
+        }}
+      >
+        {item}
+        <button
+          className={chrome.rowMore}
+          type="button"
+          aria-label="Conversation actions"
+          aria-haspopup="menu"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onMenu({ kind: 'rect', rect: e.currentTarget.getBoundingClientRect() });
+          }}
+        >
+          <Icon name="MoreVert" size={14} />
+        </button>
+      </div>
+    );
+  }
   if (!onDelete) return item;
   return (
     <div className={chrome.sbAppRow}>
@@ -339,6 +372,9 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
             conversation={c}
             active={c.id === props.activeConversationId}
             onClick={() => props.onSelectConversation?.(c.id)}
+            {...(props.onConversationMenu
+              ? { onMenu: (anchor: ShellMenuAnchor) => props.onConversationMenu?.(c.id, anchor) }
+              : {})}
             onDelete={
               props.onDeleteConversation ? () => props.onDeleteConversation?.(c.id) : undefined
             }
