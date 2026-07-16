@@ -264,13 +264,15 @@ describe('serveStatic — shared kit asset fallback', () => {
     expect(runtime.data.headers['Content-Type']).toMatch(/javascript/);
   });
 
-  it('serves the offline PDF.js display and worker modules from the shared kit', async () => {
+  it('serves generated offline browser runtimes from the shared kit', async () => {
     const appDir = newAppDir({ 'index.html': '<html></html>' });
     const sharedAssetsDir = newAppDir({
+      'blob-format.js': 'export const CBSF_MAGIC = "CBSF";',
+      'video-frame.js': 'export const captureVideoFrames = () => {};',
       'pdf.min.mjs': 'export const version = "test";',
       'pdf.worker.min.mjs': 'export const WorkerMessageHandler = {};',
     });
-    for (const name of ['pdf.min.mjs', 'pdf.worker.min.mjs']) {
+    for (const name of ['blob-format.js', 'video-frame.js', 'pdf.min.mjs', 'pdf.worker.min.mjs']) {
       const served = mockRes();
       await serveStatic(mockReq(), served.res, appDir, name, { sharedAssetsDir });
       expect(served.data.statusCode).toBe(200);

@@ -4,9 +4,12 @@
 // button/input DOM nodes it mutates for progress text are looked up locally
 // via `$`, exactly like the pre-split code did.
 import { isPendingOffsite, stageDerivative, stageFileBytes, toast } from './kit.js';
+import { captureVideoFrames, VIDEO_POSTER_EDGE, VIDEO_THUMB_EDGE } from './video-frame.js';
 import { act, narrate } from './outcomes.js';
-import { CLIENT_TINY_EDGE, CLIENT_MEDIUM_EDGE } from './media.js';
 import { $ } from './dom.js';
+
+const CLIENT_TINY_EDGE = VIDEO_THUMB_EDGE;
+const CLIENT_MEDIUM_EDGE = VIDEO_POSTER_EDGE;
 
 // Client-side ceiling per file. Bytes stream to the blob staging route
 // (issue #296) — no base64 through command JSON — so a phone video fits;
@@ -97,69 +100,16 @@ async function stageClientPreviews(file, parentSha) {
   }
 }
 
-function waitForMedia(element, event, timeoutMs = 12_000) {
-  return new Promise((resolve, reject) => {
-    const done = (value, error) => {
-      clearTimeout(timer);
-      element.removeEventListener(event, ready);
-      element.removeEventListener('error', failed);
-      if (error) reject(error);
-      else resolve(value);
-    };
-    const ready = () => done();
-    const failed = () => done(undefined, new Error('media decode failed'));
-    const timer = setTimeout(
-      () => done(undefined, new Error('media metadata timed out')),
-      timeoutMs,
-    );
-    element.addEventListener(event, ready, { once: true });
-    element.addEventListener('error', failed, { once: true });
-  });
-}
-
-function scaledCanvas(source, width, height, maxEdge) {
-  const scale = Math.min(1, maxEdge / Math.max(width, height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(width * scale));
-  canvas.height = Math.max(1, Math.round(height * scale));
-  canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
-  return canvas;
-}
-
-function canvasBlob(canvas) {
-  return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.84));
-}
-
 /**
  * Hardware-decode one representative frame on the uploading device. The
  * poster (lightbox/caption input) and thumb (grid) ride the derivative door;
  * no gateway video decoder exists in v0.
  */
 export async function stageVideoPoster(file, parentSha) {
-  if (!URL?.createObjectURL) return null;
-  const video = document.createElement('video');
-  const url = URL.createObjectURL(file);
-  video.muted = true;
-  video.playsInline = true;
-  video.preload = 'metadata';
   try {
-    video.src = url;
-    video.load();
-    await waitForMedia(video, 'loadedmetadata');
-    const width = Number(video.videoWidth);
-    const height = Number(video.videoHeight);
-    const duration = Number(video.duration);
-    if (!(width > 0 && height > 0)) return null;
-    const seekTo = Number.isFinite(duration) && duration > 0 ? Math.min(1, duration / 2) : 0;
-    if (seekTo > 0.01) {
-      video.currentTime = seekTo;
-      await waitForMedia(video, 'seeked');
-    } else if (video.readyState < 2) {
-      await waitForMedia(video, 'loadeddata');
-    }
-    const posterCanvas = scaledCanvas(video, width, height, CLIENT_MEDIUM_EDGE);
-    const thumbCanvas = scaledCanvas(video, width, height, CLIENT_TINY_EDGE);
-    const [poster, thumb] = await Promise.all([canvasBlob(posterCanvas), canvasBlob(thumbCanvas)]);
+    const captured = await captureVideoFrames(file);
+    if (!captured) return null;
+    const { width, height, duration, poster, thumb } = captured;
     await Promise.allSettled([
       ...(poster ? [stageDerivative(parentSha, 'poster', poster, 'image/jpeg')] : []),
       ...(thumb ? [stageDerivative(parentSha, 'thumb', thumb, 'image/jpeg')] : []),
@@ -167,16 +117,31 @@ export async function stageVideoPoster(file, parentSha) {
     return {
       width,
       height,
-      ...(Number.isFinite(duration) && duration >= 0 ? { duration_s: duration } : {}),
+      ...(duration !== null ? { duration_s: duration } : {}),
     };
   } catch {
     return null;
-  } finally {
-    video.pause();
-    video.removeAttribute('src');
-    video.load();
-    URL.revokeObjectURL(url);
   }
+}
+
+function waitForMedia(element, event, timeoutMs = 12_000) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const done = (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      element.removeEventListener(event, ready);
+      element.removeEventListener('error', failed);
+      if (error) reject(error);
+      else resolve();
+    };
+    const ready = () => done();
+    const failed = () => done(new Error('media decode failed'));
+    const timer = setTimeout(() => done(new Error('media metadata timed out')), timeoutMs);
+    element.addEventListener(event, ready, { once: true });
+    element.addEventListener('error', failed, { once: true });
+  });
 }
 
 /** Duration metadata for an audio upload; ID3/Vorbis tags parse server-side. */
@@ -224,6 +189,7 @@ export async function runUpload(files, { refresh, setUploading }) {
   let queued = 0;
   let failed = 0;
   let unreadable = 0;
+  let retryable = 0;
   let lastBad = null;
   for (let i = 0; i < accepted.length; i += 1) {
     btn.textContent = `Uploading ${i + 1} of ${accepted.length}…`;
@@ -234,8 +200,9 @@ export async function runUpload(files, { refresh, setUploading }) {
     let staged;
     try {
       staged = await stageFileBytes(file, '', { hash: true });
-    } catch {
-      unreadable += 1;
+    } catch (error) {
+      if (error?.resumable) retryable += 1;
+      else unreadable += 1;
       continue;
     }
     const effectiveType = String(file.type || staged.mediaType || '').toLowerCase();
@@ -289,6 +256,7 @@ export async function runUpload(files, { refresh, setUploading }) {
   if (queued > 0) parts.push(`${queued} saved offline`);
   if (failed > 0) parts.push(`${failed} refused`);
   if (unreadable > 0) parts.push(`${unreadable} unreadable`);
+  if (retryable > 0) parts.push(`${retryable} interrupted — add again to resume`);
   if (oversized.length > 0) parts.push(`${oversized.length} over the 512 MB cap`);
   toast(parts.join(' · ') || 'Nothing added');
   if (lastBad) narrate(lastBad);

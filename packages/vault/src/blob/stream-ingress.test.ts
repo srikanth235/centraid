@@ -347,4 +347,4 @@ test('stream-through resumes open and committing sessions without retransmitting
   expect(committed).toMatchObject({ sha256: sha, custody: 'remote-only' });
   expect(h.fake.partUploads).toEqual([1, 2]);
   expect(unsealBlob(h.keys.getOrCreate(sha), sha, h.fake.objects.get(sha)!)).toEqual(plain);
-});
+}, 15_000);

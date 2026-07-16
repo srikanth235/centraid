@@ -5,7 +5,14 @@ import { remoteEncryptionKey, type RemoteTier } from './custody-types.js';
 import type { MultipartPart, RemoteBlobTransfer } from './remote-transfer.js';
 import { verifyRemoteSealedObject } from './remote-verify.js';
 import { sealBlob, sealBlobStream } from './seal.js';
-import { sha256OfBytes } from './store.js';
+import {
+  DEFAULT_FRAME_SIZE,
+  encodeHeader,
+  encodeTrailer,
+  frameCountFor,
+  sealDirectory,
+  sealStoredFrame,
+} from './seal-frames.js';
 import type { OutboxRow, BlobTransferState } from './transfer-state.js';
 
 const PART_BYTES = 16 * 1024 * 1024;
@@ -13,29 +20,6 @@ const PART_BYTES = 16 * 1024 * 1024;
 // restartable multipart upload directly at the final SHA key; temporary keys
 // are reserved for hash-unknown stream-through ingress.
 const DIRECT_FINAL_PUT_MAX_BYTES = 32 * 1024 * 1024;
-
-async function* fixedChunks(
-  source: NodeJS.ReadableStream,
-  partSize = PART_BYTES,
-): AsyncGenerator<Buffer> {
-  let pending: Buffer[] = [];
-  let length = 0;
-  for await (const value of source as AsyncIterable<Buffer | string>) {
-    let chunk = Buffer.isBuffer(value) ? value : Buffer.from(value);
-    while (chunk.length > 0) {
-      const take = chunk.subarray(0, Math.min(partSize - length, chunk.length));
-      pending.push(take);
-      length += take.length;
-      chunk = chunk.subarray(take.length);
-      if (length === partSize) {
-        yield Buffer.concat(pending, length);
-        pending = [];
-        length = 0;
-      }
-    }
-  }
-  if (length > 0) yield Buffer.concat(pending, length);
-}
 
 function partsOf(row: OutboxRow): MultipartPart[] {
   try {
@@ -59,6 +43,7 @@ export interface OutboxDrainDeps {
   cache: BlobCache;
   remote: () => RemoteTier | null;
   onReplicated(sha256: string): void;
+  settlementAllowed?: () => boolean;
 }
 
 async function confirmFinal(
@@ -67,6 +52,7 @@ async function confirmFinal(
   row: OutboxRow,
 ): Promise<boolean> {
   const final = await remote.store.stat(row.sha256);
+  if (deps.settlementAllowed?.() === false) return true;
   if (!final) return false;
   try {
     const key = remoteEncryptionKey(remote, row.sha256);
@@ -79,9 +65,23 @@ async function confirmFinal(
         expectedPlaintextSize: row.byte_size,
       });
     } else {
-      const bytes = await remote.store.get(row.sha256);
-      if (!bytes || bytes.length !== row.byte_size || sha256OfBytes(bytes) !== row.sha256) {
-        return false;
+      if (final.size !== row.byte_size) return false;
+      // Plaintext stores do not expose a provider checksum through BlobStat.
+      // Compare bounded head/tail samples with the authoritative local CAS;
+      // confirmation stays O(1) egress instead of downloading a 500 MiB body.
+      const sample = Math.min(64 * 1024, row.byte_size);
+      if (sample > 0) {
+        const ranges = [
+          { start: 0, end: sample - 1 },
+          { start: Math.max(0, row.byte_size - sample), end: row.byte_size - 1 },
+        ];
+        for (const range of ranges) {
+          const [remoteBytes, localBytes] = await Promise.all([
+            remote.store.get(row.sha256, range),
+            Promise.resolve(deps.local.getSync(row.sha256, range)),
+          ]);
+          if (!remoteBytes || !localBytes || !remoteBytes.equals(localBytes)) return false;
+        }
       }
     }
   } catch {
@@ -89,6 +89,10 @@ async function confirmFinal(
     // resumable writer below replaces it from the still-present local source.
     return false;
   }
+  // `stat` and integrity reads can outlive a synchronous database close.
+  // Recheck the fence at the actual settlement boundary so no late promise
+  // writes replica evidence or deletes the durable restart obligation.
+  if (deps.settlementAllowed?.() === false) return true;
   deps.cache.replica.mark(row.sha256, row.byte_size);
   deps.state.completeOutbox(row.sha256);
   deps.onReplicated(row.sha256);
@@ -119,33 +123,68 @@ async function uploadViaDurableFinalMultipart(
 ): Promise<void> {
   const transfer = remote.transfer!;
   if (!supportsFinalMultipart(transfer)) throw new Error('final multipart upload is unavailable');
-  const opened = deps.local.openReadStreamSync?.(row.sha256);
-  if (!opened) throw new Error(`pending blob ${row.sha256} has no local source`);
+  if (!deps.local.hasSync(row.sha256)) {
+    throw new Error(`pending blob ${row.sha256} has no local source`);
+  }
+  if (deps.settlementAllowed?.() === false) return;
   deps.state.markUploadingFinal(row.sha256);
 
   let uploadId = row.upload_id;
   if (!uploadId) {
     uploadId = await transfer.beginShaUpload(row.sha256);
+    if (deps.settlementAllowed?.() === false) return;
     deps.state.setOutboxUpload(row.sha256, uploadId);
   }
   const saved = new Map(partsOf(row).map((part) => [part.partNumber, part.etag]));
   const encryptionKey = remoteEncryptionKey(remote, row.sha256);
-  const source = encryptionKey
-    ? opened.stream.pipe(sealBlobStream(encryptionKey, row.sha256, opened.size, remote.frameSize))
-    : opened.stream;
-  let partNumber = 1;
-  for await (const bytes of fixedChunks(source)) {
+  const frameSize = Math.max(remote.frameSize ?? DEFAULT_FRAME_SIZE, 8 * 1024 * 1024);
+  const frameCount = frameCountFor(row.byte_size, frameSize);
+  const sealedLens = Array.from({ length: frameCount }, (_, index) => {
+    const plainLength = Math.min(frameSize, row.byte_size - index * frameSize);
+    return plainLength + 1 + 12 + 16;
+  });
+  const directory = encryptionKey
+    ? sealDirectory(encryptionKey, row.sha256, frameCount, frameSize, row.byte_size, sealedLens)
+    : Buffer.alloc(0);
+  const totalParts = encryptionKey
+    ? Math.max(1, frameCount)
+    : Math.ceil(row.byte_size / PART_BYTES);
+  for (let partNumber = 1; partNumber <= totalParts; partNumber += 1) {
     if (!saved.has(partNumber)) {
+      let bytes: Buffer;
+      if (encryptionKey) {
+        const index = Math.min(partNumber - 1, frameCount - 1);
+        const start = index * frameSize;
+        const end = Math.min(row.byte_size, start + frameSize) - 1;
+        const plain =
+          frameCount === 0 ? Buffer.alloc(0) : deps.local.getSync(row.sha256, { start, end });
+        if (!plain) throw new Error(`pending blob ${row.sha256} has no local source range`);
+        const frame =
+          frameCount === 0
+            ? Buffer.alloc(0)
+            : sealStoredFrame(encryptionKey, row.sha256, index, frameCount, plain);
+        bytes = Buffer.concat([
+          ...(partNumber === 1 ? [encodeHeader(row.sha256)] : []),
+          frame,
+          ...(partNumber === totalParts
+            ? [directory, encodeTrailer(directory.length, frameCount)]
+            : []),
+        ]);
+      } else {
+        const start = (partNumber - 1) * PART_BYTES;
+        const end = Math.min(row.byte_size, start + PART_BYTES) - 1;
+        bytes = deps.local.getSync(row.sha256, { start, end }) ?? Buffer.alloc(0);
+      }
       saved.set(partNumber, await transfer.uploadShaPart(row.sha256, uploadId, partNumber, bytes));
+      if (deps.settlementAllowed?.() === false) return;
       deps.state.setOutboxParts(
         row.sha256,
         [...saved].map(([number, etag]) => ({ partNumber: number, etag })),
       );
     }
-    partNumber += 1;
   }
   const parts = [...saved]
-    .filter(([number]) => number < partNumber)
+    .filter(([number]) => number <= totalParts)
     .map(([number, etag]) => ({ partNumber: number, etag }))
     .sort((a, b) => a.partNumber - b.partNumber);
   if (parts.length === 0) {
@@ -155,6 +194,7 @@ async function uploadViaDurableFinalMultipart(
   } else {
     await transfer.completeShaUpload(row.sha256, uploadId, parts);
   }
+  if (deps.settlementAllowed?.() === false) return;
   if (!(await confirmFinal(deps, remote, row))) {
     throw new Error(`provider did not expose ${row.sha256} after final multipart completion`);
   }
@@ -192,6 +232,7 @@ export async function drainOutboxRow(deps: OutboxDrainDeps, row: OutboxRow): Pro
   if (!remote) throw new Error('remote CAS is not currently reachable/configured');
   if (await confirmFinal(deps, remote, row)) return; // preflight/dedupe
   await deps.cache.qosWait(); // interactive reads preempt bulk custody traffic
+  if (deps.settlementAllowed?.() === false) return;
   const durableUploadStarted = row.upload_id !== null || partsOf(row).length > 0;
   if (
     remote.transfer &&

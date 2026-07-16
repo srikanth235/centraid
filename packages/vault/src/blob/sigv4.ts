@@ -20,6 +20,28 @@ function encodeQueryPart(value: string): string {
   );
 }
 
+function amzDateOf(now: Date): string {
+  return now
+    .toISOString()
+    .replace(/[-:]/g, '')
+    .replace(/\.\d{3}/, '');
+}
+
+function scopeOf(dateStamp: string, region: string): string {
+  return `${dateStamp}/${region}/s3/aws4_request`;
+}
+
+function signingKeyOf(creds: S3Credentials, dateStamp: string, region: string): Buffer {
+  return hmac(
+    hmac(hmac(hmac(`AWS4${creds.secretAccessKey}`, dateStamp), region), 's3'),
+    'aws4_request',
+  );
+}
+
+function signatureOf(key: Buffer, stringToSign: string): string {
+  return createHmac('sha256', key).update(stringToSign, 'utf8').digest('hex');
+}
+
 /** Lowercase-hex SHA-256, used for both the payload hash and the string-to-sign. */
 export function sha256HexOf(data: Buffer | string): string {
   return createHash('sha256').update(data).digest('hex');
@@ -69,12 +91,8 @@ export interface SignedS3Request {
  */
 export function signS3Request(params: SignS3RequestParams): SignedS3Request {
   const { method, base, path, region, credentials: creds, body } = params;
-  const service = 's3';
   const now = new Date();
-  const amzDate = now
-    .toISOString()
-    .replace(/[-:]/g, '')
-    .replace(/\.\d{3}/, '');
+  const amzDate = amzDateOf(now);
   const dateStamp = amzDate.slice(0, 8);
 
   const canonicalPath = `/${encodeKeyPath(path)}`;
@@ -105,15 +123,11 @@ export function signS3Request(params: SignS3RequestParams): SignedS3Request {
     signedHeaders,
     payloadHash,
   ].join('\n');
-  const scope = `${dateStamp}/${region}/${service}/aws4_request`;
+  const scope = scopeOf(dateStamp, region);
   const stringToSign = ['AWS4-HMAC-SHA256', amzDate, scope, sha256HexOf(canonicalRequest)].join(
     '\n',
   );
-  const kDate = hmac(`AWS4${creds.secretAccessKey}`, dateStamp);
-  const kRegion = hmac(kDate, region);
-  const kService = hmac(kRegion, service);
-  const kSigning = hmac(kService, 'aws4_request');
-  const signature = createHmac('sha256', kSigning).update(stringToSign, 'utf8').digest('hex');
+  const signature = signatureOf(signingKeyOf(creds, dateStamp, region), stringToSign);
 
   const url = new URL(base.origin);
   url.pathname = canonicalPath;
@@ -149,12 +163,9 @@ export function presignS3Request(params: PresignS3RequestParams): URL {
   const creds = params.credentials;
   const now = params.now ?? new Date();
   const expires = Math.max(1, Math.min(604_800, Math.floor(params.expiresSeconds ?? 900)));
-  const amzDate = now
-    .toISOString()
-    .replace(/[-:]/g, '')
-    .replace(/\.\d{3}/, '');
+  const amzDate = amzDateOf(now);
   const dateStamp = amzDate.slice(0, 8);
-  const scope = `${dateStamp}/${params.region}/s3/aws4_request`;
+  const scope = scopeOf(dateStamp, params.region);
   const query: Record<string, string> = {
     ...params.query,
     'X-Amz-Algorithm': 'AWS4-HMAC-SHA256',
@@ -180,11 +191,7 @@ export function presignS3Request(params: PresignS3RequestParams): URL {
   const stringToSign = ['AWS4-HMAC-SHA256', amzDate, scope, sha256HexOf(canonicalRequest)].join(
     '\n',
   );
-  const kDate = hmac(`AWS4${creds.secretAccessKey}`, dateStamp);
-  const kRegion = hmac(kDate, params.region);
-  const kService = hmac(kRegion, 's3');
-  const signingKey = hmac(kService, 'aws4_request');
-  const signature = createHmac('sha256', signingKey).update(stringToSign).digest('hex');
+  const signature = signatureOf(signingKeyOf(creds, dateStamp, params.region), stringToSign);
   const url = new URL(params.base.origin);
   url.pathname = canonicalPath;
   url.search = `${canonicalQuery}&X-Amz-Signature=${signature}`;

@@ -2,8 +2,9 @@
 // the ordinary CAS driver remains below the repository's 500-line ceiling.
 
 import { assertSha, type BlobRange, type BlobStat } from './store.js';
-import { encodeKeyPath, presignS3Request, signS3Request } from './sigv4.js';
+import { encodeKeyPath, presignS3Request } from './sigv4.js';
 import type { S3BlobStoreOptions } from './s3.js';
+import { S3RequestPipeline } from './s3-pipeline.js';
 import type {
   MultipartPart,
   RemoteBlobTransfer,
@@ -13,6 +14,12 @@ import type {
 const PART_BYTES = 16 * 1024 * 1024;
 const MULTIPART_AT = 32 * 1024 * 1024;
 const TEMP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+
+/** Canonical path-style namespace advertised to trusted native carriers. */
+export function s3TemporaryUploadPrefix(input: { bucket: string; prefix?: string }): string {
+  const prefix = input.prefix ? `${input.prefix.replace(/^\/+|\/+$/g, '')}/` : '';
+  return `/${encodeKeyPath(input.bucket)}/${encodeKeyPath(`${prefix}tmp/blobs/`)}`;
+}
 
 async function* chunks(source: NodeJS.ReadableStream, size = PART_BYTES): AsyncGenerator<Buffer> {
   let pending: Buffer[] = [];
@@ -34,10 +41,6 @@ async function* chunks(source: NodeJS.ReadableStream, size = PART_BYTES): AsyncG
   if (length > 0) yield Buffer.concat(pending, length);
 }
 
-function xmlEscape(value: string): string {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
 function xmlUnescape(value: string): string {
   return value
     .replace(/&quot;/g, '"')
@@ -53,12 +56,11 @@ function xmlValue(xml: string, tag: string): string | undefined {
 
 export class S3TransferStore implements RemoteBlobTransfer {
   private readonly base: URL;
-  private readonly fetchImpl: typeof fetch;
-  private nextUploadAt = 0;
+  private readonly pipeline: S3RequestPipeline;
 
   constructor(private readonly options: S3BlobStoreOptions) {
     this.base = new URL(options.endpoint);
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.pipeline = new S3RequestPipeline(options);
   }
 
   private prefix(): string {
@@ -74,36 +76,12 @@ export class S3TransferStore implements RemoteBlobTransfer {
     return `${this.prefix()}tmp/blobs/${tempId}`;
   }
 
-  private async pace(bytes: number): Promise<void> {
-    const rate = this.options.throttleBytesPerSec;
-    if (!rate || rate <= 0 || bytes <= 0) return;
-    const now = Date.now();
-    const start = Math.max(now, this.nextUploadAt);
-    this.nextUploadAt = start + Math.ceil((bytes / rate) * 1000);
-    if (start > now) await new Promise((resolve) => setTimeout(resolve, start - now));
-  }
-
   private async request(
     method: string,
     key: string,
     input: { body?: Buffer; query?: Record<string, string>; headers?: Record<string, string> } = {},
   ): Promise<Response> {
-    const credentials = await this.options.credentials();
-    const signed = signS3Request({
-      method,
-      base: this.base,
-      path: key === '' ? this.options.bucket : `${this.options.bucket}/${key}`,
-      region: this.options.region ?? 'us-east-1',
-      credentials,
-      ...(input.body ? { body: input.body } : {}),
-      ...(input.query ? { query: input.query } : {}),
-      ...(input.headers ? { headers: input.headers } : {}),
-    });
-    return this.fetchImpl(signed.url, {
-      method,
-      headers: signed.headers,
-      body: input.body ? new Uint8Array(input.body) : undefined,
-    });
+    return this.pipeline.request(method, key, input);
   }
 
   private async send(
@@ -111,37 +89,15 @@ export class S3TransferStore implements RemoteBlobTransfer {
     key: string,
     input: { body?: Buffer; query?: Record<string, string>; headers?: Record<string, string> } = {},
   ): Promise<Response> {
-    const tries = Math.max(1, this.options.retryAttempts ?? 3);
-    let failure: unknown;
-    for (let attempt = 1; attempt <= tries; attempt += 1) {
-      try {
-        const response = await this.request(method, key, input);
-        if (attempt === tries || (response.status !== 429 && response.status < 500))
-          return response;
-        await response.text().catch(() => undefined);
-      } catch (error) {
-        failure = error;
-        if (attempt === tries) throw error;
-      }
-      await (this.options.sleepImpl ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))))(
-        Math.min(2_000, 200 * 2 ** (attempt - 1)),
-      );
-    }
-    throw failure ?? new Error(`S3 ${method} retries exhausted`);
+    return this.pipeline.send(method, key, input);
   }
 
   private async beginMultipart(key: string, label: string): Promise<string> {
-    const response = await this.send('POST', key, {
-      query: { uploads: '' },
-      ...(this.options.storageClass
-        ? { headers: { 'x-amz-storage-class': this.options.storageClass } }
-        : {}),
-    });
-    if (!response.ok) throw new Error(`s3 begin ${label} upload: ${response.status}`);
-    const body = await response.text();
-    const uploadId = /<UploadId>([^<]+)<\/UploadId>/.exec(body)?.[1];
-    if (!uploadId) throw new Error(`s3 begin ${label} upload: missing UploadId`);
-    return uploadId;
+    void label;
+    return this.pipeline.beginMultipart(
+      key,
+      this.options.storageClass ? { 'x-amz-storage-class': this.options.storageClass } : undefined,
+    );
   }
 
   private async uploadPart(
@@ -151,13 +107,8 @@ export class S3TransferStore implements RemoteBlobTransfer {
     partNumber: number,
     bytes: Buffer,
   ): Promise<string> {
-    await this.pace(bytes.length);
-    const response = await this.send('PUT', key, {
-      body: bytes,
-      query: { partNumber: String(partNumber), uploadId },
-    });
-    if (!response.ok) throw new Error(`s3 upload ${label} part ${partNumber}: ${response.status}`);
-    return response.headers.get('etag') ?? `"part-${partNumber}"`;
+    void label;
+    return this.pipeline.uploadPart(key, uploadId, partNumber, bytes);
   }
 
   private async completeMultipart(
@@ -166,23 +117,13 @@ export class S3TransferStore implements RemoteBlobTransfer {
     uploadId: string,
     parts: readonly MultipartPart[],
   ): Promise<void> {
-    const body = Buffer.from(
-      `<CompleteMultipartUpload>${parts
-        .map(
-          (part) =>
-            `<Part><PartNumber>${part.partNumber}</PartNumber><ETag>${xmlEscape(part.etag)}</ETag></Part>`,
-        )
-        .join('')}</CompleteMultipartUpload>`,
-    );
-    const response = await this.send('POST', key, { body, query: { uploadId } });
-    if (!response.ok) throw new Error(`s3 complete ${label} upload: ${response.status}`);
+    void label;
+    await this.pipeline.completeMultipart(key, uploadId, parts);
   }
 
   private async abortMultipart(key: string, label: string, uploadId: string): Promise<void> {
-    const response = await this.request('DELETE', key, { query: { uploadId } });
-    if (!response.ok && response.status !== 404) {
-      throw new Error(`s3 abort ${label} upload: ${response.status}`);
-    }
+    void label;
+    await this.pipeline.abortMultipart(key, uploadId);
   }
 
   beginShaUpload(sha: string): Promise<string> {
@@ -276,7 +217,7 @@ export class S3TransferStore implements RemoteBlobTransfer {
   }
 
   async putTemporary(tempId: string, bytes: Buffer): Promise<void> {
-    await this.pace(bytes.length);
+    await this.pipeline.pace(bytes.length);
     const response = await this.send('PUT', this.tempKey(tempId), {
       body: bytes,
       headers: { 'content-type': 'application/octet-stream' },

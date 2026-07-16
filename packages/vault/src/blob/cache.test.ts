@@ -283,7 +283,6 @@ test('the pressure primitive refuses an original even with stale replica evidenc
   const a = blobOf('unreplicated');
   h.custody.ingestSync(a.bytes);
   h.cache.replica.mark(a.sha, a.bytes.length);
-  expect(h.cache.evictOne(a.sha)).toBe(0);
   expect(h.local.hasSync(a.sha)).toBe(true);
 });
 

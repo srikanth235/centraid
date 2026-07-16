@@ -23,15 +23,16 @@
 // staging/promote path (variant/variant_of), so dedup, custody and
 // replication all "just work" with no new plumbing.
 
+import { BLOB_MEDIUM_EDGE, BLOB_TINY_EDGE } from '@centraid/blob-format';
 import type { VaultDb } from '../db.js';
 import { nowIso } from '../ids.js';
 import { stageBlobBytes } from './staging.js';
 import { shaOfBlobUri } from './store.js';
 
 /** Tiny rung (issue #405 §2): the browse-grid thumbnail, ~256 px long edge. */
-export const TINY_EDGE = 256;
+export const TINY_EDGE = BLOB_TINY_EDGE;
 /** Medium rung (issue #405 §2): the lightbox preview, ~2048 px long edge. */
-export const MEDIUM_EDGE = 2048;
+export const MEDIUM_EDGE = BLOB_MEDIUM_EDGE;
 
 /**
  * How many image items the gateway backstop processes per sweep (issue #405

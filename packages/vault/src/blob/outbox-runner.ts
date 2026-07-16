@@ -22,6 +22,7 @@ export interface BlobOutboxRunnerOptions {
 export class BlobOutboxRunner {
   private readonly timer: NodeJS.Timeout;
   private flight: Promise<void> | null = null;
+  private closing = false;
   private closed = false;
   private nextOrphanSweepAt = 0;
 
@@ -31,7 +32,7 @@ export class BlobOutboxRunner {
   }
 
   kick(): void {
-    if (this.closed || this.flight) return;
+    if (this.closing || this.closed || this.flight) return;
     this.flight = this.drainDue()
       .catch(() => undefined)
       .finally(() => {
@@ -46,6 +47,7 @@ export class BlobOutboxRunner {
       cache: this.options.cache,
       remote: this.options.remote,
       onReplicated: () => this.options.onStatus(),
+      settlementAllowed: () => !this.closed,
     };
   }
 
@@ -70,6 +72,7 @@ export class BlobOutboxRunner {
     try {
       await drainOutboxRow(this.deps(), row);
     } catch (error) {
+      if (this.closed) return;
       const backoffMs = Math.min(60_000, 1_000 * 2 ** Math.min(row.attempt_count, 6));
       this.options.state.failOutbox(
         row.sha256,
@@ -86,6 +89,7 @@ export class BlobOutboxRunner {
     try {
       await drainOutboxRow(this.deps(), row);
     } catch (error) {
+      if (this.closed) return;
       this.options.state.failOutbox(
         sha256,
         error instanceof Error ? error.message : String(error),
@@ -128,8 +132,16 @@ export class BlobOutboxRunner {
   }
 
   async close(): Promise<void> {
-    this.closed = true;
+    this.closing = true;
     clearInterval(this.timer);
     await this.flight?.catch(() => undefined);
+    this.closed = true;
+  }
+
+  /** Synchronous DB-close fence: leave durable rows pending and forbid late settlement. */
+  abandon(): void {
+    this.closing = true;
+    this.closed = true;
+    clearInterval(this.timer);
   }
 }

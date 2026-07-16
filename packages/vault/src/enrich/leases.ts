@@ -135,22 +135,52 @@ export function queueDeviceEnrichmentRequest(
     );
 }
 
-function wantedDerivatives(mediaType: string): WantedDerivative[] {
-  const type = mediaType.toLowerCase();
-  if (type.startsWith('video/')) {
-    return [
+const DEVICE_DERIVATIVE_RULES: readonly {
+  matches(mediaType: string): boolean;
+  sqlPredicate: string;
+  wanted: readonly WantedDerivative[];
+}[] = [
+  {
+    matches: (mediaType) => mediaType.startsWith('video/'),
+    sqlPredicate: "media_type LIKE 'video/%'",
+    wanted: [
       { capability: 'poster', variant: 'poster' },
       { capability: 'transcript', variant: 'transcript' },
-    ];
-  }
-  if (type.startsWith('audio/')) {
-    return [{ capability: 'transcript', variant: 'transcript' }];
-  }
-  if (type === 'application/pdf') {
-    return [{ capability: 'pdfText', variant: 'text' }];
-  }
-  return [];
+    ],
+  },
+  {
+    matches: (mediaType) => mediaType.startsWith('audio/'),
+    sqlPredicate: "media_type LIKE 'audio/%'",
+    wanted: [{ capability: 'transcript', variant: 'transcript' }],
+  },
+  {
+    matches: (mediaType) => mediaType === 'application/pdf',
+    sqlPredicate: "media_type = 'application/pdf'",
+    wanted: [{ capability: 'pdfText', variant: 'text' }],
+  },
+];
+
+function wantedDerivatives(mediaType: string): readonly WantedDerivative[] {
+  const type = mediaType.toLowerCase();
+  return DEVICE_DERIVATIVE_RULES.find((rule) => rule.matches(type))?.wanted ?? [];
 }
+
+function missingDerivativeSql(wanted: WantedDerivative): string {
+  return `(NOT EXISTS (
+    SELECT 1 FROM core_content_derivative d
+     WHERE d.content_id = core_content_item.content_id AND d.variant = '${wanted.variant}'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM enrich_request r
+     WHERE r.entity_type = 'core.content_item'
+       AND r.entity_id = core_content_item.content_id
+       AND r.required_capability = '${wanted.capability}'
+       AND r.contribution_variant = '${wanted.variant}' AND r.drained_at IS NULL
+  ))`;
+}
+
+const DEVICE_BACKLOG_SQL = DEVICE_DERIVATIVE_RULES.map(
+  (rule) => `(${rule.sqlPredicate} AND (${rule.wanted.map(missingDerivativeSql).join(' OR ')}))`,
+).join(' OR ');
 
 /**
  * Queue only the device rungs one claimed content item still lacks. The
@@ -214,47 +244,7 @@ export function queueMissingDeviceEnrichmentBacklog(
       `SELECT content_id, sha256, media_type
          FROM core_content_item
         WHERE deleted_at IS NULL AND sha256 IS NOT NULL
-          AND (
-            (media_type LIKE 'video/%' AND (
-              (NOT EXISTS (
-                SELECT 1 FROM core_content_derivative d
-                 WHERE d.content_id = core_content_item.content_id AND d.variant = 'poster'
-              ) AND NOT EXISTS (
-                SELECT 1 FROM enrich_request r
-                 WHERE r.entity_type = 'core.content_item'
-                   AND r.entity_id = core_content_item.content_id
-                   AND r.required_capability = 'poster'
-                   AND r.contribution_variant = 'poster' AND r.drained_at IS NULL
-              )) OR (NOT EXISTS (
-                SELECT 1 FROM core_content_derivative d
-                 WHERE d.content_id = core_content_item.content_id AND d.variant = 'transcript'
-              ) AND NOT EXISTS (
-                SELECT 1 FROM enrich_request r
-                 WHERE r.entity_type = 'core.content_item'
-                   AND r.entity_id = core_content_item.content_id
-                   AND r.required_capability = 'transcript'
-                   AND r.contribution_variant = 'transcript' AND r.drained_at IS NULL
-              ))
-            )) OR (media_type LIKE 'audio/%' AND NOT EXISTS (
-              SELECT 1 FROM core_content_derivative d
-               WHERE d.content_id = core_content_item.content_id AND d.variant = 'transcript'
-            ) AND NOT EXISTS (
-              SELECT 1 FROM enrich_request r
-               WHERE r.entity_type = 'core.content_item'
-                 AND r.entity_id = core_content_item.content_id
-                 AND r.required_capability = 'transcript'
-                 AND r.contribution_variant = 'transcript' AND r.drained_at IS NULL
-            )) OR (media_type = 'application/pdf' AND NOT EXISTS (
-              SELECT 1 FROM core_content_derivative d
-               WHERE d.content_id = core_content_item.content_id AND d.variant = 'text'
-            ) AND NOT EXISTS (
-              SELECT 1 FROM enrich_request r
-               WHERE r.entity_type = 'core.content_item'
-                 AND r.entity_id = core_content_item.content_id
-                 AND r.required_capability = 'pdfText'
-                 AND r.contribution_variant = 'text' AND r.drained_at IS NULL
-            ))
-          )
+          AND (${DEVICE_BACKLOG_SQL})
         ORDER BY content_id
         LIMIT ?`,
     )

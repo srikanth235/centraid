@@ -6,7 +6,14 @@
 import { randomBytes } from 'node:crypto';
 import { expect, test } from 'vitest';
 import { sealBlob, sealBlobStream, unsealBlob } from './seal.js';
-import { HEADER_BYTES, sealFrame, TRAILER_BYTES, unsealFrame } from './seal-frames.js';
+import {
+  HEADER_BYTES,
+  sealDirectory,
+  sealFrame,
+  sealStoredFrame,
+  TRAILER_BYTES,
+  unsealFrame,
+} from './seal-frames.js';
 import { sha256OfBytes } from './store.js';
 import { Readable } from 'node:stream';
 
@@ -88,6 +95,20 @@ test('tamper: a frame cannot be reordered, re-indexed, or transplanted', () => {
   expect(() => unsealFrame(KEY, sha, 1, 3, frame)).toThrow(); // re-indexed
   expect(() => unsealFrame(KEY, sha, 0, 4, frame)).toThrow(); // count changed
   expect(() => unsealFrame(KEY, other, 0, 3, frame)).toThrow(); // transplanted
+});
+
+test('compressed and store-only writers never reuse a GCM nonce for different plaintext', () => {
+  const plain = Buffer.alloc(4096, 0x61);
+  const sha = sha256OfBytes(plain);
+  const compressed = sealFrame(KEY, sha, 0, 1, plain);
+  const stored = sealStoredFrame(KEY, sha, 0, 1, plain);
+  expect(compressed.subarray(0, 12).equals(stored.subarray(0, 12))).toBe(false);
+  expect(unsealFrame(KEY, sha, 0, 1, compressed).equals(plain)).toBe(true);
+  expect(unsealFrame(KEY, sha, 0, 1, stored).equals(plain)).toBe(true);
+
+  const directoryA = sealDirectory(KEY, sha, 1, 4096, 4096, [compressed.length]);
+  const directoryB = sealDirectory(KEY, sha, 1, 4096, 4096, [stored.length]);
+  expect(directoryA.subarray(0, 12).equals(directoryB.subarray(0, 12))).toBe(false);
 });
 
 test('streaming seal matches the buffered seal end-to-end', async () => {

@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@centraid/backup": "workspace:*",
+    "@centraid/blob-format": "workspace:*",
     "uuid": "^14.0.0"
   },
   "devDependencies": {

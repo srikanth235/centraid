@@ -10,7 +10,12 @@
 // claims, and variants of an unservable parent.
 
 import type { DatabaseSync } from 'node:sqlite';
-import type { BinaryDerivativeVariant } from './derivatives.js';
+import {
+  BINARY_DERIVATIVE_SQL,
+  isBinaryDerivative,
+  isDerivativeVariant,
+  type BinaryDerivativeVariant,
+} from './derivatives.js';
 import { shaOfBlobUri } from './store.js';
 
 // Mirrors commands/links.ts RELATIONS_SCHEME_URI (imported by literal to
@@ -101,7 +106,7 @@ export function resolveServableBlob(
   if (!row) return { status: 'not-found' };
   if (row.refs === 0) return { status: 'unreferenced' };
 
-  if (variant === 'thumb' || variant === 'preview' || variant === 'poster') {
+  if (isDerivativeVariant(variant) && isBinaryDerivative(variant)) {
     const v = vault
       .prepare(
         `SELECT sha256, media_type, byte_size FROM core_content_derivative
@@ -222,7 +227,7 @@ export function liveBlobShas(vault: DatabaseSync): Set<string> {
   const staged = vault
     .prepare(
       `SELECT sha256 FROM blob_staging
-        WHERE variant IS NULL OR variant IN ('thumb','preview','poster')`,
+        WHERE variant IS NULL OR variant IN (${BINARY_DERIVATIVE_SQL})`,
     )
     .all() as { sha256: string }[];
   for (const r of staged) live.add(r.sha256);

@@ -87,6 +87,15 @@ export const DERIVATIVE_REGISTRY: Readonly<Record<DerivativeVariant, DerivativeS
   },
 };
 
+export const BINARY_DERIVATIVE_VARIANTS = DERIVATIVE_VARIANTS.filter(
+  (variant): variant is BinaryDerivativeVariant => DERIVATIVE_REGISTRY[variant].storage === 'cas',
+);
+
+/** Trusted SQL literal generated from the registry, never hand-enumerated. */
+export const BINARY_DERIVATIVE_SQL = BINARY_DERIVATIVE_VARIANTS.map(
+  (variant) => `'${variant}'`,
+).join(',');
+
 export interface ValidatedDerivative {
   readonly variant: DerivativeVariant;
   readonly storage: 'cas' | 'inline';

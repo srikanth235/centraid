@@ -11,6 +11,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { VaultDb } from '../db.js';
 import { nowIso, uuidv7 } from '../ids.js';
 import {
+  BINARY_DERIVATIVE_SQL,
   DERIVATIVE_REGISTRY,
   isBinaryDerivative,
   isDerivativeVariant,
@@ -312,7 +313,7 @@ export function sweepBlobStaging(
                (SELECT count(*) FROM core_content_item WHERE sha256 = ?) +
                (SELECT count(*) FROM core_content_derivative WHERE sha256 = ?) +
                (SELECT count(*) FROM blob_staging
-                 WHERE sha256 = ? AND (variant IS NULL OR variant IN ('thumb','preview','poster'))) AS n`,
+                 WHERE sha256 = ? AND (variant IS NULL OR variant IN (${BINARY_DERIVATIVE_SQL}))) AS n`,
           )
           .get(row.sha256, row.sha256, row.sha256) as { n: number })
       : { n: 1 };
