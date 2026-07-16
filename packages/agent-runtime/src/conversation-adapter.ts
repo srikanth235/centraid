@@ -21,14 +21,20 @@ import {
   makeConversationRunnerCore,
   type ConversationRunner,
   type Dispatcher,
+  type ModelSubsystem,
 } from '@centraid/app-engine';
 import { runTurn } from './runtime.js';
 import type { RunnerPrefs } from './types.js';
 
 export interface MakeConversationRunnerOptions {
   /** Loader for the user's persisted runner prefs. Called per turn so
-   *  the adapter picks up settings changes without a runtime restart. */
-  prefsLoader: () => Promise<RunnerPrefs | undefined>;
+   *  the adapter picks up settings changes without a runtime restart.
+   *  Receives `subsystem` when one is configured, so a host that scopes
+   *  runner selection per subsystem can answer with the right kind. */
+  prefsLoader: (subsystem?: ModelSubsystem) => Promise<RunnerPrefs | undefined>;
+  /** Which subsystem's runner/model prefs this adapter rides. Unset →
+   *  the host's default agent (the pre-existing behavior). */
+  subsystem?: ModelSubsystem;
   /**
    * Resolve the shared app-engine dispatcher. The chat adapter threads
    * this into the per-turn `ToolContext` so the agent's three structured
@@ -42,6 +48,7 @@ export interface MakeConversationRunnerOptions {
 export function makeConversationRunner(opts: MakeConversationRunnerOptions): ConversationRunner {
   return makeConversationRunnerCore({
     prefsLoader: opts.prefsLoader,
+    ...(opts.subsystem ? { subsystem: opts.subsystem } : {}),
     getDispatcher: opts.getDispatcher,
     // The local codex/claude turn driver.
     runTurn: runTurn,

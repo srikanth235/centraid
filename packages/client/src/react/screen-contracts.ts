@@ -632,23 +632,37 @@ export interface AgentCardDTO {
  */
 export type ModelSubsystem = 'assistant' | 'ask' | 'builder' | 'automations';
 export interface AgentsStatusDTO {
+  /** The DEFAULT agent (`agent.runner.kind`) — the runner every subsystem
+   *  without its own pin inherits. */
   selectedKind: AgentRunnerKind;
   cards: AgentCardDTO[];
   anyLoading: boolean;
   savedModelByKind: Record<string, string>;
   /** Per-runner subsystem model overrides, keyed by runner kind then subsystem. */
   subsystemModelByKind: Record<string, Partial<Record<ModelSubsystem, string>>>;
+  /**
+   * Per-subsystem runner pins (`runner.<subsystem>`). An ABSENT subsystem
+   * inherits `selectedKind` — the map only carries explicit pins, so a
+   * missing entry and "pinned to the default agent" stay distinguishable.
+   */
+  subsystemRunnerByKey: Partial<Record<ModelSubsystem, AgentRunnerKind>>;
 }
 export interface SettingsProvidersBridgeProps {
   loadStatus: () => Promise<AgentsStatusDTO>;
   refreshModels: () => Promise<AgentsStatusDTO>;
   refreshTools: () => Promise<AgentsStatusDTO>;
-  /** Switch the active agent; resolves true on success. */
+  /** Switch the DEFAULT agent — the fallback every unpinned subsystem
+   *  inherits; resolves true on success. */
   activateRunner: (kind: AgentRunnerKind) => Promise<boolean>;
   /** Persist this agent's default model ('' = clears back to the backend default). */
   setAgentModel: (kind: AgentRunnerKind, modelId: string) => void;
   /** Persist this agent's per-subsystem model override ('' = clears back to the default model). */
   setSubsystemModel: (kind: AgentRunnerKind, subsystem: ModelSubsystem, modelId: string) => void;
+  /**
+   * Pin this subsystem to a runner, independent of the default agent.
+   * `''` clears the pin, so the subsystem inherits `selectedKind` again.
+   */
+  setSubsystemRunner: (subsystem: ModelSubsystem, kind: AgentRunnerKind | '') => void;
 }
 
 // ── Settings: Space (issue #382) ─────────────────────────────────────────────

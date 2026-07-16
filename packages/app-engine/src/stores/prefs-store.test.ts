@@ -4,7 +4,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { PrefsStore, makeUserStoreRouteHandler, resolveSubsystemModel } from './prefs-store.js';
+import {
+  PrefsStore,
+  makeUserStoreRouteHandler,
+  resolveSubsystemModel,
+  resolveSubsystemRunner,
+} from './prefs-store.js';
 
 function freshFile(): string {
   return join(mkdtempSync(join(tmpdir(), 'centraid-prefs-')), 'prefs.json');
@@ -134,6 +139,90 @@ describe('resolveSubsystemModel', () => {
   it('ignores an empty-string explicit override (falls through like unset)', () => {
     const prefs = { 'model.codex.automations': 'automations-model' };
     expect(resolveSubsystemModel(prefs, 'codex', 'automations', '')).toBe('automations-model');
+  });
+});
+
+describe('resolveSubsystemRunner', () => {
+  it('prefers the per-subsystem pin over the default agent', () => {
+    const prefs = { 'runner.assistant': 'claude-code', 'agent.runner.kind': 'codex' };
+    expect(resolveSubsystemRunner(prefs, 'assistant')).toBe('claude-code');
+  });
+
+  it('falls back to the default agent when the subsystem is unpinned', () => {
+    const prefs = { 'agent.runner.kind': 'claude-code' };
+    expect(resolveSubsystemRunner(prefs, 'assistant')).toBe('claude-code');
+  });
+
+  it("falls back to 'codex' when nothing is configured at all", () => {
+    expect(resolveSubsystemRunner({}, 'assistant')).toBe('codex');
+  });
+
+  it('scopes pins by subsystem — an ask pin does not leak into builder resolution', () => {
+    const prefs = { 'runner.ask': 'claude-code', 'agent.runner.kind': 'codex' };
+    expect(resolveSubsystemRunner(prefs, 'ask')).toBe('claude-code');
+    // Every other subsystem still inherits the default agent.
+    expect(resolveSubsystemRunner(prefs, 'builder')).toBe('codex');
+    expect(resolveSubsystemRunner(prefs, 'assistant')).toBe('codex');
+    expect(resolveSubsystemRunner(prefs, 'automations')).toBe('codex');
+  });
+
+  it('treats an empty-string pin as unset and keeps falling through', () => {
+    const prefs = { 'runner.builder': '', 'agent.runner.kind': 'claude-code' };
+    expect(resolveSubsystemRunner(prefs, 'builder')).toBe('claude-code');
+    // ...all the way to the built-in default when there's no default agent either.
+    expect(resolveSubsystemRunner({ 'runner.builder': '' }, 'builder')).toBe('codex');
+  });
+
+  it('treats an empty-string default agent as unset (falls through to codex)', () => {
+    expect(resolveSubsystemRunner({ 'agent.runner.kind': '' }, 'automations')).toBe('codex');
+  });
+
+  it('each subsystem can pin a different runner independently', () => {
+    const prefs = {
+      'runner.assistant': 'claude-code',
+      'runner.automations': 'codex',
+      'agent.runner.kind': 'claude-code',
+    };
+    expect(resolveSubsystemRunner(prefs, 'assistant')).toBe('claude-code');
+    expect(resolveSubsystemRunner(prefs, 'automations')).toBe('codex');
+    // Unpinned subsystems still inherit the default agent.
+    expect(resolveSubsystemRunner(prefs, 'ask')).toBe('claude-code');
+  });
+
+  it('is byte-identical to the old global behavior when no runner.* key is set', () => {
+    // Back-compat is the hard requirement: with only `agent.runner.kind`
+    // present, EVERY subsystem resolves to it — exactly what the single
+    // global active runner did before per-subsystem selection existed.
+    for (const kind of ['codex', 'claude-code'] as const) {
+      const prefs = { 'agent.runner.kind': kind };
+      for (const s of ['assistant', 'ask', 'builder', 'automations'] as const) {
+        expect(resolveSubsystemRunner(prefs, s)).toBe(kind);
+      }
+    }
+  });
+});
+
+/**
+ * The two resolvers compose the way the gateway's `resolveModel` uses them:
+ * resolve the RUNNER for the subsystem first, then scope the model key by
+ * THAT kind. Reading the model against the global kind instead is the bug
+ * this pairing exists to prevent.
+ */
+describe('resolveSubsystemRunner + resolveSubsystemModel compose', () => {
+  it("reads the model key of the subsystem's OWN runner, not the default agent's", () => {
+    const prefs = {
+      'agent.runner.kind': 'codex',
+      'runner.ask': 'claude-code',
+      'model.codex.ask': 'codex-ask-model',
+      'model.claude-code.ask': 'claude-ask-model',
+    };
+    const kind = resolveSubsystemRunner(prefs, 'ask');
+    expect(kind).toBe('claude-code');
+    expect(resolveSubsystemModel(prefs, kind, 'ask')).toBe('claude-ask-model');
+    // The builder, still unpinned, keeps reading the default agent's keys.
+    expect(resolveSubsystemModel(prefs, resolveSubsystemRunner(prefs, 'builder'), 'ask')).toBe(
+      'codex-ask-model',
+    );
   });
 });
 

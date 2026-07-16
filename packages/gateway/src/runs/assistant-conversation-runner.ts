@@ -24,6 +24,7 @@ import {
   type ConversationRunner,
   type ConversationTurnInput,
   type Dispatcher,
+  type ModelSubsystem,
   type RunnerPrefs,
   type RunTurnFn,
   type VaultInvokeRunner,
@@ -33,8 +34,14 @@ import {
 import type { VaultRegistry } from '../serve/vault-registry.js';
 
 export interface AssistantConversationRunnerOptions {
-  /** Per-turn runner prefs (kind + provider) — same loader app chat uses. */
-  prefsLoader: () => Promise<RunnerPrefs | undefined>;
+  /** Per-turn runner prefs (kind + provider) — same loader app chat uses.
+   *  Receives `subsystem` so a host that pins a runner per subsystem answers
+   *  with THIS register's kind (assistant and ask are separate pins). */
+  prefsLoader: (subsystem?: ModelSubsystem) => Promise<RunnerPrefs | undefined>;
+  /** Which subsystem's runner/model prefs these turns ride. The gateway
+   *  builds this factory twice — `'assistant'` for the shell register and
+   *  `'ask'` for the per-app copilot; unset → the host's default agent. */
+  subsystem?: ModelSubsystem;
   /** The shared dispatcher — required by ToolContext; unused on this register. */
   getDispatcher: () => Dispatcher;
   /** The vault registry; every turn resolves the ACTIVE vault through it. */
@@ -96,6 +103,7 @@ export function makeAssistantConversationRunner(
 
   return makeConversationRunnerCore({
     prefsLoader: opts.prefsLoader,
+    ...(opts.subsystem ? { subsystem: opts.subsystem } : {}),
     getDispatcher: opts.getDispatcher,
     runTurn: opts.runTurn ?? runTurn,
     vaultSql,

@@ -50,6 +50,7 @@ import {
   makeJournalDbProvider,
   makeUserStoreRouteHandler,
   resolveSubsystemModel,
+  resolveSubsystemRunner,
   TurnLimiter,
   type AskModelInfo,
   type ConversationRunner,
@@ -802,9 +803,19 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
 
   // Per-turn prefs loader. Re-reads `prefs.json` every chat turn so a
   // settings change lands without a restart.
-  const prefsLoader = async (): Promise<RunnerPrefs | undefined> => {
+  //
+  // Runner selection is PER SUBSYSTEM: `runner.<subsystem>` pins one
+  // register (assistant/ask/builder/automations) to a runner; unpinned
+  // registers inherit `agent.runner.kind`, which is now "the default agent"
+  // rather than "the one active runner". Callers that don't name a
+  // subsystem get the default agent — byte-identical to the old behavior,
+  // which is what keeps a prefs file with no `runner.*` keys working
+  // exactly as it did.
+  const prefsLoader = async (subsystem?: ModelSubsystem): Promise<RunnerPrefs | undefined> => {
     const allPrefs = prefs.getAllPrefs();
-    const kindRaw = allPrefs['agent.runner.kind'];
+    const kindRaw = subsystem
+      ? resolveSubsystemRunner(allPrefs, subsystem)
+      : allPrefs['agent.runner.kind'];
     // Codex is the default when the user hasn't picked — matches the
     // settings panel's "Codex preferred when both present" copy.
     const kind: RunnerPrefs['kind'] =
@@ -826,15 +837,19 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
 
   // Per-subsystem model resolution (shared prefs contract): explicit
   // (request/manifest) → `model.<runnerKind>.<subsystem>` → `model.<runnerKind>.default`
-  // → nothing (the backend's own built-in default). The active runner kind
-  // rides the same per-turn `prefsLoader` every register already reads —
-  // when no runner is configured yet, an explicit override still wins but
-  // there's no prefs fallback to apply.
+  // → nothing (the backend's own built-in default).
+  //
+  // The runner is resolved FIRST, for THIS subsystem, and that kind is what
+  // scopes the model key. Model prefs are per runner (`model.<kind>.<sub>`),
+  // so reading them against the global kind while the subsystem actually runs
+  // on a different one hands the turn a model its backend has never heard of.
+  // Both halves come off the same per-turn `prefsLoader` every register reads,
+  // so a re-pin lands mid-session without a restart.
   const resolveModel = async (
     subsystem: ModelSubsystem,
     explicit?: string,
   ): Promise<string | undefined> => {
-    const runnerPrefs = await prefsLoader();
+    const runnerPrefs = await prefsLoader(subsystem);
     if (!runnerPrefs) return explicit;
     return resolveSubsystemModel(prefs.getAllPrefs(), runnerPrefs.kind, subsystem, explicit);
   };
@@ -903,13 +918,15 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // Ask-model picker (kit Ask panel, subsystem `ask`) — GET/PUT
   // `/centraid/<appId>/_turn/model`. Reads/writes the SAME
   // `model.<runnerKind>.ask` prefs key `resolveModel` resolves at turn
-  // time, off the SAME catalog surface the desktop's Settings → Agents
+  // time — where `<runnerKind>` is ASK's resolved runner, not the default
+  // agent, so the picker never reads one key and writes another once the
+  // owner pins `runner.ask`. Off the SAME catalog surface the desktop's Settings → Agents
   // picker reads (`resolveCatalogModels`) — one source of truth, no second
   // store. A cold/empty catalog just means an empty `catalog` list; the
   // picker still shows "Use default".
   const askModelPrefs = {
     get: async (): Promise<AskModelInfo> => {
-      const runnerPrefs = (await prefsLoader()) ?? { kind: 'codex' as const };
+      const runnerPrefs = (await prefsLoader('ask')) ?? { kind: 'codex' as const };
       const allPrefs = prefs.getAllPrefs();
       const scoped = allPrefs[`model.${runnerPrefs.kind}.ask`];
       const current = typeof scoped === 'string' && scoped.length > 0 ? scoped : null;
@@ -929,7 +946,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       };
     },
     set: async (model: string | null): Promise<void> => {
-      const runnerPrefs = (await prefsLoader()) ?? { kind: 'codex' as const };
+      const runnerPrefs = (await prefsLoader('ask')) ?? { kind: 'codex' as const };
       prefs.setPrefs({
         [`model.${runnerPrefs.kind}.ask`]: model && model.length > 0 ? model : null,
       });
@@ -1041,7 +1058,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Mint the runId here so every fire (cron included) has a bus channel.
     const runId = opts.runId ?? `${automationRef}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
     void (async () => {
-      const runnerPrefs = await prefsLoader();
+      const runnerPrefs = await prefsLoader('automations');
       const host = await currentVaultHost();
       const ws = currentWorkspace();
       // Prefs fallback for `ctx.agent` calls — the automation's own
@@ -1179,6 +1196,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     const runner: ConversationRunner = makeUnifiedConversationRunner({
       store,
       prefsLoader,
+      subsystem: 'builder',
       getDispatcher,
       publicBaseUrl: () => serverUrl,
       ext,
@@ -1571,7 +1589,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     if (!plane) return { ok: false, error: `unknown vault "${vaultId}"` };
     const host = settledHostFor(vaultId);
     const runId = `${automationRef}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
-    const runnerPrefs = await prefsLoader();
+    const runnerPrefs = await prefsLoader('automations');
     // Prefs fallback for `ctx.agent` calls — the automation's own
     // `requires.model` (read inside `runFire`) still wins over this.
     const automationsModel = await resolveModel('automations');
@@ -1693,6 +1711,14 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         // body) always wins; otherwise resolve off the register — `ask` is
         // the per-app copilot, anything else (including unset) is the
         // builder chat.
+        //
+        // The two runners below are built once at boot, but neither PICKS a
+        // runner kind at construction: each carries only its subsystem tag
+        // and calls `prefsLoader(subsystem)` inside every turn. So the same
+        // `input.register` fork that names the subsystem here also lands on
+        // a runner that resolves `runner.<subsystem>` fresh — the model key
+        // and the backend that receives it can't disagree, and a re-pin
+        // takes effect on the next turn with no restart.
         const subsystem: ModelSubsystem = input.register === 'ask' ? 'ask' : 'builder';
         const model = await resolveModel(subsystem, input.model);
         const resolvedInput = model !== input.model ? { ...input, model } : input;
@@ -1740,6 +1766,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // vault (prompt, vault_sql credential, scratch cwd) at call time.
   const assistantRunner = makeAssistantConversationRunner({
     prefsLoader,
+    subsystem: 'assistant',
     getDispatcher,
     vaults: vaultRegistry,
   });
@@ -1822,6 +1849,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // the owner asking their own vault).
   const askRunner = makeAssistantConversationRunner({
     prefsLoader,
+    subsystem: 'ask',
     getDispatcher,
     vaults: vaultRegistry,
     buildPrompt: async (input) => {
