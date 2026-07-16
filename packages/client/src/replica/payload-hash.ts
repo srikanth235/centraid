@@ -1,18 +1,28 @@
+import { webCryptoDigest, type ReplicaDigest } from './digest.js';
 import { ReplicaProtocolError } from './errors.js';
 import type { ReplicaValue } from './types.js';
 
-export async function intentPayloadHash(input: {
-  appId: string;
-  action: string;
-  input: ReplicaValue;
-}): Promise<string> {
-  const canonical = canonicalJson({
-    action: input.action,
-    appId: input.appId,
-    input: input.input,
-  });
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+/**
+ * Hashes the canonical JSON of an intent payload. The gateway pairs
+ * `intentId` + `payloadHash` for idempotency, so this value must be identical
+ * on every platform: the canonical form below is the contract, and any injected
+ * digest must be plain hex SHA-256 over its UTF-8 bytes.
+ */
+export async function intentPayloadHash(
+  input: {
+    appId: string;
+    action: string;
+    input: ReplicaValue;
+  },
+  digest: ReplicaDigest = webCryptoDigest,
+): Promise<string> {
+  return digest(
+    canonicalJson({
+      action: input.action,
+      appId: input.appId,
+      input: input.input,
+    }),
+  );
 }
 
 export function canonicalJson(value: ReplicaValue): string {

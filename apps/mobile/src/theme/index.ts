@@ -6,6 +6,11 @@
 //
 // Tokens (colors per theme, density, palette, radii, tile finishes) come
 // from the package — this file only owns the RN-specific font resolution.
+//
+// Dark mode: `useTheme()` (below) returns a scheme-aware palette lowered from
+// the blueprint kit's tokens.css (see tokens.generated.ts / resolve.ts). The
+// legacy `colors` export stays light-only for callers that read it at module
+// scope; anything that needs to follow the OS theme should call `useTheme()`.
 
 import {
   themes,
@@ -60,10 +65,17 @@ export const t = (key: TypeKey): Pick<TextStyle, 'fontSize' | 'lineHeight' | 'fo
   };
 };
 
-// `colors` is the active theme. Today this is hard-wired to light; once
-// mobile adds theme-switching, swap to `themes[currentTheme]` driven by
-// useColorScheme() or a user pref.
+// `colors` is the light theme — kept for callers that read colors at module
+// scope (shared components, static StyleSheets). Screens that follow dark
+// mode read `useTheme().colors` instead.
 export const colors: Theme = themes.light;
 
 export { themes, densities, spacing, palette, radii, fonts, tileFinish, TILE_VARIANTS };
 export type { Theme, ThemeName, DensityName, TileVariant, TileFinish };
+
+// Dark-mode-aware theme API, lowered from the blueprint kit tokens.css.
+export { useTheme } from './useTheme';
+export { resolveTheme, navThemes, navThemeFor } from './resolve';
+export type { ThemeValue, ThemeColors, Scheme } from './resolve';
+export { lightPalette, darkPalette } from './tokens.generated';
+export type { PaletteKey } from './tokens.generated';

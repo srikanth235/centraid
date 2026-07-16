@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from 'vitest';
 
 import type { VaultChangeMessage } from '../vault-change-feed.js';
 import { ReplicaCoordinator, type ReplicaChangeFeedAdapter } from './coordinator.js';
+import { createReplicaCoordinator } from './coordinator-web.js';
 import { ReplicaRebootstrapRequiredError } from './errors.js';
 import { MemoryIntentStore } from './intent-store.js';
 import { IntentQueue } from './intents.js';
@@ -140,7 +141,7 @@ describe('ReplicaCoordinator', () => {
         throw new Error('memory fallback must not open IndexedDB');
       }),
     } as unknown as IDBFactory;
-    const { replica, status } = await ReplicaCoordinator.create(
+    const { replica, status } = await createReplicaCoordinator(
       { gatewayId: 'gateway', vaultId: 'vault' },
       true,
       { workerFactory: () => worker, indexedDbFactory, idFactory: () => 'memory-intent' },
@@ -222,7 +223,7 @@ describe('ReplicaCoordinator', () => {
         return () => undefined;
       },
     };
-    const { replica, status } = await ReplicaCoordinator.create(
+    const { replica, status } = await createReplicaCoordinator(
       { gatewayId: 'gateway', vaultId: 'vault' },
       true,
       {

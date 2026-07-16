@@ -50,6 +50,14 @@ async function dispatch(request: ReplicaWorkerRequest): Promise<unknown> {
       return requiredStore().catalog();
     case 'bootstrap':
       return requiredStore().bootstrap(request.payload);
+    case 'bootstrap-begin':
+      requiredStore().bootstrapBegin(request.payload);
+      return undefined;
+    case 'bootstrap-page':
+      requiredStore().bootstrapPage(request.payload);
+      return undefined;
+    case 'bootstrap-commit':
+      return requiredStore().bootstrapCommit(request.payload);
     case 'apply-changes':
       return requiredStore().applyChanges(request.payload);
     case 'read':

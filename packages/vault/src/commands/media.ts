@@ -14,7 +14,7 @@
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 import { MAX_INLINE_DATA_URI_CHARS, mintContentFromDataUri } from '../blob/mint.js';
-import { setStarred, starredExistsSql } from './flags.js';
+import { validateDerivativeContribution } from '../blob/derivatives.js';
 import { assertInlineDataUriWithinBudget } from './inline-body-guard.js';
 
 /** Soft-deleted bytes linger this long before the lifecycle sweep purges. */
@@ -142,6 +142,9 @@ const ADD_ASSET: CommandDefinition = {
       staged_sha: { type: 'string', minLength: 64, maxLength: 64 },
       kind: { type: 'string', enum: ['photo', 'video', 'audio', 'scan'] },
       captured_at: { type: 'string' },
+      // Capture-local UTC offset in minutes (issue #419): the client reads it
+      // off the same EXIF the capture time came from.
+      tz_offset_min: { type: 'integer', minimum: -1080, maximum: 1080 },
       title: { type: 'string' },
       width: { type: 'integer', minimum: 1 },
       height: { type: 'integer', minimum: 1 },
@@ -149,6 +152,9 @@ const ADD_ASSET: CommandDefinition = {
       // Perceptual hash (issue #299 §2, Tier 0) — hex, producer-agnostic:
       // the client canvas computes a dHash beside its thumb today.
       phash: { type: 'string', minLength: 4, maxLength: 64, pattern: '^[0-9a-f]+$' },
+      // ThumbHash placeholder (issue #419) — unpadded base64, produced beside
+      // the client's thumb from the same decode; lands as an inline derivative.
+      thumbhash: { type: 'string', minLength: 6, maxLength: 100, pattern: '^[A-Za-z0-9+/]+$' },
     },
   },
   outputSchema: {
@@ -216,11 +222,13 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
     staged_sha?: string;
     kind?: string;
     captured_at?: string;
+    tz_offset_min?: number;
     title?: string;
     width?: number;
     height?: number;
     duration_s?: number;
     phash?: string;
+    thumbhash?: string;
   };
   // Staged claims carry spool metadata (issue #296 §4): the gateway sniffed
   // the type and read EXIF server-side, so capture time and dimensions no
@@ -271,14 +279,15 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
       : null;
   ctx.db
     .prepare(
-      `INSERT INTO media_media_asset (asset_id, content_id, kind, captured_at, place_id, camera_device_id, width, height, duration_s, exif_json, deleted_at)
-       VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, NULL)`,
+      `INSERT INTO media_media_asset (asset_id, content_id, kind, captured_at, tz_offset_min, place_id, camera_device_id, width, height, duration_s, exif_json, deleted_at)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, NULL)`,
     )
     .run(
       assetId,
       contentId,
       input.kind ?? assetKindFor(minted.mediaType),
       input.captured_at ?? meta.captured_at ?? null,
+      input.tz_offset_min ?? (meta as { tz_offset_min?: number }).tz_offset_min ?? null,
       placeId,
       input.width ?? meta.width ?? null,
       input.height ?? meta.height ?? null,
@@ -303,6 +312,32 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
       )
       .run(assetId, phash, ctx.now);
   }
+  // Device-contributed ThumbHash (issue #419): lands ONLY in the inline
+  // derivative row (no sidecar). Canonicalize through the same validator the
+  // staging door uses so a client-supplied value is exactly the stored form.
+  if (input.thumbhash) {
+    const contribution = validateDerivativeContribution({
+      variant: 'thumbhash',
+      bytes: Buffer.from(input.thumbhash, 'utf8'),
+    });
+    ctx.db
+      .prepare(
+        `INSERT INTO core_content_derivative
+           (derivative_id, content_id, variant, sha256, media_type, byte_size, text_content, created_at)
+         VALUES (?, ?, 'thumbhash', NULL, ?, ?, ?, ?)
+         ON CONFLICT (content_id, variant) DO UPDATE SET
+           text_content = excluded.text_content, byte_size = excluded.byte_size,
+           media_type = excluded.media_type, created_at = excluded.created_at`,
+      )
+      .run(
+        ctx.newId(),
+        contentId,
+        contribution.mediaType,
+        contribution.byteSize,
+        contribution.textContent ?? '',
+        ctx.now,
+      );
+  }
   ctx.wrote('media.media_asset', assetId);
   ctx.cite({
     claim: `${minted.mediaType} (${minted.byteSize} bytes) entered the library`,
@@ -324,10 +359,12 @@ const UPDATE_ASSET: CommandDefinition = {
       captured_at: { type: 'string' },
       // The caption lives on the canonical content item as its title.
       title: { type: 'string' },
-      // The contract keeps its `favorite` input; storage is a starred tag on
-      // the canonical core.content_item (issue #274) — favorite a photo here
-      // and the same content item reads as starred in the drive.
+      // First-class asset state (issue #419): favorite and archive are now
+      // boolean columns on the asset itself so the replica shape is
+      // self-contained — no core_tag reconstruction. set_favorite/set_archived
+      // are the focused toggles; update_asset stays the general editor.
       favorite: { type: 'integer', enum: [0, 1] },
+      archived: { type: 'integer', enum: [0, 1] },
     },
   },
   outputSchema: {
@@ -354,8 +391,10 @@ const UPDATE_ASSET: CommandDefinition = {
                            ELSE EXISTS(SELECT 1 FROM media_media_asset a JOIN core_content_item c ON c.content_id = a.content_id
                                         WHERE a.asset_id = :asset_id AND c.title = :title) END)
               AND (SELECT CASE WHEN :favorite IS NULL THEN 1
-                           WHEN :favorite = 1 THEN ${starredExistsSql('core.content_item', '(SELECT content_id FROM media_media_asset WHERE asset_id = :asset_id)')}
-                           ELSE NOT ${starredExistsSql('core.content_item', '(SELECT content_id FROM media_media_asset WHERE asset_id = :asset_id)')} END)
+                           ELSE EXISTS(SELECT 1 FROM media_media_asset WHERE asset_id = :asset_id AND favorite = :favorite) END)
+              AND (SELECT CASE WHEN :archived IS NULL THEN 1
+                           WHEN :archived = 1 THEN EXISTS(SELECT 1 FROM media_media_asset WHERE asset_id = :asset_id AND archived_at IS NOT NULL)
+                           ELSE EXISTS(SELECT 1 FROM media_media_asset WHERE asset_id = :asset_id AND archived_at IS NULL) END)
             ) AS n`,
       column: 'n',
       op: 'eq',
@@ -373,6 +412,7 @@ function updateAsset(ctx: HandlerCtx): Record<string, unknown> {
     captured_at?: string;
     title?: string;
     favorite?: number;
+    archived?: number;
   };
   if (input.captured_at !== undefined) {
     ctx.db
@@ -380,11 +420,14 @@ function updateAsset(ctx: HandlerCtx): Record<string, unknown> {
       .run(input.captured_at, input.asset_id);
   }
   if (input.favorite !== undefined) {
-    const asset = ctx.db
-      .prepare('SELECT content_id FROM media_media_asset WHERE asset_id = ?')
-      .get(input.asset_id) as { content_id: string } | undefined;
-    if (!asset) throw new Error('asset vanished between check and execute');
-    setStarred(ctx, 'core.content_item', asset.content_id, input.favorite === 1);
+    ctx.db
+      .prepare('UPDATE media_media_asset SET favorite = ? WHERE asset_id = ?')
+      .run(input.favorite, input.asset_id);
+  }
+  if (input.archived !== undefined) {
+    ctx.db
+      .prepare('UPDATE media_media_asset SET archived_at = ? WHERE asset_id = ?')
+      .run(input.archived === 1 ? ctx.now : null, input.asset_id);
   }
   if (input.title !== undefined) {
     ctx.db
@@ -628,6 +671,107 @@ function restoreAsset(ctx: HandlerCtx): Record<string, unknown> {
     entityId: input.asset_id,
   });
   return { asset_id: input.asset_id };
+}
+
+const SET_FAVORITE: CommandDefinition = {
+  name: 'media.set_favorite',
+  ownerSchema: 'media',
+  inputSchema: {
+    type: 'object',
+    required: ['asset_id', 'favorite'],
+    additionalProperties: false,
+    properties: {
+      asset_id: { type: 'string', minLength: 1 },
+      favorite: { type: 'integer', enum: [0, 1] },
+    },
+  },
+  outputSchema: {
+    type: 'object',
+    required: ['asset_id'],
+    properties: { asset_id: { type: 'string' }, favorite: { type: 'integer' } },
+  },
+  preconditions: [
+    {
+      name: 'asset_exists',
+      sql: 'SELECT count(*) AS n FROM media_media_asset WHERE asset_id = :asset_id',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: 'favorite_applied',
+      sql: 'SELECT count(*) AS n FROM media_media_asset WHERE asset_id = :asset_id AND favorite = :favorite',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  idempotency: 'idempotent',
+  risk: 'low',
+  handler: setFavorite,
+};
+
+function setFavorite(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { asset_id: string; favorite: number };
+  ctx.db
+    .prepare('UPDATE media_media_asset SET favorite = ? WHERE asset_id = ?')
+    .run(input.favorite, input.asset_id);
+  ctx.wrote('media.media_asset', input.asset_id);
+  return { asset_id: input.asset_id, favorite: input.favorite };
+}
+
+const SET_ARCHIVED: CommandDefinition = {
+  name: 'media.set_archived',
+  ownerSchema: 'media',
+  inputSchema: {
+    type: 'object',
+    required: ['asset_id', 'archived'],
+    additionalProperties: false,
+    properties: {
+      asset_id: { type: 'string', minLength: 1 },
+      archived: { type: 'integer', enum: [0, 1] },
+    },
+  },
+  outputSchema: {
+    type: 'object',
+    required: ['asset_id'],
+    properties: { asset_id: { type: 'string' }, archived: { type: 'integer' } },
+  },
+  preconditions: [
+    {
+      name: 'asset_exists',
+      sql: 'SELECT count(*) AS n FROM media_media_asset WHERE asset_id = :asset_id',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: 'archive_applied',
+      sql: `SELECT count(*) AS n FROM media_media_asset
+             WHERE asset_id = :asset_id
+               AND ((:archived = 1 AND archived_at IS NOT NULL)
+                 OR (:archived = 0 AND archived_at IS NULL))`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  idempotency: 'idempotent',
+  risk: 'low',
+  handler: setArchived,
+};
+
+function setArchived(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { asset_id: string; archived: number };
+  ctx.db
+    .prepare('UPDATE media_media_asset SET archived_at = ? WHERE asset_id = ?')
+    .run(input.archived === 1 ? ctx.now : null, input.asset_id);
+  ctx.wrote('media.media_asset', input.asset_id);
+  return { asset_id: input.asset_id, archived: input.archived };
 }
 
 const CREATE_ALBUM: CommandDefinition = {
@@ -945,6 +1089,8 @@ export function registerMediaCommands(gateway: Gateway): void {
   gateway.registerCommand(ADD_ASSET);
   gateway.registerCommand(UPDATE_ASSET);
   gateway.registerCommand(SET_ASSET_PLACE);
+  gateway.registerCommand(SET_FAVORITE);
+  gateway.registerCommand(SET_ARCHIVED);
   gateway.registerCommand(DELETE_ASSET);
   gateway.registerCommand(RESTORE_ASSET);
   gateway.registerCommand(CREATE_ALBUM);

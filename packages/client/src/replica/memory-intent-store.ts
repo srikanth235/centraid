@@ -1,5 +1,5 @@
 import { ReplicaProtocolError } from './errors.js';
-import type { IntentRecordStore, NewStoredIntent } from './intent-store.js';
+import type { IntentRecordStore, NewStoredIntent } from './intent-record-store.js';
 import type { IntentState, ReplicaIntent } from './types.js';
 
 export class MemoryIntentStore implements IntentRecordStore {

@@ -6,7 +6,7 @@ import {
   subscribeVaultChanges,
   clearVaultChangeCursor,
 } from '../vault-change-feed.js';
-import { ReplicaCoordinator, type ReplicaCoordinatorOptions } from './coordinator.js';
+import { createReplicaCoordinator, type ReplicaWebCoordinatorOptions } from './coordinator-web.js';
 import { ReplicaProtocolError } from './errors.js';
 import { validateOptimisticMutation } from './query.js';
 import {
@@ -110,8 +110,8 @@ export interface ReplicaShellSessionOptions {
 }
 
 export interface OpenReplicaShellSessionOptions extends ReplicaShellSessionOptions {
-  workerFactory?: ReplicaCoordinatorOptions['workerFactory'];
-  intentStore?: ReplicaCoordinatorOptions['intentStore'];
+  workerFactory?: ReplicaWebCoordinatorOptions['workerFactory'];
+  intentStore?: ReplicaWebCoordinatorOptions['intentStore'];
   idFactory?: () => string;
 }
 
@@ -584,7 +584,7 @@ export async function openReplicaShellSession(
   let pendingBootstrap = false;
   let persistedShapeIds: readonly string[] = [];
   const fetcher = options.fetcher ?? fetchReplicaDefault;
-  const { replica, status } = await ReplicaCoordinator.create(identity, remember, {
+  const { replica, status } = await createReplicaCoordinator(identity, remember, {
     ...(options.workerFactory ? { workerFactory: options.workerFactory } : {}),
     ...(options.intentStore ? { intentStore: options.intentStore } : {}),
     ...(options.indexedDbFactory ? { indexedDbFactory: options.indexedDbFactory } : {}),

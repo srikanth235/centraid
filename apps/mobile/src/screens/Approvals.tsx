@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '../components/Icon';
 import Button from '../components/Button';
-import { colors, family, radii, spacing, t } from '../theme';
+import { family, radii, spacing, t, useTheme, type ThemeColors } from '../theme';
 import {
   confirmParked,
   GatewayError,
@@ -11,7 +11,7 @@ import {
   resolveGatewayBase,
   type ParkedInvocation,
 } from '../lib/gateway';
-import type { RootScreenProps } from '../navigation';
+import type { SettingsScreenProps } from '../navigation';
 
 // Parked vault invocations awaiting the owner's say-so — medium+ acts that
 // apps/agents submitted get parked by the vault's consent gateway. This
@@ -26,7 +26,9 @@ type ApprovalsState =
 
 export default function ApprovalsScreen({
   navigation,
-}: RootScreenProps<'Approvals'>): React.JSX.Element {
+}: SettingsScreenProps<'Approvals'>): React.JSX.Element {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [state, setState] = useState<ApprovalsState>({ kind: 'loading' });
   const [refreshing, setRefreshing] = useState(false);
   const [actionError, setActionError] = useState<string | undefined>(undefined);
@@ -100,7 +102,7 @@ export default function ApprovalsScreen({
         }
       >
         {actionError ? <Text style={styles.actionError}>{actionError}</Text> : null}
-        {renderBody(state, decide, () => navigation.navigate('Settings'))}
+        {renderBody(state, decide, () => navigation.navigate('Settings'), styles)}
       </ScrollView>
     </SafeAreaView>
   );
@@ -110,6 +112,7 @@ function renderBody(
   state: ApprovalsState,
   decide: (invocationId: string, approve: boolean) => Promise<void>,
   openSettings: () => void,
+  styles: ReturnType<typeof makeStyles>,
 ): React.JSX.Element {
   if (state.kind === 'loading') {
     return <Text style={styles.emptyCopy}>Loading…</Text>;
@@ -140,7 +143,7 @@ function renderBody(
   return (
     <View style={styles.list}>
       {state.rows.map((row) => (
-        <ParkedCard key={row.invocationId} row={row} decide={decide} />
+        <ParkedCard key={row.invocationId} row={row} decide={decide} styles={styles} />
       ))}
     </View>
   );
@@ -149,9 +152,11 @@ function renderBody(
 function ParkedCard({
   row,
   decide,
+  styles,
 }: {
   row: ParkedInvocation;
   decide: (invocationId: string, approve: boolean) => Promise<void>;
+  styles: ReturnType<typeof makeStyles>;
 }): React.JSX.Element {
   const [busy, setBusy] = useState(false);
   const choose = (approve: boolean): void => {
@@ -204,45 +209,46 @@ function summarizeInput(input: Record<string, unknown>): string {
   }
 }
 
-const styles = StyleSheet.create({
-  actionError: { ...t('small'), color: colors.danger, marginBottom: spacing[3] },
-  backBtn: {
-    alignItems: 'center',
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
-  bar: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: spacing[2],
-  },
-  barSpacer: { width: 36 },
-  body: { padding: spacing[5] },
-  card: {
-    backgroundColor: colors.bgElev,
-    borderColor: colors.line,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    padding: spacing[4],
-  },
-  cardActions: { flexDirection: 'row', gap: spacing[3], marginTop: spacing[3] },
-  cardBtn: { flex: 1 },
-  cardCaller: { ...t('small'), color: colors.ink3, marginTop: 2 },
-  cardCommand: { ...t('bodyStrong'), color: colors.ink },
-  cardPayload: {
-    ...t('small'),
-    color: colors.ink2,
-    fontFamily: family.monoRegular,
-    marginTop: spacing[2],
-  },
-  emptyAction: { alignSelf: 'stretch', marginTop: spacing[4] },
-  emptyCopy: { ...t('body'), color: colors.ink2 },
-  emptyHint: { ...t('small'), color: colors.ink3, marginTop: spacing[2] },
-  emptyTitle: { ...t('title'), color: colors.ink, marginBottom: spacing[2] },
-  list: { gap: spacing[3] },
-  safe: { backgroundColor: colors.bg, flex: 1 },
-  title: { ...t('title'), color: colors.ink },
-});
+const makeStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    actionError: { ...t('small'), color: colors.danger, marginBottom: spacing[3] },
+    backBtn: {
+      alignItems: 'center',
+      height: 36,
+      justifyContent: 'center',
+      width: 36,
+    },
+    bar: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingHorizontal: 14,
+      paddingVertical: spacing[2],
+    },
+    barSpacer: { width: 36 },
+    body: { padding: spacing[5] },
+    card: {
+      backgroundColor: colors.bgElev,
+      borderColor: colors.line,
+      borderRadius: radii.md,
+      borderWidth: 1,
+      padding: spacing[4],
+    },
+    cardActions: { flexDirection: 'row', gap: spacing[3], marginTop: spacing[3] },
+    cardBtn: { flex: 1 },
+    cardCaller: { ...t('small'), color: colors.ink3, marginTop: 2 },
+    cardCommand: { ...t('bodyStrong'), color: colors.ink },
+    cardPayload: {
+      ...t('small'),
+      color: colors.ink2,
+      fontFamily: family.monoRegular,
+      marginTop: spacing[2],
+    },
+    emptyAction: { alignSelf: 'stretch', marginTop: spacing[4] },
+    emptyCopy: { ...t('body'), color: colors.ink2 },
+    emptyHint: { ...t('small'), color: colors.ink3, marginTop: spacing[2] },
+    emptyTitle: { ...t('title'), color: colors.ink, marginBottom: spacing[2] },
+    list: { gap: spacing[3] },
+    safe: { backgroundColor: colors.bg, flex: 1 },
+    title: { ...t('title'), color: colors.ink },
+  });

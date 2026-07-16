@@ -1,30 +1,9 @@
 import { ReplicaProtocolError } from './errors.js';
+import type { IntentRecordStore, NewStoredIntent } from './intent-record-store.js';
 import type { IntentState, ReplicaIntent } from './types.js';
 
 export { MemoryIntentStore } from './memory-intent-store.js';
-
-export type NewStoredIntent = Omit<ReplicaIntent, 'createdOrder'>;
-
-export interface IntentRecordStore {
-  add(intent: NewStoredIntent): Promise<ReplicaIntent>;
-  get(intentId: string): Promise<ReplicaIntent | undefined>;
-  list(states?: readonly IntentState[]): Promise<ReplicaIntent[]>;
-  claimNext(): Promise<ReplicaIntent | undefined>;
-  transition(
-    intentId: string,
-    allowed: readonly IntentState[],
-    patch: Partial<ReplicaIntent>,
-  ): Promise<ReplicaIntent>;
-  /** Return the settled value while atomically removing its sensitive input. */
-  settle(
-    intentId: string,
-    allowed: readonly IntentState[],
-    patch: Partial<ReplicaIntent>,
-  ): Promise<ReplicaIntent>;
-  clear(): Promise<void>;
-  close(): void;
-  destroy(): Promise<void>;
-}
+export type { IntentRecordStore, NewStoredIntent } from './intent-record-store.js';
 
 const INTENTS = 'intents';
 const META = 'meta';

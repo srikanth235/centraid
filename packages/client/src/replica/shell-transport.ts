@@ -1,24 +1,37 @@
-import {
-  authHeaders,
-  doFetch,
-  GatewayClientError,
-  type GatewayAuth,
-} from '../gateway-client-core.js';
+import { authHeaders, GatewayClientError, href, type GatewayAuth } from '../gateway-auth.js';
 import { ReplicaProtocolError, ReplicaRebootstrapRequiredError } from './errors.js';
 import type { RebootstrapReason } from './replica-rebootstrap-error.js';
 import type {
   IntentOutcome,
+  REPLICA_PROTOCOL_VERSION,
   ReplicaChangeBatch,
   ReplicaCursor,
   ReplicaIntent,
+  ReplicaShape,
   ReplicaSnapshot,
+  ReplicaSnapshotRow,
 } from './types.js';
+
+/** Matches the gateway's own default; kept explicit so the request is self-describing. */
+export const DEFAULT_REPLICA_BOOTSTRAP_WINDOW = 5_000;
+
+/** Request init widened with `cache`, which React Native's `RequestInit` type omits. */
+export type ReplicaRequestInit = RequestInit & { cache?: string };
 
 export type ReplicaFetcher = (
   baseUrl: string,
   pathname: string,
-  init: RequestInit,
+  init: ReplicaRequestInit,
 ) => Promise<Response>;
+
+/**
+ * Fallback transport for platforms/tests that don't inject one. The web shell
+ * always passes its own `doFetch` wrapper (Iroh/webControl/vault-header aware);
+ * this plain `fetch` keeps the module free of the browser gateway core so React
+ * Native can reuse it with an injected fetcher.
+ */
+const defaultReplicaFetcher: ReplicaFetcher = (baseUrl, pathname, init) =>
+  fetch(href(baseUrl, pathname), init as RequestInit);
 
 export class ReplicaTransportError extends GatewayClientError {
   constructor(
@@ -39,7 +52,7 @@ const OUTCOME_RECONCILE_BATCH = 500;
 
 export async function fetchReplicaBootstrap(
   gatewayAuth: GatewayAuth,
-  fetcher: ReplicaFetcher = doFetch,
+  fetcher: ReplicaFetcher = defaultReplicaFetcher,
   signal?: AbortSignal,
 ): Promise<ReplicaSnapshot> {
   const response = await fetcher(gatewayAuth.baseUrl, '/centraid/_vault/replica/bootstrap', {
@@ -53,12 +66,86 @@ export async function fetchReplicaBootstrap(
   return snapshot;
 }
 
+/**
+ * One page of a windowed bootstrap. Every page carries its OWN snapshot cursor —
+ * pages are not globally consistent — and `complete`/`next` drive the walk.
+ */
+export interface ReplicaBootstrapPage {
+  protocolVersion: typeof REPLICA_PROTOCOL_VERSION;
+  vaultId: string;
+  schemaEpoch: string;
+  cursor: ReplicaCursor;
+  rows: ReplicaSnapshotRow[];
+  complete: boolean;
+  /** Opaque continuation token; absent exactly when `complete` is true. */
+  next?: string;
+}
+
+/** Page 1 additionally carries the catalog and trust envelope; later pages do not. */
+export interface ReplicaBootstrapFirstPage extends ReplicaBootstrapPage {
+  shapes: ReplicaShape[];
+  shapeIds?: string[];
+  trust?: string;
+  rememberDevice?: boolean;
+}
+
+export interface FetchReplicaBootstrapPageOptions {
+  /** Rows per page (server bounds: 1..20000, default 5000). */
+  window?: number;
+  /** Page-1 `next` token. Omit for page 1. */
+  after?: string;
+  fetcher?: ReplicaFetcher;
+  signal?: AbortSignal;
+}
+
+/**
+ * Fetch one windowed bootstrap page. Opting in (`window` and/or `after`) is what
+ * selects the paging protocol server-side; {@link fetchReplicaBootstrap} keeps
+ * the single-shot behavior for callers that pass neither.
+ */
+export async function fetchReplicaBootstrapPage(
+  gatewayAuth: GatewayAuth,
+  options: FetchReplicaBootstrapPageOptions = {},
+): Promise<ReplicaBootstrapFirstPage | ReplicaBootstrapPage> {
+  const fetcher = options.fetcher ?? defaultReplicaFetcher;
+  const params = new URLSearchParams();
+  if (options.window !== undefined) params.set('window', String(options.window));
+  if (options.after !== undefined) params.set('after', options.after);
+  // Neither param present would silently fall back to the single-shot envelope.
+  if ([...params].length === 0) params.set('window', String(DEFAULT_REPLICA_BOOTSTRAP_WINDOW));
+  const response = await fetcher(
+    gatewayAuth.baseUrl,
+    `/centraid/_vault/replica/bootstrap?${params}`,
+    {
+      method: 'GET',
+      headers: { ...authHeaders(gatewayAuth.token), Accept: 'application/json' },
+      cache: 'no-store',
+      ...(options.signal ? { signal: options.signal } : {}),
+    },
+  );
+  const page = await readReplicaJson<ReplicaBootstrapPage>(response, 'bootstrap replica');
+  validateBootstrapPage(page, options.after === undefined);
+  return page;
+}
+
+function validateBootstrapPage(page: ReplicaBootstrapPage, first: boolean): void {
+  if (typeof page.complete !== 'boolean' || !Array.isArray(page.rows)) {
+    throw new ReplicaProtocolError('Replica bootstrap page is malformed');
+  }
+  if (page.complete === (page.next !== undefined)) {
+    throw new ReplicaProtocolError('Replica bootstrap page continuation contradicts completeness');
+  }
+  if (first && !Array.isArray((page as ReplicaBootstrapFirstPage).shapes)) {
+    throw new ReplicaProtocolError('First replica bootstrap page did not carry a catalog');
+  }
+}
+
 export async function fetchReplicaChanges(
   gatewayAuth: GatewayAuth,
   cursor: ReplicaCursor,
   signal: AbortSignal,
   shapeIdsOrFetcher?: readonly string[] | ReplicaFetcher,
-  customFetcher: ReplicaFetcher = doFetch,
+  customFetcher: ReplicaFetcher = defaultReplicaFetcher,
 ): Promise<ReplicaChangeBatch> {
   const shapeIds =
     shapeIdsOrFetcher === undefined || typeof shapeIdsOrFetcher === 'function'
@@ -88,7 +175,7 @@ export async function fetchReplicaIntentOutcomes(
   gatewayAuth: GatewayAuth,
   intentIds: readonly string[],
   through: ReplicaCursor,
-  fetcher: ReplicaFetcher = doFetch,
+  fetcher: ReplicaFetcher = defaultReplicaFetcher,
   signal?: AbortSignal,
 ): Promise<IntentOutcome[]> {
   const ids = [...new Set(intentIds.filter(Boolean))];
@@ -127,7 +214,7 @@ function normalizedShapeIds(shapeIds: readonly string[]): string[] {
 export async function postReplicaIntent(
   gatewayAuth: GatewayAuth,
   intent: ReplicaIntent,
-  fetcher: ReplicaFetcher = doFetch,
+  fetcher: ReplicaFetcher = defaultReplicaFetcher,
 ): Promise<ReplicaIntentResponse> {
   const response = await fetcher(gatewayAuth.baseUrl, '/centraid/_vault/replica/intents', {
     method: 'POST',
@@ -158,7 +245,7 @@ export async function postReplicaCheckpoint(
   gatewayAuth: GatewayAuth,
   cursor: ReplicaCursor,
   schemaEpoch: string,
-  fetcher: ReplicaFetcher = doFetch,
+  fetcher: ReplicaFetcher = defaultReplicaFetcher,
 ): Promise<void> {
   const response = await fetcher(gatewayAuth.baseUrl, '/centraid/_vault/replica/checkpoint', {
     method: 'POST',

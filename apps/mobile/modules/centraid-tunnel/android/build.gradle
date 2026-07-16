@@ -17,13 +17,25 @@ android {
 dependencies {
   implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
 
-  // Iroh Kotlin binding (uniffi-generated from n0-computer/iroh-ffi 1.0.0).
-  // Vendored locally rather than pulled from Maven: the generated bindings
-  // live in src/main/java/computer/iroh/ (iroh_ffi.kt + IrohAndroid.kt) and
-  // the cross-compiled native library in src/main/jniLibs/<abi>/libiroh_ffi.so.
+  // Iroh Kotlin binding (uniffi, n0-computer/iroh-ffi 1.0.0).
+  //
+  // NOTE (issue #419 M0.1): the official Maven artifact `computer.iroh:iroh`
+  // is a *desktop-JVM* jar — it bundles native libs for darwin/linux/win32
+  // only (JNA resources), has no Android ABI variant and no `.so` under
+  // jni/. A plain `implementation("computer.iroh:iroh:1.0.0")` therefore
+  // does NOT deliver a loadable Android native library. Until upstream
+  // publishes an Android AAR (with arm64-v8a/x86_64 jniLibs), Android must
+  // keep cross-compiling the native lib: the generated bindings live in
+  // src/main/java/computer/iroh/ (iroh_ffi.kt + IrohAndroid.kt) and the
+  // cargo-ndk `.so` in src/main/jniLibs/<abi>/libiroh_ffi.so. Both are
+  // git-ignored; the build steps are in ../README.md ("Android binding").
   // TunnelWire.kt is the only file that touches the binding's API surface.
-  // Regenerate via: cargo ndk -t <abi> build --lib --release  +
-  //   cargo run --bin uniffi-bindgen generate --language kotlin --library <so>
   implementation 'net.java.dev.jna:jna:5.15.0@aar'
   implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0'
+
+  // Wire-protocol conformance test (TunnelWireConformanceTest) — plain JVM
+  // JUnit over the shared golden fixture. Real org.json (the android.jar
+  // org.json is a unit-test stub) + JUnit4; loads no native iroh code.
+  testImplementation 'junit:junit:4.13.2'
+  testImplementation 'org.json:json:20240303'
 }

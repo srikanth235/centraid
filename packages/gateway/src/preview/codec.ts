@@ -24,6 +24,10 @@
 import jpegJs from 'jpeg-js';
 import { PNG } from 'pngjs';
 import type { PreviewCodec, PreviewOutput } from '@centraid/vault';
+import { rgbaToThumbHash } from './thumbhash.js';
+
+/** ThumbHash requires ≤100 px on each edge; the placeholder is coarse anyway. */
+const THUMBHASH_EDGE = 100;
 
 /**
  * Refuse inputs whose decoded raster would blow memory (issue #405 §2: "cap
@@ -209,6 +213,21 @@ export function createImagePreviewCodec(): PreviewCodec {
     perceptualHash(source: Buffer, mediaType: string): string | null {
       const raster = decode(source, mediaType);
       return raster ? perceptualHash(raster) : null;
+    },
+    thumbhash(source: Buffer, mediaType: string): string | null {
+      const raster = decode(source, mediaType);
+      if (!raster) return null;
+      try {
+        // ThumbHash caps at 100×100 — downscale first (a no-op copy when the
+        // source already fits), then encode the RGBA to the compact hash.
+        const small = downscaleRaster(raster, THUMBHASH_EDGE);
+        const bytes = rgbaToThumbHash(small.width, small.height, small.data);
+        // Canonical form: unpadded standard base64 (validated the same way on
+        // the ingress side, so a device- and a codec-produced hash match).
+        return Buffer.from(bytes).toString('base64').replace(/=+$/, '');
+      } catch {
+        return null;
+      }
     },
   };
 }

@@ -670,3 +670,59 @@ test('the vault standing sweep enforces replica retention at startup', async () 
 
   expect(currentReplicaLogState(vault.db.vault).floor.seq).toBeGreaterThanOrEqual(old.seq);
 });
+
+test('the photos grant yields a self-contained shape a native client can render from', async () => {
+  const vault = await plane();
+  // The photos app's read surface (issue #419): a native client renders the
+  // whole library — assets, their bytes' metadata, derivatives, albums, faces,
+  // places, tags — entirely from the replica, no online round trip.
+  vault.approveGrant('photos', {
+    purpose: 'dpv:ServiceProvision',
+    scopes: [
+      { schema: 'media', verbs: 'read' },
+      { schema: 'core', table: 'content_item', verbs: 'read' },
+      { schema: 'core', table: 'content_derivative', verbs: 'read' },
+      { schema: 'core', table: 'collection', verbs: 'read' },
+      { schema: 'core', table: 'collection_entry', verbs: 'read' },
+      { schema: 'core', table: 'tag', verbs: 'read' },
+      { schema: 'core', table: 'place', verbs: 'read' },
+    ],
+  });
+
+  const shape = buildReplicaShapes(vault.db.vault, {
+    trust: 'full',
+    rememberDevice: true,
+    appId: 'photos',
+  })[0]!;
+  const wire = replicaShapesWire([shape])[0]!;
+  const byEntity = new Map(wire.entities.map((entity) => [entity.entity, entity]));
+
+  // Every entity a native Photos client needs is present in the one shape.
+  for (const entity of [
+    'media.media_asset',
+    'core.content_item',
+    'core.content_derivative',
+    'core.collection',
+    'core.collection_entry',
+    'media.face_region',
+    'core.place',
+    'core.tag',
+  ]) {
+    expect(byEntity.has(entity), `shape is missing ${entity}`).toBe(true);
+  }
+
+  // First-class asset state (issue #419) rides on media.media_asset itself.
+  const asset = byEntity.get('media.media_asset')!;
+  expect(asset.columns).toEqual(
+    expect.arrayContaining(['favorite', 'archived_at', 'tz_offset_min', 'captured_at']),
+  );
+  // The bytes' identity/metadata rides on core.content_item.
+  const content = byEntity.get('core.content_item')!;
+  expect(content.columns).toEqual(
+    expect.arrayContaining(['sha256', 'media_type', 'byte_size', 'title']),
+  );
+  // Derivatives (thumb/preview/poster + inline phash/thumbhash) carry the
+  // variant and its inline text or CAS sha.
+  const derivative = byEntity.get('core.content_derivative')!;
+  expect(derivative.columns).toEqual(expect.arrayContaining(['variant', 'text_content', 'sha256']));
+});

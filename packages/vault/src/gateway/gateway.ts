@@ -1420,11 +1420,13 @@ export class Gateway {
     // this addition is deliberately a thin call-through.
     let previewsGenerated = 0;
     let phashesGenerated = 0;
+    let thumbhashesGenerated = 0;
     if (this.db.previewCodec) {
       try {
         const backfill = await backfillPreviews(this.db, this.db.previewCodec);
         previewsGenerated = backfill.generated;
         phashesGenerated = backfill.phashesGenerated;
+        thumbhashesGenerated = backfill.thumbhashesGenerated;
       } catch {
         // swallowed on purpose — see the comment above.
       }
@@ -1460,6 +1462,8 @@ export class Gateway {
         previewsGenerated,
         // Inline dHash contributions published beside preview rungs.
         phashesGenerated,
+        // Inline ThumbHash placeholders published beside preview rungs.
+        thumbhashesGenerated,
         // The bounded-cache eviction yield (issue #405 §3) — 0 when the spool
         // is under budget or the vault is local-only.
         evictedBlobs: evicted.evictedBlobs,
