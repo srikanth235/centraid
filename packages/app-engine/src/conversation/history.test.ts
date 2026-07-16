@@ -132,6 +132,40 @@ describe('ConversationHistoryStore', () => {
     expect(loaded?.messages[1]!.payload).toMatchObject({ kind: 'ai', text: 'reply' });
   });
 
+  it('persists turn notices and reconstructs them before the answer (#424)', () => {
+    const s = store.createSession(APP);
+    store.recordTurn(APP, {
+      ...turn(s.id, 'switch runners', 'fresh reply'),
+      notices: [{ level: 'warn', code: 'context.reset', message: 'Starting a fresh context.' }],
+    });
+    const loaded = store.getSession(APP, s.id);
+    // user → notice → ai
+    expect(loaded?.messages.map((m) => (m.payload as { kind: string }).kind)).toEqual([
+      'user',
+      'notice',
+      'ai',
+    ]);
+    expect(loaded?.messages[1]!.payload).toEqual({
+      kind: 'notice',
+      level: 'warn',
+      text: 'Starting a fresh context.',
+    });
+  });
+
+  it('findRecordedTurn surfaces persisted notices for replay (#424)', () => {
+    const s = store.createSession(APP);
+    const key = 'idem-notice';
+    store.recordTurn(APP, {
+      ...turn(s.id, 'q', 'a'),
+      idempotencyKey: key,
+      notices: [{ level: 'warn', code: 'context.reset', message: 'reset note' }],
+    });
+    const found = store.findRecordedTurn(APP, s.id, key);
+    expect(found?.notices).toEqual([
+      { level: 'warn', code: 'context.reset', message: 'reset note' },
+    ]);
+  });
+
   it('reconstruction tags the terminal answer with its turn id and null feedback (#420)', () => {
     const s = store.createSession(APP);
     const r = store.recordTurn(APP, turn(s.id, 'first', 'reply'));

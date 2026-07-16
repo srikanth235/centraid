@@ -220,6 +220,8 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
     aiText: '',
     finalText: undefined as string | undefined,
     errorMessage: undefined as string | undefined,
+    // Non-fatal system notes — persisted on the turn so reloads replay them.
+    notices: [] as { level: 'warn' | 'info'; code?: string; message: string }[],
     pending: new Map<
       string,
       { toolName: string; sql?: string; args?: unknown; startedAt: number }
@@ -286,6 +288,13 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
       case 'error':
         acc.errorMessage = event.message;
         break;
+      case 'notice':
+        acc.notices.push({
+          level: event.level,
+          ...(event.code !== undefined ? { code: event.code } : {}),
+          message: event.message,
+        });
+        break;
       // No ledger state to fold for these; the SSE write still happens via
       // `writeEvent`. Listed explicitly (not a default) so a newly added
       // event type fails the exhaustiveness check instead of slipping through.
@@ -293,7 +302,6 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
       case 'reasoning.delta':
       case 'phase':
       case 'aborted':
-      case 'notice':
       case 'webhooks':
         break;
     }
@@ -436,6 +444,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
             ok: acc.errorMessage === undefined,
             ...(acc.errorMessage !== undefined ? { error: acc.errorMessage } : {}),
             ...(acc.finalText !== undefined ? { finalText: acc.finalText } : {}),
+            ...(acc.notices.length ? { notices: acc.notices } : {}),
             nodes,
           });
         } catch {

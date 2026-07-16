@@ -146,6 +146,10 @@ export const CONVERSATION_LEDGER_DDL = `
       ok                       INTEGER NOT NULL DEFAULT 0,
       error                    TEXT,
       feedback                 TEXT,
+      -- Persisted non-fatal system notes for the turn (issue #424): a JSON
+      -- array of {level, code?, message}. Backs the visible context-reset
+      -- note so a reload replays what the live stream showed. NULL = none.
+      notices                  TEXT,
       pinned                   INTEGER NOT NULL DEFAULT 0,
       started_at               INTEGER NOT NULL,
       ended_at                 INTEGER,

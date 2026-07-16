@@ -23,11 +23,19 @@ import type { RecordedTurnReplay } from '../conversation/history.js';
  * the turn's original stream.
  */
 export function buildReplayEvents(recorded: RecordedTurnReplay): TurnStreamEvent[] {
+  const notices: TurnStreamEvent[] = (recorded.notices ?? []).map((n) => ({
+    type: 'notice',
+    level: n.level,
+    ...(n.code !== undefined ? { code: n.code } : {}),
+    message: n.message,
+  }));
   if (!recorded.ok) {
-    return [{ type: 'error', message: recorded.error ?? 'This turn failed.' }];
+    return [...notices, { type: 'error', message: recorded.error ?? 'This turn failed.' }];
   }
   const text = recorded.finalText ?? '';
-  const events: TurnStreamEvent[] = [{ type: 'assistant.start' }];
+  // Persisted system notes (issue #424) replay first, ahead of the answer —
+  // the same order the live stream emitted them in.
+  const events: TurnStreamEvent[] = [{ type: 'assistant.start' }, ...notices];
   if (text.length > 0) events.push({ type: 'assistant.delta', delta: text });
   if (recorded.usage) {
     events.push({

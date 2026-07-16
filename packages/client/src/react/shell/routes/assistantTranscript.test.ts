@@ -48,6 +48,23 @@ describe('hydrateMessages', () => {
     expect(activeAttemptOf(ai)?.turnId).toBe('t2');
   });
 
+  it('reconstructs a persisted notice as a notice row, and its DTO renders (#424)', () => {
+    const msgs = hydrateMessages([
+      { payload: { kind: 'user', text: 'switch' }, createdAt: 1 },
+      {
+        payload: { kind: 'notice', level: 'warn', text: 'Starting a fresh context.' },
+        createdAt: 2,
+      },
+      { payload: { kind: 'ai', text: 'fresh', turnId: 't1' }, createdAt: 3 },
+    ]);
+    expect(msgs[1]).toEqual({ kind: 'notice', level: 'warn', text: 'Starting a fresh context.' });
+    expect(msgToDTO(msgs[1]!, false)).toEqual({
+      kind: 'notice',
+      level: 'warn',
+      text: 'Starting a fresh context.',
+    });
+  });
+
   it('groups consecutive tool rows into one tools message', () => {
     const msgs = hydrateMessages([
       { payload: { kind: 'tool', id: 'x', tool: 'vault_sql', state: 'ok' }, createdAt: 1 },

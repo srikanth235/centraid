@@ -2172,6 +2172,16 @@ kit-reference-strip,
   padding: 0.2rem 0.6rem;
 }
 
+/* A context-reset / runner notice (issue #424) — a warmer tint than a plain
+   tool note so a fresh-context warning reads as a system note, not chrome. */
+.kit-ask-notice {
+  font-family: inherit;
+  color: var(--kit-warn, #b45309);
+  max-width: 90%;
+  text-align: center;
+  line-height: 1.35;
+}
+
 /* ---------- Ask · message attachment chips --------------------------------
    Rendered inside a `.kit-msg` bubble — currentColor-based so it reads on
    both the accent-deep user bubble and the neutral ai bubble. */

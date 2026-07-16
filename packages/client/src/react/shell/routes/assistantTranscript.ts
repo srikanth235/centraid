@@ -127,6 +127,10 @@ export function hydrateMessages(
         msg.activeAttempt = msg.attempts.length - 1;
       }
       out.push(msg);
+    } else if (payload.kind === 'notice') {
+      // Persisted system note (issue #424) — reconstructs the same notice row
+      // the live stream event pushes, so a reload shows the context-reset warning.
+      out.push({ kind: 'notice', level: payload.level, text: payload.text });
     } else if (payload.kind === 'tool') {
       const call: AsstToolCall = {
         id: payload.id ?? String(out.length),

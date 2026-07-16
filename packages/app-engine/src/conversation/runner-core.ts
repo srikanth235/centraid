@@ -7,9 +7,10 @@
  * passes its codex/claude `runTurn`; tests pass a stub. Every
  * `ConversationRunner` the gateway's `/_turn` route can inject does the same
  * thing around that turn: load prefs, resolve a cwd, build the system prompt,
- * thread the `centraid_*` dispatcher into a `ToolContext`, resume when the
- * prior turn used the same runner kind, drive the turn, and (optionally) run a
- * post-turn side effect. That spine used to be copied into both
+ * thread the `centraid_*` dispatcher into a `ToolContext`, pin the runner kind
+ * to the conversation and resume its handle (issue #424 — see the resume site
+ * below), drive the turn, and (optionally) run a post-turn side effect. That
+ * spine used to be copied into both
  * `makeConversationRunner` (agent-runtime, data-only chat) and the gateway's
  * `makeUnifiedConversationRunner` (code+data builder chat); they now differ
  * only by the four injected seams below (issue #147, Concern 1):
@@ -36,6 +37,7 @@ import type {
   ConversationTurnResult,
 } from './runner.js';
 import type {
+  RunnerKind,
   RunnerPrefs,
   RunTurnFn,
   ToolContext,
@@ -144,16 +146,60 @@ export function makeConversationRunnerCore(
       }
 
       const cwd = await opts.resolveCwd(input);
-      const turnCtx: TurnContext = { input, prefs, cwd };
+
+      /*
+       * v0 memory model + runner-kind pin (issue #424).
+       *
+       * The conversation engine keeps NO model-facing history of its own.
+       * Model memory is delegated wholly to the adapter's opaque resume handle
+       * (`Conversation.adapterKind` + `adapterSessionId`): resume it and the
+       * backend continues its thread; drop it and the backend starts blank.
+       * This adapter-resume-only design is deliberate for v0. The ledger
+       * (`turns`/`items`) is a UI codec that reconstructs the *rendered*
+       * transcript — it is NEVER replayed into the model as a prompt, so what
+       * the user sees and what the model remembers are two different things.
+       *
+       * Runner kind PINS at the first turn and the pin WINS. The route reads
+       * `adapterKind` off the conversation row and hands it back as
+       * `prevAdapterKind`; once set, every later turn runs with THAT kind
+       * regardless of the user's current `agent.runner.*` prefs — so a
+       * mid-thread prefs flip keeps the conversation on its original backend
+       * and loses no context. Prefs changes only steer NEW conversations
+       * (a fresh conversation has no `prevAdapterKind`, so `prefs.kind` wins
+       * and then pins). Only the runner `kind` is overridden here; the rest of
+       * the loaded prefs (binPath, extraArgs) stay as configured.
+       *
+       * A lost/expired handle (pinned kind but no `prevAdapterSessionId`) is
+       * the one remaining fresh-context reset. It is made VISIBLE below via a
+       * `context.reset` notice rather than silently dropping prior context.
+       * Reconstructing lost context from the ledger (issue #424 option B) is
+       * the designed-but-deferred upgrade path.
+       */
+      const pinnedKind = input.prevAdapterKind as RunnerKind | undefined;
+      const effectivePrefs: RunnerPrefs = pinnedKind ? { ...prefs, kind: pinnedKind } : prefs;
+      const turnCtx: TurnContext = { input, prefs: effectivePrefs, cwd };
 
       const extraSystemPrompt = opts.buildExtraSystemPrompt
         ? await opts.buildExtraSystemPrompt(turnCtx)
         : input.extraSystemPrompt;
 
-      // Resume only when the previous turn used the same runner kind — a
-      // mid-session runner switch starts a fresh conversation.
-      const resumeId =
-        input.prevAdapterKind === prefs.kind ? input.prevAdapterSessionId : undefined;
+      // A pinned conversation always resumes its OWN handle; only a first turn
+      // (no pin) or a lost handle runs without one.
+      const resumeId = pinnedKind ? input.prevAdapterSessionId : undefined;
+
+      // A1 (issue #424): a fresh-context reset is made visible. When earlier
+      // turns exist (kind pinned) yet there's no handle to resume — the handle
+      // was lost or expired — the model starts blank even though the ledger
+      // transcript still renders in full. Surface a note so the reset isn't silent.
+      if (pinnedKind && !resumeId) {
+        input.onEvent({
+          type: 'notice',
+          level: 'warn',
+          code: 'context.reset',
+          message:
+            "Starting a fresh context — earlier messages in this conversation aren't carried over to the model.",
+        });
+      }
 
       const toolContext: ToolContext = {
         appId: input.appId,
@@ -178,7 +224,7 @@ export function makeConversationRunnerCore(
         ...(resumeId ? { prevSessionId: resumeId } : {}),
       };
 
-      const result = await runTurn(turnInput, { prefs });
+      const result = await runTurn(turnInput, { prefs: effectivePrefs });
 
       if (opts.onTurnComplete) {
         try {

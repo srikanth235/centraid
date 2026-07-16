@@ -96,6 +96,8 @@ export interface FinishTurnInput {
   readonly error?: string;
   readonly summary?: string;
   readonly outputJson?: string;
+  /** Persisted turn notices (issue #424) — pre-serialized JSON array, or null. */
+  readonly noticesJson?: string;
 }
 
 export interface InsertMessageInInput {
@@ -484,6 +486,7 @@ export class ConversationStore {
       error: input.error ?? null,
       summary: input.summary ?? null,
       outputJson: input.outputJson ?? null,
+      notices: input.noticesJson ?? null,
       tid: input.turnId,
     });
   }

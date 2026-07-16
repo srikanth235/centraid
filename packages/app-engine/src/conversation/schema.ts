@@ -114,6 +114,12 @@ export interface Turn {
   readonly error?: string;
   /** Message-level reader feedback on the turn's answer (issue #420). */
   readonly feedback?: 'up' | 'down';
+  /**
+   * Persisted non-fatal system notes for this turn (issue #424) — the live
+   * `notice` stream events, folded and stored so a reload shows the same rows.
+   * Absent on turns that emitted none.
+   */
+  readonly notices?: TurnNotice[];
   readonly summary?: string;
   /**
    * The turn's structured result. For an automation it is the handler's
@@ -140,6 +146,20 @@ export interface Turn {
   readonly totalCostUsd?: number;
   readonly stepCount?: number;
   readonly toolCount?: number;
+}
+
+/**
+ * A non-fatal, human-readable system note attached to a turn (issue #424).
+ * The live `notice` `TurnStreamEvent` folds into this shape and persists on the
+ * turn's `notices` column so a reload replays the same note the live stream
+ * showed. Today's use: `code:'context.reset'` — the turn ran without a runner
+ * resume handle even though earlier turns exist, so the model started fresh
+ * (the ledger transcript still renders fully; the model's memory did not).
+ */
+export interface TurnNotice {
+  readonly level: 'warn' | 'info';
+  readonly code?: string;
+  readonly message: string;
 }
 
 export interface Item {
