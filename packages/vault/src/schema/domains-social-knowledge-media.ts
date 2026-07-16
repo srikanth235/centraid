@@ -112,6 +112,8 @@ CREATE TABLE media_media_asset (
   -- the shutter fired at. NULL when the camera never recorded a zone. taken_at
   -- stays derived (captured_at, else content.created_at) — no duplicate column.
   tz_offset_min    INTEGER,
+  -- Stable logical capture grouping for Live Photo / motion-photo companions.
+  capture_group_id TEXT,
   place_id         TEXT REFERENCES core_place(place_id),
   camera_device_id TEXT REFERENCES consent_device(device_id),
   width            INTEGER CHECK (width > 0),
@@ -131,6 +133,7 @@ CREATE TABLE media_media_asset (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_media_asset_place ON media_media_asset(place_id);
 CREATE INDEX IF NOT EXISTS idx_media_asset_camera_device ON media_media_asset(camera_device_id);
+CREATE INDEX IF NOT EXISTS idx_media_asset_capture_group ON media_media_asset(capture_group_id);
 
 CREATE TABLE media_face_region (
   region_id             TEXT PRIMARY KEY,

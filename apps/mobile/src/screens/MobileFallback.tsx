@@ -1,9 +1,9 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from '../components/Icon';
-import Button from '../components/Button';
-import { radii, spacing, t, useTheme, type ThemeColors } from '../theme';
+import Icon from '../kit/components/Icon';
+import Button from '../kit/components/Button';
+import { radii, spacing, t, useTheme, type ThemeColors } from '../kit/theme';
 import type { RootScreenProps } from '../navigation';
 
 // Mobile fallback for the desktop Builder. The mobile app is for *using*

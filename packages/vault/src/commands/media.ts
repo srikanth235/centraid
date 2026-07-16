@@ -145,6 +145,7 @@ const ADD_ASSET: CommandDefinition = {
       // Capture-local UTC offset in minutes (issue #419): the client reads it
       // off the same EXIF the capture time came from.
       tz_offset_min: { type: 'integer', minimum: -1080, maximum: 1080 },
+      capture_group_id: { type: 'string', minLength: 1, maxLength: 200 },
       title: { type: 'string' },
       width: { type: 'integer', minimum: 1 },
       height: { type: 'integer', minimum: 1 },
@@ -223,6 +224,7 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
     kind?: string;
     captured_at?: string;
     tz_offset_min?: number;
+    capture_group_id?: string;
     title?: string;
     width?: number;
     height?: number;
@@ -242,15 +244,26 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
   // media_media_asset.content_id is UNIQUE — the same bytes are one asset.
   // A trashed asset over these bytes comes back to life: re-upload = restore.
   const existingAsset = ctx.db
-    .prepare('SELECT asset_id, deleted_at FROM media_media_asset WHERE content_id = ?')
-    .get(contentId) as { asset_id: string; deleted_at: string | null } | undefined;
+    .prepare(
+      'SELECT asset_id, deleted_at, capture_group_id FROM media_media_asset WHERE content_id = ?',
+    )
+    .get(contentId) as
+    | { asset_id: string; deleted_at: string | null; capture_group_id: string | null }
+    | undefined;
   if (existingAsset) {
-    if (existingAsset.deleted_at !== null) {
+    if (
+      existingAsset.deleted_at !== null ||
+      (!existingAsset.capture_group_id && input.capture_group_id)
+    ) {
       ctx.db
         .prepare(
-          'UPDATE media_media_asset SET deleted_at = NULL, purge_at = NULL WHERE asset_id = ?',
+          `UPDATE media_media_asset
+              SET deleted_at = NULL,
+                  purge_at = NULL,
+                  capture_group_id = COALESCE(capture_group_id, ?)
+            WHERE asset_id = ?`,
         )
-        .run(existingAsset.asset_id);
+        .run(input.capture_group_id ?? null, existingAsset.asset_id);
       ctx.wrote('media.media_asset', existingAsset.asset_id);
     }
     return { asset_id: existingAsset.asset_id, content_id: contentId, deduped: 1 };
@@ -279,8 +292,8 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
       : null;
   ctx.db
     .prepare(
-      `INSERT INTO media_media_asset (asset_id, content_id, kind, captured_at, tz_offset_min, place_id, camera_device_id, width, height, duration_s, exif_json, deleted_at)
-       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, NULL)`,
+      `INSERT INTO media_media_asset (asset_id, content_id, kind, captured_at, tz_offset_min, capture_group_id, place_id, camera_device_id, width, height, duration_s, exif_json, deleted_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, NULL)`,
     )
     .run(
       assetId,
@@ -288,6 +301,7 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
       input.kind ?? assetKindFor(minted.mediaType),
       input.captured_at ?? meta.captured_at ?? null,
       input.tz_offset_min ?? (meta as { tz_offset_min?: number }).tz_offset_min ?? null,
+      input.capture_group_id ?? null,
       placeId,
       input.width ?? meta.width ?? null,
       input.height ?? meta.height ?? null,
@@ -868,6 +882,62 @@ function renameAlbum(ctx: HandlerCtx): Record<string, unknown> {
   return { album_id: input.album_id };
 }
 
+const SET_ALBUM_COVER: CommandDefinition = {
+  name: 'media.set_album_cover',
+  ownerSchema: 'media',
+  inputSchema: {
+    type: 'object',
+    required: ['album_id', 'asset_id'],
+    additionalProperties: false,
+    properties: {
+      album_id: { type: 'string', minLength: 1 },
+      asset_id: { type: 'string', minLength: 1 },
+    },
+  },
+  outputSchema: {
+    type: 'object',
+    required: ['album_id', 'asset_id'],
+    properties: { album_id: { type: 'string' }, asset_id: { type: 'string' } },
+  },
+  preconditions: [
+    {
+      name: 'asset_is_album_member',
+      sql: `SELECT count(*) AS n FROM core_collection_entry
+             WHERE collection_id = :album_id AND target_type = 'media.media_asset' AND target_id = :asset_id`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: 'cover_applied',
+      sql: `SELECT count(*) AS n FROM core_collection c
+              JOIN media_media_asset a ON a.content_id = c.cover_content_id
+             WHERE c.collection_id = :album_id AND a.asset_id = :asset_id`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  idempotency: 'idempotent',
+  risk: 'low',
+  handler: setAlbumCover,
+};
+
+function setAlbumCover(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { album_id: string; asset_id: string };
+  ctx.db
+    .prepare(
+      `UPDATE core_collection SET cover_content_id =
+         (SELECT content_id FROM media_media_asset WHERE asset_id = ?)
+       WHERE collection_id = ?`,
+    )
+    .run(input.asset_id, input.album_id);
+  ctx.wrote('core.collection', input.album_id);
+  return input;
+}
+
 const DELETE_ALBUM: CommandDefinition = {
   name: 'media.delete_album',
   ownerSchema: 'media',
@@ -1095,6 +1165,7 @@ export function registerMediaCommands(gateway: Gateway): void {
   gateway.registerCommand(RESTORE_ASSET);
   gateway.registerCommand(CREATE_ALBUM);
   gateway.registerCommand(RENAME_ALBUM);
+  gateway.registerCommand(SET_ALBUM_COVER);
   gateway.registerCommand(DELETE_ALBUM);
   gateway.registerCommand(ADD_TO_ALBUM);
   gateway.registerCommand(REMOVE_FROM_ALBUM);

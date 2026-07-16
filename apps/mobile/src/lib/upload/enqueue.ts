@@ -8,7 +8,7 @@
 import { partCountFor, frameCountFor, sealedSizeFor } from './cbsf';
 import type { FileSourceOpener } from './file-source';
 import { IncrementalSha256 } from './incremental-sha256';
-import type { UploadItem, UploadQueueStore } from './store';
+import type { UploadFollowupFactory, UploadItem, UploadQueueStore } from './store';
 
 /** Hash window. Matches the seal frame size, so memory stays flat and bounded. */
 const HASH_CHUNK_BYTES = 4 * 1024 * 1024;
@@ -69,6 +69,7 @@ export async function sha256OfFile(
 export async function enqueueLocalFile(
   deps: EnqueueDeps,
   input: EnqueueInput,
+  makeFollowup?: UploadFollowupFactory,
 ): Promise<UploadItem> {
   const { sha256, size } = await sha256OfFile(
     deps.openFile,
@@ -79,7 +80,7 @@ export async function enqueueLocalFile(
     throw new Error(`file is ${size} bytes, caller declared ${input.plaintextSize}`);
   }
   const frameCount = frameCountFor(size);
-  return deps.store.enqueue({
+  const upload = {
     itemId: deps.newId(),
     sha256,
     localUri: input.localUri,
@@ -89,5 +90,8 @@ export async function enqueueLocalFile(
     sealedSize: sealedSizeFor(size, frameCount),
     frameCount,
     partCount: partCountFor(frameCount),
-  });
+  };
+  return makeFollowup
+    ? deps.store.enqueueWithFollowup(upload, makeFollowup)
+    : deps.store.enqueue(upload);
 }

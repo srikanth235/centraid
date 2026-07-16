@@ -136,6 +136,67 @@ describe('UploadQueueStore', () => {
     });
   });
 
+  it('persists canonical follow-ups until their bytes settle and replay completes', () => {
+    const item = store.enqueue(upload());
+    const first = store.enqueueFollowup({
+      itemId: item.itemId,
+      shape: 'photos',
+      action: 'upload',
+      input: { staged_sha: item.sha256, kind: 'photo' },
+      derivatives: [{ variant: 'thumb', uri: 'file://thumb.jpg', mediaType: 'image/jpeg' }],
+    });
+    const duplicate = store.enqueueFollowup({
+      itemId: item.itemId,
+      shape: 'photos',
+      action: 'upload',
+      input: { staged_sha: item.sha256, kind: 'photo' },
+    });
+    store.enqueueFollowup({
+      itemId: item.itemId,
+      shape: 'docs',
+      action: 'upload',
+      input: { staged_sha: item.sha256, title: 'Same bytes, separate document' },
+    });
+
+    expect(duplicate.followupId).toBe(first.followupId);
+    expect(duplicate.intentId).toBe(first.intentId);
+    expect(store.pendingFollowups()).toHaveLength(0);
+    store.settle(item.itemId, { casAck: 'replicated' });
+    driver.close();
+
+    driver = new NodeSqliteFileDriver(join(dir, 'uploads.db'));
+    store = UploadQueueStore.create(driver);
+    expect(store.pendingFollowups()).toMatchObject([
+      {
+        followupId: first.followupId,
+        intentId: first.intentId,
+        shape: 'photos',
+        derivatives: [{ variant: 'thumb', uri: 'file://thumb.jpg' }],
+      },
+      { shape: 'docs' },
+    ]);
+    store.clearFollowup(first.followupId);
+    expect(store.pendingFollowups().map((followup) => followup.shape)).toEqual(['docs']);
+  });
+
+  it('migrates the v1 byte ledger in place', () => {
+    const item = store.enqueue(upload());
+    driver.exec('DROP TABLE upload_followup');
+    driver.exec('PRAGMA user_version = 1');
+
+    store = UploadQueueStore.create(driver);
+
+    expect(store.get(item.itemId)?.sha256).toBe(item.sha256);
+    expect(
+      store.enqueueFollowup({
+        itemId: item.itemId,
+        shape: 'docs',
+        action: 'upload',
+        input: { staged_sha: item.sha256 },
+      }).shape,
+    ).toBe('docs');
+  });
+
   it('never persists a content key or a presigned URL', () => {
     store.enqueue(upload());
     const columns = driver

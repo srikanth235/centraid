@@ -726,3 +726,52 @@ test('the photos grant yields a self-contained shape a native client can render 
   const derivative = byEntity.get('core.content_derivative')!;
   expect(derivative.columns).toEqual(expect.arrayContaining(['variant', 'text_content', 'sha256']));
 });
+
+test('docs and agenda grants multiplex as additive self-contained native shapes', async () => {
+  const vault = await plane();
+  vault.approveGrant('docs', {
+    purpose: 'dpv:ServiceProvision',
+    scopes: [
+      { schema: 'core', table: 'document', verbs: 'read' },
+      { schema: 'core', table: 'content_item', verbs: 'read' },
+      { schema: 'core', table: 'tag', verbs: 'read' },
+      { schema: 'core', table: 'concept', verbs: 'read' },
+      { schema: 'core', table: 'concept_scheme', verbs: 'read' },
+      { schema: 'blob', table: 'custody_state', verbs: 'read' },
+    ],
+  });
+  vault.approveGrant('agenda', {
+    purpose: 'dpv:ServiceProvision',
+    scopes: [
+      { schema: 'schedule', verbs: 'read+act' },
+      { schema: 'core', table: 'event', verbs: 'read' },
+      { schema: 'core', table: 'party', verbs: 'read' },
+    ],
+  });
+
+  const shapes = replicaShapesWire(
+    buildReplicaShapes(vault.db.vault, { trust: 'full', rememberDevice: true }),
+  );
+  const docs = shapes.find((shape) => shape.appId === 'docs')!;
+  const agenda = shapes.find((shape) => shape.appId === 'agenda')!;
+  expect(docs.entities.map((entity) => entity.entity)).toEqual(
+    expect.arrayContaining([
+      'core.document',
+      'core.content_item',
+      'core.tag',
+      'core.concept',
+      'core.concept_scheme',
+      'blob.custody_state',
+    ]),
+  );
+  expect(agenda.entities.map((entity) => entity.entity)).toEqual(
+    expect.arrayContaining([
+      'core.event',
+      'schedule.attendee',
+      'schedule.calendar',
+      'schedule.event_ext',
+      'core.party',
+    ]),
+  );
+  expect(new Set(shapes.map((shape) => shape.shapeId)).size).toBe(shapes.length);
+});

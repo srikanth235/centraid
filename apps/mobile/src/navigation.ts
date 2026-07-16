@@ -2,7 +2,9 @@
 //
 //   RootStack (native stack)
 //   ├─ Tabs (bottom tabs)
-//   │  ├─ Photos    → PhotosStack  (PhotosHome)
+//   │  ├─ Photos    → PhotosStack  (timeline, lightbox, library/search/backup)
+//   │  ├─ Docs      → DocsStack    (drive, viewer)
+//   │  ├─ Agenda    → AgendaStack  (calendar, event)
 //   │  ├─ Apps      → AppsStack    (Home, AppDetail)
 //   │  └─ SettingsTab → SettingsStack (Settings, Approvals)
 //   └─ MobileFallback (root-level modal, over the tabs)
@@ -18,6 +20,25 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 export type PhotosStackParamList = {
   PhotosHome: undefined;
+  PhotoLightbox: { assetId: string };
+  PhotosLibrary: undefined;
+  PhotosSearch: undefined;
+  BackupHealth: undefined;
+  PlacesMap: undefined;
+  FaceReview: undefined;
+  DuplicateReview: undefined;
+  AlbumDetail: { albumId: string };
+  PhotoStateView: { mode: 'favorites' | 'archive' | 'trash' };
+};
+
+export type DocsStackParamList = {
+  DocsHome: { folderId?: string } | undefined;
+  DocumentViewer: { documentId: string };
+};
+
+export type AgendaStackParamList = {
+  AgendaHome: undefined;
+  AgendaEvent: { eventId: string };
 };
 
 export type AppsStackParamList = {
@@ -32,6 +53,8 @@ export type SettingsStackParamList = {
 
 export type TabParamList = {
   Photos: NavigatorScreenParams<PhotosStackParamList>;
+  Docs: NavigatorScreenParams<DocsStackParamList>;
+  Agenda: NavigatorScreenParams<AgendaStackParamList>;
   Apps: NavigatorScreenParams<AppsStackParamList>;
   SettingsTab: NavigatorScreenParams<SettingsStackParamList>;
 };
@@ -60,6 +83,16 @@ export type PhotosScreenProps<T extends keyof PhotosStackParamList> = CompositeS
 
 export type AppsScreenProps<T extends keyof AppsStackParamList> = CompositeScreenProps<
   NativeStackScreenProps<AppsStackParamList, T>,
+  TabAndRoot
+>;
+
+export type DocsScreenProps<T extends keyof DocsStackParamList> = CompositeScreenProps<
+  NativeStackScreenProps<DocsStackParamList, T>,
+  TabAndRoot
+>;
+
+export type AgendaScreenProps<T extends keyof AgendaStackParamList> = CompositeScreenProps<
+  NativeStackScreenProps<AgendaStackParamList, T>,
   TabAndRoot
 >;
 

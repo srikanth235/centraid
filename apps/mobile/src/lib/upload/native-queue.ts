@@ -9,8 +9,15 @@ import { webCryptoUploadCrypto, type UploadCrypto } from './crypto';
 import { enqueueLocalFile, type EnqueueInput } from './enqueue';
 import { expoFileSource, expoPartPutter } from './expo-native';
 import { httpDirectTransferClient } from './gateway-client';
-import { UploadQueueStore, type UploadItem } from './store';
+import {
+  UploadQueueStore,
+  type NewUploadFollowup,
+  type UploadFollowupFactory,
+  type UploadFollowup,
+  type UploadItem,
+} from './store';
 import { UploadDrainer, type DrainSummary, type UploadPolicy } from './uploader';
+import { createNativeDigest } from './native-digest';
 
 /**
  * The queue's own database, deliberately NOT the replica's — see the header of
@@ -60,10 +67,16 @@ export class UploadQueue {
   }
 
   /** Address the bytes and durably queue them. Idempotent by content sha. */
-  async enqueue(input: EnqueueInput): Promise<UploadItem> {
+  async enqueue(input: EnqueueInput, makeFollowup?: UploadFollowupFactory): Promise<UploadItem> {
     return enqueueLocalFile(
-      { store: this.store, openFile: expoFileSource, newId: this.deps.newId },
+      {
+        store: this.store,
+        openFile: expoFileSource,
+        newId: this.deps.newId,
+        createDigest: createNativeDigest,
+      },
       input,
+      makeFollowup,
     );
   }
 
@@ -79,6 +92,22 @@ export class UploadQueue {
 
   pending(): UploadItem[] {
     return this.store.pending();
+  }
+
+  all(): UploadItem[] {
+    return this.store.all();
+  }
+
+  enqueueFollowup(followup: NewUploadFollowup): UploadFollowup {
+    return this.store.enqueueFollowup(followup);
+  }
+
+  pendingFollowups(): UploadFollowup[] {
+    return this.store.pendingFollowups();
+  }
+
+  clearFollowup(followupId: number): void {
+    this.store.clearFollowup(followupId);
   }
 
   close(): void {

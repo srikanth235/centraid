@@ -4,14 +4,21 @@
     "slug": "centraid",
     "version": "0.1.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "light",
+    "scheme": "centraid",
+    "userInterfaceStyle": "automatic",
     "icon": "../../assets/icon.png",
     "splash": {
       "image": "../../assets/splash.png",
       "backgroundColor": "#3EC8B4",
       "resizeMode": "contain"
     },
-    "ios": { "supportsTablet": true, "bundleIdentifier": "com.centraid.mobile" },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.centraid.mobile",
+      "infoPlist": {
+        "UIBackgroundModes": ["processing", "remote-notification"]
+      }
+    },
     "android": {
       "package": "com.centraid.mobile",
       "adaptiveIcon": {
@@ -23,11 +30,43 @@
     "plugins": [
       "expo-notifications",
       [
+        "expo-build-properties",
+        {
+          "ios": { "deploymentTarget": "17.5" }
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Centraid reads your library to show and back up the albums you choose.",
+          "savePhotosPermission": "Centraid saves selected vault photos back to your library.",
+          "isAccessMediaLocationEnabled": true,
+          "granularPermissions": ["photo", "video", "audio"]
+        }
+      ],
+      [
+        "expo-share-intent",
+        {
+          "iosActivationRules": {
+            "NSExtensionActivationSupportsImageWithMaxCount": 100,
+            "NSExtensionActivationSupportsMovieWithMaxCount": 20,
+            "NSExtensionActivationSupportsFileWithMaxCount": 100
+          },
+          "androidIntentFilters": ["image/*", "video/*", "audio/*", "application/pdf", "text/*"]
+        }
+      ],
+      [
         "expo-camera",
         {
           "cameraPermission": "Centraid uses the camera to scan the pairing QR code shown on your desktop."
         }
-      ]
-    ]
+      ],
+      "expo-video",
+      "react-native-quick-crypto",
+      "./plugins/withCentraidUploadService.cjs"
+    ],
+    "extra": {
+      "recurrencePolicy": "bounded-local-expansion"
+    }
   }
 }

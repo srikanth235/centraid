@@ -12,11 +12,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { AppMetaResolved } from '@centraid/design-tokens';
-import Tile from '../components/Tile';
-import Icon from '../components/Icon';
-import Logo from '../components/Logo';
-import Button from '../components/Button';
-import { spacing, t, family, useTheme, type ThemeColors } from '../theme';
+import Tile from '../kit/components/Tile';
+import Icon from '../kit/components/Icon';
+import Logo from '../kit/components/Logo';
+import Button from '../kit/components/Button';
+import { spacing, t, family, useTheme, type ThemeColors } from '../kit/theme';
 import { GatewayError, listApps, resolveAppMeta, resolveGatewayBase } from '../lib/gateway';
 import type { AppsScreenProps } from '../navigation';
 

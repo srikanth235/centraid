@@ -24,6 +24,7 @@
       { "schema": "media", "table": "restore_asset", "verbs": "act" },
       { "schema": "media", "table": "create_album", "verbs": "act" },
       { "schema": "media", "table": "rename_album", "verbs": "act" },
+      { "schema": "media", "table": "set_album_cover", "verbs": "act" },
       { "schema": "media", "table": "delete_album", "verbs": "act" },
       { "schema": "media", "table": "add_to_album", "verbs": "act" },
       { "schema": "media", "table": "remove_from_album", "verbs": "act" },
@@ -53,6 +54,7 @@
           "kind": { "type": "string", "enum": ["photo", "video", "audio", "scan"] },
           "captured_at": { "type": "string" },
           "tz_offset_min": { "type": "integer", "minimum": -1080, "maximum": 1080 },
+          "capture_group_id": { "type": "string", "minLength": 1, "maxLength": 200 },
           "title": { "type": "string" },
           "width": { "type": "integer", "minimum": 1 },
           "height": { "type": "integer", "minimum": 1 },
@@ -187,6 +189,29 @@
           "title": { "type": "string", "minLength": 1 }
         },
         "required": ["album_id", "title"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "set-album-cover",
+      "description": "Choose an existing album member as the album cover through media.set_album_cover.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "album_id": { "type": "string", "minLength": 1 },
+          "asset_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["album_id", "asset_id"],
         "additionalProperties": false
       },
       "output": {

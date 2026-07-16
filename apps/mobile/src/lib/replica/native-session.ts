@@ -244,6 +244,23 @@ export class NativeReplicaSession {
     return this.#catalog;
   }
 
+  /** Wake the one coordinator after the platform reports connectivity. */
+  notifyReachable(): void {
+    if (!this.#isConnected() || this.#closed) return;
+    if (!this.#hasCursor) void this.bootstrapWhenReachable();
+    else void this.pullNow().catch(() => undefined);
+    void this.flushIntents();
+  }
+
+  /** Replace an ephemeral loopback tunnel URL after process restart/reconnect. */
+  updateGatewayBase(baseUrl: string): void {
+    if (this.#closed || this.#gatewayAuth.baseUrl === baseUrl) return;
+    this.#gatewayAuth.baseUrl = baseUrl;
+    const foreground = this.#appState ? this.#appState.currentState !== 'background' : true;
+    this.#feed.setActive(false);
+    if (foreground) this.#feed.setActive(true);
+  }
+
   async flushIntents(): Promise<void> {
     if (this.#closed || !this.#isConnected()) return;
     if (this.#drainPromise) {

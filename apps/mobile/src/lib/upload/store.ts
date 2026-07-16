@@ -21,9 +21,39 @@
 // are presigned URLs persisted — they expire, and `begin` re-mints them.
 
 import type { ReplicaSqliteDriver } from '@centraid/client/replica/native';
+import {
+  stableFollowupIntentId,
+  toUploadFollowup,
+  type NewUploadFollowup,
+  type PersistedUploadFollowupRow,
+  type UploadFollowup,
+  type UploadFollowupFactory,
+} from './followup-record';
 
-/** Bumped when the DDL below changes; v0 rebuilds in place, never migrates. */
-const SCHEMA_VERSION = 1;
+export type {
+  NewUploadFollowup,
+  UploadDerivativeFollowup,
+  UploadFollowup,
+  UploadFollowupFactory,
+} from './followup-record';
+
+/** Bumped when the DDL below changes. Version 1 is migrated without losing queued bytes. */
+const SCHEMA_VERSION = 3;
+
+const FOLLOWUP_DDL = `
+  CREATE TABLE IF NOT EXISTS upload_followup (
+    followup_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id TEXT NOT NULL,
+    intent_id TEXT NOT NULL UNIQUE,
+    shape TEXT NOT NULL,
+    action TEXT NOT NULL,
+    input_json TEXT NOT NULL,
+    derivatives_json TEXT,
+    FOREIGN KEY (item_id) REFERENCES upload_item(item_id) ON DELETE CASCADE,
+    UNIQUE (item_id, shape, action, input_json)
+  );
+  CREATE INDEX IF NOT EXISTS upload_followup_item ON upload_followup(item_id, followup_id);
+`;
 
 const DDL = `
   CREATE TABLE IF NOT EXISTS upload_item (
@@ -55,6 +85,7 @@ const DDL = `
     key TEXT PRIMARY KEY,
     value INTEGER NOT NULL
   );
+  ${FOLLOWUP_DDL}
 `;
 
 /**
@@ -153,12 +184,29 @@ export class UploadQueueStore {
     driver.exec('PRAGMA synchronous=FULL;');
     const version =
       driver.all<{ user_version: number }>('PRAGMA user_version')[0]?.user_version ?? 0;
-    if (version !== SCHEMA_VERSION) {
+    if (version === 1) {
+      // The upload ledger is source-of-truth. Add the follow-up ledger in
+      // place so an app update cannot discard transfers already in flight.
+      driver.exec(FOLLOWUP_DDL);
+      driver.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
+    } else if (version === 2) {
+      driver.exec('ALTER TABLE upload_followup ADD COLUMN intent_id TEXT;');
+      driver.exec(
+        `UPDATE upload_followup
+         SET intent_id = 'upload-followup-' || followup_id
+         WHERE intent_id IS NULL`,
+      );
+      driver.exec(
+        'CREATE UNIQUE INDEX IF NOT EXISTS upload_followup_intent ON upload_followup(intent_id);',
+      );
+      driver.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
+    } else if (version !== SCHEMA_VERSION) {
       // v0 pre-release: rebuild in place rather than migrate. Only this
       // module's own tables are named, so nothing else in the file is
       // collateral.
       driver.exec(`
         DROP TABLE IF EXISTS upload_part;
+        DROP TABLE IF EXISTS upload_followup;
         DROP TABLE IF EXISTS upload_item;
         DROP TABLE IF EXISTS upload_meta;
       `);
@@ -177,40 +225,15 @@ export class UploadQueueStore {
    * `alreadyPresent` is the other half.
    */
   enqueue(upload: NewUpload): UploadItem {
+    return this.transaction(() => this.enqueueItem(upload));
+  }
+
+  /** Atomically persist addressed bytes and the canonical work they enable. */
+  enqueueWithFollowup(upload: NewUpload, makeFollowup: UploadFollowupFactory): UploadItem {
     return this.transaction(() => {
-      const existing = this.bySha(upload.sha256);
-      if (existing) return existing;
-      const createdOrder = this.nextOrder();
-      this.driver.run(
-        `INSERT INTO upload_item(
-           item_id, sha256, local_uri, media_type, filename, plaintext_size,
-           sealed_size, frame_count, part_count, state, created_order, attempts)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, 0)`,
-        [
-          upload.itemId,
-          upload.sha256,
-          upload.localUri,
-          upload.mediaType ?? null,
-          upload.filename ?? null,
-          upload.plaintextSize,
-          upload.sealedSize,
-          upload.frameCount,
-          upload.partCount,
-          createdOrder,
-        ],
-      );
-      for (let partNumber = 1; partNumber <= upload.partCount; partNumber += 1) {
-        this.driver.run(
-          `INSERT INTO upload_part(item_id, part_number, state) VALUES (?, ?, 'pending')`,
-          [upload.itemId, partNumber],
-        );
-      }
-      this.driver.run(
-        `INSERT INTO upload_meta(key, value) VALUES ('nextOrder', ?)
-           ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-        [createdOrder + 1],
-      );
-      return this.require(upload.itemId);
+      const item = this.enqueueItem(upload);
+      this.enqueueFollowup({ itemId: item.itemId, ...makeFollowup(item) });
+      return item;
     });
   }
 
@@ -222,6 +245,64 @@ export class UploadQueueStore {
            ORDER BY created_order`,
       )
       .map(toItem);
+  }
+
+  /** Bounded local ledger for UI backup-state reconciliation. */
+  all(): UploadItem[] {
+    return this.driver
+      .all<ItemRow>('SELECT * FROM upload_item ORDER BY created_order DESC LIMIT 100000')
+      .map(toItem);
+  }
+
+  /**
+   * Durably attach the canonical mutation before transfer starts. The unique
+   * key makes producer retries idempotent while still allowing one blob to
+   * feed more than one app/entity.
+   */
+  enqueueFollowup(followup: NewUploadFollowup): UploadFollowup {
+    const inputJson = JSON.stringify(followup.input);
+    const intentId = stableFollowupIntentId(
+      followup.itemId,
+      followup.shape,
+      followup.action,
+      inputJson,
+    );
+    this.driver.run(
+      `INSERT OR IGNORE INTO upload_followup(
+         item_id, intent_id, shape, action, input_json, derivatives_json)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        followup.itemId,
+        intentId,
+        followup.shape,
+        followup.action,
+        inputJson,
+        followup.derivatives ? JSON.stringify(followup.derivatives) : null,
+      ],
+    );
+    const row = this.driver.all<PersistedUploadFollowupRow>(
+      `SELECT * FROM upload_followup
+       WHERE item_id = ? AND shape = ? AND action = ? AND input_json = ?`,
+      [followup.itemId, followup.shape, followup.action, inputJson],
+    )[0];
+    if (!row) throw new Error(`upload follow-up for ${followup.itemId} vanished`);
+    return toUploadFollowup(row);
+  }
+
+  /** Canonical work whose bytes have a terminal casAck, oldest first. */
+  pendingFollowups(): UploadFollowup[] {
+    return this.driver
+      .all<PersistedUploadFollowupRow>(
+        `SELECT followup.* FROM upload_followup AS followup
+         INNER JOIN upload_item AS item ON item.item_id = followup.item_id
+         WHERE item.state = 'settled'
+         ORDER BY followup.followup_id`,
+      )
+      .map(toUploadFollowup);
+  }
+
+  clearFollowup(followupId: number): void {
+    this.driver.run('DELETE FROM upload_followup WHERE followup_id = ?', [followupId]);
   }
 
   get(itemId: string): UploadItem | undefined {
@@ -316,6 +397,42 @@ export class UploadQueueStore {
     const item = this.get(itemId);
     if (!item) throw new Error(`upload item ${itemId} vanished`);
     return item;
+  }
+
+  private enqueueItem(upload: NewUpload): UploadItem {
+    const existing = this.bySha(upload.sha256);
+    if (existing) return existing;
+    const createdOrder = this.nextOrder();
+    this.driver.run(
+      `INSERT INTO upload_item(
+         item_id, sha256, local_uri, media_type, filename, plaintext_size,
+         sealed_size, frame_count, part_count, state, created_order, attempts)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, 0)`,
+      [
+        upload.itemId,
+        upload.sha256,
+        upload.localUri,
+        upload.mediaType ?? null,
+        upload.filename ?? null,
+        upload.plaintextSize,
+        upload.sealedSize,
+        upload.frameCount,
+        upload.partCount,
+        createdOrder,
+      ],
+    );
+    for (let partNumber = 1; partNumber <= upload.partCount; partNumber += 1) {
+      this.driver.run(
+        `INSERT INTO upload_part(item_id, part_number, state) VALUES (?, ?, 'pending')`,
+        [upload.itemId, partNumber],
+      );
+    }
+    this.driver.run(
+      `INSERT INTO upload_meta(key, value) VALUES ('nextOrder', ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      [createdOrder + 1],
+    );
+    return this.require(upload.itemId);
   }
 
   private nextOrder(): number {

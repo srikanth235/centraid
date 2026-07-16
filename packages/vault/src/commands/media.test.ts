@@ -53,6 +53,19 @@ test('add_asset lands content item + asset, kind inferred from the media type', 
   expect(clipRow.kind).toBe('video');
 });
 
+test('add_asset preserves a logical capture group for Live Photo companions', () => {
+  const photo = addAsset({ data_uri: PIXEL, capture_group_id: 'live:camera-42' });
+  const clip = addAsset({ data_uri: CLIP, capture_group_id: 'live:camera-42' });
+  const groups = db.vault
+    .prepare('SELECT kind, capture_group_id FROM media_media_asset ORDER BY kind')
+    .all() as Array<{ kind: string; capture_group_id: string }>;
+  expect([photo.asset_id, clip.asset_id]).toHaveLength(2);
+  expect(groups).toEqual([
+    { kind: 'photo', capture_group_id: 'live:camera-42' },
+    { kind: 'video', capture_group_id: 'live:camera-42' },
+  ]);
+});
+
 test('add_asset dedupes identical bytes onto one asset (content_id is UNIQUE)', () => {
   const first = addAsset({ data_uri: PIXEL });
   const second = invoke('media.add_asset', { data_uri: PIXEL });
@@ -90,6 +103,16 @@ test('albums: entries keep positions, first photo becomes cover, cover hands off
     .prepare('SELECT cover_content_id FROM core_collection WHERE collection_id = ?')
     .get(albumId) as { cover_content_id: string };
   expect(album.cover_content_id).toBe(a.content_id);
+  expect(invoke('media.set_album_cover', { album_id: albumId, asset_id: b.asset_id }).status).toBe(
+    'executed',
+  );
+  album = db.vault
+    .prepare('SELECT cover_content_id FROM core_collection WHERE collection_id = ?')
+    .get(albumId) as { cover_content_id: string };
+  expect(album.cover_content_id).toBe(b.content_id);
+  expect(
+    invoke('media.set_album_cover', { album_id: albumId, asset_id: 'not-a-member' }).status,
+  ).toBe('failed');
   // Twice into the same album is a receipted refusal, not a UNIQUE throw.
   const dup = invoke('media.add_to_album', { album_id: albumId, asset_id: a.asset_id });
   expect(dup.status).toBe('failed');

@@ -13,3 +13,4 @@ ios/IrohLib.swift
 # Android: uniffi-generated Kotlin bindings + upstream JNI shim, and the .so.
 android/src/main/java/computer/iroh/
 android/src/main/jniLibs/
+android/build/

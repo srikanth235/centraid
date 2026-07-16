@@ -169,20 +169,24 @@ type Responder = () => Response;
 
 interface FakeGateway {
   on(pathFragment: string, responder: Responder): FakeGateway;
+  readonly baseUrls: readonly string[];
   readonly fetcher: (baseUrl: string, pathname: string, init: RequestInit) => Promise<Response>;
 }
 
 /** Programmable transport keyed by path, with a per-path FIFO of responders. */
 function createGateway(): FakeGateway {
   const queues = new Map<string, Responder[]>();
+  const baseUrls: string[] = [];
   const gateway: FakeGateway = {
+    baseUrls,
     on(pathFragment, responder) {
       const queue = queues.get(pathFragment) ?? [];
       queue.push(responder);
       queues.set(pathFragment, queue);
       return gateway;
     },
-    fetcher: (_baseUrl, pathname) => {
+    fetcher: (baseUrl, pathname) => {
+      baseUrls.push(baseUrl);
       for (const [fragment, queue] of queues) {
         if (pathname.includes(fragment) && queue.length > 0) {
           return Promise.resolve(queue.shift()!());
@@ -288,6 +292,30 @@ describe('createNativeReplicaSession', () => {
       appState.send('background');
       expect(feed.active).toBe(false);
       appState.send('active');
+      expect(feed.active).toBe(true);
+    } finally {
+      await session.close();
+    }
+  });
+
+  test('uses a newly resolved tunnel port after process restart', async () => {
+    const gateway = createGateway()
+      .on('/replica/bootstrap', () => json(page({ epoch: 'replica-1', seq: 1 })))
+      .on('/changes', () => json(noChanges({ epoch: 'replica-1', seq: 1 })))
+      .on('/changes', () => json(noChanges({ epoch: 'replica-1', seq: 1 })));
+    const feed = createFeed();
+    const session = await createNativeReplicaSession({
+      gatewayAuth: { ...gatewayAuth },
+      fetcher: gateway.fetcher,
+      changeFeed: feed,
+      driver: new NodeSqliteDriver(),
+      digest: nodeDigest,
+      idFactory: sequentialIds(),
+    });
+    try {
+      session.updateGatewayBase('http://127.0.0.1:29999');
+      await session.pullNow();
+      expect(gateway.baseUrls.at(-1)).toBe('http://127.0.0.1:29999');
       expect(feed.active).toBe(true);
     } finally {
       await session.close();

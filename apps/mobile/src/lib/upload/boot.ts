@@ -13,23 +13,25 @@ import { useEffect } from 'react';
 import { AppState } from 'react-native';
 
 import { authHeader, resolveGatewayBase } from '../gateway';
+import type { NativeReplicaSession } from '../replica/native-session';
+import { replaySettledUploadFollowups } from './followup';
 import { UploadQueue } from './native-queue';
+import { UploadForegroundService } from './foreground-service';
+import { LAST_SUCCESSFUL_SYNC_KEY, nativeUploadPolicy } from './native-policy';
+import { Store } from '../../storage';
 
 /** Serializes drains: a second foreground must not race the first. */
 let inFlight: Promise<void> | null = null;
 
-async function reconcileOnce(): Promise<void> {
-  // Edge sealing needs a WebCrypto polyfill that RN does not ship. Until it is
-  // installed at boot there is nothing this can usefully do, and probing here
-  // keeps the failure at the seam instead of deep inside a drain.
-  if (!(globalThis as { crypto?: { subtle?: unknown } }).crypto?.subtle) return;
-
+async function reconcileOnce(session?: NativeReplicaSession): Promise<void> {
   let queue: UploadQueue | undefined;
   try {
     // Open the queue before resolving the gateway: with nothing pending there
     // is no reason to spin up the tunnel.
     const probe = UploadQueue.open({ gatewayBaseUrl: 'http://127.0.0.1', headers: authHeader });
-    if (probe.pending().length === 0) {
+    const hasTransfers = probe.pending().length > 0;
+    const hasFollowups = probe.pendingFollowups().length > 0;
+    if (!hasTransfers && (!session || !hasFollowups)) {
       probe.close();
       return;
     }
@@ -37,22 +39,46 @@ async function reconcileOnce(): Promise<void> {
 
     const gatewayBaseUrl = await resolveGatewayBase();
     if (!gatewayBaseUrl) return;
-    queue = UploadQueue.open({ gatewayBaseUrl, headers: authHeader });
-    await queue.drain();
+    queue = UploadQueue.open({
+      gatewayBaseUrl,
+      headers: authHeader,
+      policy: nativeUploadPolicy(),
+      onProgress: ({ completed, total }) => UploadForegroundService.update(completed, total),
+    });
+    if (hasTransfers) UploadForegroundService.start(queue.pending().length);
+    const summary = hasTransfers
+      ? await queue.drain()
+      : { attempted: 0, settled: 0, deduped: 0, failed: 0 };
+    const replayed = session
+      ? await replaySettledUploadFollowups(queue, session, gatewayBaseUrl)
+      : 0;
+    if (summary.settled + summary.deduped + replayed > 0)
+      Store.set(LAST_SUCCESSFUL_SYNC_KEY, new Date().toISOString());
   } catch {
     // A drain never surfaces to the UI: every item it could not settle is
     // still durably queued, and the next foreground tries again.
   } finally {
     queue?.close();
+    UploadForegroundService.stop();
   }
 }
 
+/** Registered as an Android Headless JS task by index.ts. */
+export async function drainUploadQueueInBackground(): Promise<void> {
+  await reconcileOnce();
+}
+
 /** Drain on mount and on every return to the foreground. */
-export function useUploadReconciliation(): void {
+export function useUploadReconciliation(session?: NativeReplicaSession): void {
   useEffect(() => {
     const run = (): void => {
-      if (inFlight) return;
-      inFlight = reconcileOnce().finally(() => {
+      if (inFlight) {
+        void inFlight.finally(() => {
+          if (AppState.currentState === 'active') run();
+        });
+        return;
+      }
+      inFlight = reconcileOnce(session).finally(() => {
         inFlight = null;
       });
     };
@@ -61,5 +87,5 @@ export function useUploadReconciliation(): void {
       if (state === 'active') run();
     });
     return () => subscription.remove();
-  }, []);
+  }, [session]);
 }
