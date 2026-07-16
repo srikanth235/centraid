@@ -6,6 +6,7 @@ const TYPE_CHIPS = [
   ['all', 'All'],
   ['pdf', 'PDFs'],
   ['image', 'Images'],
+  ['media', 'Media'],
   ['doc', 'Docs'],
   ['sheet', 'Sheets'],
 ];

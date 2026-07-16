@@ -7,6 +7,7 @@ import {
   fmtBytes,
   fmtFull,
   isImage,
+  isVideo,
   isTextEditable,
   purgeCountdown,
   tintBg,
@@ -88,6 +89,13 @@ export function Details({
           <div className="d-hero" style={{ background: tintBg(m.cv, 16) }}>
             {isImage(doc) ? (
               <img src={doc.content_uri} alt="" />
+            ) : isVideo(doc) && doc.poster_uri ? (
+              <>
+                <img src={doc.poster_uri} alt="" onError={(e) => e.currentTarget.remove()} />
+                <span className="d-media-play" aria-hidden="true">
+                  ▶
+                </span>
+              </>
             ) : (
               <span style={{ color: `var(${m.cv})` }}>{m.label}</span>
             )}

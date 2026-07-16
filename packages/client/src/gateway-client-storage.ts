@@ -180,6 +180,15 @@ export interface StorageVaultStatusDTO {
   connectionId?: string;
   replicated: { count: number; bytes: number };
   backlog: { count: number; bytes: number };
+  pendingOffsite?: {
+    count: number;
+    bytes: number;
+    uploading: number;
+    lastError: string | null;
+  };
+  casAck?: 'receipt' | 'replicated';
+  outboxBudgetBytes?: number;
+  reservedHeadroomBytes?: number;
   lastSweep: {
     completedAt: string | null;
     lastAttemptedAt: string | null;
@@ -200,6 +209,53 @@ export async function getStorageStatus(): Promise<StorageVaultStatusDTO[]> {
   });
   const out = await readJson<{ vaults: StorageVaultStatusDTO[] }>(res, 'storage status');
   return out.vaults ?? [];
+}
+
+/**
+ * Authenticated custody-transition stream. A strict client uses this as the
+ * completion edge: the durable local receipt may already be claimed, while a
+ * later event makes the offsite acknowledgment visible without polling lag.
+ */
+export async function streamStorageCustody(
+  onStatus: (vaults: StorageVaultStatusDTO[]) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  const { baseUrl, token } = await auth();
+  try {
+    const res = await doFetch(baseUrl, '/centraid/_gateway/storage/status/events', {
+      method: 'GET',
+      headers: authHeaders(token),
+      signal,
+    });
+    if (!res.ok || !res.body) throw new Error(`storage custody stream failed (HTTP ${res.status})`);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let boundary: number;
+      while ((boundary = buffer.indexOf('\n\n')) >= 0) {
+        const frame = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        const data = frame
+          .split('\n')
+          .filter((line) => line.startsWith('data:'))
+          .map((line) => line.slice(5).trimStart())
+          .join('\n');
+        if (!data) continue;
+        try {
+          const parsed = JSON.parse(data) as { vaults?: StorageVaultStatusDTO[] };
+          if (Array.isArray(parsed.vaults)) onStatus(parsed.vaults);
+        } catch {
+          // A malformed frame is isolated; the next custody event remains useful.
+        }
+      }
+    }
+  } catch (error) {
+    if (!signal.aborted) throw error;
+  }
 }
 
 /** One store class's usage figures, as `centraid-storage-provider/1` reports them. */

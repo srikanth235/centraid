@@ -118,6 +118,13 @@ export function makePairRouteHandler(deps: PairRouteDeps): RouteHandler {
       ...(body.rememberDevice !== undefined ? { rememberDevice: body.rememberDevice } : {}),
       ...(body.trust !== undefined ? { trust: body.trust } : {}),
     });
+    plane.db.blobTransfers.enrollPairedDevice({
+      identity: deviceKey,
+      ownerPartyId: plane.boot.ownerPartyId,
+      name: body.deviceLabel,
+      ...(body.platform ? { platform: body.platform } : {}),
+      trust: enrollment.trust === 'readonly' ? 'readonly' : 'full',
+    });
     const minted = deps.deviceTokens.mint({ deviceKey, label: body.deviceLabel });
 
     sendJson(res, 200, {

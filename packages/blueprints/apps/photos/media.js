@@ -2,7 +2,7 @@
 // mount guard that makes it safe to call from a React callback ref on every
 // render. JSX-free by design — shared by every component that renders a tile
 // (Timeline.jsx, Picker.jsx, Duplicates.jsx).
-import { isVideoAsset } from './format.js';
+import { isAudioAsset, isVideoAsset } from './format.js';
 import { observeNextScreen, stopNextScreenObservation } from './media-observer.js';
 
 // The grid NEVER fetches a full original. Blob-backed assets carry a server
@@ -33,9 +33,10 @@ export const CLIENT_TINY_EDGE = 256;
 export const CLIENT_MEDIUM_EDGE = 2048;
 
 // The cheap grid source for an asset, or null to render a placeholder. Video
-// always placeholders (its bytes load only when the lightbox opens).
+// paints its device-contributed poster; the original loads only on open.
 export function gridSrc(asset) {
-  if (isVideoAsset(asset)) return null;
+  if (isVideoAsset(asset)) return asset.poster_uri ?? null;
+  if (isAudioAsset(asset)) return null;
   if (typeof asset.thumb_uri === 'string') {
     // Known-small blobs never get a thumb staged (upload only downsizes the
     // larger ones), so their `?variant=thumb` probe is a guaranteed 404 — the
@@ -57,6 +58,18 @@ export function gridSrc(asset) {
   return null;
 }
 
+export function durationLabel(seconds) {
+  const value = Number(seconds);
+  if (!Number.isFinite(value) || value < 0) return null;
+  const total = Math.round(value);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+    : `${minutes}:${String(secs).padStart(2, '0')}`;
+}
+
 function renderPlaceholder(tile, asset) {
   tile.classList.add('is-placeholder');
   const shimmer = document.createElement('span');
@@ -72,7 +85,23 @@ function renderPlaceholder(tile, asset) {
     badge.innerHTML =
       '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z"/></svg>';
     tile.appendChild(badge);
+  } else if (isAudioAsset(asset)) {
+    const badge = document.createElement('span');
+    badge.className = 'ph-tile-audio-badge';
+    badge.setAttribute('aria-hidden', 'true');
+    badge.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12v2M8 8v10M12 5v14M16 8v10M20 11v4"/></svg>';
+    tile.appendChild(badge);
   }
+}
+
+function renderDuration(tile, asset) {
+  const label = durationLabel(asset.duration_s);
+  if (!label) return;
+  const badge = document.createElement('span');
+  badge.className = 'ph-tile-duration';
+  badge.textContent = label;
+  tile.appendChild(badge);
 }
 
 // The visual guts of a tile — shared by the grid, the trash shelf, the album
@@ -83,6 +112,7 @@ export function fillTileMedia(tile, asset) {
   const src = gridSrc(asset);
   if (src == null) {
     renderPlaceholder(tile, asset);
+    renderDuration(tile, asset);
     return;
   }
   const img = document.createElement('img');
@@ -103,9 +133,21 @@ export function fillTileMedia(tile, asset) {
     img.onerror = null;
     stopNextScreenObservation(img);
     img.remove();
+    tile.querySelector('.ph-tile-video-badge')?.remove();
+    tile.querySelector('.ph-tile-duration')?.remove();
     renderPlaceholder(tile, asset);
+    renderDuration(tile, asset);
   };
   tile.appendChild(img);
+  if (isVideoAsset(asset)) {
+    const badge = document.createElement('span');
+    badge.className = 'ph-tile-video-badge';
+    badge.setAttribute('aria-hidden', 'true');
+    badge.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z"/></svg>';
+    tile.appendChild(badge);
+  }
+  renderDuration(tile, asset);
   observeNextScreen(img, src);
 }
 

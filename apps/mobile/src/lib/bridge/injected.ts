@@ -1,5 +1,5 @@
 // Source for the JS injected into every app WebView. Defines the native
-// half of `window.centraid` (notify/haptic/timer) and routes calls through
+// half of `window.centraid` (notify/haptic/timer/transfer) and routes calls through
 // `window.ReactNativeWebView.postMessage`.
 //
 // The body is wrapped in an IIFE to avoid leaking helpers onto the page.
@@ -69,6 +69,9 @@ export const INJECTED_JS = `(function () {
     timer: {
       startBackground: function (opts) { return send('timer.startBackground', opts); },
       cancel: function (id) { return send('timer.cancel', { id: id }); },
+    },
+    transfer: {
+      putBackground: function (opts) { return send('transfer.putBackground', opts); },
     },
   };
 })(); true;`;

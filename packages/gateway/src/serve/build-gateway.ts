@@ -95,6 +95,7 @@ import type { DeviceTokenStore } from './device-token-store.js';
 import { makeVaultRouteHandler } from '../routes/vault-routes.js';
 import { makePairRouteHandler } from '../routes/pair-routes.js';
 import { makeDevicesRouteHandler } from '../routes/devices-routes.js';
+import { makeDeviceWorkRouteHandler } from '../routes/device-work-routes.js';
 import { makeReplicaRouteHandler } from '../routes/replica-routes.js';
 import type { ReplicaIntentDispatchOutcome } from '../routes/replica-intent-route.js';
 import { makeConnectionsRouteHandler } from '../routes/connections-routes.js';
@@ -1784,9 +1785,15 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             vaultName: (id) => vaultRegistry.get(id)?.name,
             onRevoked: (rows) => {
               for (const row of rows) {
-                vaultRegistry.get(row.vaultId)?.forgetReplicaDevice(row.endpointId);
+                const plane = vaultRegistry.get(row.vaultId);
+                plane?.forgetReplicaDevice(row.endpointId);
+                plane?.db.blobTransfers.revokePairedDevice(row.endpointId);
               }
             },
+          }),
+          makeDeviceWorkRouteHandler({
+            vaults: vaultRegistry,
+            enrollments: options.devicePairing.enrollments,
           }),
         ]
       : []),

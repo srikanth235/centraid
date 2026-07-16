@@ -9,7 +9,7 @@
 // the whole frame, crop is a drag-anywhere-to-redraw rectangle (no resize
 // handles; redrawing replaces the previous rectangle) in fractions of the
 // CURRENT rotated frame, so it always lines up with what's on screen.
-import { stageFileBytes, toast } from '../kit.js';
+import { isPendingOffsite, stageFileBytes, toast } from '../kit.js';
 import { act, narrate } from '../outcomes.js';
 import { useEffect, useRef, useState } from '../react-core.min.js';
 
@@ -139,7 +139,11 @@ export function EditorView({ asset, onCancel, onSaved, refresh }) {
       });
       if (!narrate(outcome, noteRef.current)) return;
       if (alsoTrash) await act('delete-asset', { asset_id: asset.asset_id });
-      toast('Saved as a new photo — the original is untouched.');
+      toast(
+        isPendingOffsite(staged)
+          ? 'Saved locally as a new photo · pending offsite.'
+          : 'Saved as a new photo — the original is untouched.',
+      );
       await refresh();
       onSaved();
     } catch (err) {

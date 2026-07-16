@@ -331,6 +331,28 @@ test('rollover: exceeding walSizeThresholdBytes closes the group with a closer a
   expect(group0.at(-1)!.addr!.endOffset).toBe(rolled!.endOffset);
 });
 
+test('roll thresholds are read dynamically so a live BackupPolicy change takes effect', () => {
+  let threshold = Number.MAX_SAFE_INTEGER;
+  let baseInterval = Number.MAX_SAFE_INTEGER;
+  const shipper = makeShipper({
+    walSizeThresholdBytes: () => threshold,
+    baseIntervalMs: () => baseInterval,
+  });
+  shipper.tick();
+
+  insertVault(3, 4000);
+  clock += 1000;
+  expect(shipper.tick().rolled).toEqual([]);
+
+  threshold = 8192;
+  clock += 1000;
+  expect(shipper.tick().rolled.some((row) => row.db === 'vault')).toBe(true);
+
+  baseInterval = 1;
+  clock += 2;
+  expect(shipper.tick().breaks.map((row) => row.reason)).toContain('base-cadence');
+});
+
 test('rollover edge: uncommitted-only WAL over threshold reports busy, then truncates without advancing the group', () => {
   const shipper = makeShipper({ walSizeThresholdBytes: 8192 });
   shipper.tick();

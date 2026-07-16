@@ -82,6 +82,8 @@ describe('serveStatic — CSP + nonce', () => {
     // CSP header carries the same nonce — the inline script is now whitelisted.
     const csp = data.headers['Content-Security-Policy'];
     expect(csp).toBeTruthy();
+    expect(csp).toContain("media-src 'self' data: blob:");
+    expect(csp).toContain("worker-src 'self' blob:");
     expect(csp).toMatch(
       new RegExp(`script-src 'self' 'nonce-${inlineMatch![1]!.replace(/[/+=]/g, '\\$&')}'`),
     );
@@ -260,6 +262,21 @@ describe('serveStatic — shared kit asset fallback', () => {
     expect(runtime.data.statusCode).toBe(200);
     expect(runtime.data.body.toString('utf8')).toBe('export function jsx(){}');
     expect(runtime.data.headers['Content-Type']).toMatch(/javascript/);
+  });
+
+  it('serves the offline PDF.js display and worker modules from the shared kit', async () => {
+    const appDir = newAppDir({ 'index.html': '<html></html>' });
+    const sharedAssetsDir = newAppDir({
+      'pdf.min.mjs': 'export const version = "test";',
+      'pdf.worker.min.mjs': 'export const WorkerMessageHandler = {};',
+    });
+    for (const name of ['pdf.min.mjs', 'pdf.worker.min.mjs']) {
+      const served = mockRes();
+      await serveStatic(mockReq(), served.res, appDir, name, { sharedAssetsDir });
+      expect(served.data.statusCode).toBe(200);
+      expect(served.data.headers['Content-Type']).toMatch(/javascript/);
+      expect(served.data.body.toString('utf8')).toContain('export const');
+    }
   });
 
   it('serves tokens.css / wall.css from sharedAssetsDir when the app has no copy', async () => {

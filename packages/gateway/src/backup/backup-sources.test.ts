@@ -274,6 +274,46 @@ test(
   },
 );
 
+test('a remote-primary snapshot carries only durable pending-offsite outbox blobs', async () => {
+  const plane = await openPlane();
+  const stagingDir = await tempDir('backup-sources-remote-primary');
+  const settingsRow = plane.db.vault
+    .prepare('SELECT settings_json FROM core_vault LIMIT 1')
+    .get() as { settings_json: string | null };
+  const settings = settingsRow.settings_json
+    ? (JSON.parse(settingsRow.settings_json) as object)
+    : {};
+  plane.db.vault.prepare('UPDATE core_vault SET settings_json = ?').run(
+    JSON.stringify({
+      ...settings,
+      blob_store: {
+        kind: 's3',
+        endpoint: 'https://storage.invalid',
+        bucket: 'remote-primary-test',
+      },
+    }),
+  );
+
+  const taskId = addTask(plane, 'Protect only transit bytes');
+  const pendingBytes = randomBytes(128 * 1024);
+  const remoteBytes = randomBytes(96 * 1024);
+  const pendingSha = stageAndAttachBigBlob(plane, taskId, pendingBytes);
+  const remoteSha = stageAndAttachBigBlob(plane, taskId, remoteBytes);
+  expect(plane.db.blobTransfers.pendingSnapshotShas()).toEqual(
+    expect.arrayContaining([pendingSha, remoteSha]),
+  );
+
+  // Simulate the provider HEAD-confirmation path. The local file remains
+  // resident, but the durable outbox no longer considers it snapshot material.
+  plane.db.blobTransfers.state.completeOutbox(remoteSha);
+  plane.walTick();
+  const entries = await assembleSourceEntries({ plane, stagingDir, log: silentLogger });
+  const blobPaths = entries.filter((entry) => entry.kind === 'blob').map((entry) => entry.path);
+
+  expect(blobPaths).toEqual([`blobs/sha256/${pendingSha.slice(0, 2)}/${pendingSha}`]);
+  expect(blobPaths.some((entry) => entry.endsWith(remoteSha))).toBe(false);
+});
+
 test('the staging dir is wiped between runs — a stale marker file never survives a second assembly', async () => {
   const plane = await openPlane();
   const stagingDir = await tempDir('backup-sources-staging');

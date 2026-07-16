@@ -1,19 +1,20 @@
 // The bounded storage tier's cache coordinator (issue #405 §3/§7) — budget
 // evaluation, incremental spool accounting, the ordered eviction pass, the
-// custody-layer evict PRIMITIVE that refuses to delete an un-replicated last
-// copy, the ingest precheck, the process-lifetime metrics counters, and the
+// custody-layer eviction boundary that protects originals during admission,
+// the ingest precheck, the process-lifetime metrics counters, and the
 // QoS gate that lets interactive reads preempt bulk replication. `BlobCustody`
 // (custody.ts) holds one of these when the host wires it and stays a thin
 // facade over it; tests construct it directly over an in-memory vault handle.
 //
 // Cache model (supersedes the pre-#405 "local is ALWAYS complete" invariant):
 // the local tier is now a BOUNDED spool, not a full mirror. Tinies are pinned;
-// replicated mediums/originals are evictable LRU; `remote-only` blobs read
-// through on demand (custody.open) and re-promote. The one hard rule: a
-// `local-only` (un-replicated) blob's last copy is never deleted — not by the
-// sweep, not by disk pressure — only backpressured (VaultBlobBackpressureError).
+// replicated mediums are admission-evictable, while originals are evictable
+// only by the post-reconciliation sweep; `remote-only` blobs read through on
+// demand (custody.open) and re-promote. Admission never trusts a possibly stale
+// replica-index row to delete an original's last local copy.
 
 import type { DatabaseSync } from 'node:sqlite';
+import type { BackupPolicy } from '../backup-policy.js';
 import { VaultBlobBackpressureError } from '../errors.js';
 import type { LocalBlobStore } from './local.js';
 import { AccessIndex, ReplicaIndex } from './replica-index.js';
@@ -28,6 +29,9 @@ export interface BlobCacheSettings {
    */
   budgetBytes?: number;
 }
+
+/** Which synchronous caller has authority to shed original blobs. */
+export type BlobEvictionScope = 'admission' | 'reconciled-sweep';
 
 /** The vault's current `blob_cache` settings (`{}`-safe on any shape). */
 export function readBlobCacheSettings(vault: DatabaseSync): BlobCacheSettings {
@@ -71,6 +75,8 @@ export interface BlobCacheOptions {
   statfs?: () => CacheStatfs | null;
   /** Read the settings budget; defaults to `readBlobCacheSettings(db)`. Injectable for tests. */
   settings?: () => BlobCacheSettings;
+  /** One policy owner for cache budget + real-volume headroom (#414). */
+  policy?: () => BackupPolicy;
   /** Concurrent pushes per `replicate()` (default 3, issue #405 §4). */
   replicationConcurrency?: number;
   /** Cooldown ms after the last interactive read before bulk resumes (default 500). */
@@ -218,7 +224,7 @@ export class BlobCache {
 
   // ---- budget (issue #405 §3) ----
 
-  private freeBytes(): number | null {
+  freeBytes(): number | null {
     const stat = this.options.statfs?.();
     if (!stat) return null;
     return stat.bavail * stat.bsize;
@@ -235,7 +241,7 @@ export class BlobCache {
    *   3. else (no disk to measure — MemoryBlobStore) UNLIMITED.
    */
   budgetBytes(): number {
-    const explicit = this.settings().budgetBytes;
+    const explicit = this.options.policy?.().cacheBudgetBytes ?? this.settings().budgetBytes;
     if (explicit && explicit > 0) return explicit;
     const free = this.freeBytes();
     if (free === null) return Number.MAX_SAFE_INTEGER;
@@ -252,6 +258,35 @@ export class BlobCache {
     return this.replica.has(sha);
   }
 
+  /**
+   * Honest admission numbers after both independent limits are applied:
+   * the logical cache budget and the REAL currently-available volume bytes
+   * above the policy's reserved headroom. The old derived-budget floor could
+   * say "1 GiB available" on a volume with only 100 MiB free; this projection
+   * is what ingress and its typed error use instead.
+   */
+  admissionCapacity(
+    reservedBytes = 0,
+    diskReservedBytes = reservedBytes,
+  ): {
+    availableBytes: number;
+    freeBytes: number | null;
+    reservedHeadroomBytes: number;
+  } {
+    const freeBytes = this.freeBytes();
+    const reservedHeadroomBytes = this.options.policy?.().reservedHeadroomBytes ?? 0;
+    const budgetAvailable = Math.max(0, this.budgetBytes() - this.spoolBytes() - reservedBytes);
+    const diskAvailable =
+      freeBytes === null
+        ? Number.MAX_SAFE_INTEGER
+        : Math.max(0, freeBytes - reservedHeadroomBytes - diskReservedBytes);
+    return {
+      availableBytes: Math.min(budgetAvailable, diskAvailable),
+      freeBytes,
+      reservedHeadroomBytes,
+    };
+  }
+
   // ---- ingest precheck (issue #405 §5) ----
 
   /**
@@ -261,16 +296,24 @@ export class BlobCache {
    * bytes), throws `VaultBlobBackpressureError` so the caller paces against the
    * uplink instead of losing data. A no-op when already under budget.
    */
-  admit(incoming: number): void {
+  admit(incoming: number, reservedBytes = 0, diskReservedBytes = reservedBytes): void {
     const target = this.budgetBytes();
-    if (this.spoolBytes() + incoming <= target) return;
-    this.runEviction(incoming);
-    if (this.spoolBytes() + incoming > target) {
+    if (this.admissionCapacity(reservedBytes, diskReservedBytes).availableBytes >= incoming) return;
+    this.runEviction(incoming, reservedBytes, diskReservedBytes, 'admission');
+    const capacity = this.admissionCapacity(reservedBytes, diskReservedBytes);
+    if (capacity.availableBytes < incoming) {
       this.backpressureEvents += 1;
       throw new VaultBlobBackpressureError(
         'blob ingest',
-        `blob cache spool ${this.spoolBytes()} + ${incoming} exceeds budget ${target}; ` +
-          `nothing safely evictable (un-replicated backlog) — pace ingest against the uplink`,
+        `blob ingest needs ${incoming} bytes but only ${capacity.availableBytes} bytes are ` +
+          `admissible (free=${capacity.freeBytes ?? 'unknown'}, reserved headroom=${capacity.reservedHeadroomBytes}, ` +
+          `cache spool=${this.spoolBytes()}, budget=${target}); nothing safely evictable`,
+        {
+          needBytes: incoming,
+          availableBytes: capacity.availableBytes,
+          freeBytes: capacity.freeBytes,
+          reservedHeadroomBytes: capacity.reservedHeadroomBytes,
+        },
       );
     }
   }
@@ -278,14 +321,26 @@ export class BlobCache {
   // ---- eviction (issue #405 §3) ----
 
   /**
-   * The eviction pass. Sheds local bytes — strictly (a) LRU previews, then (b)
-   * LRU originals — until spool + `incoming` is at or under budget, or nothing
-   * safely evictable remains. Never touches a pinned tiny, a staged blob, or an
-   * un-replicated blob (the primitive `evictOne` enforces the last itself).
+   * The eviction pass. Admission may shed only reconstructible LRU previews;
+   * the explicit post-reconciliation scope may then shed LRU originals. This
+   * keeps stale replica evidence from authorizing original deletion before a
+   * deep remote listing has healed it. Pinned tinies, staged blobs, and blobs
+   * without replica evidence remain unevictable in either scope.
    */
-  runEviction(incoming = 0): { evicted: string[]; bytes: number } {
+  runEviction(
+    incoming = 0,
+    reservedBytes = 0,
+    diskReservedBytes = reservedBytes,
+    scope: BlobEvictionScope = 'admission',
+  ): { evicted: string[]; bytes: number } {
     const target = this.budgetBytes();
-    if (this.spoolBytes() + incoming <= target) return { evicted: [], bytes: 0 };
+    const free = this.freeBytes();
+    const headroom = this.options.policy?.().reservedHeadroomBytes ?? 0;
+    const logicalNeed = Math.max(0, this.spoolBytes() + reservedBytes + incoming - target);
+    const physicalNeed =
+      free === null ? 0 : Math.max(0, headroom + diskReservedBytes + incoming - free);
+    const bytesNeeded = Math.max(logicalNeed, physicalNeed);
+    if (bytesNeeded === 0) return { evicted: [], bytes: 0 };
     // Flush write-behind touches so LRU ordering reflects the latest reads.
     this.access.flush();
     const localSet = new Set(this.local.listSync());
@@ -294,10 +349,13 @@ export class BlobCache {
     const preview = previewShas(this.db);
     const evictable = (sha: string): boolean =>
       localSet.has(sha) && this.replica.has(sha) && !pinned.has(sha) && !staging.has(sha);
-    // (a) mediums first, (b) then originals (everything local that is neither a
-    // preview, a pinned thumb, nor staged).
+    // (a) mediums first; (b) originals only when the caller just reconciled the
+    // replica index against remote truth.
     const previews = [...preview].filter(evictable);
-    const originals = [...localSet].filter((s) => evictable(s) && !preview.has(s));
+    const originals =
+      scope === 'reconciled-sweep'
+        ? [...localSet].filter((s) => evictable(s) && !preview.has(s))
+        : [];
     const order = [
       ...this.access.orderOldestFirst(previews),
       ...this.access.orderOldestFirst(originals),
@@ -305,8 +363,8 @@ export class BlobCache {
     const evicted: string[] = [];
     let bytes = 0;
     for (const sha of order) {
-      if (this.spoolBytes() + incoming <= target) break;
-      const freed = this.evictOne(sha);
+      if (bytes >= bytesNeeded) break;
+      const freed = this.deleteReplicated(sha);
       if (freed > 0) {
         evicted.push(sha);
         bytes += freed;
@@ -318,15 +376,20 @@ export class BlobCache {
   }
 
   /**
-   * The custody-layer evict PRIMITIVE (issue #405 §3): delete one local copy —
-   * but ONLY if the replication index holds durable evidence a remote copy
-   * exists. This guard lives HERE, inside the primitive, not just in the policy
-   * loop above, so no future caller (a new sweep, a disk-pressure hook) can ever
-   * delete the last copy of a `local-only` blob by calling a lower-level delete.
-   * Returns the bytes freed, or 0 if the blob was refused/absent.
+   * The public pressure primitive is deliberately derivative-only. Even stale
+   * replica evidence therefore cannot make a direct caller delete an original;
+   * original deletion is available only through `runEviction`'s explicit
+   * post-reconciliation scope. Returns bytes freed, or 0 when refused/absent.
    */
   evictOne(sha: string): number {
-    if (!this.replica.has(sha)) return 0; // never delete an un-replicated last copy
+    if (!previewShas(this.db).has(sha)) return 0;
+    if (pinnedThumbShas(this.db).has(sha) || stagingShas(this.db).has(sha)) return 0;
+    return this.deleteReplicated(sha);
+  }
+
+  /** Final deletion guard shared by pre-classified policy candidates. */
+  private deleteReplicated(sha: string): number {
+    if (!this.replica.has(sha)) return 0;
     const size = this.local.statSync(sha)?.size ?? 0;
     this.local.deleteSync(sha);
     this.access.drop(sha);

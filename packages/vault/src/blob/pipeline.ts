@@ -10,6 +10,9 @@
 // the caller passes `keepLocation` (the `media.location` vault setting,
 // issue #296 §4 — automatic extraction must not silently write location).
 
+import { parseIsoBmffMetadata, parseMediaMetadata } from './media-metadata.js';
+import { extractPdfText } from './pdf-text.js';
+
 /** Magic-byte table: prefix (at offset) → media type. Order matters. */
 const MAGIC: { offset: number; bytes: number[]; type: string }[] = [
   { offset: 0, bytes: [0xff, 0xd8, 0xff], type: 'image/jpeg' },
@@ -72,13 +75,19 @@ function looksLikeText(bytes: Buffer): boolean {
  * and a text/binary probe last. Never returns an empty string.
  */
 export function sniffMediaType(bytes: Buffer, declared?: string, filename?: string): string {
+  const hint = (declared ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
   for (const m of MAGIC) {
     if (bytes.length < m.offset + m.bytes.length) continue;
-    if (m.bytes.every((b, i) => bytes[m.offset + i] === b)) return m.type;
+    if (m.bytes.every((b, i) => bytes[m.offset + i] === b)) {
+      // EBML is a container signature, not a track kind. Preserve an honest
+      // browser declaration for audio-only WebM; absent that hint, video is
+      // the conservative default and the bounded parser still reads tracks.
+      if (m.type === 'video/webm' && (hint === 'audio/webm' || hint === 'video/webm')) return hint;
+      return m.type;
+    }
   }
   const container = sniffContainers(bytes);
   if (container) return container;
-  const hint = (declared ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
   if (hint && hint !== 'application/octet-stream') return hint;
   const ext = filename?.split('.').at(-1)?.toLowerCase() ?? '';
   if (EXT_TYPES[ext]) return EXT_TYPES[ext];
@@ -96,6 +105,11 @@ export interface BlobMeta {
   longitude?: number;
   /** Extracted document text (bounded) — becomes the `text` variant. */
   text?: string;
+  /** Parse-only video/audio container metadata (never decoded/transcoded). */
+  duration_s?: number;
+  codec?: string;
+  title?: string;
+  artist?: string;
   [k: string]: unknown;
 }
 
@@ -138,8 +152,49 @@ export function extractBlobMeta(
       const text = extractPdfText(bytes);
       if (text) meta.text = text.slice(0, MAX_EXTRACT_CHARS);
     }
+    if (mediaType.startsWith('video/') || mediaType.startsWith('audio/')) {
+      Object.assign(meta, parseMediaMetadata(bytes, mediaType));
+    }
   } catch {
     // A malformed header degrades to a metadata-less blob, never a refusal.
+  }
+  return meta;
+}
+
+/**
+ * Bounded streaming twin: prefix covers signatures/EXIF/WebM headers, while
+ * a final tail probe finds ISO-BMFF `moov` metadata even when it follows a
+ * multi-hundred-megabyte `mdat`. No original-provider read is needed.
+ */
+export function extractBlobMetaFromProbes(
+  head: Buffer,
+  tail: Buffer,
+  mediaType: string,
+  options: { keepLocation?: boolean } = {},
+): BlobMeta {
+  const meta = extractBlobMeta(head, mediaType, options);
+  // A streaming upload retains bounded plaintext probes at both ends. Page
+  // content commonly sits near the trailer, so give the tail an independent
+  // cheap-text pass when the header probe did not yield useful text.
+  if (mediaType === 'application/pdf' && meta.text === undefined && tail.length > 0) {
+    const text = extractPdfText(tail);
+    if (text) meta.text = text.slice(0, MAX_EXTRACT_CHARS);
+  }
+  if (mediaType === 'video/mp4' || mediaType === 'video/quicktime' || mediaType === 'audio/mp4') {
+    const marker = Buffer.from('moov', 'ascii');
+    let at = tail.indexOf(marker);
+    while (at >= 4) {
+      const start = at - 4;
+      const size = tail.readUInt32BE(start);
+      if (size >= 8 && start + size <= tail.length) {
+        const fromTail = parseIsoBmffMetadata(tail.subarray(start, start + size));
+        for (const [key, value] of Object.entries(fromTail)) {
+          if (value !== undefined && meta[key] === undefined) meta[key] = value;
+        }
+        break;
+      }
+      at = tail.indexOf(marker, at + marker.length);
+    }
   }
   return meta;
 }
@@ -268,36 +323,4 @@ function parseJpegExif(bytes: Buffer): JpegExif {
     }
   }
   return out;
-}
-
-/**
- * Honest, dependency-free PDF text extraction: uncompressed text-showing
- * operators only (Tj / TJ over literal strings). Compressed streams — most
- * modern PDFs — yield nothing, which degrades to title-only search. A real
- * extractor is a later pipeline plug-in; the seam (the `text` variant) is
- * what this establishes.
- */
-function extractPdfText(bytes: Buffer): string | null {
-  const raw = bytes.toString('latin1');
-  const parts: string[] = [];
-  for (const m of raw.matchAll(/\(((?:\\.|[^\\)])*)\)\s*Tj/g)) {
-    parts.push(decodePdfString(m[1] ?? ''));
-    if (parts.length > 5000) break;
-  }
-  for (const m of raw.matchAll(/\[((?:\((?:\\.|[^\\)])*\)|[^\]])*)\]\s*TJ/g)) {
-    for (const s of (m[1] ?? '').matchAll(/\(((?:\\.|[^\\)])*)\)/g)) {
-      parts.push(decodePdfString(s[1] ?? ''));
-    }
-    if (parts.length > 5000) break;
-  }
-  const text = parts.join(' ').replace(/\s+/g, ' ').trim();
-  return text.length >= 16 ? text : null;
-}
-
-function decodePdfString(s: string): string {
-  return s
-    .replace(/\\([nrtbf()\\])/g, (_, c: string) =>
-      c === 'n' ? '\n' : c === 'r' ? '\r' : c === 't' ? '\t' : c === 'b' || c === 'f' ? '' : c,
-    )
-    .replace(/\\(\d{1,3})/g, (_, oct: string) => String.fromCharCode(parseInt(oct, 8)));
 }

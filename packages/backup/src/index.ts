@@ -6,8 +6,17 @@ export type {
   BackupProvider,
   BackupProviderErrorCode,
   BackupProviderErrorDetails,
+  ProviderAuditEvent,
+  ProviderAuditPage,
+  ProviderAuditQuery,
   ProviderCapabilities,
   ProviderCapabilityFlag,
+  ProviderEventKind,
+  ProviderInventoryObject,
+  ProviderInventoryPage,
+  ProviderInventoryQuery,
+  ProviderPolicy,
+  ProviderPolicyDeclaration,
   Retention,
   S3Grant,
   SnapshotRegistration,
@@ -18,10 +27,11 @@ export type {
   Usage,
   UsageByStore,
 } from './provider.js';
+export { MIN_POLICY_RPO_SECONDS } from './provider-observability.js';
 
 // Data plane.
 export { assertSafeKey, FsObjectStore } from './object-store.js';
-export type { ObjectStore } from './object-store.js';
+export type { ObjectListEntry, ObjectStore } from './object-store.js';
 export { S3ObjectStore } from './s3-store.js';
 export type { S3ObjectStoreOptions } from './s3-store.js';
 

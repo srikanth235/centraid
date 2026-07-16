@@ -3,11 +3,16 @@ import {
   confirmGatewayRecoveryKit,
   createGatewayDeviceTicket,
   getGatewayBackupStatus,
+  getGatewayDeviceWorkStatus,
   listGatewayDevices,
   revokeGatewayDevice,
   runGatewayBackupNow,
+  setGatewayDeviceCompute,
+  updateGatewayBackupPolicy,
+  verifyGatewayBackupBucket,
   verifyGatewayBackupsNow,
   streamGatewayLogs,
+  streamStorageCustody,
 } from '../../../gateway-client.js';
 import GatewayScreen from '../../screens/GatewayScreen.js';
 import { useShellActions } from '../actions.js';
@@ -106,8 +111,11 @@ export default function GatewayRoute(): JSX.Element {
         loadHealth={loadDiagnosticsData}
         streamLogs={streamGatewayLogs}
         loadBackupStatus={getGatewayBackupStatus}
+        streamBackupCustody={(onChange, signal) => streamStorageCustody(() => onChange(), signal)}
         onRunBackupNow={runGatewayBackupNow}
         onVerifyBackupNow={verifyGatewayBackupsNow}
+        onUpdateBackupPolicy={updateGatewayBackupPolicy}
+        onVerifyBackupBucket={verifyGatewayBackupBucket}
         onExportRecoveryKit={() => window.CentraidApi.exportGatewayRecoveryKit()}
         onConfirmRecoveryKit={confirmGatewayRecoveryKit}
         loadStorageStatus={loadStorageCardStatus}
@@ -120,6 +128,8 @@ export default function GatewayRoute(): JSX.Element {
           )
         }
         onCreateDeviceTicket={createGatewayDeviceTicket}
+        onUpdateDeviceCompute={setGatewayDeviceCompute}
+        loadDeviceWorkStatus={getGatewayDeviceWorkStatus}
         onRestartGateway={() => window.CentraidApi.restartGateway()}
         onExportDiagnostics={() => window.CentraidApi.exportGatewayDiagnostics()}
       />

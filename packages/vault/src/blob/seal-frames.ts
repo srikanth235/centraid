@@ -12,7 +12,7 @@
 //
 // Wire layout (all integers big-endian):
 //
-//   [ header      ] magic "CBSF" (4) | version (1)                = 5 bytes
+//   [ header      ] magic (4) | version (1) | plaintext sha (32) = 37 bytes
 //   [ frame 0     ] nonce (12) | ciphertext | tag (16)
 //   [ frame 1     ] ...
 //   [ frame N-1   ]
@@ -45,7 +45,7 @@
 // and are expected to be re-sealed by the next replication sweep; there is no
 // dual-format reader on purpose.
 
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHmac } from 'node:crypto';
 import * as zlib from 'node:zlib';
 
 const NONCE_BYTES = 12;
@@ -54,10 +54,10 @@ const TAG_BYTES = 16;
 /** Format magic — "Centraid Blob Sealed Frames". */
 const MAGIC = Buffer.from('CBSF', 'ascii');
 /** Bumped whenever the wire layout changes; bound into every AAD. */
-export const SEAL_VERSION = 1;
+export const SEAL_VERSION = 2;
 
-/** Fixed header: magic (4) + version (1). */
-export const HEADER_BYTES = MAGIC.length + 1;
+/** Fixed header: magic (4) + version (1) + raw plaintext SHA-256 (32). */
+export const HEADER_BYTES = MAGIC.length + 1 + 32;
 /** Fixed trailer: magic (4) + version (1) + dirLen (4) + frameCount (4). */
 export const TRAILER_BYTES = MAGIC.length + 1 + 4 + 4;
 
@@ -93,6 +93,21 @@ function frameAad(sha: string, index: number, frameCount: number): Buffer {
 /** AAD pinning the directory to its blob, version and frame count. */
 function dirAad(sha: string, frameCount: number): Buffer {
   return Buffer.from(`blobdir:${sha}:v${SEAL_VERSION}:n${frameCount}`, 'utf8');
+}
+
+/**
+ * Retry-stable nonce derivation for durable multipart uploads. A content key
+ * belongs to exactly one plaintext sha, and every frame/directory label is
+ * distinct under that key, so HMAC-derived 96-bit nonces remain unique while
+ * making a re-seal byte-identical after a crash. That lets already-confirmed
+ * provider parts coexist safely with newly generated parts on resume.
+ */
+function nonceFor(key: Buffer, aad: Buffer): Buffer {
+  return createHmac('sha256', key)
+    .update('cbsf-nonce\0')
+    .update(aad)
+    .digest()
+    .subarray(0, NONCE_BYTES);
 }
 
 /**
@@ -135,18 +150,30 @@ function decompressFrame(algoId: number, payload: Buffer): Buffer {
   }
 }
 
-/** The fixed 5-byte header every framed object opens with. */
-export function encodeHeader(): Buffer {
-  return Buffer.concat([MAGIC, Buffer.from([SEAL_VERSION])]);
+/** Header identity is checked before any frame is trusted. */
+export function encodeHeader(sha: string): Buffer {
+  if (!/^[0-9a-f]{64}$/.test(sha)) throw new Error('sealed blob: invalid header sha');
+  return Buffer.concat([MAGIC, Buffer.from([SEAL_VERSION]), Buffer.from(sha, 'hex')]);
 }
 
-function assertHeader(buf: Buffer): void {
-  if (buf.length < HEADER_BYTES || !buf.subarray(0, MAGIC.length).equals(MAGIC)) {
+function assertMagicVersion(buf: Buffer): void {
+  if (buf.length < MAGIC.length + 1 || !buf.subarray(0, MAGIC.length).equals(MAGIC)) {
     throw new Error('sealed blob: bad magic (not a framed seal, or truncated)');
   }
   if (buf[MAGIC.length] !== SEAL_VERSION) {
     throw new Error(`sealed blob: unsupported version ${buf[MAGIC.length]}`);
   }
+}
+
+/** Decode and optionally pin the AEAD-bound plaintext identity in the header. */
+export function decodeHeader(buf: Buffer, expectedSha?: string): { sha256: string } {
+  if (buf.length < HEADER_BYTES) throw new Error('sealed blob: truncated header');
+  assertMagicVersion(buf);
+  const sha256 = buf.subarray(MAGIC.length + 1, HEADER_BYTES).toString('hex');
+  if (expectedSha !== undefined && sha256 !== expectedSha) {
+    throw new Error(`sealed blob: header sha mismatch (expected ${expectedSha}, got ${sha256})`);
+  }
+  return { sha256 };
 }
 
 /**
@@ -162,10 +189,33 @@ export function sealFrame(
   plain: Buffer,
 ): Buffer {
   const { algoId, payload } = compressFrame(plain);
+  return sealFramePayload(key, sha, index, frameCount, algoId, payload);
+}
+
+/** Store-only twin used by resumable plaintext→provider multipart sessions. */
+export function sealStoredFrame(
+  key: Buffer,
+  sha: string,
+  index: number,
+  frameCount: number,
+  plain: Buffer,
+): Buffer {
+  return sealFramePayload(key, sha, index, frameCount, ALGO_STORE, plain);
+}
+
+function sealFramePayload(
+  key: Buffer,
+  sha: string,
+  index: number,
+  frameCount: number,
+  algoId: number,
+  payload: Buffer,
+): Buffer {
   const body = Buffer.concat([Buffer.from([algoId]), payload]);
-  const nonce = randomBytes(NONCE_BYTES);
+  const aad = frameAad(sha, index, frameCount);
+  const nonce = nonceFor(key, aad);
   const cipher = createCipheriv('aes-256-gcm', key, nonce);
-  cipher.setAAD(frameAad(sha, index, frameCount));
+  cipher.setAAD(aad);
   const ct = Buffer.concat([cipher.update(body), cipher.final()]);
   return Buffer.concat([nonce, ct, cipher.getAuthTag()]);
 }
@@ -214,9 +264,10 @@ export function sealDirectory(
     plain.writeUInt32BE(len, off);
     off += 4;
   }
-  const nonce = randomBytes(NONCE_BYTES);
+  const aad = dirAad(sha, frameCount);
+  const nonce = nonceFor(key, aad);
   const cipher = createCipheriv('aes-256-gcm', key, nonce);
-  cipher.setAAD(dirAad(sha, frameCount));
+  cipher.setAAD(aad);
   const ct = Buffer.concat([cipher.update(plain), cipher.final()]);
   return Buffer.concat([nonce, ct, cipher.getAuthTag()]);
 }
@@ -278,7 +329,7 @@ export function encodeTrailer(directoryLength: number, frameCount: number): Buff
 }
 
 export function decodeTrailer(buf: Buffer): { directoryLength: number; frameCount: number } {
-  assertHeader(buf); // magic + version live at the trailer's front too
+  assertMagicVersion(buf); // magic + version live at the trailer's front too
   return {
     directoryLength: buf.readUInt32BE(MAGIC.length + 1),
     frameCount: buf.readUInt32BE(MAGIC.length + 5),

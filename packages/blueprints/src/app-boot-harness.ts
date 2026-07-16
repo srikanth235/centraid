@@ -54,7 +54,15 @@ const PKG = path.resolve(import.meta.dirname, '..');
 // Apps import these as siblings (`./kit.js`); at rest they live only in `kit/`,
 // and the gateway serves them from a shared dir (SHARED_ASSET_FILES in
 // app-engine/src/http/static-server.ts). Symlinks reproduce that layout.
-const SHARED = ['kit.js', 'elements.js', 'react-core.min.js', 'jsx-runtime.js'];
+const SHARED = [
+  'kit.js',
+  'elements.js',
+  'edge-upload.js',
+  'pdf.min.mjs',
+  'pdf.worker.min.mjs',
+  'react-core.min.js',
+  'jsx-runtime.js',
+];
 
 // React-dialect apps ship app.jsx; the gateway transpiles it per-request. The
 // harness mirrors that with the same transform options + depth-aware

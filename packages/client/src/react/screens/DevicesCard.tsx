@@ -3,7 +3,11 @@ import type { IconName } from '@centraid/design-tokens';
 import Icon from '../ui/Icon.js';
 import { cx } from '../ui/cx.js';
 import { formatClock, formatDuration } from '../shell/routes/gatewayData.js';
-import type { CentraidGatewayDevice, GatewayDeviceTicket } from '../../gateway-client.js';
+import type {
+  CentraidGatewayDevice,
+  GatewayDeviceTicket,
+  GatewayDeviceWorkDepth,
+} from '../../gateway-client.js';
 import buttonCss from '../ui/Button.module.css';
 import controlsCss from '../styles/controls.module.css';
 import gwStyles from './GatewayScreen.module.css';
@@ -38,6 +42,11 @@ export interface DevicesCardProps {
    * simply hides the "Pair a device" affordance.
    */
   onCreateTicket?: (input?: { ttlMinutes?: number }) => Promise<GatewayDeviceTicket>;
+  onUpdateCompute?: (
+    device: CentraidGatewayDevice,
+    contributeWhileCharging: boolean,
+  ) => Promise<CentraidGatewayDevice>;
+  loadWorkStatus?: () => Promise<GatewayDeviceWorkDepth[]>;
 }
 
 /** Ticket lifetimes offered in the pairing panel (minutes). */
@@ -73,14 +82,17 @@ function DeviceRow({
   device,
   now,
   onRevoke,
+  onUpdateCompute,
 }: {
   device: CentraidGatewayDevice;
   now: number;
   onRevoke: (device: CentraidGatewayDevice) => Promise<void>;
+  onUpdateCompute?: (device: CentraidGatewayDevice, enabled: boolean) => Promise<void>;
 }): JSX.Element {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [computeBusy, setComputeBusy] = useState(false);
 
   const lastSeen = device.lastUsedAt ? ageLabel(device.lastUsedAt, now) : undefined;
   const paired = ageLabel(device.addedAt, now);
@@ -96,6 +108,19 @@ function DeviceRow({
       setError(err instanceof Error ? err.message : String(err));
       setBusy(false);
       setConfirming(false);
+    }
+  };
+
+  const updateCompute = async (enabled: boolean): Promise<void> => {
+    if (!onUpdateCompute) return;
+    setComputeBusy(true);
+    setError(null);
+    try {
+      await onUpdateCompute(device, enabled);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setComputeBusy(false);
     }
   };
 
@@ -131,6 +156,27 @@ function DeviceRow({
           {lastSeen ? <span>active {lastSeen}</span> : <span data-quiet="true">never used</span>}
           {paired ? <span data-quiet="true">paired {paired}</span> : null}
         </div>
+        {onUpdateCompute ? (
+          <label className={styles.computeToggle}>
+            <input
+              type="checkbox"
+              checked={device.compute?.contributeWhileCharging ?? false}
+              disabled={computeBusy}
+              onChange={(event) => void updateCompute(event.target.checked)}
+            />
+            <span>Help index your library while charging and unmetered</span>
+            {computeBusy ? <small>saving…</small> : null}
+          </label>
+        ) : null}
+        {device.compute?.contributeWhileCharging ? (
+          <div className={styles.computeCaps}>
+            {Object.entries(device.compute.capabilities)
+              .filter(([, enabled]) => enabled)
+              .map(([capability]) => (
+                <span key={capability}>{capability}</span>
+              ))}
+          </div>
+        ) : null}
         {error ? <div className={styles.rowError}>{error}</div> : null}
       </div>
 
@@ -323,9 +369,12 @@ export default function DevicesCard({
   onRevokeDevice,
   onCurrentDeviceRevoked,
   onCreateTicket,
+  onUpdateCompute,
+  loadWorkStatus,
 }: DevicesCardProps): JSX.Element {
   const [devices, setDevices] = useState<CentraidGatewayDevice[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [workDepth, setWorkDepth] = useState<GatewayDeviceWorkDepth[]>([]);
   const mountedRef = useRef(true);
 
   const refresh = useCallback((): void => {
@@ -339,7 +388,10 @@ export default function DevicesCard({
         if (!mountedRef.current) return;
         setLoadError(err instanceof Error ? err.message : String(err));
       });
-  }, [loadDevices]);
+    void loadWorkStatus?.().then((depth) => {
+      if (mountedRef.current) setWorkDepth(depth);
+    });
+  }, [loadDevices, loadWorkStatus]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -364,7 +416,22 @@ export default function DevicesCard({
     [onCurrentDeviceRevoked, onRevokeDevice, refresh],
   );
 
+  const updateCompute = useCallback(
+    async (device: CentraidGatewayDevice, enabled: boolean): Promise<void> => {
+      if (!onUpdateCompute) return;
+      const updated = await onUpdateCompute(device, enabled);
+      if (!mountedRef.current) return;
+      setDevices(
+        (previous) =>
+          previous?.map((row) => (row.deviceId === updated.deviceId ? updated : row)) ?? previous,
+      );
+    },
+    [onUpdateCompute],
+  );
+
   const count = devices?.length ?? 0;
+  const queued = workDepth.reduce((sum, depth) => sum + depth.available, 0);
+  const leased = workDepth.reduce((sum, depth) => sum + depth.leased, 0);
   const [pairing, setPairing] = useState(false);
 
   return (
@@ -375,6 +442,11 @@ export default function DevicesCard({
           {devices && count > 0 ? (
             <span className={gwStyles.panelMeta}>
               {count} device{count === 1 ? '' : 's'}
+            </span>
+          ) : null}
+          {loadWorkStatus ? (
+            <span className={gwStyles.panelMeta} data-testid="device-work-depth">
+              {queued} queued · {leased} leased
             </span>
           ) : null}
           {onCreateTicket && !pairing ? (
@@ -406,7 +478,13 @@ export default function DevicesCard({
         ) : (
           <div className={styles.list}>
             {devices.map((device) => (
-              <DeviceRow key={device.deviceId} device={device} now={now} onRevoke={revoke} />
+              <DeviceRow
+                key={device.deviceId}
+                device={device}
+                now={now}
+                onRevoke={revoke}
+                onUpdateCompute={onUpdateCompute ? updateCompute : undefined}
+              />
             ))}
           </div>
         )}

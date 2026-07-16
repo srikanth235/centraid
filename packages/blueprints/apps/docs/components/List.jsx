@@ -1,6 +1,14 @@
 // List view: the head row (#listHead root), each row (#list root's mapped
 // children) and the truncation footer (#windowFoot root).
-import { fmtBytes, fmtDate, isImage, purgeCountdown, tintBg, typeMeta } from '../format.js';
+import {
+  fmtBytes,
+  fmtDate,
+  isImage,
+  isVideo,
+  purgeCountdown,
+  tintBg,
+  typeMeta,
+} from '../format.js';
 import { I } from '../icons.js';
 import { Checkbox, CustodyDot, Icon, Snippet } from './Shared.jsx';
 
@@ -50,6 +58,18 @@ export function ListRow({
       >
         {isImage(doc) ? (
           <img src={doc.content_uri} alt="" loading="lazy" />
+        ) : isVideo(doc) && doc.poster_uri ? (
+          <>
+            <img
+              src={doc.poster_uri}
+              alt=""
+              loading="lazy"
+              onError={(e) => e.currentTarget.remove()}
+            />
+            <span className="d-media-play small" aria-hidden="true">
+              ▶
+            </span>
+          </>
         ) : (
           <span style={{ color: `var(${m.cv})` }}>{m.label}</span>
         )}

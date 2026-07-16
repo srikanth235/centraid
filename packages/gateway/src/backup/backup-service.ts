@@ -27,22 +27,20 @@ import {
   type VerifySnapshotResult,
 } from '@centraid/backup';
 import {
+  DEFAULT_BACKUP_POLICY,
+  MIN_RPO_SECONDS,
   ONTOLOGY_VERSION,
   VAULT_MIGRATIONS,
   bumpReplicaEpoch,
+  readBackupPolicy,
+  readBlobStoreSettings,
   verifyRestoredPair,
+  type BackupPolicy,
   type RemoteTier,
 } from '@centraid/vault';
 import { warmPreviewTinies, type PreviewsWarmResult } from './restore-warm.js';
 import type { RuntimeLogger } from '@centraid/app-engine';
-import {
-  intervalHoursOf,
-  verifyEveryDaysOf,
-  DEFAULT_INTERVAL_HOURS,
-  DEFAULT_VERIFY_EVERY_DAYS,
-  type BackupConfig,
-  type BackupProviderConfig,
-} from './backup-config.js';
+import { type BackupConfig, type BackupProviderConfig } from './backup-config.js';
 import { discardWalFiles, drainWalFiles, pruneWalGenerations, walPairKey } from './wal-uploader.js';
 import {
   loadBackupState,
@@ -62,13 +60,36 @@ import { GATEWAY_VERSION } from '../version.js';
 import { resolveBackupBackend } from './backup-backend.js';
 import { evaluateBackupHealth } from './backup-health.js';
 import { recoveryKitDocument, writeBackupRecoveryKit } from './backup-recovery-kit.js';
+import {
+  inspectProviderPolicy,
+  providerPolicyFor,
+  providerPolicyMatches,
+  pushProviderPolicy,
+  type ProviderPolicySyncState,
+} from './backup-provider-observability.js';
+import {
+  failedReconciliation,
+  runBackupReconciliation,
+  type BackupReconciliationState,
+} from './backup-reconciliation.js';
+import {
+  failedCasOnlyReconciliation,
+  runCasOnlyReconciliation,
+} from './backup-cas-reconciliation.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
-/** WAL segment drain cadence (issue #408) — the offsite RPO between bases. */
-const WAL_DRAIN_MS = 60 * 1000;
-/** Restore-verification cadence + staleness alarm (issue #408 G9). */
-const RESTORE_VERIFY_EVERY_MS = 7 * DAY_MS;
+/** Re-check policy at its declared minimum; each vault still drains only when its own RPO is due. */
+const POLICY_SCHEDULER_TICK_MS = MIN_RPO_SECONDS * 1000;
+
+function newestReconciliation(
+  first: BackupReconciliationState | undefined,
+  second: BackupReconciliationState | undefined,
+): BackupReconciliationState | undefined {
+  if (!first) return second;
+  if (!second) return first;
+  return Date.parse(first.checkedAt) >= Date.parse(second.checkedAt) ? first : second;
+}
 
 /** A materialized restore is a new replica history, never a continuation. */
 function invalidateRestoredReplica(destDir: string): void {
@@ -114,6 +135,8 @@ export interface BackupServiceOptions {
   storageConnections?: StorageConnectionStore;
   /** Shared confirmation store; CLI-only callers fall back to backup state. */
   recoveryKit?: RecoveryKitStateStore;
+  /** Injectable target-independent CAS inventory seam (tests). */
+  casReconcile?: typeof runCasOnlyReconciliation;
 }
 
 /**
@@ -137,19 +160,24 @@ export class BackupService {
   private readonly keyringPath: string;
   private readonly assembleEntries: (opts: AssembleOptions) => Promise<SourceEntry[]>;
   private readonly snapshot: typeof createSnapshot;
+  private readonly casReconcile: typeof runCasOnlyReconciliation;
   private readonly recoveryKit: RecoveryKitStateStore | undefined;
   private keyring: Keyring | undefined;
   private timer: NodeJS.Timeout | undefined;
   private walTimer: NodeJS.Timeout | undefined;
   /** One drain pass at a time; ticks that land mid-pass are skipped. */
   private draining = false;
+  /** Scheduled drain attempts are due independently per vault policy. */
+  private readonly lastWalDrainAttemptMs = new Map<string, number>();
   /** Set by stop(): no new runs/drains may start (shutdown teardown follows). */
   private stopped = false;
   /** Serializes every run — "one at a time (no concurrent backups)". */
   private chain: Promise<void> = Promise.resolve();
   /** The vault/kind currently executing inside `chain`, if any — read by
    *  `isRunning()` (the `_gateway/backup` route's `running` flag). */
-  private activeRun: { vaultId: string; kind: 'backup' | 'verify' | 'restore-verify' } | undefined;
+  private activeRun:
+    | { vaultId: string; kind: 'backup' | 'verify' | 'restore-verify' | 'reconcile' }
+    | undefined;
 
   constructor(opts: BackupServiceOptions) {
     this.config = opts.config;
@@ -164,6 +192,7 @@ export class BackupService {
     this.keyringPath = this.config?.keyringPath ?? path.join(this.backupDir, 'keyring.json');
     this.assembleEntries = opts.assembleEntries ?? assembleSourceEntries;
     this.snapshot = opts.snapshot ?? createSnapshot;
+    this.casReconcile = opts.casReconcile ?? runCasOnlyReconciliation;
     this.recoveryKit = opts.recoveryKit;
 
     this.health.registerProbe('backups', async () => this.probe());
@@ -185,12 +214,53 @@ export class BackupService {
   }
 
   private async probe(): Promise<{ status: 'ok' | 'degraded' | 'error'; detail?: string }> {
-    if (!(await this.backend())) return { status: 'ok', detail: 'backup is not configured' };
-    return evaluateBackupHealth({
-      state: await loadBackupState(this.backupDir),
-      ...(this.config ? { config: this.config } : {}),
-      now: this.now(),
-    });
+    const state = await loadBackupState(this.backupDir);
+    const backend = await this.backend();
+    const backup = backend
+      ? evaluateBackupHealth({
+          state,
+          policyForVault: (vaultId) => this.policyForVault(vaultId),
+          now: this.now(),
+        })
+      : { status: 'ok' as const, detail: 'backup is not configured' };
+    const casErrors: string[] = [];
+    const casWarnings: string[] = [];
+    for (const [vaultId, reconciliation] of Object.entries(state.casReconciliations)) {
+      const detail =
+        `${vaultId}: remote CAS inventory ${reconciliation.status} — ` +
+        `${reconciliation.cas.missing.count} missing/corrupt, ` +
+        `${reconciliation.cas.orphans.count} orphan(s)`;
+      if (reconciliation.status === 'error') casErrors.push(detail);
+      else if (reconciliation.status === 'degraded') casWarnings.push(detail);
+      const staleMs = this.policyForVault(vaultId).verifyEveryDays * DAY_MS * 2;
+      if (this.now() - Date.parse(reconciliation.checkedAt) >= staleMs) {
+        casWarnings.push(`${vaultId}: remote CAS inventory reconciliation is stale`);
+      }
+    }
+    if (backup.status === 'error' || casErrors.length > 0) {
+      return {
+        status: 'error',
+        detail: [
+          ...(backup.status === 'error' && backup.detail ? [backup.detail] : []),
+          ...casErrors,
+        ].join('; '),
+      };
+    }
+    if (backup.status === 'degraded' || casWarnings.length > 0) {
+      return {
+        status: 'degraded',
+        detail: [
+          ...(backup.status === 'degraded' && backup.detail ? [backup.detail] : []),
+          ...casWarnings,
+        ].join('; '),
+      };
+    }
+    return backup;
+  }
+
+  private policyForVault(vaultId: string): BackupPolicy {
+    const plane = this.vaults.get(vaultId);
+    return plane ? readBackupPolicy(plane.db.vault) : DEFAULT_BACKUP_POLICY;
   }
 
   private async ensureKeyring(): Promise<Keyring> {
@@ -225,6 +295,49 @@ export class BackupService {
 
   private assertRunning(): void {
     if (this.stopped) throw new Error('backup service is stopped');
+  }
+
+  // ── Provider policy ─────────────────────────────────────────────────
+
+  /** Push one vault's desired wire-policy, serialized with every state writer. */
+  async syncPolicy(vaultId: string): Promise<ProviderPolicySyncState> {
+    this.assertRunning();
+    const plane = this.vaults.get(vaultId);
+    if (!plane) throw new Error(`backup: unknown vault "${vaultId}"`);
+    const desired = providerPolicyFor(readBackupPolicy(plane.db.vault));
+    let result: ProviderPolicySyncState = {
+      status: 'pending',
+      desired,
+      checkedAt: new Date(this.now()).toISOString(),
+    };
+    await this.enqueue(async () => {
+      const state = await loadBackupState(this.backupDir);
+      const target = state.targets[vaultId];
+      if (!target) return;
+      const backend = await this.backend();
+      if (!backend) {
+        target.providerPolicy = result;
+        await saveBackupState(this.backupDir, state);
+        return;
+      }
+      this.assertTargetBackend(target, backend);
+      result = await pushProviderPolicy({
+        provider: backend.provider,
+        targetId: target.targetId,
+        desired,
+        checkedAt: new Date(this.now()).toISOString(),
+      });
+      target.providerPolicy = result;
+      await saveBackupState(this.backupDir, state);
+    });
+    return result;
+  }
+
+  private async syncEnabledPolicies(): Promise<void> {
+    const state = await loadBackupState(this.backupDir);
+    for (const plane of this.vaults.planesList()) {
+      if (state.targets[plane.boot.vaultId]) await this.syncPolicy(plane.boot.vaultId);
+    }
   }
 
   // ── Backup ────────────────────────────────────────────────────────────
@@ -291,10 +404,27 @@ export class BackupService {
       throw new Error(message);
     }
     const keyring = await this.ensureKeyring();
+    let createdTarget = false;
     if (!target) {
       const label = opaqueLabel();
       const { targetId } = await backend.provider.createTarget({ label });
       target = { targetId, label, generation: 1, providerRef: backend.providerRef };
+      createdTarget = true;
+      state.targets[vaultId] = target;
+      await saveBackupState(this.backupDir, state);
+    }
+    const desiredPolicy = providerPolicyFor(readBackupPolicy(plane.db.vault));
+    if (
+      createdTarget ||
+      !target.providerPolicy ||
+      !providerPolicyMatches(target.providerPolicy.desired, desiredPolicy)
+    ) {
+      target.providerPolicy = await pushProviderPolicy({
+        provider: backend.provider,
+        targetId: target.targetId,
+        desired: desiredPolicy,
+        checkedAt: new Date(this.now()).toISOString(),
+      });
       state.targets[vaultId] = target;
       await saveBackupState(this.backupDir, state);
     }
@@ -659,6 +789,110 @@ export class BackupService {
     }
   }
 
+  // ── Inventory reconciliation (issue #414 D14) ───────────────────────
+
+  async runReconciliation(
+    vaultId: string,
+    opts: { verifyBucket?: boolean } = {},
+  ): Promise<BackupReconciliationState | undefined> {
+    this.assertRunning();
+    let result: BackupReconciliationState | undefined;
+    await this.enqueue(async () => {
+      this.activeRun = { vaultId, kind: 'reconcile' };
+      try {
+        result = await this.doRunReconciliation(vaultId, opts.verifyBucket ?? false);
+      } finally {
+        this.activeRun = undefined;
+      }
+    });
+    return result;
+  }
+
+  /** Owner action: independently LIST the bucket and cross-check provider attestation. */
+  async verifyAgainstBucket(vaultId: string): Promise<BackupReconciliationState | undefined> {
+    return this.runReconciliation(vaultId, { verifyBucket: true });
+  }
+
+  private async doRunReconciliation(
+    vaultId: string,
+    verifyBucket: boolean,
+  ): Promise<BackupReconciliationState | undefined> {
+    const plane = this.vaults.get(vaultId);
+    if (!plane) throw new Error(`backup: unknown vault "${vaultId}"`);
+    const state = await loadBackupState(this.backupDir);
+    const target = state.targets[vaultId];
+    const backend = await this.backend();
+    const checkedAt = new Date(this.now()).toISOString();
+    let summary: BackupReconciliationState;
+    if (backend && target) {
+      this.assertTargetBackend(target, backend);
+      const desired = providerPolicyFor(readBackupPolicy(plane.db.vault));
+      if (
+        target.providerPolicy?.status !== 'rejected' ||
+        !providerPolicyMatches(target.providerPolicy.desired, desired)
+      ) {
+        target.providerPolicy = await inspectProviderPolicy({
+          provider: backend.provider,
+          targetId: target.targetId,
+          desired,
+          checkedAt,
+        });
+      }
+      try {
+        target.reconciliation = await runBackupReconciliation({
+          provider: backend.provider,
+          targetId: target.targetId,
+          vaultId,
+          keyring: await this.ensureKeyring(),
+          db: plane.db,
+          ...(this.storageConnections ? { storageConnections: this.storageConnections } : {}),
+          ...(target.walMarkerTips ? { walMarkerTips: target.walMarkerTips } : {}),
+          verifyBucket,
+          checkedAt,
+        });
+      } catch (err) {
+        target.reconciliation = failedReconciliation(
+          checkedAt,
+          verifyBucket ? 'bucket' : 'scheduled',
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+      summary = target.reconciliation;
+      state.targets[vaultId] = target;
+      delete state.casReconciliations[vaultId];
+    } else {
+      if (readBlobStoreSettings(plane.db.vault).kind !== 's3') {
+        this.logger.info(`backup reconcile: vault ${vaultId} has no remote store — skipped`);
+        return undefined;
+      }
+      try {
+        summary = await this.casReconcile({
+          db: plane.db,
+          ...(this.storageConnections ? { storageConnections: this.storageConnections } : {}),
+          verifyBucket,
+          checkedAt,
+        });
+      } catch (err) {
+        summary = failedCasOnlyReconciliation(
+          checkedAt,
+          verifyBucket ? 'bucket' : 'scheduled',
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+      state.casReconciliations[vaultId] = summary;
+    }
+    await saveBackupState(this.backupDir, state);
+    const detail =
+      `vault ${vaultId}: inventory ${summary.status} — ` +
+      `${summary.cas.missing.count} CAS missing, ${summary.backup.missing.count} backup missing, ` +
+      `${summary.walGaps.count} WAL gap(s), ` +
+      `${summary.cas.orphans.count + summary.backup.orphans.count} orphan(s)`;
+    if (summary.status === 'error') this.health.reportError('backups', detail);
+    else if (summary.status === 'degraded') this.health.reportDegraded('backups', detail);
+    else this.health.reportOk('backups', detail);
+    return summary;
+  }
+
   // ── Restore verification (issue #408 G9) ────────────────────────────
 
   /**
@@ -851,23 +1085,39 @@ export class BackupService {
    * provably damaged backups), and `stop()`'s chain await therefore covers
    * in-flight drains too.
    */
-  async drainWal(): Promise<void> {
+  async drainWal(vaultIds?: ReadonlySet<string>): Promise<void> {
     if (this.draining || this.stopped) return;
     this.draining = true;
     try {
-      await this.enqueue(() => this.doDrainPass());
+      await this.enqueue(() => this.doDrainPass(vaultIds));
     } finally {
       this.draining = false;
     }
   }
 
-  private async doDrainPass(): Promise<void> {
+  /** Scheduler entry: each vault's WAL drain follows its own declared RPO. */
+  private async drainWalDue(): Promise<void> {
+    const now = this.now();
+    const due = new Set<string>();
+    for (const plane of this.vaults.planesList()) {
+      const vaultId = plane.boot.vaultId;
+      const rpoMs = readBackupPolicy(plane.db.vault).rpoSeconds * 1000;
+      const last = this.lastWalDrainAttemptMs.get(vaultId) ?? 0;
+      if (now - last < rpoMs) continue;
+      this.lastWalDrainAttemptMs.set(vaultId, now);
+      due.add(vaultId);
+    }
+    if (due.size > 0) await this.drainWal(due);
+  }
+
+  private async doDrainPass(vaultIds?: ReadonlySet<string>): Promise<void> {
     const backend = await this.backend();
     for (const plane of this.vaults.planesList()) {
       if (this.stopped) return;
       const shipper = plane.walShipper;
       if (!shipper) continue;
       const vaultId = plane.boot.vaultId;
+      if (vaultIds && !vaultIds.has(vaultId)) continue;
       if (!backend) {
         // Capture-then-discard: the shipper must keep ticking (its
         // rollovers bound the WALs now that autocheckpoint is off), so
@@ -940,13 +1190,14 @@ export class BackupService {
           },
           logger: this.logger,
         });
-        if (Object.keys(newPins).length > 0 || Object.keys(result.markerTips).length > 0) {
+        {
           // Merge into a FRESH state read: the drain's uploads take long
           // enough that saving the pass's opening snapshot could clobber
           // fields other runs persisted meanwhile.
           const freshState = await loadBackupState(this.backupDir);
           const freshTarget = freshState.targets[vaultId];
           if (freshTarget) {
+            freshTarget.lastWalDrainAt = new Date(this.now()).toISOString();
             freshTarget.walGenerationEpochs = {
               ...freshTarget.walGenerationEpochs,
               ...newPins,
@@ -984,6 +1235,11 @@ export class BackupService {
 
   start(): void {
     if (this.timer) return;
+    void this.syncEnabledPolicies().catch((err) => {
+      this.logger.warn(
+        `backup: provider policy sync failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
     this.timer = setInterval(() => {
       void this.tick().catch((err) => {
         this.logger.warn(
@@ -993,12 +1249,12 @@ export class BackupService {
     }, HOUR_MS);
     this.timer.unref();
     this.walTimer = setInterval(() => {
-      void this.drainWal().catch((err) => {
+      void this.drainWalDue().catch((err) => {
         this.logger.warn(
           `backup: wal drain tick failed: ${err instanceof Error ? err.message : String(err)}`,
         );
       });
-    }, WAL_DRAIN_MS);
+    }, POLICY_SCHEDULER_TICK_MS);
     this.walTimer.unref();
   }
 
@@ -1026,42 +1282,63 @@ export class BackupService {
 
   async tick(): Promise<void> {
     if (this.stopped) return;
-    if (!(await this.backend())) return;
-    const intervalMs =
-      (this.config ? intervalHoursOf(this.config) : DEFAULT_INTERVAL_HOURS) * HOUR_MS;
-    const verifyMs =
-      (this.config ? verifyEveryDaysOf(this.config) : DEFAULT_VERIFY_EVERY_DAYS) * DAY_MS;
+    const backupConfigured = (await this.backend()) !== undefined;
     for (const plane of this.vaults.planesList()) {
       const vaultId = plane.boot.vaultId;
+      const policy = readBackupPolicy(plane.db.vault);
       let state = await loadBackupState(this.backupDir);
       let target = state.targets[vaultId];
       if (target?.fenced) continue;
-      const backupDue =
-        !target?.lastBackupAt || this.now() - Date.parse(target.lastBackupAt) >= intervalMs;
-      if (backupDue) {
-        await this.runBackup(vaultId);
-        state = await loadBackupState(this.backupDir);
-        target = state.targets[vaultId];
+      if (backupConfigured) {
+        const backupDue =
+          !target?.lastBackupAt ||
+          this.now() - Date.parse(target.lastBackupAt) >= policy.snapshotIntervalHours * HOUR_MS;
+        if (backupDue) {
+          await this.runBackup(vaultId);
+          state = await loadBackupState(this.backupDir);
+          target = state.targets[vaultId];
+        }
+        const verifyDue =
+          target?.lastSeq !== undefined &&
+          (!target.lastVerifiedAt ||
+            this.now() - Date.parse(target.lastVerifiedAt) >= policy.verifyEveryDays * DAY_MS);
+        if (verifyDue) {
+          await this.runVerify(vaultId).catch((err) => {
+            this.logger.warn(
+              `backup: scheduled verify failed: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          });
+        }
+        // Issue #408 G9: a real restore-verification on its own (weekly)
+        // clock, baselined at first backup so fresh targets get grace.
+        const restoreBaseline =
+          target?.lastRestoreVerifiedAt ?? target?.firstBackupAt ?? target?.lastBackupAt;
+        const restoreVerifyDue =
+          target?.lastSeq !== undefined &&
+          restoreBaseline !== undefined &&
+          this.now() - Date.parse(restoreBaseline) >= policy.verifyEveryDays * DAY_MS;
+        if (restoreVerifyDue) {
+          await this.runRestoreVerify(vaultId).catch((err) => {
+            this.logger.warn(
+              `backup: scheduled restore-verify failed: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          });
+        }
       }
-      const verifyDue =
-        target?.lastSeq !== undefined &&
-        (!target.lastVerifiedAt || this.now() - Date.parse(target.lastVerifiedAt) >= verifyMs);
-      if (verifyDue) await this.runVerify(vaultId);
-      // Issue #408 G9: a real restore-verification on its own (weekly)
-      // clock, baselined at first backup so fresh targets get grace.
-      const restoreBaseline =
-        target?.lastRestoreVerifiedAt ?? target?.firstBackupAt ?? target?.lastBackupAt;
-      const restoreVerifyDue =
-        target?.lastSeq !== undefined &&
-        restoreBaseline !== undefined &&
-        this.now() - Date.parse(restoreBaseline) >= RESTORE_VERIFY_EVERY_MS;
-      if (restoreVerifyDue) {
-        await this.runRestoreVerify(vaultId).catch((err) => {
-          this.logger.warn(
-            `backup: scheduled restore-verify failed: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        });
-      }
+      state = await loadBackupState(this.backupDir);
+      target = state.targets[vaultId];
+      const remoteCas = readBlobStoreSettings(plane.db.vault).kind === 's3';
+      const latestReconciliation =
+        backupConfigured && target
+          ? target.reconciliation
+          : newestReconciliation(target?.reconciliation, state.casReconciliations[vaultId]);
+      const reconciliationDue =
+        ((backupConfigured && target !== undefined) || remoteCas) &&
+        (latestReconciliation?.status === 'error' ||
+          !latestReconciliation?.checkedAt ||
+          this.now() - Date.parse(latestReconciliation.checkedAt) >=
+            policy.verifyEveryDays * DAY_MS);
+      if (reconciliationDue) await this.runReconciliation(vaultId);
     }
   }
 
@@ -1070,6 +1347,12 @@ export class BackupService {
   async status(): Promise<Record<string, BackupTargetState>> {
     const state = await loadBackupState(this.backupDir);
     return state.targets;
+  }
+
+  /** Latest persisted remote-CAS inventory for vaults without a backup target. */
+  async casReconciliationStatus(): Promise<Record<string, BackupReconciliationState>> {
+    const state = await loadBackupState(this.backupDir);
+    return state.casReconciliations;
   }
 
   /**

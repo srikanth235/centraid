@@ -139,7 +139,7 @@ export function makeDaemonDevicePlane(input: {
           if (!redeemed) return { ok: false, error: 'invalid_ticket' };
           const plane = registry.get(redeemed.vaultId);
           if (!plane) return { ok: false, error: 'vault_gone' };
-          enrollments.enroll({
+          const enrollment = enrollments.enroll({
             endpointId,
             vaultId: redeemed.vaultId,
             label: request.deviceName || `device ${endpointId.slice(0, 10)}…`,
@@ -148,6 +148,13 @@ export function makeDaemonDevicePlane(input: {
               ? { rememberDevice: request.rememberDevice }
               : {}),
             ...(request.trust !== undefined ? { trust: request.trust } : {}),
+          });
+          plane.db.blobTransfers.enrollPairedDevice({
+            identity: endpointId,
+            ownerPartyId: plane.boot.ownerPartyId,
+            name: request.deviceName || `device ${endpointId.slice(0, 10)}…`,
+            ...(request.platform ? { platform: request.platform } : {}),
+            trust: enrollment.trust === 'readonly' ? 'readonly' : 'full',
           });
           logger.info(
             `device plane: enrolled ${endpointId.slice(0, 10)}… into vault ${redeemed.vaultId}`,

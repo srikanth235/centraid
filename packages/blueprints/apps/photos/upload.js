@@ -3,7 +3,7 @@
 // from app.jsx (the only two things here that touch app-level state) — the
 // button/input DOM nodes it mutates for progress text are looked up locally
 // via `$`, exactly like the pre-split code did.
-import { BLOB_ROUTE, stageFileBytes, toast } from './kit.js';
+import { isPendingOffsite, stageDerivative, stageFileBytes, toast } from './kit.js';
 import { act, narrate } from './outcomes.js';
 import { CLIENT_TINY_EDGE, CLIENT_MEDIUM_EDGE } from './media.js';
 import { $ } from './dom.js';
@@ -16,7 +16,7 @@ const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
 // 64-bit dHash (issue #299 Tier 0): 9×8 grayscale, each bit = "left pixel
 // brighter than its right neighbour". The canvas is the client's raster
 // codec, so the phash rides the same decode the thumb already paid for.
-function dHashFromImage(img) {
+export function dHashFromImage(img) {
   try {
     const canvas = document.createElement('canvas');
     canvas.width = 9;
@@ -59,11 +59,7 @@ async function stageRung(bitmap, parentSha, edge, variant) {
   canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.82));
   if (!blob) return;
-  await fetch(`${BLOB_ROUTE}?variant=${variant}&variant_of=${parentSha}&media_type=image/jpeg`, {
-    method: 'POST',
-    headers: { 'content-type': 'image/jpeg' },
-    body: blob,
-  });
+  await stageDerivative(parentSha, variant, blob, 'image/jpeg');
 }
 
 // Both preview-ladder rungs (issue #405 §2), produced at upload time on this
@@ -87,12 +83,120 @@ async function stageClientPreviews(file, parentSha) {
     const phash = dHashFromImage(bitmap);
     // Tiny first (the grid is what paints on return), then medium. Both skip
     // themselves when the original is already smaller than their edge.
-    await stageRung(bitmap, parentSha, CLIENT_TINY_EDGE, 'thumb');
-    await stageRung(bitmap, parentSha, CLIENT_MEDIUM_EDGE, 'preview');
+    await Promise.allSettled([
+      stageRung(bitmap, parentSha, CLIENT_TINY_EDGE, 'thumb'),
+      stageRung(bitmap, parentSha, CLIENT_MEDIUM_EDGE, 'preview'),
+      ...(phash
+        ? [stageDerivative(parentSha, 'phash', new Blob([phash]), 'text/x-perceptual-hash')]
+        : []),
+    ]);
     bitmap.close();
     return dims ? { ...dims, ...(phash ? { phash } : {}) } : phash ? { phash } : null;
   } catch {
     return null; // no previews is a slower grid, never a failed upload
+  }
+}
+
+function waitForMedia(element, event, timeoutMs = 12_000) {
+  return new Promise((resolve, reject) => {
+    const done = (value, error) => {
+      clearTimeout(timer);
+      element.removeEventListener(event, ready);
+      element.removeEventListener('error', failed);
+      if (error) reject(error);
+      else resolve(value);
+    };
+    const ready = () => done();
+    const failed = () => done(undefined, new Error('media decode failed'));
+    const timer = setTimeout(
+      () => done(undefined, new Error('media metadata timed out')),
+      timeoutMs,
+    );
+    element.addEventListener(event, ready, { once: true });
+    element.addEventListener('error', failed, { once: true });
+  });
+}
+
+function scaledCanvas(source, width, height, maxEdge) {
+  const scale = Math.min(1, maxEdge / Math.max(width, height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(width * scale));
+  canvas.height = Math.max(1, Math.round(height * scale));
+  canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+function canvasBlob(canvas) {
+  return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.84));
+}
+
+/**
+ * Hardware-decode one representative frame on the uploading device. The
+ * poster (lightbox/caption input) and thumb (grid) ride the derivative door;
+ * no gateway video decoder exists in v0.
+ */
+export async function stageVideoPoster(file, parentSha) {
+  if (!URL?.createObjectURL) return null;
+  const video = document.createElement('video');
+  const url = URL.createObjectURL(file);
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = 'metadata';
+  try {
+    video.src = url;
+    video.load();
+    await waitForMedia(video, 'loadedmetadata');
+    const width = Number(video.videoWidth);
+    const height = Number(video.videoHeight);
+    const duration = Number(video.duration);
+    if (!(width > 0 && height > 0)) return null;
+    const seekTo = Number.isFinite(duration) && duration > 0 ? Math.min(1, duration / 2) : 0;
+    if (seekTo > 0.01) {
+      video.currentTime = seekTo;
+      await waitForMedia(video, 'seeked');
+    } else if (video.readyState < 2) {
+      await waitForMedia(video, 'loadeddata');
+    }
+    const posterCanvas = scaledCanvas(video, width, height, CLIENT_MEDIUM_EDGE);
+    const thumbCanvas = scaledCanvas(video, width, height, CLIENT_TINY_EDGE);
+    const [poster, thumb] = await Promise.all([canvasBlob(posterCanvas), canvasBlob(thumbCanvas)]);
+    await Promise.allSettled([
+      ...(poster ? [stageDerivative(parentSha, 'poster', poster, 'image/jpeg')] : []),
+      ...(thumb ? [stageDerivative(parentSha, 'thumb', thumb, 'image/jpeg')] : []),
+    ]);
+    return {
+      width,
+      height,
+      ...(Number.isFinite(duration) && duration >= 0 ? { duration_s: duration } : {}),
+    };
+  } catch {
+    return null;
+  } finally {
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+    URL.revokeObjectURL(url);
+  }
+}
+
+/** Duration metadata for an audio upload; ID3/Vorbis tags parse server-side. */
+export async function probeAudio(file) {
+  if (!URL?.createObjectURL) return null;
+  const audio = document.createElement('audio');
+  const url = URL.createObjectURL(file);
+  audio.preload = 'metadata';
+  try {
+    audio.src = url;
+    audio.load();
+    await waitForMedia(audio, 'loadedmetadata');
+    const duration = Number(audio.duration);
+    return Number.isFinite(duration) && duration >= 0 ? { duration_s: duration } : null;
+  } catch {
+    return null;
+  } finally {
+    audio.removeAttribute('src');
+    audio.load();
+    URL.revokeObjectURL(url);
   }
 }
 
@@ -116,6 +220,7 @@ export async function runUpload(files, { refresh, setUploading }) {
   let added = 0;
   let deduped = 0;
   let parked = 0;
+  let pendingOffsite = 0;
   let queued = 0;
   let failed = 0;
   let unreadable = 0;
@@ -128,34 +233,36 @@ export async function runUpload(files, { refresh, setUploading }) {
     // mints and the library learns about the asset.
     let staged;
     try {
-      staged = await stageFileBytes(file);
+      staged = await stageFileBytes(file, '', { hash: true });
     } catch {
       unreadable += 1;
       continue;
     }
-    const kind = file.type.startsWith('video/')
+    const effectiveType = String(file.type || staged.mediaType || '').toLowerCase();
+    const kind = effectiveType.startsWith('video/')
       ? 'video'
-      : file.type.startsWith('audio/')
+      : effectiveType.startsWith('audio/')
         ? 'audio'
         : 'photo';
-    // Only rasters get client-side preview rungs. Video poster frames are
-    // deliberately OUT of v0 (issue #405 §2): capturing one means loading the
-    // decoded video, seeking to a frame and racing loadeddata/seeked events —
-    // fiddly, flaky under the blueprint harness, and no cheaper than the
-    // gateway (which itself skips video decode in v0). A thumbless video keeps
-    // rendering the placeholder-with-play-badge the grid already draws.
-    const dims = kind === 'photo' ? await stageClientPreviews(file, staged.sha256) : null;
+    const mediaMeta =
+      kind === 'photo'
+        ? await stageClientPreviews(file, staged.sha256)
+        : kind === 'video'
+          ? await stageVideoPoster(file, staged.sha256)
+          : await probeAudio(file);
     const outcome = await act('upload', {
       staged_sha: staged.sha256,
       kind,
       captured_at: new Date(file.lastModified || Date.now()).toISOString(),
       ...(file.name ? { title: file.name } : {}),
-      ...(dims?.width ? { width: dims.width, height: dims.height } : {}),
-      ...(dims?.phash ? { phash: dims.phash } : {}),
+      ...(mediaMeta?.width ? { width: mediaMeta.width, height: mediaMeta.height } : {}),
+      ...(mediaMeta?.duration_s != null ? { duration_s: mediaMeta.duration_s } : {}),
+      ...(mediaMeta?.phash ? { phash: mediaMeta.phash } : {}),
     });
     // One bad file never sinks the batch — count it and keep going.
     if (outcome?.status === 'executed') {
-      added += 1;
+      if (isPendingOffsite(staged)) pendingOffsite += 1;
+      else added += 1;
       if (outcome.output?.deduped) deduped += 1;
     } else if (outcome?.status === 'parked') {
       parked += 1;
@@ -169,7 +276,7 @@ export async function runUpload(files, { refresh, setUploading }) {
 
   setUploading(false);
   btn.disabled = false;
-  btn.textContent = '＋ Add photos';
+  btn.textContent = '＋ Add media';
   $('emptyUpload').disabled = false;
 
   const parts = [];
@@ -178,6 +285,7 @@ export async function runUpload(files, { refresh, setUploading }) {
     parts.push(`Added ${added} ${added === 1 ? 'item' : 'items'}${dedupeNote}`);
   }
   if (parked > 0) parts.push(`${parked} awaiting approval`);
+  if (pendingOffsite > 0) parts.push(`${pendingOffsite} attached locally · pending offsite`);
   if (queued > 0) parts.push(`${queued} saved offline`);
   if (failed > 0) parts.push(`${failed} refused`);
   if (unreadable > 0) parts.push(`${unreadable} unreadable`);

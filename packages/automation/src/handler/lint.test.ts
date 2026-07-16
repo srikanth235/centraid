@@ -34,6 +34,7 @@ describe('lintHandlerSource', () => {
     expect(bad.every((f) => f.rule === 'no-new-date')).toBeTruthy();
     expect(lintHandlerSource('const a = new Date(ctx.input.ms);')).toEqual([]);
     expect(lintHandlerSource("const a = new Date('2026-01-01');")).toEqual([]);
+    expect(lintHandlerSource('const now = ctx.now;')).toEqual([]);
   });
 
   it('flags Math.random, randomUUID, crypto randomness, performance.now', () => {

@@ -106,6 +106,25 @@ function stage(plane: VaultPlane, bytes: Buffer, name: string): string {
   }).sha256;
 }
 
+function declareRemotePrimary(plane: VaultPlane): void {
+  const row = plane.db.vault.prepare('SELECT settings_json FROM core_vault LIMIT 1').get() as {
+    settings_json: string | null;
+  };
+  const settings = row.settings_json
+    ? (JSON.parse(row.settings_json) as Record<string, unknown>)
+    : {};
+  plane.db.vault.prepare('UPDATE core_vault SET settings_json = ?').run(
+    JSON.stringify({
+      ...settings,
+      blob_store: {
+        kind: 's3',
+        endpoint: 'https://remote-primary.invalid',
+        bucket: 'restore-e2e',
+      },
+    }),
+  );
+}
+
 test('lazy restore: a library bigger than local disk restores previews-first — remote-held blobs stay remote-only, local-only blobs materialize, tinies warm', async () => {
   const vaultDir = await tempDir('lazy-vault');
   const providerDir = await tempDir('lazy-provider');
@@ -237,6 +256,73 @@ test('lazy restore: a library bigger than local disk restores previews-first —
     // And the local-only original reads straight from the materialized copy.
     const localOnly = await readCustody.open(originals[2]!.sha);
     expect(localOnly!.equals(originals[2]!.bytes)).toBe(true);
+  } finally {
+    registry.stop();
+    while (cleanups.length > 0) await cleanups.pop()?.();
+  }
+}, 30_000);
+
+test('remote-primary snapshot restores from provider bytes plus only the durable outbox', async () => {
+  const vaultDir = await tempDir('remote-primary-vault');
+  const providerDir = await tempDir('remote-primary-provider');
+  const backupDir = await tempDir('remote-primary-backup');
+  const registry = openVaultRegistry({
+    rootDir: vaultDir,
+    logger: silentLogger,
+    ownerName: 'Mara',
+  });
+  const vaultId = registry.defaultVaultId();
+  const plane = registry.get(vaultId)!;
+  const service = new BackupService({
+    config: { enabled: true, provider: { kind: 'local', dir: providerDir } },
+    backupDir,
+    vaults: registry,
+    health: new HealthRegistry(),
+    logger: silentLogger,
+  });
+  const remoteStore = new MemoryRemoteStore();
+  const remote: RemoteTier = { store: remoteStore, encryptKey: randomBytes(32) };
+
+  try {
+    declareRemotePrimary(plane);
+    const taskId = invoke(plane, 'schedule.add_task', { title: 'Restore split custody' })[
+      'task_id'
+    ] as string;
+    const remoteBytes = randomBytes(700);
+    const pendingBytes = randomBytes(701);
+    const remoteSha = stage(plane, remoteBytes, 'remote.bin');
+    const pendingSha = stage(plane, pendingBytes, 'pending.bin');
+    for (const sha of [remoteSha, pendingSha]) {
+      invoke(plane, 'core.attach', {
+        subject_type: 'schedule.task',
+        subject_id: taskId,
+        staged_sha: sha,
+      });
+    }
+
+    const seedCustody = new BlobCustody(
+      new FsBlobStore(path.join(plane.dir, 'blobs')),
+      () => remote,
+    );
+    await seedCustody.replicate([remoteSha]);
+    plane.db.blobTransfers.state.completeOutbox(remoteSha);
+    expect(plane.db.blobTransfers.pendingSnapshotShas()).toEqual([pendingSha]);
+
+    await service.runBackup(vaultId);
+    const destDir = path.join(await tempDir('remote-primary-dest'), 'restored');
+    const result = await service.restore({ vaultId, destDir, lazy: { remote } });
+    const restoredLocal = new FsBlobStore(path.join(destDir, 'blobs'));
+
+    // Remote-primary originals never enter the snapshot at all; the restored
+    // DB still addresses them by SHA and the configured remote answers later.
+    expect(result.entries.some((entry) => entry.endsWith(remoteSha))).toBe(false);
+    expect(result.skippedBlobs).not.toContain(pendingSha);
+    expect(restoredLocal.hasSync(remoteSha)).toBe(false);
+    expect(restoredLocal.hasSync(pendingSha)).toBe(true);
+    expect((await restoredLocal.get(pendingSha))?.equals(pendingBytes)).toBe(true);
+
+    const restoredCustody = new BlobCustody(restoredLocal, () => remote);
+    expect((await restoredCustody.open(remoteSha))?.equals(remoteBytes)).toBe(true);
   } finally {
     registry.stop();
     while (cleanups.length > 0) await cleanups.pop()?.();

@@ -97,13 +97,14 @@ export default async ({ input, ctx }) => {
       .map((asset) => {
         const content = contentById.get(asset.content_id);
         const albumIds = albumIdsByAsset.get(asset.asset_id) ?? [];
-        const { src, thumb, preview } = srcOf(content);
+        const { src, thumb, preview, poster } = srcOf(content);
         return {
           ...asset,
           favorite: starredIds.has(asset.content_id) ? 1 : 0,
           content_uri: src,
           thumb_uri: thumb,
           preview_uri: preview,
+          poster_uri: poster,
           byte_size: content?.byte_size ?? null,
           media_type: content?.media_type ?? null,
           title: content?.title ?? null,

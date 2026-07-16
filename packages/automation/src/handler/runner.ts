@@ -138,6 +138,8 @@ export interface RunHandlerOptions {
   /** Absolute path to the generated `handler.js`. */
   handlerFile: string;
   runId: string;
+  /** ISO fire-start instant fixed by the caller; defaults to handler admission time. */
+  now?: string;
   toolDispatcher: ToolDispatcher;
   agentDispatcher: AgentDispatcher;
   /** Per-app conversation-ledger store for audit + ctx.state + ctx.runs. */
@@ -539,7 +541,9 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     appId,
     opts.automationName,
   );
-  const startedAt = Date.now();
+  const startedAt = opts.now === undefined ? Date.now() : Date.parse(opts.now);
+  if (!Number.isFinite(startedAt))
+    throw new Error('automation ctx.now must be a valid ISO instant');
   audit.store.insertTurn({
     turnId: audit.runId,
     conversationId: execConversationId,
@@ -572,6 +576,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     workerData: {
       handlerFile: opts.handlerFile,
       args: { automation: { id: opts.automationId } },
+      now: new Date(startedAt).toISOString(),
       input: opts.input,
     },
     resourceLimits: { maxOldGenerationSizeMb: 256, maxYoungGenerationSizeMb: 32 },

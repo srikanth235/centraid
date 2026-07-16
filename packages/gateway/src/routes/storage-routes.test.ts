@@ -214,6 +214,30 @@ test('GET status answers per-vault shape even with zero mounted vaults', async (
   expect((await res.json()) as { vaults: unknown[] }).toEqual({ vaults: [] });
 });
 
+test('GET status/events exposes the authenticated custody completion stream', async () => {
+  const dir = await tempDir();
+  const storageConnections = await openStorageConnectionStore(dir);
+  const recoveryKit = new RecoveryKitStateStore(dir);
+  const controller = new AbortController();
+  const base = await startHandlerServer(
+    makeStorageRouteHandler({
+      storageConnections,
+      recoveryKit,
+      vaults: fakeVaults(),
+      storageUsage: new StorageUsagePoller({ storageConnections }),
+    }),
+  );
+
+  const res = await fetch(`${base}/centraid/_gateway/storage/status/events`, {
+    signal: controller.signal,
+  });
+  expect(res.status).toBe(200);
+  expect(res.headers.get('content-type')).toContain('text/event-stream');
+  const first = await res.body!.getReader().read();
+  controller.abort();
+  expect(new TextDecoder().decode(first.value)).toContain('event: custody\ndata: {"vaults":[]}');
+});
+
 test('BYO S3 cannot claim backup support because it has no registry, retention, or fencing plane', async () => {
   const dir = await tempDir();
   const storageConnections = await openStorageConnectionStore(dir);

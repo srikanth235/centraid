@@ -86,16 +86,31 @@ CREATE INDEX IF NOT EXISTS idx_enrich_embedding_entity
   ON enrich_embedding(entity_type, entity_id);
 
 CREATE TABLE IF NOT EXISTS enrich_request (
-  request_id   TEXT PRIMARY KEY,
-  entity_type  TEXT NOT NULL,
-  entity_id    TEXT,
-  reason       TEXT NOT NULL CHECK (reason IN ('search-miss','on-view','manual')),
-  detail       TEXT,
-  requested_at TEXT NOT NULL,
-  drained_at   TEXT
+  request_id          TEXT PRIMARY KEY,
+  entity_type         TEXT NOT NULL,
+  entity_id           TEXT,
+  reason              TEXT NOT NULL CHECK (reason IN ('search-miss','on-view','manual')),
+  detail              TEXT,
+  -- NULL capability = the existing gateway/automation queue. A named
+  -- capability makes the request eligible for an opted-in device lease.
+  required_capability TEXT CHECK (required_capability IN
+    ('previews','poster','pdfText','ocr','transcript','embedding')),
+  contribution_variant TEXT CHECK (contribution_variant IN
+    ('thumb','preview','poster','text','transcript','embedding','phash')),
+  requested_at        TEXT NOT NULL,
+  drained_at          TEXT,
+  lease_device_id     TEXT,
+  lease_token         TEXT,
+  lease_expires_at    TEXT,
+  lease_attempts      INTEGER NOT NULL DEFAULT 0 CHECK (lease_attempts >= 0),
+  CHECK ((lease_device_id IS NULL) = (lease_token IS NULL)),
+  CHECK ((lease_device_id IS NULL) = (lease_expires_at IS NULL))
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_enrich_request_open
   ON enrich_request(entity_type, requested_at) WHERE drained_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_enrich_request_leaseable
+  ON enrich_request(required_capability, lease_expires_at, requested_at)
+  WHERE drained_at IS NULL AND required_capability IS NOT NULL;
 
 INSERT INTO core_concept_scheme (scheme_id, uri, title, publisher, version)
 SELECT lower(hex(randomblob(16))), 'urn:centraid:vision', 'Vision tags (machine)', 'centraid', '1'

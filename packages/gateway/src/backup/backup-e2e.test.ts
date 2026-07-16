@@ -27,7 +27,7 @@ import {
   verifySnapshot,
   type BackupProvider,
 } from '@centraid/backup';
-import { currentReplicaLogState, sealAad, unsealValue } from '@centraid/vault';
+import { currentReplicaLogState, sealAad, unsealValue, updateBackupPolicy } from '@centraid/vault';
 import { openVaultRegistry, type VaultRegistry } from '../serve/vault-registry.js';
 import type { VaultPlane } from '../serve/vault-plane.js';
 import { HealthRegistry } from '../serve/health-registry.js';
@@ -223,8 +223,6 @@ beforeAll(async () => {
   const layout = daemonLayoutFor(dataDir);
   const config: BackupConfig = {
     enabled: true,
-    intervalHours: 1,
-    verifyEveryDays: 1,
     provider: { kind: 'local', dir: providerDir },
   };
   const configPath = path.join(dataDir, 'config.json');
@@ -245,6 +243,7 @@ beforeAll(async () => {
     seeded: undefined as unknown as Seeded,
   };
   reopen();
+  updateBackupPolicy(h.plane.db.vault, { snapshotIntervalHours: 1, verifyEveryDays: 1 });
   cleanups.push(() => h.registry.stop());
 
   // 1. Seed a REAL vault: several data rows, real blobs (one > 1MiB, so it

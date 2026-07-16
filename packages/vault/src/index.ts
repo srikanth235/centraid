@@ -1,6 +1,5 @@
-// @centraid/vault — the Duaility personal ontology (11 schemas over two
-// SQLite files) and the gateway that is the only door to it. Consumers import
-// it namespaced (`import * as vault from '@centraid/vault'`).
+// @centraid/vault — the Duaility ontology and its sole gateway; consumers
+// import it namespaced (`import * as vault from '@centraid/vault'`).
 
 export {
   openVaultDb,
@@ -9,11 +8,16 @@ export {
   type OpenVaultOptions,
   type BlobStoreSettings,
 } from './db.js';
+export * from './backup-policy.js';
 export {
   isDiskFullError,
   asVaultDiskFullError,
   VaultDiskFullError,
   VaultBlobBackpressureError,
+  VaultBlobAuthorizationError,
+  VaultBlobHashMismatchError,
+  VaultBlobRemoteUnavailableError,
+  VaultBlobSessionError,
   DiskFullTracker,
   sharedDiskFullTracker,
   type DiskFullEvent,
@@ -35,6 +39,20 @@ export {
   type S3BlobStoreOptions,
   type S3Credentials,
 } from './blob/s3.js';
+export { S3TransferStore } from './blob/s3-transfer.js';
+export {
+  BlobTransferCoordinator,
+  type BeginBlobIngressInput,
+  type BeginBlobIngressResult,
+  type BlobTransferStatus,
+  type CommittedBlob,
+} from './blob/transfers.js';
+export {
+  type DirectBlobDownloadResult,
+  type DirectBlobInitInput,
+  type DirectBlobInitResult,
+} from './blob/direct-transfers.js';
+export { BlobContentKeyRegistry, type DeviceWrappedContentKey } from './blob/content-keys.js';
 export {
   BlobCustody,
   sealBlob,
@@ -69,6 +87,19 @@ export {
   type StageBlobOptions,
   type StagedBlob,
 } from './blob/staging.js';
+export {
+  DERIVATIVE_REGISTRY,
+  DERIVATIVE_VARIANTS,
+  isBinaryDerivative,
+  isDerivativeVariant,
+  validateDerivativeContribution,
+  type BinaryDerivativeVariant,
+  type DerivativeBackstop,
+  type DerivativeSpec,
+  type DerivativeVariant,
+  type InlineDerivativeVariant,
+  type ValidatedDerivative,
+} from './blob/derivatives.js';
 export { MAX_INLINE_DATA_URI_CHARS, decodeDataUri } from './blob/mint.js';
 export { promoteStagedBlob, type PromotedContent } from './blob/promote.js';
 export { sniffMediaType, extractBlobMeta, type BlobMeta } from './blob/pipeline.js';
@@ -354,6 +385,24 @@ export {
   type AgentContentVariant,
 } from './enrich/content.js';
 export {
+  DEFAULT_ENRICHMENT_LEASE_TTL_MS,
+  ENRICHMENT_CAPABILITIES,
+  MAX_ENRICHMENT_LEASE_TTL_MS,
+  MIN_ENRICHMENT_LEASE_TTL_MS,
+  completeEnrichmentLease,
+  drainSatisfiedEnrichmentRequests,
+  enrichmentQueueDepth,
+  leaseNextEnrichmentRequest,
+  queueDeviceEnrichmentRequest,
+  queueMissingDeviceEnrichmentBacklog,
+  queueMissingDeviceEnrichmentRequests,
+  releaseEnrichmentLease,
+  releaseExpiredEnrichmentLeases,
+  type DeviceEnrichmentSource,
+  type EnrichmentCapability,
+  type EnrichmentLease,
+} from './enrich/leases.js';
+export {
   hexHamming,
   registerHammingFn,
   encodeVector,
@@ -416,9 +465,7 @@ export {
   type ExtApplyOutcome,
 } from './gateway/ext.js';
 
-// --- issue #367 §E: vault.db growth-runway (dbstat sizing, journal
-// archival, FTS index budget, inline-body threshold) — appended as one
-// block, kept distinct from the exports above. ---
+// Issue #367 §E: vault.db sizing, archival, FTS budget, and inline threshold.
 export {
   dbSizeBreakdown,
   type DbSizeBreakdown,

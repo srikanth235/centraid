@@ -23,6 +23,7 @@ import type { Credential } from '../gateway/types.js';
 import { readEnrichSettings, updateEnrichSettings } from '../host.js';
 import { VISION_SCHEME_URI } from '../schema/enrich.js';
 import { hexHamming, encodeVector, decodeVector, cosine, scanEmbeddings } from './similarity.js';
+import { leaseNextEnrichmentRequest, queueDeviceEnrichmentRequest } from './leases.js';
 
 let db: VaultDb;
 let gw: Gateway;
@@ -664,6 +665,35 @@ describe('phase-5 surfaces', () => {
           .get() as { n: number }
       ).n,
     ).toBe(0);
+  });
+
+  test('a gateway backstop cannot drain a live device lease but may resume after expiry', () => {
+    queueDeviceEnrichmentRequest(db.vault, {
+      requestId: 'pdf-device-job',
+      entityType: 'core.content_item',
+      entityId: 'pdf-content',
+      capability: 'pdfText',
+      contributionVariant: 'text',
+    });
+    leaseNextEnrichmentRequest(db.vault, {
+      deviceId: 'laptop',
+      capabilities: ['pdfText'],
+      now: '2099-01-01T00:00:00.000Z',
+      ttlMs: 60_000,
+      token: 'live-token',
+    });
+    const live = invoke(agent, 'enrich.mark_requests_drained', {
+      request_ids: ['pdf-device-job'],
+    });
+    expect(output<{ drained: number }>(live).drained).toBe(0);
+
+    db.vault
+      .prepare("UPDATE enrich_request SET lease_expires_at = '2000-01-01T00:00:00.000Z'")
+      .run();
+    const expired = invoke(agent, 'enrich.mark_requests_drained', {
+      request_ids: ['pdf-device-job'],
+    });
+    expect(output<{ drained: number }>(expired).drained).toBe(1);
   });
 });
 

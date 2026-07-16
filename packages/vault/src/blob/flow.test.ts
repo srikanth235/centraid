@@ -315,6 +315,7 @@ test('blob maintenance sweep refreshes the app-readable custody-state mirror (is
 test('custodyStateCounts groups the mirror by state, zero-filled (issue #351 wave 4)', async () => {
   const { custodyStateCounts } = await import('./custody.js');
   expect(custodyStateCounts(db.vault)).toEqual({
+    'pending-offsite': 0,
     'local-only': 0,
     replicated: 0,
     'remote-only': 0,
@@ -324,6 +325,7 @@ test('custodyStateCounts groups the mirror by state, zero-filled (issue #351 wav
   executed(invoke('core.add_document', { staged_sha: staged.sha256, title: 'p.png' }));
   await gw.sweepBlobs(owner); // no remote tier configured — settles local-only
   expect(custodyStateCounts(db.vault)).toEqual({
+    'pending-offsite': 0,
     'local-only': 1,
     replicated: 0,
     'remote-only': 0,

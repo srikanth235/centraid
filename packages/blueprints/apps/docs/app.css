@@ -25,6 +25,7 @@
   --c-doc: #4058cf;
   --c-sheet: #4e7a40;
   --c-slide: #9a6528;
+  --c-media: #7c3aed;
 
   /* Warm-paper surfaces — deliberately independent of --app-hue's neutral
      ramp: tokens.css's --bg/--bg-sunken are hue-parameterized, but docs
@@ -58,6 +59,7 @@
   --c-doc: #8aa0ff;
   --c-sheet: #93c17f;
   --c-slide: #d9ab6d;
+  --c-media: #b69cff;
   --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
   --custody-warn: #e0a94a;
 }
@@ -70,6 +72,7 @@
     --c-doc: #8aa0ff;
     --c-sheet: #93c17f;
     --c-slide: #d9ab6d;
+    --c-media: #b69cff;
     --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
     --custody-warn: #e0a94a;
   }
@@ -580,6 +583,26 @@ button {
   justify-content: center;
   overflow: hidden;
 }
+.d-media-play {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.58);
+  color: #fff;
+  font-size: 0.8rem;
+  padding-left: 2px;
+  pointer-events: none;
+}
+.d-media-play.small {
+  width: 1.35rem;
+  height: 1.35rem;
+  font-size: 0.55rem;
+}
 .d-thumb img {
   width: 100%;
   height: 100%;
@@ -733,6 +756,7 @@ button {
   background: var(--sel);
 }
 .d-badge {
+  position: relative;
   flex-shrink: 0;
   width: 34px;
   height: 34px;
@@ -879,6 +903,7 @@ button {
   padding: 20px 18px;
 }
 .d-hero {
+  position: relative;
   height: 132px;
   border-radius: 12px;
   display: flex;
@@ -1185,6 +1210,9 @@ button {
   border: 1px solid var(--line);
   border-radius: 8px;
 }
+.d-version-audio {
+  width: 100%;
+}
 
 /* ---------- In-place editor (issue #352) ---------- */
 
@@ -1342,6 +1370,35 @@ button {
   border-radius: 8px;
   background: #fff;
   box-shadow: var(--shadow-lg);
+}
+.d-quick-media {
+  max-width: min(900px, 90%);
+  max-height: 100%;
+  border-radius: 8px;
+  background: #000;
+  box-shadow: var(--shadow-lg);
+}
+.d-quick-audio {
+  width: min(34rem, 90%);
+  display: grid;
+  justify-items: center;
+  gap: 1.25rem;
+  padding: 2.25rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.d-quick-audio > span {
+  display: grid;
+  place-items: center;
+  width: 5rem;
+  height: 5rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 2.2rem;
+}
+.d-quick-audio audio {
+  width: 100%;
 }
 .d-quick-page {
   width: min(520px, 84%);

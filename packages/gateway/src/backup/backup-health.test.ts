@@ -21,6 +21,7 @@ function healthyTarget(over: Partial<BackupTargetState> = {}): BackupTargetState
     lastBackupAt: iso,
     lastVerifiedAt: iso,
     lastRestoreVerifiedAt: iso,
+    lastWalDrainAt: new Date(NOW - 30_000).toISOString(),
     ...over,
   };
 }
@@ -28,6 +29,7 @@ function healthyTarget(over: Partial<BackupTargetState> = {}): BackupTargetState
 function stateWith(target: BackupTargetState): BackupState {
   return {
     targets: { 'vault-a': target },
+    casReconciliations: {},
     sourceInstanceId: 'deadbeef',
     recoveryKit: { confirmedAt: null },
   };
@@ -81,4 +83,58 @@ test('a real error still outranks a recent foreign checkpoint', () => {
   });
   const res = evaluateBackupHealth({ state: stateWith(target), now: NOW });
   expect(res.status).toBe('error');
+});
+
+test('a provider policy echo drift is a sticky degraded health signal', () => {
+  const target = healthyTarget({
+    providerPolicy: {
+      status: 'drift',
+      desired: {
+        rpoSeconds: 60,
+        snapshotIntervalHours: 24,
+        verifyEveryDays: 7,
+        casAck: 'receipt',
+      },
+      checkedAt: new Date(NOW).toISOString(),
+      echo: {
+        rpoSeconds: 120,
+        snapshotIntervalHours: 24,
+        verifyEveryDays: 7,
+        casAck: 'receipt',
+        declaredAt: Math.floor(NOW / 1000),
+      },
+    },
+  });
+  const res = evaluateBackupHealth({ state: stateWith(target), now: NOW });
+  expect(res.status).toBe('degraded');
+  expect(res.detail).toContain('provider policy echo differs');
+});
+
+test('a typed provider policy rejection raises error health', () => {
+  const target = healthyTarget({
+    providerPolicy: {
+      status: 'rejected',
+      desired: {
+        rpoSeconds: 60,
+        snapshotIntervalHours: 24,
+        verifyEveryDays: 7,
+        casAck: 'replicated',
+      },
+      checkedAt: new Date(NOW).toISOString(),
+      error: 'replicated acknowledgement unavailable',
+      errorCode: 'policy_unmet',
+    },
+  });
+  const res = evaluateBackupHealth({ state: stateWith(target), now: NOW });
+  expect(res.status).toBe('error');
+  expect(res.detail).toContain('provider policy rejected');
+});
+
+test('WAL replication older than twice the per-vault RPO raises an error', () => {
+  const target = healthyTarget({
+    lastWalDrainAt: new Date(NOW - 121_000).toISOString(),
+  });
+  const res = evaluateBackupHealth({ state: stateWith(target), now: NOW });
+  expect(res.status).toBe('error');
+  expect(res.detail).toContain('WAL replication exceeded 2× the 60s RPO');
 });

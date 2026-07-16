@@ -24,6 +24,7 @@
 // replication all "just work" with no new plumbing.
 
 import type { VaultDb } from '../db.js';
+import { nowIso } from '../ids.js';
 import { stageBlobBytes } from './staging.js';
 import { shaOfBlobUri } from './store.js';
 
@@ -39,6 +40,8 @@ export const MEDIUM_EDGE = 2048;
  * time across successive hourly sweeps rather than pinning a core on mount.
  */
 export const PREVIEW_BACKFILL_BATCH = 24;
+/** Maximum complete plaintext image retained while remote-primary bytes flow. */
+export const INGRESS_PREVIEW_MAX_BYTES = 32 * 1024 * 1024;
 
 /**
  * The maps tiny→`thumb` and medium→`preview` onto the existing derivative
@@ -74,6 +77,8 @@ export interface PreviewOutput {
  */
 export interface PreviewCodec {
   downscale(source: Buffer, mediaType: string, maxEdge: number): PreviewOutput | null;
+  /** 64-bit dHash, encoded as 16 lowercase hexadecimal characters. */
+  perceptualHash(source: Buffer, mediaType: string): string | null;
 }
 
 /** What one backstop pass touched — folded into the sweep receipt. */
@@ -82,10 +87,67 @@ export interface PreviewBackfillResult {
   scanned: number;
   /** Variant blobs actually staged (0-2 per scanned item). */
   generated: number;
+  /** Inline perceptual-hash contributions actually staged (0-1 per item). */
+  phashesGenerated: number;
   /** Items the codec declined outright (unsupported type / decode failure). */
   skippedUnsupported: number;
   /** Items whose original bytes were absent from BOTH tiers — an integrity gap. */
   missingBytes: number;
+}
+
+export interface IngressPreviewInput {
+  sha256: string;
+  bytes: Buffer;
+  mediaType: string;
+  stagedBy?: string;
+}
+
+/** Generate capture-time rungs + dHash while complete plaintext is in hand. */
+export function contributeIngressPreviews(
+  db: VaultDb,
+  codec: PreviewCodec,
+  input: IngressPreviewInput,
+): number {
+  if (
+    !input.mediaType.startsWith('image/') ||
+    input.bytes.length === 0 ||
+    input.bytes.length > INGRESS_PREVIEW_MAX_BYTES
+  ) {
+    return 0;
+  }
+  let generated = 0;
+  for (const rung of PREVIEW_LADDER) {
+    const output = codec.downscale(input.bytes, input.mediaType, rung.maxEdge);
+    if (!output) break;
+    stageBlobBytes(db, {
+      bytes: output.bytes,
+      mediaType: output.mediaType,
+      variant: rung.variant,
+      variantOf: input.sha256,
+      validateDerivative: true,
+      ...(input.stagedBy ? { stagedBy: input.stagedBy } : {}),
+    });
+    generated += 1;
+  }
+  if (!hasStagedOrClaimedVariant(db, input.sha256, 'phash')) {
+    try {
+      const phash = codec.perceptualHash(input.bytes, input.mediaType);
+      if (phash) {
+        stageBlobBytes(db, {
+          bytes: Buffer.from(phash),
+          mediaType: 'text/x-perceptual-hash',
+          variant: 'phash',
+          variantOf: input.sha256,
+          validateDerivative: true,
+          ...(input.stagedBy ? { stagedBy: input.stagedBy } : {}),
+        });
+        generated += 1;
+      }
+    } catch {
+      // A hash miss only removes a duplicate hint; binary previews still win.
+    }
+  }
+  return generated;
 }
 
 /** Yield the event loop between items — preview CPU never starves live work. */
@@ -94,16 +156,16 @@ function yieldTick(): Promise<void> {
 }
 
 /**
- * The gateway backstop pass (issue #405 §2): find live image content items
- * missing a tiny or medium rung, generate the gap through the injected codec,
+ * The gateway backstop pass (issues #405 §2 and #414 D9): find live image
+ * content missing a tiny/medium rung or pHash, generate the gap through the codec,
  * and stage the result via the SAME `stageBlobBytes(variant, variantOf)` path
  * a client upload uses — which, because the parent is already claimed, folds
  * the derivative straight into `core_content_derivative` (staging.ts) so it
  * dedups, gets custody and replicates with no bespoke wiring.
  *
- * Bounded (`limit`, default `PREVIEW_BACKFILL_BATCH`) and idempotent: a rung
- * that already exists is never regenerated (only genuinely-missing variants
- * are produced), so a client-supplied thumb that beat the sweep always wins —
+ * Bounded (`limit`, default `PREVIEW_BACKFILL_BATCH`) and idempotent: a
+ * contribution that already exists is never regenerated, so a client-supplied
+ * thumb or higher-quality pHash that beat the sweep always wins —
  * the backstop only fills holes. Per-item failures are counted, never fatal:
  * one unreadable image must not sink the batch, and a codec crash must not
  * fail the custody sweep this rides along with.
@@ -111,16 +173,18 @@ function yieldTick(): Promise<void> {
 export async function backfillPreviews(
   db: VaultDb,
   codec: PreviewCodec,
-  options: { limit?: number } = {},
+  options: { limit?: number; now?: string } = {},
 ): Promise<PreviewBackfillResult> {
   const limit = options.limit ?? PREVIEW_BACKFILL_BATCH;
   const result: PreviewBackfillResult = {
     scanned: 0,
     generated: 0,
+    phashesGenerated: 0,
     skippedUnsupported: 0,
     missingBytes: 0,
   };
   if (limit <= 0) return result;
+  const now = options.now ?? nowIso();
 
   // Live image originals missing at least one rung. `deleted_at IS NULL`
   // keeps the backstop off trashed items (they render from what they already
@@ -135,17 +199,30 @@ export async function backfillPreviews(
           AND i.media_type LIKE 'image/%'
           AND i.deleted_at IS NULL
           AND (
-            NOT EXISTS (SELECT 1 FROM core_content_derivative d
-                         WHERE d.content_id = i.content_id AND d.variant = 'thumb'
-                           AND d.sha256 IS NOT NULL)
+            (NOT EXISTS (SELECT 1 FROM core_content_derivative d
+                          WHERE d.content_id = i.content_id AND d.variant = 'thumb'
+                            AND d.sha256 IS NOT NULL)
+             AND NOT EXISTS (SELECT 1 FROM enrich_request r
+                              WHERE r.entity_type = 'core.content_item'
+                                AND r.entity_id = i.content_id
+                                AND r.contribution_variant = 'thumb'
+                                AND r.drained_at IS NULL AND r.lease_expires_at > ?))
+            OR (NOT EXISTS (SELECT 1 FROM core_content_derivative d
+                             WHERE d.content_id = i.content_id AND d.variant = 'preview'
+                               AND d.sha256 IS NOT NULL)
+                AND NOT EXISTS (SELECT 1 FROM enrich_request r
+                                 WHERE r.entity_type = 'core.content_item'
+                                   AND r.entity_id = i.content_id
+                                   AND r.contribution_variant = 'preview'
+                                   AND r.drained_at IS NULL AND r.lease_expires_at > ?))
             OR NOT EXISTS (SELECT 1 FROM core_content_derivative d
-                            WHERE d.content_id = i.content_id AND d.variant = 'preview'
-                              AND d.sha256 IS NOT NULL)
+                            WHERE d.content_id = i.content_id AND d.variant = 'phash'
+                              AND d.text_content IS NOT NULL)
           )
         ORDER BY i.created_at
         LIMIT ?`,
     )
-    .all(limit) as { content_id: string; content_uri: string; media_type: string }[];
+    .all(now, now, limit) as { content_id: string; content_uri: string; media_type: string }[];
 
   for (const item of items) {
     result.scanned += 1;
@@ -156,9 +233,12 @@ export async function backfillPreviews(
       // client-supplied variant that landed since the outer query is honored
       // (we never overwrite an existing rung).
       const missing = PREVIEW_LADDER.filter(
-        (rung) => !hasVariant(db, item.content_id, rung.variant),
+        (rung) =>
+          !hasVariant(db, item.content_id, rung.variant) &&
+          !hasLiveDeviceLease(db, item.content_id, rung.variant, now),
       );
-      if (missing.length === 0) continue;
+      const missingPhash = !hasVariant(db, item.content_id, 'phash');
+      if (missing.length === 0 && !missingPhash) continue;
       // Local hit first; a remote-only original reads through custody.open at
       // backfill pace (the read-through re-caches it locally as a side effect).
       const bytes = db.blobs.getSync(parentSha) ?? (await db.blobs.open(parentSha));
@@ -183,6 +263,21 @@ export async function backfillPreviews(
         });
         result.generated += 1;
       }
+      if (missingPhash) {
+        const phash = codec.perceptualHash(bytes, item.media_type);
+        if (phash && !hasVariant(db, item.content_id, 'phash')) {
+          stageBlobBytes(db, {
+            bytes: Buffer.from(phash),
+            mediaType: 'text/x-perceptual-hash',
+            variant: 'phash',
+            variantOf: parentSha,
+            validateDerivative: true,
+          });
+          result.phashesGenerated += 1;
+        } else if (!phash && missing.length === 0) {
+          unsupported = true;
+        }
+      }
       if (unsupported) result.skippedUnsupported += 1;
     } catch {
       // Best-effort maintenance: one unreadable image (corrupt bytes, a decode
@@ -194,13 +289,52 @@ export async function backfillPreviews(
   return result;
 }
 
-/** Whether a content item already carries a binary rung (sha present). */
-function hasVariant(db: VaultDb, contentId: string, variant: 'thumb' | 'preview'): boolean {
+/** Whether a content item already carries the requested binary/inline slot. */
+function hasVariant(
+  db: VaultDb,
+  contentId: string,
+  variant: 'thumb' | 'preview' | 'phash',
+): boolean {
   const row = db.vault
     .prepare(
       `SELECT 1 FROM core_content_derivative
-        WHERE content_id = ? AND variant = ? AND sha256 IS NOT NULL LIMIT 1`,
+        WHERE content_id = ? AND variant = ?
+          AND CASE WHEN variant = 'phash' THEN text_content IS NOT NULL ELSE sha256 IS NOT NULL END
+        LIMIT 1`,
     )
     .get(contentId, variant);
   return row !== undefined;
+}
+
+/** Capture-time uploads can still be staged or already claimed. */
+function hasStagedOrClaimedVariant(db: VaultDb, parentSha: string, variant: 'phash'): boolean {
+  const staged = db.vault
+    .prepare(
+      `SELECT 1 FROM blob_staging
+        WHERE variant_of = ? AND variant = ? AND inline_content IS NOT NULL LIMIT 1`,
+    )
+    .get(parentSha, variant);
+  if (staged) return true;
+  const claimed = db.vault
+    .prepare('SELECT content_id FROM core_content_item WHERE sha256 = ?')
+    .get(parentSha) as { content_id: string } | undefined;
+  return claimed ? hasVariant(db, claimed.content_id, variant) : false;
+}
+
+function hasLiveDeviceLease(
+  db: VaultDb,
+  contentId: string,
+  variant: 'thumb' | 'preview',
+  now: string,
+): boolean {
+  return (
+    db.vault
+      .prepare(
+        `SELECT 1 FROM enrich_request
+          WHERE entity_type = 'core.content_item' AND entity_id = ?
+            AND contribution_variant = ? AND drained_at IS NULL
+            AND lease_expires_at > ? LIMIT 1`,
+      )
+      .get(contentId, variant, now) !== undefined
+  );
 }

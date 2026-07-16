@@ -33,6 +33,7 @@ const SET_EXTRACTED_TEXT: CommandDefinition = {
     properties: {
       content_id: { type: 'string', minLength: 1 },
       text: { type: 'string', minLength: 1 },
+      variant: { type: 'string', enum: ['text', 'transcript'] },
     },
   },
   outputSchema: {
@@ -52,7 +53,8 @@ const SET_EXTRACTED_TEXT: CommandDefinition = {
   postconditions: [
     {
       name: 'text_derivative_present',
-      sql: `SELECT count(*) AS n FROM core_content_derivative WHERE content_id = :content_id AND variant = 'text'`,
+      sql: `SELECT count(*) AS n FROM core_content_derivative
+             WHERE content_id = :content_id AND variant = COALESCE(:variant, 'text')`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -64,12 +66,17 @@ const SET_EXTRACTED_TEXT: CommandDefinition = {
 };
 
 function setExtractedText(ctx: HandlerCtx): Record<string, unknown> {
-  const input = ctx.input as { content_id: string; text: string };
+  const input = ctx.input as {
+    content_id: string;
+    text: string;
+    variant?: 'text' | 'transcript';
+  };
+  const variant = input.variant ?? 'text';
   const existing = ctx.db
     .prepare(
-      `SELECT derivative_id FROM core_content_derivative WHERE content_id = ? AND variant = 'text'`,
+      `SELECT derivative_id FROM core_content_derivative WHERE content_id = ? AND variant = ?`,
     )
-    .get(input.content_id) as { derivative_id: string } | undefined;
+    .get(input.content_id, variant) as { derivative_id: string } | undefined;
   const byteSize = Buffer.byteLength(input.text, 'utf8');
   if (existing) {
     ctx.db
@@ -83,13 +90,13 @@ function setExtractedText(ctx: HandlerCtx): Record<string, unknown> {
     ctx.db
       .prepare(
         `INSERT INTO core_content_derivative (derivative_id, content_id, variant, sha256, media_type, byte_size, text_content, created_at)
-         VALUES (?, ?, 'text', NULL, 'text/plain', ?, ?, ?)`,
+         VALUES (?, ?, ?, NULL, 'text/plain', ?, ?, ?)`,
       )
-      .run(derivativeId, input.content_id, byteSize, input.text, ctx.now);
+      .run(derivativeId, input.content_id, variant, byteSize, input.text, ctx.now);
     ctx.wrote('core.content_derivative', derivativeId);
   }
   ctx.cite({
-    claim: `extracted text (${byteSize} bytes) now feeds the document's search index`,
+    claim: `${variant} (${byteSize} bytes) now feeds the content search index`,
     entityType: 'core.content_item',
     entityId: input.content_id,
   });
@@ -448,10 +455,12 @@ const MARK_REQUESTS_DRAINED: CommandDefinition = {
     const input = ctx.input as { request_ids: string[] };
     let drained = 0;
     const mark = ctx.db.prepare(
-      'UPDATE enrich_request SET drained_at = ? WHERE request_id = ? AND drained_at IS NULL',
+      `UPDATE enrich_request SET drained_at = ?
+        WHERE request_id = ? AND drained_at IS NULL
+          AND (lease_expires_at IS NULL OR lease_expires_at <= ?)`,
     );
     for (const requestId of input.request_ids) {
-      const changed = mark.run(ctx.now, requestId).changes;
+      const changed = mark.run(ctx.now, requestId, ctx.now).changes;
       if (changed > 0) {
         drained += Number(changed);
         ctx.wrote('enrich.request', requestId);

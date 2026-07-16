@@ -1,5 +1,14 @@
 // Quick-look overlay (#quickRoot root).
-import { fmtBytes, fmtFull, isImage, loadable, tintBg, typeMeta } from '../format.js';
+import {
+  fmtBytes,
+  fmtFull,
+  isAudio,
+  isImage,
+  isVideo,
+  loadable,
+  tintBg,
+  typeMeta,
+} from '../format.js';
 import { I } from '../icons.js';
 import { Icon } from './Shared.jsx';
 
@@ -29,6 +38,31 @@ export function QuickLook({ doc, rows, folderName, onClose, onStep }) {
         src={doc.content_uri}
         alt={doc.title ?? 'Image'}
       />
+    );
+  } else if (isVideo(doc)) {
+    stage = (
+      <video
+        key={doc.content_id}
+        className="d-quick-media"
+        src={doc.content_uri}
+        poster={doc.poster_uri ?? undefined}
+        controls
+        playsInline
+        preload="metadata"
+        aria-label={doc.title ?? 'Video'}
+      />
+    );
+  } else if (isAudio(doc)) {
+    stage = (
+      <div className="d-quick-audio" key={doc.content_id}>
+        <span aria-hidden="true">♪</span>
+        <audio
+          src={doc.content_uri}
+          controls
+          preload="metadata"
+          aria-label={doc.title ?? 'Audio'}
+        />
+      </div>
     );
   } else if (String(doc.media_type ?? '') === 'application/pdf' && loadable(doc.content_uri)) {
     stage = (

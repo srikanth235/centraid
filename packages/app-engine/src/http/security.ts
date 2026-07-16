@@ -56,6 +56,9 @@ export const SHARED_ASSET_FILES = new Set([
   'kit.js',
   'kit.css',
   'elements.js',
+  'edge-upload.js',
+  'pdf.min.mjs',
+  'pdf.worker.min.mjs',
   'react-core.min.js',
   'jsx-runtime.js',
   'tokens.css',
@@ -129,7 +132,7 @@ export function staticSecurityHeaders(
   const frameAncestors = opts.frameAncestor ? `'self' ${opts.frameAncestor}` : "'self'";
   return {
     'X-Content-Type-Options': 'nosniff',
-    'Content-Security-Policy': `default-src 'self'; script-src ${scriptSrc}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors ${frameAncestors}`,
+    'Content-Security-Policy': `default-src 'self'; script-src ${scriptSrc}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' data: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors ${frameAncestors}`,
     'Referrer-Policy': 'no-referrer',
   };
 }

@@ -3,6 +3,13 @@
 // @ts-nocheck
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
+vi.mock('../apps/photos/format.js', () => ({
+  isVideoAsset: (asset: Record<string, unknown>) =>
+    asset.kind === 'video' || String(asset.media_type ?? '').startsWith('video/'),
+  isAudioAsset: (asset: Record<string, unknown>) =>
+    asset.kind === 'audio' || String(asset.media_type ?? '').startsWith('audio/'),
+}));
+
 const importFixture = (relativePath: string) => import(relativePath);
 
 interface FakeObserver {
@@ -103,5 +110,48 @@ describe('Photos next-screen media loading', () => {
     );
     expect(observers[1]?.unobserve).not.toHaveBeenCalled();
     expect(observers[0]?.unobserve).toHaveBeenCalledWith(tiles[0]?.image);
+  });
+
+  test('uses posters for video grids and never pulls a media original', async () => {
+    const { gridSrc } = await importFixture('../apps/photos/media.js');
+
+    expect(
+      gridSrc({
+        kind: 'video',
+        content_uri: '/centraid/_vault/blobs/original-video',
+        poster_uri: '/centraid/_vault/blobs/poster',
+      }),
+    ).toBe('/centraid/_vault/blobs/poster');
+    expect(
+      gridSrc({
+        kind: 'video',
+        content_uri: '/centraid/_vault/blobs/original-video',
+        poster_uri: null,
+      }),
+    ).toBeNull();
+    expect(
+      gridSrc({
+        kind: 'audio',
+        content_uri: '/centraid/_vault/blobs/original-audio',
+      }),
+    ).toBeNull();
+  });
+
+  test('renders duration and media-specific lightweight placeholders', async () => {
+    const { durationLabel, fillTileMedia } = await importFixture('../apps/photos/media.js');
+    expect(durationLabel(65)).toBe('1:05');
+    expect(durationLabel(3_661)).toBe('1:01:01');
+    expect(durationLabel(-1)).toBeNull();
+
+    const video = document.createElement('div');
+    fillTileMedia(video, { kind: 'video', poster_uri: null, duration_s: 65 });
+    expect(video.classList.contains('is-placeholder')).toBe(true);
+    expect(video.querySelector('.ph-tile-video-badge')).not.toBeNull();
+    expect(video.querySelector('.ph-tile-duration')?.textContent).toBe('1:05');
+
+    const audio = document.createElement('div');
+    fillTileMedia(audio, { kind: 'audio', duration_s: 3_661 });
+    expect(audio.querySelector('.ph-tile-audio-badge')).not.toBeNull();
+    expect(audio.querySelector('.ph-tile-duration')?.textContent).toBe('1:01:01');
   });
 });

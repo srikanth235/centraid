@@ -103,6 +103,24 @@ describe('runFire', () => {
     expect(closes.n).toBe(1);
   });
 
+  it('injects one fire-start instant as deterministic ctx.now', async () => {
+    await writeAutomation(
+      appsDir,
+      'notes',
+      'clock',
+      manifest(),
+      'export default async ({ ctx }) => ({ output: { now: ctx.now } });',
+    );
+    const opened: OpenDispatchArgs[] = [];
+    const closes = { n: 0 };
+    const { outcome, record } = await runFire(
+      { automationRef: 'notes/clock', appsDir, journalDbFile },
+      { openDispatch: stubDispatch(opened, closes) },
+    );
+    expect(outcome.ok).toBe(true);
+    expect(outcome.output).toEqual({ now: new Date(record.startedAt).toISOString() });
+  });
+
   it('emits a live run-stream: run.start → node lifecycle per ctx call → run.end', async () => {
     // A handler that drives one ctx.tool then one ctx.agent. The stub
     // dispatch returns fixed results so the node lifecycle is deterministic.

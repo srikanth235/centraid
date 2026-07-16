@@ -3,11 +3,11 @@
         <p class="eyebrow r">Chapter 4 · backups</p>
         <h1 class="r" style="--d: 0.1s">One home for your data. <em>One copy that isn't there.</em></h1>
         <p class="lede r" style="--d: 0.22s">
-          The gateway being the single, sovereign home of your data is the whole point — and also
-          the whole risk. A dead disk, a stolen laptop, a bad <code>rm</code> don't ask permission.
-          Offsite backup is the difference between an outage and a loss: the same vault, encrypted
-          on your machine before a single byte leaves it, held by a provider who can see storage
-          but never content.
+          The gateway is the sovereign control plane for your data — and one machine is still one
+          failure domain. A dead disk, a stolen laptop, a bad <code>rm</code> don't ask permission.
+          Offsite custody turns that loss into an outage: databases and code travel in encrypted
+          snapshots, while attachments can be born as sealed bytes in your own S3 or a provider's
+          CAS. The provider sees storage, never content or keys.
         </p>
       </section>
 
@@ -39,8 +39,8 @@
               </tr>
               <tr>
                 <td>Attachments</td>
-                <td>every object in the blob store (content-addressed)</td>
-                <td>Photos, documents, receipts — a vault with no attachments is a vault with holes.</td>
+                <td>local-primary objects, or only the bounded outbox not yet in a remote-primary CAS</td>
+                <td>Photos, documents and receipts remain recoverable without duplicating remote bytes in every snapshot.</td>
               </tr>
               <tr>
                 <td>Installed apps</td>
@@ -83,12 +83,14 @@
             <div class="artifact-body" style="white-space: pre-wrap">
 backup: {
   enabled: true,
-  intervalHours: 24,
-  verifyEveryDays: 7,
   keyringPath: "~/.centraid/backup-keyring.json",
   provider: { kind: "local", dir: "/Volumes/backup-drive" }
   // or: { kind: "remote", endpoint: "https://api.clawgnition.com", apiKey: "…" }
-}</div>
+}
+
+// Per-vault cadence and byte policy lives in Gateway → Backups:
+// RPO · snapshot/verify cadence · receipt/offsite acknowledgement
+// cache/outbox/headroom · bandwidth · storage class</div>
           </div>
           <p class="prose r" style="--d: 0.2s; margin-top: 18px">
             The same shape covers both cases the config supports: a <b>local-folder provider</b> —
@@ -96,7 +98,9 @@ backup: {
             <b>remote provider</b> speaking the open backup protocol, where <code>endpoint</code> and
             <code>apiKey</code> are all the gateway needs to know. <b>Clawgnition</b> is the first
             commercial one: client-side encryption (the same as the local case — Clawgnition never
-            gets a key), S3-direct writes straight to Cloudflare R2, zero-egress restores.
+            gets a key), S3-direct writes straight to Cloudflare R2, zero-egress restores. Attachment
+            destination is a separate per-vault choice: this gateway only, your S3-compatible store,
+            or the provider's CAS grant.
           </p>
           <div class="term r" style="--d: 0.26s; margin-top: 22px; max-width: 720px">
             <div class="term-bar"><span>backup CLI · admin shell</span></div>
@@ -202,14 +206,25 @@ backup: {
       <!-- §05 HEALTH -->
       <section class="sec wrap" id="health">
         <p class="eyebrow r">§05 · health</p>
-        <h2 class="r" style="--d: 0.06s">Two ages, <em>on the Gateway page.</em></h2>
+        <h2 class="r" style="--d: 0.06s">Cadence, custody and proof. <em>One screen.</em></h2>
         <div class="prose r" style="--d: 0.12s">
           <p>
             The desktop's Gateway page carries a <b>backups</b> health component alongside the
             others, surfacing two numbers: how long since the last successful backup, and how long
             since the last successful <b>verification</b>. The Overview tab also has a dedicated
-            <b>Backups</b> card — the same two ages per vault, plus a <b>Back up now</b> button that
-            triggers an out-of-cycle run without touching a terminal.
+            <b>Backups</b> card — those ages plus the last WAL drain, pending-offsite attachment
+            bytes, every per-vault cadence, and <b>Back up now</b>/<b>Verify now</b> actions without a
+            terminal. “Confirmed when offsite” is a completion policy, not a long-held request: a
+            provider outage never rolls back a durable local claim.
+          </p>
+          <p>
+            The same card answers <b>what the provider holds</b>: provider-attested (or raw bucket
+            computed) object and byte totals for backup and CAS, recent snapshots, the WAL/PITR
+            span, prune history, and any missing or orphaned objects. A weekly reconciliation runs
+            before eviction can trust remote custody. If a provider silently loses an attachment,
+            the gateway demotes that replica immediately and pins any remaining local copy; it never
+            auto-deletes an orphan. “Verify against bucket” independently cross-checks attestation
+            with an S3 LIST.
           </p>
           <p>
             Verification is the one the protocol insists on, because the provider contract is
@@ -231,7 +246,7 @@ backup: {
           <h2 class="r" style="--d: 0.06s">The seam is <em>open, on purpose.</em></h2>
           <p class="lede r" style="--d: 0.12s">
             Backups follow the same anti-lock-in instinct as connections and connectors: the wire
-            contract between a gateway and a provider — <code>centraid-backup-provider/1</code> — is
+            contract between a gateway and a provider — <code>centraid-storage-provider/1</code> — is
             a published, versioned protocol, not a Clawgnition implementation detail. Any operator
             fronting S3-compatible storage can implement it: discovery and capabilities, two auth
             tiers, target lifecycle, generation fencing, the GC min-age rule. A reference
@@ -244,6 +259,14 @@ backup: {
             restore cost class (free-egress vs. metered) are both part of the discovery document a
             client reads before you commit to a plan, and both are things the gateway shows you —
             not fine print you find out about during a 300&nbsp;GB restore.
+          </p>
+          <p class="prose r" style="--d: 0.21s">
+            A bring-your-own S3 credential needs bucket-level <code>s3:ListBucket</code> and
+            <code>s3:ListBucketMultipartUploads</code>, plus object-level
+            <code>s3:GetObject</code>, <code>s3:PutObject</code>, <code>s3:DeleteObject</code>, and
+            <code>s3:AbortMultipartUpload</code> on the configured prefix. The multipart-list and
+            abort permissions let the gateway reap uploads orphaned by a crash after the same
+            24-hour grace it applies to its durable transfer rows.
           </p>
           <p class="aside r" style="--d: 0.24s">
             Normative text lives in the protocol source, not here: <code>packages/backup/PROTOCOL.md</code>
@@ -286,12 +309,14 @@ backup: {
           </div>
           <div class="card r" style="--d: 0.26s">
             <p class="c-no">first upload</p>
-            <h3>Seeding takes time and disk</h3>
+            <h3>Seeding still takes time</h3>
             <p>
               The first backup of a vault with hundreds of gigabytes of photos and documents is a
-              full upload — hours, not minutes, depending on your connection — and staging that much
-              content for chunking needs real headroom on local disk before it ever reaches the
-              network. Budget for both.
+              full upload — hours, not minutes, depending on your connection. A capable paired device
+              hashes, seals and uploads attachments directly through presigned URLs (including native
+              iOS/Android background transfer), so the gateway's disk and uplink are not the bulk-byte
+              path. Thin clients use the bounded gateway outbox; when that honest transit budget is
+              full and the remote is down, admission waits instead of risking ENOSPC or loss.
             </p>
           </div>
         </div>

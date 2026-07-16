@@ -51,6 +51,7 @@ export default async ({ ctx, log }) => {
     where: [
       { column: 'entity_type', op: 'eq', value: 'media.media_asset' },
       { column: 'entity_id', op: 'not-null' },
+      { column: 'required_capability', op: 'is-null' },
       { column: 'drained_at', op: 'is-null' },
     ],
     orderBy: { column: 'request_id', dir: 'asc' },

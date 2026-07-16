@@ -13,7 +13,7 @@ Describe an app in a sentence — an agent builds it, a local gateway runs it, a
 - **Run automations** — cron-, webhook-, condition- or data-change-triggered background agents. A generated handler runs in a worker thread with a curated `ctx` surface (`ctx.vault`, `ctx.agent`, `ctx.fetch`, KV state, run history).
 - **Chat with your data** — every app has one `/centraid/<id>/_turn` surface that can rewrite a handler *and* answer a data question in the same conversation; the vault-wide assistant reads across all of them.
 - **Run it anywhere** — one gateway core, two hosts: embedded in Electron or the standalone `centraid-gateway` daemon. Desktop and the installable web PWA share one React client; mobile is an Expo client over an iroh p2p tunnel.
-- **Local-first** — the vault is SQLite files on your machine, single Bearer token, consent checked and receipted on every access, nothing leaves your devices unless you point it somewhere.
+- **Owner-controlled** — databases, code, and consent stay with your gateway; attachments remain local unless you choose S3/provider custody, where devices upload only framed ciphertext and the gateway continuously verifies what the provider holds.
 
 ## How it works (30 seconds)
 
@@ -59,6 +59,8 @@ centraid-gateway print-token --data-dir ./gw-data   # Bearer token for clients
 ```
 
 Mobile companion: `bun run dev:mobile` (Expo dev build), then pair it via Settings → Phone on the desktop (one-time QR).
+
+Optional device-local transcription: run an OpenAI-compatible file-ASR service such as whisper.cpp on the desktop and set `CENTRAID_DEVICE_ASR_URL` to its loopback `/v1/audio/transcriptions` endpoint. `CENTRAID_DEVICE_ASR_TOKEN` and `CENTRAID_DEVICE_ASR_MODEL` are optional. Centraid advertises the transcript work capability only while that loopback adapter answers; media and credentials stay in the Electron main process.
 
 The PWA can connect with only a pairing ticket over relay-only Iroh/WASM, so a gateway URL is not required. Direct HTTP remains available as a fallback; in that mode the standalone gateway serves the PWA on a dedicated origin and exchanges the short-lived credential for an Origin-bound HttpOnly session. Generated apps receive separate, single-app sessions and cannot call shell/admin routes on either transport.
 

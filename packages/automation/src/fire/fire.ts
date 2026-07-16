@@ -327,6 +327,7 @@ export async function runFire(
       automationDir: row.dir,
       handlerFile: handlerPath(row.dir),
       runId,
+      now: new Date(startedAt).toISOString(),
       toolDispatcher: dispatch.toolDispatcher,
       agentDispatcher: dispatch.agentDispatcher,
       runsStore,

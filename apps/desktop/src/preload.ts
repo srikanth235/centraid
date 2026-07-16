@@ -11,6 +11,8 @@ import * as tokens from '@centraid/design-tokens';
 const Channel = {
   SETTINGS_GET: 'centraid:settings:get',
   SETTINGS_SAVE: 'centraid:settings:save',
+  DEVICE_TRANSCRIPT_AVAILABLE: 'centraid:device-transcript:available',
+  DEVICE_TRANSCRIBE: 'centraid:device-transcript:run',
 
   // App create/files/write/delete/update-meta + publish + templates clone
   // + automation create/enable/delete moved to the renderer's direct HTTP
@@ -97,6 +99,31 @@ contextBridge.exposeInMainWorld('CentraidTokens', {
 });
 
 contextBridge.exposeInMainWorld('CentraidApi', {
+  // File ASR is backed by an explicitly configured loopback model service in
+  // the main process; capability stays false until that adapter answers.
+  getHostCapabilities: async () => {
+    const transcript = await ipcRenderer
+      .invoke(Channel.DEVICE_TRANSCRIPT_AVAILABLE)
+      .then((value) => value === true)
+      .catch(() => false);
+    return {
+      platform: 'desktop' as const,
+      appSessions: false,
+      compute: {
+        previews: true,
+        poster: true,
+        pdfText: true,
+        ocr: false,
+        embedding: false,
+        transcript,
+        edgeSeal: true,
+        backgroundTransfer: false,
+      },
+    };
+  },
+  transcribeMedia: (input: { bytes: ArrayBuffer; mediaType: string; filename?: string }) =>
+    ipcRenderer.invoke(Channel.DEVICE_TRANSCRIBE, input),
+
   // Settings
   getSettings: () => ipcRenderer.invoke(Channel.SETTINGS_GET),
   saveSettings: (patch: Record<string, unknown>) =>

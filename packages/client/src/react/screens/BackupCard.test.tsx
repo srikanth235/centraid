@@ -2,6 +2,8 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import BackupCard, { type BackupStatusDTO } from './BackupCard.js';
+import type { BackupPolicyDTO, BackupPolicyPatchDTO } from './BackupPolicyPanel.js';
+import type { BackupReconciliationDTO } from './BackupInventoryPanel.js';
 
 const NOW = Date.UTC(2026, 6, 11, 12, 0, 0);
 
@@ -18,9 +20,17 @@ afterEach(() => {
 
 async function mount(props: {
   loadStatus: () => Promise<BackupStatusDTO>;
+  streamCustody?: (onChange: () => void, signal: AbortSignal) => Promise<void>;
   onRunNow: () => Promise<{ accepted: boolean; alreadyRunning?: boolean }>;
   onConfirmRecoveryKit?: () => Promise<{ confirmedAt: number }>;
   onExportRecoveryKit?: () => Promise<{ ok: boolean; canceled?: boolean; error?: string }>;
+  onUpdatePolicy?: (
+    vaultId: string,
+    patch: BackupPolicyPatchDTO,
+  ) => Promise<{ policy: BackupPolicyDTO }>;
+  onVerifyBucket?: (
+    vaultId: string,
+  ) => Promise<{ vaultId: string; reconciliation: BackupReconciliationDTO }>;
   now?: number;
 }): Promise<HTMLDivElement> {
   container = document.createElement('div');
@@ -31,9 +41,12 @@ async function mount(props: {
       <BackupCard
         now={props.now ?? NOW}
         loadStatus={props.loadStatus}
+        streamCustody={props.streamCustody}
         onRunNow={props.onRunNow}
         onConfirmRecoveryKit={props.onConfirmRecoveryKit ?? neverConfirmKit}
         onExportRecoveryKit={props.onExportRecoveryKit}
+        onUpdatePolicy={props.onUpdatePolicy}
+        onVerifyBucket={props.onVerifyBucket}
       />,
     );
   });
@@ -45,6 +58,17 @@ async function mount(props: {
 
 const neverRun = (): Promise<{ accepted: boolean }> => new Promise(() => {});
 const neverConfirmKit = (): Promise<{ confirmedAt: number }> => new Promise(() => {});
+
+const POLICY: BackupPolicyDTO = {
+  rpoSeconds: 60,
+  snapshotIntervalHours: 24,
+  verifyEveryDays: 7,
+  casAck: 'receipt',
+  outboxBudgetBytes: 512 * 1024 ** 2,
+  reservedHeadroomBytes: 256 * 1024 ** 2,
+  walBaseRollBytes: 16 * 1024 ** 2,
+  walBaseRollHours: 24,
+};
 
 describe('BackupCard — not configured', () => {
   it('renders an explainer and the permanent recovery-kit nudge, no action buttons', async () => {
@@ -69,6 +93,173 @@ describe('BackupCard — not configured', () => {
 });
 
 describe('BackupCard — configured', () => {
+  it('treats a custody SSE transition as an immediate status completion edge', async () => {
+    let emit!: () => void;
+    const streamCustody = vi.fn((onChange: () => void, signal: AbortSignal) => {
+      emit = onChange;
+      return new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve()));
+    });
+    const loadStatus = vi.fn().mockResolvedValue({
+      configured: true,
+      vaults: [{ vaultId: 'v1', name: 'Main', pendingOffsite: { count: 1, bytes: 9 } }],
+    });
+    await mount({ loadStatus, streamCustody, onRunNow: neverRun });
+
+    await act(async () => {
+      emit();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(streamCustody).toHaveBeenCalledTimes(1);
+    expect(loadStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it('answers custody questions and persists an RPO preset inline', async () => {
+    const onUpdatePolicy = vi.fn().mockResolvedValue({
+      policy: { ...POLICY, rpoSeconds: 900 },
+    });
+    const status: BackupStatusDTO = {
+      configured: true,
+      provider: 'Clawgnition',
+      vaults: [
+        {
+          vaultId: 'v1',
+          name: 'Main',
+          policy: POLICY,
+          destination: { kind: 'provider', connectionId: 'provider-1' },
+          pendingOffsite: { count: 2, bytes: 5 * 1024 ** 2 },
+        },
+      ],
+    };
+    const el = await mount({
+      loadStatus: vi.fn().mockResolvedValue(status),
+      onRunNow: neverRun,
+      onUpdatePolicy,
+    });
+    expect(el.textContent).toContain('Where do backups go?');
+    expect(el.textContent).toContain('Provider · Clawgnition');
+    expect(el.textContent).toContain('2 pending · 5.0 MB waiting offsite');
+    const rpo = [...el.querySelectorAll('label')]
+      .find((label) => label.textContent?.includes('Recovery point'))
+      ?.querySelector('select') as HTMLSelectElement;
+    await act(async () => {
+      rpo.value = '900';
+      rpo.dispatchEvent(new Event('change', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(onUpdatePolicy).toHaveBeenCalledWith('v1', { rpoSeconds: 900 });
+    expect(el.textContent).toContain('Policy saved');
+  });
+
+  it('shows provider-attested holdings, lifecycle history, and verifies them against the bucket', async () => {
+    const reconciliation: BackupReconciliationDTO = {
+      checkedAt: new Date(NOW - 60_000).toISOString(),
+      mode: 'scheduled',
+      status: 'ok',
+      backup: {
+        configured: true,
+        source: 'provider',
+        providerAttested: true,
+        objectCount: 9,
+        bytes: 20 * 1024 ** 2,
+        softDeletedCount: 0,
+        missing: { count: 0, sample: [] },
+        orphans: { count: 0, sample: [] },
+      },
+      cas: {
+        configured: true,
+        source: 'provider',
+        providerAttested: true,
+        objectCount: 42,
+        bytes: 800 * 1024 ** 2,
+        softDeletedCount: 0,
+        missing: { count: 0, sample: [] },
+        orphans: { count: 0, sample: [] },
+      },
+      walGaps: { count: 0, sample: [] },
+      snapshots: {
+        live: 2,
+        pruned: 1,
+        recent: [
+          {
+            seq: 8,
+            totalBytes: 12 * 1024 ** 2,
+            objectCount: 4,
+            createdAt: Math.floor(NOW / 1000),
+            prunedAt: null,
+            format: 'centraid-snapshot/1',
+          },
+        ],
+      },
+      walCoverage: {
+        earliestTickMs: NOW - 6.5 * 24 * 60 * 60 * 1000,
+        latestTickMs: NOW,
+        spanDays: 6.5,
+        segmentCount: 31,
+        markerCount: 7,
+      },
+      audit: {
+        source: 'provider',
+        eventCount: 3,
+        recent: [
+          {
+            at: Math.floor(NOW / 1000),
+            kind: 'prune',
+            detail: { retentionRung: 'daily' },
+          },
+        ],
+      },
+    };
+    const bucketResult: BackupReconciliationDTO = {
+      ...reconciliation,
+      mode: 'bucket',
+      backup: { ...reconciliation.backup, source: 'bucket', providerAttested: false },
+      cas: { ...reconciliation.cas, source: 'bucket', providerAttested: false },
+    };
+    const onVerifyBucket = vi.fn().mockResolvedValue({
+      vaultId: 'v1',
+      reconciliation: bucketResult,
+    });
+    const el = await mount({
+      loadStatus: vi.fn().mockResolvedValue({
+        configured: true,
+        provider: 'Clawgnition',
+        vaults: [
+          {
+            vaultId: 'v1',
+            name: 'Main',
+            // Snapshot backup is remote while the active CAS remains local.
+            // Inventory must not disappear merely because the two stores use
+            // different destinations.
+            destination: { kind: 'gateway-local' },
+            reconciliation,
+          },
+        ],
+      }),
+      onRunNow: neverRun,
+      onVerifyBucket,
+    });
+    expect(el.textContent).toContain('What does your provider hold?');
+    expect(el.textContent).toContain('42 objects · 800.0 MB');
+    expect(el.textContent).toContain('Provider-attested');
+    expect(el.textContent).toContain('6.5 days · 31 segments');
+    expect(el.textContent).toContain('Retention rung: daily');
+
+    const verify = [...el.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Verify against bucket'),
+    ) as HTMLButtonElement;
+    await act(async () => {
+      verify.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(onVerifyBucket).toHaveBeenCalledWith('v1');
+    expect(el.textContent).toContain('Computed from bucket listing');
+    expect(el.textContent).toContain('raw bucket check');
+  });
+
   it('renders per-vault ages, flags a never-backed-up vault, and shows the seal-key nudge', async () => {
     const status: BackupStatusDTO = {
       configured: true,

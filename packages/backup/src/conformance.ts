@@ -12,6 +12,7 @@
  */
 
 import assert from 'node:assert/strict';
+import { providerObservabilityConformanceCases } from './conformance-observability.js';
 import type { BackupProvider } from './provider.js';
 import { BackupProviderError } from './provider.js';
 
@@ -25,8 +26,8 @@ export interface ConformanceCase {
 export interface ConformanceHarness {
   provider: BackupProvider;
   cleanup: () => Promise<void>;
+  seedPruneEvent?: (targetId: string) => Promise<void>;
 }
-
 async function withProvider(
   makeProvider: () => Promise<ConformanceHarness>,
   fn: (provider: BackupProvider) => Promise<void>,
@@ -90,7 +91,7 @@ export function providerConformanceCases(
           assert.ok(Array.isArray(caps.capabilities), 'capabilities must declare an array');
           for (const flag of caps.capabilities) {
             assert.ok(
-              ['backup', 'cas', 'usage'].includes(flag),
+              ['backup', 'cas', 'usage', 'policy', 'inventory', 'audit'].includes(flag),
               `unknown capability flag "${flag}"`,
             );
           }
@@ -494,5 +495,6 @@ export function providerConformanceCases(
           );
         }),
     },
+    ...providerObservabilityConformanceCases(makeProvider),
   ];
 }

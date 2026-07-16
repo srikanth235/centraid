@@ -182,7 +182,7 @@
               <div id="emptyText" class="kit-empty-title"></div>
               <div class="kit-empty-sub">
                 <button id="emptyUpload" type="button" class="kit-btn primary" hidden>
-                  ＋ Add photos
+                  ＋ Add media
                 </button>
               </div>
             </div>
@@ -191,7 +191,14 @@
       </main>
     </div>
 
-    <input id="fileInput" type="file" accept="image/*,video/*" multiple hidden aria-hidden="true" />
+    <input
+      id="fileInput"
+      type="file"
+      accept="image/*,video/*,audio/*"
+      multiple
+      hidden
+      aria-hidden="true"
+    />
 
     <div id="lightbox" class="lightbox" hidden></div>
     <div

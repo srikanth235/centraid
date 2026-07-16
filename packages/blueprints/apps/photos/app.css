@@ -863,6 +863,37 @@ body.has-selection .kit-toasts {
   padding: 12px;
   box-sizing: border-box;
 }
+.ph-tile-audio-badge {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  color: color-mix(in oklab, var(--ink-2) 82%, var(--_accent));
+}
+.ph-tile-audio-badge svg {
+  width: 54px;
+  height: 54px;
+  border-radius: 999px;
+  padding: 13px;
+  background: color-mix(in oklab, var(--bg-elev) 82%, transparent);
+  box-shadow: var(--shadow-sm);
+}
+.ph-tile-duration {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  z-index: 2;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.66);
+  color: #fff;
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.25;
+  pointer-events: none;
+}
 .ph-tile-check {
   position: absolute;
   top: 7px;
@@ -1157,6 +1188,28 @@ body.has-selection .kit-toasts {
   object-fit: contain;
   border-radius: 6px;
   box-shadow: var(--shadow-lg);
+}
+.ph-lb-audio {
+  width: min(32rem, 90%);
+  display: grid;
+  justify-items: center;
+  gap: 1.25rem;
+  padding: 2rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.07);
+}
+.ph-lb-audio > span {
+  display: grid;
+  place-items: center;
+  width: 5rem;
+  height: 5rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 2.25rem;
+}
+.ph-lb-audio audio {
+  width: 100%;
 }
 .ph-lb-stagewrap img.zoomable {
   cursor: zoom-in;

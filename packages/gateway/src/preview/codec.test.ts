@@ -39,6 +39,22 @@ function makePng(width: number, height: number): Buffer {
   return PNG.sync.write(png);
 }
 
+function makeDhashPattern(rows: readonly number[]): Buffer {
+  const png = new PNG({ width: 9, height: 8 });
+  for (const [row, byte] of rows.entries()) {
+    let value = 128;
+    for (let col = 0; col < 9; col += 1) {
+      const offset = (row * 9 + col) * 4;
+      png.data[offset] = value;
+      png.data[offset + 1] = value;
+      png.data[offset + 2] = value;
+      png.data[offset + 3] = 255;
+      if (col < 8) value += (byte & (1 << (7 - col))) !== 0 ? -10 : 10;
+    }
+  }
+  return PNG.sync.write(png);
+}
+
 function decodedSize(bytes: Buffer): { width: number; height: number } {
   const img = jpegJs.decode(bytes, { useTArray: true });
   return { width: img.width, height: img.height };
@@ -72,6 +88,14 @@ test('medium rung (2048) on a smaller source never upscales', () => {
   expect(out!.height).toBe(600);
 });
 
+test('perceptual hash matches the Photos 9x8 left-brighter dHash contract', () => {
+  // Each source row encodes a chosen comparison byte, pinning comparison
+  // direction, bit order, row order and the fixed-width lowercase hex form.
+  const pattern = [0x00, 0xff, 0xaa, 0x55, 0x80, 0x01, 0xf0, 0x0f];
+  expect(codec.perceptualHash(makeDhashPattern(pattern), 'image/png')).toBe('00ffaa558001f00f');
+  expect(codec.perceptualHash(makePng(9, 8), 'image/gif')).toBeNull();
+});
+
 // A generous timeout: pure-JS decode/downscale of a multi-MP source is
 // hundreds of ms and can stretch under parallel-suite CPU contention (exactly
 // why generation is a bounded background backstop, never a request path).
@@ -99,4 +123,5 @@ test('an input past the dimension cap returns null, never throws', () => {
 test('corrupt bytes are a miss, not a crash', () => {
   expect(codec.downscale(Buffer.from('definitely not a PNG'), 'image/png', 256)).toBeNull();
   expect(codec.downscale(Buffer.from([0xff, 0xd8, 0x00, 0x01]), 'image/jpeg', 256)).toBeNull();
+  expect(codec.perceptualHash(Buffer.from('definitely not a PNG'), 'image/png')).toBeNull();
 });

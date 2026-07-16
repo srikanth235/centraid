@@ -6,6 +6,15 @@ import buttonCss from '../ui/Button.module.css';
 import controlsCss from '../styles/controls.module.css';
 import gwStyles from './GatewayScreen.module.css';
 import styles from './BackupCard.module.css';
+import BackupPolicyPanel, {
+  type BackupDestinationDTO,
+  type BackupPolicyDTO,
+  type BackupPolicyPatchDTO,
+} from './BackupPolicyPanel.js';
+import BackupInventoryPanel, {
+  type BackupReconciliationDTO,
+  type ProviderPolicyStatusDTO,
+} from './BackupInventoryPanel.js';
 
 // Gateway → Overview → Backups: the owner surface over the offsite backup
 // engine's HTTP status (`GET /centraid/_gateway/backup`, issue #351's last
@@ -28,8 +37,15 @@ export interface BackupVaultStatusDTO {
   name?: string;
   lastBackupAt?: string;
   lastVerifyAt?: string;
+  lastWalDrainAt?: string;
   lastError?: string;
   running?: boolean;
+  /** Required on the v0 wire; optional here so a loading fixture can stay terse. */
+  policy?: BackupPolicyDTO;
+  destination?: BackupDestinationDTO;
+  pendingOffsite?: { count: number; bytes: number };
+  providerPolicy?: ProviderPolicyStatusDTO;
+  reconciliation?: BackupReconciliationDTO;
 }
 
 export interface RecoveryKitStatusDTO {
@@ -50,8 +66,16 @@ export interface BackupCardProps {
   /** Live clock (parent ticks it) — drives the humanized ages. */
   now: number;
   loadStatus: () => Promise<BackupStatusDTO>;
+  streamCustody?: (onChange: () => void, signal: AbortSignal) => Promise<void>;
   onRunNow: () => Promise<{ accepted: boolean; alreadyRunning?: boolean }>;
   onVerifyNow?: () => Promise<{ accepted: boolean; alreadyRunning?: boolean }>;
+  onUpdatePolicy?: (
+    vaultId: string,
+    patch: BackupPolicyPatchDTO,
+  ) => Promise<{ policy: BackupPolicyDTO }>;
+  onVerifyBucket?: (
+    vaultId: string,
+  ) => Promise<{ vaultId: string; reconciliation: BackupReconciliationDTO }>;
   onExportRecoveryKit?: () => Promise<{ ok: boolean; canceled?: boolean; error?: string }>;
   /** POSTs `_gateway/backup/kit-confirmed` — the recovery-kit gate's confirm button. */
   onConfirmRecoveryKit: () => Promise<{ confirmedAt: number }>;
@@ -150,8 +174,37 @@ function RecoveryKitGate({
   );
 }
 
-function VaultRow({ vault, now }: { vault: BackupVaultStatusDTO; now: number }): JSX.Element {
+const DEFAULT_POLICY: BackupPolicyDTO = {
+  rpoSeconds: 60,
+  snapshotIntervalHours: 24,
+  verifyEveryDays: 7,
+  casAck: 'receipt',
+  outboxBudgetBytes: 512 * 1024 ** 2,
+  reservedHeadroomBytes: 256 * 1024 ** 2,
+  walBaseRollBytes: 16 * 1024 ** 2,
+  walBaseRollHours: 24,
+};
+
+function VaultRow({
+  vault,
+  now,
+  provider,
+  onUpdatePolicy,
+  onVerifyBucket,
+}: {
+  vault: BackupVaultStatusDTO;
+  now: number;
+  provider?: string;
+  onUpdatePolicy?: BackupCardProps['onUpdatePolicy'];
+  onVerifyBucket?: BackupCardProps['onVerifyBucket'];
+}): JSX.Element {
   const neverBackedUp = !vault.lastBackupAt;
+  const destination = vault.destination ?? { kind: 'gateway-local' as const };
+  const hasRemoteInventory =
+    destination.kind !== 'gateway-local' ||
+    provider !== undefined ||
+    vault.providerPolicy !== undefined ||
+    vault.reconciliation !== undefined;
   return (
     <div className={styles.vaultRow} data-testid="backup-vault-row">
       <div className={styles.vaultHead}>
@@ -165,6 +218,25 @@ function VaultRow({ vault, now }: { vault: BackupVaultStatusDTO; now: number }):
         <span>verified {ageLabel(vault.lastVerifyAt, now)}</span>
       </div>
       {vault.lastError ? <div className={styles.vaultError}>{vault.lastError}</div> : null}
+      <BackupPolicyPanel
+        vaultId={vault.vaultId}
+        now={now}
+        policy={vault.policy ?? DEFAULT_POLICY}
+        destination={destination}
+        snapshotProvider={provider}
+        pendingOffsite={vault.pendingOffsite ?? { count: 0, bytes: 0 }}
+        lastWalDrainAt={vault.lastWalDrainAt}
+        onUpdate={onUpdatePolicy}
+      />
+      {hasRemoteInventory ? (
+        <BackupInventoryPanel
+          vaultId={vault.vaultId}
+          now={now}
+          providerPolicy={vault.providerPolicy}
+          reconciliation={vault.reconciliation}
+          onVerifyBucket={onVerifyBucket}
+        />
+      ) : null}
     </div>
   );
 }
@@ -172,8 +244,11 @@ function VaultRow({ vault, now }: { vault: BackupVaultStatusDTO; now: number }):
 export default function BackupCard({
   now,
   loadStatus,
+  streamCustody,
   onRunNow,
   onVerifyNow,
+  onUpdatePolicy,
+  onVerifyBucket,
   onExportRecoveryKit,
   onConfirmRecoveryKit,
 }: BackupCardProps): JSX.Element {
@@ -213,6 +288,15 @@ export default function BackupCard({
       if (followupTimerRef.current !== undefined) clearTimeout(followupTimerRef.current);
     };
   }, [refresh]);
+
+  useEffect(() => {
+    if (!streamCustody) return;
+    const controller = new AbortController();
+    void streamCustody(refresh, controller.signal).catch(() => {
+      // The regular poll remains the transport-independent fallback.
+    });
+    return () => controller.abort();
+  }, [refresh, streamCustody]);
 
   const runNow = async (): Promise<void> => {
     setTriggering(true);
@@ -282,16 +366,23 @@ export default function BackupCard({
           <div className={styles.loadError}>Couldn’t reach the gateway: {loadError}</div>
         ) : !status ? (
           <div className={gwStyles.panelEmpty}>Checking backup status…</div>
-        ) : !status.configured ? (
+        ) : !status.configured && status.vaults.length === 0 ? (
           <p className={styles.notConfigured}>
             Backups aren’t set up yet. In Settings → Storage, add a storage provider and enable
-            “Encrypted backup snapshots.” The desktop will start protecting every vault
-            automatically.
+            “Encrypted backup snapshots.” Until then, databases, code, and local attachments have no
+            offsite copy.
           </p>
         ) : status.vaults.length === 0 ? (
           <div className={gwStyles.panelEmpty}>No vaults mounted yet.</div>
         ) : (
           <>
+            {!status.configured ? (
+              <p className={styles.notConfigured}>
+                Backups aren’t set up yet. In Settings → Storage, add a storage provider and enable
+                “Encrypted backup snapshots.” Until then, databases, code, and local attachments
+                have no offsite copy.
+              </p>
+            ) : null}
             {status.provider ? (
               <div className={styles.providerLine}>
                 <Icon name="Key" size={13} />
@@ -301,7 +392,14 @@ export default function BackupCard({
             {runError ? <div className={styles.runError}>{runError}</div> : null}
             <div className={styles.vaultList}>
               {status.vaults.map((v) => (
-                <VaultRow key={v.vaultId} vault={v} now={now} />
+                <VaultRow
+                  key={v.vaultId}
+                  vault={v}
+                  now={now}
+                  provider={status.provider}
+                  onUpdatePolicy={onUpdatePolicy}
+                  onVerifyBucket={onVerifyBucket}
+                />
               ))}
             </div>
           </>

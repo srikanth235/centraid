@@ -122,6 +122,35 @@ async function setup(): Promise<{ base: string; plane: VaultPlane }> {
   return { base, plane };
 }
 
+test('remote CAS configuration refuses encryption opt-out for BYO S3 too', async () => {
+  const { base, plane } = await setup();
+  const response = await fetch(`${base}/centraid/_vault/blob-store`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      blob_store: {
+        kind: 's3',
+        endpoint: 'https://s3.example.test',
+        bucket: 'private-bucket',
+        encrypt: false,
+      },
+    }),
+  });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({
+    error: 'bad_request',
+    message: 'remote CAS encryption cannot be disabled',
+  });
+  const settings = JSON.parse(
+    (
+      plane.db.vault.prepare('SELECT settings_json FROM core_vault LIMIT 1').get() as {
+        settings_json: string;
+      }
+    ).settings_json,
+  ) as Record<string, unknown>;
+  expect(settings['blob_store']).toBeUndefined();
+});
+
 test('GET /outbox and GET /blocking surface canEdit true for gmail.send, false for an unregistered verb', async () => {
   const { base, plane } = await setup();
   const gmailItem = stageGmailSend(plane);

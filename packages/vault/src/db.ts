@@ -16,9 +16,17 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { BlobCustody, type RemoteTier } from './blob/custody.js';
 import { BlobCache, readBlobCacheSettings } from './blob/cache.js';
+import { BlobContentKeyRegistry } from './blob/content-keys.js';
 import { FsBlobStore, MemoryBlobStore, type LocalBlobStore } from './blob/local.js';
-import type { PreviewCodec } from './blob/preview.js';
-import { S3BlobStore, type S3Credentials } from './blob/s3.js';
+import {
+  contributeIngressPreviews,
+  type IngressPreviewInput,
+  type PreviewCodec,
+} from './blob/preview.js';
+import { S3BlobStore, type S3BlobStoreOptions, type S3Credentials } from './blob/s3.js';
+import { S3TransferStore } from './blob/s3-transfer.js';
+import { BlobTransferCoordinator } from './blob/transfers.js';
+import { readBackupPolicy } from './backup-policy.js';
 import { registerHammingFn } from './enrich/similarity.js';
 import { asVaultDiskFullError } from './errors.js';
 import { initializeReplicaProtocol } from './replica/change-log.js';
@@ -46,6 +54,8 @@ export interface VaultDb {
    * backends needs no reopen.
    */
   blobs: BlobCustody;
+  /** Persistent resumable ingress + continuous pending-offsite drain (#414). */
+  blobTransfers: BlobTransferCoordinator;
   /**
    * The preview ladder's raster codec (issue #405 §2), or undefined when no
    * codec is wired (the vault package carries none of its own). The gateway
@@ -74,13 +84,7 @@ export interface BlobStoreSettings {
   bucket?: string;
   region?: string;
   prefix?: string;
-  /**
-   * Encrypt remote objects under the vault DEK (issue #367). Defaults to
-   * `true` — a remote tier is off-vault-disk by definition, so encryption
-   * is opt-OUT, not opt-in. Only meaningful when `connectionKind` is NOT
-   * `'provider'`: a provider-backed connection cannot disable this (see
-   * `connectionKind` below and `openVaultDb`'s `remoteTier()`).
-   */
+  /** Legacy settings field. Remote CAS encryption is mandatory in v0. */
   encrypt?: boolean;
   /**
    * The gateway-level `storage-connections` entity (#367 §C1) this vault's
@@ -93,11 +97,8 @@ export interface BlobStoreSettings {
   connectionId?: string;
   /**
    * Denormalized copy of the connection's kind, stamped by the gateway
-   * whenever it wires `connectionId` (issue #367 §C4) — read here so the
-   * vault package can enforce "encryption is force-ON for provider
-   * connections" without a live round-trip back to the gateway's
-   * storage-connection store. Never trust an ABSENT value to mean
-   * `'byo-s3'` is safe to assume off-path; it only relaxes the default.
+   * whenever it wires `connectionId` (issue #367 §C4). Encryption no longer
+   * varies by connection kind; all remote CAS objects use CBSF.
    */
   connectionKind?: 'byo-s3' | 'provider';
   /**
@@ -187,7 +188,9 @@ export function readBlobStoreSettings(vault: DatabaseSync): BlobStoreSettings {
     if (!row?.settings_json) return {};
     const parsed = JSON.parse(row.settings_json) as Record<string, unknown>;
     const bag = parsed['blob_store'];
-    return bag && typeof bag === 'object' ? (bag as BlobStoreSettings) : {};
+    if (!bag || typeof bag !== 'object') return {};
+    const settings = bag as BlobStoreSettings;
+    return settings.kind === 's3' ? { ...settings, encrypt: true } : settings;
   } catch {
     return {};
   }
@@ -239,6 +242,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   const sealKey =
     options.sealKey ??
     (dir === undefined ? ephemeralSealKey() : resolveSealKey(vault, sealKeyFileFor(dir)));
+  const blobContentKeys = new BlobContentKeyRegistry(vault, sealKey);
 
   // One remote per settings snapshot — rebuilt only when the bag changes.
   // This is also the mechanism behind issue #367 §C9's rotation semantics:
@@ -254,30 +258,31 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     const settings = readBlobStoreSettings(vault);
     if (settings.kind !== 's3' || !settings.endpoint || !settings.bucket) return null;
     if (!options.s3Credentials) return null;
-    const key = JSON.stringify(settings);
+    const policy = readBackupPolicy(vault);
+    const key = JSON.stringify({
+      settings,
+      throttle: policy.throttleBytesPerSec,
+      class: policy.storageClass,
+    });
     if (cachedRemote?.key === key) return cachedRemote.tier;
     const resolver = options.s3Credentials;
-    // Encryption default-ON (issue #367 §C4): opt-OUT via `encrypt: false`,
-    // except a `provider`-kind connection may never opt out — the operator
-    // doesn't control that bucket's access boundary the way they do a BYO
-    // one, so the vault's own AEAD envelope is the only guarantee.
-    const forceEncrypt = settings.connectionKind === 'provider';
-    const encryptOn = forceEncrypt || settings.encrypt !== false;
+    // Every remote CAS object is a CBSF envelope. Ignore stale `false` values
+    // so even direct settings writes cannot create plaintext remote objects.
+    const s3Options: S3BlobStoreOptions = {
+      endpoint: settings.endpoint,
+      bucket: settings.bucket,
+      region: settings.region,
+      prefix: settings.prefix,
+      credentials: () => resolver(settings),
+      ...(policy.throttleBytesPerSec ? { throttleBytesPerSec: policy.throttleBytesPerSec } : {}),
+      // Storage class passthrough (issue #405 §6): unset ⇒ omitted ⇒ the
+      // driver sends no x-amz-storage-class header (today's behavior).
+      ...(policy.storageClass ? { storageClass: policy.storageClass } : {}),
+    };
     const tier: RemoteTier = {
-      store: new S3BlobStore({
-        endpoint: settings.endpoint,
-        bucket: settings.bucket,
-        region: settings.region,
-        prefix: settings.prefix,
-        credentials: () => resolver(settings),
-        ...(settings.throttleBytesPerSec
-          ? { throttleBytesPerSec: settings.throttleBytesPerSec }
-          : {}),
-        // Storage class passthrough (issue #405 §6): unset ⇒ omitted ⇒ the
-        // driver sends no x-amz-storage-class header (today's behavior).
-        ...(settings.storageClass ? { storageClass: settings.storageClass } : {}),
-      }),
-      encryptKey: encryptOn ? sealKey : undefined,
+      store: new S3BlobStore(s3Options),
+      transfer: new S3TransferStore(s3Options),
+      keyFor: (sha256: string) => blobContentKeys.getOrCreate(sha256),
     };
     cachedRemote = { key, tier };
     return tier;
@@ -292,6 +297,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   const blobsDir = dir === undefined ? undefined : path.join(dir, 'blobs');
   const blobCache = new BlobCache(vault, local, {
     settings: () => readBlobCacheSettings(vault),
+    policy: () => readBackupPolicy(vault),
     ...(blobsDir
       ? {
           statfs: () => {
@@ -309,17 +315,36 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
         }
       : {}),
   });
+  let api: VaultDb | undefined;
+  const contributePreview = options.previewCodec
+    ? (input: IngressPreviewInput): void => {
+        if (api) contributeIngressPreviews(api, options.previewCodec!, input);
+      }
+    : undefined;
+  const blobTransfers = new BlobTransferCoordinator({
+    vault,
+    dir: dir ?? ':memory:',
+    local,
+    cache: blobCache,
+    remote: remoteTier,
+    remoteConfigured: () => readBlobStoreSettings(vault).kind === 's3',
+    policy: () => readBackupPolicy(vault),
+    contentKeys: blobContentKeys,
+    ...(contributePreview ? { contributePreview } : {}),
+  });
 
-  return {
+  api = {
     vault,
     journal,
     dir: dir ?? ':memory:',
     sealKey,
     blobs: new BlobCustody(local, remoteTier, blobCache),
+    blobTransfers,
     // Injected raster codec for the preview backstop (issue #405 §2), or
     // undefined — a codec-less open just never runs the backstop.
     ...(options.previewCodec ? { previewCodec: options.previewCodec } : {}),
     close(opts) {
+      void blobTransfers.close();
       // PRAGMA optimize (issue #374 tier 5a): a cheap, targeted ANALYZE that
       // only touches tables whose stats look stale — recommended by SQLite
       // to run "occasionally", and connection-close is the one point every
@@ -347,4 +372,5 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
       journal.close();
     },
   };
+  return api;
 }

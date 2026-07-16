@@ -96,6 +96,10 @@ export default async ({ input, ctx }) => {
       typeof c?.content_uri === 'string' && c.content_uri.startsWith('blob:')
         ? `/centraid/_vault/blobs/${c.content_id}`
         : c?.content_uri;
+    const posterOf = (c) =>
+      typeof c?.content_uri === 'string' && c.content_uri.startsWith('blob:')
+        ? `/centraid/_vault/blobs/${c.content_id}?variant=poster`
+        : null;
 
     const versions = chainIds.map((id, i) => {
       const c = contentById.get(id);
@@ -104,6 +108,7 @@ export default async ({ input, ctx }) => {
         media_type: c?.media_type ?? null,
         byte_size: c?.byte_size ?? null,
         content_uri: srcOf(c),
+        poster_uri: posterOf(c),
         current: i === 0,
         // The oldest entry (no outgoing edge — it was never a supersession)
         // dates from its own mint; every other entry dates from the moment

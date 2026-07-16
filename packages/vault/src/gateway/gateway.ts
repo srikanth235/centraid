@@ -19,6 +19,11 @@ import {
   type AgentContentVariant,
 } from '../enrich/content.js';
 import { recomputeDuplicateClusters } from '../enrich/clusters.js';
+import {
+  drainSatisfiedEnrichmentRequests,
+  queueMissingDeviceEnrichmentBacklog,
+  releaseExpiredEnrichmentLeases,
+} from '../enrich/leases.js';
 import { stageBlobBytes, type StageBlobOptions, type StagedBlob } from '../blob/staging.js';
 import { refreshCustodyState, type ReconcileResult } from '../blob/custody.js';
 import { backfillPreviews } from '../blob/preview.js';
@@ -978,6 +983,16 @@ export class Gateway {
     // fully rebuildable recompute; riding the same standing clock as
     // everything else in duties.ts keeps it fresh without a bespoke timer.
     recomputeDuplicateClusters(this.db.vault);
+    // Device work rides the same bounded standing clock: seed jobs for old
+    // video/audio/PDF content and clear vanished ownership so a gateway
+    // backstop that looks for NULL leases can resume immediately.
+    releaseExpiredEnrichmentLeases(this.db.vault);
+    drainSatisfiedEnrichmentRequests(this.db.vault);
+    queueMissingDeviceEnrichmentBacklog(this.db.vault, {
+      newId: () => uuidv7(),
+      requestedAt: nowIso(),
+      limit: 100,
+    });
     return result;
   }
 
@@ -1373,14 +1388,20 @@ export class Gateway {
     // in blob/preview.ts — gateway.ts stays over its line cap on a waiver, so
     // this addition is deliberately a thin call-through.
     let previewsGenerated = 0;
+    let phashesGenerated = 0;
     if (this.db.previewCodec) {
       try {
         const backfill = await backfillPreviews(this.db, this.db.previewCodec);
         previewsGenerated = backfill.generated;
+        phashesGenerated = backfill.phashesGenerated;
       } catch {
         // swallowed on purpose — see the comment above.
       }
     }
+    // Device leases and gateway backstops share the typed derivative row as
+    // their completion truth. Once an expired/unowned job's rung exists,
+    // close it here so queue depth reflects the actual remaining work.
+    drainSatisfiedEnrichmentRequests(this.db.vault);
     // Bounded-cache eviction (issue #405 §3): run LAST, after reconcile has
     // healed the replication index and the preview backstop has generated this
     // sweep's new rungs — so the pass evicts against fresh replication evidence
@@ -1389,7 +1410,7 @@ export class Gateway {
     // un-replicated last copies are untouchable. The evicted rows read back
     // `remote-only` on the NEXT sweep's `refreshCustodyState` (custody-state.ts
     // doc). No-op when the vault is local-only or the budget isn't exceeded.
-    const evicted = this.db.blobs.evict();
+    const evicted = this.db.blobs.evictAfterReconcile();
     const receiptId = writeReceipt(this.db.journal, {
       grantId: null,
       invocationId: null,
@@ -1406,6 +1427,8 @@ export class Gateway {
         // The preview backstop's per-sweep yield (issue #405 §2) — 0 when no
         // codec is wired or no image was missing a rung.
         previewsGenerated,
+        // Inline dHash contributions published beside preview rungs.
+        phashesGenerated,
         // The bounded-cache eviction yield (issue #405 §3) — 0 when the spool
         // is under budget or the vault is local-only.
         evictedBlobs: evicted.evictedBlobs,

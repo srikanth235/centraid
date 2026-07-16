@@ -1,10 +1,4 @@
-import {
-  DEFAULT_INTERVAL_HOURS,
-  DEFAULT_VERIFY_EVERY_DAYS,
-  intervalHoursOf,
-  verifyEveryDaysOf,
-  type BackupConfig,
-} from './backup-config.js';
+import { DEFAULT_BACKUP_POLICY, type BackupPolicy } from '@centraid/vault';
 import type { BackupState } from './backup-state.js';
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -12,18 +6,50 @@ const DAY_MS = 24 * HOUR_MS;
 
 export function evaluateBackupHealth(opts: {
   state: BackupState;
-  config?: BackupConfig;
+  policyForVault?: (vaultId: string) => BackupPolicy;
   now: number;
 }): { status: 'ok' | 'degraded' | 'error'; detail?: string } {
   const rows = Object.entries(opts.state.targets);
   if (rows.length === 0) return { status: 'ok', detail: 'no vaults backed up yet' };
-  const staleBackupMs =
-    (opts.config ? intervalHoursOf(opts.config) : DEFAULT_INTERVAL_HOURS) * HOUR_MS * 2;
-  const staleVerifyMs =
-    (opts.config ? verifyEveryDaysOf(opts.config) : DEFAULT_VERIFY_EVERY_DAYS) * DAY_MS * 2;
   let worst: 'ok' | 'degraded' | 'error' = 'ok';
   const notes: string[] = [];
   for (const [vaultId, target] of rows) {
+    const policy = opts.policyForVault?.(vaultId) ?? DEFAULT_BACKUP_POLICY;
+    const staleBackupMs = policy.snapshotIntervalHours * HOUR_MS * 2;
+    const staleVerifyMs = policy.verifyEveryDays * DAY_MS * 2;
+    const providerPolicy = target.providerPolicy;
+    if (providerPolicy?.status === 'rejected' || providerPolicy?.status === 'error') {
+      worst = 'error';
+      notes.push(
+        `${vaultId}: provider policy ${providerPolicy.status}` +
+          (providerPolicy.error ? ` — ${providerPolicy.error}` : ''),
+      );
+    } else if (providerPolicy?.status === 'drift') {
+      if (worst !== 'error') worst = 'degraded';
+      notes.push(`${vaultId}: provider policy echo differs from the vault policy`);
+    } else if (providerPolicy?.status === 'unsupported' || providerPolicy?.status === 'pending') {
+      if (worst !== 'error') worst = 'degraded';
+      notes.push(`${vaultId}: provider policy is ${providerPolicy.status}`);
+    }
+    const reconciliation = target.reconciliation;
+    if (reconciliation?.status === 'error') {
+      worst = 'error';
+      notes.push(
+        `${vaultId}: inventory drift — ${reconciliation.cas.missing.count} CAS missing, ` +
+          `${reconciliation.backup.missing.count} backup missing, ` +
+          `${reconciliation.walGaps.count} WAL gap(s)`,
+      );
+    } else if (reconciliation?.status === 'degraded') {
+      if (worst !== 'error') worst = 'degraded';
+      notes.push(
+        `${vaultId}: inventory warning — ` +
+          `${reconciliation.cas.orphans.count + reconciliation.backup.orphans.count} orphan(s)`,
+      );
+    }
+    if (reconciliation && opts.now - Date.parse(reconciliation.checkedAt) >= staleVerifyMs) {
+      if (worst !== 'error') worst = 'degraded';
+      notes.push(`${vaultId}: inventory reconciliation is stale`);
+    }
     if (target.fenced) {
       worst = 'error';
       notes.push(`${vaultId}: fenced — another machine has taken over this vault`);
@@ -33,6 +59,21 @@ export function evaluateBackupHealth(opts: {
       worst = 'error';
       notes.push(`${vaultId}: ${target.lastVerifyError ?? target.lastError}`);
       continue;
+    }
+    // Either a confirmed WAL drain OR a newer full snapshot satisfies the
+    // recovery-point bound. Prefer the newest protection event; an old WAL
+    // timestamp must not repaint a just-completed snapshot as data loss.
+    const walBaselineMs = Math.max(
+      ...[target.lastWalDrainAt, target.lastBackupAt, target.firstBackupAt]
+        .filter((value): value is string => value !== undefined)
+        .map((value) => Date.parse(value)),
+    );
+    const walAgeMs = Number.isFinite(walBaselineMs)
+      ? opts.now - walBaselineMs
+      : Number.POSITIVE_INFINITY;
+    if (walAgeMs >= policy.rpoSeconds * 2 * 1000) {
+      worst = 'error';
+      notes.push(`${vaultId}: WAL replication exceeded 2× the ${policy.rpoSeconds}s RPO`);
     }
     const backupAgeMs = target.lastBackupAt
       ? opts.now - Date.parse(target.lastBackupAt)

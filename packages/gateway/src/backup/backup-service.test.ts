@@ -4,7 +4,7 @@
 // The shipper bases remain real; the extra fixture gives these service tests
 // one deterministic source they can mutate without duplicating capture tests.
 
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -15,10 +15,17 @@ import {
   WAL_DB_FILES,
   type BackupProvider,
 } from '@centraid/backup';
+import {
+  updateBackupPolicy,
+  updateBlobStoreSettings,
+  ReplicaIndex,
+  type BackupPolicyPatch,
+} from '@centraid/vault';
 import { openVaultRegistry, type VaultRegistry } from '../serve/vault-registry.js';
 import { HealthRegistry } from '../serve/health-registry.js';
 import { BackupService } from './backup-service.js';
 import type { BackupConfig } from './backup-config.js';
+import { runCasOnlyReconciliation } from './backup-cas-reconciliation.js';
 
 const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
 
@@ -86,7 +93,7 @@ function conflictAfterFirstCall(real: BackupProvider): BackupProvider {
 
 /** One vault, a fixture file standing in for the staged DB, and a mutable clock. */
 async function harness(
-  overrides: Partial<BackupConfig> = {},
+  policy: BackupPolicyPatch = {},
   wrapProvider?: (real: BackupProvider) => BackupProvider,
 ): Promise<Harness> {
   const vaultRoot = await tempDir('backup-svc-vault');
@@ -103,11 +110,9 @@ async function harness(
   const clock = { now: Date.now() };
   const config: BackupConfig = {
     enabled: true,
-    intervalHours: 1,
-    verifyEveryDays: 1,
     provider: { kind: 'local', dir: providerDir },
-    ...overrides,
   };
+  updateBackupPolicy(registry.current().db.vault, policy);
   const realProvider = openLocalBackupProvider({ rootDir: providerDir });
   const service = new BackupService({
     config,
@@ -148,12 +153,143 @@ test('first run creates a target, mints a keyring, and registers a snapshot', as
   expect(status?.lastSeq).toBe(1);
   expect(status?.lastBackupAt).toBeTruthy();
   expect(status?.lastError).toBeUndefined();
+  expect(status?.providerPolicy?.status).toBe('synced');
 
   await expect(fs.access(path.join(h.backupDir, 'keyring.json'))).resolves.toBeUndefined();
 
   const snap = await h.health.snapshot();
   const backups = snap.components.find((c) => c.component === 'backups');
   expect(backups?.status).toBe('ok');
+});
+
+test('a local policy change is pushed and its provider echo is persisted', async () => {
+  const h = await harness();
+  await h.service.runBackup(h.vaultId);
+  updateBackupPolicy(h.registry.current().db.vault, { rpoSeconds: 15 * 60 });
+
+  const synced = await h.service.syncPolicy(h.vaultId);
+  const status = (await h.service.status())[h.vaultId];
+  expect(synced).toMatchObject({ status: 'synced', desired: { rpoSeconds: 15 * 60 } });
+  expect(status?.providerPolicy?.echo?.rpoSeconds).toBe(15 * 60);
+});
+
+test('a backup run pushes a policy changed outside the route', async () => {
+  const h = await harness();
+  await h.service.runBackup(h.vaultId);
+  updateBackupPolicy(h.registry.current().db.vault, { verifyEveryDays: 3 });
+
+  await h.service.runBackup(h.vaultId);
+
+  expect((await h.service.status())[h.vaultId]?.providerPolicy).toMatchObject({
+    status: 'synced',
+    desired: { verifyEveryDays: 3 },
+    echo: { verifyEveryDays: 3 },
+  });
+});
+
+test('remote-primary CAS is reconciled and persisted on policy cadence without a backup target', async () => {
+  const vaultRoot = await tempDir('backup-svc-cas-only-vault');
+  const backupDir = await tempDir('backup-svc-cas-only-state');
+  const registry = openRegistry(vaultRoot);
+  const plane = registry.current();
+  updateBlobStoreSettings(plane.db, {
+    blob_store: {
+      kind: 's3',
+      connectionId: 'cas-only',
+      connectionKind: 'byo-s3',
+    },
+  });
+  const clock = { now: Date.now() };
+  const casReconcile = vi.fn((opts: Parameters<typeof runCasOnlyReconciliation>[0]) =>
+    runCasOnlyReconciliation({
+      ...opts,
+      collect: async () => ({
+        configured: true,
+        collection: { source: 'bucket', providerAttested: false, objects: [] },
+      }),
+    }),
+  );
+  const service = new BackupService({
+    backupDir,
+    vaults: registry,
+    health: new HealthRegistry(),
+    logger: silentLogger,
+    now: () => clock.now,
+    casReconcile,
+  });
+  cleanups.push(() => service.stop());
+
+  await service.tick();
+  expect(casReconcile).toHaveBeenCalledOnce();
+  expect(await service.status()).toEqual({});
+  expect((await service.casReconciliationStatus())[plane.boot.vaultId]).toMatchObject({
+    status: 'ok',
+    backup: { configured: false },
+    cas: { configured: true, source: 'bucket' },
+  });
+
+  await service.tick();
+  expect(casReconcile).toHaveBeenCalledOnce();
+  clock.now += 8 * 24 * 60 * 60 * 1000;
+  await service.tick();
+  expect(casReconcile).toHaveBeenCalledTimes(2);
+});
+
+test('CAS-only authenticated corruption remains an error through the health probe', async () => {
+  const vaultRoot = await tempDir('backup-svc-cas-health-vault');
+  const backupDir = await tempDir('backup-svc-cas-health-state');
+  const registry = openRegistry(vaultRoot);
+  const plane = registry.current();
+  updateBlobStoreSettings(plane.db, {
+    blob_store: {
+      kind: 's3',
+      connectionId: 'cas-only',
+      connectionKind: 'provider',
+    },
+  });
+  const corrupt = 'b'.repeat(64);
+  new ReplicaIndex(plane.db.vault).mark(corrupt, 10);
+  const health = new HealthRegistry();
+  const service = new BackupService({
+    backupDir,
+    vaults: registry,
+    health,
+    logger: silentLogger,
+    casReconcile: (opts) =>
+      runCasOnlyReconciliation({
+        ...opts,
+        collect: async () => ({
+          configured: true,
+          collection: {
+            source: 'provider',
+            providerAttested: true,
+            objects: [
+              {
+                key: `blobs/sha256/${corrupt}`,
+                sizeBytes: 10,
+                etagOrHash: corrupt,
+                storedAt: 1,
+                state: 'live',
+              },
+            ],
+          },
+          authenticatedFailures: [corrupt],
+        }),
+      }),
+  });
+  cleanups.push(() => service.stop());
+
+  await service.runReconciliation(plane.boot.vaultId);
+  const first = await health.snapshot();
+  const second = await health.snapshot();
+  for (const snapshot of [first, second]) {
+    expect(snapshot.components.find((row) => row.component === 'backups')).toMatchObject({
+      status: 'error',
+    });
+    expect(snapshot.components.find((row) => row.component === 'backups')?.detail).toMatch(
+      /1 missing\/corrupt/,
+    );
+  }
 });
 
 test('stop refuses new backup work after the in-flight chain is drained', async () => {
@@ -229,7 +365,7 @@ test('conflict_generation fences the target: health error, no bump, no further a
 });
 
 test('the staleness probe flips after the clock advances past 2x the interval/verify window', async () => {
-  const h = await harness({ intervalHours: 1, verifyEveryDays: 1 });
+  const h = await harness({ snapshotIntervalHours: 1, verifyEveryDays: 1 });
   await h.service.runBackup(h.vaultId);
   await h.service.runVerify(h.vaultId);
 
@@ -247,7 +383,7 @@ test('the staleness probe flips after the clock advances past 2x the interval/ve
 });
 
 test('verify-only staleness (backup fresh, verify old) degrades without erroring', async () => {
-  const h = await harness({ intervalHours: 24, verifyEveryDays: 7 });
+  const h = await harness({ snapshotIntervalHours: 24, verifyEveryDays: 7 });
   await h.service.runBackup(h.vaultId);
   await h.service.runVerify(h.vaultId);
 

@@ -20,6 +20,7 @@
 // live-network controllers (Ask driver, @-mention popover/field) stay as the
 // imperative controllers they always were — see the excluded set in issue #327.
 import { entityKindLabel } from './elements.js';
+import { sha256FileStream, stageDirectFile, stageFallbackFile } from './edge-upload.js';
 
 // Re-export the shared kind-label helper (its definition moved to elements.js,
 // where the mention-chip and reference-strip components also need it).
@@ -419,16 +420,93 @@ export function fileToDataUri(file) {
 }
 
 /**
+ * Incremental SHA-256 over the File stream. Callers opt in because hashing
+ * is a full read pass; memory stays bounded and the upload body itself still
+ * streams from the File on the following fetch.
+ */
+export async function sha256File(file) {
+  if (typeof file?.arrayBuffer !== 'function') return null;
+  return sha256FileStream(file);
+}
+
+/** Submit a typed contribution through the existing authenticated blob door. */
+export async function stageDerivative(
+  parentSha,
+  variant,
+  body,
+  mediaType = 'application/octet-stream',
+) {
+  const q = new URLSearchParams({ variant, variant_of: parentSha, media_type: mediaType });
+  const res = await fetch(`${BLOB_ROUTE}?${q}`, {
+    method: 'POST',
+    headers: { 'content-type': mediaType },
+    body,
+  });
+  if (!res.ok) throw new Error(`${variant} contribution refused (${res.status})`);
+  return res.json();
+}
+
+/** Strict policy acknowledges success only after provider custody. */
+export function isPendingOffsite(staged) {
+  return (
+    staged?.casAck === 'replicated' &&
+    staged?.custody !== 'replicated' &&
+    staged?.custody !== 'remote-only'
+  );
+}
+
+/**
  * Stream a File to the blob staging route; resolves the staging receipt
  * ({sha256, …}). `extra` appends pre-encoded query params (e.g. `&kind=…`).
+ * With `{hash: true}`, preflight a client-declared sha and ship zero bytes
+ * when another device already established custody; the gateway still hashes
+ * and verifies every POST authoritatively.
  */
-export async function stageFileBytes(file, extra = '') {
+export async function stageFileBytes(file, extra = '', { hash = true } = {}) {
   const q = new URLSearchParams();
   if (file.name) q.set('filename', file.name);
   if (file.type) q.set('media_type', file.type);
+  let declaredSha = null;
+  if (hash) {
+    try {
+      declaredSha = await sha256File(file);
+    } catch {
+      declaredSha = null; // hashing support is an optimization, never an upload gate
+    }
+  }
+  if (declaredSha) {
+    q.set('sha256', declaredSha);
+    try {
+      const preflight = new URLSearchParams({ byte_size: String(file.size) });
+      if (file.type) preflight.set('media_type', file.type);
+      if (file.name) preflight.set('filename', file.name);
+      const have = await fetch(`${BLOB_ROUTE}/_sha/${declaredSha}?${preflight}`, {
+        method: 'HEAD',
+      });
+      if (have.ok) {
+        return {
+          sha256: declaredSha,
+          mediaType: have.headers.get('x-centraid-media-type') ?? file.type ?? null,
+          byteSize: Number(have.headers.get('content-length')) || file.size || 0,
+          existingContentId: have.headers.get('x-centraid-content-id'),
+          casAck: have.headers.get('x-centraid-cas-ack'),
+          custody: have.headers.get('x-centraid-custody'),
+          alreadyPresent: true,
+        };
+      }
+    } catch {
+      // Older/offline gateways simply take the normal authoritative POST.
+    }
+    const direct = await stageDirectFile(file, declaredSha);
+    if (direct) return direct;
+    return stageFallbackFile(file, declaredSha);
+  }
   const res = await fetch(`${BLOB_ROUTE}?${q}${extra}`, {
     method: 'POST',
-    headers: { 'content-type': file.type || 'application/octet-stream' },
+    headers: {
+      'content-type': file.type || 'application/octet-stream',
+      ...(declaredSha ? { 'x-content-sha256': declaredSha } : {}),
+    },
     body: file,
   });
   if (!res.ok) throw new Error(`upload refused (${res.status})`);
@@ -520,9 +598,11 @@ export function wireAttachInput(inputEl, getSubjectId, { act, narrate, notice, r
     if (!subjectId) return;
     for (const file of [...inputEl.files]) {
       let input;
+      let custodyReceipt;
       try {
         if (file.size > INLINE_ATTACH_BYTES) {
           const staged = await stageFileBytes(file);
+          custodyReceipt = staged;
           input = { subject_id: subjectId, staged_sha: staged.sha256, title: file.name };
         } else {
           const dataUri = await fileToDataUri(file);
@@ -533,6 +613,9 @@ export function wireAttachInput(inputEl, getSubjectId, { act, narrate, notice, r
         continue;
       }
       const outcome = await act('attach', input);
+      if (outcome?.status === 'executed' && isPendingOffsite(custodyReceipt)) {
+        notice?.('Attached locally · waiting for offsite custody.');
+      }
       if (!narrate(outcome)) break;
     }
     inputEl.value = '';

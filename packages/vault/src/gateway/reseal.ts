@@ -5,9 +5,9 @@
 //
 // Scope honesty: rotation covers every sealed CELL — live sealed columns
 // (SEALED_COLUMNS) and staged draft payloads (SEALED_PAYLOAD_FIELDS). It
-// REFUSES while `blob_store.encrypt` is on: remote blob envelopes bind to
-// the current key, and re-encrypting a remote tier is a different, longer
-// gesture than a row sweep. Turn remote encryption off (or drain it) first.
+// REFUSES while a remote CAS is attached: its per-blob keys are wrapped by
+// the current vault key, and rotating that registry belongs in the same
+// atomic gesture. Drain/detach the remote tier first.
 //
 // Crash safety: the new key lands in a `<file>.next` sidecar BEFORE the
 // sweep commits, and the commit itself flips the stamped fingerprint. An
@@ -77,9 +77,9 @@ export interface ResealResult {
  */
 export function resealVaultKey(db: VaultDb, now: string = new Date().toISOString()): ResealResult {
   const blobSettings = readBlobStoreSettings(db.vault);
-  if (blobSettings.encrypt) {
+  if (blobSettings.kind === 's3') {
     throw new Error(
-      'reseal refused: blob_store.encrypt is on and remote blob envelopes bind to the current key — disable remote encryption (or drain the remote tier) before rotating',
+      'reseal refused: blob_store.encrypt is mandatory while remote CAS is configured — drain and detach the remote tier before rotating',
     );
   }
   const oldKey = db.sealKey;

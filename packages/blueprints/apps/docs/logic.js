@@ -10,11 +10,12 @@
 // and `refresh`, that only app.jsx can define (they touch the JSX-rendering
 // roots). Everything returned here is then wired into app.jsx's render
 // functions as props/callbacks, exactly like any other value flowing down.
-import { outcomeMessage, runBulk as runBulkBase, stageFileBytes, toast } from './kit.js';
+import { isPendingOffsite, outcomeMessage, runBulk as runBulkBase, toast } from './kit.js';
 import { fmtBytes, typeMeta } from './format.js';
 import { createMetadata } from './metadata.js';
 import { createPopovers } from './popovers.js';
 import { createVersions } from './versions.js';
+import { stageDocumentFile } from './upload.js';
 
 const $ = (id) => document.getElementById(id);
 // Bytes stream to the blob staging route (issue #296) — no base64 through
@@ -342,12 +343,13 @@ export function createLogic({ state, data, render, refresh, openQuick }) {
     state.uploading = true;
     let ok = 0;
     let parked = 0;
+    let pendingOffsite = 0;
     for (let i = 0; i < accepted.length; i += 1) {
       const file = accepted[i];
       notice(`Uploading ${i + 1} of ${accepted.length}…`);
       let staged;
       try {
-        staged = await stageFileBytes(file);
+        staged = await stageDocumentFile(file);
       } catch {
         failures.push(`Could not read “${file.name}”.`);
         continue;
@@ -357,8 +359,10 @@ export function createLogic({ state, data, render, refresh, openQuick }) {
         title: file.name,
         ...(folderId != null ? { folder_id: folderId } : {}),
       });
-      if (outcome?.status === 'executed') ok += 1;
-      else if (outcome?.status === 'parked') parked += 1;
+      if (outcome?.status === 'executed') {
+        if (isPendingOffsite(staged)) pendingOffsite += 1;
+        else ok += 1;
+      } else if (outcome?.status === 'parked') parked += 1;
       else failures.push(`“${file.name}”: ${friendlyOutcome(outcome) ?? 'the upload failed'}`);
     }
     state.uploading = false;
@@ -366,6 +370,7 @@ export function createLogic({ state, data, render, refresh, openQuick }) {
     if (accepted.length > 0) {
       const parts = [`Uploaded ${ok} of ${accepted.length} · receipted.`];
       if (parked > 0) parts.push(`${parked} waiting for approval.`);
+      if (pendingOffsite > 0) parts.push(`${pendingOffsite} attached locally · pending offsite.`);
       toast(parts.join(' '));
     }
     await refresh();

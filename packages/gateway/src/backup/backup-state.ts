@@ -13,6 +13,8 @@
 import { randomBytes } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import type { ProviderPolicySyncState } from './backup-provider-observability.js';
+import type { BackupReconciliationState } from './backup-reconciliation.js';
 
 export interface BackupTargetState {
   targetId: string;
@@ -26,6 +28,12 @@ export interface BackupTargetState {
   firstBackupAt?: string;
   lastBackupAt?: string;
   lastVerifiedAt?: string;
+  /** Last successful offsite WAL drain attempt for the live status surface. */
+  lastWalDrainAt?: string;
+  /** Desired policy + provider echo/rejection, persisted so health cannot repaint drift green. */
+  providerPolicy?: ProviderPolicySyncState;
+  /** Last non-destructive provider/bucket inventory audit. */
+  reconciliation?: BackupReconciliationState;
   lastSeq?: number;
   /**
    * Set once a `conflict_generation` response is seen (PROTOCOL.md: "never
@@ -114,6 +122,8 @@ export interface RecoveryKitState {
 
 export interface BackupState {
   targets: Record<string, BackupTargetState>;
+  /** Latest CAS inventory for vaults that have remote primary storage but no backup target. */
+  casReconciliations: Record<string, BackupReconciliationState>;
   /** Random id minted once per gateway install (FORMAT.md `appMeta.sourceInstanceId`). */
   sourceInstanceId: string;
   recoveryKit: RecoveryKitState;
@@ -122,6 +132,7 @@ export interface BackupState {
 function emptyState(): BackupState {
   return {
     targets: {},
+    casReconciliations: {},
     sourceInstanceId: randomBytes(16).toString('hex'),
     recoveryKit: { confirmedAt: null },
   };
@@ -137,6 +148,7 @@ export async function loadBackupState(backupDir: string): Promise<BackupState> {
     const parsed = JSON.parse(raw) as Partial<BackupState>;
     return {
       targets: parsed.targets ?? {},
+      casReconciliations: parsed.casReconciliations ?? {},
       sourceInstanceId: parsed.sourceInstanceId ?? randomBytes(16).toString('hex'),
       // Absent on a state.json written before this wave — defaults to
       // "never confirmed" rather than assuming a pre-existing install

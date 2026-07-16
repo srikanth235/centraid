@@ -13,6 +13,13 @@ function hmac(key: Buffer | string, data: string): Buffer {
   return createHmac('sha256', key).update(data, 'utf8').digest();
 }
 
+function encodeQueryPart(value: string): string {
+  return encodeURIComponent(value).replace(
+    /[!'()*]/g,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+}
+
 /** Lowercase-hex SHA-256, used for both the payload hash and the string-to-sign. */
 export function sha256HexOf(data: Buffer | string): string {
   return createHash('sha256').update(data).digest('hex');
@@ -118,4 +125,68 @@ export function signS3Request(params: SignS3RequestParams): SignedS3Request {
       Authorization: `AWS4-HMAC-SHA256 Credential=${creds.accessKeyId}/${scope}, SignedHeaders=${signedHeaders}, Signature=${signature}`,
     },
   };
+}
+
+export interface PresignS3RequestParams {
+  method: 'GET' | 'PUT';
+  base: URL;
+  path: string;
+  region: string;
+  credentials: S3Credentials;
+  /** S3 caps SigV4 query credentials at seven days. */
+  expiresSeconds?: number;
+  query?: Record<string, string>;
+  now?: Date;
+}
+
+/**
+ * Mint a query-signed S3 URL suitable for an untrusted byte carrier. Only
+ * `host` is signed so a phone/browser can stream its body without first
+ * buffering a payload hash; the CBSF envelope + completion HEAD are the
+ * content integrity/custody checks.
+ */
+export function presignS3Request(params: PresignS3RequestParams): URL {
+  const creds = params.credentials;
+  const now = params.now ?? new Date();
+  const expires = Math.max(1, Math.min(604_800, Math.floor(params.expiresSeconds ?? 900)));
+  const amzDate = now
+    .toISOString()
+    .replace(/[-:]/g, '')
+    .replace(/\.\d{3}/, '');
+  const dateStamp = amzDate.slice(0, 8);
+  const scope = `${dateStamp}/${params.region}/s3/aws4_request`;
+  const query: Record<string, string> = {
+    ...params.query,
+    'X-Amz-Algorithm': 'AWS4-HMAC-SHA256',
+    'X-Amz-Credential': `${creds.accessKeyId}/${scope}`,
+    'X-Amz-Date': amzDate,
+    'X-Amz-Expires': String(expires),
+    'X-Amz-SignedHeaders': 'host',
+    ...(creds.sessionToken ? { 'X-Amz-Security-Token': creds.sessionToken } : {}),
+  };
+  const canonicalQuery = Object.keys(query)
+    .sort()
+    .map((key) => `${encodeQueryPart(key)}=${encodeQueryPart(query[key] ?? '')}`)
+    .join('&');
+  const canonicalPath = `/${encodeKeyPath(params.path)}`;
+  const canonicalRequest = [
+    params.method,
+    canonicalPath,
+    canonicalQuery,
+    `host:${params.base.host}\n`,
+    'host',
+    'UNSIGNED-PAYLOAD',
+  ].join('\n');
+  const stringToSign = ['AWS4-HMAC-SHA256', amzDate, scope, sha256HexOf(canonicalRequest)].join(
+    '\n',
+  );
+  const kDate = hmac(`AWS4${creds.secretAccessKey}`, dateStamp);
+  const kRegion = hmac(kDate, params.region);
+  const kService = hmac(kRegion, 's3');
+  const signingKey = hmac(kService, 'aws4_request');
+  const signature = createHmac('sha256', signingKey).update(stringToSign).digest('hex');
+  const url = new URL(params.base.origin);
+  url.pathname = canonicalPath;
+  url.search = `${canonicalQuery}&X-Amz-Signature=${signature}`;
+  return url;
 }

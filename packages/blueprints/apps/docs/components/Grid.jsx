@@ -1,5 +1,5 @@
 // Grid view row (#grid root's mapped children).
-import { fmtBytes, fmtDate, isImage, tintBg, typeMeta } from '../format.js';
+import { fmtBytes, fmtDate, isImage, isVideo, tintBg, typeMeta } from '../format.js';
 import { Checkbox, CustodyDot } from './Shared.jsx';
 
 export function GridCard({ doc, index, selectedIds, onOpenDetails, onOpenQuick, onToggleSelect }) {
@@ -24,6 +24,18 @@ export function GridCard({ doc, index, selectedIds, onOpenDetails, onOpenQuick, 
       >
         {isImage(doc) ? (
           <img src={doc.content_uri} alt="" loading="lazy" />
+        ) : isVideo(doc) && doc.poster_uri ? (
+          <>
+            <img
+              src={doc.poster_uri}
+              alt=""
+              loading="lazy"
+              onError={(e) => e.currentTarget.remove()}
+            />
+            <span className="d-media-play" aria-hidden="true">
+              ▶
+            </span>
+          </>
         ) : (
           <>
             <span className="d-thumb-label" style={{ color: `var(${m.cv})` }}>

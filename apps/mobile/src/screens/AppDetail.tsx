@@ -103,13 +103,17 @@ export default function AppDetailScreen({
       if (!parsed || typeof parsed !== 'object') return;
       const envelope = parsed as { __centraid?: string } & BridgeRequest;
       if (envelope.__centraid !== CENTRAID_HANDSHAKE) return;
-      const response = await dispatch(appId, envelope);
+      const response = await dispatch(
+        appId,
+        envelope,
+        baseUrl ? { gatewayBaseUrl: baseUrl } : undefined,
+      );
       const js = `window.__centraidResolve && window.__centraidResolve(${JSON.stringify(
         response,
       )}); true;`;
       webViewRef.current?.injectJavaScript(js);
     },
-    [appId],
+    [appId, baseUrl],
   );
 
   const reload = useCallback((): void => {

@@ -63,6 +63,7 @@ function stubCtx(options: {
   const state = new Map<string, unknown>();
   const logs: string[] = [];
   const ctx = {
+    now: '2099-01-01T00:00:00.000Z',
     vault: {
       read: async (request: { entity: string }) => ({
         rows: options.reads[request.entity] ?? [],
@@ -246,6 +247,35 @@ describe('doc-text-extractor behavior', () => {
     expect(harness.agentCalls.length).toBe(0);
     expect(harness.invokes.length).toBe(0);
     expect(result.summary).toContain('skipped 1');
+  });
+
+  it('re-enters a parent behind the content cursor when a visual derivative arrives late', async () => {
+    const handler = await loadHandler('doc-text-extractor');
+    const reads: Record<string, Record<string, unknown>[]> = {
+      'core.content_item': [{ content_id: 'd5', media_type: 'application/pdf' }],
+      'core.content_derivative': [],
+    };
+    const harness = stubCtx({
+      reads,
+      agent: () => ({ text: 'Late preview exposes the albatross renewal date' }),
+    });
+    await handler({ ctx: harness.ctx, log: harness.log });
+    expect(harness.state.get('cursor')).toBe('d5');
+    expect(harness.agentCalls).toHaveLength(0);
+
+    // The parent no longer appears in the new-content page. Its independently
+    // ordered derivative row must pull it back into the automation.
+    reads['core.content_item'] = [];
+    reads['core.content_derivative'] = [
+      { derivative_id: 'dv-1', content_id: 'd5', variant: 'preview' },
+    ];
+    await handler({ ctx: harness.ctx, log: harness.log });
+    expect(harness.agentCalls.at(-1)?.content).toEqual([{ contentId: 'd5', variant: 'preview' }]);
+    expect(harness.invokes.at(-1)).toEqual({
+      command: 'core.set_extracted_text',
+      input: { content_id: 'd5', text: 'Late preview exposes the albatross renewal date' },
+    });
+    expect(harness.state.get('derivativeCursor')).toBe('dv-1');
   });
 });
 

@@ -102,9 +102,9 @@ export interface WalShipperOptions {
   /** Defaults to `<vaultDir>/wal-ship`. */
   dir?: string;
   /** WAL size that triggers a group rollover (checkpoint). Default 16 MiB. */
-  walSizeThresholdBytes?: number;
+  walSizeThresholdBytes?: number | (() => number);
   /** Base-snapshot cadence (generation roll). Default 24 h. */
-  baseIntervalMs?: number;
+  baseIntervalMs?: number | (() => number);
   /** Local segment-dir budget while offline. Default 2 GiB. */
   localBudgetBytes?: number;
   now?: () => number;
@@ -448,8 +448,8 @@ export class WalShipper {
   private readonly db: VaultDb;
   private readonly dir: string;
   private readonly stateFile: string;
-  private readonly threshold: number;
-  private readonly baseIntervalMs: number;
+  private readonly threshold: () => number;
+  private readonly baseIntervalMs: () => number;
   private readonly localBudgetBytes: number;
   private readonly now: () => number;
   private readonly random: (n: number) => Uint8Array;
@@ -474,8 +474,14 @@ export class WalShipper {
     this.db = opts.db;
     this.dir = opts.dir ?? path.join(opts.db.dir, 'wal-ship');
     this.stateFile = path.join(this.dir, 'state.json');
-    this.threshold = opts.walSizeThresholdBytes ?? DEFAULT_THRESHOLD;
-    this.baseIntervalMs = opts.baseIntervalMs ?? DEFAULT_BASE_INTERVAL_MS;
+    const threshold = opts.walSizeThresholdBytes;
+    this.threshold =
+      typeof threshold === 'function' ? threshold : () => threshold ?? DEFAULT_THRESHOLD;
+    const baseIntervalMs = opts.baseIntervalMs;
+    this.baseIntervalMs =
+      typeof baseIntervalMs === 'function'
+        ? baseIntervalMs
+        : () => baseIntervalMs ?? DEFAULT_BASE_INTERVAL_MS;
     this.localBudgetBytes = opts.localBudgetBytes ?? DEFAULT_LOCAL_BUDGET;
     this.now = opts.now ?? Date.now;
     this.random = opts.random ?? ((n) => new Uint8Array(randomBytes(n)));
@@ -674,14 +680,14 @@ export class WalShipper {
         }
         // Base cadence: a generation roll IS the base snapshot. A REQUEST, not
         // an inline break — the pair re-bases in one tick or not at all.
-        if (report.tickMs - stream.baseCreatedAtMs >= this.baseIntervalMs) {
+        if (report.tickMs - stream.baseCreatedAtMs >= this.baseIntervalMs()) {
           reasons[db] = 'base-cadence';
           continue;
         }
         // Group rollover: bound the WAL (and with it segment sizes + restart
         // recovery time), local-only — never network-coupled (G4). A rollover
         // that catches a racing writer requests a break of its own.
-        if (stream.lastSize > this.threshold) {
+        if (stream.lastSize > this.threshold()) {
           this.rollover(db, stream, reasons, report);
         }
       } catch (err) {

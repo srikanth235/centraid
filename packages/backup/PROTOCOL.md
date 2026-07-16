@@ -82,6 +82,7 @@ the matching condition and MAY add others):
 | `undelete_window_expired` | 404 | undelete after window or after purge request |
 | `conflict_generation` | 409 | stale generation (see `backup` § Fencing) — body includes `currentGeneration` |
 | `purge_pending` | 409 | target has a pending purge; operation refused |
+| `policy_unmet` | 422 | a well-formed policy asks for a guarantee the provider cannot meet; details identify the field and bound |
 | `provider_error` | 502 | provider-internal upstream failure |
 
 ---
@@ -98,7 +99,7 @@ be declared here, not discovered behaviorally:
   "data": {
     "protocol": ["centraid-storage-provider/1"],
     "dataPlane": "s3",
-    "capabilities": ["backup", "cas", "usage"],  // additive — omit what you don't offer
+    "capabilities": ["backup", "cas", "usage", "policy", "inventory", "audit"],
     "maxCredentialTtlSeconds": 86400,
     "purgeAuthTier": "interactive",              // MUST be "interactive"
 
@@ -120,10 +121,10 @@ be declared here, not discovered behaviorally:
 }
 ```
 
-`capabilities` is the seam that lets the protocol grow: a new store class
-(or `usage`) ships as an additive flag plus its own Layer-2 section, and a
-provider that doesn't implement it simply never advertises it — existing
-clients and existing store classes are unaffected.
+`capabilities` is the additive seam. Store classes (`backup`, `cas`) and
+optional control surfaces (`usage`, `policy`, `inventory`, `audit`) are
+independent flags. A provider MUST implement every route it advertises and
+clients MUST skip capability-gated routes when their flag is absent.
 
 Clients MUST surface `backup.retention` and `backup.restoreCostClass` to the
 user when `"backup"` is offered — a provider's prune ladder is part of the
@@ -139,6 +140,9 @@ be priced before it starts.
 | `GET /v1/backup/vaults` | api-key | list caller's targets + `backup` usage + `accountStatus` |
 | `POST /v1/backup/vaults/:id/credentials` | api-key | issue grant — `{ "ttlSeconds": 3600, "mode": "read-write" \| "read", "store": "backup" \| "cas" }` |
 | `GET /v1/backup/vaults/:id/usage` | api-key | per-store-class usage report — only when `capabilities` includes `"usage"` |
+| `PUT`, `GET /v1/backup/vaults/:id/policy` | api-key | declare/read cadence — `policy` capability |
+| `GET /v1/backup/vaults/:id/inventory` | api-key | provider-attested objects — `inventory` capability |
+| `GET /v1/backup/vaults/:id/events` | api-key | append-only lifecycle audit — `audit` capability |
 | `DELETE /v1/backup/vaults/:id` | api-key | soft delete (declared undelete window) — every store class under the target |
 | `POST /v1/backup/vaults/:id/undelete` | api-key | cancel soft delete |
 | `POST /v1/backup/vaults/:id/purge` | **interactive** | irreversible erasure of the whole target (one-way; blocks undelete forever) |
@@ -149,8 +153,8 @@ store class it doesn't advertise in
 `capabilities` with `400 invalid_request`.
 
 All responses wrap payloads as `{ "data": … }`. All timestamps on the wire
-are **unix epoch seconds** (integers) — `expiresAt`, `createdAt`, `prunedAt`,
-`period.start`, `period.end`.
+are **unix epoch seconds** (integers), including `expiresAt`, `createdAt`,
+`declaredAt`, `storedAt`, event `at`, and usage-period bounds.
 
 ### Target list — `GET /v1/backup/vaults`
 
@@ -234,6 +238,50 @@ Keyed by store class; a provider MAY report only the store classes it
 offers. This is distinct from the target list's embedded `usage` (the
 `backup` store's own, always-present figure) — `usage` here is the general,
 optional, per-store-class metering surface every store class can plug into.
+
+### Declared policy — `PUT`, `GET /v1/backup/vaults/:id/policy` (`policy`)
+
+PUT accepts the client-owned cadence subset:
+
+```json
+{ "rpoSeconds": 60, "snapshotIntervalHours": 24, "verifyEveryDays": 7, "casAck": "receipt" }
+```
+
+The response and GET echo those four fields plus provider-stamped
+`declaredAt`. `rpoSeconds` is an integer with a protocol floor of 30;
+intervals are positive numbers; `casAck` is `receipt` or `replicated`.
+Malformed input is `400 invalid_request`. A provider MAY reject a valid
+declaration it cannot meet with `422 policy_unmet` and field/bound details.
+If a provider implements stale alarms, their timing basis is the echoed
+`declaredAt`: RPO, snapshot, and verification age thresholds are 2× their
+declared cadence. PUT replaces the prior document atomically and appends a
+`policy-changed` event when `audit` is offered.
+
+### Object inventory — `GET /v1/backup/vaults/:id/inventory` (`inventory`)
+
+Required query `store=backup|cas`; optional opaque `cursor`, integer `limit`
+(1–1000), and inclusive epoch-second `since`. Response:
+
+```json
+{ "data": { "store": "cas", "objects": [{ "key": "blobs/…", "sizeBytes": 123, "etagOrHash": "…", "storedAt": 1760003600, "storageClass": "STANDARD", "state": "live" }], "nextCursor": null } }
+```
+
+`state` is `live` or `soft-deleted`; `storageClass` is optional. Keys are
+relative to that store's grant prefix. Pages are key-ordered and `since` is
+inclusive so polling cannot miss same-second writes. The complete report
+MUST match raw S3 LIST under a read grant on key and byte size; a mismatch
+is a provider contract failure.
+
+### Lifecycle audit — `GET /v1/backup/vaults/:id/events` (`audit`)
+
+Returns `{ "data": { "events": [{ "at": 1760003600, "kind":
+"policy-changed", "detail": {} }], "nextCursor": null } }`. Optional
+`cursor`, `limit` (1–1000), and inclusive `since` have inventory semantics.
+Rows are immutable, append-only, and oldest-first; kinds are `prune`,
+`soft-delete`, `undelete`, `purge`, `credential-issued`, and
+`policy-changed`. Prune detail MUST include non-empty `keys` and the
+provider retention `retentionRung`; credential detail identifies store,
+mode, and expiry. Audit rows remain readable after soft deletion and purge.
 
 ---
 
@@ -383,9 +431,12 @@ The reference conformance kit lives in Centraid's `packages/backup`
 - **Layer 2 (`cas`)**: put/list/get/delete round-trip through a grant, and
   namespace isolation from the `backup` store — run only when the `cas`
   capability is present.
+- **Optional observability**: policy echo/provider clock + typed rejection;
+  inventory pagination/`since` + raw-LIST equality; audit ordering,
+  lifecycle coverage, and prune-reason detail.
 
-Grant-layer and capability-gated cases (`requestGrant`, `usageReport`) skip
-cleanly, not fail, when a provider legitimately doesn't implement them (a
+Grant-layer and capability-gated cases skip cleanly, not fail, when a
+provider legitimately doesn't implement them (a
 provider whose data plane IS the caller's own custody has no literal grant
 to hand back; a provider that doesn't meter has nothing to report).
 

@@ -220,6 +220,55 @@ test('405 on a bad method; non-matching path falls through', async () => {
   expect(other.status).toBe(404);
 });
 
+test('PUT /:id/compute persists capability advertisement and charging-only opt-in', async () => {
+  const { enrollments, deviceTokens, tickets } = await makeStores();
+  const row = enrollments.enroll({
+    endpointId: 'http:worker',
+    vaultId: 'vault-a',
+    label: 'Worker phone',
+  });
+  const base = await startHandlerServer(
+    makeDevicesRouteHandler({ enrollments, deviceTokens, tickets, vaultName, endpointTicket }),
+  );
+  const capabilities = {
+    previews: true,
+    poster: true,
+    pdfText: true,
+    ocr: false,
+    embedding: false,
+    transcript: true,
+    edgeSeal: true,
+    backgroundTransfer: true,
+  };
+  const response = await fetch(`${base}/centraid/_gateway/devices/${row.enrollmentId}/compute`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contributeWhileCharging: true, capabilities }),
+  });
+  expect(response.status).toBe(200);
+  const body = (await response.json()) as { device: { compute: Record<string, unknown> } };
+  expect(body.device.compute).toMatchObject({ contributeWhileCharging: true, capabilities });
+  expect(enrollments.list()[0]!.compute).toMatchObject({
+    contributeWhileCharging: true,
+    capabilities,
+  });
+});
+
+test('PUT /:id/compute rejects incomplete capability advertisements', async () => {
+  const { enrollments, deviceTokens, tickets } = await makeStores();
+  const row = enrollments.enroll({ endpointId: 'worker', vaultId: 'vault-a', label: 'Worker' });
+  const base = await startHandlerServer(
+    makeDevicesRouteHandler({ enrollments, deviceTokens, tickets, vaultName, endpointTicket }),
+  );
+  const response = await fetch(`${base}/centraid/_gateway/devices/${row.enrollmentId}/compute`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contributeWhileCharging: true, capabilities: { poster: true } }),
+  });
+  expect(response.status).toBe(400);
+  expect(enrollments.list()[0]!.compute).toBeUndefined();
+});
+
 test('POST /ticket as admin mints a decodable ticket for the x-centraid-vault vault', async () => {
   const { enrollments, deviceTokens, tickets } = await makeStores();
   const base = await startHandlerServer(

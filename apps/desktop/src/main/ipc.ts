@@ -49,6 +49,11 @@ import {
   type SshConnectResult,
 } from './gateway-ssh-connect.js';
 import { sshVaultCreate } from './ssh-host.js';
+import {
+  deviceTranscriptionAvailable,
+  transcribeDeviceMedia,
+  type DeviceTranscriptionInput,
+} from './device-transcription.js';
 
 /**
  * Status read for the auto-publish queue (issue #137: there is no
@@ -68,6 +73,8 @@ const getPublishStatus = (_id: string): PublishStatus => ({ inFlight: false });
 export const Channel = {
   SETTINGS_GET: 'centraid:settings:get',
   SETTINGS_SAVE: 'centraid:settings:save',
+  DEVICE_TRANSCRIPT_AVAILABLE: 'centraid:device-transcript:available',
+  DEVICE_TRANSCRIBE: 'centraid:device-transcript:run',
 
   // App create/files/write/delete/update-meta + publish moved to the
   // renderer's direct HTTP client (renderer/gateway-client.ts). The preview
@@ -290,6 +297,10 @@ export function registerIpcHandlers(): void {
     if ('launchAtLogin' in patch) applyLaunchAtLogin(next.launchAtLogin);
     return next;
   });
+  ipcMain.handle(Channel.DEVICE_TRANSCRIPT_AVAILABLE, () => deviceTranscriptionAvailable());
+  ipcMain.handle(Channel.DEVICE_TRANSCRIBE, (_e, input: DeviceTranscriptionInput) =>
+    transcribeDeviceMedia(input),
+  );
 
   // ----- Gateways (issue #109) -----
   // The local gateway is always present and can't be removed; remote

@@ -27,20 +27,8 @@ import AlertHistoryPanel from './AlertHistoryPanel.js';
 import RestartGatewayButton from './RestartGatewayButton.js';
 import styles from './GatewayScreen.module.css';
 
-// The Gateway page — a calm instrument panel over the main-process
-// heartbeat monitor, plus the gateway's component-level health and its
-// realtime log stream, folded in as tabs instead of living as their own
-// separate Settings section (the two used to share the "Gateway" name with
-// nothing connecting them; see #341/#344/#347's follow-up reorg).
-//
-// Overview reads as a cockpit gauge cluster: a breathing status orb, the
-// gateway's own uptime clock ticking in mono, a heartbeat strip of recent
-// probes, and the session outage log. Components and Logs mount the
-// screens that used to live at Settings → Gateway, cross-linked — a
-// failing component's "View in logs" jumps straight into a focused Logs
-// search. Alerts hosts the down-alert control (threshold presets, 2-minute
-// default), split out of Overview so the hero stays a status read, not a
-// settings form.
+// Gateway runtime, component health, backup/storage custody, paired devices,
+// logs, and alerts share one instrument panel (#341/#344/#347).
 
 export interface GatewayScreenProps {
   snapshot: GatewayRuntimeSnapshot;
@@ -50,13 +38,7 @@ export interface GatewayScreenProps {
   savingAlert?: boolean;
   onAlertSecondsChange: (seconds: number) => void;
   onAlertsEnabledChange: (enabled: boolean) => void;
-  /**
-   * Launch-at-login toggle (issue #351, tier 4) — the cheap 80% fix for
-   * "always-on": the desktop-hosted gateway still dies when the app quits,
-   * but the app itself can come back after a reboot/login. Optional so the
-   * Alerts tab renders unchanged wherever a caller hasn't wired settings up
-   * yet (e.g. existing tests) — `launchAtLogin` defaults to `false`.
-   */
+  /** Optional launch-at-login toggle; defaults false for older hosts/tests. */
   launchAtLogin?: boolean;
   onLaunchAtLoginChange?: (enabled: boolean) => void;
   /** True while the launch-at-login write is in flight — locks just that switch. */
@@ -68,8 +50,11 @@ export interface GatewayScreenProps {
   streamLogs: LogsBridgeProps['streamLogs'];
   /** Backup card data (Overview tab) — `GET/POST _gateway/backup`. */
   loadBackupStatus: BackupCardProps['loadStatus'];
+  streamBackupCustody?: BackupCardProps['streamCustody'];
   onRunBackupNow: BackupCardProps['onRunNow'];
   onVerifyBackupNow?: BackupCardProps['onVerifyNow'];
+  onUpdateBackupPolicy?: BackupCardProps['onUpdatePolicy'];
+  onVerifyBackupBucket?: BackupCardProps['onVerifyBucket'];
   onExportRecoveryKit?: BackupCardProps['onExportRecoveryKit'];
   /** Recovery-kit confirmation gate (Backups card) — `POST _gateway/backup/kit-confirmed`. */
   onConfirmRecoveryKit: BackupCardProps['onConfirmRecoveryKit'];
@@ -85,6 +70,8 @@ export interface GatewayScreenProps {
   onRevokeDevice?: DevicesCardProps['onRevokeDevice'];
   onCurrentDeviceRevoked?: DevicesCardProps['onCurrentDeviceRevoked'];
   onCreateDeviceTicket?: DevicesCardProps['onCreateTicket'];
+  onUpdateDeviceCompute?: DevicesCardProps['onUpdateCompute'];
+  loadDeviceWorkStatus?: DevicesCardProps['loadWorkStatus'];
   /**
    * Restart the local embedded gateway (Overview tab, near the runtime
    * status). Refused for a remote gateway — main answers `{ok: false}`
@@ -348,29 +335,27 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
               </div>
             </section>
 
-            {/* Backups — offsite snapshot status + a manual "back up now"
-                trigger (issue #351). Spans both columns, below the pair
-                above. */}
+            {/* Offsite snapshot and byte-custody status (#351/#414). */}
             <BackupCard
               now={now}
               loadStatus={props.loadBackupStatus}
+              streamCustody={props.streamBackupCustody}
               onRunNow={props.onRunBackupNow}
               onVerifyNow={props.onVerifyBackupNow}
+              onUpdatePolicy={props.onUpdateBackupPolicy}
+              onVerifyBucket={props.onVerifyBackupBucket}
               onExportRecoveryKit={props.onExportRecoveryKit}
               onConfirmRecoveryKit={props.onConfirmRecoveryKit}
             />
 
-            {/* Storage — remote quota + replication-drift read over the
-                gateway-level storage-connection entity (issue #367 §D3). */}
+            {/* Remote quota and replication drift (#367 §D3). */}
             <StorageCard
               now={now}
               loadStatus={props.loadStorageStatus}
               onOpenSettings={props.onOpenStorageSettings}
             />
 
-            {/* Paired devices — the roster of browsers/phones enrolled with
-                this gateway, with one-click revocation (issue #392 follow-up).
-                Only rendered where the host wired the device routes. */}
+            {/* Paired devices and their contributed-compute status (#392/#414). */}
             {props.loadDevices && props.onRevokeDevice ? (
               <DevicesCard
                 now={now}
@@ -381,6 +366,12 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
                   : {})}
                 {...(props.onCreateDeviceTicket
                   ? { onCreateTicket: props.onCreateDeviceTicket }
+                  : {})}
+                {...(props.onUpdateDeviceCompute
+                  ? { onUpdateCompute: props.onUpdateDeviceCompute }
+                  : {})}
+                {...(props.loadDeviceWorkStatus
+                  ? { loadWorkStatus: props.loadDeviceWorkStatus }
                   : {})}
               />
             ) : null}

@@ -37,6 +37,15 @@ export async function refreshCustodyState(db: VaultDb): Promise<{ updated: numbe
     shas.add(sha);
   }
   const status = await db.blobs.statusFor(shas);
+  // An outbox row is the durable, explicit "not yet offsite" fact. It wins
+  // over the tier projection until provider custody has been HEAD-confirmed
+  // and the drainer removes it; this avoids showing a stale replica-index hit
+  // as durable while a replacement upload is still outstanding.
+  const pending = new Set(
+    (db.vault.prepare('SELECT sha256 FROM blob_outbox').all() as { sha256: string }[]).map(
+      (row) => row.sha256,
+    ),
+  );
   const now = nowIso();
   db.vault.exec('BEGIN');
   try {
@@ -46,7 +55,12 @@ export async function refreshCustodyState(db: VaultDb): Promise<{ updated: numbe
        VALUES (?, ?, ?, ?)`,
     );
     for (const [contentId, sha] of byContent) {
-      insert.run(contentId, sha, status.get(sha) ?? 'missing', now);
+      insert.run(
+        contentId,
+        sha,
+        pending.has(sha) ? 'pending-offsite' : (status.get(sha) ?? 'missing'),
+        now,
+      );
     }
     db.vault.exec('COMMIT');
   } catch (err) {
@@ -66,6 +80,7 @@ export async function refreshCustodyState(db: VaultDb): Promise<{ updated: numbe
  */
 export function custodyStateCounts(vault: DatabaseSync): Record<CustodyState, number> {
   const counts: Record<CustodyState, number> = {
+    'pending-offsite': 0,
     'local-only': 0,
     replicated: 0,
     'remote-only': 0,
@@ -89,6 +104,7 @@ export function custodyStateCounts(vault: DatabaseSync): Record<CustodyState, nu
  */
 export function custodyStateByteCounts(vault: DatabaseSync): Record<CustodyState, number> {
   const bytes: Record<CustodyState, number> = {
+    'pending-offsite': 0,
     'local-only': 0,
     replicated: 0,
     'remote-only': 0,

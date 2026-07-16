@@ -138,6 +138,46 @@ function downscaleRaster(src: Raster, maxEdge: number): Raster {
   return { width: dw, height: dh, data: out };
 }
 
+/** ITU-R BT.601 luma, matching the Photos client's canvas dHash. */
+function luminance(src: Raster, x: number, y: number): number {
+  const offset = (y * src.width + x) * 4;
+  return (
+    0.299 * (src.data[offset] ?? 0) +
+    0.587 * (src.data[offset + 1] ?? 0) +
+    0.114 * (src.data[offset + 2] ?? 0)
+  );
+}
+
+/** Browser canvas scales every source to the fixed 9×8 dHash sample grid. */
+function sampledLuminance(src: Raster, targetX: number, targetY: number): number {
+  const sx = Math.max(0, Math.min(src.width - 1, ((targetX + 0.5) * src.width) / 9 - 0.5));
+  const sy = Math.max(0, Math.min(src.height - 1, ((targetY + 0.5) * src.height) / 8 - 0.5));
+  const x0 = Math.floor(sx);
+  const y0 = Math.floor(sy);
+  const x1 = Math.min(src.width - 1, x0 + 1);
+  const y1 = Math.min(src.height - 1, y0 + 1);
+  const fx = sx - x0;
+  const fy = sy - y0;
+  const top = luminance(src, x0, y0) * (1 - fx) + luminance(src, x1, y0) * fx;
+  const bottom = luminance(src, x0, y1) * (1 - fx) + luminance(src, x1, y1) * fx;
+  return top * (1 - fy) + bottom * fy;
+}
+
+/** 64-bit difference hash: left sample brighter than its right neighbour. */
+function perceptualHash(src: Raster): string {
+  let hex = '';
+  for (let row = 0; row < 8; row += 1) {
+    let byte = 0;
+    for (let col = 0; col < 8; col += 1) {
+      const left = sampledLuminance(src, col, row);
+      const right = sampledLuminance(src, col + 1, row);
+      byte = (byte << 1) | (left > right ? 1 : 0);
+    }
+    hex += byte.toString(16).padStart(2, '0');
+  }
+  return hex;
+}
+
 /**
  * The injected codec (issue #405 §2). Decode → area-average downscale to
  * `maxEdge` → re-encode as JPEG q≈0.8. `null` for anything unsupported,
@@ -165,6 +205,10 @@ export function createImagePreviewCodec(): PreviewCodec {
       } catch {
         return null;
       }
+    },
+    perceptualHash(source: Buffer, mediaType: string): string | null {
+      const raster = decode(source, mediaType);
+      return raster ? perceptualHash(raster) : null;
     },
   };
 }

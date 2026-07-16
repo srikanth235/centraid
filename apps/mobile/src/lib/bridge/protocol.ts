@@ -7,6 +7,7 @@ export type BridgeMethod =
   | 'haptic.impact'
   | 'haptic.selection'
   | 'haptic.success'
+  | 'transfer.putBackground'
   | 'timer.startBackground'
   | 'timer.cancel';
 

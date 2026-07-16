@@ -4,19 +4,29 @@
 // under the governance line-cap.
 
 import type { BlobStore } from './store.js';
+import type { RemoteBlobTransfer } from './remote-transfer.js';
 
 /**
  * Per-content custody state: whether a piece of content's ORIGINAL bytes sit
  * in the local tier, the remote tier, both, or (an integrity gap) neither.
  * `blob_custody_state` mirrors this per content_id (schema/blob.ts).
  */
-export type CustodyState = 'local-only' | 'replicated' | 'remote-only' | 'missing';
+export type CustodyState =
+  | 'pending-offsite'
+  | 'local-only'
+  | 'replicated'
+  | 'remote-only'
+  | 'missing';
 
 /** How the host resolves the (settings-declared) remote tier on demand. */
 export interface RemoteTier {
   store: BlobStore;
+  /** Durable multipart/temp-copy/direct-presign operations when supported. */
+  transfer?: RemoteBlobTransfer;
   /** Seal remote objects with this key (settings `blob_store.encrypt`). */
   encryptKey?: Buffer;
+  /** Per-blob edge-seal key; takes precedence over the legacy shared key. */
+  keyFor?: (sha256: string) => Buffer;
   /**
    * Plaintext frame size for the framed seal (issue #405 §1). Optional so
    * db.ts can construct a `RemoteTier` without it (falls back to the format
@@ -31,6 +41,11 @@ export interface RemoteTier {
    * force the streaming seal path over a tiny blob.
    */
   streamThresholdBytes?: number;
+}
+
+/** Resolve the encryption key without making every custody caller key-aware. */
+export function remoteEncryptionKey(remote: RemoteTier, sha256: string): Buffer | undefined {
+  return remote.keyFor?.(sha256) ?? remote.encryptKey;
 }
 
 export interface ReconcileResult {

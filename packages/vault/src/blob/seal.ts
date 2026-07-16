@@ -14,6 +14,7 @@
 import { Transform } from 'node:stream';
 import {
   coveringFrames,
+  decodeHeader,
   decodeTrailer,
   DEFAULT_FRAME_SIZE,
   encodeHeader,
@@ -40,7 +41,7 @@ export function sealBlob(
   frameSize: number = DEFAULT_FRAME_SIZE,
 ): Buffer {
   const frameCount = frameCountFor(plaintext.length, frameSize);
-  const parts: Buffer[] = [encodeHeader()];
+  const parts: Buffer[] = [encodeHeader(sha)];
   const sealedLens: number[] = [];
   for (let i = 0; i < frameCount; i++) {
     const frame = plaintext.subarray(
@@ -83,7 +84,7 @@ export function sealBlobStream(
   const header = (): Buffer[] => {
     if (headerSent) return [];
     headerSent = true;
-    return [encodeHeader()];
+    return [encodeHeader(sha)];
   };
   const emitFrame = (out: Buffer[], frame: Buffer): void => {
     const sealed = sealFrame(key, sha, index, frameCount, frame);
@@ -130,6 +131,7 @@ export function sealBlobStream(
  */
 export function unsealBlob(key: Buffer, sha: string, sealed: Buffer): Buffer {
   if (sealed.length < HEADER_BYTES + TRAILER_BYTES) throw new Error('sealed blob truncated');
+  decodeHeader(sealed.subarray(0, HEADER_BYTES), sha);
   const trailer = decodeTrailer(sealed.subarray(sealed.length - TRAILER_BYTES));
   const dirEnd = sealed.length - TRAILER_BYTES;
   const dirStart = dirEnd - trailer.directoryLength;
@@ -145,4 +147,14 @@ export function unsealBlob(key: Buffer, sha: string, sealed: Buffer): Buffer {
 }
 
 // Re-exported for the ranged read-through (custody-read.ts) and tests.
-export { coveringFrames, frameCountFor, DEFAULT_FRAME_SIZE, HEADER_BYTES, TRAILER_BYTES };
+export {
+  coveringFrames,
+  decodeHeader,
+  decodeTrailer,
+  frameCountFor,
+  openDirectory,
+  DEFAULT_FRAME_SIZE,
+  HEADER_BYTES,
+  TRAILER_BYTES,
+  unsealFrame,
+};
