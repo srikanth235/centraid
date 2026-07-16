@@ -138,6 +138,19 @@ export interface DriveTurnOptions {
   attachmentRefs?: TurnAttachmentRef[];
   /** Resolved blob paths handed to the runner for multimodal blocks. */
   turnAttachments?: { path: string; mime: string; filename?: string }[];
+  /**
+   * Fire-and-forget LLM auto-title hook (issue #420). Invoked once, ONLY after
+   * the FIRST successful turn of a still-unnamed conversation, with the turn's
+   * user message and assistant answer. The callback owns the cheap-tier
+   * inference and the "apply only if the title is still the derived truncation"
+   * guard; the driver just decides *when* to fire it. Never awaited — a title
+   * miss must never affect the turn.
+   */
+  generateTitle?: (args: {
+    conversationId: string;
+    userMessage: string;
+    assistantText: string;
+  }) => void;
 }
 
 /**
@@ -303,6 +316,11 @@ export async function driveTurnOverSse(opts: DriveTurnOptions): Promise<void> {
       req.off('close', onClientClose);
       req.off('error', onClientClose);
       if (conversationStore) {
+        // Whether this conversation is still unnamed BEFORE we record — an
+        // empty title is the "first turn of a new thread" signal (recordTurn
+        // sets the derived truncation below). Read once here so the auto-title
+        // hook fires exactly on the naming turn (issue #420).
+        const wasUnnamed = conversationStore.getSessionMeta(appId, conversationId)?.title === '';
         // Persist the turn as a `runs` row + its `run_nodes` trace. The
         // assistant reply (or the turn error) is one `step` node ordered
         // after the turn's `tool` nodes — matching the transcript shape
@@ -359,6 +377,26 @@ export async function driveTurnOverSse(opts: DriveTurnOptions): Promise<void> {
           });
         } catch {
           /* best-effort — a ledger miss never fails the turn */
+        }
+        // LLM auto-title (issue #420): only on the naming turn of a new thread,
+        // only when the turn actually produced an answer. Fire-and-forget — the
+        // callback owns the cheap inference and the rename guard.
+        if (
+          wasUnnamed &&
+          opts.generateTitle &&
+          acc.errorMessage === undefined &&
+          acc.finalText &&
+          acc.finalText.trim().length > 0
+        ) {
+          try {
+            opts.generateTitle({
+              conversationId,
+              userMessage: message,
+              assistantText: acc.finalText,
+            });
+          } catch {
+            /* best-effort — a title miss never fails the turn */
+          }
         }
         // Persist the runner-resume handle. The resume-handle update only
         // happens when the runner reported an `adapterKind` (codex /

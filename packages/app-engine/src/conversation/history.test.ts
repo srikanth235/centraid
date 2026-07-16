@@ -685,6 +685,40 @@ describe('makeConversationRouteHandler', () => {
     expect(res.status).toBe(404);
   });
 
+  it('GET sessions/search returns FTS hits with a snippet (#420)', async () => {
+    const created = await call(handler, 'POST', BASE, { title: 'Budget review' });
+    const id = (created.body as { id: string }).id;
+    store.recordTurn(APP, turn(id, 'plan the quarterly budget', 'sure'));
+    const res = await call(handler, 'GET', `${BASE}/search?q=quarterly`);
+    expect(res.status).toBe(200);
+    const results = (res.body as { results: Array<{ id: string; snippet: string }> }).results;
+    expect(results.map((r) => r.id)).toEqual([id]);
+    expect(results[0]!.snippet).toContain('⟦');
+    // A blank query yields no results, not an error.
+    const empty = await call(handler, 'GET', `${BASE}/search?q=`);
+    expect((empty.body as { results: unknown[] }).results).toEqual([]);
+  });
+
+  it('PATCH pins / archives a session and list ordering + flags reflect it (#420)', async () => {
+    const a = (await call(handler, 'POST', BASE, { title: 'Alpha' })).body as { id: string };
+    const b = (await call(handler, 'POST', BASE, { title: 'Beta' })).body as { id: string };
+    const pinned = await call(handler, 'PATCH', `${BASE}/${a.id}`, { pinned: true });
+    expect(pinned.status).toBe(200);
+    expect((pinned.body as { pinned: boolean }).pinned).toBe(true);
+    const list = (await call(handler, 'GET', BASE)).body as {
+      sessions: Array<{ id: string; pinned: boolean; archived: boolean }>;
+    };
+    // Pinned a sorts before b regardless of recency.
+    expect(list.sessions[0]!.id).toBe(a.id);
+    expect(list.sessions[0]!.pinned).toBe(true);
+    const archived = await call(handler, 'PATCH', `${BASE}/${b.id}`, { archived: true });
+    expect((archived.body as { archived: boolean }).archived).toBe(true);
+    // Archived b drops out of search.
+    store.recordTurn(APP, turn(b.id, 'beta needle text', 'ok'));
+    const res = await call(handler, 'GET', `${BASE}/search?q=needle`);
+    expect((res.body as { results: unknown[] }).results).toEqual([]);
+  });
+
   it('405s on unsupported method', async () => {
     const res = await call(handler, 'PUT', BASE);
     expect(res.status).toBe(405);

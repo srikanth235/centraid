@@ -2,6 +2,7 @@
 
 export function conversationsPath(appId: string): string;
 export function conversationPath(appId: string, sessionId: string): string;
+export function conversationSearchPath(appId: string, query: string, limit?: number): string;
 export function blobsPath(appId: string): string;
 export function appTurnPath(appId: string): string;
 export function appModelPath(appId: string): string;

@@ -35,6 +35,7 @@ import { promises as fs } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   AnalyticsStore,
+  ASSISTANT_APP_ID,
   AUTHED_DEVICE_HEADER,
   ConversationHistoryStore,
   ConversationStore,
@@ -43,6 +44,8 @@ import {
   Runtime,
   changesSubscriberCount,
   cleanupDeregisteredApp,
+  deriveTitle,
+  generateConversationTitle,
   makeConversationRouteHandler,
   makeJournalDbProvider,
   makeUserStoreRouteHandler,
@@ -61,6 +64,7 @@ import * as automation from '@centraid/automation';
 import {
   runAutomation,
   runPreflight,
+  runTurn,
   CatalogWarmer,
   deriveStatus,
   readRunnerModels,
@@ -122,6 +126,7 @@ import {
 } from '../lifecycle/headless-automation-compile.js';
 import { makeUnifiedConversationRunner } from '../runs/unified-conversation-runner.js';
 import {
+  assistantCwd,
   makeAssistantConversationRunner,
   makeVaultToolRunners,
 } from '../runs/assistant-conversation-runner.js';
@@ -1700,6 +1705,52 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     vaults: vaultRegistry,
   });
 
+  // LLM auto-title (issue #420, Wave 3): after the first turn of a new
+  // assistant thread settles, a cheap one-shot inference names it — the
+  // claude.ai affordance that beats first-message truncation. Fire-and-forget:
+  // this closure returns void immediately and self-schedules; any failure is
+  // swallowed so a title miss never touches the turn. Provider-agnostic — the
+  // titler runs at the `fast` capability TIER (never a hardcoded model id;
+  // governance no-hardcoded-model-ids), overridable per runner via the
+  // `model.<runnerKind>.title` prefs slot. "User rename wins": the generated
+  // title is only applied when the stored title is STILL the exact derived
+  // truncation, re-checked after the (async) generation returns.
+  const generateAssistantTitle = (args: {
+    conversationId: string;
+    userMessage: string;
+    assistantText: string;
+  }): void => {
+    void (async () => {
+      try {
+        const runnerPrefs = await prefsLoader();
+        if (!runnerPrefs) return;
+        const slot = prefs.getAllPrefs()[`model.${runnerPrefs.kind}.title`];
+        const configured = typeof slot === 'string' && slot.length > 0 ? slot : undefined;
+        // The `fast` tier is only meaningful on runners that understand the
+        // tier vocabulary (claude-code); on codex a bare tier token would be
+        // sent verbatim, so skip unless the owner configured an explicit slot.
+        if (!configured && runnerPrefs.kind !== 'claude-code') return;
+        const title = await generateConversationTitle({
+          runTurn,
+          runnerPrefs,
+          cwd: assistantCwd(vaultRegistry),
+          model: configured ?? 'fast',
+          userMessage: args.userMessage,
+          assistantText: args.assistantText,
+          timeoutMs: 20_000,
+        });
+        if (!title) return;
+        // Apply only if the thread still carries the derived truncation — a
+        // manual rename between record and generation wins.
+        const meta = conversationHistoryStore.getSessionMeta(ASSISTANT_APP_ID, args.conversationId);
+        if (!meta || meta.title !== deriveTitle(args.userMessage)) return;
+        conversationHistoryStore.renameSession(ASSISTANT_APP_ID, args.conversationId, title);
+      } catch {
+        /* fire-and-forget — a title miss never affects the turn */
+      }
+    })();
+  };
+
   // Ask-register lens metadata (issue #286 phase 2): the app copilot's
   // `register: 'ask'` turns ARE the owner assistant wearing the app lens —
   // name + description bias the prompt, never a permission boundary.
@@ -1840,6 +1891,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       runner: assistantRunner,
       conversationLocks: new Map(),
       resolveModel,
+      generateTitle: generateAssistantTitle,
     }),
     // Scenario seeds (issue #290 phase 1): load/reset an app's demo data.
     // Mounted BEFORE the generic `_vault` handler (same prefix family).

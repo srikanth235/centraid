@@ -219,12 +219,21 @@ export {
   ConversationHistoryStore,
   deriveTitle,
   type ConversationSummary,
+  type ConversationSearchResult,
   type ConversationMessageRow,
   type ConversationAttachmentPayload,
   type TurnNode,
   type ConversationTurnAttachment,
   type RecordTurnInput,
 } from './conversation/history.js';
+// LLM auto-titles (issue #420, Wave 3): a cheap one-shot inference names a
+// new conversation after its first turn. Provider-agnostic (tier token) and
+// fire-and-forget — the gateway owns the "apply only if still derived" guard.
+export {
+  generateConversationTitle,
+  cleanTitle,
+  type GenerateTitleDeps,
+} from './conversation/auto-title.js';
 export { makeConversationRouteHandler } from './http/conversation-routes.js';
 // The shared SSE turn driver (stream framing + run-ledger fold) — the
 // per-app `_turn` route and the gateway's vault-assistant route both ride it.

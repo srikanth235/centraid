@@ -11,7 +11,7 @@ Issue #420's suggested phasing, each wave discharged by the named subsection in
 - [x] **Wave 0 — shared conversation core**
 - [x] **Wave 1 — transcript table stakes**
 - [x] **Wave 2 — rendering**
-- [ ] **Wave 3 — management & search**
+- [x] **Wave 3 — management & search**
 - [ ] **Wave 4 — resilience**
 - [ ] **Wave 5 — design issues to spin out**
 
@@ -186,6 +186,89 @@ All §2 items in the SHARED renderer, so both surfaces gain them at once:
   `packages/blueprints/src/app-boot-harness.ts`,
   `packages/blueprints/scripts/lint-apps.mjs`.
 
+### Wave 3 — management & search
+
+All four §3 items plus the §4 composer remainder (@-mentions, starters, slash
+commands).
+
+- **Conversation search, end-to-end.** A new FTS5 shadow table `fts_conversation`
+  over chat/build titles + inbound `message_in` text, kept in sync by triggers —
+  mirroring the vault's own FTS pattern (`snippet()` context, `unicode61
+  remove_diacritics 2`). DDL + idempotent `NOT EXISTS`-guarded backfill in
+  `packages/app-engine/src/stores/gateway-db.ts` (`CONVERSATION_FTS_DDL`, ensured
+  on every journal open); `conversationMatchExpression` + `searchConversations`
+  (rank-ordered, snippet, archived-excluded, user/app-scoped) in
+  `packages/app-engine/src/conversation/store.ts` /
+  `packages/app-engine/src/conversation/store-sql.ts`; facade `searchSessions` in
+  `packages/app-engine/src/conversation/history.ts`; route
+  `GET .../sessions/search?q=` in
+  `packages/app-engine/src/http/conversation-routes.ts` (matched BEFORE the
+  generic `sessions/<id>` route). Client `searchConversations` +
+  `conversationSearchPath` in `packages/client/src/gateway-client-conversation.ts`
+  / `packages/blueprints/kit/conversation-client.js`. The ⌘K palette gains a
+  "Conversations" category via a debounced async source
+  (`packages/client/src/react/shell/routes/paletteConversationSearch.ts`) that
+  fills the palette's synchronous cache and re-runs `buildPaletteGroups` through
+  the injected `refresh()`; a hit deep-links to `{kind:'assistant',
+  conversationId}` with a snippet sub-line
+  (`packages/client/src/react/shell/routes/paletteData.ts`,
+  `packages/client/src/react/shell/App.tsx`).
+- **LLM auto-titles.** After the FIRST successful turn of a still-unnamed thread,
+  a fire-and-forget cheap-tier one-shot names it. Generator
+  `generateConversationTitle` + `cleanTitle` (tool-less `runTurn`, accumulate,
+  strip quotes/markers/trailing punctuation, cap 60) in
+  `packages/app-engine/src/conversation/auto-title.ts`; the driver fires it on the
+  naming turn via a `generateTitle` hook threaded through `DriveTurnOptions`
+  (`packages/app-engine/src/http/turn-sse.ts`) and the assistant route
+  (`packages/gateway/src/routes/assistant-routes.ts`). The gateway closure
+  (`build-gateway.ts`) resolves the `fast` capability TIER (never a model id —
+  governance `no-hardcoded-model-ids`; overridable via `model.<runnerKind>.title`,
+  skipped on codex which lacks tier vocabulary), and applies the result only when
+  the stored title is STILL the exact `deriveTitle` truncation (user renames win).
+- **Export a conversation.** Client-side serializer over the already-fetched
+  transcript (no route): `conversationToMarkdown` (role headings, timestamps,
+  code fences, attachment notes, usage line) + `conversationToJson` (structured
+  transcript under an export envelope) + `downloadConversation` in
+  `packages/client/src/react/shell/routes/conversationExport.ts`. Wired into the
+  sidebar row menu (Export as Markdown / JSON).
+- **Pin / archive.** Reused the existing `conversations.pinned` column and added
+  an `archived` column (v0, no migration) in
+  `packages/app-engine/src/conversation/schema.ts` /
+  `packages/app-engine/src/stores/gateway-db.ts`; store setters + list ordering
+  (`pinned DESC`, archived last) + PATCH `{pinned?|archived?}` on the existing
+  sessions PATCH route; client `setConversationPinned`/`setConversationArchived`.
+  Sidebar `ChatsSection` groups pinned-on-top, a collapsed "Archived" group at
+  the bottom (`packages/client/src/react/shell/Sidebar.tsx`,
+  `chrome.module.css`), with row-menu Pin/Unpin + Archive/Unarchive
+  (`packages/client/src/react/shell/App.tsx`).
+- **@-mentions + slash-commands (§4).** Clean React composer autocomplete calling
+  the SAME endpoints (justification below), not a kit-popover extraction: pure
+  helpers (`mentionTokenAt`/`slashCommandAt`/`refString`/`insertRef`) in
+  `packages/client/src/react/screens/composerMentions.ts`, a
+  `useComposerAutocomplete` hook + popover in
+  `packages/client/src/react/screens/ComposerAutocomplete.tsx`, wired into the
+  composer in `packages/client/src/react/screens/AssistantScreen.tsx`
+  (`AssistantScreen.module.css`). `@` opens an entity picker over auth-aware
+  `searchVaultEntities` and inserts `@[label](ref:type/id)` (exactly what the
+  shared renderer parses); leading `/` runs an existing shell action (/export,
+  /rename, /new). Justification: the kit's `attachMentionPopover` pokes an
+  uncontrolled DOM textarea, hard-codes a cookie-auth picker fetch with no
+  injectable search hook, and styles via global kit.css — the shell composer is a
+  controlled React textarea authed by bearer token; per the Wave-0 audit a React
+  reimplementation over the shared endpoints is the right call, and the only
+  genuinely shareable bits (token detection + ref splice) are tiny pure functions.
+  No new kit sibling ⇒ no allowlist changes.
+- **Prompt starters (§4).** Empty-state chips are now configurable via prefs
+  `assistant.starters` (defaults preserved) — `resolveStarters` +
+  `DEFAULT_STARTERS` in
+  `packages/client/src/react/shell/routes/assistantStarters.ts`, loaded via
+  `getUserPrefs` in `AssistantRoute.tsx`.
+
+New Wave 3 tests: FTS search + pin/archive (store + route), auto-title unit
+(mocked runTurn), export serializer, palette conversation group + async search
+source, composer mention/slash helpers, starters resolver; the ledger-tables
+snapshot test updated for the FTS plane.
+
 ## Out of scope
 
 - Backend/runner changes — `makeAssistantConversationRunner`, tools, prompt
@@ -244,6 +327,29 @@ Pre-existing, unrelated: `packages/blueprints/src/docs-media.test.ts` times out
 (`Promise.try` missing in vendored `pdf.min.mjs`) — fails identically on the
 base commit without this branch's changes.
 
+Wave 3 — from the worktree root:
+
+```bash
+bun run typecheck        # 26/26 turbo tasks pass
+bun run lint:types       # all packages ok
+bunx oxlint packages/{app-engine,gateway,client}/src packages/blueprints/kit  # 0 errors
+bunx vitest run packages/app-engine   # 401 tests pass
+bunx vitest run packages/client       # 836 tests pass
+bunx vitest run packages/gateway      # 665 pass; 3 non-Wave-3 fails, see below
+```
+
+Gateway fails are NOT from this wave:
+- `src/serve/serve.test.ts` "reports {configured: false}" — a backup/vault-list
+  assertion; verified pre-existing (fails identically after `git stash -u` on the
+  base tree).
+- `src/cli/backup-admin.test.ts`, `src/cli/key-admin.test.ts` — flaky under
+  full-parallel load (5s timeouts); both PASS when re-run in isolation
+  (`bunx vitest run packages/gateway/src/cli/backup-admin.test.ts
+  packages/gateway/src/cli/key-admin.test.ts` → 11/11).
+
+`oxfmt --check` flags only the vendored `pdf.min.mjs` / `pdf.worker.min.mjs`
+(pre-existing, untouched); every touched source file is formatted.
+
 ## Decisions
 
 - Canonical copy of the shared core lives in `packages/blueprints/kit/` (not
@@ -261,6 +367,29 @@ base commit without this branch's changes.
 - Interim commits on this branch carry the receipt-shape waiver at line 1; the
   final commit removes it and adds the required `## Audit`/`## Steering`
   attestations, keeping per-wave commits reviewable without re-attesting each.
+- Wave 3 (search): the conversation FTS indexes titles + inbound `message_in`
+  text only — assistant answers live in `items.output_json` as a JSON envelope,
+  not extractable in a pure-SQL trigger; titles + the user's own words are what
+  a person remembers a thread by, and the grain stays one FTS row per
+  conversation (re-derived on each text insert; chat threads are small).
+- Wave 3 (titles): resolves the `fast` capability TIER, never a model id
+  (`no-hardcoded-model-ids`); overridable per runner via `model.<runnerKind>.title`;
+  skipped on codex (no tier vocabulary — a bare token would be sent verbatim).
+  Fire-and-forget with a re-checked "still the derived truncation" guard so a
+  title miss never touches the turn and a manual rename always wins.
+- Wave 3 (export): client-side serializer over the transcript already fetched by
+  `GET .../sessions/<id>` — no route, since there are no attachment bytes to
+  stream (attachments are referenced by hash/URL, preserved in the JSON form).
+- Wave 3 (@-mentions): a clean React composer autocomplete over the same
+  `searchVaultEntities` / `@[label](ref:type/id)` contract, NOT an extraction of
+  the kit's `attachMentionPopover` (uncontrolled DOM textarea, non-injectable
+  cookie-auth fetch, global kit.css) — the shell composer is a controlled React
+  textarea on bearer auth; only the tiny pure token/splice helpers are shared-
+  shaped. No new kit sibling ⇒ no allowlist changes.
+- Wave 3: `pinned` reuses the existing conversations column; `archived` is a new
+  column (v0, no migration). `App.tsx`/`AssistantRoute.tsx`/`store.ts`/`history.ts`
+  already carry line-1 file-size waivers; no NEW file crossed the 500-line cap
+  (Sidebar 461, AssistantScreen 402, gateway-db 408, ComposerAutocomplete 242).
 
 ## Steering
 

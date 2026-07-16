@@ -58,4 +58,38 @@ describe('buildPaletteGroups', () => {
     groups.find((g) => g.group === 'Create')!.items[0]!.run();
     expect(enterBuilder).toHaveBeenCalledWith('budget tracker');
   });
+
+  it('adds a Conversations group from the search source and deep-links on run (#420)', () => {
+    const navigate = vi.fn();
+    const onClose = vi.fn();
+    const ensure = vi.fn();
+    const conversationSearch = {
+      ensure,
+      results: () => [{ id: 'c9', title: 'Budget chat', snippet: 'the ⟦budget⟧ plan' }],
+      reset: vi.fn(),
+    };
+    const groups = buildPaletteGroups('budget', deps({ navigate, onClose, conversationSearch }));
+    expect(ensure).toHaveBeenCalledWith('budget');
+    const convo = groups.find((g) => g.group === 'Conversations')!;
+    expect(convo.items[0]!.label).toBe('Budget chat');
+    // Snippet markers are stripped for the plain sub text.
+    expect(convo.items[0]!.sub).toBe('the budget plan');
+    convo.items[0]!.run();
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(navigate).toHaveBeenCalledWith({ kind: 'assistant', conversationId: 'c9' });
+  });
+
+  it('omits the Conversations group with no query or no hits (#420)', () => {
+    const empty = { ensure: vi.fn(), results: () => [], reset: vi.fn() };
+    expect(
+      buildPaletteGroups('', deps({ conversationSearch: empty })).find(
+        (g) => g.group === 'Conversations',
+      ),
+    ).toBeUndefined();
+    expect(
+      buildPaletteGroups('budget', deps({ conversationSearch: empty })).find(
+        (g) => g.group === 'Conversations',
+      ),
+    ).toBeUndefined();
+  });
 });

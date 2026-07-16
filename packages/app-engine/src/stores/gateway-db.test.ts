@@ -61,19 +61,34 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
   it('creates the ledger tables + the run_summary VIEW in ONE file (no legacy tables)', () => {
     const path = freshDbPath();
     openJournalDb(path).close();
-    expect(tableNames(path)).toEqual([
+    // The FTS5 conversation search plane (issue #420) adds `fts_conversation`
+    // and its internal shadow tables (`fts_conversation_data`, `_idx`, …); the
+    // ledger's own tables are everything that isn't part of that plane.
+    const ledgerTables = tableNames(path).filter((n) => !n.startsWith('fts_conversation'));
+    expect(ledgerTables).toEqual([
       'attachments',
       'automation_state',
       'conversations',
       'items',
       'turns',
     ]);
+    // The search virtual table + its sync triggers exist.
+    expect(tableNames(path)).toContain('fts_conversation');
     const db = new DatabaseSync(path);
     try {
       const views = db
         .prepare(`SELECT name FROM sqlite_master WHERE type='view' ORDER BY name`)
         .all() as Array<{ name: string }>;
       expect(views.map((v) => v.name)).toEqual(['run_summary']);
+      const triggers = db
+        .prepare(`SELECT name FROM sqlite_master WHERE type='trigger' ORDER BY name`)
+        .all() as Array<{ name: string }>;
+      expect(triggers.map((t) => t.name)).toEqual([
+        'fts_conversation_conv_ad',
+        'fts_conversation_conv_ai',
+        'fts_conversation_conv_au',
+        'fts_conversation_item_ai',
+      ]);
     } finally {
       db.close();
     }

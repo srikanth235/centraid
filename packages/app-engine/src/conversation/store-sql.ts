@@ -38,6 +38,7 @@ export interface RawConversation {
   adapter_session_id: string | null;
   turn_count: number;
   pinned: number;
+  archived: number;
   created_at: number;
   updated_at: number;
 }
@@ -125,6 +126,7 @@ export function conversationFromRaw(raw: RawConversation): Conversation {
     ...(raw.adapter_session_id !== null ? { adapterSessionId: raw.adapter_session_id } : {}),
     turnCount: Number(raw.turn_count),
     pinned: raw.pinned !== 0,
+    archived: raw.archived !== 0,
     createdAt: raw.created_at,
     updatedAt: raw.updated_at,
   };
@@ -221,6 +223,9 @@ export interface PreparedStatements {
   getConversation: StatementSync;
   getConversationWithCount: StatementSync;
   listConversations: StatementSync;
+  searchConversations: StatementSync;
+  setConversationPinned: StatementSync;
+  setConversationArchived: StatementSync;
   renameConversation: StatementSync;
   deleteConversationForUser: StatementSync;
   deleteConversationById: StatementSync;
@@ -264,8 +269,13 @@ export interface PreparedStatements {
 // Reconstructed transcript length = total items across the conversation's
 // turns (one `message_in` per turn + each step/tool item).
 const CONV_COLS = `c.id, c.kind, c.user_id, c.app_id, c.automation_id, c.title,
-        c.adapter_kind, c.adapter_session_id, c.turn_count, c.pinned,
+        c.adapter_kind, c.adapter_session_id, c.turn_count, c.pinned, c.archived,
         c.created_at, c.updated_at`;
+
+// The reconstructed transcript-length subquery, shared by the list/search/get
+// column blocks so a conversation's `msg_count` means the same thing everywhere.
+const MSG_COUNT_SUBQUERY = `(SELECT COUNT(*) FROM items WHERE turn_id IN
+          (SELECT id FROM turns WHERE conversation_id = c.id))`;
 
 export function prepare(db: DatabaseSync): PreparedStatements {
   return {
@@ -283,21 +293,43 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     getConversation: db.prepare(`SELECT ${CONV_COLS} FROM conversations c WHERE c.id = ?`),
     getConversationWithCount: db.prepare(`
       SELECT ${CONV_COLS},
-        (SELECT COUNT(*) FROM items WHERE turn_id IN
-          (SELECT id FROM turns WHERE conversation_id = c.id)) AS msg_count
+        ${MSG_COUNT_SUBQUERY} AS msg_count
       FROM conversations c WHERE c.id = ? AND c.user_id = ?
     `),
     // App scoping is a column filter (`?3 IS NULL OR c.app_id = ?`): the
-    // ledger file is per VAULT, one shared `journal.db` (#280).
+    // ledger file is per VAULT, one shared `journal.db` (#280). Pinned threads
+    // sort first (issue #420); archived rows still come back so the sidebar can
+    // group them, they're just ordered last within their pin bucket.
     listConversations: db.prepare(`
       SELECT ${CONV_COLS},
-        (SELECT COUNT(*) FROM items WHERE turn_id IN
-          (SELECT id FROM turns WHERE conversation_id = c.id)) AS msg_count
+        ${MSG_COUNT_SUBQUERY} AS msg_count
       FROM conversations c
       WHERE c.user_id = ? AND c.kind IN ('chat','build')
         AND (? IS NULL OR c.app_id = ?)
-      ORDER BY c.updated_at DESC
+      ORDER BY c.archived ASC, c.pinned DESC, c.updated_at DESC
     `),
+    // FTS5 search over titles + inbound message text (issue #420, Wave 3),
+    // mirroring the vault's search: rank order + snippet() for match context.
+    // Archived threads are out of the way, so they stay out of results.
+    searchConversations: db.prepare(`
+      SELECT ${CONV_COLS},
+        ${MSG_COUNT_SUBQUERY} AS msg_count,
+        snippet(fts_conversation, -1, '⟦', '⟧', '…', 12) AS snippet
+      FROM fts_conversation
+      JOIN conversations c ON c.id = fts_conversation.conversation_id
+      WHERE fts_conversation MATCH ?
+        AND c.user_id = ? AND c.kind IN ('chat','build')
+        AND (? IS NULL OR c.app_id = ?)
+        AND c.archived = 0
+      ORDER BY fts_conversation.rank
+      LIMIT ?
+    `),
+    setConversationPinned: db.prepare(
+      `UPDATE conversations SET pinned = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+    ),
+    setConversationArchived: db.prepare(
+      `UPDATE conversations SET archived = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+    ),
     renameConversation: db.prepare(
       `UPDATE conversations SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
     ),

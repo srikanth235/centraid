@@ -10,6 +10,9 @@ import { cx } from '../ui/cx.js';
 import Message, { type MessageCallbacks } from './AssistantMessage.js';
 import { useAssistantScroll } from './useAssistantScroll.js';
 import { clearDraft, loadDraft, saveDraft } from './assistantDrafts.js';
+import { useComposerAutocomplete } from './ComposerAutocomplete.js';
+
+const NO_ENTITIES = async (): Promise<never[]> => [];
 
 const EMPTY_MODEL_PICKER: AsstModelPickerDTO = {
   connected: false,
@@ -162,6 +165,9 @@ export default function AssistantScreen({
   onPagerNav,
   loadModelPicker,
   onSetModel,
+  searchEntities,
+  slashCommands,
+  onRunSlash,
 }: AssistantBridgeProps): JSX.Element {
   const [snap, setSnap] = useState<AssistantSnapshot>({
     empty: true,
@@ -175,6 +181,7 @@ export default function AssistantScreen({
   const [modelPickerLoaded, setModelPickerLoaded] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
 
   const { showJump, jumpToBottom } = useAssistantScroll(scrollRef, snap.messages, conversationId);
 
@@ -203,6 +210,16 @@ export default function AssistantScreen({
     setDraft(v);
     saveDraft(conversationId, v);
   };
+
+  // @-mentions + slash-commands (issue #420). Inert when the route wires no
+  // entity search / commands (older callers, tests).
+  const autocomplete = useComposerAutocomplete({
+    textareaRef: taRef,
+    setValue: changeDraft,
+    searchEntities: searchEntities ?? NO_ENTITIES,
+    slashCommands: slashCommands ?? [],
+    onRunSlash: onRunSlash ?? (() => undefined),
+  });
 
   const hasReadyAttachment = snap.pendingAttachments.some((a) => a.state === 'ready');
 
@@ -315,19 +332,24 @@ export default function AssistantScreen({
                 ))}
               </div>
             ) : null}
+            {autocomplete.popover}
             <textarea
+              ref={taRef}
               className={styles.input}
               rows={1}
-              placeholder="Ask your vault anything…"
+              placeholder="Ask your vault anything…  (@ to mention, / for commands)"
               data-busy={snap.busy ? '' : undefined}
               value={draft}
-              onChange={(e) => changeDraft(e.target.value)}
+              onChange={(e) => autocomplete.onChange(e)}
               onKeyDown={(e) => {
+                // The autocomplete menu gets first crack at Arrow/Enter/Tab/Esc.
+                if (autocomplete.onKeyDown(e)) return;
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   send();
                 }
               }}
+              onBlur={() => autocomplete.close()}
               onPaste={(e) => {
                 const files = Array.from(e.clipboardData?.files ?? []);
                 if (files.length) onAttachFiles(files);

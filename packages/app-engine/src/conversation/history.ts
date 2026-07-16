@@ -47,10 +47,20 @@ export interface ConversationSummary {
   adapterSessionId: string | null;
   /** Number of completed turns on this session. */
   turnCount: number;
+  /** Pinned threads sort first in the sidebar (issue #420). */
+  pinned: boolean;
+  /** Archived threads hide behind a collapsed group and drop out of search. */
+  archived: boolean;
   createdAt: number;
   updatedAt: number;
   /** Reconstructed transcript length (user + assistant + tool messages). */
   messageCount: number;
+}
+
+/** A conversation search hit: its summary plus a highlighted match snippet. */
+export interface ConversationSearchResult extends ConversationSummary {
+  /** `snippet()` output with `⟦`/`⟧` around matched terms and `…` elisions. */
+  snippet: string;
 }
 
 export interface ConversationMessageRow {
@@ -390,6 +400,38 @@ export class ConversationHistoryStore {
   }
 
   /**
+   * FTS5 search over this app's chat/build sessions — titles + inbound message
+   * text (issue #420). Powers the ⌘K palette's "Conversations" category. Each
+   * result carries a highlighted `snippet` for match context.
+   */
+  searchSessions(appId: string, query: string, limit = 20): ConversationSearchResult[] {
+    const { store } = this.appConversation(appId);
+    return store
+      .searchConversations(this.currentUserId(), query, appId, limit)
+      .map((hit) => ({ ...toMeta(hit), snippet: hit.snippet }));
+  }
+
+  /** Pin/unpin a session `appId` owns; returns the fresh summary or undefined. */
+  setSessionPinned(appId: string, id: string, pinned: boolean): ConversationSummary | undefined {
+    const { store } = this.appConversation(appId);
+    if (!this.ownedMeta(appId, id)) return undefined;
+    if (!store.setConversationPinned(id, this.currentUserId(), pinned)) return undefined;
+    return this.getSessionMeta(appId, id);
+  }
+
+  /** Archive/unarchive a session `appId` owns; returns the fresh summary. */
+  setSessionArchived(
+    appId: string,
+    id: string,
+    archived: boolean,
+  ): ConversationSummary | undefined {
+    const { store } = this.appConversation(appId);
+    if (!this.ownedMeta(appId, id)) return undefined;
+    if (!store.setConversationArchived(id, this.currentUserId(), archived)) return undefined;
+    return this.getSessionMeta(appId, id);
+  }
+
+  /**
    * Set (or clear, with `null`) the reader's 👍/👎 on one turn's answer in a
    * session `appId` owns (issue #420). Returns whether it was applied — false
    * when the session isn't owned or the turn isn't part of it.
@@ -557,6 +599,8 @@ function toMeta(c: ConversationMeta): ConversationSummary {
     adapterKind: c.adapterKind ?? null,
     adapterSessionId: c.adapterSessionId ?? null,
     turnCount: c.turnCount,
+    pinned: c.pinned,
+    archived: c.archived,
     createdAt: c.createdAt,
     updatedAt: c.updatedAt,
     messageCount: c.messageCount,

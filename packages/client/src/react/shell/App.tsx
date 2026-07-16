@@ -2,7 +2,7 @@
 // wiring every route + the grouped switcher's popover callbacks crossed 500
 // by 16 lines; a route-wiring extraction is a reasonable follow-up but not
 // warranted for this margin.
-import { type JSX, useCallback, useEffect, useRef, useState } from 'react';
+import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { IconName } from '@centraid/design-tokens';
 import type { ShellRoute } from '../../app-shell-context.js';
 import PaletteScreen from '../screens/PaletteScreen.js';
@@ -13,8 +13,18 @@ import { openMenu } from './contextMenu.js';
 import { openPrompt } from './prompt.js';
 import { showUndoToast } from './undoToast.js';
 import { relativeTime } from '../../app-format.js';
-import { ASSISTANT_APP_ID, deleteConversation, renameConversation } from '../../gateway-client.js';
+import {
+  ASSISTANT_APP_ID,
+  deleteConversation,
+  loadConversation,
+  renameConversation,
+  searchConversations,
+  setConversationArchived,
+  setConversationPinned,
+} from '../../gateway-client.js';
 import { buildPaletteGroups } from './routes/paletteData.js';
+import { createPaletteConversationSearch } from './routes/paletteConversationSearch.js';
+import { downloadConversation, type ExportFormat } from './routes/conversationExport.js';
 import ProfileSwitcherHead from './ProfileSwitcherHead.js';
 import Sidebar, {
   type ShellMenuAnchor,
@@ -113,6 +123,11 @@ function activePageFor(route: ShellRoute): SidebarPage | undefined {
   }
 }
 
+/** Compact error-message extractor for toast copy. */
+function errMsg(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 // The React shell root — the single component the flip mounts on #root,
 // replacing the vanilla app.ts IIFE + chrome.ts. It owns the real renderer
 // state (appearance prefs, the live app/draft list, starred set) and drives
@@ -135,6 +150,17 @@ export default function App(): JSX.Element {
   const gatewayStatus = useGatewayRuntime()?.status;
   const navRef = useRef<ShellNav | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // The palette's injected refresh() (issue #420) — held so the async
+  // conversation-search source can re-run buildPaletteGroups when hits land.
+  const paletteRefreshRef = useRef<(() => void) | null>(null);
+  const paletteConversationSearch = useMemo(
+    () =>
+      createPaletteConversationSearch({
+        search: (query, limit) => searchConversations(ASSISTANT_APP_ID, query, limit),
+        onResults: () => paletteRefreshRef.current?.(),
+      }),
+    [],
+  );
   const [vaultSwitcherOpen, setVaultSwitcherOpen] = useState(false);
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
   // The switcher's per-gateway actions (issue #382) — "New space…", "Test
@@ -290,22 +316,91 @@ export default function App(): JSX.Element {
     [assistantConversations],
   );
 
-  // The sidebar row ••• / right-click menu: Rename + Delete.
+  // Pin/unpin (§3) — a PATCH + refresh; the store sorts pinned threads first.
+  const pinAssistantConversation = useCallback(
+    (id: string, pinned: boolean) => {
+      void (async () => {
+        await setConversationPinned(ASSISTANT_APP_ID, id, pinned).catch((err: unknown) =>
+          showToast(`Couldn't ${pinned ? 'pin' : 'unpin'}: ${errMsg(err)}`),
+        );
+        await assistantConversations.refresh();
+      })();
+    },
+    [assistantConversations],
+  );
+
+  // Archive/unarchive (§3) — a PATCH + refresh. Archiving the open thread
+  // bounces to a fresh assistant, mirroring delete (the row leaves the list).
+  const archiveAssistantConversation = useCallback(
+    (id: string, archived: boolean) => {
+      void (async () => {
+        await setConversationArchived(ASSISTANT_APP_ID, id, archived).catch((err: unknown) =>
+          showToast(`Couldn't ${archived ? 'archive' : 'unarchive'}: ${errMsg(err)}`),
+        );
+        const cur = navRef.current?.route;
+        if (archived && cur?.kind === 'assistant' && cur.conversationId === id) {
+          navRef.current?.navigate({ kind: 'assistant' });
+        }
+        await assistantConversations.refresh();
+      })();
+    },
+    [assistantConversations],
+  );
+
+  // Export (§3) — fetch the full transcript, then serialize + download.
+  const exportAssistantConversation = useCallback((id: string, format: ExportFormat) => {
+    void (async () => {
+      try {
+        const conv = await loadConversation(ASSISTANT_APP_ID, id);
+        downloadConversation(conv, format);
+      } catch (err: unknown) {
+        showToast(`Couldn't export: ${errMsg(err)}`);
+      }
+    })();
+  }, []);
+
+  // The sidebar row ••• / right-click menu: Rename, Export, Pin, Archive, Delete.
   const conversationMenu = useCallback(
     (id: string, anchor: ShellMenuAnchor) => {
+      const conv = assistantConversations.conversations.find((c) => c.id === id);
+      const pinned = conv?.pinned ?? false;
+      const archived = conv?.archived ?? false;
       openMenu(
         [
           { id: 'rename', label: 'Rename', icon: 'Pencil' },
+          { id: 'export-md', label: 'Export as Markdown', icon: 'Share' },
+          { id: 'export-json', label: 'Export as JSON', icon: 'Share' },
+          'sep',
+          pinned
+            ? { id: 'unpin', label: 'Unpin', icon: 'Star' }
+            : { id: 'pin', label: 'Pin', icon: 'Star' },
+          archived
+            ? { id: 'unarchive', label: 'Unarchive', icon: 'History' }
+            : { id: 'archive', label: 'Archive', icon: 'Folder' },
+          'sep',
           { id: 'delete', label: 'Delete', icon: 'Trash', danger: true },
         ],
         anchor,
         (picked) => {
           if (picked === 'rename') renameAssistantConversation(id);
+          else if (picked === 'export-md') exportAssistantConversation(id, 'markdown');
+          else if (picked === 'export-json') exportAssistantConversation(id, 'json');
+          else if (picked === 'pin') pinAssistantConversation(id, true);
+          else if (picked === 'unpin') pinAssistantConversation(id, false);
+          else if (picked === 'archive') archiveAssistantConversation(id, true);
+          else if (picked === 'unarchive') archiveAssistantConversation(id, false);
           else if (picked === 'delete') deleteAssistantConversation(id);
         },
       );
     },
-    [renameAssistantConversation, deleteAssistantConversation],
+    [
+      assistantConversations,
+      renameAssistantConversation,
+      exportAssistantConversation,
+      pinAssistantConversation,
+      archiveAssistantConversation,
+      deleteAssistantConversation,
+    ],
   );
 
   const renderSidebar = useCallback(
@@ -402,6 +497,8 @@ export default function App(): JSX.Element {
           id: c.id,
           title: c.title || 'New conversation',
           timeLabel: relativeTime(new Date(c.updatedAt).toISOString()),
+          pinned: c.pinned,
+          archived: c.archived,
         }));
       return (
         <Sidebar
@@ -546,7 +643,10 @@ export default function App(): JSX.Element {
     [userApps, drafts, prefs, setPrefs, isStarred, toggleStar, refresh, setUserApps, renderSidebar],
   );
 
-  const closePalette = useCallback(() => setPaletteOpen(false), []);
+  const closePalette = useCallback(() => {
+    setPaletteOpen(false);
+    paletteConversationSearch.reset();
+  }, [paletteConversationSearch]);
 
   return (
     <>
@@ -578,6 +678,9 @@ export default function App(): JSX.Element {
       {paletteOpen ? (
         <PaletteScreen
           onClose={closePalette}
+          onReady={(refresh) => {
+            paletteRefreshRef.current = refresh;
+          }}
           buildGroups={(query) =>
             buildPaletteGroups(query, {
               userApps,
@@ -590,6 +693,7 @@ export default function App(): JSX.Element {
                   ...(initialPrompt ? { initialPrompt } : {}),
                 }),
               onClose: closePalette,
+              conversationSearch: paletteConversationSearch,
             })
           }
         />

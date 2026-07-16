@@ -181,6 +181,27 @@ export interface ListTurnsOptions {
 /** `Conversation` plus its reconstructed transcript length. */
 export type ConversationMeta = Conversation & { readonly messageCount: number };
 
+/** A search hit: the conversation meta plus a highlighted match snippet. */
+export type ConversationSearchHit = ConversationMeta & { readonly snippet: string };
+
+/**
+ * Compile owner-typed words into an FTS5 MATCH expression: each word becomes a
+ * quoted prefix phrase (`"budg"*`), implicitly AND-joined. Quoting neutralizes
+ * FTS operators (AND / NEAR / `-` …) so they match as literals; words with no
+ * letter or digit are dropped (an empty quoted phrase is an FTS syntax error).
+ * Returns null when nothing searchable remains. Mirrors the vault's
+ * `ftsMatchExpression` (packages/vault/src/gateway/search.ts).
+ */
+export function conversationMatchExpression(query: string): string | null {
+  const tokens = query
+    .split(/\s+/)
+    .map((t) => t.replaceAll('"', ''))
+    .filter((t) => /[\p{L}\p{N}]/u.test(t))
+    .slice(0, 16);
+  if (tokens.length === 0) return null;
+  return tokens.map((t) => `"${t}"*`).join(' ');
+}
+
 export class ConversationStore {
   private readonly provider: DatabaseProvider;
   private db: DatabaseSync | undefined;
@@ -245,6 +266,7 @@ export class ConversationStore {
       title: input.title ?? '',
       turnCount: 0,
       pinned: false,
+      archived: false,
       createdAt: now,
       updatedAt: now,
     };
@@ -320,9 +342,55 @@ export class ConversationStore {
     return rows.map((r) => ({ ...conversationFromRaw(r), messageCount: Number(r.msg_count) }));
   }
 
+  /**
+   * FTS5 search over a user's chat/build conversation titles + inbound message
+   * text (issue #420), newest-relevant first. `appId` scopes to one app when
+   * set. Archived threads are excluded. Returns each hit with a highlighted
+   * `snippet`.
+   */
+  searchConversations(
+    userId: string,
+    query: string,
+    appId?: string,
+    limit = 20,
+  ): ConversationSearchHit[] {
+    const match = conversationMatchExpression(query);
+    if (!match) return [];
+    const { stmts } = this.ensureReady();
+    const rows = stmts.searchConversations.all(
+      match,
+      userId,
+      appId ?? null,
+      appId ?? null,
+      Math.min(Math.max(limit, 1), 100),
+    ) as unknown as (RawConversation & { msg_count: number; snippet: string })[];
+    return rows.map((r) => ({
+      ...conversationFromRaw(r),
+      messageCount: Number(r.msg_count),
+      snippet: r.snippet ?? '',
+    }));
+  }
+
   renameConversation(id: string, userId: string, title: string): boolean {
     const { stmts } = this.ensureReady();
     return Number(stmts.renameConversation.run(title, Date.now(), id, userId).changes) > 0;
+  }
+
+  /** Pin (or unpin) a conversation for a user — pinned threads list first. */
+  setConversationPinned(id: string, userId: string, pinned: boolean): boolean {
+    const { stmts } = this.ensureReady();
+    return (
+      Number(stmts.setConversationPinned.run(pinned ? 1 : 0, Date.now(), id, userId).changes) > 0
+    );
+  }
+
+  /** Archive (or unarchive) a conversation for a user. */
+  setConversationArchived(id: string, userId: string, archived: boolean): boolean {
+    const { stmts } = this.ensureReady();
+    return (
+      Number(stmts.setConversationArchived.run(archived ? 1 : 0, Date.now(), id, userId).changes) >
+      0
+    );
   }
 
   /** Delete a conversation (user-scoped). Turns / items / attachments cascade. */

@@ -119,12 +119,13 @@ export const CONVERSATION_LEDGER_DDL = `
       adapter_session_id TEXT,
       turn_count         INTEGER NOT NULL DEFAULT 0,
       pinned             INTEGER NOT NULL DEFAULT 0,
+      archived           INTEGER NOT NULL DEFAULT 0,
       created_at         INTEGER NOT NULL,
       updated_at         INTEGER NOT NULL,
       CHECK (kind IN ('chat','automation','build'))
     ) STRICT;
     CREATE INDEX IF NOT EXISTS idx_conversations_user_updated
-      ON conversations(user_id, updated_at DESC);
+      ON conversations(user_id, pinned DESC, updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_conversations_app
       ON conversations(app_id, updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_conversations_automation
@@ -271,6 +272,78 @@ export const CONVERSATION_LEDGER_DDL = `
 `;
 
 /**
+ * Conversation search plane (issue #420, Wave 3) — an FTS5 shadow table over
+ * chat/build conversation titles + inbound message text, kept in sync by
+ * triggers, exactly mirroring the vault's own FTS pattern (schema/fts.ts):
+ * `snippet()` for match context, `unicode61 remove_diacritics 2` tokenizer.
+ *
+ * Grain is ONE row per conversation (not per item): the indexed `body` is the
+ * concatenation of every inbound `message_in` item's text. Assistant answers
+ * live in `items.output_json` as a JSON envelope, not indexable in a pure-SQL
+ * trigger, so titles + the user's own words are the search surface — the words
+ * a user actually remembers a thread by. Because a conversation accretes items
+ * incrementally, the item trigger re-derives the whole `body` row on each
+ * text-bearing insert (chat threads are small; this is a bounded recompute).
+ *
+ * The backfill at the tail is `NOT EXISTS`-guarded, so it populates rows once
+ * when the index is first created on a pre-existing dev vault and is a no-op
+ * on every subsequent open — keeping the whole block idempotent like the rest
+ * of the ledger DDL.
+ */
+export const CONVERSATION_FTS_DDL = `
+    CREATE VIRTUAL TABLE IF NOT EXISTS fts_conversation USING fts5(
+      conversation_id UNINDEXED,
+      title,
+      body,
+      tokenize = "unicode61 remove_diacritics 2"
+    );
+
+    CREATE TRIGGER IF NOT EXISTS fts_conversation_conv_ai
+      AFTER INSERT ON conversations WHEN new.kind IN ('chat','build') BEGIN
+      INSERT INTO fts_conversation(conversation_id, title, body)
+        VALUES (new.id, new.title, '');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS fts_conversation_conv_au
+      AFTER UPDATE OF title ON conversations WHEN new.kind IN ('chat','build') BEGIN
+      DELETE FROM fts_conversation WHERE conversation_id = old.id;
+      INSERT INTO fts_conversation(conversation_id, title, body)
+        SELECT new.id, new.title,
+          (SELECT COALESCE(group_concat(i.text, ' '), '')
+             FROM items i JOIN turns t ON t.id = i.turn_id
+            WHERE t.conversation_id = new.id AND i.text IS NOT NULL AND i.text <> '');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS fts_conversation_conv_ad
+      AFTER DELETE ON conversations BEGIN
+      DELETE FROM fts_conversation WHERE conversation_id = old.id;
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS fts_conversation_item_ai
+      AFTER INSERT ON items WHEN new.text IS NOT NULL AND new.text <> '' BEGIN
+      DELETE FROM fts_conversation
+        WHERE conversation_id = (SELECT conversation_id FROM turns WHERE id = new.turn_id);
+      INSERT INTO fts_conversation(conversation_id, title, body)
+        SELECT c.id, c.title,
+          (SELECT COALESCE(group_concat(i.text, ' '), '')
+             FROM items i JOIN turns t ON t.id = i.turn_id
+            WHERE t.conversation_id = c.id AND i.text IS NOT NULL AND i.text <> '')
+          FROM conversations c
+         WHERE c.id = (SELECT conversation_id FROM turns WHERE id = new.turn_id)
+           AND c.kind IN ('chat','build');
+    END;
+
+    INSERT INTO fts_conversation(conversation_id, title, body)
+      SELECT c.id, c.title,
+        (SELECT COALESCE(group_concat(i.text, ' '), '')
+           FROM items i JOIN turns t ON t.id = i.turn_id
+          WHERE t.conversation_id = c.id AND i.text IS NOT NULL AND i.text <> '')
+        FROM conversations c
+       WHERE c.kind IN ('chat','build')
+         AND NOT EXISTS (SELECT 1 FROM fts_conversation f WHERE f.conversation_id = c.id);
+`;
+
+/**
  * Idempotently create the conversation-ledger band on an open journal
  * handle. Never touches `PRAGMA user_version` — that belongs to the vault
  * package's audit-band ladder on the same file. Callers that already hold
@@ -279,6 +352,7 @@ export const CONVERSATION_LEDGER_DDL = `
  */
 export function ensureConversationLedger(db: DatabaseSync): void {
   db.exec(CONVERSATION_LEDGER_DDL);
+  db.exec(CONVERSATION_FTS_DDL);
 }
 
 /**

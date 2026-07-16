@@ -29,6 +29,7 @@ import {
   resolvePath,
   conversationsPath,
   conversationPath,
+  conversationSearchPath,
   blobsPath,
 } from '@centraid/blueprints/kit/conversation-client.js';
 
@@ -333,6 +334,57 @@ export async function renameConversation(
     body: JSON.stringify({ title }),
   });
   await readJson(res, 'rename chat');
+}
+
+/**
+ * FTS search over this app's chat sessions — titles + inbound message text
+ * (issue #420). Powers the ⌘K palette's "Conversations" category. Each hit
+ * carries a highlighted `snippet` for match context; archived threads are
+ * excluded server-side.
+ */
+export async function searchConversations(
+  appId: string,
+  query: string,
+  limit = 20,
+): Promise<CentraidConversationSearchResult[]> {
+  if (!query.trim()) return [];
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, conversationSearchPath(appId, query, limit), {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  const out = await readJson<{ results: CentraidConversationSearchResult[] }>(res, 'search chats');
+  return out.results ?? [];
+}
+
+/** Pin or unpin a chat session (pinned threads sort first). */
+export async function setConversationPinned(
+  appId: string,
+  sessionId: string,
+  pinned: boolean,
+): Promise<void> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, conversationPath(appId, sessionId), {
+    method: 'PATCH',
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify({ pinned }),
+  });
+  await readJson(res, 'pin chat');
+}
+
+/** Archive or unarchive a chat session. */
+export async function setConversationArchived(
+  appId: string,
+  sessionId: string,
+  archived: boolean,
+): Promise<void> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, conversationPath(appId, sessionId), {
+    method: 'PATCH',
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify({ archived }),
+  });
+  await readJson(res, 'archive chat');
 }
 
 /**

@@ -406,9 +406,19 @@ export interface CentraidConversationSummary {
   adapterSessionId: string | null;
   /** Number of completed turns. */
   turnCount: number;
+  /** Pinned threads sort first in the sidebar (issue #420). */
+  pinned: boolean;
+  /** Archived threads hide behind a collapsed group and drop out of search. */
+  archived: boolean;
   createdAt: number;
   updatedAt: number;
   messageCount: number;
+}
+
+/** A conversation search hit: the summary plus a highlighted match snippet. */
+export interface CentraidConversationSearchResult extends CentraidConversationSummary {
+  /** `snippet()` output — matched terms wrapped in `⟦`/`⟧`, elisions `…`. */
+  snippet: string;
 }
 
 /** One file attached to a persisted user turn (issue #190 history mirror). */
@@ -1265,9 +1275,14 @@ declare global {
     adapterKind: string | null;
     adapterSessionId: string | null;
     turnCount: number;
+    pinned: boolean;
+    archived: boolean;
     createdAt: number;
     updatedAt: number;
     messageCount: number;
+  }
+  interface CentraidConversationSearchResult extends CentraidConversationSummary {
+    snippet: string;
   }
   interface CentraidConversationHistoryAttachment {
     hash: string;

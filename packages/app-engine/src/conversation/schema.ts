@@ -75,6 +75,12 @@ export interface Conversation {
    * and a `replay` fire can serve its recorded items (issue #80 follow-up).
    */
   readonly pinned: boolean;
+  /**
+   * When true the conversation is archived (issue #420): hidden from the main
+   * sidebar list behind a collapsed group and excluded from search, without
+   * being deleted. Chat/build only.
+   */
+  readonly archived: boolean;
   readonly createdAt: number;
   readonly updatedAt: number;
 }

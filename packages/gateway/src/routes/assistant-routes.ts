@@ -51,6 +51,17 @@ export interface AssistantRouteOptions {
    * tests can omit it (falls through to the raw body value).
    */
   resolveModel?: (subsystem: ModelSubsystem, explicit?: string) => Promise<string | undefined>;
+  /**
+   * Fire-and-forget LLM auto-title hook (issue #420). Wired by the gateway to a
+   * cheap-tier one-shot inference; the driver fires it once, after the first
+   * successful turn of a still-unnamed thread. Optional so hermetic tests omit
+   * it (threads keep the derived truncation).
+   */
+  generateTitle?: (args: {
+    conversationId: string;
+    userMessage: string;
+    assistantText: string;
+  }) => void;
 }
 
 export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHandler {
@@ -137,6 +148,7 @@ export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHan
           prevAdapterKind: session.adapterKind ?? undefined,
           ...(attachmentRefs.length > 0 ? { attachmentRefs } : {}),
           ...(turnAttachments.length > 0 ? { turnAttachments } : {}),
+          ...(opts.generateTitle ? { generateTitle: opts.generateTitle } : {}),
         });
         return true;
       }

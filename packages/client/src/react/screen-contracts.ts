@@ -944,6 +944,28 @@ export interface AssistantBridgeProps {
   loadModelPicker: () => Promise<AsstModelPickerDTO>;
   /** Persist the subsystem model override ('' clears back to the default model). */
   onSetModel: (modelId: string) => void;
+  /** Composer entity-mention search (issue #420). Absent = mentions disabled. */
+  searchEntities?: (term: string) => Promise<AsstComposerEntity[]>;
+  /** Slash-command menu shown on a leading `/` (issue #420). */
+  slashCommands?: AsstSlashCommand[];
+  /** Run a chosen slash command by id (wired to existing shell actions). */
+  onRunSlash?: (id: string) => void;
+}
+
+/** A vault entity offered by the composer @-mention picker (issue #420). */
+export interface AsstComposerEntity {
+  type: string;
+  id: string;
+  title: string;
+  subtitle?: string;
+}
+
+/** A composer slash command (issue #420). */
+export interface AsstSlashCommand {
+  id: string;
+  label: string;
+  hint?: string;
+  enabled?: boolean;
 }
 
 // ── App-view settings popover ────────────────────────────────────────────────

@@ -1,10 +1,13 @@
 // governance: allow-repo-hygiene file-size-limit shared shell relocation keeps this cohesive route intact; split later under #392
-import { type JSX, useEffect, useRef } from 'react';
+import { type JSX, useEffect, useRef, useState } from 'react';
 import {
   ASSISTANT_APP_ID,
   createConversation,
   fetchAssistantAttachmentUrl,
+  getUserPrefs,
   loadConversation,
+  renameConversation,
+  searchVaultEntities,
   setConversationFeedback,
   streamAssistantTurn,
   uploadConversationAttachment,
@@ -12,11 +15,15 @@ import {
   type ConversationAttachmentRef,
   type TurnStreamEvent,
 } from '../../../gateway-client.js';
+import { openPrompt } from '../prompt.js';
+import { downloadConversation } from './conversationExport.js';
+import { DEFAULT_STARTERS, resolveStarters } from './assistantStarters.js';
 import { estimateCostUsd } from '../../screens/assistantUsage.js';
 import mainScrollCss from '../../styles/mainScroll.module.css';
 import type {
   AssistantSnapshot,
   AsstModelPickerDTO,
+  AsstSlashCommand,
   AgentRunnerKind,
 } from '../../screen-contracts.js';
 import AssistantScreen from '../../screens/AssistantScreen.js';
@@ -32,13 +39,6 @@ import {
 } from './assistantTranscript.js';
 import { loadProviders, setSubsystemModel } from './settingsProvidersData.js';
 
-const SUGGESTIONS = [
-  'What did I spend the most on last month?',
-  'Who have I not talked to in a while?',
-  'What tasks are due this week?',
-  'Which notes mention travel plans?',
-];
-
 type ReadyAttachment = PendingAttachment & { ref: ConversationAttachmentRef };
 
 interface AssistantRouteProps {
@@ -53,7 +53,7 @@ interface AssistantRouteProps {
 // mutable model lives in a ref (the snapshot, not React state, is the source of
 // truth for the screen). The conversation LIST lives in the shell sidebar.
 export default function AssistantRoute({ conversationId }: AssistantRouteProps): JSX.Element {
-  const { showToast, replace, refreshAssistantThreads } = useShellActions();
+  const { showToast, replace, navigate, refreshAssistantThreads } = useShellActions();
   const m = useRef({
     currentId: null as string | null,
     msgs: [] as AsstMsg[],
@@ -539,10 +539,81 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     // eslint-disable-next-line react-hooks/exhaustive-deps -- selectThread closes over the stable ref model, not React state #392; governance: allow-no-unjustified-suppressions stable ref model contract
   }, [conversationId]);
 
+  // Configurable empty-state starters (§4) — from prefs `assistant.starters`,
+  // defaults until they load.
+  const [starters, setStarters] = useState<string[]>([...DEFAULT_STARTERS]);
+  useEffect(() => {
+    let cancelled = false;
+    void getUserPrefs()
+      .then((prefs) => {
+        if (!cancelled) setStarters(resolveStarters(prefs));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // @-mention entity search (§4) — the auth-aware vault picker, mapped to the
+  // composer's {type,id,title,subtitle} shape.
+  const searchEntities = (
+    term: string,
+  ): Promise<{ type: string; id: string; title: string; subtitle?: string }[]> =>
+    searchVaultEntities(term)
+      .then((hits) =>
+        hits.map((h) => ({
+          type: h.type,
+          id: h.id,
+          title: h.title ?? `${h.type} ${h.id}`,
+          ...(h.subtitle ? { subtitle: h.subtitle } : {}),
+        })),
+      )
+      .catch(() => []);
+
+  // Slash commands (§4) — minimal + extensible, each firing an existing UI
+  // action. Export/Rename need an open (created) conversation.
+  const hasThread = m.current.currentId !== null;
+  const slashCommands: AsstSlashCommand[] = [
+    { id: 'export', label: 'export', hint: 'Download as Markdown', enabled: hasThread },
+    { id: 'rename', label: 'rename', hint: 'Rename this conversation', enabled: hasThread },
+    { id: 'new', label: 'new', hint: 'Start a new conversation' },
+  ];
+  const runSlash = (id: string): void => {
+    const cid = m.current.currentId;
+    if (id === 'new') {
+      navigate({ kind: 'assistant' });
+      return;
+    }
+    if (!cid) return;
+    if (id === 'export') {
+      void loadConversation(ASSISTANT_APP_ID, cid)
+        .then((conv) => downloadConversation(conv, 'markdown'))
+        .catch((err: unknown) =>
+          showToast(`Couldn't export: ${err instanceof Error ? err.message : String(err)}`),
+        );
+    } else if (id === 'rename') {
+      void (async () => {
+        const next = await openPrompt({
+          title: 'Rename conversation',
+          placeholder: 'Conversation name',
+          confirmLabel: 'Rename',
+        });
+        if (!next) return;
+        await renameConversation(ASSISTANT_APP_ID, cid, next).catch((err: unknown) =>
+          showToast(`Couldn't rename: ${err instanceof Error ? err.message : String(err)}`),
+        );
+        refreshAssistantThreads?.();
+      })();
+    }
+  };
+
   return (
     <div className={mainScrollCss.hasWall}>
       <AssistantScreen
-        suggestions={SUGGESTIONS}
+        suggestions={starters}
+        searchEntities={searchEntities}
+        slashCommands={slashCommands}
+        onRunSlash={runSlash}
         {...(conversationId ? { conversationId } : {})}
         onReady={(update) => {
           updateRef.current = update;

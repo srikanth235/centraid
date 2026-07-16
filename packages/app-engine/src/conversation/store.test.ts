@@ -86,6 +86,89 @@ describe('ConversationStore — conversations', () => {
   });
 });
 
+describe('ConversationStore — search / pin / archive (issue #420)', () => {
+  let clock = 1000;
+  /** Seed a chat conversation with one user message + a distinct updated_at. */
+  function seedChat(
+    store: ConversationStore,
+    userId: string,
+    title: string,
+    userText: string,
+  ): string {
+    const c = store.createConversation({ kind: 'chat', userId, appId: '_assistant', title });
+    store.insertTurn({
+      turnId: `${c.id}-t`,
+      conversationId: c.id,
+      triggerKind: 'interactive',
+      startedAt: 1,
+    });
+    store.insertMessageIn({ turnId: `${c.id}-t`, role: 'user', text: userText, startedAt: 1 });
+    // Distinct, increasing updated_at so newest-first ordering is deterministic
+    // (real turns bump this; the test seeds it explicitly).
+    store.touchConversation(c.id, userId, ++clock);
+    return c.id;
+  }
+
+  it('searchConversations matches on title and on inbound message text with a snippet', () => {
+    const store = newStore();
+    const budgetId = seedChat(store, 'u1', 'Budget review', 'help me plan the quarterly budget');
+    seedChat(store, 'u1', 'Trip ideas', 'where should we travel next summer');
+    const byBody = store.searchConversations('u1', 'quarterly');
+    expect(byBody.map((h) => h.id)).toEqual([budgetId]);
+    expect(byBody[0]?.snippet).toContain('⟦');
+    const byTitle = store.searchConversations('u1', 'budget');
+    expect(byTitle.map((h) => h.id)).toEqual([budgetId]);
+    store.close();
+  });
+
+  it('search is prefix-based, user-scoped, and skips archived threads', () => {
+    const store = newStore();
+    const mine = seedChat(store, 'u1', 'Travel plans', 'planning a trip');
+    seedChat(store, 'u2', 'Other travel', 'their trip');
+    expect(store.searchConversations('u1', 'trav').map((h) => h.id)).toEqual([mine]);
+    store.setConversationArchived(mine, 'u1', true);
+    expect(store.searchConversations('u1', 'trav')).toEqual([]);
+    store.close();
+  });
+
+  it('search reflects a renamed title and a blank query returns nothing', () => {
+    const store = newStore();
+    const id = seedChat(store, 'u1', 'Untitled', 'the body text here');
+    store.renameConversation(id, 'u1', 'Groceries list');
+    expect(store.searchConversations('u1', 'groceries').map((h) => h.id)).toEqual([id]);
+    expect(store.searchConversations('u1', '   ')).toEqual([]);
+    store.close();
+  });
+
+  it('pin sorts pinned-first; archive orders archived last; both are user-scoped', () => {
+    const store = newStore();
+    const a = seedChat(store, 'u1', 'Alpha', 'a');
+    const b = seedChat(store, 'u1', 'Beta', 'b');
+    const c = seedChat(store, 'u1', 'Gamma', 'g');
+    // Newest-first by default: c, b, a.
+    expect(store.listConversationsMeta('u1').map((m) => m.id)).toEqual([c, b, a]);
+    expect(store.setConversationPinned(a, 'u1', true)).toBe(true);
+    expect(store.setConversationArchived(c, 'u1', true)).toBe(true);
+    // Pinned a first, then unpinned b, then archived c last.
+    expect(store.listConversationsMeta('u1').map((m) => m.id)).toEqual([a, b, c]);
+    const metaA = store.getConversationMeta(a, 'u1');
+    expect(metaA?.pinned).toBe(true);
+    expect(store.getConversationMeta(c, 'u1')?.archived).toBe(true);
+    expect(store.setConversationPinned(a, 'other', true)).toBe(false);
+    store.close();
+  });
+
+  it('the FTS index survives a store reopen and backfills pre-existing rows', () => {
+    const provider = newProvider();
+    const s1 = new ConversationStore(provider);
+    const id = seedChat(s1, 'u1', 'Reopen test', 'searchable needle body');
+    s1.close();
+    const s2 = new ConversationStore(provider);
+    expect(s2.searchConversations('u1', 'needle').map((h) => h.id)).toEqual([id]);
+    s2.close();
+  });
+});
+
 describe('ConversationStore — turns', () => {
   it('insertTurn assigns sequential seq; finishTurn records outcome', () => {
     const store = newStore();

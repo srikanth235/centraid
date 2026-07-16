@@ -16,9 +16,17 @@ export function conversationsPath(appId) {
   return `/_centraid-conversations/apps/${enc(appId ?? '')}/sessions`;
 }
 
-/** One chat session (load/rename/delete). */
+/** One chat session (load/rename/delete/pin/archive). */
 export function conversationPath(appId, sessionId) {
   return `${conversationsPath(appId)}/${enc(sessionId)}`;
+}
+
+/** FTS search over this app's sessions (issue #420). `q` is the raw query. */
+export function conversationSearchPath(appId, query, limit) {
+  const params = new URLSearchParams();
+  params.set('q', query ?? '');
+  if (limit) params.set('limit', String(limit));
+  return `${conversationsPath(appId)}/search?${params.toString()}`;
 }
 
 /** This app's per-conversation attachment blob CAS (POST uploads). */
