@@ -10,7 +10,13 @@
  *     doesn't mint a fresh grant on every blob.
  */
 
-import { openRemoteBackupProvider, requestCasGrant, type S3Grant } from '@centraid/backup';
+import {
+  openRemoteBackupProvider,
+  requestCasGrant,
+  requestDerivedGrant,
+  requestStorageGrant,
+  type S3Grant,
+} from '@centraid/backup';
 import type { BlobStoreSettings, S3Credentials } from '@centraid/vault';
 import type { StorageConnectionStore } from './storage-connections.js';
 import { opaqueLabel } from './backup-state.js';
@@ -30,10 +36,15 @@ interface CachedGrant {
  */
 export function makeStorageCredentialsResolver(
   store: StorageConnectionStore,
-): (settings: BlobStoreSettings) => Promise<S3Credentials> {
+): (settings: BlobStoreSettings, storeClass?: 'cas' | 'derived') => Promise<S3Credentials> {
+  // Keyed by `${connectionId}:${store}` (issue #425 Wave 2): a provider may
+  // issue per-store-scoped credentials, so cas and derived grants cache apart.
   const grantCache = new Map<string, CachedGrant>();
 
-  return async (settings: BlobStoreSettings): Promise<S3Credentials> => {
+  return async (
+    settings: BlobStoreSettings,
+    storeClass: 'cas' | 'derived' = 'cas',
+  ): Promise<S3Credentials> => {
     const connectionId = settings.connectionId;
     if (!connectionId) {
       throw new Error(
@@ -42,10 +53,13 @@ export function makeStorageCredentialsResolver(
     }
     const kind = await store.kindOf(connectionId);
     if (kind === 'byo-s3') {
+      // Own-S3 uses one credential for the whole bucket; the store class only
+      // changes the key prefix, not the grant.
       return store.resolveS3Credentials(connectionId);
     }
     if (kind === 'provider') {
-      const cached = grantCache.get(connectionId);
+      const cacheKey = `${connectionId}:${storeClass}`;
+      const cached = grantCache.get(cacheKey);
       if (cached && cached.grant.expiresAt * 1000 - Date.now() > GRANT_REFRESH_MARGIN_MS) {
         return toCredentials(cached.grant);
       }
@@ -56,13 +70,14 @@ export function makeStorageCredentialsResolver(
         );
       }
       const apiKey = await store.resolveProviderApiKey(connectionId);
-      const grant = await requestCasGrant({
+      const grant = await requestStorageGrant({
         baseUrl: connection.baseUrl,
         apiKey,
         targetId: connection.targetId,
+        store: storeClass,
         mode: 'read-write',
       });
-      grantCache.set(connectionId, { grant });
+      grantCache.set(cacheKey, { grant });
       return toCredentials(grant);
     }
     throw new Error(`unknown storage connection "${connectionId}"`);
@@ -89,15 +104,29 @@ function toCredentials(grant: S3Grant): S3Credentials {
 export async function ensureProviderCasTarget(
   store: StorageConnectionStore,
   connectionId: string,
-): Promise<{ endpoint: string; region: string; bucket: string; prefix: string }> {
+): Promise<{
+  endpoint: string;
+  region: string;
+  bucket: string;
+  prefix: string;
+  /** The `derived` store prefix, present iff the provider advertises + grants it. */
+  derivedPrefix?: string;
+  /**
+   * Storage classes the provider declared it accepts (issue #425 Wave 3),
+   * learned from the same discovery document. Present iff discovery advertised a
+   * non-empty list; the vault's direct-to-cold heuristic only engages when this
+   * includes `STANDARD_IA`.
+   */
+  supportedStorageClasses?: string[];
+}> {
   const connection = await store.get(connectionId);
   if (!connection || connection.kind !== 'provider' || !connection.baseUrl) {
     throw new Error(`connection "${connectionId}" is not a provider connection`);
   }
   const apiKey = await store.resolveProviderApiKey(connectionId);
+  const provider = openRemoteBackupProvider({ baseUrl: connection.baseUrl, apiKey });
   let targetId = connection.targetId;
   if (!targetId) {
-    const provider = openRemoteBackupProvider({ baseUrl: connection.baseUrl, apiKey });
     const target = await provider.createTarget({ label: opaqueLabel() });
     targetId = target.targetId;
     await store.setTargetId(connectionId, targetId);
@@ -108,10 +137,32 @@ export async function ensureProviderCasTarget(
     targetId,
     mode: 'read-write',
   });
+  // The `derived` store is opt-in per provider (issue #425 Wave 2): only learn +
+  // stamp its prefix when discovery advertises the capability. A request for an
+  // unadvertised store is a 400, so gate strictly on the discovery document.
+  let derivedPrefix: string | undefined;
+  const capabilities = await provider.capabilities().catch(() => undefined);
+  if (capabilities?.capabilities.includes('derived')) {
+    const derivedGrant = await requestDerivedGrant({
+      baseUrl: connection.baseUrl,
+      apiKey,
+      targetId,
+      mode: 'read-write',
+    });
+    derivedPrefix = derivedGrant.prefix;
+  }
+  // The declared storage-class list (issue #425 Wave 3) rides the SAME discovery
+  // document; stamp it so the vault heuristic knows whether STANDARD_IA is safe.
+  const supportedStorageClasses =
+    capabilities?.storageClasses && capabilities.storageClasses.length > 0
+      ? capabilities.storageClasses
+      : undefined;
   return {
     endpoint: grant.endpoint,
     region: grant.region,
     bucket: grant.bucket,
     prefix: grant.prefix,
+    ...(derivedPrefix ? { derivedPrefix } : {}),
+    ...(supportedStorageClasses ? { supportedStorageClasses } : {}),
   };
 }

@@ -80,6 +80,7 @@ export {
   type CacheStatfs,
 } from './blob/cache.js';
 export { ReplicaIndex, AccessIndex } from './blob/replica-index.js';
+export type { ReplicaStore } from './blob/replica-index.js';
 export {
   stageBlobBytes,
   sweepBlobStaging,

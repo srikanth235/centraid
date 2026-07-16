@@ -25,6 +25,7 @@ import {
 } from './blob/preview.js';
 import { S3BlobStore, type S3BlobStoreOptions, type S3Credentials } from './blob/s3.js';
 import { S3TransferStore } from './blob/s3-transfer.js';
+import { desiredStoreForSha, storageClassForShaWrite } from './blob/store-routing.js';
 import { BlobTransferCoordinator } from './blob/transfers.js';
 import { readBackupPolicy } from './backup-policy.js';
 import { registerHammingFn } from './enrich/similarity.js';
@@ -84,6 +85,15 @@ export interface BlobStoreSettings {
   bucket?: string;
   region?: string;
   prefix?: string;
+  /**
+   * Key prefix for the target's `derived` store grant (issue #425 Wave 2),
+   * stamped by the gateway when the provider advertises + grants the `derived`
+   * store. Pairwise-disjoint from `prefix` (cas) and the backup prefix. Present
+   * ⇒ `remoteTier()` builds a second `S3BlobStore` here and binary derivatives
+   * (thumb/preview/poster) replicate under it; absent ⇒ graceful degradation,
+   * derivatives stay under `prefix` (cas), byte-for-byte today's behavior.
+   */
+  derivedPrefix?: string;
   /** Legacy settings field. Remote CAS encryption is mandatory in v0. */
   encrypt?: boolean;
   /**
@@ -116,6 +126,15 @@ export interface BlobStoreSettings {
    * today's behavior.
    */
   storageClass?: string;
+  /**
+   * Storage classes the target declared it supports (issue #425 Wave 3),
+   * stamped by the gateway from provider discovery (`ProviderCapabilities.
+   * storageClasses`) at attach time. The direct-to-cold heuristic only engages
+   * when this includes `STANDARD_IA`; a BYO-S3 target has no discovery so the
+   * field is absent and the heuristic never fires. Free-form provider-defined
+   * class names, not an enum.
+   */
+  supportedStorageClasses?: string[];
 }
 
 export interface OpenVaultOptions {
@@ -129,9 +148,16 @@ export interface OpenVaultOptions {
    * How S3 credentials resolve (issue #296 §2): the host wires this to the
    * broker/sealed-secret path (#290/#293) — creds never live in settings.
    * Without a resolver, an s3-configured vault stays local-only and the
-   * replication sweep reports the gap instead of failing writes.
+   * replication sweep reports the gap instead of failing writes. The optional
+   * `store` argument (issue #425 Wave 2) lets the host mint a store-scoped grant
+   * — `cas` for the primary store, `derived` for the derivatives prefix — so a
+   * provider that issues per-store credentials authorizes each store correctly;
+   * a resolver that ignores it (own-S3, tests) simply returns the same creds.
    */
-  s3Credentials?: (settings: BlobStoreSettings) => Promise<S3Credentials>;
+  s3Credentials?: (
+    settings: BlobStoreSettings,
+    store?: 'cas' | 'derived',
+  ) => Promise<S3Credentials>;
   /**
    * The preview ladder's raster codec (issue #405 §2) — the gateway host
    * passes its jpeg-js/pngjs implementation so the blob sweep's backstop can
@@ -268,21 +294,52 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     const resolver = options.s3Credentials;
     // Every remote CAS object is a CBSF envelope. Ignore stale `false` values
     // so even direct settings writes cannot create plaintext remote objects.
+    const throttle = policy.throttleBytesPerSec
+      ? { throttleBytesPerSec: policy.throttleBytesPerSec }
+      : {};
+    // Storage class passthrough (issue #405 §6): unset ⇒ omitted ⇒ the driver
+    // sends no x-amz-storage-class header (today's behavior).
+    const storageClass = policy.storageClass ? { storageClass: policy.storageClass } : {};
     const s3Options: S3BlobStoreOptions = {
       endpoint: settings.endpoint,
       bucket: settings.bucket,
       region: settings.region,
       prefix: settings.prefix,
-      credentials: () => resolver(settings),
-      ...(policy.throttleBytesPerSec ? { throttleBytesPerSec: policy.throttleBytesPerSec } : {}),
-      // Storage class passthrough (issue #405 §6): unset ⇒ omitted ⇒ the
-      // driver sends no x-amz-storage-class header (today's behavior).
-      ...(policy.storageClass ? { storageClass: policy.storageClass } : {}),
+      credentials: () => resolver(settings, 'cas'),
+      ...throttle,
+      ...storageClass,
     };
     const tier: RemoteTier = {
       store: new S3BlobStore(s3Options),
       transfer: new S3TransferStore(s3Options),
       keyFor: (sha256: string) => blobContentKeys.getOrCreate(sha256),
+      // Direct-to-cold heuristic (issue #425 Wave 3): resolve the class an
+      // eligible large media original's object-creating write carries. Reads
+      // policy fresh each call so a `directToColdOriginals` change needs no
+      // reopen (the settings snapshot the cache key is built from already
+      // carries `supportedStorageClasses`).
+      storageClassFor: (sha256, storeClass, originalHint) =>
+        storageClassForShaWrite(
+          vault,
+          sha256,
+          storeClass,
+          settings.supportedStorageClasses,
+          readBackupPolicy(vault),
+          originalHint,
+        ),
+      // The `derived` store (issue #425 Wave 2): a second CAS-shaped store under
+      // the target's derived-grant prefix, sharing endpoint/bucket/creds — only
+      // the key prefix differs. No transfer store: binary derivatives are small
+      // and never take the multipart path. Absent ⇒ derivatives stay on cas.
+      ...(settings.derivedPrefix
+        ? {
+            derivedStore: new S3BlobStore({
+              ...s3Options,
+              prefix: settings.derivedPrefix,
+              credentials: () => resolver(settings, 'derived'),
+            }),
+          }
+        : {}),
     };
     cachedRemote = { key, tier };
     return tier;
@@ -338,7 +395,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     journal,
     dir: dir ?? ':memory:',
     sealKey,
-    blobs: new BlobCustody(local, remoteTier, blobCache),
+    blobs: new BlobCustody(local, remoteTier, blobCache, (sha) => desiredStoreForSha(vault, sha)),
     blobTransfers,
     // Injected raster codec for the preview backstop (issue #405 §2), or
     // undefined — a codec-less open just never runs the backstop.

@@ -149,10 +149,10 @@ export async function streamThroughUnknownHash(
     }
     const sha = hash.digest('hex');
     const finalKey = remoteEncryptionKey(remote, sha)!;
+    const head = Buffer.concat(headChunks, headBytes);
+    const mediaType = sniffMediaType(head, input.mediaType, input.filename);
     const finish = (): CommittedBlob => {
       deps.cache.replica.mark(sha, received);
-      const head = Buffer.concat(headChunks, headBytes);
-      const mediaType = sniffMediaType(head, input.mediaType, input.filename);
       const staged = recordKnownStagedBlob(deps.vault, {
         sha256: sha,
         byteSize: received,
@@ -207,7 +207,12 @@ export async function streamThroughUnknownHash(
       plain.pipe(sealBlobStream(finalKey, sha, received, remote.frameSize)),
       received,
     );
-    await remote.transfer.copyTemporaryToSha(finalTempId, sha);
+    // Direct-to-cold heuristic (issue #425 Wave 3): the CopyObject that mints
+    // the final CAS object carries STANDARD_IA for an eligible large original.
+    // The sha is only known post-stream and the staging row is written after
+    // custody, so the media type + size are handed in directly for the resolver.
+    const storageClass = remote.storageClassFor?.(sha, 'cas', { mediaType, byteSize: received });
+    await remote.transfer.copyTemporaryToSha(finalTempId, sha, storageClass);
     const final = await remote.store.stat(sha);
     if (!final) throw new Error(`provider did not HEAD-confirm ${sha}`);
     await verifyRemoteSealedObject({

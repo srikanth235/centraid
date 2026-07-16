@@ -67,7 +67,13 @@ export interface BlobStat {
  */
 export interface BlobStore {
   readonly kind: string;
-  put(sha256: string, bytes: Buffer): Promise<void>;
+  /**
+   * `storageClass` (issue #425 Wave 3) is an optional per-write override for the
+   * object-creating `x-amz-storage-class` header — it wins over any instance
+   * default; absent ⇒ the instance default; both absent ⇒ no header. Local
+   * stores ignore it.
+   */
+  put(sha256: string, bytes: Buffer, storageClass?: string): Promise<void>;
   /** Bytes of one blob (or a byte range of it). Null when absent. */
   get(sha256: string, range?: BlobRange): Promise<Buffer | null>;
   has(sha256: string): Promise<boolean>;
@@ -80,9 +86,16 @@ export interface BlobStore {
    * caller materializing the whole blob in memory first. Implementations
    * that can't stream simply omit this — callers fall back to `put`.
    * `approxSize` need not be exact; it only informs the multipart-vs-single
-   * decision and part sizing.
+   * decision and part sizing. `storageClass` is the same per-write override as
+   * `put` (issue #425 Wave 3), applied to whichever object-creating call the
+   * size selects (single PUT or CreateMultipartUpload).
    */
-  putStream?(sha256: string, source: NodeJS.ReadableStream, approxSize: number): Promise<void>;
+  putStream?(
+    sha256: string,
+    source: NodeJS.ReadableStream,
+    approxSize: number,
+    storageClass?: string,
+  ): Promise<void>;
 }
 
 /** Clamp a requested range against a known size; null = unsatisfiable. */

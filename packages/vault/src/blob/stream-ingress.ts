@@ -300,7 +300,21 @@ export class RemoteStreamIngress {
         `stream-through provider size mismatch: expected ${meta.sealedBytes}, got ${temp?.size ?? 'missing'}`,
       );
     }
-    await remote.transfer!.copyTemporaryToSha(row.remote_temp_id!, sha);
+    const probes = this.deps.state.probes(sessionId);
+    const mediaType = sniffMediaType(
+      probes.head,
+      row.media_type ?? undefined,
+      row.original_name ?? undefined,
+    );
+    // Direct-to-cold heuristic (issue #425 Wave 3): the CopyObject that mints
+    // the final CAS object carries STANDARD_IA for an eligible large original.
+    // The original's staging row is only written below, after custody, so the
+    // media type + size are handed in directly for the resolver.
+    const storageClass = remote.storageClassFor?.(sha, 'cas', {
+      mediaType,
+      byteSize: expectedSize,
+    });
+    await remote.transfer!.copyTemporaryToSha(row.remote_temp_id!, sha, storageClass);
     const final = await remote.store.stat(sha);
     if (!final || final.size !== temp.size)
       throw new Error('provider HEAD did not confirm final object');
@@ -314,12 +328,6 @@ export class RemoteStreamIngress {
     this.deps.cache.replica.mark(sha, expectedSize);
     this.deps.state.completeSession(sessionId, sha);
     await remote.transfer!.deleteTemporary(row.remote_temp_id!).catch(() => undefined);
-    const probes = this.deps.state.probes(sessionId);
-    const mediaType = sniffMediaType(
-      probes.head,
-      row.media_type ?? undefined,
-      row.original_name ?? undefined,
-    );
     const staged = recordKnownStagedBlob(this.deps.vault, {
       sha256: sha,
       byteSize: expectedSize,

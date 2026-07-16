@@ -119,6 +119,7 @@ export class BlobTransferCoordinator {
       emit: () => this.emit(),
     });
     this.outbox = new BlobOutboxRunner({
+      vault: options.vault,
       state: this.state,
       local: options.local,
       cache: options.cache,
@@ -143,7 +144,6 @@ export class BlobTransferCoordinator {
   status(): BlobTransferStatus {
     return this.state.status();
   }
-
   pendingSnapshotShas(): string[] {
     return this.state.pendingShas();
   }

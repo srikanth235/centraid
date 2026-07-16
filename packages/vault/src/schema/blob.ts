@@ -89,11 +89,20 @@ const REFRESH_CONTENT_ITEM_FTS = (contentIdRef: string) => `
 //     it truly is until the next flush — acceptable, because eviction only runs
 //     at sweep boundaries (which flush first) and cache pressure, not per read.
 //     A sha with no row sorts OLDEST (never touched since it landed).
+//   The `store` column (issue #425 Wave 2) records WHICH remote store class
+//   actually holds a sha's replica — `cas` for originals/snapshot chunks (the
+//   default, so a provider without a `derived` grant is byte-for-byte
+//   unchanged) or `derived` for binary display derivatives (thumb/preview/
+//   poster) when the target grants that store. Evict-only-if-replicated,
+//   restore, and the reconciliation sweep read this to address the right
+//   prefix: a derived replica missing from the derived listing is missing even
+//   if the same sha happens to sit under `cas`.
 export const BLOB_CACHE_DDL = `
 CREATE TABLE IF NOT EXISTS blob_replica (
   sha256        TEXT PRIMARY KEY CHECK (length(sha256) = 64),
   replicated_at TEXT NOT NULL,
-  byte_size     INTEGER NOT NULL CHECK (byte_size >= 0)
+  byte_size     INTEGER NOT NULL CHECK (byte_size >= 0),
+  store         TEXT NOT NULL DEFAULT 'cas' CHECK (store IN ('cas','derived'))
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS blob_access (

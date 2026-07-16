@@ -92,12 +92,11 @@ export class S3TransferStore implements RemoteBlobTransfer {
     return this.pipeline.send(method, key, input);
   }
 
-  private async beginMultipart(key: string, label: string): Promise<string> {
+  private async beginMultipart(key: string, label: string, storageClass?: string): Promise<string> {
     void label;
-    return this.pipeline.beginMultipart(
-      key,
-      this.options.storageClass ? { 'x-amz-storage-class': this.options.storageClass } : undefined,
-    );
+    // Per-call override wins (issue #425 Wave 3), else the instance default.
+    const cls = storageClass ?? this.options.storageClass;
+    return this.pipeline.beginMultipart(key, cls ? { 'x-amz-storage-class': cls } : undefined);
   }
 
   private async uploadPart(
@@ -126,8 +125,8 @@ export class S3TransferStore implements RemoteBlobTransfer {
     await this.pipeline.abortMultipart(key, uploadId);
   }
 
-  beginShaUpload(sha: string): Promise<string> {
-    return this.beginMultipart(this.shaKey(sha), 'final SHA');
+  beginShaUpload(sha: string, storageClass?: string): Promise<string> {
+    return this.beginMultipart(this.shaKey(sha), 'final SHA', storageClass);
   }
 
   uploadShaPart(sha: string, uploadId: string, partNumber: number, bytes: Buffer): Promise<string> {
@@ -271,12 +270,15 @@ export class S3TransferStore implements RemoteBlobTransfer {
     return Buffer.from(await response.arrayBuffer());
   }
 
-  async copyTemporaryToSha(tempId: string, sha: string): Promise<void> {
+  async copyTemporaryToSha(tempId: string, sha: string, storageClass?: string): Promise<void> {
     const source = `/${this.options.bucket}/${encodeKeyPath(this.tempKey(tempId))}`;
+    // The CopyObject is the object-creating call for the direct-to-CAS door, so
+    // the class rides HERE (issue #425 Wave 3); override wins over the default.
+    const cls = storageClass ?? this.options.storageClass;
     const response = await this.send('PUT', this.shaKey(sha), {
       headers: {
         'x-amz-copy-source': source,
-        ...(this.options.storageClass ? { 'x-amz-storage-class': this.options.storageClass } : {}),
+        ...(cls ? { 'x-amz-storage-class': cls } : {}),
       },
     });
     if (!response.ok) throw new Error(`s3 promote temporary blob: ${response.status}`);

@@ -88,7 +88,14 @@ export async function streamThroughOnce(
       );
     }
     if (actual !== sha) throw new VaultBlobHashMismatchError(sha, actual);
-    await remote.transfer.copyTemporaryToSha(tempId, sha);
+    const head = Buffer.concat(probeChunks, probeBytes);
+    const mediaType = sniffMediaType(head, input.mediaType, input.filename);
+    // Direct-to-cold heuristic (issue #425 Wave 3): the CopyObject that mints
+    // the final CAS object carries STANDARD_IA for an eligible large original.
+    // The original's staging row is only written below, after custody, so the
+    // media type + size are handed in directly for the resolver.
+    const storageClass = remote.storageClassFor?.(sha, 'cas', { mediaType, byteSize: received });
+    await remote.transfer.copyTemporaryToSha(tempId, sha, storageClass);
     const final = await remote.store.stat(sha);
     if (!final) throw new Error(`provider did not HEAD-confirm ${sha}`);
     await verifyRemoteSealedObject({
@@ -99,8 +106,6 @@ export async function streamThroughOnce(
       expectedPlaintextSize: received,
     });
     deps.cache.replica.mark(sha, received);
-    const head = Buffer.concat(probeChunks, probeBytes);
-    const mediaType = sniffMediaType(head, input.mediaType, input.filename);
     const staged = recordKnownStagedBlob(deps.vault, {
       sha256: sha,
       byteSize: received,

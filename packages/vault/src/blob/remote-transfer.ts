@@ -18,8 +18,13 @@ export interface TemporaryMultipartUpload {
  * temp-to-final promotion, and short-lived direct-upload URLs (#414).
  */
 export interface RemoteBlobTransfer {
-  /** Restartable multipart upload whose destination is the final CAS SHA key. */
-  beginShaUpload?(sha256: string): Promise<string>;
+  /**
+   * Restartable multipart upload whose destination is the final CAS SHA key.
+   * `storageClass` (issue #425 Wave 3) rides the CreateMultipartUpload — the
+   * object-creating call — when an eligible large original takes this path;
+   * absent ⇒ the instance default.
+   */
+  beginShaUpload?(sha256: string, storageClass?: string): Promise<string>;
   uploadShaPart?(
     sha256: string,
     uploadId: string,
@@ -56,7 +61,14 @@ export interface RemoteBlobTransfer {
   statTemporary(tempId: string): Promise<BlobStat | null>;
   /** Bounded read used only to re-key a hash-unknown encrypted temp object. */
   getTemporary?(tempId: string, range?: BlobRange): Promise<Buffer | null>;
-  copyTemporaryToSha(tempId: string, sha256: string): Promise<void>;
+  /**
+   * Promote a temp object to its final CAS key via CopyObject — the
+   * object-creating call for the presigned direct-to-CAS door (#414 §11).
+   * `storageClass` (issue #425 Wave 3) rides the CopyObject for an eligible
+   * large original; the presigned temp PUT itself stays class-less (presign
+   * signs only `host`). Absent ⇒ the instance default.
+   */
+  copyTemporaryToSha(tempId: string, sha256: string, storageClass?: string): Promise<void>;
   deleteTemporary(tempId: string): Promise<void>;
   presignTemporaryPut(tempId: string, expiresSeconds?: number): Promise<URL>;
   presignTemporaryPart(

@@ -13,6 +13,8 @@ import type { MultipartPart, RemoteBlobTransfer } from './remote-transfer.js';
 import { sealBlob, unsealBlob } from './seal.js';
 import type { BlobRange, BlobStat, BlobStore } from './store.js';
 import { sha256OfBytes } from './store.js';
+import { ReplicaIndex } from './replica-index.js';
+import { desiredStoreForSha } from './store-routing.js';
 import { BlobTransferState } from './transfer-state.js';
 
 const cleanups: (() => void)[] = [];
@@ -106,6 +108,75 @@ test('known-sha outbox writes CBSF straight to the final CAS key', async () => {
   expect(state.outbox(sha)).toBeNull();
   expect([...final.keys()]).toEqual([sha]);
   expect(unsealBlob(key, sha, final.get(sha)!).equals(plain)).toBe(true);
+});
+
+test('outbox drain routes a binary derivative to the derived store (issue #425 Wave 2)', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'blob-outbox-derived-'));
+  cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
+  const db: VaultDb = openVaultDb({ dir });
+  cleanups.push(() => db.close());
+  await db.blobTransfers.close();
+  const local = new FsBlobStore(path.join(dir, 'blobs'));
+  const cache = new BlobCache(db.vault, local, {
+    qosCooldownMs: 0,
+    settings: () => ({ budgetBytes: Number.MAX_SAFE_INTEGER }),
+  });
+  const state = new BlobTransferState(db.vault);
+  const plain = randomBytes(64 * 1024);
+  const sha = sha256OfBytes(plain);
+  const key = Buffer.alloc(32, 0x5b);
+  local.putSync(sha, plain);
+  state.enqueue(sha, plain.length);
+  // Record the sha as a binary derivative so `desiredStoreForSha` → 'derived'.
+  db.vault
+    .prepare(
+      `INSERT INTO blob_staging
+         (staging_id, sha256, media_type, byte_size, variant, variant_of, staged_at)
+       VALUES (?, ?, ?, ?, 'thumb', ?, ?)`,
+    )
+    .run('stage-thumb-1', sha, 'image/png', plain.length, '0'.repeat(64), new Date().toISOString());
+
+  const casMap = new Map<string, Buffer>();
+  const derivedMap = new Map<string, Buffer>();
+  const makeStore = (kind: string, map: Map<string, Buffer>): BlobStore => ({
+    kind,
+    put: async (targetSha, bytes) => void map.set(targetSha, bytes),
+    get: async (targetSha, range) => {
+      const bytes = map.get(targetSha);
+      return bytes ? rangeOf(bytes, range) : null;
+    },
+    has: async (targetSha) => map.has(targetSha),
+    delete: async (targetSha) => void map.delete(targetSha),
+    list: async () => [...map.keys()],
+    stat: async (targetSha) => {
+      const bytes = map.get(targetSha);
+      return bytes ? { size: bytes.length } : null;
+    },
+  });
+  const remote: RemoteTier = {
+    store: makeStore('cas-fake', casMap),
+    derivedStore: makeStore('derived-fake', derivedMap),
+    keyFor: () => key,
+    frameSize: 32 * 1024,
+  };
+
+  await drainOutboxRow(
+    {
+      state,
+      local,
+      cache,
+      remote: () => remote,
+      onReplicated: () => undefined,
+      desiredStore: (s) => desiredStoreForSha(db.vault, s),
+    },
+    state.outbox(sha)!,
+  );
+
+  expect(state.outbox(sha)).toBeNull();
+  expect(derivedMap.has(sha)).toBe(true);
+  expect(casMap.has(sha)).toBe(false);
+  expect(unsealBlob(key, sha, derivedMap.get(sha)!).equals(plain)).toBe(true);
+  expect(new ReplicaIndex(db.vault).storeOf(sha)).toBe('derived');
 });
 
 test('outbox-resident multipart resumes directly at the final SHA without CopyObject', async () => {

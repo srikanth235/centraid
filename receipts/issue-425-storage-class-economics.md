@@ -83,6 +83,7 @@ Each checked item, quoted verbatim, with where it is realized:
 - packages/vault/src/blob/custody-reconcile.ts (new)
 - packages/vault/src/blob/custody-types.ts
 - packages/vault/src/blob/custody.ts
+- packages/vault/src/blob/direct-cold-doors.test.ts (new — remote-primary ingress door coverage, split from the originals suite to respect the file-size cap)
 - packages/vault/src/blob/direct-cold-originals.test.ts (new)
 - packages/vault/src/blob/direct-transfers.ts
 - packages/vault/src/blob/one-shot-stream.ts
@@ -163,6 +164,7 @@ PASS
 | cost-key | session | issue | input | output | commit | timestamp |
 | --- | --- | --- | --- | --- | --- | --- |
 | claude-code-14f54cfd-06c-1784207007-1 | claude-code | 14f54cfd-06c3-47d7-97ca-9c03b2db41d4 | #425 | claude-fable-5 | 279 | 492278 | 17052184 | 213596 | 706153 | 33.8882 | 279 | 492278 | 17052184 | 213596 | feat(backup): add derived store class and storage-class discovery (#425) |
+| claude-code-14f54cfd-06c-1784207065-1 | claude-code | 14f54cfd-06c3-47d7-97ca-9c03b2db41d4 | #425 | claude-fable-5 | 10 | 13020 | 981014 | 1387 | 14417 | 1.2132 | 289 | 505298 | 18033198 | 214983 | feat(vault): route derivatives to derived store, cold-tier large originals (#425 |
 
 ### Steering
 

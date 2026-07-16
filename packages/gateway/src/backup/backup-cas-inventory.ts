@@ -6,7 +6,12 @@ import {
   type ProviderInventoryObject,
   type S3Grant,
 } from '@centraid/backup';
-import { readBlobStoreSettings, ReplicaIndex, type VaultDb } from '@centraid/vault';
+import {
+  readBlobStoreSettings,
+  ReplicaIndex,
+  type ReplicaStore,
+  type VaultDb,
+} from '@centraid/vault';
 import { collectInventory, type CollectedInventory } from './backup-provider-observability.js';
 import type { StorageConnectionStore } from './storage-connections.js';
 
@@ -26,6 +31,8 @@ function s3Prefix(prefix: string | undefined): string {
 async function collectOwnS3(
   storage: StorageConnectionStore,
   connectionId: string,
+  store: ReplicaStore,
+  prefix: string | undefined,
 ): Promise<CollectedInventory> {
   const connection = await storage.get(connectionId);
   if (
@@ -42,15 +49,17 @@ async function collectOwnS3(
     endpoint: connection.endpoint,
     region: connection.region,
     bucket: connection.bucket,
-    prefix: s3Prefix(connection.prefix),
-    store: 'cas',
+    // The derived store shares the bucket; only the prefix differs (issue #425
+    // Wave 2), so list under whichever prefix this store class occupies.
+    prefix: s3Prefix(prefix),
+    store,
     ...credentials,
     expiresAt: Math.floor(Date.now() / 1000) + 24 * 60 * 60,
     mode: 'read',
   };
-  const store = new S3ObjectStore(grant);
+  const objectStore = new S3ObjectStore(grant);
   const objects: ProviderInventoryObject[] = [];
-  for await (const row of store.list('')) {
+  for await (const row of objectStore.list('')) {
     objects.push({
       key: row.key,
       sizeBytes: row.size,
@@ -70,6 +79,7 @@ function casSha(key: string): string | undefined {
 async function authenticatedFailures(
   db: VaultDb,
   collection: CollectedInventory,
+  store: ReplicaStore,
 ): Promise<string[]> {
   const remote = new Set(
     collection.objects
@@ -79,7 +89,9 @@ async function authenticatedFailures(
   );
   const index = new ReplicaIndex(db.vault);
   const failures: string[] = [];
-  for (const sha of index.all()) {
+  // Scope the AEAD re-audit to THIS store's rows (issue #425 Wave 2): a cas
+  // listing must never disprove derived evidence, and vice-versa.
+  for (const sha of index.all(store)) {
     if (!remote.has(sha)) continue;
     try {
       await db.blobTransfers.auditRemoteReplica(sha);
@@ -94,8 +106,12 @@ async function authenticatedFailures(
 async function verifiedResult(
   db: VaultDb,
   collection: CollectedInventory,
+  store: ReplicaStore,
 ): Promise<CasInventoryResult> {
-  const failures = await authenticatedFailures(db, collection);
+  // The AEAD re-audit reads via `auditRemoteReplica`, which addresses the cas
+  // store; run it only for cas. The derived pass is presence-diff only (its
+  // missing/orphan drift still surfaces + unmarks in the reconciler).
+  const failures = store === 'cas' ? await authenticatedFailures(db, collection, store) : [];
   return {
     configured: true,
     collection,
@@ -103,13 +119,22 @@ async function verifiedResult(
   };
 }
 
+/**
+ * Collect one store class's remote inventory (issue #425 Wave 2). `store`
+ * defaults to `cas` — the original behavior byte-for-byte. `derived` returns
+ * `{configured:false}` when the vault has no `derivedPrefix` (the target never
+ * granted the store), so the reconciler simply skips the derived pass.
+ */
 export async function collectCasInventory(opts: {
   db: VaultDb;
   storageConnections?: StorageConnectionStore;
   verifyBucket: boolean;
+  store?: ReplicaStore;
 }): Promise<CasInventoryResult> {
+  const store = opts.store ?? 'cas';
   const settings = readBlobStoreSettings(opts.db.vault);
   if (settings.kind !== 's3') return { configured: false };
+  if (store === 'derived' && !settings.derivedPrefix) return { configured: false };
   if (!settings.connectionId || !opts.storageConnections) {
     return {
       configured: true,
@@ -119,9 +144,11 @@ export async function collectCasInventory(opts: {
   try {
     const connection = await opts.storageConnections.get(settings.connectionId);
     if (connection?.kind === 'byo-s3') {
+      const prefix = store === 'derived' ? settings.derivedPrefix : connection.prefix;
       return verifiedResult(
         opts.db,
-        await collectOwnS3(opts.storageConnections, settings.connectionId),
+        await collectOwnS3(opts.storageConnections, settings.connectionId, store, prefix),
+        store,
       );
     }
     if (!connection?.baseUrl || !connection.targetId) {
@@ -134,9 +161,10 @@ export async function collectCasInventory(opts: {
       await collectInventory({
         provider,
         targetId: connection.targetId,
-        store: 'cas',
+        store,
         verifyBucket: opts.verifyBucket,
       }),
+      store,
     );
   } catch (err) {
     return {
