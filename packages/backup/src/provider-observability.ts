@@ -11,6 +11,7 @@ import {
   type ProviderInventoryPage,
   type ProviderInventoryQuery,
   type ProviderPolicyDeclaration,
+  STORE_CLASSES,
 } from './provider.js';
 
 export const MIN_POLICY_RPO_SECONDS = 30;
@@ -86,8 +87,8 @@ export function paginateInventory(
   rows: ProviderInventoryObject[],
   query: ProviderInventoryQuery,
 ): ProviderInventoryPage {
-  if (query.store !== 'backup' && query.store !== 'cas') {
-    return invalid('store must be "backup" or "cas"');
+  if (!(STORE_CLASSES as readonly string[]).includes(query.store)) {
+    return invalid(`store must be one of ${STORE_CLASSES.map((s) => `"${s}"`).join(', ')}`);
   }
   const since = sinceValue(query.since);
   const afterKey = query.cursor ? decodeCursor(query.cursor, 'inventory') : undefined;

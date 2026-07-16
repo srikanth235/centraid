@@ -12,11 +12,13 @@ The protocol has two layers:
   lifecycle, capability flags, and short-lived credential grants scoped to
   one *store class* at a time. Nothing here knows what bytes mean.
 - **Layer 2 — Workload semantics**, layered on top, one section per store
-  class. `/1` defines two: `backup` (snapshot registry, generation fencing,
-  retention, purge) and `cas` (content-addressed blob replication). A
-  provider declares which store classes it offers in discovery; the
-  protocol grows additively as new store classes are added, and existing
-  ones never need to change to make room for a new one.
+  class. `/1` defines three: `backup` (snapshot registry, generation fencing,
+  retention, purge), `cas` (content-addressed blob replication), and
+  `derived` (small, read-hot binary display derivatives — thumbnails,
+  previews, posters — kept on the hot tier permanently). A provider declares
+  which store classes it offers in discovery; the protocol grows additively
+  as new store classes are added, and existing ones never need to change to
+  make room for a new one.
 
 Across both layers:
 
@@ -40,7 +42,7 @@ provider feature belongs in this document at all.
   namespace at one provider. A target hosts one
   isolated prefix per store class it has been granted for.
 - **Store class**: a named workload sharing Layer 1's account/grant
-  machinery — `backup` or `cas` in `/1`.
+  machinery — `backup`, `cas`, or `derived` in `/1`.
 - **Snapshot**: one registered manifest in the `backup` store (a
   point-in-time revision).
 - **Grant**: short-lived, store-and-prefix-scoped S3 credentials for one
@@ -99,9 +101,10 @@ be declared here, not discovered behaviorally:
   "data": {
     "protocol": ["centraid-storage-provider/1"],
     "dataPlane": "s3",
-    "capabilities": ["backup", "cas", "usage", "policy", "inventory", "audit"],
+    "capabilities": ["backup", "cas", "derived", "usage", "policy", "inventory", "audit"],
     "maxCredentialTtlSeconds": 86400,
     "purgeAuthTier": "interactive",              // MUST be "interactive"
+    "storageClasses": ["STANDARD", "STANDARD_IA"],  // OPTIONAL — see below
 
     // Present iff `capabilities` includes "backup" — see Layer 2 § backup.
     "backup": {
@@ -121,10 +124,17 @@ be declared here, not discovered behaviorally:
 }
 ```
 
-`capabilities` is the additive seam. Store classes (`backup`, `cas`) and
-optional control surfaces (`usage`, `policy`, `inventory`, `audit`) are
-independent flags. A provider MUST implement every route it advertises and
-clients MUST skip capability-gated routes when their flag is absent.
+`capabilities` is the additive seam. Store classes (`backup`, `cas`,
+`derived`) and optional control surfaces (`usage`, `policy`, `inventory`,
+`audit`) are independent flags. A provider MUST implement every route it
+advertises and clients MUST skip capability-gated routes when their flag is
+absent.
+
+`storageClasses` is OPTIONAL: the provider-declared list of S3 storage-class
+values (`x-amz-storage-class`) its data plane accepts on object-creating
+requests (PUT, CreateMultipartUpload, CopyObject). When **absent**, clients
+MUST NOT send the header at all; when **declared**, the data plane MUST
+accept those values on those requests (e.g. R2: `["STANDARD", "STANDARD_IA"]`).
 
 Clients MUST surface `backup.retention` and `backup.restoreCostClass` to the
 user when `"backup"` is offered — a provider's prune ladder is part of the
@@ -138,7 +148,7 @@ be priced before it starts.
 | `GET /v1/backup/provider` | api-key | discovery/capabilities |
 | `POST /v1/backup/vaults` | api-key | create target — `{ "name": "<opaque label>" }`. Clients MUST NOT send real vault names; the label is an opaque handle. |
 | `GET /v1/backup/vaults` | api-key | list caller's targets + `backup` usage + `accountStatus` |
-| `POST /v1/backup/vaults/:id/credentials` | api-key | issue grant — `{ "ttlSeconds": 3600, "mode": "read-write" \| "read", "store": "backup" \| "cas" }` |
+| `POST /v1/backup/vaults/:id/credentials` | api-key | issue grant — `{ "ttlSeconds": 3600, "mode": "read-write" \| "read", "store": "backup" \| "cas" \| "derived" }` |
 | `GET /v1/backup/vaults/:id/usage` | api-key | per-store-class usage report — only when `capabilities` includes `"usage"` |
 | `PUT`, `GET /v1/backup/vaults/:id/policy` | api-key | declare/read cadence — `policy` capability |
 | `GET /v1/backup/vaults/:id/inventory` | api-key | provider-attested objects — `inventory` capability |
@@ -188,7 +198,7 @@ mode this field kills. Clients MUST alert on `payment_due`/`suspended`.
                                           // profile); it is simply no longer a client-side
                                           // hardcode — every provider states its own.
     "bucket": "…",
-    "prefix": "u/{id}/backup/",          // per-store isolated: "u/{id}/backup/" or "u/{id}/cas/"
+    "prefix": "u/{id}/backup/",          // per-store isolated: "u/{id}/backup/", "u/{id}/cas/", or "u/{id}/derived/"
     "store": "backup",                   // echoes the requested store class
     "accessKeyId": "…", "secretAccessKey": "…", "sessionToken": "…",
     "expiresAt": 1760003600,
@@ -197,10 +207,10 @@ mode this field kills. Clients MUST alert on `payment_due`/`suspended`.
 }
 ```
 
-Per-store isolation is normative: a `backup` grant and a `cas` grant for the
-same target MUST resolve to disjoint prefixes — neither store class can see
-or overwrite the other's objects, even though both live under the same
-target and the same underlying bucket.
+Per-store isolation is normative: the `backup`, `cas`, and `derived` grants
+for the same target MUST resolve to pairwise-disjoint prefixes — no store
+class can see or overwrite another's objects, even though all live under the
+same target and the same underlying bucket.
 
 `mode: "read"` grants MUST NOT permit writes — restore/verify flows use them
 so a recovery device never needs write power. Issuance MUST be refused with
@@ -227,6 +237,12 @@ entirely rather than expecting a stub.
     "cas": {
       "bytesStored": 98765,
       "objectCount": 310,
+      "quotaBytes": null,
+      "period": { "start": 1759000000, "end": 1760003600 }
+    },
+    "derived": {
+      "bytesStored": 4096,
+      "objectCount": 8,
       "quotaBytes": null,
       "period": { "start": 1759000000, "end": 1760003600 }
     }
@@ -259,7 +275,7 @@ declared cadence. PUT replaces the prior document atomically and appends a
 
 ### Object inventory — `GET /v1/backup/vaults/:id/inventory` (`inventory`)
 
-Required query `store=backup|cas`; optional opaque `cursor`, integer `limit`
+Required query `store=backup|cas|derived`; optional opaque `cursor`, integer `limit`
 (1–1000), and inclusive epoch-second `since`. Response:
 
 ```json
@@ -415,6 +431,42 @@ control-plane routes beyond the Layer 1 credentials route already accepting
 
 ---
 
+## Layer 2 — `derived` store semantics
+
+Binary **display derivatives**: the small, renderable artifacts a client
+generates from a primary blob — thumbnails, previews, posters, and future
+display rungs (scrub sprites, waveforms, low-bitrate proxies). Like `cas`,
+this is a grant plus plain S3 operations against an isolated prefix; no route
+table and no new control-plane routes beyond the Layer 1 credentials route
+already accepting `store: "derived"`. Object bytes are opaque, client-sealed
+ciphertext — the provider MUST NOT interpret, parse, or transform them,
+identical to `cas` and `backup`.
+
+- **Expected profile: small and hot.** Each object is a few KiB to a few
+  hundred KiB and is re-read frequently and effectively forever — every
+  eviction-ladder re-read and new-device sync fetches it again. The opposite
+  of `backup`'s write-once-read-rarely profile.
+- **Providers SHOULD keep the `derived` class on their hot / Standard tier
+  permanently** and SHOULD NOT apply age-based cold-tiering lifecycle rules
+  to it (e.g. transitioning objects to R2 Infrequent Access after N days) —
+  these objects never go cold, so cold-tiering only adds first-byte latency
+  and egress penalty per read. This is a SHOULD (a single-tier provider
+  trivially satisfies it), but lifecycling `derived` like `backup` works
+  against the class's whole purpose.
+- **List permission is REQUIRED on every `derived` grant**, both `read` and
+  `read-write` — the client reconciles what the provider holds against its
+  local tier by listing the granted prefix, exactly as `cas` does.
+- **No server-side fencing.** Like `cas`, there is no registry, `seq`, or
+  generation token; the client's local tier is the authoritative record of
+  what it has replicated. Derivatives are regenerable from the primary blob,
+  so a lost or racing write is at worst redundant recomputation, never data
+  loss. **Delete** follows `cas`/`backup` `mode` semantics (`"read"` grants
+  MUST NOT permit writes or deletes).
+- **Quota** shares the target's combined per-user storage pool with the other
+  store classes; `derived` is not separately budgeted.
+
+---
+
 ## Conformance
 
 The reference conformance kit lives in Centraid's `packages/backup`
@@ -431,6 +483,9 @@ The reference conformance kit lives in Centraid's `packages/backup`
 - **Layer 2 (`cas`)**: put/list/get/delete round-trip through a grant, and
   namespace isolation from the `backup` store — run only when the `cas`
   capability is present.
+- **Layer 2 (`derived`)**: put/list/get/delete round-trip through a grant,
+  pairwise namespace isolation from `backup` and `cas`, and grant echo +
+  disjoint prefix — run only when the `derived` capability is present.
 - **Optional observability**: policy echo/provider clock + typed rejection;
   inventory pagination/`since` + raw-LIST equality; audit ordering,
   lifecycle coverage, and prune-reason detail.
