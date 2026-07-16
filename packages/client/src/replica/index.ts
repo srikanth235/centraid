@@ -2,6 +2,7 @@
 export * from './coordinator.js';
 export * from './errors.js';
 export * from './intent-store.js';
+export * from './intent-invalidations.js';
 export * from './intents.js';
 export * from './key.js';
 export * from './live-query-registry.js';

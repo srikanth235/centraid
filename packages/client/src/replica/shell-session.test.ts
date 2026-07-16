@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit pre-existing cohesive session regression suite; decomposition is outside issue #417
 import { beforeAll, describe, expect, test, vi } from 'vitest';
 
 import type { ShellReplicaCoordinator } from './shell-session.js';
@@ -168,6 +169,8 @@ describe('ReplicaShellSession', () => {
 
   test('terminal scope purge forgets the durable manifest only after storage is wiped', async () => {
     localStorage.clear();
+    const cursorKey = `centraid:vault-change-cursor:${encodeURIComponent('profile-home\u0000vault')}`;
+    sessionStorage.setItem(cursorKey, JSON.stringify({ epoch: 'old', seq: 9 }));
     const identity = { gatewayId: 'profile-home', vaultId: 'vault' };
     rememberReplicaIdentity(identity);
     const coordinator = fakeCoordinator();
@@ -186,6 +189,28 @@ describe('ReplicaShellSession', () => {
 
     expect(coordinator.purge).toHaveBeenCalledOnce();
     expect(listRememberedReplicaIdentities()).toEqual([]);
+    expect(sessionStorage.getItem(cursorKey)).toBeNull();
+  });
+
+  test('purge after close still clears terminal scope state', async () => {
+    const cursorKey = `centraid:vault-change-cursor:${encodeURIComponent('profile-home\u0000vault')}`;
+    sessionStorage.setItem(cursorKey, JSON.stringify({ epoch: 'old', seq: 9 }));
+    const coordinator = fakeCoordinator();
+    const session = new ReplicaShellSession(
+      {
+        baseUrl: 'https://gateway.example',
+        gatewayId: 'profile-home',
+        vaultId: 'vault',
+        rememberDevice: false,
+      },
+      coordinator,
+      { eventTarget: new EventTarget(), isOnline: () => false, rememberStorage: false },
+    );
+
+    await session.close();
+    await session.purge();
+
+    expect(sessionStorage.getItem(cursorKey)).toBeNull();
   });
 
   test('keeps the manifest entry when terminal storage purge fails', async () => {
@@ -253,6 +278,7 @@ describe('ReplicaShellSession', () => {
       { shapeId: 'shape-todos', entity: 'core.task', source: 'canonical' },
     ]);
     expect(listener).toHaveBeenCalledWith([
+      { shapeId: 'shape-todos-billing', entity: 'core.task', source: 'canonical' },
       { shapeId: 'shape-todos', entity: 'core.task', source: 'canonical' },
     ]);
     const billingListener = vi.fn();
@@ -380,6 +406,10 @@ describe('ReplicaShellSession', () => {
       appId: 'todos',
       action: 'complete',
       input: { taskId: 'task-1' },
+      dependencies: [
+        { shapeId: 'shape-todos', entity: 'core.task' },
+        { shapeId: 'shape-todos-billing', entity: 'core.task' },
+      ],
       optimistic: [
         {
           op: 'upsert',
@@ -435,6 +465,22 @@ describe('ReplicaShellSession', () => {
       status: 'parked',
       reason: 'confirm first',
     });
+    await session.close();
+  });
+
+  test('an online event keeps a warm cursor instead of re-downloading bootstrap', async () => {
+    const events = new EventTarget();
+    const coordinator = fakeCoordinator();
+    const session = new ReplicaShellSession(
+      { baseUrl: 'https://gateway.example', vaultId: 'vault' },
+      coordinator,
+      { eventTarget: events, isOnline: () => true },
+    );
+    await session.start({ mode: 'memory', cursor: { epoch: 'warm', seq: 7 }, schemaEpoch: 's' });
+
+    events.dispatchEvent(new Event('online'));
+    await Promise.resolve();
+    expect(coordinator.bootstrap).not.toHaveBeenCalled();
     await session.close();
   });
 

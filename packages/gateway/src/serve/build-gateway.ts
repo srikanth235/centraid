@@ -303,6 +303,28 @@ export function replicaDispatchOutcome(result: ToolResult): ReplicaIntentDispatc
 const CONVERSATIONS_PREFIX = '/_centraid-conversations';
 const USER_STORE_PREFIX = '/_centraid-user';
 
+/** Shared device-tier gate, before any owner/app/action route can dispatch. */
+function readonlyRequestAllowed(req: IncomingMessage): boolean {
+  const method = (req.method ?? 'GET').toUpperCase();
+  let url = new URL(req.url ?? '/', 'http://gateway.local');
+  if (url.pathname === '/centraid/_web/control') {
+    const target = url.searchParams.get('path');
+    if (target?.startsWith('/')) url = new URL(target, 'http://gateway.local');
+  }
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return true;
+  if (method !== 'POST') return false;
+  if (
+    url.pathname === '/centraid/_tool/centraid_read' ||
+    url.pathname === '/centraid/_tool/centraid_describe' ||
+    /^\/centraid\/_draft\/[^/]+\/_tool\/centraid_(?:read|describe)$/.test(url.pathname)
+  ) {
+    return true;
+  }
+  // Checkpoints record only how far this device has durably consumed the
+  // read protocol; they grant no write authority over app/vault data.
+  return url.pathname === '/centraid/_vault/replica/checkpoint';
+}
+
 /** The per-vault host bundle — one per vault, built lazily, cached by id. */
 interface VaultHost {
   vaultId: string;
@@ -1992,6 +2014,16 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       return sendJson(res, 404, {
         error: 'vault_not_found',
         message: `unknown vault "${vaultId}"`,
+      });
+    }
+    const enrollment =
+      deviceKey !== undefined
+        ? options.devicePairing?.enrollments.get(deviceKey, vaultId)
+        : undefined;
+    if (enrollment?.trust === 'readonly' && !readonlyRequestAllowed(req)) {
+      return sendJson(res, 403, {
+        error: 'readonly_device',
+        message: 'this device is enrolled read-only and cannot mutate the gateway',
       });
     }
     return runWithVaultContext({ vaultId, ...(deviceKey !== undefined ? { deviceKey } : {}) }, () =>

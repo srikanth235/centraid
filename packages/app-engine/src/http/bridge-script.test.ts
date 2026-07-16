@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit cohesive bridge regression suite; splitting is outside issue #417
 // Bridge-script behavior (issue #404). The change bridge ships as a serialized
 // inline `<script>`; these load that exact string into a `vm` sandbox with a
 // mocked `fetch` and drive `window.centraid.read/write` to prove the new
@@ -26,6 +27,7 @@ interface Centraid {
     signal?: AbortSignal;
     optimistic?: unknown[];
     onlineOnly?: boolean;
+    intentId?: string;
   }) => Promise<unknown>;
   onChange: (listener: (detail: unknown) => void) => () => void;
   describe: (filter?: Record<string, unknown>) => Promise<unknown>;
@@ -424,6 +426,16 @@ function loadReplicaBridge(
         },
       });
     } else if (data.type === 'centraid:replica-write') {
+      if (replicaError) {
+        reply({
+          type: 'centraid:replica-result',
+          id: data.id,
+          ok: false,
+          code: replicaError.code,
+          error: replicaError.message,
+        });
+        return;
+      }
       reply({
         type: 'centraid:replica-result',
         id: data.id,
@@ -719,6 +731,28 @@ test('managed writes enter the shell intent queue with optimistic mutations', as
       optimistic: [expect.objectContaining({ entity: 'schedule.task' })],
     }),
   );
+});
+
+test('replica-unavailable write fallback preserves its idempotency key', async () => {
+  const bridge = loadReplicaBridge(async () => null);
+  bridge.setReplicaError({ code: 'REPLICA_UNAVAILABLE', message: 'admission timed out' });
+
+  await expect(
+    bridge.centraid.write({
+      action: 'complete',
+      input: { task_id: 'task-1' },
+      intentId: 'intent-timeout-1',
+    }),
+  ).resolves.toEqual({ source: 'server' });
+  expect(bridge.fetches).toContainEqual({
+    url: '/centraid/_tool/centraid_write',
+    body: {
+      app: 'demo',
+      action: 'complete',
+      input: { task_id: 'task-1' },
+      intentId: 'intent-timeout-1',
+    },
+  });
 });
 
 test('managed online-only writes fail with the network and never enter the shell intent queue', async () => {

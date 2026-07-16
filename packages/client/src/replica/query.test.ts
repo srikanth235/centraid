@@ -71,6 +71,44 @@ describe('replica query evaluation', () => {
     ).toMatchObject({ title: 'Canonical changed', rank: 3 });
   });
 
+  test('accepts numeric primary keys and skips a legacy malformed optimistic record', () => {
+    const numericSchema: ReplicaEntitySchema = {
+      entity: 'core.task',
+      primaryKey: 'task_id',
+      columns: ['task_id', 'title'],
+    };
+    const canonical: ReplicaRowEnvelope[] = [
+      {
+        rowId: '1',
+        values: { task_id: 1, title: 'Canonical' },
+        oversizedFields: [],
+        hasUnavailableFields: false,
+      },
+    ];
+    const result = evaluateReplicaRead(
+      canonical,
+      numericSchema,
+      { shapeId: 'shape', entity: 'core.task' },
+      [
+        {
+          op: 'upsert',
+          shapeId: 'shape',
+          entity: 'core.task',
+          rowId: '1',
+          values: { task_id: 1, title: 'Optimistic' },
+        },
+        {
+          op: 'upsert',
+          shapeId: 'shape',
+          entity: 'core.task',
+          rowId: '1',
+          values: { poisoned_column: 'ignored' },
+        },
+      ],
+    );
+    expect(result[0]?.values).toEqual({ task_id: 1, title: 'Optimistic' });
+  });
+
   test('reruns an unknown column online instead of compiling caller text locally', () => {
     expect(() =>
       evaluateReplicaRead(rows(), schema, {

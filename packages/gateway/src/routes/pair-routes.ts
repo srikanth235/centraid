@@ -45,23 +45,19 @@ interface PairRequestBody {
   platform?: string;
   /** Persist the replica/intent queue on this device. Omission is an explicit opt-out. */
   rememberDevice?: boolean;
-  /** A companion may voluntarily enroll read-only; full remains the legacy default. */
-  trust?: 'full' | 'readonly';
 }
 
 function parseBody(body: Record<string, unknown>): PairRequestBody | undefined {
-  const { ticket, deviceLabel, platform, rememberDevice, trust } = body;
+  const { ticket, deviceLabel, platform, rememberDevice } = body;
   if (typeof ticket !== 'string' || ticket.length === 0) return undefined;
   if (typeof deviceLabel !== 'string' || deviceLabel.trim().length === 0) return undefined;
   if (platform !== undefined && typeof platform !== 'string') return undefined;
   if (rememberDevice !== undefined && typeof rememberDevice !== 'boolean') return undefined;
-  if (trust !== undefined && trust !== 'full' && trust !== 'readonly') return undefined;
   return {
     ticket,
     deviceLabel,
     ...(platform !== undefined ? { platform } : {}),
     ...(rememberDevice !== undefined ? { rememberDevice } : {}),
-    ...(trust !== undefined ? { trust } : {}),
   };
 }
 
@@ -116,7 +112,7 @@ export function makePairRouteHandler(deps: PairRouteDeps): RouteHandler {
       label: body.deviceLabel,
       ...(body.platform !== undefined ? { platform: body.platform } : {}),
       ...(body.rememberDevice !== undefined ? { rememberDevice: body.rememberDevice } : {}),
-      ...(body.trust !== undefined ? { trust: body.trust } : {}),
+      trust: redeemed.trust,
     });
     plane.db.blobTransfers.enrollPairedDevice({
       identity: deviceKey,

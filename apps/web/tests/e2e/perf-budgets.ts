@@ -126,9 +126,9 @@ export const perfBudgets: PerfBudgets = {
     // from cache and only a conditional revalidation (or nothing) reaches the
     // relay. This is the headline wave-1 assertion.
     maxWarmToColdByteRatio: 0.2,
-    // Blob is cache-first (0 round trips warm); assets are SWR (1 conditional
-    // round trip warm). Warm bridge calls must be at most half of cold.
-    maxWarmToColdRequestRatio: 0.5,
+    // Both assets and blobs revalidate authorization conditionally. Warm
+    // calls may equal cold calls, but must transfer almost no response bytes.
+    maxWarmToColdRequestRatio: 1,
   },
   irohPool: {
     // Many streams, ~1 connect → ratio ≪ 1. 0.5 leaves room for an

@@ -3,6 +3,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 export interface ReplicaIntentContext {
   intentId: string;
   appId: string;
+  deviceId: string;
 }
 
 const storage = new AsyncLocalStorage<ReplicaIntentContext>();

@@ -88,6 +88,17 @@ function sendOutcome(
   });
 }
 
+function concealIdentityConflict(res: ServerResponse, intentId: string): true {
+  // UUID collisions are not actionable by the submitting device. Use the
+  // ordinary in-flight acknowledgement so another device's durable row is
+  // not exposed as an existence oracle, and leave that row untouched.
+  return sendJson(res, 202, {
+    protocolVersion: REPLICA_PROTOCOL_VERSION,
+    accepted: true,
+    outcome: { intentId, status: 'in-flight' },
+  });
+}
+
 /** Durable proof that an intent crossed the canonical commit boundary. */
 function hasCanonicalCommit(
   plane: VaultPlane,
@@ -152,7 +163,7 @@ export async function handleReplicaIntent(
   const existing = readReplicaIntentOutcome(context.plane.db.vault, intentId, identity.deviceId);
   if (existing) {
     if (!sameIdentity(existing, identity)) {
-      return sendJson(res, 409, { error: 'replica_intent_identity_conflict' });
+      return concealIdentityConflict(res, intentId);
     }
     // Terminal and parked outcomes are immutable dedupe hits. A `sending`
     // row means the process died between durable admission and outcome;
@@ -173,7 +184,7 @@ export async function handleReplicaIntent(
       });
       return sendOutcome(res, denied);
     } catch {
-      return sendJson(res, 409, { error: 'replica_intent_identity_conflict' });
+      return concealIdentityConflict(res, intentId);
     }
   }
 
@@ -186,7 +197,7 @@ export async function handleReplicaIntent(
   } catch {
     // A wrong-device collision is intentionally indistinguishable from any
     // other immutable-id conflict.
-    return sendJson(res, 409, { error: 'replica_intent_identity_conflict' });
+    return concealIdentityConflict(res, intentId);
   }
 
   // A retained marker means this HTTP attempt is replaying a canonical
@@ -195,7 +206,7 @@ export async function handleReplicaIntent(
   const canonicalCommitExistedBeforeDispatch = hasCanonicalCommit(context.plane, intentId, 'any');
   let dispatched: ReplicaIntentDispatchOutcome;
   try {
-    dispatched = await runWithReplicaIntent({ intentId, appId }, () =>
+    dispatched = await runWithReplicaIntent({ intentId, appId, deviceId: identity.deviceId }, () =>
       context.dispatch({ intentId, appId, action, input: body.input }),
     );
   } catch {

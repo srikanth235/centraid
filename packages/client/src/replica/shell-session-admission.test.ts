@@ -66,6 +66,53 @@ function coordinator(overrides: Partial<ShellReplicaCoordinator> = {}): ShellRep
 }
 
 describe('ReplicaShellSession admission ordering', () => {
+  test('connectivity loss after waiter registration resolves the write as durably queued', async () => {
+    let phase: 'start' | 'write' = 'start';
+    let onlineChecks = 0;
+    const queued = queuedIntent('offline-race');
+    const replica = coordinator({ enqueue: vi.fn().mockResolvedValue(queued) });
+    const session = new ReplicaShellSession(
+      { baseUrl: 'https://gateway.example', vaultId: 'vault' },
+      replica,
+      {
+        eventTarget: new EventTarget(),
+        isOnline: () => phase === 'write' && ++onlineChecks === 1,
+      },
+    );
+    await session.start({ mode: 'memory', cursor: { epoch: 'e', seq: 1 }, schemaEpoch: 's' });
+    phase = 'write';
+
+    await expect(
+      session.write('todos', { action: queued.action, input: queued.input }),
+    ).resolves.toEqual({
+      intentId: queued.intentId,
+      status: 'queued',
+      reason: 'saved locally; waiting for a connection',
+    });
+    await session.close();
+  });
+
+  test('an IndexedDB claim failure rejects every registered admission waiter', async () => {
+    let online = false;
+    const queued = queuedIntent('claim-failed');
+    const replica = coordinator({
+      enqueue: vi.fn().mockResolvedValue(queued),
+      claimNextIntent: vi.fn().mockRejectedValue(new Error('IndexedDB unavailable')),
+    });
+    const session = new ReplicaShellSession(
+      { baseUrl: 'https://gateway.example', vaultId: 'vault' },
+      replica,
+      { eventTarget: new EventTarget(), isOnline: () => online },
+    );
+    await session.start({ mode: 'memory', cursor: { epoch: 'e', seq: 1 }, schemaEpoch: 's' });
+    online = true;
+
+    await expect(
+      session.write('todos', { action: queued.action, input: queued.input }),
+    ).rejects.toThrow('IndexedDB unavailable');
+    await session.close();
+  });
+
   test('fans one same-id admission result out to every concurrent writer', async () => {
     let online = false;
     const queued = queuedIntent('shared-intent');

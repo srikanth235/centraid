@@ -29,6 +29,7 @@
   },
   "devDependencies": {
     "@centraid/app-engine": "workspace:*",
+    "@centraid/client": "workspace:*",
     "@centraid/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
     "esbuild": "^0.28.1",

@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit pre-existing cohesive blob regression suite; decomposition is outside issue #417
 // Blob custody units (issue #296): the stores, the spool pipeline, and the
 // two-tier custody facade — including the S3 driver against an in-process
 // fake S3 endpoint (SigV4-signed requests over real HTTP, no SDK).

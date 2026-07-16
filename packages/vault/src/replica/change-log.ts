@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit (#406) trigger generation, cursor reads, and retention share one transactional log invariant
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { listVaultEntities, resolveEntity } from '../schema/tables.js';
 import { REPLICA_SCHEMA_EPOCH } from '../schema/replica.js';
@@ -178,12 +178,26 @@ function sqliteSchemaVersion(vault: DatabaseSync): number {
   return row.schema_version;
 }
 
+function triggerContractMarker(
+  vault: DatabaseSync,
+  specs: EntityTriggerSpec[] = triggerSpecs(vault),
+): number {
+  const contract = specs.flatMap((spec) =>
+    (['ai', 'au', 'ad'] as const).map((suffix) => normalizeSql(triggerSql(spec, suffix))),
+  );
+  const digest = createHash('sha256')
+    .update(JSON.stringify([sqliteSchemaVersion(vault), contract]))
+    .digest('hex');
+  return Number.parseInt(digest.slice(0, 8), 16);
+}
+
 /**
  * Install or repair the database-level change triggers for all canonical and
  * currently registered live ext tables. The caller owns transaction scope so
  * ext DDL can install its trigger before the schema transaction commits.
  */
 export function refreshReplicaTriggers(vault: DatabaseSync): void {
+  const specs = triggerSpecs(vault);
   const existing = new Map(
     (
       vault
@@ -195,7 +209,7 @@ export function refreshReplicaTriggers(vault: DatabaseSync): void {
     ).map((row) => [row.name, row.sql] as const),
   );
   const ddl: string[] = [];
-  for (const spec of triggerSpecs(vault)) {
+  for (const spec of specs) {
     for (const suffix of ['ai', 'au', 'ad'] as const) {
       const name = `trg_replica_${spec.physical}_${suffix}`;
       const wanted = triggerSql(spec, suffix);
@@ -215,7 +229,7 @@ export function refreshReplicaTriggers(vault: DatabaseSync): void {
   // invalidates the marker and forces this repair pass again.
   vault
     .prepare(`UPDATE replica_meta SET trigger_schema_version = ? WHERE singleton = 1`)
-    .run(sqliteSchemaVersion(vault));
+    .run(triggerContractMarker(vault, specs));
 }
 
 function meta(vault: DatabaseSync): MetaRow {
@@ -262,14 +276,17 @@ export function currentReplicaLogState(vault: DatabaseSync): ReplicaLogState {
 export function initializeReplicaProtocol(vault: DatabaseSync): ReplicaLogState {
   const row = meta(vault);
   const contractChanged = row.schema_epoch !== currentSchemaEpoch(vault);
-  if (contractChanged) {
-    bumpReplicaEpoch(vault, { reason: 'schema-change' });
-  }
-  if (!contractChanged && row.trigger_schema_version === sqliteSchemaVersion(vault)) {
+  if (!contractChanged && row.trigger_schema_version === triggerContractMarker(vault)) {
     return currentReplicaLogState(vault);
   }
-  vault.exec('BEGIN');
+  // Epoch rotation and the trigger catalog it identifies are one contract
+  // change. A crash may expose neither or both, never a new epoch fed by old
+  // trigger projection rules.
+  vault.exec('BEGIN IMMEDIATE');
   try {
+    if (contractChanged) {
+      bumpReplicaEpochInTransaction(vault, { reason: 'schema-change' });
+    }
     refreshReplicaTriggers(vault);
     vault.exec('COMMIT');
   } catch (error) {
@@ -392,25 +409,35 @@ export function bumpReplicaEpoch(
   const now = (options.now ?? new Date()).toISOString();
   vault.exec('BEGIN IMMEDIATE');
   try {
-    const sequence = vault
-      .prepare(`SELECT seq FROM sqlite_sequence WHERE name = 'replica_change'`)
-      .get() as { seq: number } | undefined;
-    const existing = meta(vault);
-    const floor = Math.max(existing.floor_seq, sequence?.seq ?? 0);
-    vault
-      .prepare(
-        `UPDATE replica_meta
-            SET epoch = ?, floor_seq = ?, schema_epoch = ?, epoch_reason = ?,
-                epoch_started_at = ?, updated_at = ?
-          WHERE singleton = 1`,
-      )
-      .run(epoch, floor, currentSchemaEpoch(vault), options.reason, now, now);
+    bumpReplicaEpochInTransaction(vault, { ...options, epoch, now: new Date(now) });
     vault.exec('COMMIT');
   } catch (error) {
     vault.exec('ROLLBACK');
     throw error;
   }
   return currentReplicaLogState(vault);
+}
+
+function bumpReplicaEpochInTransaction(
+  vault: DatabaseSync,
+  options: BumpReplicaEpochOptions,
+): void {
+  const epoch = options.epoch ?? randomUUID();
+  formatReplicaCursor({ epoch, seq: 0 });
+  const now = (options.now ?? new Date()).toISOString();
+  const sequence = vault
+    .prepare(`SELECT seq FROM sqlite_sequence WHERE name = 'replica_change'`)
+    .get() as { seq: number } | undefined;
+  const existing = meta(vault);
+  const floor = Math.max(existing.floor_seq, sequence?.seq ?? 0);
+  vault
+    .prepare(
+      `UPDATE replica_meta
+          SET epoch = ?, floor_seq = ?, schema_epoch = ?, epoch_reason = ?,
+              epoch_started_at = ?, updated_at = ?
+        WHERE singleton = 1`,
+    )
+    .run(epoch, floor, currentSchemaEpoch(vault), options.reason, now, now);
 }
 
 export interface PruneReplicaChangesOptions {

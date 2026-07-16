@@ -222,6 +222,8 @@ export interface ReplicaIntent {
   createdOrder: number;
   attempts: number;
   optimistic: OptimisticMutation[];
+  /** App-visible replica reads that must receive this intent's settlement signal. */
+  dependencies?: ReplicaDependency[];
   reason?: string;
   output?: ReplicaValue;
 }
@@ -232,6 +234,7 @@ export interface EnqueueIntentInput {
   action: string;
   input: ReplicaValue;
   optimistic?: OptimisticMutation[];
+  dependencies?: ReplicaDependency[];
 }
 
 export interface ReplicaInvalidation extends ReplicaDependency {

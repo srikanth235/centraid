@@ -19,7 +19,9 @@ afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.();
 });
 
-async function fixture(): Promise<{
+async function fixture(
+  options: { maxBootstrapRows?: number; maxSyntheticLookupRows?: number } = {},
+): Promise<{
   plane: VaultPlane;
   enrollments: EnrollmentStore;
   handler: ReturnType<typeof makeReplicaRouteHandler>;
@@ -33,6 +35,7 @@ async function fixture(): Promise<{
     dispatchIntent: vi.fn().mockResolvedValue({ status: 'executed' }),
     pollIntervalMs: 1,
     heartbeatMs: 5,
+    ...options,
   });
   cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
   cleanups.push(() => plane.stop());
@@ -214,6 +217,34 @@ test('the bootstrap sentinel explicitly requests rebootstrap instead of guessing
   });
 });
 
+test('invalid SSE limits are rejected before stream headers and never request a data wipe', async () => {
+  const { handler } = await fixture();
+  const res = new MockResponse();
+  await handler(
+    request('/centraid/_vault/changes?since=0%3A0&stream=1&limit=unbounded', {
+      accept: 'text/event-stream',
+    }),
+    res as unknown as ServerResponse,
+  );
+
+  expect(res.statusCode).toBe(400);
+  expect(res.headers.get('content-type')).toContain('application/json');
+  expect(res.json()).toEqual({ error: 'invalid_replica_limit' });
+  expect(res.body).not.toContain('rebootstrap');
+});
+
+test('bootstrap refuses a snapshot beyond its configured authenticated-work bound', async () => {
+  const { plane, handler } = await fixture({ maxBootstrapRows: 1 });
+  task(plane, 'bounded-a', 'First');
+  task(plane, 'bounded-b', 'Second');
+  const res = new MockResponse();
+
+  await handler(request('/centraid/_vault/replica/bootstrap'), res as unknown as ServerResponse);
+
+  expect(res.statusCode).toBe(413);
+  expect(res.json()).toEqual({ error: 'replica_bootstrap_too_large' });
+});
+
 test('lazy fields resolve by opaque masked-PK row id without disclosing the canonical key', async () => {
   const { plane, handler } = await fixture();
   const initial = plane.listApps().find((app) => app.name === 'agenda')?.grants[0];
@@ -273,6 +304,58 @@ test('lazy fields resolve by opaque masked-PK row id without disclosing the cano
     values: { description },
   });
   expect(lazyRes.body).not.toContain('lazy-canonical-secret');
+});
+
+test('synthetic lazy-row lookup is bounded instead of scanning an unbounded entity', async () => {
+  const { plane, handler } = await fixture({ maxSyntheticLookupRows: 1 });
+  const initial = plane.listApps().find((app) => app.name === 'agenda')?.grants[0];
+  plane.revokeGrant(initial!.grantId);
+  plane.approveGrant('agenda', {
+    purpose: 'dpv:ServiceProvision',
+    scopes: [
+      {
+        schema: 'schedule',
+        table: 'task',
+        verbs: 'read',
+        fieldMask: ['title', 'description'],
+      },
+    ],
+  });
+  for (const id of ['a-canonical', 'z-canonical']) {
+    plane.db.vault
+      .prepare(
+        `INSERT INTO schedule_task
+           (task_id, owner_party_id, title, description, status, priority)
+         VALUES (?, ?, ?, ?, 'needs-action', 0)`,
+      )
+      .run(id, plane.boot.ownerPartyId, id, 'd'.repeat(70_000));
+  }
+  const bootstrapRes = new MockResponse();
+  await handler(
+    request('/centraid/_vault/replica/bootstrap?appId=agenda'),
+    bootstrapRes as unknown as ServerResponse,
+  );
+  const bootstrap = bootstrapRes.json<{
+    shapes: Array<{ shapeId: string }>;
+    rows: Array<{ rowId: string; values: { title: string } }>;
+  }>();
+  const target = bootstrap.rows.find((row) => row.values.title === 'z-canonical')!;
+  const params = new URLSearchParams({
+    appId: 'agenda',
+    shapeId: bootstrap.shapes[0]!.shapeId,
+    entity: 'schedule.task',
+    rowId: target.rowId,
+    column: 'description',
+  });
+  const res = new MockResponse();
+
+  await handler(
+    request(`/centraid/_vault/replica/row?${params}`),
+    res as unknown as ServerResponse,
+  );
+
+  expect(res.statusCode).toBe(413);
+  expect(res.json()).toEqual({ error: 'replica_row_lookup_too_large' });
 });
 
 test('reconciles only explicitly pending, device-scoped outcomes through the snapshot cursor', async () => {

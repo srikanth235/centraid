@@ -7,7 +7,7 @@ const VIRTUAL_PREFIX = '/__centraid_iroh__/';
 // A versioned script URL prevents an older shell worker from being treated as
 // ready merely because it controls the page. The virtual Iroh route only
 // exists in this worker generation.
-const SERVICE_WORKER_VERSION = 'iroh-bridge-v8';
+const SERVICE_WORKER_VERSION = 'iroh-bridge-v9';
 const SERVICE_WORKER_URL = `/sw.js?v=${SERVICE_WORKER_VERSION}`;
 
 // Transient tunnel failures (a redialed-then-still-dead connection, a stream
@@ -427,7 +427,7 @@ export async function irohVirtualUrl(target: string): Promise<string> {
 }
 
 interface BridgeRequest {
-  type: 'centraid:iroh-request';
+  type: 'centraid:iroh-request' | 'centraid:iroh-claim';
   bridgeId: string;
   target: string;
   method: string;
@@ -452,8 +452,12 @@ export function installIrohServiceWorkerBridge(): void {
   navigator.serviceWorker.addEventListener('message', (event: MessageEvent<BridgeRequest>) => {
     const message = event.data;
     const port = event.ports[0];
-    if (!port || message?.type !== 'centraid:iroh-request' || message.bridgeId !== bridgeId())
+    if (!port || message?.bridgeId !== bridgeId()) return;
+    if (message.type === 'centraid:iroh-claim') {
+      port.postMessage({ type: 'claim' });
       return;
+    }
+    if (message.type !== 'centraid:iroh-request') return;
     void (async () => {
       const response = await bridgeFetch(message);
       port.postMessage({

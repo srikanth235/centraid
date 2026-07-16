@@ -159,6 +159,17 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
       if (!isAllowed(target) || deps.vaultName(target) === undefined) {
         return sendJson(res, 404, { error: 'not_found' });
       }
+      const callerEnrollment = callerKey ? deps.enrollments.get(callerKey, target) : undefined;
+      if (callerEnrollment?.trust === 'readonly') {
+        return sendJson(res, 403, {
+          error: 'readonly_device',
+          message: 'read-only devices cannot mint pairing tickets',
+        });
+      }
+      const trust = body.trust === undefined ? 'full' : body.trust;
+      if (trust !== 'full' && trust !== 'readonly') {
+        return sendJson(res, 400, { error: 'invalid_trust' });
+      }
       const ttlMs =
         typeof body.ttlMinutes === 'number' && body.ttlMinutes > 0
           ? body.ttlMinutes * 60_000
@@ -173,7 +184,7 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
             'gateway has no iroh endpoint identity yet — start the daemon so it mints its endpoint',
         });
       }
-      const minted = deps.tickets.mint(target, ttlMs);
+      const minted = deps.tickets.mint(target, ttlMs, trust);
       const token = encodePairingTicket({
         v: 1,
         kind: 'centraid-gw-pair',

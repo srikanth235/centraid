@@ -107,7 +107,10 @@ export class EnrollmentStore {
     try {
       const raw = JSON.parse(fs.readFileSync(this.file, 'utf8')) as Partial<EnrollmentFile>;
       this.enrollments = Array.isArray(raw.enrollments)
-        ? raw.enrollments.filter(validEnrollment)
+        ? raw.enrollments.flatMap((value) => {
+            const enrollment = normalizeEnrollment(value);
+            return enrollment ? [enrollment] : [];
+          })
         : [];
       this.loadedRevision = revision;
     } catch {
@@ -303,14 +306,11 @@ export class EnrollmentStore {
   }
 }
 
-const ENROLLMENT_LOCK_TIMEOUT_MS = 5_000;
 const ENROLLMENT_STALE_LOCK_MS = 60_000;
-const lockWaiter = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
 
 function withEnrollmentFileLock<T>(file: string, work: () => T): T {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const lock = `${file}.lock`;
-  const deadline = Date.now() + ENROLLMENT_LOCK_TIMEOUT_MS;
   for (;;) {
     try {
       fs.mkdirSync(lock, { mode: 0o700 });
@@ -325,10 +325,10 @@ function withEnrollmentFileLock<T>(file: string, work: () => T): T {
       } catch {
         continue;
       }
-      if (Date.now() >= deadline) {
-        throw new Error('timed out locking device enrollment store', { cause: error });
-      }
-      Atomics.wait(lockWaiter, 0, 0, 10);
+      // Store mutations are synchronous for CLI compatibility. Waiting here
+      // would block the daemon event loop, so a live competing writer fails
+      // fast and lets the caller retry instead of freezing all HTTP traffic.
+      throw new Error('device enrollment store is busy', { cause: error });
     }
   }
   try {
@@ -367,23 +367,30 @@ function validCheckpoint(value: unknown): value is ReplicaCheckpoint {
   );
 }
 
-function validEnrollment(value: unknown): value is DeviceEnrollment {
-  if (typeof value !== 'object' || value === null) return false;
+function normalizeEnrollment(value: unknown): DeviceEnrollment | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
   const enrollment = value as Partial<DeviceEnrollment>;
-  return (
+  const valid =
     typeof enrollment.enrollmentId === 'string' &&
     typeof enrollment.endpointId === 'string' &&
     typeof enrollment.vaultId === 'string' &&
     typeof enrollment.label === 'string' &&
     typeof enrollment.addedAt === 'string' &&
     (enrollment.platform === undefined || typeof enrollment.platform === 'string') &&
-    (enrollment.trust === 'full' ||
+    (enrollment.trust === undefined ||
+      enrollment.trust === 'full' ||
       enrollment.trust === 'readonly' ||
       enrollment.trust === 'revoked') &&
-    typeof enrollment.rememberDevice === 'boolean' &&
+    (enrollment.rememberDevice === undefined || typeof enrollment.rememberDevice === 'boolean') &&
     (enrollment.compute === undefined || validComputeProfile(enrollment.compute)) &&
-    (enrollment.checkpoint === undefined || validCheckpoint(enrollment.checkpoint))
-  );
+    (enrollment.checkpoint === undefined || validCheckpoint(enrollment.checkpoint));
+  if (!valid) return undefined;
+  return {
+    ...(enrollment as DeviceEnrollment),
+    // Pre-#406 rows were full-trust and session-only by construction.
+    trust: enrollment.trust ?? 'full',
+    rememberDevice: enrollment.rememberDevice ?? false,
+  };
 }
 
 const COMPUTE_CAPABILITIES: readonly (keyof DeviceComputeCapabilities)[] = [

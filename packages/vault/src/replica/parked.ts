@@ -151,10 +151,18 @@ export function readDurableParkedDenial(
         ORDER BY receipt_id`,
     )
     .all(invocationId) as unknown as ParkedDenialReceiptRow[];
-  if (receipts.length > 1) {
-    throw new Error(`parked invocation ${invocationId} has multiple denial receipts`);
+  const confirmed = receipts.filter((receipt) => {
+    if (!receipt.detail_json) return false;
+    const detail = JSON.parse(receipt.detail_json) as {
+      confirmedAt?: unknown;
+      confirmedBy?: unknown;
+    };
+    return typeof detail.confirmedAt === 'string' && 'confirmedBy' in detail;
+  });
+  if (confirmed.length > 1) {
+    throw new Error(`parked invocation ${invocationId} has multiple confirmation denial receipts`);
   }
-  const receipt = receipts[0];
+  const receipt = confirmed[0];
   if (!receipt) return undefined;
   let reason = 'owner denied confirmation';
   if (receipt.detail_json) {

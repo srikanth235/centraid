@@ -374,14 +374,15 @@ test('warm initialization skips a stable trigger catalog and repairs schema drif
     ).trigger_schema_version;
 
   const stable = schemaVersion();
-  expect(recordedVersion()).toBe(stable);
+  const stableMarker = recordedVersion();
   initializeReplicaProtocol(vault);
   expect(schemaVersion()).toBe(stable);
-  expect(recordedVersion()).toBe(stable);
+  expect(recordedVersion()).toBe(stableMarker);
 
   vault.exec('DROP TRIGGER "trg_replica_core_concept_scheme_ai"');
   expect(schemaVersion()).toBeGreaterThan(stable);
   initializeReplicaProtocol(vault);
+  expect(recordedVersion()).not.toBe(stableMarker);
   expect(
     vault
       .prepare(
@@ -390,5 +391,4 @@ test('warm initialization skips a stable trigger catalog and repairs schema drif
       )
       .get(),
   ).toEqual({ present: 1 });
-  expect(recordedVersion()).toBe(schemaVersion());
 });

@@ -11,9 +11,14 @@ async function installFakeBridge(page: import('@playwright/test').Page): Promise
       ifNoneMatch: string | null;
       acceptEncoding: string | null;
     }
-    const fixture = window as unknown as { __calls: Call[]; __bridgeOffline: boolean };
+    const fixture = window as unknown as {
+      __calls: Call[];
+      __bridgeOffline: boolean;
+      __bridgeRevoked: boolean;
+    };
     fixture.__calls = [];
     fixture.__bridgeOffline = false;
+    fixture.__bridgeRevoked = false;
     async function gzipBytes(bytes: Uint8Array): Promise<Uint8Array> {
       const stream = new Response(bytes).body!.pipeThrough(new CompressionStream('gzip'));
       return new Uint8Array(await new Response(stream).arrayBuffer());
@@ -25,7 +30,12 @@ async function installFakeBridge(page: import('@playwright/test').Page): Promise
         headers?: Record<string, string>;
       };
       const port = event.ports[0];
-      if (!port || msg?.type !== 'centraid:iroh-request' || !msg.target) return;
+      if (!port) return;
+      if (msg?.type === 'centraid:iroh-claim') {
+        port.postMessage({ type: 'claim' });
+        return;
+      }
+      if (msg?.type !== 'centraid:iroh-request' || !msg.target) return;
       const ifNoneMatch = msg.headers?.['if-none-match'] ?? null;
       (window as unknown as { __calls: Call[] }).__calls.push({
         target: msg.target,
@@ -34,6 +44,11 @@ async function installFakeBridge(page: import('@playwright/test').Page): Promise
       });
       if (fixture.__bridgeOffline) {
         port.postMessage({ type: 'error', message: 'synthetic airplane mode' });
+        return;
+      }
+      if (fixture.__bridgeRevoked) {
+        port.postMessage({ type: 'head', status: 403, headers: {} });
+        port.postMessage({ type: 'end' });
         return;
       }
 
@@ -162,22 +177,62 @@ test.beforeEach(async ({ page }) => {
   await installFakeBridge(page);
 });
 
-test('immutable blobs are served from cache without a second relay round trip', async ({
+test('immutable blobs serve from cache and revalidate authorization in the background', async ({
   page,
 }) => {
   const url = '/__centraid_iroh__/d-bridge-a/centraid/_vault/blobs/sha-fixture';
   const first = await page.evaluate((u) => fetch(u).then((r) => r.text()), url);
   expect(first).toBe('BLOBDATA');
 
-  // Second fetch must hit the blob cache (cache-first) and never reach the bridge.
+  // Second fetch paints from the immutable cache immediately, then checks
+  // that the app session is still authorized in the background.
   const second = await page.evaluate((u) => fetch(u).then((r) => r.text()), url);
   expect(second).toBe('BLOBDATA');
 
-  const calls = await page.evaluate(
-    () => (window as unknown as { __calls: { target: string }[] }).__calls,
-  );
-  const blobCalls = calls.filter((c) => c.target.includes('/_vault/blobs/'));
-  expect(blobCalls.length).toBe(1);
+  await expect
+    .poll(async () => {
+      const calls = await page.evaluate(
+        () => (window as unknown as { __calls: { target: string }[] }).__calls,
+      );
+      return calls.filter((c) => c.target.includes('/_vault/blobs/')).length;
+    })
+    .toBe(2);
+});
+
+test('multiple shell tabs claim one bridge owner before a tunneled request executes', async ({
+  page,
+  context,
+}) => {
+  const second = await context.newPage();
+  await second.goto('/');
+  await installFakeBridge(second);
+
+  const url = '/__centraid_iroh__/d-one-owner/centraid/app-fixture/app.js';
+  expect(await page.evaluate((u) => fetch(u).then((r) => r.text()), url)).toBe('asset-body');
+  const total =
+    (await page.evaluate(
+      () => (window as unknown as { __calls: { target: string }[] }).__calls.length,
+    )) +
+    (await second.evaluate(
+      () => (window as unknown as { __calls: { target: string }[] }).__calls.length,
+    ));
+  expect(total).toBe(1);
+  await second.close();
+});
+
+test('a remote 403 revalidation evicts cached blobs for the revoked device', async ({ page }) => {
+  const url = '/__centraid_iroh__/d-revoked/centraid/_vault/blobs/revoked-sha';
+  expect(await page.evaluate((u) => fetch(u).then((r) => r.text()), url)).toBe('BLOBDATA');
+  await expect.poll(() => page.evaluate(() => caches.has('centraid-tunnel-blobs-v11'))).toBe(true);
+  await page.evaluate(() => {
+    (window as unknown as { __bridgeRevoked: boolean }).__bridgeRevoked = true;
+  });
+
+  // The already-held offline byte may paint once; its online authorization
+  // check must then remove the whole device-scoped tunnel bucket.
+  expect(await page.evaluate((u) => fetch(u).then((r) => r.text()), url)).toBe('BLOBDATA');
+  await expect.poll(() => page.evaluate(() => caches.has('centraid-tunnel-blobs-v11'))).toBe(false);
+  expect(await page.evaluate((u) => fetch(u).then((r) => r.status), url)).toBe(403);
 });
 
 test('prewarmed query bundles replay in airplane mode and revalidate with If-None-Match', async ({
@@ -193,7 +248,7 @@ test('prewarmed query bundles replay in airplane mode and revalidate with If-Non
         })),
       url,
     ),
-  ).toEqual({ body: 'asset-body', cors: '*' });
+  ).toEqual({ body: 'asset-body', cors: 'null' });
 
   // Second fetch is served immediately from cache; a background conditional
   // request is issued via the bridge.
@@ -235,9 +290,10 @@ test('gzip-encoded tunnel responses are decoded before caching', async ({ page }
   await expect
     .poll(() =>
       page.evaluate(async () => {
-        const cache = await caches.open('centraid-tunnel-assets-v10');
+        const cache = await caches.open('centraid-tunnel-assets-v11');
         const key = new URL('/centraid/gzip-fixture/asset.js', location.origin);
         key.searchParams.set('__centraid_scope', 'd-bridge-a');
+        key.searchParams.set('__centraid_app_scope', 'gzip-fixture');
         const cached = await cache.match(key.toString());
         if (!cached) return null;
         return {
@@ -268,7 +324,7 @@ test('remembered app launch, no-store document, and assets replay in airplane mo
   await expect
     .poll(() =>
       page.evaluate(async () => {
-        const cache = await caches.open('centraid-tunnel-assets-v10');
+        const cache = await caches.open('centraid-tunnel-assets-v11');
         const keys = await cache.keys();
         return keys.filter((key) => key.url.includes('__centraid_scope=d-offline')).length;
       }),
@@ -346,18 +402,18 @@ test('unpair purges the tunnel caches but keeps the shell cache', async ({ page 
     '/__centraid_iroh__/d-b/centraid/_vault/blobs/x',
   );
 
-  await expect.poll(() => page.evaluate(() => caches.has('centraid-tunnel-blobs-v10'))).toBe(true);
+  await expect.poll(() => page.evaluate(() => caches.has('centraid-tunnel-blobs-v11'))).toBe(true);
 
   await page.evaluate(() =>
     navigator.serviceWorker.controller?.postMessage({ type: 'centraid:purge-tunnel-cache' }),
   );
 
-  await expect.poll(() => page.evaluate(() => caches.has('centraid-tunnel-blobs-v10'))).toBe(false);
+  await expect.poll(() => page.evaluate(() => caches.has('centraid-tunnel-blobs-v11'))).toBe(false);
   await expect
-    .poll(() => page.evaluate(() => caches.has('centraid-tunnel-assets-v10')))
+    .poll(() => page.evaluate(() => caches.has('centraid-tunnel-assets-v11')))
     .toBe(false);
   // The generic shell cache is not gateway-specific and survives an unpair.
-  expect(await page.evaluate(() => caches.has('centraid-shell-v10'))).toBe(true);
+  expect(await page.evaluate(() => caches.has('centraid-shell-v11'))).toBe(true);
 });
 
 test('a fresh worker install purges stale-version caches', async ({ page }) => {
@@ -376,5 +432,5 @@ test('a fresh worker install purges stale-version caches', async ({ page }) => {
   });
 
   await expect.poll(() => page.evaluate(() => caches.has('centraid-shell-legacy'))).toBe(false);
-  expect(await page.evaluate(() => caches.has('centraid-shell-v10'))).toBe(true);
+  expect(await page.evaluate(() => caches.has('centraid-shell-v11'))).toBe(true);
 });

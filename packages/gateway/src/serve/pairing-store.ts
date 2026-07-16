@@ -27,6 +27,7 @@ interface StoredTicket {
   /** SHA-256 hex of the one-time secret — never the secret itself. */
   secretHash: string;
   vaultId: string;
+  trust: 'full' | 'readonly';
   createdAt: string;
   expiresAt: number;
 }
@@ -108,6 +109,7 @@ export class PairingTicketStore {
               typeof (t as StoredTicket).ticketId === 'string' &&
               typeof (t as StoredTicket).secretHash === 'string' &&
               typeof (t as StoredTicket).vaultId === 'string' &&
+              ((t as StoredTicket).trust === 'full' || (t as StoredTicket).trust === 'readonly') &&
               typeof (t as StoredTicket).expiresAt === 'number',
           )
         : [];
@@ -134,6 +136,7 @@ export class PairingTicketStore {
   mint(
     vaultId: string,
     ttlMs = DEFAULT_TICKET_TTL_MS,
+    trust: 'full' | 'readonly' = 'full',
   ): {
     ticketId: string;
     secret: string;
@@ -147,6 +150,7 @@ export class PairingTicketStore {
       ticketId,
       secretHash: hashSecret(secret),
       vaultId,
+      trust,
       createdAt: new Date().toISOString(),
       expiresAt,
     });
@@ -159,7 +163,10 @@ export class PairingTicketStore {
    * TTL, burn it, and hand back the vault it enrolls into. Every failure
    * is the same `undefined` — a caller learns nothing about WHY.
    */
-  redeem(ticketId: string, secret: string): { vaultId: string } | undefined {
+  redeem(
+    ticketId: string,
+    secret: string,
+  ): { vaultId: string; trust: 'full' | 'readonly' } | undefined {
     this.reloadIfChanged();
     const ticket = this.tickets.find((t) => t.ticketId === ticketId);
     if (!ticket) return undefined;
@@ -172,15 +179,20 @@ export class PairingTicketStore {
     this.tickets = this.tickets.filter((t) => t !== ticket);
     this.persist();
     if (!valid || !fresh) return undefined;
-    return { vaultId: ticket.vaultId };
+    return { vaultId: ticket.vaultId, trust: ticket.trust };
   }
 
   /** Unexpired tickets (admin listing). */
-  listActive(): Array<{ ticketId: string; vaultId: string; expiresAt: number }> {
+  listActive(): Array<{
+    ticketId: string;
+    vaultId: string;
+    trust: 'full' | 'readonly';
+    expiresAt: number;
+  }> {
     this.reloadIfChanged();
     const now = Date.now();
     return this.tickets
       .filter((t) => t.expiresAt > now)
-      .map(({ ticketId, vaultId, expiresAt }) => ({ ticketId, vaultId, expiresAt }));
+      .map(({ ticketId, vaultId, trust, expiresAt }) => ({ ticketId, vaultId, trust, expiresAt }));
   }
 }
