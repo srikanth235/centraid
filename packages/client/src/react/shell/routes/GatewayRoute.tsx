@@ -1,4 +1,4 @@
-import { type JSX, useEffect, useState } from 'react';
+import { type JSX, useCallback, useEffect, useState } from 'react';
 import {
   confirmGatewayRecoveryKit,
   createGatewayDeviceTicket,
@@ -43,6 +43,10 @@ export default function GatewayRoute(): JSX.Element {
   // getSettings() surface (same one saveSettings writes through).
   const [launchAtLogin, setLaunchAtLogin] = useState(false);
   const [savingLaunchAtLogin, setSavingLaunchAtLogin] = useState(false);
+  const streamBackupCustody = useCallback(
+    (onChange: () => void, signal: AbortSignal) => streamStorageCustody(onChange, signal),
+    [],
+  );
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -111,7 +115,7 @@ export default function GatewayRoute(): JSX.Element {
         loadHealth={loadDiagnosticsData}
         streamLogs={streamGatewayLogs}
         loadBackupStatus={getGatewayBackupStatus}
-        streamBackupCustody={(onChange, signal) => streamStorageCustody(() => onChange(), signal)}
+        streamBackupCustody={streamBackupCustody}
         onRunBackupNow={runGatewayBackupNow}
         onVerifyBackupNow={verifyGatewayBackupsNow}
         onUpdateBackupPolicy={updateGatewayBackupPolicy}

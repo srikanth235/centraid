@@ -31,6 +31,8 @@ import { DirectTransferError } from './gateway-client';
 export const FAKE_ENDPOINT = 'https://s3.example.test';
 export const FAKE_BUCKET = 'centraid-blobs';
 export const FAKE_PREFIX = 'vault1';
+/** Path root every presigned part URL below must sit under. */
+export const FAKE_UPLOAD_PREFIX = `/${FAKE_BUCKET}/${FAKE_PREFIX}/tmp/blobs/`;
 export const FAKE_GATEWAY = 'https://gateway.example.test';
 
 /** Thrown to simulate process death; the drainer must never swallow it. */
@@ -261,8 +263,13 @@ export function fakeBlobStoreFetch(): typeof fetch {
           blob_store: {
             kind: 's3',
             endpoint: FAKE_ENDPOINT,
+            // The route spreads the stored settings and then derives the
+            // allowlist root from them (`s3TemporaryUploadPrefix`), so the
+            // wire payload carries both. Mirrored here rather than importing
+            // the vault helper: this app never depends on that package.
             bucket: FAKE_BUCKET,
             prefix: FAKE_PREFIX,
+            allowedUploadPrefix: FAKE_UPLOAD_PREFIX,
           },
         }),
         { status: 200, headers: { 'content-type': 'application/json' } },

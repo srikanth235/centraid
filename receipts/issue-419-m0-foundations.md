@@ -232,6 +232,7 @@ Navigation is now Photos, Apps, and Settings tabs, with the WebView app grid and
 - Give the upload queue its own database file. The replica owns its schema version and rebuilds destructively on mismatch, while a queued upload is unreplicated source-of-truth that must outlive many rebootstraps.
 - Seal device parts with derived rather than random nonces, diverging from the browser edge-upload path, because deterministic sealing makes a replayed part byte-identical and therefore a true no-op after a crash.
 - Write a third sealed-format writer for React Native rather than importing either existing one, since the vault's depends on Node crypto and the browser's on `File` and WebCrypto; drift is prevented by unsealing its output with the vault's own reader in tests.
+- Teach the upload fixture the `allowedUploadPrefix` allowlist shape that #422 moved to, rather than pinning the old `bucket`/`prefix` pair. The fixture exists to run the real `assertGatewayMintedUploadUrl` against a faithful payload, so serving a shape the gateway no longer emits would have made the crash suite pass against a contract that does not exist.
 
 ## Verification
 
@@ -297,3 +298,4 @@ bun run lint:types
 | claude-code-80311240-f7e-1784193691-1 | claude-code | 80311240-f7e2-4eec-a3d3-3c75870a9a4e | #419 | claude-opus-4-8 | 4 | 1296 | 617585 | 416 | 1716 | 0.3273 | 581 | 954569 | 56211158 | 352292 |  |
 | claude-code-80311240-f7e-1784193732-1 | claude-code | 80311240-f7e2-4eec-a3d3-3c75870a9a4e | #419 | claude-opus-4-8 | 2 | 288 | 309542 | 237 | 527 | 0.1625 | 583 | 954857 | 56520700 | 352529 |  |
 | claude-code-80311240-f7e-1784193790-1 | claude-code | 80311240-f7e2-4eec-a3d3-3c75870a9a4e | #419 | claude-opus-4-8 | 10 | 7604 | 1550699 | 4937 | 12551 | 0.9463 | 593 | 962461 | 58071399 | 357466 |  |
+| claude-code-80311240-f7e-1784194698-1 | claude-code | 80311240-f7e2-4eec-a3d3-3c75870a9a4e | #419 | claude-opus-4-8 | 224 | 162564 | 11120918 | 49940 | 212728 | 7.8261 | 817 | 1125025 | 69192317 | 407406 |  |

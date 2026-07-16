@@ -522,7 +522,20 @@ export async function stageFileBytes(file, extra = '', { hash = true } = {}) {
     }
     const direct = await stageDirectFile(file, declaredSha);
     if (direct) return direct;
-    return stageFallbackFile(file, declaredSha);
+    const fallback = await stageFallbackFile(file, declaredSha);
+    if (fallback) return fallback;
+    // Session/direct routes are optional protocol extensions. The permanent
+    // authoritative POST remains the compatibility and backpressure fallback.
+    const legacy = await fetch(`${BLOB_ROUTE}?${q}${extra}`, {
+      method: 'POST',
+      headers: {
+        'content-type': file.type || 'application/octet-stream',
+        'x-content-sha256': declaredSha,
+      },
+      body: file,
+    });
+    if (!legacy.ok) throw new Error(`upload refused (${legacy.status})`);
+    return legacy.json();
   }
   const res = await fetch(`${BLOB_ROUTE}?${q}${extra}`, {
     method: 'POST',

@@ -45,6 +45,16 @@
 // and are expected to be re-sealed by the next replication sweep; there is no
 // dual-format reader on purpose.
 
+import {
+  CBSF_HEADER_BYTES,
+  CBSF_MAGIC,
+  CBSF_TRAILER_BYTES,
+  CBSF_VERSION,
+  cbsfDirectoryAad,
+  cbsfFrameAad,
+  decodeCbsfDirectory,
+  encodeCbsfDirectory,
+} from '@centraid/blob-format';
 import { createCipheriv, createDecipheriv, createHmac } from 'node:crypto';
 import * as zlib from 'node:zlib';
 
@@ -52,14 +62,14 @@ const NONCE_BYTES = 12;
 const TAG_BYTES = 16;
 
 /** Format magic — "Centraid Blob Sealed Frames". */
-const MAGIC = Buffer.from('CBSF', 'ascii');
+const MAGIC = Buffer.from(CBSF_MAGIC, 'ascii');
 /** Bumped whenever the wire layout changes; bound into every AAD. */
-export const SEAL_VERSION = 2;
+export const SEAL_VERSION = CBSF_VERSION;
 
 /** Fixed header: magic (4) + version (1) + raw plaintext SHA-256 (32). */
-export const HEADER_BYTES = MAGIC.length + 1 + 32;
+export const HEADER_BYTES = CBSF_HEADER_BYTES;
 /** Fixed trailer: magic (4) + version (1) + dirLen (4) + frameCount (4). */
-export const TRAILER_BYTES = MAGIC.length + 1 + 4 + 4;
+export const TRAILER_BYTES = CBSF_TRAILER_BYTES;
 
 /**
  * Default plaintext frame size: 4 MiB. The trade-off (issue #405 §1) is frame
@@ -87,12 +97,12 @@ const zstdDecompress = (zlib as { zstdDecompressSync?: (b: Buffer) => Buffer }).
 
 /** AAD pinning one frame to its blob, version, index and the total count. */
 function frameAad(sha: string, index: number, frameCount: number): Buffer {
-  return Buffer.from(`blob:${sha}:v${SEAL_VERSION}:f${index}/${frameCount}`, 'utf8');
+  return Buffer.from(cbsfFrameAad(sha, index, frameCount), 'utf8');
 }
 
 /** AAD pinning the directory to its blob, version and frame count. */
 function dirAad(sha: string, frameCount: number): Buffer {
-  return Buffer.from(`blobdir:${sha}:v${SEAL_VERSION}:n${frameCount}`, 'utf8');
+  return Buffer.from(cbsfDirectoryAad(sha, frameCount), 'utf8');
 }
 
 /**
@@ -102,12 +112,20 @@ function dirAad(sha: string, frameCount: number): Buffer {
  * making a re-seal byte-identical after a crash. That lets already-confirmed
  * provider parts coexist safely with newly generated parts on resume.
  */
-function nonceFor(key: Buffer, aad: Buffer): Buffer {
-  return createHmac('sha256', key)
-    .update('cbsf-nonce\0')
-    .update(aad)
-    .digest()
-    .subarray(0, NONCE_BYTES);
+function nonceFor(key: Buffer, aad: Buffer, plaintext: Buffer): Buffer {
+  return (
+    createHmac('sha256', key)
+      .update('cbsf-nonce\0')
+      .update(aad)
+      // A sha can legitimately be sealed by both the store-only streaming path
+      // and the compressed outbox path. Binding the actual AEAD plaintext keeps
+      // those encryptions retry-stable without ever reusing a GCM nonce for
+      // different bytes under the same content key.
+      .update('\0')
+      .update(createHmac('sha256', key).update(plaintext).digest())
+      .digest()
+      .subarray(0, NONCE_BYTES)
+  );
 }
 
 /**
@@ -213,7 +231,7 @@ function sealFramePayload(
 ): Buffer {
   const body = Buffer.concat([Buffer.from([algoId]), payload]);
   const aad = frameAad(sha, index, frameCount);
-  const nonce = nonceFor(key, aad);
+  const nonce = nonceFor(key, aad, body);
   const cipher = createCipheriv('aes-256-gcm', key, nonce);
   cipher.setAAD(aad);
   const ct = Buffer.concat([cipher.update(body), cipher.final()]);
@@ -252,20 +270,9 @@ export function sealDirectory(
   totalSize: number,
   sealedLens: number[],
 ): Buffer {
-  const plain = Buffer.alloc(4 + 8 + 4 + sealedLens.length * 4);
-  let off = 0;
-  plain.writeUInt32BE(frameSize, off);
-  off += 4;
-  plain.writeBigUInt64BE(BigInt(totalSize), off);
-  off += 8;
-  plain.writeUInt32BE(frameCount, off);
-  off += 4;
-  for (const len of sealedLens) {
-    plain.writeUInt32BE(len, off);
-    off += 4;
-  }
+  const plain = Buffer.from(encodeCbsfDirectory(frameSize, totalSize, sealedLens));
   const aad = dirAad(sha, frameCount);
-  const nonce = nonceFor(key, aad);
+  const nonce = nonceFor(key, aad, plain);
   const cipher = createCipheriv('aes-256-gcm', key, nonce);
   cipher.setAAD(aad);
   const ct = Buffer.concat([cipher.update(plain), cipher.final()]);
@@ -297,21 +304,10 @@ export function openDirectory(
   decipher.setAAD(dirAad(sha, frameCount));
   decipher.setAuthTag(tag);
   const plain = Buffer.concat([decipher.update(ct), decipher.final()]);
-  let off = 0;
-  const frameSize = plain.readUInt32BE(off);
-  off += 4;
-  const totalSize = Number(plain.readBigUInt64BE(off));
-  off += 8;
-  const storedCount = plain.readUInt32BE(off);
-  off += 4;
-  if (storedCount !== frameCount) throw new Error('sealed directory: frame-count mismatch');
-  const sealedLens: number[] = [];
+  const { frameSize, totalSize, sealedLens } = decodeCbsfDirectory(plain, frameCount);
   const offsets: number[] = [];
   let cursor = HEADER_BYTES;
-  for (let i = 0; i < frameCount; i++) {
-    const len = plain.readUInt32BE(off);
-    off += 4;
-    sealedLens.push(len);
+  for (const len of sealedLens) {
     offsets.push(cursor);
     cursor += len;
   }

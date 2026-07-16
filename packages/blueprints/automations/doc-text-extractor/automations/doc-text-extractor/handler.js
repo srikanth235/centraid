@@ -146,6 +146,13 @@ export default async ({ ctx, log }) => {
     }
 
     if (hasText) {
+      const prior = await ctx.vault.read({
+        entity: 'sync.external_entity',
+        where: [{ column: 'external_id', op: 'eq', value: `${item.content_id}:summary` }],
+        limit: 1,
+        purpose: PURPOSE,
+      });
+      if ((prior.rows ?? []).length > 0) return;
       // Summarize from the text variant — no bytes leave beyond the
       // already-extracted text, size-bounded by the content surface.
       const out = await ctx.agent({

@@ -12,7 +12,7 @@ import { DatabaseSync } from 'node:sqlite';
 import crypto, { randomBytes, createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import { sealAad, unsealValue } from '@centraid/vault';
+import { ReplicaIndex, sealAad, unsealValue } from '@centraid/vault';
 import { openVaultPlane, type VaultPlane } from '../serve/vault-plane.js';
 import { WorktreeStore } from '../worktree-store/worktree-store.js';
 import { run } from '../worktree-store/git.js';
@@ -306,6 +306,7 @@ test('a remote-primary snapshot carries only durable pending-offsite outbox blob
   // Simulate the provider HEAD-confirmation path. The local file remains
   // resident, but the durable outbox no longer considers it snapshot material.
   plane.db.blobTransfers.state.completeOutbox(remoteSha);
+  new ReplicaIndex(plane.db.vault).mark(remoteSha, remoteBytes.length);
   plane.walTick();
   const entries = await assembleSourceEntries({ plane, stagingDir, log: silentLogger });
   const blobPaths = entries.filter((entry) => entry.kind === 'blob').map((entry) => entry.path);

@@ -56,6 +56,8 @@ export const SHARED_ASSET_FILES = new Set([
   'kit.js',
   'kit.css',
   'elements.js',
+  'blob-format.js',
+  'video-frame.js',
   'edge-upload.js',
   'pdf.min.mjs',
   'pdf.worker.min.mjs',

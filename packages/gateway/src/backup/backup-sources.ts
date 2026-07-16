@@ -10,7 +10,14 @@
 
 import { existsSync, promises as fs } from 'node:fs';
 import path from 'node:path';
-import { readBlobStoreSettings, readSealKeyFingerprint, sealKeyFileFor } from '@centraid/vault';
+import {
+  archivedSegmentShas,
+  liveBlobShas,
+  readBlobStoreSettings,
+  readSealKeyFingerprint,
+  ReplicaIndex,
+  sealKeyFileFor,
+} from '@centraid/vault';
 import { WAL_DB_FILES, type EngineLogger, type SourceEntry } from '@centraid/backup';
 import { GitError, run } from '../worktree-store/git.js';
 import type { VaultPlane } from '../serve/vault-plane.js';
@@ -186,11 +193,19 @@ export async function assembleSourceEntries(opts: AssembleOptions): Promise<Sour
 
   // (b) Blob CAS, read IN PLACE. In remote-primary mode provider-confirmed
   // objects are already the primary copy; re-snapshotting the whole local
-  // cache defeats bounded storage. Only the durable pending-offsite outbox
-  // joins the snapshot, closing the crash window before its HEAD confirmation.
+  // cache defeats bounded storage. Pending outbox bytes and live local bytes
+  // without replica evidence join the snapshot. The latter covers synchronous
+  // archive/mint-spill ingress before the custody sweep has enqueued it.
   // Local-only mode still carries the complete resident CAS.
   const remotePrimary = readBlobStoreSettings(plane.db.vault).kind === 's3';
-  const pending = remotePrimary ? new Set(plane.db.blobTransfers.pendingSnapshotShas()) : undefined;
+  let pending: Set<string> | undefined;
+  if (remotePrimary) {
+    pending = new Set(plane.db.blobTransfers.pendingSnapshotShas());
+    const replicated = new ReplicaIndex(plane.db.vault).all();
+    const live = liveBlobShas(plane.db.vault);
+    for (const sha of archivedSegmentShas(plane.db.journal)) live.add(sha);
+    for (const sha of live) if (!replicated.has(sha)) pending.add(sha);
+  }
   entries.push(...(await listBlobEntries(plane.dir, pending)));
 
   // (c) Code store bundle.

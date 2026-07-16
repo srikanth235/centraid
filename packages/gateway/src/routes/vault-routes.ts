@@ -63,7 +63,9 @@ import {
   mediaLocationPolicy,
   readBlobStoreSettings,
   readEnrichSettings,
+  s3TemporaryUploadPrefix,
   updateBlobStoreSettings,
+  updateBackupPolicy,
   updateEnrichSettings,
   type EnrichTier,
 } from '@centraid/vault';
@@ -181,8 +183,19 @@ export function makeVaultRouteHandler(
       // (`media.location`: keep | strip).
       if (segments[0] === 'blob-store' && segments.length === 1) {
         if (method === 'GET') {
+          const settings = readBlobStoreSettings(plane.db.vault);
           return sendJson(res, 200, {
-            blob_store: readBlobStoreSettings(plane.db.vault),
+            blob_store: {
+              ...settings,
+              ...(settings.kind === 's3' && settings.bucket
+                ? {
+                    allowedUploadPrefix: s3TemporaryUploadPrefix({
+                      bucket: settings.bucket,
+                      ...(settings.prefix ? { prefix: settings.prefix } : {}),
+                    }),
+                  }
+                : {}),
+            },
             media_location: mediaLocationPolicy(plane.db),
           });
         }
@@ -190,6 +203,8 @@ export function makeVaultRouteHandler(
           const priorBlobStore = readBlobStoreSettings(plane.db.vault);
           const body = await readJson(req);
           const blobStore = body.blob_store;
+          const policyPatch: { storageClass?: string | null; throttleBytesPerSec?: number | null } =
+            {};
           if (blobStore !== undefined && blobStore !== null) {
             if (typeof blobStore !== 'object' || Array.isArray(blobStore)) {
               return sendJson(res, 400, {
@@ -212,7 +227,10 @@ export function makeVaultRouteHandler(
             // tiers per clawgnition#118), so the endpoint, not this route, is
             // the authority on which names it accepts.
             const storageClass = (blobStore as Record<string, unknown>).storageClass;
-            if (storageClass !== undefined && storageClass !== null) {
+            if (storageClass === null) {
+              policyPatch.storageClass = null;
+              delete (blobStore as Record<string, unknown>).storageClass;
+            } else if (storageClass !== undefined) {
               if (typeof storageClass !== 'string' || storageClass.trim() === '') {
                 return sendJson(res, 400, {
                   error: 'bad_request',
@@ -220,6 +238,22 @@ export function makeVaultRouteHandler(
                 });
               }
               (blobStore as Record<string, unknown>).storageClass = storageClass.trim();
+              policyPatch.storageClass = storageClass.trim();
+              delete (blobStore as Record<string, unknown>).storageClass;
+            }
+            const throttle = (blobStore as Record<string, unknown>).throttleBytesPerSec;
+            if (throttle === null) {
+              policyPatch.throttleBytesPerSec = null;
+              delete (blobStore as Record<string, unknown>).throttleBytesPerSec;
+            } else if (throttle !== undefined) {
+              if (typeof throttle !== 'number' || !Number.isFinite(throttle) || throttle <= 0) {
+                return sendJson(res, 400, {
+                  error: 'bad_request',
+                  message: 'blob_store.throttleBytesPerSec must be a positive number',
+                });
+              }
+              policyPatch.throttleBytesPerSec = throttle;
+              delete (blobStore as Record<string, unknown>).throttleBytesPerSec;
             }
           }
           const mediaLocation = body.media_location;
@@ -296,17 +330,32 @@ export function makeVaultRouteHandler(
             blobStorePatch = { ...blobStorePatch, encrypt: true };
           }
 
-          const attachingRemote = priorBlobStore.kind !== 's3' && blobStorePatch?.['kind'] === 's3';
+          const remoteIdentity = (value: Record<string, unknown>): string =>
+            JSON.stringify(
+              ['connectionId', 'endpoint', 'region', 'bucket', 'prefix'].map((key) => value[key]),
+            );
+          const attachingRemote =
+            blobStorePatch?.['kind'] === 's3' &&
+            (priorBlobStore.kind !== 's3' ||
+              remoteIdentity(priorBlobStore as unknown as Record<string, unknown>) !==
+                remoteIdentity(blobStorePatch));
           // Seed the outbox first: a crash before the settings write merely
           // leaves harmless obligations; a crash after it can never omit old
           // local bytes from remote-primary custody/snapshots.
-          if (attachingRemote) plane.db.blobTransfers.enqueueExistingLocal();
+          if (attachingRemote) {
+            // Replica evidence is scoped to the old target even though the
+            // table itself has no target column. Clear it before seeding new
+            // obligations so every resident byte is copied to the new store.
+            plane.db.blobTransfers.resetRemoteEvidence();
+            plane.db.blobTransfers.enqueueExistingLocal();
+          }
           updateBlobStoreSettings(plane.db, {
             ...(blobStorePatch !== undefined ? { blob_store: blobStorePatch } : {}),
             ...(mediaLocation !== undefined
               ? { media_location: mediaLocation as 'keep' | 'strip' | null }
               : {}),
           });
+          if (Object.keys(policyPatch).length > 0) updateBackupPolicy(plane.db.vault, policyPatch);
           if (attachingRemote) plane.db.blobTransfers.kickOutbox();
           return sendJson(res, 200, {
             blob_store: readBlobStoreSettings(plane.db.vault),

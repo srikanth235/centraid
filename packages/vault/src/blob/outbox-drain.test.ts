@@ -271,3 +271,59 @@ test('existing corrupt, zero, or size-stale provider objects are replaced before
   }
   expect(puts).toBe(3);
 });
+
+test('close fencing is rechecked after remote verification before SQLite settlement', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'blob-outbox-close-fence-'));
+  cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
+  const db: VaultDb = openVaultDb({ dir });
+  cleanups.push(() => db.close());
+  await db.blobTransfers.close();
+  const local = new FsBlobStore(path.join(dir, 'blobs'));
+  const cache = new BlobCache(db.vault, local, {
+    qosCooldownMs: 0,
+    settings: () => ({ budgetBytes: Number.MAX_SAFE_INTEGER }),
+  });
+  const state = new BlobTransferState(db.vault);
+  const plain = Buffer.from('provider-confirmed bytes whose range read outlives close');
+  const sha = sha256OfBytes(plain);
+  local.putSync(sha, plain);
+  state.enqueue(sha, plain.length);
+
+  let settle = true;
+  let verificationStarted!: () => void;
+  let releaseVerification!: () => void;
+  const started = new Promise<void>((resolve) => (verificationStarted = resolve));
+  const release = new Promise<void>((resolve) => (releaseVerification = resolve));
+  const store: BlobStore = {
+    kind: 'close-fence-fake',
+    put: async () => undefined,
+    get: async (_targetSha, range) => {
+      verificationStarted();
+      await release;
+      return rangeOf(plain, range);
+    },
+    has: async () => true,
+    delete: async () => undefined,
+    list: async () => [sha],
+    stat: async () => ({ size: plain.length }),
+  };
+
+  const draining = drainOutboxRow(
+    {
+      state,
+      local,
+      cache,
+      remote: () => ({ store }),
+      onReplicated: () => undefined,
+      settlementAllowed: () => settle,
+    },
+    state.outbox(sha)!,
+  );
+  await started;
+  settle = false;
+  releaseVerification();
+  await draining;
+
+  expect(state.outbox(sha)).not.toBeNull();
+  expect(cache.replica.has(sha)).toBe(false);
+});

@@ -56,6 +56,8 @@ const PKG = path.resolve(import.meta.dirname, '..');
 const SHARED = [
   'kit.js',
   'elements.js',
+  'blob-format.js',
+  'video-frame.js',
   'edge-upload.js',
   'pdf.min.mjs',
   'pdf.worker.min.mjs',

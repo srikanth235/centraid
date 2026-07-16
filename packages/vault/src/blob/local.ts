@@ -14,6 +14,7 @@ import {
   fsyncSync,
   mkdirSync,
   openSync,
+  readSync,
   readdirSync,
   readFileSync,
   renameSync,
@@ -87,6 +88,24 @@ export class FsBlobStore implements LocalBlobStore {
 
   getSync(sha: string, range?: BlobRange): Buffer | null {
     const file = this.fileFor(sha);
+    if (range) {
+      try {
+        const size = statSync(file).size;
+        const resolved = resolveRange(size, range);
+        if (!resolved) return null;
+        const bytes = Buffer.alloc(resolved.end - resolved.start + 1);
+        const fd = openSync(file, 'r');
+        try {
+          readSync(fd, bytes, 0, bytes.length, resolved.start);
+        } finally {
+          closeSync(fd);
+        }
+        return bytes;
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+        throw err;
+      }
+    }
     let whole: Buffer;
     try {
       whole = readFileSync(file);
@@ -94,9 +113,7 @@ export class FsBlobStore implements LocalBlobStore {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
       throw err;
     }
-    if (!range) return whole;
-    const r = resolveRange(whole.length, range);
-    return r ? whole.subarray(r.start, r.end + 1) : null;
+    return whole;
   }
 
   hasSync(sha: string): boolean {

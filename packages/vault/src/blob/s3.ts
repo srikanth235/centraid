@@ -1,4 +1,3 @@
-/* eslint-disable max-classes-per-file -- throttle and S3 driver share one request pipeline (#408) */
 // The S3-compatible remote driver (issue #296 phase 3). Talks AWS Signature
 // v4 over plain fetch — no SDK dependency — so any S3-compatible endpoint
 // (AWS, MinIO, R2, B2, Garage) works with `{endpoint, bucket, region,
@@ -11,7 +10,7 @@
 // corrupt identity.
 
 import { assertSha, type BlobRange, type BlobStat, type BlobStore } from './store.js';
-import { signS3Request } from './sigv4.js';
+import { S3RequestPipeline } from './s3-pipeline.js';
 
 export interface S3Credentials {
   accessKeyId: string;
@@ -67,46 +66,6 @@ export const MULTIPART_THRESHOLD_BYTES = 32 * 1024 * 1024;
 /** Multipart part size — S3's own minimum is 5 MiB; this bounds streaming memory to roughly one part. */
 const MULTIPART_PART_SIZE_BYTES = 16 * 1024 * 1024;
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * A plain token bucket: refills continuously at `ratePerSec`, `consume`
- * blocks until enough tokens exist (or the request is bigger than the whole
- * per-second budget, in which case it drains what's there and proceeds —
- * this paces sustained throughput, it isn't a hard per-call cap).
- */
-class TokenBucket {
-  private tokens: number;
-  private lastRefillMs: number;
-
-  constructor(private readonly ratePerSec: number) {
-    this.tokens = ratePerSec;
-    this.lastRefillMs = Date.now();
-  }
-
-  async consume(bytes: number): Promise<void> {
-    if (this.ratePerSec <= 0 || bytes <= 0) return;
-    for (;;) {
-      this.refill();
-      if (this.tokens >= bytes || bytes >= this.ratePerSec) {
-        this.tokens = Math.max(0, this.tokens - bytes);
-        return;
-      }
-      const waitMs = ((bytes - this.tokens) / this.ratePerSec) * 1000;
-      await delay(Math.min(Math.max(waitMs, 10), 1000));
-    }
-  }
-
-  private refill(): void {
-    const now = Date.now();
-    const elapsedSec = (now - this.lastRefillMs) / 1000;
-    this.lastRefillMs = now;
-    this.tokens = Math.min(this.ratePerSec, this.tokens + elapsedSec * this.ratePerSec);
-  }
-}
-
 async function streamToBuffer(source: NodeJS.ReadableStream): Promise<Buffer> {
   const chunks: Buffer[] = [];
   for await (const chunk of source as AsyncIterable<Buffer | string>) {
@@ -145,25 +104,12 @@ async function* chunkReadable(
   if (bufferedLen > 0) yield Buffer.concat(buffered, bufferedLen);
 }
 
-/** Retry defaults (issue #405 §4): 3 tries total, ~200ms→~2s jittered backoff. */
-const RETRY_ATTEMPTS_DEFAULT = 3;
-const BACKOFF_BASE_MS = 200;
-const BACKOFF_CAP_MS = 2000;
-
 export class S3BlobStore implements BlobStore {
   readonly kind = 's3';
-  private readonly base: URL;
-  private readonly throttle: TokenBucket | undefined;
-  private readonly retryAttempts: number;
-  private readonly sleepImpl: (ms: number) => Promise<void>;
+  private readonly pipeline: S3RequestPipeline;
 
   constructor(private readonly options: S3BlobStoreOptions) {
-    this.base = new URL(options.endpoint);
-    this.throttle = options.throttleBytesPerSec
-      ? new TokenBucket(options.throttleBytesPerSec)
-      : undefined;
-    this.retryAttempts = Math.max(1, options.retryAttempts ?? RETRY_ATTEMPTS_DEFAULT);
-    this.sleepImpl = options.sleepImpl ?? delay;
+    this.pipeline = new S3RequestPipeline(options);
   }
 
   private keyFor(sha: string): string {
@@ -181,25 +127,7 @@ export class S3BlobStore implements BlobStore {
     key: string,
     opts: { body?: Buffer; headers?: Record<string, string>; query?: Record<string, string> } = {},
   ): Promise<Response> {
-    const creds = await this.options.credentials();
-    // Path-style addressing (`/bucket/key`) — the '' key is the bucket root
-    // (ListObjectsV2). SigV4 signing lives in sigv4.ts (issue #405 §4 split).
-    const signed = signS3Request({
-      method,
-      base: this.base,
-      path: key === '' ? this.options.bucket : `${this.options.bucket}/${key}`,
-      region: this.options.region ?? 'us-east-1',
-      credentials: creds,
-      ...(opts.body ? { body: opts.body } : {}),
-      ...(opts.headers ? { headers: opts.headers } : {}),
-      ...(opts.query ? { query: opts.query } : {}),
-    });
-    const fetchImpl = this.options.fetchImpl ?? fetch;
-    return fetchImpl(signed.url, {
-      method,
-      headers: signed.headers,
-      body: opts.body ? new Uint8Array(opts.body) : undefined,
-    });
+    return this.pipeline.request(method, key, opts);
   }
 
   /**
@@ -243,42 +171,11 @@ export class S3BlobStore implements BlobStore {
     key: string,
     opts: { body?: Buffer; headers?: Record<string, string>; query?: Record<string, string> } = {},
   ): Promise<Response> {
-    let lastErr: unknown;
-    for (let attempt = 1; attempt <= this.retryAttempts; attempt += 1) {
-      const last = attempt === this.retryAttempts;
-      let res: Response;
-      try {
-        res = await this.request(method, key, opts);
-      } catch (err) {
-        // A fetch/network fault never reached the server — always retryable.
-        lastErr = err;
-        if (last) throw err;
-        await this.backoff(attempt);
-        continue;
-      }
-      if (!last && (res.status === 429 || res.status >= 500)) {
-        // Drain the body so the underlying socket can be reused (keep-alive),
-        // then back off. The caller never sees this response.
-        await res.text().catch(() => undefined);
-        await this.backoff(attempt);
-        continue;
-      }
-      // Definitive answer (incl. a 5xx on the final try) — hand it back so the
-      // caller applies its own ok/404/206 logic and surfaces the status.
-      return res;
-    }
-    // Unreachable: the loop either returns a Response or throws above.
-    throw lastErr ?? new Error(`s3 ${method} ${key}: retries exhausted`);
-  }
-
-  /** Exponential backoff with full jitter (issue #405 §4), injectable sleep. */
-  private async backoff(attempt: number): Promise<void> {
-    const ceiling = Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * 2 ** (attempt - 1));
-    await this.sleepImpl(Math.random() * ceiling);
+    return this.pipeline.send(method, key, opts);
   }
 
   async put(sha: string, bytes: Buffer): Promise<void> {
-    if (this.throttle) await this.throttle.consume(bytes.length);
+    await this.pipeline.pace(bytes.length);
     const res = await this.send('PUT', this.keyFor(sha), {
       body: bytes,
       headers: {
@@ -329,22 +226,10 @@ export class S3BlobStore implements BlobStore {
   }
 
   private async createMultipartUpload(key: string): Promise<string> {
-    const res = await this.send('POST', key, {
-      query: { uploads: '' },
-      // The multipart twin of `put`'s storage class (issue #405 §6): S3 fixes
-      // the class at CreateMultipartUpload, so it goes here and nowhere else
-      // in the multipart dance (uploadPart/complete never carry it).
-      ...(this.options.storageClass
-        ? { headers: { 'x-amz-storage-class': this.options.storageClass } }
-        : {}),
-    });
-    if (!res.ok) {
-      throw new Error(`s3 create-multipart-upload: ${res.status} ${await res.text()}`);
-    }
-    const xml = await res.text();
-    const uploadId = /<UploadId>([^<]+)<\/UploadId>/.exec(xml)?.[1];
-    if (!uploadId) throw new Error('s3 create-multipart-upload: response carried no UploadId');
-    return uploadId;
+    return this.pipeline.beginMultipart(
+      key,
+      this.options.storageClass ? { 'x-amz-storage-class': this.options.storageClass } : undefined,
+    );
   }
 
   private async uploadPart(
@@ -353,18 +238,7 @@ export class S3BlobStore implements BlobStore {
     partNumber: number,
     body: Buffer,
   ): Promise<string> {
-    if (this.throttle) await this.throttle.consume(body.length);
-    const res = await this.send('PUT', key, {
-      body,
-      query: { partNumber: String(partNumber), uploadId },
-    });
-    if (!res.ok) {
-      throw new Error(`s3 upload-part ${partNumber}: ${res.status} ${await res.text()}`);
-    }
-    // Some path-style test doubles don't echo an ETag — fall back to a
-    // synthetic one keyed by part number so `completeMultipartUpload`'s XML
-    // still has *something* per part (real S3 always sets this header).
-    return res.headers.get('etag') ?? `"part-${partNumber}"`;
+    return this.pipeline.uploadPart(key, uploadId, partNumber, body);
   }
 
   private async completeMultipartUpload(
@@ -372,23 +246,11 @@ export class S3BlobStore implements BlobStore {
     uploadId: string,
     parts: readonly { partNumber: number; etag: string }[],
   ): Promise<void> {
-    const body = Buffer.from(
-      `<CompleteMultipartUpload>${parts
-        .map((p) => `<Part><PartNumber>${p.partNumber}</PartNumber><ETag>${p.etag}</ETag></Part>`)
-        .join('')}</CompleteMultipartUpload>`,
-      'utf8',
-    );
-    const res = await this.send('POST', key, { body, query: { uploadId } });
-    if (!res.ok) {
-      throw new Error(`s3 complete-multipart-upload: ${res.status} ${await res.text()}`);
-    }
+    await this.pipeline.completeMultipart(key, uploadId, parts);
   }
 
   private async abortMultipartUpload(key: string, uploadId: string): Promise<void> {
-    const res = await this.request('DELETE', key, { query: { uploadId } });
-    if (!res.ok && res.status !== 404) {
-      throw new Error(`s3 abort-multipart-upload: ${res.status} ${await res.text()}`);
-    }
+    await this.pipeline.abortMultipart(key, uploadId);
   }
 
   async get(sha: string, range?: BlobRange): Promise<Buffer | null> {

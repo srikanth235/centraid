@@ -110,6 +110,8 @@ export function reconcileCasInventory(opts: {
   live: Set<string>;
   indexed: Set<string>;
   unmark: (sha: string) => void;
+  /** Marks created after inventory began cannot be disproved by that listing. */
+  recentlyIndexed?: ReadonlySet<string>;
 }): StoreReconciliationState {
   const remote = new Set<string>();
   const unknownKeys: string[] = [];
@@ -119,7 +121,9 @@ export function reconcileCasInventory(opts: {
     if (sha) remote.add(sha);
     else unknownKeys.push(object.key);
   }
-  const missing = [...opts.indexed].filter((sha) => !remote.has(sha));
+  const missing = [...opts.indexed].filter(
+    (sha) => !remote.has(sha) && !opts.recentlyIndexed?.has(sha),
+  );
   for (const sha of missing) opts.unmark(sha);
   const orphans = [...remote].filter((sha) => !opts.live.has(sha));
   return baseStore(opts.collection, missing, [...orphans, ...unknownKeys]);
@@ -271,34 +275,40 @@ async function analyzeBackupInventory(opts: {
   const expectedMarkerKeys = new Set<string>();
   const unreadable: string[] = [];
   const store = await opts.provider.openDataPlane(opts.targetId, 'backup', 'read');
-  for (const row of liveRows) {
-    if (!liveKeys.has(row.manifestKey)) continue;
-    try {
-      const manifest = openManifest(
-        await store.get(row.manifestKey),
-        opts.keyring,
-        opts.vaultId,
-        row.manifestHash,
-      );
-      for (const chunk of manifest.public.chunkIndex) expected.add(`chunks/${chunk.id}`);
-      const vault = manifest.entries.find((entry) => entry.path === 'vault.db');
-      const journal = manifest.entries.find((entry) => entry.path === 'journal.db');
-      if (vault?.walGeneration) generations.add(vault.walGeneration);
-      if (journal?.walGeneration) generations.add(journal.walGeneration);
-      const tip = vault?.walTipTickMs ?? journal?.walTipTickMs;
-      if (vault?.walGeneration && journal?.walGeneration && tip !== undefined) {
-        expectedMarkerKeys.add(
-          walPairMarkerKey({
-            vaultGeneration: vault.walGeneration,
-            journalGeneration: journal.walGeneration,
-            tickMs: tip,
-          }),
+  let nextManifest = 0;
+  const readManifest = async (): Promise<void> => {
+    for (;;) {
+      const row = liveRows[nextManifest++];
+      if (!row) return;
+      if (!liveKeys.has(row.manifestKey)) continue;
+      try {
+        const manifest = openManifest(
+          await store.get(row.manifestKey),
+          opts.keyring,
+          opts.vaultId,
+          row.manifestHash,
         );
+        for (const chunk of manifest.public.chunkIndex) expected.add(`chunks/${chunk.id}`);
+        const vault = manifest.entries.find((entry) => entry.path === 'vault.db');
+        const journal = manifest.entries.find((entry) => entry.path === 'journal.db');
+        if (vault?.walGeneration) generations.add(vault.walGeneration);
+        if (journal?.walGeneration) generations.add(journal.walGeneration);
+        const tip = vault?.walTipTickMs ?? journal?.walTipTickMs;
+        if (vault?.walGeneration && journal?.walGeneration && tip !== undefined) {
+          expectedMarkerKeys.add(
+            walPairMarkerKey({
+              vaultGeneration: vault.walGeneration,
+              journalGeneration: journal.walGeneration,
+              tickMs: tip,
+            }),
+          );
+        }
+      } catch (err) {
+        unreadable.push(`${row.manifestKey}: ${err instanceof Error ? err.message : String(err)}`);
       }
-    } catch (err) {
-      unreadable.push(`${row.manifestKey}: ${err instanceof Error ? err.message : String(err)}`);
     }
-  }
+  };
+  await Promise.all(Array.from({ length: Math.min(8, liveRows.length) }, readManifest));
   for (const [pair, tickMs] of Object.entries(opts.walMarkerTips ?? {})) {
     const [vaultGeneration, journalGeneration] = [pair.slice(0, 32), pair.slice(33)];
     if (!vaultGeneration || !journalGeneration) continue;
@@ -401,10 +411,14 @@ export async function runBackupReconciliation(opts: {
     const live = liveBlobShas(opts.db.vault);
     for (const sha of archivedSegmentShas(opts.db.journal)) live.add(sha);
     const index = new ReplicaIndex(opts.db.vault);
+    const rows = index.rows();
     cas = reconcileCasInventory({
       collection: casResult.collection,
       live,
-      indexed: index.all(),
+      indexed: new Set(rows.map((row) => row.sha256)),
+      recentlyIndexed: new Set(
+        rows.filter((row) => row.replicatedAt >= opts.checkedAt).map((row) => row.sha256),
+      ),
       unmark: (sha) => index.unmark(sha),
     });
     if (casResult.authenticatedFailures?.length) {

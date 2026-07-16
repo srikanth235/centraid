@@ -16,15 +16,18 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
+    "vendor:browser-shared": "node scripts/vendor-browser-shared.mjs",
     "vendor:pdfjs": "node scripts/vendor-pdfjs.mjs",
-    "build:manifest": "bun run vendor:pdfjs && node scripts/build-manifest.mjs",
+    "vendor:assets": "bun run vendor:browser-shared && bun run vendor:pdfjs",
+    "build:manifest": "bun run vendor:assets && node scripts/build-manifest.mjs",
     "build": "bun run build:manifest && tsc -p tsconfig.build.json",
     "lint": "node scripts/lint-apps.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "bun run vendor:pdfjs && vitest run",
+    "test": "bun run vendor:assets && vitest run",
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@centraid/blob-format": "workspace:*",
     "@centraid/design-tokens": "workspace:*"
   },
   "devDependencies": {
