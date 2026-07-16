@@ -1,6 +1,6 @@
 .panel {
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-xl);
   background: var(--bg-elev);
   overflow: hidden;
 }
@@ -92,22 +92,6 @@
   align-items: center;
   gap: 6px;
 }
-.removeBtn {
-  color: var(--danger);
-  border-color: color-mix(in oklab, var(--danger) 30%, var(--line));
-}
-.removeBtn:hover {
-  background: color-mix(in oklab, var(--danger) 10%, transparent);
-  color: var(--danger);
-}
-
-.empty {
-  padding: 20px 16px;
-  font-size: 12px;
-  color: var(--ink-3);
-  font-style: italic;
-}
-
 /* Add-connection wizard — an inline expanding card under the list, not a
    modal (fewer moving parts; there's no reason to block the rest of the
    page while filling this in). */
@@ -115,7 +99,7 @@
   margin-top: 14px;
   padding: 16px;
   border: 0.5px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-xl);
   background: color-mix(in oklab, var(--bg-sunken) 60%, transparent);
   display: flex;
   flex-direction: column;
@@ -158,28 +142,6 @@
   border-color: color-mix(in srgb, var(--accent) 55%, transparent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
 }
-.select {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 9px 32px 9px 12px;
-  border: 1px solid var(--line-strong);
-  border-radius: 8px;
-  background-color: var(--bg-sunken);
-  color: var(--ink);
-  font-size: 13px;
-  cursor: pointer;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a8f98' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 11px center;
-}
-.select:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 15%, transparent);
-}
-
 .setupGuide {
   display: flex;
   flex-direction: column;

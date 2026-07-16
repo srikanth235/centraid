@@ -1,0 +1,68 @@
+/* Select — the one <select> look (appearance-none shell + chevron).
+   Imported by every screen that renders a styled select; the deltas that
+   used to justify per-screen copies (a 1px padding difference, a 2px
+   chevron inset) were drift, not intent.
+
+   The chevron is a MASK, not a `background-image` data-URI. A data-URI SVG
+   is a separate document: `currentColor` and `var()` do not reach inside
+   it, so a background-image glyph can only ever carry a hard-coded hex —
+   which is exactly how the old copies froze a `stroke='%238a8f98'` grey
+   that ignored the theme. Masking tints the same path with a real token.
+
+   `.selectWrap` exists only to host the `::after`: a <select> is a replaced
+   element and does not render pseudo-elements of its own. It is
+   block-level `flex`, so it fills a labeled field, and content-sized when
+   it is itself a flex item (a bare select in a row of controls). */
+
+.selectWrap {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+.selectWrap[data-disabled='true']::after {
+  opacity: 0.5;
+}
+.selectWrap::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 11px;
+  width: 12px;
+  height: 12px;
+  transform: translateY(-50%);
+  background: var(--ink-3);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")
+    center / 12px 12px no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")
+    center / 12px 12px no-repeat;
+  pointer-events: none;
+}
+.select {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 32px 9px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background-color: var(--bg-sunken);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.select:hover:not(:disabled) {
+  border-color: var(--ink-4);
+}
+.select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 15%, transparent);
+}
+.select:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

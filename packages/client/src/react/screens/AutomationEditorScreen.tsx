@@ -14,6 +14,7 @@ import type {
 import { Button, Icon, IconButton } from '../ui/index.js';
 import { cx } from '../ui/cx.js';
 import au from '../styles/automation.module.css';
+import inlineEmptyCss from '../styles/inlineEmpty.module.css';
 import styles from './AutomationEditorScreen.module.css';
 
 // Automation editor — the instructions-first create/edit form (Automations
@@ -96,7 +97,7 @@ function ChipGroup({
   if (items.length === 0) return null;
   return (
     <div className={styles.connGroup}>
-      <div className={styles.connGroupLbl}>{label}</div>
+      <div className={styles.microLabel}>{label}</div>
       <div className={styles.chipRow}>
         {items.map((item) => (
           <span key={item} className={cx(styles.chip, mono && styles.chipMono)}>
@@ -117,7 +118,7 @@ function ConnectorsPanel({
 }): JSX.Element {
   if (mode === 'create') {
     return (
-      <div className={styles.emptyPanel}>
+      <div className={inlineEmptyCss.inlineEmpty}>
         <p>Connectors and vault scopes are declared when the plan is compiled.</p>
       </div>
     );
@@ -132,7 +133,7 @@ function ConnectorsPanel({
       c.vaultScopes.length > 0);
   if (!c || !hasAny) {
     return (
-      <div className={styles.emptyPanel}>
+      <div className={inlineEmptyCss.inlineEmpty}>
         <p>Nothing declared yet — the compiled plan declares what it needs.</p>
       </div>
     );
@@ -145,7 +146,7 @@ function ConnectorsPanel({
       <ChipGroup label="Secrets" items={c.secrets} mono />
       {c.vaultScopes.length > 0 ? (
         <div className={styles.connGroup}>
-          <div className={styles.connGroupLbl}>Vault access</div>
+          <div className={styles.microLabel}>Vault access</div>
           {c.vaultPurpose ? <p className={styles.vaultPurpose}>{c.vaultPurpose}</p> : null}
           <div className={styles.chipRow}>
             {c.vaultScopes.map((scope) => (
@@ -196,7 +197,7 @@ function GrantRow({
 }): JSX.Element {
   const revoked = grant.revokedAt !== null;
   return (
-    <div className={cx(styles.grantRow, revoked && styles.grantRowRevoked)}>
+    <div className={styles.grantRow} data-revoked={String(revoked)}>
       <code className={styles.grantVerb}>{grant.verb}</code>
       <span className={styles.grantTarget}>{grant.target}</span>
       {revoked ? (
@@ -259,7 +260,7 @@ function BehaviorPanel({
       </p>
       {mode === 'edit' && grants.length > 0 ? (
         <div className={styles.grants}>
-          <div className={styles.grantsLbl}>Standing grants</div>
+          <div className={styles.microLabel}>Standing grants</div>
           {grants.map((g) => (
             <GrantRow key={g.grantId} grant={g} onRevoke={onRevokeGrant} />
           ))}
@@ -308,7 +309,7 @@ function PlanPanel({
   const [copied, setCopied] = useState(false);
   if (mode === 'create') {
     return (
-      <div className={styles.emptyPanel}>
+      <div className={inlineEmptyCss.inlineEmpty}>
         <p>
           The compiler turns your instructions into a deterministic plan when you create the
           automation. Its <code>handler.js</code> and <code>automation.json</code> will show here.
@@ -318,7 +319,7 @@ function PlanPanel({
   }
   if (!source) {
     return (
-      <div className={styles.emptyPanel}>
+      <div className={inlineEmptyCss.inlineEmpty}>
         <p>Loading compiled plan…</p>
       </div>
     );
@@ -343,7 +344,8 @@ function PlanPanel({
               type="button"
               role="tab"
               aria-selected={file === f}
-              className={cx(styles.codeTab, file === f && styles.codeTabOn)}
+              className={cx(styles.tab, styles.codeTab)}
+              data-active={String(file === f)}
               onClick={() => onFile(f)}
             >
               {f === 'handler' ? 'handler.js' : 'automation.json'}
@@ -827,7 +829,7 @@ export default function AutomationEditorScreen({
                 {trigger.kind === 'cron' ? (
                   <div className={styles.trigFields}>
                     <label className={styles.subField}>
-                      <span className={styles.subFieldLabel}>Cron expression</span>
+                      <span className={styles.microLabel}>Cron expression</span>
                       <input
                         className={cx(styles.input, styles.mono)}
                         value={trigger.expr}
@@ -837,7 +839,7 @@ export default function AutomationEditorScreen({
                     </label>
                     {preview.length > 0 ? (
                       <div className={styles.cronPreview}>
-                        <span className={styles.cronPreviewLbl}>Next</span>
+                        <span className={cx(styles.microLabel, styles.cronPreviewLbl)}>Next</span>
                         {preview.map((label) => (
                           <span key={label} className={styles.cronPreviewPill}>
                             {label}
@@ -917,7 +919,8 @@ export default function AutomationEditorScreen({
               type="button"
               role="tab"
               aria-selected={tab === t.id}
-              className={cx(styles.tab, tab === t.id && styles.tabActive)}
+              className={styles.tab}
+              data-active={String(tab === t.id)}
               onClick={() => setTab(t.id)}
             >
               {t.label}

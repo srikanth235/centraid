@@ -1,0 +1,20 @@
+/* Inline empty state — the "this list/panel has nothing in it yet" line that
+   sits INSIDE a panel, a drawerGroup body, or a tab panel.
+
+   Deliberately not `pageEmpty`: that one is a page-level 64px centred dashed
+   card with a gradient icon, which is the wrong weight for a run of text
+   inside a bordered panel that already has its own frame and heading. The
+   two are different jobs, so they stay two modules.
+
+   No italic. Italic carries no empty-state meaning anywhere else in the
+   system — the only other italics are a blockquote and a quoted gate reason,
+   where it genuinely marks a quote. */
+
+.inlineEmpty {
+  padding: 20px 16px;
+  font: var(--t-small);
+  color: var(--ink-3);
+}
+.inlineEmpty p {
+  margin: 0;
+}

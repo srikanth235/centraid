@@ -181,25 +181,17 @@
   font-size: 9.5px;
   line-height: 1.4;
 }
-.policySelect {
-  appearance: none;
-  width: 100%;
-  min-height: 36px;
-  padding: 7px 30px 7px 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: 8px;
-  background-color: var(--bg-sunken);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a8f98' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 9px center;
-  color: var(--ink);
-  font-size: 12px;
-}
-.policySelect:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 15%, transparent);
-}
+/* The policy selects wear the shared `styles/select.module.css` look
+   (.selectWrap + .select). Everything this card used to restate — the
+   appearance-none shell, border, radius, focus ring, and a chevron frozen
+   at a hardcoded grey — was drift, and the chevron is a theme bug: a
+   data-URI SVG is its own document, so `var()`/`currentColor` can't reach
+   the stroke. The shared module masks the path and tints it with a token.
+   These two rules are the only real deltas; per CSS-CONVENTIONS rule 1 they
+   ride ALONGSIDE the shared classes rather than forking them. */
+
+/* The whole panel locks while a policy PATCH is in flight — the shared
+   select has no disabled state of its own. */
 .policySelect:disabled {
   cursor: wait;
   opacity: 0.62;
@@ -390,14 +382,16 @@
     align-items: center;
     justify-content: space-between;
   }
-  .policySelect {
+  /* Sized on the WRAP, not the select: the shared `.select` is width:100% of
+     its wrap, so the wrap is the flex item that has to be constrained here. */
+  .policySelectWrap {
     width: min(220px, 46%);
   }
   .advancedGrid .policySetting {
     align-items: flex-start;
     flex-direction: column;
   }
-  .advancedGrid .policySelect {
+  .advancedGrid .policySelectWrap {
     width: 100%;
   }
 }

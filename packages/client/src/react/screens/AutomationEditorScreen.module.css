@@ -287,7 +287,7 @@
 }
 .fieldError {
   margin: 0;
-  color: var(--c-red);
+  color: var(--danger);
   font-size: 12px;
 }
 @keyframes trigger-in {
@@ -387,10 +387,13 @@
   flex-direction: column;
   gap: 5px;
 }
-.subFieldLabel {
-  font-size: 11px;
+/* The micro label — the uppercase eyebrow over a field group. One rule; it
+   was four near-identical copies (.subFieldLabel / .cronPreviewLbl /
+   .connGroupLbl / .grantsLbl) differing only by 0.5px and 0.01em. */
+.microLabel {
+  font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.03em;
   color: var(--ink-4);
   text-transform: uppercase;
 }
@@ -412,11 +415,6 @@
   gap: 6px;
 }
 .cronPreviewLbl {
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: var(--ink-4);
   margin-right: 2px;
 }
 .cronPreviewPill {
@@ -493,17 +491,12 @@
 .tab:hover {
   color: var(--ink);
 }
-.tabActive {
+.tab[data-active='true'] {
   color: var(--ink);
   border-bottom-color: var(--accent);
 }
 .tabPanel {
   padding-top: 14px;
-}
-.emptyPanel p {
-  margin: 0;
-  font-size: 13px;
-  color: var(--ink-3);
 }
 
 /* Connectors tab — chip groups (MCPs/tools/secrets/connector/vault access). */
@@ -516,13 +509,6 @@
   display: flex;
   flex-direction: column;
   gap: 7px;
-}
-.connGroupLbl {
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: var(--ink-4);
 }
 .chipRow {
   display: flex;
@@ -640,13 +626,6 @@
   flex-direction: column;
   gap: 6px;
 }
-.grantsLbl {
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: var(--ink-4);
-}
 .grantRow {
   display: flex;
   align-items: center;
@@ -656,7 +635,7 @@
   border-radius: 8px;
   background: var(--bg-elev);
 }
-.grantRowRevoked {
+.grantRow[data-revoked='true'] {
   opacity: 0.55;
 }
 .grantVerb {
@@ -729,23 +708,19 @@
   display: inline-flex;
   gap: 2px;
 }
+/* The file switcher composes `.tab` rather than re-inventing a second,
+   pill-shaped tab look on the same page: this screen picks-one-of-N with an
+   accent underline, and that reads the same whether the N are panels or
+   compiled files. Only the scale differs — it sits in a 32px chrome bar and
+   names machine artifacts, so it drops to the mono voice. Declared after
+   `.tab` so the equal-specificity overrides land (same idiom as
+   Button.module.css's variants-after-roots). */
 .codeTab {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: var(--ink-3);
   font-family: var(--font-mono);
   font-size: 11.5px;
-  padding: 5px 10px;
-  border-radius: 7px;
-  cursor: pointer;
-}
-.codeTab:hover {
-  color: var(--ink);
-}
-.codeTabOn {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  font-weight: 500;
+  padding: 6px 2px;
+  margin-right: 12px;
 }
 .codeMeta {
   display: inline-flex;
@@ -824,9 +799,9 @@
   color: color-mix(in srgb, var(--accent) 78%, var(--ink));
 }
 .tkNum {
-  color: color-mix(in srgb, #e0a458 80%, var(--ink));
+  color: color-mix(in srgb, var(--c-amber) 80%, var(--ink));
 }
 .tkKw {
-  color: color-mix(in srgb, #7aa2f7 82%, var(--ink));
+  color: color-mix(in srgb, var(--c-indigo) 82%, var(--ink));
   font-weight: 600;
 }
