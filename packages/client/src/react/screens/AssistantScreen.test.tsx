@@ -34,6 +34,13 @@ function makeProps(over: Partial<AssistantBridgeProps> = {}): AssistantBridgePro
     onAttachFiles: vi.fn(),
     onRemovePendingAttachment: vi.fn(),
     hydrateRefs: vi.fn(),
+    wireCodeCopy: vi.fn(),
+    loadAttachmentImage: vi.fn().mockResolvedValue('blob:mock'),
+    onCopyMessage: vi.fn(),
+    onFeedback: vi.fn(),
+    onRegenerate: vi.fn(),
+    onRetryError: vi.fn(),
+    onPagerNav: vi.fn(),
     loadModelPicker: vi.fn().mockResolvedValue(modelPickerDTO()),
     onSetModel: vi.fn(),
     ...over,
@@ -108,6 +115,7 @@ describe('AssistantScreen', () => {
             streaming: false,
             html: '<p class="cd-asst-p">You spent <strong>$412</strong>.</p>',
             error: false,
+            copyText: 'You spent $412.',
           },
         ],
       }),
@@ -151,6 +159,7 @@ describe('AssistantScreen', () => {
             streaming: false,
             html: '<p>See <button class="cd-asst-ref">x</button></p>',
             error: false,
+            copyText: 'See x',
           },
         ],
       }),
@@ -253,6 +262,85 @@ describe('AssistantScreen', () => {
       ),
     );
     expect(props.onAttachFiles).toHaveBeenCalledWith([file]);
+  });
+
+  describe('transcript actions (#420)', () => {
+    const finalAi = (
+      over: Record<string, unknown> = {},
+    ): AssistantSnapshot['messages'][number] => ({
+      kind: 'ai',
+      streaming: false,
+      html: '<p>Answer</p>',
+      error: false,
+      copyText: 'Answer',
+      turnId: 't1',
+      feedback: null,
+      ...over,
+    });
+    const clickLabel = (el: HTMLElement, label: string): void => {
+      const btn = el.querySelector(`[aria-label="${label}"]`) as HTMLButtonElement;
+      void act(() => btn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    };
+
+    it('copies an answer via the copy button', () => {
+      const props = makeProps();
+      const el = mount(props);
+      push(emptySnap({ empty: false, messages: [finalAi()] }));
+      clickLabel(el, 'Copy message');
+      expect(props.onCopyMessage).toHaveBeenCalledWith('Answer');
+    });
+
+    it('sends thumbs feedback with the answer turn id', () => {
+      const props = makeProps();
+      const el = mount(props);
+      push(emptySnap({ empty: false, messages: [finalAi()] }));
+      clickLabel(el, 'Good response');
+      expect(props.onFeedback).toHaveBeenCalledWith('t1', 'up');
+      clickLabel(el, 'Bad response');
+      expect(props.onFeedback).toHaveBeenCalledWith('t1', 'down');
+    });
+
+    it('regenerates the last answer', () => {
+      const props = makeProps();
+      const el = mount(props);
+      push(emptySnap({ empty: false, messages: [finalAi({ canRegenerate: true })] }));
+      clickLabel(el, 'Regenerate response');
+      expect(props.onRegenerate).toHaveBeenCalled();
+    });
+
+    it('flips the retry pager', () => {
+      const props = makeProps();
+      const el = mount(props);
+      push(emptySnap({ empty: false, messages: [finalAi({ retry: { index: 2, count: 2 } })] }));
+      expect(el.querySelector('.pagerLabel')?.textContent).toBe('2/2');
+      clickLabel(el, 'Previous attempt');
+      expect(props.onPagerNav).toHaveBeenCalledWith(0, -1);
+    });
+
+    it('retries a failed message from its error bubble', () => {
+      const props = makeProps();
+      const el = mount(props);
+      push(
+        emptySnap({
+          empty: false,
+          messages: [
+            { kind: 'user', text: 'q' },
+            {
+              kind: 'ai',
+              streaming: false,
+              html: '<p>err</p>',
+              error: true,
+              copyText: 'err',
+              canRetry: true,
+            },
+          ],
+        }),
+      );
+      const retry = el.querySelector('[aria-label="Retry"]') as HTMLButtonElement;
+      expect(retry.textContent).toContain('Retry');
+      void act(() => retry.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      expect(props.onRetryError).toHaveBeenCalledWith(1);
+    });
   });
 
   describe('model picker', () => {

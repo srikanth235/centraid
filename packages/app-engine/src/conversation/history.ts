@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#420) cohesive conversation-history facade; the retry-collapsing transcript fold (getSession) belongs beside the record/CRUD API it mirrors — the pure helpers already live in transcript.ts
 /*
  * Centraid conversation-history facade — the conversation-container API +
  * transcript fold, over the per-vault `ConversationStore` (issue #98, reshaped
@@ -24,10 +25,15 @@
 import { randomUUID } from 'node:crypto';
 import type { WorkspaceProvider } from '../stores/vault-workspace.js';
 import { ConversationStore, type ConversationMeta } from './store.js';
-import type { RunKind } from './schema.js';
+import type { Item, RunKind, Turn } from './schema.js';
 import { ASSISTANT_APP_ID, isValidAppOrAssistantId } from '../registry/app-paths.js';
 import { costForUsage } from '../model-pricing.js';
-import { parseStepOutput, parseToolArgs, parseToolOutput } from './transcript.js';
+import {
+  groupRetryFamilies,
+  parseStepOutput,
+  parseToolArgs,
+  parseToolOutput,
+} from './transcript.js';
 import { BlobStore, blobUrl, type PutResult } from '../data/blob-store.js';
 
 export interface ConversationSummary {
@@ -41,10 +47,20 @@ export interface ConversationSummary {
   adapterSessionId: string | null;
   /** Number of completed turns on this session. */
   turnCount: number;
+  /** Pinned threads sort first in the sidebar (issue #420). */
+  pinned: boolean;
+  /** Archived threads hide behind a collapsed group and drop out of search. */
+  archived: boolean;
   createdAt: number;
   updatedAt: number;
   /** Reconstructed transcript length (user + assistant + tool messages). */
   messageCount: number;
+}
+
+/** A conversation search hit: its summary plus a highlighted match snippet. */
+export interface ConversationSearchResult extends ConversationSummary {
+  /** `snippet()` output with `⟦`/`⟧` around matched terms and `…` elisions. */
+  snippet: string;
 }
 
 export interface ConversationMessageRow {
@@ -66,6 +82,34 @@ export interface ConversationAttachmentPayload {
   sizeBytes: number;
   filename?: string;
   url: string;
+}
+
+/**
+ * Per-turn token/cost usage on a reconstructed terminal `ai` transcript entry
+ * (issue #420, Wave 2). Token sums + `costUsd` are the frozen denormalized
+ * rollup on the turn (`model-pricing.ts` cost, frozen at write); `model` is the
+ * serving model off the terminal step. Every field is optional — a legacy or
+ * unpriced turn simply omits what it doesn't have.
+ */
+export interface ConversationTurnUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  costUsd?: number;
+  model?: string;
+}
+
+/**
+ * The replayable result of an already-recorded turn, keyed by idempotency key
+ * (issue #420). A duplicate turn POST streams this straight from the ledger.
+ */
+export interface RecordedTurnReplay {
+  turnId: string;
+  ok: boolean;
+  /** The recorded final answer text (absent when the turn errored). */
+  finalText?: string;
+  /** The recorded error message (present when `ok` is false). */
+  error?: string;
+  usage?: ConversationTurnUsage;
 }
 
 /** A file already landed in the blob CAS, to attach to a turn's inbound message. */
@@ -121,6 +165,17 @@ export interface RecordTurnInput {
   kind?: RunKind;
   /** The user's prompt for the turn — recorded as the `message_in` item. */
   userMessage: string;
+  /**
+   * When set, this turn is a regenerate of the turn with this id — recorded
+   * as `turns.retry_of` so `getSession` collapses it into the original's
+   * sibling pager (ChatGPT-style "<2/2>", issue #420).
+   */
+  retryOf?: string;
+  /**
+   * Client-supplied idempotency key (issue #420). Persisted on the turn so a
+   * duplicate POST with the same key replays this recorded turn.
+   */
+  idempotencyKey?: string;
   /** Files that rode in on this turn's inbound message (already in the CAS). */
   attachments?: ConversationTurnAttachment[];
   startedAt: number;
@@ -211,24 +266,94 @@ export class ConversationHistoryStore {
 
     const messages: ConversationMessageRow[] = [];
     let idx = 0;
-    for (const turn of store.listTurns(id)) {
-      for (const item of store.listItems(turn.turnId)) {
-        if (item.kind === 'message_in') {
-          const attachments = this.attachmentsPayload(appId, item.itemId);
+    const turns = store.listTurns(id);
+    const itemsByTurn = new Map<string, Item[]>();
+    for (const turn of turns) itemsByTurn.set(turn.turnId, store.listItems(turn.turnId));
+
+    // The terminal `step` item's parsed answer for a turn — the one attempt
+    // text the retry pager flips between (issue #420).
+    const answerOf = (turnId: string): { text: string; error: boolean } => {
+      const last = (itemsByTurn.get(turnId) ?? []).findLast((it) => it.kind === 'step');
+      return parseStepOutput(last?.outputJson);
+    };
+
+    // Per-turn token/cost usage for the "this turn cost X" line (issue #420,
+    // Wave 2). Token sums + cost are the frozen denormalized rollup on the turn;
+    // the serving model comes off the terminal step. Absent on unpriced/legacy.
+    const usageOf = (turn: Turn): ConversationTurnUsage | undefined => {
+      const step = (itemsByTurn.get(turn.turnId) ?? []).findLast((it) => it.kind === 'step');
+      const usage: ConversationTurnUsage = {
+        ...(turn.totalInputTokens !== undefined ? { inputTokens: turn.totalInputTokens } : {}),
+        ...(turn.totalOutputTokens !== undefined ? { outputTokens: turn.totalOutputTokens } : {}),
+        ...(turn.totalCostUsd !== undefined ? { costUsd: turn.totalCostUsd } : {}),
+        ...(step?.model ? { model: step.model } : {}),
+      };
+      return Object.keys(usage).length > 0 ? usage : undefined;
+    };
+
+    // Collapse retries linear-with-retry: one row per *family*, showing the
+    // latest attempt inline, with sibling attempts carried for a client pager.
+    for (const family of groupRetryFamilies(turns)) {
+      const root = family[0] as Turn;
+      const active = family.at(-1) as Turn;
+      const activeItems = itemsByTurn.get(active.turnId) ?? [];
+      const terminalStepId = activeItems.findLast((it) => it.kind === 'step')?.itemId;
+      const retry =
+        family.length > 1
+          ? {
+              index: family.length,
+              count: family.length,
+              attempts: family.map((t) => {
+                const ans = answerOf(t.turnId);
+                const usage = usageOf(t);
+                return {
+                  turnId: t.turnId,
+                  text: ans.text,
+                  ...(ans.error ? { error: true } : {}),
+                  feedback: t.feedback ?? null,
+                  ...(usage ? { usage } : {}),
+                };
+              }),
+            }
+          : undefined;
+
+      // The user message rides once, from the root attempt (every retry
+      // re-sends the same prompt).
+      const userItem = (itemsByTurn.get(root.turnId) ?? []).find((it) => it.kind === 'message_in');
+      if (userItem) {
+        const attachments = this.attachmentsPayload(appId, userItem.itemId);
+        messages.push({
+          idx: idx++,
+          payload: {
+            kind: 'user',
+            text: userItem.text ?? '',
+            ...(attachments.length > 0 ? { attachments } : {}),
+          },
+          createdAt: userItem.startedAt,
+        });
+      }
+
+      for (const item of activeItems) {
+        if (item.kind === 'step') {
+          const parsed = parseStepOutput(item.outputJson);
+          // Only the terminal step carries turn identity / feedback / the retry
+          // pager — interim steps stay plain.
+          const terminal = item.itemId === terminalStepId;
           messages.push({
             idx: idx++,
             payload: {
-              kind: 'user',
-              text: item.text ?? '',
-              ...(attachments.length > 0 ? { attachments } : {}),
+              kind: 'ai',
+              text: parsed.text,
+              ...(parsed.error ? { error: true } : {}),
+              ...(terminal
+                ? {
+                    turnId: active.turnId,
+                    feedback: active.feedback ?? null,
+                    ...(retry ? { retry } : {}),
+                    ...(usageOf(active) ? { usage: usageOf(active) } : {}),
+                  }
+                : {}),
             },
-            createdAt: item.startedAt,
-          });
-        } else if (item.kind === 'step') {
-          const parsed = parseStepOutput(item.outputJson);
-          messages.push({
-            idx: idx++,
-            payload: { kind: 'ai', text: parsed.text, ...(parsed.error ? { error: true } : {}) },
             createdAt: item.startedAt,
           });
         } else if (item.kind === 'tool') {
@@ -293,6 +418,54 @@ export class ConversationHistoryStore {
     return this.getSessionMeta(appId, id);
   }
 
+  /**
+   * FTS5 search over this app's chat/build sessions — titles + inbound message
+   * text (issue #420). Powers the ⌘K palette's "Conversations" category. Each
+   * result carries a highlighted `snippet` for match context.
+   */
+  searchSessions(appId: string, query: string, limit = 20): ConversationSearchResult[] {
+    const { store } = this.appConversation(appId);
+    return store
+      .searchConversations(this.currentUserId(), query, appId, limit)
+      .map((hit) => ({ ...toMeta(hit), snippet: hit.snippet }));
+  }
+
+  /** Pin/unpin a session `appId` owns; returns the fresh summary or undefined. */
+  setSessionPinned(appId: string, id: string, pinned: boolean): ConversationSummary | undefined {
+    const { store } = this.appConversation(appId);
+    if (!this.ownedMeta(appId, id)) return undefined;
+    if (!store.setConversationPinned(id, this.currentUserId(), pinned)) return undefined;
+    return this.getSessionMeta(appId, id);
+  }
+
+  /** Archive/unarchive a session `appId` owns; returns the fresh summary. */
+  setSessionArchived(
+    appId: string,
+    id: string,
+    archived: boolean,
+  ): ConversationSummary | undefined {
+    const { store } = this.appConversation(appId);
+    if (!this.ownedMeta(appId, id)) return undefined;
+    if (!store.setConversationArchived(id, this.currentUserId(), archived)) return undefined;
+    return this.getSessionMeta(appId, id);
+  }
+
+  /**
+   * Set (or clear, with `null`) the reader's 👍/👎 on one turn's answer in a
+   * session `appId` owns (issue #420). Returns whether it was applied — false
+   * when the session isn't owned or the turn isn't part of it.
+   */
+  setTurnFeedback(
+    appId: string,
+    id: string,
+    turnId: string,
+    feedback: 'up' | 'down' | null,
+  ): boolean {
+    const { store } = this.appConversation(appId);
+    if (!this.ownedMeta(appId, id)) return false;
+    return store.setTurnFeedback(id, turnId, feedback);
+  }
+
   deleteSession(appId: string, id: string): boolean {
     // Real FK CASCADE drops the conversation's turns, items, and attachment
     // rows; a follow-up blob GC reclaims now-unreferenced bytes (issue #190).
@@ -328,6 +501,8 @@ export class ConversationHistoryStore {
         conversationId: input.conversationId,
         triggerKind: 'interactive',
         startedAt: input.startedAt,
+        ...(input.retryOf !== undefined ? { retryOf: input.retryOf } : {}),
+        ...(input.idempotencyKey !== undefined ? { idempotencyKey: input.idempotencyKey } : {}),
       });
       const messageItemId = store.insertMessageIn({
         turnId,
@@ -364,6 +539,39 @@ export class ConversationHistoryStore {
       }
     });
     return { turnId };
+  }
+
+  /**
+   * Look up an already-recorded turn by its client idempotency key (issue #420).
+   * Returns the replayable answer (final text or error + usage) so the turn
+   * route can stream a duplicate POST's result straight from the ledger instead
+   * of re-running the model. Undefined when no turn with that key exists on the
+   * conversation, or the conversation isn't owned by `appId`.
+   */
+  findRecordedTurn(
+    appId: string,
+    conversationId: string,
+    idempotencyKey: string,
+  ): RecordedTurnReplay | undefined {
+    const { store } = this.appConversation(appId);
+    if (!this.ownedMeta(appId, conversationId)) return undefined;
+    const turn = store.getTurnByIdempotencyKey(conversationId, idempotencyKey);
+    if (!turn) return undefined;
+    const parsed = parseStepOutput(turn.outputJson);
+    const step = store.listItems(turn.turnId).findLast((it) => it.kind === 'step');
+    const usage: ConversationTurnUsage = {
+      ...(turn.totalInputTokens !== undefined ? { inputTokens: turn.totalInputTokens } : {}),
+      ...(turn.totalOutputTokens !== undefined ? { outputTokens: turn.totalOutputTokens } : {}),
+      ...(turn.totalCostUsd !== undefined ? { costUsd: turn.totalCostUsd } : {}),
+      ...(step?.model ? { model: step.model } : {}),
+    };
+    return {
+      turnId: turn.turnId,
+      ok: turn.ok,
+      ...(parsed.text ? { finalText: parsed.text } : {}),
+      ...(turn.error !== undefined ? { error: turn.error } : {}),
+      ...(Object.keys(usage).length > 0 ? { usage } : {}),
+    };
   }
 
   /** Bump turn_count + persist the runner-resume handle. */
@@ -444,6 +652,8 @@ function toMeta(c: ConversationMeta): ConversationSummary {
     adapterKind: c.adapterKind ?? null,
     adapterSessionId: c.adapterSessionId ?? null,
     turnCount: c.turnCount,
+    pinned: c.pinned,
+    archived: c.archived,
     createdAt: c.createdAt,
     updatedAt: c.updatedAt,
     messageCount: c.messageCount,

@@ -52,6 +52,15 @@ export type TurnStreamEvent =
   | { type: 'error'; message: string }
   | { type: 'aborted' }
   /**
+   * A non-fatal, human-readable notice about the turn — surfaced in the
+   * transcript, never folded into the ledger (issue #420). Today's sole use:
+   * a runner that can't consume an attachment kind (e.g. Codex silently drops
+   * PDF `document` blocks) emits `code:'attachment_unsupported'` so the user
+   * sees "this runner can't read PDF attachments" instead of nothing. Both
+   * chat surfaces render it via the shared parser.
+   */
+  | { type: 'notice'; level: 'warn' | 'info'; code?: string; message: string }
+  /**
    * Webhook secrets minted as a post-turn step (issue #141, Phase 3). When
    * a unified-chat turn authors an automation with a pending webhook
    * trigger, the gateway mints the route id + shared secret after the turn
@@ -85,6 +94,8 @@ export type TurnStreamEvent =
       outputTokens?: number;
       cacheReadTokens?: number;
       cacheWriteTokens?: number;
+      /** USD estimate, priced server-side (model-pricing.ts) at the SSE seam. */
+      costUsd?: number;
     };
 
 export interface ConversationTurnInput {

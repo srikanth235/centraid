@@ -10,6 +10,60 @@
   margin: 0 0 8px;
   padding-left: 20px;
 }
+.asstOl {
+  margin: 0 0 8px;
+  padding-left: 22px;
+}
+.asstOl :is(.asstOl, .asstUl),
+.asstUl :is(.asstOl, .asstUl) {
+  margin-bottom: 0;
+}
+.asstA {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.asstImg {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 4px 0;
+}
+.asstQuote {
+  margin: 0 0 8px;
+  padding: 2px 0 2px 12px;
+  border-left: 2.5px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--ink-3);
+}
+.asstHr {
+  border: 0;
+  border-top: 0.5px solid var(--line-strong);
+  margin: 12px 0;
+}
+.asstDel {
+  text-decoration: line-through;
+  opacity: 0.75;
+}
+
+/* Syntax-highlighting tokens are literal class names inside the code <pre>
+ * innerHTML string (from code-highlight.js), so they must be styled globally —
+ * the CSS-module scoping never reaches them. Kept identical to kit.css. */
+:global(.hlKeyword) {
+  color: #9333ea;
+}
+:global(.hlString) {
+  color: #16a34a;
+}
+:global(.hlComment) {
+  color: var(--ink-4);
+  font-style: italic;
+}
+:global(.hlNumber) {
+  color: #d97706;
+}
+:global(.hlBuiltin) {
+  color: #2563eb;
+}
 .asstRich code {
   font-family: var(--font-mono);
   font-size: 12px;
@@ -120,4 +174,32 @@
   font-size: 11px;
   color: var(--ink-3);
   padding-top: 6px;
+}
+
+/* Fenced code block with a hover "Copy" button (#420). */
+.asstCodeWrap {
+  position: relative;
+}
+.asstCopyBtn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  border: 0.5px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  padding: 3px 7px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.asstCodeWrap:hover .asstCopyBtn,
+.asstCopyBtn:focus-visible {
+  opacity: 1;
+}
+.asstCopyBtn[data-copied='true'] {
+  opacity: 1;
+  color: var(--accent);
 }

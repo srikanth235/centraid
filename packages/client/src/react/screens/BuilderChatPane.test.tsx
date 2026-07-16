@@ -167,7 +167,8 @@ describe('BuilderChatPane', () => {
     const ta = el.querySelector('.chatInput textarea') as HTMLTextAreaElement;
     setValue(ta, 'Add a footer');
     void act(() => ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
-    expect(props.onSend).toHaveBeenCalledWith('Add a footer');
+    // No attachments staged → the optional attachments arg is undefined (#420).
+    expect(props.onSend).toHaveBeenCalledWith('Add a footer', undefined);
     expect(ta.value).toBe('');
   });
 

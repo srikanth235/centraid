@@ -21,6 +21,27 @@
 // imperative controllers they always were — see the excluded set in issue #327.
 import { entityKindLabel } from './elements.js';
 import { sha256FileStream, stageDirectFile, stageFallbackFile } from './edge-upload.js';
+// Shared chat-client core (issue #420) — the same parser/renderer/consent-flow
+// the React shell uses, so the Ask panel renders ref-chips + typed blocks and
+// gains stop/cancel from one canonical source.
+import { consumeSse } from './turn-stream.js';
+import { richAnswerHtml, hydrateRefs, wireCodeCopy } from './assistant-rich.js';
+import {
+  outcomeOf,
+  fetchParkedEntry,
+  describeParked,
+  confirmParked as confirmParkedShared,
+  normalizeApproveOutcome,
+} from './consent-cards.js';
+import {
+  conversationsPath,
+  conversationPath,
+  blobsPath,
+  vaultStatusPath,
+  vaultAppsPath,
+  normalizeModelState,
+  modelLabel,
+} from './conversation-client.js';
 
 // Re-export the shared kind-label helper (its definition moved to elements.js,
 // where the mention-chip and reference-strip components also need it).
@@ -1047,15 +1068,32 @@ export function wireThemeToggle(btn, { onChange } = {}) {
     // as the double-send guard: the send button (and model picker) are
     // disabled while busy.
     var busy = false;
+    // The AbortController of the in-flight turn, so the Send button can double
+    // as Stop while busy (issue #420 — the kit's Ask panel gains cancel).
+    var activeAbort = null;
     var SEND_ARROW = '→';
-    var SEND_SPINNER = '<i class="kit-ask-send-spin"></i>';
+    var SEND_STOP = '■';
     function setBusy(b) {
       busy = !!b;
       form.dataset.busy = busy ? 'true' : 'false';
-      sendBtn.disabled = busy;
-      sendBtn.innerHTML = busy ? SEND_SPINNER : SEND_ARROW;
+      // While busy the button stays enabled and becomes Stop; clicking it
+      // aborts the turn (see the sendBtn click handler below) instead of
+      // double-sending. Idle, it's the Send arrow that submits the form.
+      sendBtn.disabled = false;
+      sendBtn.innerHTML = busy ? SEND_STOP : SEND_ARROW;
+      sendBtn.setAttribute('aria-label', busy ? 'Stop' : 'Send');
+      if (busy) sendBtn.dataset.stop = 'true';
+      else delete sendBtn.dataset.stop;
       if (modelPicker) modelPicker.setDisabled(busy);
     }
+    // Intercept clicks while busy: cancel the turn rather than submit. Runs
+    // before the form's submit handler; `preventDefault` stops the submit.
+    sendBtn.addEventListener('click', function (e) {
+      if (busy) {
+        e.preventDefault();
+        if (activeAbort) activeAbort.abort();
+      }
+    });
 
     function open() {
       lastFocus = document.activeElement;
@@ -1107,22 +1145,7 @@ export function wireThemeToggle(btn, { onChange } = {}) {
       var state = { loaded: false, current: null, defaultModel: '', catalog: [] };
 
       function renderLabel() {
-        if (!state.loaded) {
-          labelEl.textContent = 'Model';
-          return;
-        }
-        if (state.current) {
-          var found = null;
-          for (var i = 0; i < state.catalog.length; i++) {
-            if (state.catalog[i].id === state.current) {
-              found = state.catalog[i];
-              break;
-            }
-          }
-          labelEl.textContent = found ? found.label : state.current;
-        } else {
-          labelEl.textContent = 'Default';
-        }
+        labelEl.textContent = modelLabel(state);
       }
 
       function onDocPointer(e) {
@@ -1154,10 +1177,7 @@ export function wireThemeToggle(btn, { onChange } = {}) {
             return r.json();
           })
           .then(function (body) {
-            state.loaded = true;
-            state.current = body.current || null;
-            state.defaultModel = body.defaultModel || '';
-            state.catalog = Array.isArray(body.catalog) ? body.catalog : [];
+            Object.assign(state, normalizeModelState(body));
             renderLabel();
           })
           .catch(function () {
@@ -1218,12 +1238,7 @@ export function wireThemeToggle(btn, { onChange } = {}) {
         /** Re-fetch the picker state (called on every panel `open()`). */
         load: function () {
           return fetchJson(appBase() + '_turn/model').then(function (r) {
-            if (r.ok && r.body) {
-              state.loaded = true;
-              state.current = r.body.current || null;
-              state.defaultModel = r.body.defaultModel || '';
-              state.catalog = Array.isArray(r.body.catalog) ? r.body.catalog : [];
-            }
+            if (r.ok && r.body) Object.assign(state, normalizeModelState(r.body));
             renderLabel();
           }, renderLabel);
         },
@@ -1620,7 +1635,7 @@ export function wireThemeToggle(btn, { onChange } = {}) {
 
     function openConversation(id) {
       historyNote('Loading…');
-      fetchJson(conversationsBase() + '/' + encodeURIComponent(id)).then(function (r) {
+      fetchJson(conversationPath(appId() || '', id)).then(function (r) {
         if (!r.ok) {
           if (r.status === 404) {
             loadHistoryList(); // a stale row — refresh the list in place
@@ -1636,15 +1651,13 @@ export function wireThemeToggle(btn, { onChange } = {}) {
     }
 
     function deleteConversationRow(id) {
-      fetch(conversationsBase() + '/' + encodeURIComponent(id), { method: 'DELETE' }).then(
-        function () {
-          if (session.get() === id) {
-            session.clear();
-            resetLogToIntro();
-          }
-          loadHistoryList();
-        },
-      );
+      fetch(conversationPath(appId() || '', id), { method: 'DELETE' }).then(function () {
+        if (session.get() === id) {
+          session.clear();
+          resetLogToIntro();
+        }
+        loadHistoryList();
+      });
     }
 
     historyBtn.addEventListener('click', function () {
@@ -1683,7 +1696,7 @@ export function wireThemeToggle(btn, { onChange } = {}) {
       // "empty" == still just the intro bubble — a fresh page load, not a
       // conversation this panel has already rendered this session.
       if (!id || log.children.length > 1) return;
-      fetchJson(conversationsBase() + '/' + encodeURIComponent(id)).then(function (r) {
+      fetchJson(conversationPath(appId() || '', id)).then(function (r) {
         if (!r.ok) {
           if (r.status === 404) session.clear(); // stale id — a fresh vault, a restart
           return;
@@ -1707,7 +1720,12 @@ export function wireThemeToggle(btn, { onChange } = {}) {
       api.user(v, refs.length ? refs : undefined);
       input.value = '';
       clearPending();
-      if (handler) handler(v, refs);
+      // Fresh AbortController per turn — the Send/Stop button aborts this
+      // signal, and the default driver threads it into fetch + consumeSse.
+      // Passed as a 3rd arg so a custom `onAsk` handler can honor cancel too
+      // (older handlers that ignore it keep working).
+      activeAbort = new AbortController();
+      if (handler) handler(v, refs.length ? refs : undefined, activeAbort.signal);
     });
 
     // Default brain: the app's _turn conversation agent. Registered after
@@ -1731,14 +1749,14 @@ export function wireThemeToggle(btn, { onChange } = {}) {
     return id ? '/centraid/' + encodeURIComponent(id) + '/' : '';
   }
 
-  /** Base for this app's conversation-history sessions (issue #98/#190; distinct from `appBase()`'s `/centraid/<id>/` turn surface). */
+  /** Base for this app's conversation-history sessions (issue #98/#190; distinct from `appBase()`'s `/centraid/<id>/` turn surface). Route single-sourced in conversation-client.js (#420). */
   function conversationsBase() {
-    return '/_centraid-conversations/apps/' + encodeURIComponent(appId() || '') + '/sessions';
+    return conversationsPath(appId() || '');
   }
 
   /** This app's attachment blob CAS — `POST` uploads, returns `{hash, sizeBytes, mime, url}`. */
   function blobsBase() {
-    return '/_centraid-conversations/apps/' + encodeURIComponent(appId() || '') + '/blobs';
+    return blobsPath(appId() || '');
   }
 
   function fetchJson(url, opts) {
@@ -1780,7 +1798,7 @@ export function wireThemeToggle(btn, { onChange } = {}) {
    */
   function refreshGrantChip(chip) {
     if (!chip || !appId()) return;
-    fetchJson('/centraid/_vault/status')
+    fetchJson(vaultStatusPath())
       .then(function (s) {
         // The status route answers { vaultId, name, ownerPartyId, fresh } —
         // there is no `active` field (a resolvable vault always 200s, an
@@ -1791,7 +1809,7 @@ export function wireThemeToggle(btn, { onChange } = {}) {
           chip.textContent = 'no vault connected';
           return;
         }
-        return fetchJson('/centraid/_vault/apps').then(function (a) {
+        return fetchJson(vaultAppsPath()).then(function (a) {
           var apps = (a.ok && a.body && a.body.apps) || [];
           // `apps[].appId` is the internal consent_app UUID minted at
           // enrollment, not the manifest id `appId()` reads off the runtime
@@ -1881,36 +1899,13 @@ export function wireThemeToggle(btn, { onChange } = {}) {
       return createConversation();
     }
 
-    /** Post the owner's decision on one parked invocation; returns the InvokeOutcome. */
-    function confirmParked(invocationId, approve) {
-      return fetchJson('/centraid/_vault/parked/' + encodeURIComponent(invocationId), {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ approve: approve }),
-      }).then(function (r) {
-        if (!r.ok) {
-          throw new Error(
-            (r.body && (r.body.message || r.body.error)) ||
-              'confirmation failed (' + r.status + ')',
-          );
-        }
-        return r.body;
-      });
-    }
-
-    function shortVal(v) {
-      var s = typeof v === 'string' ? v : JSON.stringify(v);
-      s = String(s == null ? '' : s);
-      return s.length > 60 ? s.slice(0, 57) + '…' : s;
-    }
-
-    /** Look up a freshly-parked invocation on the consent surface and render its card. */
+    /**
+     * Look up a freshly-parked invocation on the consent surface and render its
+     * card. The lookup / describe / decision-post / outcome-normalize flow is
+     * the shared one (consent-cards.js, #420); the card chrome is `api.propose`.
+     */
     function renderParked(invocationId) {
-      return fetchJson('/centraid/_vault/parked').then(function (r) {
-        var list = (r.ok && r.body && r.body.parked) || [];
-        var entry = list.filter(function (p) {
-          return p.invocationId === invocationId;
-        })[0];
+      return fetchParkedEntry(invocationId, { fetchJson: fetchJson }).then(function (entry) {
         if (!entry) {
           api.ai(
             esc(
@@ -1919,113 +1914,121 @@ export function wireThemeToggle(btn, { onChange } = {}) {
           );
           return;
         }
-        var input = entry.input || {};
-        var detail = Object.keys(input)
-          .map(function (k) {
-            return k + ': ' + shortVal(input[k]);
-          })
-          .join(' · ');
+        var d = describeParked(entry);
         api.propose({
-          title: entry.command,
-          detail: (entry.caller ? entry.caller + ' · ' : '') + (detail || 'no input'),
+          title: d.title,
+          detail: d.detail,
           onApprove: function () {
-            return confirmParked(invocationId, true).then(function (outcome) {
-              if (outcome && outcome.status === 'executed') {
-                return { ok: true, receipt: 'approved · receipt ' + outcome.receiptId };
-              }
-              if (outcome && outcome.status === 'replayed')
-                return { ok: true, receipt: 'already applied' };
-              return {
-                ok: false,
-                note: (outcome && outcome.reason) || 'The vault refused this write.',
-              };
-            });
+            return confirmParkedShared(invocationId, true, { fetchJson: fetchJson }).then(
+              normalizeApproveOutcome,
+            );
           },
           onDiscard: function () {
-            return confirmParked(invocationId, false);
+            return confirmParkedShared(invocationId, false, { fetchJson: fetchJson });
           },
         });
       });
     }
 
-    /** Probe a tool result for a vault InvokeOutcome (bare or nested under `output`). */
-    function outcomeOf(x) {
-      if (!x || typeof x !== 'object') return null;
-      if (typeof x.status === 'string') return x;
-      if (x.output && typeof x.output === 'object' && typeof x.output.status === 'string') {
-        return x.output;
-      }
-      return null;
-    }
-
-    return function ask(text, attachments) {
+    return function ask(text, attachments, signal) {
       // Busy spans the WHOLE turn (submit → terminal SSE event or stream
       // close) — NOT just until the first token, which is all `typing`
       // covers. Before this, `typing.done()` firing on the first
-      // `assistant.delta` (see `append` below) made the panel look idle
-      // while a tool call was still running mid-turn; `api.setBusy` is the
-      // fix, and doubles as the double-send guard (see the submit handler).
+      // `assistant.delta` made the panel look idle while a tool call was
+      // still running mid-turn; `api.setBusy` is the fix, and doubles as the
+      // double-send guard (see the submit handler). `signal` cancels the turn.
       api.setBusy(true);
       var typing = api.typing();
-      var stream = null; // the streaming assistant bubble
+      var stream = null; // the streaming assistant bubble element
+      var streamText = ''; // accumulated raw answer text
+      var finalized = false;
+      // One idempotency key per user send (issue #420), REUSED on the 404
+      // re-mint retry below so a duplicate turn replays instead of re-running.
+      var idempotencyKey =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : 'k-' + Date.now() + '-' + Math.random().toString(16).slice(2);
       function say(t) {
         typing.done();
         return api.ai(esc(t));
       }
-      function append(delta) {
+      function ensureStream() {
         typing.done();
         if (!stream) stream = api.ai('');
-        stream.textContent += delta;
+        return stream;
       }
-      function handleEvent(type, ev) {
-        if (type === 'assistant.delta' && ev && typeof ev.delta === 'string') {
-          append(ev.delta);
-        } else if (type === 'tool.result') {
-          var o = outcomeOf(ev && ev.result);
-          if (o && o.status === 'parked' && o.invocationId) renderParked(o.invocationId);
-          else if (o && o.status === 'denied') {
-            say(
-              'The vault denied that write' +
-                (o.reason ? ': ' + o.reason : '.') +
-                ' Grant this app access from Settings → Vault to allow it.',
-            );
+      // While streaming, show plain text live; on `final` we upgrade to the
+      // shared rich renderer (ref-chips + typed blocks), identical to the
+      // React shell (#420).
+      function append(delta) {
+        streamText += delta;
+        ensureStream().textContent = streamText;
+      }
+      function finalizeRich(fullText) {
+        var full = fullText || streamText;
+        if (!full) return;
+        finalized = true;
+        var host = ensureStream();
+        host.innerHTML = richAnswerHtml(full);
+        hydrateRefs(host);
+        wireCodeCopy(host);
+      }
+      function handleEvent(ev) {
+        switch (ev.type) {
+          case 'assistant.delta':
+            if (typeof ev.delta === 'string') append(ev.delta);
+            return;
+          case 'tool.result': {
+            var o = outcomeOf(ev.result);
+            if (o && o.status === 'parked' && o.invocationId) renderParked(o.invocationId);
+            else if (o && o.status === 'denied') {
+              say(
+                'The vault denied that write' +
+                  (o.reason ? ': ' + o.reason : '.') +
+                  ' Grant this app access from Settings → Vault to allow it.',
+              );
+            }
+            return;
           }
-        } else if (type === 'final') {
-          if (ev && ev.text && (!stream || !stream.textContent)) say(ev.text);
-        } else if (type === 'error') {
-          say('The agent hit an error: ' + ((ev && ev.message) || 'unknown'));
-        } else if (type === 'aborted') {
-          say('The turn was aborted before it finished.');
+          case 'final':
+            finalizeRich(ev.text);
+            return;
+          case 'notice':
+            // Non-fatal runner notice (issue #420), e.g. "can't read PDFs".
+            typing.done();
+            api.ai(esc(ev.message || 'Notice'));
+            return;
+          case 'error':
+            say('The agent hit an error: ' + (ev.message || 'unknown'));
+            return;
+          case 'aborted':
+            say('The turn was aborted before it finished.');
+            return;
+          default:
+            return;
         }
-      }
-      function frame(raw) {
-        var type = null;
-        var data = '';
-        raw.split('\n').forEach(function (line) {
-          if (line.indexOf('event:') === 0) type = line.slice(6).trim();
-          else if (line.indexOf('data:') === 0) data += line.slice(5).trim();
-        });
-        if (!type || type === 'end') return;
-        var ev = null;
-        try {
-          ev = data ? JSON.parse(data) : null;
-        } catch (_) {}
-        handleEvent(type, ev);
       }
       /**
        * Drive the turn against a resolved conversation id. A 404 means the
        * id this panel was holding onto isn't a session the store knows about
        * (a gateway restart against a fresh vault, journal recreated, …) — mint
        * a real one and retry exactly once rather than surfacing a session
-       * error the owner can't act on.
+       * error the owner can't act on. The SSE body is parsed by the shared
+       * `consumeSse` (#420), which also honors `signal` for clean cancel.
        */
       function runTurn(id, isRetry) {
-        var body = { conversationId: id, message: text, register: 'ask' };
+        var body = {
+          conversationId: id,
+          message: text,
+          register: 'ask',
+          idempotencyKey: idempotencyKey,
+        };
         if (attachments && attachments.length) body.attachments = attachments;
         return fetch(appBase() + '_turn', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(body),
+          signal: signal,
         }).then(function (res) {
           if (!res.ok) {
             return res.text().then(function (t) {
@@ -2039,7 +2042,11 @@ export function wireThemeToggle(btn, { onChange } = {}) {
                   return runTurn(freshId, true);
                 });
               }
-              if (res.status === 503 && j && j.error === 'no_conversation_runner') {
+              if (res.status === 429) {
+                // Turn backpressure (issue #420): the vault is busy. The React
+                // shell auto-retries; the kit keeps it simple with a nudge.
+                say('The vault is busy running other turns — try again in a moment.');
+              } else if (res.status === 503 && j && j.error === 'no_conversation_runner') {
                 say(
                   'No coding agent is configured to answer yet — open Settings → Agents, pick one, and ask again.',
                 );
@@ -2053,23 +2060,7 @@ export function wireThemeToggle(btn, { onChange } = {}) {
               }
             });
           }
-          var reader = res.body.getReader();
-          var dec = new TextDecoder();
-          var buf = '';
-          function pump() {
-            return reader.read().then(function (r) {
-              if (r.done) return;
-              buf += dec.decode(r.value, { stream: true });
-              var i;
-              while ((i = buf.indexOf('\n\n')) !== -1) {
-                var raw = buf.slice(0, i);
-                buf = buf.slice(i + 2);
-                if (raw && raw.charAt(0) !== ':') frame(raw);
-              }
-              return pump();
-            });
-          }
-          return pump();
+          return consumeSse(res.body, handleEvent, { signal: signal });
         });
       }
       ensureConversationId()
@@ -2077,10 +2068,15 @@ export function wireThemeToggle(btn, { onChange } = {}) {
           return runTurn(id, false);
         })
         .catch(function (err) {
+          // A user-initiated cancel surfaces as an AbortError — not a failure.
+          if ((signal && signal.aborted) || (err && err.name === 'AbortError')) return;
           say("Couldn't reach the vault gateway — " + String((err && err.message) || err));
         })
         .then(function () {
           typing.done();
+          // Stream ended with text but no `final` event (model stopped, or a
+          // cancel mid-answer) — still upgrade the plain text to the rich render.
+          if (!finalized && streamText) finalizeRich(streamText);
           api.setBusy(false);
         });
     };

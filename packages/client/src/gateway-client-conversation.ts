@@ -17,15 +17,26 @@
  * Re-exported from `gateway-client.ts` so call sites import from one barrel.
  */
 
-import {
-  auth,
-  authHeaders,
-  doFetch,
-  enc,
-  readJson,
-  GatewayClientError,
-} from './gateway-client-core.js';
+import { auth, authHeaders, doFetch, readJson, GatewayClientError } from './gateway-client-core.js';
 import type { CentraidAgentsStatus, CentraidRunnerStatus } from './centraid-api.js';
+// Shared chat-client core (issue #420): the ONE SSE parser + wire-route
+// builders + the documented TurnStreamEvent union, from the canonical kit copy.
+import { consumeSse } from '@centraid/blueprints/kit/turn-stream.js';
+import type { TurnStreamEvent } from '@centraid/blueprints/kit/turn-stream.js';
+import {
+  appTurnPath,
+  assistantTurnPath,
+  resolvePath,
+  conversationsPath,
+  conversationPath,
+  conversationSearchPath,
+  conversationStatusPath,
+  blobsPath,
+} from '@centraid/blueprints/kit/conversation-client.js';
+
+// Re-exported so every consumer keeps importing the union from this barrel; the
+// definition now lives in one place (the wire contract, turn-stream.d.ts).
+export type { TurnStreamEvent };
 
 /**
  * Runner preflight + model catalog from the ACTIVE gateway. Reads the
@@ -72,49 +83,6 @@ export async function getAgentsStatus(
   return readJson<CentraidAgentsStatus>(res, 'fetch agents status');
 }
 
-/**
- * The gateway's native chat stream event (mirrors
- * `@centraid/app-engine`'s `TurnStreamEvent`). Kept as a local type so the
- * renderer doesn't import the Node package; the panel consumes this union
- * directly now that the turn isn't translated through IPC.
- */
-export type TurnStreamEvent =
-  | { type: 'assistant.start' }
-  | { type: 'assistant.delta'; delta: string }
-  | { type: 'reasoning.delta'; delta: string }
-  | { type: 'tool.start'; toolCallId: string; toolName: string; args?: unknown; sql?: string }
-  | {
-      type: 'tool.result';
-      toolCallId: string;
-      toolName: string;
-      ok: boolean;
-      result?: unknown;
-      errorText?: string;
-    }
-  | { type: 'phase'; phase: string; detail?: unknown }
-  | { type: 'final'; text: string }
-  | { type: 'error'; message: string }
-  | { type: 'aborted' }
-  | {
-      type: 'usage';
-      model?: string;
-      provider?: string;
-      inputTokens?: number;
-      outputTokens?: number;
-      cacheReadTokens?: number;
-      cacheWriteTokens?: number;
-    }
-  | {
-      type: 'webhooks';
-      minted: Array<{
-        automationId: string;
-        ownerApp: string;
-        webhookId: string;
-        url: string;
-        secret: string;
-      }>;
-    };
-
 /** An attachment already uploaded to the blob CAS, referenced on the next turn. */
 export interface ConversationAttachmentRef {
   hash: string;
@@ -140,6 +108,85 @@ export interface StreamTurnInput {
   thinking?: string;
   /** Files uploaded ahead of the turn (issue #190). */
   attachments?: ConversationAttachmentRef[];
+  /** Regenerate: the turn id this turn re-runs (issue #420). Recorded as
+   *  `turns.retry_of` so the transcript collapses it into a sibling pager. */
+  retryOf?: string;
+  /**
+   * Idempotency key (issue #420). A fresh UUID per user send, REUSED on every
+   * automatic/one-tap resend of the same message — so a retry-after-network-blip
+   * replays the already-recorded turn instead of double-running it.
+   */
+  idempotencyKey?: string;
+}
+
+/** Result of a driven turn: whether the stream ended cleanly server-side. */
+export interface StreamTurnResult {
+  /** True when the terminal `event: end` arrived; false on a mid-turn drop. */
+  ended: boolean;
+}
+
+/** Bounded auto-retries on a `429` turn-busy before surfacing the error. */
+const TURN_BUSY_MAX_RETRIES = 4;
+
+/** Sleep helper for the bounded 429 backoff. */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * POST a `_turn` body, transparently auto-retrying a `429` turn-busy up to
+ * `TURN_BUSY_MAX_RETRIES` times honoring `Retry-After` (issue #420). Because the
+ * body carries a stable `idempotencyKey`, a retry can only ever replay — never
+ * double-run. Returns the OK streaming `Response`; throws `GatewayClientError`
+ * on a non-429 failure or once retries are exhausted.
+ */
+async function postTurnWithRetry(
+  path: string,
+  body: string,
+  signal: AbortSignal,
+  errLabel: string,
+): Promise<Response> {
+  const { baseUrl, token } = await auth();
+  for (let attempt = 0; ; attempt++) {
+    const res = await doFetch(baseUrl, path, {
+      method: 'POST',
+      headers: authHeaders(token, 'application/json'),
+      body,
+      signal,
+    });
+    if (res.status === 429 && attempt < TURN_BUSY_MAX_RETRIES) {
+      const retryAfter = Number(res.headers.get('retry-after'));
+      const waitMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 3000;
+      await res.body?.cancel().catch(() => undefined);
+      await delay(waitMs);
+      continue;
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      if (res.status === 401 || res.status === 403) {
+        throw new GatewayClientError(
+          'auth_required',
+          `${errLabel}: gateway rejected request (HTTP ${res.status}).`,
+        );
+      }
+      if (res.status === 429) {
+        throw new GatewayClientError(
+          'gateway_error',
+          `${errLabel}: still busy after ${TURN_BUSY_MAX_RETRIES} retries — try again shortly.`,
+        );
+      }
+      throw new GatewayClientError(
+        'gateway_error',
+        `${errLabel} failed (HTTP ${res.status}): ${text || res.statusText}`,
+      );
+    }
+    if (!res.body)
+      throw new GatewayClientError(
+        'gateway_error',
+        `${errLabel}: gateway returned no stream body.`,
+      );
+    return res;
+  }
 }
 
 /**
@@ -154,7 +201,7 @@ export async function uploadConversationAttachment(
   filename?: string,
 ): Promise<ConversationAttachmentRef> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/_centraid-conversations/apps/${enc(appId)}/blobs`, {
+  const res = await doFetch(baseUrl, blobsPath(appId), {
     method: 'POST',
     headers: { ...authHeaders(token), 'content-type': mime },
     body: bytes as BodyInit,
@@ -178,75 +225,24 @@ export async function streamTurn(
   input: StreamTurnInput,
   onEvent: (event: TurnStreamEvent) => void,
   signal: AbortSignal,
-): Promise<void> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/${enc(appId)}/_turn`, {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({
+): Promise<StreamTurnResult> {
+  const res = await postTurnWithRetry(
+    appTurnPath(appId),
+    JSON.stringify({
       conversationId: input.conversationId,
       message: input.message,
       ...(input.register ? { register: input.register } : {}),
       ...(input.model ? { model: input.model } : {}),
       ...(input.thinking ? { thinking: input.thinking } : {}),
+      ...(input.retryOf ? { retryOf: input.retryOf } : {}),
+      ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
     }),
     signal,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    if (res.status === 401 || res.status === 403) {
-      throw new GatewayClientError(
-        'auth_required',
-        `chat: gateway rejected request (HTTP ${res.status}).`,
-      );
-    }
-    throw new GatewayClientError(
-      'gateway_error',
-      `chat failed (HTTP ${res.status}): ${text || res.statusText}`,
-    );
-  }
-  if (!res.body)
-    throw new GatewayClientError('gateway_error', 'chat: gateway returned no stream body.');
-  await consumeSse(res.body, onEvent);
-}
-
-/**
- * Parse a `_turn` SSE body into `TurnStreamEvent`s. Frames are separated by
- * a blank line; each may carry an `event:` line (ignored — `type` is inside
- * the JSON), `:` heartbeat comments, and one or more `data:` lines. The
- * closing `event: end\ndata: {}` frame parses to an object with no `type`,
- * so it falls through harmlessly.
- */
-async function consumeSse(
-  body: ReadableStream<Uint8Array>,
-  onEvent: (event: TurnStreamEvent) => void,
-): Promise<void> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buf = '';
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    let sep: number;
-    while ((sep = buf.indexOf('\n\n')) >= 0) {
-      const frame = buf.slice(0, sep);
-      buf = buf.slice(sep + 2);
-      const data = frame
-        .split('\n')
-        .filter((l) => l.startsWith('data:'))
-        .map((l) => l.slice('data:'.length).trimStart())
-        .join('\n');
-      if (!data) continue;
-      try {
-        const evt = JSON.parse(data) as { type?: string };
-        if (evt && typeof evt.type === 'string') onEvent(evt as TurnStreamEvent);
-      } catch {
-        /* skip a malformed frame rather than abort the stream */
-      }
-    }
-  }
+    'chat',
+  );
+  // `res.body` is guaranteed by postTurnWithRetry.
+  return consumeSse(res.body!, onEvent, { signal });
 }
 
 // ───────────────────────── vault assistant ─────────────────────
@@ -275,30 +271,39 @@ export async function streamAssistantTurn(
   input: StreamTurnInput,
   onEvent: (event: TurnStreamEvent) => void,
   signal: AbortSignal,
-): Promise<void> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_vault/assistant/_turn`, {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({
+): Promise<StreamTurnResult> {
+  const res = await postTurnWithRetry(
+    assistantTurnPath(),
+    JSON.stringify({
       conversationId: input.conversationId,
       message: input.message,
       ...(input.model ? { model: input.model } : {}),
       ...(input.thinking ? { thinking: input.thinking } : {}),
+      ...(input.retryOf ? { retryOf: input.retryOf } : {}),
+      ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
     }),
     signal,
+    'assistant',
+  );
+  return consumeSse(res.body!, onEvent, { signal });
+}
+
+/**
+ * Poll a conversation's turn-settle status (issue #420) — cheap enough to loop
+ * during reconnect catch-up. Returns the current `turnCount` so the caller can
+ * detect a turn landing server-side after a dropped stream.
+ */
+export async function conversationStatus(
+  appId: string,
+  sessionId: string,
+): Promise<{ turnCount: number; updatedAt: number }> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, conversationStatusPath(appId, sessionId), {
+    method: 'GET',
+    headers: authHeaders(token),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new GatewayClientError(
-      res.status === 401 || res.status === 403 ? 'auth_required' : 'gateway_error',
-      `assistant turn failed (HTTP ${res.status}): ${text || res.statusText}`,
-    );
-  }
-  if (!res.body)
-    throw new GatewayClientError('gateway_error', 'assistant: gateway returned no stream body.');
-  await consumeSse(res.body, onEvent);
+  return readJson(res, 'conversation status');
 }
 
 /** Resolve answer refs (`ref:type/id`) to renderable entity cards. */
@@ -307,7 +312,7 @@ export async function resolveAssistantRefs(
 ): Promise<AssistantRefCard[]> {
   if (refs.length === 0) return [];
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_vault/assistant/resolve`, {
+  const res = await doFetch(baseUrl, resolvePath(), {
     method: 'POST',
     headers: authHeaders(token, 'application/json'),
     body: JSON.stringify({ refs }),
@@ -317,15 +322,12 @@ export async function resolveAssistantRefs(
 }
 
 // ───────────────────────── chat history ─────────────────────
-
-function sessionsPath(appId: string): string {
-  return `/_centraid-conversations/apps/${enc(appId)}/sessions`;
-}
+// Routes single-sourced in @centraid/blueprints/kit/conversation-client.js (#420).
 
 /** List this app's persisted chat sessions, newest first. */
 export async function listConversations(appId: string): Promise<CentraidConversationSummary[]> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, sessionsPath(appId), {
+  const res = await doFetch(baseUrl, conversationsPath(appId), {
     method: 'GET',
     headers: authHeaders(token),
   });
@@ -339,12 +341,34 @@ export async function createConversation(
   title = '',
 ): Promise<CentraidConversationSummary> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, sessionsPath(appId), {
+  const res = await doFetch(baseUrl, conversationsPath(appId), {
     method: 'POST',
     headers: authHeaders(token, 'application/json'),
     body: JSON.stringify({ title }),
   });
   return readJson<CentraidConversationSummary>(res, 'create chat');
+}
+
+/**
+ * Fetch an attachment blob's bytes (auth-aware) and return an object URL for an
+ * inline `<img>` thumbnail (issue #420, Wave 2). The blob GET route lives behind
+ * the same bearer auth as the rest of the conversation surface, so an `<img
+ * src>` cannot carry it — we fetch the bytes and mint a local object URL. The
+ * caller must `URL.revokeObjectURL` it when the image unmounts.
+ */
+export async function fetchAssistantAttachmentUrl(
+  appId: string,
+  hash: string,
+  mime: string,
+): Promise<string> {
+  const { baseUrl, token } = await auth();
+  const path = `${blobsPath(appId)}/${encodeURIComponent(hash)}?mime=${encodeURIComponent(mime)}`;
+  const res = await doFetch(baseUrl, path, { method: 'GET', headers: authHeaders(token) });
+  if (!res.ok) {
+    throw new GatewayClientError('gateway_error', `attachment fetch failed (HTTP ${res.status})`);
+  }
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
 }
 
 /** Load one chat session with its reconstructed transcript. */
@@ -361,7 +385,7 @@ export async function loadConversation(
   }
 > {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `${sessionsPath(appId)}/${enc(sessionId)}`, {
+  const res = await doFetch(baseUrl, conversationPath(appId, sessionId), {
     method: 'GET',
     headers: authHeaders(token),
   });
@@ -375,7 +399,7 @@ export async function renameConversation(
   title: string,
 ): Promise<void> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `${sessionsPath(appId)}/${enc(sessionId)}`, {
+  const res = await doFetch(baseUrl, conversationPath(appId, sessionId), {
     method: 'PATCH',
     headers: authHeaders(token, 'application/json'),
     body: JSON.stringify({ title }),
@@ -383,10 +407,81 @@ export async function renameConversation(
   await readJson(res, 'rename chat');
 }
 
+/**
+ * FTS search over this app's chat sessions — titles + inbound message text
+ * (issue #420). Powers the ⌘K palette's "Conversations" category. Each hit
+ * carries a highlighted `snippet` for match context; archived threads are
+ * excluded server-side.
+ */
+export async function searchConversations(
+  appId: string,
+  query: string,
+  limit = 20,
+): Promise<CentraidConversationSearchResult[]> {
+  if (!query.trim()) return [];
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, conversationSearchPath(appId, query, limit), {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  const out = await readJson<{ results: CentraidConversationSearchResult[] }>(res, 'search chats');
+  return out.results ?? [];
+}
+
+/** Pin or unpin a chat session (pinned threads sort first). */
+export async function setConversationPinned(
+  appId: string,
+  sessionId: string,
+  pinned: boolean,
+): Promise<void> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, conversationPath(appId, sessionId), {
+    method: 'PATCH',
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify({ pinned }),
+  });
+  await readJson(res, 'pin chat');
+}
+
+/** Archive or unarchive a chat session. */
+export async function setConversationArchived(
+  appId: string,
+  sessionId: string,
+  archived: boolean,
+): Promise<void> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, conversationPath(appId, sessionId), {
+    method: 'PATCH',
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify({ archived }),
+  });
+  await readJson(res, 'archive chat');
+}
+
+/**
+ * Set (or clear, with `null`) the reader's 👍/👎 on one answer turn
+ * (`PATCH .../sessions/<id>/turns/<turnId>/feedback`, issue #420).
+ */
+export async function setConversationFeedback(
+  appId: string,
+  sessionId: string,
+  turnId: string,
+  feedback: 'up' | 'down' | null,
+): Promise<void> {
+  const { baseUrl, token } = await auth();
+  const path = `${conversationPath(appId, sessionId)}/turns/${encodeURIComponent(turnId)}/feedback`;
+  const res = await doFetch(baseUrl, path, {
+    method: 'PATCH',
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify({ feedback }),
+  });
+  await readJson(res, 'set feedback');
+}
+
 /** Delete a chat session. */
 export async function deleteConversation(appId: string, sessionId: string): Promise<void> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `${sessionsPath(appId)}/${enc(sessionId)}`, {
+  const res = await doFetch(baseUrl, conversationPath(appId, sessionId), {
     method: 'DELETE',
     headers: authHeaders(token),
   });

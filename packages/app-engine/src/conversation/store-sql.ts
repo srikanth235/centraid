@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit prepared-statement block + row mappers for every conversation-ledger column; splitting the statement table from its mappers would decouple the two halves that must change together
 /*
  * Prepared-statement block + raw-row mappers for `ConversationStore`.
  *
@@ -38,6 +39,7 @@ export interface RawConversation {
   adapter_session_id: string | null;
   turn_count: number;
   pinned: number;
+  archived: number;
   created_at: number;
   updated_at: number;
 }
@@ -53,8 +55,10 @@ export interface RawTurn {
   summary: string | null;
   output_json: string | null;
   retry_of: string | null;
+  idempotency_key: string | null;
   ok: number;
   error: string | null;
+  feedback: string | null;
   pinned: number;
   started_at: number;
   ended_at: number | null;
@@ -124,6 +128,7 @@ export function conversationFromRaw(raw: RawConversation): Conversation {
     ...(raw.adapter_session_id !== null ? { adapterSessionId: raw.adapter_session_id } : {}),
     turnCount: Number(raw.turn_count),
     pinned: raw.pinned !== 0,
+    archived: raw.archived !== 0,
     createdAt: raw.created_at,
     updatedAt: raw.updated_at,
   };
@@ -141,10 +146,12 @@ export function turnFromRaw(raw: RawTurn): Turn {
       : {}),
     ...(raw.note !== null ? { note: raw.note } : {}),
     ...(raw.retry_of !== null ? { retryOf: raw.retry_of } : {}),
+    ...(raw.idempotency_key !== null ? { idempotencyKey: raw.idempotency_key } : {}),
     startedAt: raw.started_at,
     ...(raw.ended_at !== null ? { endedAt: raw.ended_at } : {}),
     ok: raw.ok !== 0,
     ...(raw.error !== null ? { error: raw.error } : {}),
+    ...(raw.feedback === 'up' || raw.feedback === 'down' ? { feedback: raw.feedback } : {}),
     ...(raw.summary !== null ? { summary: raw.summary } : {}),
     ...(raw.output_json !== null ? { outputJson: raw.output_json } : {}),
     pinned: raw.pinned !== 0,
@@ -219,6 +226,9 @@ export interface PreparedStatements {
   getConversation: StatementSync;
   getConversationWithCount: StatementSync;
   listConversations: StatementSync;
+  searchConversations: StatementSync;
+  setConversationPinned: StatementSync;
+  setConversationArchived: StatementSync;
   renameConversation: StatementSync;
   deleteConversationForUser: StatementSync;
   deleteConversationById: StatementSync;
@@ -234,11 +244,13 @@ export interface PreparedStatements {
   insertTurn: StatementSync;
   finishTurn: StatementSync;
   getTurn: StatementSync;
+  getTurnByIdempotency: StatementSync;
   listTurnsAsc: StatementSync;
   listTurnsFiltered: StatementSync;
   listTurnsByAutomation: StatementSync;
   listInFlightAutomationTurns: StatementSync;
   setTurnPinned: StatementSync;
+  setTurnFeedback: StatementSync;
   pruneAutomationByCount: StatementSync;
   pruneAutomationByDays: StatementSync;
   pruneAutomationErrorsOnly: StatementSync;
@@ -261,8 +273,13 @@ export interface PreparedStatements {
 // Reconstructed transcript length = total items across the conversation's
 // turns (one `message_in` per turn + each step/tool item).
 const CONV_COLS = `c.id, c.kind, c.user_id, c.app_id, c.automation_id, c.title,
-        c.adapter_kind, c.adapter_session_id, c.turn_count, c.pinned,
+        c.adapter_kind, c.adapter_session_id, c.turn_count, c.pinned, c.archived,
         c.created_at, c.updated_at`;
+
+// The reconstructed transcript-length subquery, shared by the list/search/get
+// column blocks so a conversation's `msg_count` means the same thing everywhere.
+const MSG_COUNT_SUBQUERY = `(SELECT COUNT(*) FROM items WHERE turn_id IN
+          (SELECT id FROM turns WHERE conversation_id = c.id))`;
 
 export function prepare(db: DatabaseSync): PreparedStatements {
   return {
@@ -280,21 +297,43 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     getConversation: db.prepare(`SELECT ${CONV_COLS} FROM conversations c WHERE c.id = ?`),
     getConversationWithCount: db.prepare(`
       SELECT ${CONV_COLS},
-        (SELECT COUNT(*) FROM items WHERE turn_id IN
-          (SELECT id FROM turns WHERE conversation_id = c.id)) AS msg_count
+        ${MSG_COUNT_SUBQUERY} AS msg_count
       FROM conversations c WHERE c.id = ? AND c.user_id = ?
     `),
     // App scoping is a column filter (`?3 IS NULL OR c.app_id = ?`): the
-    // ledger file is per VAULT, one shared `journal.db` (#280).
+    // ledger file is per VAULT, one shared `journal.db` (#280). Pinned threads
+    // sort first (issue #420); archived rows still come back so the sidebar can
+    // group them, they're just ordered last within their pin bucket.
     listConversations: db.prepare(`
       SELECT ${CONV_COLS},
-        (SELECT COUNT(*) FROM items WHERE turn_id IN
-          (SELECT id FROM turns WHERE conversation_id = c.id)) AS msg_count
+        ${MSG_COUNT_SUBQUERY} AS msg_count
       FROM conversations c
       WHERE c.user_id = ? AND c.kind IN ('chat','build')
         AND (? IS NULL OR c.app_id = ?)
-      ORDER BY c.updated_at DESC
+      ORDER BY c.archived ASC, c.pinned DESC, c.updated_at DESC
     `),
+    // FTS5 search over titles + inbound message text (issue #420, Wave 3),
+    // mirroring the vault's search: rank order + snippet() for match context.
+    // Archived threads are out of the way, so they stay out of results.
+    searchConversations: db.prepare(`
+      SELECT ${CONV_COLS},
+        ${MSG_COUNT_SUBQUERY} AS msg_count,
+        snippet(fts_conversation, -1, '⟦', '⟧', '…', 12) AS snippet
+      FROM fts_conversation
+      JOIN conversations c ON c.id = fts_conversation.conversation_id
+      WHERE fts_conversation MATCH ?
+        AND c.user_id = ? AND c.kind IN ('chat','build')
+        AND (? IS NULL OR c.app_id = ?)
+        AND c.archived = 0
+      ORDER BY fts_conversation.rank
+      LIMIT ?
+    `),
+    setConversationPinned: db.prepare(
+      `UPDATE conversations SET pinned = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+    ),
+    setConversationArchived: db.prepare(
+      `UPDATE conversations SET archived = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+    ),
     renameConversation: db.prepare(
       `UPDATE conversations SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
     ),
@@ -328,8 +367,8 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     insertTurn: db.prepare(`
       INSERT INTO turns
         (id, conversation_id, seq, parent_turn_id, trigger, trigger_origin,
-         retry_of, note, started_at, ok)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+         retry_of, idempotency_key, note, started_at, ok)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
     `),
     // Σ over this turn's own step/agent items; step/tool counts. SUM over an
     // empty set yields NULL — correct in-flight semantics.
@@ -357,6 +396,14 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       WHERE id = $tid
     `),
     getTurn: db.prepare(`SELECT * FROM turns WHERE id = ?`),
+    // Idempotency lookup (issue #420): the most recent recorded turn on a
+    // conversation carrying the given key. A key is written once per user send;
+    // newest-first is defensive against any accidental reuse.
+    getTurnByIdempotency: db.prepare(`
+      SELECT * FROM turns
+      WHERE conversation_id = ? AND idempotency_key = ?
+      ORDER BY seq DESC LIMIT 1
+    `),
     // Ascending by seq — a transcript is replayed oldest-turn-first.
     listTurnsAsc: db.prepare(`
       SELECT * FROM turns WHERE conversation_id = ? ORDER BY seq ASC
@@ -382,6 +429,10 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       ORDER BY t.started_at DESC LIMIT ?
     `),
     setTurnPinned: db.prepare(`UPDATE turns SET pinned = ? WHERE id = ?`),
+    // Message-level 👍/👎 (issue #420). `?1` is 'up' | 'down' | NULL (clear).
+    setTurnFeedback: db.prepare(
+      `UPDATE turns SET feedback = ? WHERE id = ? AND conversation_id = ?`,
+    ),
     // Retention is per turn within the automation's stable conversation.
     // Deleting a turn cascades its items and attachments; pinned turns survive.
     pruneAutomationByCount: db.prepare(`

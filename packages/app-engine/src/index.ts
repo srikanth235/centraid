@@ -219,12 +219,22 @@ export {
   ConversationHistoryStore,
   deriveTitle,
   type ConversationSummary,
+  type ConversationSearchResult,
   type ConversationMessageRow,
   type ConversationAttachmentPayload,
   type TurnNode,
   type ConversationTurnAttachment,
   type RecordTurnInput,
+  type RecordedTurnReplay,
 } from './conversation/history.js';
+// LLM auto-titles (issue #420, Wave 3): a cheap one-shot inference names a
+// new conversation after its first turn. Provider-agnostic (tier token) and
+// fire-and-forget — the gateway owns the "apply only if still derived" guard.
+export {
+  generateConversationTitle,
+  cleanTitle,
+  type GenerateTitleDeps,
+} from './conversation/auto-title.js';
 export { makeConversationRouteHandler } from './http/conversation-routes.js';
 // The shared SSE turn driver (stream framing + run-ledger fold) — the
 // per-app `_turn` route and the gateway's vault-assistant route both ride it.
@@ -236,6 +246,16 @@ export {
   type DriveTurnOptions,
   type TurnAttachmentRef,
 } from './http/turn-sse.js';
+// Idempotency replay (issue #420): recorded-turn → SSE event sequence.
+export { buildReplayEvents } from './http/turn-replay.js';
+// Per-vault turn-concurrency gate (issue #420): bounds concurrently-running
+// turns; over the ceiling the driver writes 429 + Retry-After.
+export {
+  TurnLimiter,
+  writeTurnBusy,
+  DEFAULT_MAX_CONCURRENT_TURNS,
+  TURN_RETRY_AFTER_SECONDS,
+} from './http/turn-limiter.js';
 
 // Blob content-addressed store for attachment bytes (issue #190). Bytes live
 // at `<workspace appsDir>/<appId>/blobs/<hash>` inside the vault, deduped by

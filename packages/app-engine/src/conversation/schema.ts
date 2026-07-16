@@ -75,6 +75,12 @@ export interface Conversation {
    * and a `replay` fire can serve its recorded items (issue #80 follow-up).
    */
   readonly pinned: boolean;
+  /**
+   * When true the conversation is archived (issue #420): hidden from the main
+   * sidebar list behind a collapsed group and excluded from search, without
+   * being deleted. Chat/build only.
+   */
+  readonly archived: boolean;
   readonly createdAt: number;
   readonly updatedAt: number;
 }
@@ -96,10 +102,18 @@ export interface Turn {
   readonly note?: string;
   /** When this turn is a retry, the turn id it re-runs. */
   readonly retryOf?: string;
+  /**
+   * Client-supplied idempotency key (issue #420). A duplicate turn POST with
+   * the same key on the same conversation replays this recorded turn rather
+   * than re-running. Absent on automation turns and pre-#420 rows.
+   */
+  readonly idempotencyKey?: string;
   readonly startedAt: number;
   readonly endedAt?: number;
   readonly ok: boolean;
   readonly error?: string;
+  /** Message-level reader feedback on the turn's answer (issue #420). */
+  readonly feedback?: 'up' | 'down';
   readonly summary?: string;
   /**
    * The turn's structured result. For an automation it is the handler's

@@ -24,6 +24,9 @@ import type {
   TurnStreamEvent,
 } from '../conversation/runner.js';
 import type { ConversationHistoryStore, TurnNode } from '../conversation/history.js';
+import { buildReplayEvents } from './turn-replay.js';
+import { writeTurnBusy, type TurnLimiter } from './turn-limiter.js';
+import { costForUsage } from '../model-pricing.js';
 
 /** A file uploaded to the blob CAS before the turn, referenced by its hash. */
 export interface TurnAttachmentRef {
@@ -128,12 +131,36 @@ export interface DriveTurnOptions {
   model?: string | undefined;
   thinking?: string | undefined;
   idempotencyKey?: string | undefined;
+  /**
+   * Modest per-vault turn-concurrency gate (issue #420). When set and already
+   * at capacity, the driver writes a `429` + `Retry-After` and never opens the
+   * SSE stream. The slot is held for the whole drive and released when the
+   * stream ends. Absent in hermetic tests → unbounded (the old behavior).
+   */
+  limiter?: TurnLimiter | undefined;
+  /** When set, this turn is a regenerate of the given turn id — recorded as
+   *  `turns.retry_of` so the transcript collapses it into a sibling pager
+   *  (issue #420). */
+  retryOf?: string | undefined;
   prevAdapterSessionId?: string | undefined;
   prevAdapterKind?: string | undefined;
   /** CAS refs recorded on the turn's `message_in` item. */
   attachmentRefs?: TurnAttachmentRef[];
   /** Resolved blob paths handed to the runner for multimodal blocks. */
   turnAttachments?: { path: string; mime: string; filename?: string }[];
+  /**
+   * Fire-and-forget LLM auto-title hook (issue #420). Invoked once, ONLY after
+   * the FIRST successful turn of a still-unnamed conversation, with the turn's
+   * user message and assistant answer. The callback owns the cheap-tier
+   * inference and the "apply only if the title is still the derived truncation"
+   * guard; the driver just decides *when* to fire it. Never awaited — a title
+   * miss must never affect the turn.
+   */
+  generateTitle?: (args: {
+    conversationId: string;
+    userMessage: string;
+    assistantText: string;
+  }) => void;
 }
 
 /**
@@ -142,6 +169,25 @@ export interface DriveTurnOptions {
  * here, always).
  */
 export async function driveTurnOverSse(opts: DriveTurnOptions): Promise<void> {
+  const { res } = opts;
+
+  // Backpressure (issue #420): a modest per-vault ceiling on running turns.
+  // Beyond it, 429 + Retry-After BEFORE any SSE header — the client retries
+  // (with the same idempotency key, so a retry can only ever replay). The slot
+  // is held for the whole drive and released in the finally below.
+  const releaseSlot = opts.limiter?.tryAcquire();
+  if (opts.limiter && !releaseSlot) {
+    writeTurnBusy(res);
+    return;
+  }
+  try {
+    await driveTurnInner(opts);
+  } finally {
+    releaseSlot?.();
+  }
+}
+
+async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
   const { req, res, appId, conversationId, message, runner, conversationStore } = opts;
 
   // Start the SSE stream up-front so the harness sees `connected` even if
@@ -247,13 +293,21 @@ export async function driveTurnOverSse(opts: DriveTurnOptions): Promise<void> {
       case 'reasoning.delta':
       case 'phase':
       case 'aborted':
+      case 'notice':
       case 'webhooks':
         break;
     }
   };
   const onEvent = (event: TurnStreamEvent): void => {
-    accumulate(event);
-    writeEvent(event);
+    // Price the usage event at the one allowlisted seam (model-pricing.ts) so
+    // clients can show a live cost without mirroring model rate tables.
+    let priced = event;
+    if (priced.type === 'usage' && priced.costUsd === undefined) {
+      const costUsd = costForUsage(priced.model, priced);
+      if (costUsd !== undefined) priced = { ...priced, costUsd };
+    }
+    accumulate(priced);
+    writeEvent(priced);
   };
 
   const abortController = new AbortController();
@@ -287,6 +341,31 @@ export async function driveTurnOverSse(opts: DriveTurnOptions): Promise<void> {
   };
 
   await withConversationLock(opts.conversationLocks, appId, conversationId, async () => {
+    // Idempotency (issue #420): a duplicate POST with a key that already names a
+    // recorded turn on this conversation replays the recorded answer instead of
+    // re-running the model. The per-conversation lock makes the in-flight case
+    // fall out for free — a duplicate that arrives while the first turn is still
+    // running QUEUES behind this same lock, so by the time it acquires the lock
+    // the first turn has recorded and this branch replays it (no 409 needed, no
+    // double-run). Replay skips the runner AND recordTurn, so no duplicate row.
+    if (opts.idempotencyKey && conversationStore) {
+      const recorded = conversationStore.findRecordedTurn(
+        appId,
+        conversationId,
+        opts.idempotencyKey,
+      );
+      if (recorded) {
+        for (const ev of buildReplayEvents(recorded)) writeEvent(ev);
+        clearInterval(heartbeat);
+        req.off('close', onClientClose);
+        req.off('error', onClientClose);
+        if (!res.writableEnded) {
+          res.write(`event: end\ndata: {}\n\n`);
+          res.end();
+        }
+        return;
+      }
+    }
     let runResult: { adapterSessionId?: string; adapterKind?: string } | undefined;
     try {
       const out = await runner.run(input);
@@ -299,6 +378,11 @@ export async function driveTurnOverSse(opts: DriveTurnOptions): Promise<void> {
       req.off('close', onClientClose);
       req.off('error', onClientClose);
       if (conversationStore) {
+        // Whether this conversation is still unnamed BEFORE we record — an
+        // empty title is the "first turn of a new thread" signal (recordTurn
+        // sets the derived truncation below). Read once here so the auto-title
+        // hook fires exactly on the naming turn (issue #420).
+        const wasUnnamed = conversationStore.getSessionMeta(appId, conversationId)?.title === '';
         // Persist the turn as a `runs` row + its `run_nodes` trace. The
         // assistant reply (or the turn error) is one `step` node ordered
         // after the turn's `tool` nodes — matching the transcript shape
@@ -334,6 +418,8 @@ export async function driveTurnOverSse(opts: DriveTurnOptions): Promise<void> {
             // unset → recorded as `'chat'` (issue #181). Read statically off the
             // runner so an errored turn (no `ConversationTurnResult`) is still tagged.
             ...(runner.runKind ? { kind: runner.runKind } : {}),
+            ...(opts.retryOf !== undefined ? { retryOf: opts.retryOf } : {}),
+            ...(opts.idempotencyKey !== undefined ? { idempotencyKey: opts.idempotencyKey } : {}),
             userMessage: message,
             ...(opts.attachmentRefs?.length
               ? {
@@ -354,6 +440,26 @@ export async function driveTurnOverSse(opts: DriveTurnOptions): Promise<void> {
           });
         } catch {
           /* best-effort — a ledger miss never fails the turn */
+        }
+        // LLM auto-title (issue #420): only on the naming turn of a new thread,
+        // only when the turn actually produced an answer. Fire-and-forget — the
+        // callback owns the cheap inference and the rename guard.
+        if (
+          wasUnnamed &&
+          opts.generateTitle &&
+          acc.errorMessage === undefined &&
+          acc.finalText &&
+          acc.finalText.trim().length > 0
+        ) {
+          try {
+            opts.generateTitle({
+              conversationId,
+              userMessage: message,
+              assistantText: acc.finalText,
+            });
+          } catch {
+            /* best-effort — a title miss never fails the turn */
+          }
         }
         // Persist the runner-resume handle. The resume-handle update only
         // happens when the runner reported an `adapterKind` (codex /

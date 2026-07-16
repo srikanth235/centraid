@@ -1,4 +1,4 @@
-import type { JSX, ReactNode } from 'react';
+import { useState, type JSX, type ReactNode } from 'react';
 import type { IconName } from '@centraid/design-tokens';
 import Icon from '../ui/Icon.js';
 import Logo from '../ui/Logo.js';
@@ -54,6 +54,10 @@ export interface SidebarConversation {
   id: string;
   title: string;
   timeLabel: string;
+  /** Pinned threads render in a section above the rest (issue #420). */
+  pinned?: boolean;
+  /** Archived threads render behind a collapsed group at the bottom. */
+  archived?: boolean;
 }
 
 export interface SidebarProps {
@@ -76,6 +80,9 @@ export interface SidebarProps {
   onNewChat?: () => void;
   onSelectConversation?: (id: string) => void;
   onDeleteConversation?: (id: string) => void;
+  /** Row ••• / right-click menu (Rename + Delete). Wired by App.tsx to the
+   *  shared context menu; when present it supersedes the bare delete X. */
+  onConversationMenu?: (id: string, anchor: ShellMenuAnchor) => void;
   onSearch?: () => void;
   onAssistant?: () => void;
   onInsights?: () => void;
@@ -200,11 +207,13 @@ function ConversationRow({
   conversation,
   active,
   onClick,
+  onMenu,
   onDelete,
 }: {
   conversation: SidebarConversation;
   active: boolean;
   onClick: () => void;
+  onMenu?: (anchor: ShellMenuAnchor) => void;
   onDelete?: () => void;
 }): JSX.Element {
   const item = (
@@ -216,6 +225,34 @@ function ConversationRow({
       onClick={onClick}
     />
   );
+  // Prefer the ••• menu (Rename + Delete); fall back to the bare delete X when
+  // only a delete handler is wired (route unit-test fixtures).
+  if (onMenu) {
+    return (
+      <div
+        className={chrome.sbAppRow}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onMenu({ kind: 'point', x: e.clientX, y: e.clientY });
+        }}
+      >
+        {item}
+        <button
+          className={chrome.rowMore}
+          type="button"
+          aria-label="Conversation actions"
+          aria-haspopup="menu"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onMenu({ kind: 'rect', rect: e.currentTarget.getBoundingClientRect() });
+          }}
+        >
+          <Icon name="MoreVert" size={14} />
+        </button>
+      </div>
+    );
+  }
   if (!onDelete) return item;
   return (
     <div className={chrome.sbAppRow}>
@@ -233,6 +270,67 @@ function ConversationRow({
         <Icon name="X" size={12} />
       </button>
     </div>
+  );
+}
+
+/**
+ * The "Chats" list, grouped for scale (issue #420): pinned threads on top, the
+ * rest by recency, and archived threads tucked behind a collapsed group at the
+ * bottom. Rendering + row menu are unchanged — only the ordering/sectioning is.
+ */
+function ChatsSection(props: SidebarProps): JSX.Element {
+  const [archivedOpen, setArchivedOpen] = useState(false);
+  const all = props.conversations ?? [];
+  const pinned = all.filter((c) => c.pinned && !c.archived);
+  const normal = all.filter((c) => !c.pinned && !c.archived);
+  const archived = all.filter((c) => c.archived);
+  const activeCount = pinned.length + normal.length;
+
+  const row = (c: SidebarConversation): JSX.Element => (
+    <ConversationRow
+      key={c.id}
+      conversation={c}
+      active={c.id === props.activeConversationId}
+      onClick={() => props.onSelectConversation?.(c.id)}
+      {...(props.onConversationMenu
+        ? { onMenu: (anchor: ShellMenuAnchor) => props.onConversationMenu?.(c.id, anchor) }
+        : {})}
+      onDelete={props.onDeleteConversation ? () => props.onDeleteConversation?.(c.id) : undefined}
+    />
+  );
+
+  return (
+    <>
+      <SbSection label={`Chats · ${activeCount}`} onAction={props.onNewChat} />
+      {activeCount === 0 ? (
+        <SbItem icon={<SparkleGlyph />} label="No conversations yet" disabled />
+      ) : (
+        <>
+          {pinned.length > 0 ? (
+            <>
+              <div className={chrome.sbSubLabel}>Pinned</div>
+              {pinned.map(row)}
+              {normal.length > 0 ? <div className={chrome.sbSubLabel}>Recent</div> : null}
+            </>
+          ) : null}
+          {normal.map(row)}
+        </>
+      )}
+      {archived.length > 0 ? (
+        <>
+          <button
+            className={chrome.sbArchivedToggle}
+            type="button"
+            aria-expanded={archivedOpen}
+            onClick={() => setArchivedOpen((o) => !o)}
+          >
+            <Icon name={archivedOpen ? 'ChevronDown' : 'ChevronRight'} size={13} />
+            <span>Archived · {archived.length}</span>
+          </button>
+          {archivedOpen ? archived.map(row) : null}
+        </>
+      ) : null}
+    </>
   );
 }
 
@@ -331,22 +429,7 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         <SbItem icon={<SparkleGlyph />} label="No apps yet" disabled />
       )}
 
-      <SbSection label={`Chats · ${props.conversations?.length ?? 0}`} onAction={props.onNewChat} />
-      {props.conversations && props.conversations.length > 0 ? (
-        props.conversations.map((c) => (
-          <ConversationRow
-            key={c.id}
-            conversation={c}
-            active={c.id === props.activeConversationId}
-            onClick={() => props.onSelectConversation?.(c.id)}
-            onDelete={
-              props.onDeleteConversation ? () => props.onDeleteConversation?.(c.id) : undefined
-            }
-          />
-        ))
-      ) : (
-        <SbItem icon={<SparkleGlyph />} label="No conversations yet" disabled />
-      )}
+      <ChatsSection {...props} />
 
       <span style={{ flex: '1', minHeight: '12px' }} />
       {props.onWhatsNew ? (

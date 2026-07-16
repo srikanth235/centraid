@@ -22,6 +22,14 @@
   min-width: 0;
   flex: 1;
 }
+/* Positioning context for the floating jump-to-bottom pill (§5). */
+.scrollWrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 .scroll {
   flex: 1;
   min-height: 0;
@@ -37,6 +45,130 @@
   max-width: 880px;
   width: 100%;
   margin: 0 auto;
+  /* Cheap virtualization for long transcripts (§5): the browser skips layout +
+     paint for off-screen rows. The size hint keeps the scrollbar stable. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 48px;
+}
+
+/* Floating "jump to latest" pill — a down-chevron button shown only when the
+   reader has scrolled up and new content arrived (§5). ArrowRight is rotated
+   to point down since the icon set has no down arrow. */
+.jumpToBottom {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 0.5px solid var(--line-strong);
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  box-shadow: var(--shadow-md, var(--shadow-sm));
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+}
+.jumpToBottom svg {
+  transform: rotate(90deg);
+}
+.jumpToBottom:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+.jumpToBottom:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Per-message hover action bar (copy / feedback / regenerate / retry / pager /
+   timestamp, §1). Quiet by default, surfaced on hover or focus-within. */
+.msgActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 4px;
+  min-height: 22px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.msgUser .msgActions {
+  justify-content: flex-end;
+}
+.msg:hover .msgActions,
+.msg:focus-within .msgActions {
+  opacity: 1;
+}
+.msgActionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: var(--r-sm, 5px);
+  background: transparent;
+  color: var(--ink-4);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition:
+    color 100ms,
+    background 100ms;
+}
+.msgActionBtn:hover {
+  color: var(--ink);
+  background: color-mix(in oklab, var(--ink) 7%, transparent);
+}
+.msgActionBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.msgActionBtn.feedbackOn {
+  color: var(--accent);
+}
+.msgTime {
+  margin-left: 4px;
+  font-size: 10.5px;
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
+/* Retry pager ("‹ 2/2 ›", §1). */
+.pager {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  margin-right: 4px;
+}
+.pagerBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--r-sm, 5px);
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.pagerBtn:hover:not(:disabled) {
+  color: var(--ink);
+  background: color-mix(in oklab, var(--ink) 7%, transparent);
+}
+.pagerBtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.pagerLabel {
+  font-size: 11px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  min-width: 26px;
+  text-align: center;
 }
 .msgUser {
   display: flex;
@@ -97,6 +229,39 @@
   animation: cd-asst-blink 1s steps(2) infinite;
   vertical-align: text-bottom;
 }
+/* Runner notice row (issue #420, Wave 6) — e.g. dropped-PDF warning. */
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-sunken);
+  font-size: 12.5px;
+  color: var(--ink-3);
+  align-self: flex-start;
+  max-width: 90%;
+}
+.notice[data-level='warn'] {
+  color: var(--warn, #a06a00);
+}
+/* Offline hint beside a resend button (issue #420, Wave 6). */
+.offlineHint {
+  font-size: 11px;
+  color: var(--warn, #a06a00);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+/* Reconnect catch-up hint (issue #420, Wave 6). */
+.catchUp {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  font-style: italic;
+}
 .tools {
   border: 0.5px solid var(--line);
   border-radius: 10px;
@@ -151,6 +316,7 @@
   margin: 0 auto;
 }
 .composerRow {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -162,6 +328,60 @@
   transition:
     box-shadow 140ms ease,
     border-color 140ms ease;
+}
+
+/* Composer autocomplete popover (@-mentions + slash commands, issue #420) —
+   floats just above the composer, anchored to its top edge. */
+.acPopover {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: calc(100% + 6px);
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: var(--r-lg);
+  border: 0.5px solid var(--line-strong);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-md, var(--shadow-sm));
+  z-index: 20;
+}
+.acItem {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 9px;
+  border: none;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+}
+.acItem[data-active='true'] {
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+}
+.acItem[data-disabled='true'] {
+  opacity: 0.45;
+  cursor: default;
+}
+.acItemTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.acItemHint {
+  flex: none;
+  color: var(--ink-4);
+  font-size: 11px;
+}
+.acEmpty {
+  padding: 8px 10px;
+  color: var(--ink-4);
+  font-size: 12px;
 }
 .composerRow:focus-within {
   border-color: var(--accent);
@@ -484,4 +704,98 @@
 .suggestChip:hover {
   border-color: var(--accent);
   color: var(--ink);
+}
+
+/* ── Reasoning row (issue #420, Wave 2) ─────────────────────────────────── */
+.msgThinking {
+  align-items: stretch;
+}
+.thinking {
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--ink) 3%, transparent);
+  padding: 2px 10px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  max-width: 100%;
+}
+.thinkingSummary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  list-style: none;
+  padding: 5px 0;
+  color: var(--ink-3);
+  user-select: none;
+}
+.thinkingSummary::-webkit-details-marker {
+  display: none;
+}
+.thinkingDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: none;
+}
+.thinking[data-streaming='true'] .thinkingDot {
+  animation: asstThinkPulse 1.1s ease-in-out infinite;
+}
+@keyframes asstThinkPulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.thinkingBody {
+  white-space: pre-wrap;
+  padding: 2px 0 8px 13px;
+  color: var(--ink-4);
+  border-left: 1.5px solid var(--line);
+  margin-left: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .thinking[data-streaming='true'] .thinkingDot {
+    animation: none;
+  }
+}
+
+/* ── Per-turn usage/cost (issue #420, Wave 2) ───────────────────────────── */
+.msgUsage {
+  font-size: 10.5px;
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+
+/* ── Image attachment thumbnails (issue #420, Wave 2) ───────────────────── */
+.msgAttachChipImage {
+  padding: 0;
+  overflow: hidden;
+}
+.msgAttachThumb {
+  display: block;
+  max-width: 180px;
+  max-height: 180px;
+  object-fit: cover;
+  border-radius: 10px;
+}
+.msgAttachThumb[data-loading='true'] {
+  width: 96px;
+  height: 96px;
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+}
+.attachChipImage {
+  padding-left: 5px;
+}
+.attachThumb {
+  width: 26px;
+  height: 26px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex: none;
 }

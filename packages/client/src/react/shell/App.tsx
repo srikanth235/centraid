@@ -2,18 +2,35 @@
 // wiring every route + the grouped switcher's popover callbacks crossed 500
 // by 16 lines; a route-wiring extraction is a reasonable follow-up but not
 // warranted for this margin.
-import { type JSX, useCallback, useEffect, useRef, useState } from 'react';
+import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { IconName } from '@centraid/design-tokens';
 import type { ShellRoute } from '../../app-shell-context.js';
 import PaletteScreen from '../screens/PaletteScreen.js';
 import WhatsNewModal from '../screens/WhatsNewModal.js';
 import { type ShellActions, ShellActionsProvider } from './actions.js';
 import { openConfirm } from './confirm.js';
+import { openMenu } from './contextMenu.js';
+import { openPrompt } from './prompt.js';
+import { showUndoToast } from './undoToast.js';
 import { relativeTime } from '../../app-format.js';
-import { ASSISTANT_APP_ID, deleteConversation } from '../../gateway-client.js';
+import {
+  ASSISTANT_APP_ID,
+  deleteConversation,
+  loadConversation,
+  renameConversation,
+  searchConversations,
+  setConversationArchived,
+  setConversationPinned,
+} from '../../gateway-client.js';
 import { buildPaletteGroups } from './routes/paletteData.js';
+import { createPaletteConversationSearch } from './routes/paletteConversationSearch.js';
+import { downloadConversation, type ExportFormat } from './routes/conversationExport.js';
 import ProfileSwitcherHead from './ProfileSwitcherHead.js';
-import Sidebar, { type SidebarConversation, type SidebarPage } from './Sidebar.js';
+import Sidebar, {
+  type ShellMenuAnchor,
+  type SidebarConversation,
+  type SidebarPage,
+} from './Sidebar.js';
 import ShellApp, { type ShellNav } from './ShellApp.js';
 import { showToast } from './toast.js';
 import { toSidebarApps } from './sidebarApps.js';
@@ -106,6 +123,11 @@ function activePageFor(route: ShellRoute): SidebarPage | undefined {
   }
 }
 
+/** Compact error-message extractor for toast copy. */
+function errMsg(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 // The React shell root — the single component the flip mounts on #root,
 // replacing the vanilla app.ts IIFE + chrome.ts. It owns the real renderer
 // state (appearance prefs, the live app/draft list, starred set) and drives
@@ -116,6 +138,11 @@ export default function App(): JSX.Element {
   const { prefs, setPrefs } = useAppearance();
   const { userApps, drafts, refresh, setUserApps } = useShellApps();
   const assistantConversations = useAssistantConversations();
+  // Conversations mid-undo-window after a delete — optimistically hidden from
+  // the sidebar until the grace timer commits or the reader undoes (§3).
+  const [pendingConversationDeletes, setPendingConversationDeletes] = useState<Set<string>>(
+    () => new Set(),
+  );
   const { isStarred, toggleStar } = useStarred();
   const activeVault = useActiveVault();
   const blockingCount = useBlockingCount();
@@ -123,6 +150,17 @@ export default function App(): JSX.Element {
   const gatewayStatus = useGatewayRuntime()?.status;
   const navRef = useRef<ShellNav | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // The palette's injected refresh() (issue #420) — held so the async
+  // conversation-search source can re-run buildPaletteGroups when hits land.
+  const paletteRefreshRef = useRef<(() => void) | null>(null);
+  const paletteConversationSearch = useMemo(
+    () =>
+      createPaletteConversationSearch({
+        search: (query, limit) => searchConversations(ASSISTANT_APP_ID, query, limit),
+        onResults: () => paletteRefreshRef.current?.(),
+      }),
+    [],
+  );
   const [vaultSwitcherOpen, setVaultSwitcherOpen] = useState(false);
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
   // The switcher's per-gateway actions (issue #382) — "New space…", "Test
@@ -225,28 +263,144 @@ export default function App(): JSX.Element {
   // AssistantRoute) owns the conversation list + row actions. Bounces off
   // the fresh assistant route if the conversation being deleted is the one
   // currently open.
+  // Delete with a 6s undo grace window (§3): the row hides immediately and the
+  // open thread bounces to a fresh one, but the FK-CASCADE delete only commits
+  // when the window lapses — an Undo restores the row untouched.
   const deleteAssistantConversation = useCallback(
     (id: string) => {
       const target = assistantConversations.conversations.find((c) => c.id === id);
-      void (async () => {
-        const yes = await openConfirm({
-          title: 'Delete conversation?',
-          message: `“${target?.title || 'New conversation'}” will be removed from this vault's history.`,
-          confirmLabel: 'Delete',
-          danger: true,
+      setPendingConversationDeletes((prev) => new Set(prev).add(id));
+      const cur = navRef.current?.route;
+      if (cur?.kind === 'assistant' && cur.conversationId === id) {
+        navRef.current?.navigate({ kind: 'assistant' });
+      }
+      const unhide = (): void =>
+        setPendingConversationDeletes((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
         });
-        if (!yes) return;
-        await deleteConversation(ASSISTANT_APP_ID, id).catch((err: unknown) =>
-          showToast(`Couldn't delete: ${err instanceof Error ? err.message : String(err)}`),
+      showUndoToast(`Deleted “${target?.title || 'New conversation'}”`, unhide, {
+        onExpire: () => {
+          void (async () => {
+            await deleteConversation(ASSISTANT_APP_ID, id).catch((err: unknown) =>
+              showToast(`Couldn't delete: ${err instanceof Error ? err.message : String(err)}`),
+            );
+            unhide();
+            await assistantConversations.refresh();
+          })();
+        },
+      });
+    },
+    [assistantConversations],
+  );
+
+  // Inline rename (§3) — the shared text-prompt dialog, then a PATCH + refresh.
+  const renameAssistantConversation = useCallback(
+    (id: string) => {
+      const target = assistantConversations.conversations.find((c) => c.id === id);
+      void (async () => {
+        const next = await openPrompt({
+          title: 'Rename conversation',
+          initial: target?.title ?? '',
+          placeholder: 'Conversation name',
+          confirmLabel: 'Rename',
+        });
+        if (!next) return;
+        await renameConversation(ASSISTANT_APP_ID, id, next).catch((err: unknown) =>
+          showToast(`Couldn't rename: ${err instanceof Error ? err.message : String(err)}`),
         );
         await assistantConversations.refresh();
-        const cur = navRef.current?.route;
-        if (cur?.kind === 'assistant' && cur.conversationId === id) {
-          navRef.current?.navigate({ kind: 'assistant' });
-        }
       })();
     },
     [assistantConversations],
+  );
+
+  // Pin/unpin (§3) — a PATCH + refresh; the store sorts pinned threads first.
+  const pinAssistantConversation = useCallback(
+    (id: string, pinned: boolean) => {
+      void (async () => {
+        await setConversationPinned(ASSISTANT_APP_ID, id, pinned).catch((err: unknown) =>
+          showToast(`Couldn't ${pinned ? 'pin' : 'unpin'}: ${errMsg(err)}`),
+        );
+        await assistantConversations.refresh();
+      })();
+    },
+    [assistantConversations],
+  );
+
+  // Archive/unarchive (§3) — a PATCH + refresh. Archiving the open thread
+  // bounces to a fresh assistant, mirroring delete (the row leaves the list).
+  const archiveAssistantConversation = useCallback(
+    (id: string, archived: boolean) => {
+      void (async () => {
+        await setConversationArchived(ASSISTANT_APP_ID, id, archived).catch((err: unknown) =>
+          showToast(`Couldn't ${archived ? 'archive' : 'unarchive'}: ${errMsg(err)}`),
+        );
+        const cur = navRef.current?.route;
+        if (archived && cur?.kind === 'assistant' && cur.conversationId === id) {
+          navRef.current?.navigate({ kind: 'assistant' });
+        }
+        await assistantConversations.refresh();
+      })();
+    },
+    [assistantConversations],
+  );
+
+  // Export (§3) — fetch the full transcript, then serialize + download.
+  const exportAssistantConversation = useCallback((id: string, format: ExportFormat) => {
+    void (async () => {
+      try {
+        const conv = await loadConversation(ASSISTANT_APP_ID, id);
+        downloadConversation(conv, format);
+      } catch (err: unknown) {
+        showToast(`Couldn't export: ${errMsg(err)}`);
+      }
+    })();
+  }, []);
+
+  // The sidebar row ••• / right-click menu: Rename, Export, Pin, Archive, Delete.
+  const conversationMenu = useCallback(
+    (id: string, anchor: ShellMenuAnchor) => {
+      const conv = assistantConversations.conversations.find((c) => c.id === id);
+      const pinned = conv?.pinned ?? false;
+      const archived = conv?.archived ?? false;
+      openMenu(
+        [
+          { id: 'rename', label: 'Rename', icon: 'Pencil' },
+          { id: 'export-md', label: 'Export as Markdown', icon: 'Share' },
+          { id: 'export-json', label: 'Export as JSON', icon: 'Share' },
+          'sep',
+          pinned
+            ? { id: 'unpin', label: 'Unpin', icon: 'Star' }
+            : { id: 'pin', label: 'Pin', icon: 'Star' },
+          archived
+            ? { id: 'unarchive', label: 'Unarchive', icon: 'History' }
+            : { id: 'archive', label: 'Archive', icon: 'Folder' },
+          'sep',
+          { id: 'delete', label: 'Delete', icon: 'Trash', danger: true },
+        ],
+        anchor,
+        (picked) => {
+          if (picked === 'rename') renameAssistantConversation(id);
+          else if (picked === 'export-md') exportAssistantConversation(id, 'markdown');
+          else if (picked === 'export-json') exportAssistantConversation(id, 'json');
+          else if (picked === 'pin') pinAssistantConversation(id, true);
+          else if (picked === 'unpin') pinAssistantConversation(id, false);
+          else if (picked === 'archive') archiveAssistantConversation(id, true);
+          else if (picked === 'unarchive') archiveAssistantConversation(id, false);
+          else if (picked === 'delete') deleteAssistantConversation(id);
+        },
+      );
+    },
+    [
+      assistantConversations,
+      renameAssistantConversation,
+      exportAssistantConversation,
+      pinAssistantConversation,
+      archiveAssistantConversation,
+      deleteAssistantConversation,
+    ],
   );
 
   const renderSidebar = useCallback(
@@ -337,13 +491,15 @@ export default function App(): JSX.Element {
           }}
         />
       );
-      const conversations: SidebarConversation[] = assistantConversations.conversations.map(
-        (c) => ({
+      const conversations: SidebarConversation[] = assistantConversations.conversations
+        .filter((c) => !pendingConversationDeletes.has(c.id))
+        .map((c) => ({
           id: c.id,
           title: c.title || 'New conversation',
           timeLabel: relativeTime(new Date(c.updatedAt).toISOString()),
-        }),
-      );
+          pinned: c.pinned,
+          archived: c.archived,
+        }));
       return (
         <Sidebar
           apps={apps}
@@ -372,6 +528,7 @@ export default function App(): JSX.Element {
           onNewChat={() => nav.navigate({ kind: 'assistant' })}
           onSelectConversation={(id) => nav.navigate({ kind: 'assistant', conversationId: id })}
           onDeleteConversation={deleteAssistantConversation}
+          onConversationMenu={conversationMenu}
           onWhatsNew={() => setWhatsNewOpen(true)}
           {...(updateStatus?.available
             ? { updateVersion: updateStatus.version, onRelaunchToUpdate: relaunchToUpdate }
@@ -389,6 +546,8 @@ export default function App(): JSX.Element {
       gatewayStatus,
       assistantConversations,
       deleteAssistantConversation,
+      conversationMenu,
+      pendingConversationDeletes,
     ],
   );
 
@@ -484,7 +643,10 @@ export default function App(): JSX.Element {
     [userApps, drafts, prefs, setPrefs, isStarred, toggleStar, refresh, setUserApps, renderSidebar],
   );
 
-  const closePalette = useCallback(() => setPaletteOpen(false), []);
+  const closePalette = useCallback(() => {
+    setPaletteOpen(false);
+    paletteConversationSearch.reset();
+  }, [paletteConversationSearch]);
 
   return (
     <>
@@ -516,6 +678,9 @@ export default function App(): JSX.Element {
       {paletteOpen ? (
         <PaletteScreen
           onClose={closePalette}
+          onReady={(refresh) => {
+            paletteRefreshRef.current = refresh;
+          }}
           buildGroups={(query) =>
             buildPaletteGroups(query, {
               userApps,
@@ -528,6 +693,7 @@ export default function App(): JSX.Element {
                   ...(initialPrompt ? { initialPrompt } : {}),
                 }),
               onClose: closePalette,
+              conversationSearch: paletteConversationSearch,
             })
           }
         />

@@ -129,7 +129,128 @@ describe('ConversationHistoryStore', () => {
     expect(loaded?.messages.length).toBe(2);
     expect(loaded?.messages.map((m) => m.idx)).toEqual([0, 1]);
     expect(loaded?.messages[0]!.payload).toEqual({ kind: 'user', text: 'first' });
-    expect(loaded?.messages[1]!.payload).toEqual({ kind: 'ai', text: 'reply' });
+    expect(loaded?.messages[1]!.payload).toMatchObject({ kind: 'ai', text: 'reply' });
+  });
+
+  it('reconstruction tags the terminal answer with its turn id and null feedback (#420)', () => {
+    const s = store.createSession(APP);
+    const r = store.recordTurn(APP, turn(s.id, 'first', 'reply'));
+    const ai = store.getSession(APP, s.id)?.messages[1]!.payload as {
+      turnId?: string;
+      feedback?: unknown;
+      retry?: unknown;
+    };
+    expect(ai.turnId).toBe(r?.turnId);
+    expect(ai.feedback).toBe(null);
+    expect(ai.retry).toBeUndefined();
+  });
+
+  it('reconstruction attaches per-turn token/cost usage to the terminal answer (#420 W2)', () => {
+    const s = store.createSession(APP);
+    store.recordTurn(APP, {
+      conversationId: s.id,
+      userMessage: 'cost?',
+      startedAt: 1_000,
+      endedAt: 1_020,
+      ok: true,
+      finalText: 'answer',
+      nodes: [
+        {
+          kind: 'step',
+          text: 'answer',
+          model: 'claude-sonnet-4-7',
+          inputTokens: 1200,
+          outputTokens: 340,
+          startedAt: 1_000,
+          endedAt: 1_010,
+        },
+      ],
+    });
+    const ai = store.getSession(APP, s.id)?.messages[1]!.payload as {
+      usage?: { inputTokens?: number; outputTokens?: number; costUsd?: number; model?: string };
+    };
+    expect(ai.usage?.inputTokens).toBe(1200);
+    expect(ai.usage?.outputTokens).toBe(340);
+    expect(ai.usage?.model).toBe('claude-sonnet-4-7');
+    // Frozen cost = 1200/1e6*3 + 340/1e6*15 = 0.0036 + 0.0051 = 0.0087.
+    expect(ai.usage?.costUsd).toBeCloseTo(0.0087, 6);
+  });
+
+  it('collapses a regenerate into a retry pager showing the latest attempt (#420)', () => {
+    const s = store.createSession(APP);
+    const first = store.recordTurn(APP, turn(s.id, 'why?', 'because A', 1_000));
+    // A regenerate re-sends the same prompt, pointing retryOf at the first turn.
+    const second = store.recordTurn(APP, {
+      ...turn(s.id, 'why?', 'because B', 2_000),
+      retryOf: first?.turnId,
+    });
+    const loaded = store.getSession(APP, s.id);
+    // One user row + one ai row (the family is collapsed), not two of each.
+    expect(loaded?.messages.length).toBe(2);
+    expect(loaded?.messages[0]!.payload).toEqual({ kind: 'user', text: 'why?' });
+    const ai = loaded?.messages[1]!.payload as {
+      text: string;
+      turnId?: string;
+      retry?: { index: number; count: number; attempts: Array<{ turnId: string; text: string }> };
+    };
+    // The latest attempt is shown inline...
+    expect(ai.text).toBe('because B');
+    expect(ai.turnId).toBe(second?.turnId);
+    // ...with both attempts carried for the client pager, oldest→newest.
+    expect(ai.retry?.count).toBe(2);
+    expect(ai.retry?.index).toBe(2);
+    expect(ai.retry?.attempts.map((a) => a.text)).toEqual(['because A', 'because B']);
+    expect(ai.retry?.attempts.map((a) => a.turnId)).toEqual([first?.turnId, second?.turnId]);
+  });
+
+  it('setTurnFeedback sets + clears 👍/👎 and surfaces it on reconstruction (#420)', () => {
+    const s = store.createSession(APP);
+    const r = store.recordTurn(APP, turn(s.id, 'q', 'a'));
+    const turnId = r!.turnId;
+    expect(store.setTurnFeedback(APP, s.id, turnId, 'up')).toBe(true);
+    let ai = store.getSession(APP, s.id)?.messages[1]!.payload as { feedback?: unknown };
+    expect(ai.feedback).toBe('up');
+    expect(store.setTurnFeedback(APP, s.id, turnId, null)).toBe(true);
+    ai = store.getSession(APP, s.id)?.messages[1]!.payload as { feedback?: unknown };
+    expect(ai.feedback).toBe(null);
+  });
+
+  it('setTurnFeedback returns false for a turn outside the session (#420)', () => {
+    const s = store.createSession(APP);
+    store.recordTurn(APP, turn(s.id, 'q', 'a'));
+    expect(store.setTurnFeedback(APP, s.id, 'no-such-turn', 'down')).toBe(false);
+  });
+
+  it('findRecordedTurn returns the replayable answer for a recorded idempotency key (#420)', () => {
+    const s = store.createSession(APP);
+    const key = 'idem-key-1';
+    store.recordTurn(APP, { ...turn(s.id, 'q', 'the answer'), idempotencyKey: key });
+    const found = store.findRecordedTurn(APP, s.id, key);
+    expect(found?.ok).toBe(true);
+    expect(found?.finalText).toBe('the answer');
+    // An unknown key (and a wrong app) both read as not-found.
+    expect(store.findRecordedTurn(APP, s.id, 'no-such-key')).toBeUndefined();
+    expect(store.findRecordedTurn('other', s.id, key)).toBeUndefined();
+  });
+
+  it('findRecordedTurn surfaces a recorded error turn as ok:false (#420)', () => {
+    const s = store.createSession(APP);
+    const key = 'idem-key-err';
+    store.recordTurn(APP, {
+      conversationId: s.id,
+      userMessage: 'q',
+      startedAt: Date.now(),
+      endedAt: Date.now() + 10,
+      ok: false,
+      error: 'nope',
+      idempotencyKey: key,
+      nodes: [
+        { kind: 'step', text: 'nope', isError: true, startedAt: Date.now(), endedAt: Date.now() },
+      ],
+    });
+    const found = store.findRecordedTurn(APP, s.id, key);
+    expect(found?.ok).toBe(false);
+    expect(found?.error).toBe('nope');
   });
 
   it('recordTurn attachments surface on the reconstructed user message (hash/mime/sizeBytes/filename/url)', () => {
@@ -205,7 +326,7 @@ describe('ConversationHistoryStore', () => {
     // exactly like a chat turn.
     const loaded = local.getSession(APP, build.id);
     expect(loaded?.messages[0]!.payload).toEqual({ kind: 'user', text: 'tweak ui' });
-    expect(loaded?.messages[1]!.payload).toEqual({ kind: 'ai', text: 'done' });
+    expect(loaded?.messages[1]!.payload).toMatchObject({ kind: 'ai', text: 'done' });
   });
 
   it('recordTurn reconstructs tool nodes interleaved before the assistant reply', () => {
@@ -241,7 +362,7 @@ describe('ConversationHistoryStore', () => {
     expect(tool.state).toBe('ok');
     expect(tool.result).toEqual([{ n: 1 }]);
     expect(typeof tool.id).toBe('string');
-    expect(loaded?.messages[2]!.payload).toEqual({ kind: 'ai', text: 'there is 1 row' });
+    expect(loaded?.messages[2]!.payload).toMatchObject({ kind: 'ai', text: 'there is 1 row' });
   });
 
   it('recordTurn marks a failed tool node as state=error', () => {
@@ -284,7 +405,7 @@ describe('ConversationHistoryStore', () => {
       ],
     });
     const ai = store.getSession(APP, s.id)?.messages[1]!.payload as Record<string, unknown>;
-    expect(ai).toEqual({ kind: 'ai', text: 'runner crashed', error: true });
+    expect(ai).toMatchObject({ kind: 'ai', text: 'runner crashed', error: true });
   });
 
   it('recordTurn derives the title from the first user message if empty', () => {
@@ -564,6 +685,70 @@ describe('makeConversationRouteHandler', () => {
   it('404s loading a missing session', async () => {
     const res = await call(handler, 'GET', `${BASE}/no-such-id`);
     expect(res.status).toBe(404);
+  });
+
+  it('PATCH .../turns/<turnId>/feedback sets and clears feedback (#420)', async () => {
+    const created = await call(handler, 'POST', BASE, {});
+    const id = (created.body as { id: string }).id;
+    const rec = store.recordTurn(APP, turn(id, 'q', 'a'));
+    const turnId = rec!.turnId;
+    const up = await call(handler, 'PATCH', `${BASE}/${id}/turns/${turnId}/feedback`, {
+      feedback: 'up',
+    });
+    expect(up.status).toBe(200);
+    expect((up.body as { feedback: string }).feedback).toBe('up');
+    const loaded = await call(handler, 'GET', `${BASE}/${id}`);
+    const ai = (loaded.body as { messages: Array<{ payload: { feedback?: unknown } }> })
+      .messages[1]!.payload;
+    expect(ai.feedback).toBe('up');
+    // An unknown value clears it back to null.
+    const clear = await call(handler, 'PATCH', `${BASE}/${id}/turns/${turnId}/feedback`, {
+      feedback: 'bogus',
+    });
+    expect((clear.body as { feedback: unknown }).feedback).toBe(null);
+  });
+
+  it('PATCH feedback 404s for an unknown turn (#420)', async () => {
+    const created = await call(handler, 'POST', BASE, {});
+    const id = (created.body as { id: string }).id;
+    const res = await call(handler, 'PATCH', `${BASE}/${id}/turns/nope/feedback`, {
+      feedback: 'up',
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it('GET sessions/search returns FTS hits with a snippet (#420)', async () => {
+    const created = await call(handler, 'POST', BASE, { title: 'Budget review' });
+    const id = (created.body as { id: string }).id;
+    store.recordTurn(APP, turn(id, 'plan the quarterly budget', 'sure'));
+    const res = await call(handler, 'GET', `${BASE}/search?q=quarterly`);
+    expect(res.status).toBe(200);
+    const results = (res.body as { results: Array<{ id: string; snippet: string }> }).results;
+    expect(results.map((r) => r.id)).toEqual([id]);
+    expect(results[0]!.snippet).toContain('⟦');
+    // A blank query yields no results, not an error.
+    const empty = await call(handler, 'GET', `${BASE}/search?q=`);
+    expect((empty.body as { results: unknown[] }).results).toEqual([]);
+  });
+
+  it('PATCH pins / archives a session and list ordering + flags reflect it (#420)', async () => {
+    const a = (await call(handler, 'POST', BASE, { title: 'Alpha' })).body as { id: string };
+    const b = (await call(handler, 'POST', BASE, { title: 'Beta' })).body as { id: string };
+    const pinned = await call(handler, 'PATCH', `${BASE}/${a.id}`, { pinned: true });
+    expect(pinned.status).toBe(200);
+    expect((pinned.body as { pinned: boolean }).pinned).toBe(true);
+    const list = (await call(handler, 'GET', BASE)).body as {
+      sessions: Array<{ id: string; pinned: boolean; archived: boolean }>;
+    };
+    // Pinned a sorts before b regardless of recency.
+    expect(list.sessions[0]!.id).toBe(a.id);
+    expect(list.sessions[0]!.pinned).toBe(true);
+    const archived = await call(handler, 'PATCH', `${BASE}/${b.id}`, { archived: true });
+    expect((archived.body as { archived: boolean }).archived).toBe(true);
+    // Archived b drops out of search.
+    store.recordTurn(APP, turn(b.id, 'beta needle text', 'ok'));
+    const res = await call(handler, 'GET', `${BASE}/search?q=needle`);
+    expect((res.body as { results: unknown[] }).results).toEqual([]);
   });
 
   it('405s on unsupported method', async () => {

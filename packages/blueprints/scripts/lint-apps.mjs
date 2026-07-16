@@ -51,6 +51,12 @@ const targets = [
   'kit/elements.js',
   'kit/edge-upload.js',
   'kit/jsx-runtime.js',
+  'kit/turn-stream.js',
+  'kit/assistant-rich.js',
+  'kit/gfm.js',
+  'kit/code-highlight.js',
+  'kit/consent-cards.js',
+  'kit/conversation-client.js',
 ];
 
 try {

@@ -827,11 +827,58 @@ export interface AsstAttachmentDTO {
   mime: string;
   sizeBytes: number;
 }
+/** Retry pager position on an AI answer whose turn has siblings (issue #420). */
+export interface AsstRetryDTO {
+  /** 1-based position of the shown attempt. */
+  index: number;
+  /** Total attempts in this turn's family. */
+  count: number;
+}
+/** Per-turn token/cost usage surfaced under an answer (issue #420, Wave 2). */
+export interface AsstUsageDTO {
+  inputTokens?: number;
+  outputTokens?: number;
+  /** USD cost — frozen from the ledger on reload, or a client estimate live. */
+  costUsd?: number;
+  /** True when `costUsd` is a live client-side estimate (ledger cost is exact). */
+  estimated?: boolean;
+  model?: string;
+}
 export type AsstMsgDTO =
-  | { kind: 'user'; text: string; attachments?: AsstAttachmentDTO[] }
+  | { kind: 'user'; text: string; attachments?: AsstAttachmentDTO[]; createdAt?: number }
   | { kind: 'tools'; label: string; calls: AsstToolCallDTO[] }
-  | { kind: 'ai'; streaming: true; text: string }
-  | { kind: 'ai'; streaming: false; html: string; error: boolean };
+  /** A live streaming reasoning/thinking row (issue #420, Wave 2). Live-only —
+   *  reasoning is not persisted in the ledger, so it never comes back on reload. */
+  | { kind: 'thinking'; text: string; streaming: boolean }
+  /** A non-fatal runner notice (issue #420) — e.g. "this model can't read PDF
+   *  attachments". Live-only; not persisted, so it never replays on reload. */
+  | { kind: 'notice'; level: 'warn' | 'info'; text: string }
+  | { kind: 'ai'; streaming: true; text: string; catchingUp?: boolean }
+  | {
+      kind: 'ai';
+      streaming: false;
+      html: string;
+      error: boolean;
+      /** Source text for "copy message" (issue #420). */
+      copyText: string;
+      /** Token/cost usage for the answer's turn (issue #420, Wave 2). */
+      usage?: AsstUsageDTO;
+      /** ms epoch of the answer, for the hover timestamp. */
+      createdAt?: number;
+      /** Turn id — the feedback/regenerate target; absent for a just-streamed
+       *  answer not yet reloaded from the ledger, or an error bubble. */
+      turnId?: string;
+      /** Reader 👍/👎 on this answer, if set. */
+      feedback?: 'up' | 'down' | null;
+      /** Retry pager, present when the turn has been regenerated. */
+      retry?: AsstRetryDTO;
+      /** Only the last non-error answer — gates the Regenerate control. */
+      canRegenerate?: boolean;
+      /** An error bubble whose failed message can be retried (issue #420). */
+      canRetry?: boolean;
+      /** The failed send happened while the browser was offline (issue #420). */
+      offline?: boolean;
+    };
 /** A file the composer has uploaded (or is uploading) ahead of the next send. */
 export interface AsstPendingAttachmentDTO {
   id: string;
@@ -839,6 +886,10 @@ export interface AsstPendingAttachmentDTO {
   sizeBytes: number;
   state: 'uploading' | 'ready' | 'error';
   errorText?: string;
+  /** MIME type — drives the composer image thumbnail (issue #420, Wave 2). */
+  mime?: string;
+  /** Local object-URL preview for an image attachment (issue #420, Wave 2). */
+  previewUrl?: string;
 }
 export interface AssistantSnapshot {
   empty: boolean;
@@ -868,6 +919,9 @@ export interface AsstModelPickerDTO {
 }
 export interface AssistantBridgeProps {
   suggestions: string[];
+  /** The open conversation id — keys per-thread scroll restore + draft
+   *  persistence (issue #420). `undefined` for a fresh, uncreated thread. */
+  conversationId?: string;
   onReady: (update: (s: AssistantSnapshot) => void) => void;
   onSend: (text: string) => void;
   onStop: () => void;
@@ -876,10 +930,47 @@ export interface AssistantBridgeProps {
   onRemovePendingAttachment: (id: string) => void;
   /** Wire the interactive vault refs inside a just-rendered answer node. */
   hydrateRefs: (node: HTMLElement) => void;
+  /** Wire code-block "Copy" buttons inside a just-rendered answer node (#420). */
+  wireCodeCopy: (node: HTMLElement) => void;
+  /** Fetch an image attachment's bytes (auth-aware) as an object URL for an
+   *  inline transcript thumbnail; revoke it on cleanup (issue #420, Wave 2). */
+  loadAttachmentImage: (hash: string, mime: string) => Promise<string>;
+  /** Copy a message's source text to the clipboard (issue #420). */
+  onCopyMessage: (text: string) => void;
+  /** Set 👍/👎 on an answer turn (toggles off when re-clicking the same). */
+  onFeedback: (turnId: string, value: 'up' | 'down') => void;
+  /** Regenerate the last answer (re-runs the last user message as a retry). */
+  onRegenerate: () => void;
+  /** Retry the failed message behind the error bubble at `messageIndex`. */
+  onRetryError: (messageIndex: number) => void;
+  /** Flip the retry pager on the AI message at `messageIndex` by `delta`. */
+  onPagerNav: (messageIndex: number, delta: number) => void;
   /** Read the assistant model picker's current state (fetched on mount). */
   loadModelPicker: () => Promise<AsstModelPickerDTO>;
   /** Persist the subsystem model override ('' clears back to the default model). */
   onSetModel: (modelId: string) => void;
+  /** Composer entity-mention search (issue #420). Absent = mentions disabled. */
+  searchEntities?: (term: string) => Promise<AsstComposerEntity[]>;
+  /** Slash-command menu shown on a leading `/` (issue #420). */
+  slashCommands?: AsstSlashCommand[];
+  /** Run a chosen slash command by id (wired to existing shell actions). */
+  onRunSlash?: (id: string) => void;
+}
+
+/** A vault entity offered by the composer @-mention picker (issue #420). */
+export interface AsstComposerEntity {
+  type: string;
+  id: string;
+  title: string;
+  subtitle?: string;
+}
+
+/** A composer slash command (issue #420). */
+export interface AsstSlashCommand {
+  id: string;
+  label: string;
+  hint?: string;
+  enabled?: boolean;
 }
 
 // ── App-view settings popover ────────────────────────────────────────────────
@@ -988,12 +1079,23 @@ export interface BuilderChatSnapshot {
   /** Bumps to force a history-view re-fetch after a version op. */
   historyNonce: number;
 }
+/** A builder-composer attachment ref (mirrors ConversationAttachmentRef). */
+export interface BuilderAttachmentRef {
+  hash: string;
+  mime: string;
+  sizeBytes: number;
+  filename?: string;
+}
 export interface BuilderChatBridgeProps {
   onReady: (update: (s: BuilderChatSnapshot) => void) => void;
-  onSend: (text: string) => void;
+  /** Send a turn, optionally with files uploaded ahead of it (issue #420). */
+  onSend: (text: string, attachments?: BuilderAttachmentRef[]) => void;
   onCancel: () => void;
   onToggleGroup: (id: string) => void;
   onSetView: (view: 'chat' | 'history') => void;
   /** Fill the version-history host — vanilla owns the async renderer. */
   onMountHistory: (host: HTMLElement) => void;
+  /** Upload one file to the app's blob CAS (issue #420). When omitted, the
+   *  composer's attach button is hidden (e.g. before the app exists). */
+  onUploadAttachment?: (file: File) => Promise<BuilderAttachmentRef>;
 }

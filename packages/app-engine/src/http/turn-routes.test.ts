@@ -11,6 +11,7 @@ import { ConversationHistoryStore } from '../conversation/history.ts';
 import { makeJournalDbProvider } from '../stores/gateway-db.ts';
 import type { WorkspaceProvider } from '../stores/vault-workspace.ts';
 import type { AskModelInfo, AskModelPrefs } from './turn-routes.ts';
+import { TurnLimiter } from './turn-limiter.ts';
 
 let workspace: string;
 let server: RuntimeHttpServerHandle;
@@ -63,7 +64,9 @@ function newHistoryStore(): ConversationHistoryStore {
   return new ConversationHistoryStore(workspace);
 }
 
-async function bootstrapWithStore(opts: { runner?: ConversationRunner } = {}): Promise<{
+async function bootstrapWithStore(
+  opts: { runner?: ConversationRunner; turnLimiter?: () => TurnLimiter } = {},
+): Promise<{
   store: ConversationHistoryStore;
 }> {
   workspace = await fs.mkdtemp(
@@ -74,6 +77,7 @@ async function bootstrapWithStore(opts: { runner?: ConversationRunner } = {}): P
     appsDir: workspace,
     conversationRunner: opts.runner,
     conversationHistoryStore: store,
+    ...(opts.turnLimiter ? { turnLimiter: opts.turnLimiter } : {}),
   });
   server = await startRuntimeHttpServer({ runtime });
   await runtime.bootstrap();
@@ -189,6 +193,185 @@ test(
     expect(body.error).toBe('not_found');
   },
 );
+
+test('POST /_turn threads retryOf so the transcript collapses into a retry pager (#420)', async () => {
+  const runner: ConversationRunner = {
+    async run(input) {
+      input.onEvent({ type: 'final', text: `re: ${input.message}` });
+    },
+  };
+  const { store } = await bootstrapWithStore({ runner });
+  await registerApp('demo');
+  const session = store.createSession('demo', '');
+  const post = (body: unknown): Promise<Response> =>
+    fetch(`${server.url}/centraid/demo/_turn`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  await (await post({ conversationId: session.id, message: 'why' })).text();
+  const firstAi = store.getSession('demo', session.id)?.messages[1]!.payload as { turnId: string };
+  // Regenerate: same prompt, pointing retryOf at the first answer's turn.
+  await (
+    await post({ conversationId: session.id, message: 'why', retryOf: firstAi.turnId })
+  ).text();
+
+  const loaded = store.getSession('demo', session.id);
+  // The family collapses to one user + one ai row, with a 2-attempt pager.
+  expect(loaded?.messages.length).toBe(2);
+  const ai = loaded?.messages[1]!.payload as {
+    retry?: { count: number; index: number; attempts: Array<{ turnId: string }> };
+  };
+  expect(ai.retry?.count).toBe(2);
+  expect(ai.retry?.attempts[0]?.turnId).toBe(firstAi.turnId);
+});
+
+test('POST /_turn with a duplicate idempotencyKey replays the recorded turn (no re-run) (#420)', async () => {
+  let runs = 0;
+  const runner: ConversationRunner = {
+    async run(input) {
+      runs += 1;
+      input.onEvent({ type: 'final', text: 'answer once' });
+    },
+  };
+  const { store } = await bootstrapWithStore({ runner });
+  await registerApp('demo');
+  const session = store.createSession('demo', '');
+  const key = crypto.randomUUID();
+  const post = (): Promise<Response> =>
+    fetch(`${server.url}/centraid/demo/_turn`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ conversationId: session.id, message: 'q', idempotencyKey: key }),
+    });
+  const first = await (await post()).text();
+  expect(first).toMatch(/event: final/);
+  // Second POST, SAME key: the runner is NOT invoked again; the recorded final
+  // answer is replayed from the ledger as a fresh stream.
+  const second = await (await post()).text();
+  expect(runs).toBe(1);
+  expect(second).toMatch(/event: final/);
+  expect(second).toMatch(/"text":"answer once"/);
+  // Only one turn was recorded — the replay never wrote a second row.
+  expect(store.getSession('demo', session.id)?.messages.length).toBe(2);
+});
+
+test('two concurrent POSTs with the SAME idempotencyKey run the turn once (in-flight dedup) (#420)', async () => {
+  let runs = 0;
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const runner: ConversationRunner = {
+    async run(input) {
+      runs += 1;
+      // Hold the first turn open so the duplicate arrives WHILE it is in flight;
+      // the per-conversation lock queues the duplicate behind it.
+      await gate;
+      input.onEvent({ type: 'final', text: 'once' });
+    },
+  };
+  const { store } = await bootstrapWithStore({ runner });
+  await registerApp('demo');
+  const session = store.createSession('demo', '');
+  const key = crypto.randomUUID();
+  const post = (): Promise<Response> =>
+    fetch(`${server.url}/centraid/demo/_turn`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ conversationId: session.id, message: 'q', idempotencyKey: key }),
+    });
+  const p1 = post();
+  const p2 = post();
+  // Let both requests reach the route + queue on the lock, then let the first
+  // turn complete; the second acquires the lock, finds the recorded turn, replays.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  release();
+  const [t1, t2] = await Promise.all([p1.then((r) => r.text()), p2.then((r) => r.text())]);
+  expect(runs).toBe(1);
+  expect(t1).toMatch(/event: final/);
+  expect(t2).toMatch(/event: final/);
+  expect(store.getSession('demo', session.id)?.messages.length).toBe(2);
+});
+
+test('POST /_turn replays a recorded ERROR turn on a duplicate key (#420)', async () => {
+  let runs = 0;
+  const runner: ConversationRunner = {
+    async run(input) {
+      runs += 1;
+      input.onEvent({ type: 'error', message: 'boom' });
+    },
+  };
+  const { store } = await bootstrapWithStore({ runner });
+  await registerApp('demo');
+  const session = store.createSession('demo', '');
+  const key = crypto.randomUUID();
+  const post = (): Promise<Response> =>
+    fetch(`${server.url}/centraid/demo/_turn`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ conversationId: session.id, message: 'q', idempotencyKey: key }),
+    });
+  await (await post()).text();
+  const second = await (await post()).text();
+  expect(runs).toBe(1);
+  expect(second).toMatch(/event: error/);
+  expect(second).toMatch(/"message":"boom"/);
+});
+
+test('POST /_turn is rejected with 429 + Retry-After when the vault turn limiter is saturated (#420)', async () => {
+  const runner: ConversationRunner = {
+    async run(input) {
+      input.onEvent({ type: 'final', text: 'ok' });
+    },
+  };
+  const limiter = new TurnLimiter(1);
+  const { store } = await bootstrapWithStore({ runner, turnLimiter: () => limiter });
+  await registerApp('demo');
+  const session = store.createSession('demo', '');
+  // Pre-acquire the single slot so the route sees a saturated limiter.
+  const release = limiter.tryAcquire();
+  expect(release).toBeDefined();
+  const res = await fetch(`${server.url}/centraid/demo/_turn`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ conversationId: session.id, message: 'hi' }),
+  });
+  expect(res.status).toBe(429);
+  expect(Number(res.headers.get('retry-after'))).toBeGreaterThan(0);
+  const body = (await res.json()) as { error: string };
+  expect(body.error).toBe('turn_busy');
+  // Releasing the slot lets the next turn through (200).
+  release?.();
+  const ok = await fetch(`${server.url}/centraid/demo/_turn`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ conversationId: session.id, message: 'hi' }),
+  });
+  expect(ok.status).toBe(200);
+  await ok.text();
+});
+
+test('the turn limiter releases its slot when a turn finishes (#420)', async () => {
+  const runner: ConversationRunner = {
+    async run(input) {
+      input.onEvent({ type: 'final', text: 'ok' });
+    },
+  };
+  const limiter = new TurnLimiter(2);
+  const { store } = await bootstrapWithStore({ runner, turnLimiter: () => limiter });
+  await registerApp('demo');
+  const session = store.createSession('demo', '');
+  for (let i = 0; i < 5; i++) {
+    await (
+      await fetch(`${server.url}/centraid/demo/_turn`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ conversationId: session.id, message: `hi ${i}` }),
+      })
+    ).text();
+  }
+  // Every turn ran to completion, so the count is back to zero.
+  expect(limiter.count()).toBe(0);
+});
 
 test('POST /_turn succeeds once the session is provisioned via createSession — the canonical flow', async () => {
   const runner: ConversationRunner = {
