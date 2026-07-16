@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS blob_staging (
   -- A staged DERIVATIVE rides beside its parent: claimed with it, swept with
   -- it. Generation is producer-agnostic (a client canvas today, a server
   -- codec plug-in later) — the registry doesn't care who downscaled.
-  variant       TEXT CHECK (variant IN ('thumb','preview','poster','text','transcript','embedding','phash')),
+  variant       TEXT CHECK (variant IN ('thumb','preview','poster','text','transcript','embedding','phash','thumbhash')),
   variant_of    TEXT CHECK ((variant IS NULL) = (variant_of IS NULL)),
   -- Semantic variants are payloads, not CAS rentals. Their sha remains the
   -- contribution checksum/row identity while the canonical value stays here.
@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS blob_staging (
   staged_at     TEXT NOT NULL,
   CHECK (variant IS NULL OR
     (variant IN ('thumb','preview','poster') AND inline_content IS NULL) OR
-    (variant IN ('text','transcript','embedding','phash') AND inline_content IS NOT NULL))
+    (variant IN ('text','transcript','embedding','phash','thumbhash') AND inline_content IS NOT NULL))
 ) STRICT;
 -- Originals dedupe by byte identity. Derivatives dedupe by their semantic
 -- slot, not their bytes: the same poster can validly belong to two videos,
@@ -139,7 +139,7 @@ CREATE INDEX IF NOT EXISTS idx_blob_staging_sha ON blob_staging(sha256);
 CREATE TABLE IF NOT EXISTS core_content_derivative (
   derivative_id TEXT PRIMARY KEY,
   content_id    TEXT NOT NULL REFERENCES core_content_item(content_id),
-  variant       TEXT NOT NULL CHECK (variant IN ('thumb','preview','poster','text','transcript','embedding','phash')),
+  variant       TEXT NOT NULL CHECK (variant IN ('thumb','preview','poster','text','transcript','embedding','phash','thumbhash')),
   sha256        TEXT CHECK (sha256 IS NULL OR length(sha256) = 64),
   media_type    TEXT NOT NULL,
   byte_size     INTEGER NOT NULL CHECK (byte_size >= 0),
@@ -147,7 +147,7 @@ CREATE TABLE IF NOT EXISTS core_content_derivative (
   created_at    TEXT NOT NULL,
   UNIQUE (content_id, variant),
   CHECK ((variant IN ('thumb','preview','poster')) = (sha256 IS NOT NULL)),
-  CHECK ((variant IN ('text','transcript','embedding','phash')) = (text_content IS NOT NULL))
+  CHECK ((variant IN ('text','transcript','embedding','phash','thumbhash')) = (text_content IS NOT NULL))
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_content_derivative_content ON core_content_derivative(content_id);
 

@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS enrich_request (
   required_capability TEXT CHECK (required_capability IN
     ('previews','poster','pdfText','ocr','transcript','embedding')),
   contribution_variant TEXT CHECK (contribution_variant IN
-    ('thumb','preview','poster','text','transcript','embedding','phash')),
+    ('thumb','preview','poster','text','transcript','embedding','phash','thumbhash')),
   requested_at        TEXT NOT NULL,
   drained_at          TEXT,
   lease_device_id     TEXT,

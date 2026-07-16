@@ -2,12 +2,18 @@
  * Shared read/join helpers for the photos app's queries (issue #352 phase
  * 3/4) — pulled out once queries/library.js and queries/search.js both
  * needed the SAME bounded joins over the same windowed asset/content ids:
- * the favorite star (issue #274, pre-existing), free-form labels
- * (core.tag_item/untag_item over the shared "Tags" scheme —
+ * free-form labels (core.tag_item/untag_item over the shared "Tags" scheme —
  * packages/vault/src/commands/tags.ts, shared with notes/tasks), the
  * linked place (core.place, media.ts's EXIF-GPS auto-link +
  * media.set_asset_place) and the blob custody projection
  * (blob.custody_state, blob/custody.ts).
+ *
+ * Favorite USED to be joined here too (a flags-scheme starred tag on the
+ * canonical content item, issue #274). Issue #419 made it a first-class
+ * `favorite` column on media.media_asset — the photos replica shape has to be
+ * self-contained, and a native client cannot reconstruct a star from a
+ * three-table concept join it was never granted. The tag path is gone, not
+ * dual-written: the column is the only source of truth.
  *
  * NOT a query itself — the dispatcher resolves a query name straight to
  * `queries/<name>.js` (never a directory scan: packages/app-engine/src/
@@ -17,7 +23,6 @@
  */
 
 export const BLOB_ROUTE = '/centraid/_vault/blobs';
-const FLAGS_SCHEME_URI = 'https://centraid.dev/schemes/flags';
 const TAGS_SCHEME_URI = 'centraid:tags:v1';
 
 /**
@@ -54,9 +59,10 @@ export async function readPlaces({ ctx, purpose }) {
 
 /**
  * Every bounded per-asset join the grid/lightbox rows need beyond the raw
- * asset/content columns: the favorite star, free-form labels, and custody
- * state. Callers pass the WINDOWED asset/content ids only — never a table
- * scan. Returns `{ starredIds, tagsByAsset, custodyByContent }`.
+ * asset/content columns: free-form labels and custody state. Favorite is no
+ * longer here — it is a first-class `favorite` column on the asset (issue
+ * #419), read straight off the row. Callers pass the WINDOWED asset/content
+ * ids only — never a table scan. Returns `{ tagsByAsset, custodyByContent }`.
  */
 export async function readAssetJoins({ ctx, purpose, assetIds, contentIds }) {
   const [schemes, concepts, custody] = await Promise.all([
@@ -70,28 +76,6 @@ export async function readAssetJoins({ ctx, purpose, assetIds, contentIds }) {
         })
       : { rows: [] },
   ]);
-
-  // Favorite is a flags-scheme starred tag on the canonical content item
-  // (issue #274) — one bounded read over the windowed content ids.
-  const flagsScheme = (schemes.rows ?? []).find((s) => s.uri === FLAGS_SCHEME_URI);
-  const starredConcept = flagsScheme
-    ? (concepts.rows ?? []).find(
-        (c) => c.scheme_id === flagsScheme.scheme_id && c.notation === 'starred',
-      )
-    : undefined;
-  const starredIds = new Set();
-  if (starredConcept && contentIds.length > 0) {
-    const starTags = await ctx.vault.read({
-      entity: 'core.tag',
-      where: [
-        { column: 'concept_id', op: 'eq', value: starredConcept.concept_id },
-        { column: 'target_type', op: 'eq', value: 'core.content_item' },
-        { column: 'target_id', op: 'in', value: contentIds },
-      ],
-      purpose,
-    });
-    for (const t of starTags.rows ?? []) starredIds.add(t.target_id);
-  }
 
   // Free-form labels (issue #352): core.tag_item targets the ASSET itself
   // (subject_type 'media.media_asset'), unlike the content-item-scoped
@@ -128,5 +112,5 @@ export async function readAssetJoins({ ctx, purpose, assetIds, contentIds }) {
     (custody.rows ?? []).map((c) => [c.content_id, c.custody_state]),
   );
 
-  return { starredIds, tagsByAsset, custodyByContent };
+  return { tagsByAsset, custodyByContent };
 }

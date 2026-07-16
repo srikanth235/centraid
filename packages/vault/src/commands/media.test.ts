@@ -152,25 +152,51 @@ test('delete_asset trashes the asset, leaves albums, and soft-deletes unreferenc
   expect(again.status).toBe('failed');
 });
 
-test('update_asset toggles favorite as a starred tag on the canonical content item', () => {
-  const { asset_id, content_id } = addAsset({ data_uri: PIXEL });
-  const starred = () =>
+test('favorite and archive are first-class asset columns (issue #419)', () => {
+  const { asset_id } = addAsset({ data_uri: PIXEL });
+  const state = () =>
     db.vault
-      .prepare(
-        `SELECT count(*) AS n FROM core_tag t
-           JOIN core_concept c ON c.concept_id = t.concept_id
-           JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-          WHERE t.target_type = 'core.content_item' AND t.target_id = ?
-            AND s.uri = 'https://centraid.dev/schemes/flags' AND c.notation = 'starred'`,
-      )
-      .get(content_id) as { n: number };
+      .prepare('SELECT favorite, archived_at FROM media_media_asset WHERE asset_id = ?')
+      .get(asset_id) as { favorite: number; archived_at: string | null };
+  // Fresh assets are unfavorited and unarchived.
+  expect(state()).toEqual({ favorite: 0, archived_at: null });
+
+  // update_asset stays the general editor; set_favorite is the focused toggle.
   expect(invoke('media.update_asset', { asset_id, favorite: 1 }).status).toBe('executed');
-  expect(starred().n).toBe(1);
-  // Re-favoriting stays a single tag (UNIQUE target+concept, delete-then-insert).
-  expect(invoke('media.update_asset', { asset_id, favorite: 1 }).status).toBe('executed');
-  expect(starred().n).toBe(1);
-  expect(invoke('media.update_asset', { asset_id, favorite: 0 }).status).toBe('executed');
-  expect(starred().n).toBe(0);
+  expect(state().favorite).toBe(1);
+  expect(invoke('media.set_favorite', { asset_id, favorite: 1 }).status).toBe('executed');
+  expect(state().favorite).toBe(1); // idempotent
+  expect(invoke('media.set_favorite', { asset_id, favorite: 0 }).status).toBe('executed');
+  expect(state().favorite).toBe(0);
+
+  // Archive is a nullable timestamp; toggling on stamps it, off clears it.
+  expect(invoke('media.set_archived', { asset_id, archived: 1 }).status).toBe('executed');
+  expect(state().archived_at).not.toBeNull();
+  expect(invoke('media.set_archived', { asset_id, archived: 0 }).status).toBe('executed');
+  expect(state().archived_at).toBeNull();
+});
+
+test('add_asset carries tz_offset_min and a device thumbhash onto the asset', () => {
+  const { asset_id, content_id } = addAsset({
+    data_uri: PIXEL,
+    captured_at: '2026-06-01T10:00:00Z',
+    tz_offset_min: 330,
+    thumbhash: '1QcSHQRnh493V4dIh4eXh1h4kJUI',
+  });
+  const asset = db.vault
+    .prepare('SELECT tz_offset_min FROM media_media_asset WHERE asset_id = ?')
+    .get(asset_id) as { tz_offset_min: number };
+  expect(asset.tz_offset_min).toBe(330);
+  const derivative = db.vault
+    .prepare(
+      `SELECT media_type, text_content FROM core_content_derivative
+        WHERE content_id = ? AND variant = 'thumbhash'`,
+    )
+    .get(content_id) as { media_type: string; text_content: string };
+  expect(derivative).toEqual({
+    media_type: 'application/x-thumbhash',
+    text_content: '1QcSHQRnh493V4dIh4eXh1h4kJUI',
+  });
 });
 
 test('restore_asset brings a trashed asset and its bytes back; restoring live fails', () => {

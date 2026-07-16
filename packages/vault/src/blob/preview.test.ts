@@ -42,6 +42,13 @@ const stubCodec: PreviewCodec = {
     if (mediaType === 'image/gif') return null;
     return source.length.toString(16).padStart(16, '0').slice(-16);
   },
+  thumbhash(source, mediaType) {
+    if (mediaType === 'image/gif') return null;
+    // A deterministic, canonical 21-byte (→28 char, unpadded) placeholder.
+    return Buffer.alloc(21, source.length & 0xff)
+      .toString('base64')
+      .replace(/=+$/, '');
+  },
 };
 
 let db: VaultDb;
@@ -97,6 +104,16 @@ function inlinePhash(contentId: string): string | null {
   return row?.text_content ?? null;
 }
 
+function inlineThumbhash(contentId: string): string | null {
+  const row = db.vault
+    .prepare(
+      `SELECT text_content FROM core_content_derivative
+        WHERE content_id = ? AND variant = 'thumbhash'`,
+    )
+    .get(contentId) as { text_content: string | null } | undefined;
+  return row?.text_content ?? null;
+}
+
 function mediaPhash(contentId: string): string | null {
   const row = db.vault
     .prepare(
@@ -127,12 +144,20 @@ test('backstop stages both rungs for an image missing them, idempotent on re-run
   );
   expect(inlinePhash(contentId)).toBe(expectedPhash);
   expect(mediaPhash(contentId)).toBe(expectedPhash);
+  // The ThumbHash hole gets filled too (issue #419), inline like the phash.
+  expect(first.thumbhashesGenerated).toBe(1);
+  const expectedThumbhash = stubCodec.thumbhash(
+    Buffer.concat([PNG_BYTES, Buffer.alloc(1)]),
+    'image/png',
+  );
+  expect(inlineThumbhash(contentId)).toBe(expectedThumbhash);
 
   // Second pass finds nothing missing — the backstop only fills holes.
   const second = await backfillPreviews(db, stubCodec);
   expect(second.scanned).toBe(0);
   expect(second.generated).toBe(0);
   expect(second.phashesGenerated).toBe(0);
+  expect(second.thumbhashesGenerated).toBe(0);
 });
 
 test('a client-supplied rung is never overwritten — the backstop only fills the gap', async () => {

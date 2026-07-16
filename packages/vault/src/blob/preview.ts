@@ -79,6 +79,8 @@ export interface PreviewCodec {
   downscale(source: Buffer, mediaType: string, maxEdge: number): PreviewOutput | null;
   /** 64-bit dHash, encoded as 16 lowercase hexadecimal characters. */
   perceptualHash(source: Buffer, mediaType: string): string | null;
+  /** ThumbHash bytes as unpadded standard base64, or null for an undecodable input. */
+  thumbhash(source: Buffer, mediaType: string): string | null;
 }
 
 /** What one backstop pass touched — folded into the sweep receipt. */
@@ -89,6 +91,8 @@ export interface PreviewBackfillResult {
   generated: number;
   /** Inline perceptual-hash contributions actually staged (0-1 per item). */
   phashesGenerated: number;
+  /** Inline ThumbHash placeholders actually staged (0-1 per item). */
+  thumbhashesGenerated: number;
   /** Items the codec declined outright (unsupported type / decode failure). */
   skippedUnsupported: number;
   /** Items whose original bytes were absent from BOTH tiers — an integrity gap. */
@@ -147,6 +151,24 @@ export function contributeIngressPreviews(
       // A hash miss only removes a duplicate hint; binary previews still win.
     }
   }
+  if (!hasStagedOrClaimedVariant(db, input.sha256, 'thumbhash')) {
+    try {
+      const thumbhash = codec.thumbhash(input.bytes, input.mediaType);
+      if (thumbhash) {
+        stageBlobBytes(db, {
+          bytes: Buffer.from(thumbhash),
+          mediaType: 'application/x-thumbhash',
+          variant: 'thumbhash',
+          variantOf: input.sha256,
+          validateDerivative: true,
+          ...(input.stagedBy ? { stagedBy: input.stagedBy } : {}),
+        });
+        generated += 1;
+      }
+    } catch {
+      // A missing placeholder only means a blank tile until the thumb lands.
+    }
+  }
   return generated;
 }
 
@@ -180,6 +202,7 @@ export async function backfillPreviews(
     scanned: 0,
     generated: 0,
     phashesGenerated: 0,
+    thumbhashesGenerated: 0,
     skippedUnsupported: 0,
     missingBytes: 0,
   };
@@ -218,6 +241,9 @@ export async function backfillPreviews(
             OR NOT EXISTS (SELECT 1 FROM core_content_derivative d
                             WHERE d.content_id = i.content_id AND d.variant = 'phash'
                               AND d.text_content IS NOT NULL)
+            OR NOT EXISTS (SELECT 1 FROM core_content_derivative d
+                            WHERE d.content_id = i.content_id AND d.variant = 'thumbhash'
+                              AND d.text_content IS NOT NULL)
           )
         ORDER BY i.created_at
         LIMIT ?`,
@@ -238,7 +264,8 @@ export async function backfillPreviews(
           !hasLiveDeviceLease(db, item.content_id, rung.variant, now),
       );
       const missingPhash = !hasVariant(db, item.content_id, 'phash');
-      if (missing.length === 0 && !missingPhash) continue;
+      const missingThumbhash = !hasVariant(db, item.content_id, 'thumbhash');
+      if (missing.length === 0 && !missingPhash && !missingThumbhash) continue;
       // Local hit first; a remote-only original reads through custody.open at
       // backfill pace (the read-through re-caches it locally as a side effect).
       const bytes = db.blobs.getSync(parentSha) ?? (await db.blobs.open(parentSha));
@@ -278,6 +305,21 @@ export async function backfillPreviews(
           unsupported = true;
         }
       }
+      if (missingThumbhash && !unsupported) {
+        const thumbhash = codec.thumbhash(bytes, item.media_type);
+        if (thumbhash && !hasVariant(db, item.content_id, 'thumbhash')) {
+          stageBlobBytes(db, {
+            bytes: Buffer.from(thumbhash),
+            mediaType: 'application/x-thumbhash',
+            variant: 'thumbhash',
+            variantOf: parentSha,
+            validateDerivative: true,
+          });
+          result.thumbhashesGenerated += 1;
+        } else if (!thumbhash && missing.length === 0 && !missingPhash) {
+          unsupported = true;
+        }
+      }
       if (unsupported) result.skippedUnsupported += 1;
     } catch {
       // Best-effort maintenance: one unreadable image (corrupt bytes, a decode
@@ -293,13 +335,14 @@ export async function backfillPreviews(
 function hasVariant(
   db: VaultDb,
   contentId: string,
-  variant: 'thumb' | 'preview' | 'phash',
+  variant: 'thumb' | 'preview' | 'phash' | 'thumbhash',
 ): boolean {
   const row = db.vault
     .prepare(
       `SELECT 1 FROM core_content_derivative
         WHERE content_id = ? AND variant = ?
-          AND CASE WHEN variant = 'phash' THEN text_content IS NOT NULL ELSE sha256 IS NOT NULL END
+          AND CASE WHEN variant IN ('phash','thumbhash') THEN text_content IS NOT NULL
+                   ELSE sha256 IS NOT NULL END
         LIMIT 1`,
     )
     .get(contentId, variant);
@@ -307,7 +350,11 @@ function hasVariant(
 }
 
 /** Capture-time uploads can still be staged or already claimed. */
-function hasStagedOrClaimedVariant(db: VaultDb, parentSha: string, variant: 'phash'): boolean {
+function hasStagedOrClaimedVariant(
+  db: VaultDb,
+  parentSha: string,
+  variant: 'phash' | 'thumbhash',
+): boolean {
   const staged = db.vault
     .prepare(
       `SELECT 1 FROM blob_staging

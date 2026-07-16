@@ -165,11 +165,12 @@ test('raw upload → claim via core.add_document → serve with ETag/Range/304',
   expect(dl.headers.get('content-disposition')).toBe('attachment; filename="pixel.png"');
 });
 
-test('bare raw JPEG ingress publishes thumb, preview and inline phash backstops', async () => {
+test('bare raw JPEG ingress publishes thumb, preview and inline phash/thumbhash backstops', async () => {
   const codec = createImagePreviewCodec();
   const { base, plane } = await fixture(codec);
   const jpeg = makeJpeg(18, 8);
   const expectedPhash = codec.perceptualHash(jpeg, 'image/jpeg');
+  const expectedThumbhash = codec.thumbhash(jpeg, 'image/jpeg');
 
   const response = await fetch(`${base}?filename=curl.jpg`, {
     method: 'POST',
@@ -199,6 +200,7 @@ test('bare raw JPEG ingress publishes thumb, preview and inline phash backstops'
     { variant: 'phash', sha256: null, text_content: expectedPhash },
     expect.objectContaining({ variant: 'preview', text_content: null }),
     expect.objectContaining({ variant: 'thumb', text_content: null }),
+    { variant: 'thumbhash', sha256: null, text_content: expectedThumbhash },
   ]);
   expect(derivatives[1]?.sha256).toMatch(/^[0-9a-f]{64}$/);
   expect(derivatives[2]?.sha256).toMatch(/^[0-9a-f]{64}$/);

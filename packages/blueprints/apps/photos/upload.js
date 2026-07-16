@@ -6,6 +6,7 @@
 import { isPendingOffsite, stageDerivative, stageFileBytes, toast } from './kit.js';
 import { act, narrate } from './outcomes.js';
 import { CLIENT_TINY_EDGE, CLIENT_MEDIUM_EDGE } from './media.js';
+import { thumbHashFromImage } from './thumbhash.js';
 import { $ } from './dom.js';
 
 // Client-side ceiling per file. Bytes stream to the blob staging route
@@ -81,6 +82,7 @@ async function stageClientPreviews(file, parentSha) {
     const bitmap = await createImageBitmap(file);
     const dims = bitmap.width > 0 ? { width: bitmap.width, height: bitmap.height } : null;
     const phash = dHashFromImage(bitmap);
+    const thumbhash = thumbHashFromImage(bitmap);
     // Tiny first (the grid is what paints on return), then medium. Both skip
     // themselves when the original is already smaller than their edge.
     await Promise.allSettled([
@@ -89,9 +91,20 @@ async function stageClientPreviews(file, parentSha) {
       ...(phash
         ? [stageDerivative(parentSha, 'phash', new Blob([phash]), 'text/x-perceptual-hash')]
         : []),
+      ...(thumbhash
+        ? [
+            stageDerivative(
+              parentSha,
+              'thumbhash',
+              new Blob([thumbhash]),
+              'application/x-thumbhash',
+            ),
+          ]
+        : []),
     ]);
     bitmap.close();
-    return dims ? { ...dims, ...(phash ? { phash } : {}) } : phash ? { phash } : null;
+    const extra = { ...(phash ? { phash } : {}), ...(thumbhash ? { thumbhash } : {}) };
+    return dims ? { ...dims, ...extra } : Object.keys(extra).length > 0 ? extra : null;
   } catch {
     return null; // no previews is a slower grid, never a failed upload
   }
@@ -258,6 +271,7 @@ export async function runUpload(files, { refresh, setUploading }) {
       ...(mediaMeta?.width ? { width: mediaMeta.width, height: mediaMeta.height } : {}),
       ...(mediaMeta?.duration_s != null ? { duration_s: mediaMeta.duration_s } : {}),
       ...(mediaMeta?.phash ? { phash: mediaMeta.phash } : {}),
+      ...(mediaMeta?.thumbhash ? { thumbhash: mediaMeta.thumbhash } : {}),
     });
     // One bad file never sinks the batch — count it and keep going.
     if (outcome?.status === 'executed') {

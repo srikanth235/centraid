@@ -73,7 +73,7 @@ export default async ({ input, ctx }) => {
       readAssetJoins({ ctx, purpose, assetIds, contentIds }),
     ]);
     const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
-    const { starredIds, tagsByAsset, custodyByContent } = joins;
+    const { tagsByAsset, custodyByContent } = joins;
 
     const albumRows = (albums.rows ?? []).map((c) => ({
       album_id: c.collection_id,
@@ -100,7 +100,7 @@ export default async ({ input, ctx }) => {
         const { src, thumb, preview, poster } = srcOf(content);
         return {
           ...asset,
-          favorite: starredIds.has(asset.content_id) ? 1 : 0,
+          favorite: asset.favorite ? 1 : 0,
           content_uri: src,
           thumb_uri: thumb,
           preview_uri: preview,

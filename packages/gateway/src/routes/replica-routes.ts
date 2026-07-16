@@ -1,5 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit (#406) one protocol route keeps bootstrap, pull/SSE, lazy-row, checkpoint, and intent admission semantics together
 /* Replica HTTP protocol: authenticated bootstrap, pull/stream, lazy row and intent lanes. */
+import crypto from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   currentReplicaLogState,
@@ -54,6 +55,11 @@ export const REPLICA_INTENTS_PATH = '/centraid/_vault/replica/intents';
 const OUTCOME_RECONCILE_LIMIT = 500;
 const DEFAULT_MAX_BOOTSTRAP_ROWS = 100_000;
 const DEFAULT_MAX_SYNTHETIC_LOOKUP_ROWS = 25_000;
+/** Windowed bootstrap page size bounds (issue #419). */
+const DEFAULT_BOOTSTRAP_WINDOW = 5_000;
+const MAX_BOOTSTRAP_WINDOW = 20_000;
+/** Internal read-page size while filling one window from the snapshot reader. */
+const BOOTSTRAP_READ_PAGE = 10_000;
 
 class ReplicaWorkLimitError extends Error {
   constructor(readonly kind: 'bootstrap' | 'synthetic-row') {
@@ -66,6 +72,162 @@ type BootstrapValue = {
   shapes: ReplicaServerShape[];
   rows: NonNullable<ReturnType<typeof shapeReplicaRow>>[];
 };
+
+type BootstrapWireRow = NonNullable<ReturnType<typeof shapeReplicaRow>>;
+
+// ── Windowed bootstrap (issue #419) ─────────────────────────────────────────
+//
+// The single-shot bootstrap materializes every shaped row into ONE JSON body,
+// which 413s past DEFAULT_MAX_BOOTSTRAP_ROWS — untenable for a 50k+ asset
+// library. Windowed mode is an ADDITIVE paging protocol; the single-shot path
+// is byte-for-byte unchanged when neither `window` nor `after` is present.
+//
+// Contract (the wave-2 client builds against exactly this):
+//   • Trigger: `?window=<1..20000>` and/or `?after=<token>`. Absent ⇒ legacy.
+//   • Page 1 (`?window=n`, no `after`): the full single-shot envelope
+//     (protocolVersion, vaultId, schemaEpoch, cursor, shapes, shapeIds, trust,
+//     rememberDevice) PLUS `rows` (first window), `complete`, and — when more
+//     remain — an opaque `next` continuation token.
+//   • Page N (`?after=<token>`[&window=n]): `{protocolVersion, vaultId,
+//     schemaEpoch, cursor, rows, complete, next?}` — no shapes (the client
+//     already has them). `window` may change between pages.
+//   • Snapshot model: each page opens its OWN SQLite read snapshot; pages are
+//     NOT globally snapshot-consistent. Every page reports its own `cursor`
+//     (that page's watermark). The token pins page 1's cursor as the delta
+//     floor.
+//   • Convergence (REQUIRED of the client): after `complete`, run an
+//     incremental delta pull `GET /changes?since=<page-1 cursor>`. Page 1 has
+//     the minimum cursor of all pages, so replaying the change log from it is
+//     idempotent and repairs any insert/update/delete that slipped between the
+//     per-page snapshots. Without this step deletions between pages would leak.
+//   • Rebootstrap (409) mid-pagination when the epoch or schemaEpoch changed,
+//     the shape set changed (shapeSig mismatch), or the log floor advanced past
+//     the pinned page-1 cursor (the deltas the client would need were GC'd).
+//   • 400 on a malformed/tampered token. The 100k row cap never fires here.
+
+interface BootstrapWindowToken {
+  v: 1;
+  epoch: string;
+  schemaEpoch: number;
+  /** Page-1 cursor — the delta floor the client replays from after completion. */
+  first: { epoch: string; seq: number };
+  /** Fingerprint of the page-1 shape set; a mismatch mid-pagination ⇒ 409. */
+  shapeSig: string;
+  /** Iteration position: shape index, entity index within it, and row `after`. */
+  shapeIdx: number;
+  entityIdx: number;
+  after: string | null;
+}
+
+function shapeSignature(shapeIds: string[]): string {
+  return crypto.createHash('sha256').update(JSON.stringify(shapeIds)).digest('hex').slice(0, 32);
+}
+
+function encodeBootstrapToken(token: BootstrapWindowToken): string {
+  return Buffer.from(JSON.stringify(token)).toString('base64url');
+}
+
+function isSafeIndex(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+function decodeBootstrapToken(raw: string): BootstrapWindowToken {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
+  } catch {
+    throw new Error('replica bootstrap token is not valid base64url JSON');
+  }
+  const t = parsed as Record<string, unknown>;
+  const first = t.first as Record<string, unknown> | undefined;
+  if (
+    !t ||
+    typeof t !== 'object' ||
+    t.v !== 1 ||
+    typeof t.epoch !== 'string' ||
+    !Number.isSafeInteger(t.schemaEpoch) ||
+    !first ||
+    typeof first !== 'object' ||
+    typeof first.epoch !== 'string' ||
+    !Number.isSafeInteger(first.seq) ||
+    typeof t.shapeSig !== 'string' ||
+    !isSafeIndex(t.shapeIdx) ||
+    !isSafeIndex(t.entityIdx) ||
+    !(t.after === null || typeof t.after === 'string')
+  ) {
+    throw new Error('replica bootstrap token structure is invalid');
+  }
+  return {
+    v: 1,
+    epoch: t.epoch,
+    schemaEpoch: t.schemaEpoch as number,
+    first: { epoch: first.epoch, seq: first.seq as number },
+    shapeSig: t.shapeSig,
+    shapeIdx: t.shapeIdx,
+    entityIdx: t.entityIdx,
+    after: t.after as string | null,
+  };
+}
+
+/** `?window` bound (1..20000); default when omitted on a continuation. */
+function parseBootstrapWindow(url: URL): number | 'invalid' {
+  const raw = url.searchParams.get('window');
+  if (raw === null) return DEFAULT_BOOTSTRAP_WINDOW;
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value < 1 || value > MAX_BOOTSTRAP_WINDOW) return 'invalid';
+  return value;
+}
+
+interface BootstrapPosition {
+  shapeIdx: number;
+  entityIdx: number;
+  after: string | null;
+}
+
+/**
+ * Fill one window of shaped rows from the pinned snapshot, walking (shape,
+ * entity) pairs in order and paging each entity by its primary key. Stops at
+ * `windowLimit` shaped rows and reports the resume position; `complete` is
+ * true once every shape/entity is exhausted. Throws (⇒ 400) only on a
+ * malformed `after` row id the reader rejects.
+ */
+function collectBootstrapWindow(
+  reader: ReplicaSnapshotReader,
+  shapes: ReplicaServerShape[],
+  nowMs: number,
+  start: BootstrapPosition,
+  windowLimit: number,
+): { rows: BootstrapWireRow[]; position: BootstrapPosition; complete: boolean } {
+  const rows: BootstrapWireRow[] = [];
+  let { shapeIdx, entityIdx, after } = start;
+  while (shapeIdx < shapes.length) {
+    const shape = shapes[shapeIdx];
+    if (!shape || entityIdx >= shape.entities.length) {
+      shapeIdx += 1;
+      entityIdx = 0;
+      after = null;
+      continue;
+    }
+    const entity = shape.entities[entityIdx]!.entity;
+    const page = reader.readRows(entity, {
+      ...(after ? { after } : {}),
+      limit: Math.min(BOOTSTRAP_READ_PAGE, windowLimit - rows.length),
+      maxValueBytes: REPLICA_MAX_VALUE_BYTES,
+    });
+    for (const row of page.rows) {
+      const shaped = shapeReplicaRow(shape, entity, row, nowMs);
+      if (shaped) rows.push(shaped);
+    }
+    if (page.nextAfter) {
+      after = page.nextAfter;
+    } else {
+      entityIdx += 1;
+      after = null;
+    }
+    if (rows.length >= windowLimit) break;
+  }
+  return { rows, position: { shapeIdx, entityIdx, after }, complete: shapeIdx >= shapes.length };
+}
 
 export interface ReplicaRouteOptions {
   enrollments?: EnrollmentStore;
@@ -379,6 +541,115 @@ async function streamChanges(
   return true;
 }
 
+type WindowedBootstrapResult =
+  | { rebootstrap: string }
+  | { badToken: true }
+  | {
+      shapes: ReplicaServerShape[];
+      shapeIds: string[];
+      rows: BootstrapWireRow[];
+      complete: boolean;
+      next?: string;
+    };
+
+/** One page of the windowed bootstrap (issue #419 — contract above). */
+function handleWindowedBootstrap(
+  res: ServerResponse,
+  url: URL,
+  db: import('node:sqlite').DatabaseSync,
+  vaultId: string,
+  access: ReplicaRequestAccess,
+): true {
+  const windowLimit = parseBootstrapWindow(url);
+  if (windowLimit === 'invalid') return sendJson(res, 400, { error: 'invalid_replica_window' });
+  const rawToken = url.searchParams.get('after');
+  let token: BootstrapWindowToken | null = null;
+  if (rawToken !== null) {
+    try {
+      token = decodeBootstrapToken(rawToken);
+    } catch {
+      return sendJson(res, 400, { error: 'invalid_replica_bootstrap_token' });
+    }
+  }
+
+  const snapshot = withReplicaSnapshot(db, (reader): WindowedBootstrapResult => {
+    const state = reader.state;
+    const nowMs = Date.now();
+    const shapes = buildReplicaShapes(db, access, new Date(nowMs).toISOString());
+    const shapeIds = replicaShapeIds(shapes);
+    const shapeSig = shapeSignature(shapeIds);
+    let start: BootstrapPosition = { shapeIdx: 0, entityIdx: 0, after: null };
+    if (token) {
+      if (token.epoch !== state.epoch || token.schemaEpoch !== state.schemaEpoch) {
+        return { rebootstrap: 'epoch-changed' };
+      }
+      // The delta the client will replay after completion must still be in the
+      // log; a floor past our pinned page-1 cursor means it was GC'd.
+      if (token.first.seq < state.floor.seq) return { rebootstrap: 'snapshot-retention' };
+      if (token.shapeSig !== shapeSig) return { rebootstrap: 'shape-changed' };
+      if (token.shapeIdx > shapes.length) return { badToken: true };
+      start = { shapeIdx: token.shapeIdx, entityIdx: token.entityIdx, after: token.after };
+    }
+    let collected: ReturnType<typeof collectBootstrapWindow>;
+    try {
+      collected = collectBootstrapWindow(reader, shapes, nowMs, start, windowLimit);
+    } catch {
+      return { badToken: true }; // a malformed `after` row id the reader rejected
+    }
+    const first = token ? token.first : { epoch: state.epoch, seq: state.watermark.seq };
+    const next = collected.complete
+      ? undefined
+      : encodeBootstrapToken({
+          v: 1,
+          epoch: state.epoch,
+          schemaEpoch: state.schemaEpoch,
+          first,
+          shapeSig,
+          shapeIdx: collected.position.shapeIdx,
+          entityIdx: collected.position.entityIdx,
+          after: collected.position.after,
+        });
+    return {
+      shapes,
+      shapeIds,
+      rows: collected.rows,
+      complete: collected.complete,
+      ...(next ? { next } : {}),
+    };
+  });
+
+  const value = snapshot.value;
+  if ('rebootstrap' in value) {
+    return sendJson(res, 409, rebootstrapBody(value.rebootstrap, snapshot.state));
+  }
+  if ('badToken' in value) {
+    return sendJson(res, 400, { error: 'invalid_replica_bootstrap_token' });
+  }
+  // A trusted-app session that resolves to no shapes is a 403, same as the
+  // single-shot path — but only on the first page (a continuation already
+  // proved the shapes existed and would 409 on any shape change).
+  if (!token && access.appId && value.shapes.length === 0) {
+    return sendJson(res, 403, { error: 'replica_shape_empty' });
+  }
+  const base = {
+    protocolVersion: REPLICA_PROTOCOL_VERSION,
+    vaultId,
+    schemaEpoch: String(snapshot.state.schemaEpoch),
+    cursor: snapshot.state.watermark,
+    rows: value.rows,
+    complete: value.complete,
+    ...(value.next ? { next: value.next } : {}),
+  };
+  if (token) return sendJson(res, 200, base);
+  return sendJson(res, 200, {
+    ...base,
+    shapes: replicaShapesWire(value.shapes),
+    shapeIds: value.shapeIds,
+    trust: access.trust,
+    rememberDevice: access.rememberDevice,
+  });
+}
+
 export function makeReplicaRouteHandler(
   vaults: VaultRegistry,
   options: ReplicaRouteOptions,
@@ -451,6 +722,11 @@ export function makeReplicaRouteHandler(
 
     if (url.pathname === BOOTSTRAP_PATH) {
       if (method !== 'GET') return methodAllowed(res, 'GET');
+      // Windowed mode (issue #419): additive, and only when the client opts in
+      // via `?window`/`?after`. The single-shot path below is untouched.
+      if (url.searchParams.has('window') || url.searchParams.has('after')) {
+        return handleWindowedBootstrap(res, url, plane.db.vault, vaultId, access);
+      }
       let snapshot: ReplicaSnapshotResult<BootstrapValue>;
       try {
         snapshot = withReplicaSnapshot(plane.db.vault, (reader) => {
