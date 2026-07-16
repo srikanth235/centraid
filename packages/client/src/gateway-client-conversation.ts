@@ -17,15 +17,24 @@
  * Re-exported from `gateway-client.ts` so call sites import from one barrel.
  */
 
-import {
-  auth,
-  authHeaders,
-  doFetch,
-  enc,
-  readJson,
-  GatewayClientError,
-} from './gateway-client-core.js';
+import { auth, authHeaders, doFetch, readJson, GatewayClientError } from './gateway-client-core.js';
 import type { CentraidAgentsStatus, CentraidRunnerStatus } from './centraid-api.js';
+// Shared chat-client core (issue #420): the ONE SSE parser + wire-route
+// builders + the documented TurnStreamEvent union, from the canonical kit copy.
+import { consumeSse } from '@centraid/blueprints/kit/turn-stream.js';
+import type { TurnStreamEvent } from '@centraid/blueprints/kit/turn-stream.js';
+import {
+  appTurnPath,
+  assistantTurnPath,
+  resolvePath,
+  conversationsPath,
+  conversationPath,
+  blobsPath,
+} from '@centraid/blueprints/kit/conversation-client.js';
+
+// Re-exported so every consumer keeps importing the union from this barrel; the
+// definition now lives in one place (the wire contract, turn-stream.d.ts).
+export type { TurnStreamEvent };
 
 /**
  * Runner preflight + model catalog from the ACTIVE gateway. Reads the
@@ -72,49 +81,6 @@ export async function getAgentsStatus(
   return readJson<CentraidAgentsStatus>(res, 'fetch agents status');
 }
 
-/**
- * The gateway's native chat stream event (mirrors
- * `@centraid/app-engine`'s `TurnStreamEvent`). Kept as a local type so the
- * renderer doesn't import the Node package; the panel consumes this union
- * directly now that the turn isn't translated through IPC.
- */
-export type TurnStreamEvent =
-  | { type: 'assistant.start' }
-  | { type: 'assistant.delta'; delta: string }
-  | { type: 'reasoning.delta'; delta: string }
-  | { type: 'tool.start'; toolCallId: string; toolName: string; args?: unknown; sql?: string }
-  | {
-      type: 'tool.result';
-      toolCallId: string;
-      toolName: string;
-      ok: boolean;
-      result?: unknown;
-      errorText?: string;
-    }
-  | { type: 'phase'; phase: string; detail?: unknown }
-  | { type: 'final'; text: string }
-  | { type: 'error'; message: string }
-  | { type: 'aborted' }
-  | {
-      type: 'usage';
-      model?: string;
-      provider?: string;
-      inputTokens?: number;
-      outputTokens?: number;
-      cacheReadTokens?: number;
-      cacheWriteTokens?: number;
-    }
-  | {
-      type: 'webhooks';
-      minted: Array<{
-        automationId: string;
-        ownerApp: string;
-        webhookId: string;
-        url: string;
-        secret: string;
-      }>;
-    };
-
 /** An attachment already uploaded to the blob CAS, referenced on the next turn. */
 export interface ConversationAttachmentRef {
   hash: string;
@@ -154,7 +120,7 @@ export async function uploadConversationAttachment(
   filename?: string,
 ): Promise<ConversationAttachmentRef> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/_centraid-conversations/apps/${enc(appId)}/blobs`, {
+  const res = await doFetch(baseUrl, blobsPath(appId), {
     method: 'POST',
     headers: { ...authHeaders(token), 'content-type': mime },
     body: bytes as BodyInit,
@@ -180,7 +146,7 @@ export async function streamTurn(
   signal: AbortSignal,
 ): Promise<void> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/${enc(appId)}/_turn`, {
+  const res = await doFetch(baseUrl, appTurnPath(appId), {
     method: 'POST',
     headers: authHeaders(token, 'application/json'),
     body: JSON.stringify({
@@ -208,45 +174,7 @@ export async function streamTurn(
   }
   if (!res.body)
     throw new GatewayClientError('gateway_error', 'chat: gateway returned no stream body.');
-  await consumeSse(res.body, onEvent);
-}
-
-/**
- * Parse a `_turn` SSE body into `TurnStreamEvent`s. Frames are separated by
- * a blank line; each may carry an `event:` line (ignored — `type` is inside
- * the JSON), `:` heartbeat comments, and one or more `data:` lines. The
- * closing `event: end\ndata: {}` frame parses to an object with no `type`,
- * so it falls through harmlessly.
- */
-async function consumeSse(
-  body: ReadableStream<Uint8Array>,
-  onEvent: (event: TurnStreamEvent) => void,
-): Promise<void> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buf = '';
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    let sep: number;
-    while ((sep = buf.indexOf('\n\n')) >= 0) {
-      const frame = buf.slice(0, sep);
-      buf = buf.slice(sep + 2);
-      const data = frame
-        .split('\n')
-        .filter((l) => l.startsWith('data:'))
-        .map((l) => l.slice('data:'.length).trimStart())
-        .join('\n');
-      if (!data) continue;
-      try {
-        const evt = JSON.parse(data) as { type?: string };
-        if (evt && typeof evt.type === 'string') onEvent(evt as TurnStreamEvent);
-      } catch {
-        /* skip a malformed frame rather than abort the stream */
-      }
-    }
-  }
+  await consumeSse(res.body, onEvent, { signal });
 }
 
 // ───────────────────────── vault assistant ─────────────────────
@@ -277,7 +205,7 @@ export async function streamAssistantTurn(
   signal: AbortSignal,
 ): Promise<void> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_vault/assistant/_turn`, {
+  const res = await doFetch(baseUrl, assistantTurnPath(), {
     method: 'POST',
     headers: authHeaders(token, 'application/json'),
     body: JSON.stringify({
@@ -298,7 +226,7 @@ export async function streamAssistantTurn(
   }
   if (!res.body)
     throw new GatewayClientError('gateway_error', 'assistant: gateway returned no stream body.');
-  await consumeSse(res.body, onEvent);
+  await consumeSse(res.body, onEvent, { signal });
 }
 
 /** Resolve answer refs (`ref:type/id`) to renderable entity cards. */
@@ -307,7 +235,7 @@ export async function resolveAssistantRefs(
 ): Promise<AssistantRefCard[]> {
   if (refs.length === 0) return [];
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_vault/assistant/resolve`, {
+  const res = await doFetch(baseUrl, resolvePath(), {
     method: 'POST',
     headers: authHeaders(token, 'application/json'),
     body: JSON.stringify({ refs }),
@@ -317,15 +245,12 @@ export async function resolveAssistantRefs(
 }
 
 // ───────────────────────── chat history ─────────────────────
-
-function sessionsPath(appId: string): string {
-  return `/_centraid-conversations/apps/${enc(appId)}/sessions`;
-}
+// Routes single-sourced in @centraid/blueprints/kit/conversation-client.js (#420).
 
 /** List this app's persisted chat sessions, newest first. */
 export async function listConversations(appId: string): Promise<CentraidConversationSummary[]> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, sessionsPath(appId), {
+  const res = await doFetch(baseUrl, conversationsPath(appId), {
     method: 'GET',
     headers: authHeaders(token),
   });
@@ -339,7 +264,7 @@ export async function createConversation(
   title = '',
 ): Promise<CentraidConversationSummary> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, sessionsPath(appId), {
+  const res = await doFetch(baseUrl, conversationsPath(appId), {
     method: 'POST',
     headers: authHeaders(token, 'application/json'),
     body: JSON.stringify({ title }),
@@ -361,7 +286,7 @@ export async function loadConversation(
   }
 > {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `${sessionsPath(appId)}/${enc(sessionId)}`, {
+  const res = await doFetch(baseUrl, conversationPath(appId, sessionId), {
     method: 'GET',
     headers: authHeaders(token),
   });
@@ -375,7 +300,7 @@ export async function renameConversation(
   title: string,
 ): Promise<void> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `${sessionsPath(appId)}/${enc(sessionId)}`, {
+  const res = await doFetch(baseUrl, conversationPath(appId, sessionId), {
     method: 'PATCH',
     headers: authHeaders(token, 'application/json'),
     body: JSON.stringify({ title }),
@@ -386,7 +311,7 @@ export async function renameConversation(
 /** Delete a chat session. */
 export async function deleteConversation(appId: string, sessionId: string): Promise<void> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `${sessionsPath(appId)}/${enc(sessionId)}`, {
+  const res = await doFetch(baseUrl, conversationPath(appId, sessionId), {
     method: 'DELETE',
     headers: authHeaders(token),
   });
