@@ -733,12 +733,14 @@
         "metadata.js",
         "nav.js",
         "package.json",
+        "pdf-text.js",
         "popovers.js",
         "queries/_shared.js",
         "queries/activity.js",
         "queries/drive.js",
         "queries/history.js",
         "queries/search.js",
+        "upload.js",
         "versions.js"
       ],
       "appKnobs": [

@@ -100,7 +100,7 @@ export interface VaultRouteOptions {
    * set, `PUT /centraid/_vault/blob-store` resolves a `connectionId` in the
    * body against it — denormalizing endpoint/region/bucket/prefix and
    * `connectionKind` into the vault's `blob_store` settings, and forcing
-   * `encrypt: true` for a `provider`-kind connection (§C4). Absent → the
+   * `encrypt: true` for every remote CAS connection. Absent → the
    * legacy behavior (the caller supplies endpoint/bucket/region directly,
    * harness-ambient credentials).
    */
@@ -187,6 +187,7 @@ export function makeVaultRouteHandler(
           });
         }
         if (method === 'PUT') {
+          const priorBlobStore = readBlobStoreSettings(plane.db.vault);
           const body = await readJson(req);
           const blobStore = body.blob_store;
           if (blobStore !== undefined && blobStore !== null) {
@@ -241,6 +242,12 @@ export function makeVaultRouteHandler(
           // off-box.
           let blobStorePatch = blobStore as Record<string, unknown> | null | undefined;
           let recoveryKitConfirmed: boolean | undefined;
+          if (blobStorePatch?.['encrypt'] === false) {
+            return sendJson(res, 400, {
+              error: 'bad_request',
+              message: 'remote CAS encryption cannot be disabled',
+            });
+          }
           const connectionId =
             blobStorePatch && typeof blobStorePatch['connectionId'] === 'string'
               ? (blobStorePatch['connectionId'] as string)
@@ -266,13 +273,6 @@ export function makeVaultRouteHandler(
                   'a remote storage tier (or resend with {force: true} to bypass)',
               });
             }
-            const forceEncrypt = connection.kind === 'provider';
-            if (forceEncrypt && blobStorePatch?.['encrypt'] === false) {
-              return sendJson(res, 400, {
-                error: 'bad_request',
-                message: 'a provider-kind storage connection cannot disable remote encryption',
-              });
-            }
             // A provider connection's S3 coordinates aren't known until a
             // grant has been requested (PROTOCOL.md § Credential grant) —
             // `endpoint`/`bucket` never rotate per-grant for one target, so
@@ -285,20 +285,29 @@ export function makeVaultRouteHandler(
               ...blobStorePatch,
               connectionId,
               connectionKind: connection.kind,
-              encrypt: forceEncrypt ? true : (blobStorePatch?.['encrypt'] ?? true),
+              encrypt: true,
               ...(target.endpoint ? { endpoint: target.endpoint } : {}),
               ...(target.region ? { region: target.region } : {}),
               ...(target.bucket ? { bucket: target.bucket } : {}),
               ...(target.prefix ? { prefix: target.prefix } : {}),
             };
           }
+          if (blobStorePatch?.['kind'] === 's3') {
+            blobStorePatch = { ...blobStorePatch, encrypt: true };
+          }
 
+          const attachingRemote = priorBlobStore.kind !== 's3' && blobStorePatch?.['kind'] === 's3';
+          // Seed the outbox first: a crash before the settings write merely
+          // leaves harmless obligations; a crash after it can never omit old
+          // local bytes from remote-primary custody/snapshots.
+          if (attachingRemote) plane.db.blobTransfers.enqueueExistingLocal();
           updateBlobStoreSettings(plane.db, {
             ...(blobStorePatch !== undefined ? { blob_store: blobStorePatch } : {}),
             ...(mediaLocation !== undefined
               ? { media_location: mediaLocation as 'keep' | 'strip' | null }
               : {}),
           });
+          if (attachingRemote) plane.db.blobTransfers.kickOutbox();
           return sendJson(res, 200, {
             blob_store: readBlobStoreSettings(plane.db.vault),
             media_location: mediaLocationPolicy(plane.db),

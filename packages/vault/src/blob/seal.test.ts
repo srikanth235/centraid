@@ -110,3 +110,12 @@ test('streaming seal matches the buffered seal end-to-end', async () => {
   const streamed = Buffer.concat(out);
   expect(unsealBlob(KEY, sha, streamed).equals(plain)).toBe(true);
 });
+
+test('sealing is byte-stable so persisted multipart receipts survive a writer restart', () => {
+  const plain = randomBytes(FRAME * 5 + 9);
+  const sha = sha256OfBytes(plain);
+  const first = sealBlob(KEY, sha, plain, FRAME);
+  const resumed = sealBlob(KEY, sha, plain, FRAME);
+  expect(resumed.equals(first)).toBe(true);
+  expect(unsealBlob(KEY, sha, resumed).equals(plain)).toBe(true);
+});

@@ -45,7 +45,13 @@ const apps = readdirSync(path.join(PKG, 'apps'), { withFileTypes: true })
       ? uiSources(path.join(PKG, 'apps', e.name), `apps/${e.name}`)
       : [`apps/${e.name}/app.js`],
   );
-const targets = [...apps, 'kit/kit.js', 'kit/elements.js', 'kit/jsx-runtime.js'];
+const targets = [
+  ...apps,
+  'kit/kit.js',
+  'kit/elements.js',
+  'kit/edge-upload.js',
+  'kit/jsx-runtime.js',
+];
 
 try {
   execFileSync(

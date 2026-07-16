@@ -201,8 +201,6 @@ test('backup status/run round-trip when backup IS configured', async () => {
     paths: pathsUnder(dataDir),
     backup: {
       enabled: true,
-      intervalHours: 24,
-      verifyEveryDays: 7,
       provider: { kind: 'local', dir: providerDir },
     },
   });

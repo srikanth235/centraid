@@ -42,10 +42,29 @@ export interface DeviceEnrollment {
    * decide between OPFS/IndexedDB and session-memory state.
    */
   rememberDevice: boolean;
+  /** Owner opt-in plus the compute this device most recently advertised. */
+  compute?: DeviceComputeProfile;
   /** Last replica cursor the authenticated device explicitly acknowledged. */
   checkpoint?: ReplicaCheckpoint;
   /** ISO enrollment time. */
   addedAt: string;
+}
+
+export interface DeviceComputeCapabilities {
+  previews: boolean;
+  poster: boolean;
+  pdfText: boolean;
+  ocr: boolean;
+  embedding: boolean;
+  transcript: boolean;
+  edgeSeal: boolean;
+  backgroundTransfer: boolean;
+}
+
+export interface DeviceComputeProfile {
+  contributeWhileCharging: boolean;
+  capabilities: DeviceComputeCapabilities;
+  updatedAt: string;
 }
 
 export interface ReplicaCheckpoint {
@@ -242,6 +261,21 @@ export class EnrollmentStore {
     });
   }
 
+  /** Persist the owner's work-sharing choice and the device's advertised compute. */
+  setCompute(
+    enrollmentId: string,
+    input: Omit<DeviceComputeProfile, 'updatedAt'>,
+  ): DeviceEnrollment {
+    return this.mutate(() => {
+      const enrollment = this.enrollments.find((row) => row.enrollmentId === enrollmentId);
+      if (!enrollment || enrollment.trust === 'revoked') {
+        throw new Error('device enrollment was not found');
+      }
+      enrollment.compute = { ...input, updatedAt: new Date().toISOString() };
+      return { ...enrollment, compute: { ...enrollment.compute } };
+    });
+  }
+
   private mutableEnrollment(endpointId: string, vaultId: string): DeviceEnrollment {
     this.reloadIfChanged();
     const enrollment = this.enrollments.find(
@@ -347,8 +381,35 @@ function validEnrollment(value: unknown): value is DeviceEnrollment {
       enrollment.trust === 'readonly' ||
       enrollment.trust === 'revoked') &&
     typeof enrollment.rememberDevice === 'boolean' &&
+    (enrollment.compute === undefined || validComputeProfile(enrollment.compute)) &&
     (enrollment.checkpoint === undefined || validCheckpoint(enrollment.checkpoint))
   );
+}
+
+const COMPUTE_CAPABILITIES: readonly (keyof DeviceComputeCapabilities)[] = [
+  'previews',
+  'poster',
+  'pdfText',
+  'ocr',
+  'embedding',
+  'transcript',
+  'edgeSeal',
+  'backgroundTransfer',
+];
+
+function validComputeProfile(value: unknown): value is DeviceComputeProfile {
+  if (typeof value !== 'object' || value === null) return false;
+  const profile = value as Partial<DeviceComputeProfile>;
+  if (
+    typeof profile.contributeWhileCharging !== 'boolean' ||
+    typeof profile.updatedAt !== 'string' ||
+    typeof profile.capabilities !== 'object' ||
+    profile.capabilities === null
+  ) {
+    return false;
+  }
+  const capabilities = profile.capabilities as Partial<DeviceComputeCapabilities>;
+  return COMPUTE_CAPABILITIES.every((key) => typeof capabilities[key] === 'boolean');
 }
 
 function checkpointNow(cursor: Omit<ReplicaCheckpoint, 'updatedAt'>): ReplicaCheckpoint {

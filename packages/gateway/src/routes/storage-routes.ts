@@ -50,6 +50,7 @@ import {
   S3BlobStore,
   custodyStateByteCounts,
   custodyStateCounts,
+  readBackupPolicy,
   readBlobStoreSettings,
 } from '@centraid/vault';
 import { requestCasGrant } from '@centraid/backup';
@@ -67,6 +68,7 @@ import { readJson, sendError, sendJson } from './route-helpers.js';
 
 const CONNECTIONS_PATH = '/centraid/_gateway/storage/connections';
 const STATUS_PATH = '/centraid/_gateway/storage/status';
+const STATUS_EVENTS_PATH = '/centraid/_gateway/storage/status/events';
 const USAGE_PATH = '/centraid/_gateway/storage/usage';
 
 export interface StorageRouteDeps {
@@ -157,62 +159,109 @@ async function probeConnection(
   }
 }
 
+type StoragePlane = ReturnType<VaultRegistry['planesList']>[number];
+
+function storageStatus(plane: StoragePlane) {
+  const settings = readBlobStoreSettings(plane.db.vault);
+  const policy = readBackupPolicy(plane.db.vault);
+  const counts = custodyStateCounts(plane.db.vault);
+  const bytes = custodyStateByteCounts(plane.db.vault);
+  const sweep = plane.db.blobs.sweepStatus();
+  const metrics = plane.db.blobs.metrics();
+  const outbox = plane.db.blobTransfers.status();
+  return {
+    vaultId: plane.boot.vaultId,
+    name: plane.name,
+    configured: settings.kind === 's3',
+    ...(settings.connectionId ? { connectionId: settings.connectionId } : {}),
+    // `remote-only` is confirmed provider custody and therefore ackable;
+    // pending-offsite/outbox is the only undrained state (#414).
+    replicated: {
+      count: counts.replicated + counts['remote-only'],
+      bytes: bytes.replicated + bytes['remote-only'],
+    },
+    backlog: { count: outbox.pendingCount, bytes: outbox.pendingBytes },
+    pendingOffsite: {
+      count: outbox.pendingCount,
+      bytes: outbox.pendingBytes,
+      uploading: outbox.uploadingCount,
+      lastError: outbox.lastError,
+    },
+    localOnly: { count: counts['local-only'], bytes: bytes['local-only'] },
+    casAck: policy.casAck,
+    outboxBudgetBytes: policy.outboxBudgetBytes,
+    reservedHeadroomBytes: policy.reservedHeadroomBytes,
+    lastSweep: {
+      completedAt: sweep.lastCompletedAt,
+      lastAttemptedAt: sweep.lastAttemptedAt,
+      error: sweep.lastError,
+      consecutiveFailures: sweep.consecutiveFailures,
+    },
+    ...(policy.throttleBytesPerSec ? { throttleBytesPerSec: policy.throttleBytesPerSec } : {}),
+    cache: {
+      spoolBytes: metrics.spoolBytes,
+      budgetBytes: metrics.budgetBytes === Number.MAX_SAFE_INTEGER ? null : metrics.budgetBytes,
+      localHits: metrics.localHits,
+      readThroughs: metrics.readThroughs,
+      rangedRemoteReads: metrics.rangedRemoteReads,
+      bytesServedLocal: metrics.bytesServedLocal,
+      bytesServedRemote: metrics.bytesServedRemote,
+      evictedBlobs: metrics.evictedBlobs,
+      evictedBytes: metrics.evictedBytes,
+      backpressureEvents: metrics.backpressureEvents,
+    },
+  };
+}
+
+function streamStorageStatus(
+  req: IncomingMessage,
+  res: ServerResponse,
+  planes: StoragePlane[],
+): true {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  const write = (): void => {
+    if (!res.writableEnded) {
+      res.write(
+        `event: custody\ndata: ${JSON.stringify({ vaults: planes.map(storageStatus) })}\n\n`,
+      );
+    }
+  };
+  write();
+  const unsubscribers = planes.map((plane) => plane.db.blobTransfers.subscribe(write));
+  const heartbeat = setInterval(() => {
+    if (!res.writableEnded) res.write(': ping\n\n');
+  }, 30_000);
+  heartbeat.unref();
+  let closed = false;
+  const cleanup = (): void => {
+    if (closed) return;
+    closed = true;
+    clearInterval(heartbeat);
+    for (const unsubscribe of unsubscribers) unsubscribe();
+    if (!res.writableEnded) res.end();
+  };
+  req.on('close', cleanup);
+  res.on('error', cleanup);
+  return true;
+}
+
 export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
     const url = new URL(req.url ?? '/', 'http://gateway.local');
 
-    if (url.pathname === STATUS_PATH) {
+    if (url.pathname === STATUS_PATH || url.pathname === STATUS_EVENTS_PATH) {
       if ((req.method ?? 'GET') !== 'GET') {
         return sendJson(res, 405, { error: 'method_not_allowed', message: 'GET only' });
       }
       try {
-        const vaults = deps.vaults.planesList().map((plane) => {
-          const settings = readBlobStoreSettings(plane.db.vault);
-          const counts = custodyStateCounts(plane.db.vault);
-          const bytes = custodyStateByteCounts(plane.db.vault);
-          const sweep = plane.db.blobs.sweepStatus();
-          // Bounded storage-tier health (issue #405 §7 — "tier health is
-          // invisible today"). custody exposes state counts/bytes only; the
-          // cache counters are the missing read. `budgetBytes` surfaces as
-          // `null` for an unlimited tier (the cache's UNLIMITED sentinel is
-          // Number.MAX_SAFE_INTEGER — a vault with no disk to measure, e.g. a
-          // MemoryBlobStore), so the UI shows an "unlimited" state instead of
-          // a nonsensically-huge budget bar.
-          const metrics = plane.db.blobs.metrics();
-          return {
-            vaultId: plane.boot.vaultId,
-            name: plane.name,
-            configured: settings.kind === 's3',
-            ...(settings.connectionId ? { connectionId: settings.connectionId } : {}),
-            replicated: { count: counts.replicated, bytes: bytes.replicated },
-            backlog: {
-              count: counts['local-only'] + counts['remote-only'],
-              bytes: bytes['local-only'] + bytes['remote-only'],
-            },
-            lastSweep: {
-              completedAt: sweep.lastCompletedAt,
-              lastAttemptedAt: sweep.lastAttemptedAt,
-              error: sweep.lastError,
-              consecutiveFailures: sweep.consecutiveFailures,
-            },
-            ...(settings.throttleBytesPerSec
-              ? { throttleBytesPerSec: settings.throttleBytesPerSec }
-              : {}),
-            cache: {
-              spoolBytes: metrics.spoolBytes,
-              budgetBytes:
-                metrics.budgetBytes === Number.MAX_SAFE_INTEGER ? null : metrics.budgetBytes,
-              localHits: metrics.localHits,
-              readThroughs: metrics.readThroughs,
-              rangedRemoteReads: metrics.rangedRemoteReads,
-              bytesServedLocal: metrics.bytesServedLocal,
-              bytesServedRemote: metrics.bytesServedRemote,
-              evictedBlobs: metrics.evictedBlobs,
-              evictedBytes: metrics.evictedBytes,
-              backpressureEvents: metrics.backpressureEvents,
-            },
-          };
-        });
+        const planes = deps.vaults.planesList();
+        if (url.pathname === STATUS_EVENTS_PATH) return streamStorageStatus(req, res, planes);
+        const vaults = planes.map(storageStatus);
         return sendJson(res, 200, { vaults });
       } catch (err) {
         return sendError(res, err);

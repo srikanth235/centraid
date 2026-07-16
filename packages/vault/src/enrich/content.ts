@@ -13,7 +13,7 @@ import type { VaultDb } from '../db.js';
 import { resolveServableBlob } from '../blob/read.js';
 
 /** Variants an agent may read. `original` is intentionally absent. */
-export const AGENT_CONTENT_VARIANTS = ['thumb', 'preview', 'text'] as const;
+export const AGENT_CONTENT_VARIANTS = ['thumb', 'preview', 'poster', 'text', 'transcript'] as const;
 export type AgentContentVariant = (typeof AGENT_CONTENT_VARIANTS)[number];
 
 /** Default / hard ceilings for one fetch (decoded bytes, text chars). */
@@ -40,14 +40,14 @@ export async function resolveAgentContent(
   variant: AgentContentVariant,
   maxBytes?: number,
 ): Promise<AgentContentOutcome> {
-  if (variant === 'text') {
+  if (variant === 'text' || variant === 'transcript') {
     const row = db.vault
       .prepare(
         `SELECT d.text_content FROM core_content_derivative d
            JOIN core_content_item i ON i.content_id = d.content_id
-          WHERE d.content_id = ? AND d.variant = 'text' AND i.deleted_at IS NULL`,
+          WHERE d.content_id = ? AND d.variant = ? AND i.deleted_at IS NULL`,
       )
-      .get(contentId) as { text_content: string | null } | undefined;
+      .get(contentId, variant) as { text_content: string | null } | undefined;
     if (!row) {
       const exists = db.vault
         .prepare('SELECT 1 AS n FROM core_content_item WHERE content_id = ? AND deleted_at IS NULL')

@@ -71,8 +71,6 @@ beforeEach(async () => {
       dataDir,
       backup: {
         enabled: true,
-        intervalHours: 1,
-        verifyEveryDays: 1,
         provider: { kind: 'local', dir: providerDir },
       },
     }),

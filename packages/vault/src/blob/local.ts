@@ -37,6 +37,12 @@ export interface LocalBlobStore extends BlobStore {
   listSync(): string[];
   statSync(sha256: string): BlobStat | null;
   /**
+   * Atomically adopt a fully-written, hash-verified ingress temp file under
+   * its content address. File stores rename without materializing the body;
+   * memory stores may read it for test parity. Returns false on a dedup hit.
+   */
+  adoptTempSync?(sha256: string, tempPath: string): boolean;
+  /**
    * Open a large blob for streaming (issue #367 §C8) instead of reading it
    * whole into memory — the replication path uses this for anything over
    * the multipart threshold. `null` when the driver has no streaming seam
@@ -135,6 +141,21 @@ export class FsBlobStore implements LocalBlobStore {
     return { stream: createReadStream(this.fileFor(sha)), size: stat.size };
   }
 
+  adoptTempSync(sha: string, tempPath: string): boolean {
+    const file = this.fileFor(sha);
+    if (existsSync(file)) {
+      rmSync(tempPath, { force: true });
+      return false;
+    }
+    mkdirSync(path.dirname(file), { recursive: true });
+    try {
+      renameSync(tempPath, file);
+      return true;
+    } catch (err) {
+      throw asVaultDiskFullError('blob CAS temp adoption', err);
+    }
+  }
+
   put(sha: string, bytes: Buffer): Promise<void> {
     this.putSync(sha, bytes);
     return Promise.resolve();
@@ -185,6 +206,16 @@ export class MemoryBlobStore implements LocalBlobStore {
   statSync(sha: string): BlobStat | null {
     const b = this.blobs.get(assertSha(sha));
     return b ? { size: b.length } : null;
+  }
+  adoptTempSync(sha: string, tempPath: string): boolean {
+    assertSha(sha);
+    if (this.blobs.has(sha)) {
+      rmSync(tempPath, { force: true });
+      return false;
+    }
+    this.blobs.set(sha, readFileSync(tempPath));
+    rmSync(tempPath, { force: true });
+    return true;
   }
 
   put(sha: string, bytes: Buffer): Promise<void> {

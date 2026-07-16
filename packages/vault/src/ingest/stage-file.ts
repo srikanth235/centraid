@@ -264,7 +264,9 @@ export function stageFile(
   const connectionId = ensureConnection(db, { kind, label: options.filename });
   const result = stageCandidates(db, importer, connectionId, candidates, PUBLISHERS);
   if (stagedShas.length > 0) {
-    const hold = db.vault.prepare('UPDATE blob_staging SET held_by_batch = ? WHERE sha256 = ?');
+    const hold = db.vault.prepare(
+      'UPDATE blob_staging SET held_by_batch = ? WHERE sha256 = ? AND variant IS NULL',
+    );
     for (const sha of stagedShas) hold.run(result.batchId, sha);
   }
   return { ...result, kind, unrouted };

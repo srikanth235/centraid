@@ -82,6 +82,7 @@ The handler receives `{ ctx, log }` — no `db`, no `body`, no `query`, no `wind
 - `ctx.agent({ prompt, json? })` — one constrained model turn. Always pass a `json` schema when the result is consumed structurally — it both parses the result and detects a model failure.
 - `ctx.state.get(key)` / `ctx.state.set(key, value)` / `ctx.state.del(key)` — cross-run key/value store scoped to this automation. Use for watermarks, cursors, ETags, dedup hashes. JSON-serializable values only; survives restart.
 - `ctx.runs.last({ status })` / `ctx.runs.list({ since, limit })` — this automation's prior run records. Use for "since last successful run" and aggregation windows. The in-progress self-run is filtered out.
+- `ctx.now` — the fire-start instant as an ISO string, fixed for the whole run so lease/window checks stay deterministic on replay.
 - `ctx.input` — the payload this run was fired with (a webhook body, or the `onFailure` summary); `undefined` for a plain scheduled fire.
 
 Return `{ summary?, output? }`: `summary` is the one-line description shown in the run list; `output` is persisted and, if the manifest declares `outputSchema`, validated against it (a shape mismatch fails the run).
@@ -98,9 +99,9 @@ Keep the handler **deterministic** too. A fire has no crash-resume journal: if a
 - Use randomness: no `Math.random()`, no `crypto.randomUUID()` / `randomBytes()` / `getRandomValues()`.
 - Touch ambient I/O directly: no raw `fetch(...)`, no `node:fs` / `child_process` / `net` / `http`, no `process.env` / `process.cwd()`.
 
-There is no `ctx.now()` / `ctx.random()` / `ctx.uuid()` — get these needs deterministically instead:
+There is no `ctx.random()` / `ctx.uuid()` — get these needs deterministically instead:
 
-- **"Now" / "since last run"** → derive from `ctx.runs.last({ status: 'ok' })` (its `startedAt`/`endedAt`) or a watermark in `ctx.state`. If you truly need the current instant, read it off a `ctx.tool` result.
+- **"Now"** → use the fixed `ctx.now` fire instant. **"Since last run"** → derive from `ctx.runs.last({ status: 'ok' })` (its `startedAt`/`endedAt`) or a watermark in `ctx.state`.
 - **A unique/derived id** → derive it from the run's inputs (`ctx.input`, `ctx.state`, a `ctx.tool` result), or have a `ctx.tool` mint it.
 
 **Pure JS between `ctx.*` calls is free** — loops, conditionals, filters, maps, string/JSON shaping. Put as much work there as possible. The builder's publish gate runs a static lint for these patterns, so an unsafe handler is rejected at publish time, not discovered at fire time — keep the handler clean.

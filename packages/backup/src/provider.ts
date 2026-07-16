@@ -19,10 +19,9 @@
 /** The two store classes this revision defines (PROTOCOL.md § Terminology). */
 export type StoreClass = 'backup' | 'cas';
 
-/** Discovery's `capabilities` array — additive; a provider declares only
- *  what it actually offers. `usage` is a capability in its own right (a
- *  provider can offer `backup` and/or `cas` without metering either). */
-export type ProviderCapabilityFlag = StoreClass | 'usage';
+/** Discovery's additive capability flags. A provider declares only the
+ *  control-plane surfaces and store classes it actually offers. */
+export type ProviderCapabilityFlag = StoreClass | 'usage' | 'policy' | 'inventory' | 'audit';
 
 export type Retention =
   | {
@@ -121,6 +120,70 @@ export interface StoreUsageReport {
 
 export type UsageByStore = Partial<Record<StoreClass, StoreUsageReport>>;
 
+/** Client-declared cadence and CAS acknowledgement contract. */
+export interface ProviderPolicyDeclaration {
+  rpoSeconds: number;
+  snapshotIntervalHours: number;
+  verifyEveryDays: number;
+  casAck: 'receipt' | 'replicated';
+}
+
+/** Provider echo. `declaredAt` is provider-stamped unix epoch seconds. */
+export interface ProviderPolicy extends ProviderPolicyDeclaration {
+  declaredAt: number;
+}
+
+/** Query for one store class's provider-attested inventory. */
+export interface ProviderInventoryQuery {
+  store: StoreClass;
+  cursor?: string;
+  /** Inclusive unix epoch-second lower bound on `storedAt`. */
+  since?: number;
+  limit?: number;
+}
+
+export interface ProviderInventoryObject {
+  key: string;
+  sizeBytes: number;
+  etagOrHash: string;
+  storedAt: number;
+  storageClass?: string;
+  state: 'live' | 'soft-deleted';
+}
+
+export interface ProviderInventoryPage {
+  store: StoreClass;
+  objects: ProviderInventoryObject[];
+  nextCursor: string | null;
+}
+
+export type ProviderEventKind =
+  | 'prune'
+  | 'soft-delete'
+  | 'undelete'
+  | 'purge'
+  | 'credential-issued'
+  | 'policy-changed';
+
+/** Append-only provider audit row. Rows are returned oldest-first. */
+export interface ProviderAuditEvent {
+  at: number;
+  kind: ProviderEventKind;
+  detail: Record<string, unknown>;
+}
+
+export interface ProviderAuditQuery {
+  cursor?: string;
+  /** Inclusive unix epoch-second lower bound on `at`. */
+  since?: number;
+  limit?: number;
+}
+
+export interface ProviderAuditPage {
+  events: ProviderAuditEvent[];
+  nextCursor: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Layer 2 — backup store semantics
 // ---------------------------------------------------------------------------
@@ -171,6 +234,7 @@ export type BackupProviderErrorCode =
   | 'not_found'
   | 'undelete_window_expired'
   | 'conflict_generation'
+  | 'policy_unmet'
   | 'purge_pending'
   | 'provider_error';
 
@@ -184,6 +248,7 @@ export const CODE_STATUS: Readonly<Record<BackupProviderErrorCode, number>> = {
   not_found: 404,
   undelete_window_expired: 404,
   conflict_generation: 409,
+  policy_unmet: 422,
   purge_pending: 409,
   provider_error: 502,
 };
@@ -275,4 +340,14 @@ export interface BackupProvider {
   /** Layer-1 optional `usage` capability (PROTOCOL.md § Usage) — per-store-class
    *  report. OPTIONAL; present iff `capabilities` includes `"usage"`. */
   usageReport?(targetId: string): Promise<UsageByStore>;
+
+  /** Optional `policy` capability — declaration and provider-stamped echo. */
+  putPolicy?(targetId: string, policy: ProviderPolicyDeclaration): Promise<ProviderPolicy>;
+  getPolicy?(targetId: string): Promise<ProviderPolicy>;
+
+  /** Optional `inventory` capability — provider-attested, per-store pages. */
+  listInventory?(targetId: string, query: ProviderInventoryQuery): Promise<ProviderInventoryPage>;
+
+  /** Optional `audit` capability — append-only lifecycle and custody events. */
+  listEvents?(targetId: string, query?: ProviderAuditQuery): Promise<ProviderAuditPage>;
 }

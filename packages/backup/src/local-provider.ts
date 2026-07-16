@@ -39,10 +39,23 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { FsObjectStore, type ObjectStore } from './object-store.js';
 import {
+  inventoryFromFilesystem,
+  paginateAuditEvents,
+  validateProviderPolicy,
+} from './provider-observability.js';
+import {
   BackupProviderError,
   type AccountStatus,
   type BackupProvider,
+  type ProviderAuditEvent,
+  type ProviderAuditPage,
+  type ProviderAuditQuery,
   type ProviderCapabilities,
+  type ProviderEventKind,
+  type ProviderInventoryPage,
+  type ProviderInventoryQuery,
+  type ProviderPolicy,
+  type ProviderPolicyDeclaration,
   type SnapshotRegistration,
   type SnapshotRow,
   type StoreClass,
@@ -67,10 +80,12 @@ interface Registry {
   snapshots: Record<string, SnapshotRow[]>;
   idempotency: Record<string, Record<string, SnapshotRow>>;
   nextSeq: Record<string, number>;
+  policies: Record<string, ProviderPolicy>;
+  events: Record<string, ProviderAuditEvent[]>;
 }
 
 function emptyRegistry(): Registry {
-  return { targets: {}, snapshots: {}, idempotency: {}, nextSeq: {} };
+  return { targets: {}, snapshots: {}, idempotency: {}, nextSeq: {}, policies: {}, events: {} };
 }
 
 const SOFT_DELETE_WINDOW_DAYS = 14;
@@ -80,7 +95,7 @@ const CAPABILITIES: ProviderCapabilities = {
   // Local disk has no separate wire-grant concept (openDataPlane IS the
   // grant), but it still supports both store classes and can report cheap,
   // real usage — all three are legitimately advertised offline.
-  capabilities: ['backup', 'cas', 'usage'],
+  capabilities: ['backup', 'cas', 'usage', 'policy', 'inventory', 'audit'],
   maxCredentialTtlSeconds: 86400,
   purgeAuthTier: 'api-key',
   backup: {
@@ -150,6 +165,8 @@ export class LocalBackupProvider implements BackupProvider {
         snapshots: parsed.snapshots ?? {},
         idempotency: parsed.idempotency ?? {},
         nextSeq: parsed.nextSeq ?? {},
+        policies: parsed.policies ?? {},
+        events: parsed.events ?? {},
       };
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
@@ -177,6 +194,19 @@ export class LocalBackupProvider implements BackupProvider {
     return target;
   }
 
+  private appendEvent(
+    registry: Registry,
+    targetId: string,
+    kind: ProviderEventKind,
+    detail: Record<string, unknown>,
+  ): void {
+    (registry.events[targetId] ??= []).push({
+      at: Math.floor(Date.now() / 1000),
+      kind,
+      detail,
+    });
+  }
+
   async capabilities(): Promise<ProviderCapabilities> {
     return CAPABILITIES;
   }
@@ -196,6 +226,7 @@ export class LocalBackupProvider implements BackupProvider {
     registry.snapshots[id] = [];
     registry.idempotency[id] = {};
     registry.nextSeq[id] = 1;
+    registry.events[id] = [];
     await persistObjectsDir(this.objectsRoot, id);
     await this.persist(registry);
     return { targetId: id };
@@ -208,6 +239,7 @@ export class LocalBackupProvider implements BackupProvider {
       throw BackupProviderError.of('purge_pending', `target "${targetId}" was purged`);
     target.status = 'deleted';
     target.deletedAt = new Date().toISOString();
+    this.appendEvent(registry, targetId, 'soft-delete', { targetId });
     await this.persist(registry);
   }
 
@@ -235,6 +267,7 @@ export class LocalBackupProvider implements BackupProvider {
     }
     target.status = 'active';
     target.deletedAt = null;
+    this.appendEvent(registry, targetId, 'undelete', { targetId });
     await this.persist(registry);
   }
 
@@ -249,6 +282,7 @@ export class LocalBackupProvider implements BackupProvider {
     target.status = 'deleted';
     target.deletedAt = target.deletedAt ?? new Date().toISOString();
     target.purgedAt = new Date().toISOString();
+    this.appendEvent(registry, targetId, 'purge', { targetId });
     await this.persist(registry);
   }
 
@@ -403,6 +437,43 @@ export class LocalBackupProvider implements BackupProvider {
       out[store] = report;
     }
     return out;
+  }
+
+  async putPolicy(targetId: string, input: ProviderPolicyDeclaration): Promise<ProviderPolicy> {
+    const registry = await this.load();
+    this.requireTargetIn(registry, targetId);
+    const policy = { ...validateProviderPolicy(input), declaredAt: Math.floor(Date.now() / 1000) };
+    registry.policies[targetId] = policy;
+    this.appendEvent(registry, targetId, 'policy-changed', { policy });
+    await this.persist(registry);
+    return policy;
+  }
+
+  async getPolicy(targetId: string): Promise<ProviderPolicy> {
+    const registry = await this.load();
+    this.requireTargetIn(registry, targetId);
+    const policy = registry.policies[targetId];
+    if (!policy) throw BackupProviderError.of('not_found', `no policy for target "${targetId}"`);
+    return policy;
+  }
+
+  async listInventory(
+    targetId: string,
+    query: ProviderInventoryQuery,
+  ): Promise<ProviderInventoryPage> {
+    const registry = await this.load();
+    const target = this.requireTargetIn(registry, targetId);
+    return inventoryFromFilesystem(
+      this.storeRoot(targetId, query.store),
+      target.status === 'active' ? 'live' : 'soft-deleted',
+      query,
+    );
+  }
+
+  async listEvents(targetId: string, query?: ProviderAuditQuery): Promise<ProviderAuditPage> {
+    const registry = await this.load();
+    this.requireTargetIn(registry, targetId);
+    return paginateAuditEvents(registry.events[targetId] ?? [], query);
   }
 }
 

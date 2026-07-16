@@ -3,7 +3,7 @@
 // purely to keep both files under the file-size cap — same factory pattern,
 // closing over app.jsx's own `data`/`refresh` plus logic.js's own
 // `act`/`narrate`/`notice` (passed in, never re-implemented).
-import { stageFileBytes, toast } from './kit.js';
+import { isPendingOffsite, stageFileBytes, toast } from './kit.js';
 import { fmtBytes } from './format.js';
 
 const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
@@ -66,7 +66,11 @@ export function createVersions({ data, refresh, act, narrate, notice }) {
       staged_sha: staged.sha256,
     });
     if (narrate(outcome)) {
-      toast('Replaced · new version recorded · receipted.');
+      toast(
+        isPendingOffsite(staged)
+          ? 'Replaced locally · new version recorded · pending offsite.'
+          : 'Replaced · new version recorded · receipted.',
+      );
       await refresh();
     }
   }

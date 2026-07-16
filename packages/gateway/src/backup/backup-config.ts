@@ -24,24 +24,9 @@ export type BackupProviderConfig = LocalBackupProviderConfig | RemoteBackupProvi
 
 export interface BackupConfig {
   enabled: boolean;
-  /** Backup tick cadence. Default 24. */
-  intervalHours?: number;
-  /** Verification cadence. Default 7. */
-  verifyEveryDays?: number;
   /** Default `<dataDir>/backup/keyring.json`. */
   keyringPath?: string;
   provider: BackupProviderConfig;
-}
-
-export const DEFAULT_INTERVAL_HOURS = 24;
-export const DEFAULT_VERIFY_EVERY_DAYS = 7;
-
-export function intervalHoursOf(config: BackupConfig): number {
-  return config.intervalHours ?? DEFAULT_INTERVAL_HOURS;
-}
-
-export function verifyEveryDaysOf(config: BackupConfig): number {
-  return config.verifyEveryDays ?? DEFAULT_VERIFY_EVERY_DAYS;
 }
 
 export class BackupConfigError extends Error {
@@ -62,18 +47,6 @@ export function validateBackupConfig(value: unknown): BackupConfig {
     throw new BackupConfigError('`enabled` is required and must be a boolean');
   }
   const out: BackupConfig = { enabled: value.enabled, provider: validateProvider(value.provider) };
-  if (value.intervalHours !== undefined) {
-    if (typeof value.intervalHours !== 'number' || value.intervalHours <= 0) {
-      throw new BackupConfigError('`intervalHours` must be a positive number when set');
-    }
-    out.intervalHours = value.intervalHours;
-  }
-  if (value.verifyEveryDays !== undefined) {
-    if (typeof value.verifyEveryDays !== 'number' || value.verifyEveryDays <= 0) {
-      throw new BackupConfigError('`verifyEveryDays` must be a positive number when set');
-    }
-    out.verifyEveryDays = value.verifyEveryDays;
-  }
   if (value.keyringPath !== undefined) {
     if (typeof value.keyringPath !== 'string' || value.keyringPath.length === 0) {
       throw new BackupConfigError('`keyringPath` must be a non-empty string when set');

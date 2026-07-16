@@ -102,7 +102,21 @@ async function healthSnapshot(): Promise<CentraidGatewayRuntime> {
 
 export function installWebHost(): void {
   const api = {
-    getHostCapabilities: async () => ({ platform: 'web' as const, appSessions: true }),
+    getHostCapabilities: async () => ({
+      platform: 'web' as const,
+      appSessions: true,
+      compute: {
+        previews: true,
+        poster: true,
+        pdfText: true,
+        ocr: false,
+        embedding: false,
+        // Web Speech cannot transcribe an existing audio/video Blob.
+        transcript: false,
+        edgeSeal: globalThis.crypto?.subtle !== undefined,
+        backgroundTransfer: false,
+      },
+    }),
     getSettings: async () => settings(),
     saveSettings: async (patch: Partial<CentraidSettings>) => {
       saveSettingsPatch(patch as Record<string, unknown>);

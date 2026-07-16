@@ -105,6 +105,303 @@
   overflow-wrap: anywhere;
 }
 
+/* Policy reads top-to-bottom on a phone: destination, loss window, byte
+   acknowledgement, then the slower snapshot clocks. Desktop only widens
+   rows; it does not introduce a second information architecture. */
+.policyPanel {
+  margin-top: 8px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+}
+.policyGroup {
+  padding: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.policyGroup + .policyGroup {
+  border-top: 1px solid var(--line);
+}
+.policyGroup h4 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 620;
+  letter-spacing: -0.01em;
+}
+.destinationGrid {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+.destinationGrid div {
+  min-width: 0;
+}
+.destinationGrid dt {
+  color: var(--ink-3);
+  font-size: 10.5px;
+}
+.destinationGrid dd {
+  margin: 2px 0 0;
+  color: var(--ink);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.localWarning {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 2px solid var(--icon-amber);
+  background: color-mix(in srgb, var(--icon-amber) 7%, transparent);
+  color: var(--ink-2);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.policySetting {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+  color: var(--ink-2);
+}
+.policySetting > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.policySetting strong {
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+.policySetting small {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  line-height: 1.4;
+}
+.policySelect {
+  appearance: none;
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 30px 7px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background-color: var(--bg-sunken);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a8f98' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  color: var(--ink);
+  font-size: 12px;
+}
+.policySelect:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 15%, transparent);
+}
+.policySelect:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+.pendingLine {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+.pendingDot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--success);
+  transition: background 180ms ease;
+}
+.pendingLine[data-state='pending'] .pendingDot {
+  background: var(--icon-amber);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--icon-amber) 12%, transparent);
+}
+.advancedPolicy {
+  padding: 11px 0 3px;
+  border-top: 1px solid var(--line);
+}
+.advancedPolicy summary {
+  width: fit-content;
+  color: var(--ink-2);
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 550;
+}
+.advancedGrid {
+  padding-top: 12px;
+  display: grid;
+  gap: 11px;
+}
+.policyMessage {
+  padding-top: 7px;
+  color: var(--success);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  animation: policy-message-in 160ms ease-out;
+}
+.policyMessage[data-error] {
+  color: var(--danger);
+}
+
+.inventoryHead,
+.inventoryStore,
+.inventoryFacts div {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.inventoryHead > div {
+  min-width: 0;
+}
+.inventoryHead small,
+.inventoryStore small {
+  display: block;
+  margin-top: 3px;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1.35;
+}
+.inventoryHead > span {
+  flex: none;
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  color: var(--success);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+.inventoryHead > span[data-state='degraded'] {
+  background: color-mix(in srgb, var(--icon-amber) 10%, transparent);
+  color: var(--icon-amber);
+}
+.inventoryHead > span[data-state='error'] {
+  background: color-mix(in srgb, var(--danger) 9%, transparent);
+  color: var(--danger);
+}
+.inventoryWarning,
+.inventoryEmpty {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.inventoryWarning {
+  padding-left: 9px;
+  border-left: 2px solid var(--icon-amber);
+  color: var(--ink-2);
+}
+.inventoryEmpty {
+  color: var(--ink-3);
+}
+.inventoryStores {
+  border-block: 1px solid var(--line);
+}
+.inventoryStore {
+  padding: 9px 0;
+  flex-wrap: wrap;
+  color: var(--ink-2);
+}
+.inventoryStore + .inventoryStore {
+  border-top: 1px solid var(--line);
+}
+.inventoryStore strong {
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 550;
+}
+.inventoryStore > span,
+.inventoryStore em {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-style: normal;
+}
+.inventoryStore em {
+  flex-basis: 100%;
+  color: var(--icon-amber);
+  text-align: right;
+}
+.inventoryStore[data-state='error'] em {
+  color: var(--danger);
+}
+.inventoryFacts {
+  margin: 0;
+  display: grid;
+  gap: 7px;
+}
+.inventoryFacts dt,
+.inventoryFacts dd {
+  font-size: 10.5px;
+}
+.inventoryFacts dt {
+  color: var(--ink-3);
+}
+.inventoryFacts dd {
+  margin: 0;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  text-align: right;
+}
+.inventoryHistory {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  line-height: 1.4;
+}
+.inventoryHistory strong {
+  color: var(--ink-2);
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  font-weight: 550;
+}
+.inventoryHistory b {
+  color: var(--ink-2);
+  font-weight: 550;
+}
+.verifyBucket {
+  align-self: flex-start;
+}
+@keyframes policy-message-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+}
+
+@media (min-width: 720px) {
+  .destinationGrid,
+  .advancedGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .policySetting {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .policySelect {
+    width: min(220px, 46%);
+  }
+  .advancedGrid .policySetting {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .advancedGrid .policySelect {
+    width: 100%;
+  }
+}
+
 /* Recovery-kit gate — a permanent fixture, not a dismissable toast, while
    unconfirmed. Same amber-warning shell as the old seal-key nudge; the
    confirm button + error live in a stacked body beside the icon. */

@@ -31,21 +31,18 @@
 import { nowIso } from '../ids.js';
 import type { LocalBlobStore } from './local.js';
 import { resolveRange, sha256OfBytes, type BlobRange } from './store.js';
-
 import { sealBlob, sealBlobStream, unsealBlob } from './seal.js';
 import { exportLocalTier } from './custody-export.js';
 import { fetchFrameDirectory, fetchRemoteRange, fetchRemoteWhole } from './custody-read.js';
 import type { FrameDirectory } from './seal-frames.js';
-// The tier + reconcile + sweep-status value types (and CustodyState) live in
-// custody-types.ts so this facade stays under the governance line-cap (issue
-// #405 §3 note); re-exported below so every `./custody.js` importer is
-// untouched by the split.
-import type {
-  CustodyState,
-  RemoteTier,
-  ReconcileResult,
-  ReconcileOptions,
-  BlobSweepStatus,
+// Re-export the split custody types so existing facade importers stay untouched.
+import {
+  remoteEncryptionKey,
+  type CustodyState,
+  type RemoteTier,
+  type ReconcileResult,
+  type ReconcileOptions,
+  type BlobSweepStatus,
 } from './custody-types.js';
 import {
   DEFAULT_REPLICATION_CONCURRENCY,
@@ -180,14 +177,14 @@ export class BlobCustody {
     }
     const remote = this.remoteTier();
     if (!remote) return null;
-    // Serving a byte a caller is waiting on is an INTERACTIVE read (issue #405
-    // §7) — bulk replication yields to it (marked in flight until settle).
+    const encryptionKey = remoteEncryptionKey(remote, sha);
+    // Interactive reads preempt bulk replication (issue #405 §7).
     this.cache?.enterInteractive();
     try {
-      if (range && remote.encryptKey) {
+      if (range && encryptionKey) {
         const dir = await this.readDirectory(remote, sha);
         if (!dir) return null;
-        const sliced = await fetchRemoteRange(remote.store, remote.encryptKey, sha, range, dir);
+        const sliced = await fetchRemoteRange(remote.store, encryptionKey, sha, range, dir);
         if (sliced) this.cache?.onRangedRemote(sliced.length);
         return sliced;
       }
@@ -212,7 +209,12 @@ export class BlobCustody {
     const existing = this.wholeInflight.get(sha);
     if (existing) return existing;
     const started = (async () => {
-      const plain = await fetchRemoteWhole(remote.store, remote.encryptKey, sha, unsealBlob);
+      const plain = await fetchRemoteWhole(
+        remote.store,
+        remoteEncryptionKey(remote, sha),
+        sha,
+        unsealBlob,
+      );
       if (plain === null) return null;
       if (sha256OfBytes(plain) !== sha) {
         throw new Error(`remote blob ${sha} failed content verification`);
@@ -231,8 +233,7 @@ export class BlobCustody {
       return plain;
     })();
     this.wholeInflight.set(sha, started);
-    // The initiating caller owns the cleanup; coalesced callers just await the
-    // same already-resolving promise, so the map entry outlives none of them.
+    // The initiating caller owns cleanup; coalesced callers await this promise.
     return started.finally(() => this.wholeInflight.delete(sha));
   }
 
@@ -240,7 +241,7 @@ export class BlobCustody {
   private readDirectory(remote: RemoteTier, sha: string): Promise<FrameDirectory | null> {
     const existing = this.dirInflight.get(sha);
     if (existing) return existing;
-    const key = remote.encryptKey!;
+    const key = remoteEncryptionKey(remote, sha)!;
     const started = fetchFrameDirectory(remote.store, key, sha);
     this.dirInflight.set(sha, started);
     return started.finally(() => this.dirInflight.delete(sha));
@@ -274,13 +275,13 @@ export class BlobCustody {
   }
 
   /**
-   * Run the eviction pass on demand (issue #405 §3) — the sweep-side hook.
-   * Sheds replicated LRU mediums/originals until the spool is under budget,
-   * never a pinned tiny/staged/un-replicated blob. Zeros when no cache is wired.
+   * Post-reconciliation eviction hook (issue #405 §3). The caller must first
+   * heal replica evidence from remote truth; only this scope may shed originals.
+   * Pinned tiny/staged/un-replicated blobs remain safe. Zeros without a cache.
    */
-  evict(): { evictedBlobs: number; evictedBytes: number } {
+  evictAfterReconcile(): { evictedBlobs: number; evictedBytes: number } {
     if (!this.cache) return { evictedBlobs: 0, evictedBytes: 0 };
-    const { evicted, bytes } = this.cache.runEviction();
+    const { evicted, bytes } = this.cache.runEviction(0, 0, 0, 'reconciled-sweep');
     return { evictedBlobs: evicted.length, evictedBytes: bytes };
   }
 
@@ -326,6 +327,7 @@ export class BlobCustody {
    * this sha (raced with a delete — not an error, just nothing to push).
    */
   private async replicateOne(remote: RemoteTier, sha: string): Promise<boolean> {
+    const encryptionKey = remoteEncryptionKey(remote, sha);
     const threshold = remote.streamThresholdBytes ?? STREAMING_REPLICATE_THRESHOLD_BYTES;
     const openStream = this.local.openReadStreamSync?.bind(this.local);
     if (openStream && remote.store.putStream) {
@@ -340,10 +342,8 @@ export class BlobCustody {
           // known here (from `openReadStreamSync`), so the sealer can bind the
           // frame count into every frame's AAD while never buffering more than
           // one frame.
-          const source = remote.encryptKey
-            ? opened.stream.pipe(
-                sealBlobStream(remote.encryptKey, sha, opened.size, remote.frameSize),
-              )
+          const source = encryptionKey
+            ? opened.stream.pipe(sealBlobStream(encryptionKey, sha, opened.size, remote.frameSize))
             : opened.stream;
           await remote.store.putStream(sha, source, opened.size);
           return true;
@@ -356,7 +356,7 @@ export class BlobCustody {
     if (!bytes) return false;
     await remote.store.put(
       sha,
-      remote.encryptKey ? sealBlob(remote.encryptKey, sha, bytes, remote.frameSize) : bytes,
+      encryptionKey ? sealBlob(encryptionKey, sha, bytes, remote.frameSize) : bytes,
     );
     return true;
   }

@@ -186,6 +186,30 @@ describe('LocalBackupProvider lifecycle edge cases', () => {
     expect(rows[0]?.manifestKey).toBe('manifests/1.json');
   });
 
+  test('policy and audit persist while inventory reflects on-disk objects and soft deletion', async () => {
+    const dir = await tempDir();
+    const first = new LocalBackupProvider({ rootDir: dir });
+    const { targetId } = await first.createTarget({ label: 'observable' });
+    const policy = await first.putPolicy(targetId, {
+      rpoSeconds: 60,
+      snapshotIntervalHours: 24,
+      verifyEveryDays: 7,
+      casAck: 'replicated',
+    });
+    const store = await first.openDataPlane(targetId, 'cas', 'read-write');
+    await store.put('blobs/a', new Uint8Array([1, 2, 3]));
+    await first.deleteTarget(targetId);
+
+    const restarted = new LocalBackupProvider({ rootDir: dir });
+    expect(await restarted.getPolicy(targetId)).toEqual(policy);
+    const inventory = await restarted.listInventory(targetId, { store: 'cas' });
+    expect(inventory.objects).toMatchObject([
+      { key: 'blobs/a', sizeBytes: 3, state: 'soft-deleted' },
+    ]);
+    const audit = await restarted.listEvents(targetId);
+    expect(audit.events.map((event) => event.kind)).toEqual(['policy-changed', 'soft-delete']);
+  });
+
   // Gap 1 (the whole point of generation fencing, PROTOCOL.md: "two
   // gateways, one vault"): a SECOND provider instance opened on the same
   // rootDir BEFORE the first instance's write must still observe it on its

@@ -22,6 +22,7 @@
  * bucket," not a security boundary.
  */
 
+import { createHash } from 'node:crypto';
 import http from 'node:http';
 
 export interface S3TestServerRequest {
@@ -44,6 +45,13 @@ export interface S3TestServerOptions {
   listPageSize?: number;
 }
 
+interface StoredObject {
+  body: Buffer;
+  etagOrHash: string;
+  storedAt: number;
+  storageClass: string;
+}
+
 /**
  * Crude path-style S3: object keys are the full `{bucket}/{key...}` path
  * (matching how `S3ObjectStore` addresses objects — see `s3-store.ts`).
@@ -57,7 +65,7 @@ export class S3TestServer {
   /** Every request this server has handled (data-plane traffic only), in order. */
   readonly requests: S3TestServerRequest[] = [];
 
-  private readonly objects = new Map<string, Buffer>();
+  private readonly objects = new Map<string, StoredObject>();
   private readonly server: http.Server;
   private readonly listPageSize: number;
   /** In-flight multipart uploads (issue #367 §C8), keyed by uploadId. */
@@ -127,11 +135,25 @@ export class S3TestServer {
   }
 
   getObjectDirect(bucket: string, key: string): Buffer | undefined {
-    return this.objects.get(S3TestServer.compositeKey(bucket, key));
+    return this.objects.get(S3TestServer.compositeKey(bucket, key))?.body;
   }
 
   putObjectDirect(bucket: string, key: string, data: Buffer): void {
-    this.objects.set(S3TestServer.compositeKey(bucket, key), data);
+    this.putStoredObject(S3TestServer.compositeKey(bucket, key), data);
+  }
+
+  getObjectMetadataDirect(
+    bucket: string,
+    key: string,
+  ): { size: number; etagOrHash: string; storedAt: number; storageClass: string } | undefined {
+    const object = this.objects.get(S3TestServer.compositeKey(bucket, key));
+    if (!object) return undefined;
+    return {
+      size: object.body.length,
+      etagOrHash: object.etagOrHash,
+      storedAt: object.storedAt,
+      storageClass: object.storageClass,
+    };
   }
 
   deleteObjectDirect(bucket: string, key: string): boolean {
@@ -146,6 +168,15 @@ export class S3TestServer {
       .filter((k) => k.startsWith(fullPrefix))
       .map((k) => k.slice(bucketPrefix.length))
       .sort();
+  }
+
+  private putStoredObject(key: string, body: Buffer): void {
+    this.objects.set(key, {
+      body,
+      etagOrHash: createHash('sha256').update(body).digest('hex'),
+      storedAt: Math.floor(Date.now() / 1000),
+      storageClass: 'STANDARD',
+    });
   }
 
   // --- HTTP handling ---
@@ -213,7 +244,7 @@ export class S3TestServer {
       }
       await readBody(req); // the complete-request XML body — parts already came in via PUT
       const ordered = [...upload.parts.entries()].sort((a, b) => a[0] - b[0]).map(([, buf]) => buf);
-      this.objects.set(upload.key, Buffer.concat(ordered));
+      this.putStoredObject(upload.key, Buffer.concat(ordered));
       this.multipart.delete(uploadId);
       res.writeHead(200, { 'content-type': 'application/xml' });
       res.end(
@@ -233,14 +264,14 @@ export class S3TestServer {
 
     if (req.method === 'PUT') {
       const body = await readBody(req);
-      this.objects.set(key, body);
+      this.putStoredObject(key, body);
       res.writeHead(200, {});
       res.end();
       return;
     }
 
     if (req.method === 'GET') {
-      const obj = this.objects.get(key);
+      const obj = this.objects.get(key)?.body;
       if (!obj) {
         res.writeHead(404, {});
         res.end();
@@ -252,7 +283,7 @@ export class S3TestServer {
     }
 
     if (req.method === 'HEAD') {
-      const obj = this.objects.get(key);
+      const obj = this.objects.get(key)?.body;
       if (!obj) {
         res.writeHead(404, {});
         res.end();
@@ -288,8 +319,16 @@ export class S3TestServer {
     const contents = page
       .map((k) => {
         const objKey = k.slice(bucketPrefix.length);
-        const size = this.objects.get(k)?.length ?? 0;
-        return `<Contents><Key>${escapeXml(objKey)}</Key><Size>${size}</Size></Contents>`;
+        const object = this.objects.get(k);
+        const size = object?.body.length ?? 0;
+        const etag = object?.etagOrHash ?? '';
+        const lastModified = new Date((object?.storedAt ?? 0) * 1000).toISOString();
+        const storageClass = object?.storageClass ?? 'STANDARD';
+        return (
+          `<Contents><Key>${escapeXml(objKey)}</Key><Size>${size}</Size>` +
+          `<ETag>&quot;${etag}&quot;</ETag><LastModified>${lastModified}</LastModified>` +
+          `<StorageClass>${storageClass}</StorageClass></Contents>`
+        );
       })
       .join('');
     const xml =

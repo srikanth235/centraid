@@ -6,11 +6,13 @@ import type { BackupService } from '../backup/backup-service.js';
 import type { BackupTargetState } from '../backup/backup-state.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
 import { makeBackupRouteHandler, type BackupStatusBody } from './backup-routes.js';
+import { bootstrapVault, openVaultDb } from '@centraid/vault';
 
 /** Loosened GET-body shape for tests that only assert a slice of it. */
 type BackupStatusBodyForTest = Pick<BackupStatusBody, 'recoveryKit'>;
 
 const servers: http.Server[] = [];
+const vaultDbs: ReturnType<typeof openVaultDb>[] = [];
 
 function startHandlerServer(handler: RouteHandler): Promise<string> {
   const server = http.createServer((req, res) => {
@@ -32,14 +34,26 @@ function startHandlerServer(handler: RouteHandler): Promise<string> {
 
 afterEach(() => {
   for (const server of servers.splice(0)) server.close();
+  for (const db of vaultDbs.splice(0)) db.close();
   vi.restoreAllMocks();
 });
 
-/** A `VaultRegistry` stand-in — `planesList()` is the only surface the
- *  route touches. */
+/** A `VaultRegistry` stand-in with real in-memory policy/custody tables. */
 function fakeVaults(planes: Array<{ vaultId: string; name: string }>): VaultRegistry {
+  const mounted = planes.map((p) => {
+    const db = openVaultDb();
+    bootstrapVault(db, { ownerName: 'Test Owner', vaultId: p.vaultId });
+    vaultDbs.push(db);
+    return {
+      boot: { vaultId: p.vaultId },
+      name: p.name,
+      db,
+      rescheduleWalCapture: () => undefined,
+    };
+  });
   return {
-    planesList: () => planes.map((p) => ({ boot: { vaultId: p.vaultId }, name: p.name })),
+    planesList: () => mounted,
+    get: (vaultId: string) => mounted.find((plane) => plane.boot.vaultId === vaultId),
   } as unknown as VaultRegistry;
 }
 
@@ -77,15 +91,23 @@ function fakeBackupService(opts: {
 }
 
 describe('makeBackupRouteHandler — GET /centraid/_gateway/backup', () => {
-  it('reports {configured: false, vaults: [], recoveryKit: {confirmedAt: null}} when no BackupService is wired', async () => {
+  it('reports mounted local-only vault status when no BackupService is wired', async () => {
     const url = await startHandlerServer(
       makeBackupRouteHandler({ vaults: fakeVaults([{ vaultId: 'v1', name: 'Main' }]) }),
     );
     const res = await fetch(`${url}/centraid/_gateway/backup`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
+    expect(await res.json()).toMatchObject({
       configured: false,
-      vaults: [],
+      vaults: [
+        {
+          vaultId: 'v1',
+          name: 'Main',
+          destination: { kind: 'gateway-local' },
+          pendingOffsite: { count: 0, bytes: 0 },
+          running: false,
+        },
+      ],
       recoveryKit: { confirmedAt: null },
     });
   });
@@ -126,7 +148,7 @@ describe('makeBackupRouteHandler — GET /centraid/_gateway/backup', () => {
       }>;
     };
     expect(body.configured).toBe(true);
-    expect(body.vaults).toEqual([
+    expect(body.vaults).toMatchObject([
       {
         vaultId: 'v1',
         name: 'Main',

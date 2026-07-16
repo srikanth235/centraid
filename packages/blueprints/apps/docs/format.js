@@ -47,6 +47,8 @@ export function typeMeta(mediaType) {
   const t = String(mediaType ?? '').toLowerCase();
   if (t === 'application/pdf')
     return { label: 'PDF', name: 'PDF document', cat: 'pdf', cv: '--c-pdf' };
+  if (t.startsWith('video/')) return { label: 'VID', name: 'Video', cat: 'media', cv: '--c-media' };
+  if (t.startsWith('audio/')) return { label: 'AUD', name: 'Audio', cat: 'media', cv: '--c-media' };
   if (t.startsWith('image/')) return { label: 'IMG', name: 'Image', cat: 'image', cv: '--c-image' };
   if (
     t.includes('spreadsheet') ||
@@ -118,6 +120,15 @@ export function loadable(uri) {
 }
 export function isImage(doc) {
   return String(doc.media_type ?? '').startsWith('image/') && loadable(doc.content_uri);
+}
+export function isVideo(doc) {
+  return String(doc.media_type ?? '').startsWith('video/') && loadable(doc.content_uri);
+}
+export function isAudio(doc) {
+  return String(doc.media_type ?? '').startsWith('audio/') && loadable(doc.content_uri);
+}
+export function isMedia(doc) {
+  return isVideo(doc) || isAudio(doc);
 }
 export function tintBg(cv, pct) {
   return `color-mix(in oklab, var(${cv}) ${pct}%, transparent)`;

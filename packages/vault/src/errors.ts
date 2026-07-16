@@ -76,12 +76,69 @@ export function asVaultDiskFullError(context: string, err: unknown): Error {
  * "evict-only-if-replicated enforced in the custody layer").
  */
 export class VaultBlobBackpressureError extends Error {
+  readonly code = 'blob_capacity_exceeded';
+
   constructor(
     readonly context: string,
     message: string,
+    readonly details?: {
+      needBytes: number;
+      availableBytes: number;
+      freeBytes: number | null;
+      reservedHeadroomBytes: number;
+      outboxBudgetBytes?: number;
+      /** True when a declared SHA unlocks the bounded stream-through path. */
+      expectedShaRequired?: boolean;
+    },
   ) {
     super(message);
     this.name = 'VaultBlobBackpressureError';
+  }
+}
+
+/** Declared client identity did not match the streamed plaintext bytes. */
+export class VaultBlobHashMismatchError extends Error {
+  readonly code = 'blob_hash_mismatch';
+
+  constructor(
+    readonly expectedSha256: string,
+    readonly actualSha256: string,
+  ) {
+    super(`blob SHA-256 mismatch: expected ${expectedSha256}, received ${actualSha256}`);
+    this.name = 'VaultBlobHashMismatchError';
+  }
+}
+
+/** Resumable session state/offset errors, safe to surface as a 409. */
+export class VaultBlobSessionError extends Error {
+  readonly code = 'blob_session_conflict';
+
+  constructor(
+    message: string,
+    readonly expectedOffset?: number,
+  ) {
+    super(message);
+    this.name = 'VaultBlobSessionError';
+  }
+}
+
+/** A direct-CAS key/session request was not made by its live paired device. */
+export class VaultBlobAuthorizationError extends Error {
+  readonly code = 'blob_device_forbidden';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'VaultBlobAuthorizationError';
+  }
+}
+
+/** Direct provider preflight is unavailable before any provider part exists. */
+export class VaultBlobRemoteUnavailableError extends Error {
+  readonly code = 'blob_remote_unavailable';
+
+  constructor(message = 'remote blob provider is unavailable') {
+    super(message);
+    this.name = 'VaultBlobRemoteUnavailableError';
   }
 }
 

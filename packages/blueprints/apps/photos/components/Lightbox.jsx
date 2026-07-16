@@ -23,7 +23,7 @@ import {
   TrashIcon,
 } from '../icons.jsx';
 import { fmtBytes } from '../kit.js';
-import { assetBytes, isRenderableUri, isVideoAsset } from '../format.js';
+import { assetBytes, isAudioAsset, isRenderableUri, isVideoAsset } from '../format.js';
 import { act, narrate } from '../outcomes.js';
 import { useEffect, useState } from '../react-core.min.js';
 
@@ -88,8 +88,22 @@ export function Stage({ asset, onDims }) {
         playsInline
         controls
         preload="metadata"
+        poster={asset.poster_uri ?? undefined}
         aria-label={asset.title ?? 'Video'}
       ></video>
+    );
+  }
+  if (isRenderableUri(asset.content_uri) && isAudioAsset(asset)) {
+    return (
+      <div className="ph-lb-audio">
+        <span aria-hidden="true">♪</span>
+        <audio
+          src={asset.content_uri}
+          controls
+          preload="metadata"
+          aria-label={asset.title ?? 'Audio'}
+        ></audio>
+      </div>
     );
   }
   if (isRenderableUri(asset.content_uri)) {

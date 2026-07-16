@@ -7,6 +7,9 @@
  *   GET    /v1/backup/vaults                          list + usage + accountStatus
  *   POST   /v1/backup/vaults/:id/credentials          issue grant (any store class)
  *   GET    /v1/backup/vaults/:id/usage                per-store-class usage (optional `usage` capability)
+ *   PUT/GET /v1/backup/vaults/:id/policy               client-declared policy (optional `policy` capability)
+ *   GET    /v1/backup/vaults/:id/inventory            object inventory (optional `inventory` capability)
+ *   GET    /v1/backup/vaults/:id/events               audit events (optional `audit` capability)
  *   POST   /v1/backup/vaults/:id/snapshots            register (backup store)
  *   GET    /v1/backup/vaults/:id/snapshots            list (backup store)
  *   GET    /v1/backup/vaults/:id/snapshots/:seq       one row (backup store)
@@ -25,7 +28,13 @@ import {
   BackupProviderError,
   type AccountStatus,
   type BackupProvider,
+  type ProviderAuditPage,
+  type ProviderAuditQuery,
   type ProviderCapabilities,
+  type ProviderInventoryPage,
+  type ProviderInventoryQuery,
+  type ProviderPolicy,
+  type ProviderPolicyDeclaration,
   type S3Grant,
   type SnapshotRegistration,
   type SnapshotRow,
@@ -38,6 +47,15 @@ import type { ObjectStore } from './object-store.js';
 import { callProviderRoute } from './wire-client.js';
 
 const DEFAULT_GRANT_TTL_SECONDS = 3600;
+
+function appendQuery(route: string, query: Record<string, string | number | undefined>): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined) params.set(key, String(value));
+  }
+  const encoded = params.toString();
+  return encoded ? `${route}?${encoded}` : route;
+}
 
 export interface RemoteBackupProviderOptions {
   /** e.g. "https://api.clawgnition.com" — no trailing slash required. */
@@ -198,6 +216,43 @@ export class RemoteBackupProvider implements BackupProvider {
       'GET',
       `/v1/backup/vaults/${encodeURIComponent(targetId)}/usage`,
     );
+  }
+
+  async putPolicy(targetId: string, policy: ProviderPolicyDeclaration): Promise<ProviderPolicy> {
+    return this.call<ProviderPolicy>(
+      'PUT',
+      `/v1/backup/vaults/${encodeURIComponent(targetId)}/policy`,
+      policy,
+    );
+  }
+
+  async getPolicy(targetId: string): Promise<ProviderPolicy> {
+    return this.call<ProviderPolicy>(
+      'GET',
+      `/v1/backup/vaults/${encodeURIComponent(targetId)}/policy`,
+    );
+  }
+
+  async listInventory(
+    targetId: string,
+    query: ProviderInventoryQuery,
+  ): Promise<ProviderInventoryPage> {
+    const route = appendQuery(`/v1/backup/vaults/${encodeURIComponent(targetId)}/inventory`, {
+      store: query.store,
+      cursor: query.cursor,
+      since: query.since,
+      limit: query.limit,
+    });
+    return this.call<ProviderInventoryPage>('GET', route);
+  }
+
+  async listEvents(targetId: string, query: ProviderAuditQuery = {}): Promise<ProviderAuditPage> {
+    const route = appendQuery(`/v1/backup/vaults/${encodeURIComponent(targetId)}/events`, {
+      cursor: query.cursor,
+      since: query.since,
+      limit: query.limit,
+    });
+    return this.call<ProviderAuditPage>('GET', route);
   }
 }
 

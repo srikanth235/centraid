@@ -77,6 +77,9 @@ const EXIF_LABELS = {
   exposure_time: 'Shutter',
   shutter_speed: 'Shutter',
   focal_length: 'Focal length',
+  codec: 'Codec',
+  title: 'Embedded title',
+  artist: 'Artist',
 };
 
 /**
@@ -146,6 +149,11 @@ export function exifRows(asset) {
   if (asset.width && asset.height) {
     rows.push({ label: 'Dimensions', value: `${asset.width} × ${asset.height}` });
   }
+  if (Number.isFinite(Number(asset.duration_s))) {
+    const seconds = Math.round(Number(asset.duration_s));
+    const minutes = Math.floor(seconds / 60);
+    rows.push({ label: 'Duration', value: `${minutes}:${String(seconds % 60).padStart(2, '0')}` });
+  }
   const size = fmtBytes(assetBytes(asset));
   if (size) rows.push({ label: 'File size', value: size });
   const captured = asset.captured_at ?? asset.taken_at;
@@ -187,6 +195,12 @@ export function isVideoAsset(asset) {
   return asset.kind === 'video' || String(asset.media_type ?? '').startsWith('video/');
 }
 
+export function isAudioAsset(asset) {
+  const uri = asset.content_uri;
+  if (typeof uri === 'string' && uri.startsWith('data:audio')) return true;
+  return asset.kind === 'audio' || String(asset.media_type ?? '').startsWith('audio/');
+}
+
 export function isRenderableUri(uri) {
   return (
     typeof uri === 'string' &&
@@ -194,6 +208,7 @@ export function isRenderableUri(uri) {
       uri.startsWith('https:') ||
       uri.startsWith('data:image') ||
       uri.startsWith('data:video') ||
+      uri.startsWith('data:audio') ||
       // Blob-backed bytes arrive as same-origin vault URLs (issue #296).
       uri.startsWith(BLOB_ROUTE + '/'))
   );

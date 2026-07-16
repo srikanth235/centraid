@@ -5,7 +5,14 @@
 // core.add_document, media.add_asset) and by the import spine's publishers.
 
 import type { DatabaseSync } from 'node:sqlite';
+import { queueMissingDeviceEnrichmentRequests } from '../enrich/leases.js';
+import {
+  isBinaryDerivative,
+  validateDerivativeContribution,
+  type DerivativeVariant,
+} from './derivatives.js';
 import type { BlobMeta } from './pipeline.js';
+import { upsertContentEmbedding } from './semantic-contributions.js';
 import { blobUriFor } from './store.js';
 
 export interface PromoteDeps {
@@ -106,7 +113,16 @@ export function promoteStagedBlob(
   }
 
   promoteVariants(deps, sha256, contentId, meta);
-  vault.prepare('DELETE FROM blob_staging WHERE sha256 = ?').run(sha256);
+  for (const requestId of queueMissingDeviceEnrichmentRequests(vault, {
+    contentId,
+    sha256,
+    mediaType,
+    newId: () => deps.newId(),
+    requestedAt: deps.now,
+  })) {
+    deps.wrote('enrich.request', requestId);
+  }
+  vault.prepare('DELETE FROM blob_staging WHERE sha256 = ? AND variant IS NULL').run(sha256);
   return { contentId, mediaType, byteSize, meta, deduped };
 }
 
@@ -127,34 +143,58 @@ function promoteVariants(
        byte_size = excluded.byte_size, text_content = excluded.text_content,
        created_at = excluded.created_at`,
   );
-  const variants = vault
-    .prepare(
-      'SELECT sha256, media_type, byte_size, variant FROM blob_staging WHERE variant_of = ? AND variant IS NOT NULL',
-    )
-    .all(parentSha) as { sha256: string; media_type: string; byte_size: number; variant: string }[];
-  for (const v of variants) {
-    upsert.run(
-      deps.newId(),
-      contentId,
-      v.variant,
-      v.sha256,
-      v.media_type,
-      v.byte_size,
-      null,
-      deps.now,
-    );
-    vault.prepare('DELETE FROM blob_staging WHERE sha256 = ?').run(v.sha256);
-  }
+  // The cheap ingest extractor is the backstop. Stage it FIRST so any
+  // device-contributed pdf.js/OCR text below wins deterministically.
   if (typeof meta.text === 'string' && meta.text.length > 0) {
+    const contribution = validateDerivativeContribution({
+      variant: 'text',
+      bytes: Buffer.from(meta.text, 'utf8'),
+      mediaType: 'text/plain',
+    });
     upsert.run(
       deps.newId(),
       contentId,
       'text',
       null,
-      'text/plain',
-      Buffer.byteLength(meta.text, 'utf8'),
-      meta.text,
+      contribution.mediaType,
+      contribution.byteSize,
+      contribution.textContent ?? '',
       deps.now,
     );
+  }
+  const variants = vault
+    .prepare(
+      `SELECT staging_id, sha256, media_type, byte_size, variant, inline_content
+         FROM blob_staging WHERE variant_of = ? AND variant IS NOT NULL`,
+    )
+    .all(parentSha) as {
+    staging_id: string;
+    sha256: string;
+    media_type: string;
+    byte_size: number;
+    variant: DerivativeVariant;
+    inline_content: string | null;
+  }[];
+  for (const v of variants) {
+    const binary = isBinaryDerivative(v.variant);
+    upsert.run(
+      deps.newId(),
+      contentId,
+      v.variant,
+      binary ? v.sha256 : null,
+      v.media_type,
+      binary ? v.byte_size : Buffer.byteLength(v.inline_content ?? '', 'utf8'),
+      binary ? null : v.inline_content,
+      deps.now,
+    );
+    if (v.variant === 'embedding' && v.inline_content) {
+      upsertContentEmbedding(vault, {
+        contentId,
+        canonicalPayload: v.inline_content,
+        embeddingId: deps.newId(),
+        createdAt: deps.now,
+      });
+    }
+    vault.prepare('DELETE FROM blob_staging WHERE staging_id = ?').run(v.staging_id);
   }
 }

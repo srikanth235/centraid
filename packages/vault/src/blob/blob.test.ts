@@ -6,6 +6,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { deflateSync } from 'node:zlib';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { BlobCustody, sealBlob, unsealBlob, type RemoteTier } from './custody.js';
 import { FsBlobStore, MemoryBlobStore } from './local.js';
@@ -93,7 +94,7 @@ test('jpeg EXIF: capture time parses; GPS obeys the keepLocation gate', () => {
   expect(stripped.latitude).toBeUndefined(); // ...coordinates are not
 });
 
-test('uncompressed pdf text-show operators extract; binary junk does not', () => {
+test('clear and Flate-compressed PDF text-show operators extract; binary junk does not', () => {
   const pdf = Buffer.from(
     '%PDF-1.1\nBT (Quarterly tax receipt for the vault) Tj ET\n' +
       'BT [(second) (fragment)] TJ ET\n%%EOF',
@@ -101,6 +102,34 @@ test('uncompressed pdf text-show operators extract; binary junk does not', () =>
   const meta = extractBlobMeta(pdf, 'application/pdf');
   expect(meta.text).toContain('Quarterly tax receipt');
   expect(meta.text).toContain('second fragment');
+  const content = Buffer.from(
+    'BT /F1 12 Tf 72 720 Td (Compressed narwhal renewal clause for 2028) Tj ET',
+  );
+  const compressed = deflateSync(content);
+  const modern = Buffer.concat([
+    Buffer.from(
+      `%PDF-1.7\n4 0 obj\n<< /Length ${compressed.length} /Filter /FlateDecode >>\nstream\n`,
+    ),
+    compressed,
+    Buffer.from('\nendstream\nendobj\n%%EOF'),
+  ]);
+  expect(extractBlobMeta(modern, 'application/pdf').text).toContain(
+    'Compressed narwhal renewal clause',
+  );
+  const oversized = deflateSync(
+    Buffer.concat([
+      Buffer.from('BT (This text must not escape a decompression bomb) Tj ET'),
+      Buffer.alloc(1024 * 1024, 0x20),
+    ]),
+  );
+  const bomb = Buffer.concat([
+    Buffer.from(
+      `%PDF-1.7\n4 0 obj\n<< /Length ${oversized.length} /Filter /FlateDecode >>\nstream\n`,
+    ),
+    oversized,
+    Buffer.from('\nendstream\nendobj\n%%EOF'),
+  ]);
+  expect(extractBlobMeta(bomb, 'application/pdf').text).toBeUndefined();
   expect(
     extractBlobMeta(Buffer.from('%PDF-1.1 <compressed>'), 'application/pdf').text,
   ).toBeUndefined();

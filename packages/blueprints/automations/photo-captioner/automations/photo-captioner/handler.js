@@ -3,7 +3,8 @@
  *
  * Walks the library forward from a cursor (asset ids are UUIDv7, so id
  * order IS time order — no wall clock needed), and for each new photo:
- *   1. finds which derivative exists (preview, else thumb) — DERIVATIVES
+ *   1. finds which derivative exists (poster for video, preview/thumb for
+ *      photos) — DERIVATIVES
  *      EGRESS, NEVER ORIGINALS; a photo with neither is skipped honestly
  *      and retried when a later run finds one;
  *   2. asks one bounded vision turn (`ctx.agent` with a content ref — the
@@ -49,6 +50,10 @@ const CAPTION_SCHEMA = {
 
 export default async ({ ctx, log }) => {
   const cursor = (await ctx.state.get('cursor')) ?? '';
+  // Posters can arrive long after the original video crossed the asset
+  // cursor. Follow the derivative's own UUIDv7 cursor as a second durable
+  // feed so a completed device job always makes that video captionable.
+  const posterCursor = (await ctx.state.get('posterCursor')) ?? '';
   // The on-demand queue drains FIRST (issue #299 phase 5): an owner search
   // that found nothing, or an opened unenriched photo, names specific
   // assets — those jump the backlog regardless of the cursor.
@@ -57,6 +62,7 @@ export default async ({ ctx, log }) => {
     where: [
       { column: 'entity_type', op: 'eq', value: 'media.media_asset' },
       { column: 'entity_id', op: 'not-null' },
+      { column: 'required_capability', op: 'is-null' },
       { column: 'drained_at', op: 'is-null' },
     ],
     orderBy: { column: 'request_id', dir: 'asc' },
@@ -78,6 +84,31 @@ export default async ({ ctx, log }) => {
     if (hit.rows?.[0]) requestedAssets.push(hit.rows[0]);
   }
 
+  const posterRead = await ctx.vault.read({
+    entity: 'core.content_derivative',
+    where: [
+      { column: 'derivative_id', op: 'gt', value: posterCursor },
+      { column: 'variant', op: 'eq', value: 'poster' },
+    ],
+    orderBy: { column: 'derivative_id', dir: 'asc' },
+    limit: BATCH,
+    purpose: PURPOSE,
+  });
+  const posterDerivatives = posterRead.rows ?? [];
+  const posterAssets = [];
+  for (const derivative of posterDerivatives) {
+    const hit = await ctx.vault.read({
+      entity: 'media.media_asset',
+      where: [
+        { column: 'content_id', op: 'eq', value: derivative.content_id },
+        { column: 'deleted_at', op: 'is-null' },
+      ],
+      limit: 1,
+      purpose: PURPOSE,
+    });
+    if (hit.rows?.[0]) posterAssets.push(hit.rows[0]);
+  }
+
   const read = await ctx.vault.read({
     entity: 'media.media_asset',
     where: [
@@ -90,8 +121,24 @@ export default async ({ ctx, log }) => {
   });
   const fresh = read.rows ?? [];
   const seen = new Set(requestedAssets.map((a) => a.asset_id));
-  const assets = [...requestedAssets, ...fresh.filter((a) => !seen.has(a.asset_id))];
-  if (assets.length === 0) return { summary: 'no new photos — library is fully captioned' };
+  const latePosterAssets = posterAssets.filter((asset) => {
+    if (seen.has(asset.asset_id)) return false;
+    seen.add(asset.asset_id);
+    return true;
+  });
+  const assets = [
+    ...requestedAssets,
+    ...latePosterAssets,
+    ...fresh.filter((a) => !seen.has(a.asset_id)),
+  ];
+  const lastPosterSeen = posterDerivatives.reduce(
+    (latest, row) => (row.derivative_id > latest ? row.derivative_id : latest),
+    posterCursor,
+  );
+  if (assets.length === 0) {
+    await ctx.state.set('posterCursor', lastPosterSeen);
+    return { summary: 'no new photos — library is fully captioned' };
+  }
 
   const rows = [];
   let captioned = 0;
@@ -99,8 +146,9 @@ export default async ({ ctx, log }) => {
   let lastSeen = cursor;
   for (const asset of assets) {
     if (fresh.includes(asset)) lastSeen = asset.asset_id > lastSeen ? asset.asset_id : lastSeen;
-    if (asset.kind !== 'photo' && asset.kind !== 'scan') continue;
-    // Which derivative exists? Only thumb/preview are agent-readable.
+    if (!['photo', 'scan', 'video'].includes(asset.kind)) continue;
+    // Which derivative exists? Videos use the device-contributed poster;
+    // there is deliberately no gateway video decoder/backstop in v0.
     const derivatives = await ctx.vault.read({
       entity: 'core.content_derivative',
       where: [{ column: 'content_id', op: 'eq', value: asset.content_id }],
@@ -108,21 +156,28 @@ export default async ({ ctx, log }) => {
       purpose: PURPOSE,
     });
     const variants = (derivatives.rows ?? []).map((d) => d.variant);
-    const variant = variants.includes('preview')
-      ? 'preview'
-      : variants.includes('thumb')
-        ? 'thumb'
-        : null;
+    const variant =
+      asset.kind === 'video'
+        ? variants.includes('poster')
+          ? 'poster'
+          : variants.includes('thumb')
+            ? 'thumb'
+            : null
+        : variants.includes('preview')
+          ? 'preview'
+          : variants.includes('thumb')
+            ? 'thumb'
+            : null;
     if (!variant) {
       // No derivative yet (e.g. upload without a client thumb) — honest
-      // skip; the cursor moves on and a manual re-run can revisit.
+      // skip. A late video poster re-enters through posterCursor above.
       skipped += 1;
-      log.info(`asset ${asset.asset_id}: no preview/thumb derivative yet — skipped`);
+      log.info(`asset ${asset.asset_id}: no captionable derivative yet — skipped`);
       continue;
     }
     const out = await ctx.agent({
       prompt:
-        'Look at the attached photo. Return a one-sentence factual caption of what is visibly ' +
+        'Look at the attached image or representative video frame. Return a one-sentence factual caption of what is visibly ' +
         'in it, plus up to 6 short scene/object tags with confidence 0..1. Describe only what ' +
         'you can see — no guesses about who people are or where this is.',
       json: CAPTION_SCHEMA,
@@ -173,6 +228,7 @@ export default async ({ ctx, log }) => {
     });
   }
   await ctx.state.set('cursor', lastSeen);
+  await ctx.state.set('posterCursor', lastPosterSeen);
   const published = staged && staged.output && staged.output.published;
   return {
     summary: `captioned ${captioned} photo(s), skipped ${skipped}${published ? ' (auto-published)' : rows.length > 0 ? ' (staged for review)' : ''}`,

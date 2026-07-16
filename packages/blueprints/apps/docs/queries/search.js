@@ -111,6 +111,10 @@ export default async ({ input, ctx }) => {
       typeof c?.content_uri === 'string' && c.content_uri.startsWith('blob:')
         ? `/centraid/_vault/blobs/${c.content_id}`
         : c?.content_uri;
+    const posterOf = (c) =>
+      typeof c?.content_uri === 'string' && c.content_uri.startsWith('blob:')
+        ? `/centraid/_vault/blobs/${c.content_id}?variant=poster`
+        : null;
 
     // Vault order is rank order (best match first) — keep it.
     const documents = hits
@@ -125,6 +129,7 @@ export default async ({ input, ctx }) => {
           media_type: c?.media_type ?? null,
           byte_size: c?.byte_size ?? null,
           content_uri: srcOf(c),
+          poster_uri: posterOf(c),
           created_at: d.created_at,
           updated_at: d.updated_at,
           folder_id: conceptId === rootFolderId ? null : conceptId,

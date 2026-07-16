@@ -122,12 +122,12 @@ describe('S3BlobStore round-trip (real server, incl. multipart)', () => {
 });
 
 describe('BlobCustody replication against a real S3-compatible server', () => {
-  async function makeCustody(server: S3TestServer, dir: string, prefix: string, encrypt: boolean) {
+  async function makeCustody(server: S3TestServer, dir: string, prefix: string) {
     const local = new FsBlobStore(path.join(dir, 'blobs'));
     const sealKey = ephemeralSealKey();
     const remote = (): RemoteTier | null => ({
       store: makeS3(server, prefix),
-      encryptKey: encrypt ? sealKey : undefined,
+      encryptKey: sealKey,
     });
     return { custody: new BlobCustody(local, remote), local, sealKey };
   }
@@ -135,7 +135,7 @@ describe('BlobCustody replication against a real S3-compatible server', () => {
   test('replicate() seals remote objects — raw bytes on the wire are ciphertext, not plaintext', async () => {
     const server = await startServer();
     const dir = await tempDir('custody-seal');
-    const { custody, sealKey } = await makeCustody(server, dir, 'vaultA', true);
+    const { custody, sealKey } = await makeCustody(server, dir, 'vaultA');
 
     const plaintext = Buffer.from('the quick brown fox jumps over the lazy dog');
     const { sha256: sha } = custody.ingestSync(plaintext);
@@ -155,21 +155,10 @@ describe('BlobCustody replication against a real S3-compatible server', () => {
     expect(unsealed.equals(plaintext)).toBe(true); // but it decrypts back correctly
   });
 
-  test('unencrypted connection stores plaintext bytes on the wire (encrypt: false path)', async () => {
-    const server = await startServer();
-    const dir = await tempDir('custody-plain');
-    const { custody } = await makeCustody(server, dir, 'vaultB', false);
-    const plaintext = Buffer.from('plaintext object');
-    const { sha256: sha } = custody.ingestSync(plaintext);
-    await custody.replicate([sha]);
-    const raw = server.getObjectDirect(BUCKET, `vaultB/blobs/sha256/${sha}`);
-    expect(raw?.equals(plaintext)).toBe(true);
-  });
-
   test('reconcile() replicates missing shas and deletes remote orphans', async () => {
     const server = await startServer();
     const dir = await tempDir('custody-reconcile');
-    const { custody } = await makeCustody(server, dir, 'vaultC', true);
+    const { custody } = await makeCustody(server, dir, 'vaultC');
 
     const { sha256: liveSha } = custody.ingestSync(Buffer.from('live content'));
     // An orphan: present remotely (seeded directly), no local claim, and NOT
@@ -187,7 +176,7 @@ describe('BlobCustody replication against a real S3-compatible server', () => {
   test('lease-gated reconcile (skipOrphanDelete) leaves orphans in place and reports them', async () => {
     const server = await startServer();
     const dir = await tempDir('custody-lease-gate');
-    const { custody } = await makeCustody(server, dir, 'vaultD', true);
+    const { custody } = await makeCustody(server, dir, 'vaultD');
 
     const orphanSha = crypto.createHash('sha256').update('lease-gate-orphan').digest('hex');
     server.putObjectDirect(BUCKET, `vaultD/blobs/sha256/${orphanSha}`, Buffer.from('orphan bytes'));

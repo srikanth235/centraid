@@ -9,7 +9,7 @@
  */
 
 import { createHash, createHmac } from 'node:crypto';
-import type { ObjectStore } from './object-store.js';
+import type { ObjectListEntry, ObjectStore } from './object-store.js';
 import { assertSafeKey } from './object-store.js';
 import type { S3Grant } from './provider.js';
 
@@ -259,7 +259,7 @@ export class S3ObjectStore implements ObjectStore {
     return { size: len ? Number.parseInt(len, 10) : 0 };
   }
 
-  async *list(prefix: string): AsyncIterable<{ key: string; size: number }> {
+  async *list(prefix: string): AsyncIterable<ObjectListEntry> {
     if (prefix.length > 0) assertSafeKey(prefix.endsWith('/') ? `${prefix}x` : prefix);
     const fullPrefix = `${this.grant.prefix}${prefix}`;
     let continuationToken: string | undefined;
@@ -276,12 +276,20 @@ export class S3ObjectStore implements ObjectStore {
       for (const block of xml.match(/<Contents>[\s\S]*?<\/Contents>/g) ?? []) {
         const keyMatch = /<Key>([\s\S]*?)<\/Key>/.exec(block);
         const sizeMatch = /<Size>(\d+)<\/Size>/.exec(block);
+        const etagMatch = /<ETag>([\s\S]*?)<\/ETag>/.exec(block);
+        const modifiedMatch = /<LastModified>([\s\S]*?)<\/LastModified>/.exec(block);
+        const storageClassMatch = /<StorageClass>([\s\S]*?)<\/StorageClass>/.exec(block);
         if (!keyMatch) continue;
         const fullKey = unescapeXml(keyMatch[1] ?? '');
         if (!fullKey.startsWith(this.grant.prefix)) continue;
+        const etag = etagMatch ? unescapeXml(etagMatch[1] ?? '').replace(/^"|"$/g, '') : undefined;
+        const modifiedMs = modifiedMatch ? Date.parse(unescapeXml(modifiedMatch[1] ?? '')) : NaN;
         yield {
           key: fullKey.slice(this.grant.prefix.length),
           size: sizeMatch ? Number.parseInt(sizeMatch[1] ?? '0', 10) : 0,
+          ...(etag ? { etagOrHash: etag } : {}),
+          ...(Number.isFinite(modifiedMs) ? { storedAt: Math.floor(modifiedMs / 1000) } : {}),
+          ...(storageClassMatch ? { storageClass: unescapeXml(storageClassMatch[1] ?? '') } : {}),
         };
       }
       const truncated = /<IsTruncated>true<\/IsTruncated>/.test(xml);

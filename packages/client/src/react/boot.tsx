@@ -22,6 +22,13 @@ void import('../replica/shell-session.js')
   .then((module) => module.installReplicaStorageLifecycle())
   .catch(() => undefined);
 
+// Opted-in paired devices contribute PDF text and video posters only while
+// charging + unmetered. Dynamic import keeps the PDF.js worker off the shell's
+// startup path; the queue runner itself waits for browser idle time.
+void import('../device-enrichment-worker.js')
+  .then((module) => module.installDeviceEnrichmentWorker())
+  .catch(() => undefined);
+
 const PREVIEW_HASH = '#ui-preview';
 const HOST_SELECTOR = '#react-preview-root';
 const SHELL_SELECTOR = '#root';

@@ -31,7 +31,12 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { AUTHED_DEVICE_HEADER } from '@centraid/app-engine';
 import type { RouteHandler } from '../serve/build-gateway.js';
-import type { EnrollmentStore, DeviceEnrollment } from '../serve/enrollment-store.js';
+import type {
+  DeviceComputeCapabilities,
+  DeviceComputeProfile,
+  EnrollmentStore,
+  DeviceEnrollment,
+} from '../serve/enrollment-store.js';
 import type { DeviceTokenStore } from '../serve/device-token-store.js';
 import type { PairingTicketStore } from '../serve/pairing-store.js';
 import { encodePairingTicket, DEFAULT_TICKET_TTL_MS } from '../serve/pairing-store.js';
@@ -60,6 +65,7 @@ interface DeviceDTO {
   current?: boolean;
   trust: 'full' | 'readonly' | 'revoked';
   rememberDevice: boolean;
+  compute?: DeviceComputeProfile;
   checkpoint?: {
     epoch: string;
     seq: number;
@@ -186,6 +192,34 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
       });
     }
 
+    // PUT /centraid/_gateway/devices/:enrollmentId/compute — advertise what
+    // this device can do and opt it into charging + unmetered work leases.
+    if (url.pathname.endsWith('/compute')) {
+      if (method !== 'PUT') return sendJson(res, 405, { error: 'method_not_allowed' });
+      const enrollmentId = decodeURIComponent(
+        url.pathname.slice(`${DEVICES_PATH}/`.length, -'/compute'.length),
+      );
+      const target = deps.enrollments.list().find((row) => row.enrollmentId === enrollmentId);
+      if (!target || !isAllowed(target.vaultId)) {
+        return sendJson(res, 404, { error: 'not_found' });
+      }
+      let body: Record<string, unknown>;
+      try {
+        body = await readJson(req);
+      } catch {
+        return sendJson(res, 400, { error: 'invalid_body' });
+      }
+      const compute = parseComputeProfile(body);
+      if (!compute) {
+        return sendJson(res, 400, {
+          error: 'invalid_compute_profile',
+          message: 'contribution preference and every capability must be boolean',
+        });
+      }
+      const updated = deps.enrollments.setCompute(enrollmentId, compute);
+      return sendJson(res, 200, { device: toDto(updated, deps, callerKey, undefined) });
+    }
+
     // /centraid/_gateway/devices/:enrollmentId
     const enrollmentId = decodeURIComponent(url.pathname.slice(`${DEVICES_PATH}/`.length));
     if (method !== 'DELETE') {
@@ -237,7 +271,39 @@ function toDto(
     current: callerKey !== undefined && row.endpointId === callerKey,
     trust: row.trust,
     rememberDevice: row.rememberDevice,
+    ...(row.compute ? { compute: row.compute } : {}),
     ...(row.checkpoint ? { checkpoint: row.checkpoint } : {}),
+  };
+}
+
+const COMPUTE_KEYS: readonly (keyof DeviceComputeCapabilities)[] = [
+  'previews',
+  'poster',
+  'pdfText',
+  'ocr',
+  'embedding',
+  'transcript',
+  'edgeSeal',
+  'backgroundTransfer',
+];
+
+function parseComputeProfile(
+  body: Record<string, unknown>,
+): Omit<DeviceComputeProfile, 'updatedAt'> | undefined {
+  if (
+    typeof body.contributeWhileCharging !== 'boolean' ||
+    typeof body.capabilities !== 'object' ||
+    body.capabilities === null
+  ) {
+    return undefined;
+  }
+  const raw = body.capabilities as Record<string, unknown>;
+  if (!COMPUTE_KEYS.every((key) => typeof raw[key] === 'boolean')) return undefined;
+  return {
+    contributeWhileCharging: body.contributeWhileCharging,
+    capabilities: Object.fromEntries(
+      COMPUTE_KEYS.map((key) => [key, raw[key]]),
+    ) as unknown as DeviceComputeCapabilities,
   };
 }
 

@@ -37,6 +37,8 @@ import { pathToFileURL } from 'node:url';
 interface WorkerRequest {
   handlerFile: string;
   args: unknown;
+  /** Fire-start instant fixed by the parent; stable for the whole run. */
+  now: string;
   /** The payload this run was invoked with — surfaced as `ctx.input`. */
   input?: unknown;
 }
@@ -341,6 +343,8 @@ const vault = {
 };
 
 const ctx = {
+  /** ISO fire-start instant: current enough for leases, deterministic on replay. */
+  now: req.now,
   tool(name: string, args: unknown): Promise<unknown> {
     return new Promise<unknown>((resolve, reject) => {
       pendingToolBatch.push({ name, args, resolve, reject });

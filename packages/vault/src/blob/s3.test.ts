@@ -12,6 +12,7 @@ import { MULTIPART_THRESHOLD_BYTES, S3BlobStore } from './s3.js';
 import { sha256OfBytes } from './store.js';
 import { openVaultDb } from '../db.js';
 import { ensureVaultBootstrapped, updateBlobStoreSettings } from '../host.js';
+import { updateBackupPolicy } from '../backup-policy.js';
 
 // ---------- the fake S3 endpoint ----------
 
@@ -284,7 +285,7 @@ test('retry: exhausting all attempts on 5xx surfaces the final status', async ()
 
 // ---------- settings passthrough: blob_store.storageClass → remoteTier → driver ----------
 
-test('settings: storageClass flows through readBlobStoreSettings → remoteTier onto the PUT', async () => {
+test('settings: storageClass flows through and stale encrypt:false still writes mandatory CBSF', async () => {
   const db = openVaultDb({ s3Credentials: CREDS });
   try {
     // A `core_vault` row must exist for the settings UPDATE to land on it.
@@ -295,9 +296,9 @@ test('settings: storageClass flows through readBlobStoreSettings → remoteTier 
         endpoint: fake.url,
         bucket: 'test-bucket',
         encrypt: false,
-        storageClass: 'DEEP_ARCHIVE',
       },
     });
+    updateBackupPolicy(db.vault, { storageClass: 'DEEP_ARCHIVE' });
     const bytes = Buffer.from('replicate me to cold storage');
     const { sha256 } = db.blobs.ingestSync(bytes);
     const moved = await db.blobs.replicate();
@@ -306,6 +307,9 @@ test('settings: storageClass flows through readBlobStoreSettings → remoteTier 
     const put = fake.requests.find((r) => r.method === 'PUT');
     expect(put?.storageClass).toBe('DEEP_ARCHIVE');
     expect(signedHeadersOf(put!.authorization)).toContain('x-amz-storage-class');
+    const raw = fake.objects.get(`blobs/sha256/${sha256}`);
+    expect(raw?.subarray(0, 4).toString('ascii')).toBe('CBSF');
+    expect(raw?.equals(bytes)).toBe(false);
   } finally {
     db.close();
   }

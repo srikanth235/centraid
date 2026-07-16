@@ -13,6 +13,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_DDL } from './agent.js';
 import { BLOB_DDL } from './blob.js';
+import { BLOB_TRANSFER_DDL } from './blob-transfer.js';
 import { ENRICH_DDL } from './enrich.js';
 import { CONSENT_DDL, CONSENT_INSTALL_MEMORY_DDL } from './consent.js';
 import { APP_EXT_DDL } from './ext.js';
@@ -81,6 +82,7 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     OUTBOX_DDL,
     REPLICA_DDL,
     FTS_DDL,
+    BLOB_TRANSFER_DDL,
     BLOB_DDL,
   ].join('\n'),
 ];

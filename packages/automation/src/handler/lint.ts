@@ -63,13 +63,13 @@ const RULES: readonly LintRule[] = [
     id: 'no-date-now',
     re: /\bDate\.now\s*\(/g,
     message:
-      'Date.now() reads the wall clock, so a re-run produces a different value. Derive time windows from ctx.runs.last() / ctx.state, or read a timestamp from a ctx.tool result.',
+      'Date.now() reads the wall clock, so a re-run produces a different value. Use the fixed ctx.now fire instant, derive time windows from ctx.runs.last() / ctx.state, or read a timestamp from a ctx.tool result.',
   },
   {
     id: 'no-new-date',
     re: /\bnew\s+Date\s*\(\s*\)/g,
     message:
-      'new Date() (no args) reads the wall clock — nondeterministic across re-runs. Pass an explicit ms/ISO argument, or derive "now" from ctx.runs.last() / ctx.state. (new Date(value) with an argument is fine.)',
+      'new Date() (no args) reads the wall clock — nondeterministic across re-runs. Use the fixed ctx.now fire instant or pass an explicit ms/ISO argument. (new Date(value) with an argument is fine.)',
   },
   {
     id: 'no-math-random',

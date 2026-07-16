@@ -560,7 +560,26 @@ export interface CentraidPhonePairingInfo {
 
 interface CentraidApi {
   /** Host capabilities used where browser security differs from Electron. */
-  getHostCapabilities?(): Promise<{ platform: 'desktop' | 'web'; appSessions: boolean }>;
+  getHostCapabilities?(): Promise<{
+    platform: 'desktop' | 'web';
+    appSessions: boolean;
+    compute?: {
+      previews: boolean;
+      poster: boolean;
+      pdfText: boolean;
+      ocr: boolean;
+      embedding: boolean;
+      transcript: boolean;
+      edgeSeal: boolean;
+      backgroundTransfer: boolean;
+    };
+  }>;
+  /** Desktop-only device-local file ASR; present only on a host with an adapter seam. */
+  transcribeMedia?(input: {
+    bytes: ArrayBuffer;
+    mediaType: string;
+    filename?: string;
+  }): Promise<string>;
   getSettings(): Promise<CentraidSettings>;
   saveSettings(patch: Partial<CentraidSettings>): Promise<CentraidSettings>;
 

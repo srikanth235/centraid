@@ -27,7 +27,13 @@ import {
   type BackupProvider,
   type ObjectStore,
 } from '@centraid/backup';
-import { verifyRestoredPair, type WalShipper, type WalShipperOptions } from '@centraid/vault';
+import {
+  readBackupPolicy,
+  updateBackupPolicy,
+  verifyRestoredPair,
+  type WalShipper,
+  type WalShipperOptions,
+} from '@centraid/vault';
 import { openVaultPlane, type VaultPlane } from '../serve/vault-plane.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
 import { HealthRegistry } from '../serve/health-registry.js';
@@ -105,6 +111,7 @@ async function fx(opts: FxOptions = {}): Promise<Fx> {
       ...opts.walShipper,
     },
   });
+  updateBackupPolicy(plane.db.vault, { snapshotIntervalHours: 1, verifyEveryDays: 1 });
   cleanups.push(() => plane.stop());
   // Scratch tables for volume writes, created before the first tick so they
   // are part of the first-run base snapshots.
@@ -114,8 +121,6 @@ async function fx(opts: FxOptions = {}): Promise<Fx> {
   );
   const config: BackupConfig = {
     enabled: true,
-    intervalHours: 1,
-    verifyEveryDays: 1,
     provider: { kind: 'local', dir: providerDir },
   };
   const logs: string[] = [];
@@ -1112,10 +1117,11 @@ test('G9 restore-verify: succeeds against a real snapshot+segments, THROWS loudl
           lastRestoreVerifiedAt: iso(15 * 24 * 60 * 60 * 1000),
         },
       },
+      casReconciliations: {},
       sourceInstanceId: 'test',
       recoveryKit: { confirmedAt: null },
     },
-    config: f.config,
+    policyForVault: () => readBackupPolicy(f.plane.db.vault),
     now,
   });
   expect(health.status).toBe('error');
@@ -1203,6 +1209,9 @@ test('G8/G9 restore-verify: dangling receipts leave health DEGRADED, and the pro
     generation: 1,
     lastSeq: 1,
     lastBackupAt: iso(30 * 60 * 1000),
+    // Keep the new policy-derived RPO signal healthy so this unit-level
+    // assertion isolates the restore-verification dangling-receipt verdict.
+    lastWalDrainAt: iso(30 * 1000),
     lastVerifiedAt: iso(30 * 60 * 1000),
     lastRestoreVerifiedAt: iso(30 * 60 * 1000),
   };
@@ -1210,10 +1219,11 @@ test('G8/G9 restore-verify: dangling receipts leave health DEGRADED, and the pro
     evaluateBackupHealth({
       state: {
         targets: { [f.vaultId]: t },
+        casReconciliations: {},
         sourceInstanceId: 'test',
         recoveryKit: { confirmedAt: null },
       },
-      config: f.config,
+      policyForVault: () => readBackupPolicy(f.plane.db.vault),
       now,
     });
   expect(evaluate({ ...target, lastRestoreVerifyDangling: 3 }).status).toBe('degraded');

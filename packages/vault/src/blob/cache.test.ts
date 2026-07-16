@@ -245,39 +245,44 @@ test('a thumb (tiny) is pinned — never evicted under any cache pressure', asyn
   const parent = insertContentItem(h.db, sha256OfBytes(Buffer.from('parent-original')), 999);
   insertDerivative(h.db, parent, 'thumb', thumb.sha, thumb.bytes.length);
   await h.custody.replicate(); // thumb is now replicated (evictable IF it weren't pinned)
+  await h.custody.reconcile(new Set([thumb.sha]));
   expect(h.cache.isReplicated(thumb.sha)).toBe(true);
 
   // Slam the budget to nothing — every byte is "over budget" now.
   h.budget.bytes = 1;
-  const evicted = h.custody.evict();
+  const evicted = h.custody.evictAfterReconcile();
   expect(evicted.evictedBlobs).toBe(0); // pinned — the pass refuses it
   expect(h.local.hasSync(thumb.sha)).toBe(true);
 });
 
 // ---------- §3: evict-only-if-replicated — never delete the last local copy ----------
 
-test('an un-replicated local-only blob is refused eviction; ingest backpressures, bytes intact', async () => {
+test('stale replica evidence cannot let admission delete the last local original', () => {
   const h = makeHarness({ budgetBytes: 20 });
-  const a = blobOf('0123456789'); // 10 bytes, NOT replicated
+  const a = blobOf('0123456789');
   h.custody.ingestSync(a.bytes);
+  h.cache.replica.mark(a.sha, a.bytes.length); // stale: the remote is actually absent
+  expect(h.remote.objects.has(a.sha)).toBe(false);
   expect(h.cache.spoolBytes()).toBe(10);
 
-  // Eviction can free nothing (a is un-replicated, the last copy).
-  const evicted = h.cache.runEviction(0);
-  expect(evicted.evicted).toEqual([]);
-
-  // A second blob that would blow the budget backpressures instead of deleting a.
   const b = Buffer.from('abcdefghijklmno'); // 15 bytes → 10 + 15 = 25 > 20
   expect(() => h.custody.ingestSync(b)).toThrow(VaultBlobBackpressureError);
-  expect(h.local.hasSync(a.sha)).toBe(true); // the un-replicated bytes are intact
+  expect(h.local.hasSync(a.sha)).toBe(true);
   expect(h.custody.metrics().backpressureEvents).toBe(1);
+
+  // Deep-list healing removes the stale evidence and pins the local copy even
+  // against an explicitly reconciled sweep.
+  h.cache.replica.heal(new Set(), () => 0);
+  expect(h.cache.isReplicated(a.sha)).toBe(false);
+  expect(h.cache.runEviction(15, 0, 0, 'reconciled-sweep').evicted).toEqual([]);
+  expect(h.local.hasSync(a.sha)).toBe(true);
 });
 
-test('the evict PRIMITIVE itself refuses an un-replicated sha (defense in depth)', () => {
+test('the pressure primitive refuses an original even with stale replica evidence', () => {
   const h = makeHarness({ budgetBytes: 1000 });
   const a = blobOf('unreplicated');
   h.custody.ingestSync(a.bytes);
-  // Directly call the low-level primitive — it must refuse without the policy loop.
+  h.cache.replica.mark(a.sha, a.bytes.length);
   expect(h.cache.evictOne(a.sha)).toBe(0);
   expect(h.local.hasSync(a.sha)).toBe(true);
 });
@@ -308,12 +313,14 @@ test('among originals, an accessed one outlives an untouched (older) one', async
   h.custody.ingestSync(stale.bytes);
   h.custody.ingestSync(fresh.bytes);
   await h.custody.replicate();
+  await h.custody.reconcile(new Set([stale.sha, fresh.sha]));
   // Touch `fresh` via the read path — `stale` keeps no access row (sorts oldest).
   expect(h.custody.getSync(fresh.sha)?.equals(fresh.bytes)).toBe(true);
 
   h.budget.bytes = fresh.bytes.length; // room for one
-  const { evicted } = h.cache.runEviction(0);
-  expect(evicted).toEqual([stale.sha]); // untouched/oldest goes
+  const evicted = h.custody.evictAfterReconcile();
+  expect(evicted.evictedBlobs).toBe(1);
+  expect(h.local.hasSync(stale.sha)).toBe(false); // untouched/oldest goes
   expect(h.local.hasSync(fresh.sha)).toBe(true);
 });
 
@@ -333,10 +340,10 @@ test('a remote-only blob reads through into local (promote), and is evictable la
   expect(h.local.hasSync(x.sha)).toBe(true); // promoted back
   expect(h.custody.metrics().readThroughs).toBe(1);
 
-  // Still replicated, so a later eviction can shed the promoted copy.
+  // A verified sweep may shed the promoted copy after healing remote truth.
+  await h.custody.reconcile(new Set([x.sha]));
   h.budget.bytes = 1;
-  const { evicted } = h.cache.runEviction(0);
-  expect(evicted).toEqual([x.sha]);
+  expect(h.custody.evictAfterReconcile().evictedBlobs).toBe(1);
   expect(h.local.hasSync(x.sha)).toBe(false);
   expect(h.remote.objects.has(x.sha)).toBe(true); // the durable copy remains
 });
@@ -355,8 +362,11 @@ test('paced import: 16 MiB through a 4 MiB spool completes, spool never exceeds 
     shas.push(sha256);
     // Sample AFTER each put: the spool never exceeds the budget mid-run.
     expect(h.cache.spoolBytes()).toBeLessThanOrEqual(BUDGET);
-    // Replicate what's local so the NEXT precheck has something evictable.
+    // Replicate, heal against the remote listing, then let the authorized sweep
+    // reserve room for the next original; admission itself never sheds one.
     await h.custody.replicate();
+    h.cache.replica.heal(new Set(h.remote.objects.keys()), () => BLOB);
+    h.cache.runEviction(BLOB, 0, 0, 'reconciled-sweep');
   }
   // Nothing lost: every sha is on remote or still local (or both).
   for (const sha of shas) {

@@ -250,6 +250,7 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
   const meta = spoolMeta as {
     width?: number;
     height?: number;
+    duration_s?: number;
     captured_at?: string;
     has_location?: boolean;
     latitude?: number;
@@ -281,19 +282,26 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
       placeId,
       input.width ?? meta.width ?? null,
       input.height ?? meta.height ?? null,
-      input.duration_s ?? null,
+      input.duration_s ?? meta.duration_s ?? null,
       Object.keys(exif).length > 0 ? JSON.stringify(exif) : null,
     );
   // Perceptual hash (issue #299 §2, Tier 0): producer-agnostic like thumbs —
   // the client canvas computes a dHash beside its thumbnail today. Derived
   // data in a sidecar; near-duplicates are one vault_hamming JOIN away.
-  if (input.phash) {
+  const contributedPhash = ctx.db
+    .prepare(
+      `SELECT text_content FROM core_content_derivative
+        WHERE content_id = ? AND variant = 'phash'`,
+    )
+    .get(contentId) as { text_content: string | null } | undefined;
+  const phash = input.phash ?? contributedPhash?.text_content ?? undefined;
+  if (phash) {
     ctx.db
       .prepare(
         `INSERT INTO media_asset_phash (asset_id, phash, computed_at) VALUES (?, ?, ?)
          ON CONFLICT (asset_id) DO UPDATE SET phash = excluded.phash, computed_at = excluded.computed_at`,
       )
-      .run(assetId, input.phash, ctx.now);
+      .run(assetId, phash, ctx.now);
   }
   ctx.wrote('media.media_asset', assetId);
   ctx.cite({

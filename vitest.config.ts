@@ -18,6 +18,7 @@ export default defineConfig({
       'packages/tunnel',
       'packages/vault',
       'apps/desktop',
+      'apps/mobile',
       'apps/web',
     ],
     coverage: {

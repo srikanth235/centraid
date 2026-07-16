@@ -5,9 +5,11 @@
 // converts both into the wire `BridgeResponse` envelope.
 
 import * as Haptics from 'expo-haptics';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Notifications from 'expo-notifications';
 import { SchedulableTriggerInputTypes } from 'expo-notifications';
 import type { BridgeMethod, BridgeRequest, BridgeResponse } from './protocol';
+import { assertGatewayMintedUploadUrl, type BackgroundTransferScope } from './transfer-policy';
 
 class BridgeFailureError extends Error {
   constructor(
@@ -52,6 +54,68 @@ function requireNumber(obj: Record<string, unknown>, key: string): number {
     throw new BridgeFailureError('invalid_args', `Missing or invalid "${key}"`);
   }
   return v;
+}
+
+const MAX_BACKGROUND_PART_BASE64_CHARS = 24 * 1024 * 1024;
+
+/**
+ * Put one already edge-sealed multipart part through the native networking
+ * stack. iOS uses a background URLSession; Android's FileSystem uploader is
+ * background-capable by default. The WebView can therefore be suspended
+ * after scheduling every part, then report ETags and complete custody when
+ * JavaScript resumes.
+ */
+async function handleBackgroundPut(
+  appId: string,
+  args: unknown,
+  scope?: BackgroundTransferScope,
+): Promise<{
+  status: number;
+  headers: Record<string, string>;
+}> {
+  const a = asObject(args);
+  const url = requireString(a, 'url');
+  const transferId = requireString(a, 'transferId');
+  const bodyBase64 = requireString(a, 'bodyBase64');
+  if (!scope) throw new BridgeFailureError('unavailable', 'Gateway transfer scope is unavailable.');
+  let uploadUrl: URL;
+  try {
+    uploadUrl = await assertGatewayMintedUploadUrl(url, scope);
+  } catch (error) {
+    throw new BridgeFailureError(
+      'transfer_scope_denied',
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+  if (!/^[a-zA-Z0-9._-]{1,160}$/.test(transferId)) {
+    throw new BridgeFailureError('invalid_args', 'Background transfer id is invalid.');
+  }
+  if (bodyBase64.length > MAX_BACKGROUND_PART_BASE64_CHARS) {
+    throw new BridgeFailureError('invalid_args', 'Background upload part exceeds 18 MiB.');
+  }
+  const root = FileSystem.cacheDirectory;
+  if (!root) throw new BridgeFailureError('unavailable', 'The device cache is unavailable.');
+  const fileUri = `${root}centraid-transfer-${encodeURIComponent(appId)}-${transferId}.cbsf`;
+  await FileSystem.writeAsStringAsync(fileUri, bodyBase64, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  try {
+    const response = await FileSystem.uploadAsync(uploadUrl.toString(), fileUri, {
+      httpMethod: 'PUT',
+      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+      sessionType: FileSystem.FileSystemSessionType.BACKGROUND,
+      headers: { 'content-type': 'application/octet-stream' },
+    });
+    if (response.status < 200 || response.status >= 300) {
+      throw new BridgeFailureError(
+        'upload_refused',
+        `Background upload refused (${response.status}).`,
+      );
+    }
+    return { status: response.status, headers: response.headers };
+  } finally {
+    await FileSystem.deleteAsync(fileUri, { idempotent: true }).catch(() => undefined);
+  }
 }
 
 // --- Permission gate ---
@@ -167,17 +231,25 @@ async function handleTimerCancel(appId: string, args: unknown): Promise<void> {
 
 // --- Public entry ---
 
-const HANDLERS: Record<BridgeMethod, (appId: string, args: unknown) => Promise<unknown>> = {
+const HANDLERS: Record<
+  BridgeMethod,
+  (appId: string, args: unknown, scope?: BackgroundTransferScope) => Promise<unknown>
+> = {
   'haptic.impact': (_appId, args) => handleHapticImpact(args),
   'haptic.selection': () => handleHapticSelection(),
   'haptic.success': () => handleHapticSuccess(),
   'notify.cancel': handleNotifyCancel,
   'notify.schedule': handleNotifySchedule,
+  'transfer.putBackground': handleBackgroundPut,
   'timer.cancel': handleTimerCancel,
   'timer.startBackground': handleTimerStartBackground,
 };
 
-export async function dispatch(appId: string, req: BridgeRequest): Promise<BridgeResponse> {
+export async function dispatch(
+  appId: string,
+  req: BridgeRequest,
+  scope?: BackgroundTransferScope,
+): Promise<BridgeResponse> {
   const handler = HANDLERS[req.method];
   if (!handler) {
     return {
@@ -187,7 +259,7 @@ export async function dispatch(appId: string, req: BridgeRequest): Promise<Bridg
     };
   }
   try {
-    const value = await handler(appId, req.args);
+    const value = await handler(appId, req.args, scope);
     return { id: req.id, ok: true, value };
   } catch (err) {
     if (err instanceof BridgeFailureError) {

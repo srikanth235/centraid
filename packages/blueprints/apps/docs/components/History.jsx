@@ -17,6 +17,18 @@ function VersionPreview({ v }) {
   if (!loadable(v.content_uri)) return null;
   if (t.startsWith('image/'))
     return <img className="d-version-preview" src={v.content_uri} alt="" />;
+  if (t.startsWith('video/'))
+    return (
+      <video
+        className="d-version-preview"
+        src={v.content_uri}
+        poster={v.poster_uri ?? undefined}
+        controls
+        preload="metadata"
+      />
+    );
+  if (t.startsWith('audio/'))
+    return <audio className="d-version-audio" src={v.content_uri} controls preload="metadata" />;
   if (t === 'application/pdf')
     return (
       <iframe className="d-version-preview-frame" src={v.content_uri} title="Version preview" />

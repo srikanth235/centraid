@@ -53,6 +53,7 @@ import {
   type ScopeTriple,
   renameVault,
   readVaultPresentation,
+  readBackupPolicy,
   updateVaultPresentation,
   type VaultPresentation,
   registerAttachmentCommands,
@@ -195,7 +196,7 @@ export interface VaultPlaneOptions {
   vaultName?: string;
   /** Sweep cadence for lifecycle duties. Default: hourly. */
   sweepIntervalMs?: number;
-  /** WAL shipper capture cadence (issue #408). Default: 60 s. */
+  /** Test/admin override; normal capture cadence comes from BackupPolicy.rpoSeconds. */
   walTickMs?: number;
   /** Disable WAL ownership for short-lived admin/read-only registry opens. */
   enableWalShipper?: boolean;
@@ -367,13 +368,13 @@ export class VaultPlane {
    * The WAL segment shipper (issue #408) — always constructed for a
    * file-backed vault, backup configured or not: with `wal_autocheckpoint`
    * off on every connection, its threshold rollovers are what keeps the two
-   * WALs bounded. Capture runs on `walTimer` (60 s); the BackupService's
+   * WALs bounded. Capture follows the vault's declared RPO; the BackupService's
    * drain loop uploads (or, unconfigured, discards) what it captured.
    */
   readonly walShipper: WalShipper | undefined;
   private readonly logger: RuntimeLogger;
   private readonly sweepIntervalMs: number;
-  private readonly walTickMs: number;
+  private readonly walTickOverrideMs: number | undefined;
   private readonly leaseConflicted: () => boolean;
   /** Whether this process is allowed to capture or checkpoint these WALs. */
   private readonly ownsWalLifecycle: boolean;
@@ -468,7 +469,7 @@ export class VaultPlane {
     // WAL shipper (issue #408). A restored-and-adopted directory has no
     // wal-ship state, so its first tick mints a fresh generation — which is
     // exactly the restore-takeover stream break FORMAT.md rule 6 requires.
-    this.walTickMs = options.walTickMs ?? 60_000;
+    this.walTickOverrideMs = options.walTickMs;
     this.ownsWalLifecycle =
       options.enableWalShipper !== false && !(options.leaseConflicted?.() ?? false);
     try {
@@ -477,6 +478,8 @@ export class VaultPlane {
       } else {
         this.walShipper = new WalShipper({
           db: this.db,
+          walSizeThresholdBytes: () => readBackupPolicy(this.db.vault).walBaseRollBytes,
+          baseIntervalMs: () => readBackupPolicy(this.db.vault).walBaseRollHours * 60 * 60 * 1000,
           log: {
             info: (m) => this.logger.info(m),
             warn: (m) => this.logger.warn(m),
@@ -1649,8 +1652,29 @@ export class VaultPlane {
     }
   }
 
+  private walCaptureDelayMs(): number {
+    return this.walTickOverrideMs ?? readBackupPolicy(this.db.vault).rpoSeconds * 1000;
+  }
+
+  private scheduleWalCapture(): void {
+    if (this.closed || !this.ownsWalLifecycle) return;
+    this.walTimer = setTimeout(() => {
+      this.walTimer = undefined;
+      this.walTick();
+      this.scheduleWalCapture();
+    }, this.walCaptureDelayMs());
+    this.walTimer.unref();
+  }
+
+  /** Re-read policy after an owner update without restarting the gateway. */
+  rescheduleWalCapture(): void {
+    if (this.walTimer) clearTimeout(this.walTimer);
+    this.walTimer = undefined;
+    this.scheduleWalCapture();
+  }
+
   /** Begin the standing-duty clocks: a sweep now, then one per interval;
-   *  WAL capture (issue #408) now, then one per `walTickMs`. */
+   *  WAL capture (issue #408/#414) now, then at the current policy RPO. */
   start(): void {
     this.runSweep();
     this.sweepTimer = setInterval(() => this.runSweep(), this.sweepIntervalMs);
@@ -1673,8 +1697,7 @@ export class VaultPlane {
       this.walTick();
     });
     this.firstWalTick.unref();
-    this.walTimer = setInterval(() => this.walTick(), this.walTickMs);
-    this.walTimer.unref();
+    this.scheduleWalCapture();
   }
 
   private runSweep(): void {
@@ -1819,7 +1842,7 @@ export class VaultPlane {
     if (this.closed) return;
     this.closed = true;
     if (this.sweepTimer) clearInterval(this.sweepTimer);
-    if (this.walTimer) clearInterval(this.walTimer);
+    if (this.walTimer) clearTimeout(this.walTimer);
     if (this.firstWalTick) clearImmediate(this.firstWalTick);
     if (this.walShipper) {
       // Shipper-owned shutdown (issue #408): run optimize + a final ship +

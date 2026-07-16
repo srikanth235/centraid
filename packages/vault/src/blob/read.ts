@@ -10,6 +10,7 @@
 // claims, and variants of an unservable parent.
 
 import type { DatabaseSync } from 'node:sqlite';
+import type { BinaryDerivativeVariant } from './derivatives.js';
 import { shaOfBlobUri } from './store.js';
 
 // Mirrors commands/links.ts RELATIONS_SCHEME_URI (imported by literal to
@@ -56,7 +57,7 @@ export interface ServableBlob {
   byteSize: number;
   title: string | null;
   /** Which variant resolved — `original` when no variant was asked. */
-  variant: 'original' | 'thumb' | 'preview';
+  variant: 'original' | BinaryDerivativeVariant;
 }
 
 export type BlobResolveOutcome =
@@ -100,7 +101,7 @@ export function resolveServableBlob(
   if (!row) return { status: 'not-found' };
   if (row.refs === 0) return { status: 'unreferenced' };
 
-  if (variant === 'thumb' || variant === 'preview') {
+  if (variant === 'thumb' || variant === 'preview' || variant === 'poster') {
     const v = vault
       .prepare(
         `SELECT sha256, media_type, byte_size FROM core_content_derivative
@@ -169,7 +170,7 @@ const DERIVATIVE_IN_CHUNK = 500;
 export function resolveDerivativeShas(
   vault: DatabaseSync,
   contentIds: readonly string[],
-  variant: 'thumb' | 'preview',
+  variant: BinaryDerivativeVariant,
 ): Map<string, DerivativeRef> {
   const out = new Map<string, DerivativeRef>();
   for (let i = 0; i < contentIds.length; i += DERIVATIVE_IN_CHUNK) {
@@ -218,7 +219,12 @@ export function liveBlobShas(vault: DatabaseSync): Set<string> {
     .prepare('SELECT sha256 FROM core_content_derivative WHERE sha256 IS NOT NULL')
     .all() as { sha256: string }[];
   for (const r of variants) live.add(r.sha256);
-  const staged = vault.prepare('SELECT sha256 FROM blob_staging').all() as { sha256: string }[];
+  const staged = vault
+    .prepare(
+      `SELECT sha256 FROM blob_staging
+        WHERE variant IS NULL OR variant IN ('thumb','preview','poster')`,
+    )
+    .all() as { sha256: string }[];
   for (const r of staged) live.add(r.sha256);
   return live;
 }

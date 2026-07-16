@@ -10,7 +10,7 @@
 
 import { existsSync, promises as fs } from 'node:fs';
 import path from 'node:path';
-import { readSealKeyFingerprint, sealKeyFileFor } from '@centraid/vault';
+import { readBlobStoreSettings, readSealKeyFingerprint, sealKeyFileFor } from '@centraid/vault';
 import { WAL_DB_FILES, type EngineLogger, type SourceEntry } from '@centraid/backup';
 import { GitError, run } from '../worktree-store/git.js';
 import type { VaultPlane } from '../serve/vault-plane.js';
@@ -22,7 +22,10 @@ export async function resetStagingDir(stagingDir: string): Promise<void> {
 }
 
 /** Every blob CAS file under `<vaultDir>/blobs/sha256/<fan>/<sha>` (`FsBlobStore`'s layout). */
-async function listBlobEntries(vaultDir: string): Promise<SourceEntry[]> {
+async function listBlobEntries(
+  vaultDir: string,
+  only?: ReadonlySet<string>,
+): Promise<SourceEntry[]> {
   const base = path.join(vaultDir, 'blobs', 'sha256');
   if (!existsSync(base)) return [];
   const entries: SourceEntry[] = [];
@@ -36,6 +39,7 @@ async function listBlobEntries(vaultDir: string): Promise<SourceEntry[]> {
     }
     for (const name of names) {
       if (!/^[0-9a-f]{64}$/.test(name)) continue;
+      if (only && !only.has(name)) continue;
       entries.push({
         path: `blobs/sha256/${fan}/${name}`,
         kind: 'blob',
@@ -180,11 +184,14 @@ export async function assembleSourceEntries(opts: AssembleOptions): Promise<Sour
     });
   }
 
-  // (b) Blob CAS, read IN PLACE. A configured remote resolver is not proof
-  // that every freshly-ingested blob has replicated; snapshots therefore
-  // include local custody bytes until the manifest can carry per-blob remote
-  // durability evidence. Correctness wins over temporary cross-store dedup.
-  entries.push(...(await listBlobEntries(plane.dir)));
+  // (b) Blob CAS, read IN PLACE. In remote-primary mode provider-confirmed
+  // objects are already the primary copy; re-snapshotting the whole local
+  // cache defeats bounded storage. Only the durable pending-offsite outbox
+  // joins the snapshot, closing the crash window before its HEAD confirmation.
+  // Local-only mode still carries the complete resident CAS.
+  const remotePrimary = readBlobStoreSettings(plane.db.vault).kind === 's3';
+  const pending = remotePrimary ? new Set(plane.db.blobTransfers.pendingSnapshotShas()) : undefined;
+  entries.push(...(await listBlobEntries(plane.dir, pending)));
 
   // (c) Code store bundle.
   const bundle = await bundleCodeStore(plane, stagingDir, log);

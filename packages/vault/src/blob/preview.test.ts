@@ -13,6 +13,7 @@ import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
 import type { Credential } from '../gateway/types.js';
 import { registerMediaCommands } from '../commands/media.js';
+import { leaseNextEnrichmentRequest, queueDeviceEnrichmentRequest } from '../enrich/leases.js';
 import { backfillPreviews, type PreviewCodec } from './preview.js';
 import { shaOfBlobUri } from './store.js';
 
@@ -36,6 +37,10 @@ const stubCodec: PreviewCodec = {
       width: maxEdge,
       height: maxEdge,
     };
+  },
+  perceptualHash(source, mediaType) {
+    if (mediaType === 'image/gif') return null;
+    return source.length.toString(16).padStart(16, '0').slice(-16);
   },
 };
 
@@ -82,6 +87,27 @@ function derivativeShas(contentId: string): Record<string, string> {
   return Object.fromEntries(rows.map((r) => [r.variant, r.sha256]));
 }
 
+function inlinePhash(contentId: string): string | null {
+  const row = db.vault
+    .prepare(
+      `SELECT text_content FROM core_content_derivative
+        WHERE content_id = ? AND variant = 'phash'`,
+    )
+    .get(contentId) as { text_content: string | null } | undefined;
+  return row?.text_content ?? null;
+}
+
+function mediaPhash(contentId: string): string | null {
+  const row = db.vault
+    .prepare(
+      `SELECT p.phash FROM media_asset_phash p
+        JOIN media_media_asset a ON a.asset_id = p.asset_id
+       WHERE a.content_id = ?`,
+    )
+    .get(contentId) as { phash: string } | undefined;
+  return row?.phash ?? null;
+}
+
 test('backstop stages both rungs for an image missing them, idempotent on re-run', async () => {
   const contentId = addImage(Buffer.concat([PNG_BYTES, Buffer.alloc(1)]));
   expect(derivativeShas(contentId)).toEqual({}); // client staged nothing
@@ -89,16 +115,24 @@ test('backstop stages both rungs for an image missing them, idempotent on re-run
   const first = await backfillPreviews(db, stubCodec);
   expect(first.scanned).toBe(1);
   expect(first.generated).toBe(2); // tiny + medium
+  expect(first.phashesGenerated).toBe(1);
   const rungs = derivativeShas(contentId);
   expect(Object.keys(rungs).sort()).toEqual(['preview', 'thumb']);
   // Both derivative blobs actually landed in the CAS (so they replicate).
   expect(db.blobs.hasSync(rungs.thumb!)).toBe(true);
   expect(db.blobs.hasSync(rungs.preview!)).toBe(true);
+  const expectedPhash = stubCodec.perceptualHash(
+    Buffer.concat([PNG_BYTES, Buffer.alloc(1)]),
+    'image/png',
+  );
+  expect(inlinePhash(contentId)).toBe(expectedPhash);
+  expect(mediaPhash(contentId)).toBe(expectedPhash);
 
   // Second pass finds nothing missing — the backstop only fills holes.
   const second = await backfillPreviews(db, stubCodec);
   expect(second.scanned).toBe(0);
   expect(second.generated).toBe(0);
+  expect(second.phashesGenerated).toBe(0);
 });
 
 test('a client-supplied rung is never overwritten — the backstop only fills the gap', async () => {
@@ -119,6 +153,23 @@ test('a client-supplied rung is never overwritten — the backstop only fills th
   expect(after.preview).toBeDefined();
 });
 
+test('a client-supplied phash wins while the backstop fills binary rungs', async () => {
+  const contentId = addImage(Buffer.concat([PNG_BYTES, Buffer.alloc(22)]));
+  gw.stageBlob(owner, {
+    bytes: Buffer.from('fedcba9876543210'),
+    mediaType: 'text/x-perceptual-hash',
+    variant: 'phash',
+    variantOf: originalSha(contentId),
+    validateDerivative: true,
+  });
+
+  const result = await backfillPreviews(db, stubCodec);
+  expect(result.generated).toBe(2);
+  expect(result.phashesGenerated).toBe(0);
+  expect(inlinePhash(contentId)).toBe('fedcba9876543210');
+  expect(mediaPhash(contentId)).toBe('fedcba9876543210');
+});
+
 test('unsupported media type is skipped whole (null codec result), counted once', async () => {
   const contentId = addImage(Buffer.concat([PNG_BYTES, Buffer.alloc(3)]));
   // Force this item to read as a gif so the stub declines it.
@@ -129,6 +180,7 @@ test('unsupported media type is skipped whole (null codec result), counted once'
   const result = await backfillPreviews(db, stubCodec);
   expect(result.scanned).toBe(1);
   expect(result.generated).toBe(0);
+  expect(result.phashesGenerated).toBe(0);
   expect(result.skippedUnsupported).toBe(1);
   expect(derivativeShas(contentId)).toEqual({});
 });
@@ -169,6 +221,47 @@ test('sweepBlobs runs the backstop and reports the yield in its receipt', async 
   const receipt = db.journal
     .prepare('SELECT detail_json FROM consent_receipt WHERE receipt_id = ?')
     .get(sweep.receiptId) as { detail_json: string };
-  const detail = JSON.parse(receipt.detail_json) as { previewsGenerated: number };
+  const detail = JSON.parse(receipt.detail_json) as {
+    previewsGenerated: number;
+    phashesGenerated: number;
+  };
   expect(detail.previewsGenerated).toBe(2); // tiny + medium for the one image
+  expect(detail.phashesGenerated).toBe(1);
+});
+
+test('live device preview lease wins, then expiry lets the real backstop finish and drain it', async () => {
+  const contentId = addImage(Buffer.concat([PNG_BYTES, Buffer.alloc(21)]));
+  queueDeviceEnrichmentRequest(db.vault, {
+    requestId: 'leased-preview',
+    entityType: 'core.content_item',
+    entityId: contentId,
+    capability: 'previews',
+    contributionVariant: 'preview',
+  });
+  leaseNextEnrichmentRequest(db.vault, {
+    deviceId: 'vanished-device',
+    capabilities: ['previews'],
+    now: '2099-01-01T00:00:00.000Z',
+    ttlMs: 60_000,
+    token: 'preview-token',
+  });
+
+  await gw.sweepBlobs(owner);
+  expect(derivativeShas(contentId).preview).toBeUndefined();
+  expect(
+    db.vault
+      .prepare('SELECT drained_at FROM enrich_request WHERE request_id = ?')
+      .get('leased-preview'),
+  ).toEqual({ drained_at: null });
+
+  db.vault.prepare("UPDATE enrich_request SET lease_expires_at = '2000-01-01T00:00:00.000Z'").run();
+  await gw.sweepBlobs(owner);
+  expect(derivativeShas(contentId).preview).toBeDefined();
+  const request = db.vault
+    .prepare(
+      `SELECT drained_at, lease_device_id FROM enrich_request WHERE request_id = 'leased-preview'`,
+    )
+    .get() as { drained_at: string | null; lease_device_id: string | null };
+  expect(request.drained_at).not.toBeNull();
+  expect(request.lease_device_id).toBeNull();
 });

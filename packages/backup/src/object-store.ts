@@ -9,12 +9,22 @@
 import { createWriteStream, promises as fs } from 'node:fs';
 import path from 'node:path';
 
+export interface ObjectListEntry {
+  key: string;
+  size: number;
+  /** Present when the underlying LIST surface reports it. */
+  etagOrHash?: string;
+  /** Unix epoch seconds; present when the underlying LIST reports it. */
+  storedAt?: number;
+  storageClass?: string;
+}
+
 export interface ObjectStore {
   put(key: string, data: Uint8Array | AsyncIterable<Uint8Array>): Promise<void>;
   get(key: string): Promise<Uint8Array>;
   getStream(key: string): AsyncIterable<Uint8Array>;
   head(key: string): Promise<{ size: number } | null>;
-  list(prefix: string): AsyncIterable<{ key: string; size: number }>;
+  list(prefix: string): AsyncIterable<ObjectListEntry>;
   delete(key: string): Promise<void>;
 }
 

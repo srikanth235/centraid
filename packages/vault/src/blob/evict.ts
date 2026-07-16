@@ -7,7 +7,8 @@
 import type { DatabaseSync } from 'node:sqlite';
 
 /**
- * The TINY rung (issue #405 §3): every `thumb` derivative sha is PINNED —
+ * The browse rung (issue #405 §3/#414): every `thumb` and video `poster`
+ * derivative sha is PINNED —
  * unevictable under any cache-pressure path. Tinies are ~20-40 KB each, they
  * back the browse grid, and losing one forces a remote round-trip to paint a
  * tile the user is actively scrolling. Pin them all.
@@ -15,7 +16,8 @@ import type { DatabaseSync } from 'node:sqlite';
 export function pinnedThumbShas(vault: DatabaseSync): Set<string> {
   const rows = vault
     .prepare(
-      `SELECT sha256 FROM core_content_derivative WHERE variant = 'thumb' AND sha256 IS NOT NULL`,
+      `SELECT sha256 FROM core_content_derivative
+        WHERE variant IN ('thumb','poster') AND sha256 IS NOT NULL`,
     )
     .all() as { sha256: string }[];
   return new Set(rows.map((r) => r.sha256));
@@ -43,6 +45,11 @@ export function previewShas(vault: DatabaseSync): Set<string> {
  * not race a disk-pressure delete. The cache pass leaves them entirely alone.
  */
 export function stagingShas(vault: DatabaseSync): Set<string> {
-  const rows = vault.prepare('SELECT sha256 FROM blob_staging').all() as { sha256: string }[];
+  const rows = vault
+    .prepare(
+      `SELECT sha256 FROM blob_staging
+        WHERE variant IS NULL OR variant IN ('thumb','preview','poster')`,
+    )
+    .all() as { sha256: string }[];
   return new Set(rows.map((r) => r.sha256));
 }
