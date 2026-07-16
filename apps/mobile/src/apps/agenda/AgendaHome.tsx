@@ -1,25 +1,20 @@
 import React, { useMemo, useState } from 'react';
-import {
-  Alert,
-  FlatList,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Alert, FlatList, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 
-import { family, useTheme } from '../../kit/theme';
+import { useTheme } from '../../kit/theme';
 import { useReplica } from '../../kit/replica/ReplicaProvider';
 import type { AgendaScreenProps } from '../../navigation';
 import type { AgendaEventModel } from './recurrence';
+import { styles } from './AgendaHome.styles';
 import { useAgenda } from './useAgenda';
 
 type ViewMode = 'month' | 'week' | 'agenda';
+type AgendaRow =
+  | { kind: 'day'; key: string; date: Date }
+  | { kind: 'event'; key: string; event: AgendaEventModel };
 const startOfMonth = (date: Date): Date => new Date(date.getFullYear(), date.getMonth(), 1);
 const endOfMonth = (date: Date): Date => new Date(date.getFullYear(), date.getMonth() + 1, 1);
 const startOfWeek = (date: Date): Date => {
@@ -43,6 +38,10 @@ export default function AgendaHome({
   const [mode, setMode] = useState<ViewMode>('agenda');
   const [createOpen, setCreateOpen] = useState(false);
   const [summary, setSummary] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [hiddenCalendars, setHiddenCalendars] = useState(new Set<string>());
+  const [startPreset, setStartPreset] = useState<'next-hour' | 'tomorrow'>('next-hour');
   const range = useMemo(
     () =>
       mode === 'month'
@@ -54,6 +53,30 @@ export default function AgendaHome({
   );
   const agenda = useAgenda(range[0], range[1]);
   const calendarId = String(agenda.calendars[0]?.calendar_id ?? '');
+  const visibleEvents = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return agenda.events.filter(
+      (event) =>
+        (!event.calendarId || !hiddenCalendars.has(event.calendarId)) &&
+        (!needle ||
+          event.summary.toLowerCase().includes(needle) ||
+          event.description?.toLowerCase().includes(needle)),
+    );
+  }, [agenda.events, hiddenCalendars, query]);
+  const agendaRows = useMemo<AgendaRow[]>(() => {
+    let previous = '';
+    return visibleEvents.flatMap((event) => {
+      const date = new Date(event.start);
+      const day = date.toDateString();
+      const rows: AgendaRow[] = [];
+      if (day !== previous) {
+        previous = day;
+        rows.push({ kind: 'day', key: `day:${day}`, date });
+      }
+      rows.push({ kind: 'event', key: event.instanceKey, event });
+      return rows;
+    });
+  }, [visibleEvents]);
 
   const create = async (): Promise<void> => {
     if (!session || !summary.trim() || !calendarId) {
@@ -61,8 +84,13 @@ export default function AgendaHome({
       return;
     }
     const start = new Date();
-    start.setMinutes(Math.ceil(start.getMinutes() / 30) * 30, 0, 0);
-    start.setHours(start.getHours() + 1);
+    if (startPreset === 'tomorrow') {
+      start.setDate(start.getDate() + 1);
+      start.setHours(9, 0, 0, 0);
+    } else {
+      start.setMinutes(Math.ceil(start.getMinutes() / 30) * 30, 0, 0);
+      start.setHours(start.getHours() + 1);
+    }
     const end = new Date(start.getTime() + 60 * 60 * 1000);
     const rowId = `optimistic-${Date.now()}`;
     const result = await session.write('agenda', {
@@ -105,14 +133,59 @@ export default function AgendaHome({
     else next.setDate(next.getDate() + direction * 7);
     setCursor(next);
   };
+  const goToday = (): void => {
+    void Haptics.selectionAsync();
+    setCursor(new Date());
+  };
+  const toggleCalendar = (id: string): void => {
+    void Haptics.selectionAsync();
+    setHiddenCalendars((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]} edges={['top']}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.ink }]}>Agenda</Text>
-        <Pressable onPress={() => setCreateOpen(true)}>
-          <Feather name="plus" size={24} color={colors.accent} />
-        </Pressable>
+        <View>
+          <Text style={[styles.title, { color: colors.ink }]}>Agenda</Text>
+          <Text style={[styles.subtitle, { color: colors.ink2 }]}>Your time, in one view</Text>
+        </View>
+        <View style={styles.headerActions}>
+          <Pressable
+            accessibilityLabel="Search events"
+            onPress={() => setSearchOpen((open) => !open)}
+          >
+            <Feather name="search" size={21} color={colors.ink} />
+          </Pressable>
+          <Pressable accessibilityLabel="Create event" onPress={() => setCreateOpen(true)}>
+            <Feather name="plus" size={24} color={colors.accent} />
+          </Pressable>
+        </View>
       </View>
+      {searchOpen ? (
+        <View style={[styles.search, { backgroundColor: colors.bgSunken }]}>
+          <Feather name="search" size={16} color={colors.ink2} />
+          <TextInput
+            autoFocus
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search title or notes"
+            placeholderTextColor={colors.ink3}
+            style={[styles.searchInput, { color: colors.ink }]}
+          />
+          <Pressable
+            onPress={() => {
+              setQuery('');
+              setSearchOpen(false);
+            }}
+          >
+            <Feather name="x" size={17} color={colors.ink2} />
+          </Pressable>
+        </View>
+      ) : null}
       <View style={[styles.segment, { backgroundColor: colors.bgSunken }]}>
         {(['month', 'week', 'agenda'] as ViewMode[]).map((item) => (
           <Pressable
@@ -121,49 +194,96 @@ export default function AgendaHome({
             style={[styles.segmentItem, item === mode && { backgroundColor: colors.bgElev }]}
           >
             <Text style={[styles.segmentText, { color: item === mode ? colors.ink : colors.ink2 }]}>
-              {item[0]!.toUpperCase() + item.slice(1)}
+              {item === 'agenda' ? 'Schedule' : item[0]!.toUpperCase() + item.slice(1)}
             </Text>
           </Pressable>
         ))}
       </View>
-      {mode !== 'agenda' ? (
-        <View style={styles.nav}>
+      <View style={styles.nav}>
+        <Pressable style={[styles.today, { borderColor: colors.lineStrong }]} onPress={goToday}>
+          <Text style={[styles.todayText, { color: colors.ink }]}>Today</Text>
+        </Pressable>
+        <View style={styles.navArrows}>
           <Pressable onPress={() => move(-1)}>
             <Feather name="chevron-left" size={22} color={colors.ink2} />
           </Pressable>
-          <Text style={[styles.rangeTitle, { color: colors.ink }]}>
-            {mode === 'month'
-              ? new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(
-                  cursor,
-                )
-              : `${range[0].toLocaleDateString()} – ${addDays(range[1], -1).toLocaleDateString()}`}
-          </Text>
           <Pressable onPress={() => move(1)}>
             <Feather name="chevron-right" size={22} color={colors.ink2} />
           </Pressable>
         </View>
+        <Text style={[styles.rangeTitle, { color: colors.ink }]}>
+          {mode === 'month'
+            ? new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(cursor)
+            : mode === 'week'
+              ? `${range[0].toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${addDays(range[1], -1).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+              : 'Upcoming'}
+        </Text>
+      </View>
+      {agenda.calendars.length ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.calendarScroll}
+          contentContainerStyle={styles.calendars}
+        >
+          {agenda.calendars.map((calendar, index) => {
+            const id = String(calendar.calendar_id ?? '');
+            const shown = !hiddenCalendars.has(id);
+            const swatch = String(
+              calendar.color ?? ['#4e68dd', '#b45173', '#258d86', '#ba7418'][index % 4],
+            );
+            return (
+              <Pressable
+                key={id || calendar.__rowId}
+                onPress={() => toggleCalendar(id)}
+                style={[
+                  styles.calendarChip,
+                  { backgroundColor: colors.bgSunken, opacity: shown ? 1 : 0.5 },
+                ]}
+              >
+                <View style={[styles.calendarDot, { backgroundColor: swatch }]} />
+                <Text style={[styles.calendarText, { color: colors.ink2 }]}>
+                  {String(calendar.name ?? 'Calendar')}
+                </Text>
+                {shown ? <Feather name="check" size={12} color={colors.accent} /> : null}
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       ) : null}
       {mode === 'month' ? (
-        <MonthGrid cursor={cursor} events={agenda.events} onDay={setCursor} colors={colors} />
+        <MonthGrid cursor={cursor} events={visibleEvents} onDay={setCursor} colors={colors} />
       ) : mode === 'week' ? (
-        <WeekStrip start={range[0]} events={agenda.events} colors={colors} />
+        <WeekStrip start={range[0]} events={visibleEvents} colors={colors} />
       ) : null}
       <FlatList
-        data={agenda.events}
-        keyExtractor={(event) => event.instanceKey}
+        data={agendaRows}
+        keyExtractor={(row) => row.key}
         contentContainerStyle={styles.list}
         ListEmptyComponent={
           <Text style={[styles.empty, { color: colors.ink2 }]}>
             {agenda.loading ? 'Opening your calendar…' : 'Nothing scheduled in this range.'}
           </Text>
         }
-        renderItem={({ item }) => (
-          <EventRow
-            event={item}
-            colors={colors}
-            onPress={() => navigation.navigate('AgendaEvent', { eventId: item.id })}
-          />
-        )}
+        renderItem={({ item }) =>
+          item.kind === 'day' ? (
+            <View style={styles.dayHeader}>
+              <Text style={[styles.dayHeaderTitle, { color: colors.ink }]}>
+                {new Intl.DateTimeFormat(undefined, {
+                  weekday: 'long',
+                  month: 'long',
+                  day: 'numeric',
+                }).format(item.date)}
+              </Text>
+            </View>
+          ) : (
+            <EventRow
+              event={item.event}
+              colors={colors}
+              onPress={() => navigation.navigate('AgendaEvent', { eventId: item.event.id })}
+            />
+          )
+        }
       />
       <Modal
         transparent
@@ -175,7 +295,7 @@ export default function AgendaHome({
         <View style={[styles.dialog, { backgroundColor: colors.bgElev }]}>
           <Text style={[styles.dialogTitle, { color: colors.ink }]}>New event</Text>
           <Text style={[styles.dialogMeta, { color: colors.ink2 }]}>
-            Starts at the next half hour · 1 hour · 15 minute local reminder
+            1 hour · 15 minute local reminder
           </Text>
           <TextInput
             autoFocus
@@ -185,6 +305,32 @@ export default function AgendaHome({
             placeholderTextColor={colors.ink3}
             style={[styles.input, { borderColor: colors.lineStrong, color: colors.ink }]}
           />
+          <View style={styles.startPresets}>
+            {(
+              [
+                ['next-hour', 'Next hour'],
+                ['tomorrow', 'Tomorrow · 9 AM'],
+              ] as const
+            ).map(([key, label]) => (
+              <Pressable
+                key={key}
+                onPress={() => setStartPreset(key)}
+                style={[
+                  styles.startPreset,
+                  { backgroundColor: startPreset === key ? colors.ink : colors.bgSunken },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.startPresetText,
+                    { color: startPreset === key ? colors.bg : colors.ink2 },
+                  ]}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
           <Pressable
             style={[styles.create, { backgroundColor: colors.accent }]}
             onPress={() => void create()}
@@ -215,8 +361,9 @@ function EventRow({
           )}
         </Text>
         <Text style={[styles.dayText, { color: colors.ink2 }]}>
-          {new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric' }).format(
-            new Date(event.start),
+          –{' '}
+          {new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(
+            new Date(event.end),
           )}
         </Text>
       </View>
@@ -304,59 +451,3 @@ function WeekStrip({
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  backdrop: { backgroundColor: 'rgba(0,0,0,.4)', flex: 1 },
-  create: { alignItems: 'center', borderRadius: 10, marginTop: 12, padding: 12 },
-  createText: { color: '#fff', fontFamily: family.sansBold, fontSize: 13 },
-  day: { alignItems: 'center', height: 42, justifyContent: 'center', width: `${100 / 7}%` },
-  dayNumber: { fontFamily: family.sansMedium, fontSize: 12 },
-  dayText: { fontFamily: family.sansRegular, fontSize: 10, marginTop: 3 },
-  dialog: { borderRadius: 16, left: 28, padding: 20, position: 'absolute', right: 28, top: '31%' },
-  dialogMeta: { fontFamily: family.sansRegular, fontSize: 12, lineHeight: 18, marginTop: 6 },
-  dialogTitle: { fontFamily: family.displayBold, fontSize: 19 },
-  dot: { borderRadius: 2, height: 4, marginTop: 2, width: 4 },
-  empty: { fontFamily: family.sansRegular, fontSize: 14, padding: 40, textAlign: 'center' },
-  event: { alignItems: 'center', borderBottomWidth: 1, flexDirection: 'row', minHeight: 72 },
-  eventCopy: { flex: 1 },
-  eventLine: { borderRadius: 2, height: 42, marginRight: 12, width: 3 },
-  eventMeta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 4 },
-  eventTitle: { fontFamily: family.sansMedium, fontSize: 14 },
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 50,
-    paddingHorizontal: 18,
-  },
-  input: {
-    borderRadius: 10,
-    borderWidth: 1,
-    fontFamily: family.sansRegular,
-    fontSize: 15,
-    marginTop: 16,
-    padding: 12,
-  },
-  list: { paddingBottom: 40, paddingHorizontal: 18 },
-  month: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12 },
-  nav: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-  },
-  rangeTitle: { fontFamily: family.sansBold, fontSize: 14 },
-  safe: { flex: 1 },
-  segment: { borderRadius: 10, flexDirection: 'row', marginHorizontal: 18, padding: 3 },
-  segmentItem: { alignItems: 'center', borderRadius: 8, flex: 1, paddingVertical: 7 },
-  segmentText: { fontFamily: family.sansMedium, fontSize: 12 },
-  time: { width: 68 },
-  timeText: { fontFamily: family.monoMedium, fontSize: 12 },
-  title: { fontFamily: family.displayBold, fontSize: 23 },
-  week: { gap: 8, padding: 14, paddingHorizontal: 18 },
-  weekCount: { fontFamily: family.monoBold, fontSize: 10, marginTop: 7 },
-  weekDay: { alignItems: 'center', borderRadius: 12, padding: 10, width: 52 },
-  weekName: { fontFamily: family.sansMedium, fontSize: 10 },
-  weekNumber: { fontFamily: family.displayBold, fontSize: 17, marginTop: 5 },
-});

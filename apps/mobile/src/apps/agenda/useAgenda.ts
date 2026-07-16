@@ -33,6 +33,7 @@ export function useAgenda(rangeStart: Date, rangeEnd: Date) {
           return expandEvent(
             {
               id,
+              calendarId: value<string>(row, 'calendar_id'),
               summary: value<string>(row, 'summary') ?? 'Untitled event',
               description: value<string>(row, 'description'),
               start,

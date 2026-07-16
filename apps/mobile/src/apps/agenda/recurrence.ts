@@ -1,5 +1,6 @@
 export interface AgendaEventModel {
   id: string;
+  calendarId?: string;
   instanceKey: string;
   summary: string;
   description?: string;

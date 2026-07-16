@@ -173,7 +173,7 @@ function Tabs(): React.JSX.Element {
   const { colors } = resolveTheme(useColorScheme());
   return (
     <Tab.Navigator
-      initialRouteName="Photos"
+      initialRouteName="Apps"
       screenListeners={{
         // `selection` haptic on tab switch — matches the bridge vocabulary
         // WebView apps get via expo-haptics (src/lib/bridge/dispatch.ts).
@@ -189,6 +189,14 @@ function Tabs(): React.JSX.Element {
         tabBarStyle: { backgroundColor: colors.bgElev, borderTopColor: colors.line },
       }}
     >
+      <Tab.Screen
+        name="Apps"
+        component={AppsNavigator}
+        options={{
+          tabBarLabel: 'Home',
+          tabBarIcon: ({ color, size }) => <Feather name="grid" size={size} color={color} />,
+        }}
+      />
       <Tab.Screen
         name="Photos"
         component={PhotosNavigator}
@@ -209,14 +217,6 @@ function Tabs(): React.JSX.Element {
         component={AgendaNavigator}
         options={{
           tabBarIcon: ({ color, size }) => <Feather name="calendar" size={size} color={color} />,
-        }}
-      />
-      <Tab.Screen
-        name="Apps"
-        component={AppsNavigator}
-        options={{
-          tabBarLabel: 'Apps',
-          tabBarIcon: ({ color, size }) => <Feather name="grid" size={size} color={color} />,
         }}
       />
       <Tab.Screen

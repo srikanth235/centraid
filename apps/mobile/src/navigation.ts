@@ -2,10 +2,10 @@
 //
 //   RootStack (native stack)
 //   ├─ Tabs (bottom tabs)
+//   │  ├─ Apps      → AppsStack    (super-app launcher, AppDetail)
 //   │  ├─ Photos    → PhotosStack  (timeline, lightbox, library/search/backup)
 //   │  ├─ Docs      → DocsStack    (drive, viewer)
 //   │  ├─ Agenda    → AgendaStack  (calendar, event)
-//   │  ├─ Apps      → AppsStack    (Home, AppDetail)
 //   │  └─ SettingsTab → SettingsStack (Settings, Approvals)
 //   └─ MobileFallback (root-level modal, over the tabs)
 //

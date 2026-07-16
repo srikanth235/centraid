@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import * as MediaLibrary from 'expo-media-library';
 import { File } from 'expo-file-system';
@@ -176,25 +177,65 @@ export default function PhotosHome({
         )}
       </View>
 
+      {!selection.size ? (
+        <View style={[styles.sectionNav, { backgroundColor: colors.bgSunken }]}>
+          <View style={[styles.sectionNavItem, { backgroundColor: colors.bgElev }]}>
+            <Feather name="clock" size={15} color={colors.accent} />
+            <Text style={[styles.sectionNavText, { color: colors.ink }]}>Timeline</Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open photo library"
+            onPress={() => navigation.navigate('PhotosLibrary')}
+            style={styles.sectionNavItem}
+          >
+            <Feather name="grid" size={15} color={colors.ink2} />
+            <Text style={[styles.sectionNavText, { color: colors.ink2 }]}>Library</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       {memories.length > 0 && !selection.size ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.memories}
         >
-          <Pressable
-            style={[styles.memory, { backgroundColor: colors.bgSunken }]}
-            onPress={() => navigation.navigate('PhotoLightbox', { assetId: memories[0]!.id })}
-          >
-            <Text style={[styles.memoryEyebrow, { color: colors.accent }]}>ON THIS DAY</Text>
-            <Text style={[styles.memoryTitle, { color: colors.ink }]}>
-              {memories.length} moments worth revisiting
-            </Text>
-            <Text style={[styles.memoryMeta, { color: colors.ink2 }]}>
-              {new Date().getFullYear() - new Date(memories[0]!.capturedAt).getFullYear()} years ago
-            </Text>
-          </Pressable>
+          {memories.slice(0, 3).map((memory, index) => (
+            <Pressable
+              key={memory.id}
+              style={styles.memory}
+              onPress={() => navigation.navigate('PhotoLightbox', { assetId: memory.id })}
+            >
+              <Image source={memory.uri} contentFit="cover" style={styles.memoryImage} />
+              <View style={styles.memoryShade} />
+              <View style={styles.memoryCopy}>
+                <Text style={styles.memoryEyebrow}>{index === 0 ? 'ON THIS DAY' : 'MEMORY'}</Text>
+                <Text style={styles.memoryTitle}>
+                  {index === 0 ? `${memories.length} moments` : memory.filename || 'A moment'}
+                </Text>
+                <Text style={styles.memoryMeta}>
+                  {new Date().getFullYear() - new Date(memory.capturedAt).getFullYear()} years ago
+                </Text>
+              </View>
+            </Pressable>
+          ))}
         </ScrollView>
+      ) : null}
+
+      {!selection.size && timeline.assets.length ? (
+        <View style={styles.timelineHeading}>
+          <View>
+            <Text style={[styles.timelineTitle, { color: colors.ink }]}>Timeline</Text>
+            <Text style={[styles.timelineMeta, { color: colors.ink2 }]}>
+              {timeline.assets.length} items · pinch to change density
+            </Text>
+          </View>
+          <View style={styles.protectedStatus}>
+            <Feather name="shield" size={13} color={colors.accent} />
+            <Text style={[styles.protectedText, { color: colors.accent }]}>Private</Text>
+          </View>
+        </View>
       ) : null}
 
       {timeline.loading ? (
@@ -240,12 +281,43 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
   headerActions: { flexDirection: 'row', gap: 22 },
-  memories: { padding: 10, paddingHorizontal: 16 },
-  memory: { borderRadius: 14, minWidth: 245, padding: 16 },
-  memoryEyebrow: { fontFamily: family.monoBold, fontSize: 10, letterSpacing: 1 },
-  memoryMeta: { fontFamily: family.sansRegular, fontSize: 12, marginTop: 4 },
-  memoryTitle: { fontFamily: family.displayBold, fontSize: 17, marginTop: 7 },
+  memories: { gap: 10, paddingHorizontal: 16, paddingVertical: 12 },
+  memory: { borderRadius: 15, height: 132, overflow: 'hidden', width: 218 },
+  memoryCopy: { bottom: 13, left: 14, position: 'absolute', right: 12 },
+  memoryEyebrow: { color: '#fff', fontFamily: family.monoBold, fontSize: 9, letterSpacing: 1 },
+  memoryImage: { ...StyleSheet.absoluteFillObject },
+  memoryMeta: {
+    color: 'rgba(255,255,255,.82)',
+    fontFamily: family.sansRegular,
+    fontSize: 11,
+    marginTop: 3,
+  },
+  memoryShade: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(10,14,24,.33)' },
+  memoryTitle: { color: '#fff', fontFamily: family.displayBold, fontSize: 18, marginTop: 5 },
+  protectedStatus: { alignItems: 'center', flexDirection: 'row', gap: 5 },
+  protectedText: { fontFamily: family.sansMedium, fontSize: 11 },
   safe: { flex: 1 },
+  sectionNav: { borderRadius: 11, flexDirection: 'row', marginHorizontal: 16, padding: 3 },
+  sectionNavItem: {
+    alignItems: 'center',
+    borderRadius: 8,
+    flex: 1,
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'center',
+    minHeight: 34,
+  },
+  sectionNavText: { fontFamily: family.sansMedium, fontSize: 12 },
   selectionTitle: { fontFamily: family.sansBold, fontSize: 15 },
+  timelineHeading: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingBottom: 7,
+    paddingHorizontal: 18,
+    paddingTop: 6,
+  },
+  timelineMeta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 2 },
+  timelineTitle: { fontFamily: family.displayBold, fontSize: 17 },
   title: { fontFamily: family.displayBold, fontSize: 23, letterSpacing: -0.6 },
 });

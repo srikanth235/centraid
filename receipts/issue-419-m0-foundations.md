@@ -65,8 +65,27 @@
 - [x] Add instant offline month, week, and agenda-list views.
 - [x] Add optimistic create, reschedule, cancel, and RSVP intents with native approval routing.
 - [x] Add local Agenda reminders without push infrastructure.
+- [x] Make the mobile app library the default Centraid super-app home and open native or desktop-built apps from one launcher.
+- [x] Align the native Photos information architecture with the PWA and surface its Ente/Immich-class timeline, memories, library, search, organization, and backup controls.
+- [x] Align Docs with the PWA and common Drive/Dropbox mobile navigation through All, Recent, Starred, Trash, folders, search, import, and list/grid views.
+- [x] Align Agenda with the PWA and common Calendar mobile navigation through Today, Month, Week, Schedule, search, calendar filters, and date-grouped events.
 
 ## What changed
+
+### Super-app and UI parity continuation (2026-07-16)
+
+- Make the mobile app library the default Centraid super-app home and open native or desktop-built apps from one launcher. The first tab and cold-start destination now own that responsibility.
+- Align the native Photos information architecture with the PWA and surface its Ente/Immich-class timeline, memories, library, search, organization, and backup controls. The new Timeline/Library hierarchy exposes the existing native feature set without dead actions.
+- Align Docs with the PWA and common Drive/Dropbox mobile navigation through All, Recent, Starred, Trash, folders, search, import, and list/grid views. The controls work against the offline replica and durable upload path.
+- Align Agenda with the PWA and common Calendar mobile navigation through Today, Month, Week, Schedule, search, calendar filters, and date-grouped events. The existing detail and approval flows remain the write path.
+
+Mobile now starts at a first-class Centraid Home rather than dropping into one built-in app. The launcher keeps Photos, Docs, and Agenda available even before desktop pairing, presents them beside gateway-published apps, searches both sets, and routes each tile into the appropriate native stack or WebView. The bottom navigation follows the same hierarchy with Home first. This matches the desktop/PWA model: Centraid is the product shell and individual apps are destinations inside it.
+
+The PWA Photos blueprint and the official Ente/Immich feature surfaces were used as the category benchmark. Photos now names Timeline as the primary surface, provides a direct Timeline/Library switch, renders image-led on-this-day memories when the current date has matches, shows privacy and density affordances, and lays out media in aspect-aware justified rows beneath sticky month/day chronology. Library keeps the backed capabilities discoverable: albums, favorites, archive, trash, people, places, duplicate review, search, enrichment, backup health, and receipt-gated free-space cleanup. Public/partner sharing, hidden/locked media, editing, photo stacks, and server-side semantic/OCR search remain honest non-goals because #419 supplies no backing contract for them; no dead controls were added.
+
+The PWA Docs blueprint plus official Drive/Dropbox mobile conventions produced the Docs hierarchy: All, Recent, Starred, and Trash smart views; offline search; folders; list/grid display; import; and folder creation. Custody remains visible in file metadata and the viewer retains preview, export, star, and trash actions. Collaborative editing and remote sharing remain outside the v0 contract.
+
+The PWA Agenda blueprint plus official Google/Apple Calendar conventions produced the Agenda hierarchy: Today and previous/next navigation, Month/Week/Schedule switching, event search, per-calendar visibility chips, date-grouped schedule rows, and a creation sheet with explicit next-hour or tomorrow-morning starts. Existing event detail still owns guest, RSVP, reminder, reschedule, and cancel flows. Two-way device-calendar sync and push remain outside #419.
 
 ### Full native v0 continuation (2026-07-16)
 
@@ -385,10 +404,12 @@ Navigation is now Photos, Apps, and Settings tabs, with the WebView app grid and
 - `apps/mobile/scripts/generate-theme.ts`
 - `apps/mobile/src/apps/agenda/AgendaEvent.tsx`
 - `apps/mobile/src/apps/agenda/AgendaHome.tsx`
+- `apps/mobile/src/apps/agenda/AgendaHome.styles.ts`
 - `apps/mobile/src/apps/agenda/recurrence.test.ts`
 - `apps/mobile/src/apps/agenda/recurrence.ts`
 - `apps/mobile/src/apps/agenda/useAgenda.ts`
 - `apps/mobile/src/apps/docs/DocsHome.tsx`
+- `apps/mobile/src/apps/docs/DocsHome.styles.ts`
 - `apps/mobile/src/apps/docs/DocumentViewer.tsx`
 - `apps/mobile/src/apps/docs/docs-model.test.ts`
 - `apps/mobile/src/apps/docs/docs-model.ts`
@@ -490,6 +511,10 @@ Navigation is now Photos, Apps, and Settings tabs, with the WebView app grid and
 
 Continuation verification on 2026-07-16:
 
+- iPhone 17 / iOS 26.5 simulator — cold launch opened Home first; launcher tiles opened Photos, Docs, and Agenda; Photos exposed Timeline and the complete Library feature list; Docs filters and add sheet were accessible; Agenda Schedule and Month switched successfully. Simulator inspection caught and corrected an over-expanded horizontal Docs filter strip.
+- Android API 35 `Centraid_API_35` emulator — cold launch opened Home first after the development bundle completed; launcher, aspect-aware Photos Timeline, Docs smart views, and Agenda Schedule rendered at Android density with all five tabs present.
+- `bun run --filter @centraid/mobile typecheck` — passed after the super-app and three-app UI parity changes.
+
 - `bun run ci` — format, oxlint, package lint, 28/28 Turbo build/typecheck tasks, and type-aware lint passed.
 - `bun run --cwd apps/mobile test` — 17 files / 127 tests passed, including kill/resume crypto, stable-intent replay across a kill after Docs execution, tunnel-base replacement, cumulative drag selection, recurrence/docs models, logical Live Photo coalescing, and the 50k fixture (91 ms in the final recorded run).
 - `bun run --cwd packages/gateway test -- src/routes/replica-shape.test.ts` — 18/18 passed, including additive Docs/Agenda shapes.
@@ -568,3 +593,6 @@ bun run lint:types
 | claude-code-80311240-f7e-1784194698-1 | claude-code | 80311240-f7e2-4eec-a3d3-3c75870a9a4e | #419 | claude-opus-4-8 | 224 | 162564 | 11120918 | 49940 | 212728 | 7.8261 | 817 | 1125025 | 69192317 | 407406 |  |
 | codex-019f6ab8-3b3-1784211462-1 | codex | 019f6ab8-3b3d-7522-aab1-56bd726a3a9b | #419 | gpt-5.6-sol | 2714701 | 0 | 89450240 | 224910 | 2939611 | 32.5230 | 2714701 | 0 | 89450240 | 224910 | feat(mobile): ship native Photos, Docs, and Agenda v0 (#419) -m governance: allo |
 | codex-019f6ab8-3b3-1784219910-1 | codex | 019f6ab8-3b3d-7522-aab1-56bd726a3a9b | #419 | gpt-5.6-sol | 1745383 | 0 | 61581824 | 57169 | 1802552 | 20.6164 | 4460084 | 0 | 151032064 | 282079 | fix(mobile): complete native simulator paths (#419) -m governance: allow-doc-int |
+| codex-019f6ab8-3b3-1784222127-1 | codex | 019f6ab8-3b3d-7522-aab1-56bd726a3a9b | #419 | gpt-5.6-sol | 1006331 | 0 | 17894912 | 45530 | 1051861 | 7.6725 | 5466415 | 0 | 168926976 | 327609 | feat(mobile): align super-app navigation (#419) |
+| codex-019f6ab8-3b3-1784222424-1 | codex | 019f6ab8-3b3d-7522-aab1-56bd726a3a9b | #419 | gpt-5.6-sol | 57969 | 0 | 2994944 | 7806 | 65775 | 1.0107 | 5524384 | 0 | 171921920 | 335415 | feat(mobile): align super-app navigation (#419) |
+| codex-019f6ab8-3b3-1784222571-1 | codex | 019f6ab8-3b3d-7522-aab1-56bd726a3a9b | #419 | gpt-5.6-sol | 24584 | 0 | 1230080 | 844 | 25428 | 0.3816 | 5548968 | 0 | 173152000 | 336259 | feat(mobile): align super-app navigation (#419) -m governance: allow-doc-integri |
