@@ -154,14 +154,24 @@
         "typescript": "catalog:",
       },
     },
+    "packages/blob-format": {
+      "name": "@centraid/blob-format",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@centraid/tsconfig": "workspace:*",
+        "typescript": "catalog:",
+      },
+    },
     "packages/blueprints": {
       "name": "@centraid/blueprints",
       "version": "0.1.0",
       "dependencies": {
+        "@centraid/blob-format": "workspace:*",
         "@centraid/design-tokens": "workspace:*",
       },
       "devDependencies": {
         "@centraid/app-engine": "workspace:*",
+        "@centraid/client": "workspace:*",
         "@centraid/tsconfig": "workspace:*",
         "@types/node": "^22.0.0",
         "esbuild": "^0.28.1",
@@ -175,6 +185,7 @@
       "name": "@centraid/client",
       "version": "0.1.0",
       "dependencies": {
+        "@centraid/blob-format": "workspace:*",
         "@centraid/design-tokens": "workspace:*",
         "@sqlite.org/sqlite-wasm": "3.53.0-build1",
         "pdfjs-dist": "5.7.284",
@@ -256,6 +267,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@centraid/backup": "workspace:*",
+        "@centraid/blob-format": "workspace:*",
         "uuid": "^14.0.0",
       },
       "devDependencies": {
@@ -540,6 +552,8 @@
     "@centraid/automation": ["@centraid/automation@workspace:packages/automation"],
 
     "@centraid/backup": ["@centraid/backup@workspace:packages/backup"],
+
+    "@centraid/blob-format": ["@centraid/blob-format@workspace:packages/blob-format"],
 
     "@centraid/blueprints": ["@centraid/blueprints@workspace:packages/blueprints"],
 

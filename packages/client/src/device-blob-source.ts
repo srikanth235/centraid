@@ -3,11 +3,16 @@
 // → device, never through the Pi. CBSF frames are fetched and opened one at a
 // time, so JS retains at most one sealed frame beyond the final browser Blob.
 
-const HEADER_BYTES = 37;
-const TRAILER_BYTES = 13;
-const NONCE_BYTES = 12;
-const VERSION = 2;
-const MAGIC = 'CBSF';
+import {
+  CBSF_HEADER_BYTES as HEADER_BYTES,
+  CBSF_MAGIC as MAGIC,
+  CBSF_NONCE_BYTES as NONCE_BYTES,
+  CBSF_TRAILER_BYTES as TRAILER_BYTES,
+  CBSF_VERSION as VERSION,
+  cbsfDirectoryAad,
+  cbsfFrameAad,
+  decodeCbsfDirectory,
+} from '@centraid/blob-format';
 type Bytes = Uint8Array<ArrayBuffer>;
 
 export interface DirectBlobDownloadPlan {
@@ -65,28 +70,6 @@ async function unpackFrame(body: Bytes): Promise<Bytes> {
   throw new Error(`browser cannot open CBSF compression algorithm ${algorithm}`);
 }
 
-function decodeDirectory(
-  bytes: Bytes,
-  frameCount: number,
-): {
-  totalSize: number;
-  sealedLens: number[];
-} {
-  if (bytes.byteLength !== 16 + frameCount * 4) throw new Error('CBSF directory size mismatch');
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const totalSize = Number(view.getBigUint64(4, false));
-  const encodedCount = view.getUint32(12, false);
-  if (!Number.isSafeInteger(totalSize) || encodedCount !== frameCount) {
-    throw new Error('CBSF directory metadata mismatch');
-  }
-  return {
-    totalSize,
-    sealedLens: Array.from({ length: frameCount }, (_, index) =>
-      view.getUint32(16 + index * 4, false),
-    ),
-  };
-}
-
 /** Fetch and locally unseal a remote-primary blob using bounded provider ranges. */
 export async function readDirectBlob(
   plan: DirectBlobDownloadPlan,
@@ -131,9 +114,9 @@ export async function readDirectBlob(
   const directoryPlain = await openGcm(
     key,
     directoryRead.bytes,
-    aad(`blobdir:${sha256}:v${VERSION}:n${frameCount}`),
+    aad(cbsfDirectoryAad(sha256, frameCount)),
   );
-  const directory = decodeDirectory(directoryPlain, frameCount);
+  const directory = decodeCbsfDirectory(directoryPlain, frameCount);
   const parts: BlobPart[] = [];
   let offset = HEADER_BYTES;
   let plaintextBytes = 0;
@@ -141,11 +124,7 @@ export async function readDirectBlob(
     const length = directory.sealedLens[index]!;
     const frame = await range(plan.url, `bytes=${offset}-${offset + length - 1}`);
     if (frame.bytes.byteLength !== length) throw new Error('provider returned a short CBSF frame');
-    const opened = await openGcm(
-      key,
-      frame.bytes,
-      aad(`blob:${sha256}:v${VERSION}:f${index}/${frameCount}`),
-    );
+    const opened = await openGcm(key, frame.bytes, aad(cbsfFrameAad(sha256, index, frameCount)));
     const plain = await unpackFrame(opened);
     parts.push(plain.buffer);
     plaintextBytes += plain.byteLength;

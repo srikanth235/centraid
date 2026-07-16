@@ -344,7 +344,12 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     // undefined — a codec-less open just never runs the backstop.
     ...(options.previewCodec ? { previewCodec: options.previewCodec } : {}),
     close(opts) {
-      void blobTransfers.close();
+      // VaultDb's public close contract is synchronous. Fence the runner
+      // synchronously so an in-flight provider request cannot settle against
+      // SQLite after the handles below close; its durable outbox row resumes
+      // on the next open. Callers that need a graceful drain await
+      // blobTransfers.close() before closing the DB.
+      blobTransfers.abandon();
       // PRAGMA optimize (issue #374 tier 5a): a cheap, targeted ANALYZE that
       // only touches tables whose stats look stale — recommended by SQLite
       // to run "occasionally", and connection-close is the one point every

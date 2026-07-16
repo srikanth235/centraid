@@ -4,6 +4,7 @@
 // (Timeline.jsx, Picker.jsx, Duplicates.jsx).
 import { isAudioAsset, isVideoAsset } from './format.js';
 import { observeNextScreen, stopNextScreenObservation } from './media-observer.js';
+import { BLOB_MEDIUM_EDGE, BLOB_TINY_EDGE } from '@centraid/blob-format';
 
 // The grid NEVER fetches a full original. Blob-backed assets carry a server
 // thumb variant (issue #296) — a few KB; a `data:` URI already rode inline
@@ -29,8 +30,8 @@ export const THUMB_EDGE = 360;
 // upload.js. TINY (~256 px, the grid thumbnail) and MEDIUM (~2048 px, the
 // lightbox preview) are produced from the same decode at capture time — free
 // edge CPU, the gateway backstop only covers what a client couldn't.
-export const CLIENT_TINY_EDGE = 256;
-export const CLIENT_MEDIUM_EDGE = 2048;
+export const CLIENT_TINY_EDGE = BLOB_TINY_EDGE;
+export const CLIENT_MEDIUM_EDGE = BLOB_MEDIUM_EDGE;
 
 // The cheap grid source for an asset, or null to render a placeholder. Video
 // paints its device-contributed poster; the original loads only on open.

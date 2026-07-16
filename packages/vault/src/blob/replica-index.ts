@@ -54,6 +54,20 @@ export class ReplicaIndex {
     return new Set(rows.map((r) => r.sha256));
   }
 
+  /** Evidence rows with timestamps, used to protect marks racing an inventory walk. */
+  rows(): { sha256: string; replicatedAt: string }[] {
+    const rows = this.db.prepare('SELECT sha256, replicated_at FROM blob_replica').all() as {
+      sha256: string;
+      replicated_at: string;
+    }[];
+    return rows.map((row) => ({ sha256: row.sha256, replicatedAt: row.replicated_at }));
+  }
+
+  /** Forget all evidence when the configured remote identity changes. */
+  clear(): void {
+    this.db.exec('DELETE FROM blob_replica');
+  }
+
   /**
    * Reconcile the index against a full remote listing (issue #404 §4 rebuild
    * path): the remote's real object set is TRUTH, so rows for shas the remote

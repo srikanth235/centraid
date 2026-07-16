@@ -408,7 +408,15 @@ export class BackupService {
     if (!target) {
       const label = opaqueLabel();
       const { targetId } = await backend.provider.createTarget({ label });
-      target = { targetId, label, generation: 1, providerRef: backend.providerRef };
+      target = {
+        targetId,
+        label,
+        generation: 1,
+        providerRef: backend.providerRef,
+        // Target persistence precedes the first (possibly long) snapshot.
+        // This timestamp gives health checks an honest fresh-target grace.
+        firstBackupAt: new Date(this.now()).toISOString(),
+      };
       createdTarget = true;
       state.targets[vaultId] = target;
       await saveBackupState(this.backupDir, state);
@@ -437,7 +445,12 @@ export class BackupService {
     // standing between a backup run and a checkpoint.
     const shipper = plane.walShipper;
     plane.walTick();
-    if (!shipper) throw new Error('backup: WAL shipper is unavailable');
+    if (!shipper) {
+      target.lastError = 'backup: WAL shipper is unavailable';
+      state.targets[vaultId] = target;
+      await saveBackupState(this.backupDir, state);
+      throw new Error(target.lastError);
+    }
     if (shipper.discardedStreams().length > 0 || !shipper.basesCoordinated()) {
       throw new Error(
         'backup: WAL generation is discarded or mid-break — retrying instead of registering a holed base',
@@ -1097,6 +1110,7 @@ export class BackupService {
 
   /** Scheduler entry: each vault's WAL drain follows its own declared RPO. */
   private async drainWalDue(): Promise<void> {
+    if (this.draining || this.stopped) return;
     const now = this.now();
     const due = new Set<string>();
     for (const plane of this.vaults.planesList()) {

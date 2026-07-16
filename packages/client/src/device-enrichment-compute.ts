@@ -9,12 +9,10 @@
 import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import type { DeviceEnrichmentLease } from './gateway-client-devices.js';
+import { captureVideoFrames } from './video-frame.js';
 
 const MAX_TEXT_CHARS = 1_000_000;
 const MAX_PDF_PAGES = 2_000;
-const POSTER_EDGE = 2_048;
-const THUMB_EDGE = 256;
-const MEDIA_TIMEOUT_MS = 20_000;
 
 export interface DeviceWorkContribution {
   variant: 'poster' | 'thumb' | 'text' | 'transcript';
@@ -50,10 +48,12 @@ async function extractPdfText(source: Blob): Promise<string | null> {
   const pdfjs = await loadPdfJs();
   let pdfDocument: PDFDocumentProxy | undefined;
   try {
-    const loading = pdfjs.getDocument({
+    const options = {
       data: new Uint8Array(await readBlobBytes(source)),
       useSystemFonts: true,
-    });
+      isEvalSupported: false,
+    } as Parameters<typeof pdfjs.getDocument>[0] & { isEvalSupported: boolean };
+    const loading = pdfjs.getDocument(options);
     pdfDocument = await loading.promise;
     const pages: string[] = [];
     let chars = 0;
@@ -84,77 +84,18 @@ async function extractPdfText(source: Blob): Promise<string | null> {
   }
 }
 
-function waitForMedia(media: HTMLMediaElement, event: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timer = window.setTimeout(
-      () => finish(new Error(`media ${event} timed out`)),
-      MEDIA_TIMEOUT_MS,
-    );
-    const finish = (error?: Error): void => {
-      window.clearTimeout(timer);
-      media.removeEventListener(event, onReady);
-      media.removeEventListener('error', onError);
-      if (error) reject(error);
-      else resolve();
-    };
-    const onReady = (): void => finish();
-    const onError = (): void => finish(new Error('media decode failed'));
-    media.addEventListener(event, onReady, { once: true });
-    media.addEventListener('error', onError, { once: true });
-  });
-}
-
-function scaledCanvas(video: HTMLVideoElement, maxEdge: number): HTMLCanvasElement {
-  const scale = Math.min(1, maxEdge / Math.max(video.videoWidth, video.videoHeight));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
-  canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
-  const context = canvas.getContext('2d');
-  if (!context) throw new Error('canvas unavailable');
-  context.drawImage(video, 0, 0, canvas.width, canvas.height);
-  return canvas;
-}
-
-function jpeg(canvas: HTMLCanvasElement): Promise<Blob | null> {
-  return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.84));
-}
-
 async function videoContributions(source: Blob): Promise<DeviceWorkContribution[]> {
-  if (!URL.createObjectURL) return [];
-  const video = document.createElement('video');
-  const url = URL.createObjectURL(source);
-  video.muted = true;
-  video.playsInline = true;
-  video.preload = 'metadata';
-  try {
-    video.src = url;
-    video.load();
-    await waitForMedia(video, 'loadedmetadata');
-    if (!(video.videoWidth > 0 && video.videoHeight > 0)) return [];
-    const seekTo =
-      Number.isFinite(video.duration) && video.duration > 0 ? Math.min(1, video.duration / 2) : 0;
-    if (seekTo > 0.01) {
-      video.currentTime = seekTo;
-      await waitForMedia(video, 'seeked');
-    } else if (video.readyState < 2) {
-      await waitForMedia(video, 'loadeddata');
-    }
-    const [poster, thumb] = await Promise.all([
-      jpeg(scaledCanvas(video, POSTER_EDGE)),
-      jpeg(scaledCanvas(video, THUMB_EDGE)),
-    ]);
-    return [
-      ...(poster ? [{ variant: 'poster' as const, body: poster, mediaType: 'image/jpeg' }] : []),
-      ...(thumb ? [{ variant: 'thumb' as const, body: thumb, mediaType: 'image/jpeg' }] : []),
-    ];
-  } catch {
-    return [];
-  } finally {
-    video.pause();
-    video.removeAttribute('src');
-    video.load();
-    URL.revokeObjectURL(url);
-  }
+  const captured = await captureVideoFrames(source);
+  return captured
+    ? [
+        ...(captured.poster
+          ? [{ variant: 'poster' as const, body: captured.poster, mediaType: 'image/jpeg' }]
+          : []),
+        ...(captured.thumb
+          ? [{ variant: 'thumb' as const, body: captured.thumb, mediaType: 'image/jpeg' }]
+          : []),
+      ]
+    : [];
 }
 
 async function transcriptContributions(source: Blob): Promise<DeviceWorkContribution[]> {

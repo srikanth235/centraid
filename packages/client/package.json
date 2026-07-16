@@ -8,6 +8,7 @@
     "./boot": "./src/react/boot.tsx",
     "./replica": "./src/replica/index.ts",
     "./replica/intent-invalidations": "./src/replica/intent-invalidations.ts",
+    "./video-frame": "./src/video-frame.ts",
     "./styles.css": "./src/styles.css"
   },
   "scripts": {
@@ -16,6 +17,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@centraid/blob-format": "workspace:*",
     "@centraid/design-tokens": "workspace:*",
     "@sqlite.org/sqlite-wasm": "3.53.0-build1",
     "pdfjs-dist": "5.7.284",

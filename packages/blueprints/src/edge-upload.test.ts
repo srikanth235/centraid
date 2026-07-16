@@ -48,6 +48,31 @@ describe('edge-sealed direct upload', () => {
     expect(fetchMock.mock.calls.at(-1)![0]).toContain('/commit');
   });
 
+  it.each([
+    ['transport interruption', () => Promise.reject(new TypeError('network lost'))],
+    [
+      'invalid resumed offset',
+      () => Promise.resolve(new Response(null, { status: 204, headers: { 'upload-offset': '4' } })),
+    ],
+  ])('keeps %s classified as resumable after the gateway opens a session', async (_name, patch) => {
+    const fetchMock = vi.fn(async (input: string | URL) => {
+      const url = String(input);
+      if (url.endsWith('/uploads')) {
+        return Response.json({ mode: 'spool', sessionId: 'fallback-retry', offset: 4 });
+      }
+      if (url.endsWith('/uploads/fallback-retry')) return patch();
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      stageFallbackFile(
+        new NodeFile([Uint8Array.of(0, 1, 2, 3, 4, 5, 6, 7)], 'resume-again.bin'),
+        '23'.repeat(32),
+      ),
+    ).rejects.toMatchObject({ resumable: true });
+  });
+
   it('hands an unavailable direct door back to the permanent gateway fallback', async () => {
     vi.stubGlobal('crypto', webcrypto);
     const fetchMock = vi.fn(async () =>
@@ -131,6 +156,32 @@ describe('edge-sealed direct upload', () => {
     expect(Buffer.from(bytes.subarray(5, 37)).toString('hex')).toBe(sha256);
     expect(bytes.byteLength).toBe(3 + 94 + 33);
     expect(fetchMock.mock.calls[2]![0]).toContain('/direct/session-1/complete');
+  });
+
+  it('marks a failed completion as resumable after the provider accepted ciphertext', async () => {
+    vi.stubGlobal('crypto', webcrypto);
+    vi.stubGlobal('Blob', NodeBlob);
+    const rawKey = Buffer.alloc(32, 8).toString('base64');
+    const fetchMock = vi.fn(async (input: string | URL) => {
+      const url = String(input);
+      if (url.endsWith('/direct')) {
+        return Response.json({
+          sessionId: 'completion-failed',
+          keyBase64: rawKey,
+          upload: { kind: 'single', url: 'https://provider.example/upload' },
+        });
+      }
+      if (url === 'https://provider.example/upload') return new Response(null, { status: 200 });
+      if (url.endsWith('/direct/completion-failed/complete')) {
+        return Response.json({ error: 'retry' }, { status: 503 });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      stageDirectFile(new NodeFile([Uint8Array.of(1, 2)], 'retry.bin'), '78'.repeat(32)),
+    ).rejects.toMatchObject({ resumable: true });
   });
 
   it('resumes multipart work by sealing only provider-missing parts and recording each ETag', async () => {

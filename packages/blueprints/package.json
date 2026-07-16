@@ -25,6 +25,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@centraid/blob-format": "workspace:*",
     "@centraid/design-tokens": "workspace:*"
   },
   "devDependencies": {

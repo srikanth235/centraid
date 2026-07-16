@@ -23,6 +23,7 @@ import type { HealthProbe } from './health-registry.js';
 
 /** One custody-state bucket count, as `custodyStateCounts` returns it. */
 export interface BlobCustodyCounts {
+  readonly 'pending-offsite'?: number;
   readonly 'local-only': number;
   readonly replicated: number;
   readonly 'remote-only': number;
@@ -66,6 +67,7 @@ export function createBlobSweepHealthProbe(options: BlobSweepHealthOptions): Hea
     const vaults = options.vaults();
     let s3VaultCount = 0;
     let localOnlyTotal = 0;
+    let pendingOffsiteTotal = 0;
     let replicatedTotal = 0;
     const persistentlyFailing: string[] = [];
     const recentlyFailingOrStale: string[] = [];
@@ -73,6 +75,7 @@ export function createBlobSweepHealthProbe(options: BlobSweepHealthOptions): Hea
     for (const vault of vaults) {
       const counts = vault.counts();
       localOnlyTotal += counts['local-only'];
+      pendingOffsiteTotal += counts['pending-offsite'] ?? 0;
       replicatedTotal += counts.replicated;
       if (!vault.s3Configured()) continue;
       s3VaultCount += 1;
@@ -92,15 +95,16 @@ export function createBlobSweepHealthProbe(options: BlobSweepHealthOptions): Hea
         continue;
       }
       const age = now() - Date.parse(status.lastCompletedAt);
-      if (Number.isFinite(age) && age > staleAfterMs && counts['local-only'] > 0) {
+      const backlog = counts['local-only'] + (counts['pending-offsite'] ?? 0);
+      if (Number.isFinite(age) && age > staleAfterMs && backlog > 0) {
         const ageS = Math.round(age / 1000);
-        recentlyFailingOrStale.push(
-          `${tag} (last swept ${ageS}s ago, backlog ${counts['local-only']})`,
-        );
+        recentlyFailingOrStale.push(`${tag} (last swept ${ageS}s ago, backlog ${backlog})`);
       }
     }
 
-    const backlogDetail = `${localOnlyTotal} local-only, ${replicatedTotal} replicated`;
+    const backlogDetail =
+      `${pendingOffsiteTotal} pending-offsite, ${localOnlyTotal} local-only, ` +
+      `${replicatedTotal} replicated`;
     if (persistentlyFailing.length > 0) {
       return {
         status: 'error',

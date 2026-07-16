@@ -65,6 +65,14 @@ function positiveNumber(value: unknown, field: string, floor = 0): number {
   return value;
 }
 
+function positiveInteger(value: unknown, field: string, floor = 0): number {
+  const number = positiveNumber(value, field, floor);
+  if (!Number.isInteger(number)) {
+    throw new BackupPolicyError(`\`${field}\` must be an integer`);
+  }
+  return number;
+}
+
 function optionalPositiveNumber(value: unknown, field: string): number | undefined {
   if (value === undefined || value === null || value === 0) return undefined;
   return positiveNumber(value, field);
@@ -91,16 +99,16 @@ export function resolveBackupPolicy(value: unknown): BackupPolicy {
     throw new BackupPolicyError('`storageClass` must be a non-empty string when set');
   }
   return {
-    rpoSeconds: positiveNumber(
+    rpoSeconds: positiveInteger(
       raw.rpoSeconds ?? DEFAULT_BACKUP_POLICY.rpoSeconds,
       'rpoSeconds',
       MIN_RPO_SECONDS,
     ),
-    snapshotIntervalHours: positiveNumber(
+    snapshotIntervalHours: positiveInteger(
       raw.snapshotIntervalHours ?? DEFAULT_BACKUP_POLICY.snapshotIntervalHours,
       'snapshotIntervalHours',
     ),
-    verifyEveryDays: positiveNumber(
+    verifyEveryDays: positiveInteger(
       raw.verifyEveryDays ?? DEFAULT_BACKUP_POLICY.verifyEveryDays,
       'verifyEveryDays',
     ),
@@ -140,7 +148,19 @@ function readSettings(vault: DatabaseSync): Record<string, unknown> {
 }
 
 export function readBackupPolicy(vault: DatabaseSync): BackupPolicy {
-  return resolveBackupPolicy(readSettings(vault).backup_policy);
+  const settings = readSettings(vault);
+  const policy = record(settings.backup_policy);
+  const legacy = record(settings.blob_store);
+  return resolveBackupPolicy({
+    ...policy,
+    // One-way read migration for pre-policy settings written before #414.
+    ...(policy.throttleBytesPerSec === undefined && legacy.throttleBytesPerSec !== undefined
+      ? { throttleBytesPerSec: legacy.throttleBytesPerSec }
+      : {}),
+    ...(policy.storageClass === undefined && legacy.storageClass !== undefined
+      ? { storageClass: legacy.storageClass }
+      : {}),
+  });
 }
 
 /**
