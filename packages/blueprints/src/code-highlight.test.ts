@@ -1,4 +1,3 @@
-// @ts-nocheck — exercises the untyped browser kit module (pure string→string).
 // Unit tests for the dependency-free fenced-code highlighter (issue #420, W2).
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -50,12 +49,12 @@ describe('highlightCode', () => {
   });
 
   it('preserves textContent equality for round-trip copy', () => {
-    const src = 'function go() { return `a${b}c`; } // done';
+    const src = `function go() { return \`a\${b}c\`; } // done`;
     const out = highlightCode(src, 'ts');
     // Strip the span tags — the remaining text (entities decoded) is the source.
     const stripped = out
       .replace(/<[^>]+>/g, '')
-      .replace(/&#(\d+);/g, (_m, n) => String.fromCharCode(Number(n)));
+      .replace(/&#(\d+);/g, (_m: string, n: string) => String.fromCharCode(Number(n)));
     expect(stripped).toBe(src);
   });
 });

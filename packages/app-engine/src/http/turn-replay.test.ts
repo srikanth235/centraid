@@ -9,7 +9,12 @@ test('buildReplayEvents replays a completed turn as start → delta → usage �
     finalText: 'hello world',
     usage: { model: 'tier:fast', inputTokens: 10, outputTokens: 3 },
   });
-  expect(events.map((e) => e.type)).toEqual(['assistant.start', 'assistant.delta', 'usage', 'final']);
+  expect(events.map((e) => e.type)).toEqual([
+    'assistant.start',
+    'assistant.delta',
+    'usage',
+    'final',
+  ]);
   const delta = events.find((e) => e.type === 'assistant.delta');
   expect(delta).toMatchObject({ delta: 'hello world' });
   const final = events.find((e) => e.type === 'final');

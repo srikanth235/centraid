@@ -2,58 +2,12 @@
 // Wave 2). Two paths feed the "this turn cost X" line:
 //   • Reloaded from the ledger — the gateway froze the exact `costUsd` at write
 //     time (packages/app-engine/src/model-pricing.ts) and ships it on the turn.
-//   • Live-streamed — the `usage` event carries only token counts + model, so
-//     we compute a CLIENT-SIDE ESTIMATE here. It is deliberately a mirror of the
-//     server price table (a snapshot; may drift). The estimate is replaced by
-//     the authoritative frozen cost the moment the turn is reloaded from the
-//     ledger, so it is only ever shown for the few seconds a turn is live.
-// The client cannot import @centraid/app-engine (node-side), so the small table
-// is duplicated here on purpose — keep it in sync with model-pricing.ts.
+//   • Live-streamed — the `usage` event arrives already priced server-side at
+//     the SSE seam (same model-pricing.ts), flagged `estimated` until the
+//     authoritative frozen cost replaces it on reload. The client never holds
+//     a model rate table of its own.
 
 import type { AsstUsageDTO } from '../screen-contracts.js';
-
-interface Price {
-  inputPerMtok: number;
-  outputPerMtok: number;
-}
-
-// USD per million tokens, longest-prefix wins. Mirrors model-pricing.ts (input/
-// output rates only — cache tokens aren't in the live `usage` event).
-const PRICE_TABLE: ReadonlyArray<readonly [string, Price]> = [
-  ['claude-opus', { inputPerMtok: 15, outputPerMtok: 75 }],
-  ['claude-sonnet', { inputPerMtok: 3, outputPerMtok: 15 }],
-  ['claude-haiku', { inputPerMtok: 0.8, outputPerMtok: 4 }],
-  ['gpt-5-codex', { inputPerMtok: 1.25, outputPerMtok: 10 }],
-  ['gpt-5-mini', { inputPerMtok: 0.25, outputPerMtok: 2 }],
-  ['gpt-5', { inputPerMtok: 1.25, outputPerMtok: 10 }],
-];
-
-function priceFor(model: string | undefined): Price | undefined {
-  if (!model) return undefined;
-  const id = model.trim().toLowerCase().split('/').at(-1) ?? '';
-  let best: Price | undefined;
-  let bestLen = -1;
-  for (const [prefix, price] of PRICE_TABLE) {
-    if (id.startsWith(prefix) && prefix.length > bestLen) {
-      best = price;
-      bestLen = prefix.length;
-    }
-  }
-  return best;
-}
-
-/** Client-side USD estimate for a live turn, or `undefined` when unpriced. */
-export function estimateCostUsd(
-  model: string | undefined,
-  usage: { inputTokens?: number; outputTokens?: number },
-): number | undefined {
-  const price = priceFor(model);
-  if (!price) return undefined;
-  return (
-    ((usage.inputTokens ?? 0) / 1_000_000) * price.inputPerMtok +
-    ((usage.outputTokens ?? 0) / 1_000_000) * price.outputPerMtok
-  );
-}
 
 function formatTokens(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n);

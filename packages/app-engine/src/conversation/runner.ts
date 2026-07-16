@@ -94,6 +94,8 @@ export type TurnStreamEvent =
       outputTokens?: number;
       cacheReadTokens?: number;
       cacheWriteTokens?: number;
+      /** USD estimate, priced server-side (model-pricing.ts) at the SSE seam. */
+      costUsd?: number;
     };
 
 export interface ConversationTurnInput {

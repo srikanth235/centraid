@@ -26,6 +26,7 @@ import type {
 import type { ConversationHistoryStore, TurnNode } from '../conversation/history.js';
 import { buildReplayEvents } from './turn-replay.js';
 import { writeTurnBusy, type TurnLimiter } from './turn-limiter.js';
+import { costForUsage } from '../model-pricing.js';
 
 /** A file uploaded to the blob CAS before the turn, referenced by its hash. */
 export interface TurnAttachmentRef {
@@ -298,6 +299,12 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
     }
   };
   const onEvent = (event: TurnStreamEvent): void => {
+    // Price the usage event at the one allowlisted seam (model-pricing.ts) so
+    // clients can show a live cost without mirroring model rate tables.
+    if (event.type === 'usage' && event.costUsd === undefined) {
+      const costUsd = costForUsage(event.model, event);
+      if (costUsd !== undefined) event = { ...event, costUsd };
+    }
     accumulate(event);
     writeEvent(event);
   };

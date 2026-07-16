@@ -20,7 +20,6 @@ import { openPrompt } from '../prompt.js';
 import { catchUpAfterDrop } from './assistantCatchUp.js';
 import { downloadConversation } from './conversationExport.js';
 import { DEFAULT_STARTERS, resolveStarters } from './assistantStarters.js';
-import { estimateCostUsd } from '../../screens/assistantUsage.js';
 import mainScrollCss from '../../styles/mainScroll.module.css';
 import type {
   AssistantSnapshot,
@@ -316,10 +315,9 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
           const msg = ensureAi();
           const inputTokens = event.inputTokens;
           const outputTokens = event.outputTokens;
-          const costUsd = estimateCostUsd(event.model, {
-            ...(inputTokens !== undefined ? { inputTokens } : {}),
-            ...(outputTokens !== undefined ? { outputTokens } : {}),
-          });
+          // Priced server-side at the SSE seam (model-pricing.ts); the frozen
+          // ledger rollup replaces it on reload.
+          const costUsd = event.costUsd;
           msg.usage = {
             ...(inputTokens !== undefined ? { inputTokens } : {}),
             ...(outputTokens !== undefined ? { outputTokens } : {}),
