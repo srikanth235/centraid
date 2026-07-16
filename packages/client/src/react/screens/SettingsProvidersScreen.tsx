@@ -1,31 +1,26 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
-import { Icon } from '../ui/index.js';
+import Button from '../ui/Button.js';
 import type {
   AgentCardDTO,
-  AgentModelDTO,
   AgentRunnerKind,
   AgentsStatusDTO,
-  AgentToolDTO,
   ModelSubsystem,
   SettingsProvidersBridgeProps,
 } from '../screen-contracts.js';
-import { DrawerGroup, DrawerRow } from './settings-controls.js';
+import { DrawerGroup } from './settings-controls.js';
+import AgentEntry from './SettingsProvidersAgents.js';
+import { ModelSelect, Select, modelLabel } from './SettingsProvidersSelects.js';
 import styles from './SettingsProvidersScreen.module.css';
-import drawerGroupCss from '../styles/drawerGroup.module.css';
 import controlsCss from '../styles/controls.module.css';
-import buttonCss from '../ui/Button.module.css';
-import { cx } from '../ui/cx.js';
 
-const TIER_ORDER = ['smart', 'balanced', 'fast'] as const;
-const TIER_LABEL: Record<(typeof TIER_ORDER)[number], string> = {
-  smart: 'Most capable',
-  balanced: 'Balanced',
-  fast: 'Fastest',
-};
 const POLL_MS = 800;
 const POLL_WINDOW_MS = 30_000;
 
-/** Chat & agent subsystem override rows, rendered for the active runner only. */
+/**
+ * The routing lanes. Each resolves independently to an (agent, model) pair —
+ * a lane left unset inherits the default lane. Before per-subsystem runners
+ * these were model-only overrides hanging off one globally-active agent.
+ */
 const SUBSYSTEM_ROWS: ReadonlyArray<{ key: ModelSubsystem; label: string; hint: string }> = [
   { key: 'assistant', label: 'Assistant', hint: 'Global Ask across your vault.' },
   { key: 'ask', label: 'In-app Ask', hint: 'The Ask panel inside each app.' },
@@ -33,186 +28,89 @@ const SUBSYSTEM_ROWS: ReadonlyArray<{ key: ModelSubsystem; label: string; hint: 
   { key: 'automations', label: 'Automations', hint: 'Background automations & enrichers.' },
 ];
 
-function ModelSelect({
-  card,
-  saved,
-  onChange,
-  emptyLabel = 'Gateway default',
-  ariaLabel,
-}: {
-  card: AgentCardDTO;
-  saved: string;
-  onChange: (v: string) => void;
-  emptyLabel?: string;
-  ariaLabel?: string;
-}): JSX.Element {
-  const tiered = card.models.some((m) => m.tier);
-  const opt = (m: AgentModelDTO): JSX.Element => (
-    <option key={m.id} value={m.id}>
-      {(m.name ?? m.id) + (m.default ? ' · default' : '')}
-    </option>
-  );
-  return (
-    <select
-      className={styles.modelSelect}
-      aria-label={ariaLabel ?? `Default model for ${card.title}`}
-      disabled={!card.connected}
-      value={saved}
-      onChange={(e) => onChange(e.target.value)}
-    >
-      <option value="">{emptyLabel}</option>
-      {saved && !card.models.some((m) => m.id === saved) ? (
-        <option value={saved}>{`${saved} · unavailable`}</option>
-      ) : null}
-      {tiered ? (
-        <>
-          {TIER_ORDER.map((tier) => {
-            const inTier = card.models.filter((m) => m.tier === tier);
-            return inTier.length ? (
-              <optgroup key={tier} label={TIER_LABEL[tier]}>
-                {inTier.map(opt)}
-              </optgroup>
-            ) : null;
-          })}
-          {card.models.some((m) => !m.tier) ? (
-            <optgroup label="Other">{card.models.filter((m) => !m.tier).map(opt)}</optgroup>
-          ) : null}
-        </>
-      ) : (
-        card.models.map(opt)
-      )}
-      {card.modelsLoading ? (
-        <option value="__loading" disabled>
-          Discovering models…
-        </option>
-      ) : null}
-    </select>
-  );
-}
-
-function ToolGroups({ tools }: { tools: AgentToolDTO[] }): JSX.Element {
-  const native = tools.filter((t) => t.source === 'native');
-  const mcp = new Map<string, AgentToolDTO[]>();
-  for (const t of tools) {
-    if (t.source !== 'mcp') continue;
-    const server = t.server ?? 'mcp';
-    mcp.set(server, [...(mcp.get(server) ?? []), t]);
-  }
-  const groups: Array<{ label: string; items: AgentToolDTO[] }> = [];
-  if (native.length) groups.push({ label: 'Built-in', items: native });
-  for (const server of [...mcp.keys()].sort((a, b) => a.localeCompare(b))) {
-    groups.push({ label: server, items: mcp.get(server) ?? [] });
-  }
-  return (
-    <div className={styles.groups}>
-      {groups.map((g) => (
-        <div key={g.label} className={styles.group}>
-          <div className={styles.groupHead}>
-            <span className={styles.groupLabel}>{g.label}</span>
-            <span className={styles.groupCount}>{String(g.items.length)}</span>
-          </div>
-          <div className={styles.list}>
-            {g.items
-              .slice()
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((t) => (
-                <div key={t.name} className={styles.item}>
-                  <div className={styles.itemHead}>
-                    <span className={styles.name}>{t.name}</span>
-                    {t.hasArgs ? (
-                      <span className={styles.args} title="Takes JSON arguments">
-                        args
-                      </span>
-                    ) : null}
-                  </div>
-                  {t.description ? <span className={styles.desc}>{t.description}</span> : null}
-                </div>
-              ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function AgentEntry({
-  card,
-  active,
-  saved,
-  open,
-  onToggle,
+/**
+ * One routing lane. `runner === ''` means inherit the default lane, and the
+ * inherit option names what it resolves to — "Use default model" alone told you
+ * nothing about what would actually run, and with agents inheriting too that
+ * ambiguity would have doubled.
+ */
+function RouteRow({
+  label,
+  hint,
+  cards,
+  runner,
+  model,
+  resolvedCard,
+  resolvedAgentDefault,
+  defaultCard,
+  onSetRunner,
   onSetModel,
 }: {
-  card: AgentCardDTO;
-  active: boolean;
-  saved: string;
-  open: boolean;
-  onToggle: () => void;
+  label: string;
+  hint: string;
+  cards: AgentCardDTO[];
+  runner: AgentRunnerKind | '';
+  model: string;
+  resolvedCard: AgentCardDTO | undefined;
+  /** The resolved agent's own default model id — what this lane inherits. */
+  resolvedAgentDefault: string;
+  defaultCard: AgentCardDTO | undefined;
+  onSetRunner: (v: string) => void;
   onSetModel: (v: string) => void;
 }): JSX.Element {
-  const count = card.tools.length;
   return (
     <div
-      className={styles.entry}
-      data-tools-open={open ? 'true' : ''}
-      style={{ '--row-accent': card.accent } as CSSProperties}
+      className={styles.routeRow}
+      style={{ '--route-accent': resolvedCard?.accent } as CSSProperties}
     >
-      <div
-        className={styles.row}
-        data-active={active ? 'true' : ''}
-        data-unavail={card.connected ? '' : 'true'}
+      <div className={styles.routeMeta}>
+        <div className={styles.routeName}>
+          <span className={styles.routeDot} />
+          {label}
+        </div>
+        <span className={styles.routeHint}>{hint}</span>
+      </div>
+      <Select
+        value={runner}
+        onChange={onSetRunner}
+        inherited={!runner}
+        ariaLabel={`Agent for ${label}`}
       >
-        <span
-          className={styles.rowDot}
-          style={{ background: card.connected ? card.accent : 'var(--ink-4, var(--ink-3))' }}
+        <option value="">
+          {defaultCard ? `Use default · ${defaultCard.title}` : 'Use default'}
+        </option>
+        {cards.map((c) => (
+          <option key={c.kind} value={c.kind} disabled={!c.connected}>
+            {c.connected ? c.title : `${c.title} · unavailable`}
+          </option>
+        ))}
+      </Select>
+      {resolvedCard ? (
+        <ModelSelect
+          card={resolvedCard}
+          saved={model}
+          onChange={onSetModel}
+          emptyLabel={`Use default · ${modelLabel(resolvedCard, resolvedAgentDefault)}`}
+          ariaLabel={`Model for ${label}`}
         />
-        <div className={styles.rowMeta}>
-          <div className={styles.rowName}>
-            {card.title}
-            {active ? <span className={styles.rowActive}>Active</span> : null}
-          </div>
-          <span className={styles.rowSub}>{card.subtitle}</span>
-        </div>
-        <div className={styles.rowTools}>
-          <button
-            type="button"
-            className={styles.toolsToggle}
-            aria-expanded={open}
-            title="Show tools this agent exposes (builtins + MCP)"
-            onClick={onToggle}
-          >
-            <Icon name="Code" size={12} />
-            <span className="agent-tools-count">{`${count} ${count === 1 ? 'tool' : 'tools'}`}</span>
-            <span className={styles.toolsChev}>
-              <Icon name="ChevronDown" size={12} />
-            </span>
-          </button>
-        </div>
-        <div className={styles.rowModel}>
-          <ModelSelect card={card} saved={saved} onChange={onSetModel} />
-        </div>
-      </div>
-      <div className={styles.tools} hidden={!open}>
-        {count > 0 ? (
-          <ToolGroups tools={card.tools} />
-        ) : (
-          <div className={styles.toolsEmpty}>
-            {card.toolsLoading
-              ? 'Scanning tools…'
-              : 'No tools scanned yet — use Refresh tools below.'}
-          </div>
-        )}
-      </div>
+      ) : (
+        <span className={styles.routeHint}>—</span>
+      )}
     </div>
   );
 }
 
 /**
- * Settings → Providers (agents console), ported to React (issue #325,
- * Phase 3). Active-agent switch, per-agent status + default-model picker +
- * tool disclosure, and the two refreshes. The vanilla side owns the gateway
- * I/O (loadStatus/refresh/activate/save); React owns the view, the tool-open
- * state, and the bounded poll while any surface is still enumerating.
+ * Settings → Agents. Two sections, and the split is the point: **Routing** is
+ * where every decision lives (each subsystem resolves to its own agent and
+ * model), **Agents** is inventory — what is installed, what it exposes, and
+ * which lanes land on it.
+ *
+ * The page previously led with an exclusive Codex/Claude-Code radio, because
+ * exactly one agent could be active. Per-subsystem runners retire that
+ * premise: there is no "active" agent any more, only a *default* one that
+ * unset lanes fall back to — so it became the first lane of the same table
+ * rather than a separate control above it.
  */
 export default function SettingsProvidersScreen({
   loadStatus,
@@ -221,12 +119,16 @@ export default function SettingsProvidersScreen({
   activateRunner,
   setAgentModel,
   setSubsystemModel,
+  setSubsystemRunner,
 }: SettingsProvidersBridgeProps): JSX.Element {
   const [status, setStatus] = useState<AgentsStatusDTO | null>(null);
-  const [selected, setSelected] = useState<AgentRunnerKind>('codex');
+  const [defaultKind, setDefaultKind] = useState<AgentRunnerKind>('codex');
   const [savedByKind, setSavedByKind] = useState<Record<string, string>>({});
   const [subsystemByKind, setSubsystemByKind] = useState<
     Record<string, Partial<Record<ModelSubsystem, string>>>
+  >({});
+  const [runnerBySubsystem, setRunnerBySubsystem] = useState<
+    Partial<Record<ModelSubsystem, AgentRunnerKind>>
   >({});
   const [open, setOpen] = useState<Set<AgentRunnerKind>>(new Set());
   const [busyModels, setBusyModels] = useState(false);
@@ -236,9 +138,10 @@ export default function SettingsProvidersScreen({
 
   const apply = useCallback((s: AgentsStatusDTO) => {
     setStatus(s);
-    setSelected(s.selectedKind);
+    setDefaultKind(s.selectedKind);
     setSavedByKind(s.savedModelByKind);
     setSubsystemByKind(s.subsystemModelByKind);
+    setRunnerBySubsystem(s.subsystemRunnerByKey);
   }, []);
 
   const poll = useCallback(() => {
@@ -275,12 +178,12 @@ export default function SettingsProvidersScreen({
       .finally(() => setBusy(false));
   };
 
-  const onActivate = (kind: AgentRunnerKind): void => {
-    if (kind === selected) return;
-    const prev = selected;
-    setSelected(kind); // optimistic
-    void activateRunner(kind).then((ok) => {
-      if (!ok) setSelected(prev);
+  const onSetDefault = (kind: string): void => {
+    if (!kind || kind === defaultKind) return;
+    const prev = defaultKind;
+    setDefaultKind(kind as AgentRunnerKind); // optimistic
+    void activateRunner(kind as AgentRunnerKind).then((ok) => {
+      if (!ok) setDefaultKind(prev);
     });
   };
 
@@ -294,7 +197,11 @@ export default function SettingsProvidersScreen({
     setAgentModel(kind, v);
   };
 
-  const onSetSubsystem = (kind: AgentRunnerKind, subsystem: ModelSubsystem, v: string): void => {
+  const onSetSubsystemModel = (
+    kind: AgentRunnerKind,
+    subsystem: ModelSubsystem,
+    v: string,
+  ): void => {
     setSubsystemByKind((m) => {
       const next = { ...m, [kind]: { ...m[kind] } };
       if (v) next[kind]![subsystem] = v;
@@ -302,6 +209,16 @@ export default function SettingsProvidersScreen({
       return next;
     });
     setSubsystemModel(kind, subsystem, v);
+  };
+
+  const onSetSubsystemRunner = (subsystem: ModelSubsystem, v: string): void => {
+    setRunnerBySubsystem((m) => {
+      const next = { ...m };
+      if (v) next[subsystem] = v as AgentRunnerKind;
+      else delete next[subsystem];
+      return next;
+    });
+    setSubsystemRunner(subsystem, v as AgentRunnerKind | '');
   };
 
   const toggleTools = (kind: AgentRunnerKind): void => {
@@ -314,103 +231,118 @@ export default function SettingsProvidersScreen({
   };
 
   const cards = status?.cards ?? [];
-  const activeCard = cards.find((c) => c.kind === selected);
+  const cardFor = (kind: AgentRunnerKind): AgentCardDTO | undefined =>
+    cards.find((c) => c.kind === kind);
+  const defaultCard = cardFor(defaultKind);
+  /** A lane's agent: its own override, else the default lane's. */
+  const resolvedKind = (s: ModelSubsystem): AgentRunnerKind => runnerBySubsystem[s] ?? defaultKind;
+  const usedBy = (kind: AgentRunnerKind): string[] =>
+    SUBSYSTEM_ROWS.filter((r) => resolvedKind(r.key) === kind).map((r) => r.label);
 
   return (
     <>
-      <div className={drawerGroupCss.group}>
-        <div className={drawerGroupCss.groupLabel}>Connected</div>
-        <div className={drawerGroupCss.groupBody}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div className={controlsCss.note}>
-              Switch the active agent below; set each agent’s default model. Detection is CLI-only —
-              the gateway ran `&lt;bin&gt; --version`; Centraid doesn’t inspect how each agent
-              authenticates.
-            </div>
+      <DrawerGroup label="Routing">
+        <div className={controlsCss.note}>
+          Each surface picks its own agent and model. A lane left on “Use default” follows the
+          default lane below, so you can run the Builder on one agent and everything else on
+          another.
+        </div>
+        {status === null ? (
+          <div className={controlsCss.note}>Reading agent status…</div>
+        ) : (
+          <div className={styles.panel}>
             <div
-              className={styles.switch}
-              role="tablist"
-              aria-label="Active agent"
-              data-active-index={String(selected === 'codex' ? 0 : 1)}
+              className={styles.routeRow}
+              data-default="true"
+              style={{ '--route-accent': defaultCard?.accent } as CSSProperties}
             >
-              <span className={styles.switchInd} />
-              {cards.map((card) => (
-                <button
-                  key={card.kind}
-                  type="button"
-                  className={styles.switchSeg}
-                  role="tab"
-                  aria-selected={card.kind === selected}
-                  data-active={card.kind === selected ? 'true' : ''}
-                  data-unavail={card.connected ? '' : 'true'}
-                  disabled={!card.connected || card.kind === selected}
-                  title={`Make ${card.title} the active agent`}
-                  onClick={() => onActivate(card.kind)}
-                >
-                  <span className={styles.switchDot} style={{ background: card.accent }} />
-                  <span>{card.title}</span>
-                </button>
-              ))}
+              <div className={styles.routeMeta}>
+                <div className={styles.routeName}>
+                  <span className={styles.routeDot} />
+                  Default
+                </div>
+                <span className={styles.routeHint}>
+                  Every lane set to “Use default” lands here.
+                </span>
+              </div>
+              <Select value={defaultKind} onChange={onSetDefault} ariaLabel="Default agent">
+                {cards.map((c) => (
+                  <option key={c.kind} value={c.kind} disabled={!c.connected}>
+                    {c.connected ? c.title : `${c.title} · unavailable`}
+                  </option>
+                ))}
+              </Select>
+              <span className={styles.routeHint}>
+                {defaultCard
+                  ? `${modelLabel(defaultCard, savedByKind[defaultKind] ?? '')} — set per agent below`
+                  : '—'}
+              </span>
             </div>
-            <div className={styles.panel}>
-              {status === null ? (
-                <div className={controlsCss.note}>Reading credential status…</div>
-              ) : (
-                cards.map((card) => (
-                  <AgentEntry
-                    key={card.kind}
-                    card={card}
-                    active={card.kind === selected}
-                    saved={savedByKind[card.kind] ?? ''}
-                    open={open.has(card.kind)}
-                    onToggle={() => toggleTools(card.kind)}
-                    onSetModel={(v) => onSetModel(card.kind, v)}
-                  />
-                ))
-              )}
-            </div>
+            {SUBSYSTEM_ROWS.map((row) => {
+              const kind = resolvedKind(row.key);
+              const card = cardFor(kind);
+              return (
+                <RouteRow
+                  key={row.key}
+                  label={row.label}
+                  hint={row.hint}
+                  cards={cards}
+                  runner={runnerBySubsystem[row.key] ?? ''}
+                  model={subsystemByKind[kind]?.[row.key] ?? ''}
+                  resolvedCard={card}
+                  resolvedAgentDefault={savedByKind[kind] ?? ''}
+                  defaultCard={defaultCard}
+                  onSetRunner={(v) => onSetSubsystemRunner(row.key, v)}
+                  onSetModel={(v) => onSetSubsystemModel(kind, row.key, v)}
+                />
+              );
+            })}
           </div>
+        )}
+      </DrawerGroup>
+      <DrawerGroup label="Agents">
+        <div className={controlsCss.note}>
+          Detected on this gateway. Detection is CLI-only — the gateway ran `&lt;bin&gt; --version`;
+          Centraid doesn’t inspect how each agent authenticates. Each agent’s default model is what
+          its lanes fall back to.
+        </div>
+        <div className={styles.panel}>
+          {status === null ? (
+            <div className={controlsCss.note}>Reading credential status…</div>
+          ) : (
+            cards.map((card) => (
+              <AgentEntry
+                key={card.kind}
+                card={card}
+                usedBy={usedBy(card.kind)}
+                isDefault={card.kind === defaultKind}
+                saved={savedByKind[card.kind] ?? ''}
+                open={open.has(card.kind)}
+                onToggle={() => toggleTools(card.kind)}
+                onSetModel={(v) => onSetModel(card.kind, v)}
+              />
+            ))
+          )}
         </div>
         <div className={styles.actionsRow}>
-          <button
-            type="button"
-            className={cx(buttonCss.btn, controlsCss.soft)}
+          <Button
+            variant="soft"
+            size="sm"
+            icon="Reset"
             disabled={busyModels}
+            label="Refresh models"
             onClick={() => doRefresh(refreshModels, setBusyModels)}
-          >
-            <Icon name="Reset" size={13} />
-            <span>Refresh models</span>
-          </button>
-          <button
-            type="button"
-            className={cx(buttonCss.btn, controlsCss.soft)}
+          />
+          <Button
+            variant="soft"
+            size="sm"
+            icon="Refresh"
             disabled={busyTools}
+            label={busyTools ? 'Scanning tools…' : 'Refresh tools'}
             onClick={() => doRefresh(refreshTools, setBusyTools)}
-          >
-            <Icon name="Refresh" size={13} />
-            <span>{busyTools ? 'Scanning tools…' : 'Refresh tools'}</span>
-          </button>
+          />
         </div>
-      </div>
-      {activeCard ? (
-        <DrawerGroup label="Chat & agent subsystems">
-          <div className={controlsCss.note}>
-            Subsystem choices override the default model; automations with a model set in their
-            manifest keep it.
-          </div>
-          {SUBSYSTEM_ROWS.map((row) => (
-            <DrawerRow key={row.key} label={row.label} hint={row.hint}>
-              <ModelSelect
-                card={activeCard}
-                saved={subsystemByKind[activeCard.kind]?.[row.key] ?? ''}
-                onChange={(v) => onSetSubsystem(activeCard.kind, row.key, v)}
-                emptyLabel="Use default model"
-                ariaLabel={`${row.label} model for ${activeCard.title}`}
-              />
-            </DrawerRow>
-          ))}
-        </DrawerGroup>
-      ) : null}
+      </DrawerGroup>
     </>
   );
 }
