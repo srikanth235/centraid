@@ -61,6 +61,8 @@ The queue is a SQLite-backed item and part ledger in its own database file, keye
 
 Navigation is now Photos, Apps, and Settings tabs, with the WebView app grid and detail preserved beneath the Apps stack and approvals reachable from Settings. A generator lowers the blueprint token stylesheet into a checked-in typed theme, resolving nested custom properties and skipping what cannot map rather than mangling it, and the resolved theme drives both React Navigation and the existing screens in light and dark.
 
+`apps/mobile/vitest.config.ts` raises the suite's timeout to the budget `packages/backup` and `packages/tunnel` already use. The sealing and crash-resume suites do real AES-GCM over multi-part payloads and rebuild the queue from disk across many simulated process deaths, so they land near the 5-second default on an idle machine and time out under a full-repository run.
+
 ### Checklist crosswalk
 
 - **Replace the hand-vendored iroh-ffi artifacts with official iroh 1.0 release sources.** The podspec pulls the checksum-pinned official release archive; Android's step remains only because the published Maven artifact carries no Android natives.
@@ -146,6 +148,7 @@ Navigation is now Photos, Apps, and Settings tabs, with the WebView app grid and
 - `apps/mobile/src/theme/resolve.ts`
 - `apps/mobile/src/theme/tokens.generated.ts`
 - `apps/mobile/src/theme/useTheme.ts`
+- `apps/mobile/vitest.config.ts`
 - `apps/web/iroh-wasm/OFFICIAL-BINDING-EVALUATION.md`
 - `bun.lock`
 - `packages/blueprints/apps/photos/app.json`
@@ -290,3 +293,7 @@ bun run lint:types
 | claude-code-80311240-f7e-1784192408-1 | claude-code | 80311240-f7e2-4eec-a3d3-3c75870a9a4e | #419 | claude-opus-4-8 | 2 | 780 | 295398 | 514 | 1296 | 0.1654 | 507 | 927843 | 45026379 | 334654 |  |
 | claude-code-80311240-f7e-1784192453-1 | claude-code | 80311240-f7e2-4eec-a3d3-3c75870a9a4e | #419 | claude-opus-4-8 | 4 | 2440 | 592356 | 628 | 3072 | 0.3271 | 511 | 930283 | 45618735 | 335282 |  |
 | claude-code-80311240-f7e-1784192530-1 | claude-code | 80311240-f7e2-4eec-a3d3-3c75870a9a4e | #419 | claude-opus-4-8 | 20 | 6934 | 2985442 | 4628 | 11582 | 1.6519 | 531 | 937217 | 48604177 | 339910 |  |
+| claude-code-80311240-f7e-1784193639-1 | claude-code | 80311240-f7e2-4eec-a3d3-3c75870a9a4e | #419 | claude-opus-4-8 | 46 | 16056 | 6989396 | 11966 | 28068 | 3.8944 | 577 | 953273 | 55593573 | 351876 |  |
+| claude-code-80311240-f7e-1784193691-1 | claude-code | 80311240-f7e2-4eec-a3d3-3c75870a9a4e | #419 | claude-opus-4-8 | 4 | 1296 | 617585 | 416 | 1716 | 0.3273 | 581 | 954569 | 56211158 | 352292 |  |
+| claude-code-80311240-f7e-1784193732-1 | claude-code | 80311240-f7e2-4eec-a3d3-3c75870a9a4e | #419 | claude-opus-4-8 | 2 | 288 | 309542 | 237 | 527 | 0.1625 | 583 | 954857 | 56520700 | 352529 |  |
+| claude-code-80311240-f7e-1784193790-1 | claude-code | 80311240-f7e2-4eec-a3d3-3c75870a9a4e | #419 | claude-opus-4-8 | 10 | 7604 | 1550699 | 4937 | 12551 | 0.9463 | 593 | 962461 | 58071399 | 357466 |  |
