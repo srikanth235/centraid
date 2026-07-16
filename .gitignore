@@ -41,6 +41,10 @@ packages/blueprints/.app-boot/
 # both; they are deliberately not opaque checked-in vendor blobs.
 packages/blueprints/kit/pdf.min.mjs
 packages/blueprints/kit/pdf.worker.min.mjs
+# Browser ESM generated from canonical workspace sources by
+# packages/blueprints/scripts/vendor-browser-shared.mjs.
+packages/blueprints/kit/blob-format.js
+packages/blueprints/kit/video-frame.js
 # issue #325: second design system — the desktop React shell (Icon/Button/
 # Logo/AppCard). Generated bundle + the input package's copied-fresh source,
 # fonts, and styles (build.mjs regenerates them all from apps/desktop each run).

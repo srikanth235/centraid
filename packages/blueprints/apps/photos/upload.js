@@ -4,10 +4,12 @@
 // button/input DOM nodes it mutates for progress text are looked up locally
 // via `$`, exactly like the pre-split code did.
 import { isPendingOffsite, stageDerivative, stageFileBytes, toast } from './kit.js';
-import { captureVideoFrames } from '@centraid/client/video-frame';
+import { captureVideoFrames, VIDEO_POSTER_EDGE, VIDEO_THUMB_EDGE } from './video-frame.js';
 import { act, narrate } from './outcomes.js';
-import { CLIENT_TINY_EDGE, CLIENT_MEDIUM_EDGE } from './media.js';
 import { $ } from './dom.js';
+
+const CLIENT_TINY_EDGE = VIDEO_THUMB_EDGE;
+const CLIENT_MEDIUM_EDGE = VIDEO_POSTER_EDGE;
 
 // Client-side ceiling per file. Bytes stream to the blob staging route
 // (issue #296) — no base64 through command JSON — so a phone video fits;

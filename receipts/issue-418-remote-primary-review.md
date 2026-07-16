@@ -62,6 +62,8 @@ Device PDF extraction now passes `isEvalSupported: false`. GatewayRoute memoizes
 
 The document text automation checks its durable external entity marker before invoking the paid summarizer for a late derivative. The shared `captureVideoFrames` browser utility now owns decode, seek, timeout, JPEG quality, and cleanup for both Photos upload and idle-device enrichment; its poster/thumb sizes come from the same preview-ladder constants as the Photos image path and vault backstop.
 
+The browser-shared blob-format and video-frame modules are now generated into the same-origin blueprint kit, allowing the Photos production graph to retain its two-request bundle without bare workspace imports. The generated PDF.js display and worker modules carry a `Promise.try` compatibility bridge for the Node 20 CI/browser-support floor, with the real-PDF regression explicitly exercising that missing-native path. The resumable stream-through integration test has a bounded 15-second timeout so normal CI contention does not trip Vitest's generic five-second ceiling.
+
 ### Efficiency and maintainability
 
 Plaintext remote confirmation uses stat size plus bounded head/tail ranged samples rather than downloading and hashing the whole object. Durable encrypted multipart upload maps one store-only CBSF frame to one provider part, restores saved receipts, seeks directly to missing plaintext frames, and emits only the required header/directory/trailer parts. Filesystem ranged reads no longer materialize the entire object.
@@ -108,18 +110,26 @@ The final governance pass found the cohesive blob transfer coordinator nine line
 
 ### Files
 
+- `.gitignore`
 - `apps/mobile/src/lib/bridge/transfer-policy.test.ts`
 - `apps/mobile/src/lib/bridge/transfer-policy.ts`
 - `bun.lock`
+- `packages/app-engine/src/http/security.ts`
+- `packages/app-engine/src/http/static-server.test.ts`
 - `packages/blob-format/package.json`
 - `packages/blob-format/src/index.ts`
 - `packages/blob-format/tsconfig.json`
+- `packages/blueprints/README.md`
 - `packages/blueprints/apps/photos/upload.js`
 - `packages/blueprints/apps/photos/media.js`
 - `packages/blueprints/automations/doc-text-extractor/automations/doc-text-extractor/handler.js`
 - `packages/blueprints/kit/edge-upload.js`
 - `packages/blueprints/kit/kit.js`
 - `packages/blueprints/package.json`
+- `packages/blueprints/scripts/vendor-browser-shared.mjs`
+- `packages/blueprints/scripts/vendor-pdfjs.mjs`
+- `packages/blueprints/src/app-boot-harness.ts`
+- `packages/blueprints/src/docs-media.test.ts`
 - `packages/blueprints/src/edge-upload.test.ts`
 - `packages/client/package.json`
 - `packages/client/src/device-blob-source.ts`
@@ -159,6 +169,7 @@ The final governance pass found the cohesive blob transfer coordinator nine line
 - `packages/vault/src/blob/seal.test.ts`
 - `packages/vault/src/blob/sigv4.ts`
 - `packages/vault/src/blob/staging.ts`
+- `packages/vault/src/blob/stream-ingress.test.ts`
 - `packages/vault/src/blob/transfers.ts`
 - `packages/vault/src/db.ts`
 - `packages/vault/src/enrich/leases.ts`
@@ -185,7 +196,8 @@ The final governance pass found the cohesive blob transfer coordinator nine line
 ```sh
 bun install --frozen-lockfile
 bun run build
-bun run check
+bun run ci
+bunx vitest run packages/app-engine/src/http/app-bundle.test.ts packages/app-engine/src/http/static-server.test.ts packages/blueprints/src/docs-media.test.ts packages/blueprints/src/edge-upload.test.ts packages/blueprints/src/photos-media.test.ts packages/vault/src/blob/stream-ingress.test.ts --fileParallelism=false
 bunx vitest run packages/vault --no-file-parallelism
 bunx vitest run packages/gateway packages/client packages/blueprints --no-file-parallelism
 bunx vitest run packages/gateway/src/backup/restore-lazy-e2e.test.ts
@@ -195,19 +207,20 @@ git diff --check
 
 - `bun install --frozen-lockfile` passed after the workspace lockfile update.
 - `bun run build` passed across all 16 packages.
-- `bun run check` passed formatting, Oxlint, and blueprint lint.
+- `bun run ci` passed formatting, Oxlint, blueprint lint, all package typechecks, and type-boundary lint.
+- CI repair regressions passed 88/88: the real Photos graph collapsed from 50 per-file requests to 2 bundled requests, the generated PDF.js runtime extracted a real PDF with native `Promise.try` removed, and resumable stream ingress completed under its bounded integration-test timeout.
 - Complete vault suite, file-sequential: 82 files passed; 723 tests passed; 1 opt-in test skipped.
 - Complete gateway/client/blueprints suite, file-sequential: 221 files passed and 1 stale restore-fixture assertion failed after 1,649 tests passed / 2 opt-in tests skipped. The fixture manually wrote the remote object but omitted replica evidence; it was corrected to model the production contract.
 - Corrected remote-primary lazy-restore suite: 2/2 passed in isolation.
 - Enrichment lease/backlog suite after shared-rule SQL generation: 8/8 passed.
 - Focused CBSF, S3, outbox, backup-source, edge-upload, device-read, mobile-transfer, route, reconciliation, policy, cache, and UI tests passed.
 - Final resumable-upload, late-settlement, and device-polling regressions passed: 3 files, 20/20 tests.
-- The default parallel repository graph can starve inherited 5-second tests. A deterministic file-sequential vault run passed the two cases that timed out under worker fan-out.
+- The resumable stream integration test uses a 15-second case timeout because its two encrypted multipart passes can legitimately exceed Vitest's generic five-second default under CI worker fan-out.
 - `git diff --check` passed.
 
 ## Audit
 
-Fresh-context audit against the complete diff and GitHub issue #418:
+Fresh-context audit against the original implementation diff and GitHub issue #418 (the subsequent CI-compatibility repair above was not re-audited, per maintainer direction):
 
 - **A1 — `## What changed` faithfully describes the diff:** PASS — The receipt accounts for all 56 changed paths and accurately covers the crypto/durability, backup/ingress/lifecycle, client/automation, efficiency, and shared-module work without a material omission.
 - **A2 — every checked item is realized:** PASS — All 31 findings have implementation evidence. The auditor directly rechecked resumable direct/fallback error classification, late outbox settlement fencing, and last-good DevicesCard polling state; the focused three-file regression run passed 20/20.
@@ -230,3 +243,4 @@ Fresh-context audit of Codex session `019f69a1-52c9-7020-8c7d-b1a46f1d5160`:
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | codex-019f69a1-52c-1784188153-1 | codex | 019f69a1-52c9-7020-8c7d-b1a46f1d5160 | #418 | gpt-5.6-sol | 882555 | 0 | 44429568 | 87100 | 969655 | 14.6203 | 882555 | 0 | 44429568 | 87100 | fix(vault): harden remote-primary custody (#418) |
 | codex-019f69a1-52c-1784188207-1 | codex | 019f69a1-52c9-7020-8c7d-b1a46f1d5160 | #418 | gpt-5.6-sol | 6191 | 0 | 353280 | 517 | 6708 | 0.1116 | 888746 | 0 | 44782848 | 87617 | fix(vault): harden remote-primary custody (#418) -m governance: allow-toolchain- |
+| codex-019f69a1-52c-1784189509-1 | codex | 019f69a1-52c9-7020-8c7d-b1a46f1d5160 | #418 | gpt-5.6-sol | 250119 | 0 | 8808704 | 27607 | 277726 | 3.2416 | 1138865 | 0 | 53591552 | 115224 | fix(blueprints): restore CI browser compatibility (#418) |

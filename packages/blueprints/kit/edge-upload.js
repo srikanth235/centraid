@@ -10,7 +10,7 @@ import {
   cbsfDirectoryAad,
   cbsfFrameAad,
   encodeCbsfDirectory,
-} from '@centraid/blob-format';
+} from './blob-format.js';
 
 const FRAME_BYTES = 4 * 1024 * 1024;
 const FRAMES_PER_PART = 4;

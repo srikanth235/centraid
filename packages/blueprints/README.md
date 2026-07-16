@@ -23,7 +23,7 @@ The package carries both halves of "how a new app comes into being": the **blank
 
 ## Shared browser runtimes
 
-Apps resolve a small canonical asset set from `kit/` instead of copying it into every clone. React remains the checked-in runtime bundle described by `scripts/vendor-react.mjs`. PDF text extraction uses the lockfile-pinned `pdfjs-dist` development dependency: `scripts/vendor-pdfjs.mjs` copies its minified display and worker modules to `kit/pdf.min.mjs` and `kit/pdf.worker.min.mjs`. Those generated files are gitignored and are rebuilt by `build`, `build:manifest`, and `test`; they are served same-origin by the app engine, so extraction remains offline and compatible with the app CSP. Do not hand-edit them.
+Apps resolve a small canonical asset set from `kit/` instead of copying it into every clone. React remains the checked-in runtime bundle described by `scripts/vendor-react.mjs`. `scripts/vendor-browser-shared.mjs` bundles the canonical `@centraid/blob-format` and client video-frame sources to `kit/blob-format.js` and `kit/video-frame.js` for browser consumers. PDF text extraction uses the lockfile-pinned `pdfjs-dist` development dependency: `scripts/vendor-pdfjs.mjs` copies its minified display and worker modules to `kit/pdf.min.mjs` and `kit/pdf.worker.min.mjs`. Those generated files are gitignored and are rebuilt by `build`, `build:manifest`, and `test`; they are served same-origin by the app engine, so both protocols remain offline and compatible with the app CSP. Do not hand-edit them.
 
 ## Adding a template
 

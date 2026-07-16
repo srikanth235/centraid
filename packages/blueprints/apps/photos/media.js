@@ -4,7 +4,6 @@
 // (Timeline.jsx, Picker.jsx, Duplicates.jsx).
 import { isAudioAsset, isVideoAsset } from './format.js';
 import { observeNextScreen, stopNextScreenObservation } from './media-observer.js';
-import { BLOB_MEDIUM_EDGE, BLOB_TINY_EDGE } from '@centraid/blob-format';
 
 // The grid NEVER fetches a full original. Blob-backed assets carry a server
 // thumb variant (issue #296) — a few KB; a `data:` URI already rode inline
@@ -18,20 +17,13 @@ import { BLOB_MEDIUM_EDGE, BLOB_TINY_EDGE } from '@centraid/blob-format';
 // THUMB_EDGE is the SERVE-side "no thumb was staged below this" ceiling, NOT
 // the client generation edge. It stays at 360 deliberately: the preview
 // ladder (issue #405 §2) drops the client TINY edge to 256 going forward
-// (CLIENT_TINY_EDGE below), but assets uploaded under the older 360 edge (or
+// (the upload pipeline's shared tiny edge), but assets uploaded under the older 360 edge (or
 // with no thumb at all because they were already small) must not suddenly
 // probe `?variant=thumb`, 404, and flip to a placeholder. Keeping the
 // knownSmall ceiling at the LARGER historical edge means every asset small
 // enough to lack a thumb under EITHER regime still paints its own (already
 // thumb-sized) original — never a false 404. v0 never migrates old thumbs.
 export const THUMB_EDGE = 360;
-
-// Client preview-ladder generation edges (issue #405 §2), consumed by
-// upload.js. TINY (~256 px, the grid thumbnail) and MEDIUM (~2048 px, the
-// lightbox preview) are produced from the same decode at capture time — free
-// edge CPU, the gateway backstop only covers what a client couldn't.
-export const CLIENT_TINY_EDGE = BLOB_TINY_EDGE;
-export const CLIENT_MEDIUM_EDGE = BLOB_MEDIUM_EDGE;
 
 // The cheap grid source for an asset, or null to render a placeholder. Video
 // paints its device-contributed poster; the original loads only on open.

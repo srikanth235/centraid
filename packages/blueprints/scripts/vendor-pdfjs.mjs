@@ -19,20 +19,22 @@ const PDFJS_ROOT = path.join(WORKSPACE_ROOT, 'node_modules/pdfjs-dist');
 const KIT_ROOT = path.join(PACKAGE_ROOT, 'kit');
 const version = JSON.parse(readFileSync(path.join(PDFJS_ROOT, 'package.json'), 'utf8')).version;
 
-// PDF.js 5 uses the new Uint8Array base64/hex helpers. Current Chromium has
-// them, but the v0 web shell can outlive a browser release and Node/jsdom CI
-// does not yet expose all three. Prepending this tiny standards-compatible
-// bridge to both realms keeps the generated display and Worker builds honest.
-const typedArrayBridge = `(()=>{const p=Uint8Array.prototype;
+// PDF.js 5 uses the new Uint8Array base64/hex helpers and Promise.try. Current
+// Chromium/Node releases have them, but the v0 web shell can outlive a browser
+// release and the Node 20 CI realm has no Promise.try. Prepending this tiny
+// standards-compatible bridge to both realms keeps the generated display and
+// Worker builds honest.
+const compatibilityBridge = `(()=>{const p=Uint8Array.prototype;
 if(!p.toHex)Object.defineProperty(p,"toHex",{value:function(){let s="";for(const b of this)s+=b.toString(16).padStart(2,"0");return s}});
 if(!p.toBase64)Object.defineProperty(p,"toBase64",{value:function(){let s="";for(let i=0;i<this.length;i+=32768)s+=String.fromCharCode(...this.subarray(i,i+32768));return btoa(s)}});
 if(!Uint8Array.fromBase64)Object.defineProperty(Uint8Array,"fromBase64",{value:function(v){const s=atob(v);return Uint8Array.from(s,c=>c.charCodeAt(0))}});
+if(!Promise.try)Object.defineProperty(Promise,"try",{configurable:true,writable:true,value:function(fn,...args){return new this(resolve=>resolve(fn(...args)))}});
 })();\n`;
 const banner = `// Generated from pdfjs-dist@${version} by scripts/vendor-pdfjs.mjs; do not edit.\n`;
 
 for (const file of ['pdf.min.mjs', 'pdf.worker.min.mjs']) {
   const source = readFileSync(path.join(PDFJS_ROOT, 'build', file), 'utf8');
-  writeFileSync(path.join(KIT_ROOT, file), banner + typedArrayBridge + source);
+  writeFileSync(path.join(KIT_ROOT, file), banner + compatibilityBridge + source);
 }
 
 console.log(`Copied PDF.js ${version} display + worker builds into ${KIT_ROOT}`);
