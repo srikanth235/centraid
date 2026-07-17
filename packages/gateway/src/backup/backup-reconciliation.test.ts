@@ -41,6 +41,48 @@ test('missing remote CAS evidence is demoted synchronously and orphans are repor
   expect(state.orphans).toEqual({ count: 1, sample: [ORPHAN] });
 });
 
+test('a retained-snapshot-referenced blob present remotely is live, not an orphan (issue #436 §6)', () => {
+  const unmark = vi.fn();
+  // ORPHAN here is referenced ONLY by a retained snapshot — absent from the live
+  // vault model and the replica index — yet present in the remote CAS listing.
+  const state = reconcileCasInventory({
+    collection: {
+      source: 'provider',
+      providerAttested: true,
+      objects: [ORPHAN].map((sha) => ({
+        key: `blobs/sha256/${sha}`,
+        sizeBytes: 10,
+        etagOrHash: sha,
+        storedAt: 1,
+        state: 'live' as const,
+      })),
+    },
+    live: new Set<string>(),
+    indexed: new Set<string>(),
+    unmark,
+    snapshotReferenced: new Set([ORPHAN]),
+  });
+  expect(state.orphans).toEqual({ count: 0, sample: [] });
+  expect(state.missing).toEqual({ count: 0, sample: [] });
+  expect(unmark).not.toHaveBeenCalled();
+});
+
+test('a retained-snapshot-referenced blob ABSENT remotely is a critical missing finding (issue #436 §6)', () => {
+  const unmark = vi.fn();
+  // MISSING is named by a retained snapshot but the remote CAS no longer holds
+  // it: the recovery window is broken for that attachment ⇒ critical `missing`.
+  const state = reconcileCasInventory({
+    collection: { source: 'provider', providerAttested: true, objects: [] },
+    live: new Set<string>(),
+    indexed: new Set<string>(),
+    unmark,
+    snapshotReferenced: new Set([MISSING]),
+  });
+  expect(state.missing).toEqual({ count: 1, sample: [MISSING] });
+  // Pure snapshot roots have no index row, so nothing is demoted.
+  expect(unmark).not.toHaveBeenCalled();
+});
+
 test('WAL inventory detects a gap before a provider closer', () => {
   const keys = [
     walSegmentKey({

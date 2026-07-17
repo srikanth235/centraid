@@ -1,4 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit single cohesive screen (list + add wizard + recovery-kit gate + per-vault attach) — splitting would fragment one storage-connection flow, same call SettingsConnectionsScreen.tsx makes
+// governance: allow-repo-hygiene file-size-limit single cohesive screen (connect form + recovery-kit gate + per-vault hosted/local toggle) — one storage-connection flow, same call SettingsConnectionsScreen.tsx makes
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { Button, IconButton } from '../ui/index.js';
 import { cx } from '../ui/cx.js';
@@ -6,58 +6,32 @@ import styles from './SettingsStorageScreen.module.css';
 import drawerGroupCss from '../styles/drawerGroup.module.css';
 import controlsCss from '../styles/controls.module.css';
 import inlineEmptyCss from '../styles/inlineEmpty.module.css';
-import selectCss from '../styles/select.module.css';
 import modalCss from '../styles/modal.module.css';
 
-// Settings → Storage (issue #367 §D4): the owner surface over the
-// gateway-level storage-connection entity (Section C's storage-routes.ts) —
-// shared by offsite backup snapshots and a vault's CAS remote tier. Lists
-// every connection (never a secret field — the gateway never puts one on
-// the wire), an inline add-connection form for both kinds, a real Test
-// button, delete-with-confirm, the recovery-kit gate as a real blocking
-// dialog (not a toast — losing track of a seal key is the one mistake this
-// screen can't let slide by), and a compact per-vault "which connection is
-// this vault's CAS tier attached to" section.
-//
-// Kept prop-driven like SettingsConnectionsScreen: this file owns view +
-// interaction state only. Gateway I/O + the recovery-kit-aware result
-// shapes live in `routes/settingsStorageData.ts`.
-
-export type StorageConnectionKind = 'byo-s3' | 'provider';
-export type StorageConnectionUse = 'backup' | 'cas';
+// Settings → Storage (issue #436 §7): the owner surface collapsed to ONE
+// choice per vault — "On this device" or "Hosted". There is a single
+// connection model now, the managed provider "home" bundle (snapshots +
+// attachments + previews, all one thing), so this screen has no connection-kind
+// toggle, no "use for" checkboxes, no per-vault tier picker, and no BYO-S3
+// form. It hosts: a guided "connect your storage provider" form, a real Test
+// button, disconnect-with-confirm, the recovery-kit gate as a real blocking
+// dialog (losing the seal key is the one mistake this screen can't let slide),
+// and the per-vault hosted/local toggle. Gateway I/O + the recovery-kit-aware
+// result shapes live in `routes/settingsStorageData.ts`.
 
 export interface StorageConnectionRowDTO {
   id: string;
-  kind: StorageConnectionKind;
   name: string;
-  uses: StorageConnectionUse[];
-  endpoint?: string;
-  region?: string;
-  bucket?: string;
-  prefix?: string;
   baseUrl?: string;
 }
 
-export type StorageConnectionFormInput =
-  | {
-      kind: 'byo-s3';
-      name: string;
-      endpoint: string;
-      region: string;
-      bucket: string;
-      prefix?: string;
-      accessKeyId: string;
-      secretAccessKey: string;
-      sessionToken?: string;
-      uses: StorageConnectionUse[];
-    }
-  | {
-      kind: 'provider';
-      name: string;
-      baseUrl: string;
-      apiKey: string;
-      uses: StorageConnectionUse[];
-    };
+/** The guided connect form (beta): a friendly name, the provider base URL, and
+ *  a key. One kind only — every home is a managed provider bundle. */
+export interface StorageConnectionFormInput {
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+}
 
 export type StorageMutationResult<T> =
   | { ok: true; value: T }
@@ -92,12 +66,6 @@ export interface SettingsStorageBridgeProps {
   detachVaultConnection: () => Promise<VaultBlobStoreDTO>;
   showToast: (message: string) => void;
 }
-
-const KIND_LABEL: Record<StorageConnectionKind, string> = {
-  'byo-s3': 'BYO S3',
-  provider: 'Provider',
-};
-const USE_LABEL: Record<StorageConnectionUse, string> = { backup: 'Backup', cas: 'CAS' };
 
 /** A pending gated mutation — re-invoked by the dialog's two action paths. */
 interface PendingGate {
@@ -160,8 +128,8 @@ function RecoveryKitGateDialog({
         <h3>Before this ships bytes off this machine</h3>
         <p className={styles.gateReason}>{gate.message}</p>
         <p>
-          A remote storage tier is ciphertext without the seal key that made it — if it's ever lost,
-          everything replicated through it becomes unrecoverable. Export the recovery kit once (
+          Hosted storage is ciphertext without the seal key that made it — if it's ever lost,
+          everything stored offsite becomes unrecoverable. Export the recovery kit once (
           <code>centraid-gateway backup kit</code>, or <code>key export</code>) and store it
           somewhere offline before continuing.
         </p>
@@ -204,20 +172,11 @@ function ConnectionRow({
       <div className={styles.rowMeta}>
         <div className={styles.rowHead}>
           <span className={styles.rowName}>{row.name}</span>
-          <span className={styles.kindBadge} data-kind={row.kind}>
-            {KIND_LABEL[row.kind]}
+          <span className={styles.kindBadge} data-kind="provider">
+            Hosted
           </span>
-          {row.uses.map((u) => (
-            <span key={u} className={styles.useBadge}>
-              {USE_LABEL[u]}
-            </span>
-          ))}
         </div>
-        <span className={styles.rowSub}>
-          {row.kind === 'byo-s3'
-            ? `${row.endpoint ?? ''} · ${row.bucket ?? ''}${row.prefix ? ` · ${row.prefix}` : ''}`
-            : row.baseUrl}
-        </span>
+        {row.baseUrl ? <span className={styles.rowSub}>{row.baseUrl}</span> : null}
         {testResult && testResult !== 'testing' ? (
           <span
             className={styles.testResult}
@@ -242,221 +201,82 @@ function ConnectionRow({
           disabled={busy}
           onClick={onDelete}
         >
-          Delete
+          Disconnect
         </button>
       </div>
     </div>
   );
 }
 
-function AddConnectionForm({
+function ConnectProviderForm({
   busy,
+  error,
   onCancel,
   onSubmit,
 }: {
   busy: boolean;
+  error: string | null;
   onCancel: () => void;
   onSubmit: (input: StorageConnectionFormInput) => void;
 }): JSX.Element {
-  const [kind, setKind] = useState<StorageConnectionKind>('byo-s3');
   const [name, setName] = useState('');
-  const [endpoint, setEndpoint] = useState('');
-  const [region, setRegion] = useState('');
-  const [bucket, setBucket] = useState('');
-  const [prefix, setPrefix] = useState('');
-  const [accessKeyId, setAccessKeyId] = useState('');
-  const [secretAccessKey, setSecretAccessKey] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
-  const [usesBackup, setUsesBackup] = useState(true);
-  const [usesCas, setUsesCas] = useState(true);
 
-  const uses: StorageConnectionUse[] = [
-    ...(kind === 'provider' && usesBackup ? (['backup'] as const) : []),
-    ...(usesCas ? (['cas'] as const) : []),
-  ];
-
-  const ready =
-    name.trim().length > 0 &&
-    uses.length > 0 &&
-    (kind === 'byo-s3'
-      ? endpoint.trim().length > 0 &&
-        region.trim().length > 0 &&
-        bucket.trim().length > 0 &&
-        accessKeyId.trim().length > 0 &&
-        secretAccessKey.trim().length > 0
-      : baseUrl.trim().length > 0 && apiKey.trim().length > 0);
+  const ready = baseUrl.trim().length > 0 && apiKey.trim().length > 0;
 
   const submit = (): void => {
     if (!ready) return;
-    if (kind === 'byo-s3') {
-      onSubmit({
-        kind: 'byo-s3',
-        name: name.trim(),
-        endpoint: endpoint.trim(),
-        region: region.trim(),
-        bucket: bucket.trim(),
-        ...(prefix.trim() ? { prefix: prefix.trim() } : {}),
-        accessKeyId: accessKeyId.trim(),
-        secretAccessKey: secretAccessKey.trim(),
-        uses,
-      });
-    } else {
-      onSubmit({
-        kind: 'provider',
-        name: name.trim(),
-        baseUrl: baseUrl.trim(),
-        apiKey: apiKey.trim(),
-        uses,
-      });
-    }
+    onSubmit({
+      name: name.trim() || 'Hosted storage',
+      baseUrl: baseUrl.trim(),
+      apiKey: apiKey.trim(),
+    });
   };
 
   return (
     <div className={styles.wizard}>
-      <div className={styles.kindToggle} role="radiogroup" aria-label="Connection kind">
-        <button
-          type="button"
-          className={styles.kindOption}
-          data-active={String(kind === 'byo-s3')}
-          onClick={() => setKind('byo-s3')}
-        >
-          Bring your own S3
-        </button>
-        <button
-          type="button"
-          className={styles.kindOption}
-          data-active={String(kind === 'provider')}
-          onClick={() => setKind('provider')}
-        >
-          Storage provider
-        </button>
-      </div>
-
       <label className={styles.field}>
-        <span className={styles.fieldLabel}>Name</span>
+        <span className={styles.fieldLabel}>Name (optional)</span>
         <input
           className={styles.textInput}
+          placeholder="Hosted storage"
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
       </label>
+      <label className={styles.field}>
+        <span className={styles.fieldLabel}>Provider URL</span>
+        <input
+          className={styles.textInput}
+          placeholder="https://storage.example.com"
+          value={baseUrl}
+          onChange={(e) => setBaseUrl(e.target.value)}
+        />
+      </label>
+      <label className={styles.field}>
+        <span className={styles.fieldLabel}>Access key</span>
+        <input
+          className={styles.textInput}
+          type="password"
+          autoComplete="off"
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+        />
+      </label>
 
-      {kind === 'byo-s3' ? (
-        <>
-          <div className={styles.fieldRow}>
-            <label className={styles.field}>
-              <span className={styles.fieldLabel}>Endpoint</span>
-              <input
-                className={styles.textInput}
-                placeholder="https://s3.example.com"
-                value={endpoint}
-                onChange={(e) => setEndpoint(e.target.value)}
-              />
-            </label>
-            <label className={styles.field}>
-              <span className={styles.fieldLabel}>Region</span>
-              <input
-                className={styles.textInput}
-                placeholder="auto"
-                value={region}
-                onChange={(e) => setRegion(e.target.value)}
-              />
-            </label>
-          </div>
-          <div className={styles.fieldRow}>
-            <label className={styles.field}>
-              <span className={styles.fieldLabel}>Bucket</span>
-              <input
-                className={styles.textInput}
-                value={bucket}
-                onChange={(e) => setBucket(e.target.value)}
-              />
-            </label>
-            <label className={styles.field}>
-              <span className={styles.fieldLabel}>Prefix (optional)</span>
-              <input
-                className={styles.textInput}
-                value={prefix}
-                onChange={(e) => setPrefix(e.target.value)}
-              />
-            </label>
-          </div>
-          <div className={styles.fieldRow}>
-            <label className={styles.field}>
-              <span className={styles.fieldLabel}>Access key ID</span>
-              <input
-                className={styles.textInput}
-                autoComplete="off"
-                value={accessKeyId}
-                onChange={(e) => setAccessKeyId(e.target.value)}
-              />
-            </label>
-            <label className={styles.field}>
-              <span className={styles.fieldLabel}>Secret access key</span>
-              <input
-                className={styles.textInput}
-                type="password"
-                autoComplete="off"
-                value={secretAccessKey}
-                onChange={(e) => setSecretAccessKey(e.target.value)}
-              />
-            </label>
-          </div>
-        </>
-      ) : (
-        <div className={styles.fieldRow}>
-          <label className={styles.field}>
-            <span className={styles.fieldLabel}>Base URL</span>
-            <input
-              className={styles.textInput}
-              placeholder="https://api.example.com"
-              value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
-            />
-          </label>
-          <label className={styles.field}>
-            <span className={styles.fieldLabel}>API key</span>
-            <input
-              className={styles.textInput}
-              type="password"
-              autoComplete="off"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-            />
-          </label>
+      {error ? (
+        <div className={styles.gateError} data-testid="connect-error">
+          {error}
         </div>
-      )}
-
-      <div className={styles.usesRow}>
-        <span className={styles.fieldLabel}>Use for</span>
-        {kind === 'provider' ? (
-          <label className={styles.checkLabel}>
-            <input
-              type="checkbox"
-              checked={usesBackup}
-              onChange={(e) => setUsesBackup(e.target.checked)}
-            />
-            Encrypted backup snapshots
-          </label>
-        ) : (
-          <span className={controlsCss.note}>
-            Direct S3 is for blob replication. Recoverable snapshots require a storage provider with
-            retention and takeover protection.
-          </span>
-        )}
-        <label className={styles.checkLabel}>
-          <input type="checkbox" checked={usesCas} onChange={(e) => setUsesCas(e.target.checked)} />
-          CAS blob replication
-        </label>
-      </div>
+      ) : null}
 
       <div className={styles.wizardFoot}>
         <Button variant="ghost" size="sm" label="Cancel" onClick={onCancel} />
         <Button
           variant="primary"
           size="sm"
-          label={busy ? 'Saving…' : 'Add connection'}
+          label={busy ? 'Connecting…' : 'Connect'}
           disabled={!ready || busy}
           onClick={submit}
         />
@@ -465,83 +285,71 @@ function AddConnectionForm({
   );
 }
 
-function VaultAttachSection({
-  connections,
+/** The one binary this whole screen exists to set: is this vault's data kept
+ *  only on this device, or an encrypted copy hosted with your provider? */
+function VaultStorageChoice({
+  homeConnectionId,
   blobStore,
   busy,
   onAttach,
   onDetach,
 }: {
-  connections: StorageConnectionRowDTO[];
+  homeConnectionId: string | undefined;
   blobStore: VaultBlobStoreDTO | null;
   busy: boolean;
   onAttach: (connectionId: string) => void;
   onDetach: () => void;
 }): JSX.Element {
-  const casConnections = connections.filter((c) => c.uses.includes('cas'));
-  const [selected, setSelected] = useState(casConnections[0]?.id ?? '');
-
-  useEffect(() => {
-    if (!casConnections.some((c) => c.id === selected)) {
-      setSelected(casConnections[0]?.id ?? '');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#367) re-seed only when the CAS-capable set changes
-  }, [casConnections.map((c) => c.id).join(',')]);
-
-  if (casConnections.length === 0) {
-    return (
-      <div className={controlsCss.note}>
-        Add a connection above with “CAS blob replication” enabled to give this vault a remote CAS
-        tier.
-      </div>
-    );
+  if (blobStore === null) {
+    return <div className={controlsCss.note}>Reading this vault's storage settings…</div>;
   }
+  const hosted = blobStore.kind === 's3';
+  const hostedDisabled = !homeConnectionId || busy;
 
-  const attached =
-    blobStore?.kind === 's3' ? connections.find((c) => c.id === blobStore.connectionId) : undefined;
+  const chooseDevice = (): void => {
+    if (hosted && !busy) onDetach();
+  };
+  const chooseHosted = (): void => {
+    if (!hosted && homeConnectionId && !busy) onAttach(homeConnectionId);
+  };
 
   return (
     <div className={styles.attachRow}>
-      <div className={styles.attachStatus}>
-        {blobStore === null ? (
-          <span className={controlsCss.note}>Reading this vault's storage settings…</span>
-        ) : blobStore.kind === 's3' ? (
-          <span>
-            This vault's blobs replicate through{' '}
-            <strong>{attached?.name ?? blobStore.connectionId}</strong>.
-          </span>
-        ) : (
-          <span>This vault stores blobs locally only — no remote CAS tier attached.</span>
-        )}
+      <div
+        className={styles.binaryToggle}
+        role="radiogroup"
+        aria-label="Where this vault is stored"
+      >
+        <button
+          type="button"
+          role="radio"
+          aria-checked={!hosted}
+          className={styles.binaryOption}
+          data-active={String(!hosted)}
+          disabled={busy}
+          onClick={chooseDevice}
+        >
+          On this device
+        </button>
+        <button
+          type="button"
+          role="radio"
+          aria-checked={hosted}
+          className={styles.binaryOption}
+          data-active={String(hosted)}
+          disabled={hostedDisabled}
+          onClick={chooseHosted}
+        >
+          Hosted
+        </button>
       </div>
-      <div className={styles.attachControls}>
-        <span className={selectCss.selectWrap}>
-          <select
-            className={selectCss.select}
-            value={selected}
-            onChange={(e) => setSelected(e.target.value)}
-            disabled={busy}
-          >
-            {casConnections.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </span>
-        <Button
-          variant="soft"
-          size="sm"
-          label="Attach"
-          disabled={busy || !selected}
-          onClick={() => onAttach(selected)}
-        />
-        {blobStore?.kind === 's3' ? (
-          <button type="button" className={controlsCss.chip} disabled={busy} onClick={onDetach}>
-            Detach
-          </button>
-        ) : null}
-      </div>
+      <p className={styles.attachStatus}>
+        {hosted
+          ? 'Snapshots, attachments, and previews are kept as one sealed bundle with your provider.'
+          : homeConnectionId
+            ? 'Everything stays on this machine. Switch to Hosted to keep an encrypted offsite copy.'
+            : 'Everything stays on this machine. Connect a storage provider above to turn on hosted storage.'}
+      </p>
     </div>
   );
 }
@@ -561,6 +369,7 @@ export default function SettingsStorageScreen({
   const [blobStore, setBlobStore] = useState<VaultBlobStoreDTO | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [attachBusy, setAttachBusy] = useState(false);
   const [testResults, setTestResults] = useState<Map<string, 'testing' | StorageTestResult>>(
@@ -578,7 +387,7 @@ export default function SettingsStorageScreen({
         .then(setBlobStore)
         .catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)));
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#367) mirrors SettingsConnectionsScreen: track loader identities only
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#436) mirrors SettingsConnectionsScreen: track loader identities only
     [loadConnections, loadVaultBlobStore],
   );
 
@@ -588,7 +397,7 @@ export default function SettingsStorageScreen({
     return () => {
       mountedRef.current = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#367) mount-once refresh keyed to loader identities, not refresh's own identity
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#436) mount-once refresh keyed to loader identities, not refresh's own identity
   }, [loadConnections, loadVaultBlobStore]);
 
   const withBusy = (id: string, fn: () => Promise<void>): void => {
@@ -612,6 +421,7 @@ export default function SettingsStorageScreen({
     const result = await createConnection(input, opts);
     if (result.ok) {
       setWizardOpen(false);
+      setFormError(null);
       refresh();
       return;
     }
@@ -624,8 +434,9 @@ export default function SettingsStorageScreen({
 
   const onSubmitWizard = (input: StorageConnectionFormInput): void => {
     setSaving(true);
+    setFormError(null);
     runCreate(input)
-      .catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)))
+      .catch((err: unknown) => setFormError(err instanceof Error ? err.message : String(err)))
       .finally(() => setSaving(false));
   };
 
@@ -681,22 +492,46 @@ export default function SettingsStorageScreen({
     })();
   };
 
+  const homeConnectionId = rows?.[0]?.id;
+
   return (
     <div className={drawerGroupCss.group}>
-      <div className={drawerGroupCss.groupLabel}>Storage connections</div>
+      <div className={drawerGroupCss.groupLabel}>Hosted storage</div>
       <div className={drawerGroupCss.groupBody}>
         <div className={controlsCss.note}>
-          Where offsite backup snapshots and replicated blobs go. Connections never carry a saved
-          secret back to this screen — credentials are sealed on the gateway host.
+          Keep an encrypted copy of this profile with a storage provider — snapshots, attachments,
+          and previews, all sealed on your device before they leave it. The provider only ever sees
+          ciphertext.
         </div>
 
-        <div className={styles.panel}>
-          {rows === null ? (
-            <div className={controlsCss.note}>Reading connections…</div>
-          ) : rows.length === 0 ? (
-            <div className={inlineEmptyCss.inlineEmpty}>No storage connections configured yet.</div>
+        {rows === null ? (
+          <div className={controlsCss.note}>Reading storage…</div>
+        ) : rows.length === 0 ? (
+          wizardOpen ? (
+            <ConnectProviderForm
+              busy={saving}
+              error={formError}
+              onCancel={() => {
+                setWizardOpen(false);
+                setFormError(null);
+              }}
+              onSubmit={onSubmitWizard}
+            />
           ) : (
-            rows.map((row) => (
+            <>
+              <div className={inlineEmptyCss.inlineEmpty}>No storage provider connected yet.</div>
+              <Button
+                variant="soft"
+                size="sm"
+                icon="Plus"
+                label="Connect your storage provider"
+                onClick={() => setWizardOpen(true)}
+              />
+            </>
+          )
+        ) : (
+          <div className={styles.panel}>
+            {rows.map((row) => (
               <ConnectionRow
                 key={row.id}
                 row={row}
@@ -705,31 +540,15 @@ export default function SettingsStorageScreen({
                 onTest={() => onTest(row.id)}
                 onDelete={() => onDelete(row)}
               />
-            ))
-          )}
-        </div>
-
-        {wizardOpen ? (
-          <AddConnectionForm
-            busy={saving}
-            onCancel={() => setWizardOpen(false)}
-            onSubmit={onSubmitWizard}
-          />
-        ) : (
-          <Button
-            variant="soft"
-            size="sm"
-            icon="Plus"
-            label="Add connection"
-            onClick={() => setWizardOpen(true)}
-          />
+            ))}
+          </div>
         )}
       </div>
 
-      <div className={drawerGroupCss.groupLabel}>This vault's CAS tier</div>
+      <div className={drawerGroupCss.groupLabel}>This vault</div>
       <div className={drawerGroupCss.groupBody}>
-        <VaultAttachSection
-          connections={rows ?? []}
+        <VaultStorageChoice
+          homeConnectionId={homeConnectionId}
           blobStore={blobStore}
           busy={attachBusy}
           onAttach={onAttach}

@@ -6,6 +6,7 @@ import {
   detachVaultStorageConnection,
   getVaultBlobStore,
   listStorageConnections,
+  ProviderNotHomeProfileError,
   RecoveryKitNotConfirmedError,
   testStorageConnection as gwTestStorageConnection,
   type StorageConnectionDTO,
@@ -18,24 +19,15 @@ import type {
   VaultBlobStoreDTO,
 } from '../../screens/SettingsStorageScreen.js';
 
-// Settings → Storage data layer (issue #367 §D4): maps the gateway's
-// storage-connection surface (`gateway-client-storage.ts`) onto the
-// screen's own DTOs, and hosts the recovery-kit-aware result shape so the
-// screen never needs to import the error class to distinguish "blocked by
-// the gate" from "just failed" — see `StorageMutationResult`.
+// Settings → Storage data layer (issue #436 §7): maps the gateway's storage
+// surface onto the collapsed hosted-vs-local screen. There is exactly ONE
+// connection model now — the managed provider "home" bundle (snapshots + cas +
+// derived). This layer also hosts the recovery-kit-aware and home-profile-aware
+// result shapes so the screen never imports the gateway error classes to tell
+// "blocked by the gate" from "not a valid home" from "just failed".
 
 function toRowDTO(c: StorageConnectionDTO): StorageConnectionRowDTO {
-  return {
-    id: c.id,
-    kind: c.kind,
-    name: c.name,
-    uses: c.uses,
-    ...(c.endpoint ? { endpoint: c.endpoint } : {}),
-    ...(c.region ? { region: c.region } : {}),
-    ...(c.bucket ? { bucket: c.bucket } : {}),
-    ...(c.prefix ? { prefix: c.prefix } : {}),
-    ...(c.baseUrl ? { baseUrl: c.baseUrl } : {}),
-  };
+  return { id: c.id, name: c.name, ...(c.baseUrl ? { baseUrl: c.baseUrl } : {}) };
 }
 
 export async function loadStorageConnectionsData(): Promise<StorageConnectionRowDTO[]> {
@@ -48,11 +40,25 @@ export async function createStorageConnection(
   opts?: { force?: boolean },
 ): Promise<StorageMutationResult<StorageConnectionRowDTO>> {
   try {
-    const connection = await gwCreateStorageConnection(input, opts);
+    const connection = await gwCreateStorageConnection(
+      { kind: 'provider', name: input.name, baseUrl: input.baseUrl, apiKey: input.apiKey },
+      opts,
+    );
     return { ok: true, value: toRowDTO(connection) };
   } catch (err) {
     if (err instanceof RecoveryKitNotConfirmedError) {
       return { ok: false, code: 'recovery_kit_not_confirmed', message: err.message };
+    }
+    if (err instanceof ProviderNotHomeProfileError) {
+      const missing =
+        err.missingCapabilities.length > 0
+          ? ` It’s missing: ${err.missingCapabilities.join(', ')}.`
+          : '';
+      return {
+        ok: false,
+        code: 'error',
+        message: `This provider can’t be a home for your data.${missing} A home needs to keep snapshots, store your sealed files, meter usage, and prove restores work.`,
+      };
     }
     return { ok: false, code: 'error', message: err instanceof Error ? err.message : String(err) };
   }
@@ -60,12 +66,10 @@ export async function createStorageConnection(
 
 /**
  * A real, irreversible delete — confirm-gated the same way Connections'
- * remove action is (`makeDetachConnection`, settingsConnectionsData.ts):
- * the promise-based dialog the Spaces page also uses before deleting a
- * space. Deleting a connection doesn't touch any vault's replicated
- * bytes — it only removes the gateway's pointer + sealed credential — but
- * it's still a "you'll need to re-enter credentials to undo this" action,
- * so it gets the same confirm step as any other delete in this app.
+ * remove action is. Deleting the home connection doesn't touch any bytes
+ * already replicated — it only removes the gateway's pointer + sealed
+ * credential — but it's still a "you'll need to reconnect to undo this"
+ * action, so it gets the same confirm step as any other delete in this app.
  */
 export function makeDeleteStorageConnection(
   confirm: (opts: {
@@ -77,10 +81,10 @@ export function makeDeleteStorageConnection(
 ): (id: string, name: string) => Promise<void> {
   return async (id, name) => {
     const ok = await confirm({
-      confirmLabel: 'Delete',
+      confirmLabel: 'Disconnect',
       danger: true,
-      message: `Delete "${name}"? This removes the connection and its saved credential from this gateway. It doesn't touch any bytes already replicated — but you'll need to re-enter credentials to reattach it.`,
-      title: 'Delete storage connection?',
+      message: `Disconnect "${name}"? This removes the provider and its saved credential from this gateway. It doesn't touch any bytes already stored — but you'll need to reconnect to use hosted storage again.`,
+      title: 'Disconnect storage provider?',
     });
     if (!ok) return;
     await gwDeleteStorageConnection(id);
@@ -126,8 +130,8 @@ export async function attachVaultConnection(
   }
 }
 
-/** Revert to local-only storage (`blob_store: {kind: 'fs'}`) — never gated
- *  by the recovery kit (going local-only is always safe). */
+/** Revert to on-device storage (`blob_store: {kind: 'fs'}`) — never gated by
+ *  the recovery kit (going local-only is always safe). */
 export async function detachVaultConnection(): Promise<VaultBlobStoreDTO> {
   const settings = await detachVaultStorageConnection();
   return settings.kind === 's3'

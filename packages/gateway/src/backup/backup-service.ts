@@ -21,6 +21,7 @@ import {
   verifySnapshot,
   type BackupProvider,
   type Keyring,
+  type Retention,
   type RestoreResult,
   type SnapshotRow,
   type SourceEntry,
@@ -76,6 +77,7 @@ import {
   failedCasOnlyReconciliation,
   runCasOnlyReconciliation,
 } from './backup-cas-reconciliation.js';
+import { snapshotReferencedBlobShas } from './snapshot-blob-roots.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -148,7 +150,19 @@ export interface BackupServiceOptions {
  */
 export type LazyRestoreResult = RestoreResult & { previewsWarm?: PreviewsWarmResult };
 
+/** The home bundle's provider-declared promises for the five-metric contract
+ *  (#436 §6) — Recovery window and Exit read these two fields. */
+export interface HomeDiscovery {
+  retention: Retention;
+  restoreCostClass: 'free-egress' | 'metered-egress';
+}
+
+/** Discovery is stable per provider; a short TTL keeps the 10s status poll off
+ *  the provider's `/v1/storage/provider` endpoint on every tick. */
+const HOME_DISCOVERY_TTL_MS = 5 * 60 * 1000;
+
 export class BackupService {
+  private homeDiscoveryCache: { at: number; value: HomeDiscovery } | undefined;
   private readonly config: BackupConfig | undefined;
   private readonly backupDir: string;
   private readonly vaults: VaultRegistry;
@@ -211,6 +225,28 @@ export class BackupService {
   async configured(): Promise<{ configured: boolean; provider?: string }> {
     const backend = await this.backend();
     return backend ? { configured: true, provider: backend.label } : { configured: false };
+  }
+
+  /**
+   * The home bundle's provider-declared promises the five-metric contract
+   * (#436 §6) reads for Recovery window (`retention`) and Exit
+   * (`restoreCostClass`) — sourced from the discovery document
+   * (`GET /v1/storage/provider`, PROTOCOL.md § Layer 2 — backup). Cached for
+   * `HOME_DISCOVERY_TTL_MS` so the 10s status poll doesn't re-hit the provider
+   * each time. `undefined` when backup isn't configured (no provider to ask).
+   */
+  async homeDiscovery(): Promise<HomeDiscovery | undefined> {
+    const backend = await this.backend();
+    if (!backend) return undefined;
+    const at = this.now();
+    const cached = this.homeDiscoveryCache;
+    if (cached && at - cached.at < HOME_DISCOVERY_TTL_MS) return cached.value;
+    const caps = await backend.provider.capabilities();
+    const value: HomeDiscovery = caps.backup
+      ? { retention: caps.backup.retention, restoreCostClass: caps.backup.restoreCostClass }
+      : { retention: { kind: 'none' }, restoreCostClass: 'free-egress' };
+    this.homeDiscoveryCache = { at, value };
+    return value;
   }
 
   private async probe(): Promise<{ status: 'ok' | 'degraded' | 'error'; detail?: string }> {
@@ -336,8 +372,39 @@ export class BackupService {
   private async syncEnabledPolicies(): Promise<void> {
     const state = await loadBackupState(this.backupDir);
     for (const plane of this.vaults.planesList()) {
-      if (state.targets[plane.boot.vaultId]) await this.syncPolicy(plane.boot.vaultId);
+      const vaultId = plane.boot.vaultId;
+      if (!state.targets[vaultId]) continue;
+      this.attachSnapshotRoots(plane);
+      await this.syncPolicy(vaultId);
     }
+  }
+
+  /**
+   * Wire a vault plane's blob sweep to the retained-snapshot GC roots (issue
+   * #436 §6). The plane's client-owned CAS orphan-delete consults this before
+   * every sweep so it can never evict an object a recovery-to-N still needs.
+   * The closure re-reads the current target each call (target id can change),
+   * and throws on any read/authenticate failure — the sweep translates that
+   * into skipping the delete phase (fail safe, never fail open). Idempotent:
+   * setting it again on an already-wired plane is harmless.
+   */
+  private attachSnapshotRoots(plane: VaultPlane): void {
+    const vaultId = plane.boot.vaultId;
+    plane.snapshotBlobRoots = async (): Promise<ReadonlySet<string>> => {
+      const backend = await this.backend();
+      if (!backend) return new Set<string>();
+      const state = await loadBackupState(this.backupDir);
+      const target = state.targets[vaultId];
+      // No target ⇒ no registered snapshots for this vault ⇒ no roots to pin.
+      if (!target) return new Set<string>();
+      return snapshotReferencedBlobShas({
+        provider: backend.provider,
+        targetId: target.targetId,
+        vaultId,
+        keyring: await this.ensureKeyring(),
+        manifestBlobCache: this.manifestBlobCache,
+      });
+    };
   }
 
   // ── Backup ────────────────────────────────────────────────────────────
@@ -421,6 +488,10 @@ export class BackupService {
       state.targets[vaultId] = target;
       await saveBackupState(this.backupDir, state);
     }
+    // Pin this vault's blob sweep to its retained-snapshot GC roots (issue
+    // #436 §6) the moment a target exists — before the first snapshot lands, so
+    // no orphan-delete can ever race ahead of the reachability set.
+    this.attachSnapshotRoots(plane);
     const desiredPolicy = providerPolicyFor(readBackupPolicy(plane.db.vault));
     if (
       createdTarget ||
@@ -860,6 +931,7 @@ export class BackupService {
           db: plane.db,
           ...(this.storageConnections ? { storageConnections: this.storageConnections } : {}),
           ...(target.walMarkerTips ? { walMarkerTips: target.walMarkerTips } : {}),
+          manifestBlobCache: this.manifestBlobCache,
           verifyBucket,
           checkedAt,
         });
@@ -1043,6 +1115,8 @@ export class BackupService {
   private lastAutoBackupAttemptMs = new Map<string, number>();
   /** `manifestHash → walGenerations` memo for the prune's keep-set. */
   private readonly manifestGenerationCache = new Map<string, string[]>();
+  /** `manifestHash → blob shas` memo for the retained-snapshot GC roots (#436 §6). */
+  private readonly manifestBlobCache = new Map<string, string[]>();
 
   /**
    * Every WAL generation an AUTHENTICATED manifest on the provider names —
@@ -1303,6 +1377,10 @@ export class BackupService {
       let state = await loadBackupState(this.backupDir);
       let target = state.targets[vaultId];
       if (target?.fenced) continue;
+      // Keep the plane's blob sweep pinned to the retained-snapshot GC roots
+      // (issue #436 §6) for every backup-configured vault — covers planes
+      // mounted lazily after start, before their first scheduled backup.
+      if (backupConfigured && target) this.attachSnapshotRoots(plane);
       if (backupConfigured) {
         const backupDue =
           !target?.lastBackupAt ||

@@ -247,6 +247,24 @@ test('custody replicates local bytes to the remote tier and reconciles orphans',
   expect(remoteStore.hasSync(orphan)).toBe(false);
 });
 
+test('a retained-snapshot GC root is pinned, never deleted as an orphan (issue #436 §6)', async () => {
+  const remoteStore = new MemoryBlobStore();
+  const { custody } = makeCustody({ store: remoteStore });
+  // `pinned` lives only in the remote CAS — the live vault model no longer
+  // claims it, but a retained snapshot still references it. `stray` is a true
+  // orphan nothing references at all.
+  const pinned = sha256OfBytes(Buffer.from('recovery-window byte'));
+  const stray = sha256OfBytes(Buffer.from('genuine orphan'));
+  remoteStore.putSync(pinned, Buffer.from('recovery-window byte'));
+  remoteStore.putSync(stray, Buffer.from('genuine orphan'));
+
+  const result = await custody.reconcile(new Set(), { extraLiveRoots: new Set([pinned]) });
+
+  expect(result.orphansDeleted).toEqual([stray]);
+  expect(remoteStore.hasSync(pinned)).toBe(true); // pinned survived the sweep
+  expect(remoteStore.hasSync(stray)).toBe(false);
+});
+
 test('sweepStatus records the last reconcile outcome (issue #351 wave 4)', async () => {
   const { custody } = makeCustody(null);
   expect(custody.sweepStatus()).toEqual({

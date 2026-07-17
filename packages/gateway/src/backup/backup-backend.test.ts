@@ -20,7 +20,7 @@ describe('resolveBackupBackend', () => {
     });
   });
 
-  it('activates the provider connection marked for backup', async () => {
+  it('activates the single home connection (#436 §7)', async () => {
     const resolveProviderApiKey = vi.fn().mockResolvedValue('sk-live');
     const storageConnections = {
       list: async () => [
@@ -28,7 +28,6 @@ describe('resolveBackupBackend', () => {
           id: 'provider-1',
           kind: 'provider',
           name: 'Clawgnition',
-          uses: ['backup', 'cas'],
           baseUrl: 'https://storage.example',
         },
       ],
@@ -43,9 +42,9 @@ describe('resolveBackupBackend', () => {
     expect(resolveProviderApiKey).toHaveBeenCalledWith('provider-1');
   });
 
-  it('does not mistake a direct S3 CAS connection for a backup provider', async () => {
+  it('returns undefined when no connection is configured', async () => {
     const storageConnections = {
-      list: async () => [{ id: 's3-1', kind: 'byo-s3', uses: ['cas'] }],
+      list: async () => [],
     } as unknown as StorageConnectionStore;
     expect(await resolveBackupBackend({ storageConnections })).toBeUndefined();
   });

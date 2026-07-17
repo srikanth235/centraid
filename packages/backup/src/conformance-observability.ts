@@ -119,7 +119,15 @@ export function providerObservabilityConformanceCases(
           assert.equal(rejected.code, 'policy_unmet');
           assert.equal(rejected.status, 422);
           assert.equal(rejected.details?.field, 'rpoSeconds');
-          assert.equal(rejected.details?.minimum, 30);
+          // PROTOCOL.md § "Declared policy" makes 30 the *protocol floor* for
+          // rpoSeconds — a lower bound. A provider MAY enforce a stricter
+          // (higher) business floor and report that as the violated minimum, so
+          // the reported minimum must be at least the protocol floor, not
+          // exactly it. (rpoSeconds: 29 is below every conformant floor.)
+          assert.ok(
+            typeof rejected.details?.minimum === 'number' && rejected.details.minimum >= 30,
+            `rpoSeconds minimum must be >= the protocol floor of 30, got ${String(rejected.details?.minimum)}`,
+          );
         }),
     },
     {

@@ -488,8 +488,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   instanceLease.claim();
 
   // Gateway-level storage state (issue #367 §C1/§C10): the storage-
-  // connections entity (sealed byo-s3 creds / provider api keys, shared by
-  // the backup engine and every vault's CAS tier) and the recovery-kit
+  // connection entity (a sealed provider api key, shared by the backup
+  // engine and every vault's CAS tier) and the recovery-kit
   // confirmation flag, generalized off the backup-only field it started as.
   // Both live under `paths.storageDir` (default a `storage` sibling of
   // `vaultDir`, same convention as `backupDir`) — gateway plumbing, never

@@ -121,6 +121,20 @@ export interface ReconcileOptions {
    * only the destructive delete phase pauses.
    */
   skipOrphanDelete?: boolean;
+  /**
+   * Retained-snapshot GC roots (issue #436 §6 — the GC-pins-snapshots
+   * invariant). Blob shas referenced by any RETAINED backup snapshot manifest
+   * that the caller has authenticated. A remote object one of these names is
+   * NEVER an orphan, even when the live vault model no longer references it:
+   * CAS keeps no history of its own, so a past-but-retained snapshot's
+   * reference IS the only record that the byte is still needed for a
+   * recovery-to-N. Deleting it would silently break the recovery window for
+   * exactly the attachments users care most about. The caller (the gateway
+   * layer that owns the backup provider) computes this set; whenever it cannot
+   * prove reachability it MUST fail safe by also setting `skipOrphanDelete`
+   * rather than passing an incomplete set.
+   */
+  extraLiveRoots?: ReadonlySet<string>;
 }
 
 /**

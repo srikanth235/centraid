@@ -17,16 +17,17 @@
  * gateway simply never puts one on the wire (storage-connections.ts).
  */
 
+/* eslint-disable max-classes-per-file -- the two typed gate errors (recovery-kit + home-profile) are one storage-connection boundary (#436) */
+
 import { auth, authHeaders, doFetch, enc, readJson } from './gateway-client-core.js';
 
-export type StorageConnectionKind = 'byo-s3' | 'provider';
-export type StorageConnectionUse = 'backup' | 'cas';
+/** One kind only (#436 §2): every connection is a managed provider home bundle. */
+export type StorageConnectionKind = 'provider';
 
 export interface StorageConnectionDTO {
   id: string;
   kind: StorageConnectionKind;
   name: string;
-  uses: StorageConnectionUse[];
   createdAt: string;
   updatedAt: string;
   endpoint?: string;
@@ -37,30 +38,14 @@ export interface StorageConnectionDTO {
   targetId?: string;
 }
 
-export interface CreateByoS3ConnectionInput {
-  kind: 'byo-s3';
-  name: string;
-  endpoint: string;
-  region: string;
-  bucket: string;
-  prefix?: string;
-  accessKeyId: string;
-  secretAccessKey: string;
-  sessionToken?: string;
-  uses?: StorageConnectionUse[];
-}
-
 export interface CreateProviderConnectionInput {
   kind: 'provider';
   name: string;
   baseUrl: string;
   apiKey: string;
-  uses?: StorageConnectionUse[];
 }
 
-export type CreateStorageConnectionInput =
-  | CreateByoS3ConnectionInput
-  | CreateProviderConnectionInput;
+export type CreateStorageConnectionInput = CreateProviderConnectionInput;
 
 /** Thrown for the recovery-kit gate specifically, so callers can branch on
  *  it without string-matching a generic `GatewayClientError`. */
@@ -69,6 +54,29 @@ export class RecoveryKitNotConfirmedError extends Error {
     super(message);
     this.name = 'RecoveryKitNotConfirmedError';
   }
+}
+
+/** Thrown when the provider doesn't advertise the `home` profile (issue #436
+ *  §1) — the create/attach route's 400 `provider_not_home_profile`. Carries the
+ *  parsed list of missing home capabilities so the UI can name them plainly. */
+export class ProviderNotHomeProfileError extends Error {
+  readonly missingCapabilities: string[];
+  constructor(message: string, missingCapabilities: string[]) {
+    super(message);
+    this.name = 'ProviderNotHomeProfileError';
+    this.missingCapabilities = missingCapabilities;
+  }
+}
+
+/** Pull the `(missing a, b, c)` clause out of the gateway's home-profile
+ *  message into a clean capability list. Empty when none was named. */
+function parseMissingCapabilities(message: string | undefined): string[] {
+  const match = /missing ([^)]+)\)/.exec(message ?? '');
+  if (!match || !match[1]) return [];
+  return match[1]
+    .split(',')
+    .map((c) => c.trim())
+    .filter((c) => c.length > 0);
 }
 
 /** Every configured storage connection (never carries a secret field). */
@@ -106,6 +114,16 @@ export async function createStorageConnection(
     throw new RecoveryKitNotConfirmedError(
       body.message ?? 'confirm the recovery kit before enabling a remote storage tier',
     );
+  }
+  if (res.status === 400) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+    if (body.error === 'provider_not_home_profile') {
+      throw new ProviderNotHomeProfileError(
+        body.message ?? 'this provider does not advertise the home profile',
+        parseMissingCapabilities(body.message),
+      );
+    }
+    throw new Error(body.message ?? 'create storage connection failed (HTTP 400)');
   }
   const out = await readJson<{ connection: StorageConnectionDTO }>(
     res,
@@ -270,8 +288,9 @@ export interface StoreUsageReportDTO {
 export interface StorageConnectionUsageDTO {
   connectionId: string;
   kind: StorageConnectionKind;
-  /** `null` for byo-s3 (no metering endpoint) or before the first successful poll. */
-  providerReported: Partial<Record<'backup' | 'cas', StoreUsageReportDTO>> | null;
+  /** `null` before the first successful poll, or if the provider doesn't meter.
+   *  Keyed by store class — `backup`, `cas`, `derived` (PROTOCOL.md StoreClass). */
+  providerReported: Partial<Record<'backup' | 'cas' | 'derived', StoreUsageReportDTO>> | null;
   /** Locally-computed replicated bytes (custody's own ground truth) — compare
    *  against `providerReported` for an honest drift/integrity read. */
   localReplicatedBytes: number;
@@ -293,7 +312,7 @@ export async function getStorageUsage(): Promise<StorageConnectionUsageDTO[]> {
 export interface BlobStoreSettingsDTO {
   kind: 'fs' | 's3';
   connectionId?: string;
-  connectionKind?: StorageConnectionKind;
+  connectionKind?: 'provider';
   endpoint?: string;
   region?: string;
   bucket?: string;

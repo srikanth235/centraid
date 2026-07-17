@@ -99,18 +99,18 @@ export interface BlobStoreSettings {
   /**
    * The gateway-level `storage-connections` entity (#367 §C1) this vault's
    * remote tier resolves credentials from. When set, `s3Credentials` is
-   * expected to resolve creds keyed off this id (byo-s3: the sealed
-   * sidecar; provider: a short-lived `requestCasGrant`). Absent = the
-   * legacy harness-ambient env-var lane (`VaultPlaneOptions`'s default
+   * expected to resolve creds keyed off this id (a short-lived
+   * `requestCasGrant` against the provider). Absent = the legacy
+   * harness-ambient env-var lane (`VaultPlaneOptions`'s default
    * `s3Credentials`).
    */
   connectionId?: string;
   /**
    * Denormalized copy of the connection's kind, stamped by the gateway
-   * whenever it wires `connectionId` (issue #367 §C4). Encryption no longer
-   * varies by connection kind; all remote CAS objects use CBSF.
+   * whenever it wires `connectionId` (issue #367 §C4). Only `provider`
+   * connections exist now (#436 §2); all remote CAS objects use CBSF.
    */
-  connectionKind?: 'byo-s3' | 'provider';
+  connectionKind?: 'provider';
   /**
    * Upload rate cap for the replication path, bytes/sec (issue #367 §C7,
    * simple token bucket in `S3BlobStore`). Omitted/0 = unthrottled.

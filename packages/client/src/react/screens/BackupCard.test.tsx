@@ -1,9 +1,11 @@
+// governance: allow-repo-hygiene file-size-limit (#436) one suite per screen — the five-metric surface, diagnostics disclosure, recovery-kit gate, and policy/inventory cases all exercise the single BackupCard contract and share its render/bridge fixtures
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import BackupCard, { type BackupStatusDTO } from './BackupCard.js';
 import type { BackupPolicyDTO, BackupPolicyPatchDTO } from './BackupPolicyPanel.js';
 import type { BackupReconciliationDTO } from './BackupInventoryPanel.js';
+import type { UsageInput } from '../../storage-metrics.js';
 
 const NOW = Date.UTC(2026, 6, 11, 12, 0, 0);
 
@@ -20,6 +22,7 @@ afterEach(() => {
 
 async function mount(props: {
   loadStatus: () => Promise<BackupStatusDTO>;
+  loadUsage?: () => Promise<UsageInput | null>;
   streamCustody?: (onChange: () => void, signal: AbortSignal) => Promise<void>;
   onRunNow: () => Promise<{ accepted: boolean; alreadyRunning?: boolean }>;
   onConfirmRecoveryKit?: () => Promise<{ confirmedAt: number }>;
@@ -41,6 +44,7 @@ async function mount(props: {
       <BackupCard
         now={props.now ?? NOW}
         loadStatus={props.loadStatus}
+        loadUsage={props.loadUsage}
         streamCustody={props.streamCustody}
         onRunNow={props.onRunNow}
         onConfirmRecoveryKit={props.onConfirmRecoveryKit ?? neverConfirmKit}
@@ -63,7 +67,6 @@ const POLICY: BackupPolicyDTO = {
   rpoSeconds: 60,
   snapshotIntervalHours: 24,
   verifyEveryDays: 7,
-  casAck: 'receipt',
   outboxBudgetBytes: 512 * 1024 ** 2,
   reservedHeadroomBytes: 256 * 1024 ** 2,
   walBaseRollBytes: 16 * 1024 ** 2,
@@ -76,7 +79,7 @@ describe('BackupCard — not configured', () => {
       loadStatus: vi.fn().mockResolvedValue({ configured: false, vaults: [] }),
       onRunNow: neverRun,
     });
-    expect(el.textContent).toContain('Backups aren’t set up yet');
+    expect(el.textContent).toContain('isn’t backed up offsite yet');
     expect(el.textContent).toContain('Settings → Storage');
     expect(el.textContent).toContain('somewhere offline');
     expect(
@@ -491,5 +494,127 @@ describe('BackupCard — recovery-kit gate', () => {
     } as BackupStatusDTO;
     const el = await mount({ loadStatus: vi.fn().mockResolvedValue(status), onRunNow: neverRun });
     expect(el.querySelector('[data-testid="recovery-kit-gate"]')).not.toBeNull();
+  });
+});
+
+describe('BackupCard — five-metric surface (§6)', () => {
+  const freshStatus: BackupStatusDTO = {
+    configured: true,
+    provider: 'Clawgnition',
+    vaults: [
+      {
+        vaultId: 'v1',
+        name: 'Main',
+        policy: POLICY,
+        destination: { kind: 'provider', connectionId: 'p1' },
+        // All four clocks recent so freshness reads green.
+        lastBackupAt: new Date(NOW - 60_000).toISOString(),
+        lastVerifyAt: new Date(NOW - 60_000).toISOString(),
+        lastWalDrainAt: new Date(NOW - 60_000).toISOString(),
+        pendingOffsite: { count: 0, bytes: 0 },
+      },
+    ],
+    recoveryKit: { confirmedAt: Math.floor(NOW / 1000) },
+    home: {
+      retention: { kind: 'ladder', keepAllDays: 7, dailyDays: 30, weeklyDays: 90 },
+      restoreCostClass: 'metered-egress',
+    },
+  };
+
+  it('renders exactly the five metrics, sourced from the DTOs', async () => {
+    const el = await mount({
+      loadStatus: vi.fn().mockResolvedValue(freshStatus),
+      loadUsage: vi
+        .fn()
+        .mockResolvedValue({ backup: { bytesStored: 2 * 1024 ** 3, quotaBytes: 10 * 1024 ** 3 } }),
+      onRunNow: neverRun,
+    });
+
+    // Freshness — green "everything safe as of T".
+    const freshness = el.querySelector('[data-testid="metric-freshness"]');
+    expect(freshness?.textContent).toContain('Everything safe as of');
+    expect(freshness?.querySelector('[data-tone="ok"]')).not.toBeNull();
+
+    // Recovery window — the ladder's daily rung (30 days).
+    expect(el.querySelector('[data-testid="metric-recovery"]')?.textContent).toContain(
+      'Undo anything from the last 30 days',
+    );
+
+    // Privacy — the structural constant.
+    expect(el.querySelector('[data-testid="metric-privacy"]')?.textContent).toContain(
+      'Your provider cannot read your data',
+    );
+
+    // Cost — aggregate bytes / quota with a bar.
+    const cost = el.querySelector('[data-testid="metric-cost"]');
+    expect(cost?.textContent).toContain('2.0 GB of 10.0 GB');
+    expect(cost?.querySelector('[data-testid="cost-bar"]')).not.toBeNull();
+
+    // Exit — always-available export + honest metered note.
+    expect(el.querySelector('[data-testid="export-everything"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="exit-metered-note"]')).not.toBeNull();
+  });
+
+  it('drops the recovery-window metric when the provider promises no retention', async () => {
+    const el = await mount({
+      loadStatus: vi.fn().mockResolvedValue({
+        ...freshStatus,
+        home: { retention: { kind: 'none' }, restoreCostClass: 'free-egress' },
+      }),
+      onRunNow: neverRun,
+    });
+    expect(el.querySelector('[data-testid="metric-recovery"]')).toBeNull();
+    expect(el.querySelector('[data-testid="exit-metered-note"]')).toBeNull();
+  });
+
+  it('reads Cost as unmetered when the provider reports no quota', async () => {
+    const el = await mount({
+      loadStatus: vi.fn().mockResolvedValue(freshStatus),
+      loadUsage: vi
+        .fn()
+        .mockResolvedValue({ backup: { bytesStored: 512 * 1024 ** 2, quotaBytes: null } }),
+      onRunNow: neverRun,
+    });
+    const cost = el.querySelector('[data-testid="metric-cost"]');
+    expect(cost?.textContent).toContain('unmetered');
+    expect(cost?.querySelector('[data-testid="cost-bar"]')).toBeNull();
+  });
+
+  it('reads freshness as unknown when a custody clock has never happened', async () => {
+    const el = await mount({
+      loadStatus: vi.fn().mockResolvedValue({
+        ...freshStatus,
+        vaults: [{ ...freshStatus.vaults[0]!, lastVerifyAt: undefined }],
+      }),
+      onRunNow: neverRun,
+    });
+    const freshness = el.querySelector('[data-testid="metric-freshness"]');
+    expect(freshness?.textContent).toContain('Not yet proven safe offsite');
+  });
+
+  it('keeps the four custody clocks + run trigger behind the Diagnostics disclosure', async () => {
+    const el = await mount({
+      loadStatus: vi.fn().mockResolvedValue(freshStatus),
+      onRunNow: neverRun,
+    });
+    const diagnostics = el.querySelector<HTMLDetailsElement>('[data-testid="backup-diagnostics"]');
+    expect(diagnostics?.tagName).toBe('DETAILS');
+    expect(diagnostics?.open).toBe(false); // collapsed by default
+    // The clocks live inside it, not on the primary surface.
+    expect(diagnostics?.querySelector('[data-testid="freshness-clocks"]')).not.toBeNull();
+    expect(
+      [...(diagnostics?.querySelectorAll('button') ?? [])].some((b) =>
+        b.textContent?.includes('Back up now'),
+      ),
+    ).toBe(true);
+  });
+
+  it('never renders a casAck "Confirm an attachment" control', async () => {
+    const el = await mount({
+      loadStatus: vi.fn().mockResolvedValue(freshStatus),
+      onRunNow: neverRun,
+    });
+    expect(el.textContent).not.toContain('Confirm an attachment');
+    expect(el.textContent).not.toContain('Storage class');
   });
 });

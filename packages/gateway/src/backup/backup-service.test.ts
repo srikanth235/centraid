@@ -196,7 +196,7 @@ test('remote-primary CAS is reconciled and persisted on policy cadence without a
     blob_store: {
       kind: 's3',
       connectionId: 'cas-only',
-      connectionKind: 'byo-s3',
+      connectionKind: 'provider',
     },
   });
   const clock = { now: Date.now() };

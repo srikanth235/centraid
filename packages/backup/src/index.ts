@@ -1,5 +1,11 @@
 // Provider seam (PROTOCOL.md).
-export { BackupProviderError, CODE_STATUS, STORE_CLASSES } from './provider.js';
+export {
+  BackupProviderError,
+  CODE_STATUS,
+  HOME_PROFILE_CAPABILITIES,
+  PROVIDER_PROFILES,
+  STORE_CLASSES,
+} from './provider.js';
 export type {
   AccountStatus,
   BackupDiscovery,
@@ -17,6 +23,7 @@ export type {
   ProviderInventoryQuery,
   ProviderPolicy,
   ProviderPolicyDeclaration,
+  ProviderProfile,
   Retention,
   S3Grant,
   SnapshotRegistration,

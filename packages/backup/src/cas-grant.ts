@@ -20,12 +20,12 @@ export interface RequestStorageGrantOptions extends WireClientOptions {
 }
 
 /** Generic grant path — any store class, against `POST
- *  /v1/backup/vaults/:id/credentials` (PROTOCOL.md § Layer 1). */
+ *  /v1/storage/vaults/:id/credentials` (PROTOCOL.md § Layer 1). */
 export async function requestStorageGrant(opts: RequestStorageGrantOptions): Promise<S3Grant> {
   return callProviderRoute<S3Grant>(
     opts,
     'POST',
-    `/v1/backup/vaults/${encodeURIComponent(opts.targetId)}/credentials`,
+    `/v1/storage/vaults/${encodeURIComponent(opts.targetId)}/credentials`,
     {
       ttlSeconds: opts.ttlSeconds ?? DEFAULT_GRANT_TTL_SECONDS,
       mode: opts.mode,

@@ -179,21 +179,42 @@
   gap: 8px;
 }
 
-/* Vault attach section. */
+/* Per-vault hosted/local choice — the one binary this screen exists to set. */
 .attachRow {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 .attachStatus {
+  margin: 0;
   font-size: 12.5px;
   color: var(--ink-2);
   line-height: 1.5;
 }
-.attachControls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.binaryToggle {
+  display: inline-flex;
+  border: 0.5px solid var(--line);
+  border-radius: 999px;
+  padding: 2px;
+  align-self: flex-start;
+}
+.binaryOption {
+  padding: 7px 18px;
+  border-radius: 999px;
+  border: none;
+  background: none;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.binaryOption:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.binaryOption[data-active='true'] {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent-deep, var(--accent));
+  font-weight: 600;
 }
 
 .gateReason {

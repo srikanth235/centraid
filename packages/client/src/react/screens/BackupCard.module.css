@@ -14,10 +14,174 @@
   gap: 12px;
 }
 .actions,
-.providerLine {
+.providerLine,
+.headMeta {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* ── The §6 five-metric health surface (issue #436) ─────────────────────── */
+.metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.metric {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 15px;
+}
+.metric + .metric {
+  border-top: 1px solid var(--line);
+}
+.metricDot {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--ink-4);
+}
+.metricDot[data-tone='ok'] {
+  background: var(--success);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 14%, transparent);
+}
+.metricDot[data-tone='warn'] {
+  background: var(--icon-amber);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--icon-amber) 14%, transparent);
+}
+.metricDot[data-tone='bad'] {
+  background: var(--danger);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--danger) 14%, transparent);
+}
+.metricIcon {
+  flex: none;
+  display: inline-flex;
+  margin-top: 1px;
+  color: var(--ink-3);
+}
+.metricBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.metricValue {
+  font-size: 13.5px;
+  font-weight: 550;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.metricValue[data-tone='ok'] {
+  color: var(--success);
+}
+.metricValue[data-tone='warn'] {
+  color: var(--icon-amber);
+}
+.metricValue[data-tone='bad'] {
+  color: var(--danger);
+}
+.metricValue[data-tone='unknown'] {
+  color: var(--ink-2);
+}
+.metricLabel {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.metricHow {
+  font-size: 11.5px;
+}
+.metricHow summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--accent-deep, var(--accent));
+  font-size: 11px;
+}
+.metricHow p,
+.exitHow {
+  margin: 6px 0 0;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.costTrack {
+  position: relative;
+  height: 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  overflow: hidden;
+}
+.costFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: var(--success);
+}
+.costTrack[data-severity='warn'] .costFill {
+  background: var(--icon-amber);
+}
+.costTrack[data-severity='bad'] .costFill {
+  background: var(--danger);
+}
+.exitBtn {
+  align-self: flex-start;
+}
+.exitMeteredNote {
+  color: var(--icon-amber);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+/* Diagnostics — collapsed by default; holds the raw custody clocks, the manual
+   run/verify triggers, and the per-vault policy + provider inventory. Nothing
+   here is one of the five metrics, so nothing here is on the primary surface. */
+.diagnostics {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+.diagnostics summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-weight: 550;
+}
+.diagnosticsBody {
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.clockGrid {
+  display: grid;
+  gap: 6px;
+}
+.clockLine {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.clockLine span:last-child {
+  color: var(--ink-2);
+}
+@media (min-width: 720px) {
+  .clockGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 20px;
+  }
 }
 .providerLine {
   color: var(--ink-3);

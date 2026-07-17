@@ -10,13 +10,15 @@
  *   POST   /centraid/_gateway/storage/connections            — create; body = CreateStorageConnectionInput
  *                                                              (+ optional {force: boolean}); 409
  *                                                              `recovery_kit_not_confirmed` when the
- *                                                              connection is usable for `cas` and the
  *                                                              recovery kit hasn't been confirmed, unless
- *                                                              `force: true`
+ *                                                              `force: true`; 400 `provider_not_home_profile`
+ *                                                              when the provider isn't a home bundle (#436 §1);
+ *                                                              409 `already_exists` if a home connection is
+ *                                                              already configured (#436 §7)
  *   PATCH  /centraid/_gateway/storage/connections/<id>       — update; body = partial CreateStorageConnectionInput
  *   DELETE /centraid/_gateway/storage/connections/<id>       — delete
- *   POST   /centraid/_gateway/storage/connections/<id>/test  — real signed HEAD probe against the connection's
- *                                                              (or, for `provider`, a freshly granted) bucket
+ *   POST   /centraid/_gateway/storage/connections/<id>/test  — real signed HEAD probe against a freshly granted
+ *                                                              bucket, plus the provider's home-profile status
  *   GET    /centraid/_gateway/storage/status                 — per-vault replication progress: configured,
  *                                                              replicated/backlog (count + bytes), lastSweep,
  *                                                              throttleBytesPerSec, and (issue #405 §7) a
@@ -36,13 +38,11 @@
  *                                                              alongside the locally-computed replicated byte
  *                                                              count (custody's own ground truth) — visible
  *                                                              drift between the two is an integrity signal,
- *                                                              not noise. A byo-s3 connection has no usage
- *                                                              endpoint, so `providerReported` is always
- *                                                              `null` for it.
+ *                                                              not noise.
  *
- * Every response mirrors `StorageConnectionRecord` — `id, kind, name, uses,
- * createdAt, updatedAt`, plus `endpoint/region/bucket/prefix` (byo-s3) or
- * `baseUrl/targetId` (provider). NEVER a credential field, sealed or not.
+ * Every response mirrors `StorageConnectionRecord` — `id, kind, name,
+ * createdAt, updatedAt`, plus `baseUrl/targetId`. NEVER a credential field,
+ * sealed or not.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -61,7 +61,11 @@ import {
   type CreateStorageConnectionInput,
   type StorageConnectionStore,
 } from '../backup/storage-connections.js';
-import { ensureProviderCasTarget } from '../backup/storage-credentials.js';
+import {
+  assertProviderHomeProfile,
+  ensureProviderCasTarget,
+  fetchProviderProfileStatus,
+} from '../backup/storage-credentials.js';
 import type { StorageUsagePoller } from '../backup/storage-usage.js';
 import type { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
 import { readJson, sendError, sendJson } from './route-helpers.js';
@@ -97,63 +101,70 @@ function localReplicatedBytesByConnection(vaults: VaultRegistry): Map<string, nu
 }
 
 function looksLikeCreateInput(body: Record<string, unknown>): boolean {
-  return (body.kind === 'byo-s3' || body.kind === 'provider') && typeof body.name === 'string';
+  return body.kind === 'provider' && typeof body.name === 'string';
 }
 
 function sendConnectionError(res: ServerResponse, err: unknown): true {
   if (err instanceof StorageConnectionError) {
-    const status = err.code === 'not_found' ? 404 : 400;
+    const status = err.code === 'not_found' ? 404 : err.code === 'already_exists' ? 409 : 400;
     return sendJson(res, status, { error: err.code, message: err.message });
   }
   return sendError(res, err);
 }
 
-/** Real connectivity probe: one signed HEAD against a synthetic key — a 404 IS success (proves auth + reachability, not object existence). */
+/** Real connectivity probe: one signed HEAD against a synthetic key — a 404 IS
+ *  success (proves auth + reachability, not object existence). Also reads the
+ *  provider's home-profile status (issue #436 §1) and folds it into the detail
+ *  so the Test action shows whether this provider is a full home bundle. */
 async function probeConnection(
   store: StorageConnectionStore,
   id: string,
 ): Promise<{ ok: true; detail: string } | { ok: false; error: string }> {
   const connection = await store.get(id);
   if (!connection) return { ok: false, error: `unknown storage connection "${id}"` };
+  if (!connection.baseUrl) return { ok: false, error: 'connection is missing baseUrl' };
   const probeKey = '0'.repeat(64);
   try {
-    let s3: S3BlobStore;
-    if (connection.kind === 'byo-s3') {
-      if (!connection.endpoint || !connection.region || !connection.bucket) {
-        return { ok: false, error: 'connection is missing endpoint/region/bucket' };
-      }
-      const creds = await store.resolveS3Credentials(id);
-      s3 = new S3BlobStore({
-        endpoint: connection.endpoint,
-        region: connection.region,
-        bucket: connection.bucket,
-        ...(connection.prefix ? { prefix: connection.prefix } : {}),
-        credentials: async () => creds,
-      });
-    } else {
-      const target = await ensureProviderCasTarget(store, id);
-      const refreshed = await store.get(id);
-      const apiKey = await store.resolveProviderApiKey(id);
-      const grant = await requestCasGrant({
-        baseUrl: connection.baseUrl!,
-        apiKey,
-        targetId: refreshed!.targetId!,
-        mode: 'read-write',
-      });
-      s3 = new S3BlobStore({
-        endpoint: target.endpoint,
-        region: target.region,
-        bucket: target.bucket,
-        prefix: target.prefix,
-        credentials: async () => ({
-          accessKeyId: grant.accessKeyId,
-          secretAccessKey: grant.secretAccessKey,
-          ...(grant.sessionToken ? { sessionToken: grant.sessionToken } : {}),
-        }),
-      });
+    const apiKey = await store.resolveProviderApiKey(id);
+    // Home-profile status first: a non-home provider is a hard failure (a
+    // home connection requires the full bundle), reported with the exact
+    // missing capabilities rather than a generic reachability error.
+    const profile = await fetchProviderProfileStatus(connection.baseUrl, apiKey);
+    if (!profile.isHome) {
+      const missing =
+        profile.missingCapabilities.length > 0
+          ? ` (missing ${profile.missingCapabilities.join(', ')})`
+          : '';
+      return {
+        ok: false,
+        error: `provider does not advertise the "home" profile${missing}`,
+      };
     }
+    const target = await ensureProviderCasTarget(store, id);
+    const refreshed = await store.get(id);
+    const grant = await requestCasGrant({
+      baseUrl: connection.baseUrl,
+      apiKey,
+      targetId: refreshed!.targetId!,
+      mode: 'read-write',
+    });
+    const s3 = new S3BlobStore({
+      endpoint: target.endpoint,
+      region: target.region,
+      bucket: target.bucket,
+      prefix: target.prefix,
+      credentials: async () => ({
+        accessKeyId: grant.accessKeyId,
+        secretAccessKey: grant.secretAccessKey,
+        ...(grant.sessionToken ? { sessionToken: grant.sessionToken } : {}),
+      }),
+    });
     await s3.stat(probeKey);
-    return { ok: true, detail: 'signed request reached the bucket and was accepted' };
+    return {
+      ok: true,
+      detail:
+        'signed request reached the bucket and was accepted; provider advertises the home profile',
+    };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
@@ -312,15 +323,15 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
           if (!looksLikeCreateInput(raw)) {
             return sendJson(res, 400, {
               error: 'bad_request',
-              message: 'body must carry {kind: "byo-s3"|"provider", name, ...}',
+              message: 'body must carry {kind: "provider", name, baseUrl, apiKey}',
             });
           }
           const body = raw as unknown as CreateStorageConnectionInput;
-          const uses = body.uses ?? ['backup', 'cas'];
-          const usableForCas = uses.includes('cas');
+          // Every connection is a home CAS bundle now (#436 §2/§7), so the
+          // recovery-kit gate always applies before the first remote custody.
           const status = await deps.recoveryKit.status();
           const recoveryKitConfirmed = status.confirmedAt !== null;
-          if (usableForCas && !recoveryKitConfirmed && !force) {
+          if (!recoveryKitConfirmed && !force) {
             return sendJson(res, 409, {
               error: 'recovery_kit_not_confirmed',
               recoveryKitConfirmed: false,
@@ -329,6 +340,10 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
                 'remote storage tier (or resend with {force: true} to bypass)',
             });
           }
+          // Home-profile gate (#436 §1): only a provider advertising the
+          // `home` profile can back a Centraid home connection. Throws a typed
+          // `provider_not_home_profile` StorageConnectionError → 400.
+          await assertProviderHomeProfile(body.baseUrl, body.apiKey);
           const connection = await deps.storageConnections.create(body);
           return sendJson(res, 201, { connection, recoveryKitConfirmed });
         } catch (err) {

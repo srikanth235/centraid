@@ -28,6 +28,31 @@ export const STORE_CLASSES = ['backup', 'cas', 'derived'] as const satisfies rea
  *  control-plane surfaces and store classes it actually offers. */
 export type ProviderCapabilityFlag = StoreClass | 'usage' | 'policy' | 'inventory' | 'audit';
 
+/** Named capability bundles a provider MAY advertise (PROTOCOL.md § Profiles).
+ *  Additive and advisory — capability flags, not profiles, are the
+ *  protocol-evolution seam. `/1` defines one: `home` (a household's primary
+ *  managed offsite home — the "Hosted" product option — which MUST carry all
+ *  seven of `backup`, `cas`, `derived`, `usage`, `policy`, `inventory`,
+ *  `audit`). */
+export type ProviderProfile = 'home';
+
+/** Every known profile name, as a runtime array — the single source of truth
+ *  for conformance's "only known profiles" and "home ⇒ all members" checks. */
+export const PROVIDER_PROFILES = ['home'] as const satisfies readonly ProviderProfile[];
+
+/** The seven capabilities a `home`-profile provider MUST declare
+ *  (PROTOCOL.md § Profiles). `policy` is REQUIRED so the client's five-metric
+ *  freshness contract has a declared cadence to anchor staleness against. */
+export const HOME_PROFILE_CAPABILITIES = [
+  'backup',
+  'cas',
+  'derived',
+  'usage',
+  'policy',
+  'inventory',
+  'audit',
+] as const satisfies readonly ProviderCapabilityFlag[];
+
 export type Retention =
   | {
       kind: 'ladder';
@@ -54,12 +79,16 @@ export interface BackupDiscovery {
   conditionalWrites: boolean;
 }
 
-/** `GET /v1/backup/provider` response — everything a client adapts to. */
+/** `GET /v1/storage/provider` response — everything a client adapts to. */
 export interface ProviderCapabilities {
   protocol: string[];
   dataPlane: 's3';
   /** Additive capability flags — see `ProviderCapabilityFlag`. */
   capabilities: ProviderCapabilityFlag[];
+  /** OPTIONAL named capability bundles (PROTOCOL.md § Profiles). A declared
+   *  `home` profile MUST carry all of `HOME_PROFILE_CAPABILITIES`. Absent ⇒
+   *  no named profile (still conformant). */
+  profiles?: ProviderProfile[];
   maxCredentialTtlSeconds: number;
   purgeAuthTier: 'api-key' | 'interactive';
   /** Present iff `capabilities` includes `"backup"`. */
@@ -86,7 +115,7 @@ export interface Usage {
   meteredAt?: number;
 }
 
-/** One row of `GET /v1/backup/vaults` — a storage target. */
+/** One row of `GET /v1/storage/vaults` — a storage target. */
 export interface TargetInfo {
   id: string;
   name: string;
@@ -216,7 +245,7 @@ export interface SnapshotRow {
   prunedAt: number | null;
 }
 
-/** `POST /v1/backup/vaults/:id/snapshots` request body. */
+/** `POST /v1/storage/vaults/:id/snapshots` request body. */
 export interface SnapshotRegistration {
   /** Provider MUST replay the prior result on retry. */
   idempotencyKey: string;

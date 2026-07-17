@@ -1,33 +1,29 @@
 /* eslint-disable max-classes-per-file -- error and encrypted store form one persistence boundary (#408) */
 /*
- * Gateway-level storage connections (issue #367 §C1): ONE persisted entity
- * — endpoint + region + bucket + a credential reference — that BOTH the
- * offsite backup engine (`backup-config.ts`'s `BackupProviderConfig`) and a
- * vault's CAS remote tier (`BlobStoreSettings.connectionId`/`connectionKind`,
- * `@centraid/vault`) can point at. Two kinds:
+ * Gateway-level storage connection (issue #367 §C1, collapsed by #436 §2/§7):
+ * ONE persisted entity — a base URL + a sealed api key — that BOTH the offsite
+ * backup engine (`backup-config.ts`'s `BackupProviderConfig`) and a vault's CAS
+ * remote tier (`BlobStoreSettings.connectionId`, `@centraid/vault`) point at.
  *
- *   - `byo-s3`   — static S3-compatible credentials the owner supplies
- *                  directly (any S3-compatible endpoint: AWS, R2, MinIO,
- *                  Backblaze…). Sealed at rest, same custody posture as the
- *                  connection broker's credential sidecar (issue #304):
- *                  AES-256-GCM under a dedicated key, never plaintext in the
- *                  JSON settings file.
- *   - `provider` — a Centraid storage-provider account
- *                  (`centraid-storage-provider/1`, packages/backup/PROTOCOL.md):
- *                  a base URL + a sealed api key. Real data-plane credentials
- *                  are short-lived grants (`requestCasGrant`), resolved at use
- *                  time (`storage-credentials.ts`) and never persisted here.
+ * There is exactly one kind now: `provider` — a Centraid storage-provider
+ * account (`centraid-storage-provider/1`, packages/backup/PROTOCOL.md). Real
+ * data-plane credentials are short-lived grants (`requestCasGrant`), resolved
+ * at use time (`storage-credentials.ts`) and never persisted here; only the
+ * account api key is sealed at rest. The old `byo-s3` peer kind — static
+ * S3-compatible credentials the owner supplied directly — is retired (#436 §2):
+ * a home connection is always a managed provider bundle (snapshots + cas +
+ * derived), and there is only ever ONE of them (#436 §7 — the home connection).
  *
  * Key custody: unlike a vault's DEK (one per vault, minted in a `keys/`
  * sibling of the vault directory — `@centraid/vault`'s `schema/sealed.ts`),
- * this is a GATEWAY-level secret: storage connections are shared across the
- * backup engine and every mounted vault's CAS tier, so no single vault is the
- * natural custodian. A dedicated key file lives beside the connections
- * themselves (`<dir>/connections.sealkey`, 0600) — same shape as a vault's
- * sealkey (`createSealKey`/`loadSealKey`), just scoped to the gateway process
- * instead of one vault. The sealing primitives themselves (`sealValue`,
- * `unsealValue`, `sealAad`) are the exact ones `@centraid/vault` already uses
- * for sealed columns — one AEAD envelope shape across the whole system.
+ * this is a GATEWAY-level secret: the connection is shared across the backup
+ * engine and every mounted vault's CAS tier, so no single vault is the
+ * natural custodian. A dedicated key file lives beside the connection itself
+ * (`<dir>/connections.sealkey`, 0600) — same shape as a vault's sealkey
+ * (`createSealKey`/`loadSealKey`), just scoped to the gateway process instead
+ * of one vault. The sealing primitives themselves (`sealValue`, `unsealValue`,
+ * `sealAad`) are the exact ones `@centraid/vault` already uses for sealed
+ * columns — one AEAD envelope shape across the whole system.
  *
  * Persistence mirrors `backup-state.ts`: atomic JSON writes (temp + rename),
  * 0600, re-read on every mutating call so a concurrent admin CLI and the
@@ -37,38 +33,18 @@
 import { randomBytes } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import {
-  createSealKey,
-  loadSealKey,
-  sealAad,
-  sealValue,
-  unsealValue,
-  type S3Credentials,
-} from '@centraid/vault';
+import { createSealKey, loadSealKey, sealAad, sealValue, unsealValue } from '@centraid/vault';
 
-export type StorageConnectionKind = 'byo-s3' | 'provider';
-export type StorageConnectionUse = 'backup' | 'cas';
+/** Retained as a single-member type so the wire `kind` field stays present
+ *  (`provider`) for callers that still branch on it; there is no other kind. */
+export type StorageConnectionKind = 'provider';
 
-interface StorageConnectionRowBase {
+interface ProviderRow {
   id: string;
+  kind: 'provider';
   name: string;
-  uses: StorageConnectionUse[];
   createdAt: string;
   updatedAt: string;
-}
-
-interface ByoS3Row extends StorageConnectionRowBase {
-  kind: 'byo-s3';
-  endpoint: string;
-  region: string;
-  bucket: string;
-  prefix?: string;
-  /** sealed JSON `{accessKeyId, secretAccessKey, sessionToken?}`. */
-  sealedCredentials: string;
-}
-
-interface ProviderRow extends StorageConnectionRowBase {
-  kind: 'provider';
   baseUrl: string;
   /** sealed JSON `{apiKey}`. */
   sealedCredentials: string;
@@ -76,7 +52,7 @@ interface ProviderRow extends StorageConnectionRowBase {
   targetId?: string;
 }
 
-type StorageConnectionRow = ByoS3Row | ProviderRow;
+type StorageConnectionRow = ProviderRow;
 
 interface StorageConnectionsFile {
   version: 1;
@@ -88,7 +64,6 @@ export interface StorageConnectionRecord {
   id: string;
   kind: StorageConnectionKind;
   name: string;
-  uses: StorageConnectionUse[];
   createdAt: string;
   updatedAt: string;
   endpoint?: string;
@@ -99,33 +74,19 @@ export interface StorageConnectionRecord {
   targetId?: string;
 }
 
-export interface CreateByoS3Input {
-  kind: 'byo-s3';
-  name: string;
-  endpoint: string;
-  region: string;
-  bucket: string;
-  prefix?: string;
-  accessKeyId: string;
-  secretAccessKey: string;
-  sessionToken?: string;
-  uses?: StorageConnectionUse[];
-}
-
 export interface CreateProviderInput {
   kind: 'provider';
   name: string;
   baseUrl: string;
   apiKey: string;
-  uses?: StorageConnectionUse[];
 }
 
-export type CreateStorageConnectionInput = CreateByoS3Input | CreateProviderInput;
-export type UpdateStorageConnectionInput = Partial<CreateByoS3Input> | Partial<CreateProviderInput>;
+export type CreateStorageConnectionInput = CreateProviderInput;
+export type UpdateStorageConnectionInput = Partial<CreateProviderInput>;
 
 export class StorageConnectionError extends Error {
   constructor(
-    readonly code: 'not_found' | 'invalid_request',
+    readonly code: 'not_found' | 'invalid_request' | 'already_exists' | 'provider_not_home_profile',
     message: string,
   ) {
     super(message);
@@ -141,25 +102,12 @@ function sealKeyFile(dir: string): string {
 }
 
 function toRecord(row: StorageConnectionRow): StorageConnectionRecord {
-  const base = {
+  return {
     id: row.id,
     kind: row.kind,
     name: row.name,
-    uses: row.uses,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
-  };
-  if (row.kind === 'byo-s3') {
-    return {
-      ...base,
-      endpoint: row.endpoint,
-      region: row.region,
-      bucket: row.bucket,
-      ...(row.prefix ? { prefix: row.prefix } : {}),
-    };
-  }
-  return {
-    ...base,
     baseUrl: row.baseUrl,
     ...(row.targetId ? { targetId: row.targetId } : {}),
   };
@@ -178,7 +126,7 @@ export class StorageConnectionStore {
     const keyPath = sealKeyFile(dir);
     // Same "load-or-mint" custody shape as a vault's DEK, scoped to the
     // gateway instead — see the module header for why this can't just BE a
-    // vault's key (connections outlive, and are shared across, any one vault).
+    // vault's key (the connection outlives, and is shared across, any one vault).
     const key = loadSealKey(keyPath) ?? createSealKey(keyPath);
     const store = new StorageConnectionStore(connectionsFile(dir), key);
     await store.reload();
@@ -189,7 +137,9 @@ export class StorageConnectionStore {
     try {
       const raw = await fs.readFile(this.file, 'utf8');
       const parsed = JSON.parse(raw) as Partial<StorageConnectionsFile>;
-      this.rows = Array.isArray(parsed.connections) ? parsed.connections : [];
+      this.rows = Array.isArray(parsed.connections)
+        ? parsed.connections.filter((row): row is StorageConnectionRow => row.kind === 'provider')
+        : [];
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
       this.rows = [];
@@ -220,145 +170,60 @@ export class StorageConnectionStore {
     return row;
   }
 
-  private validateUses(
-    kind: StorageConnectionKind,
-    uses: StorageConnectionUse[] | undefined,
-    editingId?: string,
-  ): StorageConnectionUse[] {
-    const normalized: StorageConnectionUse[] =
-      uses && uses.length > 0
-        ? [...new Set(uses)]
-        : kind === 'provider'
-          ? ['backup', 'cas']
-          : ['cas'];
-    if (normalized.some((use) => use !== 'backup' && use !== 'cas')) {
-      throw new StorageConnectionError(
-        'invalid_request',
-        'uses may contain only "backup" or "cas"',
-      );
-    }
-    if (kind === 'byo-s3' && normalized.includes('backup')) {
-      throw new StorageConnectionError(
-        'invalid_request',
-        'direct S3 connections support CAS replication only; encrypted backup requires a Centraid storage provider',
-      );
-    }
-    if (
-      normalized.includes('backup') &&
-      this.rows.some((row) => row.id !== editingId && row.uses.includes('backup'))
-    ) {
-      throw new StorageConnectionError(
-        'invalid_request',
-        'only one backup destination can be active at a time',
-      );
-    }
-    return normalized;
-  }
-
   async create(input: CreateStorageConnectionInput): Promise<StorageConnectionRecord> {
     await this.reload();
     if (!input.name || input.name.trim().length === 0) {
       throw new StorageConnectionError('invalid_request', 'name is required');
     }
+    if (input.kind !== 'provider') {
+      throw new StorageConnectionError('invalid_request', 'kind must be "provider"');
+    }
+    if (!input.baseUrl || !input.apiKey) {
+      throw new StorageConnectionError('invalid_request', 'provider requires baseUrl and apiKey');
+    }
+    // Exactly one home connection at a time (issue #436 §7): a provider
+    // connection is a full home bundle (snapshots + cas + derived), so a
+    // second one has no meaning — reject rather than silently pick.
+    if (this.rows.length > 0) {
+      throw new StorageConnectionError(
+        'already_exists',
+        'a storage connection already exists — only one home connection can be active at a time; delete it before adding another',
+      );
+    }
     const id = randomBytes(12).toString('hex');
     const now = new Date().toISOString();
-    const uses = this.validateUses(input.kind, input.uses);
-    let row: StorageConnectionRow;
-    if (input.kind === 'byo-s3') {
-      if (!input.endpoint || !input.region || !input.bucket) {
-        throw new StorageConnectionError(
-          'invalid_request',
-          'byo-s3 requires endpoint, region, and bucket',
-        );
-      }
-      if (!input.accessKeyId || !input.secretAccessKey) {
-        throw new StorageConnectionError(
-          'invalid_request',
-          'byo-s3 requires accessKeyId and secretAccessKey',
-        );
-      }
-      row = {
-        id,
-        kind: 'byo-s3',
-        name: input.name,
-        uses,
-        createdAt: now,
-        updatedAt: now,
-        endpoint: input.endpoint,
-        region: input.region,
-        bucket: input.bucket,
-        ...(input.prefix ? { prefix: input.prefix } : {}),
-        sealedCredentials: this.sealCreds(id, {
-          accessKeyId: input.accessKeyId,
-          secretAccessKey: input.secretAccessKey,
-          ...(input.sessionToken ? { sessionToken: input.sessionToken } : {}),
-        }),
-      };
-    } else if (input.kind === 'provider') {
-      if (!input.baseUrl || !input.apiKey) {
-        throw new StorageConnectionError('invalid_request', 'provider requires baseUrl and apiKey');
-      }
-      row = {
-        id,
-        kind: 'provider',
-        name: input.name,
-        uses,
-        createdAt: now,
-        updatedAt: now,
-        baseUrl: input.baseUrl,
-        sealedCredentials: this.sealCreds(id, { apiKey: input.apiKey }),
-      };
-    } else {
-      throw new StorageConnectionError('invalid_request', 'kind must be "byo-s3" or "provider"');
-    }
+    const row: StorageConnectionRow = {
+      id,
+      kind: 'provider',
+      name: input.name,
+      createdAt: now,
+      updatedAt: now,
+      baseUrl: input.baseUrl,
+      sealedCredentials: this.sealCreds(id, { apiKey: input.apiKey }),
+    };
     this.rows.push(row);
     await this.persist();
     return toRecord(row);
   }
 
   /**
-   * Rotation (issue #367 §C9): changing `endpoint`/`bucket` (byo-s3) or
-   * `baseUrl` (provider) is exactly this method — nothing here migrates any
-   * vault's custody rows. `storage-routes.ts` propagates the new
-   * endpoint/bucket into every referencing vault's `blob_store` settings,
-   * which is what actually flips `db.ts`'s `remoteTier()` cache key and
-   * starts custody over (see that module's header for why that's enough).
+   * Rotation (issue #367 §C9): changing `baseUrl` is exactly this method —
+   * nothing here migrates any vault's custody rows. `storage-routes.ts`
+   * propagates the new endpoint/bucket into every referencing vault's
+   * `blob_store` settings, which is what actually flips `db.ts`'s
+   * `remoteTier()` cache key and starts custody over (see that module's
+   * header for why that's enough).
    */
   async update(id: string, patch: UpdateStorageConnectionInput): Promise<StorageConnectionRecord> {
     await this.reload();
     const row = this.requireRow(id);
     const now = new Date().toISOString();
-    if (row.kind === 'byo-s3') {
-      const p = patch as Partial<CreateByoS3Input>;
-      if (p.kind && p.kind !== 'byo-s3') {
-        throw new StorageConnectionError('invalid_request', "cannot change a connection's kind");
-      }
-      if (p.endpoint) row.endpoint = p.endpoint;
-      if (p.region) row.region = p.region;
-      if (p.bucket) row.bucket = p.bucket;
-      if (p.prefix !== undefined) {
-        if (p.prefix) row.prefix = p.prefix;
-        else delete row.prefix;
-      }
-      if (p.name) row.name = p.name;
-      if (p.uses) row.uses = this.validateUses('byo-s3', p.uses, id);
-      if (p.accessKeyId && p.secretAccessKey) {
-        row.sealedCredentials = this.sealCreds(id, {
-          accessKeyId: p.accessKeyId,
-          secretAccessKey: p.secretAccessKey,
-          ...(p.sessionToken ? { sessionToken: p.sessionToken } : {}),
-        });
-      }
-    } else {
-      const p = patch as Partial<CreateProviderInput>;
-      if (p.kind && p.kind !== 'provider') {
-        throw new StorageConnectionError('invalid_request', "cannot change a connection's kind");
-      }
-      if (p.baseUrl) row.baseUrl = p.baseUrl;
-      if (p.name) row.name = p.name;
-      if (p.uses) row.uses = this.validateUses('provider', p.uses, id);
-      if (p.apiKey) row.sealedCredentials = this.sealCreds(id, { apiKey: p.apiKey });
+    if (patch.kind && patch.kind !== 'provider') {
+      throw new StorageConnectionError('invalid_request', "cannot change a connection's kind");
     }
+    if (patch.baseUrl) row.baseUrl = patch.baseUrl;
+    if (patch.name) row.name = patch.name;
+    if (patch.apiKey) row.sealedCredentials = this.sealCreds(id, { apiKey: patch.apiKey });
     row.updatedAt = now;
     await this.persist();
     return toRecord(row);
@@ -368,12 +233,6 @@ export class StorageConnectionStore {
   async setTargetId(id: string, targetId: string): Promise<StorageConnectionRecord> {
     await this.reload();
     const row = this.requireRow(id);
-    if (row.kind !== 'provider') {
-      throw new StorageConnectionError(
-        'invalid_request',
-        `connection "${id}" is not provider-kind`,
-      );
-    }
     row.targetId = targetId;
     row.updatedAt = new Date().toISOString();
     await this.persist();
@@ -390,34 +249,12 @@ export class StorageConnectionStore {
     await this.persist();
   }
 
-  /** Resolve S3 credentials for a byo-s3 connection (issue #367 §C3). */
-  async resolveS3Credentials(id: string): Promise<S3Credentials> {
-    await this.reload();
-    const row = this.requireRow(id);
-    if (row.kind !== 'byo-s3') {
-      throw new StorageConnectionError('invalid_request', `connection "${id}" is not byo-s3`);
-    }
-    return this.unsealCreds(id, row.sealedCredentials) as unknown as S3Credentials;
-  }
-
-  /** Resolve the provider api key for a provider connection (issue #367 §C3). */
+  /** Resolve the provider api key for a connection (issue #367 §C3). */
   async resolveProviderApiKey(id: string): Promise<string> {
     await this.reload();
     const row = this.requireRow(id);
-    if (row.kind !== 'provider') {
-      throw new StorageConnectionError(
-        'invalid_request',
-        `connection "${id}" is not provider-kind`,
-      );
-    }
     const creds = this.unsealCreds(id, row.sealedCredentials) as { apiKey: string };
     return creds.apiKey;
-  }
-
-  /** The connection's kind without touching sealed material — routes/resolvers branch on this. */
-  async kindOf(id: string): Promise<StorageConnectionKind | undefined> {
-    await this.reload();
-    return this.rows.find((r) => r.id === id)?.kind;
   }
 
   private sealCreds(id: string, value: Record<string, unknown>): string {

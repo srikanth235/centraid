@@ -29,15 +29,6 @@ describe('createStorageQuotaHealthProbe', () => {
     expect(result.detail).toContain('no provider-kind');
   });
 
-  it('ignores byo-s3 connections entirely (no usage endpoint to watch)', async () => {
-    const probe = probeWith([{ connectionId: 'c1', name: 'My bucket', kind: 'byo-s3' }], {
-      c1: { backup: report(999_999, 1_000_000) },
-    });
-    const result = await probe();
-    expect(result.status).toBe('ok');
-    expect(result.detail).toContain('no provider-kind');
-  });
-
   it('reports ok "unmetered" when a provider connection has no cached usage yet', async () => {
     const probe = probeWith([{ connectionId: 'c1', name: 'Clawgnition', kind: 'provider' }], {});
     const result = await probe();

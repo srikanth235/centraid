@@ -54,6 +54,72 @@ async function tempDir(): Promise<string> {
   return dir;
 }
 
+/**
+ * Minimal fake storage provider — serves just the discovery document
+ * (`GET /v1/storage/provider`, PROTOCOL.md) the home-profile gate (#436 §1)
+ * reads on create/test. `home: true` advertises the `home` profile with the
+ * full capability bundle; `home: false` advertises neither, so the gate
+ * rejects it with `provider_not_home_profile`.
+ */
+function startFakeProviderServer(opts: { apiKey: string; home: boolean }): Promise<string> {
+  const server = http.createServer((req, res) => {
+    if (req.headers.authorization !== `Bearer ${opts.apiKey}`) {
+      res.writeHead(401, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error: { type: 'invalid_request_error', code: 'auth_expired', message: 'bad key' },
+        }),
+      );
+      return;
+    }
+    if (req.method === 'GET' && req.url === '/v1/storage/provider') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          data: {
+            protocol: ['centraid-storage-provider/1'],
+            dataPlane: 's3',
+            capabilities: opts.home
+              ? ['backup', 'cas', 'derived', 'usage', 'policy', 'inventory', 'audit']
+              : ['backup', 'cas'],
+            ...(opts.home ? { profiles: ['home'] } : {}),
+            maxCredentialTtlSeconds: 3600,
+            purgeAuthTier: 'interactive',
+            backup: {
+              softDeleteWindowDays: 30,
+              retention: {
+                kind: 'ladder',
+                keepAllDays: 7,
+                dailyDays: 30,
+                weeklyDays: 90,
+                neverPruneNewest: true,
+              },
+              restoreCostClass: 'free-egress',
+              objectLock: true,
+              conditionalWrites: true,
+            },
+            storageClasses: ['STANDARD', 'STANDARD_IA'],
+          },
+        }),
+      );
+      return;
+    }
+    res.writeHead(404, { 'content-type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        error: { type: 'invalid_request_error', code: 'not_found', message: 'no route' },
+      }),
+    );
+  });
+  servers.push(server);
+  return new Promise((resolve) => {
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address() as AddressInfo;
+      resolve(`http://127.0.0.1:${port}`);
+    });
+  });
+}
+
 function fakeVaults(): VaultRegistry {
   return { planesList: () => [] } as unknown as VaultRegistry;
 }
@@ -82,15 +148,9 @@ test('POST create refuses without a confirmed recovery kit; {force:true} bypasse
     }),
   );
 
-  const body = {
-    kind: 'byo-s3',
-    name: 'My R2 bucket',
-    endpoint: 'https://example.r2.cloudflarestorage.com',
-    region: 'auto',
-    bucket: 'my-bucket',
-    accessKeyId: 'AKIA_SECRET',
-    secretAccessKey: 'super-secret-value',
-  };
+  const apiKey = 'sk-provider-super-secret-value';
+  const provider = await startFakeProviderServer({ apiKey, home: true });
+  const body = { kind: 'provider', name: 'Clawgnition home', baseUrl: provider, apiKey };
 
   const refused = await fetch(`${base}/centraid/_gateway/storage/connections`, {
     method: 'POST',
@@ -112,19 +172,16 @@ test('POST create refuses without a confirmed recovery kit; {force:true} bypasse
     recoveryKitConfirmed: boolean;
   };
   expect(forcedJson.recoveryKitConfirmed).toBe(false); // still unconfirmed — force only bypassed the refusal
-  expect(forcedJson.connection.kind).toBe('byo-s3');
-  expect(forcedJson.connection.endpoint).toBe(body.endpoint);
+  expect(forcedJson.connection.kind).toBe('provider');
+  expect(forcedJson.connection.baseUrl).toBe(provider);
   // Never a secret field, sealed or not.
   const asString = JSON.stringify(forcedJson.connection);
-  expect(asString).not.toContain('super-secret-value');
-  expect(asString).not.toContain('AKIA_SECRET');
-  expect('accessKeyId' in forcedJson.connection).toBe(false);
-  expect('secretAccessKey' in forcedJson.connection).toBe(false);
+  expect(asString).not.toContain(apiKey);
+  expect('apiKey' in forcedJson.connection).toBe(false);
 
-  // The sealed sidecar on disk never carries the plaintext secret either.
+  // The sealed sidecar on disk never carries the plaintext api key either.
   const rawFile = await fs.readFile(path.join(dir, 'connections.json'), 'utf8');
-  expect(rawFile).not.toContain('super-secret-value');
-  expect(rawFile).not.toContain('AKIA_SECRET');
+  expect(rawFile).not.toContain(apiKey);
 });
 
 test('confirmed recovery kit: create proceeds without force; list/get/patch/delete round-trip', async () => {
@@ -141,13 +198,15 @@ test('confirmed recovery kit: create proceeds without force; list/get/patch/dele
     }),
   );
 
+  const apiKey = 'sk-provider-secret';
+  const provider = await startFakeProviderServer({ apiKey, home: true });
   const created = await fetch(`${base}/centraid/_gateway/storage/connections`, {
     method: 'POST',
     body: JSON.stringify({
       kind: 'provider',
       name: 'Clawgnition',
-      baseUrl: 'https://api.example.com',
-      apiKey: 'sk-provider-secret',
+      baseUrl: provider,
+      apiKey,
     }),
   });
   expect(created.status).toBe(201);
@@ -238,10 +297,13 @@ test('GET status/events exposes the authenticated custody completion stream', as
   expect(new TextDecoder().decode(first.value)).toContain('event: custody\ndata: {"vaults":[]}');
 });
 
-test('BYO S3 cannot claim backup support because it has no registry, retention, or fencing plane', async () => {
+test('create is rejected when the provider does not advertise the home profile (#436 §1)', async () => {
   const dir = await tempDir();
   const storageConnections = await openStorageConnectionStore(dir);
   const recoveryKit = new RecoveryKitStateStore(dir);
+  await recoveryKit.confirm();
+  const apiKey = 'sk-not-home';
+  const provider = await startFakeProviderServer({ apiKey, home: false });
   const base = await startHandlerServer(
     makeStorageRouteHandler({
       storageConnections,
@@ -252,22 +314,17 @@ test('BYO S3 cannot claim backup support because it has no registry, retention, 
   );
   const res = await fetch(`${base}/centraid/_gateway/storage/connections`, {
     method: 'POST',
-    body: JSON.stringify({
-      kind: 'byo-s3',
-      name: 'backup-only',
-      endpoint: 'https://s3.example.com',
-      region: 'us-east-1',
-      bucket: 'bucket',
-      accessKeyId: 'ak',
-      secretAccessKey: 'sk',
-      uses: ['backup'],
-    }),
+    body: JSON.stringify({ kind: 'provider', name: 'not-home', baseUrl: provider, apiKey }),
   });
   expect(res.status).toBe(400);
-  expect(((await res.json()) as { message: string }).message).toMatch(/CAS replication only/);
+  const json = (await res.json()) as { error: string; message: string };
+  expect(json.error).toBe('provider_not_home_profile');
+  expect(json.message).toMatch(/home/);
+  // Nothing persisted — the gate runs before create.
+  expect((await storageConnections.list()).length).toBe(0);
 });
 
-test('only one provider backup destination can be active', async () => {
+test('only one home connection can exist at a time (#436 §7)', async () => {
   const dir = await tempDir();
   const storageConnections = await openStorageConnectionStore(dir);
   const recoveryKit = new RecoveryKitStateStore(dir);
@@ -280,21 +337,20 @@ test('only one provider backup destination can be active', async () => {
       storageUsage: new StorageUsagePoller({ storageConnections }),
     }),
   );
-  const create = (name: string) =>
-    fetch(`${base}/centraid/_gateway/storage/connections`, {
+  const create = async (name: string) => {
+    const apiKey = `sk-${name}`;
+    const provider = await startFakeProviderServer({ apiKey, home: true });
+    return fetch(`${base}/centraid/_gateway/storage/connections`, {
       method: 'POST',
-      body: JSON.stringify({
-        kind: 'provider',
-        name,
-        baseUrl: `https://${name}.example.com`,
-        apiKey: `sk-${name}`,
-        uses: ['backup'],
-      }),
+      body: JSON.stringify({ kind: 'provider', name, baseUrl: provider, apiKey }),
     });
+  };
   expect((await create('first')).status).toBe(201);
   const second = await create('second');
-  expect(second.status).toBe(400);
-  expect(((await second.json()) as { message: string }).message).toMatch(/only one backup/);
+  expect(second.status).toBe(409);
+  const json = (await second.json()) as { error: string; message: string };
+  expect(json.error).toBe('already_exists');
+  expect(json.message).toMatch(/only one home connection/);
 });
 
 test('GET usage answers an empty list with zero connections', async () => {
@@ -314,11 +370,13 @@ test('GET usage answers an empty list with zero connections', async () => {
   expect((await res.json()) as { connections: unknown[] }).toEqual({ connections: [] });
 });
 
-test('GET usage: a byo-s3 connection reports providerReported: null with localReplicatedBytes 0 (no vaults mounted)', async () => {
+test('GET usage: a provider connection with no target yet reports providerReported: null with localReplicatedBytes 0 (no vaults mounted)', async () => {
   const dir = await tempDir();
   const storageConnections = await openStorageConnectionStore(dir);
   const recoveryKit = new RecoveryKitStateStore(dir);
   await recoveryKit.confirm();
+  const apiKey = 'sk-usage';
+  const provider = await startFakeProviderServer({ apiKey, home: true });
   const base = await startHandlerServer(
     makeStorageRouteHandler({
       storageConnections,
@@ -329,15 +387,7 @@ test('GET usage: a byo-s3 connection reports providerReported: null with localRe
   );
   await fetch(`${base}/centraid/_gateway/storage/connections`, {
     method: 'POST',
-    body: JSON.stringify({
-      kind: 'byo-s3',
-      name: 'My bucket',
-      endpoint: 'https://s3.example.com',
-      region: 'us-east-1',
-      bucket: 'bucket',
-      accessKeyId: 'ak',
-      secretAccessKey: 'sk',
-    }),
+    body: JSON.stringify({ kind: 'provider', name: 'My home', baseUrl: provider, apiKey }),
   });
   const res = await fetch(`${base}/centraid/_gateway/storage/usage`);
   expect(res.status).toBe(200);
@@ -350,7 +400,7 @@ test('GET usage: a byo-s3 connection reports providerReported: null with localRe
     }[];
   };
   expect(body.connections.length).toBe(1);
-  expect(body.connections[0]?.kind).toBe('byo-s3');
+  expect(body.connections[0]?.kind).toBe('provider');
   expect(body.connections[0]?.providerReported).toBeNull();
   expect(body.connections[0]?.localReplicatedBytes).toBe(0);
 });

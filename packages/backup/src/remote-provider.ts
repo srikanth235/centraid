@@ -2,20 +2,20 @@
  * `RemoteBackupProvider` — the client side of `centraid-storage-provider/1`
  * (PROTOCOL.md § Routes) over `fetch`. Every route, verbatim:
  *
- *   GET    /v1/backup/provider                       discovery/capabilities
- *   POST   /v1/backup/vaults                          create target
- *   GET    /v1/backup/vaults                          list + usage + accountStatus
- *   POST   /v1/backup/vaults/:id/credentials          issue grant (any store class)
- *   GET    /v1/backup/vaults/:id/usage                per-store-class usage (optional `usage` capability)
- *   PUT/GET /v1/backup/vaults/:id/policy               client-declared policy (optional `policy` capability)
- *   GET    /v1/backup/vaults/:id/inventory            object inventory (optional `inventory` capability)
- *   GET    /v1/backup/vaults/:id/events               audit events (optional `audit` capability)
- *   POST   /v1/backup/vaults/:id/snapshots            register (backup store)
- *   GET    /v1/backup/vaults/:id/snapshots            list (backup store)
- *   GET    /v1/backup/vaults/:id/snapshots/:seq       one row (backup store)
- *   DELETE /v1/backup/vaults/:id                      soft delete
- *   POST   /v1/backup/vaults/:id/undelete             cancel soft delete
- *   POST   /v1/backup/vaults/:id/purge                interactive-tier purge
+ *   GET    /v1/storage/provider                       discovery/capabilities
+ *   POST   /v1/storage/vaults                          create target
+ *   GET    /v1/storage/vaults                          list + usage + accountStatus
+ *   POST   /v1/storage/vaults/:id/credentials          issue grant (any store class)
+ *   GET    /v1/storage/vaults/:id/usage                per-store-class usage (optional `usage` capability)
+ *   PUT/GET /v1/storage/vaults/:id/policy               client-declared policy (optional `policy` capability)
+ *   GET    /v1/storage/vaults/:id/inventory            object inventory (optional `inventory` capability)
+ *   GET    /v1/storage/vaults/:id/events               audit events (optional `audit` capability)
+ *   POST   /v1/storage/vaults/:id/snapshots            register (backup store)
+ *   GET    /v1/storage/vaults/:id/snapshots            list (backup store)
+ *   GET    /v1/storage/vaults/:id/snapshots/:seq       one row (backup store)
+ *   DELETE /v1/storage/vaults/:id                      soft delete
+ *   POST   /v1/storage/vaults/:id/undelete             cancel soft delete
+ *   POST   /v1/storage/vaults/:id/purge                interactive-tier purge
  *
  * There is no single-target GET route in PROTOCOL.md — `getTarget`/`usage`
  * resolve from the list route and filter by id, throwing `not_found` when
@@ -90,20 +90,20 @@ export class RemoteBackupProvider implements BackupProvider {
   }
 
   async capabilities(): Promise<ProviderCapabilities> {
-    return this.call<ProviderCapabilities>('GET', '/v1/backup/provider');
+    return this.call<ProviderCapabilities>('GET', '/v1/storage/provider');
   }
 
   async createTarget(opts: { label: string }): Promise<{ targetId: string }> {
-    const row = await this.call<{ id: string }>('POST', '/v1/backup/vaults', { name: opts.label });
+    const row = await this.call<{ id: string }>('POST', '/v1/storage/vaults', { name: opts.label });
     return { targetId: row.id };
   }
 
   async deleteTarget(targetId: string): Promise<void> {
-    await this.call<unknown>('DELETE', `/v1/backup/vaults/${encodeURIComponent(targetId)}`);
+    await this.call<unknown>('DELETE', `/v1/storage/vaults/${encodeURIComponent(targetId)}`);
   }
 
   async undeleteTarget(targetId: string): Promise<void> {
-    await this.call<unknown>('POST', `/v1/backup/vaults/${encodeURIComponent(targetId)}/undelete`);
+    await this.call<unknown>('POST', `/v1/storage/vaults/${encodeURIComponent(targetId)}/undelete`);
   }
 
   async purgeTarget(targetId: string): Promise<void> {
@@ -111,7 +111,7 @@ export class RemoteBackupProvider implements BackupProvider {
     // (PROTOCOL.md § Auth) — `call` surfaces that as a normal thrown
     // BackupProviderError('interactive_auth_required'); there is no
     // client-side special case, the server enforces the tier.
-    await this.call<unknown>('POST', `/v1/backup/vaults/${encodeURIComponent(targetId)}/purge`);
+    await this.call<unknown>('POST', `/v1/storage/vaults/${encodeURIComponent(targetId)}/purge`);
   }
 
   async requestGrant(
@@ -145,7 +145,7 @@ export class RemoteBackupProvider implements BackupProvider {
   async registerSnapshot(targetId: string, reg: SnapshotRegistration): Promise<SnapshotRow> {
     return this.call<SnapshotRow>(
       'POST',
-      `/v1/backup/vaults/${encodeURIComponent(targetId)}/snapshots`,
+      `/v1/storage/vaults/${encodeURIComponent(targetId)}/snapshots`,
       reg,
     );
   }
@@ -157,14 +157,14 @@ export class RemoteBackupProvider implements BackupProvider {
     const qs = opts?.includePruned ? '?includePruned=1' : '';
     return this.call<SnapshotRow[]>(
       'GET',
-      `/v1/backup/vaults/${encodeURIComponent(targetId)}/snapshots${qs}`,
+      `/v1/storage/vaults/${encodeURIComponent(targetId)}/snapshots${qs}`,
     );
   }
 
   async getSnapshot(targetId: string, seq: number): Promise<SnapshotRow> {
     return this.call<SnapshotRow>(
       'GET',
-      `/v1/backup/vaults/${encodeURIComponent(targetId)}/snapshots/${seq}`,
+      `/v1/storage/vaults/${encodeURIComponent(targetId)}/snapshots/${seq}`,
     );
   }
 
@@ -184,7 +184,7 @@ export class RemoteBackupProvider implements BackupProvider {
         currentGeneration: number;
         usage: Usage;
       }[];
-    }>('GET', '/v1/backup/vaults');
+    }>('GET', '/v1/storage/vaults');
     const row = listing.vaults.find((v) => v.id === targetId);
     if (!row) throw BackupProviderError.of('not_found', `unknown target "${targetId}"`);
     return row;
@@ -205,7 +205,7 @@ export class RemoteBackupProvider implements BackupProvider {
     const listing = await this.call<{
       accountStatus: AccountStatus;
       vaults: { id: string; usage: Usage }[];
-    }>('GET', '/v1/backup/vaults');
+    }>('GET', '/v1/storage/vaults');
     const row = listing.vaults.find((v) => v.id === targetId);
     if (!row) throw BackupProviderError.of('not_found', `unknown target "${targetId}"`);
     return { usage: row.usage, accountStatus: listing.accountStatus };
@@ -214,14 +214,14 @@ export class RemoteBackupProvider implements BackupProvider {
   async usageReport(targetId: string): Promise<UsageByStore> {
     return this.call<UsageByStore>(
       'GET',
-      `/v1/backup/vaults/${encodeURIComponent(targetId)}/usage`,
+      `/v1/storage/vaults/${encodeURIComponent(targetId)}/usage`,
     );
   }
 
   async putPolicy(targetId: string, policy: ProviderPolicyDeclaration): Promise<ProviderPolicy> {
     return this.call<ProviderPolicy>(
       'PUT',
-      `/v1/backup/vaults/${encodeURIComponent(targetId)}/policy`,
+      `/v1/storage/vaults/${encodeURIComponent(targetId)}/policy`,
       policy,
     );
   }
@@ -229,7 +229,7 @@ export class RemoteBackupProvider implements BackupProvider {
   async getPolicy(targetId: string): Promise<ProviderPolicy> {
     return this.call<ProviderPolicy>(
       'GET',
-      `/v1/backup/vaults/${encodeURIComponent(targetId)}/policy`,
+      `/v1/storage/vaults/${encodeURIComponent(targetId)}/policy`,
     );
   }
 
@@ -237,7 +237,7 @@ export class RemoteBackupProvider implements BackupProvider {
     targetId: string,
     query: ProviderInventoryQuery,
   ): Promise<ProviderInventoryPage> {
-    const route = appendQuery(`/v1/backup/vaults/${encodeURIComponent(targetId)}/inventory`, {
+    const route = appendQuery(`/v1/storage/vaults/${encodeURIComponent(targetId)}/inventory`, {
       store: query.store,
       cursor: query.cursor,
       since: query.since,
@@ -247,7 +247,7 @@ export class RemoteBackupProvider implements BackupProvider {
   }
 
   async listEvents(targetId: string, query: ProviderAuditQuery = {}): Promise<ProviderAuditPage> {
-    const route = appendQuery(`/v1/backup/vaults/${encodeURIComponent(targetId)}/events`, {
+    const route = appendQuery(`/v1/storage/vaults/${encodeURIComponent(targetId)}/events`, {
       cursor: query.cursor,
       since: query.since,
       limit: query.limit,

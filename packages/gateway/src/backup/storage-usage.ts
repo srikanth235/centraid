@@ -1,14 +1,13 @@
 /*
  * Provider usage polling (issue #367 §D1) — the gateway-side cache in front
  * of `centraid-storage-provider/1`'s optional Layer-1 `usage` capability
- * (`GET /v1/backup/vaults/:id/usage`, packages/backup/PROTOCOL.md § Usage;
+ * (`GET /v1/storage/vaults/:id/usage`, packages/backup/PROTOCOL.md § Usage;
  * `RemoteBackupProvider.usageReport()`).
  *
- * A `provider`-kind storage connection is the only kind this can report
- * for — a `byo-s3` connection has no metering endpoint at all (the owner's
- * own bucket, no account to ask); `GET storage/usage` (storage-routes.ts)
- * falls back to locally-computed custody byte counts for those, same as it
- * always has.
+ * Every storage connection is a provider connection (#436 §2); a provider
+ * that doesn't offer the `usage` capability reports `providerReported: null`
+ * and `GET storage/usage` (storage-routes.ts) falls back to locally-computed
+ * custody byte counts.
  *
  * The provider's usage endpoint is a real network call against an account
  * that bills for, or at least logs, API traffic — this deliberately never
@@ -31,9 +30,9 @@ import type { StorageConnectionStore } from './storage-connections.js';
 const DEFAULT_POLL_MS = 30 * 60 * 1000;
 
 export interface ProviderUsageResult {
-  /** `null` for a byo-s3 connection, a provider connection with no CAS
-   *  target minted yet, or a provider that doesn't offer the `usage`
-   *  capability (its `/usage` route 404s/refuses — see `error` below). */
+  /** `null` for a provider connection with no CAS target minted yet, or a
+   *  provider that doesn't offer the `usage` capability (its `/usage` route
+   *  404s/refuses — see `error` below). */
   providerReported: UsageByStore | null;
   /** ISO timestamp of the last successful poll, or `null` before the first one. */
   fetchedAt: string | null;
@@ -73,8 +72,8 @@ export class StorageUsagePoller {
   }
 
   /** Cached report for one connection — see the module header for the
-   *  stale-while-refresh contract. Safe to call for a byo-s3 connection id
-   *  (resolves to `{providerReported: null, fetchedAt: null}`, no network). */
+   *  stale-while-refresh contract. Resolves to `{providerReported: null,
+   *  fetchedAt: null}` (no network) for a connection with no target minted yet. */
   async usageFor(connectionId: string): Promise<ProviderUsageResult> {
     const cached = this.cache.get(connectionId);
     if (!cached) return this.refresh(connectionId);

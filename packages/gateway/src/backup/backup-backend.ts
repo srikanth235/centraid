@@ -23,11 +23,12 @@ export async function resolveBackupBackend(opts: {
     return { provider: opts.provider, providerRef: `static:${label}`, label, dynamic: false };
   }
   if (!opts.storageConnections) return undefined;
-  const matches = (await opts.storageConnections.list()).filter(
-    (connection) => connection.kind === 'provider' && connection.uses.includes('backup'),
-  );
+  // One home connection (#436 §7): a provider connection is the full home
+  // bundle (snapshots + cas + derived), so the backup engine and the CAS-tier
+  // attach both key off the same single connection — no `uses` filter.
+  const matches = await opts.storageConnections.list();
   if (matches.length === 0) return undefined;
-  if (matches.length > 1) throw new Error('backup: multiple active backup destinations found');
+  if (matches.length > 1) throw new Error('backup: multiple active home connections found');
   const connection = matches[0]!;
   const apiKey = await opts.storageConnections.resolveProviderApiKey(connection.id);
   return {
