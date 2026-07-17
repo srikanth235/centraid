@@ -128,6 +128,7 @@ export {
   masterKeyForEpoch,
   rotateKeyring,
   saveKeyring,
+  validateKeyring,
 } from './crypto.js';
 export type { Keyring, KeyringEpoch } from './crypto.js';
 
@@ -153,7 +154,13 @@ export type {
 } from './manifest.js';
 
 // Engine (snapshot / restore / verify / recovery kit).
-export { createSnapshot, restoreSnapshot, verifySnapshot, writeRecoveryKit } from './engine.js';
+export {
+  assertCompatibleAppMeta,
+  createSnapshot,
+  restoreSnapshot,
+  verifySnapshot,
+  writeRecoveryKit,
+} from './engine.js';
 export type {
   CreateSnapshotOptions,
   EngineLogger,
@@ -166,6 +173,10 @@ export type {
   VerifySnapshotResult,
   WriteRecoveryKitOptions,
 } from './engine.js';
+
+// Recovery kit reader (issue #439 R1) — the counterpart to `writeRecoveryKit`.
+export { parseRecoveryKit } from './recovery-kit.js';
+export type { RecoveryKitDocument } from './recovery-kit.js';
 
 // Providers.
 export { LocalBackupProvider, openLocalBackupProvider } from './local-provider.js';

@@ -293,6 +293,45 @@ test('a directory that fails to mount is recorded in failedMounts, retried on a 
   }
 });
 
+// Issue #439 R1: the live-gateway adopt seam. `recover()` renames a restored
+// staging dir into `<root>/<vaultId>`; the running gateway then `adopt()`s it —
+// mounting it and dropping the pristine default the registry bootstrapped onto
+// the (previously empty) blank machine, so the recovered vault stands alone.
+test('adopt() mounts a recovered vault dir and removes the pristine auto-created default', async () => {
+  // A "recovered" vault, produced by a real registry in a donor root (older id
+  // than the blank machine's auto-default, exactly as a real recovery would be),
+  // then stopped so its files are consistent to copy.
+  const donorRoot = await tempDir();
+  const donor = openVaultRegistry({ rootDir: donorRoot, logger: silentLogger, ownerName: 'Mara' });
+  const recoveredId = donor.list()[0]!.vaultId;
+  donor.rename(recoveredId, 'Recovered');
+  donor.stop();
+
+  // The blank machine bootstraps its own pristine default onto an empty root.
+  const root = await tempDir();
+  const registry = openRegistry(root);
+  const pristine = registry.list()[0]!;
+  expect(registry.list()).toHaveLength(1);
+
+  // recover() renamed the restored dir into place; simulate that with a copy.
+  await fs.cp(path.join(donorRoot, recoveredId), path.join(root, recoveredId), { recursive: true });
+  const donorKey = path.join(donorRoot, 'keys', `${recoveredId}.sealkey`);
+  if (existsSync(donorKey)) {
+    await fs.mkdir(path.join(root, 'keys'), { recursive: true });
+    await fs.cp(donorKey, path.join(root, 'keys', `${recoveredId}.sealkey`));
+  }
+
+  const adopted = registry.adopt(recoveredId);
+
+  expect(adopted.vaultId).toBe(recoveredId);
+  expect(adopted.name).toBe('Recovered');
+  // The pristine default is gone; the recovered vault stands alone and is the
+  // effective default.
+  expect(registry.list().map((v) => v.vaultId)).toEqual([recoveredId]);
+  expect(registry.defaultVaultId()).toBe(recoveredId);
+  expect(existsSync(path.join(root, pristine.vaultId))).toBe(false);
+});
+
 test('a directory whose vault.db duplicates an already-mounted vault id is recorded in failedMounts too', async () => {
   const root = await tempDir();
   const registry = openRegistry(root);

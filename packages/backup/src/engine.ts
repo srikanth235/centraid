@@ -443,7 +443,17 @@ function compareVersion(a: string, b: string): number {
 const MIN_SUPPORTED_VAULT_USER_VERSION = '1';
 const MIN_SUPPORTED_ONTOLOGY_VERSION = '1.0';
 
-function assertCompatibleAppMeta(
+/**
+ * Registry-row-level compatibility gate (issue #439 R1): does a snapshot's
+ * `appMeta` (the versions it was written under) fall within what the running
+ * gateway can read? Exported so `recover()` can refuse an incompatible
+ * snapshot from the registry row ALONE — before a manifest, a chunk, or a
+ * single egress byte is fetched (`SnapshotRow.appMeta` carries the same three
+ * version fields). `restoreSnapshot` re-runs it on the authenticated envelope
+ * too, so the early gate can only prevent a futile (and, on a metered home,
+ * billed) download — never authorize a restore the sealed manifest forbids.
+ */
+export function assertCompatibleAppMeta(
   appMeta: Record<string, string>,
   current: RestoreCurrentVersions,
 ): void {

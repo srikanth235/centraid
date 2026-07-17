@@ -53,7 +53,7 @@ import { resolveDaemonConfig } from './resolve-config.js';
  * writes at worst). The old `stageVaultDbs` CLI path was read-only, so this
  * gate is new WITH the shipper, not before it.
  */
-function refuseIfDaemonHoldsRoot(
+export function refuseIfDaemonHoldsRoot(
   vaultRoot: string,
   fail: (msg: string, code?: number) => never,
 ): void {
@@ -141,7 +141,7 @@ function printJson(value: unknown): void {
 }
 
 /** Human-readable size for the metered-egress gate's cost line (issue #439 R2). */
-function formatBytes(bytes: number): string {
+export function formatBytes(bytes: number): string {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let value = bytes;
   let unit = 0;

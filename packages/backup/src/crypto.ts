@@ -143,7 +143,11 @@ export function masterKeyForEpoch(keyring: Keyring, epoch: number): Uint8Array {
   return new Uint8Array(Buffer.from(epochOf(keyring, epoch).key, 'base64'));
 }
 
-function validateKeyring(value: unknown): Keyring {
+/** Validate an untyped JSON value as a `Keyring` (FORMAT.md § Key custody).
+ *  Exported (issue #439) so the recovery-kit reader can validate the keyring
+ *  it carries with the SAME rules `loadKeyring` holds a file to — a kit whose
+ *  keyring is malformed is rejected before a single provider call. */
+export function validateKeyring(value: unknown): Keyring {
   if (typeof value !== 'object' || value === null) throw new Error('keyring: not an object');
   const v = value as Record<string, unknown>;
   if (v['version'] !== 1) throw new Error('keyring: unsupported version');

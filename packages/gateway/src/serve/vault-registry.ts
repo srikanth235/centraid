@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#439) the vault registry is one cohesive mount/lifecycle owner — scan, create, rename, delete, and now adopt (issue #439) all manipulate the same private plane map + auto-created-default set, so splitting the adopt seam into its own module would either expose that internal state across a boundary or duplicate the scan/delete plumbing it reuses
 /*
  * The vault registry — the gateway's set of sovereign vaults under one root.
  *
@@ -127,6 +128,14 @@ export class VaultRegistry {
     | undefined;
   private readonly previewCodec: PreviewCodec | undefined;
   private readonly planes = new Map<string, VaultPlane>();
+  /**
+   * Vault ids THIS registry auto-created on an empty root at construction
+   * (issue #439 R1) — never an admin `create(name)`. The airtight signal
+   * `adopt()` uses to know a sibling default is provably pristine (minted by
+   * us, never served a request) and safe to remove so a recovered vault can
+   * stand alone.
+   */
+  private readonly autoCreatedDefaults = new Set<string>();
   /** Directories already MOUNTED — lets `scan()` skip them cheaply on rescan. */
   private readonly scannedDirs = new Set<string>();
   /** Directories that failed to mount, keyed by dir (issue #351 — never silently dropped). */
@@ -157,7 +166,11 @@ export class VaultRegistry {
       );
     }
     this.scan();
-    if (this.planes.size === 0) this.create();
+    if (this.planes.size === 0) {
+      // Record the bootstrap default as auto-created — the ONLY id `adopt()`
+      // may later remove to let a recovered vault stand alone (issue #439 R1).
+      this.autoCreatedDefaults.add(this.create().vaultId);
+    }
   }
 
   /**
@@ -175,6 +188,13 @@ export class VaultRegistry {
     const nowMs = Date.now();
     for (const entry of readdirSync(this.rootDir, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
+      // Ignore hidden/dot directories (issue #439 R1): `recover()` stages a
+      // restore into `<root>/.recover-staging-<id>/` (same device, so the adopt
+      // is an atomic rename) and that half-written dir carries a `vault.db` too
+      // — mounting it mid-restore would be a torn vault. Real vaults are named
+      // by UUIDv7 and never start with a dot, so this can only ever exclude
+      // staging scratch.
+      if (entry.name.startsWith('.')) continue;
       const dir = path.join(this.rootDir, entry.name);
       if (this.scannedDirs.has(dir)) continue;
       if (!existsSync(path.join(dir, 'vault.db'))) continue;
@@ -223,6 +243,52 @@ export class VaultRegistry {
   /** Re-scan the vault root now — retries any previously-failed mount past its backoff window. */
   rescan(): void {
     this.scan();
+  }
+
+  /**
+   * Adopt a recovered vault directory as a live vault (issue #439 R1 — the
+   * live-gateway path wave 4's `/recover` routes call after `recover()` has
+   * renamed its staging dir into place). The directory `<root>/<vaultId>` MUST
+   * already exist on disk; this mounts it (`scan`) and, when this registry
+   * bootstrapped a pristine default onto an empty root, removes that default so
+   * the recovered vault stands alone.
+   *
+   * "Effective default" — what `defaultVaultId()` returns — is purely the
+   * oldest vaultId (UUIDv7 encodes creation time), and a recovered vault was
+   * minted on the ORIGINAL machine before this blank gateway existed, so it is
+   * always older than a just-auto-created default and wins that ordering on its
+   * own. The removal below is therefore cleanliness, not correctness, and it is
+   * gated on an AIRTIGHT signal: the sibling is one THIS registry auto-created
+   * on an empty root (`autoCreatedDefaults`) and so has provably never held user
+   * content (adopt runs during recovery, before the gateway serves a request).
+   * A vault the operator created by hand, or any vault carrying data, is never
+   * touched — recovery must never delete something with user content.
+   */
+  adopt(vaultId: string): VaultInfo {
+    this.scan();
+    const plane = this.planes.get(vaultId);
+    if (!plane) {
+      throw new VaultRegistryError(
+        'vault_not_found',
+        `adopt: no vault mounted at "${vaultId}" — is its directory in place under the root?`,
+      );
+    }
+    // Collect the pristine auto-created siblings up front (a fresh array from
+    // `list()`), THEN delete — never mutate `this.planes` mid-iteration.
+    const pristineSiblings = this.list()
+      .map((info) => info.vaultId)
+      .filter((id) => id !== vaultId && this.autoCreatedDefaults.has(id));
+    for (const id of pristineSiblings) {
+      // `delete()` refuses the last vault; the recovered plane keeps size >= 2,
+      // so removing a provably-pristine auto default here is always allowed.
+      if (this.planes.size <= 1) break;
+      this.logger.info(
+        `vault registry: adopt(${vaultId}) — removing the pristine auto-created default ` +
+          `${id} so the recovered vault is the effective default`,
+      );
+      this.delete(id);
+    }
+    return this.info(plane);
   }
 
   private openPlane(dir: string, boot: { vaultId?: string; vaultName?: string }): VaultPlane {
