@@ -15,6 +15,15 @@
  * The provider usually resolves "the ACTIVE vault's journal.db", so
  * the handle can change across calls (a vault switch); `ensureReady`
  * re-prepares when it does.
+ *
+ * ROW-GRAIN, LIVE-ONLY (issue #438). The Executions feed is a list of
+ * individual runs, so it reads live `run_summary` rows exactly as before —
+ * `conversation_digest` is an AGGREGATE rollup and cannot reconstitute
+ * per-run rows, so no digest-derived rows are fabricated here. A run whose
+ * raw turn was archived-and-pruned (≥90d idle) drops out of `listSummaries`
+ * and `getSummary` returns `undefined` for it — acceptable in v1: the aggregate
+ * dashboards (InsightsStore) stay whole via the digest union, and lazy
+ * rehydration (wave 3) serves an archived run's transcript on demand.
  */
 
 import { type DatabaseSync, type StatementSync } from 'node:sqlite';

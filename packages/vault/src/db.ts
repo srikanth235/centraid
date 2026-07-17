@@ -172,6 +172,15 @@ function openFile(location: string): DatabaseSync {
     const db = new DatabaseSync(location);
     db.exec('PRAGMA foreign_keys = ON');
     if (location !== ':memory:') {
+      // auto_vacuum=INCREMENTAL bounds journal.db (issue #438): the ledger-band
+      // archival prune (and #367's audit-band archival) frees pages that only
+      // `incremental_vacuum` returns to the OS — freelist mode never shrinks the
+      // file. MUST be set BEFORE journal_mode=WAL: on a fresh file the setting is
+      // pending until the first table is created, but once WAL writes page 1 the
+      // header is fixed and the pragma no longer takes at table-create time —
+      // only a full VACUUM can then convert. So set it first (applies at DDL on
+      // fresh files), then WAL.
+      db.exec('PRAGMA auto_vacuum = INCREMENTAL');
       db.exec('PRAGMA journal_mode = WAL');
       // This is a personal-data vault with a low write rate — durability of
       // each commit matters more than write throughput, so fsync on every
@@ -195,6 +204,22 @@ function openFile(location: string): DatabaseSync {
       // every connection — here and in every by-path opener (app-engine's
       // openJournalDb, key-admin) — keeps generation churn near zero.
       db.exec('PRAGMA wal_autocheckpoint = 0');
+      // One-time conversion for a file created BEFORE #438 (auto_vacuum=0,
+      // freelist mode) while fleet files are still small. A fresh file reads
+      // back 2 here (the pragma above is pending, page 1 already written by WAL);
+      // only a pre-existing NON-empty file still reads 0 — that is the migration
+      // target. The pragma above already set INCREMENTAL as the VACUUM target, so
+      // a single full VACUUM rewrites the file into incremental mode. Runs at
+      // open with no transaction held and no other connection on the file yet, so
+      // the "VACUUM cannot run inside a transaction / mid-write" constraints hold.
+      // The WAL shipper (issue #408) sees this whole-file rewrite as a foreign
+      // checkpoint and heals via a generation break — a one-time base re-upload,
+      // acceptable now that files are small (cf. vault-plane.ts:~1815-1846).
+      const autoVacuum = (db.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum: number })
+        .auto_vacuum;
+      const pageCount = (db.prepare('PRAGMA page_count').get() as { page_count: number })
+        .page_count;
+      if (autoVacuum === 0 && pageCount > 0) db.exec('VACUUM');
     }
     return db;
   } catch (err) {

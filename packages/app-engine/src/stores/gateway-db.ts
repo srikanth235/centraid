@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit the canonical journal.db ledger-band DDL is one cohesive template-literal schema + its openers; #438 added the conversation_archive/conversation_digest tables in place — the band cannot be split across files without breaking ensureConversationLedger's single-statement idempotence
 /*
  * Centraid SQLite state. app-engine owns the CONVERSATION-LEDGER BAND of the
  * vault's `journal.db` — the old standalone `transcripts.db` folded into the
@@ -53,6 +54,18 @@
  *                        the data; there is no write path and nothing to
  *                        rebuild. Scoped per vault so a central store can
  *                        never aggregate across vaults (#280).
+ *     conversation_archive
+ *                      — #438 cold-state index: one row per archived
+ *                        turn-range SEGMENT sealed into the vault blob CAS.
+ *                        `segment_sha256` blobs are CAS GC roots; `pruned_at`
+ *                        latches once raw rows are custody-gated-deleted.
+ *                        CASCADE off `conversations` (true deletion removes it).
+ *     conversation_digest
+ *                      — #438 materialized rollup of the ARCHIVED portion,
+ *                        one row per conversation, upserted at archive time.
+ *                        Insights/Executions union this with live run_summary
+ *                        so pruning raw rows stays invisible to every
+ *                        dashboard. CASCADE off `conversations`.
  *
  *     `turns.conversation_id` and `items.turn_id` and `attachments.item_id`
  *     are real same-file FKs (CASCADE): deleting a conversation drops its
@@ -226,6 +239,83 @@ export const CONVERSATION_LEDGER_DDL = `
       PRIMARY KEY (automation_id, key)
     ) STRICT;
 
+    -- #438 ledger-band archival index. journal.db grows at machine speed; these
+    -- two cold-state tables let it converge to the recent working set. A
+    -- turn-range idle past the archive window (default 90d) serializes to a
+    -- content-addressed SEGMENT in the vault blob CAS; raw turns/items prune only
+    -- after that segment's custody is proven. History changes TEMPERATURE, never
+    -- existence — true deletion stays the consent/delete path (hence the CASCADE).
+    --
+    -- conversation_archive: one row per archived turn-range segment. A whole idle
+    -- conversation archives as one (or a few bounded) segment(s); an eternal
+    -- automation thread archives aged ranges while the thread stays live. The
+    -- segment_sha256 blobs are CAS GC ROOTS (conversationArchiveShas) — the
+    -- reconcile sweep must treat them as reachable or it would delete the only
+    -- durable copy of pruned rows. pruned_at is the custody-gate LATCH: NULL until
+    -- the raw rows are deleted, which happens only once the segment is durably
+    -- replicated (remote tier) or resident in the local CAS (local-only vault).
+    -- attachment_hashes_json is the JSON array of content hashes the archived
+    -- items reference, so ConversationStore.referencedHashes() keeps the
+    -- app-engine BlobStore bytes pinned across a prune.
+    CREATE TABLE IF NOT EXISTS conversation_archive (
+      id                     TEXT PRIMARY KEY,
+      conversation_id        TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      seq_from               INTEGER NOT NULL,
+      seq_to                 INTEGER NOT NULL,
+      from_time              INTEGER NOT NULL,
+      to_time                INTEGER NOT NULL,
+      turn_count             INTEGER NOT NULL,
+      item_count             INTEGER NOT NULL,
+      segment_sha256         TEXT NOT NULL CHECK (length(segment_sha256) = 64),
+      segment_bytes          INTEGER NOT NULL CHECK (segment_bytes >= 0),
+      plaintext_bytes        INTEGER NOT NULL CHECK (plaintext_bytes >= 0),
+      attachment_hashes_json TEXT NOT NULL DEFAULT '[]',
+      pruned_at              INTEGER,
+      created_at             INTEGER NOT NULL
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS idx_conversation_archive_conv
+      ON conversation_archive(conversation_id, seq_from);
+    CREATE INDEX IF NOT EXISTS idx_conversation_archive_sha
+      ON conversation_archive(segment_sha256);
+    -- Partial index for the prune sweep's "not yet pruned" scan.
+    CREATE INDEX IF NOT EXISTS idx_conversation_archive_unpruned
+      ON conversation_archive(pruned_at) WHERE pruned_at IS NULL;
+
+    -- conversation_digest: one row per conversation, UPSERTED at archive time,
+    -- covering ONLY the archived portion (live turns still come from the
+    -- run_summary view). Insights and the Executions feed union live run_summary
+    -- aggregates with these digest rollups, so pruning raw rows is invisible to
+    -- every dashboard — the numbers before archive == digest+live after prune.
+    -- models_json is the per-model rollup [{model,runs,tokens,cost}] so byModel
+    -- stays truthful once the item rows are gone. first_started_at/last_ended_at
+    -- bound the archived span (digests carry no per-day grain — day-grain series
+    -- coarsen archived rollups only beyond the archive horizon; see insights-store).
+    CREATE TABLE IF NOT EXISTS conversation_digest (
+      conversation_id          TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+      kind                     TEXT NOT NULL,
+      app_id                   TEXT,
+      automation_ref           TEXT,
+      automation_name          TEXT,
+      title                    TEXT NOT NULL DEFAULT '',
+      first_started_at         INTEGER,
+      last_ended_at            INTEGER,
+      run_count                INTEGER NOT NULL DEFAULT 0,
+      ok_count                 INTEGER NOT NULL DEFAULT 0,
+      err_count                INTEGER NOT NULL DEFAULT 0,
+      retry_count              INTEGER NOT NULL DEFAULT 0,
+      total_input_tokens       INTEGER NOT NULL DEFAULT 0,
+      total_output_tokens      INTEGER NOT NULL DEFAULT 0,
+      total_cache_read_tokens  INTEGER NOT NULL DEFAULT 0,
+      total_cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+      total_cost_usd           REAL NOT NULL DEFAULT 0,
+      step_count               INTEGER NOT NULL DEFAULT 0,
+      tool_count               INTEGER NOT NULL DEFAULT 0,
+      models_json              TEXT NOT NULL DEFAULT '[]',
+      updated_at               INTEGER NOT NULL
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS idx_conversation_digest_automation
+      ON conversation_digest(automation_ref);
+
     -- run_summary is a VIEW, not a table: one row per FINISHED run, every
     -- kind — the Insights/Executions source. It used to be a denormalized
     -- table maintained by a best-effort dual write at finishTurn, justified
@@ -390,12 +480,34 @@ export function openJournalDb(dbPath: string): DatabaseSync {
   // shipper is ticking (and harmless when none is — no stream exists to hole).
   // The pragma just keeps that heal — a full base re-upload — rare.
   // Per connection, so EVERY by-path opener sets it, not just the vault's.
+  //
+  // auto_vacuum=INCREMENTAL (issue #438) bounds journal.db: the ledger-band
+  // archival prune frees pages that only `incremental_vacuum` returns to the OS.
+  // MUST precede journal_mode=WAL — on a fresh file the setting is pending until
+  // the first table is created, but once WAL writes page 1 the header is fixed
+  // and the pragma no longer takes at table-create time (only a full VACUUM can
+  // then convert). openVaultDb's openFile sets the same pragma on the same file;
+  // this by-path opener mirrors it so a journal reached ONLY through app-engine
+  // (worker subprocess, standalone daemon) still converges to incremental mode.
   db.exec(`
+    PRAGMA auto_vacuum=INCREMENTAL;
     PRAGMA journal_mode=WAL;
     PRAGMA foreign_keys=ON;
     PRAGMA busy_timeout=30000;
     PRAGMA wal_autocheckpoint=0;
   `);
+  // One-time conversion for a file created before #438 (auto_vacuum=0, freelist
+  // mode) while fleet files are still small. A fresh file reads back 2 here (the
+  // pragma above is pending, page 1 already written by WAL); only a pre-existing
+  // NON-empty file still reads 0. The pragma above set INCREMENTAL as the VACUUM
+  // target, so one full VACUUM rewrites the file into incremental mode. No txn is
+  // held and no other connection is on the file yet at open. The WAL shipper
+  // (issue #408) treats this whole-file rewrite as a foreign checkpoint and heals
+  // via a generation break — a one-time base re-upload, acceptable at small size.
+  const autoVacuum = (db.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum: number })
+    .auto_vacuum;
+  const pageCount = (db.prepare('PRAGMA page_count').get() as { page_count: number }).page_count;
+  if (autoVacuum === 0 && pageCount > 0) db.exec('VACUUM');
   ensureConversationLedger(db);
   return db;
 }

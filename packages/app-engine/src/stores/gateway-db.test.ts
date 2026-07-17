@@ -68,6 +68,8 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
     expect(ledgerTables).toEqual([
       'attachments',
       'automation_state',
+      'conversation_archive',
+      'conversation_digest',
       'conversations',
       'items',
       'turns',
@@ -218,6 +220,119 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
       expect(Number(n.n)).toBe(1);
     } finally {
       again.close();
+    }
+  });
+
+  it('opens auto_vacuum=INCREMENTAL and incremental_vacuum reclaims freed pages (issue #438)', () => {
+    const path = freshDbPath();
+    const db = openJournalDb(path);
+    try {
+      // Fresh file: the pragma applied at first-table-create (the ledger DDL).
+      expect((db.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum: number }).auto_vacuum).toBe(
+        2,
+      );
+      const now = Date.now();
+      db.prepare(
+        `INSERT INTO conversations (id, kind, user_id, created_at, updated_at)
+         VALUES ('c1', 'chat', 'u1', ?, ?)`,
+      ).run(now, now);
+      const ins = db.prepare(
+        `INSERT INTO turns (id, conversation_id, seq, trigger, started_at) VALUES (?, 'c1', ?, 'interactive', ?)`,
+      );
+      for (let i = 0; i < 3000; i++) ins.run(`t${i}`, i, now);
+      // Checkpoint so pages land in the main file, then measure, delete, reclaim.
+      db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+      const before = (db.prepare('PRAGMA page_count').get() as { page_count: number }).page_count;
+      db.prepare(`DELETE FROM turns`).run();
+      const freelist = (db.prepare('PRAGMA freelist_count').get() as { freelist_count: number })
+        .freelist_count;
+      expect(freelist).toBeGreaterThan(0);
+      db.exec('PRAGMA incremental_vacuum');
+      db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+      const after = (db.prepare('PRAGMA page_count').get() as { page_count: number }).page_count;
+      // Incremental mode actually returned pages to the OS (freelist mode never
+      // shrinks the file — this is the whole point of #438 step 0).
+      expect(after).toBeLessThan(before);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('converts a pre-#438 journal.db (auto_vacuum=0) to INCREMENTAL on open (issue #438)', () => {
+    const path = freshDbPath();
+    // A file written before the pragma existed: WAL, freelist mode, non-empty.
+    const seed = new DatabaseSync(path);
+    seed.exec('PRAGMA journal_mode=WAL');
+    seed.exec('CREATE TABLE legacy(a TEXT)');
+    const ins = seed.prepare('INSERT INTO legacy VALUES (?)');
+    for (let i = 0; i < 300; i++) ins.run('x'.repeat(300));
+    seed.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    expect((seed.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum: number }).auto_vacuum).toBe(
+      0,
+    );
+    seed.close();
+
+    const db = openJournalDb(path);
+    try {
+      expect((db.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum: number }).auto_vacuum).toBe(
+        2,
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  it('conversation_archive and conversation_digest CASCADE-delete with their conversation (issue #438)', () => {
+    const path = freshDbPath();
+    const db = openJournalDb(path);
+    try {
+      const now = Date.now();
+      db.prepare(
+        `INSERT INTO conversations (id, kind, user_id, created_at, updated_at)
+         VALUES ('c1', 'chat', 'u1', ?, ?)`,
+      ).run(now, now);
+      db.prepare(
+        `INSERT INTO conversation_archive
+           (id, conversation_id, seq_from, seq_to, from_time, to_time, turn_count, item_count,
+            segment_sha256, segment_bytes, plaintext_bytes, created_at)
+         VALUES ('ar1', 'c1', 0, 9, ?, ?, 10, 20, ?, 100, 200, ?)`,
+      ).run(now, now, 'a'.repeat(64), now);
+      db.prepare(
+        `INSERT INTO conversation_digest (conversation_id, kind, updated_at)
+         VALUES ('c1', 'chat', ?)`,
+      ).run(now);
+
+      db.prepare(`DELETE FROM conversations WHERE id = 'c1'`).run();
+      for (const table of ['conversation_archive', 'conversation_digest']) {
+        const n = db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number };
+        expect(Number(n.n)).toBe(0);
+      }
+    } finally {
+      db.close();
+    }
+  });
+
+  it('conversation_archive rejects a non-64-char segment_sha256 (issue #438)', () => {
+    const path = freshDbPath();
+    const db = openJournalDb(path);
+    try {
+      const now = Date.now();
+      db.prepare(
+        `INSERT INTO conversations (id, kind, user_id, created_at, updated_at)
+         VALUES ('c1', 'chat', 'u1', ?, ?)`,
+      ).run(now, now);
+      expect(() =>
+        db
+          .prepare(
+            `INSERT INTO conversation_archive
+               (id, conversation_id, seq_from, seq_to, from_time, to_time, turn_count, item_count,
+                segment_sha256, segment_bytes, plaintext_bytes, created_at)
+             VALUES ('ar1', 'c1', 0, 9, ?, ?, 10, 20, 'tooshort', 100, 200, ?)`,
+          )
+          .run(now, now, now),
+      ).toThrow(/CHECK/i);
+    } finally {
+      db.close();
     }
   });
 });

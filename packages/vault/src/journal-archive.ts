@@ -410,14 +410,14 @@ function reclaimModeOf(journal: DatabaseSync): 'incremental' | 'full' | 'none' {
 }
 
 /**
- * Reclaim pages the deletes above freed. `journal.db` is opened without
- * `PRAGMA auto_vacuum = INCREMENTAL` (db.ts — out of this module's edit
- * scope; see the NEEDS-WIRING note in the issue #367 report), so
- * `incremental_vacuum` is a no-op on every vault mounted before that lands.
- * Archival is infrequent and windowed on a personal-vault-scale file, so a
- * full `VACUUM` fallback is a deliberate, documented choice: slower per run,
- * but it runs at most once per archival cycle, never inline with a live
- * write, and only when there is anything to reclaim (`freelist_count > 0`).
+ * Reclaim pages the deletes above freed. `journal.db` is opened with
+ * `PRAGMA auto_vacuum = INCREMENTAL` (db.ts openFile + app-engine's openJournalDb,
+ * issue #438), so `incremental_vacuum` is the normal path — it returns the
+ * freelist to the OS without rewriting the whole file. The full `VACUUM`
+ * fallback still covers a legacy file that has not yet been converted (or a
+ * connection that opened it in freelist mode): slower, but it runs at most once
+ * per archival cycle, never inline with a live write, and only when there is
+ * anything to reclaim (`freelist_count > 0`).
  */
 function reclaimSpace(journal: DatabaseSync): {
   mode: 'incremental' | 'full' | 'none';
