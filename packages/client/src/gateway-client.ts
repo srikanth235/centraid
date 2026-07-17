@@ -535,6 +535,7 @@ export * from './gateway-client-conversation.js';
 // lives in `gateway-client-vault.ts`. Re-exported here so the per-app
 // Vault tab imports it from the same barrel.
 export * from './gateway-client-vault.js';
+export * from './gateway-client-atlas.js';
 
 // The broker-owned OAuth / BYO-client connections surface (issue #304)
 // lives in `gateway-client-connections.ts`. Re-exported here so the

@@ -80,6 +80,7 @@ import {
   registerSyncCommands,
   registerTallyCommands,
   registerTaskCommands,
+  registerAtlasCommands,
   pruneReplicaChanges,
   type AgentSummary,
   type AppSummary,
@@ -459,6 +460,9 @@ export class VaultPlane {
     registerEnrichCommands(this.gateway);
     registerOutboxCommands(this.gateway);
     registerJudgmentCommands(this.gateway);
+    // The Vault Atlas Browse write trio (issue #441 B3): owner row CRUD that
+    // rides the same journalled path so hand-edits ship in the replica log.
+    registerAtlasCommands(this.gateway);
     // Re-arm the ext-band write trios for every installed app that
     // declared extension tables (issue #286 phase 2) — command handlers
     // live in gateway memory, the contract rows in the vault.
@@ -1761,6 +1765,7 @@ export class VaultPlane {
         result.contentPurged +
         result.notesPurged +
         result.documentsPurged +
+        result.domainRowsPurged +
         result.retentionDeleted +
         result.blobsReclaimed +
         result.stagingExpired;
@@ -1768,7 +1773,8 @@ export class VaultPlane {
         this.logger.info(
           `vault plane: sweep grantsExpired=${result.grantsExpired} sharesExpired=${result.sharesExpired} ` +
             `contentPurged=${result.contentPurged} notesPurged=${result.notesPurged} ` +
-            `documentsPurged=${result.documentsPurged} retentionDeleted=${result.retentionDeleted} ` +
+            `documentsPurged=${result.documentsPurged} domainRowsPurged=${result.domainRowsPurged} ` +
+            `retentionDeleted=${result.retentionDeleted} ` +
             `blobsReclaimed=${result.blobsReclaimed} stagingExpired=${result.stagingExpired}`,
         );
       }

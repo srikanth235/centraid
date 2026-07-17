@@ -130,7 +130,10 @@ per-table write counts from journal provenance). Tests assert no NOT NULL
 edge with a non-empty child table is ever a ghost, and derive expected edge
 counts from an independent PRAGMA walk — no hardcoded 122/46.
 
-`packages/vault/src/schema/atlas-browse.ts`: Browse read side — keyset
+`packages/vault/src/schema/atlas-browse.ts` (+
+`packages/vault/src/schema/atlas-browse-refs.ts`, the relations-aware half —
+FK reference search + the dependents preview — split out to stay within the
+file-size cap): Browse read side — keyset
 pagination (composite-PK tables fall back to rowid; NULL-aware tuple
 predicates for nullable order columns), column metadata with FK targets and
 sealed flags, FK reference search with a display-field heuristic, dependent
@@ -172,14 +175,24 @@ machinery shelf; kind card click lands in Browse.
 party-centred radial star chart with fixed per-pack bearings (re-centre
 animates radius only), fill-weighted edges, dotted ghosts, self-ref curl
 glyphs, the unreached island ring, relation-vocabulary chips overlaying
-authored links as a separate mechanism, and a fixed side-panel readout.
+authored links as a separate mechanism, and a fixed side-panel readout. The
+orchestrator delegates the SVG body to
+`packages/client/src/react/screens/AtlasOrreryChart.tsx` and the side panel
+to `packages/client/src/react/screens/AtlasOrreryPanel.tsx` (extracted to
+stay within the file-size cap).
 `packages/client/src/react/screens/AtlasBrowseTab.tsx` +
 `packages/client/src/react/screens/AtlasBrowseTab.module.css` +
 `packages/client/src/react/screens/AtlasBrowseTab.test.tsx` +
 `packages/client/src/react/screens/atlasBrowseData.ts`: the editor — grouped
 table picker, keyset grid with Load more and sortable headers, inline row
 editor with FK reference pickers and sealed chips, dependent-aware delete
-confirmation with FK/poly mechanism badges, machinery unlock switch.
+confirmation with FK/poly mechanism badges, machinery unlock switch. The
+orchestrator delegates to
+`packages/client/src/react/screens/AtlasBrowseTablePicker.tsx`,
+`packages/client/src/react/screens/AtlasBrowseGrid.tsx`,
+`packages/client/src/react/screens/AtlasBrowseRowEditor.tsx`, and
+`packages/client/src/react/screens/AtlasBrowseDeleteDialog.tsx` (extracted to
+stay within the file-size cap).
 Shell wiring: `packages/client/src/react/shell/routes/AtlasRoute.tsx`,
 `packages/client/src/react/shell/App.tsx`,
 `packages/client/src/react/shell/Sidebar.tsx` (Vault Atlas under Operations),
@@ -308,6 +321,12 @@ Fresh-context sub-agent attestation of session `9d3ca257-3f72-41be-943a-cae89899
 | claude-code-9d3ca257-3f7-1784305074-1 | claude-code | 9d3ca257-3f72-41be-943a-cae898992375 | #441 | claude-fable-5 | 2 | 1151 | 335955 | 165 | 1318 | 0.3586 | 887 | 3861639 | 87302528 | 691572 | probe (#441)Issue: #441 |
 | claude-code-9d3ca257-3f7-1784311722-1 | claude-code | 9d3ca257-3f72-41be-943a-cae898992375 | #441 | claude-fable-5 | 56 | 960268 | 8614089 | 16078 | 976402 | 21.4219 | 943 | 4821907 | 95916617 | 707650 | fix(vault): ontology audit Part A — poly-ref registry, generic purge, silo bleed |
 | claude-code-9d3ca257-3f7-1784311776-1 | claude-code | 9d3ca257-3f72-41be-943a-cae898992375 | #441 | claude-fable-5 | 6 | 14529 | 1031421 | 3309 | 17844 | 1.3785 | 949 | 4836436 | 96948038 | 710959 | fix(vault): audit Part A — poly-ref registry, generic purge, silo bleeds, unifor |
+| claude-code-9d3ca257-3f7-1784311829-1 | claude-code | 9d3ca257-3f72-41be-943a-cae898992375 | #441 | claude-fable-5 | 4 | 3254 | 697300 | 2324 | 5582 | 0.8542 | 953 | 4839690 | 97645338 | 713283 | feat(vault,gateway): Vault Atlas backend — stats/graph/pulse + journalled Browse |
+| claude-code-9d3ca257-3f7-1784311867-1 | claude-code | 9d3ca257-3f72-41be-943a-cae898992375 | #441 | claude-fable-5 | 2 | 1232 | 350277 | 148 | 1382 | 0.3731 | 955 | 4840922 | 97995615 | 713431 | probe (#441)Issue: #441 |
+| claude-code-9d3ca257-3f7-1784312138-1 | claude-code | 9d3ca257-3f72-41be-943a-cae898992375 | #441 | claude-fable-5 | 54 | 19821 | 9658328 | 14639 | 34514 | 10.6386 | 1009 | 4860743 | 107653943 | 728070 | feat(vault,gateway): Vault Atlas backend — stats/graph/pulse + journalled Browse |
+| claude-code-9d3ca257-3f7-1784312194-1 | claude-code | 9d3ca257-3f72-41be-943a-cae898992375 | #441 | claude-fable-5 | 4 | 10732 | 728774 | 1636 | 12372 | 0.9448 | 1013 | 4871475 | 108382717 | 729706 | feat(client): Vault Atlas screen — Kinds census, Relations orrery, Browse editor |
+| claude-code-9d3ca257-3f7-1784312990-1 | claude-code | 9d3ca257-3f72-41be-943a-cae898992375 | #441 | claude-opus-4-8 | 4 | 576844 | 53576 | 368 | 577216 | 3.6413 | 1017 | 5448319 | 108436293 | 730074 | probe (#441)Issue: #441 |
+| claude-code-9d3ca257-3f7-1784313924-1 | claude-code | 9d3ca257-3f72-41be-943a-cae898992375 | #441 | claude-opus-4-8 | 122 | 103089 | 20592438 | 72294 | 175505 | 12.7485 | 1139 | 5551408 | 129028731 | 802368 | feat(vault,gateway): Vault Atlas backend — stats/graph/pulse + journalled Browse |
 
 ### Steering
 
