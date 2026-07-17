@@ -19,7 +19,7 @@ inventory reconcile that distrusts the restored replica index.
 - [x] R1 — the recovery verb: service-layer recover() and the blank-machine e2e
 - [x] R6 — CLI recover wrapper
 - [x] R5 — adopt-time inventory reconcile and seal-key restore-verify
-- [ ] R1 surface — recover job model, progress SSE, pre-vault recover routes
+- [x] R1 surface — recover job model, progress SSE, pre-vault recover routes
 - [ ] UI — fresh-gateway onboarding recovery flow
 - [ ] R4 — orphan-grace GC invariant
 
@@ -399,6 +399,154 @@ $ bunx vitest run src/materialize.test.ts   # packages/backup
    ✓ materializes exactly the requested carried shas, byte-exact, and reports the rest absent
 ```
 
+### R1 surface — recover job model, progress SSE, pre-vault recover routes
+
+The recovery product's wire surface: a fresh gateway can turn a pasted kit + a
+provider key into a live vault over HTTP, and the restore survives the UI
+closing. The route contract (all under the gateway-plumbing prefix, matching
+`pair`/`storage`/`info`; bearer-gated, admin-plane only):
+
+- `POST /centraid/_gateway/recover/kit` — body is the kit JSON; returns
+  `{ok, createdAt, targets:[{label, vaultId, providerHost}]}` — the keyring
+  NEVER rides back. Malformed ⇒ 400 `invalid_kit`.
+- `POST /centraid/_gateway/recover/discover` — body `{kit, apiKey}`; returns the
+  found-your-vault card `{found, label, vaultId, providerHost, compatible,
+  sizeBytes, asOfMs, restoreCostClass, lazyAvailable}`, or a typed refusal: 404
+  `no_snapshot`, 409 `incompatible` (the "update the gateway" message), or the
+  provider auth error's own status (401/403) passed through.
+- `POST /centraid/_gateway/recover/start` — body `{kit, apiKey, confirmed?}`;
+  server-side gates fire in order: non-fresh gateway ⇒ 409 `not_fresh` (before
+  the provider is dialed), no snapshot ⇒ 404, incompatible ⇒ 409,
+  metered-egress without `confirmed` ⇒ 409 `confirm_required` (carrying the
+  `estimate`), a job already running ⇒ 409 `recover_in_progress`. On success
+  ⇒ 202 `{jobId}`.
+- `GET /centraid/_gateway/recover/status` — `{fresh, job}` (the entry check +
+  reattach point).
+- `GET /centraid/_gateway/recover/events?job=<id>` — the progress SSE: replays
+  every event so far, then streams live; `event: phase` frames, a final
+  `event: report` carrying the `RecoverReport`, a 30s heartbeat, and a terminal
+  `event: end` naming the state (`done`/`failed`/`interrupted`).
+
+Job lifecycle states: `running` (the sole live state) → `done` | `failed` |
+`interrupted`. Persistence rule (atomic temp+rename, `backup-state.ts`'s shape):
+ONLY progress metadata — `{jobId, state, phase, startedAt, updatedAt, targetId,
+vaultId, error?, report?}`. The kit keyring and the api-key are held in memory
+for the running job ALONE and never touch disk; the persisted `report` carries
+no secrets. That is the resumability contract: survive the UI closing (the
+daemon owns the process), report/attach from any client, and — because the
+secrets are never persisted — a daemon that dies mid-job is found `running` at
+next startup, flipped to `interrupted`, its torn `.recover-staging-*` scratch
+swept, and the user re-submits kit+key. One active job at a time.
+
+- `packages/gateway/src/backup/recover-job.ts` (new) — `RecoverJobRunner`: the
+  daemon-owned job. `start()` guards one-active-job (`RecoverJobConflictError`
+  → 409) and fires `recover()` fire-and-forget with the LIVE seams wired —
+  `onAdopted` → `adopt(vaultId)` + patches the report ids into the record;
+  `resolveRemoteTier` → the mounted plane's own tier so the warm pass runs
+  in-process. A replayable in-memory event list + subscriber set (modeled on
+  `run-event-bus.ts`) backs the SSE; `init()` reconciles a crashed job; a
+  serialized `persistChain` (writes never overlap/reorder) with write failures
+  logged not thrown, and a `flush()` a graceful `stop()` awaits. `recoverFn` is
+  an injectable seam (defaults to the real `recover()`) so the job lifecycle is
+  testable without a real restore.
+- `packages/gateway/src/routes/recover-routes.ts` (new) —
+  `makeRecoverRouteHandler`: the five routes above, orchestrating
+  `discoverRecovery` + the job. A TOP-LEVEL pre-vault handler (it stands up and
+  adopts the home vault, so it lives outside `composedHandler`'s per-request
+  vault scope — the webhook handler is the precedent). Admin-plane gate: refuses
+  a request carrying `AUTHED_DEVICE_HEADER` (a paired device) with 403
+  `admin_only`. The SSE replays `job.snapshot()` then subscribes live, closing on
+  the terminal event; its own `SseSubscriberCap`.
+- `packages/gateway/src/backup/recover.ts` — extended `discoverRecovery` +
+  `RecoveryDiscovery` with `compatible` / `incompatibleReason`: it now runs the
+  registry-`appMeta` compat gate NON-throwingly (catching `assertCompatibleAppMeta`)
+  so the discover card can show a typed "update first" refusal instead of an
+  opaque failure three phases into a restore. No other behavior changed.
+- `packages/gateway/src/serve/vault-registry.ts` — added `isFresh()`: the
+  airtight fresh-gateway signal the start gate reads. True only when every
+  mounted vault is in `autoCreatedDefaults` (the same provenance `adopt()`
+  trusts — a vault THIS registry minted on an empty root, provably never served
+  a request). Conservative in the safe direction: it can only ever refuse a
+  gateway with content, never approve one.
+- `packages/gateway/src/serve/build-gateway.ts` — constructs the
+  `RecoverJobRunner` (persisting under `storageDir`; `adopt`/`resolveRemoteTier`
+  wired to the live registry; `db.remote()` is the mounted plane's tier),
+  `await`s its `init()` (crash reconcile), builds `recoverHandler`, adds
+  `recoverHandler` to `BuiltGateway` + the return, awaits `recoverJob.flush()`
+  in `stop()`, and hoists the shared `backupDir` const.
+- `packages/gateway/src/serve/serve.ts` — inserts `gateway.recoverHandler`
+  between the webhook and composed handlers in the HTTP `extraHandlers` chain
+  (so it is bearer-checked but runs outside the per-request vault scope), and
+  adds `recoverHandler` to the `GatewayServeHandle` Omit list. This one site
+  covers both the daemon and the desktop embed — both go through `serve()`.
+- `packages/gateway/src/backup/recover-job.test.ts` (new) — the deterministic
+  job lifecycle (injected `recoverFn`): run-to-`done` with report persisted +
+  streamed and the secret NEVER on disk; late-subscriber replay; double-start
+  409; the daemon-death path (a persisted `running` record + a torn staging dir
+  ⇒ `interrupted` + swept); and a terminal record loaded as-is on restart.
+- `packages/gateway/src/routes/recover-routes.test.ts` (new) — HTTP coverage
+  against the real fake provider + a stubbed job: kit good/bad, discover
+  found/wrong-key/incompatible, the three start gates, status, the admin-plane
+  403, and the SSE replay-then-live-through-`end` stream.
+- `packages/gateway/src/backup/recover-live-e2e.test.ts` (new) — the LIVE
+  integration the CLI shell cannot reach: a real `serve()` gateway (empty root,
+  one pristine default) is driven kit→discover→start→SSE-to-`end` over HTTP
+  against the fake provider, then asserts the recovered vault is MOUNTED and the
+  effective default (the pristine default adopted away), the quarantine fired on
+  first mount, and — because the live gateway satisfied `resolveRemoteTier` with
+  the mounted plane's own `db.remote()` — the previews warmed with
+  `timeToUsableGridMs` present. A second `start` is refused `not_fresh`.
+
+#### R1 surface verification
+
+- `bun run typecheck` (turbo, `@centraid/gateway`) — clean, including the new
+  job/routes modules, the `RecoveryDiscovery` extension, `VaultRegistry.isFresh`,
+  and the `BuiltGateway.recoverHandler` wiring.
+- `bunx oxlint` + `bunx oxfmt --check` on every changed source/test file — 0
+  warnings, 0 errors, formatting clean.
+- The three new suites, plus the regression suites the surface touches
+  (recover-e2e, restore-lazy-e2e, recover-reconcile, vault-registry,
+  recover-admin, build-gateway, vault-quarantine, backup-service(-restore),
+  backup-e2e, wal-e2e) — all green.
+
+```
+$ bunx vitest run src/backup/recover-job.test.ts src/routes/recover-routes.test.ts \
+    src/backup/recover-live-e2e.test.ts
+ ✓ src/backup/recover-job.test.ts (5 tests)
+   ✓ a job runs to done: phases emitted, adopt+warm wired, report persisted and streamed
+   ✓ a late subscriber replays the full phase history
+   ✓ a second start while one runs is refused (409 conflict)
+   ✓ a job the previous daemon died mid-flight is marked interrupted and its staging swept
+   ✓ a terminal record from a prior process is loaded as-is (not re-flipped)
+ ✓ src/routes/recover-routes.test.ts (5 tests)
+   ✓ POST /recover/kit validates a kit and returns a sanitized summary (never the keyring)
+   ✓ POST /recover/discover: found / wrong-key / incompatible
+   ✓ POST /recover/start gates: metered-without-confirm, non-fresh, and double-start all 409
+   ✓ GET /recover/status folds fresh + the job record; admin-plane only
+   ✓ GET /recover/events streams replay-then-live phases and a final report through end
+ ✓ src/backup/recover-live-e2e.test.ts (1 test)
+   ✓ a fresh gateway recovers a vault over the live routes: kit → discover → start → SSE, then MOUNTED + quarantined + previews warmed
+
+ Test Files  3 passed (3)
+      Tests  11 passed (11)
+```
+
+```
+$ bunx vitest run --no-file-parallelism src/backup/recover-e2e.test.ts \
+    src/backup/restore-lazy-e2e.test.ts src/backup/recover-reconcile.test.ts \
+    src/serve/vault-registry.test.ts src/cli/recover-admin.test.ts \
+    src/serve/build-gateway.test.ts src/serve/vault-quarantine.test.ts \
+    src/backup/backup-service.test.ts src/backup/backup-service-restore.test.ts \
+    src/backup/backup-e2e.test.ts src/backup/wal-e2e.test.ts
+ Test Files  11 passed (11)
+      Tests  82 passed (82)
+```
+
+(Run serially: these 11 heavy WAL/SQLite suites intermittently hit "database
+disk image is malformed" when all launched at max file-parallelism — a
+pre-existing resource-contention flake in this repo's WAL-shipper suites, not a
+recovery regression; each suite and smaller groups pass clean in parallel.)
+
 ## Steering
 
 **Verdict: PASS**
@@ -420,3 +568,4 @@ $ bunx vitest run src/materialize.test.ts   # packages/backup
 | claude-code-b42aae9d-faa-1784300458-1 | claude-code | b42aae9d-faaf-4587-8bcc-fd43d61e35a4 | #439 | claude-fable-5 | 12 | 27756 | 762361 | 14914 | 42682 | 1.8551 | 91 | 473401 | 4004876 | 173671 | feat(gateway): recover() verb, blank-machine e2e, CLI recover (#439) -m Issue: # |
 | claude-code-b42aae9d-faa-1784300812-1 | claude-code | b42aae9d-faaf-4587-8bcc-fd43d61e35a4 | #439 | claude-fable-5 | 0 | 0 | 0 | 0 | 0 | 0.0000 | 91 | 473401 | 4004876 | 173671 | feat(gateway): recover() verb, blank-machine e2e, CLI recover (#439) -m Issue: # |
 | claude-code-b42aae9d-faa-1784302841-1 | claude-code | b42aae9d-faaf-4587-8bcc-fd43d61e35a4 | #439 | claude-fable-5 | 12 | 26858 | 825908 | 9061 | 35931 | 1.6148 | 103 | 500259 | 4830784 | 182732 | feat(gateway): adopt-time inventory reconcile, seal-key restore-verify (#439) -m |
+| claude-code-b42aae9d-faa-1784311723-1 | claude-code | b42aae9d-faaf-4587-8bcc-fd43d61e35a4 | #439 | claude-fable-5 | 116 | 433456 | 2703871 | 22169 | 455741 | 9.2317 | 219 | 933715 | 7534655 | 204901 | feat(gateway): pre-vault recover routes, daemon-owned restore job, progress SSE  |

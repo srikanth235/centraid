@@ -190,6 +190,20 @@ export interface RecoveryDiscovery {
   restoreCostClass: 'free-egress' | 'metered-egress' | undefined;
   /** True when the provider attests an inventory ⇒ lazy defers the bulk download. */
   lazyAvailable: boolean;
+  /**
+   * Whether THIS build can read the selected snapshot — the registry-`appMeta`
+   * compatibility gate (the same one `recover()` enforces before a byte is
+   * fetched) run non-throwingly so the "found your vault" card (issue #439 R1
+   * wave 4's `/recover/discover`) can show a typed "update the gateway first"
+   * refusal instead of an opaque failure three phases into a restore. `true`
+   * when there is a snapshot and this build can read it; `false` with
+   * `incompatibleReason` set when a newer-software snapshot is refused. When no
+   * snapshot exists yet (`seq === undefined`) this stays `true` — the refusal is
+   * "nothing to recover", not "incompatible".
+   */
+  compatible: boolean;
+  /** The compat-gate refusal message when `compatible` is false (else absent). */
+  incompatibleReason?: string;
 }
 
 export async function discoverRecovery(opts: {
@@ -211,6 +225,18 @@ export async function discoverRecovery(opts: {
     // the facts card on a byte count.
     row = undefined;
   }
+  // Compatibility from the registry row's appMeta ALONE (no manifest, no byte) —
+  // caught, not thrown, so the facts card renders a refusal rather than an error.
+  let compatible = true;
+  let incompatibleReason: string | undefined;
+  if (row) {
+    try {
+      assertCompatibleAppMeta(row.appMeta, currentVersions());
+    } catch (err) {
+      compatible = false;
+      incompatibleReason = err instanceof Error ? err.message : String(err);
+    }
+  }
   return {
     target,
     provider,
@@ -219,6 +245,8 @@ export async function discoverRecovery(opts: {
     recoveredAsOf: row ? row.createdAt * 1000 : undefined,
     restoreCostClass: caps.backup?.restoreCostClass,
     lazyAvailable: caps.capabilities.includes('inventory'),
+    compatible,
+    ...(incompatibleReason !== undefined ? { incompatibleReason } : {}),
   };
 }
 

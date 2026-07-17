@@ -246,6 +246,25 @@ export class VaultRegistry {
   }
 
   /**
+   * True when this gateway holds nothing but pristine auto-created default(s)
+   * — the airtight "fresh gateway" signal wave 4's `/recover/start` gate reads
+   * (issue #439 R1) to refuse recovery over a gateway that already carries user
+   * content. Reuses the SAME `autoCreatedDefaults` provenance `adopt()` trusts:
+   * a vault is fresh only if THIS registry minted it on an empty root at
+   * construction (so it has provably never served a request); a vault the
+   * operator created, one that carries data, or a recovered/adopted vault makes
+   * this false. Conservative in the safe direction — it can only ever return
+   * false (refuse) for a gateway whose default was re-mounted from disk on a
+   * later boot rather than freshly bootstrapped, never true for one with real
+   * content. `recover()`'s own fresh-directory + keyring guards are the true
+   * safety net; this gate is the friendly pre-flight the UI reads.
+   */
+  isFresh(): boolean {
+    const ids = [...this.planes.keys()];
+    return ids.length > 0 && ids.every((id) => this.autoCreatedDefaults.has(id));
+  }
+
+  /**
    * Adopt a recovered vault directory as a live vault (issue #439 R1 — the
    * live-gateway path wave 4's `/recover` routes call after `recover()` has
    * renamed its staging dir into place). The directory `<root>/<vaultId>` MUST

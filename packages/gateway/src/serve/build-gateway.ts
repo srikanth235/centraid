@@ -150,6 +150,8 @@ import { StorageUsagePoller } from '../backup/storage-usage.js';
 import { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
 import { makeStorageCredentialsResolver } from '../backup/storage-credentials.js';
 import { makeStorageRouteHandler } from '../routes/storage-routes.js';
+import { RecoverJobRunner } from '../backup/recover-job.js';
+import { makeRecoverRouteHandler } from '../routes/recover-routes.js';
 import { WebAppSessions } from './web-app-sessions.js';
 
 export type { DeviceAccess } from './vault-context.js';
@@ -424,6 +426,15 @@ export interface BuiltGateway {
    * fall through to `composedHandler`.
    */
   webhookHandler: RouteHandler;
+  /**
+   * The pre-vault recovery routes (`/centraid/_gateway/recover/*`, issue #439
+   * R1 wave 4), mounted like `webhookHandler` as a TOP-LEVEL handler outside
+   * `composedHandler`'s per-request vault scope — recovery stands up (and
+   * adopts) the home vault before one is chosen. Bearer-gated by the app-engine
+   * check (not public) and admin-plane only. Returns `false` for any
+   * non-matching URL so the host falls through to `composedHandler`.
+   */
+  recoverHandler: RouteHandler;
   /**
    * The gateway's log ring buffer + live fan-out (realtime Logs surface).
    * Every `logger.*` line lands here before the console. Hosts may
@@ -789,14 +800,39 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // storage connection marked for backup on every operation. This makes a
   // connection created in the desktop immediately effective without a
   // process restart or a second, hidden configuration source.
+  const backupDir = paths.backupDir ?? path.join(path.dirname(paths.vaultDir), 'backup');
   const backupService = new BackupService({
     ...(options.backup?.enabled ? { config: options.backup } : {}),
-    backupDir: paths.backupDir ?? path.join(path.dirname(paths.vaultDir), 'backup'),
+    backupDir,
     vaults: vaultRegistry,
     health,
     logger: health.loggerFor('backups', logger),
     recoveryKit,
     storageConnections,
+  });
+
+  // The daemon-owned recovery job (issue #439 R1 wave 4). It runs the
+  // service-layer `recover()` verb with the LIVE gateway's own seams wired in:
+  // `adopt` mounts the recovered vault through the registry, and
+  // `resolveRemoteTier` hands back the mounted plane's `db.remote()` so the
+  // previews-first warm pass runs in-process. Progress persists under
+  // `storageDir` (metadata only — never the kit keyring or the api-key); `init`
+  // reconciles a job the previous daemon process died mid-flight (marks it
+  // interrupted + sweeps torn staging scratch).
+  const recoverJob = new RecoverJobRunner({
+    dir: storageDir,
+    vaultRoot: paths.vaultDir,
+    backupDir,
+    adopt: (vaultId) => {
+      vaultRegistry.adopt(vaultId);
+    },
+    resolveRemoteTier: (ctx) => vaultRegistry.get(ctx.vaultId)?.db.remote() ?? undefined,
+    logger: health.loggerFor('backups', logger),
+  });
+  await recoverJob.init();
+  const recoverHandler = makeRecoverRouteHandler({
+    job: recoverJob,
+    isFresh: () => vaultRegistry.isFresh(),
   });
 
   const currentWorkspace = (): VaultWorkspace => vaultRegistry.currentWorkspace();
@@ -2324,6 +2360,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // write shipper + backup state, and the vault registry teardown below
     // closes the very planes it would touch.
     await backupService.stop();
+    // Flush any pending recovery-job progress write so a graceful shutdown
+    // leaves a durable record (a still-`running` job is reconciled to
+    // interrupted on the next `RecoverJobRunner.init`).
+    await recoverJob.flush();
     // Release the lease so a fresh start (or another instance) sees an
     // absent file instead of waiting out LEASE_FRESH_WINDOW_MS.
     instanceLease.stop();
@@ -2346,6 +2386,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     extraHandlers,
     composedHandler,
     webhookHandler,
+    recoverHandler,
     logs: logStore,
     start,
     stop,
