@@ -55,6 +55,17 @@ export interface VaultDb {
    * backends needs no reopen.
    */
   blobs: BlobCustody;
+  /**
+   * The settings-declared remote CAS tier, resolved fresh on every call from
+   * the SAME cached closure `blobs`/`blobTransfers` use (issue #439 R2). A
+   * lazy-by-default restore asks this "does the vault have a durable remote CAS
+   * tier?" so the gateway can prefer the previews-first lazy path WITHOUT
+   * rebuilding S3 config from settings + credentials by hand. `null` when the
+   * vault has no s3-kind `blob_store` or no resolvable credential — the signal
+   * to fall back to a FULL restore (the snapshot is the only copy). Constructing
+   * the tier makes no network call; only a store operation does.
+   */
+  remote(): RemoteTier | null;
   /** Persistent resumable ingress + continuous pending-offsite drain (#414). */
   blobTransfers: BlobTransferCoordinator;
   /**
@@ -396,6 +407,9 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     dir: dir ?? ':memory:',
     sealKey,
     blobs: new BlobCustody(local, remoteTier, blobCache, (sha) => desiredStoreForSha(vault, sha)),
+    // Narrow read-only accessor onto the cached remote-tier closure (issue #439
+    // R2) — the lazy-by-default restore's "durable remote CAS tier?" oracle.
+    remote: remoteTier,
     blobTransfers,
     // Injected raster codec for the preview backstop (issue #405 §2), or
     // undefined — a codec-less open just never runs the backstop.

@@ -9,19 +9,25 @@
  *   centraid-gateway backup list    [--config <path> | --data-dir <path>] [--vault <id>]
  *   centraid-gateway backup verify  [--config <path> | --data-dir <path>] [--vault <id>]
  *   centraid-gateway backup restore-verify [--config <path> | --data-dir <path>] [--vault <id>]
- *   centraid-gateway backup restore [--config <path> | --data-dir <path>] --vault <id> --dest <dir> [--seq <n>] [--at <iso-time>]
+ *   centraid-gateway backup restore [--config <path> | --data-dir <path>] --vault <id> --dest <dir> [--seq <n>] [--at <iso-time>] [--full] [--yes]
  *   centraid-gateway backup kit     [--config <path> | --data-dir <path>] --out <file>
  *
- * `restore` materializes a snapshot into a FRESH `--dest` directory — it
- * NEVER swaps the live vault (FORMAT.md restore rule 3); adopting the
- * result as a live vault, and clearing the resulting quarantine marker,
- * are separate, deliberate operator steps. `--at` is point-in-time restore
- * (issue #408): the newest snapshot at or before that instant plus every
- * shipped WAL segment up to it. `restore-verify` performs a REAL restore
- * from the remote into a scratch dir and runs the full check battery (G9)
- * — a backup that has never been restored is a hypothesis. `kit` emits the
- * recovery kit — live key material — with a loud "store this offline"
- * warning.
+ * `restore` ALWAYS materializes a snapshot into a FRESH, empty `--dest`
+ * side directory (issue #439 R3) — it NEVER swaps or restores in place over
+ * a live vault (FORMAT.md restore rule 3, enforced by the engine's
+ * empty-directory refusal); adopting the result as a live vault, and
+ * clearing the resulting quarantine marker, are separate, deliberate
+ * operator steps. It is LAZY by default (issue #439 R2): a vault with a
+ * durable remote CAS tier restores previews-first, deferring every
+ * remote-held blob to on-demand read-through; pass `--full` to materialize
+ * every blob byte instead. On a `metered-egress` home the restore refuses to
+ * start without `--yes`, printing the download it will incur (PROTOCOL.md's
+ * `restoreCostClass`). `--at` is point-in-time restore (issue #408): the
+ * newest snapshot at or before that instant plus every shipped WAL segment up
+ * to it. `restore-verify` performs a REAL restore from the remote into a
+ * scratch dir and runs the full check battery (G9) — a backup that has never
+ * been restored is a hypothesis. `kit` emits the recovery kit — live key
+ * material — with a loud "store this offline" warning.
  */
 
 import { readFileSync } from 'node:fs';
@@ -34,6 +40,7 @@ import {
   type LeaseRecord,
 } from '../serve/gateway-instance-lease.js';
 import { BackupService } from '../backup/backup-service.js';
+import type { BackupProvider } from '@centraid/backup';
 import { daemonLayoutFor } from './paths.js';
 import { resolveDaemonConfig } from './resolve-config.js';
 
@@ -75,6 +82,10 @@ interface BackupArgs {
   out?: string;
   /** Point-in-time restore target, epoch ms (parsed from `--at <iso>`). */
   atMs?: number;
+  /** Force a full (non-lazy) restore — the `--full` override (issue #439 R2). */
+  full?: boolean;
+  /** Acknowledge a metered-egress restore's download cost — the `--yes` gate release (issue #439 R2). */
+  yes?: boolean;
 }
 
 function parseBackupArgs(args: string[], fail: (msg: string, code?: number) => never): BackupArgs {
@@ -101,7 +112,9 @@ function parseBackupArgs(args: string[], fail: (msg: string, code?: number) => n
       const ms = Date.parse(raw);
       if (Number.isNaN(ms)) fail(`--at needs an ISO-8601 time, got "${raw}"`, 2);
       out.atMs = ms;
-    } else fail(`unknown flag "${flag}"`, 2);
+    } else if (flag === '--full') out.full = true;
+    else if (flag === '--yes') out.yes = true;
+    else fail(`unknown flag "${flag}"`, 2);
   }
   return out;
 }
@@ -127,9 +140,28 @@ function printJson(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value)}\n`);
 }
 
+/** Human-readable size for the metered-egress gate's cost line (issue #439 R2). */
+function formatBytes(bytes: number): string {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${unit === 0 ? value : value.toFixed(1)} ${units[unit]}`;
+}
+
 export async function commandBackup(
   args: string[],
   fail: (msg: string, code?: number) => never,
+  /**
+   * Test seam only (issue #439): inject a pre-built `BackupProvider` so a test
+   * can drive the CLI against a provider with a chosen `restoreCostClass` (e.g.
+   * `metered-egress`) without standing up a real remote server. Production
+   * callers (`cli.ts`) omit it and the provider is built from the config.
+   */
+  deps?: { provider?: BackupProvider },
 ): Promise<void> {
   const [action, ...rest] = args;
   if (
@@ -156,6 +188,7 @@ export async function commandBackup(
     vaults: registry,
     health,
     logger: quietLogger,
+    ...(deps?.provider ? { provider: deps.provider } : {}),
   });
 
   try {
@@ -212,21 +245,61 @@ export async function commandBackup(
       }
       case 'restore': {
         if (!parsed.vault || !parsed.dest) {
-          fail('usage: backup restore --vault <id> --dest <dir> [--seq <n>] [--at <iso-time>]', 2);
+          fail(
+            'usage: backup restore --vault <id> --dest <dir> [--seq <n>] [--at <iso-time>] [--full] [--yes]',
+            2,
+          );
         }
         const vaultId = resolveVaultId(registry, parsed.vault, fail);
+        // Issue #439 R2 — metered-egress confirm gate (PROTOCOL.md's
+        // `restoreCostClass` MUST). Only a `metered-egress` home gates: a
+        // `free-egress` home (or no discovery) skips this entirely. The estimate
+        // is manifest-free — the snapshot registry row's `totalBytes` is the
+        // whole-library download a `--full` restore incurs; a lazy restore
+        // (the default when a durable remote tier exists) defers every
+        // remote-held blob, so it downloads far less upfront.
+        const estimate = await service.restoreEgressEstimate({
+          vaultId,
+          ...(parsed.seq !== undefined ? { seq: parsed.seq } : {}),
+          ...(parsed.atMs !== undefined ? { pointInTimeMs: parsed.atMs } : {}),
+        });
+        if (estimate.costClass === 'metered-egress' && !parsed.yes) {
+          const fullSize =
+            estimate.fullBytes !== undefined
+              ? formatBytes(estimate.fullBytes)
+              : 'an unknown amount';
+          const lazyLine =
+            !parsed.full && estimate.lazyAvailable
+              ? 'this restore is lazy by default and downloads only the vault database plus any ' +
+                'blob the remote CAS does not already hold; originals stream in on demand afterward. '
+              : `a --full restore downloads the whole library (~${fullSize}). `;
+          fail(
+            `this home is metered-egress — restoring will incur egress charges. ${lazyLine}` +
+              'Re-run with --yes to proceed.',
+            2,
+          );
+        }
         const result = await service.restore({
           vaultId,
           destDir: parsed.dest,
           ...(parsed.seq !== undefined ? { seq: parsed.seq } : {}),
           ...(parsed.atMs !== undefined ? { pointInTimeMs: parsed.atMs } : {}),
+          ...(parsed.full ? { full: true } : {}),
         });
         printJson({ restored: parsed.dest, ...result });
+        // `previewsWarm` present ⇒ the lazy previews-first path ran (issue #439
+        // R2); absent ⇒ a full materialization. Report which so the operator
+        // knows whether originals are local or still remote-only.
+        const mode = result.previewsWarm
+          ? `lazy (previews-first; ${result.skippedBlobs.length} blob(s) left remote-only, ` +
+            `${result.previewsWarm.tiniesWarmed}/${result.previewsWarm.tiniesTotal} tinies warmed)`
+          : 'full (every blob materialized)';
         process.stderr.write(
-          `centraid-gateway: materialized snapshot seq ${result.seq} to ${path.resolve(parsed.dest)} — ` +
-            'this does NOT swap the live vault. A RESTORE_QUARANTINE.json marker sits beside the ' +
-            'restored files; the gateway parks outbox/automations/connections for review the first ' +
-            'time this directory is mounted as a live vault.\n',
+          `centraid-gateway: materialized snapshot seq ${result.seq} to ${path.resolve(parsed.dest)} ` +
+            `— ${mode}. This does NOT swap the live vault (issue #439 R3): restore always writes a ` +
+            'fresh side directory. A RESTORE_QUARANTINE.json marker sits beside the restored files; ' +
+            'the gateway parks outbox/automations/connections for review the first time this ' +
+            'directory is mounted as a live vault — a separate, deliberate step.\n',
         );
         return;
       }

@@ -150,11 +150,67 @@ export interface BackupServiceOptions {
  */
 export type LazyRestoreResult = RestoreResult & { previewsWarm?: PreviewsWarmResult };
 
+/**
+ * The previews-first lazy restore option (issue #405 §5 / #439 R2): the remote
+ * CAS tier that is both the per-blob skip oracle and the warm-pass source, plus
+ * an optional bounded warm fan-out. Explicit callers (tests, the recovery UI)
+ * pass it directly; `restore()` also AUTO-resolves one from the vault's own tier
+ * when neither `lazy` nor `full` is given.
+ */
+export interface LazyRestoreOption {
+  /** The vault's remote blob CAS — the skip oracle AND the warm-pass source. */
+  remote: RemoteTier;
+  /** Bounded warm-pass read-through fan-out (issue #405 §5/§7). */
+  warmConcurrency?: number;
+}
+
 /** The home bundle's provider-declared promises for the five-metric contract
  *  (#436 §6) — Recovery window and Exit read these two fields. */
 export interface HomeDiscovery {
   retention: Retention;
   restoreCostClass: 'free-egress' | 'metered-egress';
+}
+
+/**
+ * The pre-start restore cost estimate (issue #439 R2) the metered-egress confirm
+ * gate — and, later, the recovery UI's price card (#436 §5) — render WITHOUT
+ * downloading a manifest. `costClass` is the provider-declared egress class
+ * (`homeDiscovery`, PROTOCOL.md's `restoreCostClass` MUST finally getting a call
+ * site); `undefined` when backup isn't configured. `fullBytes` is the selected
+ * snapshot registry row's `totalBytes` — the whole-library download a `--full`
+ * restore incurs — or `undefined` when no snapshot/target is resolvable yet. A
+ * lazy restore defers every blob the remote CAS already holds, so its upfront
+ * download is the DB + git-bundle + any blob the remote LACKS plus the warm
+ * pass's tinies; that figure is NOT knowable from the row alone, so it is
+ * deliberately not fabricated — `lazyAvailable` only reports whether the vault
+ * has a durable remote tier (⇒ lazy is the default and defers the bulk).
+ */
+export interface RestoreEgressEstimate {
+  costClass: 'free-egress' | 'metered-egress' | undefined;
+  /** Seq of the snapshot the estimate (and a subsequent restore) would select. */
+  seq: number | undefined;
+  /** Whole-library download bytes for a `--full` restore, or undefined if unknown. */
+  fullBytes: number | undefined;
+  /** True when a durable remote CAS tier exists ⇒ restore is lazy-by-default. */
+  lazyAvailable: boolean;
+}
+
+/**
+ * The snapshot a restore (and its egress estimate) selects, from a newest-first
+ * `listSnapshots` result (issue #439 R2): an explicit `seq`, else — for a `--at`
+ * point-in-time restore — the newest snapshot AT OR BEFORE that instant (which
+ * is exactly the base the WAL replay starts from), else the newest snapshot.
+ * `createdAt` is epoch SECONDS on the wire; `pointInTimeMs` is epoch ms.
+ */
+function pickSnapshotRow(
+  rows: SnapshotRow[],
+  opts: { seq?: number; pointInTimeMs?: number },
+): SnapshotRow | undefined {
+  if (opts.seq !== undefined) return rows.find((r) => r.seq === opts.seq);
+  if (opts.pointInTimeMs !== undefined) {
+    return rows.find((r) => r.createdAt * 1000 <= opts.pointInTimeMs!);
+  }
+  return rows[0];
 }
 
 /** Discovery is stable per provider; a short TTL keeps the 10s status poll off
@@ -1485,6 +1541,15 @@ export class BackupService {
     /** Point-in-time restore (issue #408): replay WAL segments only up to this instant. */
     pointInTimeMs?: number;
     /**
+     * Force a FULL restore even when the vault has a durable remote CAS tier
+     * (issue #439 R2) — materialize every blob byte the snapshot carries. This
+     * is the `--full` flag / operator-forensics override; it is IGNORED when an
+     * explicit `lazy` option is supplied (that caller already resolved its own
+     * tier). Absent ⇒ lazy-by-default: a vault with a durable remote tier
+     * restores previews-first, deferring every remote-held blob.
+     */
+    full?: boolean;
+    /**
      * Previews-first, lazy/partial restore (issue #405 §5). Present ⇒ every
      * blob the given remote CAS already holds is DEFERRED (never materialized
      * locally — the vault's custody read-through serves it on demand), so a
@@ -1492,21 +1557,24 @@ export class BackupService {
      * blobs the remote does NOT hold are still materialized (the snapshot is
      * their only copy). After the DB is up, a warm pass pulls ALL `thumb`
      * tinies into the local spool so the grid is usable in minutes. Absent ⇒
-     * the full restore materializes every blob byte the snapshot carries.
+     * lazy is still resolved AUTOMATICALLY from the vault's own remote tier
+     * (issue #439 R2) unless `full` is set — see the resolution note below.
      */
-    lazy?: {
-      /** The vault's remote blob CAS — the skip oracle AND the warm-pass source. */
-      remote: RemoteTier;
-      /** Bounded warm-pass read-through fan-out (issue #405 §5/§7). */
-      warmConcurrency?: number;
-    };
+    lazy?: LazyRestoreOption;
   }): Promise<LazyRestoreResult> {
     const backend = await this.backend();
     if (!backend) throw new Error('backup is not configured — add a provider backup connection');
     const target = await this.requireTarget(opts.vaultId);
     this.assertTargetBackend(target, backend);
     const keyring = await this.ensureKeyring();
-    const lazy = opts.lazy;
+    // Issue #439 R2 — lazy is the DEFAULT, full is the flag. Resolution order:
+    // an explicit `lazy` option (tests, the recovery UI once it holds its own
+    // tier) wins; else a `--full` caller forces the bulk download; else
+    // auto-resolve the vault's own durable remote CAS tier and prefer lazy
+    // whenever one exists — the metered-egress whole-library download the CLI
+    // used to always incur is exactly what the previews-first path was built to
+    // avoid. No remote tier ⇒ the snapshot is the only copy ⇒ full.
+    const lazy = opts.lazy ?? (opts.full ? undefined : this.autoLazyTier(opts.vaultId));
     const result = await restoreSnapshot({
       provider: backend.provider,
       targetId: target.targetId,
@@ -1545,6 +1613,49 @@ export class BackupService {
       log: { info: (m) => this.logger.info(m), warn: (m) => this.logger.warn(m) },
     });
     return { ...result, previewsWarm };
+  }
+
+  /**
+   * The lazy-by-default skip-oracle + warm-pass source (issue #439 R2): the
+   * vault's OWN settings-declared remote CAS tier, resolved through the live
+   * plane's cached closure so the gateway never rebuilds S3 config. `undefined`
+   * (⇒ full restore) when the vault isn't mounted or has no durable remote tier
+   * — mirrors the `remoteTier()` null contract in `openVaultDb`.
+   */
+  private autoLazyTier(vaultId: string): LazyRestoreOption | undefined {
+    const remote = this.vaults.get(vaultId)?.db.remote() ?? null;
+    return remote ? { remote } : undefined;
+  }
+
+  /**
+   * The metered-egress confirm gate's evidence (issue #439 R2), computed BEFORE
+   * a restore starts and WITHOUT downloading a manifest. Small and reusable on
+   * purpose: the CLI's gate calls it today, and the recovery UI's price card
+   * (#436 §5) calls the same method later. See `RestoreEgressEstimate` for what
+   * each field means and why the lazy figure is deliberately not fabricated.
+   */
+  async restoreEgressEstimate(opts: {
+    vaultId: string;
+    seq?: number;
+    pointInTimeMs?: number;
+  }): Promise<RestoreEgressEstimate> {
+    const discovery = await this.homeDiscovery();
+    const lazyAvailable = this.autoLazyTier(opts.vaultId) !== undefined;
+    let row: SnapshotRow | undefined;
+    try {
+      const rows = await this.listSnapshots(opts.vaultId);
+      row = pickSnapshotRow(rows, opts);
+    } catch {
+      // No target/snapshot yet, or the provider is unreachable: report an honest
+      // "size unknown" (undefined) rather than block the gate on a byte count.
+      row = undefined;
+    }
+    return {
+      costClass: discovery?.restoreCostClass,
+      seq: row?.seq,
+      fullBytes: row?.totalBytes,
+      lazyAvailable,
+    };
   }
 
   async writeKit(destFile: string): Promise<void> {
