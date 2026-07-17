@@ -11,6 +11,13 @@ CREATE TABLE consent_app (
   -- surface renders (issue: parked-invocation trust legibility).
   name         TEXT NOT NULL,
   display_name TEXT,
+  -- The owner's per-vault rename (issue #434). Distinct from display_name:
+  -- display_name self-heals to the app manifest/pretty name on every
+  -- re-enrollment, so it cannot hold a durable override. label is never
+  -- touched by the self-heal — the app listing prefers it over the manifest
+  -- name. NULL means no override (fall back to the manifest name). Bundled
+  -- app code is read-only, so a rename cannot rewrite app.json; it lands here.
+  label        TEXT,
   publisher    TEXT,
   manifest_uri TEXT,
   signing_key  TEXT UNIQUE,

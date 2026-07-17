@@ -29,6 +29,7 @@ const navigate = vi.fn();
 function makeActions(): ShellActions {
   return {
     showToast,
+    builderEnabled: false,
     enterBuilder: vi.fn(),
     openNewAppSheet: vi.fn(),
     openCommandPalette: vi.fn(),

@@ -49,6 +49,39 @@ export interface LifecycleRouteOptions {
     runId: string;
     enableOnSuccess: boolean;
   }) => void;
+  /**
+   * True when `id` is a bundled blueprint app id (issue #434). Bundled ids are
+   * RESERVED — scaffold/clone reject or avoid them so a code-store app can
+   * never shadow the shipped blueprint the resolver serves in place.
+   */
+  isBundledAppId?: (id: string) => boolean;
+  /**
+   * Install a bundled blueprint app in place (issue #434): enroll the
+   * `consent.app` record (origin 'installed') + register in the runtime +
+   * grant the manifest-declared scopes — no git, no id minting. Idempotent
+   * (an already-installed app returns its existing registration). Resolves
+   * `undefined` when `templateId` isn't a bundled app. Omitted on hosts with
+   * no vault plane.
+   */
+  installBundledApp?: (templateId: string) => Promise<InstalledBundledApp | undefined>;
+  /**
+   * Set/clear an installed bundled app's per-vault rename (issue #434), since
+   * its code is read-only. Returns true when handled (the id is an installed
+   * bundled app); false lets the meta route fall through to the code-store
+   * app.json rewrite. Omitted on hosts with no vault plane.
+   */
+  renameBundledApp?: (appId: string, name: string | null) => boolean;
+}
+
+/** What {@link LifecycleRouteOptions.installBundledApp} returns to the client. */
+export interface InstalledBundledApp {
+  id: string;
+  name?: string;
+  description?: string;
+  iconKey?: string;
+  colorKey?: string;
+  /** True when the app was already installed — the install was a no-op. */
+  alreadyInstalled: boolean;
 }
 
 /** Build an app's absolute webhook URL from the inbound request's host. */

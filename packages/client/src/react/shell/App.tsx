@@ -37,6 +37,7 @@ import { toSidebarApps } from './sidebarApps.js';
 import { PageEmpty } from './status.js';
 import { useActiveVault } from './useActiveVault.js';
 import { useAppearance } from './useAppearance.js';
+import { useBuilderEnabled } from './useBuilderEnabled.js';
 import { useAssistantConversations } from './useAssistantConversations.js';
 import { useBlockingCount } from './useBlockingCount.js';
 import { useGatewayRuntime } from './useGatewayRuntime.js';
@@ -76,9 +77,11 @@ function makeActions(
   nav: ShellNav,
   openCommandPalette: () => void,
   refreshAssistantThreads: () => void,
+  builderEnabled: boolean,
 ): ShellActions {
   return {
     showToast,
+    builderEnabled,
     confirm: openConfirm,
     navigate: nav.navigate,
     replace: nav.replace,
@@ -130,6 +133,22 @@ function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+// Drafts are builder artifacts (issue #434, Phase 3) — when the builder is
+// hidden they never render anywhere. A shared frozen empty list keeps the
+// gated-off case referentially stable so the render callbacks don't churn.
+const NO_DRAFTS: readonly DraftAppMeta[] = [];
+
+// Guard for a `builder` / `automation-builder` route reached while the builder
+// is hidden (issue #434, Phase 3) — e.g. a stale persisted/programmatic route.
+// Swaps the current history entry for Home in place (replace, not navigate) so
+// there's no dead builder frame to Back into, and renders nothing meanwhile.
+export function BuilderRouteRedirect({ nav }: { nav: ShellNav }): JSX.Element {
+  useEffect(() => {
+    nav.replace({ kind: 'home' });
+  }, [nav]);
+  return <PageEmpty message="" />;
+}
+
 // The React shell root — the single component the flip mounts on #root,
 // replacing the vanilla app.ts IIFE + chrome.ts. It owns the real renderer
 // state (appearance prefs, the live app/draft list, starred set) and drives
@@ -150,6 +169,11 @@ export default function App(): JSX.Element {
   const blockingCount = useBlockingCount();
   const updateStatus = useUpdateStatus();
   const gatewayStatus = useGatewayRuntime()?.status;
+  // Dev flag (issue #434, Phase 3): the builder + every entry point into it are
+  // hidden from the first release unless this is set. Threaded into ShellActions
+  // (menus/palette read it), used to gate drafts + the "Build new" affordances
+  // here, and to redirect the builder routes below.
+  const builderEnabled = useBuilderEnabled();
   const navRef = useRef<ShellNav | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   // The palette's injected refresh() (issue #420) — held so the async
@@ -407,7 +431,10 @@ export default function App(): JSX.Element {
 
   const renderSidebar = useCallback(
     (nav: ShellNav) => {
-      const { apps, drafts: draftApps } = toSidebarApps(userApps, drafts);
+      const { apps, drafts: draftApps } = toSidebarApps(
+        userApps,
+        builderEnabled ? drafts : NO_DRAFTS,
+      );
       const page = activePageFor(nav.route);
       const go = (route: ShellRoute) => () => nav.navigate(route);
       const headSlot = (
@@ -527,7 +554,7 @@ export default function App(): JSX.Element {
           onBackups={go({ kind: 'backups' })}
           onSettings={go({ kind: 'settings' })}
           onAppClick={(id) => nav.navigate({ kind: 'app', id })}
-          onNewApp={() => nav.navigate({ kind: 'builder' })}
+          {...(builderEnabled ? { onNewApp: () => nav.navigate({ kind: 'builder' }) } : {})}
           onNewChat={() => nav.navigate({ kind: 'assistant' })}
           onSelectConversation={(id) => nav.navigate({ kind: 'assistant', conversationId: id })}
           onDeleteConversation={deleteAssistantConversation}
@@ -542,6 +569,7 @@ export default function App(): JSX.Element {
     [
       userApps,
       drafts,
+      builderEnabled,
       activeVault,
       vaultSwitcherOpen,
       blockingCount,
@@ -556,12 +584,16 @@ export default function App(): JSX.Element {
 
   const renderRoute = useCallback(
     (nav: ShellNav): JSX.Element => {
+      // Drafts are builder artifacts — hide them everywhere when the builder is
+      // off (issue #434, Phase 3). Gated once here so Home, Starred, the app
+      // lookup, and the sidebar all agree.
+      const visibleDrafts = builderEnabled ? drafts : NO_DRAFTS;
       switch (nav.route.kind) {
         case 'home':
           return (
             <HomeRoute
               userApps={userApps}
-              drafts={drafts}
+              drafts={visibleDrafts}
               tileVariant={prefs.tileVariant}
               isStarred={isStarred}
               toggleStar={toggleStar}
@@ -601,7 +633,7 @@ export default function App(): JSX.Element {
           return <SettingsRoute prefs={prefs} setPrefs={setPrefs} initialPage={nav.route.page} />;
         case 'app': {
           const id = nav.route.id;
-          const app = [...userApps, ...drafts].find((a) => a.id === id);
+          const app = [...userApps, ...visibleDrafts].find((a) => a.id === id);
           if (!app) return <PageEmpty message="App not found." />;
           const ua = userApps.find((a) => a.id === id);
           const appId = ua?.centraidAppId ?? app.id;
@@ -617,8 +649,12 @@ export default function App(): JSX.Element {
           );
         }
         case 'automation-builder':
+          // Builder handoff route — gated with the builder (issue #434, Phase
+          // 3). Normal automation editing lives on `automation-editor`.
+          if (!builderEnabled) return <BuilderRouteRedirect nav={nav} />;
           return <AutomationEditorRoute automationId={nav.route.automationId} />;
         case 'builder':
+          if (!builderEnabled) return <BuilderRouteRedirect nav={nav} />;
           return (
             <BuilderRoute
               route={nav.route}
@@ -634,7 +670,7 @@ export default function App(): JSX.Element {
           return (
             <StarredRoute
               userApps={userApps}
-              drafts={drafts}
+              drafts={visibleDrafts}
               tileVariant={prefs.tileVariant}
               isStarred={isStarred}
               toggleStar={toggleStar}
@@ -645,7 +681,18 @@ export default function App(): JSX.Element {
           return <PageEmpty message="This screen is being migrated to React." />;
       }
     },
-    [userApps, drafts, prefs, setPrefs, isStarred, toggleStar, refresh, setUserApps, renderSidebar],
+    [
+      userApps,
+      drafts,
+      builderEnabled,
+      prefs,
+      setPrefs,
+      isStarred,
+      toggleStar,
+      refresh,
+      setUserApps,
+      renderSidebar,
+    ],
   );
 
   const closePalette = useCallback(() => {
@@ -671,14 +718,15 @@ export default function App(): JSX.Element {
               () => {
                 void assistantConversations.refresh();
               },
+              builderEnabled,
             )}
           >
             {renderRoute(nav)}
           </ShellActionsProvider>
         )}
-        onNewApp={() => {
-          /* new-app flow ported with the builder route (R3) */
-        }}
+        {...(builderEnabled
+          ? { onNewApp: () => navRef.current?.navigate({ kind: 'builder' }) }
+          : {})}
       />
       {paletteOpen ? (
         <PaletteScreen
@@ -689,7 +737,8 @@ export default function App(): JSX.Element {
           buildGroups={(query) =>
             buildPaletteGroups(query, {
               userApps,
-              drafts,
+              drafts: builderEnabled ? drafts : NO_DRAFTS,
+              builderEnabled,
               tileVariant: prefs.tileVariant,
               navigate: (route) => navRef.current?.navigate(route),
               enterBuilder: (initialPrompt) =>

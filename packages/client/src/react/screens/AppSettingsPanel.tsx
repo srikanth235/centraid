@@ -220,6 +220,7 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
     onShare,
     onReveal,
     onDelete,
+    bundled,
     onMountRuns,
     onMountVault,
   } = props;
@@ -408,9 +409,13 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
                 <Icon name="Trash" size={13} />
               </span>
               <span className={styles.settingsMenuText}>
-                <span className={styles.settingsMenuLabel}>Delete app</span>
+                <span className={styles.settingsMenuLabel}>
+                  {bundled ? 'Uninstall app' : 'Delete app'}
+                </span>
                 <span className={styles.settingsMenuSub}>
-                  Removes the app, its data, and its scheduled automations.
+                  {bundled
+                    ? 'Revokes its access. Your data stays in your vault.'
+                    : 'Removes the app, its data, and its scheduled automations.'}
                 </span>
               </span>
               <span className={styles.settingsConfirmPill} hidden={!deleteArmed}>

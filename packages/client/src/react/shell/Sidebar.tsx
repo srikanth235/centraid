@@ -70,7 +70,10 @@ export interface SidebarProps {
   /** Profile-switcher head row, rendered above "Build new" with a divider. */
   headSlot?: ReactNode;
   onHome: () => void;
-  onNewApp: () => void;
+  /** "Build new" + the "Apps" section "+" — a builder entry point (issue #434,
+   *  Phase 3). Omitted when the builder is hidden, and both affordances vanish
+   *  with it. */
+  onNewApp?: () => void;
   /** The vault assistant's persisted conversations, newest first (the list
    *  endpoint already sorts — see useAssistantConversations). */
   conversations?: SidebarConversation[];
@@ -343,7 +346,9 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {props.headSlot}
 
-      <SbItem icon={<PlusGlyph />} label="Build new" meta="⌘N" accent onClick={props.onNewApp} />
+      {props.onNewApp ? (
+        <SbItem icon={<PlusGlyph />} label="Build new" meta="⌘N" accent onClick={props.onNewApp} />
+      ) : null}
       <SbItem
         icon={<SearchGlyph />}
         label="Search"

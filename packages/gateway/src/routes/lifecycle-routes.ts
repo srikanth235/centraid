@@ -16,6 +16,8 @@
 //          body {id, name?, version?, iconKey?, colorKey?, publish?}
 //   POST   /centraid/_apps/_clone              clone a bundled template
 //          body {templateId, sessionId?, publish?}
+//   POST   /centraid/_apps/_install            install a bundled blueprint in place (#434)
+//          body {templateId} → {app:{id,name?,description?,iconKey?,colorKey?}, installed:true, alreadyInstalled}
 //   POST   /centraid/_apps/<id>/meta           edit name/description
 //          body {name?, description?, sessionId?, publish?}
 //   POST   /centraid/_automations              scaffold an automation app
@@ -108,6 +110,9 @@ export function makeLifecycleRouteHandler(
       if (pathname === '/centraid/_apps/_clone' && method === 'POST') {
         return await handleClone(opts, req, res);
       }
+      if (pathname === '/centraid/_apps/_install' && method === 'POST') {
+        return await handleInstall(opts, req, res);
+      }
       const metaMatch = /^\/centraid\/_apps\/([^/]+)\/meta$/.exec(pathname);
       if (metaMatch && method === 'POST') {
         return await handleMeta(opts, req, res, decodeURIComponent(metaMatch[1] ?? ''));
@@ -165,6 +170,12 @@ async function handleCreate(
   const sessionId = explicitSession || defaultSessionId(id);
   const ephemeralSession = !explicitSession;
 
+  // Bundled ids are reserved (issue #434) — a scaffold must never shadow a
+  // shipped blueprint the resolver serves in place.
+  if (opts.isBundledAppId?.(id)) {
+    throw new AppScaffoldError('already_exists', `App id "${id}" is reserved by a bundled app.`);
+  }
+
   // Reject a collision with an app already on `main` — a create must never
   // clobber an existing app's draft (the FS scaffolder guarded this with a
   // dir-exists check; the git-store path checks the list).
@@ -209,6 +220,17 @@ async function handleClone(
     return sendJson(res, 400, { error: 'bad_request', message: 'clone needs { templateId }' });
   }
   const publish = body.publish === true;
+
+  // A bundled blueprint APP is installed in place, never cloned (issue #434):
+  // clone forks it into the git code store, which is exactly the per-vault
+  // copy the install-in-place model removes. Automation templates aren't
+  // bundled app ids, so they still clone (the hidden builder is the compiler).
+  if (opts.isBundledAppId?.(templateId)) {
+    throw new AppScaffoldError(
+      'already_exists',
+      `"${templateId}" is a bundled app — install it via /centraid/_apps/_install, not clone.`,
+    );
+  }
 
   const cacheOpt = opts.templatesCacheDir ? { cacheDir: opts.templatesCacheDir } : {};
   const templates = await resolveTemplates(cacheOpt);
@@ -280,6 +302,34 @@ async function handleClone(
   });
 }
 
+// ---- POST /centraid/_apps/_install (install a bundled blueprint in place) ----
+
+async function handleInstall(
+  opts: LifecycleRouteOptions,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<boolean> {
+  const body = await readJson(req);
+  const templateId = typeof body.templateId === 'string' ? body.templateId : '';
+  if (!templateId) {
+    return sendJson(res, 400, { error: 'bad_request', message: 'install needs { templateId }' });
+  }
+  if (!opts.installBundledApp) {
+    return sendJson(res, 400, {
+      error: 'no_vault_plane',
+      message: 'install requires a vault plane',
+    });
+  }
+  const installed = await opts.installBundledApp(templateId);
+  if (!installed) {
+    throw new AppScaffoldError('not_found', `Unknown bundled app "${templateId}".`);
+  }
+  const { alreadyInstalled, ...app } = installed;
+  // 200 (not 201): install is idempotent — a re-install returns the existing
+  // registration rather than erroring, matching app-store reinstall semantics.
+  return sendJson(res, 200, { app, installed: true, alreadyInstalled });
+}
+
 // ---- POST /centraid/_apps/<id>/meta (edit name/description) ----
 
 async function handleMeta(
@@ -293,6 +343,15 @@ async function handleMeta(
   const name = typeof body.name === 'string' ? body.name : undefined;
   const description = typeof body.description === 'string' ? body.description : undefined;
   const publish = body.publish === true;
+
+  // Installed bundled app (issue #434): its code is read-only, so a rename
+  // can't rewrite app.json — set the per-vault label override instead. A null
+  // name clears the override. (Description edits aren't supported for bundled
+  // apps; the manifest description is authoritative.) Returns false when the
+  // id isn't an installed bundled app, falling through to the code-store path.
+  if (name !== undefined && opts.renameBundledApp?.(appId, name)) {
+    return sendJson(res, 200, { ok: true, staged: false });
+  }
   const explicitSession =
     typeof body.sessionId === 'string' && body.sessionId ? body.sessionId : '';
   const sessionId = explicitSession || defaultSessionId(appId);

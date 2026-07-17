@@ -1,0 +1,50 @@
+/* App info modal (issue #434) — reuses the per-app consent pane (VaultScreen)
+   inside a body-portal dialog, with Uninstall in the footer. */
+.card {
+  width: min(520px, calc(100vw - 40px));
+  max-height: min(80vh, 720px);
+  display: flex;
+  flex-direction: column;
+}
+.head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.headIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 2px;
+}
+.card h3 {
+  margin: 0;
+}
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: auto;
+  min-height: 0;
+  padding-right: 2px;
+}
+.uninstallBtn {
+  margin-right: auto;
+  border: 0.5px solid color-mix(in srgb, var(--danger) 35%, transparent);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+}
+.uninstallBtn:hover {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+}

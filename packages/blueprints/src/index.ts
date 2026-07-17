@@ -94,6 +94,29 @@ export async function listTemplates(): Promise<TemplateMeta[]> {
 }
 
 /**
+ * The bundled APP-kind templates (automations excluded). Issue #434:
+ * install = serve the shipped blueprint in place, no copy — so these ids
+ * are RESERVED (a code-store app must never shadow one) and each serves
+ * straight from {@link bundledAppDir}. Automation templates are excluded
+ * because they still compile into the vault's git code store (the hidden
+ * builder is the compiler), never served in place.
+ */
+export async function listBundledAppTemplates(): Promise<TemplateMeta[]> {
+  return (await listTemplates()).filter((t) => (t.kind ?? 'app') !== 'automation');
+}
+
+/**
+ * Absolute dir a bundled APP-kind template serves from, inside the shipped
+ * `@centraid/blueprints` package (`<package>/apps/<id>/`). Issue #434: these
+ * are real directories on disk under the installed package — no per-vault
+ * copy and no materialized cache is needed; the app upgrades with every
+ * release because the gateway serves this path directly.
+ */
+export function bundledAppDir(id: string): string {
+  return templateSourceDir(id, { kind: 'app' });
+}
+
+/**
  * Merge the bundled and cached manifests, preferring whichever copy has the
  * higher semver `version` per template. Cache failures are swallowed —
  * resolution always degrades to the bundle.

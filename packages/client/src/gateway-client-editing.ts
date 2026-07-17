@@ -5,17 +5,22 @@
  * './gateway-client.js'`.
  *
  * The draft-editing surface (sessions / files / publish) and the
- * deterministic lifecycle (create / clone / meta / automation CRUD) the
- * gateway now owns. The renderer states intent; the gateway scaffolds,
- * mints webhooks, stages into a session worktree, and publishes.
+ * deterministic lifecycle (create / clone / install / meta) the gateway now
+ * owns. The renderer states intent; the gateway scaffolds, stages into a
+ * session worktree, and publishes. Automation CRUD lives next door in
+ * `gateway-client-automation-editing.ts`.
  *
- * Create/clone pass `publish: true` to land a *baseline* version on `main`
- * (the app's "git init"): the registry (`GET /centraid/_apps`) lists apps
- * on `main`, so an app must publish once to exist on the home grid. From
- * then on, chat- and file-driven edits stage in the `desktop-<id>` draft
- * worktree — the builder preview reads that draft via `draftPreviewUrl`
- * (Phase 4) and an explicit Publish flips the next version live. So
- * "auto-publish" is the one-time baseline only, not per-edit.
+ * Two lifecycles meet here, and the difference is *where the code comes
+ * from* (#434). A bundled app `install`s: the gateway records consent and
+ * serves it from the shipped release — nothing is copied, no git, and it
+ * upgrades with the software. Generated code (automations) and forks still
+ * `create`/`clone` with `publish: true` to land a *baseline* version on
+ * `main` (the app's "git init"), because code that exists nowhere else has
+ * to live in the vault's code store. Those then stage chat- and file-driven
+ * edits in the `desktop-<id>` draft worktree — the builder preview reads
+ * that draft via `draftPreviewUrl` and an explicit Publish flips the next
+ * version live. So "auto-publish" is the one-time baseline only, not
+ * per-edit.
  */
 
 import {
@@ -287,6 +292,53 @@ export async function cloneTemplate(input: { templateId: string }): Promise<{
   return { app: out.app, template: out.template, webhooks: out.webhooks ?? [] };
 }
 
+/**
+ * Install a bundled blueprint app in place (issue #434): registration +
+ * consent grants, no code copy, no git. Keeps the blueprint's own id.
+ * Idempotent — installing an already-installed app returns its existing
+ * registration (`alreadyInstalled: true`). Unlike {@link cloneTemplate}
+ * (still used for automations, which fork into the code store), this app
+ * serves straight from the shipped package and upgrades with every release.
+ */
+export async function installTemplate(input: { templateId: string }): Promise<{
+  app: { id: string; name?: string; description?: string; iconKey?: string; colorKey?: string };
+  alreadyInstalled: boolean;
+}> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_apps/_install`, {
+    method: 'POST',
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify({ templateId: input.templateId }),
+  });
+  const out = await readJson<{
+    app: { id: string; name?: string; description?: string; iconKey?: string; colorKey?: string };
+    alreadyInstalled?: boolean;
+  }>(res, 'install template');
+  return { app: out.app, alreadyInstalled: out.alreadyInstalled ?? false };
+}
+
+/**
+ * Rename an installed bundled app (issue #434) — sets its per-vault label
+ * override in the registry, with NO editing session. The gateway's meta route
+ * short-circuits bundled ids to the label override (their code is read-only,
+ * so nothing is staged/published); routing this through {@link updateAppMeta}
+ * would open a `desktop-<id>` session worktree that then sits empty. An empty
+ * `name` clears the override, falling back to the manifest name.
+ */
+export async function renameInstalledApp(input: {
+  id: string;
+  name: string;
+}): Promise<{ ok: true }> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_apps/${enc(input.id)}/meta`, {
+    method: 'POST',
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify({ name: input.name }),
+  });
+  await readJson(res, 'rename installed app');
+  return { ok: true };
+}
+
 /** Patch the app's `app.json` name/description in its draft, then publish. */
 export async function updateAppMeta(input: {
   id: string;
@@ -321,175 +373,5 @@ export async function deleteApp(input: { id: string }): Promise<{ ok: true }> {
   // confirmed, so a failed delete leaves the editing session intact.
   await readJson(res, 'delete app');
   await dropAppSession(input.id);
-  return { ok: true };
-}
-
-/**
- * A create-time trigger spec. `condition`/`data` are validated gateway-side
- * against the real manifest schema (issue #141 follow-up: the create route
- * used to 400 on anything but cron/webhook) and require a paired `vault`
- * block on the request — the consented read they gate on has to run under
- * some requested grant, or there is nothing for the trigger to evaluate.
- */
-export type CentraidCreateTrigger =
-  | { kind: 'cron'; expr: string }
-  | { kind: 'webhook' }
-  | { kind: 'condition'; entity: string; where?: unknown; every?: string }
-  | { kind: 'data'; entities: string[]; every?: string };
-
-/** Scaffold a new automation app; mints a webhook secret when requested. */
-export async function createAutomation(input: {
-  id: string;
-  name?: string;
-  description?: string;
-  prompt?: string;
-  triggers?: CentraidCreateTrigger[];
-  /** Requested vault access — required when `triggers` has a condition/data entry. */
-  vault?: {
-    purpose: string;
-    why?: string;
-    scopes: Array<{ schema: string; table?: string; verbs: string }>;
-  };
-  apps?: string[];
-  model?: string;
-  historyKeep?: { count: number } | { days: number } | 'all' | 'errors';
-  onFailure?: string;
-  enabled?: boolean;
-}): Promise<{
-  row: CentraidAutomationRow | null;
-  webhook?: { id: string; secret: string; url: string };
-}> {
-  const sessionId = await ensureAppSession(input.id);
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_automations`, {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({ ...input, sessionId, publish: true }),
-  });
-  const out = await readJson<{
-    row: CentraidAutomationRow | null;
-    webhook?: { id: string; secret: string; url: string };
-  }>(res, 'create automation');
-  return { row: out.row ?? null, ...(out.webhook ? { webhook: out.webhook } : {}) };
-}
-
-/**
- * Patch an automation's `name` / `prompt` (manifest `prompt` — the
- * instructions the builder compiles into `handler.js`) / `triggers` in its
- * draft, then publish. Every field is optional; only a present one is
- * changed — the instructions-first editor's save path, an alternative to
- * routing an edit through the builder chat. Triggers follow the same wire
- * shape `createAutomation` takes; a `{kind:'webhook'}` entry mints a fresh
- * secret (returned once, like create) only when the automation had no
- * webhook trigger before — an edit that keeps an existing one leaves its
- * secret untouched (`rotateAutomationWebhookSecret` is the dedicated way to
- * rotate it). 404s when `automationId` doesn't exist, 400s on an invalid
- * patch (bad trigger kind/shape).
- */
-export async function updateAutomation(input: {
-  automationId: string;
-  name?: string;
-  prompt?: string;
-  triggers?: CentraidCreateTrigger[];
-  vault?: {
-    purpose: string;
-    why?: string;
-    scopes: Array<{ schema: string; table?: string; verbs: string }>;
-  };
-}): Promise<{
-  row: CentraidAutomationRow | null;
-  webhook?: { id: string; secret: string; url: string };
-}> {
-  const appId = input.automationId.split('/')[0] ?? '';
-  const sessionId = await ensureAppSession(appId);
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(
-    baseUrl,
-    `/centraid/_automations/update?ref=${enc(input.automationId)}`,
-    {
-      method: 'POST',
-      headers: authHeaders(token, 'application/json'),
-      body: JSON.stringify({
-        ...(input.name !== undefined ? { name: input.name } : {}),
-        ...(input.prompt !== undefined ? { prompt: input.prompt } : {}),
-        ...(input.triggers !== undefined ? { triggers: input.triggers } : {}),
-        ...(input.vault !== undefined ? { vault: input.vault } : {}),
-        sessionId,
-        publish: true,
-      }),
-    },
-  );
-  const out = await readJson<{
-    row: CentraidAutomationRow | null;
-    webhook?: { id: string; secret: string; url: string };
-  }>(res, 'update automation');
-  return { row: out.row ?? null, ...(out.webhook ? { webhook: out.webhook } : {}) };
-}
-
-/** Toggle an automation's `enabled` flag in its draft, then publish. */
-export async function setAutomationEnabled(input: {
-  automationId: string;
-  enabled: boolean;
-}): Promise<{ ok: true }> {
-  const appId = input.automationId.split('/')[0] ?? '';
-  const sessionId = await ensureAppSession(appId);
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(
-    baseUrl,
-    `/centraid/_automations/set-enabled?ref=${enc(input.automationId)}`,
-    {
-      method: 'POST',
-      headers: authHeaders(token, 'application/json'),
-      body: JSON.stringify({ enabled: input.enabled, sessionId, publish: true }),
-    },
-  );
-  await readJson(res, 'set automation enabled');
-  return { ok: true };
-}
-
-/**
- * Rotate a webhook-triggered automation's shared secret and publish. The
- * original secret is shown once at mint time (create/clone); an owner who
- * missed that one-time reveal has no other way to recover it — this mints
- * a fresh one over the SAME route id (any already-configured caller URL
- * keeps working) and returns it once, exactly like `createAutomation`'s
- * `webhook` field. 404s when `automationId` doesn't exist, 400s when it has
- * no webhook trigger to rotate.
- */
-export async function rotateAutomationWebhookSecret(input: {
-  automationId: string;
-}): Promise<{ webhook: { id: string; secret: string; url: string } }> {
-  const appId = input.automationId.split('/')[0] ?? '';
-  const sessionId = await ensureAppSession(appId);
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(
-    baseUrl,
-    `/centraid/_automations/rotate-webhook?ref=${enc(input.automationId)}`,
-    {
-      method: 'POST',
-      headers: authHeaders(token, 'application/json'),
-      body: JSON.stringify({ sessionId, publish: true }),
-    },
-  );
-  const out = await readJson<{ webhook: { id: string; secret: string; url: string } }>(
-    res,
-    'rotate automation webhook secret',
-  );
-  return { webhook: out.webhook };
-}
-
-/** Remove an automation (whole app or in-app subdir), then publish. */
-export async function deleteAutomation(input: { automationId: string }): Promise<{ ok: true }> {
-  const appId = input.automationId.split('/')[0] ?? '';
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(
-    baseUrl,
-    `/centraid/_automations?ref=${enc(input.automationId)}&publish=true`,
-    { method: 'DELETE', headers: authHeaders(token) },
-  );
-  // Surface a gateway rejection instead of reporting a phantom success.
-  const out = await readJson<{ deletedApp?: boolean }>(res, 'delete automation');
-  // A whole-automation-app delete drops the app; forget its session too.
-  if (out.deletedApp) await dropAppSession(appId);
   return { ok: true };
 }

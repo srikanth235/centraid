@@ -41,27 +41,11 @@ import { WorktreeStore, WorktreeStoreError } from '../worktree-store/index.js';
 import { readBody, readJson, sendJson } from './route-helpers.js';
 import { validateManifestAt } from '../validate-manifest.js';
 import { applyExtOnPublish, readExtSpecs, type ExtBandOps } from '../lifecycle/ext-band.js';
+import { readDraftFiles, writeDraftFile } from './apps-store-draft-files.js';
 
 // Re-exported so existing importers (lifecycle-shared) keep their path; the
 // implementation moved to validate-manifest.ts (issue #167, file-size hygiene).
 export { validateManifestAt } from '../validate-manifest.js';
-
-/** Text extensions a draft file write accepts — mirrors agent-harness. */
-const EDITABLE_EXT = new Set([
-  '.ts',
-  '.js',
-  '.jsx',
-  '.mjs',
-  '.html',
-  '.htm',
-  '.css',
-  '.json',
-  '.md',
-  '.txt',
-  '.svg',
-]);
-
-const MAX_DRAFT_FILE_BYTES = 1 * 1024 * 1024; // 1 MiB per file
 
 export interface AppsStoreRouteOptions {
   /**
@@ -77,6 +61,12 @@ export interface AppsStoreRouteOptions {
    */
   onAppDeleted?: (appId: string) => Promise<void>;
   /**
+   * Installed bundled apps for the request's vault (issue #434) — the second
+   * half of the `GET /_apps` union, read from the shipped blueprint dir +
+   * per-vault rename (not the git store). Omitted with no vault plane.
+   */
+  bundledApps?: () => Promise<AppMetaRow[]>;
+  /**
    * The vault plane's ext-band operations (issue #286 phase 2). Injected
    * so publish applies the session's declared extension tables to the
    * vault before the ff-merge, and reset-data re-snapshots the draft band —
@@ -84,6 +74,17 @@ export interface AppsStoreRouteOptions {
    * vault plane.
    */
   ext?: ExtBandOps;
+}
+
+/** One row of the `GET /_apps` listing — shared by both code origins (#434). */
+export interface AppMetaRow {
+  id: string;
+  name?: string;
+  description?: string;
+  kind?: 'app' | 'automation';
+  hasIndex: boolean;
+  iconKey?: string;
+  colorKey?: string;
 }
 
 /**
@@ -111,7 +112,12 @@ export function makeAppsStoreRouteHandler(
       // issue #263) so the home shelves render tiles without a
       // workspaceDir scan or a per-device metadata shim.
       if (segments.length === 1 && method === 'GET') {
-        const apps = await store.listAppsWithMeta();
+        // Listing union (issue #434): installed bundled apps (served in place)
+        // + git code-store apps, deduped with bundled (reserved ids) winning.
+        const storeApps = await store.listAppsWithMeta();
+        const bundled = opts.bundledApps ? await opts.bundledApps() : [];
+        const bundledIds = new Set(bundled.map((a) => a.id));
+        const apps = [...bundled, ...storeApps.filter((a) => !bundledIds.has(a.id))];
         sendJson(res, 200, apps);
         return true;
       }
@@ -404,64 +410,6 @@ async function handleFiles(
     return true;
   }
   return false;
-}
-
-// ---- draft file read/write inside a session worktree ----
-
-interface DraftFile {
-  path: string;
-  content: string;
-}
-
-async function readDraftFiles(appDir: string): Promise<DraftFile[]> {
-  const out: DraftFile[] = [];
-  await walk(appDir, '', out);
-  out.sort((a, b) => a.path.localeCompare(b.path));
-  return out;
-}
-
-async function walk(root: string, rel: string, out: DraftFile[]): Promise<void> {
-  const here = rel ? path.join(root, rel) : root;
-  let entries: import('node:fs').Dirent[];
-  try {
-    entries = await fs.readdir(here, { withFileTypes: true });
-  } catch {
-    return;
-  }
-  for (const e of entries) {
-    if (e.name.startsWith('.')) continue;
-    const r = rel ? path.posix.join(rel, e.name) : e.name;
-    if (e.isDirectory()) {
-      await walk(root, r, out);
-      continue;
-    }
-    if (!e.isFile()) continue;
-    if (!EDITABLE_EXT.has(path.extname(e.name).toLowerCase())) continue;
-    const abs = path.join(root, r);
-    const stat = await fs.stat(abs).catch(() => null);
-    if (!stat || stat.size > MAX_DRAFT_FILE_BYTES) continue;
-    out.push({ path: r, content: await fs.readFile(abs, 'utf8').catch(() => '') });
-  }
-}
-
-async function writeDraftFile(
-  store: WorktreeStore,
-  sessionId: string,
-  appId: string,
-  rel: string,
-  content: Buffer,
-): Promise<{ path: string; size: number }> {
-  const appDir = await store.snapshotSessionAppDir(sessionId, appId);
-  const abs = path.resolve(appDir, rel);
-  if (abs !== appDir && !abs.startsWith(appDir + path.sep)) {
-    throw new WorktreeStoreError('invalid_app_id', `Refusing to write outside the app: ${rel}`);
-  }
-  if (!EDITABLE_EXT.has(path.extname(abs).toLowerCase())) {
-    throw new WorktreeStoreError('invalid_app_id', `Not an editable text file: ${rel}`);
-  }
-  await fs.mkdir(path.dirname(abs), { recursive: true });
-  await fs.writeFile(abs, content);
-  return { path: rel, size: content.byteLength };
 }
 
 // ---- apps-store-specific error mapping (delegates to shared sendJson) ----

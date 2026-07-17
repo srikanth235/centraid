@@ -260,24 +260,38 @@ export function AutoCard({
   );
 }
 
-function EmptyState({ kind }: { kind: 'all' | 'app' | 'automation' }): JSX.Element {
+function EmptyState({
+  kind,
+  builderEnabled,
+}: {
+  kind: 'all' | 'app' | 'automation';
+  builderEnabled: boolean;
+}): JSX.Element {
+  // With the builder hidden (issue #434, Phase 3) the empty states can't tell
+  // the reader to "describe an app" — apps arrive via Discover instead.
   const [icon, title, sub]: [IconName, string, string] =
     kind === 'automation'
       ? [
           'Bolt',
           'No automations yet',
-          'A saved conversation that fires on a trigger. Start from a template, or describe one from scratch.',
+          builderEnabled
+            ? 'A saved conversation that fires on a trigger. Start from a template, or describe one from scratch.'
+            : 'A saved conversation that fires on a trigger. Start from a template.',
         ]
       : kind === 'app'
         ? [
             'Sparkle',
             'No apps yet',
-            'Describe an app in the box above — Centraid will build it for you.',
+            builderEnabled
+              ? 'Describe an app in the box above — Centraid will build it for you.'
+              : 'Install an app from Discover to get started.',
           ]
         : [
             'Sparkle',
             'Nothing here yet',
-            'Describe an app or automation in the box above to get started.',
+            builderEnabled
+              ? 'Describe an app or automation in the box above to get started.'
+              : 'Install an app or automation from Discover to get started.',
           ];
   return (
     <div className={styles.shelfEmpty}>
@@ -299,6 +313,7 @@ function EmptyState({ kind }: { kind: 'all' | 'app' | 'automation' }): JSX.Eleme
  * the shared AppCard module + StatusPill/KindBadge primitives.
  */
 export default function HomeScreen({
+  builderEnabled,
   suggestions,
   dateLabel,
   appItems,
@@ -340,80 +355,85 @@ export default function HomeScreen({
 
   return (
     <div className={styles.day1Scroll}>
-      <div className={styles.hero}>
-        <div className={styles.heroHead}>
-          <div className={styles.heroDate}>{dateLabel}</div>
-          <h1>What should we build?</h1>
-        </div>
-        <div className={styles.heroComposerWrap}>
-          <div className={styles.composer}>
-            <textarea
-              ref={taRef}
-              className={styles.composerInput}
-              placeholder="Describe an app you want — a habit tracker, a journal, a tiny tool…"
-              rows={2}
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                  e.preventDefault();
-                  submit();
-                }
-              }}
-            />
-            <div className={styles.composerToolbar}>
-              <button
-                type="button"
-                className={cx(controlsCss.iconBtn, styles.composerAttach)}
-                title="Attach"
-              >
-                <Icon name="Plus" size={14} />
-              </button>
-              <span className={styles.composerSpacer} />
-              <span className={styles.composerMode}>
-                <span>
-                  <Icon name="Sparkle" size={11} />
+      {/* The composer hero is the primary "build a new app" entry point — hidden
+          with the builder (issue #434, Phase 3). The library shelf below (which
+          lists installed apps + automations) is the release-facing surface. */}
+      {builderEnabled ? (
+        <div className={styles.hero}>
+          <div className={styles.heroHead}>
+            <div className={styles.heroDate}>{dateLabel}</div>
+            <h1>What should we build?</h1>
+          </div>
+          <div className={styles.heroComposerWrap}>
+            <div className={styles.composer}>
+              <textarea
+                ref={taRef}
+                className={styles.composerInput}
+                placeholder="Describe an app you want — a habit tracker, a journal, a tiny tool…"
+                rows={2}
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    submit();
+                  }
+                }}
+              />
+              <div className={styles.composerToolbar}>
+                <button
+                  type="button"
+                  className={cx(controlsCss.iconBtn, styles.composerAttach)}
+                  title="Attach"
+                >
+                  <Icon name="Plus" size={14} />
+                </button>
+                <span className={styles.composerSpacer} />
+                <span className={styles.composerMode}>
+                  <span>
+                    <Icon name="Sparkle" size={11} />
+                  </span>
+                  <span>Build</span>
+                  <span>
+                    <Icon name="ChevronDown" size={9} />
+                  </span>
                 </span>
-                <span>Build</span>
-                <span>
-                  <Icon name="ChevronDown" size={9} />
-                </span>
-              </span>
-              <button
-                type="button"
-                className={cx(controlsCss.iconBtn, styles.composerMic)}
-                title="Voice"
-              >
-                <MicGlyph />
-              </button>
-              <span className={styles.composerKbd}>⌘↵</span>
-              <button
-                type="button"
-                className={styles.composerSend}
-                disabled={prompt.trim().length === 0}
-                onClick={submit}
-              >
-                <Icon name="ArrowRight" size={14} />
-              </button>
+                <button
+                  type="button"
+                  className={cx(controlsCss.iconBtn, styles.composerMic)}
+                  title="Voice"
+                >
+                  <MicGlyph />
+                </button>
+                <span className={styles.composerKbd}>⌘↵</span>
+                <button
+                  type="button"
+                  className={styles.composerSend}
+                  disabled={prompt.trim().length === 0}
+                  onClick={submit}
+                >
+                  <Icon name="ArrowRight" size={14} />
+                </button>
+              </div>
+            </div>
+            <div className={styles.heroSuggestions}>
+              {suggestions.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  className={controlsCss.chip}
+                  onClick={() => {
+                    setPrompt(s);
+                    taRef.current?.focus();
+                  }}
+                >
+                  {s}
+                </button>
+              ))}
             </div>
           </div>
-          <div className={styles.heroSuggestions}>
-            {suggestions.map((s) => (
-              <button
-                key={s}
-                type="button"
-                className={controlsCss.chip}
-                onClick={() => {
-                  setPrompt(s);
-                  taRef.current?.focus();
-                }}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
         </div>
-      </div>
+      ) : null}
 
       {/* .hsec is the whole section envelope; the homeLib* children carry the
           rest. The `.homeLib` modifier it used to name never had a rule. */}
@@ -457,7 +477,7 @@ export default function HomeScreen({
             </div>
           ) : null}
           <button type="button" className={styles.hsecBrowse} onClick={onBrowseTemplates}>
-            <span>Browse templates</span>
+            <span>Browse apps</span>
             <span aria-hidden="true">
               <Icon name="ChevronRight" size={14} />
             </span>
@@ -489,7 +509,7 @@ export default function HomeScreen({
         </div>
         <div className={styles.homeLibBody}>
           {cardCount === 0 ? (
-            <EmptyState kind={kind} />
+            <EmptyState kind={kind} builderEnabled={builderEnabled} />
           ) : (
             <div className={cx(styles.appsGrid, styles.appsGridSmall)} data-layout={layout}>
               {showApps

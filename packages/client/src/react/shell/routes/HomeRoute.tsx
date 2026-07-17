@@ -1,9 +1,10 @@
-import { type JSX } from 'react';
+import { useState, type JSX } from 'react';
 import type { AppearancePrefs } from '../../../app-shell-context.js';
 import {
   deleteApp,
   deleteAutomation,
   listAutomations,
+  renameInstalledApp,
   runAutomationNow,
   updateAppMeta,
 } from '../../../gateway-client.js';
@@ -16,7 +17,9 @@ import type { ShellMenuAnchor } from '../Sidebar.js';
 import PageScroll from '../PageScroll.js';
 import { PageLoading } from '../status.js';
 import { useAsyncData } from '../useAsyncData.js';
+import AppInfoModal from './AppInfoModal.js';
 import { collectAutomationRuns } from './automationsData.js';
+import { loadAppTemplates } from './templatesData.js';
 import {
   attentionCount,
   buildHomeAppItems,
@@ -42,19 +45,33 @@ export interface HomeRouteProps {
 // (Share = the 116-line sheet; Rename reaches into card DOM in vanilla — both
 // deferred, see notes).
 export default function HomeRoute(props: HomeRouteProps): JSX.Element {
-  const { navigate, enterBuilder, showToast, confirm } = useShellActions();
+  const { navigate, enterBuilder, showToast, confirm, builderEnabled } = useShellActions();
   const { userApps, drafts, tileVariant, isStarred, toggleStar, refreshApps } = props;
+  // The app whose "App info" sheet is open (its live grants + Uninstall).
+  const [infoApp, setInfoApp] = useState<AppMetaResolvedType | null>(null);
 
   const feed = useAsyncData(async () => {
-    const [rows, entries] = await Promise.all([
+    const [rows, entries, appTemplates] = await Promise.all([
       listAutomations().catch(() => [] as CentraidAutomationRow[]),
       collectAutomationRuns().catch(() => []),
+      // Bundled app-template ids are RESERVED (issue #434) and an installed
+      // bundled app keeps its blueprint id — so an app whose id is in this set
+      // is a bundled install (serves in place), which gets Uninstall + App
+      // info; anything else is a code-store app (legacy clone) that keeps
+      // Delete. Best-effort: an empty set degrades every app to code-store.
+      loadAppTemplates().catch(() => []),
     ]);
-    return { rows, entries };
+    return { rows, entries, bundledIds: new Set(appTemplates.map((t) => t.id)) };
   });
+
+  const bundledIds: ReadonlySet<string> =
+    feed.status === 'ready' ? feed.data.bundledIds : new Set<string>();
 
   const apps: AppMetaResolvedType[] = [...userApps, ...drafts];
   const findApp = (id: string): AppMetaResolvedType | undefined => apps.find((a) => a.id === id);
+  /** The gateway app id (a bundled install keeps its own id). */
+  const gatewayAppId = (app: AppMetaResolvedType): string =>
+    (app as UserAppMeta).centraidAppId ?? app.id;
 
   // The Home screen emits the contract's HomeMenuAnchor (loose optionals); the
   // context-menu overlay takes the shell's discriminated ShellMenuAnchor.
@@ -67,33 +84,50 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
     const app = findApp(id);
     if (!app) return;
     const draft = (app as DraftAppMeta).__draft === true;
+    // A bundled install serves in place (issue #434): it's an Uninstall (data
+    // stays) + App info app, not a Delete (wipe files) one. Anything else
+    // non-draft is a code-store app (legacy clone) that keeps Delete.
+    const bundled = !draft && bundledIds.has(app.id);
     const star = { id: 'star', label: isStarred(app.id) ? 'Unstar' : 'Star', icon: 'Star' };
+    // "Edit with Centraid" / "Continue editing" (and the whole draft menu) are
+    // builder entry points (issue #434, Phase 3) — omitted when the builder is
+    // hidden. Drafts never render in that case, so the draft branch is
+    // effectively dead then; it stays guarded for symmetry. Share (stubbed) and
+    // Reveal in Finder are dropped from the installed-app menu.
     const items = draft
       ? [
-          { id: 'update', label: 'Continue editing', icon: 'Sparkle' },
+          ...(builderEnabled ? [{ id: 'update', label: 'Continue editing', icon: 'Sparkle' }] : []),
           { id: 'rename', label: 'Rename', icon: 'Pencil' },
-          { id: 'reveal', label: 'Reveal in Finder', icon: 'Folder' },
           star,
           'sep' as const,
           { id: 'delete', label: 'Delete draft', icon: 'Trash', danger: true },
         ]
-      : [
-          { id: 'open', label: 'Open', icon: 'Eye' },
-          { id: 'update', label: 'Edit with Centraid', icon: 'Sparkle' },
-          { id: 'rename', label: 'Rename', icon: 'Pencil' },
-          { id: 'share', label: 'Share', icon: 'Share' },
-          { id: 'reveal', label: 'Reveal in Finder', icon: 'Folder' },
-          star,
-          'sep' as const,
-          { id: 'delete', label: 'Delete', icon: 'Trash', danger: true },
-        ];
+      : bundled
+        ? [
+            { id: 'open', label: 'Open', icon: 'Eye' },
+            { id: 'info', label: 'App info', icon: 'Key' },
+            { id: 'rename', label: 'Rename', icon: 'Pencil' },
+            star,
+            'sep' as const,
+            { id: 'uninstall', label: 'Uninstall', icon: 'Trash', danger: true },
+          ]
+        : [
+            { id: 'open', label: 'Open', icon: 'Eye' },
+            ...(builderEnabled
+              ? [{ id: 'update', label: 'Edit with Centraid', icon: 'Sparkle' }]
+              : []),
+            { id: 'rename', label: 'Rename', icon: 'Pencil' },
+            star,
+            'sep' as const,
+            { id: 'delete', label: 'Delete', icon: 'Trash', danger: true },
+          ];
     openMenu(items, toAnchor(anchor), (pick) => {
       if (pick === 'open') navigate({ kind: 'app', id: app.id });
       else if (pick === 'update') enterBuilder({ appContext: app });
-      else if (pick === 'reveal') void window.CentraidApi.openAppFolder({ id: app.id });
+      else if (pick === 'info') setInfoApp(app);
       else if (pick === 'star') toggleStar(app.id);
-      else if (pick === 'share') showToast('Sharing isn’t available yet.');
-      else if (pick === 'rename') void renameAppFlow(app);
+      else if (pick === 'rename') void renameAppFlow(app, bundled);
+      else if (pick === 'uninstall') void uninstallAppFlow(app);
       else if (pick === 'delete') void deleteAppFlow(app);
     });
   };
@@ -118,7 +152,28 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
     void refreshApps();
   };
 
-  const renameAppFlow = async (app: AppMetaResolvedType): Promise<void> => {
+  // Uninstall a bundled app (issue #434): revokes its access; the user's data
+  // rows are retained (uninstall is not a purge — that's a later explicit act).
+  // Uses the same `deleteApp` wire, which for a bundled id deregisters + revokes
+  // without a git delete (there's no code in the store).
+  const uninstallAppFlow = async (app: AppMetaResolvedType): Promise<void> => {
+    const ok = await confirm({
+      confirmLabel: 'Uninstall',
+      danger: true,
+      title: `Uninstall ${app.name}?`,
+      message: `Removes "${app.name}" and revokes its access. Your data stays in your vault.`,
+    });
+    if (!ok) return;
+    try {
+      await deleteApp({ id: app.id });
+      showToast(`Uninstalled "${app.name}"`);
+    } catch (err) {
+      showToast(`Could not uninstall: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    void refreshApps();
+  };
+
+  const renameAppFlow = async (app: AppMetaResolvedType, bundled: boolean): Promise<void> => {
     const next = await openPrompt({
       title: 'Rename app',
       initial: app.name,
@@ -127,7 +182,11 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
     });
     if (!next) return; // cancelled, empty, or unchanged
     try {
-      await updateAppMeta({ id: app.id, name: next });
+      // A bundled app's code is read-only — rename sets a per-vault label with
+      // NO editing session (renameInstalledApp); code-store apps rewrite
+      // app.json via updateAppMeta.
+      if (bundled) await renameInstalledApp({ id: gatewayAppId(app), name: next });
+      else await updateAppMeta({ id: app.id, name: next });
       showToast(`Renamed to "${next}"`);
     } catch (err) {
       showToast(`Could not rename: ${err instanceof Error ? err.message : String(err)}`);
@@ -189,6 +248,7 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
   return (
     <PageScroll flush>
       <HomeScreen
+        builderEnabled={builderEnabled}
         suggestions={[...HERO_SUGGESTIONS]}
         dateLabel={heroDateLabel()}
         appItems={appItems}
@@ -206,6 +266,19 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
         onAutomationMenu={automationMenu}
         onBrowseTemplates={() => navigate({ kind: 'discover' })}
       />
+      {infoApp ? (
+        <AppInfoModal
+          app={infoApp}
+          appId={gatewayAppId(infoApp)}
+          onClose={() => setInfoApp(null)}
+          onUninstall={() => {
+            const target = infoApp;
+            setInfoApp(null);
+            void uninstallAppFlow(target);
+          }}
+          showToast={showToast}
+        />
+      ) : null}
     </PageScroll>
   );
 }

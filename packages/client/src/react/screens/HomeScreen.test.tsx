@@ -48,6 +48,7 @@ const automationItems: HomeAutoItemDTO[] = [
 
 function makeProps(over: Partial<HomeBridgeProps> = {}): HomeBridgeProps {
   return {
+    builderEnabled: true,
     suggestions: ['Habit tracker', 'Weekly review'],
     dateLabel: 'TUESDAY · 19 MAY',
     appItems,
@@ -184,5 +185,30 @@ describe('HomeScreen', () => {
     );
     expect(el.querySelector('.shelfEmpty')).toBeTruthy();
     expect(el.textContent).toContain('Nothing here yet');
+  });
+
+  it('hides the composer hero + suggestions when the builder is disabled (#434)', () => {
+    const el = mount(makeProps({ builderEnabled: false }));
+    // The build composer is the primary builder entry point — gone.
+    expect(el.querySelector('.composerInput')).toBeNull();
+    expect(el.querySelector('.heroSuggestions')).toBeNull();
+    expect(el.textContent).not.toContain('What should we build?');
+    // The library shelf (installed apps + automations) still renders.
+    expect(el.querySelectorAll('.discSegB').length).toBe(3);
+    expect(el.querySelectorAll('.wrap').length).toBe(3);
+  });
+
+  it('drops the "describe an app" build prompt from empty states when disabled (#434)', () => {
+    const el = mount(
+      makeProps({
+        builderEnabled: false,
+        appItems: [],
+        automationItems: [],
+        counts: { all: 0, apps: 0, automations: 0 },
+      }),
+    );
+    expect(el.textContent).not.toContain('in the box above');
+    expect(el.textContent).not.toContain('template gallery');
+    expect(el.textContent).toContain('from Discover');
   });
 });

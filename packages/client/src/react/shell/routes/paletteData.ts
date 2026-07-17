@@ -23,6 +23,9 @@ const NAV_ACTIONS: { label: string; icon: string; route: ShellRoute }[] = [
 export interface PaletteDeps {
   userApps: readonly UserAppMeta[];
   drafts: readonly DraftAppMeta[];
+  /** Dev flag (issue #434, Phase 3) — the "Build a new app…" create row is a
+   *  builder entry point, so it only appears when the builder is enabled. */
+  builderEnabled: boolean;
   tileVariant: AppearancePrefs['tileVariant'];
   navigate: (route: ShellRoute) => void;
   enterBuilder: (initialPrompt?: string) => void;
@@ -118,22 +121,26 @@ export function buildPaletteGroups(query: string, deps: PaletteDeps): PaletteGro
     });
   }
 
-  const trimmed = query.trim();
-  groups.push({
-    group: 'Create',
-    items: [
-      {
-        variant: 'action',
-        accent: true,
-        label: trimmed ? `Build “${trimmed}”` : 'Build a new app…',
-        iconHtml: iconSvg('Plus'),
-        run: () => {
-          deps.onClose();
-          deps.enterBuilder(trimmed || undefined);
+  // The "Build a new app…" create row is a builder entry point (issue #434,
+  // Phase 3) — omitted entirely when the builder is hidden.
+  if (deps.builderEnabled) {
+    const trimmed = query.trim();
+    groups.push({
+      group: 'Create',
+      items: [
+        {
+          variant: 'action',
+          accent: true,
+          label: trimmed ? `Build “${trimmed}”` : 'Build a new app…',
+          iconHtml: iconSvg('Plus'),
+          run: () => {
+            deps.onClose();
+            deps.enterBuilder(trimmed || undefined);
+          },
         },
-      },
-    ],
-  });
+      ],
+    });
+  }
 
   return groups;
 }

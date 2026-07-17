@@ -11,6 +11,11 @@ import type { ShellMenuAnchor } from './Sidebar.js';
 // the vanilla cardsMod/autoMod one cluster at a time.
 export interface ShellActions {
   showToast: (message: string) => void;
+  /** Dev flag (issue #434, Phase 3) — the in-app builder and its entry points
+   *  are hidden from the first release unless this is on. Menus, the Home
+   *  composer, the ⌘K create row, drafts, and the builder routes all gate on
+   *  it; the underlying machinery stays wired regardless. */
+  builderEnabled: boolean;
   /** Open the builder (new app, or editing an existing one). */
   enterBuilder: (opts: { appContext?: AppMetaResolvedType; initialPrompt?: string }) => void;
   /** The new-app sheet (⌘N / sidebar Build new). */

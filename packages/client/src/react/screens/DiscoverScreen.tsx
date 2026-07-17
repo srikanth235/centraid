@@ -151,6 +151,11 @@ function TemplateCard({
             </span>
             <IntegrationDots names={[...(t.integrations ?? [])]} />
           </>
+        ) : t.installed ? (
+          <span className={styles.installedTag}>
+            <Icon name="Check" size={12} strokeWidth={2} />
+            <span>Installed</span>
+          </span>
         ) : null}
       </div>
     </button>
@@ -208,10 +213,10 @@ export default function DiscoverScreen({
         <div className={styles.head}>
           <div className={styles.headText}>
             <div className={styles.eyebrow}>Discover</div>
-            <h1>Templates</h1>
+            <h1>Apps</h1>
             <p>
-              Start from a blueprint — an app you open or an automation that runs for you. Apps
-              install straight into your Apps; automations open in the builder to configure.
+              Install an app to use it right away, or add an automation that runs in the background
+              for you. Installing grants only the access the app asks for.
             </p>
           </div>
         </div>
@@ -274,7 +279,7 @@ export default function DiscoverScreen({
               <div className={emptyCss.pageEmptyIcon} aria-hidden="true">
                 <Icon name="Sparkle" size={22} />
               </div>
-              <div className={emptyCss.pageEmptyText}>No templates available yet.</div>
+              <div className={emptyCss.pageEmptyText}>Nothing to install yet.</div>
             </div>
           ) : (
             order.map((cat) => {

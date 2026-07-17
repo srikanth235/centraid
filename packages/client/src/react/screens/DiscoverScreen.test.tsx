@@ -79,7 +79,7 @@ describe('DiscoverScreen', () => {
   it('renders the Discover chrome and the kind segmented filter', () => {
     const html = renderToStaticMarkup(<DiscoverScreen {...baseProps()} />);
     expect(html).toContain('wrap');
-    expect(html).toContain('<h1>Templates</h1>');
+    expect(html).toContain('<h1>Apps</h1>');
     expect(count(html, 'discSegB')).toBe(3);
     expect(html).toContain('libLayout');
   });
@@ -122,7 +122,7 @@ describe('DiscoverScreen', () => {
       <DiscoverScreen {...baseProps({ appTemplates: [], automationTemplates: [] })} />,
     );
     expect(html).toContain('pageEmpty');
-    expect(html).toContain('No templates available yet.');
+    expect(html).toContain('Nothing to install yet.');
     expect(count(html, 'card"')).toBe(0);
   });
 });

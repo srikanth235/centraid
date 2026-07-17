@@ -100,6 +100,9 @@ export default async ({ ctx }) => {
     clusters.sort((a, b) => b.assets.length - a.assets.length);
     return { clusters };
   } catch (err) {
-    return { clusters: [], vaultDenied: { code: err.code, message: err.message } };
+    if (err.code === 'VAULT_CONSENT') {
+      return { clusters: [], vaultDenied: { code: err.code, message: err.message } };
+    }
+    return { clusters: [], error: String(err.message ?? err) };
   }
 };

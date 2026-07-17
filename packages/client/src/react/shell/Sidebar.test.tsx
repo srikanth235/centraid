@@ -46,6 +46,17 @@ describe('Sidebar', () => {
     expect(el.textContent).toContain('Draft app');
   });
 
+  it('hides "Build new" and the Apps "+" when onNewApp is omitted (#434 builder off)', () => {
+    const { onNewApp: _drop, ...noBuild } = base;
+    const el = render(<Sidebar {...noBuild} />);
+    expect(el.textContent).not.toContain('Build new');
+    // The "Apps · N" section header keeps its label but drops the add button.
+    const appsSection = [...el.querySelectorAll('.sbSection')].find((s) =>
+      s.textContent?.includes('Apps ·'),
+    )!;
+    expect(appsSection.querySelector('.sbSectionBtn')).toBeNull();
+  });
+
   it('highlights the active page', () => {
     const el = render(<Sidebar {...base} activePage="insights" />);
     const active = el.querySelector('[data-active="true"]');

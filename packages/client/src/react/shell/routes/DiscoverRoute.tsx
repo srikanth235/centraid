@@ -1,5 +1,5 @@
 import { Store } from '../store.js';
-import { type JSX } from 'react';
+import { useState, type JSX } from 'react';
 import type { AppearancePrefs, TemplateEntry } from '../../../app-shell-context.js';
 import type { DiscoverTemplate } from '../../screen-contracts.js';
 import DiscoverScreen from '../../screens/DiscoverScreen.js';
@@ -36,31 +36,36 @@ export default function DiscoverRoute({
   refreshApps,
 }: DiscoverRouteProps): JSX.Element {
   const { navigate, showToast } = useShellActions();
+  // Bumped after an install so the catalog re-fetches and its per-vault
+  // `installed` flags flip Install → Open (no gateway push for the catalog).
+  const [reloadTick, setReloadTick] = useState(0);
   const state = useAsyncData(async () => {
     const [appTemplates, automationTemplates] = await Promise.all([
       loadAppTemplates(),
       loadAutomationTemplates(),
     ]);
     return { appTemplates, automationTemplates };
-  });
+  }, [reloadTick]);
   const tileVariant =
     Store.get<Partial<AppearancePrefs>>('appearance', {}).tileVariant ?? 'gradient';
 
-  // Clone an app template → install it directly as a published app (owner
-  // decision: no draft stage, no builder detour) → pin it to Home so the
-  // user lands where they can see it, then reconcile the shelf against the
-  // gateway's listing (the freshly published clone) the same way other
-  // mutating flows do (see HomeRoute's renameAppFlow/deleteAppFlow).
+  const openApp = (id: string): void => navigate({ kind: 'app', id });
+
+  // Install a bundled app in place (issue #434): registration + consent grants,
+  // no code copy. Pin it to the Home shelf, refresh the shelf + catalog against
+  // the gateway, then open the app — install lands the user in the running app,
+  // matching the app-store "install → open" flow.
   const applyAppTemplate = (t: TemplateEntry): void => {
     void installAppTemplate(t)
       .then((pin) => {
         setUserApps([pin, ...userApps]);
         void refreshApps();
+        setReloadTick((n) => n + 1);
         showToast(`Installed "${pin.name}"`);
-        navigate({ kind: 'home' });
+        openApp(pin.id);
       })
       .catch((err: unknown) =>
-        showToast(`Clone failed: ${err instanceof Error ? err.message : String(err)}`),
+        showToast(`Install failed: ${err instanceof Error ? err.message : String(err)}`),
       );
   };
   // Clone an automation template → surface once-only webhook secrets → open
@@ -98,34 +103,45 @@ export default function DiscoverRoute({
           appTemplates={state.data.appTemplates as unknown as DiscoverTemplate[]}
           automationTemplates={state.data.automationTemplates as unknown as DiscoverTemplate[]}
           tileVariant={tileVariant}
-          onOpenTemplate={(t) => openTemplatePreview(asEntry(t), applyAppTemplate)}
+          onOpenTemplate={(t) =>
+            // Tapping an app card: an installed app opens; an uninstalled one
+            // shows its install/consent sheet first (issue #434).
+            t.installed ? openApp(t.id) : openTemplatePreview(asEntry(t), applyAppTemplate)
+          }
           onOpenAutomationTemplate={(t) =>
             openAutomationTemplatePreview(asEntry(t), applyAutoTemplate)
           }
           onTemplateContext={(t, anchor) => {
             const auto = t.kind === 'automation';
-            openMenu(
-              [
-                { id: 'use', label: 'Use this template', icon: 'Sparkle' },
-                { id: 'preview', label: 'Preview', icon: 'Eye' },
-              ],
-              anchor,
-              (id) => {
-                if (auto) {
-                  if (id === 'use') {
-                    applyAutoTemplate(asEntry(t));
-                  } else {
-                    openAutomationTemplatePreview(asEntry(t), applyAutoTemplate);
-                  }
-                } else {
-                  if (id === 'use') {
-                    applyAppTemplate(asEntry(t));
-                  } else {
-                    openTemplatePreview(asEntry(t), applyAppTemplate);
-                  }
-                }
-              },
-            );
+            // App-template verbs (issue #434): Install (or Open when already
+            // installed) — "Use this template" is gone. Automations keep their
+            // clone-into-builder wording.
+            const items = auto
+              ? [
+                  { id: 'use', label: 'Use this template', icon: 'Sparkle' as const },
+                  { id: 'preview', label: 'Preview', icon: 'Eye' as const },
+                ]
+              : t.installed
+                ? [
+                    { id: 'open', label: 'Open', icon: 'Eye' as const },
+                    { id: 'preview', label: 'App details', icon: 'Eye' as const },
+                  ]
+                : [
+                    { id: 'install', label: 'Install', icon: 'Plus' as const },
+                    { id: 'preview', label: 'Preview', icon: 'Eye' as const },
+                  ];
+            openMenu(items, anchor, (id) => {
+              if (auto) {
+                if (id === 'use') applyAutoTemplate(asEntry(t));
+                else openAutomationTemplatePreview(asEntry(t), applyAutoTemplate);
+              } else if (id === 'open') {
+                openApp(t.id);
+              } else if (id === 'install') {
+                applyAppTemplate(asEntry(t));
+              } else {
+                openTemplatePreview(asEntry(t), applyAppTemplate);
+              }
+            });
           }}
         />
       )}

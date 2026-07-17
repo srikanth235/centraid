@@ -123,6 +123,13 @@ function applyLibraryData(data, { record = true } = {}) {
     $('consentDetail').textContent = denied.message ?? '';
     return;
   }
+  // The read resolved but the vault could not answer — same "a broken vault
+  // must not look like an empty one" rule as the rejected-read path below.
+  if (data?.error) {
+    readFailed($('noticeBanner'));
+    readErrorShown = true;
+    return;
+  }
   assets = data?.assets ?? [];
   albums = data?.albums ?? [];
   places = data?.places ?? [];

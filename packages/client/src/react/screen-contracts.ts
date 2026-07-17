@@ -24,6 +24,15 @@ export interface DiscoverTemplate {
   iconKey: string;
   version: string;
   kind?: 'app' | 'automation';
+  /** App-kind template already installed in the addressed vault (issue #434) —
+   *  the card shows Open instead of Install. */
+  installed?: boolean;
+  /** Requested vault access, for the install/consent sheet (issue #434). */
+  vault?: {
+    purpose?: string;
+    why?: string;
+    scopes: Array<{ schema: string; table?: string; verbs: string }>;
+  };
   emoji?: string;
   category?: string;
   triggerKind?: 'cron' | 'webhook' | 'data' | 'condition';
@@ -719,6 +728,10 @@ export interface HomeAutoItemDTO {
   starred: boolean;
 }
 export interface HomeBridgeProps {
+  /** Dev flag (issue #434, Phase 3) — when false the builder is hidden, so the
+   *  "What should we build?" composer hero + its suggestions don't render and
+   *  the empty states drop their "describe an app" build prompt. */
+  builderEnabled: boolean;
   suggestions: string[];
   dateLabel: string;
   appItems: HomeAppItemDTO[];
@@ -1044,6 +1057,12 @@ export interface AppSettingsBridgeProps {
   onShare: () => void;
   onReveal: () => void;
   onDelete: () => void;
+  /**
+   * Whether this app is a bundled install serving in place (issue #434). Its
+   * danger-zone action is Uninstall (revoke access, data stays), not Delete
+   * (wipe local files) — code-store apps keep Delete.
+   */
+  bundled?: boolean;
   /** Fill the per-order run-history host — vanilla owns the deep timeline. */
   onMountRuns: (ref: string, host: HTMLElement) => void;
   /** Fill the vault consent pane host — vanilla `renderVaultPane`. */

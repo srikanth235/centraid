@@ -39,6 +39,8 @@ export interface AppSettingsControllerProps {
   onShare: () => void;
   onReveal: () => void;
   onDelete: () => void;
+  /** Bundled install serving in place (issue #434) — danger action is Uninstall. */
+  bundled?: boolean;
   showToast: (message: string) => void;
 }
 
@@ -60,6 +62,7 @@ export default function AppSettingsController({
   onShare,
   onReveal,
   onDelete,
+  bundled,
   showToast,
 }: AppSettingsControllerProps): JSX.Element {
   // Mutable snapshot inputs — refs so the async fetches + run streams mutate in
@@ -244,6 +247,7 @@ export default function AppSettingsController({
       onShare={onShare}
       onReveal={onReveal}
       onDelete={onDelete}
+      {...(bundled ? { bundled: true } : {})}
       onMountRuns={(ref, host) => mountInto(host, <RunsPane automationId={ref} />)}
       onMountVault={(host) => {
         void fetchAppManifestRaw(appId).then((raw) => {
