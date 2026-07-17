@@ -154,6 +154,20 @@ function parseRrule(rrule) {
   return { freq, interval, count, until, byDay: byDay && byDay.length > 0 ? byDay : undefined };
 }
 
+// RFC 5545 UNTIL is written extended (2026-07-03T00:00:00Z) or basic
+// (20260703T000000Z, the form ICS ingest stores verbatim). Date.parse accepts
+// only the former, so a basic UNTIL silently degraded to unbounded. Normalize
+// both; a bare date (20260703) is treated as UTC midnight.
+function parseIcalInstant(value) {
+  const direct = Date.parse(value);
+  if (!Number.isNaN(direct)) return new Date(direct);
+  const match = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2}))?Z?$/.exec(String(value).trim());
+  if (!match) return null;
+  const [, y, mo, d, hh = '00', mm = '00', ss = '00'] = match;
+  const ms = Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(hh), Number(mm), Number(ss));
+  return Number.isNaN(ms) ? null : new Date(ms);
+}
+
 function addDays(d, n) {
   const next = new Date(d.getTime());
   next.setUTCDate(next.getUTCDate() + n);
@@ -177,8 +191,7 @@ function expandRrule(rrule, dtstartIso, rangeFrom, rangeTo, maxInstances = 200) 
   const parsed = parseRrule(rrule);
   const dtstart = new Date(dtstartIso);
   if (!parsed || Number.isNaN(dtstart.getTime())) return [];
-  const untilRaw = parsed.until ? new Date(parsed.until) : null;
-  const until = untilRaw && !Number.isNaN(untilRaw.getTime()) ? untilRaw : null;
+  const until = parsed.until ? parseIcalInstant(parsed.until) : null;
   const out = [];
   let occurrenceIndex = 0;
 

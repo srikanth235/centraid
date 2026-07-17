@@ -58,6 +58,39 @@ describe('enqueue', () => {
     expect(item.mediaType).toBe('image/jpeg');
   });
 
+  it('commits addressed bytes and their canonical follow-up atomically', async () => {
+    const item = await enqueueLocalFile(
+      { store, openFile, newId: () => 'item-1' },
+      { localUri: 'file://x', plaintextSize: BYTES.byteLength },
+      (addressed) => ({
+        shape: 'photos',
+        action: 'upload',
+        input: { staged_sha: addressed.sha256, kind: 'photo' },
+      }),
+    );
+    expect(store.pending()).toHaveLength(1);
+    store.settle(item.itemId, { casAck: 'replicated' });
+    expect(store.pendingFollowups()).toMatchObject([
+      { shape: 'photos', input: { staged_sha: item.sha256, kind: 'photo' } },
+    ]);
+
+    const otherBytes = new Uint8Array([1, 2, 3]);
+    await expect(
+      enqueueLocalFile(
+        {
+          store,
+          openFile: async () => bytesFileSource(otherBytes),
+          newId: () => 'item-2',
+        },
+        { localUri: 'file://other', plaintextSize: otherBytes.byteLength },
+        () => {
+          throw new Error('follow-up construction failed');
+        },
+      ),
+    ).rejects.toThrow('follow-up construction failed');
+    expect(store.all()).toHaveLength(1);
+  });
+
   it('refuses a file whose size does not match the caller', async () => {
     await expect(
       enqueueLocalFile(

@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from '../components/Icon';
-import Button from '../components/Button';
-import { family, radii, spacing, t, useTheme, type ThemeColors } from '../theme';
+import Icon from '../kit/components/Icon';
+import Button from '../kit/components/Button';
+import { family, radii, spacing, t, useTheme, type ThemeColors } from '../kit/theme';
 import {
   confirmParked,
   GatewayError,

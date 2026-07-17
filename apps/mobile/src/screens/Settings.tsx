@@ -2,9 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, TextInput, StyleSheet, ScrollView, Pressable, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import Icon from '../components/Icon';
-import Button from '../components/Button';
-import { radii, spacing, t, useTheme, type ThemeColors } from '../theme';
+import Icon from '../kit/components/Icon';
+import Button from '../kit/components/Button';
+import { radii, spacing, t, useTheme, type ThemeColors } from '../kit/theme';
 import {
   hydrateGatewayToken,
   hydrateGatewayUrl,

@@ -161,7 +161,48 @@ describe('UploadDrainer', () => {
 
     expect(summary.deduped).toBe(1);
     expect(putPart, 'alreadyPresent must skip the transfer entirely').not.toHaveBeenCalled();
-    expect(store.bySha(SHA)?.receipt).toMatchObject({ alreadyPresent: true });
+    // The receipt is the gateway's, verbatim — casAck came from the server.
+    expect(store.bySha(SHA)?.receipt).toMatchObject({
+      alreadyPresent: true,
+      casAck: 'replicated',
+      custody: 'remote-only',
+    });
+  });
+
+  it('persists an unreplicated settlement verbatim instead of fabricating a casAck', async () => {
+    enqueue();
+    // A gateway that dedupes a blob it holds only locally: the honest receipt
+    // says casAck `receipt`, which must NOT be rewritten to `replicated`.
+    const localOnly: DirectTransferClient = {
+      begin: async (input) => ({
+        ...(await gateway.begin(input)),
+        alreadyPresent: true,
+        custody: 'local-only',
+        sessionId: undefined,
+        upload: undefined,
+        settlement: {
+          alreadyPresent: true,
+          sha256: input.sha256,
+          casAck: 'receipt',
+          custody: 'local-only',
+          acknowledged: false,
+        },
+      }),
+      recordPart: async () => undefined,
+      complete: async () => ({}),
+    };
+    const putPart = vi.fn<PartPutter>(async () => '"etag"');
+    const summary = await drainer({ client: localOnly, putPart }).drainOnce();
+
+    expect(summary.deduped).toBe(1);
+    expect(putPart).not.toHaveBeenCalled();
+    expect(store.bySha(SHA)?.receipt).toEqual({
+      alreadyPresent: true,
+      sha256: SHA,
+      casAck: 'receipt',
+      custody: 'local-only',
+      acknowledged: false,
+    });
   });
 
   it('reconciles gateway-completed parts into the queue and skips re-uploading them', async () => {

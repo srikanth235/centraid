@@ -30,6 +30,7 @@ import {
   type ReplicaSqliteDriver,
   type ReplicaStatus,
   type ReplicaValue,
+  validateOptimisticMutation,
 } from '@centraid/client/replica/native';
 
 import { NativeReplicaStore } from './native-replica-store';
@@ -193,6 +194,20 @@ export class NativeReplicaSession {
       const { purpose, shapeId, ...rest } = mutation;
       return { ...rest, shapeId: this.resolveShapeId(appId, mutation.entity, shapeId, purpose) };
     }) as OptimisticMutation[];
+    // Validate at enqueue time exactly as the web shell session does. The native
+    // write path never re-checked, so an invalid optimistic mutation (e.g. a
+    // synthetic __rowId column spread into the values) was silently dropped by
+    // applyOptimisticMutations and the edit simply never rendered. Reject loudly.
+    for (const mutation of optimistic) {
+      const shape = this.#catalog.find((candidate) => candidate.shapeId === mutation.shapeId);
+      const schema = shape?.entities.find((candidate) => candidate.entity === mutation.entity);
+      if (!schema) {
+        throw new ReplicaProtocolError(
+          `Optimistic mutation targets unavailable shape ${mutation.shapeId}/${mutation.entity}`,
+        );
+      }
+      validateOptimisticMutation(mutation, schema);
+    }
     const dependencies = this.#catalog
       .filter((shape) => shape.appId === appId)
       .flatMap((shape) =>
@@ -242,6 +257,23 @@ export class NativeReplicaSession {
 
   catalog(): readonly ReplicaShape[] {
     return this.#catalog;
+  }
+
+  /** Wake the one coordinator after the platform reports connectivity. */
+  notifyReachable(): void {
+    if (!this.#isConnected() || this.#closed) return;
+    if (!this.#hasCursor) void this.bootstrapWhenReachable();
+    else void this.pullNow().catch(() => undefined);
+    void this.flushIntents();
+  }
+
+  /** Replace an ephemeral loopback tunnel URL after process restart/reconnect. */
+  updateGatewayBase(baseUrl: string): void {
+    if (this.#closed || this.#gatewayAuth.baseUrl === baseUrl) return;
+    this.#gatewayAuth.baseUrl = baseUrl;
+    const foreground = this.#appState ? this.#appState.currentState !== 'background' : true;
+    this.#feed.setActive(false);
+    if (foreground) this.#feed.setActive(true);
   }
 
   async flushIntents(): Promise<void> {

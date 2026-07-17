@@ -17,4 +17,21 @@ config.resolver.nodeModulesPaths = [
 ];
 config.resolver.disableHierarchicalLookup = true;
 
+// Workspace packages are authored as TypeScript ESM and keep `.js` in their
+// relative specifiers so the emitted Node build is executable. Metro consumes
+// those packages from source, so retry a missing relative `.js` import without
+// its extension and let Metro select the sibling `.ts`/`.tsx` source file.
+const defaultResolve = config.resolver.resolveRequest;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  const resolve = defaultResolve ?? context.resolveRequest;
+  try {
+    return resolve(context, moduleName, platform);
+  } catch (error) {
+    if (/^\.{1,2}\/.+\.js$/.test(moduleName)) {
+      return resolve(context, moduleName.slice(0, -3), platform);
+    }
+    throw error;
+  }
+};
+
 module.exports = config;

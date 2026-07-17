@@ -307,6 +307,71 @@ test('direct completion rejects missing, corrupt, and declared-plaintext-size-mi
   expect(h.cache.replica.has(wrongSize.sha)).toBe(false);
 });
 
+test('beginDirect on a remote-held blob returns an authoritative replicated settlement', async () => {
+  const h = await harness({ budgetBytes: 1 });
+  const coordinator = h.coordinator();
+  coordinator.enrollPairedDevice({
+    identity: 'paired-phone-key',
+    ownerPartyId: h.boot.ownerPartyId,
+    name: 'Phone',
+    trust: 'full',
+  });
+  const plain = Buffer.from('these bytes already live in the remote content-addressed store');
+  const sha = sha256OfBytes(plain);
+  const sealed = sealBlob(h.keys.getOrCreate(sha), sha, plain, 1024 * 1024);
+  // Remote tier holds the sealed object ⇒ custody remote-only, casAck replicated.
+  h.fake.objects.set(sha, sealed);
+
+  const result = await coordinator.beginDirect({
+    sha256: sha,
+    plaintextSize: plain.length,
+    sealedSize: sealed.length,
+    deviceId: 'paired-phone-key',
+  });
+  expect(result.alreadyPresent).toBe(true);
+  expect(result.sessionId).toBeUndefined();
+  expect(result.custody).toBe('remote-only');
+  expect(result.settlement).toMatchObject({
+    alreadyPresent: true,
+    sha256: sha,
+    casAck: 'replicated',
+    custody: 'remote-only',
+    acknowledged: true,
+  });
+});
+
+test('beginDirect on a local-only blob dedupes but settles as unreplicated (casAck receipt)', async () => {
+  const h = await harness({ budgetBytes: 1 });
+  const coordinator = h.coordinator();
+  coordinator.enrollPairedDevice({
+    identity: 'paired-tablet-key',
+    ownerPartyId: h.boot.ownerPartyId,
+    name: 'Tablet',
+    trust: 'full',
+  });
+  const plain = Buffer.from('these bytes are on disk but not yet pushed offsite');
+  const sha = sha256OfBytes(plain);
+  const sealed = sealBlob(h.keys.getOrCreate(sha), sha, plain, 1024 * 1024);
+  // Local tier only; the remote provider genuinely does not hold it yet.
+  h.local.putSync(sha, sealed);
+
+  const result = await coordinator.beginDirect({
+    sha256: sha,
+    plaintextSize: plain.length,
+    sealedSize: sealed.length,
+    deviceId: 'paired-tablet-key',
+  });
+  expect(result.alreadyPresent).toBe(true);
+  expect(result.sessionId, 'a durable local copy needs no re-upload').toBeUndefined();
+  expect(result.custody).toBe('local-only');
+  expect(result.settlement).toMatchObject({
+    alreadyPresent: true,
+    casAck: 'receipt',
+    custody: 'local-only',
+    acknowledged: false,
+  });
+});
+
 test('stream-through resumes open and committing sessions without retransmitting completed parts', async () => {
   const h = await harness({ budgetBytes: 1 });
   const plain = Buffer.alloc(TEST_CHUNK_BYTES * 2, 0x5a);

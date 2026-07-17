@@ -20,6 +20,9 @@ jobs:
       - run: bun run format:check
       # `--format github` emits inline PR annotations on the offending lines.
       - run: bunx oxlint --format github .
+      # Per-package lint scripts (mobile import boundaries, blueprint app
+      # no-undef) only exist under turbo — oxlint above doesn't run them.
+      - run: bunx turbo run lint
       - run: bun run typecheck
       # Type-aware pass (oxlint --type-aware); deps' dist is built by the
       # typecheck step's upstream `^build`.

@@ -84,6 +84,152 @@ test('expandRrule MONTHLY clamps day-of-month into shorter months', () => {
   ]);
 });
 
+test('expandRrule parses UNTIL in RFC basic form (ICS verbatim)', () => {
+  // ICS ingest stores UNTIL as `20260703T000000Z`; Date.parse rejects it, so
+  // the bound used to silently degrade to unbounded. Basic and extended must
+  // clip the series identically.
+  const basic = expandRrule(
+    'FREQ=DAILY;UNTIL=20260703T000000Z',
+    '2026-07-01T00:00:00.000Z',
+    '2026-07-01T00:00:00.000Z',
+    '2026-08-01T00:00:00.000Z',
+  );
+  expect(basic).toEqual([
+    '2026-07-01T00:00:00.000Z',
+    '2026-07-02T00:00:00.000Z',
+    '2026-07-03T00:00:00.000Z',
+  ]);
+  expect(
+    expandRrule(
+      'FREQ=DAILY;UNTIL=2026-07-03T00:00:00Z',
+      '2026-07-01T00:00:00.000Z',
+      '2026-07-01T00:00:00.000Z',
+      '2026-08-01T00:00:00.000Z',
+    ),
+  ).toEqual(basic);
+});
+
+// Shared parity fixtures — the SAME rules + windows are asserted against the
+// native expansion in apps/mobile agenda/recurrence.test.ts. These expected
+// occurrence sets are the single ground truth both projections must produce.
+const PARITY: readonly {
+  name: string;
+  rrule: string;
+  start: string;
+  from: string;
+  to: string;
+  expected: readonly string[];
+}[] = [
+  {
+    name: 'monthly anchored on the 31st clamps short months',
+    rrule: 'FREQ=MONTHLY;COUNT=4',
+    start: '2026-01-31T09:00:00Z',
+    from: '2026-01-01T00:00:00Z',
+    to: '2026-12-31T00:00:00Z',
+    expected: [
+      '2026-01-31T09:00:00.000Z',
+      '2026-02-28T09:00:00.000Z',
+      '2026-03-31T09:00:00.000Z',
+      '2026-04-30T09:00:00.000Z',
+    ],
+  },
+  {
+    name: 'monthly anchored on the 30th',
+    rrule: 'FREQ=MONTHLY;COUNT=3',
+    start: '2026-01-30T09:00:00Z',
+    from: '2026-01-01T00:00:00Z',
+    to: '2026-12-31T00:00:00Z',
+    expected: ['2026-01-30T09:00:00.000Z', '2026-02-28T09:00:00.000Z', '2026-03-30T09:00:00.000Z'],
+  },
+  {
+    name: 'monthly anchored on the 29th',
+    rrule: 'FREQ=MONTHLY;COUNT=3',
+    start: '2026-01-29T09:00:00Z',
+    from: '2026-01-01T00:00:00Z',
+    to: '2026-12-31T00:00:00Z',
+    expected: ['2026-01-29T09:00:00.000Z', '2026-02-28T09:00:00.000Z', '2026-03-29T09:00:00.000Z'],
+  },
+  {
+    name: 'yearly Feb 29 clamps to Feb 28 on common years',
+    rrule: 'FREQ=YEARLY;COUNT=3',
+    start: '2024-02-29T09:00:00Z',
+    from: '2024-01-01T00:00:00Z',
+    to: '2030-01-01T00:00:00Z',
+    expected: ['2024-02-29T09:00:00.000Z', '2025-02-28T09:00:00.000Z', '2026-02-28T09:00:00.000Z'],
+  },
+  {
+    name: 'UNTIL in extended RFC form bounds the series',
+    rrule: 'FREQ=DAILY;UNTIL=2026-07-03T00:00:00Z',
+    start: '2026-07-01T00:00:00Z',
+    from: '2026-07-01T00:00:00Z',
+    to: '2026-08-01T00:00:00Z',
+    expected: ['2026-07-01T00:00:00.000Z', '2026-07-02T00:00:00.000Z', '2026-07-03T00:00:00.000Z'],
+  },
+  {
+    name: 'UNTIL in RFC basic form (ICS verbatim) bounds identically',
+    rrule: 'FREQ=DAILY;UNTIL=20260703T000000Z',
+    start: '2026-07-01T00:00:00Z',
+    from: '2026-07-01T00:00:00Z',
+    to: '2026-08-01T00:00:00Z',
+    expected: ['2026-07-01T00:00:00.000Z', '2026-07-02T00:00:00.000Z', '2026-07-03T00:00:00.000Z'],
+  },
+  {
+    name: 'unsorted BYDAY keeps every in-window weekday',
+    rrule: 'FREQ=WEEKLY;BYDAY=FR,MO',
+    start: '2026-07-06T09:00:00Z',
+    from: '2026-07-06T00:00:00Z',
+    to: '2026-07-18T00:00:00Z',
+    expected: [
+      '2026-07-06T09:00:00.000Z',
+      '2026-07-10T09:00:00.000Z',
+      '2026-07-13T09:00:00.000Z',
+      '2026-07-17T09:00:00.000Z',
+    ],
+  },
+  {
+    name: 'INTERVAL strides the cadence',
+    rrule: 'FREQ=DAILY;INTERVAL=3;COUNT=4',
+    start: '2026-07-01T09:00:00Z',
+    from: '2026-07-01T00:00:00Z',
+    to: '2026-08-01T00:00:00Z',
+    expected: [
+      '2026-07-01T09:00:00.000Z',
+      '2026-07-04T09:00:00.000Z',
+      '2026-07-07T09:00:00.000Z',
+      '2026-07-10T09:00:00.000Z',
+    ],
+  },
+  {
+    name: 'a far-past daily anchor still surfaces its in-window rows',
+    rrule: 'FREQ=DAILY',
+    start: '2026-01-01T09:00:00Z',
+    from: '2026-07-01T00:00:00Z',
+    to: '2026-07-05T00:00:00Z',
+    expected: [
+      '2026-07-01T09:00:00.000Z',
+      '2026-07-02T09:00:00.000Z',
+      '2026-07-03T09:00:00.000Z',
+      '2026-07-04T09:00:00.000Z',
+    ],
+  },
+  {
+    name: 'an exhausted COUNT series yields nothing beyond its span',
+    rrule: 'FREQ=DAILY;COUNT=2',
+    start: '2026-01-01T09:00:00Z',
+    from: '2026-07-01T00:00:00Z',
+    to: '2026-07-05T00:00:00Z',
+    expected: [],
+  },
+];
+
+test.each(PARITY)('server projection matches the native expansion: $name', (fixture) => {
+  // maxInstances pinned to the native 200 so both projections share the walk
+  // guard; every fixture fits well inside it.
+  expect(expandRrule(fixture.rrule, fixture.start, fixture.from, fixture.to, 200)).toEqual(
+    fixture.expected,
+  );
+});
+
 test('nextOccurrence finds the next hit strictly after the given date', () => {
   const next = nextOccurrence(
     'FREQ=WEEKLY',

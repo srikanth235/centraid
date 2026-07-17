@@ -21,9 +21,41 @@
 // are presigned URLs persisted — they expire, and `begin` re-mints them.
 
 import type { ReplicaSqliteDriver } from '@centraid/client/replica/native';
+import { migrateUploadSchema, SCHEMA_VERSION } from './store-migrations';
+import { toItem, toPart, type ItemRow, type PartRow } from './store-rows';
+import {
+  stableFollowupIntentId,
+  toUploadFollowup,
+  type NewUploadFollowup,
+  type PersistedUploadFollowupRow,
+  type UploadFollowup,
+  type UploadFollowupFactory,
+} from './followup-record';
 
-/** Bumped when the DDL below changes; v0 rebuilds in place, never migrates. */
-const SCHEMA_VERSION = 1;
+export type {
+  NewUploadFollowup,
+  UploadDerivativeFollowup,
+  UploadFollowup,
+  UploadFollowupFactory,
+} from './followup-record';
+
+const FOLLOWUP_DDL = `
+  CREATE TABLE IF NOT EXISTS upload_followup (
+    followup_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id TEXT NOT NULL,
+    intent_id TEXT NOT NULL UNIQUE,
+    shape TEXT NOT NULL,
+    action TEXT NOT NULL,
+    input_json TEXT NOT NULL,
+    derivatives_json TEXT,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    poisoned_at TEXT,
+    last_error TEXT,
+    FOREIGN KEY (item_id) REFERENCES upload_item(item_id) ON DELETE CASCADE,
+    UNIQUE (item_id, shape, action, input_json)
+  );
+  CREATE INDEX IF NOT EXISTS upload_followup_item ON upload_followup(item_id, followup_id);
+`;
 
 const DDL = `
   CREATE TABLE IF NOT EXISTS upload_item (
@@ -55,6 +87,7 @@ const DDL = `
     key TEXT PRIMARY KEY,
     value INTEGER NOT NULL
   );
+  ${FOLLOWUP_DDL}
 `;
 
 /**
@@ -119,30 +152,6 @@ export interface NewUpload {
   partCount: number;
 }
 
-interface ItemRow {
-  item_id: string;
-  sha256: string;
-  local_uri: string;
-  media_type: string | null;
-  filename: string | null;
-  plaintext_size: number;
-  sealed_size: number;
-  frame_count: number;
-  part_count: number;
-  state: string;
-  session_id: string | null;
-  created_order: number;
-  attempts: number;
-  last_error: string | null;
-  receipt_json: string | null;
-}
-
-interface PartRow {
-  part_number: number;
-  state: string;
-  etag: string | null;
-}
-
 const TERMINAL: readonly UploadItemState[] = ['settled', 'failed'];
 
 export class UploadQueueStore {
@@ -153,12 +162,22 @@ export class UploadQueueStore {
     driver.exec('PRAGMA synchronous=FULL;');
     const version =
       driver.all<{ user_version: number }>('PRAGMA user_version')[0]?.user_version ?? 0;
-    if (version !== SCHEMA_VERSION) {
-      // v0 pre-release: rebuild in place rather than migrate. Only this
-      // module's own tables are named, so nothing else in the file is
-      // collateral.
+    if (version === 0) {
+      // Fresh database: build the current schema in one shot.
+      driver.exec(DDL);
+      driver.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
+    } else if (version >= 1 && version < SCHEMA_VERSION) {
+      // The upload ledger is source-of-truth. Migrate transactionally and
+      // idempotently (see store-migrations.ts) so a kill mid-migration cannot
+      // brick the queue and lose a photo that exists nowhere else yet.
+      migrateUploadSchema(driver, version, FOLLOWUP_DDL);
+    } else if (version !== SCHEMA_VERSION) {
+      // v0 pre-release: an unknown (future/foreign) version rebuilds in place
+      // rather than migrating. Only this module's own tables are named, so
+      // nothing else in the file is collateral.
       driver.exec(`
         DROP TABLE IF EXISTS upload_part;
+        DROP TABLE IF EXISTS upload_followup;
         DROP TABLE IF EXISTS upload_item;
         DROP TABLE IF EXISTS upload_meta;
       `);
@@ -177,40 +196,15 @@ export class UploadQueueStore {
    * `alreadyPresent` is the other half.
    */
   enqueue(upload: NewUpload): UploadItem {
+    return this.transaction(() => this.enqueueItem(upload));
+  }
+
+  /** Atomically persist addressed bytes and the canonical work they enable. */
+  enqueueWithFollowup(upload: NewUpload, makeFollowup: UploadFollowupFactory): UploadItem {
     return this.transaction(() => {
-      const existing = this.bySha(upload.sha256);
-      if (existing) return existing;
-      const createdOrder = this.nextOrder();
-      this.driver.run(
-        `INSERT INTO upload_item(
-           item_id, sha256, local_uri, media_type, filename, plaintext_size,
-           sealed_size, frame_count, part_count, state, created_order, attempts)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, 0)`,
-        [
-          upload.itemId,
-          upload.sha256,
-          upload.localUri,
-          upload.mediaType ?? null,
-          upload.filename ?? null,
-          upload.plaintextSize,
-          upload.sealedSize,
-          upload.frameCount,
-          upload.partCount,
-          createdOrder,
-        ],
-      );
-      for (let partNumber = 1; partNumber <= upload.partCount; partNumber += 1) {
-        this.driver.run(
-          `INSERT INTO upload_part(item_id, part_number, state) VALUES (?, ?, 'pending')`,
-          [upload.itemId, partNumber],
-        );
-      }
-      this.driver.run(
-        `INSERT INTO upload_meta(key, value) VALUES ('nextOrder', ?)
-           ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-        [createdOrder + 1],
-      );
-      return this.require(upload.itemId);
+      const item = this.enqueueItem(upload);
+      this.enqueueFollowup({ itemId: item.itemId, ...makeFollowup(item) });
+      return item;
     });
   }
 
@@ -222,6 +216,98 @@ export class UploadQueueStore {
            ORDER BY created_order`,
       )
       .map(toItem);
+  }
+
+  /** Bounded local ledger for UI backup-state reconciliation. */
+  all(): UploadItem[] {
+    return this.driver
+      .all<ItemRow>('SELECT * FROM upload_item ORDER BY created_order DESC LIMIT 100000')
+      .map(toItem);
+  }
+
+  /**
+   * Durably attach the canonical mutation before transfer starts. The unique
+   * key makes producer retries idempotent while still allowing one blob to
+   * feed more than one app/entity.
+   */
+  enqueueFollowup(followup: NewUploadFollowup): UploadFollowup {
+    const inputJson = JSON.stringify(followup.input);
+    const intentId = stableFollowupIntentId(
+      followup.itemId,
+      followup.shape,
+      followup.action,
+      inputJson,
+    );
+    this.driver.run(
+      `INSERT OR IGNORE INTO upload_followup(
+         item_id, intent_id, shape, action, input_json, derivatives_json)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        followup.itemId,
+        intentId,
+        followup.shape,
+        followup.action,
+        inputJson,
+        followup.derivatives ? JSON.stringify(followup.derivatives) : null,
+      ],
+    );
+    const row = this.driver.all<PersistedUploadFollowupRow>(
+      `SELECT * FROM upload_followup
+       WHERE item_id = ? AND shape = ? AND action = ? AND input_json = ?`,
+      [followup.itemId, followup.shape, followup.action, inputJson],
+    )[0];
+    if (!row) throw new Error(`upload follow-up for ${followup.itemId} vanished`);
+    return toUploadFollowup(row);
+  }
+
+  /**
+   * Canonical work whose bytes have a terminal casAck, oldest first. Poisoned
+   * follow-ups are excluded: a record that has exhausted its replay attempts is
+   * quarantined so it can neither replay again nor block the rest (F4).
+   */
+  pendingFollowups(): UploadFollowup[] {
+    return this.driver
+      .all<PersistedUploadFollowupRow>(
+        `SELECT followup.* FROM upload_followup AS followup
+         INNER JOIN upload_item AS item ON item.item_id = followup.item_id
+         WHERE item.state = 'settled' AND followup.poisoned_at IS NULL
+         ORDER BY followup.followup_id`,
+      )
+      .map(toUploadFollowup);
+  }
+
+  /** Count one failed replay attempt and return the new total (F4). */
+  countFollowupAttempt(followupId: number): number {
+    this.driver.run('UPDATE upload_followup SET attempts = attempts + 1 WHERE followup_id = ?', [
+      followupId,
+    ]);
+    return (
+      this.driver.all<{ attempts: number }>(
+        'SELECT attempts FROM upload_followup WHERE followup_id = ?',
+        [followupId],
+      )[0]?.attempts ?? 0
+    );
+  }
+
+  /** Terminally quarantine a follow-up that has stopped being replayable (F4). */
+  poisonFollowup(followupId: number, reason: string): void {
+    this.driver.run(
+      'UPDATE upload_followup SET poisoned_at = ?, last_error = ? WHERE followup_id = ?',
+      [new Date().toISOString(), reason.slice(0, 500), followupId],
+    );
+  }
+
+  /** How many settled-byte follow-ups are quarantined — a health signal for boot. */
+  poisonedFollowupCount(): number {
+    return (
+      this.driver.all<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM upload_followup WHERE poisoned_at IS NOT NULL',
+      )[0]?.count ?? 0
+    );
+  }
+
+  clearFollowup(followupId: number): void {
+    this.driver.run('DELETE FROM upload_followup WHERE followup_id = ?', [followupId]);
   }
 
   get(itemId: string): UploadItem | undefined {
@@ -242,11 +328,7 @@ export class UploadQueueStore {
         'SELECT part_number, state, etag FROM upload_part WHERE item_id = ? ORDER BY part_number',
         [itemId],
       )
-      .map((row) => ({
-        partNumber: row.part_number,
-        state: row.state as UploadPartState,
-        ...(row.etag === null ? {} : { etag: row.etag }),
-      }));
+      .map(toPart);
   }
 
   /** Record an open gateway session and move the item into the transfer states. */
@@ -318,6 +400,56 @@ export class UploadQueueStore {
     return item;
   }
 
+  private enqueueItem(upload: NewUpload): UploadItem {
+    const existing = this.bySha(upload.sha256);
+    if (existing) {
+      // F6: a terminally-failed item is not a dead end. Re-enqueuing the same
+      // bytes revives it with fresh attempts and a cleared error, so the next
+      // backup run retries the transfer instead of a producer reporting a
+      // phantom success over a stuck row.
+      if (existing.state === 'failed') {
+        this.driver.run(
+          `UPDATE upload_item SET state = 'pending', attempts = 0, last_error = NULL
+             WHERE item_id = ?`,
+          [existing.itemId],
+        );
+        return this.require(existing.itemId);
+      }
+      return existing;
+    }
+    const createdOrder = this.nextOrder();
+    this.driver.run(
+      `INSERT INTO upload_item(
+         item_id, sha256, local_uri, media_type, filename, plaintext_size,
+         sealed_size, frame_count, part_count, state, created_order, attempts)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, 0)`,
+      [
+        upload.itemId,
+        upload.sha256,
+        upload.localUri,
+        upload.mediaType ?? null,
+        upload.filename ?? null,
+        upload.plaintextSize,
+        upload.sealedSize,
+        upload.frameCount,
+        upload.partCount,
+        createdOrder,
+      ],
+    );
+    for (let partNumber = 1; partNumber <= upload.partCount; partNumber += 1) {
+      this.driver.run(
+        `INSERT INTO upload_part(item_id, part_number, state) VALUES (?, ?, 'pending')`,
+        [upload.itemId, partNumber],
+      );
+    }
+    this.driver.run(
+      `INSERT INTO upload_meta(key, value) VALUES ('nextOrder', ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      [createdOrder + 1],
+    );
+    return this.require(upload.itemId);
+  }
+
   private nextOrder(): number {
     return (
       this.driver.all<{ value: number }>("SELECT value FROM upload_meta WHERE key = 'nextOrder'")[0]
@@ -336,26 +468,4 @@ export class UploadQueueStore {
       throw error;
     }
   }
-}
-
-function toItem(row: ItemRow): UploadItem {
-  return {
-    itemId: row.item_id,
-    sha256: row.sha256,
-    localUri: row.local_uri,
-    ...(row.media_type === null ? {} : { mediaType: row.media_type }),
-    ...(row.filename === null ? {} : { filename: row.filename }),
-    plaintextSize: row.plaintext_size,
-    sealedSize: row.sealed_size,
-    frameCount: row.frame_count,
-    partCount: row.part_count,
-    state: row.state as UploadItemState,
-    ...(row.session_id === null ? {} : { sessionId: row.session_id }),
-    createdOrder: row.created_order,
-    attempts: row.attempts,
-    ...(row.last_error === null ? {} : { lastError: row.last_error }),
-    ...(row.receipt_json === null
-      ? {}
-      : { receipt: JSON.parse(row.receipt_json) as Record<string, unknown> }),
-  };
 }

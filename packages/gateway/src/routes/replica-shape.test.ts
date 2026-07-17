@@ -726,3 +726,77 @@ test('the photos grant yields a self-contained shape a native client can render 
   const derivative = byEntity.get('core.content_derivative')!;
   expect(derivative.columns).toEqual(expect.arrayContaining(['variant', 'text_content', 'sha256']));
 });
+
+test('docs and agenda grants multiplex as additive self-contained native shapes', async () => {
+  const vault = await plane();
+  vault.approveGrant('docs', {
+    purpose: 'dpv:ServiceProvision',
+    scopes: [
+      { schema: 'core', table: 'document', verbs: 'read' },
+      { schema: 'core', table: 'content_item', verbs: 'read' },
+      { schema: 'core', table: 'tag', verbs: 'read' },
+      { schema: 'core', table: 'concept', verbs: 'read' },
+      { schema: 'core', table: 'concept_scheme', verbs: 'read' },
+      { schema: 'blob', table: 'custody_state', verbs: 'read' },
+    ],
+  });
+  vault.approveGrant('agenda', {
+    purpose: 'dpv:ServiceProvision',
+    scopes: [
+      { schema: 'schedule', verbs: 'read+act' },
+      { schema: 'core', table: 'event', verbs: 'read' },
+      { schema: 'core', table: 'party', verbs: 'read' },
+    ],
+  });
+
+  const shapes = replicaShapesWire(
+    buildReplicaShapes(vault.db.vault, { trust: 'full', rememberDevice: true }),
+  );
+  const docs = shapes.find((shape) => shape.appId === 'docs')!;
+  const agenda = shapes.find((shape) => shape.appId === 'agenda')!;
+  const docsByEntity = new Map(docs.entities.map((entity) => [entity.entity, entity]));
+  const agendaByEntity = new Map(agenda.entities.map((entity) => [entity.entity, entity]));
+  expect([...docsByEntity.keys()]).toEqual(
+    expect.arrayContaining([
+      'core.document',
+      'core.content_item',
+      'core.tag',
+      'core.concept',
+      'core.concept_scheme',
+      'blob.custody_state',
+    ]),
+  );
+  expect([...agendaByEntity.keys()]).toEqual(
+    expect.arrayContaining([
+      'core.event',
+      'schedule.attendee',
+      'schedule.calendar',
+      'schedule.event_ext',
+      'core.party',
+    ]),
+  );
+
+  // Column sets document the consent surface (mirrors the photos assertions
+  // above). The native Docs drive builds its rows and its offline title search
+  // from exactly these columns; the native Agenda materializes recurrence from
+  // core.event and RSVPs from schedule.attendee.
+  expect(docsByEntity.get('core.document')!.columns).toEqual(
+    expect.arrayContaining(['document_id', 'title', 'current_content_id', 'deleted_at']),
+  );
+  expect(docsByEntity.get('core.content_item')!.columns).toEqual(
+    expect.arrayContaining(['content_id', 'media_type', 'byte_size', 'title']),
+  );
+  expect(docsByEntity.get('core.concept')!.columns).toEqual(
+    expect.arrayContaining(['concept_id', 'scheme_id', 'pref_label', 'broader_concept_id']),
+  );
+  expect(agendaByEntity.get('core.event')!.columns).toEqual(
+    expect.arrayContaining(['event_id', 'summary', 'dtstart', 'dtend', 'rrule', 'status']),
+  );
+  expect(agendaByEntity.get('schedule.attendee')!.columns).toEqual(
+    expect.arrayContaining(['attendee_id', 'event_id', 'party_id', 'partstat']),
+  );
+  expect(agendaByEntity.get('core.party')!.columns).toEqual(
+    expect.arrayContaining(['party_id', 'display_name']),
+  );
+  expect(new Set(shapes.map((shape) => shape.shapeId)).size).toBe(shapes.length);
+});

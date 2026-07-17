@@ -122,13 +122,16 @@ export class UploadDrainer {
       ...(item.filename ? { filename: item.filename } : {}),
     });
 
-    // D10: the gateway already holds these bytes. Nothing to transfer.
+    // D10: the gateway already holds these bytes. Nothing to transfer. The
+    // gateway alone is authoritative about durability: persist its settlement
+    // receipt verbatim. If (defensively) it issued none, settle WITHOUT a
+    // casAck — an absent casAck safely withholds device-original deletion,
+    // where a fabricated `replicated` would authorize it.
     if (plan.alreadyPresent) {
-      this.deps.store.settle(item.itemId, {
-        alreadyPresent: true,
-        casAck: 'replicated',
-        custody: plan.custody,
-      });
+      this.deps.store.settle(
+        item.itemId,
+        plan.settlement ?? { alreadyPresent: true, custody: plan.custody },
+      );
       return 'deduped';
     }
     if (!plan.sessionId || !plan.upload) {
