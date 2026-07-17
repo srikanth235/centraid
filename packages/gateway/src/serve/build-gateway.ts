@@ -61,7 +61,7 @@ import {
   type AutomationTriggerOrigin,
   type VaultWorkspace,
 } from '@centraid/app-engine';
-import { KIT_DIR } from '@centraid/blueprints';
+import { KIT_DIR, bundledAppDir, listBundledAppTemplates } from '@centraid/blueprints';
 import * as automation from '@centraid/automation';
 import {
   runAutomation,
@@ -458,6 +458,15 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // desktop's iroh tunnel) through `BuiltGateway.health`.
   const health = new HealthRegistry();
   const webAppSessions = new WebAppSessions(options.webSessions ?? {});
+
+  // Bundled blueprint apps (issue #434): these ids serve in place from the
+  // shipped @centraid/blueprints package, upgrade with every release, and are
+  // RESERVED — a code-store app must never shadow one. The set is fixed for
+  // the process lifetime (it's the release's catalog), so we resolve it once
+  // here and close over it for the resolver, the id-reservation guard, and
+  // the install/listing paths below.
+  const bundledAppIds = new Set((await listBundledAppTemplates()).map((t) => t.id));
+  const isBundledAppId = (id: string): boolean => bundledAppIds.has(id);
 
   // Second-gateway detection (issue #351 tier 1): "one gateway per user" is
   // an owner-stated topology, never enforced — nothing stops a copied vault
@@ -1025,14 +1034,13 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // Install-time scopes (issue #306 decision 2): enrolling an app grants the
   // vault block its manifest declares — installing IS the consent. Read off
   // the app's live `main` app.json; malformed or absent blocks grant nothing.
-  const grantDeclaredAppScopes = async (
+  const grantScopesFromDir = async (
     plane: VaultPlane,
-    store: WorktreeStore,
     appId: string,
+    dir: string | undefined,
   ): Promise<void> => {
+    if (!dir) return;
     try {
-      const dir = await store.resolveActiveAppDir(appId);
-      if (!dir) return;
       const raw = JSON.parse(await fs.readFile(path.join(dir, 'app.json'), 'utf8')) as {
         vault?: { purpose?: unknown; scopes?: unknown };
       };
@@ -1045,6 +1053,19 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       );
     }
   };
+  const grantDeclaredAppScopes = async (
+    plane: VaultPlane,
+    store: WorktreeStore,
+    appId: string,
+  ): Promise<void> => {
+    // Code-store apps (scaffolds, clones, compiled automations): read the
+    // live `main` app.json.
+    await grantScopesFromDir(plane, appId, await store.resolveActiveAppDir(appId));
+  };
+  // Installed bundled apps (issue #434) declare their scopes in the shipped
+  // blueprint's app.json — read it there, not from the (empty) code store.
+  const grantDeclaredBundledScopes = (plane: VaultPlane, appId: string): Promise<void> =>
+    grantScopesFromDir(plane, appId, bundledAppDir(appId));
 
   let outboxTimer: NodeJS.Timeout | undefined;
 
@@ -1124,6 +1145,13 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         vaultRegistry.enrollApp(appId);
         await grantDeclaredAppScopes(plane, host.store, appId);
       }
+      // Installed bundled apps (issue #434) aren't in the git store, so the
+      // loop above misses them — re-register each from the enrollment record
+      // so it serves (from the shipped blueprint dir) after a gateway restart.
+      for (const appId of plane.installedAppIds()) {
+        await requireRuntime().registry.ensureUploaded(appId);
+        await grantDeclaredBundledScopes(plane, appId);
+      }
       settledHosts.set(vaultId, host);
       reconcileScheduler(vaultId);
       return host;
@@ -1149,6 +1177,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         await requireRuntime().registry.ensureUploaded(appId);
         vaultRegistry.enrollApp(appId);
         await grantDeclaredAppScopes(plane, host.store, appId);
+      }
+      for (const appId of plane.installedAppIds()) {
+        await requireRuntime().registry.ensureUploaded(appId);
+        await grantDeclaredBundledScopes(plane, appId);
       }
     });
     reconcileScheduler(id);
@@ -1216,6 +1248,40 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       },
       deregister: deregisterAndCleanup,
       reconcile: () => reconcileScheduler(vaultId),
+      // Bundled ids are reserved (issue #434): a scaffold/clone must never
+      // mint one, or a code-store app would shadow the shipped blueprint.
+      isBundledAppId,
+      // Install a bundled blueprint in place (issue #434): enroll with
+      // origin 'installed' + register + grant declared scopes, no git, no id
+      // minting. Idempotent — an already-installed app returns its existing
+      // registration. Returns undefined for a non-bundled id (→ 404).
+      installBundledApp: async (templateId) => {
+        if (!bundledAppIds.has(templateId)) return undefined;
+        const meta = await readBundledAppMeta(bundledAppDir(templateId));
+        const alreadyInstalled = plane.installedAppIds().has(templateId);
+        plane.installApp(templateId, meta.name);
+        await requireRuntime().registry.ensureUploaded(templateId);
+        await grantDeclaredBundledScopes(plane, templateId);
+        invalidateToolCatalog();
+        return {
+          id: templateId,
+          ...(meta.name !== undefined ? { name: meta.name } : {}),
+          ...(meta.description !== undefined ? { description: meta.description } : {}),
+          ...(meta.iconKey !== undefined ? { iconKey: meta.iconKey } : {}),
+          ...(meta.colorKey !== undefined ? { colorKey: meta.colorKey } : {}),
+          alreadyInstalled,
+        };
+      },
+      // Per-vault rename for an installed bundled app (issue #434): the code
+      // is read-only, so the name lands on the enrollment record, not app.json.
+      // Returns false when the id isn't an installed bundled app, so the meta
+      // route falls through to its code-store app.json rewrite.
+      renameBundledApp: (appId, name) => {
+        if (!plane.installedAppIds().has(appId)) return false;
+        plane.setAppLabel(appId, name);
+        invalidateToolCatalog();
+        return true;
+      },
       ext,
       compileAutomation: ({ automationRef, runId, enableOnSuccess }) => {
         const parsed = automation.parseRef(automationRef);
@@ -1315,6 +1381,24 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           reconcileScheduler(vaultId);
           invalidateToolCatalog();
         },
+        // The listing union half (issue #434): installed bundled apps, with
+        // their metadata read from the shipped blueprint dir + the per-vault
+        // rename. Merged with the git code-store apps in GET /_apps.
+        bundledApps: async () =>
+          Promise.all(
+            plane.installedApps().map(async ({ name, label }) => {
+              const meta = await readBundledAppMeta(bundledAppDir(name));
+              return {
+                id: name,
+                name: label ?? meta.name ?? name,
+                ...(meta.description !== undefined ? { description: meta.description } : {}),
+                kind: 'app' as const,
+                hasIndex: meta.hasIndex,
+                ...(meta.iconKey !== undefined ? { iconKey: meta.iconKey } : {}),
+                ...(meta.colorKey !== undefined ? { colorKey: meta.colorKey } : {}),
+              };
+            }),
+          ),
         ext,
       }),
       // App lifecycle over HTTP (issue #141, Phase 2): the gateway owns
@@ -1750,8 +1834,20 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       return status;
     },
     logger,
-    codeDirOverride: async (appId: string) =>
-      (await currentVaultHost()).store.resolveActiveAppDir(appId),
+    // Resolver rule (issue #434): a bundled blueprint app installed in the
+    // request's vault serves in place from the shipped @centraid/blueprints
+    // package (upgrades with every release, no per-vault copy). Everything
+    // else — code the gateway can't otherwise get: compiled automations,
+    // future builder forks/downloads — resolves to the git code-store
+    // worktree, as before. The installed check is per-vault so a legacy
+    // snapshot-cloned app keeps serving from the store. The app-engine
+    // static-path sandbox applies identically to whichever dir is returned.
+    codeDirOverride: async (appId: string) => {
+      if (bundledAppIds.has(appId) && vaultRegistry.current().installedAppIds().has(appId)) {
+        return bundledAppDir(appId);
+      }
+      return (await currentVaultHost()).store.resolveActiveAppDir(appId);
+    },
     draftCodeDir: async (appId: string, sessionId: string) =>
       (await currentVaultHost()).draftCodeDir(appId, sessionId),
     vaultFor: (appId: string) => vaultRegistry.bridgeFor(appId),
@@ -2023,7 +2119,23 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // gateway-level, read-only material instantiated INTO a vault (#280).
     makeTemplatesRouteHandler({
       ...(paths.templatesCacheDir ? { cacheDir: paths.templatesCacheDir } : {}),
-      ...(paths.remoteTemplatesUrl ? { remoteTemplatesUrl: paths.remoteTemplatesUrl } : {}),
+      // Remote template fetch is deferred for v1 (issue #434, Phase 4): the
+      // catalog serves only the shipped @centraid/blueprints. Remote install
+      // is the one case where install legitimately copies (a download), so
+      // the `remoteTemplatesUrl` refresh wiring is intentionally NOT passed
+      // here — the mechanism stays in makeTemplatesRouteHandler and returns
+      // when the remote/third-party app catalog is designed.
+      // Catalog installed-state (issue #434): whether each bundled app is
+      // already installed in the request's vault, so the Discover card shows
+      // "Open" instead of "Install". Degrades to "nothing installed" if no
+      // vault is addressed — the catalog is readable before any vault exists.
+      installedAppIds: () => {
+        try {
+          return vaultRegistry.current().installedAppIds();
+        } catch {
+          return new Set<string>();
+        }
+      },
     }),
     // Coding-agent detection (codex/claude credentials on the gateway host).
     makeAgentsRouteHandler(
@@ -2245,6 +2357,45 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
  * (issue #306). Manifests are app-authored input: anything malformed grants
  * nothing rather than something surprising.
  */
+/**
+ * Display metadata for a bundled blueprint app, read from its shipped
+ * `app.json` + `index.html` presence (issue #434). Mirrors the shape
+ * `WorktreeStore.listAppsWithMeta` produces for code-store apps so the two
+ * origins merge into one listing. A malformed/absent app.json degrades to
+ * id-only — the app still lists, just without pretty metadata.
+ */
+async function readBundledAppMeta(dir: string): Promise<{
+  name?: string;
+  description?: string;
+  iconKey?: string;
+  colorKey?: string;
+  hasIndex: boolean;
+}> {
+  let manifest: Record<string, unknown> = {};
+  try {
+    manifest = JSON.parse(await fs.readFile(path.join(dir, 'app.json'), 'utf8')) as Record<
+      string,
+      unknown
+    >;
+  } catch {
+    manifest = {};
+  }
+  let hasIndex = false;
+  try {
+    await fs.access(path.join(dir, 'index.html'));
+    hasIndex = true;
+  } catch {
+    hasIndex = false;
+  }
+  return {
+    ...(typeof manifest.name === 'string' ? { name: manifest.name } : {}),
+    ...(typeof manifest.description === 'string' ? { description: manifest.description } : {}),
+    ...(typeof manifest.iconKey === 'string' ? { iconKey: manifest.iconKey } : {}),
+    ...(typeof manifest.colorKey === 'string' ? { colorKey: manifest.colorKey } : {}),
+    hasIndex,
+  };
+}
+
 function manifestScopeBlock(raw: unknown): InstallScopeBlock | undefined {
   if (raw === null || typeof raw !== 'object') return undefined;
   const block = raw as { purpose?: unknown; scopes?: unknown };

@@ -32,6 +32,9 @@ import {
   listActiveGrants,
   listEnrolledAgents,
   listEnrolledApps,
+  listInstalledApps,
+  setAppLabel,
+  type InstalledAppRow,
   lookupAgentByName,
   lookupAppByName,
   markAgentRevoked,
@@ -578,6 +581,38 @@ export class VaultPlane {
   enrollApp(appId: string): void {
     const enrolled = ensureAppEnrolled(this.db, appId, { origin: 'generated' });
     if (enrolled.created) this.logger.info(`vault plane: enrolled app "${appId}"`);
+  }
+
+  /**
+   * Record a bundled blueprint app as installed in this vault (issue #434) —
+   * a `consent.app` row with `origin: 'installed'`, the git-free install
+   * registry. Idempotent: an already-installed app returns its existing row
+   * (only its display name self-heals). Identity only — the declared scopes
+   * are granted separately through the install-time grant path. `displayName`
+   * is the manifest name so consent surfaces don't show a raw slug.
+   */
+  installApp(appId: string, displayName?: string): { created: boolean } {
+    const enrolled = ensureAppEnrolled(this.db, appId, {
+      origin: 'installed',
+      ...(displayName ? { displayName } : {}),
+    });
+    if (enrolled.created) this.logger.info(`vault plane: installed app "${appId}"`);
+    return { created: enrolled.created };
+  }
+
+  /** Enrollment keys of the bundled apps installed in this vault (#434). */
+  installedAppIds(): Set<string> {
+    return new Set(listInstalledApps(this.db).map((a) => a.name));
+  }
+
+  /** Installed bundled apps with their per-vault rename — the listing union half (#434). */
+  installedApps(): InstalledAppRow[] {
+    return listInstalledApps(this.db);
+  }
+
+  /** Set/clear an installed bundled app's per-vault rename (#434). */
+  setAppLabel(appId: string, label: string | null): void {
+    setAppLabel(this.db, appId, label);
   }
 
   /**

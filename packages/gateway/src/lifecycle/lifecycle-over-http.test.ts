@@ -65,39 +65,41 @@ afterEach(async () => {
 
 test('POST /_apps stages a draft, and publish:true lands it on main', async () => {
   // Stage-only create: the app is registered (previewable) but NOT on `main`.
+  // Uses a non-bundled id — bundled ids (issue #434) are reserved and a
+  // scaffold of one is refused (see the reservation test below).
   const staged = await fetch(`${handle.url}/centraid/_apps`, {
     method: 'POST',
     headers: auth({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ id: 'notes', name: 'Notes' }),
+    body: JSON.stringify({ id: 'jotter', name: 'Jotter' }),
   });
   expect(staged.status).toBe(201);
   const stagedBody = (await staged.json()) as { sessionId: string; staged: boolean };
   expect(stagedBody.staged).toBe(true);
   expect(stagedBody.sessionId).toBeTruthy();
-  expect(!(await listApps()).some((a) => a.id === 'notes')).toBeTruthy();
+  expect(!(await listApps()).some((a) => a.id === 'jotter')).toBeTruthy();
 
   // The staged draft serves through the runtime (issue #141 draft preview).
   const draft = await fetch(
-    `${handle.url}/centraid/_draft/${stagedBody.sessionId}/notes/app.json`,
+    `${handle.url}/centraid/_draft/${stagedBody.sessionId}/jotter/app.json`,
     { headers: auth() },
   );
   expect(draft.status).toBe(200);
   const manifest = (await draft.json()) as { id: string; name: string };
-  expect(manifest.id).toBe('notes');
+  expect(manifest.id).toBe('jotter');
 
   // Publishing a second create lands it on `main` and the home list shows it.
   const published = await fetch(`${handle.url}/centraid/_apps`, {
     method: 'POST',
     headers: auth({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ id: 'tasks', name: 'Tasks', publish: true }),
+    body: JSON.stringify({ id: 'planner', name: 'Planner', publish: true }),
   });
   expect(published.status).toBe(201);
   const pubBody = (await published.json()) as { staged: boolean };
   expect(pubBody.staged).toBe(false);
   const apps = await listApps();
-  const row = apps.find((a) => a.id === 'tasks');
+  const row = apps.find((a) => a.id === 'planner');
   expect(row).toBeTruthy();
-  expect(row?.name).toBe('Tasks');
+  expect(row?.name).toBe('Planner');
 });
 
 test('POST /_apps stamps the tile identity into app.json and the listing (#263)', async () => {
@@ -149,30 +151,32 @@ test('POST /_apps/<id>/meta renames an app on main', async () => {
   expect(row?.name).toBe('Daily Journal');
 });
 
-test('POST /_apps/_clone with publish:true installs a bundled app template directly — no draft stage', async () => {
-  // Desktop's "Use template" for an app template (owner decision): the clone
-  // must land on `main` in one shot, exactly like a create with publish:true,
-  // so it's a real installed app the moment the request completes.
-  const res = await fetch(`${handle.url}/centraid/_apps/_clone`, {
+test('a bundled app is installed in place, not cloned (issue #434)', async () => {
+  // Under the app-store model a bundled blueprint app installs in place and
+  // serves from the shipped package — cloning it (forking into the git code
+  // store) is exactly the per-vault copy the model removes, so it is refused
+  // and the caller is directed to _install. (Automation templates aren't
+  // bundled app ids, so they still clone — see clone-over-http.test.ts.)
+  const clone = await fetch(`${handle.url}/centraid/_apps/_clone`, {
     method: 'POST',
     headers: auth({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ templateId: 'tasks', publish: true }),
   });
-  expect(res.status).toBe(201);
-  const body = (await res.json()) as {
-    app: { id: string; name: string; kind?: string };
-    staged: boolean;
-  };
-  expect(body.staged).toBe(false);
-  expect(body.app.kind).toBe('app');
+  expect(clone.status).toBe(409);
 
-  // Listed on `main` immediately — the same listing GET /_apps drives for
-  // every other "staged: false" assertion in this file, so a staged-only
-  // clone (the old draft flow) would fail this the same way it fails the
-  // `stagedBody.staged === true` case above.
-  const row = (await listApps()).find((a) => a.id === body.app.id);
+  // Install lands it on `main`'s listing immediately, keeping its own id and
+  // writing nothing to git (full coverage in install-over-http.test.ts).
+  const res = await fetch(`${handle.url}/centraid/_apps/_install`, {
+    method: 'POST',
+    headers: auth({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ templateId: 'tasks' }),
+  });
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as { app: { id: string; name?: string } };
+  expect(body.app.id).toBe('tasks');
+  const row = (await listApps()).find((a) => a.id === 'tasks');
   expect(row).toBeTruthy();
-  expect(row?.name).toBe(body.app.name);
+  expect(row?.kind).toBe('app');
 });
 
 test('POST /_automations mints a webhook secret and publishes the automation', async () => {

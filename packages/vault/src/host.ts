@@ -531,6 +531,43 @@ export function markAppRevoked(db: VaultDb, appId: string): void {
   db.vault.prepare(`UPDATE consent_app SET status = 'revoked' WHERE app_id = ?`).run(appId);
 }
 
+/** One installed bundled app's enrollment key + its per-vault rename. */
+export interface InstalledAppRow {
+  /** Enrollment key (the Centraid app id / blueprint id). */
+  name: string;
+  /** Owner's per-vault rename, or null when none (fall back to manifest name). */
+  label: string | null;
+}
+
+/**
+ * Active apps enrolled with `origin = 'installed'` — the bundled blueprints
+ * installed in this vault (issue #434). Only the new install-in-place path
+ * writes that origin, so this is exactly the git-free install registry.
+ * Ordered by install time for a stable listing.
+ */
+export function listInstalledApps(db: VaultDb): InstalledAppRow[] {
+  const rows = db.vault
+    .prepare(
+      `SELECT name, label FROM consent_app
+        WHERE origin = 'installed' AND status = 'active' ORDER BY installed_at`,
+    )
+    .all() as { name: string; label: string | null }[];
+  return rows.map((r) => ({ name: r.name, label: r.label ?? null }));
+}
+
+/**
+ * Set (or clear, with null/blank) an installed app's per-vault rename
+ * (issue #434). Keyed by the active enrollment's name; a no-op when the app
+ * isn't enrolled. Trims and coalesces empty strings to NULL so "clear" and
+ * "rename to whitespace" both fall back to the manifest name.
+ */
+export function setAppLabel(db: VaultDb, appId: string, label: string | null): void {
+  const trimmed = typeof label === 'string' ? label.trim() : '';
+  db.vault
+    .prepare(`UPDATE consent_app SET label = ? WHERE name = ? AND status = 'active'`)
+    .run(trimmed.length > 0 ? trimmed : null, appId);
+}
+
 /** Key-free app summary — safe to serialize onto an owner-facing surface. */
 export interface AppSummary {
   appId: string;

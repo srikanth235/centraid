@@ -129,6 +129,22 @@ export async function listApps(): Promise<AppMetaEntry[]> {
   return out ?? [];
 }
 
+/** One requested scope of a template's `app.json` `vault` block. */
+export interface TemplateVaultScope {
+  schema: string;
+  table?: string;
+  verbs: string;
+}
+
+/** A template's requested vault access, for the Discover install/consent sheet
+ *  (issue #434). Read from the app-kind template's `app.json`; automations omit
+ *  it. `why` is the owner-facing sentence; `scopes` are what it will touch. */
+export interface TemplateVaultDTO {
+  purpose?: string;
+  why?: string;
+  scopes: TemplateVaultScope[];
+}
+
 /** Display metadata for one bundled template (the `GET /centraid/_templates` row). */
 export interface TemplateMetaEntry {
   id: string;
@@ -139,6 +155,18 @@ export interface TemplateMetaEntry {
   version: string;
   kind?: 'app' | 'automation';
   triggerKind?: 'cron' | 'webhook';
+  /**
+   * Whether this bundled app is already installed in the addressed vault
+   * (issue #434). Present only when the gateway resolves per-vault install
+   * state; the Discover gallery shows "Open" when true, "Install" otherwise.
+   */
+  installed?: boolean;
+  /**
+   * Requested vault access (issue #434). Present for app-kind templates whose
+   * `app.json` declares a `vault` block; the install sheet renders it as the
+   * consent surface before the owner installs.
+   */
+  vault?: TemplateVaultDTO;
 }
 
 /**
@@ -496,6 +524,7 @@ export async function getGatewayHealth(): Promise<CentraidGatewayHealth> {
 // (split out for the repo file-size limit). Re-exported here so call sites
 // keep importing everything from `./gateway-client.js`.
 export * from './gateway-client-editing.js';
+export * from './gateway-client-automation-editing.js';
 
 // The unified chat transport (SSE turn streaming + chat-history surface)
 // lives in `gateway-client-conversation.ts` (issue #141, Phase 3). Re-exported here
