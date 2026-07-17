@@ -20,7 +20,7 @@ inventory reconcile that distrusts the restored replica index.
 - [x] R6 — CLI recover wrapper
 - [x] R5 — adopt-time inventory reconcile and seal-key restore-verify
 - [x] R1 surface — recover job model, progress SSE, pre-vault recover routes
-- [ ] UI — fresh-gateway onboarding recovery flow
+- [x] UI — fresh-gateway onboarding recovery flow
 - [ ] R4 — orphan-grace GC invariant
 
 ## What changed
@@ -547,6 +547,136 @@ disk image is malformed" when all launched at max file-parallelism — a
 pre-existing resource-contention flake in this repo's WAL-shipper suites, not a
 recovery regression; each suite and smaller groups pass clean in parallel.)
 
+### UI — fresh-gateway onboarding recovery flow
+
+The recovery PRODUCT's surface: the fresh-gateway onboarding branch now offers
+"Start fresh / Recover my vault" and, on the recover path, walks the user through
+EXACTLY two inputs (kit, key) and ONE confirmation (shown only when the provider
+bills egress), speaking no protocol vocabulary. The shell (desktop + web) drives
+the Wave-4 pre-vault `/recover` routes over HTTP, watches the daemon-owned
+restore over SSE in three user phases, and hands over to the app once the
+recovered vault is live. All screens are presentational with injected bridge
+props (the settings-screen convention); the HTTP/SSE transport is one new
+feature-module over `gateway-client-core`.
+
+- `packages/client/src/gateway-client-recover.ts` (new) — the typed renderer
+  client for the five routes plus `streamRecoverEvents`. Each method maps the
+  gateway's typed refusals into a result union the screen branches on and NEVER
+  throws for an expected refusal (bad kit, wrong key, not-fresh, metered-confirm)
+  — only for an unreachable gateway. `validateRecoveryKit` POSTs the kit document
+  itself (the route re-parses it) and returns only the sanitized target summary
+  (never the keyring); `discoverRecovery`/`startRecovery` fold `{kit, apiKey}`
+  and thread `confirmed:true` only after the price gate; the SSE reader mirrors
+  `streamGatewayLogs` (fetch + `res.body.getReader()`, so the Bearer rides along —
+  not `EventSource`) and reuses `vault-change-sse`'s `decodeFrame`/`frameBoundary`
+  frame grammar. `recoverStageOf()` folds the machine phases
+  (discovering/fetching → replaying/fencing/adopting → warming) into the three
+  user stages the progress view renders — the raw phase is never shown.
+- `packages/client/src/react/screens/RecoverScreen.tsx` (new) — the recover flow:
+  paste/drop kit → provider key → the one "found your vault" card
+  (`<size> · safe as of <T> · hosted at <host>`) → (metered-egress only) a
+  "download about <X>" confirm → progress stepper over SSE → a landing state
+  ("Recovered as of <T>" + a plain-words quarantine hand-off routing to Approvals
+  and Connections), plus human dead-ends (nothing to recover / needs an update /
+  this machine isn't fresh / wrong key). Reattaches to a running or finished job
+  via `/status` on mount (survives a page reload); a dropped SSE reconnects
+  (replay-then-live makes it idempotent). The orchestrator only (state machine +
+  effects + the two input steps); the display views are split out to keep it
+  under the file-size cap.
+- `packages/client/src/react/screens/RecoverSteps.tsx` (new) — the presentational
+  step views split out of `RecoverScreen` (`Stage`, the progress stepper,
+  found/confirm/progress/landing/stop/failed) plus the `whenLabel`/`sizeLabel`
+  formatters — each a pure value→JSX view over injected props.
+- `packages/client/src/react/screens/RecoverScreen.module.css` (new) — the recover
+  surface's styling, reusing the first-run onboarding visual language (dim
+  atmospheric stage + one editorial card, literal-hex forced-dark, the card
+  carrying `data-theme="dark"` so the shared `Button`'s tokens resolve to the dark
+  ramp). Also hosts the first-run choice cards (FirstRunGate imports this module).
+  Responsive by inheritance (`width: min(460px, 92vw)`).
+- `packages/client/src/react/screens/FirstRunGate.tsx` (new) — the first-run
+  CHOICE step and parent switcher: the binary "Start fresh / Recover my vault"
+  before anything else, then the fresh path (the existing `OnboardingScreen`,
+  untouched) or the recover path (`RecoverScreen`), each completing into the same
+  "onboarding done → boot the app" terminal state via its own callback.
+- `packages/client/src/react/boot.tsx` — the first-run gate now renders
+  `<FirstRunGate>` (was the bare `<OnboardingScreen>`), wiring the recover bridge
+  over `gateway-client-recover` and a recover-completion path: drop the cached
+  pre-vault auth (`resetGatewayAuthCache` — the gateway already mounted the
+  recovered vault in-process, quarantine fired on first mount; its `vaultId` is
+  undefined on a fresh install so the gateway picks, and the only mounted vault is
+  the recovered one), stamp `onboardingCompletedAt`, and swap in `<App/>`. The
+  recover path skips identity/connect — the recovered vault carries its own
+  profile — so there is NO `updateProfileMetadata` on it (the fresh path keeps it).
+  Shell-agnostic: no desktop main-process IPC change; both desktop (local embedded
+  gateway) and web (the connected gateway) reach the same `/recover` routes over
+  `doFetch` and complete through the same client path.
+- `packages/client/src/gateway-client-recover.test.ts` (new) — the client unit
+  suite (fetch spy + a stubbed `window.CentraidApi`, exercising the real
+  `doFetch`/`auth`/`readJson` path): kit validate ok/invalid, discover
+  found/wrong-key/no-snapshot/incompatible, start started/confirm-required/
+  not-fresh/in-progress (and `confirmed:true` threaded only when passed), status,
+  and the SSE reader parsing phase→report→end frames in order.
+- `packages/client/src/react/screens/RecoverScreen.test.tsx` (new) — the screen
+  states (raw `react-dom/client` + `act()`, injected `vi.fn()` bridges): kit
+  invalid + bad-paste-never-hits-the-gateway, the key step, wrong-key inline,
+  free-egress-recovers-with-no-confirm vs metered-shows-the-download-confirm,
+  progress phases + done→landing with the quarantine hand-off, not-fresh dead-end,
+  and reattach-to-running / reattach-to-done.
+- `packages/client/src/react/screens/FirstRunGate.test.tsx` (new) — the choice
+  step: exactly the two options, "Start fresh" opens onboarding, "Recover my
+  vault" opens the kit step, and "Back" returns to the choice.
+
+**Decision — the choice step is a parent switcher (`FirstRunGate`), not a third
+mode inside `OnboardingScreen`.** The recover path shares nothing with the fresh
+path's completion contract (`{displayName, avatarColor, gatewayId}`) — it skips
+identity/connect entirely — so threading it through `OnboardingScreen` would
+muddy that screen's contract and tests. A thin parent switcher keeps
+`OnboardingScreen` pristine, keeps `RecoverScreen` fully isolated, and makes the
+one binary decision testable on its own.
+
+**Acceptance-criterion audit.** Every user-facing string was grepped for
+`snapshot`, `seq`, `store class`, `WAL`, and `lazy`: zero occurrences in any
+rendered copy (the only hits are a file-header doc comment and the `no_snapshot`
+reason *identifier*, neither rendered). The `restoreCostClass`/phase machine
+values are never rendered — the phase is shown only via `recoverStageOf` → the
+three user-stage labels. The flow asks for exactly two inputs (kit, key) and one
+confirmation (metered-egress only).
+
+#### UI verification
+
+- `bun run typecheck` (`@centraid/client`, `tsc --noEmit`) — clean, including the
+  new client module, both screens, and the `boot.tsx` wiring.
+- `bunx oxlint` + `bunx oxfmt --check` on every changed source/test file — 0
+  warnings, 0 errors, formatting clean.
+- Full `@centraid/client` suite (`bunx vitest run`) — 125 files / 959 tests pass
+  (was 122 / 934; +3 files, +25 tests), so the gate rewire and new screens
+  regress nothing.
+
+```
+$ bunx vitest run src/gateway-client-recover.test.ts \
+    src/react/screens/RecoverScreen.test.tsx src/react/screens/FirstRunGate.test.tsx
+ ✓ src/gateway-client-recover.test.ts (11 tests)
+ ✓ src/react/screens/RecoverScreen.test.tsx (10 tests)
+   ✓ surfaces the gateway invalid-kit message and stays on the kit step
+   ✓ a bad paste never reaches the gateway
+   ✓ advances to the key step showing the provider host
+   ✓ shows a wrong-key error inline
+   ✓ a free-egress vault recovers with no price confirm
+   ✓ a metered vault shows the download confirm before starting
+   ✓ streams progress phases and lands with the quarantine hand-off
+   ✓ a non-fresh gateway is refused in plain language
+   ✓ reattaches to a running job on mount
+   ✓ reattaches to a finished job as the landing state
+ ✓ src/react/screens/FirstRunGate.test.tsx (4 tests)
+   ✓ offers exactly the two first-run choices
+   ✓ "Start fresh" opens the existing onboarding identity step
+   ✓ "Recover my vault" opens the recovery kit step
+   ✓ "Back" from the recovery flow returns to the choice
+
+ Test Files  3 passed (3)
+      Tests  25 passed (25)
+```
+
 ## Steering
 
 **Verdict: PASS**
@@ -569,3 +699,5 @@ recovery regression; each suite and smaller groups pass clean in parallel.)
 | claude-code-b42aae9d-faa-1784300812-1 | claude-code | b42aae9d-faaf-4587-8bcc-fd43d61e35a4 | #439 | claude-fable-5 | 0 | 0 | 0 | 0 | 0 | 0.0000 | 91 | 473401 | 4004876 | 173671 | feat(gateway): recover() verb, blank-machine e2e, CLI recover (#439) -m Issue: # |
 | claude-code-b42aae9d-faa-1784302841-1 | claude-code | b42aae9d-faaf-4587-8bcc-fd43d61e35a4 | #439 | claude-fable-5 | 12 | 26858 | 825908 | 9061 | 35931 | 1.6148 | 103 | 500259 | 4830784 | 182732 | feat(gateway): adopt-time inventory reconcile, seal-key restore-verify (#439) -m |
 | claude-code-b42aae9d-faa-1784311723-1 | claude-code | b42aae9d-faaf-4587-8bcc-fd43d61e35a4 | #439 | claude-fable-5 | 116 | 433456 | 2703871 | 22169 | 455741 | 9.2317 | 219 | 933715 | 7534655 | 204901 | feat(gateway): pre-vault recover routes, daemon-owned restore job, progress SSE  |
+| claude-code-b42aae9d-faa-1784313736-1 | claude-code | b42aae9d-faaf-4587-8bcc-fd43d61e35a4 | #439 | claude-fable-5 | 63 | 20632 | 1982820 | 13395 | 34090 | 2.9111 | 282 | 954347 | 9517475 | 218296 | feat(client): fresh-gateway onboarding recovery flow (#439) -m Issue: #439 |
+| claude-code-b42aae9d-faa-1784313806-1 | claude-code | b42aae9d-faaf-4587-8bcc-fd43d61e35a4 | #439 | claude-fable-5 | 0 | 0 | 0 | 0 | 0 | 0.0000 | 282 | 954347 | 9517475 | 218296 | feat(client): fresh-gateway onboarding recovery flow (#439) -m Issue: #439 |
