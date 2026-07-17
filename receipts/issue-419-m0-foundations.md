@@ -481,6 +481,18 @@ Navigation is now Photos, Apps, and Settings tabs, with the WebView app grid and
 - `tests/agent-e2e-mobile/flows/native-v0-resilience.md`
 - `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`
 
+### Post-review hardening continuation (2026-07-17)
+
+A five-reviewer pass over the merged-candidate branch (upload pipeline, native platform code, Photos, Docs/Agenda, meta) surfaced five blockers and a tier of high-severity defects; this continuation fixes all of them on top of the v0 feature work, in four focused commits plus a CI gate fix.
+
+- **Settlement honesty (was: fabricated receipts).** The direct-transfer `begin` dedupe path now returns a gateway-authored settlement receipt with casAck derived from real custody; the client persists it verbatim and never fabricates `replicated`. Free up space additionally re-hashes the current bytes of every device copy before deletion and excludes anything edited since backup, with the eligibility predicate extracted into a pure tested module and pinned-album exclusion gated on the collection query having loaded.
+- **Queue survivability.** Store migrations are transactional and idempotent (the v2→v3 kill window no longer bricks the queue); followups are isolated per record with attempt-counted poison quarantine instead of one bad record starving all replay; derivatives persist in a durable directory instead of the OS-trimmable cache; terminally failed rows revive on re-enqueue and producers surface failure instead of phantom success.
+- **One drain at a time.** A single-flight mutex covers the foreground hook, producers, and the Android headless task; the foreground service is refcounted, spawns its drain task only for an explicit ACTION_DRAIN, updates progress via notify(), stops itself on Android 15's dataSync onTimeout, and cannot crash on background-start denial. The recursive drain-spawn loop is structurally impossible now.
+- **Share ingestion.** The iOS extension awaits every attachment before one save+redirect (large videos are no longer dropped behind small files), throwing providers dismiss with an error, and the dead JS preprocessor is removed. Text/URL shares are no longer advertised on either platform; unsupported shares reset the intent with an honest alert; shared audio routes through the media producer; ephemeral share-container copies are deleted after settlement.
+- **Timeline correctness and scale.** The sha-first merge keys by map (duplicate device copies fold onto one row, every local copy tracked), day sections bucket by capture-local day consistent with on-this-day, all Photos screens share one timeline engine (one replica read, one MediaLibrary walk), the lightbox resolves the tapped asset by id, and useReplicaQuery memoizes row mapping with stale/unmount guards. ReplicaProvider closes the driver/change feed when unmount lands before session creation, reconcile gating is extracted into a pure tested module, and remote media requests carry auth headers.
+- **Docs and Agenda parity.** core.document joined the replica local-search specs, so Docs search works offline (it previously always returned zero results); native recurrence expansion now matches the server projection (in-window counting, month-end clamps, sorted BYDAY, exhausted-series termination, normalized parsing) pinned by shared parity fixtures on both sides, and both server twins parse RFC-basic UNTIL; optimistic mutations strip the synthetic __rowId and the native write path validates at enqueue; null-dtend, per-occurrence detail, owner-party RSVP, denied/failed surfacing, parked-docs approval routing, and orphaned-folder recovery all landed with tests.
+- **CI gate.** The workflow now runs `turbo run lint`, so the mobile import-boundary check and the blueprint app lint actually execute in CI instead of only locally.
+
 ## Out of scope
 
 - Rewriting `apps/web/iroh-wasm` against an official browser binding. n0 publishes none and documents the app-owned `wasm-bindgen` wrapper this crate already is.
@@ -508,6 +520,18 @@ Navigation is now Photos, Apps, and Settings tabs, with the WebView app grid and
 - Keep share targets, reminders, and on-this-day notifications local to the OS and route every imported byte through the one durable queue; no push broker or alternate byte plane is introduced.
 
 ## Verification
+
+Post-review hardening verification on 2026-07-17 (branch `claude/pr431-review-fixes`, 51d879f8 + 4 commits):
+
+- `bun run --cwd apps/mobile test` — 25 files / 187 tests passed, including the new migration kill-window, followup poison isolation, duplicate-sha merge, free-up-space eligibility (revalidation + pin gating), recurrence parity fixtures, share-ingest routing, and reconcile-gate suites.
+- `bunx vitest run` (packages/vault: blob + recurrence + media) — 153 passed / 1 skipped, including gateway-authored dedupe receipts and RFC-basic UNTIL parsing.
+- `bunx vitest run` (packages/client: replica) — 116 passed, including the core.document offline-search spec against both sqlite-wasm and node:sqlite drivers.
+- `bunx vitest run` (packages/gateway: replica-shape, blob-routes) — 24 passed, with docs/agenda shape assertions tightened to column sets.
+- `bunx vitest run` (packages/blueprints: agenda boot + query handlers) — 8 passed after the `upcoming.js` UNTIL fix.
+- `bun run typecheck` — 28/28 Turbo tasks; `bun run lint:types` — all packages ok; `bunx oxlint .` — 0 warnings, 0 errors; `bun run format:check` — clean; `bunx turbo run lint` — mobile import boundaries + blueprint app lint pass.
+- Kotlin/Swift changes (onTimeout, ACTION_DRAIN gating, awaited share attachments) compile-verified by review only — this environment has no provisioned iroh Android bindings or xcodebuild; they are on the existing release-device matrix.
+
+
 
 Continuation verification on 2026-07-16:
 
@@ -556,6 +580,16 @@ bun run lint:types
 
 ## Audit
 
+Post-review hardening continuation (2026-07-17), fresh-context auditor:
+
+- **A1 — What changed matches the diff. PASS.** All 2026-07-17 bullets correspond to real code in `git diff 51d879f8`; the reconcile-gate extraction and the ReplicaProvider unmount-window fix are now named in the narrative.
+- **A2 — Checked items are realized. PASS.** Spot-verified in code: gateway-authored dedupe settlement persisted verbatim (never a fabricated `replicated`), delete-time re-hash + changed/missing exclusion in free-up-space, the core.document local-search spec, month-end clamping and step-guarded in-window recurrence counting, ACTION_DRAIN-gated `onStartCommand`/`getTaskConfig` with both `onTimeout` overloads, and the awaited-attachments single save+redirect in the share extension.
+- **A3 — Checklist mirrors the issue. PASS.** No checkbox flips; the release-device matrix box remains open and honest.
+- **A4 — Decisions and deviations are honest. PASS.** Kotlin/Swift changes are explicitly review-verified only (no provisioned Android bindings or xcodebuild here) and remain on the release-device matrix.
+- **A5 — Verification and limitations support the claims. PASS.** Independently re-run: apps/mobile 25 files / 187 tests, packages/client replica 116, oxlint 0/0, `turbo run lint` 2/2 — all matching the receipt's stated counts.
+
+Prior continuation (2026-07-16):
+
 - **A1 — What changed matches the diff. PASS.** All 109 changed paths are cited and the continuation summary accurately describes the implementation.
 - **A2 — Checked items are realized. PASS.** The auditor verified stable follow-up intent replay, reconnect base replacement, cumulative drag selection, and the broader native v0 crosswalk against code and tests.
 - **A3 — Checklist mirrors the issue. PASS.** The receipt covers landed M0, M0 residue, and M1–M5; release-device QA alone remains unchecked, while live issue boxes remain open until merge.
@@ -563,6 +597,13 @@ bun run lint:types
 - **A5 — Verification and limitations support the claims. PASS.** Reproducible CI, 17 files / 127 mobile tests, and 21/21 governance checks pass without representing unavailable device runs as complete.
 
 ## Steering
+
+Post-review hardening continuation (2026-07-17):
+
+- **B1 — Every human-steering event is recorded.** PASS — The continuation's only human message was the initiating request to orchestrate fixes for the review findings, which the directive excludes; the session's other human messages initiated different prior tasks (a scope brainstorm, an issue update, the review itself). Zero steering rows is correct.
+- **B2 — No non-steering message is recorded as a steering event.** PASS — No steering rows were added.
+
+Prior continuation (2026-07-16):
 
 - **B1 — Every human-steering event is recorded.** PASS — The fresh audit covered both this full-native-v0 continuation and the historical M0 work. The continuation has one human message, the initial request to complete issue #419 and create a PR; initial requests are excluded by the directive. There were no later human corrections, redirects, or interrupts, so no continuation steering row is required. The historical M0 session (`80311240-f7e2-4eec-a3d3-3c75870a9a4e`) likewise had no qualifying steering events: its later human messages supplied context, asked a clarification, and authorized its PR after completion.
 
@@ -602,3 +643,5 @@ bun run lint:types
 | claude-code-24eb7fb7-c36-1784262362-1 | claude-code | 24eb7fb7-c36c-4cbc-9350-6c92203bd65d | #419 | claude-fable-5 | 2 | 760 | 249819 | 561 | 1323 | 0.2874 | 336 | 765056 | 28828180 | 330642 | fix(mobile): make the Android drain service and iOS share extension restart-safe |
 | claude-code-24eb7fb7-c36-1784262409-1 | claude-code | 24eb7fb7-c36c-4cbc-9350-6c92203bd65d | #419 | claude-fable-5 | 2 | 675 | 250579 | 579 | 1256 | 0.2880 | 338 | 765731 | 29078759 | 331221 | fix(mobile): photos timeline correctness and free-up-space safety (#419)Free up  |
 | claude-code-24eb7fb7-c36-1784262460-1 | claude-code | 24eb7fb7-c36c-4cbc-9350-6c92203bd65d | #419 | claude-fable-5 | 2 | 684 | 251254 | 727 | 1413 | 0.2962 | 340 | 766415 | 29330013 | 331948 | fix(mobile): agenda recurrence parity, docs offline search, loud optimistic writ |
+| claude-code-24eb7fb7-c36-1784262928-1 | claude-code | 24eb7fb7-c36c-4cbc-9350-6c92203bd65d | #419 | claude-fable-5 | 38 | 25943 | 5125490 | 17502 | 43483 | 6.3253 | 378 | 792358 | 34455503 | 349450 | chore(ci): run per-package lint gates and record the hardening receipt (#419)The |
+| claude-code-24eb7fb7-c36-1784263029-1 | claude-code | 24eb7fb7-c36c-4cbc-9350-6c92203bd65d | #419 | claude-fable-5 | 6 | 2691 | 790335 | 1851 | 4548 | 0.9166 | 384 | 795049 | 35245838 | 351301 | chore(ci): run per-package lint gates and record the hardening receipt (#419)The |
