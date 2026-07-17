@@ -1,11 +1,9 @@
-/* Raw/provider CAS inventory resolution for the gateway audit (issue #414). */
+/* Provider CAS inventory resolution for the gateway audit (issue #414). Every
+ * storage connection is a provider connection now (#436 §2), so inventory
+ * always comes from the provider's attested `listInventory` capability — the
+ * old direct own-S3 bucket listing is gone. */
 
-import {
-  S3ObjectStore,
-  openRemoteBackupProvider,
-  type ProviderInventoryObject,
-  type S3Grant,
-} from '@centraid/backup';
+import { openRemoteBackupProvider } from '@centraid/backup';
 import {
   readBlobStoreSettings,
   ReplicaIndex,
@@ -21,55 +19,6 @@ export interface CasInventoryResult {
   /** Same-key objects that failed the vault content-key AEAD audit. */
   authenticatedFailures?: string[];
   error?: string;
-}
-
-function s3Prefix(prefix: string | undefined): string {
-  const clean = prefix?.replace(/^\/+|\/+$/g, '');
-  return clean ? `${clean}/` : '';
-}
-
-async function collectOwnS3(
-  storage: StorageConnectionStore,
-  connectionId: string,
-  store: ReplicaStore,
-  prefix: string | undefined,
-): Promise<CollectedInventory> {
-  const connection = await storage.get(connectionId);
-  if (
-    !connection ||
-    connection.kind !== 'byo-s3' ||
-    !connection.endpoint ||
-    !connection.region ||
-    !connection.bucket
-  ) {
-    throw new Error(`CAS connection "${connectionId}" is not a complete own-S3 connection`);
-  }
-  const credentials = await storage.resolveS3Credentials(connectionId);
-  const grant: S3Grant = {
-    endpoint: connection.endpoint,
-    region: connection.region,
-    bucket: connection.bucket,
-    // The derived store shares the bucket; only the prefix differs (issue #425
-    // Wave 2), so list under whichever prefix this store class occupies.
-    prefix: s3Prefix(prefix),
-    store,
-    ...credentials,
-    expiresAt: Math.floor(Date.now() / 1000) + 24 * 60 * 60,
-    mode: 'read',
-  };
-  const objectStore = new S3ObjectStore(grant);
-  const objects: ProviderInventoryObject[] = [];
-  for await (const row of objectStore.list('')) {
-    objects.push({
-      key: row.key,
-      sizeBytes: row.size,
-      etagOrHash: row.etagOrHash ?? '',
-      storedAt: row.storedAt ?? 0,
-      ...(row.storageClass ? { storageClass: row.storageClass } : {}),
-      state: 'live',
-    });
-  }
-  return { source: 'bucket', providerAttested: false, objects };
 }
 
 function casSha(key: string): string | undefined {
@@ -143,14 +92,6 @@ export async function collectCasInventory(opts: {
   }
   try {
     const connection = await opts.storageConnections.get(settings.connectionId);
-    if (connection?.kind === 'byo-s3') {
-      const prefix = store === 'derived' ? settings.derivedPrefix : connection.prefix;
-      return verifiedResult(
-        opts.db,
-        await collectOwnS3(opts.storageConnections, settings.connectionId, store, prefix),
-        store,
-      );
-    }
     if (!connection?.baseUrl || !connection.targetId) {
       throw new Error(`provider CAS connection "${settings.connectionId}" has no target`);
     }

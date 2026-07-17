@@ -13,7 +13,6 @@ import {
   walPairMarkerKey,
   type BackupProvider,
   type Keyring,
-  type ProviderInventoryObject,
   type SnapshotRow,
   type WalDbName,
   type WalGroupCloser,
@@ -21,8 +20,10 @@ import {
 } from '@centraid/backup';
 import { ReplicaIndex, archivedSegmentShas, liveBlobShas, type VaultDb } from '@centraid/vault';
 import type { StorageConnectionStore } from './storage-connections.js';
+import { baseStore, reconcileCasInventory } from './backup-cas-diff.js';
 import { collectCasInventory } from './backup-cas-inventory.js';
 import { reconcileDerivedInto } from './backup-derived-inventory.js';
+import { snapshotReferencedBlobShas } from './snapshot-blob-roots.js';
 import {
   collectAudit,
   collectInventory,
@@ -32,11 +33,11 @@ import {
 import type {
   BackupReconciliationState,
   DriftSummary,
-  InventoryAttestationDrift,
   StoreReconciliationState,
 } from './backup-reconciliation-state.js';
 import { driftSummary as drift, unavailableStore } from './backup-reconciliation-state.js';
 
+export { reconcileCasInventory } from './backup-cas-diff.js';
 export type {
   BackupReconciliationState,
   DriftSummary,
@@ -46,89 +47,6 @@ export type {
 export { failedReconciliation } from './backup-reconciliation-state.js';
 
 const SAMPLE_LIMIT = 25;
-
-function inventoryNumbers(objects: readonly ProviderInventoryObject[]): {
-  objectCount: number;
-  bytes: number;
-  liveObjectCount: number;
-  softDeletedCount: number;
-  softDeletedBytes: number;
-} {
-  const objectCount = objects.length;
-  let bytes = 0;
-  let liveObjectCount = 0;
-  let softDeletedCount = 0;
-  let softDeletedBytes = 0;
-  for (const object of objects) {
-    bytes += object.sizeBytes;
-    if (object.state === 'soft-deleted') {
-      softDeletedCount += 1;
-      softDeletedBytes += object.sizeBytes;
-      continue;
-    }
-    liveObjectCount += 1;
-  }
-  return { objectCount, bytes, liveObjectCount, softDeletedCount, softDeletedBytes };
-}
-
-function attestationDrift(collection: CollectedInventory): InventoryAttestationDrift | undefined {
-  if (!collection.crossCheck) return undefined;
-  return {
-    providerOnly: drift(collection.crossCheck.providerOnly),
-    bucketOnly: drift(collection.crossCheck.bucketOnly),
-    metadataMismatch: drift(collection.crossCheck.metadataMismatch),
-  };
-}
-
-function baseStore(
-  collection: CollectedInventory,
-  missing: Iterable<string>,
-  orphans: Iterable<string>,
-): StoreReconciliationState {
-  return {
-    configured: true,
-    source: collection.source,
-    providerAttested: collection.providerAttested,
-    ...inventoryNumbers(collection.objects),
-    missing: drift(missing),
-    orphans: drift(orphans),
-    ...(attestationDrift(collection) ? { attestationDrift: attestationDrift(collection) } : {}),
-    ...(collection.attestationError ? { attestationError: collection.attestationError } : {}),
-  };
-}
-
-function casSha(key: string): string | undefined {
-  return /(?:^|\/)blobs\/(?:sha256\/)?([0-9a-f]{64})$/.exec(key)?.[1];
-}
-
-/**
- * Diff remote CAS truth against both the live model and durable replica
- * evidence. `unmark` calls happen synchronously before this function returns:
- * the next cache eviction cannot rely on an object the inventory did not see.
- */
-export function reconcileCasInventory(opts: {
-  collection: CollectedInventory;
-  live: Set<string>;
-  indexed: Set<string>;
-  unmark: (sha: string) => void;
-  /** Marks created after inventory began cannot be disproved by that listing. */
-  recentlyIndexed?: ReadonlySet<string>;
-}): StoreReconciliationState {
-  const remote = new Set<string>();
-  const unknownKeys: string[] = [];
-  for (const object of opts.collection.objects) {
-    if (object.state !== 'live') continue;
-    const sha = casSha(object.key);
-    if (sha) remote.add(sha);
-    else unknownKeys.push(object.key);
-  }
-  const missing = [...opts.indexed].filter(
-    (sha) => !remote.has(sha) && !opts.recentlyIndexed?.has(sha),
-  );
-  for (const sha of missing) opts.unmark(sha);
-  const orphans = [...remote].filter((sha) => !opts.live.has(sha));
-  return baseStore(opts.collection, missing, [...orphans, ...unknownKeys]);
-}
 
 function walStreamGaps(
   db: WalDbName,
@@ -387,8 +305,18 @@ export async function runBackupReconciliation(opts: {
   walMarkerTips?: Record<string, number>;
   verifyBucket?: boolean;
   checkedAt: string;
+  /** `manifestHash → blob shas` memo for the retained-snapshot root set (#436 §6). */
+  manifestBlobCache?: Map<string, string[]>;
 }): Promise<BackupReconciliationState> {
   const verifyBucket = opts.verifyBucket ?? false;
+  // Retained-snapshot GC roots (issue #436 §6): the CAS diff treats them as live.
+  const snapshotReferenced = await snapshotReferencedBlobShas({
+    provider: opts.provider,
+    targetId: opts.targetId,
+    vaultId: opts.vaultId,
+    keyring: opts.keyring,
+    ...(opts.manifestBlobCache ? { manifestBlobCache: opts.manifestBlobCache } : {}),
+  });
   const [backupResult, casResult, audit] = await Promise.all([
     collectInventory({
       provider: opts.provider,
@@ -423,6 +351,7 @@ export async function runBackupReconciliation(opts: {
         rows.filter((row) => row.replicatedAt >= opts.checkedAt).map((row) => row.sha256),
       ),
       unmark: (sha) => index.unmark(sha),
+      snapshotReferenced,
     });
     if (casResult.authenticatedFailures?.length) {
       cas.missing = {

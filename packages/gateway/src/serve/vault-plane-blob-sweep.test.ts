@@ -153,6 +153,44 @@ describe('VaultPlane blob sweep — real S3, lease gate + resumability', () => {
     await until(async () => (await makeS3List(server)).includes(sha), 3000);
     expect(plane2.db.blobs.hasSync(sha)).toBe(true);
   });
+
+  test('a retained-snapshot GC root survives the sweep; a genuine orphan does not (issue #436 §6)', async () => {
+    const server = await startServer();
+    const dir = await tempDir();
+    const plane = openPlane(dir, { endpoint: server.url, leaseConflicted: () => false });
+
+    const pinnedSha = crypto.createHash('sha256').update('snapshot-referenced').digest('hex');
+    const straySha = crypto.createHash('sha256').update('true-orphan').digest('hex');
+    server.putObjectDirect('b', `p/blobs/sha256/${pinnedSha}`, Buffer.from('pin'));
+    server.putObjectDirect('b', `p/blobs/sha256/${straySha}`, Buffer.from('stray'));
+    // The gateway (BackupService) supplies retained-snapshot roots; here we
+    // stand in for it directly on the plane.
+    plane.snapshotBlobRoots = async () => new Set([pinnedSha]);
+
+    plane.start();
+    // The stray orphan must be swept; the pinned root must never be.
+    await until(() => !server.hasObjectDirect('b', `p/blobs/sha256/${straySha}`), 3000);
+    expect(server.hasObjectDirect('b', `p/blobs/sha256/${pinnedSha}`)).toBe(true);
+  });
+
+  test('when the snapshot-roots supplier throws, orphan-delete fails safe — nothing is deleted (issue #436 §6)', async () => {
+    const server = await startServer();
+    const dir = await tempDir();
+    const plane = openPlane(dir, { endpoint: server.url, leaseConflicted: () => false });
+
+    const orphanSha = crypto.createHash('sha256').update('unprovable-reachability').digest('hex');
+    server.putObjectDirect('b', `p/blobs/sha256/${orphanSha}`, Buffer.from('orphan'));
+    // Reachability cannot be established (e.g. an unreadable manifest) — the
+    // sweep must NOT delete, because it cannot prove the object is unreferenced.
+    plane.snapshotBlobRoots = async () => {
+      throw new Error('cannot read manifest');
+    };
+
+    plane.start();
+    // Let several sweep ticks (25ms) elapse; the orphan must persist.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(server.hasObjectDirect('b', `p/blobs/sha256/${orphanSha}`)).toBe(true);
+  });
 });
 
 async function makeS3List(server: S3TestServer): Promise<string[]> {

@@ -1,24 +1,25 @@
 /*
  * The `s3Credentials` resolver every mounted vault's remote blob tier calls
  * on each use (issue #367 §C3) — bridges `BlobStoreSettings.connectionId` to
- * a live `StorageConnectionStore` row:
- *
- *   - `byo-s3`   resolves the sealed sidecar directly — cheap, no network.
- *   - `provider` resolves a short-lived `requestCasGrant`
- *     (`centraid-storage-provider/1`, packages/backup/PROTOCOL.md § Layer 1),
- *     cached per connection until near expiry so a busy replication sweep
- *     doesn't mint a fresh grant on every blob.
+ * a live `StorageConnectionStore` row. Every connection is a provider
+ * connection now (#436 §2): resolution is always a short-lived
+ * `requestCasGrant` (`centraid-storage-provider/1`, packages/backup/PROTOCOL.md
+ * § Layer 1), cached per connection until near expiry so a busy replication
+ * sweep doesn't mint a fresh grant on every blob.
  */
 
 import {
+  HOME_PROFILE_CAPABILITIES,
   openRemoteBackupProvider,
   requestCasGrant,
   requestDerivedGrant,
   requestStorageGrant,
+  type ProviderCapabilityFlag,
+  type ProviderProfile,
   type S3Grant,
 } from '@centraid/backup';
 import type { BlobStoreSettings, S3Credentials } from '@centraid/vault';
-import type { StorageConnectionStore } from './storage-connections.js';
+import { StorageConnectionError, type StorageConnectionStore } from './storage-connections.js';
 import { opaqueLabel } from './backup-state.js';
 
 /** Refresh a cached grant this long before it actually expires. */
@@ -51,37 +52,91 @@ export function makeStorageCredentialsResolver(
         'blob_store.connectionId is not set — attach a storage connection before enabling the s3 tier (issue #367)',
       );
     }
-    const kind = await store.kindOf(connectionId);
-    if (kind === 'byo-s3') {
-      // Own-S3 uses one credential for the whole bucket; the store class only
-      // changes the key prefix, not the grant.
-      return store.resolveS3Credentials(connectionId);
+    const cacheKey = `${connectionId}:${storeClass}`;
+    const cached = grantCache.get(cacheKey);
+    if (cached && cached.grant.expiresAt * 1000 - Date.now() > GRANT_REFRESH_MARGIN_MS) {
+      return toCredentials(cached.grant);
     }
-    if (kind === 'provider') {
-      const cacheKey = `${connectionId}:${storeClass}`;
-      const cached = grantCache.get(cacheKey);
-      if (cached && cached.grant.expiresAt * 1000 - Date.now() > GRANT_REFRESH_MARGIN_MS) {
-        return toCredentials(cached.grant);
-      }
-      const connection = await store.get(connectionId);
-      if (!connection?.targetId || !connection.baseUrl) {
-        throw new Error(
-          `storage connection "${connectionId}" has no provider target yet — the CAS-attach route must create one before this resolves`,
-        );
-      }
-      const apiKey = await store.resolveProviderApiKey(connectionId);
-      const grant = await requestStorageGrant({
-        baseUrl: connection.baseUrl,
-        apiKey,
-        targetId: connection.targetId,
-        store: storeClass,
-        mode: 'read-write',
-      });
-      grantCache.set(cacheKey, { grant });
-      return toCredentials(grant);
+    const connection = await store.get(connectionId);
+    if (!connection) throw new Error(`unknown storage connection "${connectionId}"`);
+    if (!connection.targetId || !connection.baseUrl) {
+      throw new Error(
+        `storage connection "${connectionId}" has no provider target yet — the CAS-attach route must create one before this resolves`,
+      );
     }
-    throw new Error(`unknown storage connection "${connectionId}"`);
+    const apiKey = await store.resolveProviderApiKey(connectionId);
+    const grant = await requestStorageGrant({
+      baseUrl: connection.baseUrl,
+      apiKey,
+      targetId: connection.targetId,
+      store: storeClass,
+      mode: 'read-write',
+    });
+    grantCache.set(cacheKey, { grant });
+    return toCredentials(grant);
   };
+}
+
+/**
+ * Home-profile status of a provider (issue #436 §1) — read from the discovery
+ * document (`GET /v1/storage/provider`, PROTOCOL.md § Profiles). A connection
+ * may only be created/attached against a provider that advertises the `home`
+ * profile, i.e. a full managed household home carrying all of
+ * `HOME_PROFILE_CAPABILITIES`. Surfaced whole (not just a boolean) so the Test
+ * action can show exactly which capabilities a non-home provider is missing.
+ */
+export interface ProviderProfileStatus {
+  profiles: ProviderProfile[];
+  isHome: boolean;
+  /** Home capabilities the provider does NOT declare — empty iff `isHome`. */
+  missingCapabilities: ProviderCapabilityFlag[];
+}
+
+/** Fetch and evaluate a provider's home-profile status. Pure read — no target
+ *  is minted. `fetchImpl` lets tests point at an in-process fake provider. */
+export async function fetchProviderProfileStatus(
+  baseUrl: string,
+  apiKey: string,
+  fetchImpl?: typeof fetch,
+): Promise<ProviderProfileStatus> {
+  const provider = openRemoteBackupProvider({
+    baseUrl,
+    apiKey,
+    ...(fetchImpl ? { fetchImpl } : {}),
+  });
+  const caps = await provider.capabilities();
+  const profiles = caps.profiles ?? [];
+  const isHome = profiles.includes('home');
+  const declared = new Set<ProviderCapabilityFlag>(caps.capabilities);
+  const missingCapabilities = HOME_PROFILE_CAPABILITIES.filter((c) => !declared.has(c));
+  return { profiles, isHome, missingCapabilities };
+}
+
+/**
+ * Assert a provider advertises the `home` profile, throwing a typed
+ * `StorageConnectionError('provider_not_home_profile', …)` otherwise (issue
+ * #436 §1). Returns the status on success so a caller (the Test action) can
+ * still surface it.
+ */
+export async function assertProviderHomeProfile(
+  baseUrl: string,
+  apiKey: string,
+  fetchImpl?: typeof fetch,
+): Promise<ProviderProfileStatus> {
+  const status = await fetchProviderProfileStatus(baseUrl, apiKey, fetchImpl);
+  if (!status.isHome) {
+    const missing =
+      status.missingCapabilities.length > 0
+        ? ` (missing ${status.missingCapabilities.join(', ')})`
+        : '';
+    throw new StorageConnectionError(
+      'provider_not_home_profile',
+      `this provider does not advertise the "home" profile${missing} — a Centraid home connection ` +
+        'requires a provider that carries the full home bundle (snapshots, cas, derived, usage, ' +
+        'policy, inventory, audit)',
+    );
+  }
+  return status;
 }
 
 function toCredentials(grant: S3Grant): S3Credentials {
@@ -94,7 +149,7 @@ function toCredentials(grant: S3Grant): S3Credentials {
 
 /**
  * Ensure a `provider`-kind connection has a Layer-1 target
- * (`POST /v1/backup/vaults`, PROTOCOL.md), then request one `cas` grant just
+ * (`POST /v1/storage/vaults`, PROTOCOL.md), then request one `cas` grant just
  * to learn `{endpoint, region, bucket, prefix}` — those are stable per
  * target+store (only credentials/expiry rotate on later grants), so the
  * CAS-attach route (`vault-routes.ts`) can denormalize them into the vault's

@@ -1392,7 +1392,7 @@ export class Gateway {
    */
   async sweepBlobs(
     cred: Credential,
-    options?: { skipOrphanDelete?: boolean },
+    options?: { skipOrphanDelete?: boolean; extraLiveRoots?: ReadonlySet<string> },
   ): Promise<ReconcileResult & { receiptId: string }> {
     const owner = this.identify(cred);
     if (owner.kind !== 'owner-device')
@@ -1402,10 +1402,14 @@ export class Gateway {
     // would delete their remote replicas as orphans (issue #367 §E2).
     const live = liveBlobShas(this.db.vault);
     for (const sha of archivedSegmentShas(this.db.journal)) live.add(sha);
-    const result = await this.db.blobs.reconcile(
-      live,
-      options?.skipOrphanDelete ? { skipOrphanDelete: true } : {},
-    );
+    // Retained-snapshot GC roots (issue #436 §6) pin remote objects the live
+    // model no longer claims but a recovery-to-N would still need. They protect
+    // from the orphan delete without joining `live` (which would spuriously
+    // re-push a remote-only original the local tier does not hold).
+    const result = await this.db.blobs.reconcile(live, {
+      ...(options?.skipOrphanDelete ? { skipOrphanDelete: true } : {}),
+      ...(options?.extraLiveRoots ? { extraLiveRoots: options.extraLiveRoots } : {}),
+    });
     // Refresh the app-readable custody-state mirror (issue #352 phase 3/4)
     // AFTER reconcile — the snapshot reflects the post-sweep steady state,
     // not a stale pre-sweep gap.

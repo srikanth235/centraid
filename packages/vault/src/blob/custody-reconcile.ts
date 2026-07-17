@@ -67,6 +67,13 @@ export async function reconcileCustody(
     for (const tier of stores) {
       for (const sha of tier.listed) {
         if (liveShas.has(sha)) continue;
+        // GC-pins-snapshots invariant (issue #436 §6): a blob referenced by any
+        // retained snapshot manifest is a live GC root and MUST NOT be deleted,
+        // even though the live vault model no longer claims it. CAS has no
+        // history — the retained snapshot's reference is the attachment history,
+        // and this object is what a recovery-to-N would restore. Pinned here, at
+        // the one place a client-owned CAS delete can happen.
+        if (options.extraLiveRoots?.has(sha)) continue;
         if (options.skipOrphanDelete) {
           result.orphansSkipped.push(sha);
           continue;

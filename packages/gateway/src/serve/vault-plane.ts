@@ -220,8 +220,8 @@ export interface VaultPlaneOptions {
   /**
    * Resolve S3 credentials for a vault's remote blob tier (issue #367 §C3):
    * the gateway-level `StorageConnectionStore` wires this to
-   * `settings.connectionId` (sealed byo-s3 creds, or a cached
-   * `requestCasGrant` for a provider connection). Defaults to the legacy
+   * `settings.connectionId` (a cached `requestCasGrant` for the provider
+   * connection). Defaults to the legacy
    * harness-ambient env-var lane (`CENTRAID_S3_*`, issue #296 §2) for hosts
    * that haven't adopted storage connections yet.
    */
@@ -389,6 +389,17 @@ export class VaultPlane {
   private closed = false;
   private displayName: string;
   /**
+   * Retained-snapshot GC-root supplier (issue #436 §6). Set by the
+   * `BackupService` for a vault whose backup store is configured; it returns
+   * the blob shas every retained snapshot manifest references. The blob sweep
+   * feeds these to `sweepBlobs` so a client-owned CAS orphan-delete can never
+   * evict an object a recovery-to-N still needs. Left unset when no backup
+   * store is configured — there are then no snapshots and no window to protect.
+   * When the supplier THROWS, the sweep fails safe (skips the delete phase)
+   * rather than delete against a possibly-incomplete root set.
+   */
+  snapshotBlobRoots?: () => Promise<ReadonlySet<string>>;
+  /**
    * Whether the journal's conversation-ledger band has been ensured on this
    * plane's handle. The workspace serves the SAME `journal.db` connection the
    * audit stream uses (the old standalone `transcripts.db` folded in) — the
@@ -409,7 +420,7 @@ export class VaultPlane {
     // default lane stays HARNESS-AMBIENT env vars, never settings — but a
     // host that has wired a `StorageConnectionStore` (build-gateway.ts)
     // injects `options.s3Credentials`, which resolves per `connectionId`
-    // instead (sealed byo-s3 creds, or a cached provider grant). A vault
+    // instead (a cached provider grant). A vault
     // whose settings name an s3 tier without a resolvable credential stays
     // local-only and the replication sweep reports the gap instead of
     // failing writes.
@@ -1854,8 +1865,13 @@ export class VaultPlane {
    * replicas and detecting missing shas still runs either way.
    */
   private runBlobSweep(): void {
-    void this.gateway
-      .sweepBlobs(this.ownerCredential, { skipOrphanDelete: this.leaseConflicted() })
+    void this.resolveSnapshotBlobRoots()
+      .then((roots) =>
+        this.gateway.sweepBlobs(this.ownerCredential, {
+          skipOrphanDelete: this.leaseConflicted() || roots === 'unavailable',
+          ...(roots !== 'unavailable' && roots ? { extraLiveRoots: roots } : {}),
+        }),
+      )
       .then((blobs) => {
         if (
           blobs.replicated.length +
@@ -1876,6 +1892,29 @@ export class VaultPlane {
           `vault plane: blob sweep failed: ${err instanceof Error ? err.message : String(err)}`,
         );
       });
+  }
+
+  /**
+   * Resolve the retained-snapshot GC roots for this sweep (issue #436 §6).
+   * `undefined` → no backup store configured (no snapshots, nothing to pin).
+   * `'unavailable'` → the supplier threw (e.g. an unreadable manifest); the
+   * caller then skips the orphan-DELETE phase entirely, because a client-owned
+   * CAS delete against an unknown reachability set could evict a byte a
+   * recovery-to-N still needs. Fail safe, never fail open.
+   */
+  private async resolveSnapshotBlobRoots(): Promise<
+    ReadonlySet<string> | undefined | 'unavailable'
+  > {
+    if (!this.snapshotBlobRoots) return undefined;
+    try {
+      return await this.snapshotBlobRoots();
+    } catch (err) {
+      this.logger.warn(
+        `vault plane: retained-snapshot roots unavailable — skipping orphan delete to protect ` +
+          `the recovery window (issue #436 §6): ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return 'unavailable';
+    }
   }
 
   /** Stop the clocks, checkpoint the WALs, close the files. Idempotent. */

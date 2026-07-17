@@ -30,7 +30,7 @@ import {
 } from '@centraid/vault';
 import type { RouteHandler } from '../serve/build-gateway.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
-import type { BackupService, RecoveryKitState } from '../backup/backup-service.js';
+import type { BackupService, HomeDiscovery, RecoveryKitState } from '../backup/backup-service.js';
 import type { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
 import type { ProviderPolicySyncState } from '../backup/backup-provider-observability.js';
 import type { BackupReconciliationState } from '../backup/backup-reconciliation.js';
@@ -45,7 +45,7 @@ const BACKUP_POLICY_PREFIX = '/centraid/_gateway/backup/policy/';
 const BACKUP_VERIFY_BUCKET_PREFIX = '/centraid/_gateway/backup/verify-bucket/';
 
 export interface BackupDestinationStatus {
-  kind: 'gateway-local' | 'own-s3' | 'provider';
+  kind: 'gateway-local' | 'provider';
   connectionId?: string;
 }
 
@@ -69,6 +69,10 @@ export interface BackupStatusBody {
   provider?: string;
   vaults: BackupVaultStatus[];
   recoveryKit: RecoveryKitState;
+  /** The home bundle's provider-declared promises (#436 §6) — Recovery window
+   *  (`retention`) and Exit (`restoreCostClass`) of the five-metric contract.
+   *  Absent when backup isn't configured, or when discovery couldn't be read. */
+  home?: HomeDiscovery;
 }
 
 export interface BackupRouteDeps {
@@ -94,12 +98,17 @@ async function buildStatus(deps: BackupRouteDeps): Promise<BackupStatusBody> {
       recoveryKit,
     };
   }
-  const [configuration, state, casReconciliations, recoveryKit] = await Promise.all([
+  const [configuration, state, casReconciliations, recoveryKit, home] = await Promise.all([
     backupService.configured?.() ?? Promise.resolve({ configured: true }),
     backupService.status(),
     backupService.casReconciliationStatus?.() ??
       Promise.resolve<Record<string, BackupReconciliationState>>({}),
     backupService.recoveryKitStatus(),
+    // Discovery is a provider round-trip; a failure must never blank the whole
+    // status body — the five-metric surface degrades to unknown recovery/exit.
+    typeof backupService.homeDiscovery === 'function'
+      ? backupService.homeDiscovery().catch(() => undefined)
+      : Promise.resolve<HomeDiscovery | undefined>(undefined),
   ]);
   const vaults: BackupVaultStatus[] = deps.vaults.planesList().map((plane) => {
     const vaultId = plane.boot.vaultId;
@@ -116,6 +125,7 @@ async function buildStatus(deps: BackupRouteDeps): Promise<BackupStatusBody> {
     ...(configuration.provider ? { provider: configuration.provider } : {}),
     vaults,
     recoveryKit,
+    ...(home ? { home } : {}),
   };
 }
 
@@ -135,12 +145,11 @@ function vaultStatus(
   casReconciliation?: BackupReconciliationState,
 ): BackupVaultStatus {
   const store = readBlobStoreSettings(plane.db.vault);
+  // Every remote CAS connection is a provider home bundle now (#436 §2).
   const destination: BackupDestinationStatus =
     store.kind !== 's3'
       ? { kind: 'gateway-local' }
-      : store.connectionKind === 'provider'
-        ? { kind: 'provider', ...(store.connectionId ? { connectionId: store.connectionId } : {}) }
-        : { kind: 'own-s3', ...(store.connectionId ? { connectionId: store.connectionId } : {}) };
+      : { kind: 'provider', ...(store.connectionId ? { connectionId: store.connectionId } : {}) };
   const outbox = plane.db.blobTransfers.status();
   const reconciliation = newestReconciliation(target?.reconciliation, casReconciliation);
   return {
@@ -168,16 +177,22 @@ function newestReconciliation(
   return Date.parse(first.checkedAt) >= Date.parse(second.checkedAt) ? first : second;
 }
 
+// Owner-editable policy keys (issue #436 §4). Deliberately EXCLUDED:
+//   - `casAck`: the wire declaration keeps the field (default 'receipt'), but
+//     durability semantics are not an owner knob — remote custody is always
+//     receipt-acked; the store engine reads the default, the owner never sets it.
+//   - `storageClass` / `directToColdOriginals`: store-class vocabulary — the
+//     gateway routes store classes internally; not user-facing.
+// The cadence fields (rpo/snapshot/verify) stay editable as "advanced", along
+// with the transit budgets and WAL-roll knobs.
 const POLICY_KEYS: readonly (keyof BackupPolicy)[] = [
   'rpoSeconds',
   'snapshotIntervalHours',
   'verifyEveryDays',
-  'casAck',
   'outboxBudgetBytes',
   'reservedHeadroomBytes',
   'cacheBudgetBytes',
   'throttleBytesPerSec',
-  'storageClass',
   'walBaseRollBytes',
   'walBaseRollHours',
 ];

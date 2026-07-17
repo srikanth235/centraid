@@ -4,12 +4,11 @@
  * provider-reported figure (`StoreUsageReport.quotaBytes`,
  * packages/backup/PROTOCOL.md § Usage) instead of a local `statfs` call.
  *
- * Only a `provider`-kind storage connection with a provider-reported
- * `quotaBytes` can ever go `degraded`/`error` here — a `byo-s3` connection
- * has no metering endpoint to report one (see `storage-usage.ts`), and a
- * provider that doesn't meter reports `quotaBytes: null` ("unmetered", per
- * PROTOCOL.md). Both read as `ok` with an honest "unmetered" detail rather
- * than a fabricated pass — there is genuinely nothing to watch.
+ * Only a storage connection with a provider-reported `quotaBytes` can ever go
+ * `degraded`/`error` here — a provider that doesn't meter reports
+ * `quotaBytes: null` ("unmetered", per PROTOCOL.md), which reads as `ok` with
+ * an honest "unmetered" detail rather than a fabricated pass — there is
+ * genuinely nothing to watch.
  */
 
 import type { UsageByStore } from '@centraid/backup';
@@ -26,11 +25,11 @@ const STORE_CLASSES = ['backup', 'cas'] as const;
 export interface StorageQuotaConnectionEntry {
   readonly connectionId: string;
   readonly name: string;
-  readonly kind: 'byo-s3' | 'provider';
+  readonly kind: 'provider';
 }
 
 export interface StorageQuotaHealthOptions {
-  /** Every configured storage connection — filtered to `kind: 'provider'` internally. */
+  /** Every configured storage connection (all `kind: 'provider'`). */
   readonly connections: () => Promise<readonly StorageQuotaConnectionEntry[]>;
   /** The cached provider-reported usage for one connection (issue #367 §D1's poller). */
   readonly usageFor: (connectionId: string) => Promise<{ providerReported: UsageByStore | null }>;

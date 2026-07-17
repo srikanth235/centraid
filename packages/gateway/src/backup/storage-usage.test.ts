@@ -1,6 +1,6 @@
 /*
  * Coverage for the provider-usage poller (issue #367 §D1) against a REAL
- * in-process HTTP fake implementing just `GET /v1/backup/vaults/:id/usage`
+ * in-process HTTP fake implementing just `GET /v1/storage/vaults/:id/usage`
  * (PROTOCOL.md § Usage) — same "fake mirrors the real gateway" philosophy
  * `remote-provider.test.ts` uses, scoped down to the one route this module
  * calls. No mocked `fetch`.
@@ -46,7 +46,7 @@ function startFakeUsageServer(opts: {
       );
       return;
     }
-    if (req.method === 'GET' && req.url === `/v1/backup/vaults/${opts.targetId}/usage`) {
+    if (req.method === 'GET' && req.url === `/v1/storage/vaults/${opts.targetId}/usage`) {
       requests += 1;
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ data: opts.usage }));
@@ -147,24 +147,6 @@ test('stale-while-refresh: a read past pollIntervalMs returns the cached value i
   // Let the background refresh's microtasks/IO settle.
   await new Promise((resolve) => setTimeout(resolve, 50));
   expect(fake.requestCount()).toBe(2);
-});
-
-test('byo-s3 connections report null with no network call', async () => {
-  const dir = await tempDir();
-  const store = await openStorageConnectionStore(dir);
-  const connection = await store.create({
-    kind: 'byo-s3',
-    name: 'My bucket',
-    endpoint: 'https://s3.example.com',
-    region: 'us-east-1',
-    bucket: 'b',
-    accessKeyId: 'ak',
-    secretAccessKey: 'sk',
-  });
-  const poller = new StorageUsagePoller({ storageConnections: store });
-  const result = await poller.usageFor(connection.id);
-  expect(result.providerReported).toBeNull();
-  expect(result.fetchedAt).toBeNull();
 });
 
 test('a provider connection with no target yet reports null with no network call', async () => {

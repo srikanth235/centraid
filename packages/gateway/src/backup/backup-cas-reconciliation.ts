@@ -93,6 +93,15 @@ export async function runCasOnlyReconciliation(
   });
   let cas = unavailableStore(result.configured, result.error);
   if (result.collection) {
+    // Live GC roots = liveBlobShas ∪ archivedSegmentShas ∪ retained-snapshot
+    // roots (issue #436 §6). The third term is provably EMPTY on this path:
+    // `runCasOnlyReconciliation` runs ONLY when no backup store/provider is
+    // configured (see BackupService.doRunReconciliation), so no snapshot
+    // manifest exists to reference a blob — there is nothing to open and no
+    // recovery window to protect. When a backup store IS configured, the
+    // reconciliation runs through `runBackupReconciliation`, which computes the
+    // root set from the provider's retained manifests. Kept explicit so the
+    // invariant is visible at both forks of the diff, not silently absent here.
     const live = liveBlobShas(opts.db.vault);
     for (const sha of archivedSegmentShas(opts.db.journal)) live.add(sha);
     const index = new ReplicaIndex(opts.db.vault);
