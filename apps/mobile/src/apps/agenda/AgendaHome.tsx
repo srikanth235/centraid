@@ -280,7 +280,12 @@ export default function AgendaHome({
             <EventRow
               event={item.event}
               colors={colors}
-              onPress={() => navigation.navigate('AgendaEvent', { eventId: item.event.id })}
+              onPress={() =>
+                navigation.navigate('AgendaEvent', {
+                  eventId: item.event.id,
+                  instanceKey: item.event.instanceKey,
+                })
+              }
             />
           )
         }

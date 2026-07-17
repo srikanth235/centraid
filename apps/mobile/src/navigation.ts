@@ -38,7 +38,9 @@ export type DocsStackParamList = {
 
 export type AgendaStackParamList = {
   AgendaHome: undefined;
-  AgendaEvent: { eventId: string };
+  // `instanceKey` renders the tapped occurrence of a recurring series (its
+  // date/time and reminder); writes still target the series via `eventId`.
+  AgendaEvent: { eventId: string; instanceKey?: string };
 };
 
 export type AppsStackParamList = {

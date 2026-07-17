@@ -754,7 +754,9 @@ test('docs and agenda grants multiplex as additive self-contained native shapes'
   );
   const docs = shapes.find((shape) => shape.appId === 'docs')!;
   const agenda = shapes.find((shape) => shape.appId === 'agenda')!;
-  expect(docs.entities.map((entity) => entity.entity)).toEqual(
+  const docsByEntity = new Map(docs.entities.map((entity) => [entity.entity, entity]));
+  const agendaByEntity = new Map(agenda.entities.map((entity) => [entity.entity, entity]));
+  expect([...docsByEntity.keys()]).toEqual(
     expect.arrayContaining([
       'core.document',
       'core.content_item',
@@ -764,7 +766,7 @@ test('docs and agenda grants multiplex as additive self-contained native shapes'
       'blob.custody_state',
     ]),
   );
-  expect(agenda.entities.map((entity) => entity.entity)).toEqual(
+  expect([...agendaByEntity.keys()]).toEqual(
     expect.arrayContaining([
       'core.event',
       'schedule.attendee',
@@ -772,6 +774,29 @@ test('docs and agenda grants multiplex as additive self-contained native shapes'
       'schedule.event_ext',
       'core.party',
     ]),
+  );
+
+  // Column sets document the consent surface (mirrors the photos assertions
+  // above). The native Docs drive builds its rows and its offline title search
+  // from exactly these columns; the native Agenda materializes recurrence from
+  // core.event and RSVPs from schedule.attendee.
+  expect(docsByEntity.get('core.document')!.columns).toEqual(
+    expect.arrayContaining(['document_id', 'title', 'current_content_id', 'deleted_at']),
+  );
+  expect(docsByEntity.get('core.content_item')!.columns).toEqual(
+    expect.arrayContaining(['content_id', 'media_type', 'byte_size', 'title']),
+  );
+  expect(docsByEntity.get('core.concept')!.columns).toEqual(
+    expect.arrayContaining(['concept_id', 'scheme_id', 'pref_label', 'broader_concept_id']),
+  );
+  expect(agendaByEntity.get('core.event')!.columns).toEqual(
+    expect.arrayContaining(['event_id', 'summary', 'dtstart', 'dtend', 'rrule', 'status']),
+  );
+  expect(agendaByEntity.get('schedule.attendee')!.columns).toEqual(
+    expect.arrayContaining(['attendee_id', 'event_id', 'party_id', 'partstat']),
+  );
+  expect(agendaByEntity.get('core.party')!.columns).toEqual(
+    expect.arrayContaining(['party_id', 'display_name']),
   );
   expect(new Set(shapes.map((shape) => shape.shapeId)).size).toBe(shapes.length);
 });

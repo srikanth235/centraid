@@ -9,16 +9,30 @@ import { useReplica } from '../../kit/replica/ReplicaProvider';
 import type { AgendaScreenProps } from '../../navigation';
 import { useAgenda } from './useAgenda';
 
+// Rows from useReplicaQuery carry a synthetic `__rowId` key that is not a real
+// shaped column; spreading it into an optimistic mutation's values made the
+// mutation fail validation and silently not render. Strip it first.
+function withoutRowId<T extends { __rowId?: unknown }>(row: T): Omit<T, '__rowId'> {
+  const { __rowId, ...rest } = row;
+  return rest;
+}
+
 export default function AgendaEvent({
   route,
   navigation,
 }: AgendaScreenProps<'AgendaEvent'>): React.JSX.Element {
   const { colors } = useTheme();
   const { session } = useReplica();
+  const { eventId, instanceKey } = route.params;
   const range = useMemo(() => [new Date('1970-01-01'), new Date('2100-01-01')] as const, []);
   const agenda = useAgenda(range[0], range[1]);
-  const canonical = agenda.canonicalEvents.find((row) => row.event_id === route.params.eventId);
-  const event = agenda.events.find((row) => row.id === route.params.eventId);
+  const canonical = agenda.canonicalEvents.find((row) => row.event_id === eventId);
+  // Render the tapped occurrence when an instanceKey was threaded through, so a
+  // recurring instance shows its own date/time (and reminders below fire for
+  // that occurrence). Writes still target the canonical series via `eventId`.
+  const event =
+    (instanceKey ? agenda.events.find((row) => row.instanceKey === instanceKey) : undefined) ??
+    agenda.events.find((row) => row.id === eventId);
   const [pending, setPending] = useState<string>();
   const partyNames = new Map(
     agenda.parties.map((row) => [
@@ -26,63 +40,86 @@ export default function AgendaEvent({
       String(row.display_name ?? row.name ?? 'Guest'),
     ]),
   );
-  const attendees = agenda.attendees.filter((row) => row.event_id === route.params.eventId);
+  const attendees = agenda.attendees.filter((row) => row.event_id === eventId);
+  // RSVP acts as the vault owner's own attendee row, not attendees[0]. If the
+  // owner isn't on the guest list there is no honest party to RSVP as.
+  const me = agenda.ownerPartyId;
+  const myAttendee = attendees.find((row) => me != null && String(row.party_id) === String(me));
+
+  const applyOutcome = (result: { status: string; reason?: string }, verb: string): void => {
+    if (result.status === 'parked' || result.status === 'queued') {
+      setPending(`${verb} awaiting approval`);
+    } else if (result.status === 'denied' || result.status === 'failed') {
+      Alert.alert(`${verb} not applied`, result.reason ?? 'The vault rejected this change.');
+    }
+  };
+  const reportFailure = (verb: string, error: unknown): void => {
+    Alert.alert(`${verb} failed`, error instanceof Error ? error.message : 'Please try again.');
+  };
 
   const reschedule = async (): Promise<void> => {
     if (!event || !session) return;
     const start = new Date(Date.parse(event.start) + 60 * 60 * 1000).toISOString();
     const end = new Date(Date.parse(event.end) + 60 * 60 * 1000).toISOString();
-    const result = await session.write('agenda', {
-      action: 'reschedule',
-      input: { event_id: event.id, dtstart: start, dtend: end },
-      optimistic: [
-        {
-          op: 'upsert',
-          entity: 'core.event',
-          rowId: event.id,
-          values: { ...canonical, dtstart: start, dtend: end },
-        },
-      ],
-    });
-    if (result.status === 'parked' || result.status === 'queued')
-      setPending('Reschedule awaiting approval');
+    try {
+      const result = await session.write('agenda', {
+        action: 'reschedule',
+        input: { event_id: event.id, dtstart: start, dtend: end },
+        optimistic: [
+          {
+            op: 'upsert',
+            entity: 'core.event',
+            rowId: event.id,
+            values: { ...(canonical ? withoutRowId(canonical) : {}), dtstart: start, dtend: end },
+          },
+        ],
+      });
+      applyOutcome(result, 'Reschedule');
+    } catch (error) {
+      reportFailure('Reschedule', error);
+    }
   };
   const cancel = async (): Promise<void> => {
     if (!event || !session) return;
-    const result = await session.write('agenda', {
-      action: 'cancel-event',
-      input: { event_id: event.id },
-      optimistic: [
-        {
-          op: 'upsert',
-          entity: 'core.event',
-          rowId: event.id,
-          values: { ...canonical, status: 'cancelled' },
-        },
-      ],
-    });
-    if (result.status === 'parked' || result.status === 'queued')
-      setPending('Cancellation awaiting approval');
+    try {
+      const result = await session.write('agenda', {
+        action: 'cancel-event',
+        input: { event_id: event.id },
+        optimistic: [
+          {
+            op: 'upsert',
+            entity: 'core.event',
+            rowId: event.id,
+            values: { ...(canonical ? withoutRowId(canonical) : {}), status: 'cancelled' },
+          },
+        ],
+      });
+      applyOutcome(result, 'Cancellation');
+    } catch (error) {
+      reportFailure('Cancellation', error);
+    }
   };
   const rsvp = async (partstat: string): Promise<void> => {
-    const attendee = attendees[0];
-    if (!attendee || !session || !event) return;
-    const partyId = String(attendee.party_id ?? '');
+    if (!myAttendee || !session || !event) return;
+    const partyId = String(myAttendee.party_id ?? '');
     if (!partyId) return;
-    const result = await session.write('agenda', {
-      action: 'rsvp',
-      input: { event_id: event.id, party_id: partyId, partstat },
-      optimistic: [
-        {
-          op: 'upsert',
-          entity: 'schedule.attendee',
-          rowId: String(attendee.attendee_id),
-          values: { ...attendee, partstat },
-        },
-      ],
-    });
-    if (result.status === 'parked' || result.status === 'queued')
-      setPending('RSVP awaiting approval');
+    try {
+      const result = await session.write('agenda', {
+        action: 'rsvp',
+        input: { event_id: event.id, party_id: partyId, partstat },
+        optimistic: [
+          {
+            op: 'upsert',
+            entity: 'schedule.attendee',
+            rowId: String(myAttendee.attendee_id),
+            values: { ...withoutRowId(myAttendee), partstat },
+          },
+        ],
+      });
+      applyOutcome(result, 'RSVP');
+    } catch (error) {
+      reportFailure('RSVP', error);
+    }
   };
   const remind = async (): Promise<void> => {
     if (!event) return;
@@ -176,7 +213,7 @@ export default function AgendaEvent({
         ) : (
           <Text style={[styles.empty, { color: colors.ink2 }]}>No attendees.</Text>
         )}
-        {attendees.length ? (
+        {myAttendee ? (
           <View style={styles.rsvp}>
             {[
               ['Going', 'accepted'],
@@ -192,6 +229,10 @@ export default function AgendaEvent({
               </Pressable>
             ))}
           </View>
+        ) : attendees.length ? (
+          <Text style={[styles.empty, { color: colors.ink2 }]}>
+            You are not on this guest list, so there is no RSVP to give.
+          </Text>
         ) : null}
         <Text style={[styles.section, { color: colors.ink2 }]}>ACTIONS</Text>
         <Pressable

@@ -46,8 +46,26 @@ export default function DocumentViewer({
       ? `${gatewayBase}/centraid/_vault/blobs/${encodeURIComponent(document.contentId)}${document.mediaType.startsWith('image/') || document.mediaType === 'application/pdf' ? '?variant=preview' : ''}`
       : '';
   const action = async (name: string): Promise<void> => {
-    if (document)
-      await session?.write('docs', { action: name, input: { document_id: document.id } });
+    if (!document || !session) return;
+    try {
+      const result = await session.write('docs', {
+        action: name,
+        input: { document_id: document.id },
+      });
+      // A parked write (e.g. moving to trash is medium-risk) must surface for
+      // Approve/Discard rather than silently vanish (M5); denials/failures are
+      // shown, not swallowed.
+      if (result.status === 'parked' || result.status === 'queued') {
+        navigation.navigate('Tabs', {
+          screen: 'SettingsTab',
+          params: { screen: 'Approvals' },
+        });
+      } else if (result.status === 'denied' || result.status === 'failed') {
+        Alert.alert('Not applied', result.reason ?? 'The vault rejected this change.');
+      }
+    } catch (error) {
+      Alert.alert('Action failed', error instanceof Error ? error.message : 'Please try again.');
+    }
   };
   const share = async (): Promise<void> => {
     if (!document || !url) return;

@@ -59,17 +59,44 @@ export function buildDrive(
   const custodyByContent = new Map(
     custodyRows.map((row) => [scalar<string>(row, 'content_id'), scalar<string>(row, 'state')]),
   );
+  const rootId = scalar<string>(root ?? {}, 'concept_id');
+  const nonRoot = concepts.filter((row) => scalar(row, 'concept_id') !== rootId);
+  const folderIdSet = new Set(
+    nonRoot.map((row) => scalar<string>(row, 'concept_id')).filter(Boolean),
+  );
+  const folders: NativeFolder[] = nonRoot.map((row) => {
+    const id = scalar<string>(row, 'concept_id')!;
+    const broader = scalar<string>(row, 'broader_concept_id');
+    // A parent is honored only when it resolves to another real folder; a
+    // broader pointer to root, to nothing, or to a non-folder concept is not.
+    const parentId =
+      broader && broader !== rootId && folderIdSet.has(broader) ? broader : undefined;
+    return parentId
+      ? { id, name: scalar<string>(row, 'pref_label') ?? 'Folder', parentId }
+      : { id, name: scalar<string>(row, 'pref_label') ?? 'Folder' };
+  });
+  // Orphan/cycle guard: a folder whose parent chain dangles or loops would
+  // never reach the root and would drag its documents out of view with it.
+  // Promote any such folder to the root so it stays reachable.
+  const folderById = new Map(folders.map((folder) => [folder.id, folder]));
+  for (const folder of folders) {
+    const seen = new Set<string>();
+    let cursor: NativeFolder | undefined = folder;
+    while (cursor?.parentId) {
+      if (seen.has(cursor.id)) {
+        delete folder.parentId;
+        break;
+      }
+      seen.add(cursor.id);
+      cursor = folderById.get(cursor.parentId);
+      if (!cursor) {
+        delete folder.parentId;
+        break;
+      }
+    }
+  }
   return {
-    folders: concepts
-      .filter((row) => scalar(row, 'concept_id') !== scalar(root ?? {}, 'concept_id'))
-      .map((row) => ({
-        id: scalar<string>(row, 'concept_id')!,
-        name: scalar<string>(row, 'pref_label') ?? 'Folder',
-        ...(scalar<string>(row, 'broader_concept_id') &&
-        scalar(row, 'broader_concept_id') !== scalar(root ?? {}, 'concept_id')
-          ? { parentId: scalar<string>(row, 'broader_concept_id') }
-          : {}),
-      })),
+    folders,
     documents: documentRows.map((row) => {
       const id = scalar<string>(row, 'document_id')!;
       const contentId = scalar<string>(row, 'current_content_id')!;

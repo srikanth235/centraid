@@ -8,12 +8,14 @@ export interface ReplicaLocalSearchSpec {
 }
 
 /**
- * Direct-column subset of the canonical vault FTS contract. Folded-body
- * entities (notes, documents and messages) deliberately stay online-only:
- * their searchable bytes are not eager replica metadata.
+ * Direct-column subset of the canonical vault FTS contract. A folded document
+ * BODY stays online-only (its bytes are not eager replica metadata), but the
+ * document TITLE is an eager scalar on core.document, so the native Docs drive
+ * can rank titles offline; a body match still needs the canonical FTS online.
  */
 export const REPLICA_LOCAL_SEARCH: Readonly<Record<string, ReplicaLocalSearchSpec>> = {
   'core.content_item': { columns: ['title'], deletedColumn: 'deleted_at' },
+  'core.document': { columns: ['title'], deletedColumn: 'deleted_at' },
   'social.thread': { columns: ['subject'] },
   'core.party': { columns: ['display_name', 'sort_name'] },
   'social.contact_card': { columns: ['nickname', 'org_title'] },

@@ -6,6 +6,8 @@ import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 
+import { OnlineOnlyError } from '@centraid/client/replica/native';
+
 import { backupDocument } from '../../lib/upload/media-producer';
 import { useTheme } from '../../kit/theme';
 import { useReplica } from '../../kit/replica/ReplicaProvider';
@@ -18,7 +20,7 @@ type LibraryFilter = 'all' | 'recent' | 'starred' | 'trash';
 type ViewMode = 'list' | 'grid';
 type DriveItem =
   | { kind: 'folder'; folder: NativeFolder }
-  | { kind: 'document'; document: NativeDocument };
+  | { kind: 'document'; document: NativeDocument; location?: string };
 
 const FILTERS: readonly {
   key: LibraryFilter;
@@ -41,6 +43,7 @@ export default function DocsHome({
   const folderId = route.params?.folderId;
   const [query, setQuery] = useState('');
   const [matches, setMatches] = useState<Set<string>>();
+  const [searchError, setSearchError] = useState<string>();
   const [filter, setFilter] = useState<LibraryFilter>('all');
   const [view, setView] = useState<ViewMode>('list');
   const [addOpen, setAddOpen] = useState(false);
@@ -50,6 +53,7 @@ export default function DocsHome({
     let active = true;
     if (!query.trim() || !session) {
       setMatches(undefined);
+      setSearchError(undefined);
       return;
     }
     const timeout = setTimeout(
@@ -57,11 +61,23 @@ export default function DocsHome({
         void session
           .search('docs', { entity: 'core.document', query: query.trim(), limit: 100 })
           .then((result) => {
-            if (active)
-              setMatches(new Set(result.rows.map((row) => String(row.values.document_id))));
+            if (!active) return;
+            setSearchError(undefined);
+            setMatches(new Set(result.rows.map((row) => String(row.values.document_id))));
           })
-          .catch(() => {
-            if (active) setMatches(new Set());
+          .catch((error: unknown) => {
+            if (!active) return;
+            // An OnlineOnlyError is an expected degradation (e.g. an indexed
+            // title too large to rank offline): fall back to the unfiltered
+            // library rather than a scary error or a blank "no matches". A
+            // real transport/protocol failure is surfaced instead of swallowed.
+            if (error instanceof OnlineOnlyError) {
+              setMatches(undefined);
+              setSearchError(undefined);
+            } else {
+              setMatches(undefined);
+              setSearchError('Search is unavailable right now.');
+            }
           }),
       160,
     );
@@ -71,29 +87,58 @@ export default function DocsHome({
     };
   }, [query, session]);
 
+  // A folder path resolver for search hits: a root-level search surfaces
+  // documents living in subfolders (issue: search was ANDed with the current
+  // folder), so each match shows where it lives.
+  const folderById = useMemo(
+    () => new Map(drive.folders.map((folder) => [folder.id, folder])),
+    [drive.folders],
+  );
+  const folderPathOf = (document: NativeDocument): string => {
+    if (!document.folderId) return 'Docs';
+    const names: string[] = [];
+    const seen = new Set<string>();
+    let current: NativeFolder | undefined = folderById.get(document.folderId);
+    while (current && !seen.has(current.id)) {
+      seen.add(current.id);
+      names.unshift(current.name);
+      current = current.parentId ? folderById.get(current.parentId) : undefined;
+    }
+    return names.length ? names.join(' / ') : 'Docs';
+  };
+
+  // When a search is active the folder scope is dropped so a hit in any
+  // subfolder surfaces; otherwise documents are scoped to the open folder.
+  const searching = matches !== undefined;
   const documents = useMemo(() => {
-    const inFolder = drive.documents.filter(
-      (document) =>
-        (!folderId ? !document.folderId : document.folderId === folderId) &&
-        (!matches || matches.has(document.id)),
+    const inScope = drive.documents.filter((document) =>
+      searching
+        ? matches.has(document.id)
+        : !folderId
+          ? !document.folderId
+          : document.folderId === folderId,
     );
-    const visible = inFolder.filter((document) => {
+    const visible = inScope.filter((document) => {
       if (filter === 'trash') return document.trashed;
       if (document.trashed) return false;
       return filter !== 'starred' || document.starred;
     });
     const sorted = [...visible].sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
     return filter === 'recent' ? sorted.slice(0, 8) : sorted;
-  }, [drive.documents, filter, folderId, matches]);
+  }, [drive.documents, filter, folderId, matches, searching]);
   const folders = drive.folders.filter(
     (folder) =>
       filter === 'all' &&
-      !query.trim() &&
+      !searching &&
       (!folderId ? !folder.parentId : folder.parentId === folderId),
   );
   const items: DriveItem[] = [
     ...folders.map((folder) => ({ kind: 'folder' as const, folder })),
-    ...documents.map((document) => ({ kind: 'document' as const, document })),
+    ...documents.map((document) => ({
+      kind: 'document' as const,
+      document,
+      ...(searching ? { location: folderPathOf(document) } : {}),
+    })),
   ];
   const parent = folderId ? drive.folders.find((folder) => folder.id === folderId) : undefined;
 
@@ -119,13 +164,30 @@ export default function DocsHome({
   };
   const createFolder = async (): Promise<void> => {
     if (!session || !folderName.trim()) return;
-    await session.write('docs', {
-      action: 'create-folder',
-      input: { name: folderName.trim() },
-    });
-    setFolderName('');
-    setAddOpen(false);
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    try {
+      const result = await session.write('docs', {
+        action: 'create-folder',
+        input: { name: folderName.trim() },
+      });
+      setFolderName('');
+      setAddOpen(false);
+      if (result.status === 'parked' || result.status === 'queued') {
+        navigation.navigate('Tabs', {
+          screen: 'SettingsTab',
+          params: { screen: 'Approvals' },
+        });
+      } else if (result.status === 'denied' || result.status === 'failed') {
+        Alert.alert('Folder not created', result.reason ?? 'The vault rejected this change.');
+      } else {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (error) {
+      setAddOpen(false);
+      Alert.alert(
+        'Folder not created',
+        error instanceof Error ? error.message : 'Please try again.',
+      );
+    }
   };
   const selectFilter = (next: LibraryFilter): void => {
     void Haptics.selectionAsync();
@@ -249,14 +311,18 @@ export default function DocsHome({
             <Text style={[styles.emptyTitle, { color: colors.ink }]}>
               {drive.loading
                 ? 'Opening your drive…'
-                : query
-                  ? 'No matching documents'
-                  : 'Nothing here yet'}
+                : searchError
+                  ? searchError
+                  : query
+                    ? 'No matching documents'
+                    : 'Nothing here yet'}
             </Text>
             <Text style={[styles.empty, { color: colors.ink2 }]}>
-              {filter === 'trash'
-                ? 'Deleted documents will remain recoverable here.'
-                : 'Import a file or create a folder to get started.'}
+              {searchError
+                ? 'Reconnect and try your search again.'
+                : filter === 'trash'
+                  ? 'Deleted documents will remain recoverable here.'
+                  : 'Import a file or create a folder to get started.'}
             </Text>
           </View>
         }
@@ -355,6 +421,7 @@ function ListItem({ item, navigation, colors }: ItemProps): React.JSX.Element {
           {item.document.title}
         </Text>
         <Text style={[styles.meta, { color: colors.ink2 }]}>
+          {item.location ? `${item.location} · ` : ''}
           {formatType(item.document.mediaType)} · {formatBytes(item.document.byteSize)} ·{' '}
           {item.document.custody ?? 'local'}
         </Text>
@@ -387,7 +454,7 @@ function GridItem({ item, navigation, colors }: ItemProps): React.JSX.Element {
       </Text>
       <Text style={[styles.meta, { color: colors.ink2 }]}>
         {document
-          ? `${formatType(document.mediaType)} · ${formatBytes(document.byteSize)}`
+          ? `${item.kind === 'document' && item.location ? `${item.location} · ` : ''}${formatType(document.mediaType)} · ${formatBytes(document.byteSize)}`
           : 'Folder'}
       </Text>
     </Pressable>
