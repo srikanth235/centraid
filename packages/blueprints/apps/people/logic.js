@@ -1,6 +1,6 @@
 // Non-visual business logic: vault IO (write/act), row derivation, selection,
-// the kebab/move-to-circle popover (stays plain DOM, built with kit's
-// `h()`/`popItem()` — no React root needed there), every person/circle write,
+// the kebab/move-to-list popover (stays plain DOM, built with kit's
+// `h()`/`popItem()` — no React root needed there), every person/list write,
 // the profile drawer's load/reload + "+ add" write helper, journal/activity
 // reads, and navigation state transitions. `createLogic()` is a factory
 // app.jsx calls once at boot, closing over the exact `state`/`data` objects
@@ -19,7 +19,7 @@ import {
   runBulk as runBulkBase,
   toast,
 } from './kit.js';
-import { PALETTE, circleColor, daysSince, daysUntilAnnual, statusOf } from './format.js';
+import { PALETTE, listColor, daysSince, daysUntilAnnual, statusOf } from './format.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -72,8 +72,7 @@ export function createLogic({
         base = base.filter((p) => daysSince(p) >= (p.cadence_days ?? 30));
       else if (nav.kind === 'upcoming') base = base.filter((p) => (p.reminders || []).length > 0);
       else if (nav.kind === 'starred') base = base.filter((p) => p.starred);
-      else if (nav.kind === 'circle')
-        base = base.filter((p) => (p.circle_id ?? null) === nav.circleId);
+      else if (nav.kind === 'list') base = base.filter((p) => (p.list_id ?? null) === nav.listId);
     }
     if (chip !== 'all') base = base.filter((p) => statusOf(p).key === chip);
 
@@ -120,8 +119,8 @@ export function createLogic({
     render();
   }
 
-  // ---------- Popover (kebab + move-to-circle) ----------
-  // Reused for both the row kebab menu and the drawer's "Move to circle"
+  // ---------- Popover (kebab + move-to-list) ----------
+  // Reused for both the row kebab menu and the drawer's "Move to list"
   // button (same target list), exactly as the old version did.
 
   function openPersonMenu(anchor, p) {
@@ -136,23 +135,23 @@ export function createLogic({
           toggleStar(p);
         }),
         h('div', { class: 'kit-popover-sep' }),
-        h('p', { class: 'kit-popover-head' }, 'Move to circle'),
+        h('p', { class: 'kit-popover-head' }, 'Move to list'),
         popItem(
-          'No circle',
+          'No list',
           () => {
             closePopover();
-            movePerson(p, null, 'no circle');
+            movePerson(p, null, 'no list');
           },
-          { disabled: p.circle_id == null, dotColor: 'var(--ink-3)' },
+          { disabled: p.list_id == null, dotColor: 'var(--ink-3)' },
         ),
-        ...data.circles.map((c) =>
+        ...data.lists.map((c) =>
           popItem(
             c.name,
             () => {
               closePopover();
-              movePerson(p, c.circle_id, c.name);
+              movePerson(p, c.list_id, c.name);
             },
-            { disabled: p.circle_id === c.circle_id, dotColor: circleColor(c.circle_id) },
+            { disabled: p.list_id === c.list_id, dotColor: listColor(c.list_id) },
           ),
         ),
       );
@@ -164,7 +163,7 @@ export function createLogic({
   // refresh() re-renders the open drawer, but from the stale `detailPerson`
   // snapshot — so any write that can land while the drawer is open on the
   // same person must also reload the detail read, or the drawer keeps
-  // showing the pre-write state (star glyph, circle, history) until it's
+  // showing the pre-write state (star glyph, list, history) until it's
   // closed and reopened.
   async function reloadOpenDetail(partyId) {
     if (state.detailsId === partyId) await loadDetail(partyId);
@@ -180,8 +179,8 @@ export function createLogic({
     await reloadOpenDetail(p.party_id);
   }
 
-  async function movePerson(p, circleId, name) {
-    const input = { party_id: p.party_id, ...(circleId == null ? {} : { circle_id: circleId }) };
+  async function movePerson(p, listId, name) {
+    const input = { party_id: p.party_id, ...(listId == null ? {} : { list_id: listId }) };
     const outcome = await act('move-person', input);
     if (!narrate(outcome)) return;
     toast(`Moved to ${name} · receipted.`);
@@ -214,47 +213,47 @@ export function createLogic({
     });
   }
 
-  // ---------- Circle writes ----------
+  // ---------- List writes ----------
 
-  async function createCircle(name) {
-    const outcome = await act('create-circle', { name });
+  async function createList(name) {
+    const outcome = await act('create-list', { name });
     if (narrate(outcome)) {
-      state.creatingCircle = false;
-      toast(`Circle "${name}" created · receipted.`);
+      state.creatingList = false;
+      toast(`List "${name}" created · receipted.`);
       await refresh();
     } else {
       render();
     }
   }
-  async function renameCircle(circleId, name) {
-    const outcome = await act('rename-circle', { circle_id: circleId, name });
+  async function renameList(listId, name) {
+    const outcome = await act('rename-list', { list_id: listId, name });
     if (narrate(outcome)) {
-      state.renamingCircleId = null;
-      toast('Circle renamed · receipted.');
+      state.renamingListId = null;
+      toast('List renamed · receipted.');
       await refresh();
     } else {
       render();
     }
   }
-  async function deleteCircle(circle) {
-    const outcome = await act('delete-circle', { circle_id: circle.circle_id });
+  async function deleteList(list) {
+    const outcome = await act('delete-list', { list_id: list.list_id });
     if (narrate(outcome)) {
-      if (state.nav.kind === 'circle' && state.nav.circleId === circle.circle_id)
+      if (state.nav.kind === 'list' && state.nav.listId === list.list_id)
         state.nav = { kind: 'all' };
-      toast('Circle deleted · receipted.');
+      toast('List deleted · receipted.');
       await refresh();
     }
   }
-  function startRenameCircle(circleId) {
-    state.renamingCircleId = circleId;
+  function startRenameList(listId) {
+    state.renamingListId = listId;
     render();
   }
-  function cancelCreateCircle() {
-    state.creatingCircle = false;
+  function cancelCreateList() {
+    state.creatingList = false;
     render();
   }
-  function cancelRenameCircle() {
-    state.renamingCircleId = null;
+  function cancelRenameList() {
+    state.renamingListId = null;
     render();
   }
 
@@ -302,14 +301,14 @@ export function createLogic({
 
   // ---------- Add-person modal ----------
 
-  async function addPerson({ name, role, circleId, cadence }) {
+  async function addPerson({ name, role, listId, cadence }) {
     const avatar_color = PALETTE[data.people.length % PALETTE.length];
     const input = {
       display_name: name,
       cadence_days: cadence,
       avatar_color,
       ...(role ? { role } : {}),
-      ...(circleId != null ? { circle_id: circleId } : {}),
+      ...(listId != null ? { list_id: listId } : {}),
     };
     const outcome = await act('add-person', input);
     if (!narrate(outcome)) return false;
@@ -331,10 +330,10 @@ export function createLogic({
     state.addModalOpen = false;
     renderModal();
   }
-  function startCreateCircle() {
+  function startCreateList() {
     state.newMenuOpen = false;
     renderNewMenu();
-    state.creatingCircle = true;
+    state.creatingList = true;
     render();
   }
 
@@ -377,8 +376,8 @@ export function createLogic({
     $('searchInput').value = '';
     state.chip = 'all';
     state.newMenuOpen = false;
-    state.creatingCircle = false;
-    state.renamingCircleId = null;
+    state.creatingList = false;
+    state.renamingListId = null;
     if (state.narrow) $('root').classList.remove('side-open');
     renderDetails();
     if (nav.kind === 'journal') await loadJournal();
@@ -405,12 +404,12 @@ export function createLogic({
     movePerson,
     logInteraction,
     favoriteSelected,
-    createCircle,
-    renameCircle,
-    deleteCircle,
-    startRenameCircle,
-    cancelCreateCircle,
-    cancelRenameCircle,
+    createList,
+    renameList,
+    deleteList,
+    startRenameList,
+    cancelCreateList,
+    cancelRenameList,
     openDetails,
     closeDetails,
     loadDetail,
@@ -419,7 +418,7 @@ export function createLogic({
     addPerson,
     openAddModal,
     closeAddModal,
-    startCreateCircle,
+    startCreateList,
     loadJournal,
     loadDashboard,
     addJournalEntry,

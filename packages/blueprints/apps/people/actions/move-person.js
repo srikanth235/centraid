@@ -1,5 +1,5 @@
 /**
- * Move a person into a circle, or omit the circle to un-circle them. Runs through people.move_person — consent-checked and receipted, risk low.
+ * Move a person into a list, or omit the list to un-list them. Runs through people.move_person — consent-checked and receipted, risk low.
  *
  * @type {import('@centraid/app-engine').ActionHandler}
  */

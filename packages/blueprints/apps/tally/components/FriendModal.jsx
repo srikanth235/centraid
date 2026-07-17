@@ -1,7 +1,7 @@
-// The add-friend form: name + colour picker. `af` is app.jsx's mutable
-// `state.addFriend`; `onPatch` mutates it in place and re-renders, same
-// pattern as ExpenseModal's `onPatch`.
-import { FRIEND_COLORS } from '../format.js';
+// The add-friend form: just a name. A friend's avatar hue is derived from the
+// party (issue #441 A3), not chosen and stored per Tally row, so there is no
+// colour picker. `af` is app.jsx's mutable `state.addFriend`; `onPatch`
+// mutates it in place and re-renders, same pattern as ExpenseModal's `onPatch`.
 import { ModalBackdrop } from './Shared.jsx';
 
 export function FriendModal({ af, onPatch, onClose, onSave }) {
@@ -16,31 +16,6 @@ export function FriendModal({ af, onPatch, onClose, onSave }) {
           placeholder="Name"
           onChange={(e) => onPatch({ name: e.target.value })}
         />
-        <div className="s-field">
-          <div className="s-flabel">Colour</div>
-          <div className="s-catrow">
-            {FRIEND_COLORS.map((c) => (
-              <button
-                key={c}
-                type="button"
-                className="kit-chip quiet"
-                aria-pressed={String(af.color === c)}
-                aria-label="Colour"
-                onClick={() => onPatch({ color: c })}
-              >
-                <span
-                  style={{
-                    display: 'block',
-                    width: '18px',
-                    height: '18px',
-                    borderRadius: '999px',
-                    background: c,
-                  }}
-                />
-              </button>
-            ))}
-          </div>
-        </div>
         <div className="kit-modal-foot">
           <button type="button" className="kit-btn" onClick={onClose}>
             Cancel

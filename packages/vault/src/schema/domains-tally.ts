@@ -4,9 +4,13 @@
 // (the balance engine lives in the queries). Only the ground facts persist.
 //
 // A friend is a canonical core.party (kind='person'), the same person spine
-// People and every other surface use; `tally_friend` hangs the one CRM-free
-// fact Tally needs off the party id — the avatar hue. The owner is the
-// implicit `me` (core_vault.owner_party_id) and never gets a tally_friend row.
+// People and every other surface use; `tally_friend` is the bare enrolment
+// marker — a party is "a friend in Tally". The avatar hue is NOT stored here
+// (issue #441 A3): it lived twice, once here and once on people_profile, both
+// 1:1 on the same party, free to disagree. One hue per party now: Tally reads
+// people_profile's hue when the party is also a CRM contact, else derives a
+// stable one from the party id. The owner is the implicit `me`
+// (core_vault.owner_party_id) and never gets a tally_friend row.
 //
 // A group IS an audience — and the vault already has exactly one audience
 // mechanism, social.circle (the #274 decision that circles deliberately stay
@@ -17,6 +21,30 @@
 // table this domain briefly re-introduced is gone. Deleting a group is
 // refused while it still holds expenses, mirroring the folders
 // "delete when empty" rule; deleting it removes its circle too.
+//
+// Trash (issue #441 A4): the owner-authored CONTENT rows — tally_expense and
+// tally_settlement — carry the uniform soft-delete pair `deleted_at` /
+// `purge_at` with the CHECK guard (`purge_at IS NULL OR deleted_at IS NOT NULL`),
+// matching Docs/Photos/Locker. tally.delete_expense is a reversible grace-window
+// trash now (not an instant hard delete), and the lifecycle sweep is what finally
+// purges the row, cascades its splits, and cleans its polymorphic references
+// (the expense memo annotation among them — previously leaked on hard delete).
+// Two tables stay HARD-delete, by design, not oversight:
+//   - tally_friend is a bare enrolment marker (a party "is a friend in Tally"),
+//     an identity decoration with no content of its own — un-enrolling is not
+//     trashing content, so it needs no grace window.
+//   - tally_group is STRUCTURAL, not content: deleting it is refused while it
+//     holds expenses and, once empty, CASCADES its audience — the group owned
+//     its social_circle and leaves with it (circle + membership + any
+//     free-standing settlements deleted). A grace window on the group would
+//     leave a half-torn audience; the refuse-then-cascade rule is the safety.
+// Decision — a trashed expense STILL blocks group deletion until it purges:
+// delete_group's expense-emptiness check counts ALL of the group's expenses,
+// trashed ones included (it does NOT filter deleted_at IS NULL). A trashed
+// expense is recoverable money history in the group; tearing the group (and its
+// audience) out from under it would strand or cascade a row the owner could
+// still restore. Empty the group of live AND trashed expenses first — or wait
+// for the trashed ones to purge — then the group deletes.
 //
 // Money is fixed-scale INTEGER minor units (cents) in the vault's base
 // currency; an expense's `tally_expense_split` rows resolve one method
@@ -35,7 +63,6 @@ export const TALLY_DDL = `
 CREATE TABLE tally_friend (
   friend_id    TEXT PRIMARY KEY,
   party_id     TEXT NOT NULL UNIQUE REFERENCES core_party(party_id),
-  avatar_color TEXT,
   created_at   TEXT NOT NULL
 ) STRICT;
 
@@ -57,7 +84,10 @@ CREATE TABLE tally_expense (
   category     TEXT NOT NULL CHECK (category IN
     ('food','groceries','rent','utilities','transport','fun','travel','shopping','general')),
   txn_id       TEXT REFERENCES core_transaction(txn_id),
-  created_at   TEXT NOT NULL
+  created_at   TEXT NOT NULL,
+  -- Trash pair + guard (issue #441 A4). tally_expense_split cascades on purge.
+  deleted_at   TEXT,
+  purge_at     TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL)
 ) STRICT;
 
 CREATE TABLE tally_expense_split (
@@ -76,7 +106,10 @@ CREATE TABLE tally_settlement (
   amount_minor  INTEGER NOT NULL CHECK (amount_minor > 0),
   paid_on       TEXT NOT NULL,
   txn_id        TEXT REFERENCES core_transaction(txn_id),
-  created_at    TEXT NOT NULL
+  created_at    TEXT NOT NULL,
+  -- Trash pair + guard (issue #441 A4).
+  deleted_at    TEXT,
+  purge_at      TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL)
 ) STRICT;
 
 CREATE INDEX tally_expense_group_idx ON tally_expense(group_id);

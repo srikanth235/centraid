@@ -1,13 +1,13 @@
 // Formatting + identity/status helpers — pure functions of their arguments
-// (verbatim mapping from the People prototype), plus `data.circles` lookups
-// (`circleName`) that take `data` as a plain argument rather than a closure.
+// (verbatim mapping from the People prototype), plus `data.lists` lookups
+// (`listName`) that take `data` as a plain argument rather than a closure.
 // None hold or mutate app state. Split out of app.jsx so the orchestrator and
 // every component (Sidebar/Grid/List/Details/Journal/Activity) can call these
 // directly instead of threading them all as props.
 
 // The per-contact palette (prototype). Avatar hues come from here or a name
-// hash; a circle's chrome dot hashes its id into the same eight colours so a
-// circle is always the same colour.
+// hash; a list's chrome dot hashes its id into the same eight colours so a
+// list is always the same colour.
 export const PALETTE = [
   '#7C5BD9',
   '#2EA098',
@@ -125,14 +125,14 @@ export function hashInt(s) {
 export function avatarColor(p) {
   return p.avatar_color || PALETTE[hashInt(p.name) % PALETTE.length];
 }
-// Circle chrome dot: deterministic from the circle id.
-export function circleColor(circleId) {
-  if (circleId == null) return 'var(--ink-3)';
-  return PALETTE[hashInt(circleId) % PALETTE.length];
+// List chrome dot: deterministic from the list id.
+export function listColor(listId) {
+  if (listId == null) return 'var(--ink-3)';
+  return PALETTE[hashInt(listId) % PALETTE.length];
 }
-export function circleName(data, id) {
+export function listName(data, id) {
   if (id == null) return '—';
-  const c = data.circles.find((x) => x.circle_id === id);
+  const c = data.lists.find((x) => x.list_id === id);
   return c ? c.name : '—';
 }
 

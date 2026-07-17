@@ -81,6 +81,20 @@ function addCircleMember(ctx: HandlerCtx, circleId: string, partyId: string): vo
 
 const GROUP_EXISTS_SQL = 'SELECT count(*) AS n FROM tally_group WHERE group_id = :group_id';
 const EXPENSE_EXISTS_SQL = 'SELECT count(*) AS n FROM tally_expense WHERE expense_id = :expense_id';
+// A live expense is one not in the trash — the guard for edit/memo/trash so you
+// cannot mutate or re-trash a row already on its way out (issue #441 A4).
+const EXPENSE_LIVE_SQL =
+  'SELECT count(*) AS n FROM tally_expense WHERE expense_id = :expense_id AND deleted_at IS NULL';
+const EXPENSE_TRASHED_SQL =
+  'SELECT count(*) AS n FROM tally_expense WHERE expense_id = :expense_id AND deleted_at IS NOT NULL';
+
+/** ~30-day trash grace window before the sweep purges — mirrors Docs/Locker. */
+const PURGE_WINDOW_DAYS = 30;
+function plusDays(iso: string, days: number): string {
+  const d = new Date(iso);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString();
+}
 
 /** The vault's base currency — settlements are recorded in it. */
 function baseCurrency(ctx: HandlerCtx): string {
@@ -189,7 +203,6 @@ const ADD_FRIEND: CommandDefinition = {
     additionalProperties: false,
     properties: {
       name: { type: 'string', minLength: 1 },
-      avatar_color: { type: 'string' },
     },
   },
   outputSchema: {
@@ -210,7 +223,9 @@ const ADD_FRIEND: CommandDefinition = {
   idempotency: 'once',
   risk: 'low',
   handler: (ctx) => {
-    const input = ctx.input as { name: string; avatar_color?: string };
+    // The avatar hue is no longer stored on the friend row (issue #441 A3) —
+    // one hue per party, read from people_profile or derived from party_id.
+    const input = ctx.input as { name: string };
     const partyId = ctx.newId();
     ctx.db
       .prepare(
@@ -221,10 +236,8 @@ const ADD_FRIEND: CommandDefinition = {
     ctx.wrote('core.party', partyId);
     const friendId = ctx.newId();
     ctx.db
-      .prepare(
-        'INSERT INTO tally_friend (friend_id, party_id, avatar_color, created_at) VALUES (?, ?, ?, ?)',
-      )
-      .run(friendId, partyId, input.avatar_color ?? null, ctx.now);
+      .prepare('INSERT INTO tally_friend (friend_id, party_id, created_at) VALUES (?, ?, ?)')
+      .run(friendId, partyId, ctx.now);
     ctx.wrote('tally.friend', friendId);
     ctx.cite({
       claim: `"${input.name}" added to Tally`,
@@ -531,9 +544,7 @@ const EDIT_EXPENSE: CommandDefinition = {
     },
   },
   outputSchema: { type: 'object', properties: { expense_id: { type: 'string' } } },
-  preconditions: [
-    { name: 'expense_exists', sql: EXPENSE_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
-  ],
+  preconditions: [{ name: 'expense_live', sql: EXPENSE_LIVE_SQL, column: 'n', op: 'eq', value: 1 }],
   postconditions: [],
   idempotency: 'idempotent',
   risk: 'low',
@@ -589,18 +600,55 @@ const DELETE_EXPENSE: CommandDefinition = {
     properties: { expense_id: { type: 'string', minLength: 1 } },
   },
   outputSchema: { type: 'object', properties: { expense_id: { type: 'string' } } },
-  preconditions: [
-    { name: 'expense_exists', sql: EXPENSE_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
-  ],
+  preconditions: [{ name: 'expense_live', sql: EXPENSE_LIVE_SQL, column: 'n', op: 'eq', value: 1 }],
   postconditions: [
-    { name: 'expense_gone', sql: EXPENSE_EXISTS_SQL, column: 'n', op: 'eq', value: 0 },
+    { name: 'expense_trashed', sql: EXPENSE_TRASHED_SQL, column: 'n', op: 'eq', value: 1 },
   ],
   idempotency: 'once',
   risk: 'low',
   handler: (ctx) => {
+    // Reversible grace-window trash (issue #441 A4), not an instant hard delete.
+    // Splits stay put — the balance engine already ignores them once the expense
+    // drops out of the deleted_at IS NULL window, and the sweep cascades them at
+    // purge (tally_expense_split ON DELETE CASCADE) along with cleaning the
+    // expense's polymorphic references (its memo annotation among them).
     const expenseId = String((ctx.input as { expense_id: string }).expense_id);
-    ctx.db.prepare('DELETE FROM tally_expense_split WHERE expense_id = ?').run(expenseId);
-    ctx.db.prepare('DELETE FROM tally_expense WHERE expense_id = ?').run(expenseId);
+    ctx.db
+      .prepare(
+        'UPDATE tally_expense SET deleted_at = :now, purge_at = :purge WHERE expense_id = :expense_id',
+      )
+      .run({ expense_id: expenseId, now: ctx.now, purge: plusDays(ctx.now, PURGE_WINDOW_DAYS) });
+    ctx.wrote('tally.expense', expenseId);
+    return { expense_id: expenseId };
+  },
+};
+
+const RESTORE_EXPENSE: CommandDefinition = {
+  name: 'tally.restore_expense',
+  ownerSchema: 'tally',
+  inputSchema: {
+    type: 'object',
+    required: ['expense_id'],
+    additionalProperties: false,
+    properties: { expense_id: { type: 'string', minLength: 1 } },
+  },
+  outputSchema: { type: 'object', properties: { expense_id: { type: 'string' } } },
+  preconditions: [
+    { name: 'expense_trashed', sql: EXPENSE_TRASHED_SQL, column: 'n', op: 'eq', value: 1 },
+  ],
+  postconditions: [
+    { name: 'expense_live', sql: EXPENSE_LIVE_SQL, column: 'n', op: 'eq', value: 1 },
+  ],
+  idempotency: 'idempotent',
+  risk: 'low',
+  handler: (ctx) => {
+    // Lossless restore within the grace window — splits were never dropped.
+    const expenseId = String((ctx.input as { expense_id: string }).expense_id);
+    ctx.db
+      .prepare(
+        'UPDATE tally_expense SET deleted_at = NULL, purge_at = NULL WHERE expense_id = :expense_id',
+      )
+      .run({ expense_id: expenseId });
     ctx.wrote('tally.expense', expenseId);
     return { expense_id: expenseId };
   },
@@ -783,9 +831,7 @@ const SET_EXPENSE_MEMO: CommandDefinition = {
     },
   },
   outputSchema: { type: 'object', properties: { expense_id: { type: 'string' } } },
-  preconditions: [
-    { name: 'expense_exists', sql: EXPENSE_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
-  ],
+  preconditions: [{ name: 'expense_live', sql: EXPENSE_LIVE_SQL, column: 'n', op: 'eq', value: 1 }],
   postconditions: [],
   idempotency: 'idempotent',
   risk: 'low',
@@ -811,6 +857,7 @@ export function registerTallyCommands(gateway: Gateway): void {
   gateway.registerCommand(ADD_EXPENSE);
   gateway.registerCommand(EDIT_EXPENSE);
   gateway.registerCommand(DELETE_EXPENSE);
+  gateway.registerCommand(RESTORE_EXPENSE);
   gateway.registerCommand(SETTLE_UP);
   gateway.registerCommand(BIND_TXN);
   gateway.registerCommand(SET_EXPENSE_MEMO);

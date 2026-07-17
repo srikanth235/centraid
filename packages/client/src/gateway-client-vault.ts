@@ -433,15 +433,3 @@ export async function vaultConnectionSetStatus(
   );
   await readJson(res, 'set connection status');
 }
-
-/** Purge demo rows — one app's, or every app's when appId is omitted. */
-export async function vaultDemoPurge(
-  appId?: string,
-): Promise<{ purged: number; blocked: unknown[] }> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_vault/demo${appId ? `/${enc(appId)}` : ''}`, {
-    method: 'DELETE',
-    headers: authHeaders(token),
-  });
-  return readJson<{ purged: number; blocked: unknown[] }>(res, 'purge demo data');
-}

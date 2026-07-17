@@ -59,6 +59,17 @@ import {
   type OutboxWireRequest,
 } from '../serve/outbox-edit.js';
 import {
+  atlasCensus,
+  atlasGraph,
+  atlasPulse,
+  browseTableList,
+  browseColumns,
+  browseRows,
+  browseRow,
+  browseRefSearch,
+  browseDependents,
+  BrowseError,
+  BROWSE_MAX_LIMIT,
   listVaultEntities,
   mediaLocationPolicy,
   readBlobStoreSettings,
@@ -656,6 +667,135 @@ export function makeVaultRouteHandler(
         return sendJson(res, 200, { entities: listVaultEntities() });
       }
 
+      // The Vault Atlas (issue #441 Part B): three read-only owner census
+      // surfaces over the registered ontology. All computed on request — an
+      // owner ops screen, not a hot path. Numbers are derived from the live
+      // schema (the FK walk, dbstat, the journal), never hardcoded.
+      if (method === 'GET' && segments[0] === 'atlas' && segments.length === 2) {
+        if (segments[1] === 'stats') {
+          return sendJson(res, 200, atlasCensus(plane.db.vault, plane.db.journal));
+        }
+        if (segments[1] === 'graph') {
+          // FK edges + per-edge fill + BFS rings, plus core_link aggregation
+          // as a SEPARATE collection (FK ≠ core_link — the trap this must not
+          // fall into). See atlas-census.ts.
+          return sendJson(res, 200, atlasGraph(plane.db.vault));
+        }
+        if (segments[1] === 'pulse') {
+          return sendJson(res, 200, atlasPulse(plane.db.journal));
+        }
+      }
+
+      // The Vault Atlas Browse tab (issue #441 Part B, B3): a vault-aware
+      // table editor. Reads are owner-trust census over the ontology; writes
+      // ride the journalled command pipeline (atlas.* commands) with the
+      // owner-device credential so every edit is a receipted operator act and
+      // ships in the replica change log. All under `/atlas/browse/...`.
+      if (segments[0] === 'atlas' && segments[1] === 'browse' && segments.length === 3) {
+        const sub = segments[2];
+        const table = url.searchParams.get('table') ?? '';
+        try {
+          if (method === 'GET' && sub === 'tables') {
+            return sendJson(res, 200, { tables: browseTableList(plane.db.vault) });
+          }
+          if (method === 'GET' && sub === 'columns') {
+            return sendJson(res, 200, browseColumns(plane.db.vault, table));
+          }
+          if (method === 'GET' && sub === 'rows') {
+            const limitParam = Number(url.searchParams.get('limit'));
+            const dirParam = url.searchParams.get('dir');
+            return sendJson(
+              res,
+              200,
+              browseRows(plane.db.vault, {
+                table,
+                ...(Number.isFinite(limitParam) && limitParam > 0
+                  ? { limit: Math.min(limitParam, BROWSE_MAX_LIMIT) }
+                  : {}),
+                ...(url.searchParams.get('after') ? { after: url.searchParams.get('after')! } : {}),
+                ...(url.searchParams.get('orderBy')
+                  ? { orderBy: url.searchParams.get('orderBy')! }
+                  : {}),
+                ...(dirParam === 'desc' ? { dir: 'desc' as const } : {}),
+              }),
+            );
+          }
+          if (method === 'GET' && sub === 'row') {
+            return sendJson(
+              res,
+              200,
+              browseRow(plane.db.vault, table, url.searchParams.get('id') ?? ''),
+            );
+          }
+          if (method === 'GET' && sub === 'ref-search') {
+            return sendJson(res, 200, {
+              hits: browseRefSearch(plane.db.vault, table, url.searchParams.get('query') ?? ''),
+            });
+          }
+          if (method === 'GET' && sub === 'dependents') {
+            return sendJson(
+              res,
+              200,
+              browseDependents(plane.db.vault, table, url.searchParams.get('id') ?? ''),
+            );
+          }
+        } catch (err) {
+          if (err instanceof BrowseError) {
+            const status = err.code === 'bad_request' ? 400 : 404;
+            return sendJson(res, status, { error: err.code, message: err.message });
+          }
+          throw err;
+        }
+
+        if (method === 'POST' && sub === 'insert') {
+          const body = await readJson(req);
+          return runBrowseWrite(res, plane, 'atlas.insert_row', {
+            table: body['table'],
+            values: body['values'],
+            ...(body['unlockMachinery'] === true ? { unlockMachinery: true } : {}),
+          });
+        }
+        if (method === 'POST' && sub === 'update') {
+          const body = await readJson(req);
+          return runBrowseWrite(res, plane, 'atlas.update_row', {
+            table: body['table'],
+            id: body['id'],
+            set: body['set'],
+            ...(body['unlockMachinery'] === true ? { unlockMachinery: true } : {}),
+          });
+        }
+        if (method === 'POST' && sub === 'delete') {
+          const body = await readJson(req);
+          const delTable = typeof body['table'] === 'string' ? body['table'] : '';
+          const delId = typeof body['id'] === 'string' ? body['id'] : '';
+          // Preflight the dependent walk so a blocked delete returns the FULL
+          // dependent payload (engine + polymorphic) as a 409 — the command's
+          // own guard only surfaces a reason string through the pipeline.
+          try {
+            const deps = browseDependents(plane.db.vault, delTable, delId);
+            if (deps.hasEngineDependents) {
+              return sendJson(res, 409, {
+                error: 'has_dependents',
+                message: `${deps.totalRows} row(s) reference this row`,
+                dependents: deps.dependents,
+                totalRows: deps.totalRows,
+              });
+            }
+          } catch (err) {
+            if (err instanceof BrowseError) {
+              const status = err.code === 'bad_request' ? 400 : 404;
+              return sendJson(res, status, { error: err.code, message: err.message });
+            }
+            throw err;
+          }
+          return runBrowseWrite(res, plane, 'atlas.delete_row', {
+            table: body['table'],
+            id: body['id'],
+            ...(body['unlockMachinery'] === true ? { unlockMachinery: true } : {}),
+          });
+        }
+      }
+
       if (method === 'GET' && segments[0] === 'picker' && segments.length === 1) {
         const term = url.searchParams.get('term') ?? undefined;
         const kindsParam = url.searchParams.get('kinds');
@@ -839,6 +979,37 @@ async function handleVaultsRoute(
   } catch (err) {
     return sendRegistryError(res, err);
   }
+}
+
+/**
+ * Run a Browse write (issue #441 B3) through the journalled command pipeline
+ * with the owner-device credential, and shape the outcome: `executed` → 200
+ * with the command output; `denied`/`failed` → 4xx with the reason (STRICT
+ * NOT NULL / CHECK violations, sealed-column or machinery refusals all land
+ * here as a clean error, never a crash).
+ */
+function runBrowseWrite(
+  res: ServerResponse,
+  plane: VaultPlane,
+  command: string,
+  input: Record<string, unknown>,
+): boolean {
+  const outcome = plane.gateway.invoke(plane.ownerCredential, {
+    command,
+    input,
+    purpose: 'dpv:ServiceProvision',
+  });
+  if (outcome.status === 'executed') {
+    return sendJson(res, 200, { ok: true, ...(outcome.output as Record<string, unknown>) });
+  }
+  if (outcome.status === 'replayed') {
+    return sendJson(res, 200, { ok: true, ...(outcome.output as Record<string, unknown>) });
+  }
+  // Everything else — denied / parked / failed — carries a reason.
+  return sendJson(res, outcome.status === 'denied' ? 403 : 400, {
+    ok: false,
+    error: outcome.reason,
+  });
 }
 
 function sendRegistryError(res: ServerResponse, err: unknown): boolean {

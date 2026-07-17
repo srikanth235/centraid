@@ -11,9 +11,10 @@
 //  - business_invoice.issued_on is NOT NULL with no default, which doesn't
 //    cleanly fit draft-then-send. v1 stamps issued_on at draft creation;
 //    revisit as a migration only if the loose semantics bite.
-//  - business_invoice_line.qty_scaled carries no paired scale column (unlike
-//    finance_fx_rate). Convention fixed here: qty_scaled is HOURS × 100
-//    (hundredths of an hour), so amount_minor = qty_scaled × unit_price_minor / 100.
+//  - business_invoice_line.qty_scaled now carries its paired qty_scale column
+//    (issue #441 A3), the pair finance_holding already uses. Time-entry lines
+//    bill HOURS × 100 (hundredths of an hour), so qty_scale is a fixed 2 and
+//    amount_minor = qty_scaled × unit_price_minor / 100.
 //
 // mark_invoice_paid links an EXISTING core_transaction: no command anywhere
 // synthesizes ledger rows (which account? no seeded one exists), and
@@ -513,20 +514,23 @@ function createDraftInvoice(ctx: HandlerCtx): Record<string, unknown> {
   for (const row of entryRows) {
     const hours =
       (new Date(row.ended_at as string).getTime() - new Date(row.started_at).getTime()) / 3_600_000;
-    // qty_scaled = hours × 100 (hundredths of an hour, see header comment).
+    // qty_scaled = hours × 100 (hundredths of an hour, see header comment), so
+    // the paired scale is a fixed 2 (issue #441 A3).
     const qtyScaled = Math.max(1, Math.round(hours * 100));
+    const qtyScale = 2;
     const amount = Math.round((qtyScaled * (row.rate_minor as number)) / 100);
     const lineId = ctx.newId();
     ctx.db
       .prepare(
-        `INSERT INTO business_invoice_line (line_id, invoice_id, description, qty_scaled, unit_price_minor, amount_minor)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO business_invoice_line (line_id, invoice_id, description, qty_scaled, qty_scale, unit_price_minor, amount_minor)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         lineId,
         invoiceId,
         `${row.project_name} — ${row.started_at.slice(0, 10)}`,
         qtyScaled,
+        qtyScale,
         row.rate_minor,
         amount,
       );

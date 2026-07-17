@@ -1,5 +1,5 @@
 // The "Add someone" modal (#modalRoot root). A self-contained, stateful leaf:
-// its own name/role/circle/cadence draft, focused once on mount. Calls up to
+// its own name/role/list/cadence draft, focused once on mount. Calls up to
 // `onSubmit` with the assembled fields; on success the caller closes the
 // modal (unmounting this component) and opens the new person's drawer, same
 // as the old version. On failure/park, the draft and open state stay put so
@@ -13,11 +13,11 @@ const CADENCE_OPTS = [
   { d: 90, l: 'Quarterly' },
 ];
 
-export function AddPersonModal({ circles, onSubmit, onClose }) {
+export function AddPersonModal({ lists, onSubmit, onClose }) {
   const nameRef = useRef(null);
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
-  const [circleId, setCircleId] = useState(null);
+  const [listId, setListId] = useState(null);
   const [cadence, setCadence] = useState(30);
   const [busy, setBusy] = useState(false);
 
@@ -25,13 +25,13 @@ export function AddPersonModal({ circles, onSubmit, onClose }) {
     nameRef.current?.focus();
   }, []);
 
-  const circleOpts = [{ circle_id: null, name: 'No circle' }, ...circles];
+  const listOpts = [{ list_id: null, name: 'No list' }, ...lists];
 
   const submit = async () => {
     const trimmed = name.trim();
     if (!trimmed) return;
     setBusy(true);
-    const ok = await onSubmit({ name: trimmed, role: role.trim(), circleId, cadence });
+    const ok = await onSubmit({ name: trimmed, role: role.trim(), listId, cadence });
     if (!ok) setBusy(false);
   };
 
@@ -56,15 +56,15 @@ export function AddPersonModal({ circles, onSubmit, onClose }) {
           value={role}
           onChange={(e) => setRole(e.target.value)}
         />
-        <div className="d-modal-label">Circle</div>
+        <div className="d-modal-label">List</div>
         <div className="d-pick">
-          {circleOpts.map((c) => (
+          {listOpts.map((c) => (
             <button
-              key={c.circle_id ?? 'none'}
+              key={c.list_id ?? 'none'}
               type="button"
               className="kit-chip quiet"
-              aria-pressed={String(circleId === c.circle_id)}
-              onClick={() => setCircleId(c.circle_id)}
+              aria-pressed={String(listId === c.list_id)}
+              onClick={() => setListId(c.list_id)}
             >
               {c.name}
             </button>

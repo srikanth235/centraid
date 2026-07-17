@@ -139,6 +139,67 @@ export {
   JOURNAL_TABLES,
   type EntityRef,
 } from './schema/tables.js';
+// Issue #441 Part B: the Vault Atlas mapping (table → kind → pack).
+export {
+  ONTOLOGY_PACKS,
+  MACHINERY_BANDS,
+  ATLAS_PACK_LABELS,
+  packKindOf,
+  humanizeKind,
+  atlasTables,
+  atlasTablesByPhysical,
+  atlasTablesByLogical,
+  type AtlasPackKind,
+  type AtlasTableEntry,
+} from './schema/atlas.js';
+// Issue #441 Part B: the Atlas census/graph/pulse payload builders.
+export {
+  atlasCensus,
+  atlasGraph,
+  atlasPulse,
+  ATLAS_GRAPH_CENTER,
+  ATLAS_PULSE_WINDOW_DAYS,
+  type AtlasCensusPayload,
+  type AtlasCensusPack,
+  type AtlasCensusTable,
+  type AtlasGraphPayload,
+  type AtlasGraphNode,
+  type AtlasFkEdge,
+  type AtlasAuthoredLink,
+  type AtlasPulsePayload,
+  type AtlasPulseSeries,
+  type AtlasPulseDay,
+} from './schema/atlas-census.js';
+// Issue #441 Part B (B3): the Browse read side — table picker, keyset row
+// grid, column metadata, FK reference search, and dependent preview.
+export {
+  browseTableList,
+  browseColumns,
+  browseRows,
+  browseRow,
+  displayFieldOf,
+  primaryKeyColumns,
+  keysetKey,
+  resolveBrowseTable,
+  BrowseError,
+  BROWSE_MAX_LIMIT,
+  BROWSE_DEFAULT_LIMIT,
+  BROWSE_REF_SEARCH_LIMIT,
+  DISPLAY_FIELD_CANDIDATES,
+  type BrowseTableEntry,
+  type BrowseColumn,
+  type BrowseColumnsResult,
+  type BrowseRowsParams,
+  type BrowseRowsResult,
+  type BrowseRowResult,
+} from './schema/atlas-browse.js';
+export {
+  browseRefSearch,
+  browseDependents,
+  type BrowseRefHit,
+  type BrowseDependent,
+  type BrowseDependentsResult,
+} from './schema/atlas-browse-refs.js';
 export {
   formatReplicaCursor,
   parseReplicaCursor,
@@ -374,13 +435,20 @@ export { registerMediaCommands } from './commands/media.js';
 export { registerDocumentCommands, FOLDER_SCHEME_URI } from './commands/documents.js';
 export { FLAGS_SCHEME_URI, STARRED_NOTATION } from './commands/flags.js';
 export { registerHomeCommands } from './commands/home.js';
-export { registerPeopleCommands, CIRCLE_SCHEME_URI } from './commands/people.js';
+export { registerPeopleCommands, LIST_SCHEME_URI } from './commands/people.js';
 export { registerLockerCommands, LOCKER_ITEM_TYPE } from './commands/locker.js';
 export { registerTallyCommands } from './commands/tally.js';
 export { registerSyncCommands } from './commands/sync.js';
 export { registerEnrichCommands } from './commands/enrich.js';
 export { registerOutboxCommands } from './commands/outbox.js';
 export { registerJudgmentCommands } from './commands/judgment.js';
+// Issue #441 Part B (B3): the Browse write trio — journalled row CRUD.
+export {
+  registerAtlasCommands,
+  ATLAS_OWNER_SCHEMA,
+  AtlasDeleteBlockedError,
+  type AtlasDependentsRefusal,
+} from './commands/atlas.js';
 
 export {
   AGENT_CONTENT_VARIANTS,

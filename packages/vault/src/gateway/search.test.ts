@@ -4,6 +4,7 @@
 
 import { beforeEach, describe, expect, test } from 'vitest';
 import { registerKnowledgeCommands } from '../commands/knowledge.js';
+import { registerPeopleCommands } from '../commands/people.js';
 import { bootstrapVault, createGrant, enrollApp, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from './gateway.js';
@@ -27,6 +28,12 @@ function createNote(title: string, body: string): string {
   return (outcome.output as { note_id: string }).note_id;
 }
 
+function execOut<T>(command: string, input: Record<string, unknown>): T {
+  const outcome = gw.invoke(owner, { command, input, purpose: PURPOSE });
+  if (outcome.status !== 'executed') throw new Error(`${command} ${outcome.status}`);
+  return outcome.output as T;
+}
+
 function appCred(scopes: Parameters<typeof createGrant>[1]['scopes']): Credential {
   const app = enrollApp(db, { name: `app-${Math.random().toString(36).slice(2, 8)}` });
   createGrant(db, {
@@ -43,6 +50,7 @@ beforeEach(() => {
   boot = bootstrapVault(db, { ownerName: 'Priya' });
   gw = createGateway(db);
   registerKnowledgeCommands(gw);
+  registerPeopleCommands(gw);
   owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
 });
 
@@ -123,6 +131,53 @@ describe('index-backed matching', () => {
         })
         .rows.map((row) => row.content_id),
     ).toEqual(['photo-a']);
+  });
+
+  test('a People interaction body is searchable through the command layer (issue #441 A2.2)', () => {
+    // "Everything I wrote about Ravi" — the interaction body must reach search.
+    const { party_id } = execOut<{ party_id: string }>('people.add_person', {
+      display_name: 'Ravi',
+      cadence_days: 30,
+    });
+    const { interaction_id } = execOut<{ interaction_id: string }>('people.log_interaction', {
+      party_id,
+      kind: 'call',
+      text: 'talked about the Ladakh trek plans',
+    });
+
+    const hits = gw.search(owner, {
+      entity: 'people.interaction',
+      query: 'ladakh trek',
+      purpose: PURPOSE,
+    }).rows;
+    expect(hits.map((r) => r.interaction_id)).toContain(interaction_id);
+  });
+
+  test('People gift and journal bodies are searchable too (issue #441 A2.2)', () => {
+    const { party_id } = execOut<{ party_id: string }>('people.add_person', {
+      display_name: 'Ravi',
+      cadence_days: 30,
+    });
+    const { gift_id } = execOut<{ gift_id: string }>('people.add_gift', {
+      party_id,
+      text: 'a handmade ceramic mug',
+    });
+    expect(
+      gw
+        .search(owner, { entity: 'people.gift', query: 'ceramic mug', purpose: PURPOSE })
+        .rows.map((r) => r.gift_id),
+    ).toContain(gift_id);
+
+    const { entry_id } = execOut<{ entry_id: string }>('people.add_journal_entry', {
+      entry_date: '2026-07-17',
+      mood: 'grateful',
+      text: 'a quiet morning writing',
+    });
+    expect(
+      gw
+        .search(owner, { entity: 'people.journal_entry', query: 'quiet morning', purpose: PURPOSE })
+        .rows.map((r) => r.entry_id),
+    ).toContain(entry_id);
   });
 
   test('matches title and canonical body, ranked, with a snippet', () => {

@@ -1,0 +1,287 @@
+/* Kinds tab — the periodic table of the ontology (issue #441 B1). Co-located
+   with AtlasKindsTab.tsx. A census sentence up top, then one grid section per
+   ontology pack where every kind holds a permanent cell (populated cells carry
+   a count + write-pulse sparkline; empty kinds are dashed ghosts), and a
+   collapsed machinery shelf beneath. Mobile-first: the grid packs to whatever
+   width it has and gains columns on wider viewports via auto-fill. */
+
+.tab {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+/* ── Census header ─────────────────────────────────────────────────────── */
+.census {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.censusSentence {
+  margin: 0;
+  font: var(--t-h2);
+  font-family: var(--font-display);
+  color: var(--ink-2);
+  max-width: 62ch;
+}
+.num {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.censusControls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Rows/Bytes segmented control. */
+.metricToggle {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  border: 0.5px solid var(--line);
+}
+.metricOption {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition:
+    color 0.15s var(--ease, ease),
+    background 0.15s var(--ease, ease);
+}
+.metricOption[data-active='true'] {
+  color: var(--ink);
+  background: var(--bg-elev);
+}
+.metricOption:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 0.5px solid var(--line);
+  background: var(--bg-elev);
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: color 0.15s var(--ease, ease);
+}
+.refresh:hover {
+  color: var(--ink);
+}
+.refresh:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.refreshStamp {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+}
+
+/* ── Per-pack section ──────────────────────────────────────────────────── */
+.pack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.packHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 0.5px solid var(--line);
+  padding-bottom: 6px;
+}
+.packLabel {
+  margin: 0;
+  font: var(--t-title);
+  color: var(--ink);
+}
+.packMeta {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: 8px;
+}
+@media (min-width: 720px) {
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+}
+
+/* ── Kind cell ─────────────────────────────────────────────────────────── */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 88px;
+  padding: 11px 12px;
+  text-align: left;
+  border-radius: 11px;
+  border: 0.5px solid var(--line);
+  background: var(--bg-elev);
+  color: var(--ink);
+  cursor: pointer;
+  transition:
+    border-color 0.15s var(--ease, ease),
+    transform 0.1s var(--ease, ease);
+}
+.card:hover {
+  border-color: var(--accent);
+}
+.card:active {
+  transform: translateY(0.5px);
+}
+.cardGhost {
+  border-style: dashed;
+  background: none;
+  color: var(--ink-4);
+  cursor: pointer;
+}
+.cardGhost:hover {
+  border-color: var(--line-strong);
+}
+.cardLabel {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.25;
+  color: inherit;
+}
+.cardGhostNote {
+  margin-top: auto;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.cardValue {
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.cardQuiet {
+  margin-top: auto;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.cardSparkPad {
+  margin-top: auto;
+  height: 22px;
+}
+
+/* Write-pulse sparkline. */
+.spark {
+  margin-top: auto;
+  width: 100%;
+  height: 22px;
+  display: block;
+}
+.sparkBar {
+  fill: var(--accent);
+}
+.sparkZero {
+  fill: var(--line-strong);
+}
+
+/* ── Machinery shelf ───────────────────────────────────────────────────── */
+.machinery {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+.machineryToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border: none;
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  border-top: 0.5px solid var(--line);
+  transition: color 0.15s var(--ease, ease);
+}
+.machineryToggle:hover {
+  color: var(--ink);
+}
+.machineryTitle {
+  font: var(--t-title);
+  color: inherit;
+}
+.machineryMeta {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.machineryTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.machineryTable th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  padding: 6px 10px;
+  border-bottom: 0.5px solid var(--line);
+}
+.machineryRow {
+  cursor: pointer;
+  color: var(--ink-2);
+}
+.machineryRow:hover {
+  background: var(--bg-sunken);
+}
+.machineryRow td {
+  padding: 7px 10px;
+  border-bottom: 0.5px solid var(--line);
+}
+.machineryPack {
+  color: var(--ink-4);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.numCol {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}

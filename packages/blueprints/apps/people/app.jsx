@@ -1,6 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit (#363) blueprint apps ship a single app.jsx entry per the kit's convention (see sibling docs/photos/tally); splitting would break the served-as-one-module contract static-server.ts assumes
 // People — your circle, remembered. A pure projection over the personal
-// vault. Every row is a core.party; circles are collections, cadence and
+// vault. Every row is a core.party; lists are collections, cadence and
 // stars are judgments the vault holds, notes/tasks/gifts/debts/dates hang
 // off the party, and interactions are the touch log. The app stores nothing
 // of its own: revoke the grant and this page goes dark while the people,
@@ -17,7 +17,7 @@
 // per dynamic container (created once at boot) plus module-level `state`/
 // `data` objects (mutated in place, never reassigned) and a `render()`
 // orchestrator fanning out to each root's `.render(...)` call — the same
-// docs/tasks/notes pattern. Popovers (kebab / move-to-circle) stay plain DOM
+// docs/tasks/notes pattern. Popovers (kebab / move-to-list) stay plain DOM
 // built with kit's `h()`/`popItem()`, exactly as before — no React root
 // needed there. `emptyState()`/`showSkeleton()`/`readFailed()` remain the raw
 // kit.js DOM helpers because `#empty` and the boot skeleton in `#list` were
@@ -36,9 +36,9 @@ import {
 } from './kit.js';
 import { createLogic } from './logic.js';
 import { wireChrome } from './chrome.js';
-import { avatarColor, circleName, hashInt, PALETTE } from './format.js';
+import { avatarColor, listName, hashInt, PALETTE } from './format.js';
 import { I } from './icons.js';
-import { CircleList, JournalNav, SmartNav, Storage } from './components/Sidebar.jsx';
+import { ListList, JournalNav, SmartNav, Storage } from './components/Sidebar.jsx';
 import { StatusChips } from './components/Toolbar.jsx';
 import { BulkBar } from './components/BulkBar.jsx';
 import { NewMenu } from './components/NewMenu.jsx';
@@ -71,11 +71,11 @@ const CHANGE_TABLES = [
 
 // ---------- State ----------
 
-const data = { people: [], circles: [] };
+const data = { people: [], lists: [] };
 
 const state = {
   view: document.documentElement.getAttribute('data-app-view') === 'list' ? 'list' : 'grid',
-  nav: { kind: 'all' }, // all | reconnect | upcoming | starred | circle(id) | journal | activity
+  nav: { kind: 'all' }, // all | reconnect | upcoming | starred | list(id) | journal | activity
   chip: 'all', // all | overdue | due | ok
   sortKey: 'last', // last | name | cadence
   sortDir: -1,
@@ -88,8 +88,8 @@ const state = {
   detailAdders: {}, // which "+ add" affordances are revealed in the drawer
   newMenuOpen: false,
   addModalOpen: false,
-  creatingCircle: false,
-  renamingCircleId: null,
+  creatingList: false,
+  renamingListId: null,
   narrow: false,
   peopleWindow: 200,
   peopleTruncated: false,
@@ -117,7 +117,7 @@ const logic = createLogic({
 // ---------- Roots ----------
 
 let smartNavRoot;
-let circleListRoot;
+let listListRoot;
 let journalNavRoot;
 let storageRoot;
 let statusChipsRoot;
@@ -155,25 +155,25 @@ function renderSidebar() {
   smartNavRoot.render(
     <SmartNav navKind={state.nav.kind} people={data.people} onSelectNav={logic.selectNav} />,
   );
-  circleListRoot.render(
-    <CircleList
-      circles={data.circles}
+  listListRoot.render(
+    <ListList
+      lists={data.lists}
       people={data.people}
       navKind={state.nav.kind}
-      navCircleId={state.nav.circleId}
-      renamingCircleId={state.renamingCircleId}
-      creatingCircle={state.creatingCircle}
+      navListId={state.nav.listId}
+      renamingListId={state.renamingListId}
+      creatingList={state.creatingList}
       onSelectNav={logic.selectNav}
-      onStartRename={logic.startRenameCircle}
-      onDeleteCircle={logic.deleteCircle}
-      onRenameCommit={logic.renameCircle}
-      onRenameCancel={logic.cancelRenameCircle}
-      onCreateCommit={logic.createCircle}
-      onCreateCancel={logic.cancelCreateCircle}
+      onStartRename={logic.startRenameList}
+      onDeleteList={logic.deleteList}
+      onRenameCommit={logic.renameList}
+      onRenameCancel={logic.cancelRenameList}
+      onCreateCommit={logic.createList}
+      onCreateCancel={logic.cancelCreateList}
     />,
   );
   journalNavRoot.render(<JournalNav navKind={state.nav.kind} onSelectNav={logic.selectNav} />);
-  storageRoot.render(<Storage people={data.people} circles={data.circles} />);
+  storageRoot.render(<Storage people={data.people} lists={data.lists} />);
 }
 
 // ---------- Toolbar render ----------
@@ -181,7 +181,7 @@ function renderSidebar() {
 function renderToolbar() {
   const rows = state.visibleRows;
   const nav = state.nav;
-  const isPeople = ['all', 'reconnect', 'upcoming', 'starred', 'circle'].includes(nav.kind);
+  const isPeople = ['all', 'reconnect', 'upcoming', 'starred', 'list'].includes(nav.kind);
   const titles = {
     all: 'All people',
     reconnect: 'Reconnect',
@@ -190,7 +190,7 @@ function renderToolbar() {
     journal: 'Journal',
     activity: 'Activity',
   };
-  let title = nav.kind === 'circle' ? circleName(data, nav.circleId) : titles[nav.kind];
+  let title = nav.kind === 'list' ? listName(data, nav.listId) : titles[nav.kind];
   if (state.search.trim()) title = `Results for "${state.search.trim()}"`;
   $('activeTitle').textContent = title;
 
@@ -404,11 +404,7 @@ function renderDetails() {
 function renderModal() {
   modalRootReact.render(
     state.addModalOpen ? (
-      <AddPersonModal
-        circles={data.circles}
-        onSubmit={logic.addPerson}
-        onClose={logic.closeAddModal}
-      />
+      <AddPersonModal lists={data.lists} onSubmit={logic.addPerson} onClose={logic.closeAddModal} />
     ) : null,
   );
 }
@@ -424,15 +420,15 @@ function renderNewMenu() {
     return;
   }
   newMenuRoot.render(
-    <NewMenu onAddPerson={logic.openAddModal} onNewCircle={logic.startCreateCircle} />,
+    <NewMenu onAddPerson={logic.openAddModal} onNewList={logic.startCreateList} />,
   );
 }
 
 // ---------- Master render ----------
 
 function render() {
-  // A circle can vanish under us (deleted elsewhere) — fall back to All.
-  if (state.nav.kind === 'circle' && !data.circles.some((c) => c.circle_id === state.nav.circleId))
+  // A list can vanish under us (deleted elsewhere) — fall back to All.
+  if (state.nav.kind === 'list' && !data.lists.some((c) => c.list_id === state.nav.listId))
     state.nav = { kind: 'all' };
   closePopover();
   state.visibleRows = logic.currentRows(); // one source of truth for toolbar counts + rows
@@ -498,7 +494,7 @@ async function refresh() {
   // over this exact object at boot.
   const incoming = next ?? data;
   data.people = incoming.people ?? [];
-  data.circles = incoming.circles ?? [];
+  data.lists = incoming.lists ?? [];
   state.peopleTruncated = Boolean(next?.truncated);
   // Drop selections and a stale open drawer for people that no longer exist.
   state.selected = new Set(
@@ -517,7 +513,7 @@ async function refresh() {
 // One React root per dynamic container, created once and reused for every
 // subsequent render.
 smartNavRoot = createRoot($('smartNav'));
-circleListRoot = createRoot($('circleList'));
+listListRoot = createRoot($('listList'));
 journalNavRoot = createRoot($('journalNav'));
 storageRoot = createRoot($('storage'));
 statusChipsRoot = createRoot($('statusChips'));

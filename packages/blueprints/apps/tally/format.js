@@ -59,6 +59,17 @@ export const FRIEND_COLORS = [
 export function cat(c) {
   return CATS[c] || CATS.general;
 }
+
+// A friend's avatar hue is no longer stored on the tally_friend row (issue
+// #441 A3 — one hue per party). Derive a stable one from the party id so the
+// same person always renders the same colour; a people_profile hue, when the
+// party is also a CRM contact, takes precedence at the call site.
+export function friendColor(partyId) {
+  const id = String(partyId || '');
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return FRIEND_COLORS[h % FRIEND_COLORS.length];
+}
 export function tint(color) {
   return `color-mix(in oklab, ${color || '#5C677D'} 16%, transparent)`;
 }

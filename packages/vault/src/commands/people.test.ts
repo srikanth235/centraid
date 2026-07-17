@@ -3,7 +3,8 @@ import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
 import type { Credential } from '../gateway/types.js';
-import { CIRCLE_SCHEME_URI, registerPeopleCommands } from './people.js';
+import { LIST_SCHEME_URI, registerPeopleCommands } from './people.js';
+import { registerPartyCommands } from './parties.js';
 
 const FLAGS_SCHEME_URI = 'https://centraid.dev/schemes/flags';
 
@@ -17,6 +18,7 @@ beforeEach(() => {
   boot = bootstrapVault(db, { ownerName: 'Priya' });
   gw = createGateway(db);
   registerPeopleCommands(gw);
+  registerPartyCommands(gw);
   owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
 });
 
@@ -34,12 +36,12 @@ function addPerson(input: Record<string, unknown> = {}): string {
   return out<{ party_id: string }>(o).party_id;
 }
 
-function createCircle(name: string): string {
-  return out<{ circle_id: string }>(invoke('people.create_circle', { name })).circle_id;
+function createList(name: string): string {
+  return out<{ list_id: string }>(invoke('people.create_list', { name })).list_id;
 }
 
-/** The circles-scheme concept this person is currently filed under, if any. */
-function circleOf(partyId: string): string | undefined {
+/** The lists-scheme concept this person is currently filed under, if any. */
+function listOf(partyId: string): string | undefined {
   return (
     db.vault
       .prepare(
@@ -48,7 +50,7 @@ function circleOf(partyId: string): string | undefined {
            JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
           WHERE t.target_type = 'core.party' AND t.target_id = ? AND s.uri = ?`,
       )
-      .get(partyId, CIRCLE_SCHEME_URI) as { id: string } | undefined
+      .get(partyId, LIST_SCHEME_URI) as { id: string } | undefined
   )?.id;
 }
 
@@ -82,17 +84,17 @@ test('add_person mints a canonical person party plus its 1:1 profile', () => {
   });
 });
 
-test('add_person files into a circle when given, and refuses an unknown one', () => {
-  const work = createCircle('Work');
-  const partyId = addPerson({ circle_id: work });
-  expect(circleOf(partyId)).toBe(work);
+test('add_person files into a list when given, and refuses an unknown one', () => {
+  const work = createList('Work');
+  const partyId = addPerson({ list_id: work });
+  expect(listOf(partyId)).toBe(work);
   const bad = invoke('people.add_person', {
     display_name: 'Ghost',
     cadence_days: 30,
-    circle_id: 'nope',
+    list_id: 'nope',
   });
   expect(bad.status).toBe('failed');
-  if (bad.status === 'failed') expect(bad.predicate).toContain('circle_exists_if_given');
+  if (bad.status === 'failed') expect(bad.predicate).toContain('list_exists_if_given');
 });
 
 test('edit_person revises the name and profile fields', () => {
@@ -169,29 +171,29 @@ test('star/unstar are the canonical flags-scheme tag on the party (idempotent)',
   expect(starCount(partyId)).toBe(0);
 });
 
-test('move_person re-files into one circle and un-circles when omitted', () => {
+test('move_person re-files into one list and un-lists when omitted', () => {
   const partyId = addPerson();
-  const close = createCircle('Close');
-  const family = createCircle('Family');
-  expect(invoke('people.move_person', { party_id: partyId, circle_id: close }).status).toBe(
+  const close = createList('Close');
+  const family = createList('Family');
+  expect(invoke('people.move_person', { party_id: partyId, list_id: close }).status).toBe(
     'executed',
   );
-  expect(circleOf(partyId)).toBe(close);
-  expect(invoke('people.move_person', { party_id: partyId, circle_id: family }).status).toBe(
+  expect(listOf(partyId)).toBe(close);
+  expect(invoke('people.move_person', { party_id: partyId, list_id: family }).status).toBe(
     'executed',
   );
-  expect(circleOf(partyId)).toBe(family);
-  // Exactly one circle tag survives a re-file.
+  expect(listOf(partyId)).toBe(family);
+  // Exactly one list tag survives a re-file.
   const tags = db.vault
     .prepare(
       `SELECT count(*) AS n FROM core_tag t JOIN core_concept c ON c.concept_id = t.concept_id
          JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
         WHERE t.target_id = ? AND s.uri = ?`,
     )
-    .get(partyId, CIRCLE_SCHEME_URI) as { n: number };
+    .get(partyId, LIST_SCHEME_URI) as { n: number };
   expect(tags.n).toBe(1);
   expect(invoke('people.move_person', { party_id: partyId }).status).toBe('executed');
-  expect(circleOf(partyId)).toBeUndefined();
+  expect(listOf(partyId)).toBeUndefined();
 });
 
 test('add_note lands an annotation on the party (searchable owner memo)', () => {
@@ -261,6 +263,67 @@ test('important dates: a birthday auto-creates its reminder; toggle flips it', (
   ).toBe(0);
 });
 
+test('birthdays have one writer: core_party.birth_date and the People row never disagree (issue #441 A2.3)', () => {
+  const partyId = addPerson();
+  const birthDateOf = () =>
+    (
+      db.vault.prepare('SELECT birth_date FROM core_party WHERE party_id = ?').get(partyId) as {
+        birth_date: string | null;
+      }
+    ).birth_date;
+  const rowMonthDay = () =>
+    (
+      db.vault
+        .prepare(
+          "SELECT month_day FROM people_important_date WHERE party_id = ? AND label LIKE '%birthday%'",
+        )
+        .get(partyId) as { month_day: string } | undefined
+    )?.month_day;
+
+  // Direction 1 — add_important_date writes through to the party spine. No year
+  // is known, so birth_date is stored year-less (ISO 8601 --MM-DD).
+  const dateId = out<{ date_id: string }>(
+    invoke('people.add_important_date', {
+      party_id: partyId,
+      label: 'Birthday',
+      month_day: '08-12',
+    }),
+  ).date_id;
+  expect(birthDateOf()).toBe('--08-12');
+  expect(rowMonthDay()).toBe('08-12');
+  expect(birthDateOf()?.slice(-5)).toBe(rowMonthDay());
+
+  // Direction 2 — update_party's birth_date refreshes the People row's MM-DD,
+  // and a known full date is preserved with its year on the party side.
+  expect(invoke('core.update_party', { party_id: partyId, birth_date: '1990-03-04' }).status).toBe(
+    'executed',
+  );
+  expect(birthDateOf()).toBe('1990-03-04');
+  expect(rowMonthDay()).toBe('03-04');
+  expect(birthDateOf()?.slice(-5)).toBe(rowMonthDay());
+
+  // Direction 1 again — re-adding/adjusting the birthday preserves the known
+  // year already on the party and only moves MM-DD.
+  out<{ date_id: string }>(
+    invoke('people.add_important_date', {
+      party_id: partyId,
+      label: 'Birthday',
+      month_day: '12-25',
+    }),
+  );
+  expect(birthDateOf()).toBe('1990-12-25');
+  expect(birthDateOf()?.slice(-5)).toBe('12-25');
+
+  // The original People row moved too — never two disagreeing MM-DDs.
+  expect(
+    (
+      db.vault
+        .prepare('SELECT month_day FROM people_important_date WHERE date_id = ?')
+        .get(dateId) as { month_day: string }
+    ).month_day,
+  ).toBe('12-25');
+});
+
 test('relationships add with an optional pet species', () => {
   const partyId = addPerson();
   expect(
@@ -315,22 +378,22 @@ test('debts add in minor units and settle (a settled debt refuses re-settling)',
   if (again.status === 'failed') expect(again.predicate).toContain('debt_open');
 });
 
-test('circles create with unique names, rename, and delete only when empty', () => {
-  const work = createCircle('Work');
-  const twin = invoke('people.create_circle', { name: 'Work' });
+test('lists create with unique names, rename, and delete only when empty', () => {
+  const work = createList('Work');
+  const twin = invoke('people.create_list', { name: 'Work' });
   expect(twin.status).toBe('failed');
   if (twin.status === 'failed') expect(twin.predicate).toContain('name_unused');
-  expect(invoke('people.rename_circle', { circle_id: work, name: 'Colleagues' }).status).toBe(
+  expect(invoke('people.rename_list', { list_id: work, name: 'Colleagues' }).status).toBe(
     'executed',
   );
-  const partyId = addPerson({ circle_id: work });
-  const nonEmpty = invoke('people.delete_circle', { circle_id: work });
+  const partyId = addPerson({ list_id: work });
+  const nonEmpty = invoke('people.delete_list', { list_id: work });
   expect(nonEmpty.status).toBe('failed');
   if (nonEmpty.status === 'failed') {
-    expect(nonEmpty.predicate).toBe('This circle still has people in it — move them out first.');
+    expect(nonEmpty.predicate).toBe('This list still has people in it — move them out first.');
   }
   expect(invoke('people.move_person', { party_id: partyId }).status).toBe('executed');
-  expect(invoke('people.delete_circle', { circle_id: work }).status).toBe('executed');
+  expect(invoke('people.delete_list', { list_id: work }).status).toBe('executed');
 });
 
 test('journal entries attach to the owner party', () => {

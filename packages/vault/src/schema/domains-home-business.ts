@@ -121,8 +121,12 @@ CREATE TABLE business_invoice_line (
   invoice_id       TEXT NOT NULL REFERENCES business_invoice(invoice_id),
   description      TEXT NOT NULL,
   qty_scaled       INTEGER NOT NULL CHECK (qty_scaled > 0),
+  -- Scaled quantities carry their scale explicitly (issue #441 A3), the pair
+  -- finance_holding already uses: qty_scaled is qty × 10^qty_scale. Time-entry
+  -- lines bill hours to hundredths, so qty_scale = 2.
+  qty_scale        INTEGER NOT NULL CHECK (qty_scale BETWEEN 0 AND 9),
   unit_price_minor INTEGER NOT NULL CHECK (unit_price_minor >= 0),
-  amount_minor     INTEGER NOT NULL
+  amount_minor     INTEGER NOT NULL CHECK (amount_minor >= 0)
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_invoice_line_invoice ON business_invoice_line(invoice_id);
 `;

@@ -85,7 +85,7 @@ export function Details({
               className="kit-btn d-detail-btn"
               onClick={(e) => onMove(e.currentTarget)}
             >
-              Move to circle
+              Move to list
             </button>
           ) : null}
         </div>

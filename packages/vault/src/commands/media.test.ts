@@ -199,6 +199,62 @@ test('favorite and archive are first-class asset columns (issue #419)', () => {
   expect(state().archived_at).toBeNull();
 });
 
+test('favoriting a photo writes the starred flags tag on its content item (issue #441 A2.1)', () => {
+  const { asset_id, content_id } = addAsset({ data_uri: PIXEL });
+
+  // The #274 "everything I starred" query: a live flags-scheme starred tag on
+  // the canonical content item. Docs/Locker/People all appear in it — a photo
+  // must too once favorited.
+  const starredContentIds = () =>
+    (
+      db.vault
+        .prepare(
+          `SELECT t.target_id AS id FROM core_tag t
+             JOIN core_concept c ON c.concept_id = t.concept_id
+             JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
+            WHERE t.target_type = 'core.content_item'
+              AND s.uri = 'https://centraid.dev/schemes/flags'
+              AND c.notation = 'starred'`,
+        )
+        .all() as { id: string }[]
+    ).map((r) => r.id);
+
+  expect(starredContentIds()).not.toContain(content_id);
+
+  // Favorite via the focused toggle → the tag appears.
+  expect(invoke('media.set_favorite', { asset_id, favorite: 1 }).status).toBe('executed');
+  expect(starredContentIds()).toContain(content_id);
+
+  // Unfavorite → the tag is gone.
+  expect(invoke('media.set_favorite', { asset_id, favorite: 0 }).status).toBe('executed');
+  expect(starredContentIds()).not.toContain(content_id);
+
+  // Reverse-direction agreement holds across 0/1 cycles: column and tag never
+  // disagree (the postcondition would have failed the invoke otherwise).
+  const agrees = () => {
+    const row = db.vault
+      .prepare(
+        `SELECT (a.favorite = 1) = EXISTS(
+                  SELECT 1 FROM core_tag t
+                    JOIN core_concept c ON c.concept_id = t.concept_id
+                    JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
+                   WHERE t.target_type = 'core.content_item' AND t.target_id = a.content_id
+                     AND s.uri = 'https://centraid.dev/schemes/flags' AND c.notation = 'starred'
+                ) AS ok FROM media_media_asset a WHERE a.asset_id = ?`,
+      )
+      .get(asset_id) as { ok: number };
+    return row.ok === 1;
+  };
+  for (const fav of [1, 0, 1, 0]) {
+    expect(invoke('media.set_favorite', { asset_id, favorite: fav }).status).toBe('executed');
+    expect(agrees()).toBe(true);
+  }
+
+  // The general editor path (update_asset) mirrors too.
+  expect(invoke('media.update_asset', { asset_id, favorite: 1 }).status).toBe('executed');
+  expect(starredContentIds()).toContain(content_id);
+});
+
 test('add_asset carries tz_offset_min and a device thumbhash onto the asset', () => {
   const { asset_id, content_id } = addAsset({
     data_uri: PIXEL,
