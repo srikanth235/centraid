@@ -1393,7 +1393,11 @@ export class Gateway {
    */
   async sweepBlobs(
     cred: Credential,
-    options?: { skipOrphanDelete?: boolean; extraLiveRoots?: ReadonlySet<string> },
+    options?: {
+      skipOrphanDelete?: boolean;
+      extraLiveRoots?: ReadonlySet<string>;
+      graceWindowMs?: number;
+    },
   ): Promise<ReconcileResult & { receiptId: string }> {
     const owner = this.identify(cred);
     if (owner.kind !== 'owner-device')
@@ -1414,6 +1418,10 @@ export class Gateway {
     const result = await this.db.blobs.reconcile(live, {
       ...(options?.skipOrphanDelete ? { skipOrphanDelete: true } : {}),
       ...(options?.extraLiveRoots ? { extraLiveRoots: options.extraLiveRoots } : {}),
+      // Orphan-grace window (issue #439 R4): the recovery window N, as ms. The
+      // gateway resolves it from the provider's retention ladder; the delete is
+      // deferred until an orphan has been observed for longer than N.
+      ...(options?.graceWindowMs !== undefined ? { graceWindowMs: options.graceWindowMs } : {}),
     });
     // Refresh the app-readable custody-state mirror (issue #352 phase 3/4)
     // AFTER reconcile — the snapshot reflects the post-sweep steady state,
@@ -1464,6 +1472,9 @@ export class Gateway {
       detail: {
         orphansDeleted: result.orphansDeleted.length,
         orphansSkipped: result.orphansSkipped.length,
+        // Orphans held by the recovery-window grace (issue #439 R4) — deferred,
+        // not skipped; they delete on a future sweep once the grace elapses.
+        orphansGraceHeld: result.orphansGraceHeld.length,
         replicated: result.replicated.length,
         missing: result.missing,
         // The preview backstop's per-sweep yield (issue #405 §2) — 0 when no

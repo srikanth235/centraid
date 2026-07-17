@@ -17,7 +17,22 @@
 
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { loadSealKey, readSealKeyFingerprint, sealKeyFingerprint } from './schema/sealed.js';
 import { resolveEntity } from './schema/tables.js';
+
+/**
+ * Seal-key custody verdict for a restored pair (issue #439 R5). FORMAT.md calls
+ * a restore whose sealed columns can't be opened "a placebo"; this proves it or
+ * catches it:
+ *   - `not-sealed`: the vault never sealed a value (no stamped fingerprint) — no
+ *     key is expected, nothing to prove.
+ *   - `ok`: the vault has sealed secrets and the restored `seal.key` matches the
+ *     fingerprint stamped in `core_vault` — it would actually unseal.
+ *   - `missing`: the vault has sealed secrets but the restore carries no `seal.key`.
+ *   - `mismatch`: a `seal.key` is present but is not the key those secrets were
+ *     sealed with (regenerated/foreign/corrupt) — GCM garbage on every reveal.
+ */
+export type SealKeyVerdict = 'not-sealed' | 'ok' | 'missing' | 'mismatch';
 
 export interface RestoredPairReport {
   vault: { integrity: string; foreignKeyViolations: number };
@@ -25,6 +40,23 @@ export interface RestoredPairReport {
   /** Receipts whose (object_type, object_id) names a vault table row that is absent. */
   receiptsChecked: number;
   danglingReceipts: { receiptId: string; action: string; objectType: string; objectId: string }[];
+  /** Whether the restored seal key is present and unseals (issue #439 R5). */
+  sealKey: { verdict: SealKeyVerdict; expected?: string };
+}
+
+/** Prove the restored `seal.key` matches the vault's stamped fingerprint. */
+function checkSealKey(destDir: string, vault: DatabaseSync): RestoredPairReport['sealKey'] {
+  const expected = readSealKeyFingerprint(vault);
+  if (expected === null) return { verdict: 'not-sealed' };
+  let key: Buffer | null;
+  try {
+    key = loadSealKey(path.join(destDir, 'seal.key'));
+  } catch {
+    // Present but the wrong length — a corrupt key file, not an absent one.
+    return { verdict: 'mismatch', expected };
+  }
+  if (!key) return { verdict: 'missing', expected };
+  return { verdict: sealKeyFingerprint(key) === expected ? 'ok' : 'mismatch', expected };
 }
 
 function checkFile(file: string): {
@@ -52,6 +84,7 @@ function pkOf(db: DatabaseSync, physical: string): string | undefined {
 export function verifyRestoredPair(destDir: string): RestoredPairReport {
   const vault = checkFile(path.join(destDir, 'vault.db'));
   const journal = checkFile(path.join(destDir, 'journal.db'));
+  const sealKey = checkSealKey(destDir, vault.db);
   const danglingReceipts: RestoredPairReport['danglingReceipts'] = [];
   let receiptsChecked = 0;
   try {
@@ -94,5 +127,6 @@ export function verifyRestoredPair(destDir: string): RestoredPairReport {
     journal: { integrity: journal.integrity, foreignKeyViolations: journal.foreignKeyViolations },
     receiptsChecked,
     danglingReceipts,
+    sealKey,
   };
 }

@@ -518,7 +518,11 @@ export {
   type WalShipperOptions,
   type WalTickReport,
 } from './wal-shipper.js';
-export { verifyRestoredPair, type RestoredPairReport } from './restore-check.js';
+export {
+  verifyRestoredPair,
+  type RestoredPairReport,
+  type SealKeyVerdict,
+} from './restore-check.js';
 export {
   validateExtSpecs,
   canonicalSpecJson,

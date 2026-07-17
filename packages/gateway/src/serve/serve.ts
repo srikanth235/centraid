@@ -47,7 +47,13 @@ export interface ServeOptions extends BuildGatewayOptions {
 
 export interface GatewayServeHandle extends Omit<
   BuiltGateway,
-  'extraHandlers' | 'composedHandler' | 'webhookHandler' | 'webAppSessions' | 'start' | 'stop'
+  | 'extraHandlers'
+  | 'composedHandler'
+  | 'webhookHandler'
+  | 'recoverHandler'
+  | 'webAppSessions'
+  | 'start'
+  | 'stop'
 > {
   /** Bound base URL — `http://<host>:<port>`. */
   url: string;
@@ -68,10 +74,14 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
   // every one of them. The webhook handler is tried FIRST and stands
   // outside that per-request vault scope (it resolves its own owning
   // vault across all of them); it falls through (`false`) for any other
-  // URL, so `composedHandler` still sees everything else.
+  // URL, so `composedHandler` still sees everything else. The recover
+  // handler (issue #439) sits between them for the same reason — it is a
+  // pre-vault landlord act (it stands up and adopts the home vault), so it
+  // must run outside `composedHandler`'s per-request vault scope; it is
+  // bearer-gated (not public) and falls through for any non-recover URL.
   const serverOptions: Parameters<typeof startRuntimeHttpServer>[0] = {
     runtime: gateway.runtime,
-    extraHandlers: [gateway.webhookHandler, gateway.composedHandler],
+    extraHandlers: [gateway.webhookHandler, gateway.recoverHandler, gateway.composedHandler],
     exposeUserStoreRoute: false,
     exposeConversationRoute: false,
     // The OAuth consent callback (issue #304) is the one bearer-free path:

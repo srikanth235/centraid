@@ -12,7 +12,7 @@ import { promises as fs, existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { SNAPSHOT_FORMAT } from '@centraid/backup';
+import { SNAPSHOT_FORMAT, openLocalBackupProvider, type BackupProvider } from '@centraid/backup';
 import { openVaultRegistry } from '../serve/vault-registry.js';
 import { commandBackup } from './backup-admin.js';
 import { daemonLayoutFor } from './paths.js';
@@ -167,4 +167,110 @@ test('backup CLI refuses when the config has no "backup" block', async () => {
   await expect(
     capture(() => commandBackup(['status', '--config', bareConfig], fail)),
   ).rejects.toThrow(/not configured/);
+});
+
+// ── Issue #439 R2/R3 — lazy-by-default, --full, metered gate, restore-to-side ──
+
+/** A local provider that declares itself `metered-egress` (issue #439 R2),
+ *  standing in for a hosted home without a real remote server. The SAME
+ *  instance must back both the `run` and `restore` calls — LocalBackupProvider
+ *  caches its registry per-instance and never re-reads another instance's
+ *  same-process writes. */
+function meteredLocalProvider(dir: string): BackupProvider {
+  const real = openLocalBackupProvider({ rootDir: dir });
+  return {
+    capabilities: async () => {
+      const caps = await real.capabilities();
+      return caps.backup
+        ? { ...caps, backup: { ...caps.backup, restoreCostClass: 'metered-egress' } }
+        : caps;
+    },
+    createTarget: (...a) => real.createTarget(...a),
+    deleteTarget: (...a) => real.deleteTarget(...a),
+    undeleteTarget: (...a) => real.undeleteTarget(...a),
+    purgeTarget: (...a) => real.purgeTarget(...a),
+    openDataPlane: (...a) => real.openDataPlane(...a),
+    registerSnapshot: (...a) => real.registerSnapshot(...a),
+    listSnapshots: (...a) => real.listSnapshots(...a),
+    getSnapshot: (...a) => real.getSnapshot(...a),
+    getTarget: (...a) => real.getTarget(...a),
+    usage: (...a) => real.usage(...a),
+  };
+}
+
+test('restore accepts --full and reports a full (non-lazy) materialization (#439 R2)', async () => {
+  await capture(() => commandBackup(['run', '--config', configPath], fail));
+  const destDir = path.join(dataDir, 'restored-full');
+  const out = await capture(() =>
+    commandBackup(
+      ['restore', '--config', configPath, '--vault', vaultId, '--dest', destDir, '--full'],
+      fail,
+    ),
+  );
+  const [result] = lines(out) as [{ seq: number; previewsWarm?: unknown }];
+  expect(result.seq).toBe(1);
+  // A free-egress local home with no remote tier ⇒ a full restore: no warm pass.
+  expect(result.previewsWarm).toBeUndefined();
+  expect(existsSync(path.join(destDir, 'vault.db'))).toBe(true);
+});
+
+test('a free-egress home never gates the restore (#439 R2)', async () => {
+  await capture(() => commandBackup(['run', '--config', configPath], fail));
+  const destDir = path.join(dataDir, 'restored-free');
+  // No --yes needed: the local provider is free-egress, so the metered gate
+  // stays silent and the restore proceeds.
+  const out = await capture(() =>
+    commandBackup(['restore', '--config', configPath, '--vault', vaultId, '--dest', destDir], fail),
+  );
+  const [result] = lines(out) as [{ seq: number }];
+  expect(result.seq).toBe(1);
+  expect(existsSync(path.join(destDir, 'vault.db'))).toBe(true);
+});
+
+test('a metered-egress home refuses restore without --yes and proceeds with it (#439 R2)', async () => {
+  const provider = meteredLocalProvider(providerDir);
+  await capture(() => commandBackup(['run', '--config', configPath], fail, { provider }));
+  const destDir = path.join(dataDir, 'restored-metered');
+  // Without --yes: the metered gate refuses BEFORE any restore work.
+  await expect(
+    capture(() =>
+      commandBackup(
+        ['restore', '--config', configPath, '--vault', vaultId, '--dest', destDir],
+        fail,
+        { provider },
+      ),
+    ),
+  ).rejects.toThrow(/metered-egress/);
+  expect(existsSync(destDir)).toBe(false);
+  // With --yes: the acknowledged restore runs to completion.
+  const out = await capture(() =>
+    commandBackup(
+      ['restore', '--config', configPath, '--vault', vaultId, '--dest', destDir, '--yes'],
+      fail,
+      { provider },
+    ),
+  );
+  const [result] = lines(out) as [{ seq: number }];
+  expect(result.seq).toBe(1);
+  expect(existsSync(path.join(destDir, 'vault.db'))).toBe(true);
+});
+
+test('restore refuses a --dest that already holds a vault — restore stays to-side (#439 R3)', async () => {
+  await capture(() => commandBackup(['run', '--config', configPath], fail));
+  // Restore NEVER writes in place: a dest that already contains a live vault
+  // (vault.db present) is off-limits, so an accidental in-place PITR rollback
+  // cannot happen. Adopting a fresh restore is a separate, deliberate step.
+  const destDir = path.join(dataDir, 'occupied-vault');
+  await fs.mkdir(destDir, { recursive: true });
+  await fs.writeFile(path.join(destDir, 'vault.db'), 'live-bytes');
+  await expect(
+    capture(() =>
+      commandBackup(
+        ['restore', '--config', configPath, '--vault', vaultId, '--dest', destDir],
+        fail,
+      ),
+    ),
+  ).rejects.toThrow(/not empty|refusing to restore over/);
+  // The pre-existing vault.db is untouched — nothing was overwritten.
+  expect(await fs.readFile(path.join(destDir, 'vault.db'), 'utf8')).toBe('live-bytes');
 });

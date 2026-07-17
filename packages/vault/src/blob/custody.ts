@@ -412,6 +412,7 @@ export class BlobCustody {
           remote: this.remoteTier(),
           local: this.local,
           ...(this.cache ? { cache: this.cache } : {}),
+          ...(this.cache ? { orphans: this.cache.orphan } : {}),
           desiredStore: (sha) => this.desiredStore?.(sha) ?? 'cas',
           open: (sha) => this.open(sha),
           replicate: (shas) => this.replicate(shas),

@@ -406,6 +406,19 @@ export class VaultPlane {
    */
   snapshotBlobRoots?: () => Promise<ReadonlySet<string>>;
   /**
+   * Orphan-grace window supplier (issue #439 R4). Set by the `BackupService`
+   * alongside `snapshotBlobRoots`; returns the recovery window N in ms — the
+   * provider's retention daily rung — or `undefined` when no window is knowable
+   * (a non-ladder retention, e.g. a local provider). The blob sweep threads this
+   * into `sweepBlobs` so the client-owned CAS orphan delete waits N days past
+   * first-observed-orphaned before evicting an intra-snapshot-interval byte a
+   * recovery-to-N would replay. Left unset when no backup store is configured —
+   * no snapshots, no window, so an orphan deletes immediately (pre-R4 behavior).
+   * When the supplier THROWS, the sweep fails safe (an effectively-infinite
+   * grace ⇒ nothing deletes) rather than delete against an unknown window.
+   */
+  orphanGraceWindowMs?: () => Promise<number | undefined>;
+  /**
    * Whether the journal's conversation-ledger band has been ensured on this
    * plane's handle. The workspace serves the SAME `journal.db` connection the
    * audit stream uses (the old standalone `transcripts.db` folded in) — the
@@ -1912,11 +1925,12 @@ export class VaultPlane {
    * replicas and detecting missing shas still runs either way.
    */
   private runBlobSweep(): void {
-    void this.resolveSnapshotBlobRoots()
-      .then((roots) =>
+    void Promise.all([this.resolveSnapshotBlobRoots(), this.resolveOrphanGraceWindowMs()])
+      .then(([roots, graceWindowMs]) =>
         this.gateway.sweepBlobs(this.ownerCredential, {
           skipOrphanDelete: this.leaseConflicted() || roots === 'unavailable',
           ...(roots !== 'unavailable' && roots ? { extraLiveRoots: roots } : {}),
+          ...(graceWindowMs !== undefined ? { graceWindowMs } : {}),
         }),
       )
       .then((blobs) => {
@@ -1924,13 +1938,14 @@ export class VaultPlane {
           blobs.replicated.length +
             blobs.orphansDeleted.length +
             blobs.orphansSkipped.length +
+            blobs.orphansGraceHeld.length +
             blobs.missing.length >
           0
         ) {
           this.logger.info(
             `vault plane: blob sweep replicated=${blobs.replicated.length} ` +
               `orphansDeleted=${blobs.orphansDeleted.length} orphansSkipped=${blobs.orphansSkipped.length} ` +
-              `missing=${blobs.missing.length}`,
+              `orphansGraceHeld=${blobs.orphansGraceHeld.length} missing=${blobs.missing.length}`,
           );
         }
       })
@@ -1961,6 +1976,29 @@ export class VaultPlane {
           `the recovery window (issue #436 §6): ${err instanceof Error ? err.message : String(err)}`,
       );
       return 'unavailable';
+    }
+  }
+
+  /**
+   * Resolve the orphan-grace window N for this sweep (issue #439 R4), in ms.
+   * `undefined` → no window to protect: either no supplier (no backup store, so
+   * no snapshots and no recovery-window promise) or a non-ladder retention. The
+   * orphan delete then runs immediately, its pre-R4 behavior. A supplier that
+   * THROWS fails safe to `Number.POSITIVE_INFINITY` — an effectively-infinite
+   * grace so nothing deletes — because a window that SHOULD exist but could not
+   * be resolved must not license evicting an intra-interval recovery byte. Same
+   * conservative stance as `resolveSnapshotBlobRoots`' `'unavailable'`.
+   */
+  private async resolveOrphanGraceWindowMs(): Promise<number | undefined> {
+    if (!this.orphanGraceWindowMs) return undefined;
+    try {
+      return await this.orphanGraceWindowMs();
+    } catch (err) {
+      this.logger.warn(
+        `vault plane: recovery window unavailable — holding all orphans (infinite grace) to protect ` +
+          `the recovery window (issue #439 R4): ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return Number.POSITIVE_INFINITY;
     }
   }
 

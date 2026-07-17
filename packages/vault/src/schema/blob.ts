@@ -97,6 +97,21 @@ const REFRESH_CONTENT_ITEM_FTS = (contentIdRef: string) => `
 //   restore, and the reconciliation sweep read this to address the right
 //   prefix: a derived replica missing from the derived listing is missing even
 //   if the same sha happens to sit under `cas`.
+//
+//   blob_orphan — the orphan-grace tombstone (issue #439 R4): one row per
+//     remote sha the reconciliation sweep has FOUND orphaned (claimed by
+//     neither the live vault model nor any retained snapshot manifest), stamped
+//     with the epoch-ms instant it was FIRST observed orphaned. The client-owned
+//     CAS orphan delete (blob/custody-reconcile.ts) may drop the object only once
+//     `now - first_orphaned_at` exceeds the recovery window N — because PITR
+//     makes every instant inside the window restorable, and a blob referenced
+//     only BETWEEN two snapshots is exactly the byte such a restore needs, yet is
+//     named by no retained manifest. First-observed-orphaned is always ≥ the true
+//     dereference instant, so the grace is conservative in the safe direction. A
+//     sha that becomes live/pinned again before the grace elapses has its
+//     tombstone CLEARED; delete clears it too. `first_orphaned_at` is INTEGER ms
+//     (unlike the ISO-text stamps above) because the only reader does age
+//     arithmetic against `Date.now()`.
 export const BLOB_CACHE_DDL = `
 CREATE TABLE IF NOT EXISTS blob_replica (
   sha256        TEXT PRIMARY KEY CHECK (length(sha256) = 64),
@@ -111,6 +126,11 @@ CREATE TABLE IF NOT EXISTS blob_access (
   byte_size      INTEGER
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_blob_access_lru ON blob_access(last_access_at);
+
+CREATE TABLE IF NOT EXISTS blob_orphan (
+  sha256            TEXT PRIMARY KEY CHECK (length(sha256) = 64),
+  first_orphaned_at INTEGER NOT NULL CHECK (first_orphaned_at >= 0)
+) STRICT;
 `;
 
 export const BLOB_DDL = `

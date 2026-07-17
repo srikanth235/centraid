@@ -47,6 +47,7 @@ import { commandVault } from './vault-admin.js';
 import { commandDevices, commandPair } from './device-admin.js';
 import { commandKey } from './key-admin.js';
 import { commandBackup } from './backup-admin.js';
+import { commandRecover } from './recover-admin.js';
 import { commandService } from './service-admin.js';
 import { commandStatus } from './status-admin.js';
 import { makeDaemonDevicePlane } from './endpoint-host.js';
@@ -112,6 +113,7 @@ function usage(): never {
       '  centraid-gateway backup verify  [--config <path> | --data-dir <path>] [--vault <id>]',
       '  centraid-gateway backup restore [--config <path> | --data-dir <path>] --vault <id> --dest <dir> [--seq <n>]',
       '  centraid-gateway backup kit     [--config <path> | --data-dir <path>] --out <file>',
+      '  centraid-gateway recover --kit <file> --api-key <key> --data-dir <path> [--at <iso>] [--full] [--vault <id>] [--yes]',
       '  centraid-gateway service install   [--data-dir <path> | --config <path>] [--host <h>] [--port <p>] [--dry-run] [--label <id>]',
       '  centraid-gateway service uninstall [--dry-run] [--label <id>]',
       '  centraid-gateway service status    [--dry-run] [--label <id>]',
@@ -138,6 +140,14 @@ function usage(): never {
       'same --config/--data-dir resolution `serve` uses (its JSON config',
       'file\'s "backup" key). restore materializes into --dest — it never',
       'swaps the live vault; kit emits live key material, store it offline.',
+      '',
+      'recover (issue #439) is the recovery VERB for a blank machine: with',
+      'nothing but the recovery kit (--kit) and the provider api-key',
+      '(--api-key), it restores the vault into --data-dir, seeds a fenced',
+      'backup state so the old machine is superseded, and adopts the result as',
+      'a live vault (its quarantine fires on first mount). Lazy by default;',
+      '--full materializes every blob; --at is point-in-time recovery. A',
+      'metered-egress home needs --yes.',
       '',
       'serve flags override the config file. --data-dir is required if no',
       '--config is supplied (the config file otherwise carries dataDir).',
@@ -387,6 +397,9 @@ async function main(): Promise<void> {
       return;
     case 'backup':
       await commandBackup(rest, fail);
+      return;
+    case 'recover':
+      await commandRecover(rest, fail);
       return;
     case 'service':
       await commandService(rest, fail);
