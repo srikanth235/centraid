@@ -28,6 +28,24 @@ export interface DirectBlobInitInput {
   deviceId: string;
 }
 
+/**
+ * The authoritative settlement receipt the gateway issues when `begin` finds
+ * the bytes already durable. The client persists this VERBATIM as the item's
+ * receipt — it must never synthesize a `casAck`, because free-up-space deletes
+ * device originals only for a `replicated` casAck it did not fabricate.
+ */
+export interface DirectSettlementReceipt {
+  alreadyPresent: true;
+  sha256: string;
+  casAck: 'receipt' | 'replicated';
+  custody: CustodyState;
+  /** True only when the bytes are confirmed remote — the deletion gate. */
+  acknowledged: boolean;
+  byteSize?: number;
+  mediaType?: string;
+  existingContentId?: string;
+}
+
 export interface DirectBlobInitResult {
   sessionId?: string;
   alreadyPresent: boolean;
@@ -36,9 +54,20 @@ export interface DirectBlobInitResult {
   /** Raw per-blob key, only on this authenticated gateway response (never URL/object). */
   keyBase64: string;
   completedParts: MultipartPart[];
+  /** Present iff `alreadyPresent`: the honest, custody-derived settlement. */
+  settlement?: DirectSettlementReceipt;
   upload?:
     | { kind: 'single'; url: string }
     | { kind: 'multipart'; uploadId: string; parts: { partNumber: number; url: string }[] };
+}
+
+/**
+ * The one place casAck is derived from custody, shared by every settlement
+ * door: only bytes the remote tier confirms holding are `replicated` (safe to
+ * free the device original); a merely-local or in-flight copy is `receipt`.
+ */
+function directCasAck(custody: CustodyState): 'receipt' | 'replicated' {
+  return custody === 'replicated' || custody === 'remote-only' ? 'replicated' : 'receipt';
 }
 
 export interface DirectBlobDownloadResult {
@@ -53,9 +82,14 @@ export interface DirectBlobTransferDeps {
   remote: () => RemoteTier | null;
   contentKeys: BlobContentKeyRegistry;
   state: BlobTransferState;
-  preflight(
-    sha256: string,
-  ): Promise<{ exists: boolean; custody: CustodyState; remoteAvailable: boolean }>;
+  preflight(sha256: string): Promise<{
+    exists: boolean;
+    custody: CustodyState;
+    remoteAvailable: boolean;
+    byteSize?: number;
+    mediaType?: string;
+    contentId?: string;
+  }>;
   emit(): void;
 }
 
@@ -89,13 +123,29 @@ export class DirectBlobTransfers {
     if (!existing.remoteAvailable) {
       throw new VaultBlobRemoteUnavailableError();
     }
-    if (existing.custody === 'replicated' || existing.custody === 'remote-only') {
+    // D10 dedupe: the vault already holds these bytes durably, so transfer
+    // nothing. The receipt tells the client the HONEST replication state — a
+    // merely-local or in-flight copy settles with casAck `receipt`, which does
+    // NOT authorize deleting the device original; only a confirmed remote copy
+    // reports `replicated`.
+    if (existing.exists) {
+      const casAck = directCasAck(existing.custody);
       return {
         alreadyPresent: true,
         custody: existing.custody,
         contentKey: grant,
         keyBase64,
         completedParts: [],
+        settlement: {
+          alreadyPresent: true,
+          sha256: sha,
+          casAck,
+          custody: existing.custody,
+          acknowledged: casAck === 'replicated',
+          ...(existing.byteSize !== undefined ? { byteSize: existing.byteSize } : {}),
+          ...(existing.mediaType ? { mediaType: existing.mediaType } : {}),
+          ...(existing.contentId ? { existingContentId: existing.contentId } : {}),
+        },
       };
     }
     const sessionId = uuidv7();

@@ -19,6 +19,13 @@ export interface EnqueueInput {
   filename?: string;
   /** Caller-known plaintext size; verified against the opened file. */
   plaintextSize: number;
+  /**
+   * Optional precomputed content digest. A producer that already hashed to
+   * probe the ledger (F11 — deciding whether to run the derivative pipeline)
+   * passes it here so the same 4 GB video is not streamed through SHA-256
+   * twice. Verified against the declared size just like a fresh hash.
+   */
+  digest?: { sha256: string; size: number };
 }
 
 /** The streaming-digest shape; `IncrementalSha256` is the portable default. */
@@ -71,11 +78,13 @@ export async function enqueueLocalFile(
   input: EnqueueInput,
   makeFollowup?: UploadFollowupFactory,
 ): Promise<UploadItem> {
-  const { sha256, size } = await sha256OfFile(
-    deps.openFile,
-    input.localUri,
-    ...(deps.createDigest ? [deps.createDigest] : []),
-  );
+  const { sha256, size } =
+    input.digest ??
+    (await sha256OfFile(
+      deps.openFile,
+      input.localUri,
+      ...(deps.createDigest ? [deps.createDigest] : []),
+    ));
   if (size !== input.plaintextSize) {
     throw new Error(`file is ${size} bytes, caller declared ${input.plaintextSize}`);
   }

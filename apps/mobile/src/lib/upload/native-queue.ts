@@ -94,6 +94,11 @@ export class UploadQueue {
     return this.store.pending();
   }
 
+  /** Ledger lookup by content sha — the F11 probe and the F6 outcome check. */
+  bySha(sha256: string): UploadItem | undefined {
+    return this.store.bySha(sha256);
+  }
+
   all(): UploadItem[] {
     return this.store.all();
   }
@@ -108,6 +113,18 @@ export class UploadQueue {
 
   clearFollowup(followupId: number): void {
     this.store.clearFollowup(followupId);
+  }
+
+  countFollowupAttempt(followupId: number): number {
+    return this.store.countFollowupAttempt(followupId);
+  }
+
+  poisonFollowup(followupId: number, reason: string): void {
+    this.store.poisonFollowup(followupId, reason);
+  }
+
+  poisonedFollowupCount(): number {
+    return this.store.poisonedFollowupCount();
   }
 
   close(): void {

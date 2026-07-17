@@ -33,6 +33,13 @@ export interface DirectBeginResult {
   /** Raw per-blob content key. Response-only — never persisted, never in a URL. */
   keyBase64: string;
   completedParts: MultipartPartReceipt[];
+  /**
+   * Present iff `alreadyPresent`: the gateway's AUTHORITATIVE settlement. The
+   * client persists this verbatim and never fabricates a `casAck` — a
+   * synthesized `replicated` would let free-up-space delete an original whose
+   * bytes are not actually offsite yet.
+   */
+  settlement?: SettlementReceipt;
   upload?: DirectUploadPlan;
 }
 

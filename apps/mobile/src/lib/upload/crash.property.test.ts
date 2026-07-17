@@ -303,6 +303,46 @@ describe('durable upload queue under process death', () => {
     expect(reUploads, 'a durable ETag should replay, not re-upload').toHaveLength(0);
   });
 
+  it('replays a settled follow-up exactly once across a kill before the ledger clears', async () => {
+    harness = new Harness();
+    // One file plus its canonical follow-up; settle the bytes first.
+    await enqueueLocalFile(
+      { store: harness.store, openFile: harness.openFile, newId: () => 'item-1' },
+      { localUri: 'file://a.jpg', plaintextSize: FILES[0]!.bytes.byteLength },
+      (addressed) => ({
+        shape: 'docs',
+        action: 'upload',
+        input: { staged_sha: addressed.sha256, title: 'field notes' },
+      }),
+    );
+    await harness.drainer().drainOnce();
+    expect(harness.store.pendingFollowups(), 'bytes settled, follow-up armed').toHaveLength(1);
+
+    // A minimal replay a kill can interrupt between the canonical write and
+    // clearing the ledger row — the exact crash the intent id defends against.
+    const executed: string[] = [];
+    const created = new Set<string>();
+    const replayOnce = (killBeforeClear: boolean): void => {
+      for (const followup of harness!.store.pendingFollowups()) {
+        executed.push(followup.intentId);
+        created.add(followup.intentId); // idempotent: same intent, one document
+        if (killBeforeClear) throw new UploadKillSignalError('followup:clear');
+        harness!.store.clearFollowup(followup.followupId);
+      }
+    };
+
+    expect(() => replayOnce(true)).toThrow(UploadKillSignalError);
+    harness.remount();
+    // The row survived the kill; the second pass completes it.
+    expect(harness.store.pendingFollowups()).toHaveLength(1);
+    replayOnce(false);
+    harness.remount();
+
+    expect(harness.store.pendingFollowups(), 'no loss: the ledger drains').toHaveLength(0);
+    expect(executed.length, 'the intent was attempted twice').toBe(2);
+    expect(created.size, 'but the canonical write is idempotent — created once').toBe(1);
+  });
+
   it('dedupes via alreadyPresent instead of transferring again', async () => {
     harness = new Harness();
     await harness.enqueueAll();

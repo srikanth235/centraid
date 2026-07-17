@@ -17,6 +17,8 @@ export interface NewUploadFollowup {
 export interface UploadFollowup extends NewUploadFollowup {
   followupId: number;
   intentId: string;
+  /** Replay attempts so far; drives the poison threshold (F4). */
+  attempts: number;
 }
 
 export type UploadFollowupFactory = (item: UploadItem) => Omit<NewUploadFollowup, 'itemId'>;
@@ -29,6 +31,9 @@ export interface PersistedUploadFollowupRow {
   action: string;
   input_json: string;
   derivatives_json: string | null;
+  attempts: number;
+  poisoned_at: string | null;
+  last_error: string | null;
 }
 
 export function toUploadFollowup(row: PersistedUploadFollowupRow): UploadFollowup {
@@ -39,6 +44,7 @@ export function toUploadFollowup(row: PersistedUploadFollowupRow): UploadFollowu
     shape: row.shape,
     action: row.action,
     input: JSON.parse(row.input_json) as Record<string, unknown>,
+    attempts: row.attempts ?? 0,
     ...(row.derivatives_json === null
       ? {}
       : { derivatives: JSON.parse(row.derivatives_json) as UploadDerivativeFollowup[] }),

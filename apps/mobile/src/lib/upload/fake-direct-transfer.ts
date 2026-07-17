@@ -137,6 +137,16 @@ export class FakeGateway implements DirectTransferClient {
         custody: 'remote-only',
         keyBase64,
         completedParts: [],
+        // The real gateway derives this from custody; a remote-only object is
+        // genuinely replicated. The client persists it verbatim.
+        settlement: {
+          alreadyPresent: true,
+          sha256: input.sha256,
+          casAck: 'replicated',
+          custody: 'remote-only',
+          acknowledged: true,
+          byteSize: input.plaintextSize,
+        },
       };
     }
     const existingId = this.bySha.get(input.sha256);
