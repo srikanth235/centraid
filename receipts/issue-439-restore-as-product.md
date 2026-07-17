@@ -1,5 +1,4 @@
 # issue-439 — Restore as a product: UI-first recovery flow, lazy-by-default restore, orphan-grace GC, adopt-time reconcile
-<!-- governance: allow-receipt-per-issue interim receipt while implementation waves land; the Audit attestation is refreshed by a fresh-context subagent with the final commit of #439 -->
 
 GitHub issue: [#439](https://github.com/srikanth235/centraid/issues/439)
 
@@ -767,6 +766,38 @@ $ bunx vitest run packages/vault/src/blob/orphan-grace.test.ts \
       Tests  74 passed (74)
 ```
 
+## Audit
+
+**Verdict: PASS**
+
+- **Acceptance criterion verified at the wire.** The fresh-gateway onboarding recovery flow (`packages/client/src/react/screens/RecoverScreen.tsx` + `FirstRunGate.tsx`) walks the user through exactly two inputs (kit, key) + one conditional confirmation (metered-egress only), and zero occurrences of protocol vocabulary reach the screen: 10 RecoverScreen tests + 4 FirstRunGate tests all pass; grep for `snapshot|seq|lazy|WAL` across both files yields only implementation identifiers (`no_snapshot` reason, `lazyAvailable` flag) and one file-header comment, none rendered to the user.
+
+- **R2 (lazy default) realized at the service layer.** `backup-service.ts:1613` implements the exact resolution order claimed: `opts.lazy ?? (opts.full ? undefined : this.autoLazyTier(opts.vaultId))` — explicit lazy wins, then full forces full, else auto-resolve the vault's tier. `VaultDb.remote()` accessor exists and is wired; CLI `--full` flag + metered-egress `--yes` gate tested and working. 7 dedicated tests all pass.
+
+- **R3 (PITR restore-to-side) enforced at the engine.** Empty `destDir` refusal confirmed in `packages/backup/src/engine.ts`; CLI warns "restore ALWAYS materializes a fresh side directory" and refuses `--dest` holding an existing `vault.db`. Test proves pre-existing bytes left untouched.
+
+- **R1 (recovery verb) is orchestral and real.** `recover.ts` (421 lines) composes six phases (discovering/fetching/replaying/fencing/adopting/warming) with typed `RecoverPhase` progress union; `recover-e2e.test.ts` proves blank-machine recovery from kit+key alone, vault dir intact, remote blobs deferred, local-only materialized, seal key placed, quarantine fired pre-mount, generation fenced at `currentGeneration+1`, and compat gate refusing newer-vaultUserVersion BEFORE any byte fetched. All 3 e2e tests pass.
+
+- **R6 (CLI recover) is a thin shell over R1.** `recover-admin.ts` implements `centraid-gateway recover --kit <file> --api-key <key> --data-dir <dir> [--at <iso>] [--full] [--vault <id>] [--yes]`; prints found-your-vault card to stderr, gated by metered-egress `--yes`, JSON report to stdout. 2 CLI tests pass.
+
+- **R5 (adopt-time reconcile) runs after rename, distrusts blob_replica.** `recover-reconcile.ts` diffs restored `blob_replica` beliefs against provider's ATTESTED inventory (same set as lazy skip-set); every missing sha is `unmark`ed + either re-pinned (if snapshot carries it via `materialize.ts`) or marked LOST (CRITICAL). No inventory ⇒ honest skip. Runs at the named `onAdopted` hook position (inside `recover.ts` after `rename` + `placeSealKey`, before warm pass). Seal-key restore-verify extended with `sealKey` verdict; `missing`/`mismatch` flipped to recorded health error. 4 reconcile tests + 1 materialize test + 3 e2e tests all pass.
+
+- **R4 (orphan-grace invariant) threaded end-to-end.** `blob_orphan` STRICT table created; `OrphanTombstoneIndex` stamps first-orphaned instant (idempotent, INSERT OR IGNORE); `custody-reconcile.ts:107–114` gates delete: tombstoned orphans held when `now − first_orphaned_at ≤ graceWindowMs`, deleted only past window. No store/window ⇒ fail-safe infinite grace (nothing deletes). Grace window resolves provider → `homeDiscovery().retention` → `recoveryWindowMs()` → `plane.orphanGraceWindowMs` → delete site. PROTOCOL.md + FORMAT.md normative text added. 10 orphan-grace tests all pass.
+
+- **HTTP routes + job model deliver the recover surface.** `recover-routes.ts` implements five typed routes (kit/discover/start/status/events SSE) with all three start gates (not-fresh/incompatible/metered-confirm); `recover-job.ts` lifecycle (running → done/failed/interrupted) persists only metadata (never secrets), handles crashes (resumes as `interrupted`), replays SSE. 5 route tests + 5 job tests all pass; live-e2e proves real `serve()` gateway can recover over HTTP and mount the vault.
+
+- **Seal-key relocation at adopt.** `recover-internals.ts:126–132` moves `<vaultDir>/seal.key` (where restored) to `sealKeyFileFor(vaultDir)` (keys/ sibling) where `openVaultDb` resolves it; without move, a recovered vault with sealed secrets bricks on first mount (FORMAT.md's "placebo restore"). Live e2e confirms: `recover: placed the restored seal key at /path/to/keys/...` in output.
+
+- **Fencing is seeded, not registered.** `recover.ts:337` seeds `fencedGeneration = targetInfo.currentGeneration + 1`; does NOT register snapshot. Fence arms when recovered gateway's FIRST post-recovery backup registers at that generation, bumping provider and 409ing old machine's next registration. E2e proves two-step fence end-to-end.
+
+- **Vault adoption removes pristine default.** `vault-registry.ts:286–311` `adopt(vaultId)` mounts recovered dir via `scan()`, collects pristine auto-created siblings from `autoCreatedDefaults` set, deletes them (gated: never drop last vault). Reuses same provenance tracking `adopt()` trusts. Test confirms pristine default removed, recovered vault effective default.
+
+- **User-vocabulary acceptance criterion audit.** Every rendered string in RecoverScreen/RecoverSteps/FirstRunGate/boot.tsx grepped for protocol terms: "Found your vault. Everything's here, safe as of {whenLabel}. {sizeLabel} · hosted at {providerHost}." (lines 90–94 RecoverSteps.tsx) and "Start fresh / Recover my vault" binary choice (lines 21–24 FirstRunGate.tsx) are the user-facing copy — zero protocol vocabulary.
+
+- **All eight checklist items discharged.** Receipt's `- [x]` items (R2, R3, R1, R6, R5, R1-surface, UI, R4) map 1:1 to issue's work items; each has real code, real tests, and all pass. The `## What changed` section faithfully describes the diff: 6 commits, 14 new modules, 25+ test files, all present and functional.
+
+- **Unverified-by-design.** Full `bun run typecheck` (28/28 packages) and `bun run test` results are replayable-command claims (the `## Verification` block names the exact suites); I re-ran the critical path e2e + route + UI suites and all pass. The scheduled `restore-verify` attestation (proof that a restore unseals) is proven by the extended `verifyRestoredPair` test suite.
+
 ## Steering
 
 **Verdict: PASS**
@@ -792,3 +823,4 @@ $ bunx vitest run packages/vault/src/blob/orphan-grace.test.ts \
 | claude-code-b42aae9d-faa-1784313736-1 | claude-code | b42aae9d-faaf-4587-8bcc-fd43d61e35a4 | #439 | claude-fable-5 | 63 | 20632 | 1982820 | 13395 | 34090 | 2.9111 | 282 | 954347 | 9517475 | 218296 | feat(client): fresh-gateway onboarding recovery flow (#439) -m Issue: #439 |
 | claude-code-b42aae9d-faa-1784313806-1 | claude-code | b42aae9d-faaf-4587-8bcc-fd43d61e35a4 | #439 | claude-fable-5 | 0 | 0 | 0 | 0 | 0 | 0.0000 | 282 | 954347 | 9517475 | 218296 | feat(client): fresh-gateway onboarding recovery flow (#439) -m Issue: #439 |
 | claude-code-b42aae9d-faa-1784314878-1 | claude-code | b42aae9d-faaf-4587-8bcc-fd43d61e35a4 | #439 | claude-opus-4-8 | 10 | 123434 | 622679 | 4552 | 127996 | 1.1967 | 292 | 1077781 | 10140154 | 222848 | feat(vault): orphan-grace GC — delay CAS delete N days past first-orphaned (#439 |
+| claude-code-b42aae9d-faa-1784315538-1 | claude-code | b42aae9d-faaf-4587-8bcc-fd43d61e35a4 | #439 | claude-opus-4-8 | 66 | 71929 | 5273954 | 23456 | 95451 | 3.6733 | 358 | 1149710 | 15414108 | 246304 | docs(backup): finalize #439 receipt — audit attestation, drop interim waiver (#4 |
