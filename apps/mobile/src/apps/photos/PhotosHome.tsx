@@ -15,6 +15,7 @@ import { backupDeviceMedia } from '../../lib/upload/media-producer';
 import { Store } from '../../storage';
 import type { PhotosScreenProps } from '../../navigation';
 import PhotoTimeline from './PhotoTimeline';
+import { imageSource } from './media-source';
 import { onThisDay } from './timeline-model';
 import { usePhotoTimeline } from './timeline-source';
 
@@ -75,7 +76,10 @@ export default function PhotosHome({
           plaintextSize: file.size,
           kind: asset.kind,
           capturedAt: asset.capturedAt,
-          tzOffsetMin: -new Date(asset.capturedAt).getTimezoneOffset(),
+          // The capture's true UTC offset isn't in MediaLibrary metadata, so we
+          // record none rather than fabricating the device's current offset —
+          // sectioning falls back to the viewing device's local day (matching
+          // BackupHealth, which also passes no offset).
           captureGroupId: info.pairedVideoAsset ? `live:${asset.localId}` : undefined,
           width: asset.width,
           height: asset.height,
@@ -207,7 +211,11 @@ export default function PhotosHome({
               style={styles.memory}
               onPress={() => navigation.navigate('PhotoLightbox', { assetId: memory.id })}
             >
-              <Image source={memory.uri} contentFit="cover" style={styles.memoryImage} />
+              <Image
+                source={imageSource(memory.uri)}
+                contentFit="cover"
+                style={styles.memoryImage}
+              />
               <View style={styles.memoryShade} />
               <View style={styles.memoryCopy}>
                 <Text style={styles.memoryEyebrow}>{index === 0 ? 'ON THIS DAY' : 'MEMORY'}</Text>

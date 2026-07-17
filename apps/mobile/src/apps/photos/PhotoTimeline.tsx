@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { Image } from 'expo-image';
@@ -11,6 +11,7 @@ import Icon from '../../kit/components/Icon';
 import { family, useTheme } from '../../kit/theme';
 import type { PhotoAsset, PhotoSection } from './timeline-source';
 import { addDragSelection } from './timeline-model';
+import { imageSource } from './media-source';
 
 type TimelineRow =
   | { type: 'month'; key: string; title: string; assets: PhotoAsset[] }
@@ -23,8 +24,14 @@ type TimelineRow =
       widths: number[];
     };
 
+// Hoisted so the scrubber doesn't build a fresh Intl formatter on every move.
+const MONTH_YEAR_FORMAT = new Intl.DateTimeFormat(undefined, { month: 'short', year: 'numeric' });
+
 const ratioFor = (asset: PhotoAsset): number =>
   Math.max(0.65, Math.min(1.9, asset.width && asset.height ? asset.width / asset.height : 1));
+
+const rowHeightOf = (row: TimelineRow): number =>
+  row.type === 'month' ? 52 : row.type === 'header' ? 42 : row.height;
 
 function assetRows(
   assets: PhotoAsset[],
@@ -112,7 +119,7 @@ const AssetCell = memo(function AssetCell({
       style={{ height, width }}
     >
       <Image
-        source={asset.uri}
+        source={imageSource(asset.uri)}
         placeholder={asset.thumbhash ? { thumbhash: asset.thumbhash } : undefined}
         contentFit="cover"
         transition={120}
@@ -165,6 +172,16 @@ export default function PhotoTimeline({
     () => rows.flatMap((row, index) => (row.type === 'month' ? [index] : [])),
     [rows],
   );
+  // Prefix-summed row tops, so a drag maps a y-offset to its row by binary
+  // search instead of re-walking every row's height on each pan event.
+  const rowTops = useMemo(() => {
+    let cursor = 0;
+    return rows.map((row) => {
+      const top = cursor;
+      cursor += rowHeightOf(row);
+      return top;
+    });
+  }, [rows]);
   const selecting = selection.size > 0;
 
   const pinch = useMemo(
@@ -181,23 +198,41 @@ export default function PhotoTimeline({
     [columns],
   );
 
-  const toggle = (asset: PhotoAsset): void => {
-    void Haptics.selectionAsync();
-    const next = new Set(selection);
-    if (next.has(asset.id)) next.delete(asset.id);
-    else next.add(asset.id);
-    onSelectionChange(next);
-  };
+  // Stable identities so the memoized AssetCell isn't invalidated every render
+  // by a fresh closure. onOpen is read through a ref so a parent passing an
+  // inline arrow doesn't defeat the memo either.
+  const onOpenRef = useRef(onOpen);
+  onOpenRef.current = onOpen;
+  const handleOpen = useCallback((asset: PhotoAsset): void => onOpenRef.current(asset), []);
+  const toggle = useCallback(
+    (asset: PhotoAsset): void => {
+      void Haptics.selectionAsync();
+      const next = new Set(selectionRef.current);
+      if (next.has(asset.id)) next.delete(asset.id);
+      else next.add(asset.id);
+      onSelectionChange(next);
+    },
+    [onSelectionChange],
+  );
 
   const dragSelect = (x: number, y: number): void => {
-    let cursor = scrollOffset.current + y;
-    const row = rows.find((candidate) => {
-      const rowHeight =
-        candidate.type === 'month' ? 52 : candidate.type === 'header' ? 42 : candidate.height;
-      if (cursor < rowHeight) return true;
-      cursor -= rowHeight;
-      return false;
-    });
+    const cursor = scrollOffset.current + y;
+    // Binary search for the row whose band contains the cursor.
+    let lo = 0;
+    let hi = rows.length - 1;
+    let rowIndex = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const top = rowTops[mid]!;
+      const bottom = top + rowHeightOf(rows[mid]!);
+      if (cursor < top) hi = mid - 1;
+      else if (cursor >= bottom) lo = mid + 1;
+      else {
+        rowIndex = mid;
+        break;
+      }
+    }
+    const row = rowIndex >= 0 ? rows[rowIndex] : undefined;
     if (!row || row.type !== 'assets') return;
     let position = Math.max(0, x);
     let assetIndex = 0;
@@ -230,11 +265,7 @@ export default function PhotoTimeline({
     const row = rows[index];
     const asset = row?.assets[0];
     if (asset) {
-      setScrubLabel(
-        new Intl.DateTimeFormat(undefined, { month: 'short', year: 'numeric' }).format(
-          new Date(asset.capturedAt),
-        ),
-      );
+      setScrubLabel(MONTH_YEAR_FORMAT.format(new Date(asset.capturedAt)));
     }
   };
 
@@ -277,7 +308,7 @@ export default function PhotoTimeline({
                     width={item.widths[index] ?? item.height}
                     selected={selection.has(asset.id)}
                     selecting={selecting}
-                    onOpen={onOpen}
+                    onOpen={handleOpen}
                     onSelect={toggle}
                   />
                 ))}

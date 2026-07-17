@@ -32,6 +32,7 @@ import { useReplica } from '../../kit/replica/ReplicaProvider';
 import { useReplicaQuery } from '../../kit/hooks/useReplicaQuery';
 import type { PhotosScreenProps } from '../../navigation';
 import type { PhotoAsset } from './timeline-model';
+import { imageSource, videoSource } from './media-source';
 import { styles } from './PhotoLightbox.styles';
 import { usePhotoTimeline } from './timeline-source';
 
@@ -44,7 +45,7 @@ function VideoAsset({
   width: number;
   height: number;
 }): React.JSX.Element {
-  const player = useVideoPlayer(uri, (instance) => {
+  const player = useVideoPlayer(videoSource(uri), (instance) => {
     instance.loop = false;
   });
   return (
@@ -92,13 +93,13 @@ function MediaPage({
       <GestureDetector gesture={zoom}>
         <Animated.View style={[styles.mediaCenter, { width, height }, zoomStyle]}>
           <Image
-            source={
+            source={imageSource(
               quality === 'original'
                 ? asset.originalUri
                 : quality === 'preview'
                   ? asset.previewUri || asset.uri
-                  : asset.uri
-            }
+                  : asset.uri,
+            )}
             placeholder={asset.thumbhash ? { thumbhash: asset.thumbhash } : undefined}
             contentFit="contain"
             transition={120}
@@ -146,15 +147,19 @@ export default function PhotoLightbox({
     'photos',
     useMemo(() => ({ entity: 'core.place' }), []),
   );
-  const initial = Math.max(
-    0,
-    assets.findIndex((asset) => asset.id === route.params.assetId),
-  );
-  const [index, setIndex] = useState(initial);
+  // Page by asset identity, never by raw index: this timeline is the shared,
+  // still-loading instance, so device pages land after mount and shift every
+  // index. `assetId` here is the timeline row id (route param).
+  const [currentId, setCurrentId] = useState(route.params.assetId);
   const [infoOpen, setInfoOpen] = useState(false);
   const [slideshow, setSlideshow] = useState(false);
   const list = useRef<FlatList<PhotoAsset>>(null);
-  const current = assets[index];
+  const index = assets.findIndex((asset) => asset.id === currentId);
+  const current = index >= 0 ? assets[index] : undefined;
+  // The scroll offset the list must open at, captured the first time the target
+  // row actually exists in the data (so we never open on the wrong photo).
+  const initialIndex = useRef<number | null>(null);
+  if (index >= 0 && initialIndex.current === null) initialIndex.current = index;
   const albumIds = new Set(
     entries.rows
       .filter((row) => row.target_id === current?.assetId)
@@ -174,14 +179,15 @@ export default function PhotoLightbox({
   useEffect(() => {
     if (!slideshow || assets.length < 2) return;
     const timer = setInterval(() => {
-      setIndex((currentIndex) => {
-        const next = (currentIndex + 1) % assets.length;
+      setCurrentId((activeId) => {
+        const activeIndex = assets.findIndex((asset) => asset.id === activeId);
+        const next = (activeIndex + 1) % assets.length;
         list.current?.scrollToIndex({ index: next, animated: true });
-        return next;
+        return assets[next]?.id ?? activeId;
       });
     }, 3_500);
     return () => clearInterval(timer);
-  }, [assets.length, slideshow]);
+  }, [assets, slideshow]);
 
   const write = async (
     action: string,
@@ -217,7 +223,11 @@ export default function PhotoLightbox({
     else await Share.share({ url: uri });
   };
 
-  if (!current) return <View style={[styles.fill, { backgroundColor: '#000' }]} />;
+  // Until the shared timeline has loaded the requested row we hold on a black
+  // frame rather than opening index 0 (the wrong photo). Once loaded without a
+  // match the asset is genuinely gone, so the same frame stands in.
+  if (!current || initialIndex.current === null)
+    return <View style={[styles.fill, { backgroundColor: '#000' }]} />;
   return (
     <GestureDetector gesture={dismiss}>
       <SafeAreaView style={[styles.fill, { backgroundColor: '#000' }]} edges={['top', 'bottom']}>
@@ -237,16 +247,17 @@ export default function PhotoLightbox({
           data={assets}
           horizontal
           pagingEnabled
-          initialScrollIndex={initial}
+          initialScrollIndex={initialIndex.current}
           getItemLayout={(_, itemIndex) => ({
             length: width,
             offset: width * itemIndex,
             index: itemIndex,
           })}
           keyExtractor={(asset) => asset.id}
-          onMomentumScrollEnd={(event) =>
-            setIndex(Math.round(event.nativeEvent.contentOffset.x / width))
-          }
+          onMomentumScrollEnd={(event) => {
+            const nextIndex = Math.round(event.nativeEvent.contentOffset.x / width);
+            setCurrentId((activeId) => assets[nextIndex]?.id ?? activeId);
+          }}
           renderItem={({ item }) => (
             <MediaPage
               asset={item}

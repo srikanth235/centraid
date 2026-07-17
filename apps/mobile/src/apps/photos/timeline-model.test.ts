@@ -45,6 +45,29 @@ describe('native Photos timeline model', () => {
     });
   });
 
+  test('two device copies of one sha fold onto a single row, both reachable', () => {
+    const rows = mergePhotoAssets(
+      [
+        photo('copy-a', { localId: 'local-a', sha256: 'exact' }),
+        photo('copy-b', { localId: 'local-b', sha256: 'exact' }),
+      ],
+      [photo('remote', { sha256: 'exact', source: 'replica', backupState: 'remote-only' })],
+    );
+    // The second copy must not be dropped (the old indexOf(-1) bug), and both
+    // localIds must survive so free-up-space can reach every device original.
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ source: 'merged', localId: 'local-a' });
+    expect(rows[0]?.localIds).toEqual(['local-a', 'local-b']);
+  });
+
+  test('sections by capture-local day using tzOffsetMin, not the raw UTC slice', () => {
+    // 03:00 UTC in PDT (-420 min) is the previous evening, so it files a day earlier.
+    const sections = sectionPhotoAssets([
+      photo('evening', { capturedAt: '2026-07-16T03:00:00.000Z', tzOffsetMin: -420 }),
+    ]);
+    expect(sections[0]?.day).toBe('2026-07-15');
+  });
+
   test('archive and trash never appear in timeline sections', () => {
     expect(
       sectionPhotoAssets([

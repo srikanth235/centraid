@@ -98,18 +98,25 @@ export function ReplicaProvider({ children }: { children: React.ReactNode }): Re
   useEffect(() => {
     let cancelled = false;
     let session: NativeReplicaSession | undefined;
+    // Held so an unmount landing in the window between opening the op-sqlite
+    // driver and creating the session (which then owns it) still releases the
+    // native handle and change-feed stream instead of leaking them.
+    let driver: Awaited<ReturnType<typeof openNativeReplicaDriver>> | undefined;
+    let changeFeed: NativeVaultChangeFeed | undefined;
     let networkSubscription: { remove(): void } | undefined;
     void (async () => {
       try {
         const identity = await resolveIdentity();
-        const driver = await openNativeReplicaDriver(
+        driver = await openNativeReplicaDriver(
           { gatewayId: identity.gatewayId, vaultId: identity.auth.vaultId! },
           nativeReplicaDigest,
         );
-        const changeFeed = new NativeVaultChangeFeed({
+        if (cancelled) return;
+        changeFeed = new NativeVaultChangeFeed({
           gatewayAuth: identity.auth,
           storage: AsyncStorage,
         });
+        if (cancelled) return;
         let connected = identity.online;
         session = await createNativeReplicaSession({
           gatewayAuth: identity.auth,
@@ -120,6 +127,10 @@ export function ReplicaProvider({ children }: { children: React.ReactNode }): Re
           isConnected: () => connected,
           bootstrapWindow: 5_000,
         });
+        // The session now owns the driver + feed lifecycle; hand off so the
+        // cleanup below closes them only via `session.close()`.
+        driver = undefined;
+        changeFeed = undefined;
         if (cancelled) {
           await session.close();
           return;
@@ -167,6 +178,9 @@ export function ReplicaProvider({ children }: { children: React.ReactNode }): Re
       cancelled = true;
       networkSubscription?.remove();
       void session?.close();
+      // Session was never created: release the pieces it would have owned.
+      changeFeed?.setActive(false);
+      driver?.close();
     };
   }, []);
 

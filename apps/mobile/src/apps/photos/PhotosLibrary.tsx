@@ -18,8 +18,13 @@ import { useFocusEffect } from '@react-navigation/native';
 import { family, useTheme } from '../../kit/theme';
 import { useReplica } from '../../kit/replica/ReplicaProvider';
 import { useReplicaQuery } from '../../kit/hooks/useReplicaQuery';
+import { sha256OfFile } from '../../lib/upload/enqueue';
+import { expoFileSource } from '../../lib/upload/expo-native';
+import { createNativeDigest } from '../../lib/upload/native-digest';
 import type { PhotosScreenProps } from '../../navigation';
 import { usePhotoTimeline } from './timeline-source';
+import { imageSource } from './media-source';
+import { revalidateBackedUp, selectFreeUpCandidates, type DeviceByteProbe } from './free-up-space';
 import { Store } from '../../storage';
 
 const KEEP_ORIGINALS_KEY = 'photos.keepOriginalAlbums';
@@ -52,6 +57,7 @@ export default function PhotosLibrary({
   );
   const [keptAlbums, setKeptAlbums] = useState<string[]>([]);
   const [pinsReady, setPinsReady] = useState(false);
+  const [freeing, setFreeing] = useState(false);
   const [newAlbum, setNewAlbum] = useState(false);
   const [title, setTitle] = useState('');
   useFocusEffect(
@@ -69,21 +75,31 @@ export default function PhotosLibrary({
       };
     }, []),
   );
-  const protectedAssets = new Set(
-    entries.rows
-      .filter((row) => keptAlbums.includes(String(row.collection_id)))
-      .map((row) => String(row.target_id)),
+  // The keep-pin exclusion is only trustworthy once the collection_entry rows
+  // have actually loaded — an empty set mid-load would wrongly treat pinned
+  // album originals as eligible for deletion.
+  const pinsHydrated = pinsReady && !entries.loading;
+  const protectedAssets = useMemo(
+    () =>
+      new Set(
+        entries.rows
+          .filter((row) => keptAlbums.includes(String(row.collection_id)))
+          .map((row) => String(row.target_id)),
+      ),
+    [entries.rows, keptAlbums],
   );
-  const backedLocal = assets.filter(
-    (asset) =>
-      asset.localId &&
-      asset.assetId &&
-      asset.source === 'merged' &&
-      asset.backupState === 'backed-up' &&
-      asset.verifiedCasAck === true &&
-      !protectedAssets.has(asset.assetId),
+  const freeCandidates = useMemo(
+    () => selectFreeUpCandidates(assets, protectedAssets),
+    [assets, protectedAssets],
   );
-  const backedBytes = backedLocal.reduce((sum, asset) => sum + (asset.fileSize ?? 0), 0);
+  const eligibleCount = useMemo(
+    () => freeCandidates.reduce((total, candidate) => total + candidate.localIds.length, 0),
+    [freeCandidates],
+  );
+  const eligibleBytes = useMemo(
+    () => freeCandidates.reduce((total, candidate) => total + candidate.fileSize, 0),
+    [freeCandidates],
+  );
   const duplicateCount = assets.filter((asset) => asset.duplicateHint).length;
   const albumRows = [...collections.rows]
     .sort((a, b) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0))
@@ -105,21 +121,55 @@ export default function PhotosLibrary({
     setNewAlbum(false);
     setTitle('');
   };
+  // Re-hash the CURRENT bytes of one device copy. A photo edited in place after
+  // backup keeps its ph:// id but holds new bytes; this is what catches that.
+  const probeDeviceBytes: DeviceByteProbe = async (localId) => {
+    const info = await MediaLibrary.getAssetInfoAsync(localId, { shouldDownloadFromNetwork: true });
+    const uri = info.localUri ?? info.uri;
+    if (!uri) return null;
+    return sha256OfFile(expoFileSource, uri, createNativeDigest);
+  };
+  const confirmFreeSpace = async (): Promise<void> => {
+    setFreeing(true);
+    try {
+      // Revalidate at delete time, never trusting the settle-time map alone.
+      const result = await revalidateBackedUp(freeCandidates, probeDeviceBytes);
+      if (result.deletableLocalIds.length)
+        await MediaLibrary.deleteAssetsAsync(result.deletableLocalIds);
+      const lines = [
+        `${result.deletableLocalIds.length} originals removed (${(result.eligibleBytes / 1024 / 1024 / 1024).toFixed(2)} GB).`,
+      ];
+      if (result.changedCount)
+        lines.push(`${result.changedCount} changed since backup — kept on device.`);
+      if (result.missingCount) lines.push(`${result.missingCount} already gone.`);
+      Alert.alert(
+        result.changedCount || result.missingCount ? 'Freed with exclusions' : 'Space freed',
+        lines.join('\n'),
+      );
+    } catch (error) {
+      Alert.alert('Free up space paused', error instanceof Error ? error.message : String(error));
+    } finally {
+      setFreeing(false);
+    }
+  };
   const freeSpace = (): void => {
-    if (!pinsReady) {
+    if (!pinsHydrated) {
       Alert.alert('Checking device pins', 'Try again after protected albums finish loading.');
+      return;
+    }
+    if (!freeCandidates.length) {
+      Alert.alert('Nothing to free', 'No verified backups are eligible on this device right now.');
       return;
     }
     Alert.alert(
       'Free up space',
-      `${backedLocal.length} verified originals (${(backedBytes / 1024 / 1024 / 1024).toFixed(2)} GB) are eligible. Albums pinned to this device are excluded. This is the only action here that touches device originals.`,
+      `${eligibleCount} verified originals (${(eligibleBytes / 1024 / 1024 / 1024).toFixed(2)} GB) are eligible. Bytes are re-hashed at delete time and anything changed since backup is kept. Albums pinned to this device are excluded. This is the only action here that touches device originals.`,
       [
         { text: 'Cancel' },
         {
           text: 'Delete from device',
           style: 'destructive',
-          onPress: () =>
-            void MediaLibrary.deleteAssetsAsync(backedLocal.map((asset) => asset.localId!)),
+          onPress: () => void confirmFreeSpace(),
         },
       ],
     );
@@ -201,7 +251,11 @@ export default function PhotosLibrary({
                 style={styles.albumCard}
               >
                 {cover ? (
-                  <Image source={cover.uri} contentFit="cover" style={styles.albumCover} />
+                  <Image
+                    source={imageSource(cover.uri)}
+                    contentFit="cover"
+                    style={styles.albumCover}
+                  />
                 ) : (
                   <View style={[styles.albumCover, { backgroundColor: colors.bgSunken }]} />
                 )}
@@ -226,14 +280,16 @@ export default function PhotosLibrary({
             colors={colors}
           />
         </Pressable>
-        <Pressable disabled={!pinsReady} onPress={freeSpace}>
+        <Pressable disabled={!pinsHydrated || freeing} onPress={freeSpace}>
           <Row
             icon="hard-drive"
             title="Free up space"
             meta={
-              pinsReady
-                ? `${backedLocal.length} verified originals · ${(backedBytes / 1024 / 1024 / 1024).toFixed(2)} GB`
-                : 'Checking protected albums…'
+              freeing
+                ? 'Re-hashing device originals…'
+                : pinsHydrated
+                  ? `${eligibleCount} verified originals · ${(eligibleBytes / 1024 / 1024 / 1024).toFixed(2)} GB`
+                  : 'Checking protected albums…'
             }
             colors={colors}
           />
