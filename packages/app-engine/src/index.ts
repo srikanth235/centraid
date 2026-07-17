@@ -226,7 +226,11 @@ export {
   type ConversationTurnAttachment,
   type RecordTurnInput,
   type RecordedTurnReplay,
+  type SessionTranscript,
 } from './conversation/history.js';
+// Lazy archive rehydration seam (issue #438 wave 3): the gateway supplies the
+// vault's `db.blobs.open` as the reader; the standalone host omits it.
+export type { ArchiveBlobReader } from './conversation/rehydrate.js';
 // LLM auto-titles (issue #420, Wave 3): a cheap one-shot inference names a
 // new conversation after its first turn. Provider-agnostic (tier token) and
 // fire-and-forget — the gateway owns the "apply only if still derived" guard.

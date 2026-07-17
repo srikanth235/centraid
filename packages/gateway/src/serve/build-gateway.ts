@@ -808,7 +808,16 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   const journalProvider = () => currentWorkspace().journal();
   const analyticsStore = new AnalyticsStore(journalProvider);
   const insightsStore = new InsightsStore(journalProvider);
-  const conversationHistoryStore = new ConversationHistoryStore(currentWorkspace);
+  // Lazy archive rehydration (issue #438 wave 3): opening a conversation whose
+  // cold ranges were custody-gated-pruned reads the sealed segment blobs back
+  // through the ACTIVE vault's CAS door (`db.blobs.open` — local hit or remote
+  // fetch → unseal → verify → promote). Resolved per call via `current()` — the
+  // SAME active-vault resolution `currentWorkspace` uses — so a vault switch
+  // reads the right file. The store degrades to `archiveUnavailable` if a fetch
+  // fails; the standalone http-server host wires no reader at all.
+  const conversationHistoryStore = new ConversationHistoryStore(currentWorkspace, {
+    archiveBlobReader: (sha) => vaultRegistry.current().db.blobs.open(sha),
+  });
 
   // Per-turn prefs loader. Re-reads `prefs.json` every chat turn so a
   // settings change lands without a restart.

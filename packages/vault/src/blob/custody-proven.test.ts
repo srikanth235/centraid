@@ -39,7 +39,9 @@ test('s3 vault: unproven until a replica row exists', () => {
   db.blobs.ingestSync(Buffer.from('segment')); // local presence is NOT enough here
   expect(blobCustodyProven(db, sha)).toBe(false);
   db.vault
-    .prepare(`INSERT INTO blob_replica (sha256, replicated_at, byte_size, store) VALUES (?, ?, 7, 'cas')`)
+    .prepare(
+      `INSERT INTO blob_replica (sha256, replicated_at, byte_size, store) VALUES (?, ?, 7, 'cas')`,
+    )
     .run(sha, new Date().toISOString());
   expect(blobCustodyProven(db, sha)).toBe(true);
   db.close();
@@ -50,7 +52,9 @@ test('s3 vault: a pending outbox obligation keeps it unproven even with a replic
   setS3(db);
   const sha = sha256OfBytes(Buffer.from('segment'));
   db.vault
-    .prepare(`INSERT INTO blob_replica (sha256, replicated_at, byte_size, store) VALUES (?, ?, 7, 'cas')`)
+    .prepare(
+      `INSERT INTO blob_replica (sha256, replicated_at, byte_size, store) VALUES (?, ?, 7, 'cas')`,
+    )
     .run(sha, new Date().toISOString());
   db.vault
     .prepare(

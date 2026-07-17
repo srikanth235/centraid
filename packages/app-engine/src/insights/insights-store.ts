@@ -371,7 +371,14 @@ export class InsightsStore {
       cost: number,
     ): void => {
       const key = `${kind} ${automationRef ?? ''}`;
-      const g = autoGroups.get(key) ?? { kind, automationRef, name: null, runs: 0, tokens: 0, cost: 0 };
+      const g = autoGroups.get(key) ?? {
+        kind,
+        automationRef,
+        name: null,
+        runs: 0,
+        tokens: 0,
+        cost: 0,
+      };
       g.runs += runs;
       g.tokens += tokens;
       g.cost += cost;

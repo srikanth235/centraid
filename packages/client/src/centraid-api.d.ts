@@ -459,9 +459,19 @@ export interface CentraidConversationHistoryRetryAttempt {
   usage?: CentraidConversationTurnUsage;
 }
 
-/** Coarse-grained persisted shape per message in a chat session. */
+/**
+ * Coarse-grained persisted shape per message in a chat session. `fromArchive`
+ * marks a message rehydrated from a custody-gated-pruned segment (issue #438
+ * wave 3) — read-only cold history the surface renders with a "from the archive"
+ * affordance and no feedback/regenerate controls.
+ */
 export type CentraidConversationHistoryMessage =
-  | { kind: 'user'; text: string; attachments?: CentraidConversationHistoryAttachment[] }
+  | {
+      kind: 'user';
+      text: string;
+      attachments?: CentraidConversationHistoryAttachment[];
+      fromArchive?: boolean;
+    }
   | {
       kind: 'ai';
       text: string;
@@ -480,6 +490,8 @@ export type CentraidConversationHistoryMessage =
       };
       /** Token/cost usage for this answer's turn (issue #420, Wave 2). */
       usage?: CentraidConversationTurnUsage;
+      /** Rehydrated from a pruned archive segment (issue #438) — read-only. */
+      fromArchive?: boolean;
     }
   | {
       kind: 'tool';
@@ -490,6 +502,7 @@ export type CentraidConversationHistoryMessage =
       state: 'ok' | 'error';
       result?: unknown;
       errorText?: string;
+      fromArchive?: boolean;
     };
 
 export interface CentraidVersionRecord {
@@ -1317,7 +1330,12 @@ declare global {
     usage?: CentraidConversationTurnUsage;
   }
   type CentraidConversationHistoryMessage =
-    | { kind: 'user'; text: string; attachments?: CentraidConversationHistoryAttachment[] }
+    | {
+        kind: 'user';
+        text: string;
+        attachments?: CentraidConversationHistoryAttachment[];
+        fromArchive?: boolean;
+      }
     | {
         kind: 'ai';
         text: string;
@@ -1330,6 +1348,7 @@ declare global {
           attempts: CentraidConversationHistoryRetryAttempt[];
         };
         usage?: CentraidConversationTurnUsage;
+        fromArchive?: boolean;
       }
     | {
         kind: 'tool';
@@ -1340,6 +1359,7 @@ declare global {
         state: 'ok' | 'error';
         result?: unknown;
         errorText?: string;
+        fromArchive?: boolean;
       };
   // Mirror of the module-level automation types so screens can
   // reference them by bare name without imports (issue #91).

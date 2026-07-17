@@ -88,6 +88,10 @@ test('openVaultDb: a journal.db created WITHOUT auto_vacuum converts to INCREMEN
   cleanups.push(() => db.close());
   // The one-time conversion VACUUM in openFile rewrites the file into
   // incremental mode; the file stays in WAL.
-  expect((db.journal.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum: number }).auto_vacuum).toBe(2);
-  expect((db.journal.prepare('PRAGMA journal_mode').get() as { journal_mode: string }).journal_mode).toBe('wal');
+  expect(
+    (db.journal.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum: number }).auto_vacuum,
+  ).toBe(2);
+  expect(
+    (db.journal.prepare('PRAGMA journal_mode').get() as { journal_mode: string }).journal_mode,
+  ).toBe('wal');
 });

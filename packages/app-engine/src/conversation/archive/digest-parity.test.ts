@@ -115,16 +115,106 @@ describe('digest parity with pre-archive rollups', () => {
       )
       .run(daysAgo(200), daysAgo(120));
 
-    seedFinishedTurn(journal, { turnId: 'd0', conversationId: 'app/digest', seq: 0, startedAt: daysAgo(150), input: 100, output: 50, cost: 0.02, steps: 2, tools: 1, model: 'sonnet' });
-    seedFinishedTurn(journal, { turnId: 'd1', conversationId: 'app/digest', seq: 1, startedAt: daysAgo(140), input: 200, output: 40, cost: 0.03, steps: 3, tools: 0, model: 'opus', ok: false });
-    seedFinishedTurn(journal, { turnId: 'd2', conversationId: 'app/digest', seq: 2, startedAt: daysAgo(130), input: 80, output: 20, cost: 0.01, steps: 1, tools: 2, model: 'sonnet', retryOf: 'd1' });
-    seedFinishedTurn(journal, { turnId: 'd3', conversationId: 'app/digest', seq: 3, startedAt: daysAgo(2), input: 10, output: 5, cost: 0.001, steps: 1, tools: 0, model: 'sonnet' }); // live head
+    seedFinishedTurn(journal, {
+      turnId: 'd0',
+      conversationId: 'app/digest',
+      seq: 0,
+      startedAt: daysAgo(150),
+      input: 100,
+      output: 50,
+      cost: 0.02,
+      steps: 2,
+      tools: 1,
+      model: 'sonnet',
+    });
+    seedFinishedTurn(journal, {
+      turnId: 'd1',
+      conversationId: 'app/digest',
+      seq: 1,
+      startedAt: daysAgo(140),
+      input: 200,
+      output: 40,
+      cost: 0.03,
+      steps: 3,
+      tools: 0,
+      model: 'opus',
+      ok: false,
+    });
+    seedFinishedTurn(journal, {
+      turnId: 'd2',
+      conversationId: 'app/digest',
+      seq: 2,
+      startedAt: daysAgo(130),
+      input: 80,
+      output: 20,
+      cost: 0.01,
+      steps: 1,
+      tools: 2,
+      model: 'sonnet',
+      retryOf: 'd1',
+    });
+    seedFinishedTurn(journal, {
+      turnId: 'd3',
+      conversationId: 'app/digest',
+      seq: 3,
+      startedAt: daysAgo(2),
+      input: 10,
+      output: 5,
+      cost: 0.001,
+      steps: 1,
+      tools: 0,
+      model: 'sonnet',
+    }); // live head
 
-    seedFinishedTurn(journal, { turnId: 's0', conversationId: 'app/sync', seq: 0, startedAt: daysAgo(160), input: 300, output: 100, cost: 0.05, steps: 4, tools: 3, model: 'opus' });
-    seedFinishedTurn(journal, { turnId: 's1', conversationId: 'app/sync', seq: 1, startedAt: daysAgo(1), input: 20, output: 8, cost: 0.002, steps: 1, tools: 0, model: 'opus' }); // live head
+    seedFinishedTurn(journal, {
+      turnId: 's0',
+      conversationId: 'app/sync',
+      seq: 0,
+      startedAt: daysAgo(160),
+      input: 300,
+      output: 100,
+      cost: 0.05,
+      steps: 4,
+      tools: 3,
+      model: 'opus',
+    });
+    seedFinishedTurn(journal, {
+      turnId: 's1',
+      conversationId: 'app/sync',
+      seq: 1,
+      startedAt: daysAgo(1),
+      input: 20,
+      output: 8,
+      cost: 0.002,
+      steps: 1,
+      tools: 0,
+      model: 'opus',
+    }); // live head
 
-    seedFinishedTurn(journal, { turnId: 'c0', conversationId: 'chat1', seq: 0, startedAt: daysAgo(150), input: 60, output: 30, cost: 0.015, steps: 2, tools: 1, model: 'sonnet' });
-    seedFinishedTurn(journal, { turnId: 'c1', conversationId: 'chat1', seq: 1, startedAt: daysAgo(140), input: 40, output: 10, cost: 0.005, steps: 1, tools: 0, model: 'haiku' });
+    seedFinishedTurn(journal, {
+      turnId: 'c0',
+      conversationId: 'chat1',
+      seq: 0,
+      startedAt: daysAgo(150),
+      input: 60,
+      output: 30,
+      cost: 0.015,
+      steps: 2,
+      tools: 1,
+      model: 'sonnet',
+    });
+    seedFinishedTurn(journal, {
+      turnId: 'c1',
+      conversationId: 'chat1',
+      seq: 1,
+      startedAt: daysAgo(140),
+      input: 40,
+      output: 10,
+      cost: 0.005,
+      steps: 1,
+      tools: 0,
+      model: 'haiku',
+    });
 
     const insights = new InsightsStore(makeJournalDbProvider(dbPath));
     // A window wide enough to include every aged run in BOTH the live and the
@@ -132,7 +222,10 @@ describe('digest parity with pre-archive rollups', () => {
     const opts = { windowDays: 400 };
     const before = insights.summary(opts);
 
-    const r = runConversationArchival({ journal, blobSink, custodyProven: () => true }, { nowMs: now });
+    const r = runConversationArchival(
+      { journal, blobSink, custodyProven: () => true },
+      { nowMs: now },
+    );
     expect(r.segmentsWritten).toBeGreaterThan(0);
     expect(r.turnsPruned).toBeGreaterThan(0);
     // Confirm raw archived rows are actually gone (Insights now leans on digests).

@@ -149,15 +149,11 @@ function mergeModels(existingJson: string, delta: Map<string, ModelRollup>): str
  * extend; kind/app_id/automation_ref/automation_name/title snapshot the latest
  * conversation state. Read-modify-write in JS keeps the models_json merge simple.
  */
-function upsertDigest(
-  journal: DatabaseSync,
-  conv: Row,
-  delta: DigestDelta,
-  nowMs: number,
-): void {
+function upsertDigest(journal: DatabaseSync, conv: Row, delta: DigestDelta, nowMs: number): void {
   const conversationId = conv.id as string;
   const kind = conv.kind as string;
-  const automationRef = kind === 'automation' ? ((conv.automation_id as string | null) ?? null) : null;
+  const automationRef =
+    kind === 'automation' ? ((conv.automation_id as string | null) ?? null) : null;
   const appId = derivedAppId(conv);
   const title = (conv.title as string | null) ?? '';
   const automationName = kind === 'automation' && title !== '' ? title : null;
@@ -171,7 +167,10 @@ function upsertDigest(
 
   const firstStartedAt =
     existing && existing.first_started_at !== null
-      ? Math.min(num(existing.first_started_at), delta.firstStartedAt ?? num(existing.first_started_at))
+      ? Math.min(
+          num(existing.first_started_at),
+          delta.firstStartedAt ?? num(existing.first_started_at),
+        )
       : delta.firstStartedAt;
   const lastEndedAt =
     existing && existing.last_ended_at !== null
@@ -267,7 +266,9 @@ export function archiveRange(
   const items =
     turnIds.length > 0
       ? (journal
-          .prepare(`SELECT * FROM items WHERE turn_id IN (${placeholders}) ORDER BY turn_id, ordinal`)
+          .prepare(
+            `SELECT * FROM items WHERE turn_id IN (${placeholders}) ORDER BY turn_id, ordinal`,
+          )
           .all(...turnIds) as Row[])
       : [];
   const itemIds = items.map((i) => i.id as string);

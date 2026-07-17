@@ -108,7 +108,10 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     try {
       const loaded = await loadConversation(ASSISTANT_APP_ID, id);
       if (m.current.disposed || m.current.currentId !== id || m.current.busy) return;
-      m.current.msgs = hydrateMessages(loaded.messages);
+      m.current.msgs = hydrateMessages(loaded.messages, {
+        ...(loaded.hasArchivedHistory ? { hasArchivedHistory: true } : {}),
+        ...(loaded.archiveUnavailable ? { archiveUnavailable: true } : {}),
+      });
       m.current.turnCount = loaded.turnCount;
       push();
     } catch {
@@ -128,7 +131,10 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     try {
       const loaded = await loadConversation(ASSISTANT_APP_ID, id);
       if (m.current.disposed || m.current.currentId !== id) return;
-      m.current.msgs = hydrateMessages(loaded.messages);
+      m.current.msgs = hydrateMessages(loaded.messages, {
+        ...(loaded.hasArchivedHistory ? { hasArchivedHistory: true } : {}),
+        ...(loaded.archiveUnavailable ? { archiveUnavailable: true } : {}),
+      });
       m.current.turnCount = loaded.turnCount;
     } catch (err) {
       if (m.current.disposed) return;

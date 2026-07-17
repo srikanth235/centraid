@@ -75,7 +75,10 @@ export function runConversationArchival(
 
   // ── Phase B — custody-gated prune (separate phase, same call) ─────────
   const pruned = pruneCustodyProven(journal, custodyProven, nowMs, maxPruneSegments);
-  const reclaim = pruned.segmentsPruned > 0 ? reclaimJournalPages(journal) : { mode: reclaimModeOf(journal), ranVacuum: false };
+  const reclaim =
+    pruned.segmentsPruned > 0
+      ? reclaimJournalPages(journal)
+      : { mode: reclaimModeOf(journal), ranVacuum: false };
 
   return {
     archived,
@@ -87,7 +90,9 @@ export function runConversationArchival(
   };
 }
 
-function reclaimModeOf(journal: ConversationArchivalDeps['journal']): 'incremental' | 'full' | 'none' {
+function reclaimModeOf(
+  journal: ConversationArchivalDeps['journal'],
+): 'incremental' | 'full' | 'none' {
   const av = (journal.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum: number }).auto_vacuum;
   return av === 2 ? 'incremental' : av === 1 ? 'full' : 'none';
 }
