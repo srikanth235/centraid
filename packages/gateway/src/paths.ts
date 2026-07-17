@@ -80,6 +80,15 @@ export interface GatewayPaths {
   modelCatalogFile?: string;
 
   /**
+   * Optional path to the disk-cached model PRICE table (`model-pricing.json`,
+   * issue #445) — the pricing warmer's filtered LiteLLM fetch, kept fresh with
+   * a 24h TTL. Omit to default to a sibling of `modelCatalogFile`; without
+   * either, the warmer refreshes in-memory only and costing falls back to the
+   * bundled snapshot.
+   */
+  modelPricingFile?: string;
+
+  /**
    * Optional root for the offsite backup engine's own state
    * (`keyring.json`, `state.json`, `staging/`) — kept OUTSIDE `vaultDir` so
    * a raw copy of the vault tree never carries the backup keyring (the

@@ -264,6 +264,7 @@ export interface PreparedStatements {
   listAttachmentsForItem: StatementSync;
   listAttachmentsForTurn: StatementSync;
   referencedHashes: StatementSync;
+  listArchiveSegments: StatementSync;
   upsertState: StatementSync;
   getState: StatementSync;
   deleteState: StatementSync;
@@ -503,7 +504,30 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       SELECT a.* FROM attachments a JOIN items i ON a.item_id = i.id
       WHERE i.turn_id = ? ORDER BY a.created_at ASC
     `),
-    referencedHashes: db.prepare(`SELECT DISTINCT hash FROM attachments`),
+    // The blob-GC live set (issue #190) UNIONED with every hash an archived
+    // segment references (issue #438 decision 4) — both unpruned AND pruned
+    // conversation_archive rows, because archived history still points at those
+    // attachment bytes forever (archiving changes temperature, never existence).
+    // Deleting the conversation CASCADE-drops its archive rows and releases the
+    // hashes on the one true-deletion path.
+    referencedHashes: db.prepare(`
+      SELECT DISTINCT hash FROM (
+        SELECT hash FROM attachments
+        UNION
+        SELECT j.value AS hash
+          FROM conversation_archive ca, json_each(ca.attachment_hashes_json) j
+      )
+    `),
+    // Wave-3 rehydration (issue #438 decision 9): the archive-index rows for a
+    // conversation, ordered by seq. `pruned_at` distinguishes a sealed-AND-pruned
+    // range (raw rows gone → must fetch the segment blob to render it) from an
+    // archived-but-not-yet-pruned range (raw rows still live → served as today).
+    listArchiveSegments: db.prepare(`
+      SELECT id, seq_from, seq_to, segment_sha256, pruned_at
+        FROM conversation_archive
+       WHERE conversation_id = ?
+       ORDER BY seq_from ASC
+    `),
     upsertState: db.prepare(`
       INSERT INTO automation_state (automation_id, key, value_json, updated_at)
       VALUES (?, ?, ?, ?)

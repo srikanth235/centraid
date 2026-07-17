@@ -18,6 +18,7 @@ vi.mock('../../gateway-client.js', () => ({
         retries: 0,
         appsTouched: 0,
         quotaTokens: 1,
+        unpricedRuns: 0,
       },
       daily: [],
       byAutomation: [],

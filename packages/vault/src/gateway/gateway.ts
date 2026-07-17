@@ -12,6 +12,7 @@ import { nowIso, uuidv7 } from '../ids.js';
 import type { VaultDb } from '../db.js';
 import { resolveServableBlob, liveBlobShas, type BlobResolveOutcome } from '../blob/read.js';
 import { archivedSegmentShas } from '../journal-archive.js';
+import { conversationArchiveShas } from '../conversation-archive-roots.js';
 import {
   AGENT_CONTENT_VARIANTS,
   resolveAgentContent,
@@ -1402,6 +1403,10 @@ export class Gateway {
     // would delete their remote replicas as orphans (issue #367 §E2).
     const live = liveBlobShas(this.db.vault);
     for (const sha of archivedSegmentShas(this.db.journal)) live.add(sha);
+    // Conversation-ledger archive segments are claimed the same way (issue #438
+    // decision 6) — a pruned segment is the ONLY copy of its rows, so it must
+    // read as reachable or the sweep would delete the only durable copy.
+    for (const sha of conversationArchiveShas(this.db.journal)) live.add(sha);
     // Retained-snapshot GC roots (issue #436 §6) pin remote objects the live
     // model no longer claims but a recovery-to-N would still need. They protect
     // from the orphan delete without joining `live` (which would spuriously

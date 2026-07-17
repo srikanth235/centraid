@@ -48,6 +48,7 @@ const summary = {
     retries: 3,
     appsTouched: 7,
     quotaTokens: 256_000,
+    unpricedRuns: 0,
   },
   daily: [{ date: '2026-06-08', tokens: 1000, costUsd: 0.1, runs: 2 }],
   byAutomation: [],

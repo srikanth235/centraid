@@ -212,7 +212,9 @@ export function makeConversationRouteHandler(getStore: () => ConversationHistory
       }
 
       if (method === 'GET') {
-        const full = store.getSession(appId, id);
+        // Archive-aware read (issue #438 wave 3): serves live rows and merges
+        // any custody-gated-pruned history back from the CAS, read-only.
+        const full = await store.getSessionRehydrated(appId, id);
         if (!full) {
           sendError(res, 404, 'session not found');
           return true;

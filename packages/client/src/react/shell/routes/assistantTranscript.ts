@@ -60,6 +60,9 @@ export type AsstMsg =
       idempotencyKey?: string;
       /** The failed send happened while the browser was offline (issue #420). */
       offline?: boolean;
+      /** Rehydrated from a pruned archive segment (issue #438 wave 3): read-only,
+       *  so its feedback/regenerate controls are suppressed. */
+      fromArchive?: boolean;
     }
   | { kind: 'tools'; calls: AsstToolCall[] };
 
@@ -84,11 +87,30 @@ export function activeAttemptOf(msg: Extract<AsstMsg, { kind: 'ai' }>): Attempt 
   return attempts[i] ?? null;
 }
 
-/** Rebuild the message model from the ledger transcript rows (GET session). */
+/**
+ * Rebuild the message model from the ledger transcript rows (GET session).
+ * `opts` carries the archive markers (issue #438 wave 3): when history was
+ * rehydrated read-only from the archive, a subtle notice is prepended above the
+ * thread, and a warn notice replaces it when a segment blob couldn't be fetched.
+ */
 export function hydrateMessages(
   rows: Array<{ payload: CentraidConversationHistoryMessage; createdAt: number }>,
+  opts: { hasArchivedHistory?: boolean; archiveUnavailable?: boolean } = {},
 ): AsstMsg[] {
   const out: AsstMsg[] = [];
+  if (opts.archiveUnavailable) {
+    out.push({
+      kind: 'notice',
+      level: 'warn',
+      text: "Some older messages couldn't be loaded from the archive right now.",
+    });
+  } else if (opts.hasArchivedHistory) {
+    out.push({
+      kind: 'notice',
+      level: 'info',
+      text: 'Older messages below are restored from the archive (read-only).',
+    });
+  }
   for (const { payload, createdAt } of rows) {
     if (payload.kind === 'user') {
       out.push({
@@ -115,6 +137,7 @@ export function hydrateMessages(
         ...(payload.turnId ? { turnId: payload.turnId } : {}),
         ...(payload.feedback ? { feedback: payload.feedback } : {}),
         ...(payload.usage ? { usage: payload.usage } : {}),
+        ...(payload.fromArchive ? { fromArchive: true } : {}),
       };
       if (payload.retry?.attempts?.length) {
         msg.attempts = payload.retry.attempts.map((a) => ({
@@ -203,7 +226,10 @@ export function msgToDTO(msg: AsstMsg, isLastAnswer: boolean): AsstMsgDTO {
   const active = activeAttemptOf(msg);
   const text = active ? active.text : msg.text;
   const error = active ? Boolean(active.error) : Boolean(msg.error);
-  const turnId = active ? active.turnId : msg.turnId;
+  // Archived (read-only) history (issue #438 wave 3): drop the feedback/
+  // regenerate target so the surface renders no control the server would reject
+  // — a mutation on a pruned turn no-ops (its raw row is gone).
+  const turnId = msg.fromArchive ? undefined : active ? active.turnId : msg.turnId;
   const feedback = active ? active.feedback : (msg.feedback ?? null);
   const usage = active ? active.usage : msg.usage;
   return {

@@ -226,7 +226,11 @@ export {
   type ConversationTurnAttachment,
   type RecordTurnInput,
   type RecordedTurnReplay,
+  type SessionTranscript,
 } from './conversation/history.js';
+// Lazy archive rehydration seam (issue #438 wave 3): the gateway supplies the
+// vault's `db.blobs.open` as the reader; the standalone host omits it.
+export type { ArchiveBlobReader } from './conversation/rehydrate.js';
 // LLM auto-titles (issue #420, Wave 3): a cheap one-shot inference names a
 // new conversation after its first turn. Provider-agnostic (tier token) and
 // fire-and-forget — the gateway owns the "apply only if still derived" guard.
@@ -278,6 +282,25 @@ export {
   CONVERSATION_LEDGER_DDL,
   type DatabaseProvider,
 } from './stores/gateway-db.js';
+
+// Conversation-band archival engine (issue #438): the bounded, idempotent
+// maintenance pass that seals cold turn-ranges into the vault blob CAS
+// (phase A) and custody-gated-prunes their raw rows (phase B). The vault/
+// gateway inject the blob-CAS door and the custody-proven latch; app-engine
+// owns the band. `readArchivedConversationSegment` is the round-trip read
+// wave 3's rehydration reuses.
+export {
+  runConversationArchival,
+  readArchivedConversationSegment,
+  DEFAULT_CONVERSATION_ARCHIVE_WINDOW_DAYS,
+  type ConversationArchivalDeps,
+  type ConversationArchivalOptions,
+  type ConversationArchivalResult,
+  type ArchivedRange,
+  type ArchivedConversationSegment,
+  type BlobSink,
+  type CustodyProven,
+} from './conversation/archive/index.js';
 
 // The per-vault workspace view app-engine operates in (#280): the gateway
 // resolves the ACTIVE vault and injects this shape; stores re-resolve per
@@ -343,10 +366,26 @@ export type {
   RunKind,
 } from './conversation/schema.js';
 
-// Per-model token pricing. `run_nodes.cost_usd` is frozen at write time
-// via `costForUsage`; an unknown model yields `undefined` so the ledger
-// records NULL (distinct from a genuine $0). See issue #90 question 4.
-export { priceForModel, costForUsage, type ModelPrice, type TokenUsage } from './model-pricing.js';
+// Per-model token pricing. `items.cost_usd` is frozen at write time via
+// `costForUsage`; an unknown model yields `undefined` so the ledger records
+// NULL (distinct from a genuine $0). See issue #90 question 4 / #445. The
+// catalog is seeded from a committed LiteLLM snapshot; the gateway warmer
+// overlays a fresher table with `setPricingCatalog`, filtering the live
+// fetch through the shared `filterLiteLLM`.
+export {
+  priceForModel,
+  costForUsage,
+  setPricingCatalog,
+  filterLiteLLM,
+  type ModelPrice,
+  type TokenUsage,
+  type PricingCatalog,
+  type PricingEntry,
+} from './model-pricing.js';
+
+// Repricing backfill (#445) — bounded, idempotent pass that recomputes frozen
+// `items.cost_usd` from the current catalog and re-derives affected turn totals.
+export { repriceLedger, type RepriceResult, type RepriceOptions } from './conversation/reprice.js';
 
 // Insights domain — AnalyticsStore + InsightsStore over the run ledger.
 // Lives in the `insights/` sub-module behind a one-way internal boundary:

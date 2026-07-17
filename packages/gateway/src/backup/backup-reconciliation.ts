@@ -18,7 +18,13 @@ import {
   type WalGroupCloser,
   type WalSegmentAddress,
 } from '@centraid/backup';
-import { ReplicaIndex, archivedSegmentShas, liveBlobShas, type VaultDb } from '@centraid/vault';
+import {
+  ReplicaIndex,
+  archivedSegmentShas,
+  conversationArchiveShas,
+  liveBlobShas,
+  type VaultDb,
+} from '@centraid/vault';
 import type { StorageConnectionStore } from './storage-connections.js';
 import { baseStore, reconcileCasInventory } from './backup-cas-diff.js';
 import { collectCasInventory } from './backup-cas-inventory.js';
@@ -339,6 +345,7 @@ export async function runBackupReconciliation(opts: {
   if (casResult.collection) {
     const live = liveBlobShas(opts.db.vault);
     for (const sha of archivedSegmentShas(opts.db.journal)) live.add(sha);
+    for (const sha of conversationArchiveShas(opts.db.journal)) live.add(sha);
     const index = new ReplicaIndex(opts.db.vault);
     // Scope the cas diff to `store='cas'` rows (issue #425 Wave 2) so the cas
     // listing never disproves derived evidence.

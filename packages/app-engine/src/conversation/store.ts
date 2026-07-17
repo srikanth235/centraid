@@ -51,6 +51,7 @@ import type {
   ItemKind,
   RunKind,
 } from './schema.js';
+import type { ArchiveSegmentRef } from './rehydrate.js';
 import {
   prepare,
   conversationFromRaw,
@@ -706,6 +707,30 @@ export class ConversationStore {
     const { stmts } = this.ensureReady();
     const rows = stmts.referencedHashes.all() as unknown as { hash: string }[];
     return new Set(rows.map((r) => r.hash));
+  }
+
+  /**
+   * The archive-index rows for a conversation, seq-ordered (issue #438 wave 3).
+   * `pruned` is true once the range's raw turns were custody-gated-deleted — the
+   * caller then rehydrates that range from the segment blob; unpruned ranges
+   * still have live rows and render as today.
+   */
+  listArchiveSegments(conversationId: string): ArchiveSegmentRef[] {
+    const { stmts } = this.ensureReady();
+    const rows = stmts.listArchiveSegments.all(conversationId) as unknown as {
+      id: string;
+      seq_from: number;
+      seq_to: number;
+      segment_sha256: string;
+      pruned_at: number | null;
+    }[];
+    return rows.map((r) => ({
+      id: r.id,
+      seqFrom: r.seq_from,
+      seqTo: r.seq_to,
+      segmentSha256: r.segment_sha256,
+      pruned: r.pruned_at !== null,
+    }));
   }
 
   // ─── automation state KV ────────────────────────────────────────────

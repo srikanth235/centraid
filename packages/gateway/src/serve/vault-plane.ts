@@ -108,6 +108,7 @@ import {
   type S3Credentials,
   type PreviewCodec,
   runJournalArchival,
+  blobCustodyProven,
   WalShipper,
   type WalShipperOptions,
 } from '@centraid/vault';
@@ -116,6 +117,8 @@ import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import {
   ensureConversationLedger,
+  runConversationArchival,
+  repriceLedger,
   type RuntimeLogger,
   type VaultBridge,
   type VaultCallResult,
@@ -386,6 +389,8 @@ export class VaultPlane {
   private walTimer: NodeJS.Timeout | undefined;
   private firstWalTick: NodeJS.Immediate | undefined;
   private lastJournalArchivalAt = 0;
+  // Resume point for the bounded repricing pass (#445); wraps to 0 at the tail.
+  private repriceCursor = 0;
   private closed = false;
   private displayName: string;
   /**
@@ -1828,20 +1833,56 @@ export class VaultPlane {
               `vault plane: journal archival rowsArchived=${archived.rowsArchived} ` +
                 `manifests=${archived.manifests.length} vacuum=${archived.reclaim.mode}`,
             );
-            // captureFirst: false — the JOURNAL's WAL right now holds the
-            // archival VACUUM's whole-database rewrite; the fresh base the
-            // roll takes already contains every byte of it, so capturing
-            // first would ship a DB-sized burst into a generation whose next
-            // event is its own retirement. (The VAULT's pending bytes still
-            // ship: the flag names one database, and the vault's WAL holds
-            // nothing unusual.)
-            //
-            // This re-bases the VAULT too, and that is required, not
-            // incidental (issue #408): the two generations break together or
-            // the snapshot that follows would pair a journal base from after
-            // the archival with a vault base from before it — two instants,
-            // no coordinated restore point between them, and the producer
-            // refuses to register such a pair at all.
+          }
+          // Conversation-ledger archival (issue #438) rides the SAME daily block:
+          // the ledger band grows at machine speed and is the file that reaches
+          // gigabytes. The gateway composes the engine's seams — the vault blob
+          // door (`db.blobs`) and the custody-proven latch from vault primitives.
+          // A gateway that has never served conversations may not have ensured
+          // the ledger band on this journal yet, so ensure it first (idempotent).
+          ensureConversationLedger(this.db.journal);
+          // Repricing backfill (issue #445) rides the daily block: the price
+          // catalog refreshes at most daily (warmer TTL), so an hourly pass
+          // would almost always no-op. Bounded + resumable from a plane-held
+          // cursor — corrects NULL-from-then-unknown and stale-rate item costs
+          // and re-derives the affected turn totals before those rows may be
+          // archived. Idempotent: a clean row recomputes unchanged and writes
+          // nothing. Runs BEFORE archival so live rows get honest costs first.
+          const repriced = repriceLedger(this.db.journal, { cursor: this.repriceCursor });
+          this.repriceCursor = repriced.nextCursor;
+          if (repriced.itemsRepriced > 0) {
+            this.logger.info(
+              `vault plane: repriced items=${repriced.itemsRepriced} ` +
+                `turns=${repriced.turnsRederived} scanned=${repriced.scanned}`,
+            );
+          }
+          const convArchival = runConversationArchival({
+            journal: this.db.journal,
+            blobSink: {
+              ingestSync: (bytes) => this.db.blobs.ingestSync(bytes),
+              has: (sha) => this.db.blobs.hasSync(sha),
+            },
+            custodyProven: (sha) => blobCustodyProven(this.db, sha),
+          });
+          if (convArchival.segmentsWritten > 0 || convArchival.segmentsPruned > 0) {
+            this.logger.info(
+              `vault plane: conversation archival segmentsWritten=${convArchival.segmentsWritten} ` +
+                `turnsArchived=${convArchival.turnsArchived} segmentsPruned=${convArchival.segmentsPruned} ` +
+                `turnsPruned=${convArchival.turnsPruned} vacuum=${convArchival.reclaim.mode}`,
+            );
+          }
+          // One shared generation roll if EITHER engine wrote or pruned rows
+          // (issue #408/#438): both engines VACUUM the same journal.db through
+          // the WAL, and the vault+journal generations must break TOGETHER so a
+          // snapshot never pairs a post-archival journal base with a pre-archival
+          // vault base — the producer refuses such a two-instant pair outright.
+          // captureFirst: false — the fresh base already contains the rewrite, so
+          // capturing first would ship a DB-sized burst into a doomed generation.
+          if (
+            archived.rowsArchived > 0 ||
+            convArchival.segmentsWritten > 0 ||
+            convArchival.segmentsPruned > 0
+          ) {
             this.walShipper?.rollGeneration('journal', 'journal-archival', { captureFirst: false });
           }
         } catch (err) {

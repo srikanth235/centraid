@@ -14,6 +14,7 @@
  *   <dataDir>/
  *     prefs.json            — device prefs (runner choice, binPath, …)
  *     model-catalog.json    — chat picker's per-runner model catalog
+ *     model-pricing.json    — disk-cached LiteLLM price table (#445 warmer)
  *     token.bin             — persistent bearer token (mode 0o600)
  *     vault/                — vault registry root (one dir per vault)
  *     backup/               — offsite backup engine state (keyring, per-vault
@@ -63,6 +64,7 @@ export function daemonLayoutFor(dataDir: string): DaemonLayout {
   return {
     prefsFile: path.join(abs, 'prefs.json'),
     modelCatalogFile: path.join(abs, 'model-catalog.json'),
+    modelPricingFile: path.join(abs, 'model-pricing.json'),
     tokenFile: path.join(abs, 'token.bin'),
     // Mounting the vault registry (duaility §12): the daemon hosts one
     // gateway holding N sovereign vaults, one subdirectory each — and,

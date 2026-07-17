@@ -371,7 +371,13 @@ export async function fetchAssistantAttachmentUrl(
   return URL.createObjectURL(blob);
 }
 
-/** Load one chat session with its reconstructed transcript. */
+/**
+ * Load one chat session with its reconstructed transcript. When cold ranges
+ * were archived + custody-gated-pruned (issue #438 wave 3), the server merges
+ * them back read-only: `hasArchivedHistory` flags that some messages carry
+ * `fromArchive`, and `archiveUnavailable` flags that a segment blob couldn't be
+ * fetched (the render is the live rows only).
+ */
 export async function loadConversation(
   appId: string,
   sessionId: string,
@@ -382,6 +388,9 @@ export async function loadConversation(
       payload: CentraidConversationHistoryMessage;
       createdAt: number;
     }>;
+    hasArchivedHistory?: boolean;
+    archivedTurnCount?: number;
+    archiveUnavailable?: boolean;
   }
 > {
   const { baseUrl, token } = await auth();

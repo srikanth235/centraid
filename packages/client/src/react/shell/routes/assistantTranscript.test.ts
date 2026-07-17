@@ -57,6 +57,20 @@ describe('hydrateMessages', () => {
     expect(msgs[0]).toMatchObject({ kind: 'tools' });
     expect((msgs[0] as Extract<AsstMsg, { kind: 'tools' }>).calls.length).toBe(2);
   });
+
+  it('prepends a from-the-archive notice and marks rehydrated answers (issue #438)', () => {
+    const msgs = hydrateMessages(
+      [{ payload: { kind: 'ai', text: 'old', turnId: 't1', fromArchive: true }, createdAt: 1 }],
+      { hasArchivedHistory: true },
+    );
+    expect(msgs[0]).toMatchObject({ kind: 'notice', level: 'info' });
+    expect(msgs[1]).toMatchObject({ kind: 'ai', text: 'old', fromArchive: true });
+  });
+
+  it('prepends a warn notice when archived history is unavailable (issue #438)', () => {
+    const msgs = hydrateMessages([], { hasArchivedHistory: true, archiveUnavailable: true });
+    expect(msgs[0]).toMatchObject({ kind: 'notice', level: 'warn' });
+  });
 });
 
 describe('msgToDTO', () => {
@@ -99,5 +113,23 @@ describe('msgToDTO', () => {
     const dto = msgToDTO(errored, false);
     expect(dto.kind === 'ai' && dto.streaming === false && dto.error).toBe(true);
     expect(dto.kind === 'ai' && dto.streaming === false && dto.canRetry).toBe(true);
+  });
+
+  it('suppresses feedback + regenerate on read-only archived answers (issue #438)', () => {
+    const archived: AsstMsg = {
+      kind: 'ai',
+      text: 'sealed',
+      turnId: 't1',
+      feedback: 'up',
+      fromArchive: true,
+    };
+    const dto = msgToDTO(archived, true);
+    if (dto.kind === 'ai' && dto.streaming === false) {
+      // No turnId ⇒ the surface renders no feedback/regenerate control the
+      // server would reject on a pruned (gone) turn.
+      expect(dto.turnId).toBeUndefined();
+      expect(dto.canRegenerate).toBeFalsy();
+      expect(dto.copyText).toBe('sealed');
+    }
   });
 });

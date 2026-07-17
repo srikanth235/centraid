@@ -69,6 +69,8 @@ export interface InsightsKpis {
   retries: number;
   appsTouched: number;
   quotaTokens: number;
+  /** Finished runs left unpriced by a then-unknown model (#445). */
+  unpricedRuns: number;
 }
 export interface InsightsDailyPoint {
   date: string;

@@ -7,7 +7,13 @@
  * target merely so inventory can run.
  */
 
-import { ReplicaIndex, archivedSegmentShas, liveBlobShas, type VaultDb } from '@centraid/vault';
+import {
+  ReplicaIndex,
+  archivedSegmentShas,
+  conversationArchiveShas,
+  liveBlobShas,
+  type VaultDb,
+} from '@centraid/vault';
 import { collectCasInventory, type CasInventoryResult } from './backup-cas-inventory.js';
 import { reconcileDerivedInto } from './backup-derived-inventory.js';
 import { reconcileCasInventory, type BackupReconciliationState } from './backup-reconciliation.js';
@@ -104,6 +110,7 @@ export async function runCasOnlyReconciliation(
     // invariant is visible at both forks of the diff, not silently absent here.
     const live = liveBlobShas(opts.db.vault);
     for (const sha of archivedSegmentShas(opts.db.journal)) live.add(sha);
+    for (const sha of conversationArchiveShas(opts.db.journal)) live.add(sha);
     const index = new ReplicaIndex(opts.db.vault);
     for (const sha of result.authenticatedFailures ?? []) index.unmark(sha);
     // Scope the cas diff to `store='cas'` rows (issue #425 Wave 2).
