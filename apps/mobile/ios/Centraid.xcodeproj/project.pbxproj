@@ -14,7 +14,6 @@
 		4D61C559D6424EDFA48B8A7E /* MainInterface.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = C656DF64F66C4E0A99FC2098 /* MainInterface.storyboard */; };
 		6E47C0A2A5334D4DBC4F5682 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76F3F634552A46C9BDA49296 /* ShareViewController.swift */; };
 		83CF788FB536A4DF75DDC4EF /* libPods-Centraid.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A8084E4C0254B41FD1BF0DA3 /* libPods-Centraid.a */; };
-		862B703DEE874D3BBFE72234 /* ShareExtensionPreprocessor.js in Resources */ = {isa = PBXBuildFile; fileRef = 9C5038ED76B8486185967C27 /* ShareExtensionPreprocessor.js */; };
 		9186C9E8C27B8C5680E73FD9 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAFF470D87577DF8FC52E704 /* ExpoModulesProvider.swift */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		D86D345E4258491AAF4D6BC3 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = BABB3D74A7F946B98EB90A66 /* PrivacyInfo.xcprivacy */; };
@@ -53,7 +52,6 @@
 		3C1CC3994908466291D6BCFA /* ShareExtension.entitlements */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = ShareExtension.entitlements; path = ShareExtension.entitlements; sourceTree = "<group>"; };
 		6B59F3E946CE3ED29CEADBCE /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = Centraid/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		76F3F634552A46C9BDA49296 /* ShareViewController.swift */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.swift; name = ShareViewController.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
-		9C5038ED76B8486185967C27 /* ShareExtensionPreprocessor.js */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = ShareExtensionPreprocessor.js; path = ShareExtensionPreprocessor.js; sourceTree = "<group>"; };
 		A8084E4C0254B41FD1BF0DA3 /* libPods-Centraid.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Centraid.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = Centraid/SplashScreen.storyboard; sourceTree = "<group>"; };
 		B10CB87B539C42A4A7943664 /* Pods-Centraid.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Centraid.debug.xcconfig"; path = "Target Support Files/Pods-Centraid/Pods-Centraid.debug.xcconfig"; sourceTree = "<group>"; };
@@ -182,7 +180,6 @@
 			children = (
 				76F3F634552A46C9BDA49296 /* ShareViewController.swift */,
 				C656DF64F66C4E0A99FC2098 /* MainInterface.storyboard */,
-				9C5038ED76B8486185967C27 /* ShareExtensionPreprocessor.js */,
 				BABB3D74A7F946B98EB90A66 /* PrivacyInfo.xcprivacy */,
 				18E954F694DB4A728A760EA3 /* ShareExtension-Info.plist */,
 				3C1CC3994908466291D6BCFA /* ShareExtension.entitlements */,
@@ -284,7 +281,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				4D61C559D6424EDFA48B8A7E /* MainInterface.storyboard in Resources */,
-				862B703DEE874D3BBFE72234 /* ShareExtensionPreprocessor.js in Resources */,
 				D86D345E4258491AAF4D6BC3 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

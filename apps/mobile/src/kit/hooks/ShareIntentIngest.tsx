@@ -1,52 +1,36 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
 import { useShareIntentContext } from 'expo-share-intent';
 import { File } from 'expo-file-system';
 
 import { backupDeviceMedia, backupDocument } from '../../lib/upload/media-producer';
 import { useReplica } from '../replica/ReplicaProvider';
+import { ShareIntentGate, processShareIntent } from './share-ingest';
 
 /** iOS share extension + Android share target converge on the one durable queue. */
 export function ShareIntentIngest(): null {
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
   const { session, gatewayBase } = useReplica();
+  // One gate across renders: a re-render while an ingest is still in flight must
+  // not spawn a second pass over the same files (#431 F9).
+  const gateRef = useRef<ShareIntentGate | null>(null);
+  if (!gateRef.current) gateRef.current = new ShareIntentGate();
   useEffect(() => {
-    if (!hasShareIntent || !session || !gatewayBase || !shareIntent.files?.length) return;
-    let cancelled = false;
-    void (async () => {
-      for (const file of shareIntent.files ?? []) {
-        const plaintextSize = file.size ?? new File(file.path).size;
-        if (file.mimeType.startsWith('image/') || file.mimeType.startsWith('video/')) {
-          await backupDeviceMedia(session, gatewayBase, {
-            localUri: file.path,
-            filename: file.fileName,
-            mediaType: file.mimeType,
-            plaintextSize,
-            kind: file.mimeType.startsWith('video/') ? 'video' : 'photo',
-            width: file.width ?? undefined,
-            height: file.height ?? undefined,
-            durationS: file.duration ?? undefined,
-          });
-        } else {
-          await backupDocument(session, gatewayBase, {
-            localUri: file.path,
-            title: file.fileName,
-            mediaType: file.mimeType,
-            plaintextSize,
-          });
-        }
-      }
-      if (!cancelled) resetShareIntent();
-    })().catch((error) => {
-      if (!cancelled)
-        Alert.alert(
-          'Save to Centraid paused',
-          error instanceof Error ? error.message : String(error),
-        );
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [gatewayBase, hasShareIntent, resetShareIntent, session, shareIntent.files]);
+    if (!hasShareIntent || !session || !gatewayBase) return;
+    void gateRef.current!.run(() =>
+      processShareIntent(
+        {
+          backupDeviceMedia,
+          backupDocument,
+          fileSize: (path) => new File(path).size,
+          reset: resetShareIntent,
+          alert: (title, message) => Alert.alert(title, message),
+        },
+        session,
+        gatewayBase,
+        shareIntent,
+      ),
+    );
+  }, [gatewayBase, hasShareIntent, resetShareIntent, session, shareIntent]);
   return null;
 }
