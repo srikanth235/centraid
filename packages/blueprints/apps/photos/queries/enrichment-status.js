@@ -21,6 +21,9 @@ export default async ({ ctx }) => {
     const row = (result.rows ?? [])[0];
     return { tier: row?.tier ?? 'off' };
   } catch (err) {
-    return { tier: null, vaultDenied: { code: err.code, message: err.message } };
+    if (err.code === 'VAULT_CONSENT') {
+      return { tier: null, vaultDenied: { code: err.code, message: err.message } };
+    }
+    return { tier: null, error: String(err.message ?? err) };
   }
 };

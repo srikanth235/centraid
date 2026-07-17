@@ -12,6 +12,11 @@ import { defineConfig } from 'vite';
 const fromHere = (p: string): string => fileURLToPath(new URL(p, import.meta.url));
 
 export default defineConfig({
+  // The desktop shell document loads over file://, so every emitted asset URL
+  // must be relative. The default base '/' made the replica's sqlite worker
+  // resolve to file:///assets/… — a path that exists nowhere — so the worker
+  // request was canceled and the offline replica never started.
+  base: './',
   // Bundle @centraid/design-tokens from its TS source, not its built dist: it
   // emits CommonJS (it's also consumed by the Electron preload), and Rollup
   // can't statically read named exports from a CJS file reached through a

@@ -178,12 +178,14 @@ export default async ({ input, ctx }) => {
       window,
     };
   } catch (err) {
-    return {
-      assets: [],
-      albums: [],
-      places: [],
-      trash: [],
-      vaultDenied: { code: err.code, message: err.message },
-    };
+    const empty = { assets: [], albums: [], places: [], trash: [] };
+    // Only a consent deny is "ask the owner for access". Every other failure
+    // (VAULT_ERROR, VAULT_UNAVAILABLE, a protocol error from the replica
+    // bridge) is ours, and saying "no vault access yet" about it sends the
+    // reader off to fix a grant that was never the problem.
+    if (err.code === 'VAULT_CONSENT') {
+      return { ...empty, vaultDenied: { code: err.code, message: err.message } };
+    }
+    return { ...empty, error: String(err.message ?? err) };
   }
 };

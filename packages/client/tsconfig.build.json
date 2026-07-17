@@ -8,5 +8,11 @@
     "types": []
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.d.ts"],
-  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "node_modules", "dist"]
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/**/*-test-driver.ts",
+    "node_modules",
+    "dist"
+  ]
 }

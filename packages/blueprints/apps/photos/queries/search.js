@@ -120,6 +120,9 @@ export default async ({ input, ctx }) => {
     assets.sort((a, b) => contentIds.indexOf(a.content_id) - contentIds.indexOf(b.content_id));
     return { assets };
   } catch (err) {
-    return { assets: [], vaultDenied: { code: err.code, message: err.message } };
+    if (err.code === 'VAULT_CONSENT') {
+      return { assets: [], vaultDenied: { code: err.code, message: err.message } };
+    }
+    return { assets: [], error: String(err.message ?? err) };
   }
 };

@@ -1,5 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit (#406) shell session keeps replica ownership, lifecycle teardown, and intent drain in one auditable boundary
 import { auth, doFetch, GatewayClientError, type GatewayAuth } from '../gateway-client-core.js';
+import { vaultStatus } from '../gateway-client-vault.js';
 import {
   resumeVaultChanges,
   setVaultChangeShapeIds,
@@ -641,13 +642,16 @@ export async function openReplicaShellSession(
 let singleton:
   | { key: string; identity: ReplicaIdentity; promise: Promise<ReplicaShellSession> }
   | undefined;
+// The gateway's answer to "which vault am I addressing?", per gateway. Held
+// across calls because `getReplicaShellSession` runs on every bridged read.
+let addressedFallback: { key: string; promise: Promise<string | undefined> } | undefined;
 let lifecycleInstalled = false;
 let lifecyclePurge = Promise.resolve();
 const terminalPurgeRetryLoop = new TerminalReplicaPurgeRetryLoop();
 
 export async function getReplicaShellSession(): Promise<ReplicaShellSession> {
   installReplicaStorageLifecycle();
-  const gatewayAuth = await auth();
+  const gatewayAuth = await addressedGatewayAuth();
   const identity = replicaIdentityForGatewayAuth(gatewayAuth);
   const key = identityKey(identity);
   if (singleton?.key === key) return singleton.promise;
@@ -833,6 +837,46 @@ function purgeBrowserReplicaCaches(): void {
   } catch {
     /* Cache Storage may be denied even when the global is present. */
   }
+}
+
+/**
+ * `auth()`, with the addressed vault filled in when the client left it unset.
+ *
+ * An undefined `vaultId` means "let the gateway pick" (issue #289) — fine over
+ * HTTP, where the composed handler resolves one per request, but the replica
+ * keys its local store by `(gatewayId, vaultId)` and needs a concrete id up
+ * front. We ask the gateway instead of guessing: `_vault/status` answers for
+ * `vaults.current()`, the very plane the request resolved to, so it is right
+ * for both transports. Guessing `listVaults()[0]` would be wrong on the
+ * device-token path, which addresses the OLDEST ENROLLMENT rather than the
+ * lowest vault id — the replica would then build a store for one vault while
+ * every HTTP call served another.
+ */
+export async function addressedGatewayAuth(): Promise<GatewayAuth> {
+  const gatewayAuth = await auth();
+  if (gatewayAuth.vaultId) return gatewayAuth;
+  const key = gatewayAuth.gatewayId?.trim() || normalizedGatewayUrl(gatewayAuth.baseUrl);
+  let pending = addressedFallback?.key === key ? addressedFallback : undefined;
+  if (!pending) {
+    const promise = vaultStatus()
+      .then((status) => status?.vaultId)
+      .catch(() => undefined);
+    pending = { key, promise };
+    addressedFallback = pending;
+    // `promise` already folds a failed read into `undefined`, so it never
+    // rejects — no catch to attach here.
+    void promise.then((vaultId) => {
+      // A gateway that mounts no vault plane has nothing to cache — let the
+      // next call re-ask rather than pinning "unknown" for the session.
+      if (vaultId === undefined && addressedFallback?.promise === promise) {
+        addressedFallback = undefined;
+      }
+    });
+  }
+  const vaultId = await pending.promise;
+  // Still nothing to address (no vault plane) — `replicaIdentityForGatewayAuth`
+  // raises the protocol error, which is the honest answer here.
+  return vaultId ? { ...gatewayAuth, vaultId } : gatewayAuth;
 }
 
 export function replicaIdentityForGatewayAuth(gatewayAuth: GatewayAuth): ReplicaIdentity {
