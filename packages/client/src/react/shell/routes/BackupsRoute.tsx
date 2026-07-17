@@ -11,7 +11,7 @@ import {
 import BackupsScreen from '../../screens/BackupsScreen.js';
 import { useShellActions } from '../actions.js';
 import PageScroll from '../PageScroll.js';
-import { loadStorageCardStatus } from './gatewayStorageData.js';
+import { loadStorageUsageAggregate } from './gatewayStorageData.js';
 
 // React-owned Backups route — snapshot custody and the remote bytes behind
 // it, split out of the Gateway page (which stays the runtime instrument
@@ -51,7 +51,7 @@ export default function BackupsRoute(): JSX.Element {
         onVerifyBackupBucket={verifyGatewayBackupBucket}
         onExportRecoveryKit={() => window.CentraidApi.exportGatewayRecoveryKit()}
         onConfirmRecoveryKit={confirmGatewayRecoveryKit}
-        loadStorageStatus={loadStorageCardStatus}
+        loadStorageUsage={loadStorageUsageAggregate}
         onOpenStorageSettings={() => navigate({ kind: 'settings', page: 'storage' })}
       />
     </PageScroll>

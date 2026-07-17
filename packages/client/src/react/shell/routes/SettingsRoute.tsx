@@ -129,7 +129,7 @@ const PAGES: readonly PageDef[] = [
     section: 'Account',
     icon: 'Webhook',
     subtitle:
-      'Where your offsite backup snapshots and replicated blobs live — bring your own S3-compatible bucket, or connect a Centraid storage provider.',
+      'Keep this vault on this device only, or an encrypted copy hosted with your storage provider.',
   },
   {
     id: 'providers',

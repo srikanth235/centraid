@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import Icon from '../ui/Icon.js';
 import { cx } from '../ui/cx.js';
 import { formatClock, formatDuration } from '../shell/routes/gatewayData.js';
@@ -6,6 +6,10 @@ import buttonCss from '../ui/Button.module.css';
 import controlsCss from '../styles/controls.module.css';
 import gwStyles from './GatewayScreen.module.css';
 import styles from './BackupCard.module.css';
+import type { UsageInput } from '../../storage-metrics.js';
+import type { GatewayHomeDiscoveryDTO } from '../../gateway-client.js';
+import { computeStorageMetrics } from './backupMetrics.js';
+import BackupHealthMetrics, { ClockLine } from './BackupHealthMetrics.js';
 import BackupPolicyPanel, {
   type BackupDestinationDTO,
   type BackupPolicyDTO,
@@ -16,21 +20,15 @@ import BackupInventoryPanel, {
   type ProviderPolicyStatusDTO,
 } from './BackupInventoryPanel.js';
 
-// Gateway → Overview → Backups: the owner surface over the offsite backup
-// engine's HTTP status (`GET /centraid/_gateway/backup`, issue #351's last
-// workstream — the `centraid-gateway backup` CLI had status/run but nothing
-// surfaced it to the desktop). Not-configured renders an explainer instead
-// of an empty panel; configured renders per-vault last-backup/last-verify
-// ages and a manual "Back up now" trigger.
-//
-// The recovery-kit reminder (wave 4 of #351) is a permanent fixture of the
-// card, not a dismissable toast — losing track of the seal key makes every
-// snapshot unrecoverable ciphertext. It's now a real gate, not just a
-// nudge: unconfirmed renders a prominent call-to-action with a confirm
-// button that POSTs `_gateway/backup/kit-confirmed`; confirmed renders a
-// quiet one-line state with the date. The flag itself is generic (issue
-// #367 reuses it to gate the S3-storage enable flow), so this card is just
-// its first consumer, not its owner.
+// Gateway → Backups: the owner surface over the offsite backup engine. This
+// card now renders EXACTLY the five metrics of the §6 contract (issue #436)
+// via `BackupHealthMetrics` — Freshness, Recovery window, Privacy, Cost, Exit —
+// computed ONCE from `computeStorageMetrics`. Everything that used to sit on
+// the primary surface but isn't one of the five (the raw custody clocks, the
+// manual back-up/verify triggers, per-vault policy + the provider inventory)
+// now lives behind the collapsed "Diagnostics" disclosure. The recovery-kit
+// gate stays on the primary surface: it is Privacy/Exit-adjacent and blocking-
+// critical — losing the seal key makes every offsite byte unrecoverable.
 
 export interface BackupVaultStatusDTO {
   vaultId: string;
@@ -60,12 +58,18 @@ export interface BackupStatusDTO {
   /** Optional so a pre-wave-4 fixture / stub still type-checks; treated as
    *  "never confirmed" when absent. */
   recoveryKit?: RecoveryKitStatusDTO;
+  /** Provider-declared retention + restore-egress promises (#436 §6) — feeds
+   *  the Recovery-window and Exit metrics. Absent ⇒ those degrade to neutral. */
+  home?: GatewayHomeDiscoveryDTO;
 }
 
 export interface BackupCardProps {
   /** Live clock (parent ticks it) — drives the humanized ages. */
   now: number;
   loadStatus: () => Promise<BackupStatusDTO>;
+  /** Aggregate provider-reported usage (the Cost metric's source) — `null`
+   *  before the first poll. */
+  loadUsage?: () => Promise<UsageInput | null>;
   streamCustody?: (onChange: () => void, signal: AbortSignal) => Promise<void>;
   onRunNow: () => Promise<{ accepted: boolean; alreadyRunning?: boolean }>;
   onVerifyNow?: () => Promise<{ accepted: boolean; alreadyRunning?: boolean }>;
@@ -79,6 +83,8 @@ export interface BackupCardProps {
   onExportRecoveryKit?: () => Promise<{ ok: boolean; canceled?: boolean; error?: string }>;
   /** POSTs `_gateway/backup/kit-confirmed` — the recovery-kit gate's confirm button. */
   onConfirmRecoveryKit: () => Promise<{ confirmedAt: number }>;
+  /** Navigates to Settings → Storage (the head's "Manage" link). */
+  onOpenSettings?: () => void;
 }
 
 /** Regular refresh cadence — matches useGatewayHealth's poll order of
@@ -178,13 +184,13 @@ const DEFAULT_POLICY: BackupPolicyDTO = {
   rpoSeconds: 60,
   snapshotIntervalHours: 24,
   verifyEveryDays: 7,
-  casAck: 'receipt',
   outboxBudgetBytes: 512 * 1024 ** 2,
   reservedHeadroomBytes: 256 * 1024 ** 2,
   walBaseRollBytes: 16 * 1024 ** 2,
   walBaseRollHours: 24,
 };
 
+/** One diagnostic custody clock as a plain labelled age. */
 function VaultRow({
   vault,
   now,
@@ -244,6 +250,7 @@ function VaultRow({
 export default function BackupCard({
   now,
   loadStatus,
+  loadUsage,
   streamCustody,
   onRunNow,
   onVerifyNow,
@@ -251,8 +258,10 @@ export default function BackupCard({
   onVerifyBucket,
   onExportRecoveryKit,
   onConfirmRecoveryKit,
+  onOpenSettings,
 }: BackupCardProps): JSX.Element {
   const [status, setStatus] = useState<BackupStatusDTO | null>(null);
+  const [usage, setUsage] = useState<UsageInput | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [triggering, setTriggering] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
@@ -276,7 +285,16 @@ export default function BackupCard({
         if (!mountedRef.current) return;
         setLoadError(err instanceof Error ? err.message : String(err));
       });
-  }, [loadStatus]);
+    if (loadUsage) {
+      loadUsage()
+        .then((u) => {
+          if (mountedRef.current) setUsage(u);
+        })
+        .catch(() => {
+          // Usage is best-effort — the Cost metric falls back to unmetered/zero.
+        });
+    }
+  }, [loadStatus, loadUsage]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -329,87 +347,141 @@ export default function BackupCard({
     }
   };
 
+  const metrics = useMemo(
+    () => (status ? computeStorageMetrics(status, usage, now) : null),
+    [status, usage, now],
+  );
+
+  const hasBackups =
+    (status?.configured ?? false) || (status?.vaults.some((v) => v.lastBackupAt) ?? false);
+  const clocks = metrics?.freshness.clocks;
+
   return (
     <section className={cx(gwStyles.panel, styles.card)}>
       <div className={gwStyles.panelHead}>
         <h2>Backups</h2>
-        {status?.configured ? (
-          <div className={styles.actions}>
-            {onVerifyNow ? (
-              <button
-                type="button"
-                className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
-                disabled={anyRunning || verifying}
-                onClick={() => void verifyNow()}
-              >
-                <Icon name="CheckCircle" size={13} />
-                <span>{verifying ? 'Verifying…' : 'Verify now'}</span>
-              </button>
-            ) : null}
+        <div className={styles.headMeta}>
+          {status?.provider ? (
+            <div className={styles.providerLine}>
+              <Icon name="Key" size={13} />
+              <span>Protected by {status.provider}</span>
+            </div>
+          ) : null}
+          {onOpenSettings ? (
             <button
               type="button"
               className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
-              disabled={anyRunning || verifying}
-              onClick={() => void runNow()}
+              onClick={onOpenSettings}
             >
-              <span className={styles.runIcon} data-spin={anyRunning || undefined}>
-                <Icon name={anyRunning ? 'Loader' : 'Save'} size={13} />
-              </span>
-              <span>{anyRunning ? 'Backing up…' : 'Back up now'}</span>
+              <Icon name="Settings" size={13} />
+              <span>Manage</span>
             </button>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </div>
 
       <div className={styles.body}>
         {loadError ? (
           <div className={styles.loadError}>Couldn’t reach the gateway: {loadError}</div>
-        ) : !status ? (
+        ) : !status || !metrics ? (
           <div className={gwStyles.panelEmpty}>Checking backup status…</div>
-        ) : !status.configured && status.vaults.length === 0 ? (
-          <p className={styles.notConfigured}>
-            Backups aren’t set up yet. In Settings → Storage, add a storage provider and enable
-            “Encrypted backup snapshots.” Until then, databases, code, and local attachments have no
-            offsite copy.
-          </p>
-        ) : status.vaults.length === 0 ? (
-          <div className={gwStyles.panelEmpty}>No vaults mounted yet.</div>
+        ) : !hasBackups ? (
+          <>
+            <p className={styles.notConfigured}>
+              Your data isn’t backed up offsite yet. In Settings → Storage, connect your storage
+              provider and set this vault to Hosted. Until then, databases, code, and attachments
+              live only on this machine.
+            </p>
+            <RecoveryKitGate
+              configured={status.configured}
+              recoveryKit={status.recoveryKit ?? { confirmedAt: null }}
+              onConfirm={onConfirmRecoveryKit}
+              onExport={onExportRecoveryKit}
+            />
+          </>
         ) : (
           <>
-            {!status.configured ? (
-              <p className={styles.notConfigured}>
-                Backups aren’t set up yet. In Settings → Storage, add a storage provider and enable
-                “Encrypted backup snapshots.” Until then, databases, code, and local attachments
-                have no offsite copy.
-              </p>
-            ) : null}
-            {status.provider ? (
-              <div className={styles.providerLine}>
-                <Icon name="Key" size={13} />
-                <span>Protected by {status.provider}</span>
+            <BackupHealthMetrics metrics={metrics} now={now} />
+
+            <RecoveryKitGate
+              configured={status.configured}
+              recoveryKit={status.recoveryKit ?? { confirmedAt: null }}
+              onConfirm={onConfirmRecoveryKit}
+              onExport={onExportRecoveryKit}
+            />
+
+            <details className={styles.diagnostics} data-testid="backup-diagnostics">
+              <summary>Diagnostics</summary>
+              <div className={styles.diagnosticsBody}>
+                <div className={styles.actions}>
+                  {onVerifyNow ? (
+                    <button
+                      type="button"
+                      className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
+                      disabled={anyRunning || verifying}
+                      onClick={() => void verifyNow()}
+                    >
+                      <Icon name="CheckCircle" size={13} />
+                      <span>{verifying ? 'Verifying…' : 'Verify now'}</span>
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
+                    disabled={anyRunning || verifying}
+                    onClick={() => void runNow()}
+                  >
+                    <span className={styles.runIcon} data-spin={anyRunning || undefined}>
+                      <Icon name={anyRunning ? 'Loader' : 'Save'} size={13} />
+                    </span>
+                    <span>{anyRunning ? 'Backing up…' : 'Back up now'}</span>
+                  </button>
+                </div>
+                {runError ? <div className={styles.runError}>{runError}</div> : null}
+
+                {clocks ? (
+                  <div className={styles.clockGrid} data-testid="freshness-clocks">
+                    <ClockLine
+                      label="Newest snapshot"
+                      at={clocks.lastRegisteredSnapshotAt}
+                      now={now}
+                    />
+                    <ClockLine
+                      label="Last verification"
+                      at={clocks.lastSuccessfulVerificationAt}
+                      now={now}
+                    />
+                    <ClockLine
+                      label="Newest WAL segment"
+                      at={clocks.lastAckedWalSegmentAt}
+                      now={now}
+                    />
+                    <ClockLine
+                      label="Outbox drained"
+                      at={clocks.outboxDrainedWatermarkAt}
+                      now={now}
+                    />
+                  </div>
+                ) : null}
+
+                {status.vaults.length > 0 ? (
+                  <div className={styles.vaultList}>
+                    {status.vaults.map((v) => (
+                      <VaultRow
+                        key={v.vaultId}
+                        vault={v}
+                        now={now}
+                        provider={status.provider}
+                        onUpdatePolicy={onUpdatePolicy}
+                        onVerifyBucket={onVerifyBucket}
+                      />
+                    ))}
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-            {runError ? <div className={styles.runError}>{runError}</div> : null}
-            <div className={styles.vaultList}>
-              {status.vaults.map((v) => (
-                <VaultRow
-                  key={v.vaultId}
-                  vault={v}
-                  now={now}
-                  provider={status.provider}
-                  onUpdatePolicy={onUpdatePolicy}
-                  onVerifyBucket={onVerifyBucket}
-                />
-              ))}
-            </div>
+            </details>
           </>
         )}
-        <RecoveryKitGate
-          configured={status?.configured ?? false}
-          recoveryKit={status?.recoveryKit ?? { confirmedAt: null }}
-          onConfirm={onConfirmRecoveryKit}
-          onExport={onExportRecoveryKit}
-        />
       </div>
     </section>
   );

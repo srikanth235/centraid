@@ -1,53 +1,14 @@
-import {
-  getStorageStatus,
-  getStorageUsage,
-  listStorageConnections,
-} from '../../../gateway-client.js';
-import type { StorageCardStatusDTO } from '../../screens/StorageCard.js';
+import { getStorageUsage } from '../../../gateway-client.js';
+import { aggregateUsage } from '../../screens/backupMetrics.js';
+import type { UsageInput } from '../../../storage-metrics.js';
 
-// Storage card data layer (issue #367 §D3) — stitches three independent
-// gateway reads (connections, per-connection usage, per-vault replication
-// status) into the one DTO the card renders. Kept out of the screen itself
-// so StorageCard.tsx stays prop-driven and testable with plain mocks, same
-// split BackupCard/gatewayData.ts already established.
-
-export async function loadStorageCardStatus(): Promise<StorageCardStatusDTO> {
-  const [connections, usage, vaults] = await Promise.all([
-    listStorageConnections(),
-    getStorageUsage(),
-    getStorageStatus(),
-  ]);
-  const usageByConnection = new Map(usage.map((u) => [u.connectionId, u]));
-
-  return {
-    connections: connections.map((c) => {
-      const u = usageByConnection.get(c.id);
-      return {
-        id: c.id,
-        kind: c.kind,
-        name: c.name,
-        uses: c.uses,
-        providerReported: u?.providerReported ?? null,
-        localReplicatedBytes: u?.localReplicatedBytes ?? 0,
-        ...(u?.fetchedAt ? { fetchedAt: u.fetchedAt } : {}),
-        ...(u?.error ? { error: u.error } : {}),
-      };
-    }),
-    vaults: vaults.map((v) => ({
-      vaultId: v.vaultId,
-      name: v.name,
-      configured: v.configured,
-      ...(v.connectionId ? { connectionId: v.connectionId } : {}),
-      replicated: v.replicated,
-      backlog: v.backlog,
-      lastSweep: {
-        completedAt: v.lastSweep.completedAt,
-        error: v.lastSweep.error,
-        consecutiveFailures: v.lastSweep.consecutiveFailures,
-      },
-      // Bounded storage-tier health (issue #405 §7) — passed straight through
-      // when the gateway reports it (older gateways omit it, card degrades).
-      ...(v.cache ? { cache: v.cache } : {}),
-    })),
-  };
+// Backups Cost-metric data layer (issue #436 §6/§7) — the ONE aggregate the
+// five-metric Cost readout needs. Sums every home connection's provider-
+// reported per-store usage into the shape `deriveStorageMetrics` consumes; the
+// old per-connection quota bars + drift lines (store-class vocabulary) are gone
+// with the StorageCard they used to feed. `null` before the first poll or when
+// the provider doesn't meter.
+export async function loadStorageUsageAggregate(): Promise<UsageInput | null> {
+  const connections = await getStorageUsage();
+  return aggregateUsage(connections);
 }

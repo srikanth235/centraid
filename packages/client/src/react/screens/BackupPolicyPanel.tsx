@@ -9,12 +9,10 @@ export interface BackupPolicyDTO {
   rpoSeconds: number;
   snapshotIntervalHours: number;
   verifyEveryDays: number;
-  casAck: 'receipt' | 'replicated';
   outboxBudgetBytes: number;
   reservedHeadroomBytes: number;
   cacheBudgetBytes?: number;
   throttleBytesPerSec?: number;
-  storageClass?: string;
   walBaseRollBytes: number;
   walBaseRollHours: number;
 }
@@ -24,7 +22,7 @@ export type BackupPolicyPatchDTO = {
 };
 
 export interface BackupDestinationDTO {
-  kind: 'gateway-local' | 'own-s3' | 'provider';
+  kind: 'gateway-local' | 'provider';
   connectionId?: string;
 }
 
@@ -84,8 +82,7 @@ function SelectSetting({
 }
 
 function destinationLabel(destination: BackupDestinationDTO): string {
-  if (destination.kind === 'provider') return 'Storage provider';
-  if (destination.kind === 'own-s3') return 'Your S3-compatible store';
+  if (destination.kind === 'provider') return 'Hosted with your provider';
   return 'This machine only';
 }
 
@@ -178,18 +175,6 @@ export default function BackupPolicyPanel({
               ? 'All received attachment bytes are offsite'
               : 'Stored on this machine'}
         </div>
-        {remote ? (
-          <SelectSetting
-            label="Confirm an attachment"
-            value={current.casAck}
-            disabled={saving || !onUpdate}
-            options={[
-              { value: 'receipt', label: 'When received' },
-              { value: 'replicated', label: 'When offsite' },
-            ]}
-            onChange={(value) => void update({ casAck: value as BackupPolicyDTO['casAck'] })}
-          />
-        ) : null}
       </section>
 
       <section className={styles.policyGroup}>
@@ -232,18 +217,6 @@ export default function BackupPolicyPanel({
             onChange={(value) =>
               void update({ throttleBytesPerSec: value === '0' ? null : Number(value) })
             }
-          />
-          <SelectSetting
-            label="Storage class"
-            value={current.storageClass ?? ''}
-            disabled={saving || !onUpdate}
-            options={[
-              { value: '', label: 'Provider default' },
-              { value: 'STANDARD', label: 'Standard' },
-              { value: 'INTELLIGENT_TIERING', label: 'Intelligent tiering' },
-              { value: 'STANDARD_IA', label: 'Infrequent access' },
-            ]}
-            onChange={(value) => void update({ storageClass: value || null })}
           />
           <SelectSetting
             label="Cache budget"

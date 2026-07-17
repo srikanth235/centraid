@@ -9,12 +9,8 @@ import SettingsStorageScreen, {
 function makeRow(over: Partial<StorageConnectionRowDTO> = {}): StorageConnectionRowDTO {
   return {
     id: 'c1',
-    kind: 'byo-s3',
-    name: 'My Bucket',
-    uses: ['backup', 'cas'],
-    endpoint: 'https://s3.example.com',
-    region: 'us-east-1',
-    bucket: 'my-bucket',
+    name: 'My Home',
+    baseUrl: 'https://storage.example.com',
     ...over,
   };
 }
@@ -65,18 +61,47 @@ const setNativeValue = (input: HTMLInputElement, value: string): void => {
   input.dispatchEvent(new Event('input', { bubbles: true }));
 };
 
-describe('SettingsStorageScreen — connection list', () => {
-  it('renders a connection row with its kind/use badges and endpoint summary', async () => {
+const fieldInputBy =
+  (el: HTMLElement) =>
+  (labelText: string): HTMLInputElement | null => {
+    const field = [...el.querySelectorAll('.field')].find((f) =>
+      f.querySelector('.fieldLabel')?.textContent?.includes(labelText),
+    );
+    return field?.querySelector('input') ?? null;
+  };
+
+describe('SettingsStorageScreen — hosted provider', () => {
+  it('renders the connected provider row with its Hosted badge and base URL', async () => {
     const el = await mount(makeProps());
     expect(el.querySelectorAll('[data-testid="storage-connection-row"]').length).toBe(1);
-    expect(el.textContent).toContain('My Bucket');
-    expect(el.textContent).toContain('BYO S3');
-    expect(el.textContent).toContain('s3.example.com');
+    expect(el.textContent).toContain('My Home');
+    expect(el.textContent).toContain('Hosted');
+    expect(el.textContent).toContain('storage.example.com');
   });
 
-  it('shows the empty state when there are no connections', async () => {
+  it('shows the connect empty state when no provider is connected', async () => {
     const el = await mount(makeProps({ loadConnections: vi.fn().mockResolvedValue([]) }));
-    expect(el.textContent).toContain('No storage connections configured yet.');
+    expect(el.textContent).toContain('No storage provider connected yet.');
+    expect(
+      [...el.querySelectorAll('button')].some((b) =>
+        b.textContent?.includes('Connect your storage provider'),
+      ),
+    ).toBe(true);
+  });
+
+  it('has no connection-kind toggle, no "use for" checkboxes, and no BYO-S3 fields', async () => {
+    const el = await mount(makeProps({ loadConnections: vi.fn().mockResolvedValue([]) }));
+    const connectBtn = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Connect your storage provider'),
+    );
+    await act(async () => connectBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(el.textContent).not.toContain('Bring your own S3');
+    expect(el.textContent).not.toContain('Use for');
+    expect(el.textContent).not.toContain('CAS');
+    expect(el.textContent).not.toContain('Access key ID');
+    // Only the guided provider fields.
+    expect(el.textContent).toContain('Provider URL');
+    expect(el.textContent).toContain('Access key');
   });
 
   it('Test connection shows the ok result inline', async () => {
@@ -93,62 +118,36 @@ describe('SettingsStorageScreen — connection list', () => {
     expect(result?.textContent).toContain('signed request accepted');
   });
 
-  it('Test connection shows the error result inline', async () => {
-    const props = makeProps({
-      testConnection: vi.fn().mockResolvedValue({ ok: false, error: 'connection refused' }),
-    });
-    const el = await mount(props);
-    const testBtn = [...el.querySelectorAll('button')].find(
-      (b) => b.textContent === 'Test connection',
-    );
-    await act(async () => testBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    await act(async () => {
-      await Promise.resolve();
-    });
-    const result = el.querySelector<HTMLElement>('[data-testid="storage-test-result"]');
-    expect(result?.dataset.ok).toBe('false');
-    expect(result?.textContent).toContain('connection refused');
-  });
-
-  it('Delete calls deleteConnection with id + name and refreshes', async () => {
+  it('Disconnect calls deleteConnection with id + name and refreshes', async () => {
     const props = makeProps();
     const el = await mount(props);
-    const deleteBtn = [...el.querySelectorAll('button')].find((b) => b.textContent === 'Delete');
+    const deleteBtn = [...el.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Disconnect',
+    );
     await act(async () => deleteBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await act(async () => {
       await Promise.resolve();
     });
-    expect(props.deleteConnection).toHaveBeenCalledWith('c1', 'My Bucket');
+    expect(props.deleteConnection).toHaveBeenCalledWith('c1', 'My Home');
     expect(props.loadConnections).toHaveBeenCalledTimes(2); // initial + post-delete refresh
   });
-});
 
-describe('SettingsStorageScreen — add connection', () => {
-  it('opens the add form and submits a byo-s3 connection', async () => {
+  it('connects a provider from the guided form (name optional)', async () => {
     const props = makeProps({ loadConnections: vi.fn().mockResolvedValue([]) });
     const el = await mount(props);
-    const addBtn = [...el.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes('Add connection'),
+    const connectBtn = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Connect your storage provider'),
     );
-    await act(async () => addBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await act(async () => connectBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
 
-    const fieldInput = (labelText: string): HTMLInputElement | null => {
-      const field = [...el.querySelectorAll('.field')].find((f) =>
-        f.querySelector('.fieldLabel')?.textContent?.includes(labelText),
-      );
-      return field?.querySelector('input') ?? null;
-    };
+    const field = fieldInputBy(el);
     await act(async () => {
-      setNativeValue(fieldInput('Name')!, 'Backup bucket');
-      setNativeValue(fieldInput('Endpoint')!, 'https://s3.example.com');
-      setNativeValue(fieldInput('Region')!, 'us-east-1');
-      setNativeValue(fieldInput('Bucket')!, 'my-bucket');
-      setNativeValue(fieldInput('Access key ID')!, 'AKIA123');
-      setNativeValue(fieldInput('Secret access key')!, 'shh-secret');
+      setNativeValue(field('Provider URL')!, 'https://storage.example.com');
+      setNativeValue(field('Access key')!, 'sekret-key');
     });
 
     const saveBtn = [...el.querySelectorAll('.wizard button')].find((b) =>
-      b.textContent?.includes('Add connection'),
+      b.textContent?.includes('Connect'),
     );
     expect(saveBtn?.hasAttribute('disabled')).toBe(false);
     await act(async () => saveBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
@@ -157,42 +156,67 @@ describe('SettingsStorageScreen — add connection', () => {
     });
 
     expect(props.createConnection).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'byo-s3',
-        name: 'Backup bucket',
-        endpoint: 'https://s3.example.com',
-        region: 'us-east-1',
-        bucket: 'my-bucket',
-        accessKeyId: 'AKIA123',
-        secretAccessKey: 'shh-secret',
-        uses: ['cas'],
-      }),
+      { name: 'Hosted storage', baseUrl: 'https://storage.example.com', apiKey: 'sekret-key' },
       undefined,
     );
-    // Wizard closed on success.
-    expect(el.querySelector('.wizard')).toBeNull();
+    expect(el.querySelector('.wizard')).toBeNull(); // closed on success
   });
 
-  it('switching to "Storage provider" shows baseUrl/apiKey fields instead', async () => {
-    const el = await mount(makeProps());
-    const addBtn = [...el.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes('Add connection'),
+  it('surfaces a provider_not_home_profile error in plain language', async () => {
+    const props = makeProps({
+      loadConnections: vi.fn().mockResolvedValue([]),
+      createConnection: vi.fn().mockResolvedValue({
+        ok: false,
+        code: 'error',
+        message: 'This provider can’t be a home for your data. It’s missing: inventory, audit.',
+      }),
+    });
+    const el = await mount(props);
+    const connectBtn = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Connect your storage provider'),
     );
-    await act(async () => addBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    const providerToggle = [...el.querySelectorAll('button')].find(
-      (b) => b.textContent === 'Storage provider',
+    await act(async () => connectBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const field = fieldInputBy(el);
+    await act(async () => {
+      setNativeValue(field('Provider URL')!, 'https://weak.example.com');
+      setNativeValue(field('Access key')!, 'k');
+    });
+    const saveBtn = [...el.querySelectorAll('.wizard button')].find((b) =>
+      b.textContent?.includes('Connect'),
     );
-    await act(async () =>
-      providerToggle?.dispatchEvent(new MouseEvent('click', { bubbles: true })),
-    );
-    expect(el.textContent).toContain('Base URL');
-    expect(el.textContent).toContain('API key');
-    expect(el.textContent).not.toContain('Access key ID');
+    await act(async () => saveBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const err = el.querySelector('[data-testid="connect-error"]');
+    expect(err?.textContent).toContain('can’t be a home for your data');
+    expect(err?.textContent).toContain('inventory, audit');
   });
 });
 
 describe('SettingsStorageScreen — recovery-kit gate', () => {
-  it('shows the gate dialog when createConnection is refused, and "I\'ve saved my recovery kit" confirms then retries', async () => {
+  async function openFormAndSubmit(props: SettingsStorageBridgeProps): Promise<HTMLDivElement> {
+    const el = await mount(props);
+    const connectBtn = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Connect your storage provider'),
+    );
+    await act(async () => connectBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const field = fieldInputBy(el);
+    await act(async () => {
+      setNativeValue(field('Provider URL')!, 'https://storage.example.com');
+      setNativeValue(field('Access key')!, 'k');
+    });
+    const saveBtn = [...el.querySelectorAll('.wizard button')].find((b) =>
+      b.textContent?.includes('Connect'),
+    );
+    await act(async () => saveBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    return el;
+  }
+
+  it('shows the gate on refusal, then "I\'ve saved my recovery kit" confirms and retries', async () => {
     const createConnection = vi
       .fn()
       .mockResolvedValueOnce({
@@ -202,33 +226,7 @@ describe('SettingsStorageScreen — recovery-kit gate', () => {
       })
       .mockResolvedValueOnce({ ok: true, value: makeRow() });
     const props = makeProps({ createConnection, loadConnections: vi.fn().mockResolvedValue([]) });
-    const el = await mount(props);
-
-    const addBtn = [...el.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes('Add connection'),
-    );
-    await act(async () => addBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    const fieldInput = (labelText: string): HTMLInputElement | null => {
-      const field = [...el.querySelectorAll('.field')].find((f) =>
-        f.querySelector('.fieldLabel')?.textContent?.includes(labelText),
-      );
-      return field?.querySelector('input') ?? null;
-    };
-    await act(async () => {
-      setNativeValue(fieldInput('Name')!, 'Bucket');
-      setNativeValue(fieldInput('Endpoint')!, 'https://s3.example.com');
-      setNativeValue(fieldInput('Region')!, 'us-east-1');
-      setNativeValue(fieldInput('Bucket')!, 'b');
-      setNativeValue(fieldInput('Access key ID')!, 'ak');
-      setNativeValue(fieldInput('Secret access key')!, 'sk');
-    });
-    const saveBtn = [...el.querySelectorAll('.wizard button')].find((b) =>
-      b.textContent?.includes('Add connection'),
-    );
-    await act(async () => saveBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    await act(async () => {
-      await Promise.resolve();
-    });
+    const el = await openFormAndSubmit(props);
 
     const dialog = el.querySelector('[role="dialog"]');
     expect(dialog).toBeTruthy();
@@ -245,7 +243,7 @@ describe('SettingsStorageScreen — recovery-kit gate', () => {
     expect(props.confirmRecoveryKit).toHaveBeenCalledTimes(1);
     expect(createConnection).toHaveBeenCalledTimes(2);
     expect(createConnection.mock.calls[1]?.[1]).toBeUndefined(); // retried WITHOUT force
-    expect(el.querySelector('[role="dialog"]')).toBeNull(); // dialog closed after success
+    expect(el.querySelector('[role="dialog"]')).toBeNull();
   });
 
   it('"Proceed anyway" retries with {force: true} and never calls confirmRecoveryKit', async () => {
@@ -254,33 +252,7 @@ describe('SettingsStorageScreen — recovery-kit gate', () => {
       .mockResolvedValueOnce({ ok: false, code: 'recovery_kit_not_confirmed', message: 'nope' })
       .mockResolvedValueOnce({ ok: true, value: makeRow() });
     const props = makeProps({ createConnection, loadConnections: vi.fn().mockResolvedValue([]) });
-    const el = await mount(props);
-
-    const addBtn = [...el.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes('Add connection'),
-    );
-    await act(async () => addBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    const fieldInput = (labelText: string): HTMLInputElement | null => {
-      const field = [...el.querySelectorAll('.field')].find((f) =>
-        f.querySelector('.fieldLabel')?.textContent?.includes(labelText),
-      );
-      return field?.querySelector('input') ?? null;
-    };
-    await act(async () => {
-      setNativeValue(fieldInput('Name')!, 'Bucket');
-      setNativeValue(fieldInput('Endpoint')!, 'https://s3.example.com');
-      setNativeValue(fieldInput('Region')!, 'us-east-1');
-      setNativeValue(fieldInput('Bucket')!, 'b');
-      setNativeValue(fieldInput('Access key ID')!, 'ak');
-      setNativeValue(fieldInput('Secret access key')!, 'sk');
-    });
-    const saveBtn = [...el.querySelectorAll('.wizard button')].find((b) =>
-      b.textContent?.includes('Add connection'),
-    );
-    await act(async () => saveBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    await act(async () => {
-      await Promise.resolve();
-    });
+    const el = await openFormAndSubmit(props);
 
     const proceedBtn = [...el.querySelectorAll('button')].find((b) =>
       b.textContent?.includes('Proceed anyway'),
@@ -297,51 +269,57 @@ describe('SettingsStorageScreen — recovery-kit gate', () => {
   });
 });
 
-describe('SettingsStorageScreen — per-vault CAS attach', () => {
-  it('shows the local-only state when no s3 tier is attached', async () => {
+describe('SettingsStorageScreen — per-vault hosted/local choice', () => {
+  it('shows "On this device" active and the local hint when nothing is hosted', async () => {
     const el = await mount(makeProps());
-    expect(el.textContent).toContain('stores blobs locally only');
+    const device = [...el.querySelectorAll('button')].find(
+      (b) => b.textContent === 'On this device',
+    );
+    expect(device?.getAttribute('aria-checked')).toBe('true');
+    expect(el.textContent).toContain('Everything stays on this machine');
   });
 
-  it('shows which connection this vault is attached to', async () => {
+  it('shows Hosted active when the vault is attached', async () => {
     const props = makeProps({
       loadVaultBlobStore: vi.fn().mockResolvedValue({ kind: 's3', connectionId: 'c1' }),
     });
     const el = await mount(props);
-    expect(el.textContent).toContain('My Bucket');
+    const hosted = [...el.querySelectorAll('button')].find((b) => b.textContent === 'Hosted');
+    expect(hosted?.getAttribute('aria-checked')).toBe('true');
+    expect(el.textContent).toContain('one sealed bundle with your provider');
   });
 
-  it('Attach calls attachVaultConnection with the selected connection id', async () => {
+  it('clicking Hosted attaches to the home connection', async () => {
     const props = makeProps();
     const el = await mount(props);
-    const attachBtn = [...el.querySelectorAll('button')].find((b) => b.textContent === 'Attach');
-    await act(async () => attachBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const hosted = [...el.querySelectorAll('button')].find((b) => b.textContent === 'Hosted');
+    await act(async () => hosted?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await act(async () => {
       await Promise.resolve();
     });
     expect(props.attachVaultConnection).toHaveBeenCalledWith('c1', undefined);
   });
 
-  it('Detach appears once attached and calls detachVaultConnection', async () => {
+  it('clicking "On this device" while hosted detaches', async () => {
     const props = makeProps({
       loadVaultBlobStore: vi.fn().mockResolvedValue({ kind: 's3', connectionId: 'c1' }),
     });
     const el = await mount(props);
-    const detachBtn = [...el.querySelectorAll('button')].find((b) => b.textContent === 'Detach');
-    expect(detachBtn).toBeDefined();
-    await act(async () => detachBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const device = [...el.querySelectorAll('button')].find(
+      (b) => b.textContent === 'On this device',
+    );
+    await act(async () => device?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await act(async () => {
       await Promise.resolve();
     });
     expect(props.detachVaultConnection).toHaveBeenCalledTimes(1);
   });
 
-  it('shows a hint instead of a picker when no connection is CAS-capable', async () => {
-    const props = makeProps({
-      loadConnections: vi.fn().mockResolvedValue([makeRow({ uses: ['backup'] })]),
-    });
+  it('disables Hosted with a hint when no provider is connected', async () => {
+    const props = makeProps({ loadConnections: vi.fn().mockResolvedValue([]) });
     const el = await mount(props);
-    expect(el.textContent).toContain('CAS blob replication');
-    expect(el.querySelector('select')).toBeNull();
+    const hosted = [...el.querySelectorAll('button')].find((b) => b.textContent === 'Hosted');
+    expect(hosted?.hasAttribute('disabled')).toBe(true);
+    expect(el.textContent).toContain('Connect a storage provider above');
   });
 });

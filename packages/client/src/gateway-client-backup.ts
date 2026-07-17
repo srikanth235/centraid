@@ -23,12 +23,21 @@ export interface GatewayBackupPolicyDTO {
   walBaseRollHours: number;
 }
 
+/**
+ * Owner-editable policy keys (issue #436 §4). `casAck` and `storageClass` are
+ * deliberately NOT editable: `casAck`'s field survives on the read DTO for the
+ * wire declaration (always defaults to 'receipt'), and store-class vocabulary
+ * is gateway-internal — neither round-trips as an owner-settable value. The
+ * gateway's `POLICY_KEYS` allow-list is the authority; this type mirrors it.
+ */
 export type GatewayBackupPolicyPatchDTO = {
-  [K in keyof GatewayBackupPolicyDTO]?: GatewayBackupPolicyDTO[K] | null;
+  [K in keyof Omit<GatewayBackupPolicyDTO, 'casAck' | 'storageClass'>]?:
+    | GatewayBackupPolicyDTO[K]
+    | null;
 };
 
 export interface GatewayBackupDestinationDTO {
-  kind: 'gateway-local' | 'own-s3' | 'provider';
+  kind: 'gateway-local' | 'provider';
   connectionId?: string;
 }
 
@@ -124,11 +133,28 @@ export interface GatewayRecoveryKitStatusDTO {
   confirmedAt: number | null;
 }
 
+/** The provider's retention promise (discovery `backup.retention`) — the
+ *  Recovery-window metric's source (#436 §6). Structural subset of
+ *  `@centraid/backup`'s `Retention` (drops `neverPruneNewest`, always true). */
+export type GatewayRetentionDTO =
+  | { kind: 'ladder'; keepAllDays: number; dailyDays: number; weeklyDays: number }
+  | { kind: 'none' };
+
+/** The home bundle's provider-declared promises for the five-metric contract
+ *  (#436 §6): Recovery window (`retention`) and Exit (`restoreCostClass`). */
+export interface GatewayHomeDiscoveryDTO {
+  retention: GatewayRetentionDTO;
+  restoreCostClass: 'free-egress' | 'metered-egress';
+}
+
 export interface GatewayBackupStatusDTO {
   configured: boolean;
   provider?: string;
   vaults: GatewayBackupVaultDTO[];
   recoveryKit: GatewayRecoveryKitStatusDTO;
+  /** Provider-declared retention + restore-egress promises; absent when backup
+   *  isn't configured or discovery couldn't be read (metrics degrade). */
+  home?: GatewayHomeDiscoveryDTO;
 }
 
 /** Backup status for every mounted vault — `{configured: false, vaults: []}`
