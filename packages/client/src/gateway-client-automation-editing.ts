@@ -10,7 +10,7 @@
  */
 
 import { auth, authHeaders, doFetch, enc, readJson } from './gateway-client-core.js';
-import { dropAppSession, ensureAppSession, publish } from './gateway-client-editing.js';
+import { dropAppSession, ensureAppSession } from './gateway-client-editing.js';
 
 /**
  * A create-time trigger spec. `condition`/`data` are validated gateway-side

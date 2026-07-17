@@ -159,7 +159,7 @@ export default function PaletteScreen({
             className={styles.input}
             type="text"
             autoComplete="off"
-            placeholder="Search apps, chats, templates — or describe a new one…"
+            placeholder="Search apps and conversations…"
             value={query}
             onChange={(e) => {
               setActive(0);

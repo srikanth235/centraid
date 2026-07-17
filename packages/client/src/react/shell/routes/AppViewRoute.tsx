@@ -6,8 +6,10 @@ import { iconSvg } from '../iconSvg.js';
 import { openPrompt } from '../prompt.js';
 import type { ShellNav } from '../ShellApp.js';
 import ShellFrame from '../ShellFrame.js';
+import { useAsyncData } from '../useAsyncData.js';
 import AppFrame from './AppFrame.js';
 import AppSettingsController from './AppSettingsController.js';
+import { loadAppTemplates } from './templatesData.js';
 import styles from './AppViewRoute.module.css';
 import chrome from '../chrome.module.css';
 
@@ -40,8 +42,16 @@ export default function AppViewRoute({
   prefs,
   onToggleSidebar,
 }: AppViewRouteProps): JSX.Element {
-  const { confirm, enterBuilder, openNewAppSheet, showToast } = useShellActions();
+  const { confirm, enterBuilder, openNewAppSheet, showToast, builderEnabled } = useShellActions();
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // A bundled app-template id is RESERVED (issue #434) and an installed bundled
+  // app keeps its blueprint id, so an app whose id is in the catalog serves in
+  // place — its gear-popover verb is Uninstall (access revoked, data stays), not
+  // Delete (wipe local files). Anything else is a code-store app that keeps
+  // Delete. Best-effort: an empty/failed load degrades to code-store (Delete).
+  const bundledState = useAsyncData(() => loadAppTemplates(), []);
+  const bundled = bundledState.status === 'ready' && bundledState.data.some((t) => t.id === app.id);
 
   const renameFlow = async (): Promise<void> => {
     const next = await openPrompt({
@@ -59,20 +69,31 @@ export default function AppViewRoute({
     }
   };
 
+  // For a bundled install this is an Uninstall (revoke access, data stays); for
+  // a code-store app it's a Delete (wipe local files). The `deleteApp` wire is
+  // the same — for a bundled id it deregisters + revokes without a git delete.
   const deleteFlow = async (): Promise<void> => {
-    const ok = await confirm({
-      confirmLabel: 'Delete',
-      danger: true,
-      title: 'Delete app?',
-      message: `Delete "${app.name}"? This removes it from the gateway and wipes its local app files.`,
-    });
+    const ok = bundled
+      ? await confirm({
+          confirmLabel: 'Uninstall',
+          danger: true,
+          title: `Uninstall ${app.name}?`,
+          message: `Removes "${app.name}" and revokes its access. Your data stays in your vault.`,
+        })
+      : await confirm({
+          confirmLabel: 'Delete',
+          danger: true,
+          title: 'Delete app?',
+          message: `Delete "${app.name}"? This removes it from the gateway and wipes its local app files.`,
+        });
     if (!ok) return;
     try {
       await deleteApp({ id: app.id });
-      showToast(`Deleted "${app.name}"`);
+      showToast(`${bundled ? 'Uninstalled' : 'Deleted'} "${app.name}"`);
       nav.navigate({ kind: 'home' });
     } catch (err) {
-      showToast(`Could not delete: ${err instanceof Error ? err.message : String(err)}`);
+      const verb = bundled ? 'uninstall' : 'delete';
+      showToast(`Could not ${verb}: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -98,26 +119,31 @@ export default function AppViewRoute({
 
   const titlebarRight = (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-      <div className={styles.modeSwitch}>
-        <button className={styles.modeSeg} type="button" data-active="true">
-          <span
-            className={styles.modeSegIcon}
-            dangerouslySetInnerHTML={{ __html: iconSvg('Eye', 12) }}
-          />
-          Use
-        </button>
-        <button
-          className={styles.modeSeg}
-          type="button"
-          onClick={() => enterBuilder({ appContext: app })}
-        >
-          <span
-            className={styles.modeSegIcon}
-            dangerouslySetInnerHTML={{ __html: iconSvg('Sparkle', 12) }}
-          />
-          Build
-        </button>
-      </div>
+      {/* The Use/Build switch is a builder entry point (issue #434, Phase 3) —
+          hidden with the builder. "Use" alone is meaningless, so the whole
+          toggle goes; the app just runs. */}
+      {builderEnabled ? (
+        <div className={styles.modeSwitch}>
+          <button className={styles.modeSeg} type="button" data-active="true">
+            <span
+              className={styles.modeSegIcon}
+              dangerouslySetInnerHTML={{ __html: iconSvg('Eye', 12) }}
+            />
+            Use
+          </button>
+          <button
+            className={styles.modeSeg}
+            type="button"
+            onClick={() => enterBuilder({ appContext: app })}
+          >
+            <span
+              className={styles.modeSegIcon}
+              dangerouslySetInnerHTML={{ __html: iconSvg('Sparkle', 12) }}
+            />
+            Build
+          </button>
+        </div>
+      ) : null}
       <span className={chrome.tbBtnWrap}>
         <button
           className={chrome.tbBtn}
@@ -149,7 +175,7 @@ export default function AppViewRoute({
       canGoForward={nav.canGoForward}
       onBack={() => nav.back()}
       onForward={() => nav.forward()}
-      showNewChat
+      showNewChat={builderEnabled}
       onNewChat={openNewAppSheet}
       titlebarLead={brandChip}
       titlebarRight={titlebarRight}
@@ -167,6 +193,7 @@ export default function AppViewRoute({
           <AppSettingsController
             app={app}
             appId={appId}
+            {...(bundled ? { bundled: true } : {})}
             onClose={() => setSettingsOpen(false)}
             onOpenAutomations={() => {
               setSettingsOpen(false);
