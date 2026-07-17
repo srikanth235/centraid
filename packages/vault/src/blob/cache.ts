@@ -18,6 +18,7 @@ import type { BackupPolicy } from '../backup-policy.js';
 import { VaultBlobBackpressureError } from '../errors.js';
 import type { LocalBlobStore } from './local.js';
 import { AccessIndex, ReplicaIndex } from './replica-index.js';
+import { OrphanTombstoneIndex } from './orphan-tombstone.js';
 import { pinnedThumbShas, previewShas, stagingShas } from './evict.js';
 
 /** The `blob_cache` settings bag (issue #405 §3), camelCase to match `blob_store`. */
@@ -119,6 +120,8 @@ export interface BlobMetrics {
 export class BlobCache {
   readonly replica: ReplicaIndex;
   readonly access: AccessIndex;
+  /** Orphan-grace tombstones (issue #439 R4) — first-observed-orphaned per sha. */
+  readonly orphan: OrphanTombstoneIndex;
   /** null until first read — then maintained incrementally (never rescanned). */
   private spool: number | null = null;
 
@@ -150,6 +153,7 @@ export class BlobCache {
   ) {
     this.replica = new ReplicaIndex(db);
     this.access = new AccessIndex(db);
+    this.orphan = new OrphanTombstoneIndex(db);
     this.replicationConcurrency = options.replicationConcurrency ?? DEFAULT_REPLICATION_CONCURRENCY;
     this.qosCooldownMs = options.qosCooldownMs ?? DEFAULT_QOS_COOLDOWN_MS;
     this.qosPollMs = options.qosPollMs ?? DEFAULT_QOS_POLL_MS;

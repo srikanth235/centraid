@@ -417,6 +417,20 @@ snapshot (generation start) and whenever the non-DB entries change.
    machine finds out. The WAL stream also breaks to a fresh
    `walGeneration` — the superseded machine's segments can never interleave
    (random ids), and its next detector pass breaks its own generation.
+7. **Recovery-window honesty (orphan grace)**: a point-in-time restore to any
+   instant T within the recovery window replays vault rows that reference `cas`
+   blobs by `sha256`; those bytes MUST still exist for the restore to be whole.
+   A blob created and dereferenced BETWEEN two snapshots is referenced by no
+   retained manifest and not by the live model, so the two GC gates that keep
+   snapshot instants honest — the credential-TTL floor and the snapshot-root pin
+   (PROTOCOL.md) — do not cover it. Therefore a client that owns `cas` GC MUST
+   also honor **orphan grace**: it MUST NOT delete an orphaned blob until at
+   least N days — the recovery window (the retention daily rung) — have elapsed
+   since the blob was first observed orphaned, clearing the observation the
+   moment the blob is referenced again. Without this, the recovery-window number
+   N is a lie for short-lived blobs: a restore to an instant inside the window
+   would replay a row pointing at a purged `sha`. This is the restore-side
+   guarantee the reconcile sweep's grace window (issue #439 R4) exists to keep.
 
 ## Verification (scheduled, client-side)
 

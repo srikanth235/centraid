@@ -172,6 +172,20 @@ export interface HomeDiscovery {
 }
 
 /**
+ * The recovery window N in ms (issue #439 R4) — the retention DAILY rung, the
+ * span over which PITR makes every instant restorable. `undefined` for a
+ * non-ladder retention (`kind: 'none'`, e.g. a local provider): no daily window
+ * promise, so the orphan-grace gate stays disengaged and orphans delete on
+ * observation, as they did pre-R4. A ladder's `dailyDays` is the honest N: it is
+ * the promise #436 metric 2 makes, and the grace exists precisely to keep it
+ * honest for blobs created and dereferenced within one inter-snapshot interval.
+ */
+export function recoveryWindowMs(retention: Retention | undefined): number | undefined {
+  if (retention?.kind === 'ladder') return retention.dailyDays * DAY_MS;
+  return undefined;
+}
+
+/**
  * The pre-start restore cost estimate (issue #439 R2) the metered-egress confirm
  * gate — and, later, the recovery UI's price card (#436 §5) — render WITHOUT
  * downloading a manifest. `costClass` is the provider-declared egress class
@@ -460,6 +474,14 @@ export class BackupService {
         keyring: await this.ensureKeyring(),
         manifestBlobCache: this.manifestBlobCache,
       });
+    };
+    // Orphan-grace window N (issue #439 R4): the recovery window is the retention
+    // daily rung. Threaded into the sweep so the client-owned CAS orphan delete
+    // waits N past first-observed-orphaned for a blob referenced only between two
+    // snapshots — the byte a recovery-to-N inside that interval would replay.
+    plane.orphanGraceWindowMs = async (): Promise<number | undefined> => {
+      const discovery = await this.homeDiscovery();
+      return recoveryWindowMs(discovery?.retention);
     };
   }
 

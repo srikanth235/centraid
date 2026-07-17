@@ -23,7 +23,7 @@ import {
 } from '@centraid/vault';
 import { openVaultRegistry, type VaultRegistry } from '../serve/vault-registry.js';
 import { HealthRegistry } from '../serve/health-registry.js';
-import { BackupService } from './backup-service.js';
+import { BackupService, recoveryWindowMs } from './backup-service.js';
 import type { BackupConfig } from './backup-config.js';
 import { runCasOnlyReconciliation } from './backup-cas-reconciliation.js';
 
@@ -142,6 +142,22 @@ async function harness(
 
   return { service, registry, health, vaultId, fixtureFile, clock, providerDir, backupDir };
 }
+
+test('recoveryWindowMs maps a retention ladder to its daily rung, non-ladder to none (issue #439 R4)', () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  expect(
+    recoveryWindowMs({
+      kind: 'ladder',
+      keepAllDays: 7,
+      dailyDays: 30,
+      weeklyDays: 90,
+      neverPruneNewest: true,
+    }),
+  ).toBe(30 * DAY_MS);
+  // A local provider (no ladder) advertises no recovery window ⇒ grace disengaged.
+  expect(recoveryWindowMs({ kind: 'none' })).toBeUndefined();
+  expect(recoveryWindowMs(undefined)).toBeUndefined();
+});
 
 test('first run creates a target, mints a keyring, and registers a snapshot', async () => {
   const h = await harness();

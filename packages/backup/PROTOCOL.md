@@ -499,7 +499,9 @@ silent split-brain into a loud, user-visible event on the next backup tick.
 - **GC min-age invariant** (normative, promoted from Clawgnition's CLI
   convention): any client-side garbage collection MUST NOT delete an object
   younger than `maxCredentialTtlSeconds` — an in-flight snapshot holding a
-  live grant may reference it.
+  live grant may reference it. For `cas` objects two further gates apply — the
+  **snapshot-root pin** and **orphan grace** (see Layer 2 § cas store
+  semantics); the three are independent and all must hold before a delete.
 - Providers SHOULD support `conditionalWrites` (If-None-Match) and declare
   it; clients SHOULD use it when available so a compromised gateway's grant
   cannot overwrite existing chunk objects (immutability is the real
@@ -549,6 +551,29 @@ control-plane routes beyond the Layer 1 credentials route already accepting
 - **Delete** is allowed via a `read-write` grant, following the same
   `mode` semantics as `backup`'s data plane (`"read"` grants MUST NOT permit
   writes or deletes).
+- **Snapshot-root pin** (normative — the GC-pins-snapshots invariant): a `cas`
+  object referenced by any RETAINED `backup` snapshot manifest is a live GC
+  root and MUST NOT be deleted, even when the live vault model no longer claims
+  it. `cas` keeps no history of its own, so a past-but-retained snapshot's
+  reference is the only record that the byte is still needed for a recovery to
+  that point. A client that owns `cas` GC MUST authenticate the retained
+  manifests' referenced-blob set and exclude it from orphan deletion; when it
+  cannot prove that set, it MUST NOT delete at all (fail safe).
+- **Orphan grace** (normative — companion to the snapshot-root pin): a client
+  that owns `cas` GC MUST NOT delete an orphaned object (one referenced by
+  neither the live vault model nor any retained snapshot manifest) until at
+  least N days have elapsed since the object was **first observed orphaned**,
+  where N is the recovery window (the retention daily rung). The client records
+  a first-observed-orphaned tombstone on the first GC pass that finds an object
+  orphaned, and may delete only when `now − first_orphaned_at > N days`; an
+  object that becomes referenced again before the grace elapses MUST have its
+  tombstone cleared. First-observed-orphaned is always ≥ the true dereference
+  instant, so the rule is conservative in the safe direction. Rationale: PITR
+  makes every instant inside the recovery window restorable, and an object
+  referenced only between two snapshots — named by no retained manifest — is
+  exactly the byte such a restore needs. This complements, and does not
+  replace, the **GC min-age invariant** (credential-TTL floor) above and the
+  snapshot-root pin: all three gates apply.
 
 ---
 

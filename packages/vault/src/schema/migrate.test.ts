@@ -77,6 +77,25 @@ test('migrations are idempotent via user_version', () => {
   db.close();
 });
 
+test('the orphan-grace tombstone table exists on a fresh vault (issue #439 R4)', () => {
+  const db = openVaultDb();
+  // `blob_orphan` is plumbing (like blob_replica/blob_access), not a registered
+  // logical entity, so the registry sweep above cannot cover it — assert directly.
+  const row = db.vault
+    .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='blob_orphan'`)
+    .get() as { name: string } | undefined;
+  expect(row?.name).toBe('blob_orphan');
+  // first_orphaned_at must be present; a valid row round-trips as INTEGER ms.
+  db.vault
+    .prepare(`INSERT INTO blob_orphan (sha256, first_orphaned_at) VALUES (?, ?)`)
+    .run('a'.repeat(64), 1700000000000);
+  const stamp = db.vault
+    .prepare(`SELECT first_orphaned_at FROM blob_orphan WHERE sha256 = ?`)
+    .get('a'.repeat(64)) as { first_orphaned_at: number };
+  expect(stamp.first_orphaned_at).toBe(1700000000000);
+  db.close();
+});
+
 test('STRICT + CHECK constraints hold: bad enum and negative byte_size rejected', () => {
   const db = openVaultDb();
   expect(() =>

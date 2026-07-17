@@ -21,7 +21,7 @@ inventory reconcile that distrusts the restored replica index.
 - [x] R5 — adopt-time inventory reconcile and seal-key restore-verify
 - [x] R1 surface — recover job model, progress SSE, pre-vault recover routes
 - [x] UI — fresh-gateway onboarding recovery flow
-- [ ] R4 — orphan-grace GC invariant
+- [x] R4 — orphan-grace GC invariant
 
 ## What changed
 
@@ -677,6 +677,96 @@ $ bunx vitest run src/gateway-client-recover.test.ts \
       Tests  25 passed (25)
 ```
 
+### R4 — orphan-grace GC invariant
+
+Closes gap 3, the honesty hole in metric 2. GC-pins-snapshots (#436 §6) makes the
+recovery-window number N true only AT snapshot instants; PITR restores to arbitrary
+instants BETWEEN snapshots. A blob uploaded and dereferenced within one inter-snapshot
+interval is referenced by no retained manifest and not by the live model, so it was
+GC-eligible at the one client-owned CAS delete site — and a PITR into that interval
+would replay vault rows pointing at a purged `sha`. The fix: the reconcile sweep now
+tombstones an orphan on first observation and MUST NOT delete it until N days (the
+recovery window, the retention daily rung) have elapsed since first-observed-orphaned;
+a sha that becomes live/pinned again before the grace elapses has its tombstone cleared.
+
+- `packages/vault/src/schema/blob.ts` — new `blob_orphan` STRICT table in
+  `BLOB_CACHE_DDL` (self-contained plumbing beside `blob_replica`/`blob_access`, so a
+  bare `:memory:` handle creates it): `sha256` PK + `first_orphaned_at INTEGER` (epoch
+  ms, because the only reader does age arithmetic). v0's one-rung ladder composes the
+  DDL in place — no new migration rung.
+- `packages/vault/src/blob/orphan-tombstone.ts` (new) — `OrphanTombstoneIndex`
+  mirroring `ReplicaIndex`: `markFirstSeen(sha, nowMs)` (INSERT OR IGNORE, returns the
+  ORIGINAL stamp so the grace clock never resets), `read(sha)`, `clear(sha)`,
+  `clearAll()`.
+- `packages/vault/src/blob/custody-reconcile.ts` — the grace gate at the one delete
+  site: a live sha clears its tombstone; a pinned snapshot-root is excluded before the
+  gate (never tombstoned); a genuine orphan is tombstoned + `orphansGraceHeld` when
+  `now − first_orphaned_at ≤ graceWindowMs`, deleted (and tombstone cleared) once past
+  it. A grace window with no tombstone store fails safe (holds). Added `orphans?` to
+  `ReconcileContext` and an injectable `now`.
+- `packages/vault/src/blob/custody-types.ts` — `ReconcileResult.orphansGraceHeld`,
+  `ReconcileOptions.graceWindowMs` + `now`.
+- `packages/vault/src/blob/cache.ts` — `BlobCache.orphan` constructed beside
+  `replica`/`access`; `packages/vault/src/blob/custody.ts` threads it into the reconcile
+  ctx.
+- `packages/vault/src/gateway/gateway.ts` — `sweepBlobs` accepts + forwards
+  `graceWindowMs`; the sweep receipt records `orphansGraceHeld`.
+- `packages/gateway/src/serve/vault-plane.ts` — new `orphanGraceWindowMs` supplier +
+  `resolveOrphanGraceWindowMs()` (mirrors `resolveSnapshotBlobRoots`; a throw fails safe
+  to `Number.POSITIVE_INFINITY` so nothing deletes); `runBlobSweep` resolves both roots
+  and window and threads the window into `sweepBlobs`.
+- `packages/gateway/src/backup/backup-service.ts` — exported `recoveryWindowMs(retention)`
+  (ladder → `dailyDays × DAY_MS`, non-ladder → undefined ⇒ grace disengaged) and wired
+  `plane.orphanGraceWindowMs` in `attachSnapshotRoots` off `homeDiscovery().retention`.
+  N is NOT hardcoded — it flows from the provider's declared retention.
+- `packages/backup/PROTOCOL.md` — normative **Orphan grace** + **Snapshot-root pin**
+  bullets in Layer 2 § cas store semantics, cross-referenced from the GC min-age
+  invariant (three independent gates, all must hold before a `cas` delete).
+- `packages/backup/FORMAT.md` — new normative Restore rule 7 (recovery-window honesty)
+  tying the grace window to the restore-side guarantee.
+
+#### Fail-safe / plumbing
+
+N (the grace window) is threaded provider → gateway → delete site: the provider's
+`GET /v1/storage/provider` retention ladder → `homeDiscovery().retention` →
+`recoveryWindowMs()` → `plane.orphanGraceWindowMs` supplier → `runBlobSweep` →
+`gateway.sweepBlobs({ graceWindowMs })` → `reconcile` options → the tombstone gate. When
+N cannot be resolved (supplier throws), the sweep passes `Number.POSITIVE_INFINITY` — an
+effectively-infinite grace, so every orphan is held and nothing deletes, the same
+conservative stance the existing snapshot-root `'unavailable'` path takes. No backup
+store (no supplier) ⇒ `graceWindowMs` undefined ⇒ pre-R4 immediate delete, correct
+because a local-only vault has no recovery window to protect.
+
+#### R4 verification
+
+- `bun run typecheck` — clean across the monorepo (28/28 tasks).
+- `bunx oxlint` + `bun run format:check` on every changed file — 0 warnings, 0 errors,
+  formatting clean.
+- New `packages/vault/src/blob/orphan-grace.test.ts` (10 tests): the index
+  (mark-once/idempotent, clear→re-stamp) and the full reconcile grace matrix (held on
+  first observation, deleted past window, held within window, live-again clears +
+  never deletes, pinned root never deleted nor tombstoned, no-store fail-safe hold,
+  no-window pre-R4 delete, infinite-grace hold). New table-existence test in
+  `migrate.test.ts`; `recoveryWindowMs` mapping test in `backup-service.test.ts`.
+- Existing suites stay green: vault blob (incl. the pre-existing orphan-delete and
+  snapshot-root-pin tests in `blob.test.ts`), `db.test.ts`, `migrate.test.ts`,
+  gateway `backup-service`/`backup-reconciliation`/`recover-*`, `vault-plane`.
+
+```
+$ bunx vitest run packages/vault/src/blob/orphan-grace.test.ts \
+    packages/vault/src/blob/blob.test.ts packages/vault/src/schema/migrate.test.ts \
+    packages/gateway/src/backup/backup-service.test.ts \
+    packages/gateway/src/serve/vault-plane.test.ts
+ ✓ |@centraid/vault| src/blob/orphan-grace.test.ts (10 tests) 8ms
+ ✓ |@centraid/vault| src/schema/migrate.test.ts (10 tests)
+ ✓ |@centraid/vault| src/blob/blob.test.ts (19 tests)
+ ✓ |@centraid/gateway| src/backup/backup-service.test.ts (17 tests)
+ ✓ |@centraid/gateway| src/serve/vault-plane.test.ts (18 tests)
+
+ Test Files  5 passed (5)
+      Tests  74 passed (74)
+```
+
 ## Steering
 
 **Verdict: PASS**
@@ -701,3 +791,4 @@ $ bunx vitest run src/gateway-client-recover.test.ts \
 | claude-code-b42aae9d-faa-1784311723-1 | claude-code | b42aae9d-faaf-4587-8bcc-fd43d61e35a4 | #439 | claude-fable-5 | 116 | 433456 | 2703871 | 22169 | 455741 | 9.2317 | 219 | 933715 | 7534655 | 204901 | feat(gateway): pre-vault recover routes, daemon-owned restore job, progress SSE  |
 | claude-code-b42aae9d-faa-1784313736-1 | claude-code | b42aae9d-faaf-4587-8bcc-fd43d61e35a4 | #439 | claude-fable-5 | 63 | 20632 | 1982820 | 13395 | 34090 | 2.9111 | 282 | 954347 | 9517475 | 218296 | feat(client): fresh-gateway onboarding recovery flow (#439) -m Issue: #439 |
 | claude-code-b42aae9d-faa-1784313806-1 | claude-code | b42aae9d-faaf-4587-8bcc-fd43d61e35a4 | #439 | claude-fable-5 | 0 | 0 | 0 | 0 | 0 | 0.0000 | 282 | 954347 | 9517475 | 218296 | feat(client): fresh-gateway onboarding recovery flow (#439) -m Issue: #439 |
+| claude-code-b42aae9d-faa-1784314878-1 | claude-code | b42aae9d-faaf-4587-8bcc-fd43d61e35a4 | #439 | claude-opus-4-8 | 10 | 123434 | 622679 | 4552 | 127996 | 1.1967 | 292 | 1077781 | 10140154 | 222848 | feat(vault): orphan-grace GC — delay CAS delete N days past first-orphaned (#439 |

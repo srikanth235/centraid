@@ -109,6 +109,15 @@ export interface ReconcileResult {
    * still be writing here). Empty whenever orphan-delete ran normally.
    */
   orphansSkipped: string[];
+  /**
+   * Orphaned remote objects HELD by the orphan-grace window (issue #439 R4):
+   * found orphaned but tombstoned (or newly tombstoned) less than `graceWindowMs`
+   * ago, so a recovery-to-N that lands between two snapshots can still reach the
+   * byte. Distinct from `orphansSkipped` (a lease-conflict pause of the whole
+   * delete phase): grace-held orphans WILL delete on a future sweep once their
+   * grace elapses. Empty when no grace window is in force.
+   */
+  orphansGraceHeld: string[];
 }
 
 export interface ReconcileOptions {
@@ -135,6 +144,25 @@ export interface ReconcileOptions {
    * rather than passing an incomplete set.
    */
   extraLiveRoots?: ReadonlySet<string>;
+  /**
+   * The orphan-grace window in ms (issue #439 R4 — the recovery window N, the
+   * retention daily rung). When set, a genuine orphan (not live, not pinned by
+   * `extraLiveRoots`) is not deleted on the pass that first finds it: the sweep
+   * tombstones it (`ctx.orphans`) and DEFERS the delete until
+   * `now - first_orphaned_at > graceWindowMs`. This makes the recovery-window
+   * number N honest for a blob created and dereferenced BETWEEN two snapshots —
+   * named by no retained manifest, yet exactly what a PITR into that interval
+   * replays. Undefined ⇒ grace disengaged (immediate delete, the pre-R4
+   * behavior) — correct only when there is no recovery window to protect (a
+   * local-only vault). The gateway sweep passes `Number.POSITIVE_INFINITY` as a
+   * fail-safe when N SHOULD exist but could not be resolved, so nothing deletes.
+   */
+  graceWindowMs?: number;
+  /**
+   * Monotonic clock for the grace-window arithmetic (issue #439 R4), injectable
+   * so tests need no real waits. Absent ⇒ `Date.now`.
+   */
+  now?: () => number;
 }
 
 /**

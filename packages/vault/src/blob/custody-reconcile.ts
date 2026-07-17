@@ -9,6 +9,7 @@
 import type { BlobCache } from './cache.js';
 import type { ReconcileOptions, ReconcileResult, RemoteTier } from './custody-types.js';
 import type { LocalBlobStore } from './local.js';
+import type { OrphanTombstoneIndex } from './orphan-tombstone.js';
 import type { ReplicaStore } from './replica-index.js';
 
 export interface ReconcileContext {
@@ -21,6 +22,14 @@ export interface ReconcileContext {
   open: (sha: string) => Promise<unknown>;
   /** Re-push local shas the remote is missing (custody.replicate). */
   replicate: (shas: string[]) => Promise<string[]>;
+  /**
+   * The orphan-grace tombstone store (issue #439 R4) — where the sweep records
+   * WHEN each sha was first observed orphaned so the delete can be deferred by
+   * `options.graceWindowMs`. Absent (legacy / cache-less) ⇒ grace cannot be
+   * evaluated: when a grace window IS requested but this is missing, the sweep
+   * fails safe (holds, never deletes).
+   */
+  orphans?: OrphanTombstoneIndex;
 }
 
 /**
@@ -40,8 +49,10 @@ export async function reconcileCustody(
     replicated: [],
     missing: [],
     orphansSkipped: [],
+    orphansGraceHeld: [],
   };
   const { remote, local, cache } = ctx;
+  const now = options.now ?? Date.now;
   const casShas = remote ? new Set(await remote.store.list()) : new Set<string>();
   const derivedShas = remote?.derivedStore
     ? new Set(await remote.derivedStore.list())
@@ -66,19 +77,47 @@ export async function reconcileCustody(
     }
     for (const tier of stores) {
       for (const sha of tier.listed) {
-        if (liveShas.has(sha)) continue;
+        // A live sha is re-referenced: it can carry no orphan tombstone. Clear
+        // any stale one (issue #439 R4 — a sha that becomes live again before
+        // its grace elapses must lose its tombstone) and skip.
+        if (liveShas.has(sha)) {
+          ctx.orphans?.clear(sha);
+          continue;
+        }
         // GC-pins-snapshots invariant (issue #436 §6): a blob referenced by any
         // retained snapshot manifest is a live GC root and MUST NOT be deleted,
         // even though the live vault model no longer claims it. CAS has no
         // history — the retained snapshot's reference is the attachment history,
         // and this object is what a recovery-to-N would restore. Pinned here, at
-        // the one place a client-owned CAS delete can happen.
+        // the one place a client-owned CAS delete can happen. A pinned root is by
+        // definition not orphaned, so it never earns a tombstone — the check
+        // precedes the grace gate, keeping pinned objects out of blob_orphan.
         if (options.extraLiveRoots?.has(sha)) continue;
         if (options.skipOrphanDelete) {
           result.orphansSkipped.push(sha);
           continue;
         }
+        // Orphan-grace gate (issue #439 R4). With a grace window in force, a
+        // freshly-found orphan is tombstoned and HELD, not deleted: PITR makes
+        // every instant inside the recovery window restorable, and a blob
+        // referenced only BETWEEN two snapshots — named by no retained manifest —
+        // is exactly the byte such a restore replays. Delete only once the
+        // first-observed-orphaned instant is older than the window. A grace
+        // window with no tombstone store to evaluate it fails safe (holds).
+        if (options.graceWindowMs !== undefined) {
+          if (!ctx.orphans) {
+            result.orphansGraceHeld.push(sha);
+            continue;
+          }
+          const firstOrphanedAt = ctx.orphans.markFirstSeen(sha, now());
+          if (now() - firstOrphanedAt <= options.graceWindowMs) {
+            result.orphansGraceHeld.push(sha);
+            continue;
+          }
+          // Grace elapsed — fall through to delete and forget the tombstone.
+        }
         await tier.store.delete(sha);
+        ctx.orphans?.clear(sha);
         tier.surviving.delete(sha);
         cache?.replica.unmark(sha);
         result.orphansDeleted.push(sha);
