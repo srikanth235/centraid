@@ -15,6 +15,7 @@ function deps(over: Partial<PaletteDeps> = {}): PaletteDeps {
   return {
     userApps: [{ id: 'todos', name: 'Todos', color: 'blue', iconKey: 'Todo', desc: 'Tasks' }],
     drafts: [{ id: 'd1', name: 'Draft One', color: 'teal', iconKey: 'Sparkle', __draft: true }],
+    builderEnabled: true,
     tileVariant: 'gradient',
     navigate: vi.fn(),
     enterBuilder: vi.fn(),
@@ -41,6 +42,16 @@ describe('buildPaletteGroups', () => {
     expect(groups.find((g) => g.group === 'Go to')).toBeUndefined();
     const create = groups.find((g) => g.group === 'Create')!.items[0]!;
     expect(create.label).toBe('Build “todo”');
+  });
+
+  it('omits the Create/build row when the builder is disabled (#434)', () => {
+    // The "Build a new app…" row is a builder entry point — gone when hidden.
+    const groups = buildPaletteGroups('', deps({ builderEnabled: false }));
+    expect(groups.map((g) => g.group)).toEqual(['Apps', 'Go to']);
+    expect(groups.find((g) => g.group === 'Create')).toBeUndefined();
+    // A query still never resurrects it.
+    const filtered = buildPaletteGroups('budget tracker', deps({ builderEnabled: false }));
+    expect(filtered.find((g) => g.group === 'Create')).toBeUndefined();
   });
 
   it('an app row navigates to the app and closes on run', () => {

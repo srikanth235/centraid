@@ -51,9 +51,12 @@ beforeEach(async () => {
   (globalThis as unknown as { Icon: unknown }).Icon = { Todo: () => '', Sparkle: () => '' };
   (globalThis as unknown as { ICON_PALETTE: unknown }).ICON_PALETTE = { violet: '#7C5BD9' };
   // The App boot effect subscribes to gateway/vault change broadcasts.
+  // `getSettings` feeds useBuilderEnabled (#434) — default omits builderEnabled,
+  // so the builder stays hidden unless a test overrides it before mounting.
   (globalThis as unknown as { CentraidApi: unknown }).CentraidApi = {
     onGatewayChanged: () => {},
     onVaultChanged: () => {},
+    getSettings: () => Promise.resolve({}),
   };
   // Home's buildHomeAppItems asks the tokens bridge for each tile's finish.
   (globalThis as unknown as { CentraidTokens: unknown }).CentraidTokens = {
@@ -121,15 +124,36 @@ describe('App root', () => {
     expect(el.querySelector('.pageHead')?.textContent).toContain('Starred');
   });
 
-  it('opens the ⌘K command palette listing the app + a create row', async () => {
+  it('hides every builder entry point by default (#434 builder off)', async () => {
     const el = await mount();
-    expect(el.querySelector('[aria-label="Command palette"]')).toBeNull();
+    // No "Build new" in the sidebar and no composer hero on Home.
+    expect(el.textContent).not.toContain('Build new');
+    expect(el.querySelector('.composerInput')).toBeNull();
+    // The ⌘K palette lists the app but no "Build a new app…" create row.
     await act(async () => {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
     });
     const dialog = el.querySelector('[aria-label="Command palette"]');
     expect(dialog).not.toBeNull();
     expect(dialog?.textContent).toContain('Todos');
+    expect(dialog?.textContent).not.toContain('Build a new app…');
+  });
+
+  it('reveals builder entry points when builderEnabled is set (#434 builder on)', async () => {
+    (globalThis as unknown as { CentraidApi: { getSettings: unknown } }).CentraidApi.getSettings =
+      () => Promise.resolve({ builderEnabled: true });
+    const el = await mount();
+    // useBuilderEnabled resolves getSettings() a tick after first paint.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(el.textContent).toContain('Build new');
+    expect(el.querySelector('.composerInput')).not.toBeNull();
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
+    });
+    const dialog = el.querySelector('[aria-label="Command palette"]');
     expect(dialog?.textContent).toContain('Build a new app…');
   });
 
@@ -142,5 +166,22 @@ describe('App root', () => {
     });
     expect(el.querySelector<HTMLElement>('.window')?.dataset.sidebar).toBe('closed');
     expect(store.get('appearance')).toMatchObject({ sidebarOpen: false });
+  });
+});
+
+describe('BuilderRouteRedirect (#434)', () => {
+  it('replaces a stale builder route with Home on mount', async () => {
+    const { BuilderRouteRedirect } = await import('./App.js');
+    const replace = vi.fn();
+    const nav = { replace } as unknown as Parameters<typeof BuilderRouteRedirect>[0]['nav'];
+    const el = document.createElement('div');
+    document.body.append(el);
+    const r = createRoot(el);
+    await act(async () => {
+      r.render(<BuilderRouteRedirect nav={nav} />);
+    });
+    expect(replace).toHaveBeenCalledWith({ kind: 'home' });
+    act(() => r.unmount());
+    el.remove();
   });
 });

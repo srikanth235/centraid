@@ -103,6 +103,18 @@ export interface CentraidSettings {
    * Absent → disabled (opt-in).
    */
   launchAtLogin?: boolean;
+  /**
+   * DEV FLAG (issue #434, Phase 3) — reveal the in-app builder and every
+   * surface that reaches it: the Home composer, "Build new", the ⌘K "Build a
+   * new app…" row, draft apps + their menus, "Edit with Centraid", and the
+   * `builder` / `automation-builder` routes. The builder is hidden from the
+   * first release — apps are installed from Discover, not authored here — but
+   * the machinery stays fully wired (the builder is also the headless
+   * automations compiler), so this only gates UI reachability. There is no
+   * settings-screen toggle for v1: hand-edit the settings JSON (set
+   * `"builderEnabled": true`) and relaunch. Absent → disabled.
+   */
+  builderEnabled?: boolean;
 }
 
 /** A single published release shown in the "What's new" modal. */
