@@ -2,18 +2,18 @@
 
 **Personal software. Your data. Your apps. Your devices.**
 
-Describe an app in a sentence — an agent builds it, a local gateway runs it, and it shows up on your desktop, browser, and phone. Every app is a thin projection over one **vault** on your machine — a shared personal ontology where your people, money, documents and plans live once, borrowed through grants you sign. App code is a folder of HTML + JS handlers, versioned in a local git store, operable by you or an AI.
+Install an app and a local gateway runs it — on your desktop, browser, and phone — or add an agent that works your data in the background. Every app is a thin projection over one **vault** on your machine — a shared personal ontology where your people, money, documents and plans live once, borrowed through grants you sign. App code is a folder of HTML + JS handlers versioned in a local git store; apps serve from the shipped release and update with it, and are authored by agents (the builder that does that ships hidden for v1).
 
 [Docs](https://centraid.dev/docs/) · [Get started](https://centraid.dev/docs/start/) · [Architecture](ARCHITECTURE.md) · [Agents map](AGENTS.md)
 
 ## What it does
 
-- **Build apps by chatting** — describe a new app or a change; the builder agent edits a draft branch, you preview, **Publish** flips it live.
-- **Clone templates** — 8 blueprint apps (Docs, Photos, Notes, People, Locker, Tally, Agenda, Tasks) + 16 automation templates (Google/GitHub connectors plus enrichers like photo captioner and document deadlines). Click and deploy, no compile step.
-- **Run automations** — cron-, webhook-, condition- or data-change-triggered background agents. A generated handler runs in a worker thread with a curated `ctx` surface (`ctx.vault`, `ctx.agent`, `ctx.fetch`, KV state, run history).
-- **Chat with your data** — every app has one `/centraid/<id>/_turn` surface that can rewrite a handler *and* answer a data question in the same conversation; the vault-wide assistant reads across all of them.
-- **Run it anywhere** — one gateway core, two hosts: embedded in Electron or the standalone `centraid-gateway` daemon. Desktop and the installable web PWA share one React client; mobile is an Expo client over an iroh p2p tunnel.
-- **Owner-controlled** — databases, code, and consent stay with your gateway; attachments remain local unless you choose S3/provider custody, where devices upload only framed ciphertext and the gateway continuously verifies what the provider holds.
+- **Install apps** — 8 blueprint apps (Docs, Photos, Notes, People, Locker, Tally, Agenda, Tasks). Installing writes a consent row and grants the scopes the app declares — nothing is copied; apps serve from the shipped release, upgrade with it, and uninstall keeps your data.
+- **Automate your data** — 16 automation templates (Google/GitHub connectors plus enrichers like photo captioner and document deadlines) that fire on a schedule, webhook, condition, or vault data change. Each is a saved conversation; its handler runs in a worker thread with a curated `ctx` surface (`ctx.vault`, `ctx.agent`, `ctx.fetch`, KV state, run history). Templates still copy into the vault.
+- **Ask your vault** — a vault-wide assistant reads across every app through one tool register; each app also answers data questions on its own `/centraid/<id>/_turn` surface.
+- **Explore the model** — **Vault Atlas** maps every kind, how kinds relate (a star centered on `core_party`), and a browsable table editor — every write going through the journalled command path.
+- **Run it anywhere** — one gateway core, two hosts: embedded in Electron or the standalone `centraid-gateway` daemon. Desktop and the installable web PWA share one React client (the PWA pairs with just a ticket over relay-only Iroh/WASM); mobile is an Expo client with native **Photos, Docs, and Agenda** over a consent-scoped offline replica, and remote apps over the iroh tunnel.
+- **Hosted or on-device** — databases, code, and consent stay with your gateway. Keep the vault **On this device**, or connect one storage provider for an encrypted **Hosted** copy where devices upload only framed ciphertext and the gateway verifies what the provider holds; a blank machine plus your recovery kit runs `recover` to bring the vault back, lazily.
 
 ## How it works (30 seconds)
 
@@ -80,7 +80,7 @@ Full tour: [Get started](https://centraid.dev/docs/start/) — install → vault
 | `packages/agent-runtime` | Drives one turn through the codex app-server (JSON-RPC subprocess) or the Claude Agent SDK (in-process); ships the vault-register tools and the `centraid` CLI. |
 | `packages/automation` | Manifest schema, fire spine, in-process scheduler, webhook ingress, worker-thread handler runner. |
 | `packages/tunnel` | iroh QUIC wire protocol — device tunnel + one-time pairing; the TS reference the Swift/Kotlin mobile ports mirror. |
-| `packages/blueprints` | Template gallery: 8 blueprint apps + 16 automation templates, blank-app scaffolders, clone flow. |
+| `packages/blueprints` | Template gallery: 8 blueprint apps + 16 automation templates, plus blank-app scaffolders. |
 | `packages/skills` | Agent grounding: `SKILL.md` units + dynamic renderers (live design tokens, host-tool list). |
 | `packages/design-tokens` | Colors, type, spacing, app metadata, icons — shared across desktop and mobile. |
 | `packages/tsconfig` | Shared `base` / `electron` / `expo` tsconfigs. |
@@ -91,7 +91,7 @@ Turborepo + Bun. What CI runs is `bun run ci`.
 
 ```sh
 bun run build          # all apps + packages
-bun run test           # per-package vitest (87 test files)
+bun run test           # per-package vitest (hundreds of test files)
 bun run coverage       # repo-wide v8 coverage
 bun run typecheck
 bun run check          # oxfmt --check + oxlint
@@ -99,7 +99,7 @@ bun run lint:types     # type-aware lint
 bun run ci             # check + typecheck + lint:types
 ```
 
-Desktop e2e: 59 Playwright tests across 14 scenario sections, driving the real Electron app against a mock gateway — see [apps/desktop/tests/e2e](apps/desktop/tests/e2e/README.md).
+Desktop e2e: Playwright tests across 14 scenario sections, driving the real Electron app against a mock gateway — see [apps/desktop/tests/e2e](apps/desktop/tests/e2e/README.md).
 
 Web e2e: `bun run --cwd apps/web build && bun run --cwd apps/web e2e` drives the production PWA against a real gateway and verifies pairing, preview/publish, app execution, and session isolation.
 
@@ -111,7 +111,7 @@ The docs ([centraid.dev/docs](https://centraid.dev/docs/)) are Astro-built stati
 |---|---|
 | [Start](https://centraid.dev/docs/start/) | Install → vault → first app → pair a phone → always-on → key backup |
 | [Data](https://centraid.dev/docs/data/) | The vault, consent & the outbox, sealed columns, connections & sync, automations, the assistant, blobs, search |
-| [Apps](https://centraid.dev/docs/apps/) | The eight blueprints, app anatomy, the builder, attach & link, the agent surface, mobile |
+| [Apps](https://centraid.dev/docs/apps/) | The eight blueprints, app anatomy, the install model, attach & link, the agent surface, mobile |
 | [Devices](https://centraid.dev/docs/devices/) | Star topology, (gateway, vault) addressing, pairing, iroh, desktop & mobile clients, agent runtimes |
 | [Ontology](https://centraid.dev/docs/ontology/) | The full logical model — schemas, entity map, ownership matrix, gateway contract, rules |
 

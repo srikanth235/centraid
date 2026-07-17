@@ -320,7 +320,11 @@
               with a QUIC close code 401, before it ever reaches an application. The result is a
               star, not a mesh: Centraid refuses the hardest problem in personal software —
               multi-master sync — by never having it. One always-on gateway per person; every
-              device is just a client around it.
+              device is just a client around it. A client need not be online to be useful, though:
+              each holds a consent-scoped offline <b>replica</b> — a private copy of just the slice
+              it's allowed to see — kept current by a one-way change log the gateway alone writes.
+              Offline edits queue as intents and settle on reconnect, so there is still exactly one
+              canonical writer and nothing to merge.
             </p>
             <p class="aside">
               Go deeper: <a href="../devices/#iroh">Devices § connectivity</a> ·

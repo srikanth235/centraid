@@ -5,8 +5,9 @@
         <p class="lede r" style="--d: 0.22s">
           In the silo world, an app is where your data lives. Here it is a <b>window</b>: a folder
           of plain HTML and JavaScript that renders vault rows and mutates them through typed
-          commands, under a grant you signed. Delete the app and nothing of yours is lost. Ask the
-          builder to reshape it and it's a different window onto the same record by dinner.
+          commands, under a grant you signed. Installing one copies nothing — it hands over a
+          grant, not a database. Uninstall it and nothing of yours is lost; install another window
+          onto the same record and it reads the very same rows.
         </p>
       </section>
 
@@ -24,10 +25,11 @@
           </p>
           <p>
             When an app genuinely needs its own tables — a game's score sheet, a niche tracker — it
-            declares an <b>ext band</b>: registered tables that live inside
-            <code>vault.db</code> under the app's namespace. Ext tables may point <i>into</i> the
-            canonical model; the canon never points back. Uninstall retains, then purges the band —
-            the silo line is a band boundary you can see, not a separate file you forget.
+            declares an <b>ext band</b>: registered tables the gateway creates inside
+            <code>vault.db</code> from the manifest, under the app's namespace (apps never run DDL).
+            Ext tables may point <i>into</i> the canonical model; the canon never points back.
+            Uninstall revokes the grant but keeps the rows — the silo line is a band boundary you
+            can see, not a separate file you forget.
           </p>
           <p class="aside">
             Why the ontology can absorb almost everything without ext tables — and the rule that
@@ -80,7 +82,7 @@
               <h3>People</h3>
               <p>
                 Every person is the same canonical party your calendar and expenses reference.
-                Circles, cadences ("reconnect every 6 weeks"), important dates, gift ideas, debts, a
+                Lists, cadences ("reconnect every 6 weeks"), important dates, gift ideas, debts, a
                 journal. Proves: <b>shared identity</b>.
               </p>
             </div>
@@ -200,49 +202,62 @@
         </div>
       </section>
 
-      <!-- §04 THE BUILDER -->
-      <section class="dark" id="builder">
+      <!-- §04 INSTALLING -->
+      <section class="dark" id="install">
         <div class="wrap">
-          <p class="eyebrow r">§04 · the builder</p>
+          <p class="eyebrow r">§04 · installing</p>
           <h2 class="r" style="--d: 0.06s">
-            Describe the change. <em>Poke the preview. Publish.</em>
+            A grant, <em>not a copy.</em>
           </h2>
           <p class="lede r" style="--d: 0.12s">
-            Blueprints are starting points, not products you're stuck with. The builder is an agent
-            that edits app code in conversation — "make Docs group by year", "add a warranty-expiry
-            view to home inventory" — against a live preview, on a draft.
+            You don't clone or fork an app into your vault. Installing from <b>Discover</b> writes
+            one consent record and the scopes the app's manifest asks for — nothing is copied. The
+            code keeps running from the shipped release and upgrades with it; there is no per-vault
+            snapshot to go stale.
           </p>
           <div class="artifact tilt-r r" style="--d: 0.16s; max-width: 660px; margin-top: 8px">
             <div class="artifact-head">
-              <span>builder · docs</span><span class="tag">draft</span>
+              <span>install · docs</span><span class="tag">consent</span>
             </div>
             <div class="artifact-body">
-              <div class="t-line">
-                <span class="t-who you">you</span>
-                <span class="t-msg"
-                  >I want receipts separated from documents, and a monthly total next to each
-                  folder.</span
-                >
+              <div style="font-weight: 600; margin-bottom: 4px">Install Docs</div>
+              <div style="color: var(--ink-3); font-style: italic; margin-bottom: 10px">
+                Keeps your important documents filed, editable, downloadable and restorable — with a
+                version history.
               </div>
-              <div class="t-line">
-                <span class="t-who agent">builder</span>
-                <span class="t-msg"
-                  ><span class="tool-chip">⚙ vault_sql → folders, attachment roles, txn joins</span>
-                  Receipts already carry a canonical role — no new table needed. Drafting a filtered
-                  view + a query that joins attachments to transactions.
-                  <span class="dim nl">Preview updated. Publish?</span></span
-                >
+              <div style="color: var(--ink-3); font-style: italic">What Docs can access</div>
+              <div>
+                <span style="color: var(--accent); font-weight: 600">Read</span
+                >&nbsp;&nbsp;documents, folders, tags, content, blob custody
+              </div>
+              <div>
+                <span style="color: var(--amber); font-weight: 600">Add &amp; change</span
+                >&nbsp;&nbsp;documents, folders, tags
+              </div>
+              <div class="dim nl">
+                Installing grants the access above. Nothing is copied — the app runs from the
+                shipped release and updates with it. Uninstall anytime; your data stays in your
+                vault.
               </div>
             </div>
           </div>
           <div class="prose r" style="--d: 0.24s">
             <p>
-              The guardrails are the same ones everything else obeys: the builder reads the live
-              schema and ontology vocabulary each turn, is steered to map onto canonical mechanisms
-              first (an ext table is a justified escape, not a default), can't widen the app's
-              scopes without a request you approve, and publishes through the app lifecycle — which
-              re-diffs the grant. Generated code is untrusted by construction; it gets the paved
-              road, not a side door.
+              An app declares its purpose and scopes in the manifest; the install sheet groups them
+              into <b>Read</b> and <b>Add &amp; change</b> so a grant is a sentence you can read
+              before you sign it. Install and the app pins to Home and opens straight away.
+              <b>Uninstall</b> is the mirror image — "Removes the app and revokes its access. Your
+              data stays in your vault." — the consent row is tombstoned and the grants drop, but
+              every row and receipt it wrote is still yours; reinstalling is a fresh consent, not a
+              recovery.
+            </p>
+            <p>
+              And no, you don't build one by describing it — not yet. The machinery that once did
+              still exists: it's the compiler that turns an automation's plain-language instructions
+              into a deterministic plan, and behind a developer flag it can still edit app code. But
+              there is no user-facing "describe an app and watch it appear" surface in this release.
+              Apps arrive with the release; the one thing you still start from a template and copy
+              into your vault is an <a class="u" href="../data/#automations">automation</a>.
             </p>
           </div>
         </div>
@@ -309,12 +324,22 @@
           <p>
             Apps are responsive by rule, mobile layout first: the same HTML that fills a desktop
             window reflows to the phone, and desktop-only flourishes gate themselves on width
-            instead of forking the code. The mobile companion renders the identical app over the
-            peer-to-peer tunnel — same handlers, same grants, live updates over SSE — plus an
-            approvals surface, because a parked command should be answerable from your pocket.
+            instead of forking the code. That responsive shell is how your <b>installed apps</b>
+            travel — on the phone they open in a WebView and render over the peer-to-peer tunnel,
+            same handlers, same grants, live updates over SSE, with an approvals surface so a parked
+            command is answerable from your pocket.
+          </p>
+          <p>
+            Three of the blueprints go further. <b>Photos</b>, <b>Docs</b> and <b>Agenda</b> ship as
+            <i>native</i> mobile apps drawing on a consent-scoped copy of the vault held on the
+            phone, so they work in airplane mode: a timeline, a document library with offline
+            search, a calendar that expands recurrence locally. Writes you make offline queue as
+            intents and settle exactly once when you reconnect — the gateway is still the only
+            writer. Even freeing up space defers to consent: the only control that deletes a phone
+            original waits until its bytes are provably safe in the vault.
           </p>
           <p class="aside">
-            How the tunnel, pairing and the companion actually work:
+            How the tunnel, pairing and the offline replica actually work:
             <a href="../devices/">Devices →</a>
           </p>
         </div>

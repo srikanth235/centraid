@@ -100,6 +100,12 @@
             endpoint id in the ACL, its line to the gateway permanent until you revoke it. No
             password, no account, nothing reusable to intercept.
           </p>
+          <p>
+            Enrollment is <b>one bit, not a role matrix</b> — a device is <b>full</b> or
+            <b>read-only</b> — and what it can actually see is narrowed further by each app's
+            consent grants. That single tier plus those grants is exactly what shapes the device's
+            offline replica, two sections down.
+          </p>
         </div>
         <div class="term r" style="--d: 0.2s; margin-top: 24px; max-width: 720px">
           <div class="term-bar"><span>headless pairing · admin shell</span></div>
@@ -156,10 +162,12 @@
                 <h3>Transport tiers with a guardrail</h3>
                 <p>
                   Clients classify their route: <b>local</b> (embedded gateway, loopback),
-                  <b>direct</b> (an https URL + bearer — your Tailscale or LAN), or <b>iroh</b>
+                  <b>direct</b> (an https URL + bearer — your Tailscale or LAN), <b>iroh</b>
                   (dial by endpoint id; a loopback proxy makes it transparent to the rest of the
-                  app). Plain http to a public hostname is refused outright — loopback and RFC1918
-                  only.
+                  app), or <b>relay-only</b> — the browser's lot, where a WebAssembly iroh endpoint
+                  has no UDP socket to hole-punch with, so every stream rides iroh's public relay,
+                  still key-authenticated and end-to-end encrypted. Plain http to a public hostname
+                  is refused outright — loopback and RFC1918 only.
                 </p>
               </div>
             </div>
@@ -177,14 +185,86 @@
           </div>
           <p class="note r" style="--d: 0.24s; margin-top: 16px">
             The wire protocol has one TypeScript reference implementation, ported byte-for-byte to
-            Swift and Kotlin for the phone's native module.
+            Swift and Kotlin for the phone's native module and compiled to WebAssembly for the
+            browser.
           </p>
         </div>
       </section>
 
-      <!-- §05 DESKTOP -->
+      <!-- §05 REPLICA -->
+      <section class="sec wrap" id="replica">
+        <p class="eyebrow r">§05 · replica</p>
+        <h2 class="r" style="--d: 0.06s">Offline, <em>without a second writer.</em></h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            A star has one obvious weakness: cut the line to the center and the client goes dark.
+            Centraid closes that without betraying the thesis — no second writer, no two-way merge,
+            no CRDT. Every device keeps a <b>consent-scoped replica</b>: a private, offline copy of
+            exactly the slice it's allowed to see, kept current by a one-directional change log the
+            gateway alone writes.
+          </p>
+          <p>
+            The mechanism is a durable log living inside <code>vault.db</code>. A per-entity trigger
+            writes a <code>replica_change</code> row <i>in the same SQLite transaction</i> as the
+            base mutation, so the log can never disagree with the data it describes. A device never
+            receives the whole vault: the gateway computes a server-derived <b>shape</b> — the app's
+            consent grants intersected with the device's trust tier, then row- and column-minimized
+            — and ships only that. A read-only browser session sees only its one app's shape.
+          </p>
+        </div>
+        <div class="steps r" style="--d: 0.16s; max-width: 880px">
+          <div class="step">
+            <span class="dot">1</span>
+            <div>
+              <h3>Bootstrap, then follow</h3>
+              <p>
+                A fresh device pulls a shaped snapshot from <code>replica/bootstrap</code> (windowed
+                for large libraries), then tails <code>changes?since=&lt;epoch:seq&gt;</code> — as
+                JSON, NDJSON, or a live SSE stream — and acks the cursor it durably committed back
+                through <code>replica/checkpoint</code>. Heavy columns are fetched lazily, per row,
+                only when something opens them.
+              </p>
+            </div>
+          </div>
+          <div class="step">
+            <span class="dot">2</span>
+            <div>
+              <h3>Writes are intents, not edits</h3>
+              <p>
+                Offline, a device doesn't mutate its copy and reconcile later — it queues an
+                <b>intent</b> (<code>{intentId, appId, action, input}</code> with a checked payload
+                hash) and submits it to <code>replica/intents</code> on reconnect. The gateway runs
+                it once and durably; replaying the same <code>intentId</code> returns the same
+                outcome instead of re-executing, so a flaky network never double-posts. The
+                canonical order always wins — the device's optimistic view is just the log, replayed.
+              </p>
+            </div>
+          </div>
+          <div class="step">
+            <span class="dot">3</span>
+            <div>
+              <h3>Consent still answers</h3>
+              <p>
+                An intent can come back <code>parked</code> — the same owner confirmation any risky
+                command faces, now reachable from a pocket — settling later through the very log the
+                device already follows. A read-only device gets a durable <code>denied</code>,
+                server-side, not a hidden client-side guard. Revocation or downgrade lands on live
+                connections immediately.
+              </p>
+            </div>
+          </div>
+        </div>
+        <p class="aside r" style="--d: 0.3s">
+          Compatibility here is a number, not a migration ladder: an <code>epoch</code> plus a
+          build-time schema epoch are invalidation counters — bump either and clients throw the
+          replica away and re-bootstrap clean, exactly in keeping with the pre-release no-migrations
+          rule. This is how the star carries offline devices without ever growing a second master.
+        </p>
+      </section>
+
+      <!-- §06 DESKTOP -->
       <section class="sec wrap" id="desktop">
-        <p class="eyebrow r">§05 · desktop shell</p>
+        <p class="eyebrow r">§06 · desktop shell</p>
         <h2 class="r" style="--d: 0.06s">The everyday <em>front door.</em></h2>
         <div class="prose r" style="--d: 0.12s">
           <p>
@@ -201,35 +281,82 @@
         </div>
       </section>
 
-      <!-- §06 MOBILE -->
+      <!-- §07 WEB -->
+      <section class="dark" id="web">
+        <div class="wrap">
+          <p class="eyebrow r">§07 · web app</p>
+          <h2 class="r" style="--d: 0.06s">A client home in <em>a browser tab.</em></h2>
+          <p class="lede r" style="--d: 0.12s">
+            The third home installs nothing heavier than a bookmark: the web app is a PWA that pairs
+            with the same one-time ticket a phone uses — paste it and you're enrolled, no account,
+            no gateway URL to hunt for — and holds the same consent-scoped replica in a service
+            worker, so it keeps working with the tab offline.
+          </p>
+          <div class="grid cols-2" style="margin-top: 26px">
+            <div class="card r" style="--d: 0.1s">
+              <p class="c-no">the normal path</p>
+              <h3>Relay-only iroh, in WASM</h3>
+              <p>
+                A browser owns no UDP socket to hole-punch with, so its iroh endpoint is compiled to
+                WebAssembly and rides iroh's public relay for every stream — still key-authenticated,
+                still end-to-end encrypted. The stable device key lives in the browser; because the
+                transport bypasses browser HTTP entirely, the gateway stamps the trusted origin on
+                its own sessions.
+              </p>
+            </div>
+            <div class="card r" style="--d: 0.18s">
+              <p class="c-no">the fallback</p>
+              <h3>Direct HTTP, origin-bound</h3>
+              <p>
+                Where the gateway answers over https (Tailscale, LAN), the browser can talk straight
+                to it. The session is then an <b>Origin-bound, HttpOnly</b> control cookie on a
+                dedicated origin — so logout is a server-side revoke, not just a cleared
+                <code>localStorage</code>: killing the cookie kills the session on the gateway too.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- §08 MOBILE -->
       <section class="sec wrap" id="mobile">
-        <p class="eyebrow r">§06 · mobile companion</p>
-        <h2 class="r" style="--d: 0.06s">A thin client with <em>your approvals in it.</em></h2>
+        <p class="eyebrow r">§08 · mobile companion</p>
+        <h2 class="r" style="--d: 0.06s">Native where it counts, <em>your approvals in your pocket.</em></h2>
         <div class="prose r" style="--d: 0.12s">
           <p>
-            The phone app (Expo, iOS and Android) carries no gateway and no database — it scans the
-            pairing QR, holds its device key, and renders your apps over the tunnel: the same
-            responsive HTML, live SSE updates, search across your tiles. Its one native trick is the
-            tunnel module itself (Swift and Kotlin implementations of the wire protocol); everything
-            above that line is the same product you see on the desktop.
+            The phone app (Expo, iOS and Android) embeds no gateway — but it is no longer a thin
+            window either. Its home splits in two. <b>Built in</b> are three genuinely native apps —
+            <b>Photos</b>, <b>Docs</b> and <b>Agenda</b> — drawn over an on-device SQLite replica, so
+            a timeline, a folder of files, or next week's schedule all render instantly in airplane
+            mode. Photos runs a durable background upload of the camera roll into the vault (sealed
+            frames, an incremental hash, an Android foreground service and iOS background transfers);
+            Agenda expands recurrence locally and fires reminders on-device, with no push broker in
+            the loop.
           </p>
           <p>
-            It also ships an <b>Approvals</b> surface — parked commands and staged outbox items,
-            answerable from your pocket — because consent that can only be granted at a desk is
-            consent that gets rubber-stamped later.
+            <b>Your apps</b> — anything built on the desktop — still open in a WebView over the
+            tunnel: the same responsive HTML, live SSE updates, search across your tiles. Building
+            apps stays a desktop act; the phone renders, it doesn't author.
+          </p>
+          <p>
+            Two touches earn a mention. <b>"Free up space"</b> is the one and only UI that deletes
+            phone originals, and it refuses to until the vault holds a settled copy — a custody-gated
+            delete, never a leap of faith. And an <b>Approvals</b> surface carries parked commands
+            and staged outbox items to your pocket, because consent that can only be granted at a
+            desk is consent that gets rubber-stamped later.
           </p>
           <p class="note">
-            Honest beta note: the native module means a dev build (<code>expo prebuild</code> +
-            <code>run:ios / run:android</code>) — Expo Go won't load it, and prebuilt store binaries
+            Honest beta note: the native tunnel and store modules mean a dev build
+            (<code>bun run dev:mobile</code>) — Expo Go won't load it, and prebuilt store binaries
             don't exist yet.
           </p>
         </div>
       </section>
 
-      <!-- §07 RUNTIMES -->
+      <!-- §09 RUNTIMES -->
       <section class="dark" id="runtimes">
         <div class="wrap">
-          <p class="eyebrow r">§07 · agent runtimes</p>
+          <p class="eyebrow r">§09 · agent runtimes</p>
           <h2 class="r" style="--d: 0.06s">Bring your own <em>brain.</em></h2>
           <p class="lede r" style="--d: 0.12s">
             Chat turns, builder sessions and automation fires all run through one injected turn
@@ -237,28 +364,31 @@
           </p>
           <div class="grid cols-2" style="margin-top: 26px">
             <div class="card r" style="--d: 0.1s">
-              <p class="c-no">in-process</p>
-              <h3>Claude Code</h3>
-              <p>
-                Runs through the Claude Agent SDK inside the gateway process — the default brain for
-                chat, builder and automations.
-              </p>
-            </div>
-            <div class="card r" style="--d: 0.18s">
               <p class="c-no">spawned</p>
               <h3>Codex</h3>
               <p>
                 Spawned as <code>codex app-server</code> over JSON-RPC stdio — an on-device runner
-                with the same turn contract.
+                and the default brain when you haven't picked one.
+              </p>
+            </div>
+            <div class="card r" style="--d: 0.18s">
+              <p class="c-no">in-process</p>
+              <h3>Claude Code</h3>
+              <p>
+                Runs through the Claude Agent SDK inside the gateway process — the same turn
+                contract, a different lab behind it.
               </p>
             </div>
           </div>
           <div class="prose r" style="--d: 0.3s">
             <p>
-              Whatever the brain, the leash is identical: agents see the vault only through
-              <code>vault_sql</code> / <code>vault_invoke</code> / <code>vault_content</code>, and
-              the model tiering is capability-based, not vendor-named — swap the runtime, keep the
-              contract, keep every receipt.
+              There is no single "active agent" anymore — only a default and a set of
+              <b>routing lanes</b>. Settings → <b>Agents</b> resolves each subsystem — Assistant,
+              In-app Ask, Builder, Automations — to its own (agent, model) pair, any lane free to
+              inherit the default. Whatever the brain, the leash is identical: agents see the vault
+              only through <code>vault_sql</code> / <code>vault_invoke</code> /
+              <code>vault_content</code>, and the model tiering is capability-based, not
+              vendor-named — swap the runtime, keep the contract, keep every receipt.
             </p>
           </div>
 
