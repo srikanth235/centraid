@@ -175,6 +175,27 @@ export async function commandRecover(
   });
 
   printJson(report);
+
+  // Adopt-time reconcile (issue #439 R5). Recovery SUCCEEDED for everything
+  // else, so this never fails the command (no non-zero exit) — a lost blob is
+  // not a reason to abandon a recovered vault. But LOST bytes are surfaced as a
+  // prominent CRITICAL block so an operator cannot miss them; a re-pin is a
+  // quieter FYI (the byte is back, it will re-upload on the next backup).
+  const rec = report.reconcile;
+  if (rec.lost.length > 0) {
+    process.stderr.write(
+      `\ncentraid-gateway: CRITICAL — ${rec.lost.length} blob(s) are permanently LOST. The provider ` +
+        'no longer holds them and the snapshot did not carry them, so the content they back is ' +
+        `unreadable. blob_replica was corrected. Shas: ${rec.lost.slice(0, 10).join(', ')}` +
+        `${rec.lost.length > 10 ? `, +${rec.lost.length - 10} more` : ''}.\n\n`,
+    );
+  } else if (rec.repinned.length > 0) {
+    process.stderr.write(
+      `centraid-gateway: ${rec.repinned.length} blob(s) the provider had dropped were re-pinned from ` +
+        'the snapshot and will re-upload on the next backup.\n',
+    );
+  }
+
   const previews = report.previews.warmed
     ? `previews warmed (${report.previews.tiniesWarmed}/${report.previews.tiniesTotal} in ` +
       `${report.previews.timeToUsableGridMs}ms)`

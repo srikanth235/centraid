@@ -178,6 +178,14 @@ export type {
 export { parseRecoveryKit } from './recovery-kit.js';
 export type { RecoveryKitDocument } from './recovery-kit.js';
 
+// Targeted blob re-pin (issue #439 R5) — materialize specific shas from a
+// snapshot, for the adopt-time inventory reconcile.
+export { materializeSnapshotBlobs } from './materialize.js';
+export type {
+  MaterializeSnapshotBlobsOptions,
+  MaterializeSnapshotBlobsResult,
+} from './materialize.js';
+
 // Providers.
 export { LocalBackupProvider, openLocalBackupProvider } from './local-provider.js';
 export type { LocalBackupProviderOptions } from './local-provider.js';

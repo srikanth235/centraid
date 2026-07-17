@@ -18,7 +18,7 @@ inventory reconcile that distrusts the restored replica index.
 - [x] R3 — PITR stays restore-to-side
 - [x] R1 — the recovery verb: service-layer recover() and the blank-machine e2e
 - [x] R6 — CLI recover wrapper
-- [ ] R5 — adopt-time inventory reconcile and seal-key restore-verify
+- [x] R5 — adopt-time inventory reconcile and seal-key restore-verify
 - [ ] R1 surface — recover job model, progress SSE, pre-vault recover routes
 - [ ] UI — fresh-gateway onboarding recovery flow
 - [ ] R4 — orphan-grace GC invariant
@@ -307,6 +307,98 @@ $ bunx vitest run src/backup/recover-e2e.test.ts src/cli/recover-admin.test.ts \
       Tests  17 passed (17)
 ```
 
+### R5 — adopt-time inventory reconcile and seal-key restore-verify
+
+Closes gap 4 (a restored vault trusting its own restored `blob_replica`, which
+attests remote durability as of CAPTURE time). The reconcile runs ALWAYS as a
+`recover()`-internal step at the adopt position — not gated on the `onAdopted`
+hook (which stays for wave 4's live mount). One orchestration, two shells.
+
+- **The reconcile step — `packages/gateway/src/backup/recover-reconcile.ts`
+  (new).** `reconcileAdoptedInventory()` opens the freshly adopted `vault.db`,
+  reads which shas the restored `blob_replica` believes `'cas'`-durable
+  (`ReplicaIndex.all('cas')`), and diffs them against the provider's ATTESTED
+  cas inventory. Every believed sha the live inventory does NOT hold is
+  `unmark`ed (so custody/eviction can never drop a phantom-replicated local
+  copy, and replication re-uploads it) and classified: snapshot-carried ⇒
+  **re-pinned** (ensured local), snapshot-less ⇒ **LOST** (CRITICAL, logged at
+  error level). No `inventory` capability ⇒ honest
+  `skipped: 'no-inventory-capability'`, index untouched.
+- **The targeted re-pin — `packages/backup/src/materialize.ts` (new),
+  exported from `packages/backup/src/index.ts`.**
+  `materializeSnapshotBlobs()` pulls SPECIFIC shas out of the already-restored
+  snapshot and writes them under the `FsBlobStore` layout, reusing the EXACT
+  chunk-stream → unseal → unframe → keyed-id-verify → sha-verify path
+  `restoreSnapshot` uses (the crypto primitives from `crypto.js`/`compress.js`/
+  `manifest.js`, never hand-rolled). A requested sha the manifest lacks comes
+  back `absent` (the reconcile records it lost).
+- **Wiring — `packages/gateway/src/backup/recover.ts`.** The provider inventory
+  is now collected ONCE whenever `provider.listInventory` exists (not only on
+  the lazy path) and reused for BOTH the skip-set AND the reconcile (`--full`
+  still skips nothing). Added `RecoverReport.reconcile: ReconcileReport`; the
+  reconcile runs right after `rename` + `placeSealKey`, before `onAdopted`
+  (single-writer on `vault.db`). `RecoverInput.log` widened to `ReconcileLogger`
+  (an optional `error` sink; the engine only ever calls info/warn).
+- **CLI surfacing — `packages/gateway/src/cli/recover-admin.ts`.** After the
+  JSON report, a prominent **CRITICAL** stderr block when `reconcile.lost`
+  is non-empty, a quieter FYI when blobs were re-pinned. Recovery still SUCCEEDS
+  (exit 0, documented) — a lost blob is not a reason to abandon a recovered
+  vault; the operator must simply not miss it.
+- **Seal-key restore-verify — `packages/vault/src/restore-check.ts`
+  (`SealKeyVerdict` exported from `packages/vault/src/index.ts`).**
+  `verifyRestoredPair` now returns a `sealKey` verdict: `not-sealed` (no stamped
+  fingerprint ⇒ nothing to prove), `ok` (restored `seal.key` matches the
+  fingerprint stamped in `core_vault`), `missing` (absent), or `mismatch`
+  (present but not the key the secrets were sealed with).
+  **`packages/gateway/src/backup/backup-service.ts`** — `doRunRestoreVerify`
+  turns a `missing`/`mismatch` verdict into a recorded verify problem ("the
+  restore would be a placebo"), exactly like the existing integrity problems
+  (health error + `lastRestoreVerifyError`). FORMAT.md called a restore without
+  the seal key "a placebo"; the standing verification now proves it isn't.
+- **Tests —** `packages/backup/src/materialize.test.ts` (new; the re-pin path in
+  isolation — the recover e2e's re-pin is served by the lazy restore, so the
+  helper needs its own coverage), `packages/gateway/src/backup/recover-reconcile.test.ts`
+  (new; the four reconcile outcomes: re-pin+unmark, LOST+CRITICAL+unmark, honest
+  skip, clean), `packages/gateway/src/backup/restore-verify-sealkey.test.ts`
+  (new; a sealed vault verifies clean, a fingerprint-mismatched one FAILS with
+  the placebo problem), and `packages/gateway/src/backup/recover-e2e.test.ts`
+  (extended; machine A now marks `blob_replica`, and a new test deletes a
+  replicated object from the provider then asserts the reconcile flags + re-pins
+  it and unmarks the stale belief).
+
+#### R5 verification
+
+- `bun run typecheck` (turbo, all 28 packages) — clean.
+- `bunx oxlint` + `bunx oxfmt --check` on every changed source/test file — 0
+  warnings, 0 errors, formatting clean.
+- Full backup package suite (`bunx vitest run` in `packages/backup`) — 283
+  passed, 26 skipped (env-gated clawgnition interop), including the new
+  `materialize.test.ts`.
+- `wal-e2e.test.ts` (16) green — the extended `verifyRestoredPair` (`not-sealed`
+  verdict on its unsealed vault) does not regress the scheduled restore-verify.
+
+```
+$ bunx vitest run src/backup/recover-reconcile.test.ts \
+    src/backup/recover-e2e.test.ts src/backup/restore-verify-sealkey.test.ts
+ ✓ src/backup/recover-reconcile.test.ts (4 tests)
+ ✓ src/backup/restore-verify-sealkey.test.ts (2 tests)
+   ✓ restore-verify passes when the restored seal key unseals the vault
+   ✓ restore-verify FAILS with the placebo problem when the seal key does not match
+ ✓ src/backup/recover-e2e.test.ts (3 tests)
+   ✓ a blank machine recovers a whole vault from nothing but the kit and the api-key
+   ✓ recovery refuses a snapshot written by newer software BEFORE any byte is fetched
+   ✓ adopt-time reconcile re-pins a replicated blob the provider dropped, and unmarks it
+
+ Test Files  3 passed (3)
+      Tests  9 passed (9)
+```
+
+```
+$ bunx vitest run src/materialize.test.ts   # packages/backup
+ ✓ src/materialize.test.ts (1 test)
+   ✓ materializes exactly the requested carried shas, byte-exact, and reports the rest absent
+```
+
 ## Steering
 
 **Verdict: PASS**
@@ -327,3 +419,4 @@ $ bunx vitest run src/backup/recover-e2e.test.ts src/cli/recover-admin.test.ts \
 | claude-code-b42aae9d-faa-1784298109-1 | claude-code | b42aae9d-faaf-4587-8bcc-fd43d61e35a4 | #439 | claude-fable-5 | 0 | 0 | 0 | 0 | 0 | 0.0000 | 79 | 445645 | 3242515 | 158757 | feat(backup): lazy-by-default restore, --full override, metered-egress confirm ( |
 | claude-code-b42aae9d-faa-1784300458-1 | claude-code | b42aae9d-faaf-4587-8bcc-fd43d61e35a4 | #439 | claude-fable-5 | 12 | 27756 | 762361 | 14914 | 42682 | 1.8551 | 91 | 473401 | 4004876 | 173671 | feat(gateway): recover() verb, blank-machine e2e, CLI recover (#439) -m Issue: # |
 | claude-code-b42aae9d-faa-1784300812-1 | claude-code | b42aae9d-faaf-4587-8bcc-fd43d61e35a4 | #439 | claude-fable-5 | 0 | 0 | 0 | 0 | 0 | 0.0000 | 91 | 473401 | 4004876 | 173671 | feat(gateway): recover() verb, blank-machine e2e, CLI recover (#439) -m Issue: # |
+| claude-code-b42aae9d-faa-1784302841-1 | claude-code | b42aae9d-faaf-4587-8bcc-fd43d61e35a4 | #439 | claude-fable-5 | 12 | 26858 | 825908 | 9061 | 35931 | 1.6148 | 103 | 500259 | 4830784 | 182732 | feat(gateway): adopt-time inventory reconcile, seal-key restore-verify (#439) -m |

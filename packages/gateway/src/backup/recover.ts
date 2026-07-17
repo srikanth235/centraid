@@ -36,11 +36,11 @@ import { existsSync, promises as fs } from 'node:fs';
 import path from 'node:path';
 import {
   assertCompatibleAppMeta,
+  materializeSnapshotBlobs,
   parseRecoveryKit,
   restoreSnapshot,
   saveKeyring,
   type BackupProvider,
-  type EngineLogger,
   type Keyring,
   type RecoveryKitTarget,
   type SnapshotRow,
@@ -59,6 +59,11 @@ import {
   walReplayTruncated,
   warmOrSkip,
 } from './recover-internals.js';
+import {
+  reconcileAdoptedInventory,
+  type ReconcileLogger,
+  type ReconcileReport,
+} from './recover-reconcile.js';
 
 /** The user-facing phases wave 4's SSE narrates. Machine vocabulary (seq, WAL,
  *  lazy) stays out of it — these map to "fetching your vault → replaying recent
@@ -99,7 +104,8 @@ export interface RecoverInput {
   /** Which vault to recover when the kit carries more than one target (else the sole target). */
   vaultId?: string;
   now?: () => number;
-  log?: EngineLogger;
+  /** Engine-shaped logger, plus an optional `error` sink the R5 reconcile shouts LOST blobs through. */
+  log?: ReconcileLogger;
   onPhase?: (phase: RecoverPhase) => void;
   /** Test / wave-4 seam: a pre-built provider (else one is built from the kit target + apiKey). */
   provider?: BackupProvider;
@@ -157,6 +163,9 @@ export interface RecoverReport {
   restoreCostClass: 'free-egress' | 'metered-egress' | undefined;
   /** Warm-pass result or the honest skip reason. */
   previews: PreviewsRecoverOutcome;
+  /** Adopt-time inventory reconcile (issue #439 R5): what the restored index believed vs. what the
+   *  provider actually holds — `lost.length > 0` is CRITICAL (bytes are gone). */
+  reconcile: ReconcileReport;
   /** What the `RESTORE_QUARANTINE.json` marker parks the first time the vault mounts. */
   quarantine: string[];
 }
@@ -215,9 +224,12 @@ export async function discoverRecovery(opts: {
 
 export async function recover(input: RecoverInput): Promise<RecoverReport> {
   const now = input.now ?? Date.now;
-  const log: EngineLogger = {
+  const log: ReconcileLogger = {
     info: (m) => input.log?.info?.(m),
     warn: (m) => input.log?.warn?.(m),
+    // The engine only ever calls info/warn; error is the R5 reconcile's CRITICAL
+    // sink — routed to a real error logger when one is wired, else warn.
+    error: (m) => (input.log?.error ?? input.log?.warn)?.(m),
   };
   const emit = (phase: RecoverPhase): void => input.onPhase?.(phase);
 
@@ -243,15 +255,18 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
   // byte is touched (a refusal here can never bill a metered home).
   assertCompatibleAppMeta(row.appMeta, current);
 
-  // The lazy skip-set: which blobs the provider's ATTESTED inventory holds. No
-  // `inventory` capability ⇒ full restore (honest fallback, nothing skipped).
+  // The provider's ATTESTED cas inventory — collected ONCE and used for BOTH
+  // the lazy skip-set AND the R5 adopt-time reconcile (below). Gated only on the
+  // capability, not on lazy-vs-full: a `--full` restore still needs it to prove
+  // the restored `blob_replica` beliefs against live truth. No `inventory`
+  // capability ⇒ nothing to attest (full restore, reconcile skips honestly).
   const lazy = input.full !== true;
-  let remoteShas: Set<string> | undefined;
-  let inventoryConsulted = false;
-  if (lazy && provider.listInventory) {
-    remoteShas = await collectRemoteCasShas(provider, target.targetId);
-    inventoryConsulted = true;
-  }
+  const remoteShas = provider.listInventory
+    ? await collectRemoteCasShas(provider, target.targetId)
+    : undefined;
+  // `inventoryConsulted` reports the SKIP-SET decision — a full restore builds
+  // no skip-set even when an inventory exists.
+  const inventoryConsulted = lazy && remoteShas !== undefined;
 
   // ── fetching + replaying ─────────────────────────────────────────────
   emit('fetching');
@@ -279,8 +294,9 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       destDir: stagingDir,
       current,
       // Defer any blob the remote CAS attests it holds; a blob the inventory
-      // does NOT name is materialized (the snapshot is its only copy).
-      ...(remoteShas ? { skipBlob: ({ sha }) => remoteShas!.has(sha) } : {}),
+      // does NOT name is materialized (the snapshot is its only copy). A `--full`
+      // restore skips nothing even though the inventory is collected (for R5).
+      ...(lazy && remoteShas ? { skipBlob: ({ sha }) => remoteShas.has(sha) } : {}),
       log,
     });
     emit('replaying');
@@ -322,7 +338,29 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       provider,
       keyring: kit.keyring,
     };
-    // Extension point: wave 3 R5 inventory reconcile + wave 4 live mount.
+    // R5 (issue #439): reconcile the restored `blob_replica` beliefs against the
+    // provider's live inventory (reusing `remoteShas`) BEFORE the vault mounts —
+    // a recover()-internal step that ALWAYS runs, not gated on `onAdopted`. It
+    // must write to `vault.db` while nothing else holds it (single-writer).
+    const reconcile = await reconcileAdoptedInventory({
+      vaultDir: finalDir,
+      remoteShas,
+      snapshotEntries: restore.entries,
+      materialize: (shas) =>
+        materializeSnapshotBlobs({
+          provider,
+          targetId: target.targetId,
+          keyring: kit.keyring,
+          vaultId: target.vaultId,
+          seq: restore.seq,
+          shas,
+          destDir: finalDir,
+          log,
+        }).then((r) => r.materialized),
+      log,
+    });
+
+    // Extension point: wave 4 live `VaultRegistry.adopt` + mount.
     await input.onAdopted?.(adoptCtx);
 
     // ── warming ────────────────────────────────────────────────────────
@@ -343,6 +381,7 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       inventoryConsulted,
       restoreCostClass,
       previews,
+      reconcile,
       quarantine: ['outbox', 'automations', 'connections'],
     };
   } catch (err) {

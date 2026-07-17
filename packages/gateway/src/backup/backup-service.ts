@@ -1086,6 +1086,20 @@ export class BackupService {
       const problems: string[] = [];
       if (report.vault.integrity !== 'ok') problems.push(`vault: ${report.vault.integrity}`);
       if (report.journal.integrity !== 'ok') problems.push(`journal: ${report.journal.integrity}`);
+      // Seal-key custody (issue #439 R5): a restore whose sealed columns cannot
+      // be opened is "a placebo" (FORMAT.md) — prove the restored key is present
+      // AND matches the vault's stamped fingerprint, or say so loudly.
+      if (report.sealKey.verdict === 'missing') {
+        problems.push(
+          `seal key absent — this vault has sealed secrets (${report.sealKey.expected}) that a ` +
+            'restore without it can never open; the restore would be a placebo',
+        );
+      } else if (report.sealKey.verdict === 'mismatch') {
+        problems.push(
+          `seal key does not match the vault's stamped fingerprint (${report.sealKey.expected}) — ` +
+            'the restored key would turn every sealed cell into garbage; the restore would be a placebo',
+        );
+      }
       if (report.vault.foreignKeyViolations > 0) {
         problems.push(`vault: ${report.vault.foreignKeyViolations} fk violation(s)`);
       }

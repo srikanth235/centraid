@@ -26,7 +26,7 @@ import crypto, { randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { BackupProviderError, openRemoteBackupProvider, SNAPSHOT_FORMAT } from '@centraid/backup';
 import { startFakeProviderServer } from '@centraid/backup/dist/testing/fake-provider-server.js';
-import { FsBlobStore } from '@centraid/vault';
+import { FsBlobStore, ReplicaIndex } from '@centraid/vault';
 import { openVaultRegistry } from '../serve/vault-registry.js';
 import type { VaultPlane } from '../serve/vault-plane.js';
 import { HealthRegistry } from '../serve/health-registry.js';
@@ -183,6 +183,13 @@ async function seedMachineA(
   // vault bricks; the approved item + grant are what the quarantine parks.
   const { itemId, grantId } = seedSealedOutbox(plane);
 
+  // Machine A's vault BELIEVES originals[0] + originals[1] are durable on the
+  // remote cas tier (marked 'cas' in blob_replica) — the belief the snapshot
+  // carries and the R5 adopt-time reconcile checks against live inventory.
+  const replica = new ReplicaIndex(plane.db.vault);
+  replica.mark(originals[0]!, 400, 'cas');
+  replica.mark(originals[1]!, 401, 'cas');
+
   await service.runBackup(vaultId);
   const status = await service.status();
   const targetId = status[vaultId]!.targetId;
@@ -324,7 +331,12 @@ test('a blank machine recovers a whole vault from nothing but the kit and the ap
   }
   expect(fenced).toBe(true);
 
-  // 5. The completion report is honest.
+  // 5. Adopt-time reconcile (R5): the provider still holds everything the
+  //    restored index believed durable, so nothing is missing, re-pinned, or lost.
+  expect(report.reconcile).toMatchObject({ checked: 2, missing: 0, repinned: [], lost: [] });
+  expect(report.reconcile.skipped).toBeUndefined();
+
+  // 6. The completion report is honest.
   expect(typeof report.recoveredAsOf).toBe('number');
   expect(report.recoveredAsOf).toBeGreaterThan(0);
   expect(report.truncated).toBe(false);
@@ -371,4 +383,53 @@ test('recovery refuses a snapshot written by newer software BEFORE any byte is f
   const rootEntries = existsSync(layout.vaultDir) ? await fs.readdir(layout.vaultDir) : [];
   expect(rootEntries.filter((e) => e.startsWith('.recover-staging-'))).toHaveLength(0);
   expect(existsSync(path.join(layout.backupDir!, 'keyring.json'))).toBe(false);
+}, 45_000);
+
+test('adopt-time reconcile re-pins a replicated blob the provider dropped, and unmarks it', async () => {
+  const server = await startFakeProviderServer();
+  cleanups.push(() => server.close());
+  const a = await seedMachineA(server);
+
+  // The provider LOSES originals[0] after the backup — the exact drift R5 exists
+  // for: the restored index still believes it durable, but the live inventory no
+  // longer holds it. originals[1] stays put.
+  const casProvider = openRemoteBackupProvider({ baseUrl: a.serverUrl, apiKey: a.apiKey });
+  const casStore = await casProvider.openDataPlane(a.targetId, 'cas', 'read-write');
+  await casStore.delete(`blobs/sha256/${a.originals[0]}`);
+
+  const dataDir = await tempDir('recover-reconcile');
+  const layout = daemonLayoutFor(dataDir);
+  const report = await recover({
+    kitDocument: a.kitDocument,
+    apiKey: a.apiKey,
+    vaultRoot: layout.vaultDir,
+    backupDir: layout.backupDir!,
+    log: silentLogger,
+  });
+
+  // The report flags exactly the dropped blob, re-pinned from the snapshot; none lost.
+  expect(report.reconcile.checked).toBe(2);
+  expect(report.reconcile.missing).toBe(1);
+  expect(report.reconcile.repinned).toEqual([a.originals[0]]);
+  expect(report.reconcile.lost).toEqual([]);
+
+  // The re-pin materialized what the snapshot carried: originals[0] is local
+  // again (the lazy restore did not defer it, because the inventory no longer
+  // named it), while originals[1] — still remote — stays deferred.
+  const vaultDir = path.join(layout.vaultDir, a.vaultId);
+  const restoredBlobs = new FsBlobStore(path.join(vaultDir, 'blobs'));
+  expect(restoredBlobs.hasSync(a.originals[0]!)).toBe(true);
+  expect(restoredBlobs.hasSync(a.originals[1]!)).toBe(false);
+  expect(report.skippedBlobs).toBe(1); // only originals[1] deferred now
+
+  // The restored index no longer believes the dropped blob is durable (so
+  // custody can never evict a phantom copy); the surviving one is untouched.
+  const restoredDb = new DatabaseSync(path.join(vaultDir, 'vault.db'), { readOnly: true });
+  try {
+    const index = new ReplicaIndex(restoredDb);
+    expect(index.has(a.originals[0]!)).toBe(false);
+    expect(index.has(a.originals[1]!)).toBe(true);
+  } finally {
+    restoredDb.close();
+  }
 }, 45_000);
