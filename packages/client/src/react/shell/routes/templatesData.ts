@@ -2,6 +2,7 @@ import { palette } from '@centraid/design-tokens';
 import { isAutomationTemplate } from '../../../app-format.js';
 import {
   cloneTemplate as gwCloneTemplate,
+  installTemplate as gwInstallTemplate,
   listAutomations,
   listTemplates,
 } from '../../../gateway-client.js';
@@ -64,28 +65,30 @@ export function surfaceMintedWebhook(w: { url: string; secret: string }): void {
   );
 }
 
-/** Clone an app template on the gateway and pin it straight to Home as an
- *  installed app — owner decision: "Use template" for an app installs it
- *  directly (the gateway's `_clone` already runs with `publish: true`, so the
- *  clone lands on `main` as a real app); no draft stage, no builder detour.
- *  Ported from the old cloneTemplateToDraft, reshaped from a `DraftAppMeta`
- *  (builder appContext) to a `UserAppMeta` pin — the install path only needs
- *  the fields the Home grid renders. Throws on failure. */
+/** Install a bundled app template in place and pin it straight to Home
+ *  (issue #434): install = registration + consent grants, no code copy, no
+ *  git. The app keeps the blueprint's own id and serves from the shipped
+ *  package, so it upgrades with every release. Install is idempotent — the
+ *  pin is built the same whether this was a fresh install or an already-
+ *  installed no-op. Unlike automations (which still clone into the code
+ *  store), app templates never fork. Throws on failure. */
 export async function installAppTemplate(tmpl: TemplateEntry): Promise<UserAppMeta> {
   const pal = palette as unknown as Record<string, string>;
-  const color = (pal[tmpl.colorKey] ?? '#5847e0') as UserAppMeta['color'];
-  const result = await gwCloneTemplate({ templateId: tmpl.id });
+  const result = await gwInstallTemplate({ templateId: tmpl.id });
+  const app = result.app;
+  const colorKey = (app.colorKey ?? tmpl.colorKey) as UserAppMeta['colorKey'];
+  const color = (pal[colorKey] ?? pal[tmpl.colorKey] ?? '#5847e0') as UserAppMeta['color'];
   const now = new Date().toISOString();
-  const id = result.app.id;
+  const id = app.id;
   return {
     centraidAppId: id,
     color,
-    colorKey: tmpl.colorKey as UserAppMeta['colorKey'],
+    colorKey,
     createdAt: now,
-    desc: result.app.description || tmpl.desc,
-    iconKey: tmpl.iconKey as UserAppMeta['iconKey'],
+    desc: app.description || tmpl.desc,
+    iconKey: (app.iconKey ?? tmpl.iconKey) as UserAppMeta['iconKey'],
     id,
-    name: result.app.name ?? result.template.name,
+    name: app.name ?? tmpl.name,
     updatedAt: now,
   } as UserAppMeta;
 }

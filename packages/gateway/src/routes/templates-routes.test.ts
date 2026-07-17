@@ -68,6 +68,25 @@ test('GET /centraid/_templates returns stripped bundled metadata behind auth', a
       expect(key in t).toBeTruthy();
     }
   }
+  // Automations declare access on their own manifest, not the app-kind vault
+  // block — so they never carry `vault` here.
+  for (const t of automations) {
+    expect('vault' in t).toBeFalsy();
+  }
+
+  // Issue #434: an app-kind template with a declared vault block carries it,
+  // so the Discover install/consent sheet can render the requested access.
+  const photos = templates.find((t) => t.id === 'photos');
+  expect(photos).toBeTruthy();
+  const vault = photos?.vault as
+    | { why?: string; scopes?: Array<{ schema: string; table?: string; verbs: string }> }
+    | undefined;
+  expect(vault).toBeTruthy();
+  expect(typeof vault?.why).toBe('string');
+  expect(Array.isArray(vault?.scopes) && (vault?.scopes?.length ?? 0) > 0).toBeTruthy();
+  expect(
+    vault?.scopes?.every((s) => typeof s.schema === 'string' && typeof s.verbs === 'string'),
+  ).toBeTruthy();
 });
 
 // Issue #141, Phase 5: the gateway owns the remote template *refresh* too —

@@ -3,14 +3,17 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ShellActions } from '../actions.js';
 
-// Product change: "Use template" for an APP template installs it directly as
-// a published app (owner decision) — no draft stage, no builder detour.
-// Automation templates keep their existing clone-into-builder flow untouched.
+// Product change (issue #434): APP templates INSTALL in place (registration +
+// consent grants, no code copy) — "Use this template" is gone; the card verb is
+// Install (Open when already installed). Automation templates keep their
+// clone-into-builder flow untouched.
 const listTemplates = vi.fn();
 const gwCloneTemplate = vi.fn();
+const gwInstallTemplate = vi.fn();
 vi.mock('../../../gateway-client.js', () => ({
   listTemplates: () => listTemplates(),
   cloneTemplate: (a: unknown) => gwCloneTemplate(a),
+  installTemplate: (a: unknown) => gwInstallTemplate(a),
 }));
 
 let DiscoverRoute: typeof import('./DiscoverRoute.js').default;
@@ -25,6 +28,7 @@ const setUserApps = vi.fn();
 function makeActions(): ShellActions {
   return {
     showToast,
+    builderEnabled: false,
     enterBuilder: vi.fn(),
     openNewAppSheet: vi.fn(),
     openCommandPalette: vi.fn(),
@@ -42,6 +46,11 @@ const appTemplate = {
   iconKey: 'Todo',
   version: '1.0',
   kind: 'app',
+  vault: {
+    purpose: 'dpv:ServiceProvision',
+    why: 'Keeps your task list.',
+    scopes: [{ schema: 'tasks', table: 'add_task', verbs: 'act' }],
+  },
 };
 
 const autoTemplate = {
@@ -61,6 +70,7 @@ beforeEach(async () => {
   ({ ShellActionsProvider } = await import('../actions.js'));
   listTemplates.mockReset().mockResolvedValue([appTemplate, autoTemplate]);
   gwCloneTemplate.mockReset();
+  gwInstallTemplate.mockReset();
   showToast.mockClear();
   navigate.mockClear();
   setUserApps.mockClear();
@@ -96,10 +106,24 @@ afterEach(() => {
 });
 
 describe('DiscoverRoute', () => {
-  it('opening an app template preview and clicking "Use this template" installs it: pins to Home, refreshes, toasts, and navigates home — no builder', async () => {
-    gwCloneTemplate.mockResolvedValue({
-      app: { id: 'todos-2', name: 'Todos 2', description: 'cloned' },
-      template: { name: 'Todos' },
+  it('tapping an app card opens the install/consent sheet showing the requested access', async () => {
+    const el = await render([]);
+    const card = [...el.querySelectorAll('.card')].find((c) =>
+      c.textContent?.includes('Todos'),
+    ) as HTMLButtonElement;
+    await act(async () => {
+      card.click();
+    });
+    // The consent sheet renders the why line + a humanized scope sentence.
+    expect(document.body.textContent).toContain('What Todos can access');
+    expect(document.body.textContent).toContain('Keeps your task list.');
+    expect(document.body.textContent).toContain('add task');
+  });
+
+  it('clicking "Install" installs in place: pins to Home, refreshes, toasts, and opens the app — no builder, no clone', async () => {
+    gwInstallTemplate.mockResolvedValue({
+      app: { id: 'todos', name: 'Todos', iconKey: 'Todo', colorKey: 'violet' },
+      alreadyInstalled: false,
     });
     const el = await render([]);
     const card = [...el.querySelectorAll('.card')].find((c) =>
@@ -108,30 +132,30 @@ describe('DiscoverRoute', () => {
     await act(async () => {
       card.click();
     });
-    const useBtn = [...document.querySelectorAll('.primary')].find((b) =>
-      b.textContent?.includes('Use this template'),
+    const installBtn = [...document.querySelectorAll('.primary')].find((b) =>
+      b.textContent?.includes('Install'),
     ) as HTMLButtonElement;
-    expect(useBtn).toBeTruthy();
+    expect(installBtn).toBeTruthy();
     await act(async () => {
-      useBtn.click();
+      installBtn.click();
       await flush();
     });
 
-    expect(gwCloneTemplate).toHaveBeenCalledWith({ templateId: 'todos' });
+    expect(gwInstallTemplate).toHaveBeenCalledWith({ templateId: 'todos' });
+    expect(gwCloneTemplate).not.toHaveBeenCalled();
     expect(setUserApps).toHaveBeenCalledTimes(1);
     const [pinned] = setUserApps.mock.calls[0] as [UserAppMeta[]];
     expect(pinned).toHaveLength(1);
-    expect(pinned[0]).toMatchObject({ id: 'todos-2', name: 'Todos 2', centraidAppId: 'todos-2' });
+    expect(pinned[0]).toMatchObject({ id: 'todos', name: 'Todos', centraidAppId: 'todos' });
     expect((pinned[0] as unknown as { __draft?: boolean }).__draft).toBeUndefined();
     expect(refreshApps).toHaveBeenCalledTimes(1);
-    expect(showToast).toHaveBeenCalledWith('Installed "Todos 2"');
-    expect(navigate).toHaveBeenCalledWith({ kind: 'home' });
-    // Never routes through the builder for an app template.
+    expect(showToast).toHaveBeenCalledWith('Installed "Todos"');
+    expect(navigate).toHaveBeenCalledWith({ kind: 'app', id: 'todos' });
     expect(navigate).not.toHaveBeenCalledWith(expect.objectContaining({ kind: 'builder' }));
   });
 
-  it('surfaces a toast and does not navigate when the clone fails', async () => {
-    gwCloneTemplate.mockRejectedValue(new Error('offline'));
+  it('surfaces a toast and does not navigate when the install fails', async () => {
+    gwInstallTemplate.mockRejectedValue(new Error('offline'));
     const el = await render([]);
     const card = [...el.querySelectorAll('.card')].find((c) =>
       c.textContent?.includes('Todos'),
@@ -139,17 +163,51 @@ describe('DiscoverRoute', () => {
     await act(async () => {
       card.click();
     });
-    const useBtn = [...document.querySelectorAll('.primary')].find((b) =>
-      b.textContent?.includes('Use this template'),
+    const installBtn = [...document.querySelectorAll('.primary')].find((b) =>
+      b.textContent?.includes('Install'),
     ) as HTMLButtonElement;
     await act(async () => {
-      useBtn.click();
+      installBtn.click();
       await flush();
     });
 
-    expect(showToast).toHaveBeenCalledWith('Clone failed: offline');
+    expect(showToast).toHaveBeenCalledWith('Install failed: offline');
     expect(setUserApps).not.toHaveBeenCalled();
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('an already-installed app card OPENS the app instead of showing the install sheet', async () => {
+    listTemplates.mockResolvedValue([{ ...appTemplate, installed: true }, autoTemplate]);
+    const el = await render([]);
+    const card = [...el.querySelectorAll('.card')].find((c) =>
+      c.textContent?.includes('Todos'),
+    ) as HTMLButtonElement;
+    // The card carries an "Installed" marker.
+    expect(card.textContent).toContain('Installed');
+    await act(async () => {
+      card.click();
+    });
+    expect(navigate).toHaveBeenCalledWith({ kind: 'app', id: 'todos' });
+    // No install sheet, no install call.
+    expect(document.querySelector('.tmplPreview')).toBeNull();
+    expect(gwInstallTemplate).not.toHaveBeenCalled();
+  });
+
+  it('right-clicking an installed app card offers Open, and an uninstalled one offers Install', async () => {
+    listTemplates.mockResolvedValue([{ ...appTemplate, installed: true }, autoTemplate]);
+    const el = await render([]);
+    const card = [...el.querySelectorAll('.card')].find((c) =>
+      c.textContent?.includes('Todos'),
+    ) as HTMLButtonElement;
+    await act(async () => {
+      card.dispatchEvent(
+        new MouseEvent('contextmenu', { bubbles: true, clientX: 10, clientY: 10 }),
+      );
+    });
+    const labels = [...document.querySelectorAll('[role="menuitem"]')].map((b) => b.textContent);
+    expect(labels).toContain('Open');
+    expect(labels).not.toContain('Install');
+    expect(labels).not.toContain('Use this template');
   });
 
   it('an automation template still clones into the automation builder, unaffected by the app-install change', async () => {
@@ -174,6 +232,7 @@ describe('DiscoverRoute', () => {
     });
 
     expect(gwCloneTemplate).toHaveBeenCalledWith({ templateId: 'digest' });
+    expect(gwInstallTemplate).not.toHaveBeenCalled();
     expect(navigate).toHaveBeenCalledWith({ kind: 'automations' });
     expect(setUserApps).not.toHaveBeenCalled();
   });
@@ -203,7 +262,6 @@ describe('DiscoverRoute', () => {
 
     expect(gwCloneTemplate).toHaveBeenCalledWith({ templateId: 'digest' });
     expect(navigate).toHaveBeenCalledWith({ kind: 'automations' });
-    // Never mis-pinned to Home as if it were an app template.
     expect(setUserApps).not.toHaveBeenCalled();
     expect(navigate).not.toHaveBeenCalledWith({ kind: 'home' });
   });
@@ -225,8 +283,6 @@ describe('DiscoverRoute', () => {
       previewItem.click();
     });
 
-    // The automation preview drawer renders its trigger info ("Daily");
-    // the plain app-template preview modal has no such field.
     expect(document.body.textContent).toContain('Daily');
   });
 });

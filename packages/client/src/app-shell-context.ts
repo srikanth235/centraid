@@ -104,12 +104,25 @@ export interface TemplateEntry {
   iconKey: string;
   version: string;
   kind?: 'app' | 'automation';
+  /** Whether this app-kind template is already installed in the addressed
+   *  vault (issue #434). Drives Install vs Open in Discover. */
+  installed?: boolean;
+  /** Requested vault access, for the install/consent sheet (issue #434). */
+  vault?: TemplateVaultBlock;
   // automation-only display fields:
   emoji?: string;
   category?: string;
   triggerKind?: 'cron' | 'webhook' | 'data' | 'condition';
   triggerLabel?: string;
   integrations?: readonly string[];
+}
+
+/** A template's requested vault access (issue #434) — the consent surface the
+ *  install sheet renders. Mirrors the gateway's `TemplateVaultDTO`. */
+export interface TemplateVaultBlock {
+  purpose?: string;
+  why?: string;
+  scopes: Array<{ schema: string; table?: string; verbs: string }>;
 }
 
 // Per-automation run state, keyed by `${appId}:${name}`.

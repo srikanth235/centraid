@@ -265,6 +265,7 @@ PASS
 | claude-code-d9a902af-877-1784279162-1 | claude-code | d9a902af-877b-4579-9d81-b893be0e42fa | #434 | claude-opus-4-8 | 6 | 10128 | 802776 | 4350 | 14484 | 0.5735 | 1100 | 2003547 | 86461112 | 375155 | feat(gateway): install bundled apps in place instead of cloning them (#434)Centr |
 | claude-code-d9a902af-877-1784279240-1 | claude-code | d9a902af-877b-4579-9d81-b893be0e42fa | #434 | claude-opus-4-8 | 10 | 3748 | 1365233 | 1878 | 5636 | 0.7530 | 1110 | 2007295 | 87826345 | 377033 | feat(gateway): install bundled apps in place instead of cloning them (#434)Centr |
 | claude-code-d9a902af-877-1784279293-1 | claude-code | d9a902af-877b-4579-9d81-b893be0e42fa | #434 | claude-opus-4-8 | 4 | 7712 | 549352 | 1204 | 8920 | 0.3530 | 1114 | 2015007 | 88375697 | 378237 | feat(shell): hide the builder behind a dev flag for the first release (#434)The  |
+| claude-code-d9a902af-877-1784279343-1 | claude-code | d9a902af-877b-4579-9d81-b893be0e42fa | #434 | claude-opus-4-8 | 2 | 831 | 278532 | 816 | 1649 | 0.1649 | 1116 | 2015838 | 88654229 | 379053 | feat(shell): install and uninstall apps, with consent as the install moment (#43 |
 
 ### Steering
 

@@ -207,6 +207,20 @@
   font-size: 11.5px;
   color: var(--ink-3);
 }
+/* "Installed" marker on an app card whose app is already in this vault
+   (issue #434) — the card opens instead of installing. */
+.installedTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.installedTag svg {
+  display: block;
+}
 .trig svg {
   display: block;
 }
