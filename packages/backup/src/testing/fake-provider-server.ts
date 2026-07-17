@@ -153,11 +153,12 @@ export async function startFakeProviderServer(): Promise<FakeProviderServer> {
       errorBody(res, 401, 'auth_expired', 'invalid or missing bearer token');
       return;
     }
-    if (req.method === 'GET' && route === '/v1/backup/provider') {
+    if (req.method === 'GET' && route === '/v1/storage/provider') {
       jsonBody(res, 200, {
         protocol: ['centraid-storage-provider/1'],
         dataPlane: 's3',
         capabilities: ['backup', 'cas', 'derived', 'usage', 'policy', 'inventory', 'audit'],
+        profiles: ['home'],
         maxCredentialTtlSeconds: 86400,
         purgeAuthTier: 'interactive',
         storageClasses: ['STANDARD', 'STANDARD_IA'],
@@ -177,7 +178,7 @@ export async function startFakeProviderServer(): Promise<FakeProviderServer> {
       });
       return;
     }
-    if (req.method === 'POST' && route === '/v1/backup/vaults') {
+    if (req.method === 'POST' && route === '/v1/storage/vaults') {
       const body = (await readJsonBody(req)) as { name: string };
       const id = randomUUID();
       targets.set(id, {
@@ -194,7 +195,7 @@ export async function startFakeProviderServer(): Promise<FakeProviderServer> {
       jsonBody(res, 200, { id });
       return;
     }
-    if (req.method === 'GET' && route === '/v1/backup/vaults') {
+    if (req.method === 'GET' && route === '/v1/storage/vaults') {
       jsonBody(res, 200, {
         accountStatus: 'ok',
         vaults: [...targets.values()].map((target) => ({
@@ -205,7 +206,7 @@ export async function startFakeProviderServer(): Promise<FakeProviderServer> {
       return;
     }
 
-    const match = /^\/v1\/backup\/vaults\/([^/]+)(.*)$/.exec(route);
+    const match = /^\/v1\/storage\/vaults\/([^/]+)(.*)$/.exec(route);
     if (!match) return errorBody(res, 404, 'not_found', `no route for ${route}`);
     const targetId = match[1]!;
     const rest = match[2]!;

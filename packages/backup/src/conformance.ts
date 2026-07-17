@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#436) the reference conformance kit is one cohesive grading suite — every case shares `withProvider`/`manifestKeyFor`/`expectError` fixtures and is the executable definition of the protocol; the profile-membership assertion (#436 § Profiles) belongs in the capabilities-sanity case beside the other Layer-1 discovery checks, not in a fragmented sibling
 /*
  * The conformance kit (PROTOCOL.md § Conformance): "the reference
  * conformance kit lives in Centraid's packages/backup (conformance.ts) and
@@ -15,7 +16,12 @@ import assert from 'node:assert/strict';
 import { providerDerivedConformanceCases } from './conformance-derived.js';
 import { providerObservabilityConformanceCases } from './conformance-observability.js';
 import type { BackupProvider } from './provider.js';
-import { BackupProviderError, STORE_CLASSES } from './provider.js';
+import {
+  BackupProviderError,
+  HOME_PROFILE_CAPABILITIES,
+  PROVIDER_PROFILES,
+  STORE_CLASSES,
+} from './provider.js';
 
 const TEXT = new TextEncoder();
 
@@ -97,6 +103,26 @@ export function providerConformanceCases(
                 caps.storageClasses.every((s) => typeof s === 'string' && s.length > 0),
               'storageClasses, when declared, must be an array of non-empty strings',
             );
+          }
+          if (caps.profiles !== undefined) {
+            assert.ok(Array.isArray(caps.profiles), 'profiles, when declared, must be an array');
+            for (const profile of caps.profiles) {
+              assert.ok(
+                (PROVIDER_PROFILES as readonly string[]).includes(profile),
+                `unknown profile name "${profile}"`,
+              );
+            }
+            // A `home` provider MUST carry every member capability — `policy`
+            // included — so the client's freshness watchdog has a declared
+            // cadence to anchor staleness against (PROTOCOL.md § Profiles).
+            if (caps.profiles.includes('home')) {
+              for (const member of HOME_PROFILE_CAPABILITIES) {
+                assert.ok(
+                  caps.capabilities.includes(member),
+                  `"home" profile declared but member capability "${member}" is missing`,
+                );
+              }
+            }
           }
           if (caps.capabilities.includes('backup')) {
             assert.ok(

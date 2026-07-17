@@ -89,9 +89,89 @@ the matching condition and MAY add others):
 
 ---
 
+## Layer 0 — provisioning
+
+> **STATUS — specified now, deferred build.** This section is normative
+> **for-GA** but is **NOT implemented for the first-100 beta, and nobody
+> should build it now.** The beta provisions an api-key by *guided key
+> entry*: the user signs up on the provider's surface out-of-band, copies the
+> api-key, and pastes it into the gateway's "connect a provider" flow. Layer 0
+> replaces that copy/paste with an in-band handshake before GA; until then it
+> exists only as this contract, so the two implementations can build to it
+> deliberately rather than improvising a signup flow each.
+
+Layer 0 answers the one thing Layer 1 assumes and never explains: **how the
+gateway comes to hold an api-key for a provider it has never talked to.**
+Guided key entry works but has the user handle a bearer secret by hand —
+Layer 0 removes the human from the secret's path entirely with a device-code
+/ signup-handoff handshake, RFC 8628-shaped (OAuth 2.0 Device Authorization
+Grant) because the gateway is exactly the "input-constrained, no trusted
+browser of its own" client that flow was designed for.
+
+Shape (all routes normative-for-GA; none built for beta):
+
+1. **Gateway initiates.** `POST /v1/storage/provision/sessions` (no auth —
+   this is the pre-account entry point). Optional body
+   `{ "deviceLabel": "<opaque>" }`. Response:
+
+   ```jsonc
+   {
+     "data": {
+       "deviceCode": "…",              // gateway-held secret; used only on the poll route
+       "userCode": "WDJB-MJHT",        // short, human-transcribable; shown to the user
+       "verificationUri": "https://provider.example/activate",
+       "verificationUriComplete": "https://provider.example/activate?code=WDJB-MJHT", // OPTIONAL convenience
+       "expiresIn": 900,               // seconds the pairing is valid
+       "interval": 5                   // minimum seconds between polls
+     }
+   }
+   ```
+
+2. **User consents on the provider's own surface.** The gateway shows the
+   user `userCode` + `verificationUri` (or opens `verificationUriComplete`).
+   On that provider-hosted page the user completes **interactive** signup or
+   login and approves this device — the same `interactive` tier Layer 1 § Auth
+   already defines for `purge`. All account creation, payment, and identity
+   live on the provider's surface; the protocol never carries a password.
+
+3. **Gateway polls for the key.** `POST /v1/storage/provision/token` with
+   `{ "deviceCode": "…" }`. Until the user finishes, the provider MUST reply
+   `400` with one of the RFC 8628 codes in the error envelope's `code` field:
+
+   | code | meaning |
+   |---|---|
+   | `authorization_pending` | user hasn't approved yet — keep polling at `interval` |
+   | `slow_down` | polling too fast — add 5s to `interval` and continue |
+   | `expired_token` | `expiresIn` elapsed before approval — restart at step 1 |
+   | `access_denied` | user declined — stop, surface the refusal |
+
+   On approval the provider returns the minted key **once**, over this
+   pairing channel, so the user never sees or pastes it:
+
+   ```jsonc
+   { "data": { "apiKey": "…", "accountStatus": "ok" } }
+   ```
+
+   The gateway stores `apiKey` and proceeds to Layer 1 discovery exactly as a
+   guided-entry key does — Layer 0's only job is delivering that secret.
+
+- **Revocation** is out-of-band and provider-owned: the key MUST be revocable
+  from the provider's dashboard (the `interactive` surface). A revoked key
+  fails Layer 1 calls with `auth_expired` (401), the same as any expired key;
+  the gateway re-runs Layer 0 to obtain a fresh one. The protocol defines no
+  gateway-initiated revocation route in `/1`.
+- **Conformance (for-GA).** The handshake is testable against a fake provider
+  that scripts the approval: create a session, assert `authorization_pending`
+  on an early poll, flip an internal "approved" flag, assert the next poll
+  returns an `apiKey` that then authenticates a Layer 1 discovery call.
+  `expired_token` and `access_denied` are each exercised by a fake that never
+  approves / explicitly declines.
+
+---
+
 ## Layer 1 — Account & grants
 
-### Discovery — `GET /v1/backup/provider`
+### Discovery — `GET /v1/storage/provider`
 
 Bearer-authed. The capabilities document; everything a client adapts to MUST
 be declared here, not discovered behaviorally:
@@ -102,6 +182,7 @@ be declared here, not discovered behaviorally:
     "protocol": ["centraid-storage-provider/1"],
     "dataPlane": "s3",
     "capabilities": ["backup", "cas", "derived", "usage", "policy", "inventory", "audit"],
+    "profiles": ["home"],                        // OPTIONAL — see § Profiles
     "maxCredentialTtlSeconds": 86400,
     "purgeAuthTier": "interactive",              // MUST be "interactive"
     "storageClasses": ["STANDARD", "STANDARD_IA"],  // OPTIONAL — see below
@@ -130,6 +211,42 @@ be declared here, not discovered behaviorally:
 advertises and clients MUST skip capability-gated routes when their flag is
 absent.
 
+### Profiles
+
+`profiles` is an OPTIONAL, additive array of named capability *bundles* — a
+shorthand a provider uses to assert "I implement the whole set of flags this
+named product experience requires", so a client can key one product decision
+off a single token instead of re-checking a hand-list of capabilities. It
+does not replace `capabilities`: capability flags remain the sole
+protocol-evolution seam, and every route a profile implies is still gated by
+its own flag in `capabilities`. Absent `profiles` is legal and means "no
+named profile" — a bare durability sink (e.g. `capabilities: ["backup"]`) is
+still a conformant provider.
+
+`/1` defines exactly one profile:
+
+- **`home`** — a provider fit to be a household's primary managed offsite
+  home for its data (the target of the client's **"Hosted"** product option,
+  as opposed to a user's own BYO bucket). A provider advertising `"home"`
+  MUST also declare **all seven** of these capabilities: `backup`, `cas`,
+  `derived`, `usage`, `policy`, `inventory`, and `audit`. A `home` provider
+  missing any member is a conformance failure.
+
+  `policy` is REQUIRED (not merely SHOULD) because a home provider is the
+  client's staleness watchdog's counterpart: the client's five-metric
+  freshness contract derives its status color (fresh / aging / stale) from
+  the declared cadence a provider echoes back through the `policy` surface
+  (`declaredAt` + the RPO/snapshot/verify thresholds in § Declared policy).
+  A provider with no policy declaration surface gives the client nothing to
+  anchor those age thresholds against, so it cannot honestly present a
+  "Hosted" home the user is meant to trust with primary custody.
+
+Clients MUST treat `profiles` as advisory-additive: an unknown profile name
+is ignored (forward compatibility), and the **"Hosted"** product option is
+offered only for providers whose discovery advertises `home`. The profile is
+a product-menu convenience layered on top of the protocol; capability flags,
+never profiles, are what the protocol grows along.
+
 `storageClasses` is OPTIONAL: the provider-declared list of S3 storage-class
 values (`x-amz-storage-class`) its data plane accepts on object-creating
 requests (PUT, CreateMultipartUpload, CopyObject). When **absent**, clients
@@ -145,17 +262,17 @@ be priced before it starts.
 
 | Route | Auth | Purpose |
 |---|---|---|
-| `GET /v1/backup/provider` | api-key | discovery/capabilities |
-| `POST /v1/backup/vaults` | api-key | create target — `{ "name": "<opaque label>" }`. Clients MUST NOT send real vault names; the label is an opaque handle. |
-| `GET /v1/backup/vaults` | api-key | list caller's targets + `backup` usage + `accountStatus` |
-| `POST /v1/backup/vaults/:id/credentials` | api-key | issue grant — `{ "ttlSeconds": 3600, "mode": "read-write" \| "read", "store": "backup" \| "cas" \| "derived" }` |
-| `GET /v1/backup/vaults/:id/usage` | api-key | per-store-class usage report — only when `capabilities` includes `"usage"` |
-| `PUT`, `GET /v1/backup/vaults/:id/policy` | api-key | declare/read cadence — `policy` capability |
-| `GET /v1/backup/vaults/:id/inventory` | api-key | provider-attested objects — `inventory` capability |
-| `GET /v1/backup/vaults/:id/events` | api-key | append-only lifecycle audit — `audit` capability |
-| `DELETE /v1/backup/vaults/:id` | api-key | soft delete (declared undelete window) — every store class under the target |
-| `POST /v1/backup/vaults/:id/undelete` | api-key | cancel soft delete |
-| `POST /v1/backup/vaults/:id/purge` | **interactive** | irreversible erasure of the whole target (one-way; blocks undelete forever) |
+| `GET /v1/storage/provider` | api-key | discovery/capabilities |
+| `POST /v1/storage/vaults` | api-key | create target — `{ "name": "<opaque label>" }`. Clients MUST NOT send real vault names; the label is an opaque handle. |
+| `GET /v1/storage/vaults` | api-key | list caller's targets + `backup` usage + `accountStatus` |
+| `POST /v1/storage/vaults/:id/credentials` | api-key | issue grant — `{ "ttlSeconds": 3600, "mode": "read-write" \| "read", "store": "backup" \| "cas" \| "derived" }` |
+| `GET /v1/storage/vaults/:id/usage` | api-key | per-store-class usage report — only when `capabilities` includes `"usage"` |
+| `PUT`, `GET /v1/storage/vaults/:id/policy` | api-key | declare/read cadence — `policy` capability |
+| `GET /v1/storage/vaults/:id/inventory` | api-key | provider-attested objects — `inventory` capability |
+| `GET /v1/storage/vaults/:id/events` | api-key | append-only lifecycle audit — `audit` capability |
+| `DELETE /v1/storage/vaults/:id` | api-key | soft delete (declared undelete window) — every store class under the target |
+| `POST /v1/storage/vaults/:id/undelete` | api-key | cancel soft delete |
+| `POST /v1/storage/vaults/:id/purge` | **interactive** | irreversible erasure of the whole target (one-way; blocks undelete forever) |
 
 `store` and `mode` on the credentials route are REQUIRED — neither has a
 default. A provider MUST reject a missing field or a grant request naming a
@@ -166,7 +283,7 @@ All responses wrap payloads as `{ "data": … }`. All timestamps on the wire
 are **unix epoch seconds** (integers), including `expiresAt`, `createdAt`,
 `declaredAt`, `storedAt`, event `at`, and usage-period bounds.
 
-### Target list — `GET /v1/backup/vaults`
+### Target list — `GET /v1/storage/vaults`
 
 ```jsonc
 {
@@ -218,7 +335,7 @@ so a recovery device never needs write power. Issuance MUST be refused with
 allow new writes (read grants SHOULD still be issued while data is retained:
 a lapsed subscriber keeps the right to take their data out).
 
-### Usage — `GET /v1/backup/vaults/:id/usage` (optional `usage` capability)
+### Usage — `GET /v1/storage/vaults/:id/usage` (optional `usage` capability)
 
 Only present when discovery's `capabilities` includes `"usage"`; a provider
 that doesn't meter simply omits the capability and clients skip this route
@@ -255,7 +372,7 @@ offers. This is distinct from the target list's embedded `usage` (the
 `backup` store's own, always-present figure) — `usage` here is the general,
 optional, per-store-class metering surface every store class can plug into.
 
-### Declared policy — `PUT`, `GET /v1/backup/vaults/:id/policy` (`policy`)
+### Declared policy — `PUT`, `GET /v1/storage/vaults/:id/policy` (`policy`)
 
 PUT accepts the client-owned cadence subset:
 
@@ -268,12 +385,16 @@ The response and GET echo those four fields plus provider-stamped
 intervals are positive numbers; `casAck` is `receipt` or `replicated`.
 Malformed input is `400 invalid_request`. A provider MAY reject a valid
 declaration it cannot meet with `422 policy_unmet` and field/bound details.
+`casAck` — and store-class vocabulary generally (`backup`/`cas`/`derived`,
+`receipt`/`replicated`) — is a machine-to-machine wire concern: clients MUST
+NOT surface it as a user-facing choice, but derive it from a protection
+preset (or default it) and send the resolved value here.
 If a provider implements stale alarms, their timing basis is the echoed
 `declaredAt`: RPO, snapshot, and verification age thresholds are 2× their
 declared cadence. PUT replaces the prior document atomically and appends a
 `policy-changed` event when `audit` is offered.
 
-### Object inventory — `GET /v1/backup/vaults/:id/inventory` (`inventory`)
+### Object inventory — `GET /v1/storage/vaults/:id/inventory` (`inventory`)
 
 Required query `store=backup|cas|derived`; optional opaque `cursor`, integer `limit`
 (1–1000), and inclusive epoch-second `since`. Response:
@@ -288,7 +409,7 @@ inclusive so polling cannot miss same-second writes. The complete report
 MUST match raw S3 LIST under a read grant on key and byte size; a mismatch
 is a provider contract failure.
 
-### Lifecycle audit — `GET /v1/backup/vaults/:id/events` (`audit`)
+### Lifecycle audit — `GET /v1/storage/vaults/:id/events` (`audit`)
 
 Returns `{ "data": { "events": [{ "at": 1760003600, "kind":
 "policy-changed", "detail": {} }], "nextCursor": null } }`. Optional
@@ -309,7 +430,7 @@ design, except where the Layer 1/2 split required rewording (`vaults/{id}/`
 example prefixes became `u/{id}/backup/`; discovery fields moved under
 `backup`).
 
-### Snapshot registration — `POST /v1/backup/vaults/:id/snapshots`
+### Snapshot registration — `POST /v1/storage/vaults/:id/snapshots`
 
 Request:
 
@@ -344,9 +465,9 @@ Read/list routes:
 
 | Route | Auth | Purpose |
 |---|---|---|
-| `POST /v1/backup/vaults/:id/snapshots` | api-key | register a manifest already written to the `backup` store |
-| `GET /v1/backup/vaults/:id/snapshots` | api-key | registry rows, newest first; `?includePruned=1` |
-| `GET /v1/backup/vaults/:id/snapshots/:seq` | api-key | one registry row |
+| `POST /v1/storage/vaults/:id/snapshots` | api-key | register a manifest already written to the `backup` store |
+| `GET /v1/storage/vaults/:id/snapshots` | api-key | registry rows, newest first; `?includePruned=1` |
+| `GET /v1/storage/vaults/:id/snapshots/:seq` | api-key | one registry row |
 
 ### Generation fencing (split-brain detection)
 
@@ -477,7 +598,11 @@ The reference conformance kit lives in Centraid's `packages/backup`
   isolated prefixes (region present, store echoed, disjoint prefixes),
   delete/undelete/purge tiering, error-code fidelity, and — when the
   `usage` capability is present — usage-report shape and monotonic byte
-  growth after a write.
+  growth after a write. Discovery's `profiles`, when present, MUST contain
+  only known profile names, and a declared `home` profile MUST carry all
+  seven of its member capabilities (`backup`, `cas`, `derived`, `usage`,
+  `policy`, `inventory`, `audit`) — a missing member is a conformance
+  failure.
 - **Layer 2 (`backup`)**: registration idempotency, generation fencing,
   pruned-row filtering.
 - **Layer 2 (`cas`)**: put/list/get/delete round-trip through a grant, and

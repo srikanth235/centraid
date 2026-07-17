@@ -15,7 +15,7 @@
  *
  * History: this suite previously carried two `test.fails(...)` exemptions
  * in "a. full conformance" for confirmed Clawgnition-side bugs —
- * `POST /v1/backup/vaults/:id/snapshots` omitting `prunedAt`, and that same
+ * `POST /v1/storage/vaults/:id/snapshots` omitting `prunedAt`, and that same
  * route's response shape disagreeing with `GET .../snapshots/:seq` for the
  * identical row (extra `id`/`vaultId` fields, missing `prunedAt`). Both are
  * now fixed upstream (registration response matches the GET row shape
@@ -36,10 +36,12 @@
  */
 
 import { type ChildProcess, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, promises as fs } from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { providerConformanceCases, type ConformanceHarness } from './conformance.js';
@@ -48,6 +50,38 @@ import { createSnapshot, restoreSnapshot, verifySnapshot, type SourceEntry } fro
 import { BackupProviderError } from './provider.js';
 import { RemoteBackupProvider } from './remote-provider.js';
 import { S3TestServer } from './testing/s3-test-server.js';
+import { callProviderRoute } from './wire-client.js';
+
+// A `/1` coordinated base pair (vault.db + journal.db) must be a REAL
+// WAL-quiet SQLite base carrying sha256 + walGeneration + baseTickMs — the
+// snapshot engine verifies the base sha256 and runs (empty) WAL replay with a
+// SQLite integrity check on restore, so random bytes cannot stand in. Helpers
+// mirror engine.test.ts's fixtures.
+function makeSqliteDbFile(filePath: string, vals: string[]): void {
+  const conn = new DatabaseSync(filePath);
+  conn.exec('PRAGMA journal_mode=WAL');
+  conn.exec('CREATE TABLE rows (id INTEGER PRIMARY KEY, val TEXT NOT NULL)');
+  const stmt = conn.prepare('INSERT INTO rows (val) VALUES (?)');
+  for (const v of vals) stmt.run(v);
+  conn.close(); // closing the last connection checkpoints + deletes the WAL
+}
+
+function readSqliteRows(filePath: string): string[] {
+  const conn = new DatabaseSync(filePath);
+  try {
+    return (conn.prepare('SELECT val FROM rows ORDER BY id').all() as { val: string }[]).map(
+      (r) => r.val,
+    );
+  } finally {
+    conn.close();
+  }
+}
+
+async function fileSha256(filePath: string): Promise<string> {
+  return createHash('sha256')
+    .update(await fs.readFile(filePath))
+    .digest('hex');
+}
 
 // ---------------------------------------------------------------------------
 // Gating — decided at collection time, synchronously, so `describe.skipIf`
@@ -92,7 +126,12 @@ const GATEWAY_PORT = 9587;
 const S3_PORT = 9099;
 const GATEWAY_URL = `http://127.0.0.1:${GATEWAY_PORT}`;
 const BUCKET = 'clawgnition-vault-backups-dev';
-const API_KEY = 'sk-claw_operator_dev_fixed_key_0001';
+// Clawgnition auth is routed-key based (`sk-claw_v1_<cell>_<keyId>_<secret>`):
+// flat seeded keys no longer authenticate. The suite signs in as the
+// predev-seeded operator and mints a routed key over the real HTTP surface
+// (`POST /v1/keys`) in beforeAll — the same path the dashboard takes.
+const OPERATOR_EMAIL = 'operator@clawgnition.local';
+const OPERATOR_PASSWORD = 'Operator123!';
 const CURRENT = { gatewayVersion: '0.1.0', vaultUserVersion: '1', ontologyVersion: '1.2' };
 const APP_META = {
   gatewayVersion: '0.1.0',
@@ -160,11 +199,11 @@ function runCommand(
   });
 }
 
-/** `pnpm predev` — applies D1 migrations + seeds the fixed dev API key. Idempotent. */
+/** `bun run predev` — applies D1 migrations + seeds the fixed dev API key. Idempotent. (clawgnition is bun-managed; pnpm refuses to run there.) */
 async function runPredev(): Promise<void> {
-  const { code, output } = await runCommand('pnpm', ['predev'], CLAWGNITION_REPO, 120_000);
+  const { code, output } = await runCommand('bun', ['run', 'predev'], CLAWGNITION_REPO, 120_000);
   if (code !== 0) {
-    throw new Error(`pnpm predev exited ${code}:\n${output.slice(-4000)}`);
+    throw new Error(`bun run predev exited ${code}:\n${output.slice(-4000)}`);
   }
 }
 
@@ -204,7 +243,7 @@ async function killProcessTree(child: ChildProcess): Promise<void> {
   }
 }
 
-/** Polls `GET /v1/backup/provider` — 401 (no bearer) or 200 both mean "the Worker is up and routing". */
+/** Polls `GET /v1/storage/provider` — 401 (no bearer) or 200 both mean "the Worker is up and routing". */
 async function waitForGatewayUp(
   url: string,
   timeoutMs: number,
@@ -228,6 +267,52 @@ async function waitForGatewayUp(
   );
 }
 
+/**
+ * Sign in as the predev-seeded operator (Better Auth email/password) and mint
+ * a routed api key via `POST /v1/keys` — the same flow the dashboard uses. No
+ * `origin` header is sent: the gateway's CSRF guard treats origin-less
+ * requests as non-browser clients and lets them through.
+ */
+async function mintRoutedApiKey(): Promise<string> {
+  const signIn = await fetch(`${GATEWAY_URL}/api/auth/sign-in/email`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: OPERATOR_EMAIL, password: OPERATOR_PASSWORD }),
+  });
+  if (!signIn.ok) {
+    throw new Error(`operator sign-in failed (${signIn.status}): ${await signIn.text()}`);
+  }
+  const setCookie = signIn.headers.get('set-cookie') ?? '';
+  const session = /better-auth\.session_token=[^;]+/.exec(setCookie)?.[0];
+  if (!session) {
+    throw new Error(`operator sign-in returned no session cookie (set-cookie: ${setCookie})`);
+  }
+  // Right after a cold `wrangler dev` boot the USER_DO key-verifier snapshot
+  // isn't warm yet, so the first mint can 503 with `key_delivery_pending`
+  // ("Retry shortly."). Retry with backoff, exactly as the contract asks.
+  let lastText = '';
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const minted = await fetch(`${GATEWAY_URL}/v1/keys`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: session },
+      body: JSON.stringify({ name: 'centraid-interop' }),
+    });
+    if (minted.ok) {
+      const body = (await minted.json()) as { data?: { key?: string } };
+      if (!body.data?.key)
+        throw new Error(`POST /v1/keys returned no key: ${JSON.stringify(body)}`);
+      return body.data.key;
+    }
+    lastText = await minted.text();
+    if (minted.status === 503 && lastText.includes('key_delivery_pending')) {
+      await sleep(500 * (attempt + 1));
+      continue;
+    }
+    throw new Error(`POST /v1/keys failed (${minted.status}): ${lastText}`);
+  }
+  throw new Error(`POST /v1/keys never became available: ${lastText}`);
+}
+
 // ---------------------------------------------------------------------------
 // Suite
 // ---------------------------------------------------------------------------
@@ -236,6 +321,7 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
   let s3: S3TestServer;
   let gatewayProc: ChildProcess | undefined;
   let provider: RemoteBackupProvider;
+  let apiKey: string;
   const createdTargetIds: string[] = [];
 
   beforeAll(async () => {
@@ -254,7 +340,7 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
         await runPredev();
         const spawned = spawnWranglerDev();
         gatewayProc = spawned.child;
-        await waitForGatewayUp(`${GATEWAY_URL}/v1/backup/provider`, 90_000, spawned.recentLog);
+        await waitForGatewayUp(`${GATEWAY_URL}/v1/storage/provider`, 90_000, spawned.recentLog);
         break;
       } catch (err) {
         if (gatewayProc) {
@@ -270,7 +356,8 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
       }
     }
 
-    provider = new RemoteBackupProvider({ baseUrl: GATEWAY_URL, apiKey: API_KEY });
+    apiKey = await mintRoutedApiKey();
+    provider = new RemoteBackupProvider({ baseUrl: GATEWAY_URL, apiKey });
   }, 240_000);
 
   afterAll(async () => {
@@ -286,7 +373,7 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
     }
     if (gatewayProc) await killProcessTree(gatewayProc);
     if (s3) await s3.close();
-  }, 30_000);
+  }, 120_000);
 
   async function freshTarget(label: string): Promise<string> {
     const { targetId } = await provider.createTarget({ label });
@@ -305,7 +392,10 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
     // The full, unmodified kit — no exemptions. Both previously-confirmed
     // response-shape bugs (see module header) are fixed upstream.
     for (const c of providerConformanceCases(makeHarness)) {
-      test(c.name, c.run, 30_000);
+      // Generous per-case timeout: the dev gateway's per-cell auth rate limit
+      // (60 req / 60 s, no Retry-After) can force the client to wait out a full
+      // window mid-case; the wire client's bounded backoff needs room to do so.
+      test(c.name, c.run, 90_000);
     }
   });
 
@@ -343,11 +433,11 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
 
       sourceDir = await fs.mkdtemp(path.join(os.tmpdir(), 'interop-source-'));
       await fs.mkdir(path.join(sourceDir, 'blobs'), { recursive: true });
-      await fs.writeFile(
-        path.join(sourceDir, 'vault.db'),
-        pseudoRandomBuffer(1.5 * 1024 * 1024, 1),
-      );
-      await fs.writeFile(path.join(sourceDir, 'journal.db'), pseudoRandomBuffer(8_000, 2));
+      // Real WAL-quiet SQLite bases (the `/1` coordinated pair); the engine
+      // verifies their sha256 and runs an integrity-checked WAL replay on
+      // restore, so these cannot be random bytes.
+      makeSqliteDbFile(path.join(sourceDir, 'vault.db'), ['v1', 'v2', 'v3']);
+      makeSqliteDbFile(path.join(sourceDir, 'journal.db'), ['j1']);
       await fs.writeFile(path.join(sourceDir, 'blobs', 'photo.bin'), pseudoRandomBuffer(40_000, 3));
       // Large blob: 33 MiB of incompressible bytes so a SINGLE entry spans
       // MULTIPLE 16 MiB parts (#405 §1 acceptance — the old interop topped out
@@ -361,9 +451,26 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
         path.join(sourceDir, 'blobs', 'big.bin'),
         pseudoRandomBuffer(33 * 1024 * 1024, 4),
       );
+      const BASE_TICK = 1_752_480_000_000;
       entries = [
-        { path: 'vault.db', kind: 'db', absolutePath: path.join(sourceDir, 'vault.db') },
-        { path: 'journal.db', kind: 'db', absolutePath: path.join(sourceDir, 'journal.db') },
+        {
+          path: 'vault.db',
+          kind: 'db',
+          absolutePath: path.join(sourceDir, 'vault.db'),
+          sha256: await fileSha256(path.join(sourceDir, 'vault.db')),
+          walGeneration: '11'.repeat(16),
+          baseTickMs: BASE_TICK,
+        },
+        {
+          path: 'journal.db',
+          kind: 'db',
+          absolutePath: path.join(sourceDir, 'journal.db'),
+          sha256: await fileSha256(path.join(sourceDir, 'journal.db')),
+          // Same tick as the vault base — the shipper breaks both generations
+          // together and restore refuses a pair that cannot show it.
+          walGeneration: '22'.repeat(16),
+          baseTickMs: BASE_TICK,
+        },
         {
           path: 'blobs/photo.bin',
           kind: 'blob',
@@ -419,7 +526,12 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
       });
       expect(result.seq).toBe(1);
       expect(result.entries.sort()).toEqual(entries.map((e) => e.path).sort());
-      for (const entry of entries) {
+      // The db bases restore + replay to logically-identical SQLite content
+      // (WAL replay reopens/checkpoints the file, so the bytes need not match);
+      // the opaque blobs restore byte-identical.
+      expect(readSqliteRows(path.join(destDir, 'vault.db'))).toEqual(['v1', 'v2', 'v3']);
+      expect(readSqliteRows(path.join(destDir, 'journal.db'))).toEqual(['j1']);
+      for (const entry of entries.filter((e) => e.kind === 'blob')) {
         const original = await fs.readFile(entry.absolutePath);
         const restored = await fs.readFile(path.join(destDir, ...entry.path.split('/')));
         expect(restored.equals(original)).toBe(true);
@@ -429,7 +541,7 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
       const verified = await verifySnapshot({ provider, targetId, keyring, vaultId: VAULT_ID });
       expect(verified.missing).toEqual([]);
       expect(verified.corrupt).toEqual([]);
-    }, 60_000);
+    }, 90_000);
 
     test('c. deleting a chunk object directly against the real S3 server makes verifySnapshot report it missing', async () => {
       expect(targetId, 'depends on test b having run first').toBeDefined();
@@ -448,7 +560,7 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
         seq: snapshotSeq,
       });
       expect(verified.missing.length).toBeGreaterThan(0);
-    }, 30_000);
+    }, 90_000);
   });
 
   // -------------------------------------------------------------------------
@@ -509,7 +621,7 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
     });
     expect(replay.generation).toBe(2);
     expect(replay.manifestKey).toBe(gen2.manifestKey);
-  }, 30_000);
+  }, 90_000);
 
   // -------------------------------------------------------------------------
   // e. Read-mode grant
@@ -519,14 +631,17 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
 
     // The grant mode assertion needs the raw wire response — RemoteBackupProvider
     // doesn't surface the grant object itself, only an already-wrapped ObjectStore.
-    const res = await fetch(`${GATEWAY_URL}/v1/backup/vaults/${targetId}/credentials`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${API_KEY}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ ttlSeconds: 3600, mode: 'read', store: 'backup' }),
-    });
-    const body = (await res.json()) as { data: { mode: string; bucket: string } };
-    expect(body.data.mode).toBe('read');
-    expect(body.data.bucket).toBe(BUCKET);
+    // Go through `callProviderRoute` (not a bare fetch) so the same backpressure
+    // handling that carries every other case through the dev gateway's per-cell
+    // auth rate limit applies here too.
+    const grant = await callProviderRoute<{ mode: string; bucket: string }>(
+      { baseUrl: GATEWAY_URL, apiKey },
+      'POST',
+      `/v1/storage/vaults/${targetId}/credentials`,
+      { ttlSeconds: 3600, mode: 'read', store: 'backup' },
+    );
+    expect(grant.mode).toBe('read');
+    expect(grant.bucket).toBe(BUCKET);
 
     // Enforcement that a 'read' grant can't write is CLIENT-side by design
     // (PROTOCOL.md: providers issue prefix-scoped creds but the data plane
@@ -536,7 +651,7 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
     // before ever making the request — that's what this asserts.
     const readStore = await provider.openDataPlane(targetId, 'backup', 'read');
     await expect(readStore.put('chunks/nope', new Uint8Array([1]))).rejects.toThrow(/read.*mode/i);
-  }, 30_000);
+  }, 90_000);
 
   // -------------------------------------------------------------------------
   // f. accountStatus / usage / currentGeneration shape against real rows
@@ -568,5 +683,5 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
     if (usage.quotaBytes !== undefined) {
       expect(usage.quotaBytes).toBe(107_374_182_400); // pro tier: 100 GiB (packages/db migration 0012)
     }
-  }, 30_000);
+  }, 90_000);
 });
