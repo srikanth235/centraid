@@ -619,6 +619,7 @@ export default function App(): JSX.Element {
             <AutomationEditorRoute
               automationId={nav.route.automationId}
               templateId={nav.route.templateId}
+              watchEntity={nav.route.watchEntity}
             />
           );
         case 'run-view':

@@ -93,8 +93,6 @@ function coerceScalar(raw: string): string | number {
   return t !== '' && /^-?\d+(?:\.\d+)?$/.test(t) ? Number(t) : t;
 }
 
-const DATALIST_ID = 'au-entity-types';
-
 /** A DTO where clause (value is `unknown` on the wire) → an editable row. */
 function whereRowOf(raw: unknown): WhereRowDraft {
   const c = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
@@ -161,6 +159,110 @@ function loadedTrigger(t: AutomationEditorData['triggers'][number]): TriggerDraf
 function autogrow(el: HTMLTextAreaElement): void {
   el.style.height = 'auto';
   el.style.height = `${el.scrollHeight}px`;
+}
+
+/** Inline entity-KIND picker for the data/condition trigger inputs — the same
+ *  at-token idiom as the Instructions at-mention (`.mentionPopover` /
+ *  `.mentionOption` surface), applied to the trigger entity fields. It offers
+ *  canonical entity TYPES (e.g. `core.transaction`) from the lazily-loaded
+ *  `list`, filtered client-side and capped at eight; it never offers row
+ *  instances (those live in the at-mention search, not here). Keyboard-navigable
+ *  — ArrowUp/ArrowDown move, Enter accepts, Escape dismisses — and click to
+ *  accept. When `segmented`, the value is a comma-separated list and only the
+ *  trailing segment (after the last comma) is matched and completed, leaving
+ *  the earlier entities intact. */
+function EntityKindPicker({
+  value,
+  list,
+  segmented = false,
+  placeholder,
+  onChange,
+}: {
+  value: string;
+  list: string[];
+  segmented?: boolean;
+  placeholder: string;
+  onChange: (next: string) => void;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+
+  // For a comma-separated value everything up to and including the last comma
+  // is a fixed prefix; the trailing segment is what we match and complete.
+  const lastComma = segmented ? value.lastIndexOf(',') : -1;
+  const prefix = value.slice(0, lastComma + 1);
+  const query = value
+    .slice(lastComma + 1)
+    .trim()
+    .toLowerCase();
+  const matches = (query ? list.filter((k) => k.toLowerCase().includes(query)) : list).slice(0, 8);
+  const activeIndex = matches.length ? Math.min(active, matches.length - 1) : 0;
+  const showList = open && matches.length > 0;
+
+  const accept = (kind: string): void => {
+    onChange(segmented ? `${prefix}${prefix ? ' ' : ''}${kind}` : kind);
+    setOpen(false);
+    setActive(0);
+  };
+
+  return (
+    <div className={styles.pickerAnchor}>
+      <input
+        className={cx(styles.input, styles.mono)}
+        value={value}
+        onChange={(event) => {
+          onChange(event.target.value);
+          setOpen(true);
+          setActive(0);
+        }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={(event) => {
+          if (!showList) {
+            if (event.key === 'ArrowDown') {
+              setOpen(true);
+              event.preventDefault();
+            }
+            return;
+          }
+          if (event.key === 'ArrowDown') {
+            setActive((activeIndex + 1) % matches.length);
+            event.preventDefault();
+          } else if (event.key === 'ArrowUp') {
+            setActive((activeIndex - 1 + matches.length) % matches.length);
+            event.preventDefault();
+          } else if (event.key === 'Enter') {
+            accept(matches[activeIndex]!);
+            event.preventDefault();
+          } else if (event.key === 'Escape') {
+            setOpen(false);
+            event.stopPropagation();
+          }
+        }}
+        placeholder={placeholder}
+        spellCheck={false}
+        autoComplete="off"
+      />
+      {showList ? (
+        <div className={styles.mentionPopover} role="listbox" aria-label="Choose entity type">
+          {matches.map((kind, i) => (
+            <button
+              key={kind}
+              type="button"
+              role="option"
+              aria-selected={i === activeIndex ? 'true' : 'false'}
+              data-active={String(i === activeIndex)}
+              className={styles.mentionOption}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => accept(kind)}
+            >
+              <span className={styles.pickerKind}>{kind}</span>
+              <code>Domain model</code>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 /** A labeled row of pill chips; renders nothing when `items` is empty so
@@ -551,9 +653,9 @@ export default function AutomationEditorScreen({
   }, [reload]);
 
   // Lazily fetch the canonical entity-type list the first time a data/condition
-  // trigger is present — feeds the `<datalist>` autocomplete on their entity
-  // inputs. The route caches the underlying gateway read, so re-fetches are
-  // cheap even if this fires again after a reload.
+  // trigger is present — feeds the `EntityKindPicker` autocomplete on their
+  // entity inputs. The route caches the underlying gateway read, so re-fetches
+  // are cheap even if this fires again after a reload.
   const needsEntityTypes = triggers.some((t) => t.kind === 'data' || t.kind === 'condition');
   const entityTypesLoaded = useRef(false);
   useEffect(() => {
@@ -941,20 +1043,19 @@ export default function AutomationEditorScreen({
                 ) : null}
                 {trigger.kind === 'data' ? (
                   <div className={styles.trigFields}>
-                    <label className={styles.subField}>
+                    <div className={styles.subField}>
                       <span className={styles.microLabel}>Entities</span>
-                      <input
-                        className={cx(styles.input, styles.mono)}
+                      <EntityKindPicker
                         value={trigger.entities}
-                        list={DATALIST_ID}
-                        onChange={(event) => update({ entities: event.target.value })}
+                        list={entityTypes}
+                        segmented
+                        onChange={(entities) => update({ entities })}
                         placeholder="core.transaction, billing.invoice"
-                        spellCheck={false}
                       />
                       <span className={styles.trigHint}>
                         Comma-separated <code>schema.table</code> names to watch for changes.
                       </span>
-                    </label>
+                    </div>
                     <label className={styles.subField}>
                       <span className={styles.microLabel}>Poll every (optional)</span>
                       <input
@@ -982,17 +1083,15 @@ export default function AutomationEditorScreen({
                 ) : null}
                 {trigger.kind === 'condition' ? (
                   <div className={styles.trigFields}>
-                    <label className={styles.subField}>
+                    <div className={styles.subField}>
                       <span className={styles.microLabel}>Entity</span>
-                      <input
-                        className={cx(styles.input, styles.mono)}
+                      <EntityKindPicker
                         value={trigger.entity}
-                        list={DATALIST_ID}
-                        onChange={(event) => update({ entity: event.target.value })}
+                        list={entityTypes}
+                        onChange={(entity) => update({ entity })}
                         placeholder="business.invoice"
-                        spellCheck={false}
                       />
-                    </label>
+                    </div>
                     <div className={styles.subField}>
                       <span className={styles.microLabel}>Where (optional)</span>
                       <div className={styles.whereBuilder}>
@@ -1133,13 +1232,6 @@ export default function AutomationEditorScreen({
             );
           })}
         </div>
-        {needsEntityTypes && entityTypes.length > 0 ? (
-          <datalist id={DATALIST_ID}>
-            {entityTypes.map((name) => (
-              <option key={name} value={name} />
-            ))}
-          </datalist>
-        ) : null}
       </section>
 
       <section className={styles.section}>

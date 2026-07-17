@@ -69,9 +69,13 @@ export type ShellRoute =
   // Instructions-first create/edit form (Automations UI revamp). `automationId`
   // (a `ref`) is omitted for create mode; `templateId` seeds the form from a
   // template gallery entry (Discover/Templates "Use template" for an
-  // automation). Reached inside normal chrome, NOT full-bleed — unlike the
+  // automation). `watchEntity` (a logical entity KIND, `schema.table`) seeds a
+  // create-mode data trigger watching that kind — the per-app "Automate this
+  // data" deep-link (issue #446 follow-up 1). Like `templateId`, it only shapes
+  // the initial DTO and is excluded from `routeKey`, so it never persists past
+  // the first paint. Reached inside normal chrome, NOT full-bleed — unlike the
   // builder chat it replaces as the primary edit surface.
-  | { kind: 'automation-editor'; automationId?: string; templateId?: string }
+  | { kind: 'automation-editor'; automationId?: string; templateId?: string; watchEntity?: string }
   | { automationId: string; kind: 'automation-view' }
   | { automationId: string; kind: 'run-view'; runId: string }
   | { id: string; kind: 'app' }

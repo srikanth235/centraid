@@ -48,3 +48,26 @@
 .uninstallBtn:hover {
   background: color-mix(in srgb, var(--danger) 16%, transparent);
 }
+
+/* "Automate on this data" deep-links (issue #446 follow-up 1) — one chip button
+   per requested entity kind. */
+.automateRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.automateBtn {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 0.5px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--ink-1);
+  cursor: pointer;
+}
+.automateBtn:hover {
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elev));
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}

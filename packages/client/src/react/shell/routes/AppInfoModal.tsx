@@ -1,11 +1,12 @@
 import { useEffect, useState, type JSX } from 'react';
-import type { VaultBlockDTO } from '../../screen-contracts.js';
+import type { VaultBlockDTO, VaultScopeDTO } from '../../screen-contracts.js';
 import VaultScreen from '../../screens/VaultScreen.js';
 import { iconSvg } from '../iconSvg.js';
 import { cx } from '../../ui/cx.js';
 import buttonCss from '../../ui/Button.module.css';
 import modalCss from '../../styles/modal.module.css';
 import appSettingsCss from '../../styles/appSettings.module.css';
+import vaultCss from '../../styles/vault.module.css';
 import styles from './AppInfoModal.module.css';
 import { buildVaultProps, fetchAppManifestRaw, manifestVaultBlock } from './appSettingsData.js';
 
@@ -15,12 +16,23 @@ import { buildVaultProps, fetchAppManifestRaw, manifestVaultBlock } from './appS
 // gear popover mounts): requested access, live grants, revoke, and any parked
 // invocations — all read from the app's live `app.json` vault block. Uninstall
 // lives here too, so "review access → remove" is one surface.
+/** An app's requested scope → the logical entity KIND (`schema.table`, or a
+ *  bare `schema`) an automation data trigger watches — the same string
+ *  `VaultScreen.scopeLabel` renders. */
+const scopeEntityKind = (s: VaultScopeDTO): string =>
+  s.table ? `${s.schema}.${s.table}` : s.schema;
+
 export interface AppInfoModalProps {
   app: AppMetaResolvedType;
   /** The gateway app id (a bundled app's is its own id). */
   appId: string;
   onClose: () => void;
   onUninstall: () => void;
+  /** Deep-link into the automation editor (create mode) with a data trigger
+   *  pre-filled to watch `entity` — the per-app "Automate this data" entry
+   *  point (issue #446 follow-up 1). Threaded from the shell so the modal stays
+   *  free of the router/actions context. */
+  onAutomate: (entity: string) => void;
   showToast: (message: string) => void;
 }
 
@@ -29,11 +41,46 @@ type BlockState =
   | { phase: 'none' }
   | { phase: 'ready'; block: VaultBlockDTO };
 
+/** "Automate on this data" — one deep-link button per distinct entity KIND the
+ *  app requests, landing in the automation editor with that kind pre-watched.
+ *  Rendered only when the app requests at least one scope. */
+function AutomateSection({
+  block,
+  onAutomate,
+}: {
+  block: VaultBlockDTO;
+  onAutomate: (entity: string) => void;
+}): JSX.Element | null {
+  const kinds = [...new Set(block.scopes.map(scopeEntityKind))];
+  if (kinds.length === 0) return null;
+  return (
+    <div className={appSettingsCss.appSettingsSection}>
+      <div className={vaultCss.label}>Automate on this data</div>
+      <div className={appSettingsCss.appSettingsNote}>
+        Start an automation that runs whenever this kind of data changes in your vault.
+      </div>
+      <div className={styles.automateRow}>
+        {kinds.map((kind) => (
+          <button
+            key={kind}
+            type="button"
+            className={styles.automateBtn}
+            onClick={() => onAutomate(kind)}
+          >
+            {`Automate ${kind}`}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function AppInfoModal({
   app,
   appId,
   onClose,
   onUninstall,
+  onAutomate,
   showToast,
 }: AppInfoModalProps): JSX.Element {
   const [state, setState] = useState<BlockState>({ phase: 'loading' });
@@ -98,7 +145,10 @@ export default function AppInfoModal({
               This app requests no access to your vault.
             </div>
           ) : (
-            <VaultScreen {...buildVaultProps(appId, state.block, { showToast })} />
+            <>
+              <VaultScreen {...buildVaultProps(appId, state.block, { showToast })} />
+              <AutomateSection block={state.block} onAutomate={onAutomate} />
+            </>
           )}
         </div>
 

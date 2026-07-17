@@ -89,6 +89,13 @@ function setSelect(el: HTMLSelectElement, value: string): void {
   });
 }
 
+/** Dispatch a bubbling `keydown` so React's onKeyDown handler fires. */
+function keydown(el: HTMLElement, key: string): void {
+  act(() => {
+    el.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+  });
+}
+
 function button(el: HTMLElement, label: string): HTMLButtonElement {
   return [...el.querySelectorAll('button')].find(
     (b) => b.textContent === label,
@@ -211,8 +218,33 @@ describe('AutomationEditorScreen — authoring data/condition triggers', () => {
     expect(props.onSave).toHaveBeenCalledWith({ instructions: '', name: 'A', triggers: [] });
   });
 
-  it('populates the entity <datalist> lazily once a data trigger exists', async () => {
-    const loadEntityTypes = vi.fn().mockResolvedValue(['core.transaction', 'billing.invoice']);
+  // The entity inputs use an inline @-token-style picker (not a bare
+  // <datalist>) offering entity KINDS from `loadEntityTypes`. These cover the
+  // lazy fetch, client-side filtering, keyboard accept, and — for the
+  // comma-separated data input — trailing-segment completion.
+  const KINDS = ['core.transaction', 'core.event', 'billing.invoice'];
+
+  /** Add a data trigger and wait for the lazy entity-type fetch to resolve. */
+  async function mountWithDataTrigger(loadEntityTypes: ReturnType<typeof vi.fn>): Promise<{
+    el: HTMLDivElement;
+    input: HTMLInputElement;
+  }> {
+    const { el } = await mountNamed({ loadEntityTypes });
+    await act(async () => {
+      button(el, '+ Data change').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+    const input = el.querySelector(
+      'input[placeholder="core.transaction, billing.invoice"]',
+    ) as HTMLInputElement;
+    return { el, input };
+  }
+
+  const optionLabels = (el: HTMLElement): string[] =>
+    [...el.querySelectorAll('[role="option"] span')].map((s) => s.textContent ?? '');
+
+  it('fetches entity kinds lazily the first time a data trigger appears', async () => {
+    const loadEntityTypes = vi.fn().mockResolvedValue(KINDS);
     const { el } = await mountNamed({ loadEntityTypes });
     expect(loadEntityTypes).not.toHaveBeenCalled();
     await act(async () => {
@@ -220,9 +252,62 @@ describe('AutomationEditorScreen — authoring data/condition triggers', () => {
       await Promise.resolve();
     });
     expect(loadEntityTypes).toHaveBeenCalledTimes(1);
-    const options = [...el.querySelectorAll('datalist#au-entity-types option')].map(
-      (o) => (o as HTMLOptionElement).value,
-    );
-    expect(options).toEqual(['core.transaction', 'billing.invoice']);
+    // No popover until the field is engaged.
+    expect(el.querySelector('[role="listbox"]')).toBeNull();
+  });
+
+  it('filters kinds client-side as the user types, capped to the query', async () => {
+    const loadEntityTypes = vi.fn().mockResolvedValue(KINDS);
+    const { el, input } = await mountWithDataTrigger(loadEntityTypes);
+    setValue(input, 'core');
+    expect(optionLabels(el)).toEqual(['core.transaction', 'core.event']);
+    setValue(input, 'bill');
+    expect(optionLabels(el)).toEqual(['billing.invoice']);
+  });
+
+  it('keyboard-navigates and accepts a kind into the input (Enter)', async () => {
+    const loadEntityTypes = vi.fn().mockResolvedValue(KINDS);
+    const { el, input } = await mountWithDataTrigger(loadEntityTypes);
+    setValue(input, 'core');
+    keydown(input, 'ArrowDown'); // move to the second match (core.event)
+    keydown(input, 'Enter');
+    expect(input.value).toBe('core.event');
+    expect(el.querySelector('[role="listbox"]')).toBeNull(); // dismissed on accept
+  });
+
+  it('Escape dismisses the picker without changing the input', async () => {
+    const loadEntityTypes = vi.fn().mockResolvedValue(KINDS);
+    const { el, input } = await mountWithDataTrigger(loadEntityTypes);
+    setValue(input, 'core');
+    expect(el.querySelector('[role="listbox"]')).not.toBeNull();
+    keydown(input, 'Escape');
+    expect(el.querySelector('[role="listbox"]')).toBeNull();
+    expect(input.value).toBe('core');
+  });
+
+  it('completes only the trailing comma segment for the data input', async () => {
+    const loadEntityTypes = vi.fn().mockResolvedValue(KINDS);
+    const { input } = await mountWithDataTrigger(loadEntityTypes);
+    setValue(input, 'core.transaction, bill');
+    keydown(input, 'Enter'); // accept sole match, keep the earlier entity
+    expect(input.value).toBe('core.transaction, billing.invoice');
+  });
+
+  it('accepts a kind by click for the single-entity condition input', async () => {
+    const loadEntityTypes = vi.fn().mockResolvedValue(KINDS);
+    const { el } = await mountNamed({ loadEntityTypes });
+    await act(async () => {
+      button(el, '+ Condition').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+    const input = el.querySelector('input[placeholder="business.invoice"]') as HTMLInputElement;
+    setValue(input, 'invoice');
+    const option = el.querySelector('[role="option"]') as HTMLButtonElement;
+    expect(option.textContent).toContain('billing.invoice');
+    await act(async () => {
+      option.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      option.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(input.value).toBe('billing.invoice');
   });
 });
