@@ -1,12 +1,12 @@
 /**
- * Delete an empty circle (move its people out first). Runs through people.delete_circle — consent-checked and receipted, risk low.
+ * Create a list (a SKOS concept in your lists scheme), like a Docs folder. Runs through people.create_list — consent-checked and receipted, risk low.
  *
  * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {
     const outcome = await ctx.vault.invoke({
-      command: 'people.delete_circle',
+      command: 'people.create_list',
       input: body ?? {},
       purpose: 'dpv:ServiceProvision',
     });

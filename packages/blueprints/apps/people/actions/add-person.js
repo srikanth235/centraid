@@ -1,5 +1,5 @@
 /**
- * Add a person to your circle: mints a canonical core.party plus its people_profile, optionally filed into a circle. Runs through people.add_person — consent-checked and receipted, risk low.
+ * Add a person to your circle: mints a canonical core.party plus its people_profile, optionally filed into a list. Runs through people.add_person — consent-checked and receipted, risk low.
  *
  * @type {import('@centraid/app-engine').ActionHandler}
  */

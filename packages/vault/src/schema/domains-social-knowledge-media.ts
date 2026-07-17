@@ -36,6 +36,13 @@ CREATE TABLE social_thread (
   subject         TEXT,
   external_ref    TEXT UNIQUE,
   created_at      TEXT NOT NULL,
+  -- Rebuildable projection (issue #441 A3), the blob_custody_state pattern:
+  -- last_message_at is a cache of MAX(social_message.sent_at) over the thread's
+  -- messages — the natural sort key for a thread list. Writers keep it fresh on
+  -- the happy path (send, publish, import), but import corrections and message
+  -- purges can drift it, so the standing sweep (gateway/duties.ts) HEALS it
+  -- wholesale — one UPDATE recomputing it from the messages — exactly as
+  -- blob_custody_state is rebuilt. It is therefore never a source of truth.
   last_message_at TEXT
 ) STRICT;
 
@@ -82,9 +89,11 @@ CREATE TABLE knowledge_note (
   updated_at      TEXT NOT NULL,
   -- Trash (issue #308 A6): delete is reversible — the soft-delete pair, with
   -- real deletion deferred to the lifecycle sweep's purge window. The FTS
-  -- spec's deletedColumn guard keeps trashed notes out of the index.
+  -- spec's deletedColumn guard keeps trashed notes out of the index. The guard
+  -- (issue #441 A4) makes purge_at-without-deleted_at unrepresentable, matching
+  -- core_content_item / core_document / media_media_asset.
   deleted_at      TEXT,
-  purge_at        TEXT
+  purge_at        TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL)
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_note_author_party ON knowledge_note(author_party_id);
 CREATE INDEX IF NOT EXISTS idx_note_body_content ON knowledge_note(body_content_id);

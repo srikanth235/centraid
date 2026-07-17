@@ -14,12 +14,14 @@ export default async ({ ctx }) => {
     const [entries, interactions] = await Promise.all([
       ctx.vault.read({
         entity: 'people.journal_entry',
+        where: [{ column: 'deleted_at', op: 'is-null' }],
         orderBy: { column: 'created_at', dir: 'desc' },
         limit: 200,
         purpose,
       }),
       ctx.vault.read({
         entity: 'people.interaction',
+        where: [{ column: 'deleted_at', op: 'is-null' }],
         orderBy: { column: 'occurred_at', dir: 'desc' },
         limit: 100,
         purpose,

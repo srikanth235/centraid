@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit one lifecycle sweep, one spec — the purge matrix (content/note/document/asset/domain-trash × every polymorphic mechanism in poly-refs.ts) is a single table of invariants; splitting it would scatter the completeness argument the registry exists to make
 // Tests for the §10 responsibilities closed after the first pass: polymorphic
 // ref validation (S4), contract version check (S3), retention policy sweeps,
 // the view service, and file custody.
@@ -240,6 +241,195 @@ test('lifecycle sweep purges a lapsed trashed document and its exclusively-owned
   expect(
     db.vault.prepare(`SELECT 1 FROM core_document WHERE document_id = 'd-fresh'`).get(),
   ).toBeTruthy();
+});
+
+/**
+ * Seed one of every registered polymorphic dependent pointing at (type, id):
+ * a revocable share, a vector embedding, a sync-map row, a margin annotation,
+ * and an attachment. The attachment carries its OWN bytes (a second content
+ * item) so it never blocks the target's deletion. Returns the ids to assert on.
+ */
+function seedPolyDependents(
+  type: string,
+  id: string,
+): {
+  shareId: string;
+  embeddingId: string;
+  mapId: string;
+  annotationId: string;
+  attachmentId: string;
+} {
+  const now = new Date().toISOString();
+  const shareId = uuidv7();
+  db.vault
+    .prepare(
+      `INSERT INTO consent_share (share_id, owner_party_id, audience, target_type, target_id, mode, created_at)
+       VALUES (?, ?, 'public_link', ?, ?, 'view', ?)`,
+    )
+    .run(shareId, boot.ownerPartyId, type, id, now);
+  const embeddingId = uuidv7();
+  db.vault
+    .prepare(
+      `INSERT INTO enrich_embedding (embedding_id, entity_type, entity_id, model, dim, vector, created_at)
+       VALUES (?, ?, ?, 'test-model', 1, ?, ?)`,
+    )
+    .run(embeddingId, type, id, new Uint8Array([1, 2, 3, 4]), now);
+  // A drained request stays (inert history); an open one must go.
+  db.vault
+    .prepare(
+      `INSERT INTO enrich_request (request_id, entity_type, entity_id, reason, requested_at)
+       VALUES (?, ?, ?, 'on-view', ?)`,
+    )
+    .run(uuidv7(), type, id, now);
+  const connId = uuidv7();
+  db.vault
+    .prepare(
+      `INSERT INTO sync_connection (connection_id, kind, label, status, trust, created_at)
+       VALUES (?, 'file', ?, 'active', 'staged', ?)`,
+    )
+    .run(connId, `conn-${connId}`, now);
+  const mapId = uuidv7();
+  db.vault
+    .prepare(
+      `INSERT INTO sync_external_entity (map_id, connection_id, external_id, entity_type, entity_id, content_hash, first_seen_at, last_seen_at)
+       VALUES (?, ?, ?, ?, ?, 'h', ?, ?)`,
+    )
+    .run(mapId, connId, `ext-${mapId}`, type, id, now, now);
+  const annotationId = uuidv7();
+  db.vault
+    .prepare(
+      `INSERT INTO knowledge_annotation (annotation_id, author_party_id, target_type, target_id, body_text, created_at)
+       VALUES (?, ?, ?, ?, 'margin note', ?)`,
+    )
+    .run(annotationId, boot.ownerPartyId, type, id, now);
+  const attachBytes = uuidv7();
+  db.vault
+    .prepare(
+      `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
+       VALUES (?, 'text/plain', 'data:text/plain,att', ?, 1, ?)`,
+    )
+    .run(attachBytes, `sha-att-${attachBytes}`, now);
+  const attachmentId = uuidv7();
+  db.vault
+    .prepare(
+      `INSERT INTO core_attachment (attachment_id, subject_type, subject_id, content_id, role, is_primary, created_at)
+       VALUES (?, ?, ?, ?, 'other', 0, ?)`,
+    )
+    .run(attachmentId, type, id, attachBytes, now);
+  return { shareId, embeddingId, mapId, annotationId, attachmentId };
+}
+
+function expectPolyDependentsCleaned(
+  deps: ReturnType<typeof seedPolyDependents>,
+  type: string,
+  id: string,
+): void {
+  const share = db.vault
+    .prepare('SELECT revoked_at FROM consent_share WHERE share_id = ?')
+    .get(deps.shareId) as { revoked_at: string | null } | undefined;
+  expect(share?.revoked_at, 'share of a purged row must be revoked').toBeTruthy();
+  expect(
+    db.vault.prepare('SELECT 1 FROM enrich_embedding WHERE embedding_id = ?').get(deps.embeddingId),
+    'orphan embedding must be gone',
+  ).toBeUndefined();
+  expect(
+    db.vault
+      .prepare(
+        'SELECT 1 FROM enrich_request WHERE entity_type = ? AND entity_id = ? AND drained_at IS NULL',
+      )
+      .get(type, id),
+    'open enrich request must be gone',
+  ).toBeUndefined();
+  expect(
+    db.vault.prepare('SELECT 1 FROM sync_external_entity WHERE map_id = ?').get(deps.mapId),
+    'stale sync-map row must be gone',
+  ).toBeUndefined();
+  expect(
+    db.vault
+      .prepare('SELECT 1 FROM knowledge_annotation WHERE annotation_id = ?')
+      .get(deps.annotationId),
+    'annotation must be gone',
+  ).toBeUndefined();
+  expect(
+    db.vault
+      .prepare('SELECT 1 FROM core_attachment WHERE attachment_id = ?')
+      .get(deps.attachmentId),
+    'attachment must be gone',
+  ).toBeUndefined();
+}
+
+test('purge sweep cleans every polymorphic dependent of a purged content item (issue #441 A1)', () => {
+  const past = '2020-01-01T00:00:00Z';
+  db.vault
+    .prepare(
+      `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at, deleted_at, purge_at)
+       VALUES ('poly-c', 'text/plain', 'data:text/plain,x', 'sha-poly-c', 1, ?, ?, ?)`,
+    )
+    .run(past, past, past);
+  const deps = seedPolyDependents('core.content_item', 'poly-c');
+  const result = gw.sweep(owner);
+  expect(result.contentPurged).toBe(1);
+  expect(
+    db.vault.prepare(`SELECT 1 FROM core_content_item WHERE content_id = 'poly-c'`).get(),
+  ).toBe(undefined);
+  expectPolyDependentsCleaned(deps, 'core.content_item', 'poly-c');
+});
+
+test('purge sweep cleans every polymorphic dependent of a purged media asset (issue #441 A1)', () => {
+  const now = new Date().toISOString();
+  const past = '2020-01-01T00:00:00Z';
+  // The asset's bytes are NOT purged here — asset meaning and byte custody have
+  // independent lifecycles; only the asset row lapses.
+  db.vault
+    .prepare(
+      `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
+       VALUES ('poly-asset-body', 'image/jpeg', 'data:image/jpeg,x', 'sha-poly-asset', 1, ?)`,
+    )
+    .run(now);
+  db.vault
+    .prepare(
+      `INSERT INTO media_media_asset (asset_id, content_id, kind, deleted_at, purge_at)
+       VALUES ('poly-a', 'poly-asset-body', 'photo', ?, ?)`,
+    )
+    .run(past, past);
+  const deps = seedPolyDependents('media.media_asset', 'poly-a');
+  const result = gw.sweep(owner);
+  expect(result.assetsPurged).toBe(1);
+  expect(db.vault.prepare(`SELECT 1 FROM media_media_asset WHERE asset_id = 'poly-a'`).get()).toBe(
+    undefined,
+  );
+  expectPolyDependentsCleaned(deps, 'media.media_asset', 'poly-a');
+});
+
+test('lifecycle sweep purges lapsed trashed People/Tally rows and cleans their poly refs (issue #441 A4)', () => {
+  const now = new Date().toISOString();
+  const past = '2020-01-01T00:00:00Z';
+  // A lapsed trashed People content row (representative of the table-driven set).
+  db.vault
+    .prepare(
+      `INSERT INTO people_interaction (interaction_id, party_id, kind, body_text, occurred_at, created_at, deleted_at, purge_at)
+       VALUES ('poly-int', ?, 'call', 'hi', ?, ?, ?, ?)`,
+    )
+    .run(boot.ownerPartyId, past, past, past, past);
+  const deps = seedPolyDependents('people.interaction', 'poly-int');
+  // A trashed row still inside its grace window must survive the sweep.
+  db.vault
+    .prepare(
+      `INSERT INTO people_interaction (interaction_id, party_id, kind, body_text, occurred_at, created_at, deleted_at, purge_at)
+       VALUES ('poly-int-fresh', ?, 'call', 'later', ?, ?, ?, '2999-01-01T00:00:00Z')`,
+    )
+    .run(boot.ownerPartyId, now, now, now);
+  const result = gw.sweep(owner);
+  expect(result.domainRowsPurged).toBe(1);
+  expect(
+    db.vault.prepare(`SELECT 1 FROM people_interaction WHERE interaction_id = 'poly-int'`).get(),
+  ).toBe(undefined);
+  expect(
+    db.vault
+      .prepare(`SELECT 1 FROM people_interaction WHERE interaction_id = 'poly-int-fresh'`)
+      .get(),
+  ).toBeTruthy();
+  expectPolyDependentsCleaned(deps, 'people.interaction', 'poly-int');
 });
 
 function calendarAppWithEvent(): { cred: Credential; appId: string } {

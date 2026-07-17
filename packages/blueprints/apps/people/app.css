@@ -59,7 +59,7 @@
   --t-tiny: 600 0.6rem/1.4 var(--mono);
   --t-mono: 500 0.72rem/1.4 var(--mono);
 
-  /* Circle / status hues (used for status dots + circle chrome dots). */
+  /* List / status hues (used for status dots + list chrome dots). */
   --c-close: #7c5bd9;
   --c-family: #c9803a;
   --c-friends: #2ea098;
@@ -782,7 +782,7 @@ button {
 .d-col.name {
   flex: 1;
 }
-.d-col.circle {
+.d-col.list {
   width: 120px;
 }
 .d-col.last {
@@ -858,7 +858,7 @@ button {
   white-space: nowrap;
   cursor: pointer;
 }
-.d-cell.circle {
+.d-cell.list {
   width: 120px;
   font: var(--t-small);
   font-size: 12px;
@@ -1252,7 +1252,7 @@ span.d-chip-sm {
   flex-wrap: wrap;
   gap: 7px;
 }
-/* Picker chips (circle/cadence): kit.css .kit-chip.quiet — they're
+/* Picker chips (list/cadence): kit.css .kit-chip.quiet — they're
    aria-pressed toggles, same voice as the toolbar filters. */
 /* Modal footer: kit.css .kit-modal-foot; People right-aligns its actions. */
 .d-modal-foot {
@@ -1440,9 +1440,9 @@ span.d-chip-sm {
 .docs.is-narrow .d-grid {
   grid-template-columns: repeat(2, 1fr);
 }
-.docs.is-narrow .d-col.circle,
+.docs.is-narrow .d-col.list,
 .docs.is-narrow .d-col.last,
-.docs.is-narrow .d-cell.circle,
+.docs.is-narrow .d-cell.list,
 .docs.is-narrow .d-cell.last {
   display: none;
 }

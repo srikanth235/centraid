@@ -60,9 +60,11 @@ CREATE TABLE locker_item (
   created_at   TEXT NOT NULL,
   updated_at   TEXT NOT NULL,
   -- trash: soft-delete keeps the row (and its star) so restore is lossless;
-  -- purge_at is set ~30 days out, mirroring Docs.
+  -- purge_at is set ~30 days out, mirroring Docs. The guard (issue #441 A4)
+  -- makes purge_at-without-deleted_at unrepresentable, matching the other
+  -- trash-bearing tables.
   deleted_at   TEXT,
-  purge_at     TEXT
+  purge_at     TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL)
 ) STRICT;
 
 CREATE INDEX locker_item_type_idx ON locker_item(type);

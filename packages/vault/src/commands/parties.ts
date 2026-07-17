@@ -212,6 +212,27 @@ function updateParty(ctx: HandlerCtx): Record<string, unknown> {
       .prepare(`UPDATE core_party SET ${sets.join(', ')} WHERE party_id = ?`)
       .run(...values, input.party_id);
   }
+  // Birthday is one logical fact with two surfaces (issue #441 A2.3): the
+  // party's birth_date and any People "Birthday" important-date row. When the
+  // birth_date moves, reconcile the matching People row's MM-DD so the two can
+  // never disagree. (add_important_date reconciles the other direction.)
+  if (input.birth_date !== undefined) {
+    const md = /(\d{2}-\d{2})$/.exec(input.birth_date)?.[1] ?? null;
+    if (md) {
+      const stale = ctx.db
+        .prepare(
+          `SELECT date_id FROM people_important_date
+            WHERE party_id = ? AND label LIKE '%birthday%' AND month_day <> ?`,
+        )
+        .all(input.party_id, md) as { date_id: string }[];
+      for (const row of stale) {
+        ctx.db
+          .prepare('UPDATE people_important_date SET month_day = ? WHERE date_id = ?')
+          .run(md, row.date_id);
+        ctx.wrote('people.important_date', row.date_id);
+      }
+    }
+  }
   ctx.wrote('core.party', input.party_id);
   ctx.cite({
     claim: `party ${input.party_id} details revised${input.display_name ? ` → "${input.display_name}"` : ''}`,

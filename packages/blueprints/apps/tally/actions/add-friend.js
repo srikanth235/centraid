@@ -4,7 +4,7 @@
  *
  * @type {import('@centraid/app-engine').ActionHandler}
  */
-const KEYS = ['name', 'avatar_color'];
+const KEYS = ['name'];
 export default async ({ body, ctx }) => {
   const input = body ?? {};
   const cmdInput = {};

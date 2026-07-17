@@ -30,8 +30,7 @@ function out<T = Record<string, unknown>>(o: ReturnType<typeof invoke>): T {
   return (o as { output: T }).output;
 }
 function addFriend(name = 'Priya Nair'): string {
-  return out<{ party_id: string }>(invoke('tally.add_friend', { name, avatar_color: '#4E68DD' }))
-    .party_id;
+  return out<{ party_id: string }>(invoke('tally.add_friend', { name })).party_id;
 }
 function members(groupId: string): string[] {
   // Membership lives on the group's circle (issue #310 S4).
@@ -56,12 +55,42 @@ test('add_friend mints a canonical person party plus its tally_friend row', () =
   };
   expect(party.kind).toBe('person');
   expect(party.display_name).toBe('Priya Nair');
-  const f = db.vault
-    .prepare('SELECT avatar_color FROM tally_friend WHERE party_id = ?')
-    .get(pid) as {
-    avatar_color: string;
+  const f = db.vault.prepare('SELECT friend_id FROM tally_friend WHERE party_id = ?').get(pid) as {
+    friend_id: string;
   };
-  expect(f.avatar_color).toBe('#4E68DD');
+  expect(f.friend_id).toBeTruthy();
+});
+
+test('avatar_color is stored exactly once per party — on people_profile, never on tally_friend (issue #441 A3)', () => {
+  // The same party is both a Tally friend and a People CRM contact; give it a
+  // people_profile carrying a hue (the one surviving home for a stored hue).
+  const pid = addFriend('Dual Party');
+  db.vault
+    .prepare(
+      `INSERT INTO people_profile (profile_id, party_id, role, avatar_color, cadence_days, last_contacted_at, met, created_at)
+       VALUES (?, ?, NULL, '#7C5BD9', 30, NULL, NULL, ?)`,
+    )
+    .run('profile-dual', pid, new Date().toISOString());
+
+  // tally_friend has no hue column at all — the consolidation dropped it.
+  const tallyCols = (
+    db.vault.prepare("PRAGMA table_info('tally_friend')").all() as { name: string }[]
+  ).map((c) => c.name);
+  expect(tallyCols).not.toContain('avatar_color');
+
+  // people_profile is the single home for a stored hue.
+  const profileCols = (
+    db.vault.prepare("PRAGMA table_info('people_profile')").all() as { name: string }[]
+  ).map((c) => c.name);
+  expect(profileCols).toContain('avatar_color');
+
+  // Exactly one stored hue exists for this party across the two 1:1 tables.
+  const hues = db.vault
+    .prepare(
+      'SELECT avatar_color FROM people_profile WHERE party_id = ? AND avatar_color IS NOT NULL',
+    )
+    .all(pid) as { avatar_color: string }[];
+  expect(hues).toHaveLength(1);
 });
 
 test('create_group always includes the owner as a member', () => {
@@ -129,12 +158,8 @@ test('settle_up records a payment and refuses a self-settlement', () => {
   expect(self.status).toBe('failed');
 });
 
-test('delete_group is refused while it holds an expense, allowed once empty', () => {
-  const priya = addFriend();
-  const gid = out<{ group_id: string }>(
-    invoke('tally.create_group', { name: 'Apt', icon: '🏠', member_ids: [priya] }),
-  ).group_id;
-  const xid = out<{ expense_id: string }>(
+function addRentExpense(gid: string, priya: string): string {
+  return out<{ expense_id: string }>(
     invoke('tally.add_expense', {
       group_id: gid,
       description: 'Rent',
@@ -147,9 +172,81 @@ test('delete_group is refused while it holds an expense, allowed once empty', ()
       ],
     }),
   ).expense_id;
+}
+
+test('delete_group is refused while it holds an expense — a TRASHED expense still blocks until it purges', () => {
+  const priya = addFriend();
+  const gid = out<{ group_id: string }>(
+    invoke('tally.create_group', { name: 'Apt', icon: '🏠', member_ids: [priya] }),
+  ).group_id;
+  const xid = addRentExpense(gid, priya);
+  // A live expense refuses the group deletion.
   expect(invoke('tally.delete_group', { group_id: gid }).status).toBe('failed');
+  // delete_expense now soft-deletes (issue #441 A4). The decision: a TRASHED
+  // (recoverable) expense STILL blocks group deletion until it purges — it is
+  // money history the owner could restore, so the group cannot be torn out from
+  // under it.
   out(invoke('tally.delete_expense', { expense_id: xid }));
+  expect(invoke('tally.delete_group', { group_id: gid }).status).toBe('failed');
+  // Restore proves it round-trips losslessly, then re-trash + purge it.
+  out(invoke('tally.restore_expense', { expense_id: xid }));
+  out(invoke('tally.delete_expense', { expense_id: xid }));
+  db.vault
+    .prepare('UPDATE tally_expense SET purge_at = ? WHERE expense_id = ?')
+    .run('2000-01-01T00:00:00Z', xid);
+  gw.sweep(owner);
+  // Purged: the row and its splits (ON DELETE CASCADE) are gone.
+  expect(
+    (
+      db.vault.prepare('SELECT count(*) AS n FROM tally_expense WHERE expense_id = ?').get(xid) as {
+        n: number;
+      }
+    ).n,
+  ).toBe(0);
+  expect(
+    (
+      db.vault
+        .prepare('SELECT count(*) AS n FROM tally_expense_split WHERE expense_id = ?')
+        .get(xid) as { n: number }
+    ).n,
+  ).toBe(0);
+  // Now the group is genuinely empty and deletes.
   expect(invoke('tally.delete_group', { group_id: gid }).status).toBe('executed');
+});
+
+test('purging a trashed expense via the sweep cleans its polymorphic refs (issue #441 A4/A1)', () => {
+  const priya = addFriend();
+  const gid = out<{ group_id: string }>(
+    invoke('tally.create_group', { name: 'Trip', icon: '✈️', member_ids: [priya] }),
+  ).group_id;
+  const xid = addRentExpense(gid, priya);
+  // A memo is a knowledge_annotation targeting the canonical 'tally.expense' row.
+  out(invoke('tally.set_expense_memo', { expense_id: xid, note: 'reimburse later' }));
+  const memoCount = () =>
+    (
+      db.vault
+        .prepare(
+          `SELECT count(*) AS n FROM knowledge_annotation WHERE target_type = 'tally.expense' AND target_id = ?`,
+        )
+        .get(xid) as { n: number }
+    ).n;
+  expect(memoCount()).toBe(1);
+  // Trash, lapse the grace window, sweep.
+  out(invoke('tally.delete_expense', { expense_id: xid }));
+  db.vault
+    .prepare('UPDATE tally_expense SET purge_at = ? WHERE expense_id = ?')
+    .run('2000-01-01T00:00:00Z', xid);
+  gw.sweep(owner);
+  // The expense purged, and its memo annotation went with it — no dangling
+  // polymorphic pointer (previously leaked on the old hard-delete path).
+  expect(
+    (
+      db.vault.prepare('SELECT count(*) AS n FROM tally_expense WHERE expense_id = ?').get(xid) as {
+        n: number;
+      }
+    ).n,
+  ).toBe(0);
+  expect(memoCount()).toBe(0);
 });
 
 test('remove_group_member is refused while the member is on the ledger', () => {

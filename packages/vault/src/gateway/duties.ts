@@ -12,6 +12,7 @@ import { nowIso } from '../ids.js';
 import { sweepBlobStaging } from '../blob/staging.js';
 import { shaOfBlobUri } from '../blob/store.js';
 import { RELATIONS_SCHEME_URI } from '../commands/links.js';
+import { cleanupPolyRefs } from '../schema/poly-refs.js';
 import { resolveEntity } from '../schema/tables.js';
 import { retainExtBand } from './ext.js';
 import { writeScopeTombstones } from '../install-memory.js';
@@ -125,6 +126,12 @@ export interface SweepResult {
   notesPurged: number;
   /** Trashed documents whose grace window lapsed (issue #352). */
   documentsPurged: number;
+  /**
+   * Lapsed trashed rows of the domain content tables that carry the uniform
+   * soft-delete pair (People + Tally, issue #441 A4), purged table-driven with
+   * their polymorphic references cleaned.
+   */
+  domainRowsPurged: number;
   retentionDeleted: number;
   /** CAS bytes reclaimed with their purged content items (issue #296). */
   blobsReclaimed: number;
@@ -286,19 +293,11 @@ function purgeContentItem(db: VaultDb, owner: Identity, now: string, contentId: 
   if (asset) {
     writeProvenance(db.journal, owner, 'media.media_asset', asset.asset_id, 'sweep.purge');
     db.vault.prepare('DELETE FROM media_face_region WHERE asset_id = ?').run(asset.asset_id);
-    db.vault
-      .prepare('DELETE FROM core_collection_entry WHERE target_type = ? AND target_id = ?')
-      .run('media.media_asset', asset.asset_id);
     db.vault.prepare('DELETE FROM media_media_asset WHERE asset_id = ?').run(asset.asset_id);
-    db.vault
-      .prepare(
-        `UPDATE core_link SET valid_to = ? WHERE valid_to IS NULL
-          AND ((from_type = ? AND from_id = ?) OR (to_type = ? AND to_id = ?))`,
-      )
-      .run(now, 'media.media_asset', asset.asset_id, 'media.media_asset', asset.asset_id);
-    db.vault
-      .prepare('DELETE FROM core_tag WHERE target_type = ? AND target_id = ?')
-      .run('media.media_asset', asset.asset_id);
+    // Every polymorphic pointer at the asset (issue #441 A1): end-date links,
+    // drop tags/entries/annotations/attachments/embeddings/sync-map/seed rows,
+    // revoke shares — the registry is the complete set, not this call site.
+    cleanupPolyRefs(db.vault, now, 'media.media_asset', asset.asset_id);
   }
   writeProvenance(db.journal, owner, 'core.content_item', contentId, 'sweep.purge');
   // A collection cover pointing at these bytes goes dark rather than
@@ -329,19 +328,59 @@ function purgeContentItem(db: VaultDb, owner: Identity, now: string, contentId: 
     db.blobs.deleteLocalSync(originalSha);
     reclaimed += 1;
   }
-  db.vault
-    .prepare(
-      `UPDATE core_link SET valid_to = ? WHERE valid_to IS NULL
-        AND ((from_type = ? AND from_id = ?) OR (to_type = ? AND to_id = ?))`,
-    )
-    .run(now, 'core.content_item', contentId, 'core.content_item', contentId);
-  db.vault
-    .prepare('DELETE FROM core_tag WHERE target_type = ? AND target_id = ?')
-    .run('core.content_item', contentId);
-  db.vault
-    .prepare('DELETE FROM core_collection_entry WHERE target_type = ? AND target_id = ?')
-    .run('core.content_item', contentId);
+  // Every polymorphic pointer at the content item (issue #441 A1): end-date
+  // links, drop tags/entries/annotations/attachments/embeddings/sync-map/seed
+  // rows, revoke shares. cover_content_id above is a plain FK, not a poly ref.
+  cleanupPolyRefs(db.vault, now, 'core.content_item', contentId);
   return reclaimed;
+}
+
+/**
+ * The domain content tables that carry the uniform soft-delete pair but have
+ * no bespoke purge pass of their own (People + Tally, issue #441 A4). The
+ * sweep walks this list, purges every row whose grace window has lapsed, and
+ * cleans each row's polymorphic references via the A1 registry — so the trash
+ * lifecycle is complete BY CONSTRUCTION for these tables and the next
+ * soft-deletable domain row is one entry here, not a remembered purge clause.
+ * `entity` is the LOGICAL name stored in polymorphic type columns (what a memo
+ * annotation on a trashed expense, or a tag on a trashed row, points at).
+ * FK children with ON DELETE CASCADE (tally_expense_split) go automatically —
+ * PRAGMA foreign_keys is ON (db.ts) — so no child needs manual deletion here.
+ */
+const DOMAIN_TRASH_TABLES: readonly { physical: string; idCol: string; entity: string }[] = [
+  { physical: 'people_interaction', idCol: 'interaction_id', entity: 'people.interaction' },
+  { physical: 'people_task', idCol: 'task_id', entity: 'people.task' },
+  { physical: 'people_gift', idCol: 'gift_id', entity: 'people.gift' },
+  { physical: 'people_important_date', idCol: 'date_id', entity: 'people.important_date' },
+  { physical: 'people_relationship', idCol: 'relationship_id', entity: 'people.relationship' },
+  { physical: 'people_debt', idCol: 'debt_id', entity: 'people.debt' },
+  { physical: 'people_journal_entry', idCol: 'entry_id', entity: 'people.journal_entry' },
+  { physical: 'tally_expense', idCol: 'expense_id', entity: 'tally.expense' },
+  { physical: 'tally_settlement', idCol: 'settlement_id', entity: 'tally.settlement' },
+];
+
+/**
+ * Purge lapsed trashed rows of the domain content tables (issue #441 A4).
+ * Each purged row gets a `sweep.purge` provenance stamp and a full
+ * `cleanupPolyRefs` pass so nothing points at a row that no longer exists.
+ * Returns the total rows purged across all tables.
+ */
+function purgeDomainTrash(db: VaultDb, owner: Identity, now: string): number {
+  let purged = 0;
+  for (const t of DOMAIN_TRASH_TABLES) {
+    const lapsed = db.vault
+      .prepare(
+        `SELECT "${t.idCol}" AS id FROM "${t.physical}" WHERE purge_at IS NOT NULL AND purge_at <= ?`,
+      )
+      .all(now) as { id: string }[];
+    for (const row of lapsed) {
+      writeProvenance(db.journal, owner, t.entity, row.id, 'sweep.purge');
+      db.vault.prepare(`DELETE FROM "${t.physical}" WHERE "${t.idCol}" = ?`).run(row.id);
+      cleanupPolyRefs(db.vault, now, t.entity, row.id);
+      purged += 1;
+    }
+  }
+  return purged;
 }
 
 /**
@@ -370,20 +409,11 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     )
     .all(now) as { content_id: string }[];
   // Purges are the one hard delete outside the command pipeline, so the
-  // temporal link duty runs here too: live links onto a purged row end-date
-  // rather than dangle (issue #272).
-  const endDateLinks = db.vault.prepare(
-    `UPDATE core_link SET valid_to = ?
-      WHERE valid_to IS NULL
-        AND ((from_type = ? AND from_id = ?) OR (to_type = ? AND to_id = ?))`,
-  );
-  // Tags are classification and entries are curation, not history: a tag or
-  // a collection entry on a purged row says nothing once the row is gone,
-  // so both delete with the row instead of dangling (issue #274).
-  const dropTags = db.vault.prepare('DELETE FROM core_tag WHERE target_type = ? AND target_id = ?');
-  const dropEntries = db.vault.prepare(
-    'DELETE FROM core_collection_entry WHERE target_type = ? AND target_id = ?',
-  );
+  // polymorphic-cleanup duty runs here too: links onto a purged row end-date
+  // (issue #272), tags/entries/annotations/attachments/embeddings/sync-map/seed
+  // rows drop and shares revoke (issues #274, #441 A1). The registry in
+  // schema/poly-refs.ts is the single, complete enumeration — cleanupPolyRefs
+  // walks it so no purge path re-derives a partial list by hand.
   // Lapsed trashed notes purge FIRST (issue #308 A6): the note row rents its
   // body content (NOT NULL FK), so the row and its edges must go before the
   // content purge below can delete the body's bytes in the same pass.
@@ -392,20 +422,8 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     .all(now) as { note_id: string }[];
   for (const n of lapsedNotes) {
     writeProvenance(db.journal, owner, 'knowledge.note', n.note_id, 'sweep.purge');
-    dropEntries.run('knowledge.note', n.note_id);
-    db.vault
-      .prepare(
-        `DELETE FROM knowledge_annotation WHERE target_type = 'knowledge.note' AND target_id = ?`,
-      )
-      .run(n.note_id);
-    db.vault
-      .prepare(
-        `DELETE FROM core_attachment WHERE subject_type = 'knowledge.note' AND subject_id = ?`,
-      )
-      .run(n.note_id);
     db.vault.prepare('DELETE FROM knowledge_note WHERE note_id = ?').run(n.note_id);
-    endDateLinks.run(now, 'knowledge.note', n.note_id, 'knowledge.note', n.note_id);
-    dropTags.run('knowledge.note', n.note_id);
+    cleanupPolyRefs(db.vault, now, 'knowledge.note', n.note_id);
   }
   // Lapsed trashed documents purge next (issue #352), same reason as notes
   // above: the wrapper rents its current content (NOT NULL FK), so the row
@@ -424,10 +442,8 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
       ? documentChain(db, doc.current_content_id, revisesId)
       : [doc.current_content_id];
     writeProvenance(db.journal, owner, 'core.document', doc.document_id, 'sweep.purge');
-    dropEntries.run('core.document', doc.document_id);
-    dropTags.run('core.document', doc.document_id);
-    endDateLinks.run(now, 'core.document', doc.document_id, 'core.document', doc.document_id);
     db.vault.prepare('DELETE FROM core_document WHERE document_id = ?').run(doc.document_id);
+    cleanupPolyRefs(db.vault, now, 'core.document', doc.document_id);
     for (const contentId of chain) {
       if (contentRentedElsewhere(db, contentId)) continue;
       if (revisesId && ownedByAnotherLiveDocument(db, contentId, doc.document_id, revisesId))
@@ -450,11 +466,23 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
   for (const a of lapsedAssets) {
     writeProvenance(db.journal, owner, 'media.media_asset', a.asset_id, 'sweep.purge');
     db.vault.prepare('DELETE FROM media_face_region WHERE asset_id = ?').run(a.asset_id);
-    dropEntries.run('media.media_asset', a.asset_id);
     db.vault.prepare('DELETE FROM media_media_asset WHERE asset_id = ?').run(a.asset_id);
-    endDateLinks.run(now, 'media.media_asset', a.asset_id, 'media.media_asset', a.asset_id);
-    dropTags.run('media.media_asset', a.asset_id);
+    cleanupPolyRefs(db.vault, now, 'media.media_asset', a.asset_id);
   }
+  // Lapsed trashed People/Tally content rows purge table-driven, each with its
+  // polymorphic references cleaned (issue #441 A4). Runs after the content /
+  // asset passes above so a row that referenced now-purged bytes is judged last.
+  const domainRowsPurged = purgeDomainTrash(db, owner, now);
+  // Heal the rebuildable projection social_thread.last_message_at (issue #441
+  // A3), the blob_custody_state pattern: recompute it wholesale from the
+  // messages so import corrections or message purges above can never leave it
+  // drifted. Threads with no messages fall back to NULL.
+  db.vault
+    .prepare(
+      `UPDATE social_thread SET last_message_at =
+         (SELECT MAX(sent_at) FROM social_message WHERE social_message.thread_id = social_thread.thread_id)`,
+    )
+    .run();
   const retentionDeleted = enforceRetention(db, now);
   // The staging TTL (issue #296 §3): bytes nothing claimed leave with their
   // rows; a batch hold (import review in progress) pins past the TTL.
@@ -474,6 +502,7 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
       assetsPurged: lapsedAssets.length,
       notesPurged: lapsedNotes.length,
       documentsPurged: lapsedDocuments.length,
+      domainRowsPurged,
       retentionDeleted,
       blobsReclaimed,
       stagingExpired: staging.expired.length,
@@ -486,6 +515,7 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     assetsPurged: lapsedAssets.length,
     notesPurged: lapsedNotes.length,
     documentsPurged: lapsedDocuments.length,
+    domainRowsPurged,
     retentionDeleted,
     blobsReclaimed,
     stagingExpired: staging.expired.length,

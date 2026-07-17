@@ -14,6 +14,28 @@
 
 const YOU_COLOR = '#0FA678';
 
+// A friend's avatar hue is no longer stored on the tally_friend row (issue
+// #441 A3 — one hue per party). Derive a stable one from the party id so the
+// same person always renders the same colour. (Kept in step with format.js's
+// FRIEND_COLORS; inlined here to keep this server query free of the client
+// kit imports format.js pulls in.)
+const FRIEND_COLORS = [
+  '#7C5BD9',
+  '#4E68DD',
+  '#E0567A',
+  '#E8923C',
+  '#2EA098',
+  '#3AA6B9',
+  '#57A55A',
+  '#D9536F',
+];
+function friendColor(partyId) {
+  const id = String(partyId || '');
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return FRIEND_COLORS[h % FRIEND_COLORS.length];
+}
+
 function initials(name) {
   if (!name) return '?';
   return name
@@ -45,12 +67,20 @@ export async function loadTally(ctx, purpose) {
     ctx.vault.read({ entity: 'social.circle_member', purpose }),
     ctx.vault.read({
       entity: 'tally.expense',
+      // Trashed expenses (issue #441 A4) drop out of every balance and ledger —
+      // their splits are read below but never consumed once the expense is gone.
+      where: [{ column: 'deleted_at', op: 'is-null' }],
       orderBy: { column: 'spent_on', dir: 'desc' },
       limit: 2000,
       purpose,
     }),
     ctx.vault.read({ entity: 'tally.expense_split', limit: 8000, purpose }),
-    ctx.vault.read({ entity: 'tally.settlement', limit: 2000, purpose }),
+    ctx.vault.read({
+      entity: 'tally.settlement',
+      where: [{ column: 'deleted_at', op: 'is-null' }],
+      limit: 2000,
+      purpose,
+    }),
   ]);
 
   const vaultRow = (vaultRes.rows ?? [])[0] ?? {};
@@ -69,7 +99,7 @@ export async function loadTally(ctx, purpose) {
         })
       : { rows: [] };
   const nameById = new Map((partiesRes.rows ?? []).map((p) => [p.party_id, p.display_name]));
-  const colorByParty = new Map(friends.map((f) => [f.party_id, f.avatar_color || '#5C677D']));
+  const colorByParty = new Map(friends.map((f) => [f.party_id, friendColor(f.party_id)]));
 
   const people = new Map();
   if (me)

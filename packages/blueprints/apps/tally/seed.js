@@ -22,9 +22,9 @@ export default async ({ input, log, ctx }) => {
   const me = vaultRow.rows?.[0]?.owner_party_id;
   if (!me) throw new Error('vault has no owner party');
 
-  const meera = await invoke('tally.add_friend', { name: 'Meera', avatar_color: 'coral' });
-  const arjun = await invoke('tally.add_friend', { name: 'Arjun', avatar_color: 'teal' });
-  const sana = await invoke('tally.add_friend', { name: 'Sana', avatar_color: 'violet' });
+  const meera = await invoke('tally.add_friend', { name: 'Meera' });
+  const arjun = await invoke('tally.add_friend', { name: 'Arjun' });
+  const sana = await invoke('tally.add_friend', { name: 'Sana' });
   const friends = [meera.party_id, arjun.party_id, sana.party_id];
 
   const group = await invoke('tally.create_group', {

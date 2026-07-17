@@ -1,6 +1,6 @@
 // List view: each row (#list root's mapped children), the head row
 // (#listHead root) and the truncation footer (#windowFoot root).
-import { avatarColor, circleName, daysSince, shortFmt, statusOf } from '../format.js';
+import { avatarColor, listName, daysSince, shortFmt, statusOf } from '../format.js';
 import { I } from '../icons.js';
 import { Icon, Snippet } from './Shared.jsx';
 
@@ -52,8 +52,8 @@ export function ListRow({
         <div className="d-row-role">{p.role || ''}</div>
         {search.trim() && p.snippet ? <Snippet snippet={p.snippet} className="d-row-role" /> : null}
       </div>
-      <span className="d-cell circle" onClick={() => onOpenDetails(p.party_id)}>
-        {circleName(data, p.circle_id ?? null)}
+      <span className="d-cell list" onClick={() => onOpenDetails(p.party_id)}>
+        {listName(data, p.list_id ?? null)}
       </span>
       <span className="d-cell last" onClick={() => onOpenDetails(p.party_id)}>
         {shortFmt(daysSince(p))}
@@ -95,7 +95,7 @@ export function ListHead({ rows, selectedIds, onToggleAll }) {
       </button>
       <span style={{ width: '34px' }}></span>
       <span className="d-col name">Name</span>
-      <span className="d-col circle">Circle</span>
+      <span className="d-col list">List</span>
       <span className="d-col last">Last spoke</span>
       <span className="d-col status">Status</span>
       <span className="d-col end"></span>

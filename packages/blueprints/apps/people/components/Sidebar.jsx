@@ -1,12 +1,12 @@
-// Sidebar region: the smart nav (all/reconnect/upcoming/starred), the circle
+// Sidebar region: the smart nav (all/reconnect/upcoming/starred), the list
 // list (with inline create/rename editors + delete), the journal/activity nav,
 // and the storage footprint — four separate React roots in app.jsx (#smartNav
-// / #circleList / #journalNav / #storage), so this file exports several
+// / #listList / #journalNav / #storage), so this file exports several
 // top-level components rather than one.
 import { useEffect, useRef } from '../react-core.min.js';
 import { armConfirm } from '../kit.js';
 import { I } from '../icons.js';
-import { circleColor, daysSince } from '../format.js';
+import { listColor, daysSince } from '../format.js';
 import { Icon } from './Shared.jsx';
 
 function NavItem({ icon, label, active, count, onClick }) {
@@ -60,9 +60,9 @@ export function SmartNav({ navKind, people, onSelectNav }) {
   );
 }
 
-// The new-circle editor row: an uncontrolled input, focused + selected once on
+// The new-list editor row: an uncontrolled input, focused + selected once on
 // mount — the React analogue of the old kit `h()` island's `setTimeout(focus)`.
-function CircleCreateEdit({ onCommit, onCancel }) {
+function ListCreateEdit({ onCommit, onCancel }) {
   const inputRef = useRef(null);
   useEffect(() => {
     inputRef.current?.focus();
@@ -76,8 +76,8 @@ function CircleCreateEdit({ onCommit, onCancel }) {
     <div className="d-folder-edit">
       <input
         type="text"
-        placeholder="Circle name…"
-        aria-label="New circle name"
+        placeholder="List name…"
+        aria-label="New list name"
         ref={inputRef}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
@@ -94,7 +94,7 @@ function CircleCreateEdit({ onCommit, onCancel }) {
   );
 }
 
-function CircleRenameEdit({ c, onCommit, onCancel }) {
+function ListRenameEdit({ c, onCommit, onCancel }) {
   const inputRef = useRef(null);
   useEffect(() => {
     const node = inputRef.current;
@@ -105,14 +105,14 @@ function CircleRenameEdit({ c, onCommit, onCancel }) {
   }, []);
   const commit = () => {
     const name = inputRef.current.value.trim();
-    if (name && name !== c.name) onCommit(c.circle_id, name);
+    if (name && name !== c.name) onCommit(c.list_id, name);
     else onCancel();
   };
   return (
     <div className="d-folder-edit">
       <input
         type="text"
-        aria-label="Circle name"
+        aria-label="List name"
         defaultValue={c.name}
         ref={inputRef}
         onKeyDown={(e) => {
@@ -130,31 +130,31 @@ function CircleRenameEdit({ c, onCommit, onCancel }) {
   );
 }
 
-function CircleRow({
+function ListNavRow({
   c,
   people,
   navKind,
-  navCircleId,
-  renamingCircleId,
+  navListId,
+  renamingListId,
   onSelectNav,
   onStartRename,
-  onDeleteCircle,
+  onDeleteList,
   onRenameCommit,
   onRenameCancel,
 }) {
-  if (renamingCircleId === c.circle_id)
-    return <CircleRenameEdit c={c} onCommit={onRenameCommit} onCancel={onRenameCancel} />;
-  const count = people.filter((p) => (p.circle_id ?? null) === c.circle_id).length;
-  const active = navKind === 'circle' && navCircleId === c.circle_id;
+  if (renamingListId === c.list_id)
+    return <ListRenameEdit c={c} onCommit={onRenameCommit} onCancel={onRenameCancel} />;
+  const count = people.filter((p) => (p.list_id ?? null) === c.list_id).length;
+  const active = navKind === 'list' && navListId === c.list_id;
   return (
     <div className="d-folder">
       <button
         type="button"
         className="d-nav-item"
         aria-current={String(active)}
-        onClick={() => onSelectNav({ kind: 'circle', circleId: c.circle_id })}
+        onClick={() => onSelectNav({ kind: 'list', listId: c.list_id })}
       >
-        <span className="d-nav-dot" style={{ background: circleColor(c.circle_id) }}></span>
+        <span className="d-nav-dot" style={{ background: listColor(c.list_id) }}></span>
         <span className="lbl">{c.name}</span>
         <span className="d-nav-count">{count || ''}</span>
       </button>
@@ -165,7 +165,7 @@ function CircleRow({
           aria-label={`Rename ${c.name}`}
           onClick={(e) => {
             e.stopPropagation();
-            onStartRename(c.circle_id);
+            onStartRename(c.list_id);
           }}
         >
           <Icon svg={I.rename} />
@@ -177,7 +177,7 @@ function CircleRow({
           onClick={(e) => {
             e.stopPropagation();
             if (!armConfirm(e.currentTarget, { armedLabel: '×?' })) return;
-            onDeleteCircle(c);
+            onDeleteList(c);
           }}
         >
           <Icon svg={I.del} />
@@ -187,16 +187,16 @@ function CircleRow({
   );
 }
 
-export function CircleList({
-  circles,
+export function ListList({
+  lists,
   people,
   navKind,
-  navCircleId,
-  renamingCircleId,
-  creatingCircle,
+  navListId,
+  renamingListId,
+  creatingList,
   onSelectNav,
   onStartRename,
-  onDeleteCircle,
+  onDeleteList,
   onRenameCommit,
   onRenameCancel,
   onCreateCommit,
@@ -204,24 +204,22 @@ export function CircleList({
 }) {
   return (
     <>
-      {circles.map((c) => (
-        <CircleRow
-          key={c.circle_id}
+      {lists.map((c) => (
+        <ListNavRow
+          key={c.list_id}
           c={c}
           people={people}
           navKind={navKind}
-          navCircleId={navCircleId}
-          renamingCircleId={renamingCircleId}
+          navListId={navListId}
+          renamingListId={renamingListId}
           onSelectNav={onSelectNav}
           onStartRename={onStartRename}
-          onDeleteCircle={onDeleteCircle}
+          onDeleteList={onDeleteList}
           onRenameCommit={onRenameCommit}
           onRenameCancel={onRenameCancel}
         />
       ))}
-      {creatingCircle ? (
-        <CircleCreateEdit onCommit={onCreateCommit} onCancel={onCreateCancel} />
-      ) : null}
+      {creatingList ? <ListCreateEdit onCommit={onCreateCommit} onCancel={onCreateCancel} /> : null}
     </>
   );
 }
@@ -245,7 +243,7 @@ export function JournalNav({ navKind, onSelectNav }) {
   );
 }
 
-export function Storage({ people, circles }) {
+export function Storage({ people, lists }) {
   const count = people.length;
   return (
     <>
@@ -254,8 +252,8 @@ export function Storage({ people, circles }) {
         <span className="val">{count}</span>
       </div>
       <div className="d-storage-label">
-        {count} {count === 1 ? 'person' : 'people'} across {circles.length} circle
-        {circles.length === 1 ? '' : 's'}
+        {count} {count === 1 ? 'person' : 'people'} across {lists.length} list
+        {lists.length === 1 ? '' : 's'}
       </div>
     </>
   );

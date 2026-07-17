@@ -10,7 +10,7 @@
  * @type {import('@centraid/app-engine').QueryHandler}
  */
 
-const CIRCLE_SCHEME_URI = 'https://centraid.dev/schemes/circles';
+const LIST_SCHEME_URI = 'https://centraid.dev/schemes/lists';
 const FLAGS_SCHEME_URI = 'https://centraid.dev/schemes/flags';
 
 export default async ({ input, ctx }) => {
@@ -68,10 +68,10 @@ export default async ({ input, ctx }) => {
 
     const profileByParty = new Map((profiles.rows ?? []).map((p) => [p.party_id, p]));
     const nameById = new Map((parties.rows ?? []).map((p) => [p.party_id, p.display_name]));
-    const circleScheme = (schemes.rows ?? []).find((s) => s.uri === CIRCLE_SCHEME_URI);
-    const circleConceptIds = new Set(
+    const listScheme = (schemes.rows ?? []).find((s) => s.uri === LIST_SCHEME_URI);
+    const listConceptIds = new Set(
       (concepts.rows ?? [])
-        .filter((c) => circleScheme && c.scheme_id === circleScheme.scheme_id)
+        .filter((c) => listScheme && c.scheme_id === listScheme.scheme_id)
         .map((c) => c.concept_id),
     );
     const flagsScheme = (schemes.rows ?? []).find((s) => s.uri === FLAGS_SCHEME_URI);
@@ -80,10 +80,10 @@ export default async ({ input, ctx }) => {
           (c) => c.scheme_id === flagsScheme.scheme_id && c.notation === 'starred',
         )?.concept_id ?? null)
       : null;
-    const circleByParty = new Map();
+    const listByParty = new Map();
     const starredParties = new Set();
     for (const t of tags.rows ?? []) {
-      if (circleConceptIds.has(t.concept_id)) circleByParty.set(t.target_id, t.concept_id);
+      if (listConceptIds.has(t.concept_id)) listByParty.set(t.target_id, t.concept_id);
       if (starredConceptId != null && t.concept_id === starredConceptId)
         starredParties.add(t.target_id);
     }
@@ -100,7 +100,7 @@ export default async ({ input, ctx }) => {
           cadence_days: pr.cadence_days,
           last_contacted_at: pr.last_contacted_at ?? null,
           created_at: pr.created_at,
-          circle_id: circleByParty.get(id) ?? null,
+          list_id: listByParty.get(id) ?? null,
           starred: starredParties.has(id),
           reminders: [],
           snippet: snippetByParty.get(id) ?? '',

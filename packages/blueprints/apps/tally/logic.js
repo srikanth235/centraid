@@ -13,7 +13,7 @@
 // tracks it (no React `useState` needed for these, no Lit `live()` needed
 // either: a full re-render already keeps the DOM in sync on every keystroke).
 import { debounce, outcomeMessage, toast } from './kit.js';
-import { FRIEND_COLORS, first, resolveSplits, toCents, todayKey } from './format.js';
+import { first, resolveSplits, toCents, todayKey } from './format.js';
 
 export function createLogic({ state, dash, render, renderModals, loadView, refreshAll }) {
   const $ = (id) => document.getElementById(id);
@@ -426,10 +426,9 @@ export function createLogic({ state, dash, render, renderModals, loadView, refre
 
   function openAddFriend() {
     closeAllModals();
-    state.addFriend = {
-      name: '',
-      color: FRIEND_COLORS[dash.friends.length % FRIEND_COLORS.length],
-    };
+    // No colour field: a friend's hue is derived from the party (issue #441 A3),
+    // not chosen and stored per Tally row.
+    state.addFriend = { name: '' };
     renderModals();
   }
   function closeAddFriend() {
@@ -444,7 +443,7 @@ export function createLogic({ state, dash, render, renderModals, loadView, refre
   async function saveAddFriend() {
     const af = state.addFriend;
     if (!af.name.trim()) return;
-    const outcome = await act('add-friend', { name: af.name.trim(), avatar_color: af.color });
+    const outcome = await act('add-friend', { name: af.name.trim() });
     if (!narrate(outcome)) return;
     toast('Friend added · receipted.');
     closeAddFriend();

@@ -158,13 +158,12 @@
     },
     {
       "name": "add-friend",
-      "description": "Add a friend through tally.add_friend — mints a canonical person party plus its avatar hue.",
+      "description": "Add a friend through tally.add_friend — mints a canonical person party. The avatar hue is derived from the party, not stored here.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "name": { "type": "string", "minLength": 1 },
-          "avatar_color": { "type": "string" }
+          "name": { "type": "string", "minLength": 1 }
         },
         "required": ["name"],
         "additionalProperties": false

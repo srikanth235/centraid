@@ -1,12 +1,12 @@
 /**
- * Rename a circle. Runs through people.rename_circle — consent-checked and receipted, risk low.
+ * Delete an empty list (move its people out first). Runs through people.delete_list — consent-checked and receipted, risk low.
  *
  * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {
     const outcome = await ctx.vault.invoke({
-      command: 'people.rename_circle',
+      command: 'people.delete_list',
       input: body ?? {},
       purpose: 'dpv:ServiceProvision',
     });

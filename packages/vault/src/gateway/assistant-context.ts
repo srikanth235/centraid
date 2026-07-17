@@ -9,7 +9,7 @@ import type { VaultDb } from '../db.js';
 import { RELATIONS_SCHEME_URI } from '../commands/links.js';
 import { FLAGS_SCHEME_URI, STARRED_NOTATION } from '../commands/flags.js';
 import { FOLDER_SCHEME_URI } from '../commands/documents.js';
-import { CIRCLE_SCHEME_URI } from '../commands/people.js';
+import { LIST_SCHEME_URI } from '../commands/people.js';
 import { SEARCHABLE } from '../schema/fts.js';
 import { VAULT_TABLES } from '../schema/tables.js';
 import { extPhysicalNames } from './ext.js';
@@ -19,7 +19,7 @@ const CONVENTIONS = `## Conventions
 - Primary keys are UUIDv7 strings — lexicographic order IS creation-time order. Timestamps are ISO-8601 strings; compare with plain string comparison or the date() family.
 - core.party is the universal person/org row (kind column). People, contacts, senders, attendees, clients all reference party_id.
 - core_link is the ONLY cross-entity relationship fabric: (from_type, from_id) → (to_type, to_id) with relation_concept_id → core_concept. A live link has valid_to IS NULL; ended links keep their row (temporal, never deleted). Employment ("works-for"), references, about — all links.
-- SKOS concepts (core_concept in core_concept_scheme) carry vocabulary: link relations, document folders, flags, people circles. core_tag pins a concept onto any entity (target_type, target_id, concept_id).
+- SKOS concepts (core_concept in core_concept_scheme) carry vocabulary: link relations, document folders, flags, people lists. core_tag pins a concept onto any entity (target_type, target_id, concept_id).
 - Starred = a core_tag whose concept has notation '${STARRED_NOTATION}' in the flags scheme (${FLAGS_SCHEME_URI}).
 - Canonical bytes/text live in core_content_item (content_uri is a data: URI). Use the SQL function vault_content_text(media_type, content_uri) to decode a body to text. Note/message bodies hang off *_content_id columns.
 - A document's identity is core_document, not core_content_item (issue #352): current_content_id names the HEAD content item; version history is a 'revises' core.link chain over content items (NEW content item -> OLD content item), walked backward. knowledge_note's body_content_id repoints the same way and records the same revises link on edit.
@@ -94,8 +94,8 @@ export function buildAssistantContext(db: VaultDb): string {
   if (flags.length > 0) vocab.push(`flags: ${flags.join(', ')}`);
   const folders = schemeLines(db, FOLDER_SCHEME_URI);
   if (folders.length > 0) vocab.push(`document folders: ${folders.join(', ')}`);
-  const circles = schemeLines(db, CIRCLE_SCHEME_URI);
-  if (circles.length > 0) vocab.push(`people circles: ${circles.join(', ')}`);
+  const lists = schemeLines(db, LIST_SCHEME_URI);
+  if (lists.length > 0) vocab.push(`people lists: ${lists.join(', ')}`);
   if (vocab.length > 0) sections.push(`## Concept vocabularies\n${vocab.join('\n')}`);
 
   const fts = Object.values(SEARCHABLE)

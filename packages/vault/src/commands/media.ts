@@ -16,6 +16,25 @@ import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 import { MAX_INLINE_DATA_URI_CHARS, mintContentFromDataUri } from '../blob/mint.js';
 import { validateDerivativeContribution } from '../blob/derivatives.js';
 import { assertInlineDataUriWithinBudget } from './inline-body-guard.js';
+import { setStarred, starredExistsSql } from './flags.js';
+
+// The starred flag rides the CANONICAL content item, not the asset row (issue
+// #274 kink 1 / #441 A2.1): favoriting a photo must surface it in every "what
+// I starred" query — Docs' Starred section, the agent, the briefing — exactly
+// as Docs/Locker/People/Social already do. media_media_asset.favorite stays as
+// the Photos replica read model but becomes a mirror with a single writer: the
+// tag is the truth, the column is a derived cache, and a postcondition asserts
+// the two agree after every toggle.
+const CONTENT_ITEM_TARGET_TYPE = 'core.content_item';
+
+/** Mirror the favorite bit onto the content item's starred flags tag. */
+function mirrorFavoriteToTag(ctx: HandlerCtx, assetId: string, favorite: number): void {
+  const row = ctx.db
+    .prepare('SELECT content_id FROM media_media_asset WHERE asset_id = ?')
+    .get(assetId) as { content_id: string } | undefined;
+  if (!row) return;
+  setStarred(ctx, CONTENT_ITEM_TARGET_TYPE, row.content_id, favorite === 1);
+}
 
 /** Soft-deleted bytes linger this long before the lifecycle sweep purges. */
 const PURGE_AFTER_DAYS = 30;
@@ -414,6 +433,19 @@ const UPDATE_ASSET: CommandDefinition = {
       op: 'eq',
       value: 1,
     },
+    {
+      // When this edit touched favorite, the column and the canonical starred
+      // tag must agree (issue #441 A2.1); a no-op when favorite was untouched.
+      name: 'favorite_mirrors_tag',
+      sql: `SELECT (CASE WHEN :favorite IS NULL THEN 1
+                    ELSE (SELECT count(*) FROM media_media_asset a
+                           WHERE a.asset_id = :asset_id
+                             AND (a.favorite = 1) = ${starredExistsSql(CONTENT_ITEM_TARGET_TYPE, 'a.content_id')})
+                    END) AS n`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   idempotency: 'idempotent',
   risk: 'low',
@@ -437,6 +469,7 @@ function updateAsset(ctx: HandlerCtx): Record<string, unknown> {
     ctx.db
       .prepare('UPDATE media_media_asset SET favorite = ? WHERE asset_id = ?')
       .run(input.favorite, input.asset_id);
+    mirrorFavoriteToTag(ctx, input.asset_id, input.favorite);
   }
   if (input.archived !== undefined) {
     ctx.db
@@ -721,6 +754,17 @@ const SET_FAVORITE: CommandDefinition = {
       op: 'eq',
       value: 1,
     },
+    {
+      // The column and the canonical starred tag must never disagree — the
+      // column is a mirror, the tag is the truth (issue #441 A2.1).
+      name: 'favorite_mirrors_tag',
+      sql: `SELECT count(*) AS n FROM media_media_asset a
+             WHERE a.asset_id = :asset_id
+               AND (a.favorite = 1) = ${starredExistsSql(CONTENT_ITEM_TARGET_TYPE, 'a.content_id')}`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   idempotency: 'idempotent',
   risk: 'low',
@@ -732,6 +776,7 @@ function setFavorite(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare('UPDATE media_media_asset SET favorite = ? WHERE asset_id = ?')
     .run(input.favorite, input.asset_id);
+  mirrorFavoriteToTag(ctx, input.asset_id, input.favorite);
   ctx.wrote('media.media_asset', input.asset_id);
   return { asset_id: input.asset_id, favorite: input.favorite };
 }

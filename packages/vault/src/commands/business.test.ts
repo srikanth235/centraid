@@ -221,13 +221,34 @@ test('create_draft_invoice bills unbilled entries, totals reconcile, entries get
     )
     .get(e1.entry_id, e2.entry_id) as { n: number };
   expect(billed.n).toBe(2);
-  // qty_scaled convention: hours × 100.
+  // qty_scaled convention: hours × 100, with the paired scale stored (issue
+  // #441 A3): qty_scale = 2, and amount_minor never negative.
   const lines = db.vault
     .prepare(
-      'SELECT qty_scaled FROM business_invoice_line WHERE invoice_id = ? ORDER BY qty_scaled',
+      'SELECT qty_scaled, qty_scale, amount_minor FROM business_invoice_line WHERE invoice_id = ? ORDER BY qty_scaled',
     )
-    .all(out.invoice_id) as { qty_scaled: number }[];
+    .all(out.invoice_id) as { qty_scaled: number; qty_scale: number; amount_minor: number }[];
   expect(lines.map((l) => l.qty_scaled)).toEqual([100, 250]);
+  expect(lines.map((l) => l.qty_scale)).toEqual([2, 2]);
+  expect(lines.every((l) => l.amount_minor >= 0)).toBe(true);
+});
+
+test('business_invoice_line carries a NOT NULL qty_scale and CHECKs its scale + amount (issue #441 A3)', () => {
+  const cols = db.vault.prepare("PRAGMA table_info('business_invoice_line')").all() as {
+    name: string;
+    notnull: number;
+  }[];
+  const qtyScale = cols.find((c) => c.name === 'qty_scale');
+  expect(qtyScale).toBeDefined();
+  expect(qtyScale?.notnull).toBe(1);
+
+  const ddl = (
+    db.vault
+      .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='business_invoice_line'")
+      .get() as { sql: string }
+  ).sql;
+  expect(ddl).toContain('CHECK (qty_scale BETWEEN 0 AND 9)');
+  expect(ddl).toContain('CHECK (amount_minor >= 0)');
 });
 
 test('double-billing a time entry is a receipted refusal that rolls everything back', () => {

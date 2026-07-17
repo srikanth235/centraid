@@ -1,7 +1,7 @@
 /**
  * One person's full profile, gathered from the vault: the party (name), the
  * people_profile (role, cadence, last-contacted, how-you-met, avatar hue), the
- * party's contact identifiers (phone/email), and every child record — circle,
+ * party's contact identifiers (phone/email), and every child record — list,
  * favorite, relationships, important dates, notes (annotations on the party),
  * tasks, gift ideas, open debts and the interaction history. Nothing is stored
  * by the app; it is all a read of the owner's vault.
@@ -9,7 +9,7 @@
  * @type {import('@centraid/app-engine').QueryHandler}
  */
 
-const CIRCLE_SCHEME_URI = 'https://centraid.dev/schemes/circles';
+const LIST_SCHEME_URI = 'https://centraid.dev/schemes/lists';
 const FLAGS_SCHEME_URI = 'https://centraid.dev/schemes/flags';
 
 export default async ({ input, ctx }) => {
@@ -42,12 +42,18 @@ export default async ({ input, ctx }) => {
         }),
         ctx.vault.read({
           entity: 'people.relationship',
-          where: [{ column: 'party_id', op: 'eq', value: partyId }],
+          where: [
+            { column: 'party_id', op: 'eq', value: partyId },
+            { column: 'deleted_at', op: 'is-null' },
+          ],
           purpose,
         }),
         ctx.vault.read({
           entity: 'people.important_date',
-          where: [{ column: 'party_id', op: 'eq', value: partyId }],
+          where: [
+            { column: 'party_id', op: 'eq', value: partyId },
+            { column: 'deleted_at', op: 'is-null' },
+          ],
           purpose,
         }),
         ctx.vault.read({
@@ -61,24 +67,36 @@ export default async ({ input, ctx }) => {
         }),
         ctx.vault.read({
           entity: 'people.task',
-          where: [{ column: 'party_id', op: 'eq', value: partyId }],
+          where: [
+            { column: 'party_id', op: 'eq', value: partyId },
+            { column: 'deleted_at', op: 'is-null' },
+          ],
           orderBy: { column: 'created_at', dir: 'desc' },
           purpose,
         }),
         ctx.vault.read({
           entity: 'people.gift',
-          where: [{ column: 'party_id', op: 'eq', value: partyId }],
+          where: [
+            { column: 'party_id', op: 'eq', value: partyId },
+            { column: 'deleted_at', op: 'is-null' },
+          ],
           orderBy: { column: 'created_at', dir: 'desc' },
           purpose,
         }),
         ctx.vault.read({
           entity: 'people.debt',
-          where: [{ column: 'party_id', op: 'eq', value: partyId }],
+          where: [
+            { column: 'party_id', op: 'eq', value: partyId },
+            { column: 'deleted_at', op: 'is-null' },
+          ],
           purpose,
         }),
         ctx.vault.read({
           entity: 'people.interaction',
-          where: [{ column: 'party_id', op: 'eq', value: partyId }],
+          where: [
+            { column: 'party_id', op: 'eq', value: partyId },
+            { column: 'deleted_at', op: 'is-null' },
+          ],
           orderBy: { column: 'occurred_at', dir: 'desc' },
           purpose,
         }),
@@ -94,10 +112,10 @@ export default async ({ input, ctx }) => {
         ctx.vault.read({ entity: 'core.concept_scheme', purpose }),
       ]);
 
-    const circleScheme = (schemes.rows ?? []).find((s) => s.uri === CIRCLE_SCHEME_URI);
-    const circleConceptIds = new Set(
+    const listScheme = (schemes.rows ?? []).find((s) => s.uri === LIST_SCHEME_URI);
+    const listConceptIds = new Set(
       (concepts.rows ?? [])
-        .filter((c) => circleScheme && c.scheme_id === circleScheme.scheme_id)
+        .filter((c) => listScheme && c.scheme_id === listScheme.scheme_id)
         .map((c) => c.concept_id),
     );
     const flagsScheme = (schemes.rows ?? []).find((s) => s.uri === FLAGS_SCHEME_URI);
@@ -106,10 +124,10 @@ export default async ({ input, ctx }) => {
           (c) => c.scheme_id === flagsScheme.scheme_id && c.notation === 'starred',
         )?.concept_id ?? null)
       : null;
-    let circleId = null;
+    let listId = null;
     let starred = false;
     for (const t of tags.rows ?? []) {
-      if (circleConceptIds.has(t.concept_id)) circleId = t.concept_id;
+      if (listConceptIds.has(t.concept_id)) listId = t.concept_id;
       if (starredConceptId != null && t.concept_id === starredConceptId) starred = true;
     }
 
@@ -128,7 +146,7 @@ export default async ({ input, ctx }) => {
       last_contacted_at: profile.last_contacted_at ?? null,
       created_at: profile.created_at,
       met: profile.met ?? '',
-      circle_id: circleId,
+      list_id: listId,
       starred,
       contact,
       relationships: (rels.rows ?? []).map((r) => ({

@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "id": "people",
   "name": "People",
-  "description": "Your circle, remembered — a personal CRM as a projection of the vault. Each person is a canonical core.party (kind='person') enriched by a 1:1 people_profile carrying the keep-in-touch facts: role, avatar hue, how-often-to-reach-out cadence, and when you last spoke. Circles are SKOS concepts in your circles scheme, filed one tag per person exactly like Docs folders; favorites are the one canonical flags-scheme star every surface shares; notes are annotations on the party. Logging a touch stamps last-contacted so they drop off Reconnect. Interactions, tasks, important dates (birthdays auto-remind), relationships, gift ideas, debts and an owner journal each hang off the party. Every write runs through a typed vault command — consent-checked and receipted, all risk low. No data of its own — revoke the grant and the app goes dark.",
+  "description": "Your circle, remembered — a personal CRM as a projection of the vault. Each person is a canonical core.party (kind='person') enriched by a 1:1 people_profile carrying the keep-in-touch facts: role, avatar hue, how-often-to-reach-out cadence, and when you last spoke. Lists are SKOS concepts in your lists scheme, filed one tag per person exactly like Docs folders; favorites are the one canonical flags-scheme star every surface shares; notes are annotations on the party. Logging a touch stamps last-contacted so they drop off Reconnect. Interactions, tasks, important dates (birthdays auto-remind), relationships, gift ideas, debts and an owner journal each hang off the party. Every write runs through a typed vault command — consent-checked and receipted, all risk low. No data of its own — revoke the grant and the app goes dark.",
   "version": "0.1.0",
   "iconKey": "Users",
   "colorKey": "rose",
@@ -22,7 +22,7 @@
   "actions": [
     {
       "name": "add-person",
-      "description": "Add a person to your circle through people.add_person — mints a canonical core.party plus its people_profile, optionally filed into a circle. Risk low.",
+      "description": "Add a person to your circle through people.add_person — mints a canonical core.party plus its people_profile, optionally filed into a list. Risk low.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -31,7 +31,7 @@
           "role": { "type": "string" },
           "avatar_color": { "type": "string" },
           "cadence_days": { "type": "integer", "minimum": 1 },
-          "circle_id": { "type": "string", "minLength": 1 }
+          "list_id": { "type": "string", "minLength": 1 }
         },
         "required": ["display_name", "cadence_days"],
         "additionalProperties": false
@@ -161,13 +161,13 @@
     },
     {
       "name": "move-person",
-      "description": "Move a person into a circle through people.move_person — omit circle_id to un-circle them.",
+      "description": "Move a person into a list through people.move_person — omit list_id to un-list them.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
           "party_id": { "type": "string", "minLength": 1 },
-          "circle_id": { "type": "string", "minLength": 1 }
+          "list_id": { "type": "string", "minLength": 1 }
         },
         "required": ["party_id"],
         "additionalProperties": false
@@ -407,8 +407,8 @@
       "writes": []
     },
     {
-      "name": "create-circle",
-      "description": "Create a circle (a SKOS concept in your circles scheme) through people.create_circle, like a Docs folder.",
+      "name": "create-list",
+      "description": "Create a list (a SKOS concept in your lists scheme) through people.create_list, like a Docs folder.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -427,16 +427,16 @@
       "writes": []
     },
     {
-      "name": "rename-circle",
-      "description": "Rename a circle through people.rename_circle.",
+      "name": "rename-list",
+      "description": "Rename a list through people.rename_list.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "circle_id": { "type": "string", "minLength": 1 },
+          "list_id": { "type": "string", "minLength": 1 },
           "name": { "type": "string", "minLength": 1 }
         },
-        "required": ["circle_id", "name"],
+        "required": ["list_id", "name"],
         "additionalProperties": false
       },
       "output": {
@@ -450,13 +450,13 @@
       "writes": []
     },
     {
-      "name": "delete-circle",
-      "description": "Delete an empty circle through people.delete_circle (move its people out first).",
+      "name": "delete-list",
+      "description": "Delete an empty list through people.delete_list (move its people out first).",
       "confirmation": "none",
       "input": {
         "type": "object",
-        "properties": { "circle_id": { "type": "string", "minLength": 1 } },
-        "required": ["circle_id"],
+        "properties": { "list_id": { "type": "string", "minLength": 1 } },
+        "required": ["list_id"],
         "additionalProperties": false
       },
       "output": {
@@ -497,7 +497,7 @@
   "queries": [
     {
       "name": "people",
-      "description": "The circle as a bounded recent window: people.profile rows (each a 1:1 enrichment of a core.party), newest first, decorated with name, circle, favorite star and active reminder dates, plus the circle list. `truncated` means older people exist beyond the window.",
+      "description": "The people window as a bounded recent view: people.profile rows (each a 1:1 enrichment of a core.party), newest first, decorated with name, list, favorite star and active reminder dates, plus the lists. `truncated` means older people exist beyond the window.",
       "input": {
         "type": "object",
         "properties": { "limit": { "type": "integer", "minimum": 20, "maximum": 2000 } },
@@ -507,7 +507,7 @@
         "type": "object",
         "properties": {
           "people": { "type": "array" },
-          "circles": { "type": "array" },
+          "lists": { "type": "array" },
           "truncated": { "type": "boolean" },
           "window": { "type": "integer" },
           "vaultDenied": { "type": "object" }
@@ -516,7 +516,7 @@
     },
     {
       "name": "person",
-      "description": "One person's full profile: name, role, cadence, last-contacted, how-you-met, circle, favorite, contact identifiers, relationships, important dates, notes, tasks, gift ideas, open debts and interaction history.",
+      "description": "One person's full profile: name, role, cadence, last-contacted, how-you-met, list, favorite, contact identifiers, relationships, important dates, notes, tasks, gift ideas, open debts and interaction history.",
       "input": {
         "type": "object",
         "properties": { "party_id": { "type": "string", "minLength": 1 } },

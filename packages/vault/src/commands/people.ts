@@ -1,4 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); People owns the whole keep-in-touch loop — persons, circles, interactions, tasks, dates, relationships, gifts, debts and the journal — so it is large by design.
+// governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); People owns the whole keep-in-touch loop — persons, lists, interactions, tasks, dates, relationships, gifts, debts and the journal — so it is large by design.
 // People commands (schema `people`): the personal-CRM write surface. A person
 // is a canonical core.party (kind='person') plus a 1:1 people_profile holding
 // the keep-in-touch facts — role, avatar hue, cadence, last-contacted, how you
@@ -7,11 +7,15 @@
 //
 // The gestures the ontology already models are reused, not re-invented (issue
 // #274): notes are knowledge.annotation on the party (annotate), favorites are
-// the flags-scheme star on the party (setStarred), and circles are SKOS
-// concepts in the owner's `circles` scheme with membership one core.tag per
-// person — the same mechanism Docs folders use. Logging an interaction is what
-// clears "overdue": it stamps profile.last_contacted_at = now. Every write is
-// a typed command — consent-checked, receipted, all risk low.
+// the flags-scheme star on the party (setStarred), and the owner files people
+// into `lists` — SKOS concepts in the owner's `lists` scheme with membership
+// one core.tag per person, the same mechanism Docs folders use. These were
+// named "circles" until issue #441 A2.4 found the name collided with
+// social_circle (the AUDIENCE mechanism shares and Tally groups target); the
+// classification is renamed to "lists" end-to-end, social_circle keeps its
+// "circle" name. Logging an interaction is what clears "overdue": it stamps
+// profile.last_contacted_at = now. Every write is a typed command —
+// consent-checked, receipted, all risk low.
 
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
@@ -20,9 +24,9 @@ import { annotate } from './annotations.js';
 import { setStarred, starredExistsSql } from './flags.js';
 
 // An https URI, not a urn: one — this literal interpolates into condition SQL,
-// where `:circles` would read as a named parameter (the issue-258 colon-literal
+// where `:lists` would read as a named parameter (the issue-258 colon-literal
 // trap); `https://` survives because no parameter name starts with a slash.
-export const CIRCLE_SCHEME_URI = 'https://centraid.dev/schemes/circles';
+export const LIST_SCHEME_URI = 'https://centraid.dev/schemes/lists';
 
 /** The acting party: the caller's own party, else the vault owner (apps). */
 function actorPartyId(ctx: HandlerCtx): string {
@@ -47,24 +51,24 @@ function baseCurrency(ctx: HandlerCtx): string {
   return row?.base_currency ?? 'USD';
 }
 
-/** The circles scheme, created on first use (mirrors the folders scheme). */
-function circleSchemeId(ctx: HandlerCtx): string {
+/** The lists scheme, created on first use (mirrors the folders scheme). */
+function listSchemeId(ctx: HandlerCtx): string {
   const existing = ctx.db
     .prepare('SELECT scheme_id FROM core_concept_scheme WHERE uri = ?')
-    .get(CIRCLE_SCHEME_URI) as { scheme_id: string } | undefined;
+    .get(LIST_SCHEME_URI) as { scheme_id: string } | undefined;
   if (existing) return existing.scheme_id;
   const schemeId = ctx.newId();
   ctx.db
     .prepare(
       `INSERT INTO core_concept_scheme (scheme_id, uri, title, publisher, version)
-       VALUES (?, ?, 'Circles', 'centraid', '1')`,
+       VALUES (?, ?, 'Lists', 'centraid', '1')`,
     )
-    .run(schemeId, CIRCLE_SCHEME_URI);
+    .run(schemeId, LIST_SCHEME_URI);
   return schemeId;
 }
 
-/** File a person into exactly one circle (or none): one circles-scheme tag. */
-function fileIntoCircle(ctx: HandlerCtx, partyId: string, circleConceptId: string | null): void {
+/** File a person into exactly one list (or none): one lists-scheme tag. */
+function fileIntoList(ctx: HandlerCtx, partyId: string, listConceptId: string | null): void {
   ctx.db
     .prepare(
       `DELETE FROM core_tag
@@ -73,15 +77,15 @@ function fileIntoCircle(ctx: HandlerCtx, partyId: string, circleConceptId: strin
                                JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
                               WHERE s.uri = ?)`,
     )
-    .run(partyId, CIRCLE_SCHEME_URI);
-  if (circleConceptId == null) return;
+    .run(partyId, LIST_SCHEME_URI);
+  if (listConceptId == null) return;
   const tagId = ctx.newId();
   ctx.db
     .prepare(
       `INSERT INTO core_tag (tag_id, target_type, target_id, concept_id, tagged_by_party_id, confidence, tagged_at)
        VALUES (?, 'core.party', ?, ?, ?, NULL, ?)`,
     )
-    .run(tagId, partyId, circleConceptId, actorPartyId(ctx), ctx.now);
+    .run(tagId, partyId, listConceptId, actorPartyId(ctx), ctx.now);
   ctx.wrote('core.tag', tagId);
 }
 
@@ -91,11 +95,11 @@ const PERSON_EXISTS_SQL = `
     JOIN core_party p ON p.party_id = pr.party_id
    WHERE pr.party_id = :party_id AND p.kind = 'person'`;
 
-// Condition fragment: :circle_id is a live concept in the circles scheme.
-const CIRCLE_EXISTS_SQL = `
+// Condition fragment: :list_id is a live concept in the lists scheme.
+const LIST_EXISTS_SQL = `
   EXISTS(SELECT 1 FROM core_concept c
            JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-          WHERE c.concept_id = :circle_id AND s.uri = '${CIRCLE_SCHEME_URI}')`;
+          WHERE c.concept_id = :list_id AND s.uri = '${LIST_SCHEME_URI}')`;
 
 // ---------- Person ----------
 
@@ -111,7 +115,7 @@ const ADD_PERSON: CommandDefinition = {
       role: { type: 'string' },
       avatar_color: { type: 'string' },
       cadence_days: { type: 'integer', minimum: 1 },
-      circle_id: { type: 'string', minLength: 1 },
+      list_id: { type: 'string', minLength: 1 },
     },
   },
   outputSchema: {
@@ -121,8 +125,8 @@ const ADD_PERSON: CommandDefinition = {
   },
   preconditions: [
     {
-      name: 'circle_exists_if_given',
-      sql: `SELECT CASE WHEN :circle_id IS NULL THEN 1 ELSE ${CIRCLE_EXISTS_SQL} END AS n`,
+      name: 'list_exists_if_given',
+      sql: `SELECT CASE WHEN :list_id IS NULL THEN 1 ELSE ${LIST_EXISTS_SQL} END AS n`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -148,7 +152,7 @@ function addPerson(ctx: HandlerCtx): Record<string, unknown> {
     role?: string;
     avatar_color?: string;
     cadence_days: number;
-    circle_id?: string;
+    list_id?: string;
   };
   const partyId = ctx.newId();
   ctx.db
@@ -173,9 +177,9 @@ function addPerson(ctx: HandlerCtx): Record<string, unknown> {
       ctx.now,
     );
   ctx.wrote('people.profile', profileId);
-  if (input.circle_id != null) fileIntoCircle(ctx, partyId, input.circle_id);
+  if (input.list_id != null) fileIntoList(ctx, partyId, input.list_id);
   ctx.cite({
-    claim: `"${input.display_name}" added to your circle`,
+    claim: `"${input.display_name}" added to People`,
     entityType: 'core.party',
     entityId: partyId,
   });
@@ -448,8 +452,8 @@ const MOVE_PERSON: CommandDefinition = {
     additionalProperties: false,
     properties: {
       party_id: { type: 'string', minLength: 1 },
-      // Omitted circle_id un-circles the person (back to no circle).
-      circle_id: { type: 'string', minLength: 1 },
+      // Omitted list_id un-lists the person (back to no list).
+      list_id: { type: 'string', minLength: 1 },
     },
   },
   outputSchema: {
@@ -460,8 +464,8 @@ const MOVE_PERSON: CommandDefinition = {
   preconditions: [
     { name: 'person_exists', sql: PERSON_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
     {
-      name: 'circle_exists_if_given',
-      sql: `SELECT CASE WHEN :circle_id IS NULL THEN 1 ELSE ${CIRCLE_EXISTS_SQL} END AS n`,
+      name: 'list_exists_if_given',
+      sql: `SELECT CASE WHEN :list_id IS NULL THEN 1 ELSE ${LIST_EXISTS_SQL} END AS n`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -469,23 +473,23 @@ const MOVE_PERSON: CommandDefinition = {
   ],
   postconditions: [
     {
-      // Filed exactly where asked (=1 when correct): un-circled ⇒ no
-      // circle-scheme tag; circled ⇒ the given circle, and only it.
-      name: 'circle_applied',
-      sql: `SELECT CASE WHEN :circle_id IS NULL
+      // Filed exactly where asked (=1 when correct): unfiled ⇒ no
+      // lists-scheme tag; filed ⇒ the given list, and only it.
+      name: 'list_applied',
+      sql: `SELECT CASE WHEN :list_id IS NULL
                THEN (SELECT count(*) FROM core_tag t
                        JOIN core_concept c ON c.concept_id = t.concept_id
                        JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
                       WHERE t.target_type = 'core.party' AND t.target_id = :party_id
-                        AND s.uri = '${CIRCLE_SCHEME_URI}') = 0
+                        AND s.uri = '${LIST_SCHEME_URI}') = 0
                ELSE ((SELECT count(*) FROM core_tag
                         WHERE target_type = 'core.party' AND target_id = :party_id
-                          AND concept_id = :circle_id) = 1
+                          AND concept_id = :list_id) = 1
                      AND (SELECT count(*) FROM core_tag t
                             JOIN core_concept c ON c.concept_id = t.concept_id
                             JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
                            WHERE t.target_type = 'core.party' AND t.target_id = :party_id
-                             AND s.uri = '${CIRCLE_SCHEME_URI}') = 1)
+                             AND s.uri = '${LIST_SCHEME_URI}') = 1)
              END AS n`,
       column: 'n',
       op: 'eq',
@@ -495,8 +499,8 @@ const MOVE_PERSON: CommandDefinition = {
   idempotency: 'idempotent',
   risk: 'low',
   handler: (ctx) => {
-    const input = ctx.input as { party_id: string; circle_id?: string };
-    fileIntoCircle(ctx, input.party_id, input.circle_id ?? null);
+    const input = ctx.input as { party_id: string; list_id?: string };
+    fileIntoList(ctx, input.party_id, input.list_id ?? null);
     ctx.wrote('core.party', input.party_id);
     return { party_id: input.party_id };
   },
@@ -648,6 +652,18 @@ const ADD_IMPORTANT_DATE: CommandDefinition = {
       op: 'eq',
       value: 1,
     },
+    {
+      // A birthday label must leave core_party.birth_date's MM-DD agreeing with
+      // this row (issue #441 A2.3); a no-op for non-birthday dates.
+      name: 'birthday_reconciled',
+      sql: `SELECT (CASE WHEN :label NOT LIKE '%birthday%' THEN 1
+                    ELSE EXISTS(SELECT 1 FROM core_party
+                                 WHERE party_id = :party_id
+                                   AND substr(birth_date, -5) = :month_day) END) AS n`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   idempotency: 'once',
   risk: 'low',
@@ -669,6 +685,41 @@ const ADD_IMPORTANT_DATE: CommandDefinition = {
       )
       .run(dateId, input.party_id, input.label, input.month_day, reminder, ctx.now);
     ctx.wrote('people.important_date', dateId);
+    // A birthday is one logical fact (issue #441 A2.3): write it through to the
+    // canonical party spine so core_party.birth_date and this row cannot
+    // disagree. Preserve a known birth year if one is already recorded;
+    // otherwise store the year-less ISO 8601 form (--MM-DD), since a birthday's
+    // year is genuinely unknown here. (update_party reconciles the reverse.)
+    if (isBirthday) {
+      const party = ctx.db
+        .prepare('SELECT birth_date FROM core_party WHERE party_id = ?')
+        .get(input.party_id) as { birth_date: string | null } | undefined;
+      const existing = party?.birth_date ?? null;
+      const yearPrefix =
+        existing && /^\d{4}-\d{2}-\d{2}$/.test(existing) ? existing.slice(0, 4) : '-';
+      const birthDate = `${yearPrefix}-${input.month_day}`;
+      if (birthDate !== existing) {
+        ctx.db
+          .prepare('UPDATE core_party SET birth_date = ?, updated_at = ? WHERE party_id = ?')
+          .run(birthDate, ctx.now, input.party_id);
+        ctx.wrote('core.party', input.party_id);
+      }
+      // Birthday is single-valued: keep any other "Birthday" rows for this
+      // party in step so no two surfaces ever disagree on the MM-DD.
+      const others = ctx.db
+        .prepare(
+          `SELECT date_id FROM people_important_date
+            WHERE party_id = ? AND label LIKE '%birthday%' AND date_id <> ? AND month_day <> ?
+              AND deleted_at IS NULL`,
+        )
+        .all(input.party_id, dateId, input.month_day) as { date_id: string }[];
+      for (const other of others) {
+        ctx.db
+          .prepare('UPDATE people_important_date SET month_day = ? WHERE date_id = ?')
+          .run(input.month_day, other.date_id);
+        ctx.wrote('people.important_date', other.date_id);
+      }
+    }
     return { date_id: dateId };
   },
 };
@@ -949,10 +1000,10 @@ const SETTLE_DEBT: CommandDefinition = {
   },
 };
 
-// ---------- Circles (SKOS concepts, like Docs folders) ----------
+// ---------- Lists (SKOS concepts, like Docs folders) ----------
 
-const CREATE_CIRCLE: CommandDefinition = {
-  name: 'people.create_circle',
+const CREATE_LIST: CommandDefinition = {
+  name: 'people.create_list',
   ownerSchema: 'people',
   inputSchema: {
     type: 'object',
@@ -962,16 +1013,16 @@ const CREATE_CIRCLE: CommandDefinition = {
   },
   outputSchema: {
     type: 'object',
-    required: ['circle_id'],
-    properties: { circle_id: { type: 'string' } },
+    required: ['list_id'],
+    properties: { list_id: { type: 'string' } },
   },
   preconditions: [
     {
-      // Circles keep distinct names — a receipted refusal beats two "Work"s.
+      // Lists keep distinct names — a receipted refusal beats two "Work"s.
       name: 'name_unused',
       sql: `SELECT count(*) AS n FROM core_concept c
               JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-             WHERE s.uri = '${CIRCLE_SCHEME_URI}' AND c.pref_label = :name`,
+             WHERE s.uri = '${LIST_SCHEME_URI}' AND c.pref_label = :name`,
       column: 'n',
       op: 'eq',
       value: 0,
@@ -979,8 +1030,8 @@ const CREATE_CIRCLE: CommandDefinition = {
   ],
   postconditions: [
     {
-      name: 'circle_created',
-      sql: 'SELECT count(*) AS n FROM core_concept WHERE concept_id = :circle_id AND pref_label = :name',
+      name: 'list_created',
+      sql: 'SELECT count(*) AS n FROM core_concept WHERE concept_id = :list_id AND pref_label = :name',
       column: 'n',
       op: 'eq',
       value: 1,
@@ -990,42 +1041,42 @@ const CREATE_CIRCLE: CommandDefinition = {
   risk: 'low',
   handler: (ctx) => {
     const input = ctx.input as { name: string };
-    const schemeId = circleSchemeId(ctx);
-    const circleId = ctx.newId();
+    const schemeId = listSchemeId(ctx);
+    const listId = ctx.newId();
     ctx.db
       .prepare(
         `INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition)
          VALUES (?, ?, ?, ?, NULL, NULL, NULL)`,
       )
-      .run(circleId, schemeId, circleId, input.name);
-    ctx.wrote('core.concept', circleId);
-    return { circle_id: circleId };
+      .run(listId, schemeId, listId, input.name);
+    ctx.wrote('core.concept', listId);
+    return { list_id: listId };
   },
 };
 
-const RENAME_CIRCLE: CommandDefinition = {
-  name: 'people.rename_circle',
+const RENAME_LIST: CommandDefinition = {
+  name: 'people.rename_list',
   ownerSchema: 'people',
   inputSchema: {
     type: 'object',
-    required: ['circle_id', 'name'],
+    required: ['list_id', 'name'],
     additionalProperties: false,
     properties: {
-      circle_id: { type: 'string', minLength: 1 },
+      list_id: { type: 'string', minLength: 1 },
       name: { type: 'string', minLength: 1 },
     },
   },
   outputSchema: {
     type: 'object',
-    required: ['circle_id'],
-    properties: { circle_id: { type: 'string' } },
+    required: ['list_id'],
+    properties: { list_id: { type: 'string' } },
   },
   preconditions: [
     {
-      name: 'circle_exists',
+      name: 'list_exists',
       sql: `SELECT count(*) AS n FROM core_concept c
               JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-             WHERE c.concept_id = :circle_id AND s.uri = '${CIRCLE_SCHEME_URI}'`,
+             WHERE c.concept_id = :list_id AND s.uri = '${LIST_SCHEME_URI}'`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -1034,7 +1085,7 @@ const RENAME_CIRCLE: CommandDefinition = {
   postconditions: [
     {
       name: 'name_applied',
-      sql: 'SELECT count(*) AS n FROM core_concept WHERE concept_id = :circle_id AND pref_label = :name',
+      sql: 'SELECT count(*) AS n FROM core_concept WHERE concept_id = :list_id AND pref_label = :name',
       column: 'n',
       op: 'eq',
       value: 1,
@@ -1043,54 +1094,54 @@ const RENAME_CIRCLE: CommandDefinition = {
   idempotency: 'idempotent',
   risk: 'low',
   handler: (ctx) => {
-    const input = ctx.input as { circle_id: string; name: string };
+    const input = ctx.input as { list_id: string; name: string };
     ctx.db
       .prepare('UPDATE core_concept SET pref_label = ? WHERE concept_id = ?')
-      .run(input.name, input.circle_id);
-    ctx.wrote('core.concept', input.circle_id);
-    return { circle_id: input.circle_id };
+      .run(input.name, input.list_id);
+    ctx.wrote('core.concept', input.list_id);
+    return { list_id: input.list_id };
   },
 };
 
-const DELETE_CIRCLE: CommandDefinition = {
-  name: 'people.delete_circle',
+const DELETE_LIST: CommandDefinition = {
+  name: 'people.delete_list',
   ownerSchema: 'people',
   inputSchema: {
     type: 'object',
-    required: ['circle_id'],
+    required: ['list_id'],
     additionalProperties: false,
-    properties: { circle_id: { type: 'string', minLength: 1 } },
+    properties: { list_id: { type: 'string', minLength: 1 } },
   },
   outputSchema: {
     type: 'object',
-    required: ['circle_id'],
-    properties: { circle_id: { type: 'string' } },
+    required: ['list_id'],
+    properties: { list_id: { type: 'string' } },
   },
   preconditions: [
     {
-      name: 'circle_exists',
+      name: 'list_exists',
       sql: `SELECT count(*) AS n FROM core_concept c
               JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-             WHERE c.concept_id = :circle_id AND s.uri = '${CIRCLE_SCHEME_URI}'`,
+             WHERE c.concept_id = :list_id AND s.uri = '${LIST_SCHEME_URI}'`,
       column: 'n',
       op: 'eq',
       value: 1,
     },
     {
-      // Only empty circles delete — move the people out first.
-      name: 'circle_is_empty',
+      // Only empty lists delete — move the people out first.
+      name: 'list_is_empty',
       sql: `SELECT EXISTS(SELECT 1 FROM core_tag
-                           WHERE target_type = 'core.party' AND concept_id = :circle_id) AS n`,
+                           WHERE target_type = 'core.party' AND concept_id = :list_id) AS n`,
       column: 'n',
       op: 'eq',
       value: 0,
-      message: 'This circle still has people in it — move them out first.',
+      message: 'This list still has people in it — move them out first.',
     },
   ],
   postconditions: [
     {
-      name: 'circle_removed',
-      sql: 'SELECT count(*) AS n FROM core_concept WHERE concept_id = :circle_id',
+      name: 'list_removed',
+      sql: 'SELECT count(*) AS n FROM core_concept WHERE concept_id = :list_id',
       column: 'n',
       op: 'eq',
       value: 0,
@@ -1099,10 +1150,10 @@ const DELETE_CIRCLE: CommandDefinition = {
   idempotency: 'idempotent',
   risk: 'low',
   handler: (ctx) => {
-    const input = ctx.input as { circle_id: string };
-    ctx.db.prepare('DELETE FROM core_concept WHERE concept_id = ?').run(input.circle_id);
-    ctx.wrote('core.concept', input.circle_id);
-    return { circle_id: input.circle_id };
+    const input = ctx.input as { list_id: string };
+    ctx.db.prepare('DELETE FROM core_concept WHERE concept_id = ?').run(input.list_id);
+    ctx.wrote('core.concept', input.list_id);
+    return { list_id: input.list_id };
   },
 };
 
@@ -1178,8 +1229,8 @@ export function registerPeopleCommands(gateway: Gateway): void {
   gateway.registerCommand(TOGGLE_GIFT);
   gateway.registerCommand(ADD_DEBT);
   gateway.registerCommand(SETTLE_DEBT);
-  gateway.registerCommand(CREATE_CIRCLE);
-  gateway.registerCommand(RENAME_CIRCLE);
-  gateway.registerCommand(DELETE_CIRCLE);
+  gateway.registerCommand(CREATE_LIST);
+  gateway.registerCommand(RENAME_LIST);
+  gateway.registerCommand(DELETE_LIST);
   gateway.registerCommand(ADD_JOURNAL_ENTRY);
 }

@@ -12,7 +12,7 @@
  * @type {import('@centraid/app-engine').QueryHandler}
  */
 
-const CIRCLE_SCHEME_URI = 'https://centraid.dev/schemes/circles';
+const LIST_SCHEME_URI = 'https://centraid.dev/schemes/lists';
 const FLAGS_SCHEME_URI = 'https://centraid.dev/schemes/flags';
 const DAY = 86400000;
 
@@ -80,11 +80,15 @@ export default async ({ ctx }) => {
       }),
       ctx.vault.read({
         entity: 'people.important_date',
-        where: [{ column: 'party_id', op: 'in', value: partyIds }],
+        where: [
+          { column: 'party_id', op: 'in', value: partyIds },
+          { column: 'deleted_at', op: 'is-null' },
+        ],
         purpose,
       }),
       ctx.vault.read({
         entity: 'people.interaction',
+        where: [{ column: 'deleted_at', op: 'is-null' }],
         orderBy: { column: 'occurred_at', dir: 'desc' },
         limit: 30,
         purpose,
