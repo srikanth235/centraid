@@ -32,12 +32,16 @@ import styles from './AutomationEditorScreen.module.css';
 // this screen always showed.
 
 type TriggerKind = 'cron' | 'webhook' | 'condition' | 'data';
+/** One row of a condition trigger's `where` builder. `value` is the raw text
+ *  the user typed; it is coerced per-op into the manifest clause shape at save
+ *  time (see `whereClauseOf`). */
+type WhereRowDraft = { column: string; op: ConditionOp; value: string };
 type TriggerDraft = {
   key: string;
   kind: TriggerKind;
   expr: string;
   entity: string;
-  where: string;
+  whereRows: WhereRowDraft[];
   every: string;
   entities: string;
 };
@@ -50,6 +54,82 @@ const TABS: readonly { id: TabId; label: string }[] = [
   { id: 'plan', label: 'Plan' },
 ];
 
+// Mirrors packages/automation/src/manifest/manifest.ts `CONDITION_OPS` — kept
+// in sync by hand since the renderer bundle doesn't pull in the automation
+// runtime package (main-process-only dependency today), same as
+// BuilderAutomationTriggers.tsx.
+const CONDITION_OPS = [
+  'eq',
+  'ne',
+  'lt',
+  'lte',
+  'gt',
+  'gte',
+  'in',
+  'is-null',
+  'not-null',
+  'within-days',
+  'within-next-days',
+] as const;
+type ConditionOp = (typeof CONDITION_OPS)[number];
+/** Add-trigger button labels, keyed by kind. */
+const TRIGGER_ADD_LABEL: Record<TriggerKind, string> = {
+  cron: 'Schedule',
+  webhook: 'Webhook',
+  data: 'Data change',
+  condition: 'Condition',
+};
+/** Ops that take no `value` (unary null checks). */
+const NO_VALUE_OPS: ReadonlySet<string> = new Set(['is-null', 'not-null']);
+/** Ops whose value is a comma-separated list. */
+const LIST_OPS: ReadonlySet<string> = new Set(['in']);
+/** Ops whose value is a bare day count (a number). */
+const NUMERIC_OPS: ReadonlySet<string> = new Set(['within-days', 'within-next-days']);
+
+/** Turn a clean numeric string into a number; leave everything else a string
+ *  (so `eq status open` stays `"open"`, `eq amount 100` becomes `100`). */
+function coerceScalar(raw: string): string | number {
+  const t = raw.trim();
+  return t !== '' && /^-?\d+(?:\.\d+)?$/.test(t) ? Number(t) : t;
+}
+
+const DATALIST_ID = 'au-entity-types';
+
+/** A DTO where clause (value is `unknown` on the wire) → an editable row. */
+function whereRowOf(raw: unknown): WhereRowDraft {
+  const c = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const op = (CONDITION_OPS as readonly string[]).includes(c.op as string)
+    ? (c.op as ConditionOp)
+    : 'eq';
+  let value = '';
+  if (!NO_VALUE_OPS.has(op) && c.value !== undefined && c.value !== null) {
+    value = Array.isArray(c.value) ? c.value.map(String).join(', ') : String(c.value);
+  }
+  return { column: typeof c.column === 'string' ? c.column : '', op, value };
+}
+
+/** An editable row → a manifest where clause, coerced per-op. Drops the row
+ *  (returns null) when it has no column. */
+function whereClauseOf(row: WhereRowDraft): { column: string; op: string; value?: unknown } | null {
+  const column = row.column.trim();
+  if (!column) return null;
+  if (NO_VALUE_OPS.has(row.op)) return { column, op: row.op };
+  if (LIST_OPS.has(row.op)) {
+    const list = row.value
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map(coerceScalar);
+    return { column, op: row.op, value: list };
+  }
+  if (NUMERIC_OPS.has(row.op)) {
+    const t = row.value.trim();
+    const n = Number(t);
+    return { column, op: row.op, value: t !== '' && Number.isFinite(n) ? n : t };
+  }
+  return { column, op: row.op, value: coerceScalar(row.value) };
+}
+
 let triggerKey = 0;
 function draftTrigger(kind: TriggerKind): TriggerDraft {
   return {
@@ -57,7 +137,7 @@ function draftTrigger(kind: TriggerKind): TriggerDraft {
     kind,
     expr: kind === 'cron' ? '0 9 * * *' : '',
     entity: '',
-    where: '',
+    whereRows: [],
     every: '',
     entities: '',
   };
@@ -69,7 +149,7 @@ function loadedTrigger(t: AutomationEditorData['triggers'][number]): TriggerDraf
   if (t.kind === 'condition') {
     draft.entity = t.entity;
     draft.every = t.every ?? '';
-    draft.where = t.where === undefined ? '' : JSON.stringify(t.where);
+    draft.whereRows = Array.isArray(t.where) ? t.where.map(whereRowOf) : [];
   }
   if (t.kind === 'data') {
     draft.entities = t.entities.join(', ');
@@ -393,6 +473,7 @@ export default function AutomationEditorScreen({
   onSave,
   onCompile,
   onSearchEntities,
+  loadEntityTypes,
   onReadSource,
   onRunNow,
   onToggleEnabled,
@@ -406,7 +487,7 @@ export default function AutomationEditorScreen({
   const [name, setName] = useState('');
   const [instructions, setInstructions] = useState('');
   const [triggers, setTriggers] = useState<TriggerDraft[]>([]);
-  const [whereError, setWhereError] = useState<string | null>(null);
+  const [entityTypes, setEntityTypes] = useState<string[]>([]);
   const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
   const [mentionHits, setMentionHits] = useState<
     Array<{ type: string; id: string; title: string | null; subtitle: string | null }>
@@ -442,7 +523,6 @@ export default function AutomationEditorScreen({
     setInstructions(d.instructions);
     baselineInstructionsRef.current = d.instructions;
     setTriggers(d.triggers.map(loadedTrigger));
-    setWhereError(null);
   }, []);
 
   const reload = useCallback(async () => {
@@ -469,6 +549,28 @@ export default function AutomationEditorScreen({
     didInitialLoad.current = true;
     void reload();
   }, [reload]);
+
+  // Lazily fetch the canonical entity-type list the first time a data/condition
+  // trigger is present — feeds the `<datalist>` autocomplete on their entity
+  // inputs. The route caches the underlying gateway read, so re-fetches are
+  // cheap even if this fires again after a reload.
+  const needsEntityTypes = triggers.some((t) => t.kind === 'data' || t.kind === 'condition');
+  const entityTypesLoaded = useRef(false);
+  useEffect(() => {
+    if (!needsEntityTypes || entityTypesLoaded.current || !loadEntityTypes) return;
+    entityTypesLoaded.current = true;
+    let active = true;
+    void loadEntityTypes()
+      .then((types) => {
+        if (active) setEntityTypes(types);
+      })
+      .catch(() => {
+        if (active) entityTypesLoaded.current = false;
+      });
+    return () => {
+      active = false;
+    };
+  }, [needsEntityTypes, loadEntityTypes]);
 
   useEffect(() => {
     if (instructionsRef.current) autogrow(instructionsRef.current);
@@ -533,7 +635,6 @@ export default function AutomationEditorScreen({
   const glyph = glyphForId(identityId);
 
   function buildTriggers(): AuEditorTriggerInput[] {
-    setWhereError(null);
     return triggers.flatMap((trigger): AuEditorTriggerInput[] => {
       if (trigger.kind === 'cron') {
         return trigger.expr.trim() ? [{ expr: trigger.expr.trim(), kind: 'cron' }] : [];
@@ -544,6 +645,7 @@ export default function AutomationEditorScreen({
           .split(',')
           .map((e) => e.trim())
           .filter(Boolean);
+        // Skip an empty data trigger — same spirit as the cron empty-expr skip.
         return entities.length
           ? [
               {
@@ -554,24 +656,17 @@ export default function AutomationEditorScreen({
             ]
           : [];
       }
+      // condition — skip when no entity is named.
       if (!trigger.entity.trim()) return [];
-      let where: unknown = undefined;
-      if (trigger.where.trim()) {
-        try {
-          where = JSON.parse(trigger.where);
-          if (!Array.isArray(where)) throw new Error('must be a JSON array');
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'invalid JSON';
-          setWhereError(`Condition filters ${message}.`);
-          throw new Error(`Condition filters ${message}.`, { cause: error });
-        }
-      }
+      const where = trigger.whereRows
+        .map(whereClauseOf)
+        .filter((c): c is NonNullable<typeof c> => c !== null);
       return [
         {
           entity: trigger.entity.trim(),
           kind: 'condition',
           ...(trigger.every.trim() ? { every: trigger.every.trim() } : {}),
-          ...(where !== undefined ? { where } : {}),
+          ...(where.length ? { where } : {}),
         },
       ];
     });
@@ -750,12 +845,12 @@ export default function AutomationEditorScreen({
           <div>
             <h2 className={styles.sectionTitle}>Triggers</h2>
             <p className={styles.sectionHint}>
-              Add a Schedule or Webhook. Data-change and condition triggers are written by the
-              compiler from your instructions.
+              Run this on a schedule, an inbound webhook, a vault data change, or when rows start
+              matching a condition.
             </p>
           </div>
           <div className={styles.addTrigger} aria-label="Add trigger">
-            {(['cron', 'webhook'] as const).map((kind) => (
+            {(['cron', 'webhook', 'data', 'condition'] as const).map((kind) => (
               <button
                 key={kind}
                 type="button"
@@ -764,7 +859,7 @@ export default function AutomationEditorScreen({
                 }
                 onClick={() => setTriggers((current) => [...current, draftTrigger(kind)])}
               >
-                + {kind === 'cron' ? 'Schedule' : 'Webhook'}
+                + {TRIGGER_ADD_LABEL[kind]}
               </button>
             ))}
           </div>
@@ -782,41 +877,36 @@ export default function AutomationEditorScreen({
               trigger.kind === 'cron' && trigger.expr.trim()
                 ? cronNextRuns(trigger.expr.trim(), 3).map(relativeRunLabel)
                 : [];
-            // Condition/data triggers are compiler output — the owner declares
-            // intent in Instructions, not here — so they render read-only
-            // (still preserved on save; see buildTriggers).
-            const derived = trigger.kind === 'condition' || trigger.kind === 'data';
+            // The `every` gate on a data/condition trigger is a cron too, so it
+            // gets the same next-runs preview the Schedule trigger shows.
+            const everyPreview =
+              (trigger.kind === 'data' || trigger.kind === 'condition') && trigger.every.trim()
+                ? cronNextRuns(trigger.every.trim(), 3).map(relativeRunLabel)
+                : [];
+            const webhookTakenElsewhere = triggers.some(
+              (item) => item.kind === 'webhook' && item.key !== trigger.key,
+            );
             return (
               <div key={trigger.key} className={styles.triggerRow} data-trigger-kind={trigger.kind}>
                 <div className={styles.triggerRowHead}>
                   <span className={styles.triggerIndex}>{String(index + 1).padStart(2, '0')}</span>
-                  {derived ? (
-                    <span className={styles.triggerDerivedLabel}>
-                      {trigger.kind === 'data' ? 'Data change' : 'Condition'}
-                      <span className={styles.triggerDerivedTag}>from instructions</span>
-                    </span>
-                  ) : (
-                    <select
-                      className={styles.triggerSelect}
-                      value={trigger.kind}
-                      onChange={(event) => {
-                        const kind = event.target.value as TriggerKind;
-                        if (kind === 'webhook' && triggers.some((item) => item.kind === 'webhook'))
-                          return;
-                        update({ ...draftTrigger(kind), key: trigger.key });
-                      }}
-                    >
-                      <option value="cron">Schedule</option>
-                      <option
-                        value="webhook"
-                        disabled={triggers.some(
-                          (item) => item.kind === 'webhook' && item.key !== trigger.key,
-                        )}
-                      >
-                        Webhook
-                      </option>
-                    </select>
-                  )}
+                  <select
+                    className={styles.triggerSelect}
+                    value={trigger.kind}
+                    onChange={(event) => {
+                      const kind = event.target.value as TriggerKind;
+                      if (kind === 'webhook' && triggers.some((item) => item.kind === 'webhook'))
+                        return;
+                      update({ ...draftTrigger(kind), key: trigger.key });
+                    }}
+                  >
+                    <option value="cron">Schedule</option>
+                    <option value="webhook" disabled={webhookTakenElsewhere}>
+                      Webhook
+                    </option>
+                    <option value="data">Data change</option>
+                    <option value="condition">Condition</option>
+                  </select>
                   <IconButton
                     icon="Trash"
                     ariaLabel={`Remove trigger ${index + 1}`}
@@ -849,27 +939,166 @@ export default function AutomationEditorScreen({
                     ) : null}
                   </div>
                 ) : null}
-                {derived ? (
+                {trigger.kind === 'data' ? (
                   <div className={styles.trigFields}>
-                    <p className={styles.trigHint}>
-                      {trigger.kind === 'data' ? (
-                        <>
-                          Watches <code>{trigger.entities || 'vault data'}</code> for changes.
-                        </>
-                      ) : (
-                        <>
-                          Watches <code>{trigger.entity || 'vault data'}</code>
-                          {trigger.where ? ' matching a filter' : ''}.
-                        </>
-                      )}
-                      {trigger.every ? (
-                        <>
-                          {' '}
-                          Checked <code>{trigger.every}</code>.
-                        </>
-                      ) : null}{' '}
-                      Edit your instructions and recompile to change it.
-                    </p>
+                    <label className={styles.subField}>
+                      <span className={styles.microLabel}>Entities</span>
+                      <input
+                        className={cx(styles.input, styles.mono)}
+                        value={trigger.entities}
+                        list={DATALIST_ID}
+                        onChange={(event) => update({ entities: event.target.value })}
+                        placeholder="core.transaction, billing.invoice"
+                        spellCheck={false}
+                      />
+                      <span className={styles.trigHint}>
+                        Comma-separated <code>schema.table</code> names to watch for changes.
+                      </span>
+                    </label>
+                    <label className={styles.subField}>
+                      <span className={styles.microLabel}>Poll every (optional)</span>
+                      <input
+                        className={cx(styles.input, styles.mono)}
+                        value={trigger.every}
+                        onChange={(event) => update({ every: event.target.value })}
+                        placeholder="* * * * *"
+                        spellCheck={false}
+                      />
+                      <span className={styles.trigHint}>
+                        5-field cron gate. Defaults to every minute.
+                      </span>
+                    </label>
+                    {everyPreview.length > 0 ? (
+                      <div className={styles.cronPreview}>
+                        <span className={cx(styles.microLabel, styles.cronPreviewLbl)}>Next</span>
+                        {everyPreview.map((label) => (
+                          <span key={label} className={styles.cronPreviewPill}>
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+                {trigger.kind === 'condition' ? (
+                  <div className={styles.trigFields}>
+                    <label className={styles.subField}>
+                      <span className={styles.microLabel}>Entity</span>
+                      <input
+                        className={cx(styles.input, styles.mono)}
+                        value={trigger.entity}
+                        list={DATALIST_ID}
+                        onChange={(event) => update({ entity: event.target.value })}
+                        placeholder="business.invoice"
+                        spellCheck={false}
+                      />
+                    </label>
+                    <div className={styles.subField}>
+                      <span className={styles.microLabel}>Where (optional)</span>
+                      <div className={styles.whereBuilder}>
+                        {trigger.whereRows.map((row, rowIndex) => {
+                          const setRow = (patch: Partial<WhereRowDraft>): void =>
+                            update({
+                              whereRows: trigger.whereRows.map((r, i) =>
+                                i === rowIndex ? { ...r, ...patch } : r,
+                              ),
+                            });
+                          const takesValue = !NO_VALUE_OPS.has(row.op);
+                          return (
+                            <div key={rowIndex} className={styles.whereRow}>
+                              <input
+                                className={cx(styles.input, styles.mono, styles.whereField)}
+                                value={row.column}
+                                onChange={(event) => setRow({ column: event.target.value })}
+                                placeholder="column"
+                                aria-label="Filter column"
+                                spellCheck={false}
+                              />
+                              <select
+                                className={styles.whereSelect}
+                                value={row.op}
+                                aria-label="Filter operator"
+                                onChange={(event) =>
+                                  setRow({ op: event.target.value as ConditionOp })
+                                }
+                              >
+                                {CONDITION_OPS.map((op) => (
+                                  <option key={op} value={op}>
+                                    {op}
+                                  </option>
+                                ))}
+                              </select>
+                              {takesValue ? (
+                                <input
+                                  className={cx(styles.input, styles.mono, styles.whereField)}
+                                  value={row.value}
+                                  onChange={(event) => setRow({ value: event.target.value })}
+                                  placeholder={
+                                    LIST_OPS.has(row.op)
+                                      ? 'a, b, c'
+                                      : NUMERIC_OPS.has(row.op)
+                                        ? 'days'
+                                        : 'value'
+                                  }
+                                  inputMode={NUMERIC_OPS.has(row.op) ? 'numeric' : undefined}
+                                  aria-label="Filter value"
+                                  spellCheck={false}
+                                />
+                              ) : (
+                                <span className={styles.whereValueOff}>no value</span>
+                              )}
+                              <IconButton
+                                icon="Trash"
+                                ariaLabel={`Remove filter ${rowIndex + 1}`}
+                                title="Remove filter"
+                                onClick={() =>
+                                  update({
+                                    whereRows: trigger.whereRows.filter((_, i) => i !== rowIndex),
+                                  })
+                                }
+                              />
+                            </div>
+                          );
+                        })}
+                        <button
+                          type="button"
+                          className={styles.whereAddBtn}
+                          onClick={() =>
+                            update({
+                              whereRows: [
+                                ...trigger.whereRows,
+                                { column: '', op: 'eq', value: '' },
+                              ],
+                            })
+                          }
+                        >
+                          + Add filter
+                        </button>
+                      </div>
+                    </div>
+                    <label className={styles.subField}>
+                      <span className={styles.microLabel}>Evaluate every (optional)</span>
+                      <input
+                        className={cx(styles.input, styles.mono)}
+                        value={trigger.every}
+                        onChange={(event) => update({ every: event.target.value })}
+                        placeholder="*/5 * * * *"
+                        spellCheck={false}
+                      />
+                      <span className={styles.trigHint}>
+                        5-field cron gate. Defaults to every 5 minutes.
+                      </span>
+                    </label>
+                    {everyPreview.length > 0 ? (
+                      <div className={styles.cronPreview}>
+                        <span className={cx(styles.microLabel, styles.cronPreviewLbl)}>Next</span>
+                        {everyPreview.map((label) => (
+                          <span key={label} className={styles.cronPreviewPill}>
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
                 {trigger.kind === 'webhook' ? (
@@ -904,10 +1133,12 @@ export default function AutomationEditorScreen({
             );
           })}
         </div>
-        {whereError ? (
-          <p className={styles.fieldError} role="alert">
-            {whereError}
-          </p>
+        {needsEntityTypes && entityTypes.length > 0 ? (
+          <datalist id={DATALIST_ID}>
+            {entityTypes.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
         ) : null}
       </section>
 

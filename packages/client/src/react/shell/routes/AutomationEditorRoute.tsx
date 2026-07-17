@@ -53,7 +53,7 @@ function triggerToDto(t: CentraidAutomationRow['triggers'][number]): AuEditorTri
   }
 }
 
-function vaultForTriggers(triggers: readonly (AuEditorTriggerDTO | AuEditorTriggerInput)[]) {
+export function vaultForTriggers(triggers: readonly (AuEditorTriggerDTO | AuEditorTriggerInput)[]) {
   const entities = triggers.flatMap((trigger) =>
     trigger.kind === 'condition'
       ? [trigger.entity]
@@ -235,6 +235,14 @@ export default function AutomationEditorRoute({
             .map((name) => ({ id: '*', subtitle: 'Domain model', title: name, type: name }));
           const instanceHits = await searchVaultEntities(term).catch(() => []);
           return [...typeHits, ...instanceHits];
+        }}
+        loadEntityTypes={async () => {
+          // Same cached gateway read the @-mention type search uses — the
+          // data/condition trigger editors' `<datalist>` autocomplete.
+          if (entityTypeCache === null) {
+            entityTypeCache = await listVaultEntityTypes().catch(() => []);
+          }
+          return entityTypeCache;
         }}
         onReadSource={async () => {
           const ref = refIdRef.current;

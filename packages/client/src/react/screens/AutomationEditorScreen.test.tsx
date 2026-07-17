@@ -282,7 +282,7 @@ describe('AutomationEditorScreen — edit mode', () => {
     expect(el.textContent).not.toContain('Recompile plan');
   });
 
-  it('renders loaded condition/data triggers read-only and preserves them on save', async () => {
+  it('renders loaded condition/data triggers as editable fields and round-trips them on save', async () => {
     const props = makeProps({
       loadData: vi.fn().mockResolvedValue(
         editData({
@@ -303,10 +303,29 @@ describe('AutomationEditorScreen — edit mode', () => {
     expect(el.querySelectorAll('[data-trigger-kind]').length).toBe(3);
     expect(button(el, '+ Webhook').disabled).toBe(false);
 
-    // Condition/data triggers are compiler output — read-only, no editable
-    // entity/where inputs, but preserved verbatim on save.
-    expect(el.querySelector('input[placeholder^="[{"]')).toBeNull();
-    expect(el.textContent).toContain('Watches');
+    // The condition trigger is now editable: its entity, and its one where
+    // clause (column / op / value), are prefilled real inputs.
+    expect(
+      (el.querySelector('input[placeholder="business.invoice"]') as HTMLInputElement).value,
+    ).toBe('core.event');
+    expect((el.querySelector('input[aria-label="Filter column"]') as HTMLInputElement).value).toBe(
+      'status',
+    );
+    expect(
+      (el.querySelector('select[aria-label="Filter operator"]') as HTMLSelectElement).value,
+    ).toBe('eq');
+    expect((el.querySelector('input[aria-label="Filter value"]') as HTMLInputElement).value).toBe(
+      'open',
+    );
+    // The data trigger's watched entities are a comma-joined editable input.
+    expect(
+      (
+        el.querySelector(
+          'input[placeholder="core.transaction, billing.invoice"]',
+        ) as HTMLInputElement
+      ).value,
+    ).toBe('core.party');
+
     await act(async () =>
       button(el, 'Save changes').dispatchEvent(new MouseEvent('click', { bubbles: true })),
     );

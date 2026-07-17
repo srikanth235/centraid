@@ -499,6 +499,11 @@ export interface AutomationEditorBridgeProps {
   onSearchEntities: (
     term: string,
   ) => Promise<Array<{ type: string; id: string; title: string | null; subtitle: string | null }>>;
+  /** Canonical vault entity-type names (e.g. `core.transaction`) for the
+   *  data/condition trigger editors' `<datalist>` autocomplete. Fetched
+   *  lazily the first time a data/condition trigger is present. Optional so a
+   *  `loadData`-only host still typechecks; absent ⇒ no autocomplete. */
+  loadEntityTypes?: () => Promise<string[]>;
   /** The compiled plan (automation.json + handler.js) for the read-only viewer. */
   onReadSource: () => Promise<{ manifest: string | null; handler: string | null }>;
   /** Internal-only builder handoff retained for a future surface; hidden in v0. */

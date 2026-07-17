@@ -267,29 +267,6 @@
   font-weight: 600;
   cursor: pointer;
 }
-.triggerDerivedLabel {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.triggerDerivedTag {
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-.fieldError {
-  margin: 0;
-  color: var(--danger);
-  font-size: 12px;
-}
 @keyframes trigger-in {
   from {
     opacity: 0;
@@ -425,6 +402,60 @@
   border: 0.5px solid var(--line);
   border-radius: 999px;
   padding: 3px 9px;
+}
+
+/* Condition where-builder — one wrapping row per clause (column · op · value),
+   plus a text "add filter" affordance mirroring the addTrigger buttons. */
+.whereBuilder {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.whereRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.whereField {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+.whereSelect {
+  flex: 0 1 150px;
+  appearance: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink);
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 9px 11px;
+}
+.whereSelect:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.whereValueOff {
+  flex: 1 1 120px;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--ink-4);
+  font-style: italic;
+}
+.whereAddBtn {
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  padding: 4px 0;
+}
+.whereAddBtn:hover {
+  color: var(--accent);
 }
 
 .webhookRow {

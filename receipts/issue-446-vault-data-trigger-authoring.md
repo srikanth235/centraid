@@ -84,6 +84,7 @@ Checklist crosswalk — each item, with where it's realized:
 | claude-code-7f569ecb-8b7-1784304204-1 | claude-code | 7f569ecb-8b77-41e0-b783-c630499b4268 | #446 | claude-fable-5 | 3 | 11589 | 424395 | 2025 | 13617 | 0.6705 | 250 | 343660 | 12890082 | 115287 | feat(automation): teach the compiler data/condition triggers — skill + compile w |
 | claude-code-7f569ecb-8b7-1784304521-1 | claude-code | 7f569ecb-8b77-41e0-b783-c630499b4268 | #446 | claude-fable-5 | 50 | 31044 | 4014484 | 27087 | 58181 | 5.7574 | 300 | 374704 | 16904566 | 142374 | feat(automation): teach the compiler data/condition triggers (skill + work order |
 | claude-code-7f569ecb-8b7-1784304652-1 | claude-code | 7f569ecb-8b77-41e0-b783-c630499b4268 | #446 | claude-fable-5 | 17 | 12637 | 1507708 | 10022 | 22676 | 2.1669 | 317 | 387341 | 18412274 | 152396 | feat(automation): teach the compiler data/condition triggers (skill + work order |
+| claude-code-7f569ecb-8b7-1784304718-1 | claude-code | 7f569ecb-8b77-41e0-b783-c630499b4268 | #446 | claude-fable-5 | 6 | 12243 | 516564 | 2217 | 14466 | 0.7805 | 323 | 399584 | 18928838 | 154613 | feat(client): direct data/condition trigger authoring in the automation editor ( |
 
 ## Steering
 
