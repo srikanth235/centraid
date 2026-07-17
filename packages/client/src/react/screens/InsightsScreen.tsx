@@ -217,7 +217,15 @@ export default function InsightsScreen({ summary }: InsightsBridgeProps): JSX.El
             icon={<Icon name="Coin" size={12} />}
             label="Spent · USD"
             value={insUsd(kpis.totalCostUsd)}
-            foot={<span className={styles.kpiSub}>last 30 days</span>}
+            foot={
+              // Honest unknowns (#445): a NULL-cost run is unpriced, not free —
+              // flag it near the cost so the total reads as a floor, not truth.
+              <span className={styles.kpiSub}>
+                {kpis.unpricedRuns > 0
+                  ? `last 30 days · ${kpis.unpricedRuns} unpriced`
+                  : 'last 30 days'}
+              </span>
+            }
           />
           <StatCard
             icon={<Icon name="History" size={12} />}
