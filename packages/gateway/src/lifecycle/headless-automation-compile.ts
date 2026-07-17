@@ -30,6 +30,8 @@ export const HEADLESS_COMPILE_WORK_ORDER = (instructions: string): string => {
     'Compile this automation headlessly. This is a work order, not a conversation.',
     'Update automation.json only when derived requirements or vault scopes need to change.',
     'Write a complete deterministic handler.js that implements the instructions.',
+    'When the instructions describe reacting to vault-data changes, declare a data trigger; when they describe a data-state window ("due in N days"), declare a condition trigger — with vault read scopes covering every watched entity — instead of approximating either with a cron poll.',
+    'Leave existing cron/webhook triggers alone unless the instructions changed them.',
     'Do not change the enabled field; the gateway owns enable/disable lifecycle after validation.',
     "Use generated.by = 'centraid-compiler'. Do not ask questions. Stop after the files are ready.",
     '',
