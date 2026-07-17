@@ -65,6 +65,9 @@ export type ShellRoute =
   // Snapshot custody + remote bytes — split out of the Gateway page's
   // Overview tab; both sit under the sidebar's Operations section.
   | { kind: 'backups' }
+  // Ontology-at-a-glance — the Kinds/Relations/Browse census over the vault
+  // schema (issue #441 Part B). Sits under the sidebar's Operations section.
+  | { kind: 'atlas' }
   | { kind: 'templates' }
   // Instructions-first create/edit form (Automations UI revamp). `automationId`
   // (a `ref`) is omitted for create mode; `templateId` seeds the form from a

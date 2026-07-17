@@ -1,0 +1,134 @@
+/* The Vault Atlas (issue #441 Part B) — co-located styles for AtlasScreen.tsx
+   and the two placeholder tabs. This file owns the page frame: head, the
+   underline tab strip (shared vocabulary with the Gateway page), the Kinds
+   loading/error lines, and the "coming in this PR" empty state the Relations
+   and Browse placeholders render until their real bodies land. The Kinds tab
+   carries its own module (AtlasKindsTab.module.css). */
+
+.page {
+  max-width: 1120px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* Header — title cluster + one-line orientation. Mirrors GatewayScreen. */
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.title {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.titleIcon {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-inv);
+  background: linear-gradient(155deg, var(--accent-light), var(--accent-deep));
+}
+.title h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 25px;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.headMeta {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+/* Tab strip — Kinds / Relations / Browse. Plain underline tabs (page-level
+   navigation), same shape as the Gateway page's strip. */
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 0.5px solid var(--line);
+}
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 10px 4px 9px;
+  margin: 0 8px;
+  color: var(--ink-3);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition:
+    color 0.15s var(--ease, ease),
+    border-color 0.15s var(--ease, ease);
+}
+.tab:first-child {
+  margin-left: 0;
+}
+.tab:hover {
+  color: var(--ink);
+}
+.tabActive {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+/* Kinds loading + error lines. */
+.loading,
+.error {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-3);
+  padding: 24px 4px;
+}
+.error {
+  color: var(--danger);
+}
+
+/* Placeholder empty state — Relations + Browse until their bodies land. */
+.comingSoon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: 56px 24px;
+  border: 0.5px dashed var(--line-strong);
+  border-radius: 14px;
+  background: var(--bg-sunken);
+}
+.comingSoonIcon {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-3);
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line);
+}
+.comingSoonTitle {
+  font: var(--t-title);
+  color: var(--ink);
+}
+.comingSoonBody {
+  margin: 0;
+  max-width: 46ch;
+  font: var(--t-small);
+  color: var(--ink-3);
+}

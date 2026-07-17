@@ -327,6 +327,7 @@ Fresh-context sub-agent attestation of session `9d3ca257-3f72-41be-943a-cae89899
 | claude-code-9d3ca257-3f7-1784312194-1 | claude-code | 9d3ca257-3f72-41be-943a-cae898992375 | #441 | claude-fable-5 | 4 | 10732 | 728774 | 1636 | 12372 | 0.9448 | 1013 | 4871475 | 108382717 | 729706 | feat(client): Vault Atlas screen — Kinds census, Relations orrery, Browse editor |
 | claude-code-9d3ca257-3f7-1784312990-1 | claude-code | 9d3ca257-3f72-41be-943a-cae898992375 | #441 | claude-opus-4-8 | 4 | 576844 | 53576 | 368 | 577216 | 3.6413 | 1017 | 5448319 | 108436293 | 730074 | probe (#441)Issue: #441 |
 | claude-code-9d3ca257-3f7-1784313924-1 | claude-code | 9d3ca257-3f72-41be-943a-cae898992375 | #441 | claude-opus-4-8 | 122 | 103089 | 20592438 | 72294 | 175505 | 12.7485 | 1139 | 5551408 | 129028731 | 802368 | feat(vault,gateway): Vault Atlas backend — stats/graph/pulse + journalled Browse |
+| claude-code-9d3ca257-3f7-1784313988-1 | claude-code | 9d3ca257-3f72-41be-943a-cae898992375 | #441 | claude-opus-4-8 | 10 | 15959 | 1818888 | 3149 | 19118 | 1.0880 | 1149 | 5567367 | 130847619 | 805517 | feat(client): Vault Atlas screen — Kinds census, Relations orrery, Browse editor |
 
 ### Steering
 

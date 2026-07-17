@@ -49,6 +49,7 @@ import { getCachedGroupedRows, openGroupedVaultRegistry } from './flatVaultSwitc
 import { closeVaultSwitcher, openVaultSwitcher, updateVaultSwitcherRows } from './vaultSwitcher.js';
 import ApprovalsRoute from './routes/ApprovalsRoute.js';
 import AppViewRoute from './routes/AppViewRoute.js';
+import AtlasRoute from './routes/AtlasRoute.js';
 import AssistantRoute from './routes/AssistantRoute.js';
 import AutomationEditorRoute from './routes/AutomationEditorRoute.js';
 import AutomationsRoute from './routes/AutomationsRoute.js';
@@ -112,6 +113,7 @@ function activePageFor(route: ShellRoute): SidebarPage | undefined {
     case 'approvals':
     case 'gateway':
     case 'backups':
+    case 'atlas':
     case 'settings':
       return route.kind;
     case 'app':
@@ -552,6 +554,7 @@ export default function App(): JSX.Element {
           onGateway={go({ kind: 'gateway' })}
           gatewayStatus={gatewayStatus}
           onBackups={go({ kind: 'backups' })}
+          onAtlas={go({ kind: 'atlas' })}
           onSettings={go({ kind: 'settings' })}
           onAppClick={(id) => nav.navigate({ kind: 'app', id })}
           {...(builderEnabled ? { onNewApp: () => nav.navigate({ kind: 'builder' }) } : {})}
@@ -612,6 +615,8 @@ export default function App(): JSX.Element {
           return <GatewayRoute />;
         case 'backups':
           return <BackupsRoute />;
+        case 'atlas':
+          return <AtlasRoute />;
         case 'automation-view':
           return <AutomationViewRoute automationId={nav.route.automationId} />;
         case 'automation-editor':

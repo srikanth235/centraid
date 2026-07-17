@@ -39,6 +39,7 @@ export type SidebarPage =
   | 'approvals'
   | 'gateway'
   | 'backups'
+  | 'atlas'
   | 'settings';
 
 export interface SidebarApp {
@@ -101,6 +102,7 @@ export interface SidebarProps {
   /** Live heartbeat status pill next to "Gateway" — omitted shows no pill. */
   gatewayStatus?: 'up' | 'down' | 'unknown';
   onBackups?: () => void;
+  onAtlas?: () => void;
   onAppClick: (id: string) => void;
   onAppContext?: (id: string, anchor: ShellMenuAnchor) => void;
   onSettings: () => void;
@@ -428,6 +430,13 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         active={props.activePage === 'backups'}
         disabled={!props.onBackups}
         onClick={props.onBackups}
+      />
+      <SbItem
+        icon={<Icon name="Globe" size={15} />}
+        label="Vault Atlas"
+        active={props.activePage === 'atlas'}
+        disabled={!props.onAtlas}
+        onClick={props.onAtlas}
       />
 
       <SbSection label={`Apps · ${appList.length}`} onAction={props.onNewApp} />
