@@ -366,10 +366,26 @@ export type {
   RunKind,
 } from './conversation/schema.js';
 
-// Per-model token pricing. `run_nodes.cost_usd` is frozen at write time
-// via `costForUsage`; an unknown model yields `undefined` so the ledger
-// records NULL (distinct from a genuine $0). See issue #90 question 4.
-export { priceForModel, costForUsage, type ModelPrice, type TokenUsage } from './model-pricing.js';
+// Per-model token pricing. `items.cost_usd` is frozen at write time via
+// `costForUsage`; an unknown model yields `undefined` so the ledger records
+// NULL (distinct from a genuine $0). See issue #90 question 4 / #445. The
+// catalog is seeded from a committed LiteLLM snapshot; the gateway warmer
+// overlays a fresher table with `setPricingCatalog`, filtering the live
+// fetch through the shared `filterLiteLLM`.
+export {
+  priceForModel,
+  costForUsage,
+  setPricingCatalog,
+  filterLiteLLM,
+  type ModelPrice,
+  type TokenUsage,
+  type PricingCatalog,
+  type PricingEntry,
+} from './model-pricing.js';
+
+// Repricing backfill (#445) — bounded, idempotent pass that recomputes frozen
+// `items.cost_usd` from the current catalog and re-derives affected turn totals.
+export { repriceLedger, type RepriceResult, type RepriceOptions } from './conversation/reprice.js';
 
 // Insights domain — AnalyticsStore + InsightsStore over the run ledger.
 // Lives in the `insights/` sub-module behind a one-way internal boundary:

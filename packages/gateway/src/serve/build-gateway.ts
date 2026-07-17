@@ -147,6 +147,7 @@ import { BackupService } from '../backup/backup-service.js';
 import type { BackupConfig } from '../backup/backup-config.js';
 import { openStorageConnectionStore } from '../backup/storage-connections.js';
 import { StorageUsagePoller } from '../backup/storage-usage.js';
+import { PricingWarmer } from './pricing-warmer.js';
 import { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
 import { makeStorageCredentialsResolver } from '../backup/storage-credentials.js';
 import { makeStorageRouteHandler } from '../routes/storage-routes.js';
@@ -501,6 +502,21 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // refresh in front of a provider connection's optional `usage` capability
   // (PROTOCOL.md § Usage). Never polls on its own timer; see storage-usage.ts.
   const storageUsage = new StorageUsagePoller({ storageConnections });
+
+  // Model price catalog (issue #445) — seed the app-engine pricing seam from a
+  // fresh-enough disk cache and kick a background LiteLLM refresh. Costing works
+  // from the bundled snapshot regardless; this only overlays fresher rates. The
+  // cache file sits beside `model-catalog.json` when the host pins one.
+  const pricingCacheFile =
+    paths.modelPricingFile ??
+    (paths.modelCatalogFile
+      ? path.join(path.dirname(paths.modelCatalogFile), 'model-pricing.json')
+      : undefined);
+  const pricingWarmer = new PricingWarmer({
+    ...(pricingCacheFile ? { cacheFile: pricingCacheFile } : {}),
+    logger: health.loggerFor('pricing', logger),
+  });
+  void pricingWarmer.boot();
 
   // Vault registry (duaility §12, #289): the gateway is a landlord hosting
   // N sovereign vaults — one plane per vault under the root, every request

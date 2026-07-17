@@ -118,6 +118,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import {
   ensureConversationLedger,
   runConversationArchival,
+  repriceLedger,
   type RuntimeLogger,
   type VaultBridge,
   type VaultCallResult,
@@ -388,6 +389,8 @@ export class VaultPlane {
   private walTimer: NodeJS.Timeout | undefined;
   private firstWalTick: NodeJS.Immediate | undefined;
   private lastJournalArchivalAt = 0;
+  // Resume point for the bounded repricing pass (#445); wraps to 0 at the tail.
+  private repriceCursor = 0;
   private closed = false;
   private displayName: string;
   /**
@@ -1838,6 +1841,21 @@ export class VaultPlane {
           // A gateway that has never served conversations may not have ensured
           // the ledger band on this journal yet, so ensure it first (idempotent).
           ensureConversationLedger(this.db.journal);
+          // Repricing backfill (issue #445) rides the daily block: the price
+          // catalog refreshes at most daily (warmer TTL), so an hourly pass
+          // would almost always no-op. Bounded + resumable from a plane-held
+          // cursor — corrects NULL-from-then-unknown and stale-rate item costs
+          // and re-derives the affected turn totals before those rows may be
+          // archived. Idempotent: a clean row recomputes unchanged and writes
+          // nothing. Runs BEFORE archival so live rows get honest costs first.
+          const repriced = repriceLedger(this.db.journal, { cursor: this.repriceCursor });
+          this.repriceCursor = repriced.nextCursor;
+          if (repriced.itemsRepriced > 0) {
+            this.logger.info(
+              `vault plane: repriced items=${repriced.itemsRepriced} ` +
+                `turns=${repriced.turnsRederived} scanned=${repriced.scanned}`,
+            );
+          }
           const convArchival = runConversationArchival({
             journal: this.db.journal,
             blobSink: {

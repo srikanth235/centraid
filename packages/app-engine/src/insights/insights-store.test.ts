@@ -90,6 +90,19 @@ describe('InsightsStore', () => {
     expect(s.byAutomation).toEqual([]);
     expect(s.byModel).toEqual([]);
     expect(s.recent).toEqual([]);
+    expect(s.kpis.unpricedRuns).toBe(0);
+  });
+
+  it('counts finished runs whose cost is NULL as unpriced (#445)', () => {
+    const { runs, insights } = setup();
+    // Two priced runs, one left unpriced (no costUsd → total_cost_usd NULL).
+    seedRun(runs, { kind: 'chat', model: 'claude-haiku-4-5', inputTokens: 100, costUsd: 0.01 });
+    seedRun(runs, { kind: 'chat', model: 'claude-haiku-4-5', inputTokens: 100, costUsd: 0.01 });
+    seedRun(runs, { kind: 'chat', model: 'some-unknown-model', inputTokens: 100 });
+
+    const s = insights.summary();
+    expect(s.kpis.generations).toBe(3);
+    expect(s.kpis.unpricedRuns).toBe(1);
   });
 
   it('rolls up KPIs across chat and automation runs', () => {

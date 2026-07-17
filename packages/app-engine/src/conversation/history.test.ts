@@ -158,7 +158,7 @@ describe('ConversationHistoryStore', () => {
         {
           kind: 'step',
           text: 'answer',
-          model: 'claude-sonnet-4-7',
+          model: 'claude-sonnet-4-5',
           inputTokens: 1200,
           outputTokens: 340,
           startedAt: 1_000,
@@ -171,7 +171,7 @@ describe('ConversationHistoryStore', () => {
     };
     expect(ai.usage?.inputTokens).toBe(1200);
     expect(ai.usage?.outputTokens).toBe(340);
-    expect(ai.usage?.model).toBe('claude-sonnet-4-7');
+    expect(ai.usage?.model).toBe('claude-sonnet-4-5');
     // Frozen cost = 1200/1e6*3 + 340/1e6*15 = 0.0036 + 0.0051 = 0.0087.
     expect(ai.usage?.costUsd).toBeCloseTo(0.0087, 6);
   });

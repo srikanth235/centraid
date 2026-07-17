@@ -11,7 +11,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && cp src/pricing/litellm-snapshot.json dist/pricing/litellm-snapshot.json",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run",
     "clean": "rm -rf dist"

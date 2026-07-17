@@ -263,6 +263,7 @@ test('11.1 — Insights renders the KPI cards', async () => {
     kpis: {
       totalTokens: 12345,
       quotaTokens: 100000,
+      unpricedRuns: 0,
       totalCostUsd: 1.23,
       forecastCostUsd: 4.56,
       appsTouched: 3,

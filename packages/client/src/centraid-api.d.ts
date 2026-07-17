@@ -1000,6 +1000,8 @@ export interface CentraidInsightsKpis {
   appsTouched: number;
   /** Placeholder monthly token allowance — no billing model exists yet. */
   quotaTokens: number;
+  /** Finished runs left unpriced by a then-unknown model (#445). */
+  unpricedRuns: number;
 }
 
 /** One day of the consumption chart. `date` is `YYYY-MM-DD` (UTC). */
@@ -1464,6 +1466,7 @@ declare global {
     retries: number;
     appsTouched: number;
     quotaTokens: number;
+    unpricedRuns: number;
   }
   interface CentraidInsightsDailyPoint {
     date: string;

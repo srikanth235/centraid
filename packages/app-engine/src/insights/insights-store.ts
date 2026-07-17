@@ -58,6 +58,13 @@ export interface InsightsKpis {
   appsTouched: number;
   /** Placeholder monthly token allowance. */
   quotaTokens: number;
+  /**
+   * Finished LIVE runs whose `total_cost_usd IS NULL` — a then-unknown model
+   * left them unpriced (#445). Surfaced so a NULL cost stays visible as
+   * "unpriced" instead of silently coalescing into $0. Digests always carry a
+   * number, so this is the live arm only.
+   */
+  unpricedRuns: number;
 }
 
 export interface InsightsDailyPoint {
@@ -166,7 +173,8 @@ export class InsightsStore {
           COUNT(*) AS generations,
           SUM(CASE WHEN retry_of IS NOT NULL THEN 1 ELSE 0 END) AS retries,
           SUM(${TOKEN_SUM}) AS tokens,
-          SUM(COALESCE(total_cost_usd, 0)) AS cost
+          SUM(COALESCE(total_cost_usd, 0)) AS cost,
+          SUM(CASE WHEN total_cost_usd IS NULL THEN 1 ELSE 0 END) AS unpriced
         FROM run_summary
         WHERE started_at >= ?
       `),
@@ -300,6 +308,7 @@ export class InsightsStore {
       retries: number | null;
       tokens: number | null;
       cost: number | null;
+      unpriced: number | null;
     };
     const kd = stmts.kpisDigest.get(since) as {
       generations: number | null;
@@ -322,6 +331,7 @@ export class InsightsStore {
       retries: (k.retries ?? 0) + (kd.retries ?? 0),
       appsTouched: apps.size,
       quotaTokens: INSIGHTS_QUOTA_TOKENS,
+      unpricedRuns: k.unpriced ?? 0,
     };
 
     // Daily: live per-day buckets, then fold each digest into its last-archived
