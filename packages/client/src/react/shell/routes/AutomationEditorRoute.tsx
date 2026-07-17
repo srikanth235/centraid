@@ -53,7 +53,46 @@ function triggerToDto(t: CentraidAutomationRow['triggers'][number]): AuEditorTri
   }
 }
 
-function vaultForTriggers(triggers: readonly (AuEditorTriggerDTO | AuEditorTriggerInput)[]) {
+/** The initial editor DTO for create mode (no existing row). Pure so the
+ *  prefill contract — a `templateId` seeding a template trigger, or a
+ *  `watchEntity` (an entity KIND, `schema.table`) seeding a data trigger that
+ *  watches it — is unit-testable without a live gateway. A template's own
+ *  trigger kind wins over `watchEntity` (a template is the more specific seed);
+ *  with neither, the form opens trigger-less exactly as before. Mirrors how the
+ *  screen already renders any data trigger in the DTO as a fully editable row,
+ *  so a seeded `{ kind: 'data' }` needs zero screen changes (issue #446). */
+export function buildCreateAutomationEditorData(opts: {
+  template?: { name: string; desc: string; triggerKind?: 'cron' | 'webhook' };
+  watchEntity?: string;
+  instructions: string;
+  name: string;
+}): AutomationEditorData {
+  const { template, watchEntity, instructions, name } = opts;
+  const triggers: AuEditorTriggerDTO[] =
+    template?.triggerKind === 'webhook'
+      ? [{ id: null, kind: 'webhook', pending: true }]
+      : template?.triggerKind === 'cron'
+        ? [{ expr: '0 9 * * *', kind: 'cron' }]
+        : watchEntity
+          ? [{ entities: [watchEntity], kind: 'data' }]
+          : [];
+  return {
+    automationId: null,
+    connectors: null,
+    consent: { grants: [], outbox: [], parked: [] },
+    enabled: false,
+    instructions: template?.desc ?? instructions,
+    mode: 'create',
+    model: null,
+    name: template?.name ?? name,
+    onFailure: null,
+    rowId: null,
+    triggers,
+    webhook: null,
+  };
+}
+
+export function vaultForTriggers(triggers: readonly (AuEditorTriggerDTO | AuEditorTriggerInput)[]) {
   const entities = triggers.flatMap((trigger) =>
     trigger.kind === 'condition'
       ? [trigger.entity]
@@ -87,9 +126,11 @@ let entityTypeCache: string[] | null = null;
 export default function AutomationEditorRoute({
   automationId,
   templateId,
+  watchEntity,
 }: {
   automationId?: string;
   templateId?: string;
+  watchEntity?: string;
 }): JSX.Element {
   const { navigate, showToast, confirm } = useShellActions();
   // `refIdRef` is the automation's `ref` once it exists on the gateway —
@@ -109,25 +150,12 @@ export default function AutomationEditorRoute({
             const template = templateId
               ? (await listTemplates()).find((entry) => entry.id === templateId)
               : undefined;
-            return {
-              automationId: null,
-              connectors: null,
-              consent: { grants: [], outbox: [], parked: [] },
-              enabled: false,
-              instructions: template?.desc ?? loaded.instructions,
-              mode: 'create',
-              model: null,
-              name: template?.name ?? loaded.name,
-              onFailure: null,
-              rowId: null,
-              triggers:
-                template?.triggerKind === 'webhook'
-                  ? [{ id: null, kind: 'webhook', pending: true }]
-                  : template?.triggerKind === 'cron'
-                    ? [{ expr: '0 9 * * *', kind: 'cron' }]
-                    : [],
-              webhook: null,
-            };
+            return buildCreateAutomationEditorData({
+              ...(template ? { template } : {}),
+              ...(watchEntity ? { watchEntity } : {}),
+              instructions: loaded.instructions,
+              name: loaded.name,
+            });
           }
           const [{ baseUrl }, blocking, grants, agents] = await Promise.all([
             auth(),
@@ -235,6 +263,14 @@ export default function AutomationEditorRoute({
             .map((name) => ({ id: '*', subtitle: 'Domain model', title: name, type: name }));
           const instanceHits = await searchVaultEntities(term).catch(() => []);
           return [...typeHits, ...instanceHits];
+        }}
+        loadEntityTypes={async () => {
+          // Same cached gateway read the @-mention type search uses — the
+          // data/condition trigger editors' `<datalist>` autocomplete.
+          if (entityTypeCache === null) {
+            entityTypeCache = await listVaultEntityTypes().catch(() => []);
+          }
+          return entityTypeCache;
         }}
         onReadSource={async () => {
           const ref = refIdRef.current;

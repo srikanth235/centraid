@@ -99,6 +99,17 @@ describe('runHeadlessAutomationCompile', () => {
     );
     expect(prompt).toContain("generated.by = 'centraid-compiler'");
   });
+
+  it('instructs the compiler to pick data/condition triggers over cron polling', () => {
+    const prompt = HEADLESS_COMPILE_WORK_ORDER('Reconcile invoices when a transaction posts.');
+    expect(prompt).toContain('reacting to vault-data changes, declare a data trigger');
+    expect(prompt).toContain('data-state window ("due in N days"), declare a condition trigger');
+    expect(prompt).toContain('vault read scopes covering every watched entity');
+    expect(prompt).toContain('instead of approximating either with a cron poll');
+    expect(prompt).toContain(
+      'Leave existing cron/webhook triggers alone unless the instructions changed them.',
+    );
+  });
 });
 
 describe('finalizeCompiledManifest', () => {

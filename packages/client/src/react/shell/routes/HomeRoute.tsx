@@ -276,6 +276,10 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
             setInfoApp(null);
             void uninstallAppFlow(target);
           }}
+          onAutomate={(entity) => {
+            setInfoApp(null);
+            navigate({ kind: 'automation-editor', watchEntity: entity });
+          }}
           showToast={showToast}
         />
       ) : null}

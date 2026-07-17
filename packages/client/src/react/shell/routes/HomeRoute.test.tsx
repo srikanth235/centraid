@@ -233,4 +233,27 @@ describe('HomeRoute installed-app context menu', () => {
     expect(dialog.textContent).toContain('media');
     expect(dialog.textContent).toContain('Uninstall');
   });
+
+  it('App info offers an "Automate on this data" deep-link into the editor pre-watching the kind', async () => {
+    // The app requests one scope (`media`); the modal offers a per-kind
+    // "Automate media" button that deep-links to the automation editor with
+    // that entity kind pre-filled as a data trigger (issue #446 follow-up 1).
+    await render([app('photos', 'Photos')]);
+    openMenuFor('photos');
+    await act(async () => {
+      clickMenuItem('App info');
+      await flush();
+    });
+    const automate = [...document.querySelectorAll('[role="dialog"] button')].find(
+      (b) => b.textContent === 'Automate media',
+    ) as HTMLButtonElement;
+    expect(automate).toBeTruthy();
+    await act(async () => {
+      automate.click();
+      await flush();
+    });
+    expect(navigate).toHaveBeenCalledWith({ kind: 'automation-editor', watchEntity: 'media' });
+    // The modal closes on navigate.
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
 });
