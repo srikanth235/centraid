@@ -493,6 +493,12 @@ export {
   type ArchivedSegmentRows,
   type ArchiveVerification,
 } from './journal-archive.js';
+// Conversation-ledger band GC roots (issue #438 decision 6) + the prune
+// custody latch (decision 3) — vault-side helpers the gateway composes so the
+// app-engine archival engine and every CAS GC path stay correct without the
+// vault importing app-engine.
+export { conversationArchiveShas } from './conversation-archive-roots.js';
+export { blobCustodyProven } from './blob/custody-proven.js';
 export { FTS_BODY_INDEX_BUDGET_CHARS, truncateForIndex, rebuildFtsIndex } from './schema/fts.js';
 export { rebuildDocumentFtsIndex } from './schema/blob.js';
 export {

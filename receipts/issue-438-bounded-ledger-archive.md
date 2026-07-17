@@ -6,9 +6,9 @@ Issue: https://github.com/srikanth235/centraid/issues/438
 
 - [x] Verify auto_vacuum mode on vault.db + journal.db; migrate to INCREMENTAL if NONE
 - [x] conversation_digest materialized table + Insights/list reads move from run_summary VIEW to digests
-- [ ] Conversation archive serializer (sealed blob per idle conversation through the blob door)
-- [ ] conversation_archive index table; archive references added as CAS GC roots (shared rule with the snapshot-pinning invariant)
-- [ ] Custody-gated prune + incremental_vacuum in the bounded maintenance pass
+- [x] Conversation archive serializer (sealed blob per idle conversation through the blob door)
+- [x] conversation_archive index table; archive references added as CAS GC roots (shared rule with the snapshot-pinning invariant)
+- [x] Custody-gated prune + incremental_vacuum in the bounded maintenance pass
 - [ ] Lazy rehydration path (read-only render of archived conversations)
 - [ ] Tests: prune-before-custody is impossible; digest parity with pre-archive rollups; rehydrate round-trip; vacuum reclaims pages
 
@@ -33,6 +33,26 @@ Two cold-state tables added to `CONVERSATION_LEDGER_DDL` in `packages/app-engine
 `packages/app-engine/src/insights/insights-store.ts` unions every aggregate (kpis, appsTouched, daily, byAutomation, byModel via `json_each(models_json)`) across live `run_summary` and `conversation_digest`; digests join a window when `last_ended_at >= since`; day-grain series attribute a digest to its last-archived day (coarse only beyond the ≥90d archive horizon, documented per query); `recent` stays live-only. `packages/app-engine/src/insights/analytics-store.ts` documents the row-grain Executions feed as live-only (no fabricated per-run rows). Zero-digest results are byte-identical to the pre-#438 behavior — existing insights tests run unmodified.
 
 - `packages/app-engine/src/insights/insights-store.test.ts` — digest union across kpis/byAutomation/byModel/daily; out-of-window digest excluded; digest parity with pre-archive rollups (rollups before archive == digest+live after a simulated prune).
+
+### Conversation archive serializer (sealed blob per idle conversation through the blob door)
+
+New engine `packages/app-engine/src/conversation/archive/` (app-engine owns the ledger band; the vault blob door and custody latch are injected seams, so layering stays one-way):
+
+- `packages/app-engine/src/conversation/archive/types.ts` — `BlobSink`/`CustodyProven` seams, segment shape, internal constants (90-day window, per-run caps; no user-facing knobs).
+- `packages/app-engine/src/conversation/archive/selector.ts` — eligibility → contiguous seq-ranges. Automation threads (one eternal conversation per automation) archive aged finished ranges but never the newest turn, never pinned/unfinished/retry-protected/already-archived turns; chat/build conversations archive only when the whole conversation is idle past the window with no unfinished or pinned turn.
+- `packages/app-engine/src/conversation/archive/segment.ts` — gzip(JSON) segment of verbatim turn/item/attachment rows through the blob door (`blobSink.ingestSync`), `conversation_archive` row insert, `conversation_digest` UPSERT adding the range's deltas; `models_json` uses the exact `run_summary.model` dominant-model pick (the Wave 1 union contract). Exports `readArchivedConversationSegment` for the rehydration wave.
+- `packages/app-engine/src/conversation/archive/engine.ts` + `packages/app-engine/src/conversation/archive/index.ts` — `runConversationArchival` entry: phase A archive (one transaction per range), then phase B prune each call; barrel export wired into `packages/app-engine/src/index.ts`.
+- `packages/app-engine/src/conversation/store-sql.ts` — `referencedHashes()` unions live `attachments.hash` with `json_each(conversation_archive.attachment_hashes_json)` (pruned and unpruned) so the app-engine blob GC keeps archived attachment bytes pinned; conversation deletion CASCADE-drops archive rows and releases them (true deletion stays the consent path).
+
+### conversation_archive index table; archive references added as CAS GC roots (shared rule with the snapshot-pinning invariant)
+
+The index table itself landed in the Wave 1 schema; this wave makes its references live GC roots. `packages/vault/src/conversation-archive-roots.ts` — `conversationArchiveShas(journal)` (SQL over the same journal.db file the vault holds open, `sqlite_master`-guarded for a journal whose ledger band is not yet ensured), exported via `packages/vault/src/index.ts`. Unioned into the live-root set at every reconcile/GC site where #367's `archivedSegmentShas` already is: `packages/vault/src/gateway/gateway.ts`, `packages/gateway/src/backup/backup-cas-reconciliation.ts`, `packages/gateway/src/backup/backup-reconciliation.ts`, `packages/gateway/src/backup/backup-sources.ts` — one reachability rule, three root sets, fail-safe contract unchanged (unavailable roots still skip orphan-delete).
+
+### Custody-gated prune + incremental_vacuum in the bounded maintenance pass
+
+- `packages/app-engine/src/conversation/archive/prune.ts` — the raw-row DELETE exists only behind the `custodyProven(segment_sha256)` latch in one code path (prune-before-custody is structurally impossible); each segment prunes in one transaction and latches `pruned_at`; `conversations.turn_count` stays a lifetime counter; `reclaimJournalPages` mirrors the freelist → `incremental_vacuum` pattern.
+- `packages/vault/src/blob/custody-proven.ts` — `blobCustodyProven(db, sha)`: remote tier configured ⇒ `blob_replica` has the sha AND no `blob_outbox` row remains; local-only vault ⇒ durable local CAS presence. Fail-closed. Exported from the vault index.
+- `packages/gateway/src/serve/vault-plane.ts` — the daily archival block now runs both engines: `walTick()` → `runJournalArchival` → `ensureConversationLedger` → `runConversationArchival` (seams composed from `db.blobs` + `blobCustodyProven`), then ONE shared `rollGeneration('journal','journal-archival',{captureFirst:false})` if either engine wrote or pruned — vault and journal generations still break together.
 
 ## Out of scope
 
@@ -61,6 +81,19 @@ oxlint over the 8 changed files:      0 warnings, 0 errors
 
 Pre-existing failure, unrelated and untouched: `packages/app-engine/src/http/app-bundle.test.ts` ("collapses the real photos app to 2 requests", after=51) fails identically on the branch head without these changes (verified via `git stash`).
 
+Wave 2 (archive engine + GC roots + custody-gated prune):
+
+```
+bunx turbo run typecheck --filter=@centraid/vault --filter=@centraid/app-engine --filter=@centraid/gateway
+  Tasks: 25 successful, 25 total
+packages/vault full suite:                    767 passed | 1 skipped (87 files)
+packages/app-engine conversation+insights+stores: 160 passed (10 files)
+packages/gateway vault-plane*/backup-* targeted:   43 passed (6 files)
+oxlint (29 changed files):                    0 warnings, 0 errors
+```
+
+Wave 2 test files: `packages/app-engine/src/conversation/archive/archive.test.ts` (prune-before-custody impossible across repeated runs, then flips with custody and latches idempotently; segment round-trip byte-identical; incremental_vacuum drops page_count after prune; selector edges — live automation head and unfinished turns kept, pinned turns block/split ranges, non-idle chat untouched, in-flight retry protects its target, re-runs idempotent, automation_state untouched; referencedHashes unions archived hashes), `packages/app-engine/src/conversation/archive/digest-parity.test.ts` (real InsightsStore: kpis/byAutomation/byModel identical before archive vs after prune), `packages/vault/src/conversation-archive-roots.test.ts` (archive sha is a GC root, stays a root after prune, missing-table guard), `packages/vault/src/blob/custody-proven.test.ts` (local-only presence; s3 replica gate; outbox row blocks even with a replica), `packages/gateway/src/serve/vault-plane-conversation-archival.test.ts` (daily block archives + prunes + rolls exactly one generation).
+
 ## Audit
 
 **Check 1 — "What changed" faithfully describes the diff:** PASS. Receipt exactly enumerates the eight file changes; spot-reads of `db.ts` (auto_vacuum ordering + legacy conversion), `gateway-db.ts` (pragma reordering + schema DDL + governance waiver), and `insights-store.ts` (live/digest union for kpis/appsTouched/daily/byAutomation/byModel + fresh kpisDigest/appsTouchedDigest statements) all align with the 812-insertion diff. No omissions.
@@ -83,3 +116,7 @@ Pre-existing failure, unrelated and untouched: `packages/app-engine/src/http/app
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | claude-code-b10ad6d8-505-1784297195-1 | claude-code | b10ad6d8-505e-4365-920b-2e2d106dc673 | #438 | claude-fable-5 | 413 | 440270 | 17990021 | 118737 | 559420 | 29.4344 | 413 | 440270 | 17990021 | 118737 | feat(ledger): auto_vacuum=INCREMENTAL + digest/archive cold-state schema + insig |
 | claude-code-b10ad6d8-505-1784297399-1 | claude-code | b10ad6d8-505e-4365-920b-2e2d106dc673 | #438 | claude-fable-5 | 12 | 21606 | 1013994 | 7425 | 29043 | 1.6554 | 425 | 461876 | 19004015 | 126162 | feat(ledger): auto_vacuum=INCREMENTAL + digest/archive cold-state schema + insig |
+| claude-code-b10ad6d8-505-1784299254-1 | claude-code | b10ad6d8-505e-4365-920b-2e2d106dc673 | #438 | claude-fable-5 | 66 | 43084 | 6014902 | 19829 | 62979 | 7.5456 | 491 | 504960 | 25018917 | 145991 | feat(ledger): conversation archival engine — segments, GC roots, custody-gated p |
+| claude-code-b10ad6d8-505-1784299299-1 | claude-code | b10ad6d8-505e-4365-920b-2e2d106dc673 | #438 | claude-fable-5 | 6 | 11499 | 584469 | 1647 | 13152 | 0.8106 | 497 | 516459 | 25603386 | 147638 | feat(ledger): conversation archival engine — segments, GC roots, custody-gated p |
+| claude-code-b10ad6d8-505-1784299357-1 | claude-code | b10ad6d8-505e-4365-920b-2e2d106dc673 | #438 | claude-fable-5 | 4 | 1070 | 398207 | 370 | 1444 | 0.4301 | 501 | 517529 | 26001593 | 148008 | feat(ledger): conversation archival engine — segments, GC roots, custody-gated p |
+| claude-code-b10ad6d8-505-1784299406-1 | claude-code | b10ad6d8-505e-4365-920b-2e2d106dc673 | #438 | claude-fable-5 | 8 | 5936 | 800618 | 2439 | 8383 | 0.9968 | 509 | 523465 | 26802211 | 150447 | feat(ledger): conversation archival engine — segments, GC roots, custody-gated p |

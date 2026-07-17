@@ -12,6 +12,7 @@ import { existsSync, promises as fs } from 'node:fs';
 import path from 'node:path';
 import {
   archivedSegmentShas,
+  conversationArchiveShas,
   liveBlobShas,
   readBlobStoreSettings,
   readSealKeyFingerprint,
@@ -204,6 +205,7 @@ export async function assembleSourceEntries(opts: AssembleOptions): Promise<Sour
     const replicated = new ReplicaIndex(plane.db.vault).all();
     const live = liveBlobShas(plane.db.vault);
     for (const sha of archivedSegmentShas(plane.db.journal)) live.add(sha);
+    for (const sha of conversationArchiveShas(plane.db.journal)) live.add(sha);
     for (const sha of live) if (!replicated.has(sha)) pending.add(sha);
   }
   entries.push(...(await listBlobEntries(plane.dir, pending)));

@@ -503,7 +503,20 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       SELECT a.* FROM attachments a JOIN items i ON a.item_id = i.id
       WHERE i.turn_id = ? ORDER BY a.created_at ASC
     `),
-    referencedHashes: db.prepare(`SELECT DISTINCT hash FROM attachments`),
+    // The blob-GC live set (issue #190) UNIONED with every hash an archived
+    // segment references (issue #438 decision 4) — both unpruned AND pruned
+    // conversation_archive rows, because archived history still points at those
+    // attachment bytes forever (archiving changes temperature, never existence).
+    // Deleting the conversation CASCADE-drops its archive rows and releases the
+    // hashes on the one true-deletion path.
+    referencedHashes: db.prepare(`
+      SELECT DISTINCT hash FROM (
+        SELECT hash FROM attachments
+        UNION
+        SELECT j.value AS hash
+          FROM conversation_archive ca, json_each(ca.attachment_hashes_json) j
+      )
+    `),
     upsertState: db.prepare(`
       INSERT INTO automation_state (automation_id, key, value_json, updated_at)
       VALUES (?, ?, ?, ?)

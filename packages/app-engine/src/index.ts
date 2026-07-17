@@ -279,6 +279,25 @@ export {
   type DatabaseProvider,
 } from './stores/gateway-db.js';
 
+// Conversation-band archival engine (issue #438): the bounded, idempotent
+// maintenance pass that seals cold turn-ranges into the vault blob CAS
+// (phase A) and custody-gated-prunes their raw rows (phase B). The vault/
+// gateway inject the blob-CAS door and the custody-proven latch; app-engine
+// owns the band. `readArchivedConversationSegment` is the round-trip read
+// wave 3's rehydration reuses.
+export {
+  runConversationArchival,
+  readArchivedConversationSegment,
+  DEFAULT_CONVERSATION_ARCHIVE_WINDOW_DAYS,
+  type ConversationArchivalDeps,
+  type ConversationArchivalOptions,
+  type ConversationArchivalResult,
+  type ArchivedRange,
+  type ArchivedConversationSegment,
+  type BlobSink,
+  type CustodyProven,
+} from './conversation/archive/index.js';
+
 // The per-vault workspace view app-engine operates in (#280): the gateway
 // resolves the ACTIVE vault and injects this shape; stores re-resolve per
 // call so a vault switch lands without reconstruction.
