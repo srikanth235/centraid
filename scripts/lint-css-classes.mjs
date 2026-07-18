@@ -29,7 +29,7 @@ const ROOT = resolve(import.meta.dirname, '..');
 // Every *.module.css in the repo lives under here. If that changes, add the
 // root — an unlisted directory is unchecked, exactly like lint-types.sh's
 // TARGETS list.
-const TARGETS = ['packages/client/src/react'];
+const TARGETS = ['packages/client/src/react', 'packages/blueprints/apps'];
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', '.turbo']);
 

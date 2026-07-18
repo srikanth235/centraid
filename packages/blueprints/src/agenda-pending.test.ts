@@ -5,7 +5,7 @@ const importFixture = (relativePath: string) => import(relativePath);
 describe('Agenda pending intent presentation', () => {
   test('settles only the exact terminal intent and ignores unrelated changes', async () => {
     const { settlePendingChange, trackPendingOutcome } = await importFixture(
-      '../apps/agenda/pending.js',
+      '../apps/agenda/pending.ts',
     );
     const state = {
       pendingIds: new Set(),
@@ -43,7 +43,7 @@ describe('Agenda pending intent presentation', () => {
 
   test('retains exact managed settlement but clears parked legacy chips on a relevant doorbell', async () => {
     const { reconcilePendingChange, trackPendingOutcome } = await importFixture(
-      '../apps/agenda/pending.js',
+      '../apps/agenda/pending.ts',
     );
     const state = {
       pendingIds: new Set(),

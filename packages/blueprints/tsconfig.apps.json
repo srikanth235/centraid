@@ -1,0 +1,20 @@
+{
+  // Typecheck-only config for the browser-side blueprint apps (TS + CSS-modules
+  // conversion). The apps are ES modules served verbatim — nothing bundles them
+  // through tsc — so this program never emits: it exists purely to gate the
+  // converted `.ts`/`.tsx` app + handler sources against strict types, plus the
+  // shared ambient declarations under `types/`. Apps import each other by their
+  // REAL served extension (`./logic.ts`, `./Board.tsx`), hence
+  // `allowImportingTsExtensions` (requires `noEmit`).
+  "extends": "@centraid/tsconfig/base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": ["apps/**/*.ts", "apps/**/*.tsx", "apps/**/*.d.ts", "types/**/*.d.ts"]
+}

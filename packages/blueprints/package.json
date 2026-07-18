@@ -22,7 +22,8 @@
     "build:manifest": "bun run vendor:assets && node scripts/build-manifest.mjs",
     "build": "bun run build:manifest && tsc -p tsconfig.build.json",
     "lint": "node scripts/lint-apps.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && bun run typecheck:apps",
+    "typecheck:apps": "tsc -p tsconfig.apps.json --noEmit",
     "test": "bun run vendor:assets && vitest run",
     "clean": "rm -rf dist"
   },
