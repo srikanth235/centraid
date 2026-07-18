@@ -27,6 +27,13 @@ test('openVaultDb: file-backed vault.db and journal.db open with PRAGMA synchron
   expect(journalSync.synchronous).toBe(2);
 });
 
+test('openVaultDb: NORMAL applies only to vault.db; journal proof remains FULL', () => {
+  const db = openVaultDb({ dir: tempDir(), synchronous: 'NORMAL' });
+  cleanups.push(() => db.close());
+  expect(db.vault.prepare('PRAGMA synchronous').get()).toEqual({ synchronous: 1 });
+  expect(db.journal.prepare('PRAGMA synchronous').get()).toEqual({ synchronous: 2 });
+});
+
 test('openVaultDb: file-backed handles use the bounded low-end read pragmas (#456 S1)', () => {
   const dir = tempDir();
   const db = openVaultDb({ dir });

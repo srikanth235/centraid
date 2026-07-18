@@ -59,10 +59,26 @@ function resourceCounters() {
 
 async function directoryBytes(dir) {
   let total = 0;
-  for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+  let entries;
+  try {
+    entries = await fs.readdir(dir, { withFileTypes: true });
+  } catch (error) {
+    // The live vault owns temporary/WAL paths that can disappear between a
+    // directory walk and the next syscall. A vanished entry contributes zero
+    // bytes; it must not make the performance gate flaky.
+    if (error?.code === 'ENOENT') return 0;
+    throw error;
+  }
+  for (const entry of entries) {
     const target = path.join(dir, entry.name);
     if (entry.isDirectory()) total += await directoryBytes(target);
-    else if (entry.isFile()) total += (await fs.stat(target)).size;
+    else if (entry.isFile()) {
+      try {
+        total += (await fs.stat(target)).size;
+      } catch (error) {
+        if (error?.code !== 'ENOENT') throw error;
+      }
+    }
   }
   return total;
 }

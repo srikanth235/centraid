@@ -27,9 +27,9 @@ import {
 import type { RouteHandler } from '../serve/build-gateway.js';
 import { vaultContext } from '../serve/vault-context.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
-import { createBlobHandoffUrl, type DataPlaneHttpOptions } from '../serve/data-plane-handoff.js';
+import type { DataPlaneHttpOptions } from '../serve/data-plane-handoff.js';
 import { openBlobCustodyEvents } from './blob-custody-events.js';
-import { parseRange, pipeBlobResponse } from './blob-response.js';
+import { serveBlobRead } from './blob-read-route.js';
 import { sendBlobRouteError } from './blob-route-errors.js';
 import { readBody, readJson, sendJson } from './route-helpers.js';
 
@@ -420,77 +420,15 @@ export function makeBlobRouteHandler(
         if (outcome.status !== 'ok') {
           return sendJson(res, 404, { error: outcome.status });
         }
-        const blob = outcome.blob;
-        const etag = `"${blob.sha256}"`;
-        res.setHeader('ETag', etag);
-        res.setHeader('Accept-Ranges', 'bytes');
-        // Content-addressed bytes never change under their id+variant —
-        // cache forever, privately (this is the owner's data).
-        res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
-        res.setHeader('Content-Type', blob.mediaType);
-        const disposition = url.searchParams.get('download') ? 'attachment' : 'inline';
-        const name = (blob.title ?? blob.sha256.slice(0, 12)).replace(/["\\\r\n]/g, '');
-        res.setHeader('Content-Disposition', `${disposition}; filename="${name}"`);
-        if (req.headers['if-none-match'] === etag) {
-          res.statusCode = 304;
-          res.end();
-          return true;
-        }
-        const range = parseRange(
-          typeof req.headers.range === 'string' ? req.headers.range : undefined,
-          blob.byteSize,
-        );
-        if (typeof req.headers.range === 'string' && !range) {
-          res.statusCode = 416;
-          res.setHeader('Content-Range', `bytes */${blob.byteSize}`);
-          res.end();
-          return true;
-        }
-        const localFile = plane.db.blobs.localPathSync?.(blob.sha256) ?? null;
-        const handoff =
-          dataPlane && localFile
-            ? createBlobHandoffUrl(dataPlane, {
-                file: localFile,
-                mediaType: blob.mediaType,
-                disposition: `${disposition}; filename="${name}"`,
-                etag,
-              })
-            : undefined;
-        if (handoff) {
-          res.statusCode = 307;
-          res.setHeader('Location', handoff);
-          res.setHeader('Content-Length', '0');
-          res.end();
-          return true;
-        }
-        if (method === 'HEAD') {
-          res.statusCode = 200;
-          res.setHeader('Content-Length', String(blob.byteSize));
-          res.end();
-          return true;
-        }
-        const requestedRange = range ? { start: range.start, end: range.end } : undefined;
-        const opened = plane.db.blobs.openReadStreamSync(blob.sha256, requestedRange);
-        if (range) {
-          res.statusCode = 206;
-          res.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${blob.byteSize}`);
-        } else {
-          res.statusCode = 200;
-        }
-        const contentLength = range ? range.end - range.start + 1 : blob.byteSize;
-        res.setHeader('Content-Length', String(contentLength));
-        if (opened) {
-          await pipeBlobResponse(req, res, opened.stream);
-          return true;
-        }
-        const remoteStream = plane.db.blobs.openRemoteReadStream(
-          blob.sha256,
-          blob.byteSize,
-          requestedRange,
-        );
-        if (!remoteStream) return sendJson(res, 404, { error: 'bytes missing from custody' });
-        await pipeBlobResponse(req, res, remoteStream);
-        return true;
+        return serveBlobRead({
+          req,
+          res,
+          method,
+          blob: outcome.blob,
+          custody: plane.db.blobs,
+          download: url.searchParams.has('download'),
+          ...(dataPlane ? { dataPlane } : {}),
+        });
       }
     } catch (error) {
       return sendBlobRouteError(res, error);

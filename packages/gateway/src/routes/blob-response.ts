@@ -54,9 +54,12 @@ export async function pipeBlobResponse(
       // that can still be serialized onto the dead socket.
       settle();
     };
-    const onSourceError = (error: Error): void => {
-      if (!res.destroyed) res.destroy(error);
-      settle(error);
+    const onSourceError = (): void => {
+      // Passing the storage error to destroy() emits it again on the HTTP
+      // response. With no consumer error listener that becomes a process-level
+      // unhandled error, so close the incomplete transport without re-emitting.
+      if (!res.destroyed) res.destroy();
+      settle();
     };
     source.once('error', onSourceError);
     req.once('aborted', onAbort);

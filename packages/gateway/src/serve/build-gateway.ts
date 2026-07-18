@@ -593,10 +593,20 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // probe. Publish the resolved class so slow storage and explicit overrides
   // select the same actual limits that this health line reports.
   process.env.CENTRAID_RESOLVED_HARDWARE_PROFILE = hardwareProfile.class;
-  process.env.CENTRAID_WORKER_POOL_SIZE ??= String(hardwareProfile.workerPoolSize);
+  // Publish the exact resolved values, including validated operator
+  // overrides. Lazy consumers read these values instead of independently
+  // reclassifying the host and drifting from this health record.
+  process.env.CENTRAID_WORKER_MAX_CONCURRENT = String(hardwareProfile.workerMaxConcurrent);
+  process.env.CENTRAID_WORKER_MAX_OLD_GENERATION_MB = String(
+    hardwareProfile.workerMaxOldGenerationMb,
+  );
+  process.env.CENTRAID_WORKER_POOL_SIZE = String(hardwareProfile.workerPoolSize);
+  process.env.CENTRAID_REPLICATION_CONCURRENCY = String(hardwareProfile.replicationConcurrency);
+  process.env.CENTRAID_STATIC_BROTLI_QUALITY = String(hardwareProfile.staticBrotliQuality);
+  process.env.CENTRAID_STATIC_GZIP_QUALITY = String(hardwareProfile.staticGzipQuality);
   health.reportOk(
     'hardware-profile',
-    `${hardwareProfile.class}; sqlite=${hardwareProfile.sqliteSynchronous}; workers=${hardwareProfile.workerMaxConcurrent}x${hardwareProfile.workerMaxOldGenerationMb}MB; pool=${hardwareProfile.workerPoolSize}; replication=${hardwareProfile.replicationConcurrency}; mount=${hardwareProfile.vaultMountStrategy}; sweep=${hardwareProfile.vaultSweepIntervalMs}ms`,
+    `${hardwareProfile.class}; sqlite=${hardwareProfile.sqliteSynchronous}; workers=${hardwareProfile.workerMaxConcurrent}x${hardwareProfile.workerMaxOldGenerationMb}MB; pool=${hardwareProfile.workerPoolSize}; replication=${hardwareProfile.replicationConcurrency}; compression=br${hardwareProfile.staticBrotliQuality}/gz${hardwareProfile.staticGzipQuality}; mount=${hardwareProfile.vaultMountStrategy}; sweep=${hardwareProfile.vaultSweepIntervalMs}ms`,
   );
   const webAppSessions = new WebAppSessions(options.webSessions ?? {});
 
@@ -1749,6 +1759,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
                 );
               });
             },
+            onDormancyChange: (dormant, at) =>
+              runWithVaultContext({ vaultId }, () => {
+                schedulerLedgerFor(vaultId).setDormant(dormant, at);
+              }),
           });
     schedulers.set(vaultId, created);
     if (schedulersStarted) created.start();
@@ -2238,7 +2252,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     ...(options.dataPlaneControl
       ? [
           forRoutePrefixes(
-            '/centraid/_gateway/tunnel/authorize',
+            '/centraid/_gateway/tunnel',
             makeDataPlaneControlHandler(options.dataPlaneControl),
           ),
         ]
@@ -2374,7 +2388,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // configure, pause/resume, and the PKCE consent ceremony. Mounted
     // BEFORE the generic `_vault` handler (same prefix family).
     forRoutePrefixes(
-      '/centraid/_vault/connections',
+      ['/centraid/_vault/connections', '/centraid/_vault/oauth/callback'],
       makeConnectionsRouteHandler(vaultRegistry, connectionBroker, {
         onConnectionChanged: invalidateToolCatalog,
       }),
@@ -2564,6 +2578,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     );
   };
 
+  let unsubscribeLateMount = (): void => undefined;
+  const lateMountTasks = new Set<Promise<void>>();
+
   const start = async (publicBaseUrl: string): Promise<void> => {
     // Publish the live origin to the unified chat runner so post-turn
     // webhook minting can build absolute `_centraid-hook` URLs.
@@ -2573,6 +2590,30 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // flip `instance` health red as early in boot as possible, well before
     // any vault mounts (issue #351).
     instanceLease.start();
+
+    // A vault arriving after boot can introduce an earlier WAL RPO than the
+    // currently armed timer and also needs its host/scheduler activated.
+    unsubscribeLateMount();
+    unsubscribeLateMount = vaultRegistry.onMount((plane) => {
+      const task = Promise.all([
+        hostFor(plane).catch((error) =>
+          logger.warn(
+            `late vault host mount failed (${plane.boot.vaultId}): ` +
+              (error instanceof Error ? error.message : String(error)),
+          ),
+        ),
+        backupService
+          .refreshWalSchedule()
+          .catch((error) =>
+            logger.warn(
+              `late vault WAL schedule refresh failed: ` +
+                (error instanceof Error ? error.message : String(error)),
+            ),
+          ),
+      ]).then(() => undefined);
+      lateMountTasks.add(task);
+      void task.finally(() => lateMountTasks.delete(task));
+    });
 
     // Start the per-vault in-process cron schedulers as they mount. Under
     // n8n semantics they only fire while running — downtime is not
@@ -2633,6 +2674,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   };
 
   const stop = async (): Promise<void> => {
+    unsubscribeLateMount();
+    // A mount notification may already be building its code host. Let that
+    // bounded work settle before closing vault databases or removing temp
+    // roots; otherwise shutdown races git/SQLite initialization.
+    await Promise.all(lateMountTasks);
     await Promise.all([...schedulers.values()].map((sched) => sched.stop()));
     if (outboxTimer) clearTimeout(outboxTimer);
     // Await the in-flight backup run (if any): its post-registration steps

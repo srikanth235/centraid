@@ -72,12 +72,12 @@ GitHub issue: [#456](https://github.com/srikanth235/centraid/issues/456)
   current/peak p99 lag plus bounded load-shedding state without blind gaps.
 - **M3 Storage-latency probe at boot** — boot performs an isolated 4 KiB
   write/fsync/unlink probe and reports its latency without touching vault data.
-- The final explicitly constrained-profile run (120 writes, 30 reads,
-  concurrency 4, 65-second idle window) measured write p50 **15.89 ms**, p99
-  **24.89 ms**, max **25.31 ms**, and **241.25 writes/s**; read p99 was
-  **2.81 ms**; peak RSS was **197,656,576 bytes**; event-loop peak p99 was
-  **26.94 ms**; boot fsync was **5.56 ms**; idle context switches were
-  **371,553/hour**, idle filesystem writes were **0/hour**, and live-data
+- The post-review explicitly constrained-profile run (120 writes, 30 reads,
+  concurrency 4, 65-second idle window) measured write p50 **14.46 ms**, p99
+  **29.46 ms**, max **29.47 ms**, and **247.28 writes/s**; read p99 was
+  **8.40 ms**; peak RSS was **184,254,464 bytes**; event-loop peak p99 was
+  **10.02 ms**; boot fsync was **7.11 ms**; idle context switches were
+  **418,307/hour**, idle filesystem writes were **0/hour**, and live-data
   growth was **0/hour**. Every locally
   available budget passed. Linux CI runs the same constrained primary workload
   untraced, then scopes a second `strace` run to workload markers and requires
@@ -129,9 +129,10 @@ GitHub issue: [#456](https://github.com/srikanth235/centraid/issues/456)
   `mmap_size`, `cache_size`, and related read tuning per hardware profile.
 - **S2 Collapse ordinary-command finalize** — ordinary commands now share one
   commit/finalize boundary instead of paying redundant persistence work.
-- **S3 `synchronous` as tunable** — the standard profile retains `FULL`; the
-  constrained profile selects `NORMAL`, explicitly documenting the durability
-  trade-off instead of weakening the default.
+- **S3 `synchronous` as tunable** — auto-detection and the standard profile
+  retain `FULL`; only an explicitly selected constrained profile may choose
+  `NORMAL` for `vault.db`, while the receipt-bearing `journal.db` remains
+  `FULL` under every profile.
 - **S4 Group commit** — a true bounded group-commit queue coalesces concurrent
   ordinary-command finalization while preserving per-call outcomes. Every
   production request-path command entry point, including the benchmark's Atlas
@@ -218,7 +219,8 @@ GitHub issue: [#456](https://github.com/srikanth235/centraid/issues/456)
   [`n0-computer/iroh-ffi#276`](https://github.com/n0-computer/iroh-ffi/issues/276).
 - **N2 Rust tunnel relay** — the normal `packages/tunnel` build produces its
   target-specific napi module and both gateway-daemon and Electron-desktop
-  production entry points require it (no silent JS fallback). Real integration
+  production entry points prefer it, with a tested JS iroh fallback when the
+  target artifact cannot load or the native endpoint cannot start. Real integration
   tests prove both pairing modes, dynamic desktop upstreams, and 2 MiB tunneled
   request/response bodies stay in Rust while only authenticated control
   metadata crosses to TypeScript; revocation closes Rust-owned live connections.
@@ -235,9 +237,55 @@ GitHub issue: [#456](https://github.com/srikanth235/centraid/issues/456)
 - **N5 Backup/provider pump** — a bounded provider pump moves streamed data
   without buffering the entire object.
 - **N6 Rust preview raster** — dimensions and allocation limits are checked
-  before decode; output dimensions/quality are bounded.
+  before decode; EXIF orientation matches the TypeScript path, previews never
+  upscale, and output dimensions/quality are bounded.
 - **N7 Bun experiment** — Node/Bun runtime and SQLite behavior are measured by
-  a committed probe; the results do not justify a runtime migration.
+  a committed dual-runtime probe that reproduces the committed artifact schema;
+  the results do not justify a runtime migration.
+
+### Post-review control, durability, and lifecycle hardening
+
+- The production prefix table now mounts the complete tunnel control family
+  (`/authorize` and `/pair`) and OAuth callback family. A compiled-table
+  integration regression exercises those exact paths instead of mounting the
+  leaf handlers directly.
+- Rust and JavaScript relay requests strip client authority/proof headers and
+  stamp only gateway-owned identity. The redirect handoff requires a
+  timing-safe relay proof, never sends LAN clients to loopback, strips the
+  proof before forwarding, and sends the one-use 307 as `no-store`.
+- Blob response headers are committed only after custody bytes are acquired.
+  Missing bytes produce a clean uncached 404, aborts destroy their source, and
+  an error after headers destroys only that response. The HTTP server contains
+  rejected route promises so a stream failure cannot become an unhandled
+  rejection or terminate the gateway.
+- Upload receipt timeout now accommodates a 512 MiB body at slow phone uplink
+  rates. Restarted resumable commits truncate any non-durable temp tail before
+  hashing/adoption, and expired sessions close coordinator descriptors before
+  deleting their rows/files. Cleanup runs even without an S3 destination.
+- Scheduler dormancy is durable: zero-enabled transitions stop liveness aging,
+  wake transitions reset the baseline without fabricated downtime runs, and
+  health ignores explicitly dormant ledgers. Late vault mounts activate their
+  host and refresh WAL scheduling; shutdown awaits that work before closing
+  SQLite or removing vault roots.
+- Direct lifecycle sweeps ring replica doorbells. Restore reconciliation stays
+  pre-mount by design, before a replica subscriber can exist, so it has no live
+  stream to notify. Memory-backed blob reads retain their bounded buffered
+  fallback.
+- The portable preview path is selected lazily when native `sharp` is missing
+  or fails; Electron's wasm selection does not eagerly load sharp. Wasm-vips
+  operations are serialized and its file/cache/heap ceilings are bounded.
+- Rust now uses ECMAScript-compatible canonical number spelling, verifies
+  compressed CBSF algorithms in both languages, applies EXIF orientation,
+  bounds loopback HTTP connect/read time, closes the revoke/authorize race,
+  and expires replay nonces individually instead of clearing the set wholesale.
+- Event-loop metrics subtract monitor resolution, sustained load shedding has
+  a five-minute maximum deferral plus degraded health, and one bounded
+  background pass is forced at the ceiling. Hardware-profile consumers receive
+  one resolved set of actual worker, replication, old-generation, pool, and
+  compression values rather than re-deriving copies.
+- Benchmark directory scans tolerate concurrent deletion and the runtime probe
+  emits the committed comparison schema directly. The post-review 65-second
+  constrained measurement passes every budget with zero live-data growth.
 
 ### Safe adaptive behavior and gated next moves
 
@@ -266,8 +314,10 @@ GitHub issue: [#456](https://github.com/srikanth235/centraid/issues/456)
 - Rust has two packaging forms: the required napi tunnel module and the
   optional direct-HTTP sidecar. TypeScript retains identity/policy authority;
   Rust receives authenticated metadata or expiring byte-bounded capabilities.
-- Standard durability remains `synchronous=FULL`. Only the explicitly selected
-  constrained profile uses `NORMAL`; the profile is observable and reversible.
+- Standard and auto-detected durability remain `synchronous=FULL`. Only the
+  explicitly selected constrained profile may use `NORMAL` for `vault.db`;
+  `journal.db` is always `FULL` so canonical marker reclamation never outruns
+  its receipt proof.
 - A1–A5 are complete specifications but intentionally gated implementations.
   Building them after the measured budgets passed would add invalidation and
   recovery risk without evidence of need.
@@ -326,6 +376,7 @@ Changed paths covered by this receipt:
 - `packages/app-engine/src/http/changes-sse.ts`
 - `packages/app-engine/src/http/compression.test.ts`
 - `packages/app-engine/src/http/compression.ts`
+- `packages/app-engine/src/http/http-server.test.ts`
 - `packages/app-engine/src/http/http-server.ts`
 - `packages/app-engine/src/http/server-tuning.test.ts`
 - `packages/app-engine/src/http/server-tuning.ts`
@@ -336,6 +387,8 @@ Changed paths covered by this receipt:
 - `packages/app-engine/src/stores/gateway-db.ts`
 - `packages/automation/src/fire/in-process-scheduler.test.ts`
 - `packages/automation/src/fire/in-process-scheduler.ts`
+- `packages/automation/src/fire/scheduler-ledger.test.ts`
+- `packages/automation/src/fire/scheduler-ledger.ts`
 - `packages/automation/src/handler/runner.ts`
 - `packages/automation/src/worker/runner.ts`
 - `packages/backup/src/compress.test.ts`
@@ -351,6 +404,7 @@ Changed paths covered by this receipt:
 - `packages/data-plane/src/cbsf.rs`
 - `packages/data-plane/src/format.rs`
 - `packages/data-plane/src/http_plane.rs`
+- `packages/data-plane/src/http_plane_tests.rs`
 - `packages/data-plane/src/iroh_relay.rs`
 - `packages/data-plane/src/iroh_wire.rs`
 - `packages/data-plane/src/lib.rs`
@@ -384,6 +438,9 @@ Changed paths covered by this receipt:
 - `packages/gateway/src/routes/automations-routes.ts`
 - `packages/gateway/src/routes/backup-observability-routes.test.ts`
 - `packages/gateway/src/routes/backup-routes.ts`
+- `packages/gateway/src/routes/blob-route-errors.ts`
+- `packages/gateway/src/routes/blob-read-route.ts`
+- `packages/gateway/src/routes/blob-routes-hardening.test.ts`
 - `packages/gateway/src/routes/blob-routes.test.ts`
 - `packages/gateway/src/routes/blob-routes.ts`
 - `packages/gateway/src/routes/blob-response.ts`
@@ -402,6 +459,7 @@ Changed paths covered by this receipt:
 - `packages/gateway/src/routes/storage-routes.ts`
 - `packages/gateway/src/routes/vault-routes.ts`
 - `packages/gateway/src/runs/run-event-bus.ts`
+- `packages/gateway/src/serve/build-gateway.test.ts`
 - `packages/gateway/src/serve/build-gateway.ts`
 - `packages/gateway/src/serve/connection-broker.ts`
 - `packages/gateway/src/serve/data-plane-handoff.test.ts`
@@ -423,11 +481,14 @@ Changed paths covered by this receipt:
 - `packages/gateway/src/serve/outbox-executor.test.ts`
 - `packages/gateway/src/serve/outbox-executor.ts`
 - `packages/gateway/src/serve/route-prefix-dispatch.test.ts`
+- `packages/gateway/src/serve/scheduler-health.test.ts`
+- `packages/gateway/src/serve/scheduler-health.ts`
 - `packages/gateway/src/serve/storage-latency.test.ts`
 - `packages/gateway/src/serve/storage-latency.ts`
 - `packages/gateway/src/serve/vault-picker.ts`
 - `packages/gateway/src/serve/vault-plane.test.ts`
 - `packages/gateway/src/serve/vault-plane.ts`
+- `packages/gateway/src/serve/vault-registry.test.ts`
 - `packages/gateway/src/serve/vault-registry.ts`
 - `packages/gateway/src/serve/web-app-sessions.ts`
 - `packages/gateway/src/serve/web-ui-server.test.ts`
@@ -440,8 +501,10 @@ Changed paths covered by this receipt:
 - `packages/tunnel/package.json`
 - `packages/tunnel/scripts/build-native.mjs`
 - `packages/tunnel/scripts/probe-typed-array.mjs`
+- `packages/tunnel/src/desktop-tunnel.ts`
 - `packages/tunnel/src/gateway-endpoint.ts`
 - `packages/tunnel/src/index.ts`
+- `packages/tunnel/src/native-fallback.test.ts`
 - `packages/tunnel/src/native-relay.test.ts`
 - `packages/tunnel/src/native-relay.ts`
 - `packages/tunnel/src/protocol.ts`
@@ -547,6 +610,55 @@ primary workload untraced, runs a second workload under Linux `strace` solely
 for scoped fsync accounting, and fails if that exact signal is absent or above
 budget.
 
+Post-review remediation was additionally verified with:
+
+```sh
+bun run ci
+bunx vitest run --maxWorkers=2 --minWorkers=1
+bunx vitest run \
+  packages/gateway/src/cli/admin.test.ts \
+  packages/gateway/src/serve/vault-registry.test.ts \
+  packages/gateway/src/worktree-store/worktree-store.test.ts \
+  --maxWorkers=2 --minWorkers=1
+bun run --cwd packages/data-plane test
+cargo clippy --manifest-path packages/data-plane/Cargo.toml \
+  --locked --all-targets -- -D warnings
+CENTRAID_RUN_NATIVE_TUNNEL=1 bunx vitest run \
+  packages/tunnel/src/native-relay.test.ts --maxWorkers=1
+node_modules/.bin/vitest run \
+  packages/gateway/src/routes/blob-routes.test.ts \
+  packages/gateway/src/routes/blob-routes-hardening.test.ts \
+  packages/app-engine/src/http/http-server.test.ts \
+  --maxWorkers=2 --minWorkers=1
+CENTRAID_HARDWARE_PROFILE=constrained bun run --cwd packages/gateway perf:low-end
+git diff --check
+```
+
+The final static gate passed formatting, lint, Rust clippy, all **29/29**
+typecheck tasks, type-surface checks, and CSS validation. The bounded workspace
+run passed **500 files / 4,407 tests**; three files and 35 tests remained behind
+their existing explicit platform/opt-in gates. The focused loaded-host
+revocation, late-mount, registry-restart, and worktree suites passed **46/46**.
+Data-plane Rust passed nine unit and four golden tests, then the same four HTTP
+contract assertions passed against each TypeScript and Rust implementation.
+After the governance line-limit split, the two blob-route suites and HTTP
+boundary suite passed **21/21** with no unhandled errors; the split Rust module
+again passed all nine unit and four golden tests.
+The release native relay passed both integration tests (pairing, multi-MiB
+streaming, revocation, and desktop flow). The post-review constrained 65-second
+benchmark passed every budget: p99 **29.46 ms**, **247.28 writes/s**, peak RSS
+**184,254,464 bytes**, peak event-loop p99 **10.02 ms**, **418,307** idle
+context switches/hour, zero idle filesystem writes, and zero live-data growth.
+
+For transparency, the default package-local Vitest worker fan-out was also run
+inside a Turbo graph limited to two packages. It oversubscribed this host and
+ended with three unrelated five-second git/registry timeouts plus the original
+one-second revocation assertion window; every affected suite passed under the
+repository's established two-worker bound, and the complete bounded workspace
+run above passed. A separate sandboxed data-plane attempt could not bind
+localhost (`EPERM`); the identical package command passed outside the socket
+sandbox, including both HTTP implementations.
+
 ## Audit
 
 PASS — fresh-context reviewer `/root/issue456_router_final_audit` read the live
@@ -593,11 +705,22 @@ fresh generation after SQLite's fallback checkpoint is re-enabled for backup.
 After the focused **50/50** suites, final bounded coverage, receipt counts, and
 diff hygiene were rechecked, the reviewer returned an unqualified `PASS`.
 
+Post-review remediation audit: **PASS**. Every item in the supplied review was
+mapped back to code and a regression or invariant: all three blockers, majors
+4–11, the Rust/contract and lifecycle minor clusters, preview fallback/bounds,
+observability/profile convergence, and benchmark reproducibility. The audit
+also traced the two direct-SQL paths separately: ordinary lifecycle sweep now
+rings the replica doorbell, while restore reconciliation intentionally runs
+before the recovered vault is mounted and therefore before any live replica
+subscriber exists. The final diff is formatted, has no whitespace errors, and
+the receipt covers every changed path.
+
 ## Steering
 
-PASS — the only human instruction in this task was the opening `/goal` to
-complete the entire issue scope, follow its measurement/iteration directions,
-and create a PR. There were no user corrections or mid-task redirects.
+PASS — the opening `/goal` requested the entire issue scope, measurement and
+iteration, and a PR. The user then supplied the PR review and explicitly asked
+to fix every finding; this remediation implements the full supplied list and
+keeps the same issue/PR scope.
 
 ## Accounting
 
@@ -613,3 +736,4 @@ and create a PR. There were no user corrections or mid-task redirects.
 | codex-019f7389-37c-1784386147-1 | codex | 019f7389-37ce-7252-abb8-77936a8e13cb | #456 | gpt-5.6-sol | 167984 | 0 | 6912512 | 27419 | 195403 | 2.5594 | 5473408 | 0 | 256919040 | 595620 | perf(gateway): stabilize low-end measurement gate (#456) |
 | codex-019f7389-37c-1784389221-1 | codex | 019f7389-37ce-7252-abb8-77936a8e13cb | #456 | gpt-5.6-sol | 330968 | 0 | 21291264 | 35839 | 366807 | 6.6878 | 5804376 | 0 | 278210304 | 631459 | fix(gateway): stop unconfigured WAL capture churn (#456) |
 | codex-019f7389-37c-1784390498-1 | codex | 019f7389-37ce-7252-abb8-77936a8e13cb | #456 | gpt-5.6-sol | 70793 | 0 | 9885952 | 8178 | 78971 | 2.7711 | 5875169 | 0 | 288096256 | 639637 | docs(gateway): correct final coverage receipt (#456) |
+| codex-019f7389-37c-1784399978-1 | codex | 019f7389-37ce-7252-abb8-77936a8e13cb | #456 | gpt-5.6-sol | 1372524 | 0 | 57456896 | 109791 | 1482315 | 19.4424 | 7247693 | 0 | 345553152 | 749428 | fix(gateway): address performance review findings (#456) |

@@ -1113,6 +1113,9 @@ export class Gateway {
       requestedAt: nowIso(),
       limit: 100,
     });
+    // Sweeps commit canonical changes outside the command execution path.
+    // Wake replica SSE streams at the same post-commit boundary.
+    notifyReplicaCommit(this.db.vault);
     return result;
   }
 

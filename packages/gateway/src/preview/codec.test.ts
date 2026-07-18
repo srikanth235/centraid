@@ -145,3 +145,12 @@ test('corrupt bytes are a miss, not a crash', async () => {
   ).toBeNull();
   expect(await codec.perceptualHash(Buffer.from('definitely not a PNG'), 'image/png')).toBeNull();
 });
+
+test('a missing native codec falls back to the portable implementation', async () => {
+  const fallback = createImagePreviewCodec(async () => {
+    throw new Error('native addon unavailable');
+  });
+  const out = await fallback.downscale(makePng(320, 160), 'image/png', 160);
+
+  expect(out).toMatchObject({ mediaType: 'image/jpeg', width: 160, height: 80 });
+});

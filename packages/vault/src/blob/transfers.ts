@@ -137,6 +137,12 @@ export class BlobTransferCoordinator {
       remote: options.remote,
       remoteConfigured: options.remoteConfigured,
       onStatus: () => this.emit(),
+      onExpireSession: (sessionId) => {
+        const write = this.fallbackWrites.get(sessionId);
+        if (!write) return;
+        closeSync(write.fd);
+        this.fallbackWrites.delete(sessionId);
+      },
       ...(options.shouldDeferBackgroundWork
         ? { shouldDeferBackgroundWork: options.shouldDeferBackgroundWork }
         : {}),
@@ -430,6 +436,17 @@ export class BlobTransferCoordinator {
         `upload is incomplete: have ${row.received_bytes}, expected ${row.expected_size}`,
         row.received_bytes,
       );
+    }
+    // A crash can leave non-fsynced tail bytes in the temp file beyond the
+    // durable offset recorded in SQLite. Never hash a prefix and then adopt
+    // the larger physical file under that prefix's content address.
+    if (row.temp_path) {
+      try {
+        truncateSync(row.temp_path, row.received_bytes);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        // Idempotent replay after adoption: the temp path is expected gone.
+      }
     }
     let hash = pendingHash;
     if (!hash && row.state === 'committing' && row.expected_sha256) {

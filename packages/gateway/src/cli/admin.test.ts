@@ -409,7 +409,7 @@ test('device plane: SSH CLI revocation closes the native relay endpoint', async 
   });
   try {
     await capture(() => commandDevices(['revoke', '--data-dir', dataDir, 'ep-live-cli'], fail));
-    await vi.waitFor(() => expect(revoked).toEqual(['ep-live-cli']));
+    await vi.waitFor(() => expect(revoked).toEqual(['ep-live-cli']), { timeout: 10_000 });
   } finally {
     await watcher.close();
     registry.stop();

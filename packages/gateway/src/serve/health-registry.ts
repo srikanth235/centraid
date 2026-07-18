@@ -121,6 +121,8 @@ export interface HealthRegistryOptions {
   maxEvents?: number;
   /** Clock override (tests). */
   now?: () => number;
+  /** Longest continuous lag interval before one bounded background pass is forced. */
+  maxLoadShedMs?: number;
 }
 
 interface ComponentState {
@@ -133,6 +135,7 @@ interface ComponentState {
 }
 
 const DEFAULT_MAX_EVENTS = 100;
+const DEFAULT_MAX_LOAD_SHED_MS = 5 * 60 * 1_000;
 
 export class HealthRegistry {
   private readonly components = new Map<string, ComponentState>();
@@ -141,6 +144,8 @@ export class HealthRegistry {
   private readonly maxEvents: number;
   private readonly now: () => number;
   private readonly startedAtMs: number;
+  private readonly maxLoadShedMs: number;
+  private loadShedSinceMs?: number;
   private metricsSource?: MetricsSource;
   private performanceMetricsSource?: PerformanceMetricsSource;
   private resetPerformanceMetricsSource?: () => void;
@@ -149,6 +154,7 @@ export class HealthRegistry {
     this.maxEvents = options.maxEvents ?? DEFAULT_MAX_EVENTS;
     this.now = options.now ?? Date.now;
     this.startedAtMs = this.now();
+    this.maxLoadShedMs = options.maxLoadShedMs ?? DEFAULT_MAX_LOAD_SHED_MS;
   }
 
   /**
@@ -174,7 +180,28 @@ export class HealthRegistry {
   /** Runtime backpressure signal shared by every background subsystem (issue #456 A6). */
   shouldDeferBackgroundWork(maxP99Ms = 50): boolean {
     const p99 = this.performanceMetricsSource?.().eventLoopLagP99Ms;
-    return p99 !== undefined && p99 >= maxP99Ms;
+    const now = this.now();
+    if (p99 === undefined || p99 < maxP99Ms) {
+      if (this.loadShedSinceMs !== undefined) {
+        this.loadShedSinceMs = undefined;
+        this.reportOk('load-shed', 'event-loop pressure cleared');
+      }
+      return false;
+    }
+
+    this.loadShedSinceMs ??= now;
+    const deferredMs = now - this.loadShedSinceMs;
+    if (deferredMs < this.maxLoadShedMs) return true;
+
+    // Never silently starve WAL/outbox/backup work forever. Permit one caller
+    // through per max-age interval and retain a degraded health signal until
+    // event-loop pressure clears.
+    this.reportDegraded(
+      'load-shed',
+      `event-loop p99 ${p99.toFixed(1)} ms; forcing one background pass after ${deferredMs} ms deferred`,
+    );
+    this.loadShedSinceMs = now;
+    return false;
   }
 
   reportOk(component: string, detail?: string): void {

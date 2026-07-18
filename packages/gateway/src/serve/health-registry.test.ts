@@ -197,5 +197,28 @@ describe('HealthRegistry', () => {
       registry.resetPerformanceMetrics();
       expect(resets).toBe(1);
     });
+
+    it('forces one visible background pass after sustained load shedding', async () => {
+      let clock = 1_000;
+      let p99 = 75;
+      const registry = new HealthRegistry({ now: () => clock, maxLoadShedMs: 5_000 });
+      registry.setPerformanceMetricsSource(() => ({ eventLoopLagP99Ms: p99 }));
+
+      expect(registry.shouldDeferBackgroundWork()).toBe(true);
+      clock += 4_999;
+      expect(registry.shouldDeferBackgroundWork()).toBe(true);
+      clock += 1;
+      expect(registry.shouldDeferBackgroundWork()).toBe(false);
+      expect(registry.shouldDeferBackgroundWork()).toBe(true);
+      expect((await registry.snapshot()).components).toContainEqual(
+        expect.objectContaining({ component: 'load-shed', status: 'degraded' }),
+      );
+
+      p99 = 10;
+      expect(registry.shouldDeferBackgroundWork()).toBe(false);
+      expect((await registry.snapshot()).components).toContainEqual(
+        expect.objectContaining({ component: 'load-shed', status: 'ok' }),
+      );
+    });
   });
 });

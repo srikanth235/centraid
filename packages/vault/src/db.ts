@@ -276,12 +276,15 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   let local: LocalBlobStore;
   if (dir === undefined) {
     vault = openFile(':memory:', options.synchronous);
-    journal = openFile(':memory:', options.synchronous);
+    // The journal is the durable execution/receipt proof used to reclaim
+    // vault-side invocation markers. It stays FULL even when an operator
+    // explicitly relaxes the canonical vault to NORMAL.
+    journal = openFile(':memory:', 'FULL');
     local = options.blobStore ?? new MemoryBlobStore();
   } else {
     mkdirSync(dir, { recursive: true });
     vault = openFile(path.join(dir, 'vault.db'), options.synchronous);
-    journal = openFile(path.join(dir, 'journal.db'), options.synchronous);
+    journal = openFile(path.join(dir, 'journal.db'), 'FULL');
     local = options.blobStore ?? new FsBlobStore(path.join(dir, 'blobs'));
   }
   // The FTS sync triggers (and the v2 backfill) decode canonical bodies via

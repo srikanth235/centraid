@@ -110,9 +110,8 @@ export function watchEnrollmentRevocations(input: {
     input.knownEndpointIds ?? new Set(input.enrollments.listFresh().map((row) => row.endpointId));
   let pending = Promise.resolve();
   let closed = false;
-  const filename = path.basename(input.file);
-  const watcher = fs.watch(path.dirname(input.file), (_event, changed) => {
-    if (closed || (changed !== null && String(changed) !== filename)) return;
+  let settleTimer: NodeJS.Timeout | undefined;
+  const refresh = (): void => {
     pending = pending
       .then(async () => {
         const next = new Set(input.enrollments.listFresh().map((row) => row.endpointId));
@@ -126,6 +125,20 @@ export function watchEnrollmentRevocations(input: {
           `device plane: failed to propagate external revocation: ${error instanceof Error ? error.message : String(error)}`,
         );
       });
+  };
+  const watcher = fs.watch(path.dirname(input.file), () => {
+    if (closed) return;
+    // Atomic replacement is allowed to report only the temporary filename
+    // on some platforms. The directory is the gateway's small control dir,
+    // so refreshing on any notification is cheap. Briefly debounce the
+    // notification so a temp-file event cannot read the old destination just
+    // before rename; this timer exists only after a write, never while idle.
+    if (settleTimer) clearTimeout(settleTimer);
+    settleTimer = setTimeout(() => {
+      settleTimer = undefined;
+      refresh();
+    }, 10);
+    settleTimer.unref();
   });
   watcher.on('error', (error) => {
     input.logger.warn(`device plane: enrollment watch failed: ${error.message}`);
@@ -134,6 +147,7 @@ export function watchEnrollmentRevocations(input: {
     close: async () => {
       closed = true;
       watcher.close();
+      if (settleTimer) clearTimeout(settleTimer);
       await pending;
     },
   };

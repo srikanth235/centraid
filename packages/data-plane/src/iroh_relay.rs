@@ -22,8 +22,8 @@ use tokio_stream::wrappers::ReceiverStream;
 use crate::{
     GW_PAIR_ALPN, MAX_REQUEST_BODY_BYTES, PAIR_ALPN, TUNNEL_ALPN,
     iroh_wire::{
-        Authorization, TunnelRequestHeader, TunnelResponseHeader, WireHeaderValue, read_header,
-        request_headers, response_headers, write_header,
+        Authorization, RELAY_PROOF_HEADER, TunnelRequestHeader, TunnelResponseHeader,
+        WireHeaderValue, read_header, request_headers, response_headers, write_header,
     },
 };
 
@@ -45,7 +45,13 @@ pub struct IrohRelayHandle {
     live_connections: LiveConnections,
 }
 
-type LiveConnections = Arc<Mutex<HashMap<String, HashMap<u64, Connection>>>>;
+#[derive(Default)]
+struct RelayConnections {
+    by_endpoint: HashMap<String, HashMap<u64, Connection>>,
+    revoke_epochs: HashMap<String, u64>,
+}
+
+type LiveConnections = Arc<Mutex<RelayConnections>>;
 
 impl IrohRelayHandle {
     pub fn endpoint_id(&self) -> String {
@@ -61,12 +67,15 @@ impl IrohRelayHandle {
     }
 
     pub async fn revoke_endpoint(&self, endpoint_id: &str) {
-        let connections = self
-            .live_connections
-            .lock()
-            .await
-            .remove(endpoint_id)
-            .unwrap_or_default();
+        let connections = {
+            let mut live = self.live_connections.lock().await;
+            let epoch = live
+                .revoke_epochs
+                .entry(endpoint_id.to_owned())
+                .or_default();
+            *epoch = epoch.wrapping_add(1);
+            live.by_endpoint.remove(endpoint_id).unwrap_or_default()
+        };
         for connection in connections.into_values() {
             connection.close(401_u32.into(), b"revoked");
         }
@@ -148,7 +157,11 @@ async fn serve_stream(
     }
     let method = Method::from_bytes(header.method.as_bytes())?;
     let url = format!("{}{}", upstream_url.trim_end_matches('/'), header.target);
-    let headers = request_headers(&header.headers, &auth, upstream_token)?;
+    let mut headers = request_headers(&header.headers, &auth, upstream_token)?;
+    headers.insert(
+        RELAY_PROOF_HEADER,
+        reqwest::header::HeaderValue::from_str(&config.control_secret)?,
+    );
     let (body_tx, body_rx) = mpsc::channel::<std::io::Result<Bytes>>(4);
     tokio::spawn(async move {
         let mut total = 0_usize;
@@ -215,6 +228,13 @@ async fn serve_connection(
     connection: Connection,
 ) {
     let endpoint_id = connection.remote_id().to_string();
+    let observed_revoke_epoch = live_connections
+        .lock()
+        .await
+        .revoke_epochs
+        .get(&endpoint_id)
+        .copied()
+        .unwrap_or_default();
     match authorize(&client, &config, &endpoint_id).await {
         Ok(Authorization { allowed: true, .. }) => {}
         _ => {
@@ -222,12 +242,22 @@ async fn serve_connection(
             return;
         }
     }
-    live_connections
-        .lock()
-        .await
-        .entry(endpoint_id.clone())
-        .or_default()
-        .insert(connection_id, connection.clone());
+    {
+        let mut live = live_connections.lock().await;
+        let current_epoch = live
+            .revoke_epochs
+            .get(&endpoint_id)
+            .copied()
+            .unwrap_or_default();
+        if current_epoch != observed_revoke_epoch {
+            connection.close(401_u32.into(), b"revoked");
+            return;
+        }
+        live.by_endpoint
+            .entry(endpoint_id.clone())
+            .or_default()
+            .insert(connection_id, connection.clone());
+    }
     while let Ok((send, recv)) = connection.accept_bi().await {
         let client = client.clone();
         let config = Arc::clone(&config);
@@ -239,10 +269,10 @@ async fn serve_connection(
         });
     }
     let mut live = live_connections.lock().await;
-    if let Some(connections) = live.get_mut(&endpoint_id) {
+    if let Some(connections) = live.by_endpoint.get_mut(&endpoint_id) {
         connections.remove(&connection_id);
         if connections.is_empty() {
-            live.remove(&endpoint_id);
+            live.by_endpoint.remove(&endpoint_id);
         }
     }
 }
@@ -368,8 +398,14 @@ pub async fn start(config: IrohRelayConfig) -> Result<IrohRelayHandle> {
         .await
         .context("bind native iroh relay")?;
     tracing::info!(endpoint_id = %endpoint.id(), "native iroh byte relay listening");
-    let client = Client::builder().build()?;
-    let live_connections = Arc::new(Mutex::new(HashMap::new()));
+    let client = Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        // Per-read inactivity timeout: long-lived SSE remains healthy while
+        // heartbeats flow, but a hung loopback/control response cannot pin a
+        // relay task forever.
+        .read_timeout(std::time::Duration::from_secs(120))
+        .build()?;
+    let live_connections = Arc::new(Mutex::new(RelayConnections::default()));
     let handle = IrohRelayHandle {
         endpoint: endpoint.clone(),
         live_connections: Arc::clone(&live_connections),

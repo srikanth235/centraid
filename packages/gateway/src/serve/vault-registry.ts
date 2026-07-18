@@ -140,6 +140,7 @@ export class VaultRegistry {
   private readonly shouldDeferBackgroundWork: (() => boolean) | undefined;
   private readonly replicationConcurrency: number | undefined;
   private readonly planes = new Map<string, VaultPlane>();
+  private readonly mountListeners = new Set<(plane: VaultPlane) => void>();
   /**
    * Vault ids THIS registry auto-created on an empty root at construction
    * (issue #439 R1) — never an admin `create(name)`. The airtight signal
@@ -233,6 +234,7 @@ export class VaultRegistry {
         this.scannedDirs.add(dir);
         this.failedMountsByDir.delete(dir);
         if (this.started) plane.start();
+        this.notifyMounted(plane);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         const schemaAhead =
@@ -259,6 +261,22 @@ export class VaultRegistry {
   /** Re-scan the vault root now — retries any previously-failed mount past its backoff window. */
   rescan(): void {
     this.scan();
+  }
+
+  /** Observe vaults mounted after registration (admin create or recovery). */
+  onMount(listener: (plane: VaultPlane) => void): () => void {
+    this.mountListeners.add(listener);
+    return () => this.mountListeners.delete(listener);
+  }
+
+  private notifyMounted(plane: VaultPlane): void {
+    for (const listener of this.mountListeners) {
+      try {
+        listener(plane);
+      } catch {
+        // Follow-up host work cannot roll back a successful durable mount.
+      }
+    }
   }
 
   /**
@@ -426,6 +444,7 @@ export class VaultRegistry {
     this.scannedDirs.add(dir);
     this.planes.set(plane.boot.vaultId, plane);
     if (this.started) plane.start();
+    this.notifyMounted(plane);
     this.logger.info(`vault registry: created vault ${plane.boot.vaultId} ("${plane.name}")`);
     return this.info(plane);
   }

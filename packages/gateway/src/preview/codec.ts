@@ -19,7 +19,6 @@ import jpegJs from 'jpeg-js';
 import { PNG } from 'pngjs';
 import type { PreviewCodec, PreviewOutput } from '@centraid/vault';
 import { rgbaToThumbHash } from './thumbhash.js';
-import { createNativeImagePreviewCodec } from './native-codec.js';
 
 /** ThumbHash requires ≤100 px on each edge; the placeholder is coarse anyway. */
 const THUMBHASH_EDGE = 100;
@@ -228,6 +227,45 @@ export function createPortableImagePreviewCodec(): PreviewCodec {
 }
 
 /** Production default: native libvips work stays off the gateway JS thread. */
-export function createImagePreviewCodec(): PreviewCodec {
-  return createNativeImagePreviewCodec();
+export function createImagePreviewCodec(
+  nativeLoader: () => Promise<PreviewCodec | undefined> = () =>
+    import('./native-codec.js').then(({ createNativeImagePreviewCodec }) =>
+      createNativeImagePreviewCodec(),
+    ),
+): PreviewCodec {
+  const portable = createPortableImagePreviewCodec();
+  let native: Promise<PreviewCodec | undefined> | undefined;
+  const loadNative = (): Promise<PreviewCodec | undefined> => {
+    native ??= nativeLoader().catch(() => undefined);
+    return native;
+  };
+  const withFallback = async <T>(
+    nativeCall: (codec: PreviewCodec) => T | Promise<T>,
+    portableCall: () => T | Promise<T>,
+  ): Promise<T> => {
+    const codec = await loadNative();
+    if (!codec) return await portableCall();
+    try {
+      return await nativeCall(codec);
+    } catch {
+      return await portableCall();
+    }
+  };
+  return {
+    downscale: (source, mediaType, maxEdge) =>
+      withFallback(
+        (codec) => codec.downscale(source, mediaType, maxEdge),
+        () => portable.downscale(source, mediaType, maxEdge),
+      ),
+    perceptualHash: (source, mediaType) =>
+      withFallback(
+        (codec) => codec.perceptualHash(source, mediaType),
+        () => portable.perceptualHash(source, mediaType),
+      ),
+    thumbhash: (source, mediaType) =>
+      withFallback(
+        (codec) => codec.thumbhash(source, mediaType),
+        () => portable.thumbhash(source, mediaType),
+      ),
+  };
 }

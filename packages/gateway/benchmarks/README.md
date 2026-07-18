@@ -48,6 +48,7 @@ make a regression pass.
 | 2s stability recheck | 18.05 ms | 288.15 writes/s | 208.0 MB | 23.10 ms | idle extrapolation fail |
 | First Linux 65s gate | 29.21 ms | 224.44 writes/s | 172.2 MB | 26.66 ms | unconfigured WAL spool: 483 MB/hour fail |
 | Corrected 65s final | 24.89 ms | 241.25 writes/s | 197.7 MB | 26.94 ms | pass |
+| Post-review hardening | 29.46 ms | 247.28 writes/s | 184.3 MB | 10.02 ms | pass |
 
 The final artifact is `results/issue-456-final.json`. It resets the performance
 measurement epoch after authenticated warmup, so app installation and bundle
@@ -71,10 +72,11 @@ capture dormant and use SQLite's 64 MiB autocheckpoint safety net; storage
 connection create/delete re-arms capture or the fallback immediately. The
 portable live-data-growth gate catches future spool accumulation even on hosts
 without `/proc/self/io`.
-`results/issue-456-runtime.json` records the N7 runtime gate: Node
-24.4.1 passes the required `node:sqlite` compatibility probe, while Bun 1.3.13
-cannot import that built-in and is therefore a no-go rather than a misleading
-partial benchmark.
+`results/issue-456-runtime.json` records the reproducible N7 runtime gate. The
+committed probe launches both runtimes by default and emits this exact schema;
+Node 24.4.1 passes the required `node:sqlite` compatibility probe, while Bun
+1.3.13 cannot import that built-in and is therefore a no-go rather than a
+misleading partial benchmark.
 
 The full optimization record, architecture decisions, and Rust boundary are in
 `docs/plans/gateway-low-end-and-rust-plane.md`.

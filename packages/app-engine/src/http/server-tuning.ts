@@ -2,7 +2,10 @@ import type http from 'node:http';
 
 export const GATEWAY_KEEP_ALIVE_TIMEOUT_MS = 60_000;
 export const GATEWAY_HEADERS_TIMEOUT_MS = 65_000;
-export const GATEWAY_REQUEST_TIMEOUT_MS = 120_000;
+// Blob ingress is streaming and independently capped at 512 MiB. Keep enough
+// wall time for the 512 MiB ceiling over a slow phone uplink (~300 KiB/s)
+// while still bounding abandoned request residency.
+export const GATEWAY_REQUEST_TIMEOUT_MS = 30 * 60_000;
 export const GATEWAY_MAX_CONNECTIONS = 256;
 
 /** Shared low-RAM listener policy for the API and dedicated PWA origins (#456 R3). */

@@ -13,10 +13,22 @@ export interface GatewayHardwareProfile {
   workerPoolSize: number;
   replicationConcurrency: number;
   staticBrotliQuality: number;
+  staticGzipQuality: number;
   /** Lazy mount remains gated by A5's scheduler index; correctness selects eager. */
   vaultMountStrategy: 'eager';
   vaultSweepIntervalMs: number;
   outboxIdleIntervalMs: number;
+}
+
+function integerOverride(
+  raw: string | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number {
+  if (raw === undefined || raw === '') return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed >= minimum ? Math.min(parsed, maximum) : fallback;
 }
 
 export function resolveGatewayHardwareProfile(
@@ -41,20 +53,42 @@ export function resolveGatewayHardwareProfile(
   const sqliteSynchronous =
     syncOverride === 'FULL' || syncOverride === 'NORMAL'
       ? syncOverride
-      : hardwareClass === 'constrained'
+      : requested === 'constrained'
         ? 'NORMAL'
         : 'FULL';
+  const constrained = hardwareClass === 'constrained';
   return {
     class: hardwareClass,
     cores,
     totalMemoryBytes,
     storageFsyncMs,
     sqliteSynchronous,
-    workerMaxConcurrent: hardwareClass === 'constrained' ? 2 : 8,
-    workerMaxOldGenerationMb: hardwareClass === 'constrained' ? 128 : 256,
-    workerPoolSize: hardwareClass === 'constrained' ? 0 : 2,
-    replicationConcurrency: hardwareClass === 'constrained' ? 1 : 3,
-    staticBrotliQuality: hardwareClass === 'constrained' ? 5 : 10,
+    workerMaxConcurrent: integerOverride(
+      env.CENTRAID_WORKER_MAX_CONCURRENT,
+      constrained ? 2 : 8,
+      1,
+      32,
+    ),
+    workerMaxOldGenerationMb: integerOverride(
+      env.CENTRAID_WORKER_MAX_OLD_GENERATION_MB,
+      constrained ? 128 : 256,
+      8,
+      1_024,
+    ),
+    workerPoolSize: integerOverride(env.CENTRAID_WORKER_POOL_SIZE, constrained ? 0 : 2, 0, 8),
+    replicationConcurrency: integerOverride(
+      env.CENTRAID_REPLICATION_CONCURRENCY,
+      constrained ? 1 : 3,
+      1,
+      8,
+    ),
+    staticBrotliQuality: integerOverride(
+      env.CENTRAID_STATIC_BROTLI_QUALITY,
+      constrained ? 5 : 10,
+      0,
+      11,
+    ),
+    staticGzipQuality: integerOverride(env.CENTRAID_STATIC_GZIP_QUALITY, constrained ? 6 : 9, 0, 9),
     vaultMountStrategy: 'eager',
     vaultSweepIntervalMs: hardwareClass === 'constrained' ? 2 * 60 * 60 * 1000 : 60 * 60 * 1000,
     outboxIdleIntervalMs: hardwareClass === 'constrained' ? 2 * 60 * 1000 : 60 * 1000,

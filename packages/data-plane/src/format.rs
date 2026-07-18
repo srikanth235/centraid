@@ -26,7 +26,12 @@ pub fn canonical_json(value: &Value) -> String {
     match value {
         Value::Null => "null".into(),
         Value::Bool(v) => v.to_string(),
-        Value::Number(v) => v.to_string(),
+        // TypeScript's canonicalizer delegates numbers to JSON.stringify,
+        // whose values and exponent thresholds follow ECMAScript Number
+        // (IEEE-754), not serde_json's arbitrary integer spelling.
+        Value::Number(v) => ryu_js::Buffer::new()
+            .format(v.as_f64().expect("JSON numbers are finite"))
+            .to_owned(),
         Value::String(v) => serde_json::to_string(v).expect("string serialization"),
         Value::Array(values) => format!(
             "[{}]",
@@ -240,6 +245,16 @@ mod tests {
         assert_eq!(
             canonical_json(&json!({"z": 1, "a": {"y": true, "b": null}})),
             r#"{"a":{"b":null,"y":true},"z":1}"#
+        );
+    }
+
+    #[test]
+    fn canonical_json_uses_ecmascript_number_spelling() {
+        assert_eq!(
+            canonical_json(
+                &serde_json::from_str("[1.5,1e21,1e20,1e-7,1e-6,-0,9007199254740993]").unwrap()
+            ),
+            "[1.5,1e+21,100000000000000000000,1e-7,0.000001,0,9007199254740992]"
         );
     }
 }

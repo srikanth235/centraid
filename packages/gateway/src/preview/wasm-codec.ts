@@ -24,6 +24,11 @@ interface VipsImage {
 
 interface VipsRuntime {
   Image: { newFromBuffer(source: Uint8Array): VipsImage };
+  Cache: {
+    max(value: number): void;
+    maxMem(value: number): void;
+    maxFiles(value: number): void;
+  };
 }
 
 // Avoid pulling wasm-vips' 260 KiB generated operation declaration into every
@@ -34,8 +39,27 @@ const Vips = require('wasm-vips') as () => Promise<VipsRuntime>;
 let runtime: Promise<VipsRuntime> | undefined;
 
 function getRuntime(): Promise<VipsRuntime> {
-  runtime ??= Vips();
+  runtime ??= Vips().then((vips) => {
+    // A long-lived Electron process must not inherit libvips' effectively
+    // unbounded operation/file cache defaults.
+    vips.Cache.max(32);
+    vips.Cache.maxMem(128 * 1024 * 1024);
+    vips.Cache.maxFiles(16);
+    return vips;
+  });
   return runtime;
+}
+
+// Serialize wasm-vips jobs. Each decoded image is independently capped, and
+// this gate prevents concurrent 40 MP rasters from multiplying heap growth.
+let operationTail: Promise<void> = Promise.resolve();
+function bounded<T>(operation: () => Promise<T>): Promise<T> {
+  const current = operationTail.then(operation, operation);
+  operationTail = current.then(
+    () => undefined,
+    () => undefined,
+  );
+  return current;
 }
 
 function supported(mediaType: string): boolean {
@@ -63,7 +87,7 @@ function dispose(images: VipsImage[]): void {
 
 /** Electron codec: libvips compiled to WebAssembly, with no native-addon ABI coupling. */
 export function createWasmImagePreviewCodec(): PreviewCodec {
-  return {
+  const codec: PreviewCodec = {
     async downscale(
       source: Buffer,
       mediaType: string,
@@ -153,5 +177,12 @@ export function createWasmImagePreviewCodec(): PreviewCodec {
         dispose(images);
       }
     },
+  };
+  return {
+    downscale: (source, mediaType, maxEdge) =>
+      bounded(async () => await codec.downscale(source, mediaType, maxEdge)),
+    perceptualHash: (source, mediaType) =>
+      bounded(async () => await codec.perceptualHash(source, mediaType)),
+    thumbhash: (source, mediaType) => bounded(async () => await codec.thumbhash(source, mediaType)),
   };
 }

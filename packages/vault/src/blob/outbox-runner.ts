@@ -25,6 +25,8 @@ export interface BlobOutboxRunnerOptions {
   onStatus(): void;
   /** Host-wide event-loop pressure gate. Explicit `drainSha` calls stay foreground. */
   shouldDeferBackgroundWork?: () => boolean;
+  /** Close coordinator-owned resources before an expired row/file is removed. */
+  onExpireSession?: (sessionId: string) => void;
   intervalMs?: number;
 }
 
@@ -46,11 +48,16 @@ export class BlobOutboxRunner {
       clearTimeout(this.timer);
       this.timer = undefined;
     }
-    // No remote tier means there is nowhere to drain. Keep only a one-minute
-    // configuration backstop; enqueue/configuration events still call kick()
-    // immediately (#456 I1).
+    // No remote tier means there is nowhere to drain, but local upload spools
+    // still expire and must be reaped. Run that cheap lifecycle pass on the
+    // one-minute configuration backstop (#456 I1).
     if (!this.options.remoteConfigured()) {
-      this.scheduleNext();
+      this.flight = this.cleanupExpiredSessions()
+        .catch(() => undefined)
+        .finally(() => {
+          this.flight = null;
+          this.scheduleNext();
+        });
       return;
     }
     if (this.options.shouldDeferBackgroundWork?.()) {
@@ -143,6 +150,7 @@ export class BlobOutboxRunner {
 
   private async cleanupExpiredSessions(): Promise<void> {
     for (const row of this.options.state.expiredSessions()) {
+      this.options.onExpireSession?.(row.session_id);
       if (row.temp_path) rmSync(row.temp_path, { force: true });
       const transfer = this.options.remote()?.transfer;
       if (row.remote_temp_id && row.remote_upload_id) {

@@ -168,6 +168,19 @@ describe('SchedulerLedgerStore', () => {
     // Real refs are always `<appId>/<id>` — the sentinel deliberately has no slash.
     expect(SCHEDULER_LEDGER_AUTOMATION_ID.includes('/')).toBe(false);
   });
+
+  it('marks dormancy without advancing time and resets the baseline on wake', () => {
+    const store = new SchedulerLedgerStore(fakeConversationStore());
+    store.recordTick(at(8, 0));
+    store.setDormant(true, at(8, 1));
+    expect(store.load()).toEqual({
+      lastTickAt: at(8, 0).toISOString(),
+      dormant: true,
+      missed: [],
+    });
+    store.setDormant(false, at(12, 0));
+    expect(store.load()).toEqual({ lastTickAt: at(12, 0).toISOString(), missed: [] });
+  });
 });
 
 describe('recordSchedulerTick', () => {

@@ -88,6 +88,39 @@ test('an unconfigured remote tier performs no fast polling (#456 I1)', async () 
   }
 });
 
+test('an unconfigured remote still reaps expired local sessions and resources', async () => {
+  vi.useFakeTimers();
+  const db = openVaultDb();
+  await db.blobTransfers.close();
+  const state = new BlobTransferState(db.vault);
+  state.createSession({
+    sessionId: 'expired-local',
+    kind: 'fallback',
+    tempPath: '/tmp/centraid-expired-local-does-not-exist',
+    expiresAt: new Date(0).toISOString(),
+  });
+  const expired: string[] = [];
+  const local = new MemoryBlobStore();
+  const runner = new BlobOutboxRunner({
+    vault: db.vault,
+    state,
+    local,
+    cache: new BlobCache(db.vault, local),
+    remote: () => null,
+    remoteConfigured: () => false,
+    onExpireSession: (sessionId) => void expired.push(sessionId),
+    onStatus: () => undefined,
+  });
+  try {
+    await vi.advanceTimersByTimeAsync(65_000);
+    expect(expired).toEqual(['expired-local']);
+    expect(state.session('expired-local')).toBeNull();
+  } finally {
+    await runner.close();
+    db.close();
+  }
+});
+
 test('a pressured host defers timer-driven replication but keeps its durable row', async () => {
   vi.useFakeTimers();
   const db = openVaultDb();

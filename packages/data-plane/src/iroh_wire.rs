@@ -8,6 +8,7 @@ use crate::MAX_HEADER_FRAME_BYTES;
 
 const AUTH_MODE_HEADER: &str = "x-centraid-tunnel-auth-mode";
 const AUTH_WEB_SESSION: &str = "web-session";
+pub(crate) const RELAY_PROOF_HEADER: &str = "x-centraid-data-plane-relay";
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(untagged)]
@@ -95,7 +96,11 @@ pub(crate) fn request_headers(
         Some(WireHeaderValue::One(value)) if value == AUTH_WEB_SESSION
     );
     for (name, value) in wire {
-        if hop_by_hop(name) || name.eq_ignore_ascii_case(AUTH_MODE_HEADER) {
+        if hop_by_hop(name)
+            || name.eq_ignore_ascii_case(AUTH_MODE_HEADER)
+            || name.eq_ignore_ascii_case("host")
+            || name.eq_ignore_ascii_case(RELAY_PROOF_HEADER)
+        {
             continue;
         }
         let name = HeaderName::from_bytes(name.as_bytes())?;
@@ -111,6 +116,9 @@ pub(crate) fn request_headers(
         }
     }
     for (name, value) in &auth.headers {
+        if name.eq_ignore_ascii_case("host") || name.eq_ignore_ascii_case(RELAY_PROOF_HEADER) {
+            continue;
+        }
         headers.insert(
             HeaderName::from_bytes(name.as_bytes())?,
             HeaderValue::from_str(value)?,
@@ -148,4 +156,45 @@ pub(crate) fn response_headers(headers: &HeaderMap) -> HashMap<String, WireHeade
             (name, value)
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn relay_owns_host_authorization_and_proof_headers() {
+        let wire = HashMap::from([
+            (
+                "Host".to_owned(),
+                WireHeaderValue::One("attacker.invalid".to_owned()),
+            ),
+            (
+                RELAY_PROOF_HEADER.to_owned(),
+                WireHeaderValue::One("forged".to_owned()),
+            ),
+            (
+                "x-client".to_owned(),
+                WireHeaderValue::One("kept".to_owned()),
+            ),
+        ]);
+        let auth = Authorization {
+            allowed: true,
+            headers: HashMap::from([
+                ("host".to_owned(), "also.invalid".to_owned()),
+                (RELAY_PROOF_HEADER.to_owned(), "also-forged".to_owned()),
+            ]),
+            upstream_url: None,
+            upstream_token: None,
+        };
+
+        let headers = request_headers(&wire, &auth, "owner-token").unwrap();
+        assert!(!headers.contains_key(reqwest::header::HOST));
+        assert!(!headers.contains_key(RELAY_PROOF_HEADER));
+        assert_eq!(headers.get("x-client").unwrap(), "kept");
+        assert_eq!(
+            headers.get(reqwest::header::AUTHORIZATION).unwrap(),
+            "Bearer owner-token"
+        );
+    }
 }

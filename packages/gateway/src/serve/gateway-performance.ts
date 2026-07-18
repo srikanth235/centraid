@@ -30,7 +30,7 @@ interface EventLoopDelayHistogramLike {
 }
 
 export interface GatewayPerformanceMonitorOptions {
-  /** Native histogram resolution. Twenty milliseconds keeps a 50 ms shed threshold meaningful. */
+  /** Native histogram sampling interval, subtracted from recorded delays. */
   resolutionMs?: number;
   /** Active sampling window. Set to zero only in deterministic unit tests. */
   sampleWindowMs?: number;
@@ -55,6 +55,7 @@ function milliseconds(nanoseconds: number): number {
 /** One global monitor shared by health, benchmarks, and background load shedding. */
 export class GatewayPerformanceMonitor {
   private readonly histogram: EventLoopDelayHistogramLike;
+  private readonly resolutionMs: number;
   private timer?: NodeJS.Timeout;
   private readonly sampleIntervalMs: number;
   private lastWindow = { ...EMPTY_WINDOW };
@@ -63,8 +64,8 @@ export class GatewayPerformanceMonitor {
   private closed = false;
 
   constructor(options: GatewayPerformanceMonitorOptions = {}) {
-    this.histogram =
-      options.histogram ?? monitorEventLoopDelay({ resolution: options.resolutionMs ?? 20 });
+    this.resolutionMs = options.resolutionMs ?? 20;
+    this.histogram = options.histogram ?? monitorEventLoopDelay({ resolution: this.resolutionMs });
     this.storageFsyncMs = options.storageFsyncMs;
     const firstWindowMs = options.sampleWindowMs ?? 1_000;
     this.sampleIntervalMs = Math.max(1, options.sampleIntervalMs ?? firstWindowMs);
@@ -124,10 +125,16 @@ export class GatewayPerformanceMonitor {
   private readWindow(): typeof EMPTY_WINDOW {
     const count = Number(this.histogram.count);
     if (!Number.isFinite(count) || count <= 0) return { ...EMPTY_WINDOW };
+    // Node's histogram samples a recurring timer. Its raw values include the
+    // configured sampling interval itself (an idle 20 ms monitor reports
+    // roughly 20 ms), while callers need scheduling delay *beyond* that
+    // baseline for health and load shedding.
+    const lagMilliseconds = (nanoseconds: number): number =>
+      Math.max(0, milliseconds(nanoseconds) - this.resolutionMs);
     return {
-      eventLoopLagP50Ms: milliseconds(this.histogram.percentile(50)),
-      eventLoopLagP99Ms: milliseconds(this.histogram.percentile(99)),
-      eventLoopLagMaxMs: milliseconds(this.histogram.max),
+      eventLoopLagP50Ms: lagMilliseconds(this.histogram.percentile(50)),
+      eventLoopLagP99Ms: lagMilliseconds(this.histogram.percentile(99)),
+      eventLoopLagMaxMs: lagMilliseconds(this.histogram.max),
       eventLoopLagSamples: count,
     };
   }

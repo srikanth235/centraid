@@ -33,6 +33,22 @@ fn node_cbsf_opens_in_rust_and_rust_seals_identical_bytes() {
 }
 
 #[test]
+fn node_compressed_cbsf_algorithms_open_in_rust() {
+    let fixture = fixture();
+    let key = bytes32(fixture["cbsf"]["keyHex"].as_str().unwrap());
+    for name in ["zstd", "deflate"] {
+        let vector = &fixture["cbsfCompressed"][name];
+        let plain = STANDARD
+            .decode(vector["plainBase64"].as_str().unwrap())
+            .unwrap();
+        let sealed = STANDARD
+            .decode(vector["sealedBase64"].as_str().unwrap())
+            .unwrap();
+        assert_eq!(cbsf::open_object(&key, &sealed).unwrap(), plain, "{name}");
+    }
+}
+
+#[test]
 fn node_wal_segment_opens_in_rust_and_rust_seals_identical_bytes() {
     let fixture = fixture();
     let vector = &fixture["wal"];

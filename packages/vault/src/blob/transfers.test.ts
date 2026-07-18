@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
@@ -104,6 +104,30 @@ test('fallback ingress persists offsets once per 4 MiB durability batch (#456 I7
     received_bytes: INGRESS_FSYNC_BATCH_BYTES,
     hash_state_json: null,
   });
+});
+
+test('restart commit truncates a non-durable tail before adopting unknown-size ingress', async () => {
+  const h = fallbackRestartHarness('blob-fallback-truncate-tail-');
+  const first = await h.restart();
+  const begin = await first.coordinator.beginIngress({ resumable: true });
+  expect(begin.mode).toBe('spool');
+  if (begin.mode !== 'spool') throw new Error('expected spool ingress');
+  const durable = Buffer.from('durable prefix');
+  const nonDurableTail = Buffer.from('tail that survived close but not the offset transaction');
+  const tempPath = first.coordinator.state.session(begin.sessionId)?.temp_path;
+  if (!tempPath) throw new Error('expected fallback temp path');
+  // Model the crash boundary directly: SQLite contains only the last fsynced
+  // offset while the filesystem still exposes later, non-durable bytes.
+  writeFileSync(tempPath, Buffer.concat([durable, nonDurableTail]));
+  first.coordinator.state.recordAppend(begin.sessionId, durable.length);
+  expect(first.coordinator.state.session(begin.sessionId)?.received_bytes).toBe(durable.length);
+  first.coordinator.abandon();
+
+  const second = await h.restart();
+  const committed = await second.coordinator.commitIngress(begin.sessionId);
+  const expectedSha = createHash('sha256').update(durable).digest('hex');
+  expect(committed).toMatchObject({ sha256: expectedSha, byteSize: durable.length });
+  expect(second.local.getSync(expectedSha)).toEqual(durable);
 });
 
 test('strict acknowledgment returns a durable pending receipt while provider is down, then transitions', async () => {

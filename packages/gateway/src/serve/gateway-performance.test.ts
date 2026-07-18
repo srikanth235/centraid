@@ -34,25 +34,41 @@ describe('GatewayPerformanceMonitor', () => {
     const histogram = new FakeHistogram();
     const monitor = new GatewayPerformanceMonitor({
       histogram,
+      resolutionMs: 10,
       sampleWindowMs: 0,
       storageFsyncMs: 12.5,
     });
 
     expect(monitor.snapshot()).toEqual({
-      eventLoopLagP50Ms: 15,
-      eventLoopLagP99Ms: 65,
-      eventLoopLagMaxMs: 80,
-      eventLoopLagPeakP99Ms: 65,
+      eventLoopLagP50Ms: 5,
+      eventLoopLagP99Ms: 55,
+      eventLoopLagMaxMs: 70,
+      eventLoopLagPeakP99Ms: 55,
       eventLoopLagSamples: 4,
       storageFsyncMs: 12.5,
     });
     expect(monitor.shouldDeferBackgroundWork(50)).toBe(true);
     histogram.p99 = 20_000_000;
     monitor.resetMeasurement();
-    expect(monitor.snapshot().eventLoopLagPeakP99Ms).toBe(20);
+    expect(monitor.snapshot().eventLoopLagPeakP99Ms).toBe(10);
     expect(histogram.resetCount).toBe(1);
     monitor.close();
     expect(histogram.enabled).toBe(false);
+  });
+
+  it('subtracts the sampling interval so an idle histogram reports zero lag', () => {
+    const histogram = new FakeHistogram();
+    histogram.max = 20_000_000;
+    histogram.p99 = 20_000_000;
+    const monitor = new GatewayPerformanceMonitor({ histogram, sampleWindowMs: 0 });
+
+    expect(monitor.snapshot()).toMatchObject({
+      eventLoopLagP50Ms: 0,
+      eventLoopLagP99Ms: 0,
+      eventLoopLagMaxMs: 0,
+    });
+    expect(monitor.shouldDeferBackgroundWork()).toBe(false);
+    monitor.close();
   });
 
   it('does not shed while the histogram has no samples', () => {

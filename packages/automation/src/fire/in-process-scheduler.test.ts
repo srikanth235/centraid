@@ -244,6 +244,20 @@ describe('InProcessScheduler onTick hook (issue #351)', () => {
     expect(ticks).toBe(0);
   });
 
+  it('reports only active/dormant transitions so the host can reset liveness once', async () => {
+    const transitions: boolean[] = [];
+    const s = new InProcessScheduler({
+      fire: () => {},
+      onDormancyChange: (dormant) => void transitions.push(dormant),
+      now: () => at(8, 0),
+    });
+    await s.reconcile([]);
+    await s.reconcile([row('a/one', true, ['0 8 * * *'])]);
+    await s.reconcile([row('a/one', true, ['0 8 * * *'])]);
+    await s.reconcile([]);
+    expect(transitions).toEqual([false, true]);
+  });
+
   it('onTick is optional — omitting it changes nothing about firing', async () => {
     const fired: string[] = [];
     const s = new InProcessScheduler({ fire: (ref) => void fired.push(ref), now: () => at(8, 0) });

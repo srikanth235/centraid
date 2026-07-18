@@ -6,7 +6,7 @@ export type {
   TunnelResponse,
 } from './client.js';
 export type { Connection, PathSnapshot } from './iroh.js';
-export { startDesktopTunnel } from './desktop-tunnel.js';
+export { startDesktopTunnel, startPreferredDesktopTunnel } from './desktop-tunnel.js';
 export { startNativeDesktopTunnel } from './native-relay.js';
 export type {
   ActivePairing,

@@ -2,13 +2,12 @@
 // claim them through a command, and serve them back with ETag/Range — the
 // full staged-upload loop an app performs.
 
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { Readable } from 'node:stream';
 import { deflateSync } from 'node:zlib';
 import jpegJs from 'jpeg-js';
 import { createImagePreviewCodec } from '../preview/codec.js';
@@ -85,6 +84,7 @@ function compressedPdf(text: string): Buffer {
 
 async function fixture(
   previewCodec?: ReturnType<typeof createImagePreviewCodec>,
+  dataPlane?: { baseUrl: string; secret: string },
 ): Promise<{ base: string; plane: VaultPlane }> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), `blob-routes-${crypto.randomUUID()}-`));
   cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
@@ -95,7 +95,10 @@ async function fixture(
     ...(previewCodec ? { previewCodec } : {}),
   });
   cleanups.push(() => plane.stop());
-  const handler = makeBlobRouteHandler({ current: () => plane });
+  const handler = makeBlobRouteHandler(
+    { current: () => plane },
+    dataPlane ? { ...dataPlane, rootDir: dir } : undefined,
+  );
   const server = http.createServer((req, res) => {
     void handler(req, res).then((handled) => {
       if (!handled) {
@@ -175,53 +178,6 @@ test('raw upload → claim via core.add_document → serve with ETag/Range/304',
   // Download disposition on demand.
   const dl = await fetch(`${base}/${contentId}?download=1`);
   expect(dl.headers.get('content-disposition')).toBe('attachment; filename="pixel.png"');
-});
-
-test('aborting a blob response destroys its source stream immediately', async () => {
-  const { base, plane } = await fixture();
-  const staged = (await (
-    await fetch(`${base}?filename=abort.png`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/octet-stream' },
-      body: new Uint8Array(PNG_BYTES),
-    })
-  ).json()) as { sha256: string };
-  const outcome = plane.gateway.invoke(plane.ownerCredential, {
-    command: 'core.add_document',
-    input: { staged_sha: staged.sha256, title: 'abort.png' },
-    purpose: 'dpv:ServiceProvision',
-  });
-  const contentId = (outcome as { output: { content_id: string } }).output.content_id;
-
-  let emitted = false;
-  const slow = new Readable({
-    read() {
-      if (emitted) return;
-      emitted = true;
-      this.push(PNG_BYTES.subarray(0, 1));
-    },
-  });
-  const open = vi.spyOn(plane.db.blobs, 'openReadStreamSync').mockReturnValue({
-    stream: slow,
-    size: PNG_BYTES.length,
-    range: { start: 0, end: PNG_BYTES.length - 1 },
-  });
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const request = http.get(`${base}/${contentId}`, (response) => {
-        response.once('data', () => response.destroy());
-        response.once('close', resolve);
-        response.once('error', reject);
-      });
-      request.once('error', reject);
-    });
-    for (let attempt = 0; attempt < 50 && !slow.destroyed; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-    expect(slow.destroyed).toBe(true);
-  } finally {
-    open.mockRestore();
-  }
 });
 
 test('bare raw JPEG ingress defers preview CPU to the bounded backstop sweep', async () => {

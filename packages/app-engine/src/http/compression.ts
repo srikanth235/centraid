@@ -121,7 +121,16 @@ export function staticQualityForHost(
   const constrained =
     resolvedProfile === 'constrained' ||
     (resolvedProfile !== 'standard' && (host.cores <= 4 || host.totalMemoryBytes <= 4 * 1024 ** 3));
-  return constrained ? { brotli: 5, gzip: 6 } : STATIC_QUALITY;
+  const parse = (raw: string | undefined, fallback: number, ceiling: number): number => {
+    if (raw === undefined || raw === '') return fallback;
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, ceiling) : fallback;
+  };
+  const fallback = constrained ? { brotli: 5, gzip: 6 } : STATIC_QUALITY;
+  return {
+    brotli: parse(env.CENTRAID_STATIC_BROTLI_QUALITY, fallback.brotli, 11),
+    gzip: parse(env.CENTRAID_STATIC_GZIP_QUALITY, fallback.gzip, 9),
+  };
 }
 
 /** Compress on libuv's worker pool so large payloads never stall the event loop. */

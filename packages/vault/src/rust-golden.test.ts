@@ -13,6 +13,10 @@ import {
 
 interface GoldenFixture {
   cbsf: { keyHex: string; plainBase64: string; frameSize: number; sealedBase64: string };
+  cbsfCompressed: Record<
+    'zstd' | 'deflate',
+    { algorithm: number; plainBase64: string; sealedBase64: string }
+  >;
 }
 
 const fixture = JSON.parse(
@@ -71,4 +75,27 @@ test('CBSF v2 golden is byte-identical across Node and Rust', () => {
       encodeTrailer(resealedDirectory.length, trailer.frameCount),
     ]),
   ).toEqual(sealed);
+});
+
+test('CBSF compressed algorithm goldens open in both Node and Rust', () => {
+  const key = Buffer.from(fixture.cbsf.keyHex, 'hex');
+  for (const [name, vector] of Object.entries(fixture.cbsfCompressed)) {
+    const sealed = Buffer.from(vector.sealedBase64, 'base64');
+    const sha = decodeHeader(sealed).sha256;
+    const trailer = decodeTrailer(sealed.subarray(sealed.length - 13));
+    const directoryStart = sealed.length - 13 - trailer.directoryLength;
+    const directory = openDirectory(
+      key,
+      sha,
+      trailer.frameCount,
+      sealed.subarray(directoryStart, sealed.length - 13),
+    );
+    const frame = sealed.subarray(
+      directory.offsets[0],
+      directory.offsets[0]! + directory.sealedLens[0]!,
+    );
+    expect(unsealFrame(key, sha, 0, 1, frame), name).toEqual(
+      Buffer.from(vector.plainBase64, 'base64'),
+    );
+  }
 });

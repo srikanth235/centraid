@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, HashMap},
     io::Cursor,
     path::{Component, Path, PathBuf},
     sync::Arc,
@@ -16,7 +16,7 @@ use axum::{
     routing::{get, post},
 };
 use futures_util::StreamExt;
-use image::{ImageFormat, ImageReader, Limits, codecs::jpeg::JpegEncoder};
+use image::{ImageDecoder, ImageFormat, ImageReader, Limits, codecs::jpeg::JpegEncoder};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
@@ -39,7 +39,7 @@ const MAX_PREVIEW_ALLOC_BYTES: u64 = 192 * 1024 * 1024;
 struct PlaneState {
     root: Arc<PathBuf>,
     ticket_secret: Arc<Vec<u8>>,
-    used_nonces: Arc<Mutex<HashSet<String>>>,
+    used_nonces: Arc<Mutex<HashMap<String, u64>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -164,15 +164,19 @@ async fn serve_blob(
     };
     {
         let mut used = state.used_nonces.lock().await;
-        if !used.insert(ticket.nonce.clone()) {
+        if used.contains_key(&ticket.nonce) {
             return error(StatusCode::UNAUTHORIZED, "ticket_replayed");
         }
         // Tickets live for seconds. Bound the set during long-running service
-        // without adding a cleanup timer to the low-end process.
-        if used.len() > 65_536 {
-            used.clear();
-            used.insert(ticket.nonce.clone());
+        // without dropping still-valid replay proofs wholesale.
+        if used.len() >= 65_536 {
+            let now = now_ms();
+            used.retain(|_, expires_at_ms| *expires_at_ms >= now);
+            if used.len() >= 65_536 {
+                return error(StatusCode::SERVICE_UNAVAILABLE, "ticket_replay_cache_full");
+            }
         }
+        used.insert(ticket.nonce.clone(), ticket.expires_at_ms);
     }
     let Some(candidate) = safe_relative(&state.root, &ticket.relative_path) else {
         return error(StatusCode::FORBIDDEN, "invalid_path");
@@ -307,14 +311,28 @@ fn render_preview(bytes: &[u8], edge: u32) -> Result<Vec<u8>> {
         anyhow::bail!("image dimensions exceed cap");
     }
 
+    let mut orientation_reader = ImageReader::with_format(Cursor::new(bytes), format);
+    let mut orientation_limits = Limits::default();
+    orientation_limits.max_image_width = Some(MAX_PREVIEW_EDGE);
+    orientation_limits.max_image_height = Some(MAX_PREVIEW_EDGE);
+    orientation_limits.max_alloc = Some(MAX_PREVIEW_ALLOC_BYTES);
+    orientation_reader.limits(orientation_limits);
+    let orientation = orientation_reader.into_decoder()?.orientation()?;
+
     let mut reader = ImageReader::with_format(Cursor::new(bytes), format);
     let mut limits = Limits::default();
     limits.max_image_width = Some(MAX_PREVIEW_EDGE);
     limits.max_image_height = Some(MAX_PREVIEW_EDGE);
     limits.max_alloc = Some(MAX_PREVIEW_ALLOC_BYTES);
     reader.limits(limits);
-    let image = reader.decode()?;
-    let resized = image.thumbnail(edge, edge).to_rgb8();
+    let mut image = reader.decode()?;
+    image.apply_orientation(orientation);
+    let resized = if image.width() > edge || image.height() > edge {
+        image.thumbnail(edge, edge)
+    } else {
+        image
+    }
+    .to_rgb8();
     let mut output = Vec::new();
     JpegEncoder::new_with_quality(&mut output, 80).encode_image(&resized)?;
     Ok(output)
@@ -399,7 +417,14 @@ async fn pump_put(
     {
         return error(StatusCode::INTERNAL_SERVER_ERROR, "source_seek_failed");
     }
-    let client = reqwest::Client::new();
+    let client = match reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .read_timeout(std::time::Duration::from_secs(120))
+        .build()
+    {
+        Ok(client) => client,
+        Err(_) => return error(StatusCode::INTERNAL_SERVER_ERROR, "http_client_failed"),
+    };
     let mut request = client
         .put(destination)
         .header(reqwest::header::CONTENT_LENGTH, length)
@@ -454,7 +479,7 @@ pub async fn serve(config: HttpPlaneConfig) -> Result<()> {
     let state = PlaneState {
         root: Arc::new(root),
         ticket_secret: Arc::new(config.ticket_secret),
-        used_nonces: Arc::new(Mutex::new(HashSet::new())),
+        used_nonces: Arc::new(Mutex::new(HashMap::new())),
     };
     let app = Router::new()
         .route("/v1/health", get(|| async { "ok" }))
@@ -470,16 +495,6 @@ pub async fn serve(config: HttpPlaneConfig) -> Result<()> {
     tracing::info!(listen = %config.listen, "Centraid byte plane listening");
     axum::serve(listener, app).await.context("serve byte plane")
 }
-
 #[cfg(test)]
-mod tests {
-    use axum::http::HeaderValue;
-
-    use super::parse_range;
-
-    #[test]
-    fn rejects_a_zero_length_suffix_range() {
-        let value = HeaderValue::from_static("bytes=-0");
-        assert_eq!(parse_range(Some(&value), 100), None);
-    }
-}
+#[path = "http_plane_tests.rs"]
+mod tests;

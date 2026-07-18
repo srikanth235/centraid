@@ -7,6 +7,25 @@ export interface DataPlaneHttpOptions {
   rootDir: string;
 }
 
+/**
+ * Proof stamped by the trusted relay before it forwards a request to the
+ * gateway. The gateway must never redirect an ordinary LAN/browser request
+ * to its configured byte-plane address: that address is frequently loopback
+ * from the gateway host's point of view.
+ */
+export const DATA_PLANE_RELAY_HEADER = 'x-centraid-data-plane-relay';
+
+export function isDataPlaneRelayRequest(
+  options: Pick<DataPlaneHttpOptions, 'secret'>,
+  supplied: string | string[] | undefined,
+): boolean {
+  const candidate = Array.isArray(supplied) ? supplied[0] : supplied;
+  if (!candidate) return false;
+  const left = Buffer.from(candidate);
+  const right = Buffer.from(options.secret);
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
 interface BlobTicket {
   relativePath: string;
   expiresAtMs: number;

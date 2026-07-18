@@ -1,7 +1,9 @@
-import { createHash } from 'node:crypto';
+import { createCipheriv, createHash, createHmac } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { deflateRawSync, zstdCompressSync } from 'node:zlib';
+import { cbsfFrameAad } from '@centraid/blob-format';
 import { deriveDataKey, type Keyring } from '../../backup/src/crypto.ts';
 import { sealManifest } from '../../backup/src/manifest.ts';
 import { sealWalSegment, type WalSegmentAddress } from '../../backup/src/wal-format.ts';
@@ -35,6 +37,49 @@ const cbsf = Buffer.concat([
   directory,
   encodeTrailer(directory.length, chunks.length),
 ]);
+
+function sealForcedFrame(
+  frameKey: Buffer,
+  frameSha: string,
+  algoId: 1 | 2,
+  payload: Buffer,
+): Buffer {
+  const body = Buffer.concat([Buffer.from([algoId]), payload]);
+  const aad = Buffer.from(cbsfFrameAad(frameSha, 0, 1));
+  const nonce = createHmac('sha256', frameKey)
+    .update('cbsf-nonce\0')
+    .update(aad)
+    .update('\0')
+    .update(createHmac('sha256', frameKey).update(body).digest())
+    .digest()
+    .subarray(0, 12);
+  const cipher = createCipheriv('aes-256-gcm', frameKey, nonce);
+  cipher.setAAD(aad);
+  const ciphertext = Buffer.concat([cipher.update(body), cipher.final()]);
+  return Buffer.concat([nonce, ciphertext, cipher.getAuthTag()]);
+}
+
+function compressedCbsf(algoId: 1 | 2): {
+  algorithm: number;
+  plainBase64: string;
+  sealedBase64: string;
+} {
+  const bytes = Buffer.from('compressed golden frame '.repeat(512));
+  const digest = createHash('sha256').update(bytes).digest('hex');
+  const payload = algoId === 1 ? zstdCompressSync(bytes) : deflateRawSync(bytes);
+  const frame = sealForcedFrame(key, digest, algoId, payload);
+  const sealedDirectory = sealDirectory(key, digest, 1, bytes.length, bytes.length, [frame.length]);
+  return {
+    algorithm: algoId,
+    plainBase64: bytes.toString('base64'),
+    sealedBase64: Buffer.concat([
+      encodeHeader(digest),
+      frame,
+      sealedDirectory,
+      encodeTrailer(sealedDirectory.length, 1),
+    ]).toString('base64'),
+  };
+}
 
 const masterKey = Buffer.from(Array.from({ length: 32 }, (_, index) => 255 - index));
 const vaultId = '00000000-0000-7000-8000-000000000456';
@@ -88,6 +133,10 @@ const fixture = {
     plainBase64: plain.toString('base64'),
     frameSize,
     sealedBase64: cbsf.toString('base64'),
+  },
+  cbsfCompressed: {
+    zstd: compressedCbsf(1),
+    deflate: compressedCbsf(2),
   },
   wal: {
     masterKeyHex: masterKey.toString('hex'),

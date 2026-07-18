@@ -41,6 +41,7 @@ import {
 import type { TunnelUpstream } from './desktop-tunnel.js';
 
 export const GW_PAIR_ALPN = 'centraid/gw-pair/1';
+const DATA_PLANE_RELAY_HEADER = 'x-centraid-data-plane-relay';
 
 /** Ticket redemption over `centraid/gw-pair/1` — one frame each way. */
 export interface GatewayPairRequest {
@@ -110,15 +111,22 @@ export async function startGatewayEndpoint(
   options: GatewayEndpointOptions,
 ): Promise<GatewayEndpointHandle> {
   if (options.nativeControl && options.secretKey) {
-    const upstream = await options.upstream();
-    if (!upstream) throw new Error('gateway upstream is unavailable');
-    const { startNativeGatewayRelay } = await import('./native-relay.js');
-    return await startNativeGatewayRelay({
-      secretKey: options.secretKey,
-      upstream,
-      controlSecret: options.nativeControl.secret,
-      ...(options.relays ? { relays: options.relays } : {}),
-    });
+    try {
+      const upstream = await options.upstream();
+      if (!upstream) throw new Error('gateway upstream is unavailable');
+      const { startNativeGatewayRelay } = await import('./native-relay.js');
+      return await startNativeGatewayRelay({
+        secretKey: options.secretKey,
+        upstream,
+        controlSecret: options.nativeControl.secret,
+        ...(options.relays ? { relays: options.relays } : {}),
+      });
+    } catch {
+      // The first-party addon is an optimization, not an availability
+      // boundary. @number0/iroh's supported-platform binding still provides
+      // the original JS relay path when our target artifact is absent or
+      // cannot be loaded.
+    }
   }
   const builder = iroh.Endpoint.builder();
   builder.applyN0();
@@ -267,6 +275,12 @@ class GatewayEndpoint {
     const injected = this.options.requestHeaders?.(endpointId) ?? {};
     for (const name of Object.keys(injected)) delete headers[name.toLowerCase()];
     Object.assign(headers, injected);
+    // A client cannot claim it arrived through the trusted byte relay. Strip
+    // its copy and stamp the control secret only on this relay-owned hop.
+    delete headers[DATA_PLANE_RELAY_HEADER];
+    if (this.options.nativeControl) {
+      headers[DATA_PLANE_RELAY_HEADER] = this.options.nativeControl.secret;
+    }
     headers.host = base.host;
     // Browser-generated apps carry a one-app cookie minted by WebAppSessions.
     // Omitting the broad device bearer lets the HTTP authorizer apply that
