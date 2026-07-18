@@ -528,8 +528,8 @@ SSH CLI propagation regressions pass as part of **29/29** focused tests. The
 final hygiene split's affected route, cache-profile, cache, and gateway suites
 passed **61/61 tests**.
 
-The final bounded coverage run passed **499 files / 4,387 tests**; three files
-and 35 tests were skipped only by their explicit platform or opt-in
+The final bounded coverage run passed **499 files / 4,386 tests**; three files
+and 36 tests were skipped only by their explicit platform or opt-in
 integration gates. The focused WAL-capture/storage/backup transition suites
 passed **50/50 tests**.
 
@@ -612,3 +612,4 @@ and create a PR. There were no user corrections or mid-task redirects.
 | codex-019f7389-37c-1784384195-1 | codex | 019f7389-37ce-7252-abb8-77936a8e13cb | #456 | gpt-5.6-sol | 79079 | 0 | 9083648 | 9313 | 88392 | 2.6083 | 5305424 | 0 | 250006528 | 568201 | fix(gateway): defer fsync gate to trace parent (#456) |
 | codex-019f7389-37c-1784386147-1 | codex | 019f7389-37ce-7252-abb8-77936a8e13cb | #456 | gpt-5.6-sol | 167984 | 0 | 6912512 | 27419 | 195403 | 2.5594 | 5473408 | 0 | 256919040 | 595620 | perf(gateway): stabilize low-end measurement gate (#456) |
 | codex-019f7389-37c-1784389221-1 | codex | 019f7389-37ce-7252-abb8-77936a8e13cb | #456 | gpt-5.6-sol | 330968 | 0 | 21291264 | 35839 | 366807 | 6.6878 | 5804376 | 0 | 278210304 | 631459 | fix(gateway): stop unconfigured WAL capture churn (#456) |
+| codex-019f7389-37c-1784390498-1 | codex | 019f7389-37ce-7252-abb8-77936a8e13cb | #456 | gpt-5.6-sol | 70793 | 0 | 9885952 | 8178 | 78971 | 2.7711 | 5875169 | 0 | 288096256 | 639637 | docs(gateway): correct final coverage receipt (#456) |
