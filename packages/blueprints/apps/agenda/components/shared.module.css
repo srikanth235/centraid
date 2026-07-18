@@ -1,0 +1,10 @@
+/* Genuinely shared rule-sets imported by more than one component. The form
+   notice appears in both the event drawer and the create composer. (The
+   `.ag-field-row` field row is also shared, but it stays GLOBAL in app.css
+   because the create composer overrides it with a descendant rule —
+   `.ag-create-times .ag-field-row` — that a CSS-module map cannot reach across
+   the shared/CreateModal module boundary.) */
+
+.formNotice {
+  margin: 6px 0 14px;
+}

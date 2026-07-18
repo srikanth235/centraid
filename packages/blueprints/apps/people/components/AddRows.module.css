@@ -1,0 +1,40 @@
+/* The profile drawer's dashed "+ add" input rows. All React-rendered, so the
+   classes moved here. `.narrow` / `.dash` are descendant locals scoped under
+   `.noteadd`; `.seg` rigidifies the kit segmented control inside the add row.
+   The commit button (`.miniBtn`) comes from shared.module.css. Authored
+   camelCase. */
+
+.noteadd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 12px;
+  border-radius: 11px;
+  border: 1px dashed var(--line-strong);
+}
+.noteadd input,
+.noteadd select {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  outline: none;
+  font: var(--t-body);
+  color: var(--ink);
+}
+.noteadd select {
+  cursor: pointer;
+}
+.noteadd input[type='date'] {
+  color-scheme: light dark;
+}
+.noteadd input.narrow {
+  flex: 0 1 92px;
+}
+.noteadd .dash {
+  color: var(--ink-3);
+  flex-shrink: 0;
+}
+.seg {
+  flex-shrink: 0;
+}

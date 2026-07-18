@@ -1,0 +1,141 @@
+/* Cross-component atoms for the tasks app (TS + CSS-modules split). These
+   rule-sets are used by two or more components — the row primitives by Board
+   (its pending-add ghost row) + Row; the completion circle by Board + Row +
+   Detail; the eyebrow label by Capture + Detail + Sidebar — so they live here
+   and are imported wherever needed. Authored camelCase; module hashing replaces
+   the old `tk-` prefix. `kit-pending` stays a global kit class, so the
+   pending-row tweak is written against `:global(.kit-pending)`. */
+
+/* Metadata eyebrow label (Capture When/Flag, Detail sections, Sidebar Today). */
+.eyebrowLabel {
+  font: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--ink-3);
+}
+
+/* ---------- Task row primitives (Board pending-add + Row) ---------- */
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 9px 10px;
+  margin: 0 -10px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.12s var(--ease);
+}
+.row:hover {
+  background: var(--bg-elev);
+}
+/* Parked writes: the calm, always-full-ink treatment — kit.css's
+   .kit-pending / .kit-pending-chip do the work; this is only row-shape
+   integration. */
+.row:global(.kit-pending) {
+  padding-left: 10px;
+}
+
+.rowMain {
+  flex: 1;
+  min-width: 0;
+  padding: 1px 0;
+}
+.rowTitleLine {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.rowTitle {
+  font: var(--t-body);
+  font-size: 14px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rowTitle.done {
+  color: var(--ink-3);
+  text-decoration: line-through;
+}
+.rowTitle mark {
+  background: var(--accent-soft);
+  color: var(--accent-deep-fg);
+  border-radius: 3px;
+  padding: 0 1px;
+}
+
+.due {
+  flex-shrink: 0;
+  align-self: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+.due.overdue {
+  color: var(--danger);
+}
+
+/* ---------- Completion circle (Board pending-add + Row + Detail) ---------- */
+
+.circle {
+  position: relative;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 2px solid var(--line-strong);
+  background: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  transition:
+    background 0.15s var(--ease),
+    border-color 0.15s var(--ease),
+    transform 0.08s var(--ease);
+}
+.circle::after {
+  content: '';
+  position: absolute;
+  inset: -0.55rem;
+  border-radius: 999px;
+}
+.circle:hover {
+  border-color: var(--_accent);
+}
+.circle:active {
+  transform: scale(0.92);
+}
+.circle[data-on='true'] {
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
+}
+.circle[data-cancelled='true'] {
+  background: var(--bg-sunken);
+  border-color: var(--line-strong);
+  color: var(--ink-3);
+}
+.circle.lg {
+  width: 26px;
+  height: 26px;
+}
+.circle.sm {
+  width: 17px;
+  height: 17px;
+}
+
+/* ---------- Tag chip base (Row static chips + Detail removable chips) ---------- */
+
+.tagChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--accent-deep-fg);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 3px 6px 3px 10px;
+}

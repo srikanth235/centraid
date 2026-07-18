@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit cohesive per-file static asset server; the .ts/.tsx transform, .module.css compile branch, and range/etag plumbing are one request path and share the cache/mtime helpers
 import { promises as fs } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
@@ -5,15 +6,18 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as esbuild from 'esbuild';
 import {
   contentTypeFor,
+  isCssModuleFile,
   resolveStaticPath,
   SHARED_ASSET_FILES,
   staticSecurityHeaders,
 } from './security.js';
 import { BUNDLE_REL_RE, findBundleByHash, prepareBundledIndex } from './app-bundle.js';
+import { compileCssModule } from './css-module.js';
 import { sendError } from './http-utils.js';
 import { DYNAMIC_QUALITY } from './compression.js';
 import {
   computeEtag,
+  cssModuleVariantCache,
   finishStaticAsset,
   jsxVariantCache,
   plainCache,
@@ -96,6 +100,20 @@ type JsxCacheEntry = { mtimeMs: number; etag: string } & (
 );
 const jsxCache = new Map<string, JsxCacheEntry>();
 
+/**
+ * Per-file compiled-CSS-module cache, keyed by absolute path and validated by
+ * `mtimeMs` — the same mtime-invalidation shape as {@link jsxCache}. A
+ * `*.module.css` request is served as a JS module (style injector + class-map
+ * default export, see css-module.ts); the compiled body and its content etag
+ * are memoized here so an unchanged module isn't re-run through esbuild per
+ * request. Bounded for the same reason as jsxCache (a gateway serves a fixed
+ * set of installed apps). Unlike jsxCache this doesn't cache failures: a CSS
+ * module that fails to compile is a hard 500 (there's no "friendly broken
+ * preview" story for a stylesheet the way there is for mid-edit JSX).
+ */
+type CssModuleCacheEntry = { mtimeMs: number; code: string; etag: string };
+const cssModuleCache = new Map<string, CssModuleCacheEntry>();
+
 // esbuild's `automatic` JSX runtime emits an extensionless relative import —
 // `import { jsx as _jsx } from "./jsx-runtime";` — resolved relative to the
 // IMPORTING FILE's own directory, same as any other relative ESM specifier.
@@ -128,14 +146,28 @@ function jsxRuntimeClimb(rel: string): { depth: number; prefix: string } {
 }
 
 /**
- * Transform a `.jsx` source file to plain JS via esbuild's `automatic` JSX
- * runtime, with an mtime-and-depth-keyed cache (see {@link jsxCache}). On a
- * transform failure (normal mid-edit for a builder agent), returns a
- * 200-able JS body that logs the esbuild error to the console instead of
- * throwing — a broken `.jsx` file must not 500 the whole preview iframe, and
- * there's no existing "friendly broken preview" precedent elsewhere in this
- * codebase to follow, so this keeps the iframe alive and puts the error
- * where a builder agent's own tooling (devtools) can see it.
+ * The esbuild loader for a source file the browser imports as JS, selected by
+ * extension: `.jsx`→`jsx`, `.tsx`→`tsx`, `.ts`→`ts`. TypeScript sources
+ * (issue: TS-authored apps) are stripped/compiled the same serve-time way the
+ * `.jsx` path already compiles React dialect — the `automatic` JSX config and
+ * the depth-aware `./jsx-runtime` rewrite apply unchanged to `.tsx` and are
+ * inert for `.ts` (no JSX to rewrite).
+ */
+function loaderForExt(file: string): 'jsx' | 'tsx' | 'ts' {
+  if (file.endsWith('.tsx')) return 'tsx';
+  if (file.endsWith('.ts')) return 'ts';
+  return 'jsx';
+}
+
+/**
+ * Transform a `.jsx`/`.tsx`/`.ts` source file to plain JS via esbuild's
+ * `automatic` JSX runtime, with an mtime-and-depth-keyed cache (see
+ * {@link jsxCache}). On a transform failure (normal mid-edit for a builder
+ * agent), returns a 200-able JS body that logs the esbuild error to the
+ * console instead of throwing — a broken source file must not 500 the whole
+ * preview iframe, and there's no existing "friendly broken preview" precedent
+ * elsewhere in this codebase to follow, so this keeps the iframe alive and
+ * puts the error where a builder agent's own tooling (devtools) can see it.
  *
  * Returns the body alongside its content etag, computed once here and cached
  * with the transform (not re-hashed per request) — the mtime key that
@@ -157,7 +189,7 @@ async function transformJsx(
 
   try {
     const result = await esbuild.transform(source.toString('utf8'), {
-      loader: 'jsx',
+      loader: loaderForExt(file),
       jsx: 'automatic',
       jsxImportSource: '.',
     });
@@ -336,15 +368,43 @@ export async function serveStatic(
     return true;
   }
 
-  // Builder-generated apps may ship `app.jsx` source directly — the git code
-  // store stays source-only (no persisted build artifacts), so the compile
-  // to plain JS happens transparently at serve time, cached by mtime (see
+  // A `*.module.css` request is a browser `import` of a CSS module, so it
+  // must leave here as JavaScript (style injector + class-map default export,
+  // see css-module.ts) with `application/javascript` — NOT as text/css, which
+  // is what `contentTypeFor`'s trailing-`.css` read would pick. A plain
+  // (non-module) `.css` file falls through untouched to the text/css path
+  // below. Compiled body + etag are memoized by mtime in {@link
+  // cssModuleCache}; compressed variants ride the etag-keyed
+  // {@link cssModuleVariantCache}. `appDir` is the compilation root so hashed
+  // class names stay deterministic and path-prefix-free.
+  if (isCssModuleFile(file)) {
+    const stat = await fs.stat(file);
+    let cachedCss = cssModuleCache.get(file);
+    if (!cachedCss || cachedCss.mtimeMs !== stat.mtimeMs) {
+      const compiled = await compileCssModule(file, appDir);
+      cachedCss = { mtimeMs: stat.mtimeMs, code: compiled.js, etag: compiled.etag };
+      cssModuleCache.set(file, cachedCss);
+    }
+    const raw = Buffer.from(cachedCss.code, 'utf8');
+    return finishStaticAsset(req, res, {
+      contentType: 'application/javascript; charset=utf-8',
+      etag: cachedCss.etag,
+      rawSize: raw.length,
+      loadRaw: () => raw,
+      variants: variantCacheFor(cssModuleVariantCache, cachedCss.etag),
+    });
+  }
+
+  // Builder-generated apps may ship `app.jsx` source directly, and TS-authored
+  // apps ship `app.tsx` / `.ts` siblings — the git code store stays
+  // source-only (no persisted build artifacts), so the compile to plain JS
+  // happens transparently at serve time, cached by mtime (see
   // {@link transformJsx}). Applies identically to the live `/centraid/<id>/…`
   // path and the draft `/centraid/_draft/<sid>/<id>/…` path — both funnel
   // through this same `serveStatic` call. The transform hands back its etag,
   // memoized in {@link jsxCache}, so it isn't re-hashed per request; its
   // compressed variants ride the etag-keyed {@link jsxVariantCache}.
-  if (file.endsWith('.jsx')) {
+  if (file.endsWith('.jsx') || file.endsWith('.tsx') || file.endsWith('.ts')) {
     const transformed = await transformJsx(file, await fs.readFile(file), rel);
     const raw = Buffer.from(transformed.code, 'utf8');
     return finishStaticAsset(req, res, {

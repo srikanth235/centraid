@@ -1,0 +1,12 @@
+/* Rule-sets shared by more than one photos component (imported by the ones
+   that use them, not a catch-all). `.sectionLabel` is the old
+   `.ph-section-label` eyebrow, used by both the sidebar and the Memories
+   strip. */
+
+.sectionLabel {
+  font: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--ink-3);
+  padding: 14px 9px 6px;
+}

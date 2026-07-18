@@ -1,0 +1,23 @@
+/* The canvas header's dynamic half. The search box + light/dark toggle are
+   static markup styled globally (kit-search / kit-icon-btn); the segmented
+   switch's `on` modifier is a kit-seg vocabulary class and stays a global
+   plain string. */
+
+.today {
+  flex-shrink: 0;
+}
+.navArrows {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.rangeLabel {
+  font: var(--t-title);
+  font-size: 18px;
+  letter-spacing: var(--tracking-h);
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+.viewSeg {
+  flex-shrink: 0;
+}

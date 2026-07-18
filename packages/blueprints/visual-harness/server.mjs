@@ -30,7 +30,7 @@ const APPS_DIR = path.join(REPO_ROOT, 'packages/blueprints/apps');
 const KIT_DIR = path.join(REPO_ROOT, 'packages/blueprints/kit');
 const MOCK_SCRIPT_FILE = path.join(__dirname, 'mock-centraid.js');
 
-const PORT = 4173;
+const PORT = Number(process.env.PORT) || 4173;
 const SUPPORTED_APPS = new Set([
   'docs',
   'photos',

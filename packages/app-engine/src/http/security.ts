@@ -6,6 +6,8 @@ const STATIC_EXT_ALLOWLIST = new Set([
   '.css',
   '.js',
   '.jsx',
+  '.ts',
+  '.tsx',
   '.mjs',
   '.json',
   '.svg',
@@ -28,6 +30,11 @@ const CONTENT_TYPES: Record<string, string> = {
   '.css': 'text/css; charset=utf-8',
   '.js': 'application/javascript; charset=utf-8',
   '.jsx': 'application/javascript; charset=utf-8',
+  // `.ts`/`.tsx` sources are compiled to JS at serve time (see
+  // static-server.ts transformJsx / the whole-graph bundler), so they leave
+  // this server as JavaScript — the browser never sees TypeScript syntax.
+  '.ts': 'application/javascript; charset=utf-8',
+  '.tsx': 'application/javascript; charset=utf-8',
   '.mjs': 'application/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
@@ -121,6 +128,19 @@ export function resolveStaticPath(appDir: string, relRequest: string): string | 
 export function contentTypeFor(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
   return CONTENT_TYPES[ext] ?? 'application/octet-stream';
+}
+
+/**
+ * A CSS module (`*.module.css`) is authored as CSS but consumed by a browser
+ * `import` as JavaScript — the served body injects the compiled CSS via a
+ * `<style>` element and default-exports the local→hashed class-name map (see
+ * css-module.ts). `contentTypeFor` reads only the trailing `.css` extension,
+ * so the callers that compile+serve these (static-server.ts, app-bundle.ts's
+ * onLoad) recognize the filename shape through this predicate instead. A
+ * plain `.css` file stays text/css and is served verbatim.
+ */
+export function isCssModuleFile(filePath: string): boolean {
+  return filePath.toLowerCase().endsWith('.module.css');
 }
 
 /**

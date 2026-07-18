@@ -1,0 +1,125 @@
+/* List pane: search box + filtered/sorted rows. Authored camelCase (old `v-`
+   prefix dropped). Narrow-viewport rules depend on the global `.locker.is-narrow`
+   / `.show-list` state classes app.tsx toggles on the static #root, so they use
+   `:global(...)` parents. Row atoms (itile/imain/ititle/isub) and the empty
+   state come from shared.module.css. */
+
+.list {
+  width: 330px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+  height: 100vh;
+  background: var(--bg-elev);
+}
+.listTop {
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.listHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.hamburger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  flex-shrink: 0;
+}
+.listTitle {
+  font: var(--t-title);
+  font-size: 18px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.listCount {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.search {
+  position: relative;
+}
+.search svg {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink-3);
+  pointer-events: none;
+}
+.search input {
+  width: 100%;
+  font: var(--t-body);
+  font-size: 13px;
+  background: var(--bg-sunken);
+  border: 1px solid transparent;
+  border-radius: 9px;
+  padding: 8px 12px 8px 33px;
+  outline: none;
+}
+.search input:focus {
+  border-color: var(--selb);
+  background: var(--bg-elev);
+  box-shadow: var(--kit-focus-ring);
+}
+.items {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px;
+}
+.item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  background: none;
+  border-radius: 10px;
+  text-align: left;
+  color: var(--ink);
+}
+.item:hover {
+  background: var(--bg-sunken);
+}
+.item[aria-current='true'] {
+  background: var(--accs);
+}
+.star {
+  color: var(--warn);
+  flex-shrink: 0;
+}
+.warnDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+/* Narrow-viewport (global state classes on #root). */
+:global(.locker.is-narrow) .hamburger {
+  display: flex;
+}
+:global(.locker.is-narrow) .list {
+  width: 100%;
+}
+:global(.locker.is-narrow:not(.show-list)) .list {
+  display: none;
+}
+:global(.locker.is-narrow) .listHead {
+  padding-right: 96px;
+}

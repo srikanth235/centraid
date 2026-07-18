@@ -1,0 +1,199 @@
+/* The lightbox info panel's own classes. Authored camelCase (old `ph-` prefix
+   dropped). `.ph-faces` (host for faces.ts's imperatively-injected
+   `lightbox-faces-title`/`lightbox-face` children) STAYS GLOBAL in app.css.
+   The custody tone class is picked via an explicit lookup map in the component
+   (never a computed `styles['custody-' + tone]`). */
+
+.captionInput {
+  width: 100%;
+  font: var(--t-body-strong);
+  font-size: 14px;
+  color: var(--ink);
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  padding: 0 0 8px;
+  outline: none;
+  margin-bottom: 16px;
+}
+.captionInput:focus {
+  border-color: var(--selb);
+}
+.infoSectionLabel {
+  font: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--ink-3);
+  margin-bottom: 8px;
+}
+.detailsTaken {
+  margin-bottom: 8px;
+}
+.detailsTaken :global(.kit-input) {
+  font-family: var(--mono);
+  color: var(--ink-2);
+  font-size: 0.78rem;
+}
+.detailsGrid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 14px;
+  font: var(--t-small);
+  margin-bottom: 18px;
+}
+.detailsK {
+  font: var(--t-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.detailsV {
+  color: var(--ink-2);
+  word-break: break-word;
+}
+.custodyOk {
+  color: var(--accent-deep-fg);
+}
+.custodyWarn {
+  color: var(--custody-warn);
+}
+.custodyDanger {
+  color: var(--danger);
+}
+.placeEditor {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+.placeEditor select {
+  flex: 1;
+  min-width: 0;
+}
+.placeEmpty {
+  flex: 1 1 100%;
+  margin: 0.2rem 0 0;
+}
+.placeChip {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  color: var(--ink-2);
+  font: var(--t-small);
+  font-size: 12px;
+  margin-bottom: 18px;
+}
+.placeChip:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 18px;
+}
+.albumChip {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  font: var(--t-small);
+  font-size: 12px;
+}
+.albumChip[data-active='true'] {
+  border-color: var(--selb);
+  background: var(--sel);
+  color: var(--accent-deep-fg);
+  font-weight: 600;
+}
+.tagChipX,
+.tagChipNew {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  font: var(--t-mono);
+  font-size: 11px;
+}
+.tagChipNew:hover {
+  border-color: color-mix(in oklab, var(--_accent) 45%, var(--line));
+  color: var(--accent-deep-fg);
+}
+.tagInput {
+  border-radius: 999px;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.7rem;
+  width: 8rem;
+}
+.activity {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 10px;
+}
+.activityRow {
+  display: flex;
+  gap: 11px;
+  padding-bottom: 14px;
+}
+.activityDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent-deep-fg);
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+.activityBody {
+  min-width: 0;
+}
+.activityText {
+  font: var(--t-small);
+  color: var(--ink);
+}
+.activityMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+.activityMeta span:first-child {
+  font: var(--t-mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.receiptChip {
+  font: var(--t-mono);
+  font-size: 9.5px;
+  color: var(--accent-deep-fg);
+  border: 1px solid var(--accent-soft);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.deleteLink {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--danger);
+  font: var(--t-small);
+  padding: 8px;
+  margin-top: 4px;
+}
+.deleteLink:hover {
+  border-color: var(--danger);
+  background: color-mix(in oklab, var(--danger) 8%, transparent);
+}
+.note {
+  color: var(--ink-2);
+  font-size: 0.78rem;
+  margin: 8px 0 0;
+}
+.note:empty {
+  display: none;
+}

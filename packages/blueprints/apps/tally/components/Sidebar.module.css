@@ -1,0 +1,70 @@
+/* Sidebar nav rows — the smart-section items (Dashboard/Activity) and the
+   group/friend list items. The `.s-nav` containers stay static in index.html
+   (global); only these rendered rows move here. Authored camelCase. */
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 9px 11px;
+  border: none;
+  border-radius: 9px;
+  font: var(--t-body);
+  background: none;
+  color: var(--ink-2);
+}
+.navItem .lbl {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.navItem:hover {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+.navItem[aria-current='true'] {
+  background: var(--accs);
+  color: var(--accd-fg);
+  font-weight: 600;
+}
+.listitem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: none;
+  border-radius: 9px;
+  text-align: left;
+  color: var(--ink);
+}
+.listitem:hover {
+  background: var(--bg-sunken);
+}
+.listitem[aria-current='true'] {
+  background: var(--accs);
+}
+.liMain {
+  flex: 1;
+  min-width: 0;
+}
+.liName {
+  display: block;
+  font: var(--t-body);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.liSub {
+  display: block;
+  font: var(--t-mono);
+  font-size: 10px;
+  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

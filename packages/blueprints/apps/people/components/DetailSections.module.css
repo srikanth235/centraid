@@ -1,0 +1,156 @@
+/* Profile-drawer body sections (relationships, dates, tasks, notes, gifts,
+   debts, contact, history). All React-rendered, so every class moved here.
+   `.chipSm` is the compact mono-eyebrow that outranks kit.css's `.kit-chip`
+   (which loads after app.css) — authored as `:global(.kit-chip).chipSm` so the
+   local modifier rides the still-global kit chip. `.detailBtn`, the `.mini*`
+   commit button and the `.activity*` timeline live in shared.module.css.
+   Authored camelCase. */
+
+.detailLabel {
+  font: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: var(--tk-eye);
+  color: var(--ink-3);
+  margin: 22px 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.detailActions {
+  display: flex;
+  gap: 7px;
+  margin: 18px 0;
+}
+.addToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  font: var(--t-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.addToggle:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+.kv {
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+.kvRow {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 13px;
+  border-bottom: 1px solid var(--line);
+}
+.kvRow:last-child {
+  border-bottom: none;
+}
+.kvRow svg {
+  color: var(--ink-3);
+  flex-shrink: 0;
+}
+.kvV {
+  flex: 1;
+  min-width: 0;
+  font: var(--t-body);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kvK {
+  font: var(--t-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.rel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--line);
+}
+.rel:last-child {
+  border-bottom: none;
+}
+.relBadge {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+  color: var(--ink-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: var(--t-small);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.note {
+  padding: 12px 14px;
+  border-radius: 11px;
+  background: color-mix(in oklab, var(--_accent) 6%, transparent);
+  border: 1px solid color-mix(in oklab, var(--_accent) 16%, transparent);
+  margin-bottom: 8px;
+}
+.note p {
+  margin: 0;
+  font: var(--t-body);
+  color: var(--ink-2);
+}
+.note .when {
+  margin-top: 6px;
+  font: var(--t-mono);
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.taskrow {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--line);
+}
+.taskrow:last-child {
+  border-bottom: none;
+}
+.taskbox {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  border: 1.5px solid var(--line-strong);
+  background: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.taskbox.on {
+  background: var(--accd);
+  border-color: var(--accd);
+}
+/* Micro chips ride kit.css .kit-chip.quiet; the compact mono-eyebrow sizing is
+   the People delta (compound selector to outrank kit.css, which loads after
+   app.css). Some are plain status <span>s, not toggles. */
+:global(.kit-chip).chipSm {
+  min-height: 0;
+  padding: 3px 9px;
+  font: var(--t-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+span.chipSm {
+  cursor: default;
+}

@@ -1,0 +1,63 @@
+/* The "Take a note…" quick-add card. Authored camelCase. `.qaMore` animates in
+   with the global `nt-fade` keyframe (kept in app.css because the editor
+   backdrop and the narrow scrim also consume it). The `:last-child` reset
+   targets the kit button via a `:global(...)` bridge. */
+
+.quickadd {
+  max-width: 620px;
+  margin: 0 auto 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: border-color 0.15s var(--ease);
+}
+.quickadd:focus-within {
+  border-color: color-mix(in oklab, var(--_accent) 40%, var(--line-strong));
+}
+.qaTitle {
+  width: 100%;
+  font: var(--t-body-strong);
+  font-size: 15px;
+  color: var(--ink);
+  background: none;
+  border: none;
+  padding: 14px 16px 6px;
+  outline: none;
+}
+.qaTitle::placeholder {
+  color: var(--ink-3);
+}
+.qaMore {
+  animation: nt-fade 0.16s ease;
+}
+.qaBody {
+  width: 100%;
+  min-height: 64px;
+  font: var(--t-body);
+  color: var(--ink-2);
+  background: none;
+  border: none;
+  padding: 0 16px 10px;
+  outline: none;
+  resize: none;
+  font-family: var(--font-sans);
+}
+.qaBody::placeholder {
+  color: var(--ink-3);
+}
+.qaActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+}
+.qaTarget {
+  font: var(--t-small);
+  color: var(--ink-3);
+}
+.qaActions :global(.kit-btn):last-child {
+  margin-left: auto;
+}

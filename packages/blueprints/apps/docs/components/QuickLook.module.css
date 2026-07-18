@@ -1,0 +1,143 @@
+/* Quick-look overlay (rendered into the static #quickRoot). Authored camelCase;
+   the old `d-quick-*` prefix is replaced by module hashing. The prev/next
+   buttons are kit.css's global .kit-viewer-nav; the close button is kit.css's
+   .kit-icon-btn, so its on-dark override is a compound `.quickIcon:global(.kit-icon-btn)`.
+   `.d-quick-block` (the vestigial document-mock rule) has no JSX referent and
+   stays global in app.css — it is deliberately NOT moved here. */
+
+.quick {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in oklab, #0b0d12 92%, #000);
+  animation: kit-fade 0.2s ease;
+}
+.quickTop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  color: #fff;
+  flex-shrink: 0;
+}
+.quickBadge {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 9px;
+  flex-shrink: 0;
+}
+.quickTitle {
+  flex: 1;
+  min-width: 0;
+  font: var(--t-body-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quickBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font: var(--t-small);
+  padding: 8px 14px;
+  border-radius: var(--r-pill);
+  text-decoration: none;
+}
+.quickBtn:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+/* Close button: kit.css's .kit-icon-btn, on the quick-look's dark surface —
+   the compound selector bumps specificity above .kit-icon-btn's own
+   color/hover rules so these on-dark colors win regardless of load order. */
+.quickIcon:global(.kit-icon-btn) {
+  color: #fff;
+}
+.quickIcon:global(.kit-icon-btn):hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+.quickStage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 60px 28px;
+  position: relative;
+}
+/* Prev/next: kit.css's .kit-viewer-nav (+.prev/.next); .quickStage above
+   is already the required `position: relative` ancestor. */
+.quickImage {
+  max-width: min(760px, 90%);
+  max-height: 100%;
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  object-fit: contain;
+}
+.quickFrame {
+  width: min(760px, 90%);
+  height: 100%;
+  border: none;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--shadow-lg);
+}
+.quickMedia {
+  max-width: min(900px, 90%);
+  max-height: 100%;
+  border-radius: 8px;
+  background: #000;
+  box-shadow: var(--shadow-lg);
+}
+.quickAudio {
+  width: min(34rem, 90%);
+  display: grid;
+  justify-items: center;
+  gap: 1.25rem;
+  padding: 2.25rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.quickAudio > span {
+  display: grid;
+  place-items: center;
+  width: 5rem;
+  height: 5rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 2.2rem;
+}
+.quickAudio audio {
+  width: 100%;
+}
+.quickPage {
+  width: min(520px, 84%);
+  aspect-ratio: 8.5 / 11;
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: var(--shadow-lg);
+  padding: 44px 46px;
+  overflow: hidden;
+}
+.quickPage > i {
+  display: block;
+  border-radius: 2px;
+}
+.quickFoot {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.6);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding-bottom: 16px;
+}

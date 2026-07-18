@@ -1,0 +1,78 @@
+/* Crop/rotate editor (issue #352 phase 3/4), hosted inside the lightbox's
+   dark stage. Authored camelCase (old `editor-` prefix dropped). The stage bg
+   supplies the dark surface; the toolbar tints its `kit-btn` children (kit.css
+   vocabulary — referenced as `:global`) for that backdrop. */
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: min(34rem, 92vw);
+  color: #fff;
+}
+.canvasWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-height: 62vh;
+  touch-action: none;
+  cursor: crosshair;
+}
+.canvas {
+  max-width: 100%;
+  max-height: 62vh;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  display: block;
+  user-select: none;
+  box-shadow: var(--shadow-lg);
+}
+.cropBox {
+  position: absolute;
+  border: 2px dashed #fff;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.toolbar :global(.kit-btn) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+.toolbar :global(.kit-btn):hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+.toolbar :global(.kit-btn.primary) {
+  background: var(--accent-deep);
+  border-color: transparent;
+  color: #fff;
+}
+.trashToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+.spacer {
+  flex: 1;
+}
+.note {
+  min-height: 0;
+  color: rgba(255, 255, 255, 0.75);
+}
+.hint {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.55);
+}
+.loadError {
+  padding: 2rem;
+  color: rgba(255, 255, 255, 0.75);
+}

@@ -20,19 +20,26 @@ const PKG = path.resolve(fileURLToPath(import.meta.url), '../..');
 // oxlint is hoisted to the workspace root, never to this package's own .bin.
 const OXLINT = path.resolve(PKG, '../../node_modules/.bin/oxlint');
 
-// An app's entry is app.jsx; oxlint parses JSX natively. Apps may split into
-// further browser modules (components/*.jsx, helpers .js) which are just as
-// unexecuted by CI as the entry, so the gate walks the whole app dir —
-// skipping the handler dirs (queries/actions/automations), which are
-// node-side modules the gateway dispatches, not page code.
+// An app's entry is app.tsx (or, pre-conversion, app.jsx); oxlint parses both
+// JSX and TSX natively (oxc). Apps may split into further browser modules
+// (components/*.tsx, helpers .ts/.js) which are just as unexecuted by CI as the
+// entry, so the gate walks the whole app dir — skipping the handler dirs
+// (queries/actions/automations), which are node-side modules the gateway
+// dispatches, not page code.
 const NON_UI_DIRS = new Set(['queries', 'actions', 'automations']);
+function isUiSource(name) {
+  if (name.endsWith('.d.ts')) return false; // declarations carry no runtime refs
+  return (
+    name.endsWith('.tsx') || name.endsWith('.jsx') || name.endsWith('.ts') || name.endsWith('.js')
+  );
+}
 function uiSources(dir, rel) {
   const out = [];
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const r = `${rel}/${e.name}`;
     if (e.isDirectory()) {
       if (!NON_UI_DIRS.has(e.name)) out.push(...uiSources(path.join(dir, e.name), r));
-    } else if (e.name.endsWith('.jsx') || e.name.endsWith('.js')) {
+    } else if (isUiSource(e.name)) {
       out.push(r);
     }
   }
@@ -40,11 +47,17 @@ function uiSources(dir, rel) {
 }
 const apps = readdirSync(path.join(PKG, 'apps'), { withFileTypes: true })
   .filter((e) => e.isDirectory())
-  .flatMap((e) =>
-    existsSync(path.join(PKG, 'apps', e.name, 'app.jsx'))
-      ? uiSources(path.join(PKG, 'apps', e.name), `apps/${e.name}`)
-      : [`apps/${e.name}/app.js`],
-  );
+  .flatMap((e) => {
+    const base = path.join(PKG, 'apps', e.name);
+    // Probe the TS entry first, then the legacy JSX one; a multi-file app walks
+    // its whole dir, a single-file app falls back to its lone entry.
+    if (existsSync(path.join(base, 'app.tsx')) || existsSync(path.join(base, 'app.jsx'))) {
+      return uiSources(base, `apps/${e.name}`);
+    }
+    return [
+      existsSync(path.join(base, 'app.ts')) ? `apps/${e.name}/app.ts` : `apps/${e.name}/app.js`,
+    ];
+  });
 const targets = [
   ...apps,
   'kit/kit.js',

@@ -1,0 +1,132 @@
+/* Rule-sets shared across more than one Tally component — imported by the
+   components that use them (Sidebar/Dashboard share the group icon; every
+   modal shares the field atoms; the money-tone classes decorate rows in
+   Sidebar/Dashboard/ExpenseRow/Activity). Authored camelCase so the esbuild
+   local-css export keys match (no localsConvention transform at serve time). */
+
+/* Group icon tile — Sidebar group rows + Dashboard group cards. */
+.gicon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+}
+
+/* Category tile — ExpenseRow + the detail popover. */
+.excat {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+/* Bordered list surface — group/friend ledger, search results, skeleton. */
+.explist {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+.emptyRow {
+  padding: 22px 16px;
+  text-align: center;
+  font: var(--t-small);
+  color: var(--ink-3);
+}
+
+/* Money tone modifiers — mapped from the `pos`/`neg`/`muted` cls the format
+   helpers and components compute (via an explicit lookup map, never a computed
+   styles[expr]). */
+.pos {
+  color: var(--pos);
+}
+.neg {
+  color: var(--neg);
+}
+.muted {
+  color: var(--ink-3);
+}
+
+/* Modal field atoms — shared by the expense/settle/group/friend/detail modals. */
+.field {
+  margin-top: 15px;
+}
+.flabel {
+  font: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: var(--tk-eye);
+  color: var(--ink-3);
+  margin-bottom: 7px;
+}
+.in {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg);
+  outline: none;
+  font: var(--t-body);
+}
+.in:focus {
+  border-color: var(--selb);
+  box-shadow: var(--kit-focus-ring);
+}
+.amtwrap {
+  position: relative;
+}
+.amtwrap .cur {
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  font: var(--font-title);
+  font-size: 18px;
+  color: var(--ink-3);
+}
+.amt {
+  width: 100%;
+  padding: 12px 12px 12px 30px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  outline: none;
+  font: var(--font-title);
+  font-size: 20px;
+  font-weight: 600;
+}
+.amt:focus {
+  border-color: var(--selb);
+  box-shadow: var(--kit-focus-ring);
+}
+.row2 {
+  display: flex;
+  gap: 10px;
+}
+.catrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg);
+  outline: none;
+  font: var(--t-body);
+  -webkit-appearance: none;
+  appearance: none;
+}
+/* Delete sits left of the kit footer's Cancel/Save pair. */
+.del {
+  margin-right: auto;
+}

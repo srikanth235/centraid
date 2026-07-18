@@ -1,0 +1,62 @@
+/* Cross-component atoms for the people app (TS + CSS-modules split). These
+   rule-sets are used by two or more components, so they live here and are
+   imported wherever needed (mirrors locker's shared.module.css):
+   - `.miniBtn`  — the drawer "+ add" commit button (DetailSections + AddRows)
+   - `.detailBtn` — the equal-width drawer action button (Details + DetailSections)
+   - `.activity*` — the timeline rail (DetailSections history + Activity view)
+   - `.jWrap`    — the 640px reading column (Journal + Activity)
+   Authored camelCase; module hashing replaces the old `d-`/`j-` prefixes. */
+
+.miniBtn {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Equal-width drawer quick actions (kit.css .kit-btn owns the look). */
+.detailBtn {
+  flex: 1;
+}
+
+.activityItem {
+  display: flex;
+  gap: 11px;
+  padding-bottom: 14px;
+}
+.activityRail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+.activityDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  margin-top: 5px;
+}
+.activityLine {
+  width: 1px;
+  flex: 1;
+  background: var(--line);
+  margin-top: 3px;
+}
+.activityKind {
+  font: var(--t-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.activityDate {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+
+.jWrap {
+  max-width: 640px;
+}

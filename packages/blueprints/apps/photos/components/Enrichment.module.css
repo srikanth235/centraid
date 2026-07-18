@@ -1,0 +1,22 @@
+/* Face-proposer header control. Authored camelCase (old `enrichment-` prefix
+   dropped). The popover rides the shared `.kit-popover` base as a compound so
+   its positioning keeps the specificity that beat kit.css. The status note
+   stays a global `lightbox-note enrichment-note` string (neither class carries
+   an app rule — the note is deliberately unstyled), so it owns no module
+   class here. */
+
+.wrap {
+  position: relative;
+  display: flex;
+}
+:global(.kit-popover).panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 15rem;
+  padding: 0.7rem 0.75rem;
+  z-index: 5;
+}

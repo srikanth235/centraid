@@ -1,0 +1,18 @@
+/* The Details drawer's tag editor (issue #352 phase 4). Authored camelCase; the
+   old `d-tag-*` prefix is replaced by module hashing. The chips themselves are
+   shared.module.css's `.tagChip` (Toolbar's TagChips shares them); the add
+   affordance is kit.css's global .kit-chip.quiet, and the input is kit.css's
+   .kit-input.bare — this module carries only the row layout + the input's
+   width clamp. */
+
+.tagsRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 18px;
+}
+.tagInput {
+  min-width: 6rem;
+  flex: 0 1 8rem;
+}

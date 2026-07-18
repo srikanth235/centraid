@@ -1,0 +1,14 @@
+/* Bulk-selection action bar contents (#bulkBar root). The animated container
+   `.d-bulk` stays global in app.css (static #bulkBar element); only these two
+   inner rows moved here. The action buttons ride kit.css `.kit-btn`. */
+
+.bulkCount {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+}
+.bulkActions {
+  margin-left: auto;
+  display: flex;
+  gap: 7px;
+}

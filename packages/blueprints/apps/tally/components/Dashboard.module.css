@@ -1,0 +1,172 @@
+/* Dashboard-only surfaces: the summary stat cards, the you-owe / you-are-owed
+   balance lists, the groups grid and the fresh-vault welcome. Authored
+   camelCase. The two narrow-viewport tweaks that target these rendered
+   surfaces move here too, written against the global `.tally.is-narrow` state
+   the shell toggles on #root. */
+.balRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  width: 100%;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  background: none;
+  text-align: left;
+}
+.balRow:last-child {
+  border-bottom: none;
+}
+.balRow:hover {
+  background: var(--bg-sunken);
+}
+.balMain {
+  flex: 1;
+  min-width: 0;
+}
+.balName {
+  display: block;
+  font: var(--t-body);
+  font-size: 14px;
+  font-weight: 500;
+}
+.balSub {
+  display: block;
+  font: var(--t-small);
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-top: 1px;
+}
+.balAmt {
+  font: var(--font-title);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 24px;
+}
+.stat {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg-elev);
+  padding: 16px 18px;
+}
+.stat .k {
+  font: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: var(--tk-eye);
+  color: var(--ink-3);
+}
+.stat .v {
+  font: var(--font-title);
+  font-size: 26px;
+  font-weight: 600;
+  margin-top: 8px;
+  letter-spacing: -0.02em;
+}
+.cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+.cardH {
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--line);
+  font: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: var(--tk-eye);
+  color: var(--ink-3);
+}
+
+.sectionTitle {
+  font: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: var(--tk-eye);
+  color: var(--ink-3);
+  margin: 26px 0 12px;
+}
+.groupgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+.gcard {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg-elev);
+  padding: 16px;
+  text-align: left;
+  cursor: pointer;
+}
+.gcard:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-md);
+}
+.gcardTop {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 12px;
+}
+.gcardName {
+  font: var(--t-strong);
+  font-size: 14px;
+}
+.gcardMem {
+  font: var(--t-mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  margin-top: 1px;
+}
+.gcardBal {
+  font: var(--t-small);
+  font-size: 13px;
+}
+
+.dashEmpty {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg-elev);
+  padding: 40px 24px;
+  text-align: center;
+}
+.dashEmpty .t {
+  font: var(--t-title);
+  font-size: 17px;
+  margin-bottom: 6px;
+}
+.dashEmpty .d {
+  font: var(--t-small);
+  color: var(--ink-2);
+  max-width: 380px;
+  margin: 0 auto 16px;
+}
+.dashEmpty .row {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* Narrow (phone) — driven by JS `.is-narrow` on the static #root `.tally`. */
+:global(.tally.is-narrow) .summary {
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+:global(.tally.is-narrow) .cols {
+  grid-template-columns: 1fr;
+}

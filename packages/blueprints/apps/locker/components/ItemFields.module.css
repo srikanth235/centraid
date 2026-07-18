@@ -1,0 +1,139 @@
+/* Detail read-view field rows + item-pane body. Authored camelCase (old `v-`
+   prefix dropped). The `.mono` and `.on` modifiers are local compound classes
+   joined onto their base in the JSX. The pane chrome atoms (detailInner/dhead/
+   dtile/dtitle/dsub/fields/dlabel), the empty state and the strength meter row
+   come from shared.module.css; `kit-btn`/`danger` stay global kit classes. */
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--line);
+}
+.field:last-child {
+  border-bottom: none;
+}
+.fieldMain {
+  flex: 1;
+  min-width: 0;
+}
+.fieldK {
+  font: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+.fieldV {
+  font: var(--t-body);
+  font-size: 14px;
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fieldV.mono {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+.fieldV a {
+  color: var(--accd-fg);
+  text-decoration: none;
+}
+.fbtn {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  color: var(--ink-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.fbtn:hover {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+.dheadTools {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+.dtool {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dtool:hover {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+.dtool.on {
+  color: var(--warn);
+  border-color: color-mix(in oklab, var(--warn) 40%, transparent);
+}
+.note {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg-elev);
+  font: var(--t-body);
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  margin-top: 14px;
+}
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 14px;
+}
+.tag {
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  color: var(--ink-2);
+  font: var(--t-small);
+  font-size: 12px;
+}
+.meta {
+  font: var(--t-mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  margin-top: 20px;
+}
+
+/* TOTP */
+.otp {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.otpCode {
+  font-family: var(--mono);
+  font-size: 19px;
+  letter-spacing: 0.14em;
+  color: var(--accd-fg);
+  font-weight: 600;
+}
+.ring {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+/* Layout-only: pushes a foot's delete button to the far left (kit-btn danger
+   carries the visual). */
+.del {
+  margin-right: auto;
+}

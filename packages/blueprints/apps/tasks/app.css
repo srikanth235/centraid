@@ -7,6 +7,13 @@
    single per-app accent (teal by default); priority flags are the only other
    hue. JetBrains-class monospace (var(--mono)) carries every metadata voice —
    dates, flags, counts, effort, eyebrows, receipt chips; content stays sans.
+
+   TS + CSS-modules split: this file now keeps ONLY the global remainder — the
+   :root token/knob blocks, the base reset, and the static index.html shell
+   chrome (#shell sidebar/topbar/scroll + the narrow-layout rules toggled on
+   #shell by chrome.ts). Every JSX-only `tk-*` rule moved into a co-located
+   components/*.module.css (shared atoms in components/shared.module.css); the
+   `kit-*` classes stay global (kit.css vocabulary).
    ========================================================================== */
 
 :root {
@@ -42,7 +49,7 @@
   }
 }
 
-/* Knobs — appFont swaps the sans face; appWidth is read in chrome.js (forces
+/* Knobs — appFont swaps the sans face; appWidth is read in chrome.ts (forces
    the narrow/phone layout regardless of measured width). */
 :root[data-app-font='sans'] {
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
@@ -100,7 +107,10 @@ button {
   overflow: hidden;
 }
 
-/* ---------- Sidebar ---------- */
+/* ---------- Sidebar (static chrome — index.html) ---------- */
+/* The nav-item + progress + consent-line rules moved to
+   components/Sidebar.module.css; `.tk-nav` / `.tk-side-foot` stay here as the
+   static React-mount containers. */
 
 .tk-side {
   width: 250px;
@@ -175,99 +185,17 @@ button {
   flex-direction: column;
   gap: 2px;
 }
-.tk-nav-item {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  width: 100%;
-  padding: 9px 11px;
-  border: none;
-  border-radius: 9px;
-  font: var(--t-body);
-  background: none;
-  color: var(--ink-2);
-}
-.tk-nav-item span:first-of-type {
-  flex: 1;
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.tk-nav-item:hover {
-  background: var(--bg-sunken);
-  color: var(--ink);
-}
-.tk-nav-item[aria-current='true'] {
-  background: var(--accent-soft);
-  color: var(--accent-deep-fg);
-  font-weight: 600;
-}
-.tk-nav-count {
-  font-family: var(--mono);
-  font-size: 11px;
-  opacity: 0.6;
-}
 
 .tk-side-foot {
   margin-top: auto;
   padding-top: 16px;
-}
-.tk-progress {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 12px 13px;
-  background: var(--bg-elev);
-}
-.tk-progress-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-.tk-progress-pct {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--ink-3);
-}
-.tk-progress-track {
-  height: 6px;
-  border-radius: 999px;
-  background: var(--bg-sunken);
-  overflow: hidden;
-}
-.tk-progress-bar {
-  height: 100%;
-  border-radius: 999px;
-  background: var(--accent-deep);
-  transition: width 0.3s var(--ease);
-}
-.tk-progress-label {
-  font: var(--t-small);
-  color: var(--ink-2);
-  margin-top: 8px;
-}
-.tk-consent-line {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 11px 4px 2px;
-  color: var(--ink-3);
-}
-.tk-consent-line svg {
-  color: var(--accent-deep-fg);
-  flex-shrink: 0;
-}
-.tk-consent-line span {
-  font: var(--t-small);
-  font-size: 11.5px;
 }
 
 .tk-scrim {
   display: none;
 }
 
-/* ---------- Main ---------- */
+/* ---------- Main (static chrome — index.html) ---------- */
 
 .tk-main {
   flex: 1;
@@ -337,558 +265,18 @@ button {
   overflow: auto;
   padding: 18px 26px 48px;
 }
-.tk-column {
-  max-width: 760px;
-}
 
-/* ---------- Capture bar ---------- */
-
-.tk-capture {
-  border: 1px solid var(--line);
-  border-radius: var(--r-card);
-  background: var(--bg-elev);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
-  margin-bottom: 26px;
-  transition: border-color 0.15s var(--ease);
-}
-.tk-capture:focus-within {
-  border-color: color-mix(in oklab, var(--_accent) 40%, var(--line-strong));
-}
-.tk-capture-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-}
-.tk-capture-dot {
-  width: 19px;
-  height: 19px;
-  border-radius: 999px;
-  border: 2px solid var(--line-strong);
-  flex-shrink: 0;
-}
-.tk-capture-input {
-  flex: 1;
-  min-width: 0;
-  font: var(--t-body-strong);
-  font-size: 15px;
-  color: var(--ink);
-  background: none;
-  border: none;
-  outline: none;
-}
-.tk-capture-input::placeholder {
-  color: var(--ink-3);
-}
-.tk-capture-add {
-  flex-shrink: 0;
-}
-.tk-capture-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 16px 13px 47px;
-  flex-wrap: wrap;
-}
-.tk-eyebrow-label {
-  font: var(--t-tiny);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
-  color: var(--ink-3);
-}
-/* The When/Flag capture chips and detail chips read in the metadata voice —
-   mono, a notch smaller than kit-seg's default sans buttons. */
-.tk-capture-seg > button,
-.tk-detail-seg > button {
-  font-family: var(--mono);
-  font-size: 0.72rem;
-  min-height: 1.9rem;
-  padding: 0.25rem 0.6rem;
-}
-.tk-capture-div {
-  width: 1px;
-  height: 16px;
-  background: var(--line);
-  margin: 0 2px;
-}
-.tk-nl-hint {
-  margin-left: auto;
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--accent-deep-fg);
-}
-
-/* ---------- Section headers (ledger eyebrows) ---------- */
-
-.tk-section {
-  margin-bottom: 26px;
-}
-.tk-section-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-.tk-eyebrow {
-  font-family: var(--mono);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
-  color: var(--ink-2);
-}
-.tk-eyebrow.tone-danger {
-  color: var(--danger);
-}
-.tk-eyebrow.tone-accent {
-  color: var(--accent-deep-fg);
-}
-.tk-eyebrow-count {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--ink-3);
-}
-.tk-hairline {
-  flex: 1;
-  height: 1px;
-  background: var(--line);
-}
-.tk-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-/* ---------- Task rows ---------- */
-
-.tk-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 11px;
-  padding: 9px 10px;
-  margin: 0 -10px;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: background 0.12s var(--ease);
-}
-.tk-row:hover {
-  background: var(--bg-elev);
-}
-
-.tk-circle {
-  position: relative;
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  border-radius: 999px;
-  border: 2px solid var(--line-strong);
-  background: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  cursor: pointer;
-  transition:
-    background 0.15s var(--ease),
-    border-color 0.15s var(--ease),
-    transform 0.08s var(--ease);
-}
-.tk-circle::after {
-  content: '';
-  position: absolute;
-  inset: -0.55rem;
-  border-radius: 999px;
-}
-.tk-circle:hover {
-  border-color: var(--_accent);
-}
-.tk-circle:active {
-  transform: scale(0.92);
-}
-.tk-circle[data-on='true'] {
-  background: var(--accent-deep);
-  border-color: var(--accent-deep);
-}
-.tk-circle[data-cancelled='true'] {
-  background: var(--bg-sunken);
-  border-color: var(--line-strong);
-  color: var(--ink-3);
-}
-.tk-circle.lg {
-  width: 26px;
-  height: 26px;
-}
-.tk-circle.sm {
-  width: 17px;
-  height: 17px;
-}
-
-.tk-row-main {
-  flex: 1;
-  min-width: 0;
-  padding: 1px 0;
-}
-.tk-row-title-line {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-.tk-row-title {
-  font: var(--t-body);
-  font-size: 14px;
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.tk-row-title.done {
-  color: var(--ink-3);
-  text-decoration: line-through;
-}
-.tk-row-title mark,
-.tk-row-note mark {
-  background: var(--accent-soft);
-  color: var(--accent-deep-fg);
-  border-radius: 3px;
-  padding: 0 1px;
-}
-.tk-row-note {
-  font: var(--t-small);
-  font-size: 12px;
-  color: var(--ink-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  margin-top: 1px;
-}
-
-.tk-badge.doing {
-  flex-shrink: 0;
-  font-family: var(--mono);
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--accent-deep-fg);
-  background: var(--accent-soft);
-  border-radius: 5px;
-  padding: 1px 6px;
-}
-.tk-recur {
-  flex-shrink: 0;
-  color: var(--ink-3);
-  font-size: 11px;
-}
-.tk-meta {
-  flex-shrink: 0;
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--ink-3);
-  align-self: center;
-}
-.tk-flag {
-  flex-shrink: 0;
-  align-self: center;
-  font-size: 12px;
-}
-.tk-flag.high {
-  color: var(--danger);
-}
-.tk-flag.medium {
-  color: var(--warn);
-}
-.tk-flag.low {
-  color: var(--ink-3);
-}
-.tk-due {
-  flex-shrink: 0;
-  align-self: center;
-  font-family: var(--mono);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink-3);
-}
-.tk-due.overdue {
-  color: var(--danger);
-}
-
-/* Parked writes: the calm, always-full-ink treatment — kit.css's
-   .kit-pending / .kit-pending-chip do the work; this is only row-shape
-   integration (rounded corners to match .tk-row, spacing for the chip). */
-.tk-row.kit-pending {
-  padding-left: 10px;
-}
+/* Parked writes: kit.css's .kit-pending / .kit-pending-chip do the work; this
+   is the one app-level chip tweak, kept global with the kit-* vocabulary (the
+   `.tk-row.kit-pending` / `.tk-detail.kit-pending` shape tweaks moved into the
+   Row/Detail modules alongside their moved base classes). */
 .kit-pending-chip {
   flex-shrink: 0;
 }
 
-/* ---------- Empty state ---------- */
-/* kit.css's .kit-empty* owns icon/title/sub — no local overrides needed. */
-
-/* ---------- Detail drawer ---------- */
-
-.tk-detail-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: flex;
-  justify-content: flex-end;
-  background: color-mix(in oklab, var(--ink) 30%, rgba(10, 12, 16, 0.55));
-  backdrop-filter: blur(2px);
-  animation: kit-fade 0.18s ease;
-}
-.tk-detail {
-  width: min(440px, 94vw);
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg);
-  border-left: 1px solid var(--line-strong);
-  box-shadow: var(--shadow-lg);
-  animation: tk-slide-r 0.24s var(--ease);
-  overflow: auto;
-}
-@keyframes tk-slide-r {
-  from {
-    transform: translateX(24px);
-    opacity: 0.4;
-  }
-  to {
-    transform: none;
-    opacity: 1;
-  }
-}
-.tk-detail-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--line);
-  flex-shrink: 0;
-}
-.tk-detail-close {
-  margin-left: auto;
-}
-.tk-detail-body {
-  flex: 1;
-  min-height: 0;
-  padding: 18px;
-}
-.tk-detail-title {
-  display: block;
-  width: 100%;
-  font: var(--t-display, 600 20px/1.3 var(--font-title));
-  font-family: var(--font-title);
-  letter-spacing: var(--tracking-h);
-  color: var(--ink);
-  background: none;
-  border: none;
-  outline: none;
-  margin-bottom: 6px;
-}
-.tk-detail-notes {
-  display: block;
-  width: 100%;
-  min-height: 60px;
-  font: var(--t-body);
-  font-size: 13.5px;
-  line-height: 1.6;
-  color: var(--ink-2);
-  background: none;
-  border: none;
-  outline: none;
-  resize: none;
-  margin-bottom: 14px;
-}
-.tk-detail-seg {
-  margin-bottom: 8px;
-}
-.tk-detail-date {
-  margin-bottom: 16px;
-}
-.tk-detail-cols {
-  display: flex;
-  gap: 22px;
-  margin-bottom: 18px;
-  flex-wrap: wrap;
-}
-.tk-subtasks {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  margin: 8px 0;
-}
-.tk-subtask-row {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 6px 4px;
-}
-.tk-subtask-title {
-  flex: 1;
-  font: var(--t-body);
-  font-size: 13px;
-  color: var(--ink);
-}
-.tk-subtask-title.done {
-  color: var(--ink-3);
-  text-decoration: line-through;
-}
-.tk-subtask-add {
-  padding: 2px 4px;
-}
-.tk-subtask-dot {
-  width: 16px;
-  height: 16px;
-  border-radius: 999px;
-  border: 1.5px dashed var(--line-strong);
-  flex-shrink: 0;
-}
-.tk-subtask-add input {
-  flex: 1;
-  font: var(--t-body);
-  font-size: 13px;
-  color: var(--ink);
-  background: none;
-  border: none;
-  outline: none;
-}
-.tk-subtask-add input::placeholder {
-  color: var(--ink-3);
-}
-
-.tk-activity {
-  margin: 10px 0 20px;
-}
-.tk-activity-empty {
-  margin: 0;
-}
-.tk-activity-item {
-  display: flex;
-  gap: 11px;
-  padding-bottom: 12px;
-}
-.tk-activity-rail {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--accent-deep);
-  margin-top: 5px;
-  flex-shrink: 0;
-}
-.tk-activity-text {
-  font: var(--t-small);
-  color: var(--ink);
-}
-.tk-activity-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 2px;
-}
-.tk-activity-date {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--ink-3);
-}
-.tk-receipt-chip {
-  font-family: var(--mono);
-  font-size: 9px;
-  color: var(--accent-deep-fg);
-  border: 1px solid var(--accent-soft);
-  border-radius: 4px;
-  padding: 0 4px;
-}
-
-.tk-detail-attach {
-  margin: 8px 0 10px;
-}
-.tk-attach-btn {
-  margin-bottom: 4px;
-}
-
-.tk-detail-hint {
-  margin: -6px 0 10px;
-}
-
-.tk-tag-strip {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin: 8px 0 14px;
-}
-.tk-tag-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--accent-deep-fg);
-  background: var(--accent-soft);
-  border-radius: 999px;
-  padding: 3px 6px 3px 10px;
-}
-.tk-tag-remove {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: inherit;
-  opacity: 0.7;
-  cursor: pointer;
-}
-.tk-tag-remove:hover {
-  opacity: 1;
-}
-.tk-tag-add {
-  display: inline-flex;
-}
-.tk-tag-input {
-  font: inherit;
-  font-size: 12px;
-  border: 1px dashed var(--line);
-  border-radius: 999px;
-  padding: 4px 10px;
-  background: transparent;
-  color: var(--ink);
-  min-width: 90px;
-}
-.tk-tag-input:focus {
-  outline: none;
-  border-color: var(--accent-deep);
-  border-style: solid;
-}
-.tk-row-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 2px;
-}
-.tk-tag-chip-static {
-  font-size: 11px;
-  padding: 2px 8px;
-}
-
-.tk-detail-foot {
-  display: flex;
-  gap: 8px;
-  padding: 14px 18px;
-  border-top: 1px solid var(--line);
-  background: var(--bg-elev);
-  flex-shrink: 0;
-}
-.tk-flex {
-  flex: 1;
-}
-
-.tk-detail.kit-pending {
-  border-left-width: 3px;
-}
-
-/* ---------- Narrow (phone) — driven by chrome.js's .is-narrow on #shell ---------- */
+/* ---------- Narrow (phone) — driven by chrome.ts's .is-narrow on #shell ---------- */
+/* The `.tk-detail` full-width rule moved to components/Detail.module.css (its
+   base class lives there now); everything below targets static shell chrome. */
 
 .tk-shell.is-narrow .tk-side {
   position: fixed;
@@ -940,23 +328,4 @@ button {
 .tk-shell.is-narrow .tk-search {
   width: auto;
   flex: 1;
-}
-.tk-shell.is-narrow .tk-detail {
-  width: 100vw;
-}
-
-@media (max-width: 519px) {
-  .tk-capture-row {
-    flex-wrap: wrap;
-  }
-  .tk-capture-input {
-    flex: 1 0 100%;
-    order: -1;
-  }
-  .tk-capture-add {
-    margin-left: auto;
-  }
-  .tk-detail-cols {
-    gap: 14px;
-  }
 }

@@ -66,6 +66,55 @@ beforeEach(async () => {
   });
 });
 
+describe('TypeScript handlers', () => {
+  it('prefers a .ts handler over a .js of the same name', async () => {
+    // Both files exist for the declared `add_note`; the dispatcher probes
+    // `.ts` first, so the TS handler must be the one that runs.
+    await writeFile(
+      path.join(codeDir, 'actions', 'add_note.ts'),
+      `interface Body { title: string }\n` +
+        `export default async ({ body }: { body: Body }) => ({ status: 200, body: { added: 'TS:' + body.title } });`,
+    );
+    const out = await dispatcher.write({ app: 'demo', action: 'add_note', input: { title: 'x' } });
+    expect(out.isError).toBe(false);
+    expect(out.structuredContent).toEqual({ added: 'TS:x' });
+  });
+
+  it('dispatches a .ts action and a .ts query, each with a relative .ts sibling import', async () => {
+    await writeFile(
+      path.join(codeDir, 'actions', 'helper.ts'),
+      `export function shout(s: string): string { return s.toUpperCase(); }`,
+    );
+    await writeFile(
+      path.join(codeDir, 'actions', 'add_note.ts'),
+      `import { shout } from './helper.js';\n` +
+        `interface Body { title: string }\n` +
+        `export default async ({ body }: { body: Body }) => ({ status: 200, body: { added: shout(body.title) } });`,
+    );
+    await writeFile(
+      path.join(codeDir, 'queries', 'countHelper.ts'),
+      `export const seed: number = 3;`,
+    );
+    await writeFile(
+      path.join(codeDir, 'queries', 'list_notes.ts'),
+      `import { seed } from './countHelper.js';\n` +
+        `export default async (): Promise<{ notes: number[] }> => ({ notes: [seed, seed + 1] });`,
+    );
+
+    const wrote = await dispatcher.write({
+      app: 'demo',
+      action: 'add_note',
+      input: { title: 'hi' },
+    });
+    expect(wrote.isError).toBe(false);
+    expect(wrote.structuredContent).toEqual({ added: 'HI' });
+
+    const read = await dispatcher.read({ app: 'demo', query: 'list_notes' });
+    expect(read.isError).toBe(false);
+    expect(read.structuredContent).toEqual({ notes: [3, 4] });
+  }, 10_000);
+});
+
 describe('declared routing', () => {
   it('write runs a declared action and fires the change notification', async () => {
     const out = await dispatcher.write({ app: 'demo', action: 'add_note', input: { title: 'x' } });

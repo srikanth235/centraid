@@ -1,0 +1,133 @@
+/* Sidebar region rows: the nav items, list folders (with inline editors) and
+   the storage footprint. The static containers (#smartNav/#listList/
+   #journalNav/#storage → .d-nav/.d-folders/.d-storage) stay global in app.css;
+   only this JSX-rendered content moved here. Authored camelCase; module
+   hashing replaces the old `d-` prefix. `.lbl`/`.val` are descendant locals
+   whose styling depends on their parent (`.navItem .lbl` vs `.storageTop
+   .lbl`), preserved exactly. */
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 9px 11px;
+  border: none;
+  border-radius: 9px;
+  font: var(--t-body);
+  background: none;
+  color: var(--ink-2);
+}
+.navItem .lbl {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.navItem:hover {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+.navItem[aria-current='true'] {
+  background: var(--accs);
+  color: var(--accd-fg);
+  font-weight: 600;
+}
+.navCount {
+  font-family: var(--mono);
+  font-size: 11px;
+  opacity: 0.6;
+}
+.navDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.folder {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.folder .navItem {
+  padding-right: 8px;
+}
+.folderTools {
+  position: absolute;
+  right: 6px;
+  display: none;
+  gap: 2px;
+  background: linear-gradient(90deg, transparent, var(--bg-elev) 22%);
+  padding-left: 14px;
+}
+.folder:hover .folderTools,
+.folder:focus-within .folderTools {
+  display: flex;
+}
+.folder:hover .navCount {
+  opacity: 0;
+}
+.toolBtn {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  color: var(--ink-3);
+}
+.toolBtn:hover {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+.toolBtn.danger:hover {
+  color: var(--danger);
+}
+.folderEdit {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 2px;
+}
+.folderEdit input {
+  flex: 1;
+  min-width: 0;
+  font: var(--t-body);
+  color: var(--ink);
+  background: var(--bg-elev);
+  border: 1px solid var(--selb);
+  border-radius: 7px;
+  padding: 6px 8px;
+}
+.folderEdit button {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  font: var(--t-small);
+  padding: 0 10px;
+}
+.storageTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.storageTop .lbl {
+  font: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: var(--tk-eye);
+  color: var(--ink-3);
+}
+.storageTop .val {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.storageLabel {
+  font: var(--t-small);
+  color: var(--ink-2);
+}

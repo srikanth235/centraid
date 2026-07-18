@@ -1,0 +1,315 @@
+/* The immersive editor overlay: backdrop, panel, top bar (back + save label +
+   notebook select + tools), the markdown-lite body renderer, the tag strip,
+   attachments and the receipt footer. Authored camelCase. The `nt-pop` panel
+   keyframe is single-consumer so it lives here (esbuild localizes the name +
+   reference together); the backdrop's fade-in uses the global `nt-fade` (kept
+   in app.css, shared with quick-add + the narrow scrim). `:global(...)` bridges
+   the kit classes (`.kit-icon-btn`, `.kit-pending`) and the shell state class
+   the narrow-viewport rules depend on. The eyebrow label, tag-chip base and
+   armed-delete label live in shared.module.css. */
+
+.editorBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in oklab, var(--ink) 30%, rgba(10, 12, 16, 0.55));
+  backdrop-filter: blur(2px);
+  animation: nt-fade 0.18s ease;
+}
+.editor {
+  margin: auto;
+  width: min(760px, 94vw);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  border-radius: 18px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: nt-pop 0.2s var(--ease);
+}
+.editorTop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.saveLabel {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  min-width: 92px;
+}
+.editorTools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.editorTools :global(.kit-icon-btn) {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg-elev);
+}
+.editorTools :global(.kit-icon-btn):hover {
+  border-color: var(--line-strong);
+}
+.editorTools :global(.kit-icon-btn.on) {
+  color: var(--accent-deep-fg);
+  border-color: var(--selb);
+  background: var(--sel);
+}
+.nbSelect {
+  font: var(--t-small);
+  color: var(--ink-2);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  outline: none;
+}
+.nbSelect:hover {
+  border-color: var(--line-strong);
+}
+
+.editorBody {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 20px 24px 8px;
+}
+.editorTitle {
+  display: block;
+  width: 100%;
+  font-family: var(--font-title);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: var(--tracking-h);
+  color: var(--ink);
+  background: none;
+  border: none;
+  outline: none;
+  margin-bottom: 12px;
+}
+.editorTitle::placeholder {
+  color: var(--ink-3);
+}
+.editorTextarea {
+  width: 100%;
+  min-height: 320px;
+  font: var(--t-body);
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--ink);
+  background: none;
+  border: none;
+  outline: none;
+  resize: none;
+  font-family: var(--font-sans);
+}
+.bodyRender {
+  min-height: 320px;
+  font-size: 15px;
+  line-height: 1.65;
+  cursor: text;
+}
+.mdH1,
+.mdH2,
+.mdH3 {
+  margin: 14px 0 4px;
+  font-family: var(--font-title);
+  font-weight: 600;
+  color: var(--ink);
+}
+.mdH1 {
+  font-size: 20px;
+}
+.mdH2 {
+  font-size: 17px;
+}
+.mdH3 {
+  font-size: 15px;
+}
+.mdP {
+  padding: 3px 0;
+  margin: 0;
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+.mdGap {
+  height: 10px;
+  margin: 0;
+}
+.mdLi {
+  display: flex;
+  gap: 9px;
+  padding: 2px 0;
+  color: var(--ink);
+}
+.mdBullet {
+  color: var(--accent-deep-fg);
+  flex-shrink: 0;
+}
+.checkLine {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 3px 0;
+}
+.checkBox {
+  flex-shrink: 0;
+  margin-top: 2px;
+  width: 19px;
+  height: 19px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--line-strong);
+  background: transparent;
+  padding: 0;
+  transition:
+    background 0.15s var(--ease),
+    border-color 0.15s var(--ease);
+}
+.checkLine.done .checkBox {
+  border-color: var(--accent-deep);
+  background: var(--accent-deep);
+}
+.checkText {
+  flex: 1;
+  color: var(--ink);
+}
+.checkLine.done .checkText {
+  color: var(--ink-3);
+  text-decoration: line-through;
+}
+
+.editorAttach {
+  margin: 8px 0 10px;
+}
+.attachBtn {
+  margin-bottom: 4px;
+}
+
+.tagStrip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 14px;
+}
+.tagRemove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+}
+.tagRemove:hover {
+  opacity: 1;
+}
+.tagAdd {
+  display: inline-flex;
+}
+.tagInput {
+  font: inherit;
+  font-size: 12px;
+  border: 1px dashed var(--line);
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: transparent;
+  color: var(--ink);
+  min-width: 90px;
+}
+.tagInput:focus {
+  outline: none;
+  border-color: var(--accent-deep);
+  border-style: solid;
+}
+
+.editorFoot {
+  flex-shrink: 0;
+  border-top: 1px solid var(--line);
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-elev);
+}
+.receiptChip {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--accent-deep-fg);
+  border: 1px solid var(--accent-soft);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.activityLine {
+  font: var(--t-small);
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.editor:global(.kit-pending) {
+  border-left-width: 3px;
+}
+
+@keyframes nt-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Narrow (phone) — global shell state on #shell (chrome.ts). */
+:global(.nt-shell.is-narrow) .editorBackdrop {
+  align-items: stretch;
+}
+:global(.nt-shell.is-narrow) .editor {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  border-radius: 0;
+  border: none;
+  animation: none;
+}
+/* The full top bar is too wide for a phone at its desktop sizing — let the save
+   label truncate instead of reserving a fixed 92px, cap the select, tighten
+   gaps/padding. */
+:global(.nt-shell.is-narrow) .editorTop {
+  gap: 6px;
+  padding: 10px;
+}
+:global(.nt-shell.is-narrow) .saveLabel {
+  min-width: 0;
+  flex-shrink: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:global(.nt-shell.is-narrow) .editorTools {
+  gap: 4px;
+}
+:global(.nt-shell.is-narrow) .nbSelect {
+  max-width: 25vw;
+  padding: 7px 6px;
+}

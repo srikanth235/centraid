@@ -1,0 +1,68 @@
+/* The add/edit expense modal's split rows and its width knob. Field atoms
+   (`in`/`field`/`amtwrap`/`amt`/`catrow`/`row2`/`select`/`flabel`/`del`) and
+   the kit segmented/chip controls come from shared / kit vocabulary. Authored
+   camelCase; the `on`/`bad` modifiers are compound (`.base.mod`). */
+.wide {
+  width: min(500px, 100%);
+}
+.splitrow {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 8px 2px;
+  border-bottom: 1px solid var(--line);
+}
+.splitrow:last-child {
+  border-bottom: none;
+}
+.splitbox {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  border: 1.5px solid var(--line-strong);
+  background: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.splitbox.on {
+  background: var(--accd);
+  border-color: var(--accd);
+}
+.splitname {
+  flex: 1;
+  font: var(--t-body);
+  font-size: 13.5px;
+}
+.splitin {
+  width: 92px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  outline: none;
+  font: var(--t-mono);
+  font-size: 12px;
+  text-align: right;
+}
+.splitin:focus {
+  border-color: var(--selb);
+}
+.splitshare {
+  width: 78px;
+  text-align: right;
+  font: var(--t-mono);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.splitsum {
+  font: var(--t-small);
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-top: 8px;
+  text-align: right;
+}
+.splitsum.bad {
+  color: var(--neg);
+}
