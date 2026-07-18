@@ -188,6 +188,7 @@ async function runInternal() {
       process.resourceUsage().maxRSS * 1024,
     );
 
+    const liveDataBytesBeforeIdle = await directoryBytes(root);
     const idleResourcesBefore = resourceCounters();
     const idleProcBefore = await readProcIo();
     const idleStarted = performance.now();
@@ -195,6 +196,7 @@ async function runInternal() {
     const idleDurationMs = performance.now() - idleStarted;
     const idleResourcesAfter = resourceCounters();
     const idleProcAfter = await readProcIo();
+    const liveDataBytesAfterIdle = await directoryBytes(root);
 
     writeLatencies.sort((a, b) => a - b);
     readLatencies.sort((a, b) => a - b);
@@ -250,7 +252,7 @@ async function runInternal() {
           (resourcesAfterWrites.fsWrites - resourcesBeforeWrites.fsWrites) / writes,
         diskWriteBytes,
         diskWriteBytesPerWrite: diskWriteBytes === null ? null : diskWriteBytes / writes,
-        liveDataBytes: await directoryBytes(root),
+        liveDataBytes: liveDataBytesAfterIdle,
       },
       idle: {
         contextSwitchesPerHour: ratePerHour(
@@ -265,6 +267,10 @@ async function runInternal() {
           idleProcBefore && idleProcAfter
             ? ratePerHour(idleProcAfter.write_bytes - idleProcBefore.write_bytes, idleDurationMs)
             : null,
+        liveDataGrowthBytesPerHour: ratePerHour(
+          Math.max(0, liveDataBytesAfterIdle - liveDataBytesBeforeIdle),
+          idleDurationMs,
+        ),
       },
     };
     return report;
@@ -297,6 +303,11 @@ function checkBudgets(report, budgets, requireFsync) {
       'idle.contextSwitchesPerHour',
       report.idle.contextSwitchesPerHour,
       budgets.idleContextSwitchesPerHour,
+    ],
+    [
+      'idle.liveDataGrowthBytesPerHour',
+      report.idle.liveDataGrowthBytesPerHour,
+      budgets.idleLiveDataGrowthBytesPerHour,
     ],
   ];
   if (report.storage.diskWriteBytesPerWrite !== null) {

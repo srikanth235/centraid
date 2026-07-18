@@ -73,11 +73,12 @@ GitHub issue: [#456](https://github.com/srikanth235/centraid/issues/456)
 - **M3 Storage-latency probe at boot** — boot performs an isolated 4 KiB
   write/fsync/unlink probe and reports its latency without touching vault data.
 - The final explicitly constrained-profile run (120 writes, 30 reads,
-  concurrency 4, 65-second idle window) measured write p50 **13.63 ms**, p99
-  **19.09 ms**, max **19.38 ms**, and **281.43 writes/s**; read p99 was
-  **2.41 ms**; peak RSS was **212,795,392 bytes**; event-loop peak p99 was
-  **24.00 ms**; boot fsync was **5.59 ms**; idle context switches were
-  **387,958/hour**; and idle filesystem writes were **0/hour**. Every locally
+  concurrency 4, 65-second idle window) measured write p50 **15.89 ms**, p99
+  **24.89 ms**, max **25.31 ms**, and **241.25 writes/s**; read p99 was
+  **2.81 ms**; peak RSS was **197,656,576 bytes**; event-loop peak p99 was
+  **26.94 ms**; boot fsync was **5.56 ms**; idle context switches were
+  **371,553/hour**, idle filesystem writes were **0/hour**, and live-data
+  growth was **0/hour**. Every locally
   available budget passed. Linux CI runs the same constrained primary workload
   untraced, then scopes a second `strace` run to workload markers and requires
   exact fsync data.
@@ -94,6 +95,15 @@ GitHub issue: [#456](https://github.com/srikanth235/centraid/issues/456)
   unstable. The ceiling was not widened: the final 65-second window covers both
   30-second and 60-second recurring gateway cadences, while the trace-only
   child uses a one-millisecond teardown wait after its measured fsync epoch.
+- The first trustworthy 65-second Linux run then exposed a real unconfigured
+  WAL-capture write: one **~8.7 MiB** local segment at the 60-second RPO,
+  extrapolating to **483,204,833 bytes/hour**. The ceiling was again not
+  widened. Unconfigured vaults now keep capture dormant behind SQLite's
+  **64 MiB** autocheckpoint safety net; connection create/delete immediately
+  switches every mounted plane between that fallback and exact-RPO capture.
+  The benchmark also gates portable live-data growth at **10 MiB/hour**, so
+  this accumulation remains detectable on macOS where physical write bytes are
+  unavailable.
 
 ### Eliminate byte and buffering pathologies
 
@@ -132,7 +142,9 @@ GitHub issue: [#456](https://github.com/srikanth235/centraid/issues/456)
   rejects only that queued call while preserving its canonical vault marker,
   so retries cannot duplicate an already-committed command.
 - **S5 WAL safety net** — checkpointing remains bounded and detects foreign
-  checkpoint/reset conditions without silently losing a stream.
+  checkpoint/reset conditions without silently losing a stream. With no
+  backup consumer, capture sleeps and both databases use a page-size-aware
+  64 MiB autocheckpoint; configuring backup restores shipper-only checkpoints.
 - **S6 Replace `MSG_COUNT_SUBQUERY`** — conversation rows maintain `item_count`
   transactionally and migration/tests cover existing databases.
 - **S7 `page_size` 8–16 KB** — new gateway databases use an 8 KiB page while
@@ -178,10 +190,10 @@ GitHub issue: [#456](https://github.com/srikanth235/centraid/issues/456)
   its freshness window scales proportionally, halving steady-state writes.
 - **I3 Empty scheduler ledger skip** — reconciliation performs no ledger write
   when there is no semantic scheduler change.
-- **I4 Backup timer unconfigured** — no backup timer is installed until backup
-  is configured; one-shot scheduling uses each vault's actual remaining RPO,
-  and policy or live storage-backend create/update/delete transitions re-arm it
-  immediately.
+- **I4 Backup timer unconfigured** — neither the backup drain nor per-vault WAL
+  capture timer is installed until backup is configured; one-shot scheduling
+  uses each vault's actual remaining RPO, and policy or live storage-backend
+  create/update/delete transitions re-arm capture and drain immediately.
 - **I5 Push replica delta** — commit-time doorbells name affected shapes so
   replicas wake from actual changes instead of polling the whole catalog.
 - **I6 Jitter timers** — recurring vault/gateway timers share bounded jitter to
@@ -472,6 +484,10 @@ Changed paths covered by this receipt:
 bun run ci
 bun run build
 node_modules/.bin/vitest run --coverage --maxWorkers=2 --minWorkers=1
+node_modules/.bin/vitest run --project @centraid/gateway \
+  packages/gateway/src/serve/vault-plane.test.ts \
+  packages/gateway/src/routes/storage-routes.test.ts \
+  packages/gateway/src/routes/backup-routes.test.ts
 bun run --cwd packages/data-plane lint
 bun run --cwd packages/data-plane test
 bun run --cwd packages/data-plane test:contract
@@ -512,9 +528,10 @@ SSH CLI propagation regressions pass as part of **29/29** focused tests. The
 final hygiene split's affected route, cache-profile, cache, and gateway suites
 passed **61/61 tests**.
 
-The final bounded coverage run passed **499 files / 4,385 tests**; three files
+The final bounded coverage run passed **499 files / 4,387 tests**; three files
 and 35 tests were skipped only by their explicit platform or opt-in
-integration gates.
+integration gates. The focused WAL-capture/storage/backup transition suites
+passed **50/50 tests**.
 
 The unconstrained default-worker coverage attempt reached the tail of the
 suite with no assertion failure but Vitest's process pool terminated with
@@ -566,6 +583,16 @@ the physical-byte gate is substantive rather than budget evasion, and the
 unchanged idle ceiling is now sampled stably. After two stale wording claims
 were corrected, it returned `PASS`.
 
+The first trustworthy 65-second Linux gate subsequently revealed the dormant
+configuration still captured a WAL segment at the 60-second clock. The same
+fresh-context reviewer audited the product fix and initially `REFUTED` it
+because shutdown still bypassed the live configuration gate. The corrected
+shutdown path leaves the shipper untouched when unconfigured, and the added
+regressions prove both zero shipper growth on disabled stop and a coordinated
+fresh generation after SQLite's fallback checkpoint is re-enabled for backup.
+After the focused **50/50** suites, final bounded coverage, receipt counts, and
+diff hygiene were rechecked, the reviewer returned an unqualified `PASS`.
+
 ## Steering
 
 PASS — the only human instruction in this task was the opening `/goal` to
@@ -584,3 +611,4 @@ and create a PR. There were no user corrections or mid-task redirects.
 | codex-019f7389-37c-1784383061-1 | codex | 019f7389-37ce-7252-abb8-77936a8e13cb | #456 | gpt-5.6-sol | 45439 | 0 | 6249472 | 7751 | 53190 | 1.7922 | 5226345 | 0 | 240922880 | 558888 | perf(gateway): harden low-end control and data planes (#456) -m governance: allo |
 | codex-019f7389-37c-1784384195-1 | codex | 019f7389-37ce-7252-abb8-77936a8e13cb | #456 | gpt-5.6-sol | 79079 | 0 | 9083648 | 9313 | 88392 | 2.6083 | 5305424 | 0 | 250006528 | 568201 | fix(gateway): defer fsync gate to trace parent (#456) |
 | codex-019f7389-37c-1784386147-1 | codex | 019f7389-37ce-7252-abb8-77936a8e13cb | #456 | gpt-5.6-sol | 167984 | 0 | 6912512 | 27419 | 195403 | 2.5594 | 5473408 | 0 | 256919040 | 595620 | perf(gateway): stabilize low-end measurement gate (#456) |
+| codex-019f7389-37c-1784389221-1 | codex | 019f7389-37ce-7252-abb8-77936a8e13cb | #456 | gpt-5.6-sol | 330968 | 0 | 21291264 | 35839 | 366807 | 6.6878 | 5804376 | 0 | 278210304 | 631459 | fix(gateway): stop unconfigured WAL capture churn (#456) |

@@ -637,6 +637,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // inside a vault directory a raw copy could carry off-box.
   const storageDir = paths.storageDir ?? path.join(path.dirname(paths.vaultDir), 'storage');
   const storageConnections = await openStorageConnectionStore(storageDir);
+  let walCaptureConfigured =
+    options.backup?.enabled === true || (await storageConnections.list()).length > 0;
   const recoveryKit = new RecoveryKitStateStore(storageDir);
   // Provider usage cache (issue #367 §D1) — cache-with-TTL + stale-while-
   // refresh in front of a provider connection's optional `usage` capability
@@ -669,6 +671,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     replicationConcurrency: hardwareProfile.replicationConcurrency,
     sweepIntervalMs: hardwareProfile.vaultSweepIntervalMs,
     shouldDeferBackgroundWork: () => health.shouldDeferBackgroundWork(),
+    walCaptureEnabled: () => walCaptureConfigured,
     // Disposable runner cache lives outside the vault tree (defaults to a
     // `-cache` sibling of `vaultDir` when the host doesn't pin one).
     ...(paths.cacheDir ? { cacheRootDir: paths.cacheDir } : {}),
@@ -2320,7 +2323,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         recoveryKit,
         vaults: vaultRegistry,
         storageUsage,
-        onConnectionsChanged: () => backupService.refreshWalSchedule(),
+        onConnectionsChanged: async () => {
+          walCaptureConfigured =
+            options.backup?.enabled === true || (await storageConnections.list()).length > 0;
+          for (const plane of vaultRegistry.planesList()) plane.rescheduleWalCapture();
+          await backupService.refreshWalSchedule();
+        },
       }),
     ),
     // Due task/event reminders, computed live — the desktop main process

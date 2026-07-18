@@ -84,6 +84,8 @@ export interface VaultRegistryOptions {
   sweepIntervalMs?: number;
   /** False for admin/read-only opens that must never own or checkpoint WALs. */
   enableWalShipper?: boolean;
+  /** Forwarded live backup-configuration gate for each plane's WAL capture clock. */
+  walCaptureEnabled?: () => boolean;
   /** Forwarded to every plane (issue #367 §C6) — see `VaultPlaneOptions.leaseConflicted`. */
   leaseConflicted?: () => boolean;
   /** Forwarded to every plane (issue #367 §C3) — see `VaultPlaneOptions.s3Credentials`. */
@@ -128,6 +130,7 @@ export class VaultRegistry {
   private readonly ownerName: string | undefined;
   private readonly sweepIntervalMs: number | undefined;
   private readonly enableWalShipper: boolean;
+  private readonly walCaptureEnabled: (() => boolean) | undefined;
   private readonly leaseConflicted: (() => boolean) | undefined;
   private readonly s3Credentials:
     | ((settings: BlobStoreSettings) => Promise<S3Credentials>)
@@ -162,6 +165,7 @@ export class VaultRegistry {
     this.ownerName = options.ownerName;
     this.sweepIntervalMs = options.sweepIntervalMs;
     this.enableWalShipper = options.enableWalShipper ?? true;
+    this.walCaptureEnabled = options.walCaptureEnabled;
     this.leaseConflicted = options.leaseConflicted;
     this.s3Credentials = options.s3Credentials;
     this.previewCodec = options.previewCodec;
@@ -332,6 +336,7 @@ export class VaultRegistry {
       ...(this.ownerName ? { ownerName: this.ownerName } : {}),
       ...(this.sweepIntervalMs !== undefined ? { sweepIntervalMs: this.sweepIntervalMs } : {}),
       enableWalShipper: this.enableWalShipper,
+      ...(this.walCaptureEnabled ? { walCaptureEnabled: this.walCaptureEnabled } : {}),
       ...(this.leaseConflicted ? { leaseConflicted: this.leaseConflicted } : {}),
       ...(this.s3Credentials ? { s3Credentials: this.s3Credentials } : {}),
       ...(this.previewCodec ? { previewCodec: this.previewCodec } : {}),

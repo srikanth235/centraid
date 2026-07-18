@@ -6,5 +6,6 @@
   "diskWriteBytesPerWrite": 131072,
   "idleContextSwitchesPerHour": 500000,
   "idleResourceFsWritesPerHour": 5000,
+  "idleLiveDataGrowthBytesPerHour": 10485760,
   "idleDiskWriteBytesPerHour": 10485760
 }

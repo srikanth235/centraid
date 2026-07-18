@@ -24,6 +24,15 @@ async function tempDir(): Promise<string> {
   return dir;
 }
 
+async function directoryBytes(dir: string): Promise<number> {
+  let total = 0;
+  for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    total += entry.isDirectory() ? await directoryBytes(full) : (await fs.stat(full)).size;
+  }
+  return total;
+}
+
 function openPlane(dir: string): VaultPlane {
   const plane = openVaultPlane({ dir, logger: silentLogger, ownerName: 'Priya' });
   cleanups.push(() => plane.stop());
@@ -50,6 +59,87 @@ test("a WAL-disabled admin plane never checkpoints another process's stream on s
   plane.stop();
 
   expect(checkpoints).toBe(0);
+});
+
+test('WAL capture sleeps without backup and re-arms immediately when configured', async () => {
+  const dir = await tempDir();
+  let backupConfigured = false;
+  const plane = openVaultPlane({
+    dir,
+    logger: silentLogger,
+    ownerName: 'Priya',
+    walCaptureEnabled: () => backupConfigured,
+  });
+  cleanups.push(() => plane.stop());
+  const tick = vi.spyOn(plane.walShipper!, 'tick');
+  const close = vi.spyOn(plane.walShipper!, 'close');
+  const autocheckpointPages = () =>
+    [plane.db.vault, plane.db.journal].map((db) => {
+      const row = db.prepare('PRAGMA wal_autocheckpoint').get() as Record<string, number>;
+      return Object.values(row)[0];
+    });
+
+  plane.start();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(tick).not.toHaveBeenCalled();
+  expect(autocheckpointPages().every((pages) => (pages ?? 0) > 0)).toBe(true);
+
+  backupConfigured = true;
+  plane.rescheduleWalCapture();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(tick).toHaveBeenCalledTimes(1);
+  expect(autocheckpointPages()).toEqual([0, 0]);
+
+  backupConfigured = false;
+  plane.rescheduleWalCapture();
+  expect(autocheckpointPages().every((pages) => (pages ?? 0) > 0)).toBe(true);
+
+  const shipBytesBeforeStop = await directoryBytes(path.join(dir, 'wal-ship'));
+  plane.stop();
+  expect(close).not.toHaveBeenCalled();
+  expect(await directoryBytes(path.join(dir, 'wal-ship'))).toBe(shipBytesBeforeStop);
+});
+
+test('re-enabling capture after fallback autocheckpoint mints a coordinated generation', async () => {
+  const dir = await tempDir();
+  let backupConfigured = true;
+  const plane = openVaultPlane({
+    dir,
+    logger: silentLogger,
+    ownerName: 'Priya',
+    walCaptureEnabled: () => backupConfigured,
+  });
+  cleanups.push(() => plane.stop());
+
+  plane.start();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const before = plane.walShipper!.status().dbs;
+  expect(before.vault?.generation).toMatch(/^[0-9a-f]{32}$/);
+  expect(before.journal?.generation).toMatch(/^[0-9a-f]{32}$/);
+
+  backupConfigured = false;
+  plane.rescheduleWalCapture();
+  // Force the production fallback's ordinary SQLite checkpoint transition
+  // with one page so this regression does not need to write 64 MiB.
+  plane.db.vault.exec('PRAGMA wal_autocheckpoint = 1');
+  plane.db.vault.exec(
+    'CREATE TABLE fallback_checkpoint_probe (id INTEGER PRIMARY KEY, value TEXT NOT NULL)',
+  );
+  plane.db.vault
+    .prepare('INSERT INTO fallback_checkpoint_probe (value) VALUES (?)')
+    .run('folded while backup was disabled');
+
+  backupConfigured = true;
+  plane.rescheduleWalCapture();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const after = plane.walShipper!.status();
+  expect(after.dbs.vault?.generation).not.toBe(before.vault?.generation);
+  expect(after.dbs.journal?.generation).not.toBe(before.journal?.generation);
+  expect(after.dbs.vault?.generation).toMatch(/^[0-9a-f]{32}$/);
+  expect(after.dbs.journal?.generation).toMatch(/^[0-9a-f]{32}$/);
+  expect(after.dbs.vault?.basePending).toBe(true);
+  expect(after.dbs.journal?.basePending).toBe(true);
+  expect(after.foreignCheckpointCount).toBeGreaterThan(0);
 });
 
 function seedCalendar(plane: VaultPlane): string {

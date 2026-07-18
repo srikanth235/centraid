@@ -15,8 +15,9 @@ split across party/place shapes with 30 interleaved authenticated status
 reads. The checked-in budgets are request p99 <= 250 ms, peak RSS <= 512 MiB,
 event-loop peak p99 <= 150 ms, <= 6 fsyncs and <= 128 KiB physical disk writes
 per write, <= 500,000 idle context switches/hour, and <= 10 MiB idle physical
-writes/hour. Platforms without a physical-byte counter fall back to <= 5,000
-raw OS filesystem-output units/hour.
+writes/hour. Live data may grow by no more than 10 MiB/hour on every platform;
+platforms without a physical-byte counter also fall back to <= 5,000 raw OS
+filesystem-output units/hour.
 
 The primary idle observation lasts 65 seconds, covering the 30-second and
 60-second recurring service cadences instead of extrapolating a two-second
@@ -33,7 +34,8 @@ idle and therefore uses a one-millisecond teardown wait.
 | First Linux traced-primary gate | 23.70 ms | 40.21 ms | 152.30 writes/s | 170.5 MB | 29.97 ms | 1.89 ms | 1,115,868 | fsync pass; OS-counter/ptrace fail |
 | Corrected untraced 2s sample | 16.33 ms | 27.87 ms | 231.09 writes/s | 212.9 MB | 29.77 ms | 5.24 ms | 375,859 | pass |
 | Two-second stability recheck | 13.21 ms | 18.05 ms | 288.15 writes/s | 208.0 MB | 23.10 ms | 5.51 ms | 507,421 | idle extrapolation fail |
-| Corrected 65-second final | 13.63 ms | 19.09 ms | 281.43 writes/s | 212.8 MB | 24.00 ms | 5.59 ms | 387,958 | pass |
+| First Linux 65-second gate | 16.24 ms | 29.21 ms | 224.44 writes/s | 172.2 MB | 26.66 ms | 1.26 ms | 192,186 | unconfigured WAL spool fail |
+| Corrected 65-second final | 15.89 ms | 24.89 ms | 241.25 writes/s | 197.7 MB | 26.94 ms | 5.56 ms | 371,553 | pass |
 
 The first final attempt counted app install/bundle prewarming in the
 event-loop workload epoch and reported a 674.23 ms peak. Boot and prewarming
@@ -46,11 +48,11 @@ explicitly sets `CENTRAID_HARDWARE_PROFILE=constrained`; the 8-core/16 GiB
 measurement host therefore exercises the low-end worker, replication,
 compression, and SQLite defaults. Linux CI repeats the constrained profile.
 
-RSS rose from 156.8 MB to 212.8 MB after adding precompressed app variants,
+RSS rose from 156.8 MB to 197.7 MB after adding precompressed app variants,
 codec runtimes, and the performance monitor. That remains well below the
-512 MiB ceiling. The p99 improvement from 381.76 ms to 19.09 ms and event-loop
-improvement from 367.26 ms to 24.00 ms are the deciding changes; throughput
-rose from 66.06 to 281.43 writes/second after every Atlas write was moved
+512 MiB ceiling. The p99 improvement from 381.76 ms to 24.89 ms and event-loop
+improvement from 367.26 ms to 26.94 ms are the deciding changes; throughput
+rose from 66.06 to 241.25 writes/second after every Atlas write was moved
 through the shared group-commit window.
 
 macOS cannot provide an unprivileged exact SQLite fsync count. It reports
@@ -205,7 +207,7 @@ described above. It is deliberately a deferral valve, not cancellation: work
 becomes eligible again when the rolling window recovers.
 
 **A8** is a measured no-go for moving SQLite to a worker thread. The final
-19.09 ms request p99 is below the 250 ms budget and 24.00 ms event-loop peak is
+24.89 ms request p99 is below the 250 ms budget and 26.94 ms event-loop peak is
 below the 150 ms budget. Crossing the database boundary would add a second
 serialization/error surface without evidence it is needed. Revisit only if
 the Linux Pi lane fails either p99 or event-loop lag after the implemented

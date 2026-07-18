@@ -3,7 +3,8 @@
 Issue #456's server-side harness runs a real gateway and drives a concurrent,
 authenticated mix of journalled Atlas writes and status reads. It records write p50/p99,
 peak RSS, event-loop delay, boot fsync latency, filesystem activity,
-and an idle-window extrapolation for context switches and disk writes per hour.
+and an idle-window extrapolation for context switches, disk writes, and live
+data growth per hour.
 
 ```sh
 bun run perf:gateway
@@ -45,7 +46,8 @@ make a regression pass.
 | First Linux traced-primary gate | 40.21 ms | 152.30 writes/s | 170.5 MB | 29.97 ms | fsync pass; OS-counter/ptrace fail |
 | Corrected untraced 2s sample | 27.87 ms | 231.09 writes/s | 212.9 MB | 29.77 ms | pass |
 | 2s stability recheck | 18.05 ms | 288.15 writes/s | 208.0 MB | 23.10 ms | idle extrapolation fail |
-| Corrected 65s final | 19.09 ms | 281.43 writes/s | 212.8 MB | 24.00 ms | pass |
+| First Linux 65s gate | 29.21 ms | 224.44 writes/s | 172.2 MB | 26.66 ms | unconfigured WAL spool: 483 MB/hour fail |
+| Corrected 65s final | 24.89 ms | 241.25 writes/s | 197.7 MB | 26.94 ms | pass |
 
 The final artifact is `results/issue-456-final.json`. It resets the performance
 measurement epoch after authenticated warmup, so app installation and bundle
@@ -60,6 +62,15 @@ even though the measurement host has 8 cores and 16 GiB RAM, proving the
 low-end defaults rather than merely labeling a standard-host run. The Linux
 CI gate repeats that constrained profile with an untraced primary run and
 separate exact strace accounting.
+
+The first trustworthy 65-second Linux run exposed a genuine product bug: the
+per-vault WAL shipper captured about 8.7 MiB at the unconfigured 60-second RPO,
+which extrapolated to 483 MB/hour and accumulated locally because the
+unconfigured drain clock was correctly dormant. Unconfigured vaults now leave
+capture dormant and use SQLite's 64 MiB autocheckpoint safety net; storage
+connection create/delete re-arms capture or the fallback immediately. The
+portable live-data-growth gate catches future spool accumulation even on hosts
+without `/proc/self/io`.
 `results/issue-456-runtime.json` records the N7 runtime gate: Node
 24.4.1 passes the required `node:sqlite` compatibility probe, while Bun 1.3.13
 cannot import that built-in and is therefore a no-go rather than a misleading
