@@ -280,6 +280,80 @@ describe('invalidation — an app file edit re-keys the bundle', () => {
   });
 });
 
+describe('TypeScript entry + CSS-module in the whole-graph bundle', () => {
+  /** A TS app: `app.tsx` entry importing a `.module.css`, plus a global
+   * `app.css` that stays a `<link>` (inlined into the HTML, never in the JS
+   * graph). No JSX/React import, so no shared dir is needed. */
+  function newTsApp(cardCss = '.card { padding: 8px; }'): string {
+    return newDir({
+      'index.html': [
+        '<!doctype html><html><head>',
+        '<link rel="stylesheet" href="app.css" />',
+        '</head><body><div id="root"></div>',
+        '<script type="module" src="./app.tsx"></script>',
+        '</body></html>',
+      ].join('\n'),
+      'app.css': '#root { display: grid; }',
+      'app.tsx': [
+        "import styles from './styles.module.css';",
+        'interface Props { name: string }',
+        "export const APP_MARKER: string = 'ts-app';",
+        'globalThis.__TS_APP = APP_MARKER;',
+        'const cls: string = styles.card;',
+        'globalThis.__CARD_CLASS = cls;',
+        'export function render(p: Props): string { return p.name + cls; }',
+      ].join('\n'),
+      'styles.module.css': cardCss,
+    });
+  }
+
+  it('bundles a .tsx entry importing a .module.css: hashed class name + injected CSS present, no second output dropped', async () => {
+    const app = newTsApp();
+    const first = await serve(app, 'index.html');
+    const html = first.body.toString('utf8');
+
+    // (a) the `<script type="module" src="./app.tsx">` entry was rewritten…
+    const m = BUNDLE_URL_RE.exec(html);
+    expect(m, 'the .tsx entry was not bundled').toBeTruthy();
+    expect(html).not.toContain('src="./app.tsx"');
+    // …and the global app.css stayed a <link> that got inlined (not in the JS).
+    expect(html).not.toContain('<link rel="stylesheet"');
+    expect(html).toContain('display: grid');
+
+    const body = (await serve(app, `_bundle.${m![1]}.js`)).body.toString('utf8');
+    // TS type syntax is gone.
+    expect(body).not.toMatch(/interface\s+Props/);
+    expect(body).not.toMatch(/:\s*string/);
+    // The CSS-module output was NOT dropped: its compiled CSS text is inlined
+    // into the JS graph via the style injector (single-output invariant held).
+    expect(body).toContain('padding: 8px');
+    expect(body).toMatch(/document\.createElement\(['"]style['"]\)/);
+    // The hashed local class name is referenced by the app code.
+    expect(body).toMatch(/card:\s*["'][^"']*card[^"']*["']/);
+    expect(body).toContain('__CARD_CLASS');
+  });
+
+  it('re-keys the bundle when the .module.css changes (module CSS invalidates the manifest)', async () => {
+    const app = newTsApp('.card { padding: 8px; }');
+    const hash1 = BUNDLE_URL_RE.exec((await serve(app, 'index.html')).body.toString())![1]!;
+
+    const edited = join(app, 'styles.module.css');
+    writeFileSync(edited, '.card { padding: 16px; }');
+    const future = Date.now() / 1000 + 5;
+    utimesSync(edited, future, future);
+
+    const hash2 = BUNDLE_URL_RE.exec((await serve(app, 'index.html')).body.toString())![1]!;
+    expect(hash2).not.toBe(hash1);
+
+    const fresh = await serve(app, `_bundle.${hash2}.js`);
+    expect(fresh.statusCode).toBe(200);
+    expect(fresh.body.toString('utf8')).toContain('padding: 16px');
+
+    // The old hash is gone once the manifest re-keyed.
+    expect((await serve(app, `_bundle.${hash1}.js`)).statusCode).toBe(404);
+  });
+});
+
 describe('draft serving stays per-file', () => {
   const draft = { draft: { appId: 'demo', sessionId: 'sess-1' } };
 
@@ -337,7 +411,10 @@ async function countBootRequests(
     const data = await serve(appDir, rel, opts);
     if (data.statusCode !== 200) continue;
     seen.add(rel);
-    if (!/\.(js|jsx|mjs)$/.test(rel)) continue;
+    // Recurse into every source module the per-file server transpiles — JS,
+    // JSX, and (TS-authored apps) TS/TSX. A `.module.css` is served (counted)
+    // but not walked: it imports no further app modules.
+    if (!/\.(js|jsx|ts|tsx|mjs)$/.test(rel)) continue;
     const body = data.body.toString('utf8');
     for (const m of body.matchAll(/(?:import|export)[^'"]*from\s*["']([^"']+)["']/g)) {
       pending.push(resolveRel(rel, m[1]!));

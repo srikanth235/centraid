@@ -53,8 +53,11 @@ interface PlainCacheEntry {
 }
 export const plainCache = new Map<string, PlainCacheEntry>();
 
-/** Compressed variants for a transformed `.jsx` body, keyed by its content etag. */
+/** Compressed variants for a transformed `.jsx`/`.tsx`/`.ts` body, keyed by its content etag. */
 export const jsxVariantCache = new Map<string, Map<Encoding, Buffer>>();
+
+/** Compressed variants for a compiled `*.module.css` JS body, keyed by its content etag. */
+export const cssModuleVariantCache = new Map<string, Map<Encoding, Buffer>>();
 export function variantCacheFor(
   cache: Map<string, Map<Encoding, Buffer>>,
   etag: string,

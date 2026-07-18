@@ -498,6 +498,114 @@ describe('serveStatic — serve-time JSX transform', () => {
   });
 });
 
+describe('serveStatic — TypeScript sources + CSS modules', () => {
+  // A `.tsx` with both TS type syntax and JSX — the served body must contain
+  // neither the type annotations nor the raw JSX, and must carry the
+  // depth-aware automatic-runtime import like the `.jsx` path does.
+  const VALID_TSX = `interface Props { name: string }
+export default function App(props: Props){ const n: number = 1; return <div className="ok">{props.name}{n}</div>; }`;
+  // A plain `.ts` (no JSX) — types stripped, no jsx-runtime import needed.
+  const VALID_TS = `export const greeting: string = "hi";
+interface Q { a: number }
+export function total(q: Q): number { return q.a; }`;
+  const CSS_MOD = `.foo { color: red; }
+.barBaz { font-weight: bold; }`;
+  const CSS_MOD_V2 = `.foo { color: blue; }`;
+
+  it('compiles a .tsx file to plain JS: no type syntax, no raw JSX, JS content-type, rewritten runtime import', async () => {
+    const dir = newAppDir({ 'app.tsx': VALID_TSX });
+    const { res, data } = mockRes();
+    await serveStatic(mockReq(), res, dir, 'app.tsx');
+    expect(data.statusCode).toBe(200);
+    expect(data.headers['Content-Type']).toMatch(/javascript/);
+    const body = data.body.toString('utf8');
+    expect(body).not.toMatch(/<div/);
+    expect(body).not.toMatch(/interface\s+Props/);
+    expect(body).not.toMatch(/:\s*number/);
+    expect(body).toMatch(/from\s+["']\.\/jsx-runtime\.js["']/);
+  });
+
+  it('climbs one level for a nested components/*.tsx jsx-runtime import', async () => {
+    const dir = newAppDir({ 'components/Widget.tsx': VALID_TSX });
+    const { res, data } = mockRes();
+    await serveStatic(mockReq(), res, dir, 'components/Widget.tsx', {});
+    expect(data.statusCode).toBe(200);
+    const body = data.body.toString('utf8');
+    expect(body).not.toMatch(/<div/);
+    expect(body).toMatch(/from\s+["']\.\.\/jsx-runtime\.js["']/);
+  });
+
+  it('strips types from a plain .ts file (no JSX, JS content-type)', async () => {
+    const dir = newAppDir({ 'util.ts': VALID_TS });
+    const { res, data } = mockRes();
+    await serveStatic(mockReq(), res, dir, 'util.ts');
+    expect(data.statusCode).toBe(200);
+    expect(data.headers['Content-Type']).toMatch(/javascript/);
+    const body = data.body.toString('utf8');
+    expect(body).not.toMatch(/interface\s+Q/);
+    expect(body).not.toMatch(/:\s*string/);
+    expect(body).not.toMatch(/:\s*number/);
+    expect(body).toMatch(/greeting/);
+    // A no-JSX source needs no runtime import.
+    expect(body).not.toMatch(/jsx-runtime/);
+  });
+
+  it('serves a *.module.css as a JS module: class-map default export + idempotent style injection, JS content-type', async () => {
+    const dir = newAppDir({ 'styles.module.css': CSS_MOD });
+    const { res, data } = mockRes();
+    await serveStatic(mockReq(), res, dir, 'styles.module.css');
+    expect(data.statusCode).toBe(200);
+    // NOT text/css — the browser imports it as JS.
+    expect(data.headers['Content-Type']).toMatch(/javascript/);
+    const body = data.body.toString('utf8');
+    // Injects a guarded <style> element carrying the compiled CSS.
+    expect(body).toMatch(/document\.createElement\(['"]style['"]\)/);
+    expect(body).toMatch(/data-centraid-css-module/);
+    expect(body).toMatch(/color: red/);
+    // Default-exports the local→hashed class map; camelCase `barBaz` preserved.
+    expect(body).toMatch(/foo:\s*["'][^"']*foo[^"']*["']/);
+    expect(body).toMatch(/barBaz:\s*["'][^"']*barBaz[^"']*["']/);
+    expect(body).toMatch(/export\s*\{[^}]*\bas default\b|export\s+default/);
+  });
+
+  it('a plain (non-module) .css still serves verbatim as text/css', async () => {
+    const dir = newAppDir({ 'app.css': '.a{color:blue}' });
+    const { res, data } = mockRes();
+    await serveStatic(mockReq(), res, dir, 'app.css');
+    expect(data.statusCode).toBe(200);
+    expect(data.headers['Content-Type']).toMatch(/text\/css/);
+    expect(data.body.toString('utf8')).toBe('.a{color:blue}');
+  });
+
+  it('a *.module.css gets an ETag and re-compiles with a fresh etag+body when edited (mtime bump)', async () => {
+    const dir = newAppDir({ 'styles.module.css': CSS_MOD });
+    const file = join(dir, 'styles.module.css');
+
+    const first = mockRes();
+    await serveStatic(mockReq(), first.res, dir, 'styles.module.css');
+    const etag1 = first.data.headers['ETag']!;
+    expect(etag1).toMatch(/^"[0-9a-f]{16,}"$/);
+    expect(first.data.body.toString('utf8')).toMatch(/color: red/);
+
+    // Unchanged → conditional 304.
+    const revalidate = mockRes();
+    await serveStatic(mockReq({ 'if-none-match': etag1 }), revalidate.res, dir, 'styles.module.css');
+    expect(revalidate.data.statusCode).toBe(304);
+
+    writeFileSync(file, CSS_MOD_V2);
+    const bumped = new Date(statSync(file).mtimeMs + 2000);
+    utimesSync(file, bumped, bumped);
+
+    const second = mockRes();
+    await serveStatic(mockReq({ 'if-none-match': etag1 }), second.res, dir, 'styles.module.css');
+    expect(second.data.statusCode).toBe(200);
+    expect(second.data.headers['ETag']).not.toBe(etag1);
+    const body2 = second.data.body.toString('utf8');
+    expect(body2).toMatch(/color: blue/);
+    expect(body2).not.toMatch(/color: red/);
+  });
+});
+
 describe('serveStatic — ETag / conditional revalidation (issue #356)', () => {
   const VALID_JSX = `export default function App(){ return <div className="ok">hi</div>; }`;
   const VALID_JSX_V2 = `export default function App(){ return <span className="v2">bye</span>; }`;

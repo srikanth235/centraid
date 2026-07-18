@@ -333,7 +333,7 @@ export class Dispatcher {
 
     const outcome = await runHandler({
       app: { id: entry.id, dir: dataDir },
-      handlerFile: path.join(codeDir, 'actions', `${actionName}.js`),
+      handlerFile: await resolveHandlerFile(codeDir, 'actions', actionName),
       handlerKind: 'action',
       args: { params: {}, body: handlerInput },
       timeoutMs: 30_000,
@@ -409,7 +409,7 @@ export class Dispatcher {
 
     const outcome = await runHandler({
       app: { id: entry.id, dir: dataDir },
-      handlerFile: path.join(codeDir, 'queries', `${queryName}.js`),
+      handlerFile: await resolveHandlerFile(codeDir, 'queries', queryName),
       handlerKind: 'query',
       args: {
         params: {},
@@ -496,6 +496,30 @@ function bindIntentToVaultBridge(bridge: VaultBridge, intentId: string): VaultBr
       },
     });
   };
+}
+
+/**
+ * Resolve a declared handler's source file, preferring a `.ts` over a `.js`
+ * (a TS-authored app ships `.ts` handlers; a builder-generated one ships
+ * `.js`). The worker loads whatever it's handed: `.ts` graphs go through the
+ * esbuild loader hook the worker registers (worker/runner.ts), `.js` graphs
+ * import natively as before. A single extra `stat` per dispatch is negligible
+ * beside the worker spawn it precedes; if the `.ts` probe misses we fall
+ * straight through to the historical `.js` path — a missing `.js` then surfaces
+ * as the same worker "no default export"/load error it always did.
+ */
+async function resolveHandlerFile(
+  codeDir: string,
+  dir: 'actions' | 'queries',
+  name: string,
+): Promise<string> {
+  const tsPath = path.join(codeDir, dir, `${name}.ts`);
+  try {
+    if ((await fs.stat(tsPath)).isFile()) return tsPath;
+  } catch {
+    /* no .ts source — fall back to .js */
+  }
+  return path.join(codeDir, dir, `${name}.js`);
 }
 
 function manifestErrorToResult(appId: string, err: unknown): ToolErrorResult {

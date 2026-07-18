@@ -100,6 +100,36 @@ test('module-level state from run A is not visible to run B (no worker reuse)', 
   expect(second.value).toEqual({ seen: 1 });
 });
 
+test('runs a TypeScript handler graph (typed source + relative .ts sibling import)', async () => {
+  // TS-authored apps ship `.ts` handlers; the worker installs the esbuild
+  // loader hook (worker/ts-loader-hooks) on demand so a `.ts` graph imports.
+  // The sibling is imported by its emitted `.js` name while the file on disk
+  // is `.ts` — the TS ESM convention the resolve hook bridges.
+  await writeHandler(
+    'util.ts',
+    `export interface Sum { total: number }\n` +
+      `export function addTyped(a: number, b: number): Sum { return { total: a + b }; }`,
+  );
+  const handlerFile = await writeHandler(
+    'compute.ts',
+    `import { addTyped, type Sum } from './util.js';\n` +
+      `interface Body { a: number; b: number }\n` +
+      `export default async ({ body }: { body: Body }): Promise<Sum> => addTyped(body.a, body.b);`,
+  );
+  pool = new WorkerPool(HANDLER_WORKER_FILE, 1);
+  pool.prewarm();
+  const outcome = await runHandler({
+    app: { id: 'demo', dir: appDir },
+    handlerFile,
+    handlerKind: 'action',
+    args: { body: { a: 40, b: 2 } },
+    timeoutMs: 5_000,
+    pool,
+  });
+  expect(outcome.ok).toBe(true);
+  expect(outcome.value).toEqual({ total: 42 });
+}, 10_000);
+
 test('a hung handler is still terminated on timeout without poisoning the pool', async () => {
   pool = new WorkerPool(HANDLER_WORKER_FILE, 2);
   pool.prewarm();
