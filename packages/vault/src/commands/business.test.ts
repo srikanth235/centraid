@@ -233,6 +233,48 @@ test('create_draft_invoice bills unbilled entries, totals reconcile, entries get
   expect(lines.every((l) => l.amount_minor >= 0)).toBe(true);
 });
 
+test('invoice totals stay derived when lines change and reject direct drift', () => {
+  const clientId = addClient();
+  expect(() =>
+    db.vault
+      .prepare(
+        `INSERT INTO business_invoice
+           (invoice_id, client_id, number, issued_on, due_on, currency, status,
+            total_minor, paid_txn_id, pdf_content_id)
+         VALUES (?, ?, 'INV-DIRECT', '2026-07-01', '2026-08-01', 'EUR', 'draft',
+                 1, NULL, NULL)`,
+      )
+      .run(uuidv7(), clientId),
+  ).toThrow(/new invoice total must be zero/);
+
+  const projectId = addProject(clientId);
+  const entry = logTime(projectId);
+  const { invoice_id } = expectExecuted<InvoiceDraft>('business.create_draft_invoice', {
+    client_id: clientId,
+    entry_ids: [entry.entry_id],
+    due_on: '2099-08-01',
+  });
+  const line = db.vault
+    .prepare('SELECT line_id FROM business_invoice_line WHERE invoice_id = ?')
+    .get(invoice_id) as { line_id: string };
+
+  db.vault
+    .prepare('UPDATE business_invoice_line SET amount_minor = 12345 WHERE line_id = ?')
+    .run(line.line_id);
+  expect(
+    (
+      db.vault
+        .prepare('SELECT total_minor FROM business_invoice WHERE invoice_id = ?')
+        .get(invoice_id) as { total_minor: number }
+    ).total_minor,
+  ).toBe(12345);
+  expect(() =>
+    db.vault
+      .prepare('UPDATE business_invoice SET total_minor = 1 WHERE invoice_id = ?')
+      .run(invoice_id),
+  ).toThrow(/must equal the sum of its lines/);
+});
+
 test('business_invoice_line carries a NOT NULL qty_scale and CHECKs its scale + amount (issue #441 A3)', () => {
   const cols = db.vault.prepare("PRAGMA table_info('business_invoice_line')").all() as {
     name: string;

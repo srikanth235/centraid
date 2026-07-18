@@ -33,6 +33,16 @@ export interface Group {
   owner_net_minor: number;
 }
 
+/** A soft-deleted expense shown on the dashboard trash shelf. */
+export interface TrashedExpense {
+  expense_id: string;
+  description: string;
+  amount_minor: number;
+  group_name: string;
+  deleted_at: string;
+  purge_at?: string | null;
+}
+
 /** The group meta a group-view payload carries (no member_count). */
 export interface GroupMeta {
   group_id: string;
@@ -108,6 +118,7 @@ export interface Dash {
   currency: string;
   friends: Friend[];
   groups: Group[];
+  trash: TrashedExpense[];
   owe_total_minor: number;
   owed_total_minor: number;
 }
@@ -123,6 +134,7 @@ export interface DashboardPayload {
   currency: string;
   friends: Friend[];
   groups: Group[];
+  trash: TrashedExpense[];
   owe_total_minor: number;
   owed_total_minor: number;
   vaultDenied?: VaultDenied;

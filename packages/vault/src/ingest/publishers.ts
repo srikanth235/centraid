@@ -347,13 +347,13 @@ const messagePublisher: Publisher = {
       );
       const isFirst = vault
         .prepare(
-          `SELECT count(*) AS n FROM core_attachment WHERE subject_type = 'social.message' AND subject_id = ?`,
+          `SELECT count(*) AS n FROM core_attachment WHERE target_type = 'social.message' AND target_id = ?`,
         )
         .get(messageId) as { n: number };
       const attachmentId = uuidv7();
       vault
         .prepare(
-          `INSERT INTO core_attachment (attachment_id, subject_type, subject_id, content_id, role, is_primary, created_at)
+          `INSERT INTO core_attachment (attachment_id, target_type, target_id, content_id, role, is_primary, created_at)
            VALUES (?, 'social.message', ?, ?, ?, ?, ?)`,
         )
         .run(

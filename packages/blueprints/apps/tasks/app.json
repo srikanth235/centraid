@@ -3,7 +3,7 @@
   "id": "tasks",
   "name": "Tasks",
   "description": "A Things-style task manager as a projection of the personal vault: canonical tasks from schedule.task, nothing stored here. Adding, completing and editing all run through the schedule domain's typed task commands — consent-checked, contract-checked and receipted. Revoke the grant and the app goes dark while the tasks, history and receipts remain the owner's.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "iconKey": "Check",
   "colorKey": "teal",
   "vault": {

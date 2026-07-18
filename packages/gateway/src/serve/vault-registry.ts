@@ -90,6 +90,8 @@ export interface VaultRegistryOptions {
   s3Credentials?: (settings: BlobStoreSettings) => Promise<S3Credentials>;
   /** Forwarded to every plane (issue #405 §2) — see `VaultPlaneOptions.previewCodec`. */
   previewCodec?: PreviewCodec;
+  /** Forwarded to each plane after journal provenance commits. */
+  onProvenanceCommitted?: (vaultId: string, entityTypes?: readonly string[]) => void;
 }
 
 /** One row of the vault list. */
@@ -127,6 +129,9 @@ export class VaultRegistry {
     | ((settings: BlobStoreSettings) => Promise<S3Credentials>)
     | undefined;
   private readonly previewCodec: PreviewCodec | undefined;
+  private readonly onProvenanceCommitted:
+    | ((vaultId: string, entityTypes?: readonly string[]) => void)
+    | undefined;
   private readonly planes = new Map<string, VaultPlane>();
   /**
    * Vault ids THIS registry auto-created on an empty root at construction
@@ -156,6 +161,7 @@ export class VaultRegistry {
     this.leaseConflicted = options.leaseConflicted;
     this.s3Credentials = options.s3Credentials;
     this.previewCodec = options.previewCodec;
+    this.onProvenanceCommitted = options.onProvenanceCommitted;
     mkdirSync(this.rootDir, { recursive: true });
     if (existsSync(path.join(this.rootDir, 'vault.db'))) {
       // Pre-multi-vault layout (v0: no data migrations) — the files stay put
@@ -323,6 +329,7 @@ export class VaultRegistry {
       ...(this.leaseConflicted ? { leaseConflicted: this.leaseConflicted } : {}),
       ...(this.s3Credentials ? { s3Credentials: this.s3Credentials } : {}),
       ...(this.previewCodec ? { previewCodec: this.previewCodec } : {}),
+      ...(this.onProvenanceCommitted ? { onProvenanceCommitted: this.onProvenanceCommitted } : {}),
       ...boot,
     });
   }

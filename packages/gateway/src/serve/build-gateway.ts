@@ -534,6 +534,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // addressed to exactly one of them. Required: post-#280 the whole app
   // surface (code, data, transcripts) is vault-scoped, so there is no
   // vault-less mode.
+  // Planes are mounted before schedulers are constructed, so the injected
+  // commit-time doorbell closes over this late-bound host callback. A write
+  // during bootstrap simply drops the hint; the standing poll remains the
+  // crash/startup correctness backstop.
+  let provenanceDoorbell: (vaultId: string, entityTypes?: readonly string[]) => void = () => {};
   const vaultRegistry: VaultRegistry = openVaultRegistry({
     rootDir: paths.vaultDir,
     // Disposable runner cache lives outside the vault tree (defaults to a
@@ -548,6 +553,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // `blob_store.connectionId` is set; vaults without one keep working off
     // the env-var default (`vault-plane.ts`'s `defaultEnvS3Credentials`).
     s3Credentials: makeStorageCredentialsResolver(storageConnections),
+    onProvenanceCommitted: (vaultId, entityTypes) => provenanceDoorbell(vaultId, entityTypes),
     // Preview backstop codec (issue #405 §2): the gateway holds plaintext on
     // ingest inside the owner's trust boundary, so generating tiny/medium
     // derivatives here leaks nothing to the provider. One shared stateless
@@ -1214,7 +1220,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         await grantDeclaredBundledScopes(plane, appId);
       }
       settledHosts.set(vaultId, host);
-      reconcileScheduler(vaultId);
+      await reconcileScheduler(vaultId);
       return host;
     }).catch((err) => {
       // A failed mount must not poison the cache — drop it so the next
@@ -1244,7 +1250,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         await grantDeclaredBundledScopes(plane, appId);
       }
     });
-    reconcileScheduler(id);
+    await reconcileScheduler(id);
   };
 
   // Drop an app from the registry AND delete its wrapper dir under the
@@ -1308,7 +1314,13 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         invalidateToolCatalog();
       },
       deregister: deregisterAndCleanup,
-      reconcile: () => reconcileScheduler(vaultId),
+      reconcile: () => {
+        // The lifecycle interface is intentionally fire-and-forget here; the
+        // reconciler already reports the failure to health/logging. Awaited
+        // publish/start paths call reconcileScheduler directly and receive the
+        // rejection so a failed data-cursor bootstrap cannot look ready.
+        void reconcileScheduler(vaultId).catch(() => undefined);
+      },
       // Bundled ids are reserved (issue #434): a scaffold/clone must never
       // mint one, or a code-store app would shadow the shipped blueprint.
       isBundledAppId,
@@ -1434,12 +1446,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           await grantDeclaredAppScopes(plane, store, appId);
           // A publish/rollback may have added/removed/toggled an
           // automation — resync THIS vault's cron scheduler off the new `main`.
-          reconcileScheduler(vaultId);
+          await reconcileScheduler(vaultId);
           invalidateToolCatalog();
         },
         onAppDeleted: async (appId) => {
           await deregisterAndCleanup(appId);
-          reconcileScheduler(vaultId);
+          await reconcileScheduler(vaultId);
           invalidateToolCatalog();
         },
         // The listing union half (issue #434): installed bundled apps, with
@@ -1501,7 +1513,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // their vault's ambient scope, so `ctx.vault`, transcripts, and code all
   // ride the vault the automation lives in.
   const schedulers = new Map<string, automation.LocalScheduler>();
-  const reconcileStates = new Map<string, { inFlight: boolean; dirty: boolean }>();
+  const reconcileStates = new Map<string, { inFlight?: Promise<void>; dirty: boolean }>();
   let schedulersStarted = false;
 
   const schedulerFor = (vaultId: string): automation.LocalScheduler => {
@@ -1563,20 +1575,23 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     return created;
   };
 
-  const reconcileScheduler = (vaultId: string): void => {
+  provenanceDoorbell = (vaultId, entityTypes) => {
+    runWithVaultContext({ vaultId }, () => schedulers.get(vaultId)?.nudge(entityTypes));
+  };
+
+  const reconcileScheduler = (vaultId: string): Promise<void> => {
     const sched = schedulerFor(vaultId);
     let state = reconcileStates.get(vaultId);
     if (!state) {
-      state = { inFlight: false, dirty: false };
+      state = { dirty: false };
       reconcileStates.set(vaultId, state);
     }
     if (state.inFlight) {
       state.dirty = true;
-      return;
+      return state.inFlight;
     }
-    state.inFlight = true;
     const settled = state;
-    void runWithVaultContext({ vaultId }, async () => {
+    const work = runWithVaultContext({ vaultId }, async () => {
       do {
         settled.dirty = false;
         const { rows } = await automation.list(settledHostFor(vaultId).codeAppsDir());
@@ -1616,7 +1631,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           );
         }
       } while (settled.dirty);
-    })
+    });
+    settled.inFlight = work
       .then(() =>
         health.reportOk(
           'automations',
@@ -1628,10 +1644,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           `scheduler reconcile failed: ` + (err instanceof Error ? err.message : String(err));
         health.reportError('automations', message);
         logger.warn(message);
+        throw err;
       })
       .finally(() => {
-        settled.inFlight = false;
+        settled.inFlight = undefined;
       });
+    return settled.inFlight;
   };
 
   // Condition-trigger evaluation (duaility: time semantics live in the
@@ -1689,8 +1707,13 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         vault,
       });
       if (evaluation.reason) {
-        logger.warn(`data trigger ${ref}[${triggerIndex}] skipped: ${evaluation.reason}`);
-        return;
+        // Reconcile uses this same evaluator to establish a fresh watcher's
+        // no-history cursor. A soft "skip" there would let publish report
+        // ready without a cursor and make the first real write become the
+        // bootstrap (and therefore not fire). Reject instead: reconcile
+        // propagates readiness failure, while minute/nudge callers route it
+        // through the scheduler's fire-and-forget onError path.
+        throw new Error(`data trigger ${ref}[${triggerIndex}] failed: ${evaluation.reason}`);
       }
       if (!evaluation.fire) return;
       fireAutomation(ref, {

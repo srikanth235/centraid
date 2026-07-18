@@ -359,6 +359,13 @@ export function createLogic({
     await refreshAll();
   }
 
+  async function restoreExpense(expenseId: string) {
+    const outcome = await act('restore-expense', { expense_id: expenseId });
+    if (!narrate(outcome)) return;
+    toast('Expense restored · receipted.');
+    await refreshAll();
+  }
+
   // ---------- Settle up ----------
 
   async function openSettle() {
@@ -520,6 +527,7 @@ export function createLogic({
     setExpenseGroup,
     saveExpense,
     deleteExpense,
+    restoreExpense,
     openSettle,
     closeSettle,
     setSettle,

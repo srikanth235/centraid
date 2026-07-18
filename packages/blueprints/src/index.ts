@@ -1,19 +1,22 @@
 /*
  * @centraid/blueprints
  *
- * How a new centraid app comes into being. Two kinds of blueprint, one home:
+ * How Centraid code comes into being. Three paths, one home:
  *
  *   1. Blank scaffold — `scaffoldApp` / `scaffoldAppFiles` stamp out an empty
  *      app from `scaffold-defaults`.
- *   2. Template clone — `cloneTemplate` / `cloneTemplateFiles` copy one of the
- *      bundled gallery templates into a fresh app.
+ *   2. Automation clone — `cloneTemplate` / `cloneTemplateFiles` copy a
+ *      bundled automation into editable, user-owned app code.
+ *   3. UI-app install — bundled apps under `apps/<id>/` are enrolled in place
+ *      (`consent.app`, origin `installed`, declared-scope grants). No source is
+ *      copied: the app serves from the package and upgrades with the release.
  *
- * The gallery half: bundled, pre-built Centraid apps the desktop offers as
- * "clone and deploy" starting points. Each template folder lives under a
- * kind-segment directory — `apps/<id>/` for full UI apps (`apps/agenda/`,
- * `apps/notes/`, `apps/vitals/`, …) and `automations/<id>/` for automation
- * apps — and is a fully-formed app (HTML/CSS/JS + queries/ + actions/) —
- * identical in shape to an app the user authors themselves.
+ * The gallery half: bundled, pre-built Centraid UI apps are installed in
+ * place; automation templates are cloned. Each source folder lives under a
+ * kind-segment directory — `apps/<id>/` for shipped UI apps (`apps/agenda/`,
+ * `apps/notes/`, `apps/vitals/`, …) and `automations/<id>/` for cloneable
+ * automations. Both carry runtime-ready files; ownership and upgrade behavior,
+ * not source shape, distinguish the paths.
  * Two layers stack on top of the bundle:
  *   - A user-data cache that can hold newer copies pulled from a remote URL.
  *   - A resolver that picks bundle-or-cache per template, preferring the

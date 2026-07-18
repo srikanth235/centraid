@@ -3,7 +3,7 @@
   "id": "tally",
   "name": "Tally",
   "description": "Split, settled — a personal expense splitter as a projection of the vault. Track shared costs across groups and friends, see who owes whom, and settle up. A friend is a canonical core.party; a group is a social.circle (the vault's one audience mechanism) decorated by a tally.group with an emoji icon, membership on the circle (you included); an expense stores its resolved splits (equally, exact amounts or percentages), re-validated server-side to sum to the amount; a settlement is a real cash payment. Balances are NEVER stored — they are derived at read time by the balance engine. Adding, editing and deleting expenses, settling up, and managing groups and friends all run through typed vault commands — consent-checked and receipted. No data of its own — revoke the grant and the app goes dark.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "iconKey": "Receipt",
   "colorKey": "forest",
   "vault": {
@@ -19,6 +19,7 @@
       { "schema": "tally", "table": "expense", "verbs": "read" },
       { "schema": "tally", "table": "expense_split", "verbs": "read" },
       { "schema": "tally", "table": "settlement", "verbs": "read" },
+      { "schema": "tally", "table": "obligation", "verbs": "read" },
       { "schema": "tally", "table": "add_friend", "verbs": "act" },
       { "schema": "tally", "table": "create_group", "verbs": "act" },
       { "schema": "tally", "table": "rename_group", "verbs": "act" },
@@ -28,6 +29,7 @@
       { "schema": "tally", "table": "add_expense", "verbs": "act" },
       { "schema": "tally", "table": "edit_expense", "verbs": "act" },
       { "schema": "tally", "table": "delete_expense", "verbs": "act" },
+      { "schema": "tally", "table": "restore_expense", "verbs": "act" },
       { "schema": "tally", "table": "settle_up", "verbs": "act" }
     ]
   },
@@ -113,6 +115,26 @@
     {
       "name": "delete-expense",
       "description": "Delete an expense through tally.delete_expense.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": { "expense_id": { "type": "string", "minLength": 1 } },
+        "required": ["expense_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "restore-expense",
+      "description": "Restore a soft-deleted expense and its preserved splits through tally.restore_expense.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -305,6 +327,7 @@
           "currency": { "type": "string" },
           "friends": { "type": "array" },
           "groups": { "type": "array" },
+          "trash": { "type": "array" },
           "owe_total_minor": { "type": "integer" },
           "owed_total_minor": { "type": "integer" },
           "vaultDenied": { "type": "object" }

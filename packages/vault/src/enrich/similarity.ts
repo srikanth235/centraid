@@ -81,18 +81,18 @@ export function scanEmbeddings(
 ): SemanticHit[] {
   const q = Float32Array.from(query);
   const types = options.entityTypes?.length
-    ? ` AND entity_type IN (${options.entityTypes.map(() => '?').join(',')})`
+    ? ` AND target_type IN (${options.entityTypes.map(() => '?').join(',')})`
     : '';
   const rows = vault
-    .prepare(`SELECT entity_type, entity_id, vector FROM enrich_embedding WHERE model = ?${types}`)
+    .prepare(`SELECT target_type, target_id, vector FROM enrich_embedding WHERE model = ?${types}`)
     .all(model, ...(options.entityTypes ?? [])) as {
-    entity_type: string;
-    entity_id: string;
+    target_type: string;
+    target_id: string;
     vector: Uint8Array;
   }[];
   const hits = rows.map((r) => ({
-    entityType: r.entity_type,
-    entityId: r.entity_id,
+    entityType: r.target_type,
+    entityId: r.target_id,
     score: cosine(q, decodeVector(Buffer.from(r.vector))),
   }));
   hits.sort((a, b) => b.score - a.score);

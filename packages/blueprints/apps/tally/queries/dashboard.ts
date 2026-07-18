@@ -51,6 +51,15 @@ interface SettlementRow {
   group_id?: string;
   [k: string]: unknown;
 }
+interface ObligationRow {
+  obligation_id: string;
+  from_party: string;
+  to_party: string;
+  amount_minor: number;
+  currency: string;
+  settled_at?: string | null;
+  [k: string]: unknown;
+}
 
 /** The folded ground facts every Tally query computes against. */
 export interface TallyData {
@@ -62,6 +71,7 @@ export interface TallyData {
   membersByGroup: Map<string, string[]>;
   expenses: ExpenseFact[];
   settlements: SettlementRow[];
+  obligations: ObligationRow[];
 }
 
 // A friend's avatar hue is no longer stored on the tally_friend row (issue
@@ -109,6 +119,7 @@ export async function loadTally(ctx: HandlerCtx, purpose: string): Promise<Tally
     expensesRes,
     splitsRes,
     settlesRes,
+    obligationsRes,
   ] = await Promise.all([
     ctx.vault.read({ entity: 'core.vault', purpose }),
     ctx.vault.read({ entity: 'tally.friend', purpose }),
@@ -128,6 +139,15 @@ export async function loadTally(ctx: HandlerCtx, purpose: string): Promise<Tally
     ctx.vault.read({
       entity: 'tally.settlement',
       where: [{ column: 'deleted_at', op: 'is-null' }],
+      limit: 2000,
+      purpose,
+    }),
+    ctx.vault.read({
+      entity: 'tally.obligation',
+      where: [
+        { column: 'settled_at', op: 'is-null' },
+        { column: 'deleted_at', op: 'is-null' },
+      ],
       limit: 2000,
       purpose,
     }),
@@ -215,6 +235,7 @@ export async function loadTally(ctx: HandlerCtx, purpose: string): Promise<Tally
     membersByGroup,
     expenses,
     settlements: (settlesRes.rows ?? []) as unknown as SettlementRow[],
+    obligations: (obligationsRes.rows ?? []) as unknown as ObligationRow[],
   };
 }
 
@@ -248,6 +269,13 @@ export function pairwise(data: TallyData): Map<string, number> {
       b.set(s.to_party, (b.get(s.to_party) || 0) + s.amount_minor);
     else if (s.to_party === me && s.from_party !== me)
       b.set(s.from_party, (b.get(s.from_party) || 0) - s.amount_minor);
+  }
+  for (const obligation of data.obligations) {
+    if (obligation.from_party === me && obligation.to_party !== me) {
+      b.set(obligation.to_party, (b.get(obligation.to_party) || 0) - obligation.amount_minor);
+    } else if (obligation.to_party === me && obligation.from_party !== me) {
+      b.set(obligation.from_party, (b.get(obligation.from_party) || 0) + obligation.amount_minor);
+    }
   }
   return b;
 }
@@ -315,6 +343,13 @@ export default async ({ ctx }: HandlerArgs) => {
   const purpose = 'dpv:ServiceProvision';
   try {
     const data = await loadTally(ctx, purpose);
+    const trashRes = await ctx.vault.read({
+      entity: 'tally.expense',
+      where: [{ column: 'deleted_at', op: 'not-null' }],
+      orderBy: { column: 'deleted_at', dir: 'desc' },
+      limit: 100,
+      purpose,
+    });
     const bal = pairwise(data);
     const friends = data.friends.map((f) => {
       const p = personOf(data, f.party_id);
@@ -343,11 +378,21 @@ export default async ({ ctx }: HandlerArgs) => {
         owner_net_minor: net.get(data.me as string) || 0,
       };
     });
+    const groupName = new Map(data.groups.map((group) => [group.group_id, group.name]));
+    const trash = (trashRes.rows ?? []).map((row) => ({
+      expense_id: String(row.expense_id),
+      description: String(row.description ?? 'Expense'),
+      amount_minor: Number(row.amount_minor ?? 0),
+      group_name: groupName.get(String(row.group_id)) ?? 'Group',
+      deleted_at: String(row.deleted_at),
+      purge_at: row.purge_at == null ? null : String(row.purge_at),
+    }));
     return {
       me: data.me,
       currency: data.currency,
       friends,
       groups,
+      trash,
       owe_total_minor: owe,
       owed_total_minor: owed,
     };
@@ -358,6 +403,7 @@ export default async ({ ctx }: HandlerArgs) => {
       currency: 'USD',
       friends: [],
       groups: [],
+      trash: [],
       owe_total_minor: 0,
       owed_total_minor: 0,
       vaultDenied: { code: e.code, message: e.message },

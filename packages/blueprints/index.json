@@ -7,7 +7,7 @@
       "desc": "Your calendar, projected from the vault.",
       "colorKey": "indigo",
       "iconKey": "Calendar",
-      "version": "0.4.0"
+      "version": "0.4.1"
     },
     {
       "id": "tasks",
@@ -15,7 +15,7 @@
       "desc": "A Things-style task manager over your vault's canonical tasks.",
       "colorKey": "teal",
       "iconKey": "Check",
-      "version": "0.3.0"
+      "version": "0.3.1"
     },
     {
       "id": "people",
@@ -23,7 +23,7 @@
       "desc": "Your circle, remembered — a personal CRM that keeps light records on the people you care about and nudges you to stay in touch.",
       "colorKey": "rose",
       "iconKey": "Users",
-      "version": "0.1.0"
+      "version": "0.1.1"
     },
     {
       "id": "notes",
@@ -31,7 +31,7 @@
       "desc": "Write, file and pin notes over your vault's canonical content.",
       "colorKey": "forest",
       "iconKey": "Book",
-      "version": "0.4.0"
+      "version": "0.4.1"
     },
     {
       "id": "photos",
@@ -63,7 +63,7 @@
       "desc": "Split, settled — track shared expenses across groups and friends, see who owes whom, and settle up.",
       "colorKey": "forest",
       "iconKey": "Receipt",
-      "version": "0.1.0"
+      "version": "0.1.1"
     },
     {
       "id": "photo-captioner",

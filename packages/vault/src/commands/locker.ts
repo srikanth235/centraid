@@ -23,6 +23,7 @@
 
 import { createHmac } from 'node:crypto';
 import type { Gateway } from '../gateway/gateway.js';
+import { cleanupPolyRefs } from '../schema/poly-refs.js';
 import { SEALED_PLACEHOLDER } from '../schema/sealed.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 import { setStarred } from './flags.js';
@@ -451,6 +452,7 @@ const PURGE_ITEM: CommandDefinition = {
     setStarred(ctx, LOCKER_ITEM_TYPE, itemId, false);
     setTags(ctx, itemId, []); // core_tag rows are polymorphic — no CASCADE
     ctx.db.prepare('DELETE FROM locker_item WHERE item_id = ?').run(itemId);
+    cleanupPolyRefs(ctx.db, ctx.now, LOCKER_ITEM_TYPE, itemId);
     ctx.wrote(LOCKER_ITEM_TYPE, itemId);
     return { item_id: itemId };
   },

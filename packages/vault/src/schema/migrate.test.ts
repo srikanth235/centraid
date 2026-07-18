@@ -31,8 +31,8 @@ function userVersionOf(file: string): number {
   return row.user_version;
 }
 
-test('ontology contract version stamps 1.3 (issue #352: core_document + revises lineage)', () => {
-  expect(ONTOLOGY_VERSION).toBe('1.3');
+test('ontology contract version stamps 1.4 (issue #450 canonical consolidation)', () => {
+  expect(ONTOLOGY_VERSION).toBe('1.4');
 });
 
 test('migrations create every table in the registry, in both files', () => {
@@ -64,6 +64,69 @@ test('migrations create every table in the registry, in both files', () => {
     expect(ref?.file).toBe('journal');
     expect(journalTables.has(ref?.physical ?? ''), logical).toBe(true);
   }
+  db.close();
+});
+
+test('editable domain rows expose and maintain updated_at consistently', () => {
+  const db = openVaultDb();
+  const editableDomainTables = [
+    'people_profile',
+    'people_important_date',
+    'social_contact_card',
+    'tally_friend',
+    'tally_group',
+    'tally_expense',
+    'tally_expense_split',
+    'tally_settlement',
+    'tally_obligation',
+    'home_asset_item',
+    'home_warranty',
+    'home_maintenance_plan',
+    'home_utility_meter',
+    'home_meter_reading',
+    'business_client',
+    'business_project',
+    'business_time_entry',
+    'business_invoice',
+    'business_invoice_line',
+  ] as const;
+
+  for (const table of editableDomainTables) {
+    const columns = db.vault.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    expect(
+      columns.some((column) => column.name === 'updated_at'),
+      `${table}.updated_at`,
+    ).toBe(true);
+    const trigger = db.vault
+      .prepare(
+        `SELECT name FROM sqlite_master
+          WHERE type = 'trigger' AND tbl_name = ? AND name LIKE '%touch_updated_at'`,
+      )
+      .get(table);
+    expect(trigger, `${table} touch trigger`).toBeTruthy();
+  }
+
+  const now = new Date().toISOString();
+  db.vault
+    .prepare(
+      `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
+       VALUES ('updated-party', 'person', 'Updated', ?, ?, ?)`,
+    )
+    .run(now, now, ONTOLOGY_VERSION);
+  db.vault
+    .prepare(
+      `INSERT INTO people_profile
+         (profile_id, party_id, cadence_days, created_at, updated_at)
+       VALUES ('updated-profile', 'updated-party', 30, ?, '2000-01-01T00:00:00.000Z')`,
+    )
+    .run(now);
+  db.vault
+    .prepare(`UPDATE people_profile SET role = 'friend' WHERE profile_id = 'updated-profile'`)
+    .run();
+  const stamp = db.vault
+    .prepare(`SELECT updated_at FROM people_profile WHERE profile_id = 'updated-profile'`)
+    .get() as { updated_at: string };
+  expect(stamp.updated_at).not.toBe('2000-01-01T00:00:00.000Z');
   db.close();
 });
 

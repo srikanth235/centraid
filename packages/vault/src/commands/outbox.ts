@@ -163,7 +163,7 @@ function stageItem(ctx: HandlerCtx): Record<string, unknown> {
     .prepare(
       `INSERT INTO outbox_item
          (item_id, connection_id, actor_id, actor_kind, verb, target,
-          subject_type, subject_id, recipient_party_id, artifact_json, request_json,
+          target_type, target_id, recipient_party_id, artifact_json, request_json,
           status, grant_id, staged_at, decided_at, drained_at, result_json, published_message_id, note)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL)`,
     )

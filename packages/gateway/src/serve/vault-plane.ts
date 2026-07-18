@@ -237,6 +237,8 @@ export interface VaultPlaneOptions {
    * Omitted for hosts/tests without one: the backstop simply doesn't run.
    */
   previewCodec?: PreviewCodec;
+  /** Post-journal-commit data-trigger hint; the host supplies vault scoping. */
+  onProvenanceCommitted?: (vaultId: string, entityTypes?: readonly string[]) => void;
 }
 
 /** A grant request the owner approves — scopes as the manifest declares them. */
@@ -456,7 +458,12 @@ export class VaultPlane {
       ...(options.vaultName ? { vaultName: options.vaultName } : {}),
     });
     this.displayName = this.boot.displayName;
-    this.gateway = createGateway(this.db);
+    this.gateway = options.onProvenanceCommitted
+      ? createGateway(this.db, {
+          onProvenanceCommitted: (entityTypes?: readonly string[]) =>
+            options.onProvenanceCommitted?.(this.boot.vaultId, entityTypes),
+        })
+      : createGateway(this.db);
     registerScheduleCommands(this.gateway);
     registerTaskCommands(this.gateway);
     registerSocialCommands(this.gateway);

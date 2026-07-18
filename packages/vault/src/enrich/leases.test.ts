@@ -306,6 +306,6 @@ test('bounded backfill skips satisfied rows instead of starving later content', 
     }),
   ).toEqual(['fair-1', 'fair-2']);
   expect(
-    vault.vault.prepare('SELECT DISTINCT entity_id FROM enrich_request ORDER BY entity_id').all(),
-  ).toEqual([{ entity_id: 'b-missing' }]);
+    vault.vault.prepare('SELECT DISTINCT target_id FROM enrich_request ORDER BY target_id').all(),
+  ).toEqual([{ target_id: 'b-missing' }]);
 });

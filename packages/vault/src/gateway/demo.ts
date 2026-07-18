@@ -8,6 +8,7 @@
 import { nowIso } from '../ids.js';
 import type { VaultDb } from '../db.js';
 import { resolveEntity } from '../schema/tables.js';
+import { cleanupPolyRefs } from '../schema/poly-refs.js';
 import { SEED_PURGE_ACTIVITY } from '../schema/seed.js';
 import { pkColumn } from './execution.js';
 import { writeProvenance, writeReceipt } from './evidence.js';
@@ -26,8 +27,8 @@ export interface DemoPurgeResult {
 interface SeedRow {
   seed_id: string;
   app_id: string;
-  entity_type: string;
-  entity_id: string;
+  target_type: string;
+  target_id: string;
 }
 
 /** Rows seeded per app — the "demo data present" surface. */
@@ -50,20 +51,11 @@ export function purgeDemoRows(db: VaultDb, owner: Identity, appId?: string): Dem
   const now = nowIso();
   const rows = db.vault
     .prepare(
-      `SELECT seed_id, app_id, entity_type, entity_id FROM consent_seed_row
+      `SELECT seed_id, app_id, target_type, target_id FROM consent_seed_row
         ${appId ? 'WHERE app_id = ?' : ''} ORDER BY seed_id DESC`,
     )
     .all(...(appId ? [appId] : [])) as unknown as SeedRow[];
 
-  const endDateLinks = db.vault.prepare(
-    `UPDATE core_link SET valid_to = ?
-      WHERE valid_to IS NULL
-        AND ((from_type = ? AND from_id = ?) OR (to_type = ? AND to_id = ?))`,
-  );
-  const dropTags = db.vault.prepare('DELETE FROM core_tag WHERE target_type = ? AND target_id = ?');
-  const dropEntries = db.vault.prepare(
-    'DELETE FROM core_collection_entry WHERE target_type = ? AND target_id = ?',
-  );
   const dropSeed = db.vault.prepare('DELETE FROM consent_seed_row WHERE seed_id = ?');
 
   let purged = 0;
@@ -75,7 +67,7 @@ export function purgeDemoRows(db: VaultDb, owner: Identity, appId?: string): Dem
     progressed = false;
     const blocked: SeedRow[] = [];
     for (const row of remaining) {
-      const ref = resolveEntity(row.entity_type, db.vault);
+      const ref = resolveEntity(row.target_type, db.vault);
       if (!ref || ref.file !== 'vault') {
         // An unresolvable registry row (e.g. a purged ext band) has nothing
         // left to delete — retire the registry entry.
@@ -88,14 +80,12 @@ export function purgeDemoRows(db: VaultDb, owner: Identity, appId?: string): Dem
       try {
         const res = db.vault
           .prepare(`DELETE FROM "${ref.physical}" WHERE "${pk}" = ?`)
-          .run(row.entity_id);
+          .run(row.target_id);
         if (Number(res.changes) === 0) missing += 1;
         else {
           purged += 1;
           purgedIds.push(row);
-          endDateLinks.run(now, row.entity_type, row.entity_id, row.entity_type, row.entity_id);
-          dropTags.run(row.entity_type, row.entity_id);
-          dropEntries.run(row.entity_type, row.entity_id);
+          cleanupPolyRefs(db.vault, now, row.target_type, row.target_id);
         }
         dropSeed.run(row.seed_id);
         progressed = true;
@@ -109,7 +99,7 @@ export function purgeDemoRows(db: VaultDb, owner: Identity, appId?: string): Dem
   }
 
   for (const row of purgedIds) {
-    writeProvenance(db.journal, owner, row.entity_type, row.entity_id, SEED_PURGE_ACTIVITY);
+    writeProvenance(db.journal, owner, row.target_type, row.target_id, SEED_PURGE_ACTIVITY);
   }
   const receiptId = writeReceipt(db.journal, {
     grantId: null,
@@ -122,14 +112,14 @@ export function purgeDemoRows(db: VaultDb, owner: Identity, appId?: string): Dem
     detail: {
       purged,
       missing,
-      blocked: remaining.map((r) => `${r.entity_type}:${r.entity_id}`),
+      blocked: remaining.map((r) => `${r.target_type}:${r.target_id}`),
       by: owner.partyId,
     },
   });
   return {
     purged,
     missing,
-    blocked: remaining.map((r) => ({ entityType: r.entity_type, entityId: r.entity_id })),
+    blocked: remaining.map((r) => ({ entityType: r.target_type, entityId: r.target_id })),
     receiptId,
   };
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { InProcessScheduler } from './in-process-scheduler.js';
 import type { Row } from '../scaffold/app.js';
 import type { Manifest } from '../manifest/manifest.js';
@@ -145,6 +145,7 @@ describe('condition-trigger watches', () => {
     s.tick();
     expect(fires).toEqual(['studio/chaser']);
     expect(evals).toEqual([['studio/chaser', 1]]);
+    await new Promise<void>((resolve) => setImmediate(resolve));
 
     // 08:05 — neither.
     clock = at(8, 5);
@@ -176,6 +177,7 @@ describe('condition-trigger watches', () => {
     expect(await s.list()).toEqual(['studio/chaser']);
     s.tick();
     expect(evals).toEqual([0]);
+    await new Promise<void>((resolve) => setImmediate(resolve));
     clock = at(9, 3);
     s.tick();
     expect(evals).toEqual([0]);
@@ -189,6 +191,214 @@ describe('condition-trigger watches', () => {
     const r = conditionRow('studio/chaser', '* * * * *');
     await s.register({ ...r, triggers: [r.triggers[1]!] });
     expect(() => s.tick()).not.toThrow();
+  });
+});
+
+describe('InProcessScheduler.nudge', () => {
+  function dataRow(ref: string, entities: readonly string[]): Row {
+    const [ownerApp, id] = ref.split('/') as [string, string];
+    const triggers = [{ kind: 'data' as const, entities }];
+    return {
+      id,
+      dir: `/tmp/${id}`,
+      name: id,
+      ownerApp,
+      ref,
+      enabled: true,
+      triggers,
+      manifest: { ...manifest(true), triggers },
+    };
+  }
+
+  it('coalesces a burst into one filtered data-trigger evaluation pass', async () => {
+    vi.useFakeTimers();
+    const evals: Array<[string, number]> = [];
+    const s = new InProcessScheduler({
+      fire: () => {},
+      evaluate: (ref, index) => void evals.push([ref, index]),
+      nudgeDelayMs: 25,
+    });
+    try {
+      await s.reconcile([
+        dataRow('studio/invoices', ['business.invoice']),
+        dataRow('studio/transactions', ['core.transaction']),
+      ]);
+      evals.length = 0;
+
+      // Model five committed write hints spread across a tight burst rather
+      // than five calls in the same JS turn. The fixed window starts at the
+      // first hint and all later hints inside it join the same pass.
+      s.nudge(['business.invoice']);
+      await vi.advanceTimersByTimeAsync(5);
+      s.nudge(['business.invoice']);
+      await vi.advanceTimersByTimeAsync(5);
+      s.nudge(['business.invoice']);
+      s.nudge(['business.invoice']);
+      s.nudge(['business.invoice']);
+      expect(evals).toEqual([]);
+      await vi.advanceTimersByTimeAsync(15);
+
+      expect(evals).toEqual([['studio/invoices', 0]]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('bypasses the minute gate while leaving condition triggers poll-only', async () => {
+    const evals: Array<[string, number]> = [];
+    const s = new InProcessScheduler({
+      fire: () => {},
+      evaluate: (ref, index) => void evals.push([ref, index]),
+      now: () => at(9, 0),
+      nudgeDelayMs: 0,
+    });
+    const condition = {
+      ...dataRow('studio/condition', ['business.invoice']),
+      triggers: [{ kind: 'condition' as const, entity: 'business.invoice' }],
+    };
+    await s.reconcile([dataRow('studio/data', ['business.invoice']), condition]);
+    evals.length = 0;
+
+    s.tick();
+    expect(evals).toEqual([
+      ['studio/data', 0],
+      ['studio/condition', 0],
+    ]);
+    s.nudge(['business.invoice']);
+    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+
+    expect(evals).toEqual([
+      ['studio/data', 0],
+      ['studio/condition', 0],
+      ['studio/data', 0],
+    ]);
+  });
+
+  it('bootstraps a fresh data watcher during reconcile before its first write', async () => {
+    const evals: Array<[string, number]> = [];
+    const s = new InProcessScheduler({
+      fire: () => {},
+      evaluate: (ref, index) => void evals.push([ref, index]),
+      nudgeDelayMs: 0,
+    });
+
+    await s.reconcile([dataRow('studio/data', ['core.party'])]);
+    expect(evals).toEqual([['studio/data', 0]]);
+
+    s.nudge(['core.party']);
+    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+    expect(evals).toEqual([
+      ['studio/data', 0],
+      ['studio/data', 0],
+    ]);
+  });
+
+  it('fails readiness on bootstrap error, restores the old registry, and retries', async () => {
+    let fail = true;
+    let evals = 0;
+    const s = new InProcessScheduler({
+      fire: () => {},
+      evaluate: async () => {
+        evals++;
+        if (fail) throw new Error('cursor unavailable');
+      },
+    });
+
+    await expect(s.reconcile([dataRow('studio/data', ['core.party'])])).rejects.toThrow(
+      'cursor unavailable',
+    );
+    expect(await s.list()).toEqual([]);
+
+    fail = false;
+    await expect(s.reconcile([dataRow('studio/data', ['core.party'])])).resolves.toMatchObject({
+      added: ['studio/data'],
+    });
+    expect(evals).toBe(2);
+    expect(await s.list()).toEqual(['studio/data']);
+  });
+
+  it('serializes a doorbell that races the minute tick and performs one dirty rerun', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let calls = 0;
+    let active = 0;
+    let maxActive = 0;
+    const s = new InProcessScheduler({
+      fire: () => {},
+      now: () => at(9, 0),
+      nudgeDelayMs: 0,
+      evaluate: async () => {
+        calls++;
+        active++;
+        maxActive = Math.max(maxActive, active);
+        if (calls === 1) await gate;
+        active--;
+      },
+    });
+    await s.register(dataRow('studio/data', ['core.party']));
+
+    s.nudge(['core.party']);
+    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+    expect(calls).toBe(1);
+    s.tick();
+    expect(calls).toBe(1);
+    release();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(calls).toBe(2);
+    expect(maxActive).toBe(1);
+  });
+
+  it('the minute cron backstop consumes one missed offline change exactly once', async () => {
+    let clock = at(9, 0);
+    const journal = ['prov-1'];
+    let cursor = 'prov-1';
+    let fires = 0;
+    const s = new InProcessScheduler({
+      fire: () => {},
+      now: () => clock,
+      evaluate: async () => {
+        const cursorIndex = journal.indexOf(cursor);
+        const changes = journal.slice(cursorIndex + 1);
+        if (changes.length === 0) return;
+        cursor = changes.at(-1)!;
+        fires++;
+      },
+    });
+    // register(), unlike reconcile(), models a restarted scheduler whose
+    // persisted data cursor already exists. The write lands while no live
+    // doorbell is present — the exact crash window the poll must cover.
+    await s.register(dataRow('studio/data', ['core.party']));
+    journal.push('prov-2');
+
+    s.tick();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect({ cursor, fires }).toEqual({ cursor: 'prov-2', fires: 1 });
+
+    clock = at(9, 1);
+    s.tick();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect({ cursor, fires }).toEqual({ cursor: 'prov-2', fires: 1 });
+  });
+
+  it('routes rejected off-cycle evaluations without rejecting the caller', async () => {
+    const errors: string[] = [];
+    const s = new InProcessScheduler({
+      fire: () => {},
+      evaluate: async () => {
+        throw new Error('nudge failed');
+      },
+      nudgeDelayMs: 0,
+      onError: (error) => errors.push(error instanceof Error ? error.message : String(error)),
+    });
+    await s.register(dataRow('studio/data', ['core.transaction']));
+
+    expect(() => s.nudge()).not.toThrow();
+    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+
+    expect(errors).toEqual(['nudge failed']);
   });
 });
 

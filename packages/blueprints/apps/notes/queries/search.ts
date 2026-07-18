@@ -29,8 +29,8 @@ interface NoteRow {
 
 interface AttachmentRow {
   attachment_id: string;
-  subject_type: string;
-  subject_id: string;
+  target_type: string;
+  target_id: string;
   content_id: string;
   role?: string;
   is_primary?: number;
@@ -67,10 +67,10 @@ function attachmentsBySubject(
       : c?.content_uri;
   const bySubject = new Map<string, Array<Record<string, unknown>>>();
   for (const a of attachments) {
-    if (a.subject_type !== subjectType) continue;
+    if (a.target_type !== subjectType) continue;
     const content = contentById.get(a.content_id);
-    if (!bySubject.has(a.subject_id)) bySubject.set(a.subject_id, []);
-    bySubject.get(a.subject_id)!.push({
+    if (!bySubject.has(a.target_id)) bySubject.set(a.target_id, []);
+    bySubject.get(a.target_id)!.push({
       attachment_id: a.attachment_id,
       content_id: a.content_id,
       role: a.role,
@@ -179,8 +179,8 @@ export default async ({ input, ctx }: HandlerArgs) => {
       ctx.vault.read({
         entity: 'core.attachment',
         where: [
-          { column: 'subject_type', op: 'eq', value: 'knowledge.note' },
-          { column: 'subject_id', op: 'in', value: noteIds },
+          { column: 'target_type', op: 'eq', value: 'knowledge.note' },
+          { column: 'target_id', op: 'in', value: noteIds },
         ],
         purpose,
       }),

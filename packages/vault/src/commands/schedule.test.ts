@@ -81,6 +81,41 @@ test('propose_event refuses an unrecognized repeat rule', () => {
   if (outcome.status === 'failed') expect(outcome.predicate).toContain('not recognized');
 });
 
+test('an iCalendar chair, when present, must be the event organizer', () => {
+  const eventId = proposeEvent();
+  const otherPartyId = uuidv7();
+  db.vault
+    .prepare(
+      `INSERT INTO core_party
+         (party_id, kind, display_name, created_at, updated_at, ontology_version)
+       VALUES (?, 'person', 'Asha', '2026-07-01T00:00:00Z', '2026-07-01T00:00:00Z', '1.4')`,
+    )
+    .run(otherPartyId);
+
+  expect(() =>
+    db.vault
+      .prepare(
+        `INSERT INTO schedule_attendee
+           (attendee_id, event_id, party_id, role, partstat)
+         VALUES (?, ?, ?, 'chair', 'accepted')`,
+      )
+      .run(uuidv7(), eventId, otherPartyId),
+  ).toThrow(/must match the event organizer/);
+
+  db.vault
+    .prepare(
+      `INSERT INTO schedule_attendee
+         (attendee_id, event_id, party_id, role, partstat)
+       VALUES (?, ?, ?, 'chair', 'accepted')`,
+    )
+    .run(uuidv7(), eventId, boot.ownerPartyId);
+  expect(() =>
+    db.vault
+      .prepare('UPDATE core_event SET organizer_party_id = ? WHERE event_id = ?')
+      .run(otherPartyId, eventId),
+  ).toThrow(/must match its chair attendee/);
+});
+
 test('cancel_event marks the event cancelled as a SEQUENCE revision, not a vanish', () => {
   const eventId = proposeEvent();
   const before = db.vault
