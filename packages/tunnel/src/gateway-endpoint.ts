@@ -22,6 +22,7 @@
  */
 
 import http from 'node:http';
+import { once } from 'node:events';
 import type { Accepting, Connection, Endpoint, RecvStream, SendStream } from './iroh.js';
 import { iroh } from './iroh.js';
 import type { TunnelRequestHeader, TunnelResponseHeader } from './protocol.js';
@@ -29,7 +30,8 @@ import {
   alpnBytes,
   CLOSE_UNAUTHORIZED,
   encodeHeaderFrame,
-  readBodyToEnd,
+  MAX_REQUEST_BODY_BYTES,
+  readBody,
   readHeaderFrame,
   sanitizeHeaders,
   TUNNEL_AUTH_MODE_HEADER,
@@ -90,6 +92,8 @@ export interface GatewayEndpointOptions {
   requestHeaders?: (endpointId: string) => Record<string, string>;
   /** `disabled` keeps tests offline; production uses the n0 relays + discovery. */
   relays?: 'n0' | 'disabled';
+  /** Authenticated loopback metadata route used by the Rust-owned relay. */
+  nativeControl?: { secret: string };
 }
 
 export interface GatewayEndpointHandle {
@@ -97,12 +101,25 @@ export interface GatewayEndpointHandle {
   endpointId: string;
   /** Current dial ticket (recomputed — the addr can change with the network). */
   ticket(): string;
+  /** Immediately close every live transport owned by a revoked device key. */
+  revokeEndpoint(endpointId: string): Promise<void>;
   close(): Promise<void>;
 }
 
 export async function startGatewayEndpoint(
   options: GatewayEndpointOptions,
 ): Promise<GatewayEndpointHandle> {
+  if (options.nativeControl && options.secretKey) {
+    const upstream = await options.upstream();
+    if (!upstream) throw new Error('gateway upstream is unavailable');
+    const { startNativeGatewayRelay } = await import('./native-relay.js');
+    return await startNativeGatewayRelay({
+      secretKey: options.secretKey,
+      upstream,
+      controlSecret: options.nativeControl.secret,
+      ...(options.relays ? { relays: options.relays } : {}),
+    });
+  }
   const builder = iroh.Endpoint.builder();
   builder.applyN0();
   if (options.relays === 'disabled') builder.relayMode(iroh.RelayMode.disabled());
@@ -117,6 +134,7 @@ export async function startGatewayEndpoint(
 
 class GatewayEndpoint {
   private closed = false;
+  private readonly liveConnections = new Map<string, Set<Connection>>();
 
   constructor(
     private readonly endpoint: Endpoint,
@@ -127,6 +145,13 @@ class GatewayEndpoint {
     return {
       endpointId: this.endpoint.id().toString(),
       ticket: () => iroh.EndpointTicket.fromAddr(this.endpoint.addr()).toString(),
+      revokeEndpoint: async (endpointId) => {
+        const connections = this.liveConnections.get(endpointId);
+        this.liveConnections.delete(endpointId);
+        for (const connection of connections ?? []) {
+          connection.close(CLOSE_UNAUTHORIZED, alpnBytes('revoked'));
+        }
+      },
       close: async () => {
         this.closed = true;
         await this.endpoint.close();
@@ -189,6 +214,9 @@ class GatewayEndpoint {
       connection.close(CLOSE_UNAUTHORIZED, alpnBytes('unauthorized'));
       return;
     }
+    const live = this.liveConnections.get(endpointId) ?? new Set<Connection>();
+    live.add(connection);
+    this.liveConnections.set(endpointId, live);
     try {
       for (;;) {
         const bi = await connection.acceptBi();
@@ -204,15 +232,18 @@ class GatewayEndpoint {
       }
     } catch {
       // Connection closed (by peer, revocation, or shutdown).
+    } finally {
+      live.delete(connection);
+      if (live.size === 0 && this.liveConnections.get(endpointId) === live) {
+        this.liveConnections.delete(endpointId);
+      }
     }
   }
 
   private async serveStream(endpointId: string, send: SendStream, recv: RecvStream): Promise<void> {
     let header: TunnelRequestHeader;
-    let body: Buffer;
     try {
       header = await readHeaderFrame<TunnelRequestHeader>(recv);
-      body = await readBodyToEnd(recv);
     } catch {
       await this.respondError(send, 400, 'bad_request');
       return;
@@ -242,10 +273,8 @@ class GatewayEndpoint {
     // cookie's route scope. The marker itself is always stripped upstream.
     if (authMode === TUNNEL_AUTH_WEB_SESSION) delete headers.authorization;
     else headers.authorization = `Bearer ${upstream.token}`;
-    if (body.length > 0) headers['content-length'] = String(body.length);
-    else delete headers['content-length'];
-
     await new Promise<void>((resolve) => {
+      let bodyFailed = false;
       const request = http.request(
         {
           host: base.hostname,
@@ -263,8 +292,9 @@ class GatewayEndpoint {
             await send.writeAll(encodeHeaderFrame(responseHeader));
             // Sequential for-await keeps chunk ordering; SSE stays live
             // because each chunk is written the moment it arrives.
+            const writeWindow: number[] = [];
             for await (const chunk of response) {
-              await send.writeAll(bytesToArray(chunk as Buffer));
+              await send.writeAll(bytesToArray(chunk as Buffer, writeWindow));
             }
             await send.finish();
           })()
@@ -275,9 +305,24 @@ class GatewayEndpoint {
         },
       );
       request.on('error', () => {
-        void this.respondError(send, 502, 'upstream_unreachable').finally(resolve);
+        void this.respondError(
+          send,
+          bodyFailed ? 400 : 502,
+          bodyFailed ? 'bad_request' : 'upstream_unreachable',
+        ).finally(resolve);
       });
-      request.end(body);
+      void readBody(
+        recv,
+        async (chunk) => {
+          if (!request.write(chunk)) await once(request, 'drain');
+        },
+        MAX_REQUEST_BODY_BYTES,
+      )
+        .then(() => request.end())
+        .catch(() => {
+          bodyFailed = true;
+          request.destroy();
+        });
     });
   }
 
@@ -308,8 +353,8 @@ class GatewayEndpoint {
  * protocol on this per-chunk hot path. Compression (issue #404) is what
  * actually shrinks the byte volume crossing here.
  */
-function bytesToArray(buf: Buffer): Array<number> {
-  const out = Array.from<number>({ length: buf.length });
+function bytesToArray(buf: Buffer, out: number[] = []): Array<number> {
+  out.length = buf.length;
   for (let i = 0; i < buf.length; i++) out[i] = buf[i]!;
   return out;
 }

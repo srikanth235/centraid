@@ -42,13 +42,14 @@ The same journalled command path backs **Vault Atlas** (#441), the Operations sc
 ├── packages/
 │   ├── client/                    # @centraid/client — shared React shell + browser-safe HTTP clients
 │   ├── gateway/                   # @centraid/gateway — host-agnostic gateway; centraid-gateway daemon bin
+│   ├── data-plane/                # Shared Rust byte-plane core + direct-HTTP sidecar
 │   ├── vault/                     # @centraid/vault — the ontology: vault.db+journal.db DDL, consent gateway, typed commands
 │   ├── app-engine/                # @centraid/app-engine — handler loader, dispatcher, /centraid HTTP surface, stores
 │   ├── agent-runtime/             # @centraid/agent-runtime — codex/Claude SDK turn driver; centraid CLI bin
 │   ├── automation/                # @centraid/automation — manifest, fire spine, scheduler, webhook ingress
 │   ├── blueprints/                # @centraid/blueprints — scaffolders + bundled template gallery
 │   ├── skills/                    # @centraid/skills — SKILL.md grounding + dynamic renderers
-│   ├── tunnel/                    # @centraid/tunnel — iroh QUIC device tunnel + pairing wire protocol
+│   ├── tunnel/                    # @centraid/tunnel — wire protocol + packaged Rust napi relay
 │   ├── design-tokens/             # @centraid/design-tokens — colors, type, spacing, icons
 │   └── tsconfig/                  # @centraid/tsconfig — base.json, electron.json, expo.json
 ├── turbo.json                     # task graph (build / dev / typecheck / lint / test)
@@ -57,7 +58,7 @@ The same journalled command path backs **Vault Atlas** (#441), the Operations sc
 
 ### Dependency shape
 
-`@centraid/app-engine` is the foundation (depends only on `ajv`). `@centraid/backup` is a Node-builtins-only leaf containing both the opaque provider seam and the pure authenticated WAL codecs; `@centraid/vault` depends on that codec surface for capture and otherwise stands beside app-engine. The gateway is where the vault and app engine meet (handlers reach the vault through an injected `ctx.vault` bridge, never an app-engine package import). `@centraid/automation` builds on app-engine + blueprints; `@centraid/agent-runtime` on app-engine + automation; `@centraid/gateway` on app-engine + agent-runtime + automation + backup + blueprints + skills + vault. The desktop app depends on gateway + agent-runtime + app-engine + automation + design-tokens + tunnel. Both apps share `@centraid/design-tokens` (mobile resolves it from `src` for React Native).
+`@centraid/app-engine` is the foundation (depends only on `ajv`). `@centraid/backup` is a Node-builtins-only leaf containing both the opaque provider seam and the pure authenticated WAL codecs; `@centraid/vault` depends on that codec surface for capture and otherwise stands beside app-engine. The gateway is where the vault and app engine meet (handlers reach the vault through an injected `ctx.vault` bridge, never an app-engine package import). `@centraid/automation` builds on app-engine + blueprints; `@centraid/agent-runtime` on app-engine + automation; `@centraid/gateway` on app-engine + agent-runtime + automation + backup + blueprints + skills + vault. The Rust `packages/data-plane` core is packaged both as `packages/tunnel/native`'s napi relay and as the optional direct-HTTP sidecar for ticketed Range delivery, hashing, compression, previews, and provider byte pumping. Both receive only pre-authorized metadata/capabilities and own no identity, consent, journal, replica, agent, or automation decision. The desktop app depends on gateway + agent-runtime + app-engine + automation + design-tokens + tunnel. Both apps share `@centraid/design-tokens` (mobile resolves it from `src` for React Native). The low-end measurements, hardware decision table, deferred cache/materialization designs, Rust protocol boundary, and rollback contract are recorded in [`docs/plans/gateway-low-end-and-rust-plane.md`](docs/plans/gateway-low-end-and-rust-plane.md).
 
 ## On-disk layout
 

@@ -27,6 +27,7 @@
  */
 
 import zlib from 'node:zlib';
+import { availableParallelism, totalmem } from 'node:os';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 /**
@@ -109,16 +110,49 @@ export const DYNAMIC_QUALITY: CompressQuality = { brotli: 4, gzip: 6 };
  */
 export const STATIC_QUALITY: CompressQuality = { brotli: 10, gzip: 9 };
 
-export function compress(buf: Buffer, encoding: Encoding, quality: CompressQuality): Buffer {
-  if (encoding === 'br') {
-    return zlib.brotliCompressSync(buf, {
-      params: {
-        [zlib.constants.BROTLI_PARAM_QUALITY]: quality.brotli,
-        [zlib.constants.BROTLI_PARAM_SIZE_HINT]: buf.length,
-      },
-    });
-  }
-  return zlib.gzipSync(buf, { level: quality.gzip });
+export function staticQualityForHost(
+  host = {
+    cores: availableParallelism(),
+    totalMemoryBytes: totalmem(),
+  },
+  env: NodeJS.ProcessEnv = process.env,
+): CompressQuality {
+  const resolvedProfile = env.CENTRAID_HARDWARE_PROFILE ?? env.CENTRAID_RESOLVED_HARDWARE_PROFILE;
+  const constrained =
+    resolvedProfile === 'constrained' ||
+    (resolvedProfile !== 'standard' && (host.cores <= 4 || host.totalMemoryBytes <= 4 * 1024 ** 3));
+  return constrained ? { brotli: 5, gzip: 6 } : STATIC_QUALITY;
+}
+
+/** Compress on libuv's worker pool so large payloads never stall the event loop. */
+export function compress(
+  buf: Buffer,
+  encoding: Encoding,
+  quality: CompressQuality,
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const done = (error: Error | null, result: Buffer): void => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(result);
+    };
+    if (encoding === 'br') {
+      zlib.brotliCompress(
+        buf,
+        {
+          params: {
+            [zlib.constants.BROTLI_PARAM_QUALITY]: quality.brotli,
+            [zlib.constants.BROTLI_PARAM_SIZE_HINT]: buf.length,
+          },
+        },
+        done,
+      );
+      return;
+    }
+    zlib.gzip(buf, { level: quality.gzip }, done);
+  });
 }
 
 /**
@@ -127,12 +161,12 @@ export function compress(buf: Buffer, encoding: Encoding, quality: CompressQuali
  * Accept-Encoding` is always set so an intermediary caches per encoding.
  * Node fills `Content-Length` from the buffer we `end()` — no stale length.
  */
-export function sendJsonNegotiated(
+export async function sendJsonNegotiated(
   req: IncomingMessage,
   res: ServerResponse,
   status: number,
   body: unknown,
-): true {
+): Promise<true> {
   const raw = Buffer.from(JSON.stringify(body), 'utf8');
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -145,6 +179,6 @@ export function sendJsonNegotiated(
     return true;
   }
   res.setHeader('Content-Encoding', encoding);
-  res.end(compress(raw, encoding, DYNAMIC_QUALITY));
+  res.end(await compress(raw, encoding, DYNAMIC_QUALITY));
   return true;
 }

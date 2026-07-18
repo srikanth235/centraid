@@ -147,6 +147,10 @@ export class InProcessScheduler implements LocalScheduler {
     const minute = minuteKey(at);
     if (minute === this.lastFiredMinute) return;
     this.lastFiredMinute = minute;
+    // With no enabled schedules there is no missed-fire state to persist.
+    // Skipping the host hook avoids a journal.db write every minute on the
+    // common zero-automation gateway (#456 I3).
+    if (this.entries.size === 0) return;
     try {
       this.onTick?.(at);
     } catch (err) {

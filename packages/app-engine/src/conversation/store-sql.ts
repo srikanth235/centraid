@@ -277,11 +277,6 @@ const CONV_COLS = `c.id, c.kind, c.user_id, c.app_id, c.automation_id, c.title,
         c.adapter_kind, c.adapter_session_id, c.turn_count, c.pinned, c.archived,
         c.created_at, c.updated_at`;
 
-// The reconstructed transcript-length subquery, shared by the list/search/get
-// column blocks so a conversation's `msg_count` means the same thing everywhere.
-const MSG_COUNT_SUBQUERY = `(SELECT COUNT(*) FROM items WHERE turn_id IN
-          (SELECT id FROM turns WHERE conversation_id = c.id))`;
-
 export function prepare(db: DatabaseSync): PreparedStatements {
   return {
     insertConversation: db.prepare(`
@@ -298,7 +293,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     getConversation: db.prepare(`SELECT ${CONV_COLS} FROM conversations c WHERE c.id = ?`),
     getConversationWithCount: db.prepare(`
       SELECT ${CONV_COLS},
-        ${MSG_COUNT_SUBQUERY} AS msg_count
+        c.item_count AS msg_count
       FROM conversations c WHERE c.id = ? AND c.user_id = ?
     `),
     // App scoping is a column filter (`?3 IS NULL OR c.app_id = ?`): the
@@ -307,7 +302,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     // group them, they're just ordered last within their pin bucket.
     listConversations: db.prepare(`
       SELECT ${CONV_COLS},
-        ${MSG_COUNT_SUBQUERY} AS msg_count
+        c.item_count AS msg_count
       FROM conversations c
       WHERE c.user_id = ? AND c.kind IN ('chat','build')
         AND (? IS NULL OR c.app_id = ?)
@@ -318,7 +313,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     // Archived threads are out of the way, so they stay out of results.
     searchConversations: db.prepare(`
       SELECT ${CONV_COLS},
-        ${MSG_COUNT_SUBQUERY} AS msg_count,
+        c.item_count AS msg_count,
         snippet(fts_conversation, -1, '⟦', '⟧', '…', 12) AS snippet
       FROM fts_conversation
       JOIN conversations c ON c.id = fts_conversation.conversation_id

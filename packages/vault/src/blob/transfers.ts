@@ -1,6 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit (#418) the ingress/direct/stream/outbox coordinator is one lifecycle boundary; splitting only its close fence would separate shutdown ordering from the runner it owns
 import {
   closeSync,
+  createReadStream,
   fsyncSync,
   mkdirSync,
   openSync,
@@ -8,6 +9,7 @@ import {
   truncateSync,
   writeSync,
 } from 'node:fs';
+import { createHash, type Hash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
@@ -22,7 +24,6 @@ import { uuidv7 } from '../ids.js';
 import type { BlobCache } from './cache.js';
 import { BlobContentKeyRegistry } from './content-keys.js';
 import type { CustodyState, RemoteTier } from './custody-types.js';
-import { IncrementalSha256, type SerializableSha256State } from './incremental-sha256.js';
 import {
   DirectBlobTransfers,
   type DirectBlobDownloadResult,
@@ -51,6 +52,14 @@ import {
 import { BlobTransferState, type IngressSessionRow } from './transfer-state.js';
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+export const INGRESS_FSYNC_BATCH_BYTES = 4 * 1024 * 1024;
+
+interface FallbackWrite {
+  fd: number;
+  offset: number;
+  durableOffset: number;
+  hash: Hash;
+}
 export interface BeginBlobIngressInput {
   expectedSha256?: string;
   expectedSize?: number;
@@ -96,11 +105,13 @@ export interface BlobTransferCoordinatorOptions {
   policy: () => BackupPolicy;
   contentKeys: BlobContentKeyRegistry;
   contributePreview?: (input: IngressPreviewInput) => void;
+  shouldDeferBackgroundWork?: () => boolean;
   drainIntervalMs?: number;
   streamChunkBytes?: number;
 }
 
 export class BlobTransferCoordinator {
+  private readonly fallbackWrites = new Map<string, FallbackWrite>();
   readonly state: BlobTransferState;
   private readonly listeners = new Set<(status: BlobTransferStatus) => void>();
   private readonly direct: DirectBlobTransfers;
@@ -124,7 +135,11 @@ export class BlobTransferCoordinator {
       local: options.local,
       cache: options.cache,
       remote: options.remote,
+      remoteConfigured: options.remoteConfigured,
       onStatus: () => this.emit(),
+      ...(options.shouldDeferBackgroundWork
+        ? { shouldDeferBackgroundWork: options.shouldDeferBackgroundWork }
+        : {}),
       ...(options.drainIntervalMs ? { intervalMs: options.drainIntervalMs } : {}),
     });
     this.stream = new RemoteStreamIngress({
@@ -305,7 +320,6 @@ export class BlobTransferCoordinator {
       kind: 'fallback',
       tempPath,
       expiresAt,
-      hashState: new IncrementalSha256().exportState(),
       ...(input.expectedSha256 ? { expectedSha256: input.expectedSha256 } : {}),
       ...(input.expectedSize !== undefined ? { expectedSize: input.expectedSize } : {}),
       ...(input.mediaType ? { mediaType: input.mediaType } : {}),
@@ -330,10 +344,12 @@ export class BlobTransferCoordinator {
       return this.stream.append(sessionId, offset, bytes);
     }
     const row = this.requireOpenFallback(sessionId);
-    if (offset !== row.received_bytes) {
+    const pending = this.fallbackWrites.get(sessionId);
+    const expectedOffset = pending?.offset ?? row.received_bytes;
+    if (offset !== expectedOffset) {
       throw new VaultBlobSessionError(
-        `upload offset ${offset} does not match durable offset ${row.received_bytes}`,
-        row.received_bytes,
+        `upload offset ${offset} does not match current offset ${expectedOffset}`,
+        expectedOffset,
       );
     }
     if (row.expected_size !== null && offset + bytes.length > row.expected_size) {
@@ -341,28 +357,56 @@ export class BlobTransferCoordinator {
     }
     if (row.expected_size === null)
       this.availableForSpool(bytes.length, row.expected_sha256 !== null);
-    const state = new IncrementalSha256(
-      JSON.parse(row.hash_state_json ?? '{}') as SerializableSha256State,
-    );
-    state.update(bytes);
+    let write = pending;
     try {
-      truncateSync(row.temp_path!, row.received_bytes); // heal a crash after fsync/before DB update
-      const fd = openSync(row.temp_path!, 'r+');
-      try {
-        writeSync(fd, bytes, 0, bytes.length, row.received_bytes);
-        fsyncSync(fd);
-      } finally {
-        closeSync(fd);
+      if (!write) {
+        truncateSync(row.temp_path!, row.received_bytes); // discard bytes past the durable DB offset
+        const hash = createHash('sha256');
+        if (row.received_bytes > 0) {
+          for await (const chunk of createReadStream(row.temp_path!, {
+            start: 0,
+            end: row.received_bytes - 1,
+          })) {
+            hash.update(chunk as Buffer);
+          }
+        }
+        write = {
+          fd: openSync(row.temp_path!, 'r+'),
+          offset: row.received_bytes,
+          durableOffset: row.received_bytes,
+          hash,
+        };
+        this.fallbackWrites.set(sessionId, write);
+      }
+      writeSync(write.fd, bytes, 0, bytes.length, write.offset);
+      write.hash.update(bytes);
+      write.offset += bytes.length;
+      const complete = row.expected_size !== null && write.offset === row.expected_size;
+      if (write.offset - write.durableOffset >= INGRESS_FSYNC_BATCH_BYTES || complete) {
+        this.flushFallbackWrite(sessionId, write);
       }
     } catch (error) {
+      if (write) {
+        closeSync(write.fd);
+        this.fallbackWrites.delete(sessionId);
+      }
       throw asVaultDiskFullError('resumable blob ingress', error);
     }
-    const next = row.received_bytes + bytes.length;
-    this.state.recordAppend(sessionId, next, state.exportState());
-    return { offset: next };
+    return { offset: write.offset };
   }
 
   async commitIngress(sessionId: string): Promise<CommittedBlob> {
+    const pending = this.fallbackWrites.get(sessionId);
+    let pendingHash: string | undefined;
+    if (pending) {
+      try {
+        this.flushFallbackWrite(sessionId, pending);
+        pendingHash = pending.hash.digest('hex');
+      } finally {
+        closeSync(pending.fd);
+        this.fallbackWrites.delete(sessionId);
+      }
+    }
     let row = this.state.session(sessionId);
     if (!row) throw new VaultBlobSessionError(`unknown upload session ${sessionId}`);
     if (row.state === 'complete' && row.expected_sha256) {
@@ -387,9 +431,20 @@ export class BlobTransferCoordinator {
         row.received_bytes,
       );
     }
-    const hash = new IncrementalSha256(
-      JSON.parse(row.hash_state_json ?? '{}') as SerializableSha256State,
-    ).digestHex();
+    let hash = pendingHash;
+    if (!hash && row.state === 'committing' && row.expected_sha256) {
+      hash = row.expected_sha256;
+    }
+    if (!hash) {
+      const source = createHash('sha256');
+      for await (const chunk of createReadStream(row.temp_path!, {
+        start: 0,
+        end: Math.max(0, row.received_bytes - 1),
+      })) {
+        source.update(chunk as Buffer);
+      }
+      hash = source.digest('hex');
+    }
     if (row.expected_sha256 && hash !== row.expected_sha256) {
       if (row.state === 'open') await this.abortIngress(sessionId);
       throw new VaultBlobHashMismatchError(row.expected_sha256, hash);
@@ -417,6 +472,11 @@ export class BlobTransferCoordinator {
   async abortIngress(sessionId: string): Promise<void> {
     const row = this.state.session(sessionId);
     if (!row) return;
+    const pending = this.fallbackWrites.get(sessionId);
+    if (pending) {
+      closeSync(pending.fd);
+      this.fallbackWrites.delete(sessionId);
+    }
     this.state.setSessionState(sessionId, 'aborted');
     if (row.temp_path) rmSync(row.temp_path, { force: true });
     if (row.remote_temp_id && row.remote_upload_id) {
@@ -499,12 +559,32 @@ export class BlobTransferCoordinator {
     return row;
   }
 
+  private flushFallbackWrite(sessionId: string, write: FallbackWrite): void {
+    if (write.offset === write.durableOffset) return;
+    fsyncSync(write.fd);
+    this.state.recordAppend(sessionId, write.offset);
+    write.durableOffset = write.offset;
+  }
+
+  private closeFallbackWrites(persist: boolean): void {
+    for (const [sessionId, write] of this.fallbackWrites) {
+      try {
+        if (persist) this.flushFallbackWrite(sessionId, write);
+      } finally {
+        closeSync(write.fd);
+      }
+    }
+    this.fallbackWrites.clear();
+  }
+
   async close(): Promise<void> {
+    this.closeFallbackWrites(true);
     await this.outbox.close();
   }
 
   /** Fence asynchronous transfer completion before a synchronous SQLite close. */
   abandon(): void {
+    this.closeFallbackWrites(false);
     this.outbox.abandon();
   }
 }

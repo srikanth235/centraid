@@ -140,7 +140,7 @@ test('a draft session branches a scratch band seeded from live; reset re-snapsho
   expect((await publish('s1', 'v1')).status).toBe(201);
   // A live row the draft copy must carry.
   const plane = handle.vaults.current();
-  const live = plane.invokeAsAssistant({
+  const live = await plane.invokeAsAssistant({
     command: 'ext.gym.insert',
     input: { table: 'workout', values: { notes: 'live row' } },
     purpose: 'dpv:ServiceProvision',
@@ -158,7 +158,7 @@ test('a draft session branches a scratch band seeded from live; reset re-snapsho
   expect(ownerSql('SELECT notes FROM extdraft_gym_workout')).toEqual([{ notes: 'live row' }]);
 
   // Draft writes stay scratch.
-  const draftWrite = plane.invokeAsAssistant({
+  const draftWrite = await plane.invokeAsAssistant({
     command: 'ext.gym.insert',
     input: { table: 'workout', values: { notes: 'draft only' }, band: 'draft' },
     purpose: 'dpv:ServiceProvision',
@@ -223,11 +223,13 @@ test('purge-ext over HTTP drops the app ext band and its data', async () => {
   // Seed a live row so the purge has something to reclaim.
   const plane = handle.vaults.current();
   expect(
-    plane.invokeAsAssistant({
-      command: 'ext.gym.insert',
-      input: { table: 'workout', values: { notes: 'reclaim me' } },
-      purpose: 'dpv:ServiceProvision',
-    }).status,
+    (
+      await plane.invokeAsAssistant({
+        command: 'ext.gym.insert',
+        input: { table: 'workout', values: { notes: 'reclaim me' } },
+        purpose: 'dpv:ServiceProvision',
+      })
+    ).status,
   ).toBe('executed');
   expect(ownerSql('SELECT count(*) AS n FROM ext_gym_workout')[0]?.n).toBe(1);
 

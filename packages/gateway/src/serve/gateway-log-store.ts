@@ -57,7 +57,7 @@ export interface GatewayLogEntry {
   message: string;
 }
 
-export type GatewayLogListener = (entry: GatewayLogEntry) => void;
+export type GatewayLogListener = (entry: GatewayLogEntry, serialized: string) => void;
 
 export interface GatewayLogStoreOptions {
   /**
@@ -132,11 +132,12 @@ export class GatewayLogStore {
     if (this.entries.length > this.capacity) {
       this.entries.splice(0, this.entries.length - this.capacity);
     }
-    this.persist(entry);
+    const serialized = JSON.stringify(entry);
+    this.persist(serialized);
     // Snapshot: a listener may unsubscribe itself mid-fanout.
     for (const fn of Array.from(this.listeners)) {
       try {
-        fn(entry);
+        fn(entry, serialized);
       } catch {
         /* one wedged subscriber must not break the fanout */
       }
@@ -198,7 +199,7 @@ export class GatewayLogStore {
     };
   }
 
-  private persist(entry: GatewayLogEntry): void {
+  private persist(serialized: string): void {
     if (!this.dir || !this.currentFile) return;
     // Backed off after a disk-full hit: count the drop but don't retry the
     // write on every single line while `diskFullUntil` is still in the
@@ -209,7 +210,7 @@ export class GatewayLogStore {
       return;
     }
     try {
-      fs.appendFileSync(this.currentFile, `${JSON.stringify(entry)}\n`);
+      fs.appendFileSync(this.currentFile, `${serialized}\n`);
       this.diskFullUntil = null;
       this.rotateIfNeeded();
     } catch (err) {

@@ -10,12 +10,10 @@
 //        staged_sha) is, and that is where the receipt mints.
 //
 //   GET  /centraid/_vault/blobs/<contentId>[?variant=thumb|preview]
-//        consent-checked, DERIVED-reachability-gated byte serving:
-//        Range (video scrubbing), ETag = sha256 (content-addressed ⇒
+//        consent + DERIVED-reachability gated: Range, ETag = sha256
 //        immutable caching), inline disposition — ?download=1 for saves.
-//        Transport auth is the outer Bearer + vault scope (#289); the
-//        desktop's auth-injector stamps both onto bare <img>/<video>
-//        subresource loads, so app tiles need no token plumbing.
+//        Outer Bearer + vault-scope auth (#289) is stamped onto <img>/<video>
+//        subresource loads without app-level token plumbing.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { AUTHED_DEVICE_HEADER } from '@centraid/app-engine';
@@ -29,9 +27,13 @@ import {
 import type { RouteHandler } from '../serve/build-gateway.js';
 import { vaultContext } from '../serve/vault-context.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
+import { createBlobHandoffUrl, type DataPlaneHttpOptions } from '../serve/data-plane-handoff.js';
 import { openBlobCustodyEvents } from './blob-custody-events.js';
+import { parseRange, pipeBlobResponse } from './blob-response.js';
 import { sendBlobRouteError } from './blob-route-errors.js';
 import { readBody, readJson, sendJson } from './route-helpers.js';
+
+export { MAX_OPEN_RANGE_BYTES, parseRange } from './blob-response.js';
 
 const PREFIX = '/centraid/_vault/blobs';
 /** Upload cap — a phone video fits; a Takeout goes through the import door. */
@@ -83,23 +85,10 @@ function authenticatedDevice(req: IncomingMessage): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
-/** `bytes=<start>-<end?>` → a single satisfiable range, else null. */
-function parseRange(
-  header: string | undefined,
-  size: number,
-): { start: number; end: number } | null {
-  const m = header?.match(/^bytes=(\d*)-(\d*)$/);
-  if (!m) return null;
-  const [, rawStart, rawEnd] = m;
-  if (rawStart === '' && rawEnd === '') return null;
-  // Suffix form `bytes=-N`: the final N bytes.
-  const start = rawStart === '' ? Math.max(0, size - Number(rawEnd)) : Number(rawStart);
-  const end = rawStart === '' ? size - 1 : rawEnd === '' ? size - 1 : Number(rawEnd);
-  if (Number.isNaN(start) || Number.isNaN(end) || start > end || start >= size) return null;
-  return { start, end: Math.min(end, size - 1) };
-}
-
-export function makeBlobRouteHandler(vaults: Pick<VaultRegistry, 'current'>): RouteHandler {
+export function makeBlobRouteHandler(
+  vaults: Pick<VaultRegistry, 'current'>,
+  dataPlane?: DataPlaneHttpOptions,
+): RouteHandler {
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
     const url = new URL(req.url ?? '/', 'http://gateway.local');
     if (url.pathname !== PREFIX && !url.pathname.startsWith(`${PREFIX}/`)) return false;
@@ -246,7 +235,8 @@ export function makeBlobRouteHandler(vaults: Pick<VaultRegistry, 'current'>): Ro
           await plane.db.blobTransfers.abortIngress(begin.sessionId);
           return sendJson(res, 400, { error: 'empty upload' });
         }
-        return sendCommitted(res, await plane.db.blobTransfers.commitIngress(begin.sessionId));
+        const committed = await plane.db.blobTransfers.commitIngress(begin.sessionId);
+        return sendCommitted(res, committed);
       }
 
       if (method === 'HEAD' && segments[0] === '_sha' && segments.length === 2) {
@@ -456,25 +446,50 @@ export function makeBlobRouteHandler(vaults: Pick<VaultRegistry, 'current'>): Ro
           res.end();
           return true;
         }
+        const localFile = plane.db.blobs.localPathSync?.(blob.sha256) ?? null;
+        const handoff =
+          dataPlane && localFile
+            ? createBlobHandoffUrl(dataPlane, {
+                file: localFile,
+                mediaType: blob.mediaType,
+                disposition: `${disposition}; filename="${name}"`,
+                etag,
+              })
+            : undefined;
+        if (handoff) {
+          res.statusCode = 307;
+          res.setHeader('Location', handoff);
+          res.setHeader('Content-Length', '0');
+          res.end();
+          return true;
+        }
         if (method === 'HEAD') {
           res.statusCode = 200;
           res.setHeader('Content-Length', String(blob.byteSize));
           res.end();
           return true;
         }
-        const bytes = await plane.db.blobs.open(
-          blob.sha256,
-          range ? { start: range.start, end: range.end } : undefined,
-        );
-        if (!bytes) return sendJson(res, 404, { error: 'bytes missing from custody' });
+        const requestedRange = range ? { start: range.start, end: range.end } : undefined;
+        const opened = plane.db.blobs.openReadStreamSync(blob.sha256, requestedRange);
         if (range) {
           res.statusCode = 206;
           res.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${blob.byteSize}`);
         } else {
           res.statusCode = 200;
         }
-        res.setHeader('Content-Length', String(bytes.length));
-        res.end(bytes);
+        const contentLength = range ? range.end - range.start + 1 : blob.byteSize;
+        res.setHeader('Content-Length', String(contentLength));
+        if (opened) {
+          await pipeBlobResponse(req, res, opened.stream);
+          return true;
+        }
+        const remoteStream = plane.db.blobs.openRemoteReadStream(
+          blob.sha256,
+          blob.byteSize,
+          requestedRange,
+        );
+        if (!remoteStream) return sendJson(res, 404, { error: 'bytes missing from custody' });
+        await pipeBlobResponse(req, res, remoteStream);
         return true;
       }
     } catch (error) {

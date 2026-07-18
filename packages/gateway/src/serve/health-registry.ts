@@ -62,12 +62,34 @@ export interface HealthMetrics {
    * that lands (see `build-gateway.ts`'s `setMetricsSource` call).
    */
   sseClients?: number;
+  /** Rolling event-loop delay window from `perf_hooks.monitorEventLoopDelay`. */
+  eventLoopLagP50Ms?: number;
+  eventLoopLagP99Ms?: number;
+  eventLoopLagMaxMs?: number;
+  /** Highest rolling-window p99 observed since process start. */
+  eventLoopLagPeakP99Ms?: number;
+  eventLoopLagSamples?: number;
+  /** Boot-time durability-barrier latency for one 4 KiB write. */
+  storageFsyncMs?: number;
   uptimeMs: number;
 }
 
 /** What a host-injected metrics source contributes — `rssBytes`/`uptimeMs` are computed here. */
 export type MetricsSourceResult = Partial<Pick<HealthMetrics, 'outboxPending' | 'sseClients'>>;
 export type MetricsSource = () => MetricsSourceResult;
+
+export type PerformanceMetricsSourceResult = Partial<
+  Pick<
+    HealthMetrics,
+    | 'eventLoopLagP50Ms'
+    | 'eventLoopLagP99Ms'
+    | 'eventLoopLagMaxMs'
+    | 'eventLoopLagPeakP99Ms'
+    | 'eventLoopLagSamples'
+    | 'storageFsyncMs'
+  >
+>;
+export type PerformanceMetricsSource = () => PerformanceMetricsSourceResult;
 
 export interface HealthSnapshot {
   /** Worst component status — `ok` when every component is ok. */
@@ -120,6 +142,8 @@ export class HealthRegistry {
   private readonly now: () => number;
   private readonly startedAtMs: number;
   private metricsSource?: MetricsSource;
+  private performanceMetricsSource?: PerformanceMetricsSource;
+  private resetPerformanceMetricsSource?: () => void;
 
   constructor(options: HealthRegistryOptions = {}) {
     this.maxEvents = options.maxEvents ?? DEFAULT_MAX_EVENTS;
@@ -135,6 +159,22 @@ export class HealthRegistry {
    */
   setMetricsSource(source: MetricsSource): void {
     this.metricsSource = source;
+  }
+
+  setPerformanceMetricsSource(source: PerformanceMetricsSource, reset?: () => void): void {
+    this.performanceMetricsSource = source;
+    this.resetPerformanceMetricsSource = reset;
+  }
+
+  /** Start a fresh metrics epoch; used by the in-process benchmark after warmup. */
+  resetPerformanceMetrics(): void {
+    this.resetPerformanceMetricsSource?.();
+  }
+
+  /** Runtime backpressure signal shared by every background subsystem (issue #456 A6). */
+  shouldDeferBackgroundWork(maxP99Ms = 50): boolean {
+    const p99 = this.performanceMetricsSource?.().eventLoopLagP99Ms;
+    return p99 !== undefined && p99 >= maxP99Ms;
   }
 
   reportOk(component: string, detail?: string): void {
@@ -214,6 +254,7 @@ export class HealthRegistry {
     const nowMs = this.now();
     const uptimeMs = nowMs - this.startedAtMs;
     const sourced = this.metricsSource?.() ?? {};
+    const performance = this.performanceMetricsSource?.() ?? {};
     return {
       status: components.reduce<ComponentStatus>((acc, c) => worseOf(acc, c.status), 'ok'),
       startedAt: new Date(this.startedAtMs).toISOString(),
@@ -224,6 +265,7 @@ export class HealthRegistry {
         rssBytes: process.memoryUsage().rss,
         outboxPending: sourced.outboxPending ?? 0,
         ...(sourced.sseClients !== undefined ? { sseClients: sourced.sseClients } : {}),
+        ...performance,
         uptimeMs,
       },
     };

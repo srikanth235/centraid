@@ -34,9 +34,11 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
+import path from 'node:path';
 import {
   startGatewayEndpoint,
   type GatewayEndpointHandle,
+  type GatewayPairRequest,
   type GatewayPairResponse,
 } from '@centraid/tunnel';
 import type { IncomingMessage } from 'node:http';
@@ -47,6 +49,7 @@ import { EnrollmentStore } from '../serve/enrollment-store.js';
 import { PairingTicketStore } from '../serve/pairing-store.js';
 import { DeviceTokenStore } from '../serve/device-token-store.js';
 import { GATEWAY_SCHEMA_EPOCH, GATEWAY_VERSION } from '../version.js';
+import type { DataPlaneControlOptions } from '../routes/data-plane-control.js';
 import type { DaemonLayout } from './paths.js';
 
 export const DEVICE_HEADER = 'x-centraid-device';
@@ -60,6 +63,8 @@ export interface DaemonDevicePlane {
     baseUrl: string;
     token: string;
   }): Promise<GatewayEndpointHandle | undefined>;
+  /** Metadata-only callbacks exposed to the native iroh relay over loopback. */
+  dataPlaneControl: DataPlaneControlOptions;
   /**
    * The device-pairing stores (issue #376) — threaded into `serve()`'s
    * `devicePairing` option (mounts the HTTP ticket-redemption route) and
@@ -84,6 +89,56 @@ function readOrMintSecretKey(file: string): Uint8Array {
   return Uint8Array.from(key);
 }
 
+export interface EnrollmentRevocationWatcher {
+  close(): Promise<void>;
+}
+
+/**
+ * Bridge the SSH admin CLI's atomic devices.json rewrites into the live
+ * native relay. Directory watching survives the file's rename-based replace
+ * and adds no idle polling wakeup; the enrollment store is force-refreshed
+ * only after an OS change notification.
+ */
+export function watchEnrollmentRevocations(input: {
+  file: string;
+  enrollments: EnrollmentStore;
+  knownEndpointIds?: Set<string>;
+  onRevoked: (endpointId: string) => void | Promise<void>;
+  logger: RuntimeLogger;
+}): EnrollmentRevocationWatcher {
+  const known =
+    input.knownEndpointIds ?? new Set(input.enrollments.listFresh().map((row) => row.endpointId));
+  let pending = Promise.resolve();
+  let closed = false;
+  const filename = path.basename(input.file);
+  const watcher = fs.watch(path.dirname(input.file), (_event, changed) => {
+    if (closed || (changed !== null && String(changed) !== filename)) return;
+    pending = pending
+      .then(async () => {
+        const next = new Set(input.enrollments.listFresh().map((row) => row.endpointId));
+        const revoked = [...known].filter((endpointId) => !next.has(endpointId));
+        known.clear();
+        for (const endpointId of next) known.add(endpointId);
+        for (const endpointId of revoked) await input.onRevoked(endpointId);
+      })
+      .catch((error) => {
+        input.logger.warn(
+          `device plane: failed to propagate external revocation: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
+  });
+  watcher.on('error', (error) => {
+    input.logger.warn(`device plane: enrollment watch failed: ${error.message}`);
+  });
+  return {
+    close: async () => {
+      closed = true;
+      watcher.close();
+      await pending;
+    },
+  };
+}
+
 export function makeDaemonDevicePlane(input: {
   layout: DaemonLayout;
   /**
@@ -93,6 +148,8 @@ export function makeDaemonDevicePlane(input: {
    */
   vaults: () => VaultRegistry | undefined;
   logger: RuntimeLogger;
+  /** Shared only with native byte-plane components on the loopback listener. */
+  controlSecret?: string;
   /**
    * iroh relay mode. Defaults to the production n0 relays + discovery;
    * `disabled` keeps the endpoint offline (tests bind on loopback only).
@@ -103,10 +160,13 @@ export function makeDaemonDevicePlane(input: {
   const enrollments = EnrollmentStore.open(layout.devicesFile);
   const tickets = PairingTicketStore.open(layout.pairingTicketsFile);
   const deviceTokens = DeviceTokenStore.open(layout.deviceTokensFile);
+  const knownEndpointIds = new Set(enrollments.listFresh().map((row) => row.endpointId));
   // Per-boot proof shared only between the endpoint's forwarder and the
   // HTTP layer's device resolution — never persisted, never on the wire
   // outside this process.
   const deviceProof = crypto.randomBytes(32).toString('hex');
+  const controlSecret = input.controlSecret ?? crypto.randomBytes(32).toString('hex');
+  let liveEndpointId: string | undefined;
 
   const deviceAccess: DeviceAccess = {
     deviceKeyFor: (req: IncomingMessage): string | undefined => {
@@ -122,6 +182,73 @@ export function makeDaemonDevicePlane(input: {
     vaultsFor: (deviceKey: string): string[] => enrollments.vaultsFor(deviceKey),
   };
 
+  const pairDevice = (candidate: unknown, endpointId: string): GatewayPairResponse => {
+    const request = candidate as Partial<GatewayPairRequest> | null;
+    if (
+      !request ||
+      typeof request.ticketId !== 'string' ||
+      typeof request.secret !== 'string' ||
+      typeof request.deviceName !== 'string' ||
+      typeof request.platform !== 'string'
+    ) {
+      return { ok: false, error: 'bad_request' };
+    }
+    const registry = input.vaults();
+    if (!registry) return { ok: false, error: 'gateway_not_ready' };
+    const redeemed = tickets.redeem(request.ticketId, request.secret);
+    if (!redeemed) return { ok: false, error: 'invalid_ticket' };
+    const plane = registry.get(redeemed.vaultId);
+    if (!plane) return { ok: false, error: 'vault_gone' };
+    const enrollment = enrollments.enroll({
+      endpointId,
+      vaultId: redeemed.vaultId,
+      label: request.deviceName || `device ${endpointId.slice(0, 10)}…`,
+      platform: request.platform,
+      ...(request.rememberDevice !== undefined ? { rememberDevice: request.rememberDevice } : {}),
+      trust: redeemed.trust,
+    });
+    knownEndpointIds.add(endpointId);
+    plane.db.blobTransfers.enrollPairedDevice({
+      identity: endpointId,
+      ownerPartyId: plane.boot.ownerPartyId,
+      name: request.deviceName || `device ${endpointId.slice(0, 10)}…`,
+      ...(request.platform ? { platform: request.platform } : {}),
+      trust: enrollment.trust === 'readonly' ? 'readonly' : 'full',
+    });
+    logger.info(
+      `device plane: enrolled ${endpointId.slice(0, 10)}… into vault ${redeemed.vaultId}`,
+    );
+    return {
+      ok: true,
+      gatewayId: liveEndpointId,
+      gatewayName: os.hostname().replace(/\.local$/, ''),
+      vaultId: redeemed.vaultId,
+      vaultName: plane.name,
+      version: GATEWAY_VERSION,
+      schemaEpoch: GATEWAY_SCHEMA_EPOCH,
+    };
+  };
+
+  const dataPlaneControl: DataPlaneControlOptions = {
+    secret: controlSecret,
+    authorize: (endpointId) => {
+      const allowed = enrollments.isEnrolled(endpointId);
+      if (allowed) knownEndpointIds.add(endpointId);
+      return {
+        allowed,
+        ...(allowed
+          ? {
+              headers: {
+                [DEVICE_HEADER]: endpointId,
+                [DEVICE_PROOF_HEADER]: deviceProof,
+              },
+            }
+          : {}),
+      };
+    },
+    pair: pairDevice,
+  };
+
   const startEndpoint = async (upstream: {
     baseUrl: string;
     token: string;
@@ -132,47 +259,12 @@ export function makeDaemonDevicePlane(input: {
         secretKey: readOrMintSecretKey(layout.endpointKeyFile),
         upstream: () => upstream,
         authorize: (endpointId) => enrollments.isEnrolled(endpointId),
-        pair: (request, endpointId): GatewayPairResponse => {
-          const registry = input.vaults();
-          if (!registry) return { ok: false, error: 'gateway_not_ready' };
-          const redeemed = tickets.redeem(request.ticketId, request.secret);
-          if (!redeemed) return { ok: false, error: 'invalid_ticket' };
-          const plane = registry.get(redeemed.vaultId);
-          if (!plane) return { ok: false, error: 'vault_gone' };
-          const enrollment = enrollments.enroll({
-            endpointId,
-            vaultId: redeemed.vaultId,
-            label: request.deviceName || `device ${endpointId.slice(0, 10)}…`,
-            platform: request.platform,
-            ...(request.rememberDevice !== undefined
-              ? { rememberDevice: request.rememberDevice }
-              : {}),
-            trust: redeemed.trust,
-          });
-          plane.db.blobTransfers.enrollPairedDevice({
-            identity: endpointId,
-            ownerPartyId: plane.boot.ownerPartyId,
-            name: request.deviceName || `device ${endpointId.slice(0, 10)}…`,
-            ...(request.platform ? { platform: request.platform } : {}),
-            trust: enrollment.trust === 'readonly' ? 'readonly' : 'full',
-          });
-          logger.info(
-            `device plane: enrolled ${endpointId.slice(0, 10)}… into vault ${redeemed.vaultId}`,
-          );
-          return {
-            ok: true,
-            gatewayId: handle.endpointId,
-            gatewayName: os.hostname().replace(/\.local$/, ''),
-            vaultId: redeemed.vaultId,
-            vaultName: plane.name,
-            version: GATEWAY_VERSION,
-            schemaEpoch: GATEWAY_SCHEMA_EPOCH,
-          };
-        },
+        pair: pairDevice,
         requestHeaders: (endpointId) => ({
           [DEVICE_HEADER]: endpointId,
           [DEVICE_PROOF_HEADER]: deviceProof,
         }),
+        nativeControl: { secret: controlSecret },
         ...(input.relays ? { relays: input.relays } : {}),
       });
     } catch (err) {
@@ -183,6 +275,14 @@ export function makeDaemonDevicePlane(input: {
       );
       return undefined;
     }
+    liveEndpointId = handle.endpointId;
+    const revocations = watchEnrollmentRevocations({
+      file: layout.devicesFile,
+      enrollments,
+      knownEndpointIds,
+      onRevoked: (endpointId) => handle.revokeEndpoint(endpointId),
+      logger,
+    });
     // Publish the live identity for the `pair` CLI (a separate process):
     // EndpointId is permanent; the dial ticket carries fresh relay hints.
     fs.writeFileSync(
@@ -190,8 +290,21 @@ export function makeDaemonDevicePlane(input: {
       `${JSON.stringify({ endpointId: handle.endpointId, ticket: handle.ticket() }, null, 2)}\n`,
       { mode: 0o600 },
     );
-    return handle;
+    return {
+      endpointId: handle.endpointId,
+      ticket: () => handle.ticket(),
+      revokeEndpoint: (endpointId) => handle.revokeEndpoint(endpointId),
+      close: async () => {
+        await revocations.close();
+        await handle.close();
+      },
+    };
   };
 
-  return { deviceAccess, startEndpoint, pairing: { enrollments, tickets, deviceTokens } };
+  return {
+    deviceAccess,
+    startEndpoint,
+    dataPlaneControl,
+    pairing: { enrollments, tickets, deviceTokens },
+  };
 }

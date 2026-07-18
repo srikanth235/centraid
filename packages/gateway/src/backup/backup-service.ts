@@ -33,6 +33,7 @@ import {
   ONTOLOGY_VERSION,
   VAULT_MIGRATIONS,
   bumpReplicaEpoch,
+  jitterDelayMs,
   readBackupPolicy,
   readBlobStoreSettings,
   verifyRestoredPair,
@@ -81,8 +82,27 @@ import { snapshotReferencedBlobShas } from './snapshot-blob-roots.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
-/** Re-check policy at its declared minimum; each vault still drains only when its own RPO is due. */
-const POLICY_SCHEDULER_TICK_MS = MIN_RPO_SECONDS * 1000;
+export interface WalDrainPolicyDue {
+  rpoSeconds: number;
+  lastAttemptMs?: number;
+}
+
+/** Delay until the earliest mounted vault actually reaches its policy RPO. */
+export function walDrainDelayMs(
+  configured: boolean,
+  policies: readonly WalDrainPolicyDue[],
+  nowMs: number,
+): number | undefined {
+  if (!configured) return undefined;
+  if (policies.length === 0) return MIN_RPO_SECONDS * 1000;
+  return Math.min(
+    ...policies.map(({ rpoSeconds, lastAttemptMs }) => {
+      const rpoMs = Math.max(MIN_RPO_SECONDS, rpoSeconds) * 1000;
+      if (lastAttemptMs === undefined) return rpoMs;
+      return Math.max(0, lastAttemptMs + rpoMs - nowMs);
+    }),
+  );
+}
 
 function newestReconciliation(
   first: BackupReconciliationState | undefined,
@@ -249,6 +269,7 @@ export class BackupService {
   private keyring: Keyring | undefined;
   private timer: NodeJS.Timeout | undefined;
   private walTimer: NodeJS.Timeout | undefined;
+  private walTimerDueAtMs: number | undefined;
   /** One drain pass at a time; ticks that land mid-pass are skipped. */
   private draining = false;
   /** Scheduled drain attempts are due independently per vault policy. */
@@ -436,6 +457,7 @@ export class BackupService {
       target.providerPolicy = result;
       await saveBackupState(this.backupDir, state);
     });
+    await this.refreshWalSchedule();
     return result;
   }
 
@@ -1420,21 +1442,76 @@ export class BackupService {
         `backup: provider policy sync failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     });
-    this.timer = setInterval(() => {
+    const runScheduled = () => {
+      if (this.health.shouldDeferBackgroundWork()) return;
       void this.tick().catch((err) => {
         this.logger.warn(
           `backup: scheduler tick failed: ${err instanceof Error ? err.message : String(err)}`,
         );
       });
-    }, HOUR_MS);
+    };
+    this.timer = setTimeout(() => {
+      if (this.stopped) return;
+      runScheduled();
+      this.timer = setInterval(runScheduled, HOUR_MS);
+      this.timer.unref();
+    }, jitterDelayMs(HOUR_MS));
     this.timer.unref();
-    this.walTimer = setInterval(() => {
-      void this.drainWalDue().catch((err) => {
+    // The 30 s global clock used to run even with no backend. Resolve live
+    // configuration first, then arm one tick for the earliest actual policy
+    // due time; unconfigured gateways arm no WAL-drain clock (#456 I4).
+    void this.refreshWalSchedule().catch((err) => {
+      this.logger.warn(
+        `backup: wal scheduler setup failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
+  }
+
+  /** Re-resolve backend presence and mounted policy RPOs after configuration changes. */
+  async refreshWalSchedule(): Promise<void> {
+    const configured = (await this.backend()) !== undefined;
+    const now = this.now();
+    const state = configured ? await loadBackupState(this.backupDir) : undefined;
+    const policies = configured
+      ? this.vaults.planesList().map((plane) => {
+          const vaultId = plane.boot.vaultId;
+          let lastAttemptMs = this.lastWalDrainAttemptMs.get(vaultId);
+          if (lastAttemptMs === undefined) {
+            const persisted = Date.parse(state?.targets[vaultId]?.lastWalDrainAt ?? '');
+            lastAttemptMs = Number.isFinite(persisted) ? persisted : now;
+            this.lastWalDrainAttemptMs.set(vaultId, lastAttemptMs);
+          }
+          return {
+            rpoSeconds: readBackupPolicy(plane.db.vault).rpoSeconds,
+            lastAttemptMs,
+          };
+        })
+      : [];
+    const remainingMs = walDrainDelayMs(configured, policies, now);
+    const delayMs =
+      remainingMs === undefined
+        ? undefined
+        : Math.max(this.health.shouldDeferBackgroundWork() ? 1_000 : 0, remainingMs);
+    const dueAtMs = delayMs === undefined ? undefined : now + delayMs;
+    if (dueAtMs === this.walTimerDueAtMs) return;
+    if (this.walTimer) clearTimeout(this.walTimer);
+    this.walTimer = undefined;
+    this.walTimerDueAtMs = dueAtMs;
+    if (delayMs === undefined) return;
+    this.walTimer = setTimeout(() => {
+      if (this.stopped || this.walTimerDueAtMs !== dueAtMs) return;
+      this.walTimer = undefined;
+      this.walTimerDueAtMs = undefined;
+      const run = async () => {
+        if (!this.health.shouldDeferBackgroundWork()) await this.drainWalDue();
+        await this.refreshWalSchedule();
+      };
+      void run().catch((err) => {
         this.logger.warn(
           `backup: wal drain tick failed: ${err instanceof Error ? err.message : String(err)}`,
         );
       });
-    }, POLICY_SCHEDULER_TICK_MS);
+    }, delayMs);
     this.walTimer.unref();
   }
 
@@ -1454,9 +1531,10 @@ export class BackupService {
       this.timer = undefined;
     }
     if (this.walTimer) {
-      clearInterval(this.walTimer);
+      clearTimeout(this.walTimer);
       this.walTimer = undefined;
     }
+    this.walTimerDueAtMs = undefined;
     await this.chain.catch(() => undefined);
   }
 

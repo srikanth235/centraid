@@ -167,5 +167,35 @@ describe('HealthRegistry', () => {
       expect(snap.metrics.outboxPending).toBe(1);
       expect('sseClients' in snap.metrics).toBe(false);
     });
+
+    it('surfaces performance metrics and exposes the shared load-shed signal', async () => {
+      const registry = new HealthRegistry();
+      let p99 = 18;
+      let resets = 0;
+      registry.setPerformanceMetricsSource(
+        () => ({
+          eventLoopLagP50Ms: 7,
+          eventLoopLagP99Ms: p99,
+          eventLoopLagMaxMs: 25,
+          eventLoopLagPeakP99Ms: 44,
+          eventLoopLagSamples: 100,
+          storageFsyncMs: 11,
+        }),
+        () => {
+          resets += 1;
+        },
+      );
+
+      expect((await registry.snapshot()).metrics).toMatchObject({
+        eventLoopLagP50Ms: 7,
+        eventLoopLagP99Ms: 18,
+        storageFsyncMs: 11,
+      });
+      expect(registry.shouldDeferBackgroundWork()).toBe(false);
+      p99 = 51;
+      expect(registry.shouldDeferBackgroundWork()).toBe(true);
+      registry.resetPerformanceMetrics();
+      expect(resets).toBe(1);
+    });
   });
 });

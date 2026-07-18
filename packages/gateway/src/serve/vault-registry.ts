@@ -90,6 +90,12 @@ export interface VaultRegistryOptions {
   s3Credentials?: (settings: BlobStoreSettings) => Promise<S3Credentials>;
   /** Forwarded to every plane (issue #405 §2) — see `VaultPlaneOptions.previewCodec`. */
   previewCodec?: PreviewCodec;
+  /** SQLite durability selected by the gateway hardware profile. */
+  synchronous?: 'FULL' | 'NORMAL';
+  /** Global event-loop pressure gate forwarded to mounted planes. */
+  shouldDeferBackgroundWork?: () => boolean;
+  /** Concurrent remote pushes selected by the gateway hardware profile. */
+  replicationConcurrency?: number;
 }
 
 /** One row of the vault list. */
@@ -127,6 +133,9 @@ export class VaultRegistry {
     | ((settings: BlobStoreSettings) => Promise<S3Credentials>)
     | undefined;
   private readonly previewCodec: PreviewCodec | undefined;
+  private readonly synchronous: 'FULL' | 'NORMAL' | undefined;
+  private readonly shouldDeferBackgroundWork: (() => boolean) | undefined;
+  private readonly replicationConcurrency: number | undefined;
   private readonly planes = new Map<string, VaultPlane>();
   /**
    * Vault ids THIS registry auto-created on an empty root at construction
@@ -156,6 +165,9 @@ export class VaultRegistry {
     this.leaseConflicted = options.leaseConflicted;
     this.s3Credentials = options.s3Credentials;
     this.previewCodec = options.previewCodec;
+    this.synchronous = options.synchronous;
+    this.shouldDeferBackgroundWork = options.shouldDeferBackgroundWork;
+    this.replicationConcurrency = options.replicationConcurrency;
     mkdirSync(this.rootDir, { recursive: true });
     if (existsSync(path.join(this.rootDir, 'vault.db'))) {
       // Pre-multi-vault layout (v0: no data migrations) — the files stay put
@@ -323,6 +335,13 @@ export class VaultRegistry {
       ...(this.leaseConflicted ? { leaseConflicted: this.leaseConflicted } : {}),
       ...(this.s3Credentials ? { s3Credentials: this.s3Credentials } : {}),
       ...(this.previewCodec ? { previewCodec: this.previewCodec } : {}),
+      ...(this.synchronous ? { synchronous: this.synchronous } : {}),
+      ...(this.shouldDeferBackgroundWork
+        ? { shouldDeferBackgroundWork: this.shouldDeferBackgroundWork }
+        : {}),
+      ...(this.replicationConcurrency !== undefined
+        ? { replicationConcurrency: this.replicationConcurrency }
+        : {}),
       ...boot,
     });
   }

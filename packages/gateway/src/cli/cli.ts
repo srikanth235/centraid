@@ -37,6 +37,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import type { BearerAuthorization } from '@centraid/app-engine';
+import type { GatewayEndpointHandle } from '@centraid/tunnel';
 import { serve } from '../serve/serve.js';
 import { daemonLayoutFor, type DaemonLayout } from './paths.js';
 import { type DaemonConfig } from './config.js';
@@ -230,6 +231,8 @@ async function commandServe(args: string[]): Promise<void> {
   await fs.mkdir(config.dataDir, { recursive: true });
 
   const token = await readOrMintToken(layout.tokenFile);
+  const dataPlaneSecret = process.env.CENTRAID_DATA_PLANE_SECRET;
+  const dataPlaneHttpUrl = process.env.CENTRAID_DATA_PLANE_HTTP_URL;
 
   // Device plane (issue #289): enrollment-scoped vault resolution for
   // requests arriving over the iroh endpoint. Constructed before serve()
@@ -245,6 +248,7 @@ async function commandServe(args: string[]): Promise<void> {
     layout,
     vaults: () => vaultsRef,
     logger,
+    ...(dataPlaneSecret ? { controlSecret: dataPlaneSecret } : {}),
   });
 
   // Per-device HTTP bearer tokens (issue #376): the shared token remains
@@ -258,7 +262,7 @@ async function commandServe(args: string[]): Promise<void> {
     return device ? { plane: 'device', deviceKey: device.deviceKey } : undefined;
   };
   const webRoot = await bundledWebRoot();
-
+  let endpoint: GatewayEndpointHandle | undefined;
   const handle = await serve({
     paths: layout,
     ...(config.host !== undefined ? { host: config.host } : {}),
@@ -267,6 +271,16 @@ async function commandServe(args: string[]): Promise<void> {
     token,
     logTag: 'centraid-gateway',
     deviceAccess: devicePlane.deviceAccess,
+    dataPlaneControl: devicePlane.dataPlaneControl,
+    ...(dataPlaneSecret && dataPlaneHttpUrl
+      ? {
+          dataPlaneHttp: {
+            baseUrl: dataPlaneHttpUrl,
+            secret: dataPlaneSecret,
+            rootDir: layout.vaultDir,
+          },
+        }
+      : {}),
     devicePairing: {
       ...devicePlane.pairing,
       // The gateway's iroh EndpointTicket for a HTTP-minted pairing ticket's
@@ -282,6 +296,7 @@ async function commandServe(args: string[]): Promise<void> {
           return undefined;
         }
       },
+      onEndpointRevoked: (endpointId) => endpoint?.revokeEndpoint(endpointId),
     },
     authorizeBearer,
     // Durable PWA control sessions (issue #376): persist control cookies so
@@ -313,7 +328,7 @@ async function commandServe(args: string[]): Promise<void> {
   // The iroh endpoint (issue #289 phase 3): the gateway's permanent
   // identity + the first-class remote transport. Best-effort — an HTTP-only
   // daemon still serves loopback/`direct` clients.
-  const endpoint =
+  endpoint =
     config.endpoint === false
       ? undefined
       : await devicePlane.startEndpoint({

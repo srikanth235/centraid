@@ -2,17 +2,18 @@
 // claim them through a command, and serve them back with ETag/Range — the
 // full staged-upload loop an app performs.
 
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { Readable } from 'node:stream';
 import { deflateSync } from 'node:zlib';
 import jpegJs from 'jpeg-js';
 import { createImagePreviewCodec } from '../preview/codec.js';
 import { openVaultPlane, type VaultPlane } from '../serve/vault-plane.js';
-import { makeBlobRouteHandler } from './blob-routes.js';
+import { MAX_OPEN_RANGE_BYTES, makeBlobRouteHandler, parseRange } from './blob-routes.js';
 
 const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
 
@@ -25,6 +26,17 @@ const PNG_BYTES = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
   'base64',
 );
+
+test('open-ended byte ranges are clamped to one bounded streaming window', () => {
+  expect(parseRange('bytes=0-', MAX_OPEN_RANGE_BYTES * 3)).toEqual({
+    start: 0,
+    end: MAX_OPEN_RANGE_BYTES - 1,
+  });
+  expect(parseRange(`bytes=${MAX_OPEN_RANGE_BYTES}-`, MAX_OPEN_RANGE_BYTES * 3)).toEqual({
+    start: MAX_OPEN_RANGE_BYTES,
+    end: MAX_OPEN_RANGE_BYTES * 2 - 1,
+  });
+});
 
 /** A structurally valid one-page PDF with a real Flate-compressed content stream. */
 function compressedPdf(text: string): Buffer {
@@ -165,12 +177,59 @@ test('raw upload → claim via core.add_document → serve with ETag/Range/304',
   expect(dl.headers.get('content-disposition')).toBe('attachment; filename="pixel.png"');
 });
 
-test('bare raw JPEG ingress publishes thumb, preview and inline phash/thumbhash backstops', async () => {
+test('aborting a blob response destroys its source stream immediately', async () => {
+  const { base, plane } = await fixture();
+  const staged = (await (
+    await fetch(`${base}?filename=abort.png`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/octet-stream' },
+      body: new Uint8Array(PNG_BYTES),
+    })
+  ).json()) as { sha256: string };
+  const outcome = plane.gateway.invoke(plane.ownerCredential, {
+    command: 'core.add_document',
+    input: { staged_sha: staged.sha256, title: 'abort.png' },
+    purpose: 'dpv:ServiceProvision',
+  });
+  const contentId = (outcome as { output: { content_id: string } }).output.content_id;
+
+  let emitted = false;
+  const slow = new Readable({
+    read() {
+      if (emitted) return;
+      emitted = true;
+      this.push(PNG_BYTES.subarray(0, 1));
+    },
+  });
+  const open = vi.spyOn(plane.db.blobs, 'openReadStreamSync').mockReturnValue({
+    stream: slow,
+    size: PNG_BYTES.length,
+    range: { start: 0, end: PNG_BYTES.length - 1 },
+  });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const request = http.get(`${base}/${contentId}`, (response) => {
+        response.once('data', () => response.destroy());
+        response.once('close', resolve);
+        response.once('error', reject);
+      });
+      request.once('error', reject);
+    });
+    for (let attempt = 0; attempt < 50 && !slow.destroyed; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect(slow.destroyed).toBe(true);
+  } finally {
+    open.mockRestore();
+  }
+});
+
+test('bare raw JPEG ingress defers preview CPU to the bounded backstop sweep', async () => {
   const codec = createImagePreviewCodec();
   const { base, plane } = await fixture(codec);
   const jpeg = makeJpeg(18, 8);
-  const expectedPhash = codec.perceptualHash(jpeg, 'image/jpeg');
-  const expectedThumbhash = codec.thumbhash(jpeg, 'image/jpeg');
+  const expectedPhash = await codec.perceptualHash(jpeg, 'image/jpeg');
+  const expectedThumbhash = await codec.thumbhash(jpeg, 'image/jpeg');
 
   const response = await fetch(`${base}?filename=curl.jpg`, {
     method: 'POST',
@@ -186,6 +245,12 @@ test('bare raw JPEG ingress publishes thumb, preview and inline phash/thumbhash 
   });
   expect(outcome.status).toBe('executed');
   const output = (outcome as { output: { asset_id: string; content_id: string } }).output;
+  expect(
+    plane.db.vault
+      .prepare('SELECT COUNT(*) AS n FROM core_content_derivative WHERE content_id = ?')
+      .get(output.content_id),
+  ).toEqual({ n: 0 });
+  await plane.gateway.sweepBlobs(plane.ownerCredential);
   const derivatives = plane.db.vault
     .prepare(
       `SELECT variant, sha256, text_content FROM core_content_derivative

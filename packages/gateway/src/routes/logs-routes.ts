@@ -91,10 +91,10 @@ export function makeLogsRouteHandler(
     req.on('close', cleanup);
     res.on('error', cleanup);
 
-    const write = (entry: GatewayLogEntry): void => {
+    const write = (entry: GatewayLogEntry, serialized = JSON.stringify(entry)): void => {
       if (res.writableEnded) return;
       res.write(`event: log\n`);
-      res.write(`data: ${JSON.stringify(entry)}\n\n`);
+      res.write(`data: ${serialized}\n\n`);
     };
 
     // Replay then live. Both are synchronous against the in-process store,

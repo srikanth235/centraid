@@ -5,6 +5,7 @@ import { timingSafeEqual } from './security.js';
 import { makeConversationRouteHandler } from './conversation-routes.js';
 import { makeUserStoreRouteHandler } from '../stores/prefs-store.js';
 import type { Runtime } from '../runtime.js';
+import { tuneGatewayHttpServer } from './server-tuning.js';
 
 export interface RuntimeHttpServerOptions {
   runtime: Runtime;
@@ -180,6 +181,7 @@ export async function startRuntimeHttpServer(
   const server = http.createServer((req, res) => {
     void route(req, res);
   });
+  tuneGatewayHttpServer(server);
 
   async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     setCorsHeaders(req, res);

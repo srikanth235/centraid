@@ -131,6 +131,7 @@ export const CONVERSATION_LEDGER_DDL = `
       adapter_kind       TEXT,
       adapter_session_id TEXT,
       turn_count         INTEGER NOT NULL DEFAULT 0,
+      item_count         INTEGER NOT NULL DEFAULT 0,
       pinned             INTEGER NOT NULL DEFAULT 0,
       archived           INTEGER NOT NULL DEFAULT 0,
       created_at         INTEGER NOT NULL,
@@ -439,6 +440,22 @@ export const CONVERSATION_FTS_DDL = `
          AND NOT EXISTS (SELECT 1 FROM fts_conversation f WHERE f.conversation_id = c.id);
 `;
 
+const CONVERSATION_ITEM_COUNT_DDL = `
+    CREATE TRIGGER IF NOT EXISTS conversation_item_count_ai
+      AFTER INSERT ON items BEGIN
+      UPDATE conversations
+         SET item_count = item_count + 1
+       WHERE id = (SELECT conversation_id FROM turns WHERE id = new.turn_id);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS conversation_item_count_ad
+      AFTER DELETE ON items BEGIN
+      UPDATE conversations
+         SET item_count = MAX(item_count - 1, 0)
+       WHERE id = (SELECT conversation_id FROM turns WHERE id = old.turn_id);
+    END;
+`;
+
 /**
  * Idempotently create the conversation-ledger band on an open journal
  * handle. Never touches `PRAGMA user_version` — that belongs to the vault
@@ -448,6 +465,22 @@ export const CONVERSATION_FTS_DDL = `
  */
 export function ensureConversationLedger(db: DatabaseSync): void {
   db.exec(CONVERSATION_LEDGER_DDL);
+  const hasItemCount = (
+    db.prepare(`PRAGMA table_info(conversations)`).all() as { name: string }[]
+  ).some((column) => column.name === 'item_count');
+  if (!hasItemCount) {
+    db.exec(`ALTER TABLE conversations ADD COLUMN item_count INTEGER NOT NULL DEFAULT 0`);
+    db.exec(`
+      UPDATE conversations
+         SET item_count = (
+           SELECT COUNT(*)
+             FROM items i
+             JOIN turns t ON t.id = i.turn_id
+            WHERE t.conversation_id = conversations.id
+         )
+    `);
+  }
+  db.exec(CONVERSATION_ITEM_COUNT_DDL);
   db.exec(CONVERSATION_FTS_DDL);
 }
 
@@ -490,10 +523,14 @@ export function openJournalDb(dbPath: string): DatabaseSync {
   // this by-path opener mirrors it so a journal reached ONLY through app-engine
   // (worker subprocess, standalone daemon) still converges to incremental mode.
   db.exec(`
+    PRAGMA page_size=8192;
     PRAGMA auto_vacuum=INCREMENTAL;
     PRAGMA journal_mode=WAL;
     PRAGMA foreign_keys=ON;
     PRAGMA busy_timeout=30000;
+    PRAGMA cache_size=-16000;
+    PRAGMA mmap_size=67108864;
+    PRAGMA temp_store=MEMORY;
     PRAGMA wal_autocheckpoint=0;
   `);
   // One-time conversion for a file created before #438 (auto_vacuum=0, freelist

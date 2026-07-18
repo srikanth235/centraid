@@ -19,6 +19,8 @@
     "build": "turbo run build",
     "test": "turbo run test",
     "coverage": "vitest run --coverage",
+    "perf:gateway": "turbo run build --filter=@centraid/gateway && bun run --cwd packages/gateway perf:low-end",
+    "perf:runtime-probe": "node packages/gateway/scripts/probe-runtime-sqlite.mjs",
     "typecheck": "turbo run typecheck",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",

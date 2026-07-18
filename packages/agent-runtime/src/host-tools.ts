@@ -44,6 +44,7 @@ import type { RunnerKind } from './types.js';
 import { startMockLlmServer } from '@centraid/automation';
 import { codexProviderOverrideArgs } from './backends/codex/provider-config.js';
 import { agentSpawnEnv } from './spawn-env.js';
+import { lowPriorityCommand } from './low-priority.js';
 
 /** The throwaway prompt; the mock ends the turn at once, so it's never acted on. */
 const PROBE_PROMPT = 'centraid tool-enumeration probe — reply with: ok';
@@ -95,7 +96,8 @@ async function spawnProbeCli(input: {
     '--skip-git-repo-check',
     PROBE_PROMPT,
   ];
-  const proc = spawn(input.binPath ?? 'codex', args, {
+  const command = lowPriorityCommand(input.binPath ?? 'codex', args);
+  const proc = spawn(command.bin, command.args, {
     cwd: input.cwd,
     env,
     stdio: ['ignore', 'ignore', 'ignore'],

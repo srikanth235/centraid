@@ -10,6 +10,12 @@
  */
 
 export {
+  WorkerPool,
+  workerPoolSizeFromEnv,
+  workerResourceLimitsFromEnv,
+  type WorkerResourceLimits,
+} from './handlers/worker-pool.js';
+export {
   Runtime,
   type RuntimeOptions,
   type RuntimeLogger,
@@ -78,6 +84,15 @@ export {
   type RuntimeHttpServerHandle,
   type BearerAuthorization,
 } from './http/http-server.js';
+export {
+  tuneGatewayHttpServer,
+  GATEWAY_KEEP_ALIVE_TIMEOUT_MS,
+  GATEWAY_HEADERS_TIMEOUT_MS,
+  GATEWAY_REQUEST_TIMEOUT_MS,
+  GATEWAY_MAX_CONNECTIONS,
+} from './http/server-tuning.js';
+export { prewarmAppAssets } from './http/app-bundle.js';
+export { negotiateEncoding, type Encoding } from './http/compression.js';
 
 // Public handler types — apps written in TypeScript import these to type
 // their default exports.

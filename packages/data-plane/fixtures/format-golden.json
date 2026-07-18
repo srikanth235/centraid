@@ -1,0 +1,73 @@
+{
+  "schema": "centraid-cross-language-golden/1",
+  "cbsf": {
+    "keyHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "plainBase64": "Q0JTRiB2MiBjcm9zcy1sYW5ndWFnZSBnb2xkZW4gYnl0ZXMgc3BhbiBzZXZlcmFsIGZyYW1lcy4=",
+    "frameSize": 13,
+    "sealedBase64": "Q0JTRgLacNdoqVTrO+wkoZ7Sy7cu37ePH9H9HQeq+GC4TofQA6psmAdcGwxwhy3wcIJvqUlN5X69yNYeP5ngJ/4Y/NWii1C6WJ0W0XIxXY0J6l46MXT/i9oFNiCvs8zAbyAMjtlT7kKctktj2XZKa5iY/xS+H/8hgTA48lDr5GazADSM40kcDnumI6CFJB66k6OO3fYxhJvZHVbmBh/r/sjHk4t2G24kbWCqsJKS3HCw2slzaIWuf8rAYtGQrevm/NbLjjbcRLfSKW96V0YkdyAsalXusBsShl+jNWs8LZhO90w0Vj0rYmnZ0WGW7bMsES6GVCUMXRsxR/9gnzwerCZW6Yljq3XQEBUyXktJLIoIhShPdLQd4CMNqdyVbtgqIj01eSC7VOGce8Wg+AdDQlNGAgAAAEAAAAAF"
+  },
+  "wal": {
+    "masterKeyHex": "fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0efeeedecebeae9e8e7e6e5e4e3e2e1e0",
+    "dataKeyHex": "2e615f7d18575b5be35322522af8aa8d6e33a11758b531eb73e33f08e69f263d",
+    "vaultId": "00000000-0000-7000-8000-000000000456",
+    "address": {
+      "db": "vault",
+      "generation": "0123456789abcdef0123456789abcdef",
+      "group": 7,
+      "startOffset": 32,
+      "endOffset": 67,
+      "tickMs": 1721280000456
+    },
+    "plainBase64": "YXV0aGVudGljYXRlZCBXQUwgYnl0ZXMgZnJvbSBOb2RlISE=",
+    "sealedBase64": "WLxhZX3YYze/trpGlAWu2kCt5ibKu0wqWV/Qanbc1vEQLiIIRgHXwnhxDhnNMbm7xjTluXnnQbRgzXDmKPX0"
+  },
+  "snapshot": {
+    "masterKeyHex": "fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0efeeedecebeae9e8e7e6e5e4e3e2e1e0",
+    "vaultId": "00000000-0000-7000-8000-000000000456",
+    "publicEnvelope": {
+      "format": "centraid-snapshot/2",
+      "keyEpoch": 1,
+      "createdAt": "2026-07-18T00:00:00.000Z",
+      "generation": 3,
+      "prevManifestHash": null,
+      "chunkIndex": [
+        {
+          "id": "d37385d8b16fb7a1972293bed4ba14065ad3f88084940d5587c8780214ddf530",
+          "size": 12
+        }
+      ],
+      "appMeta": {
+        "source": "node-golden",
+        "version": "456"
+      }
+    },
+    "payload": {
+      "entries": [
+        {
+          "path": "vault.db",
+          "kind": "db",
+          "size": 12,
+          "mtimeMs": 1721280000000,
+          "chunks": ["d37385d8b16fb7a1972293bed4ba14065ad3f88084940d5587c8780214ddf530"],
+          "sha256": "d37385d8b16fb7a1972293bed4ba14065ad3f88084940d5587c8780214ddf530",
+          "walGeneration": "0123456789abcdef0123456789abcdef",
+          "baseTickMs": 1721280000456
+        }
+      ]
+    },
+    "entries": [
+      {
+        "path": "vault.db",
+        "kind": "db",
+        "size": 12,
+        "mtimeMs": 1721280000000,
+        "chunks": ["d37385d8b16fb7a1972293bed4ba14065ad3f88084940d5587c8780214ddf530"],
+        "sha256": "d37385d8b16fb7a1972293bed4ba14065ad3f88084940d5587c8780214ddf530",
+        "walGeneration": "0123456789abcdef0123456789abcdef",
+        "baseTickMs": 1721280000456
+      }
+    ],
+    "storedBase64": "eyJhcHBNZXRhIjp7InNvdXJjZSI6Im5vZGUtZ29sZGVuIiwidmVyc2lvbiI6IjQ1NiJ9LCJjaHVua0luZGV4IjpbeyJpZCI6ImQzNzM4NWQ4YjE2ZmI3YTE5NzIyOTNiZWQ0YmExNDA2NWFkM2Y4ODA4NDk0MGQ1NTg3Yzg3ODAyMTRkZGY1MzAiLCJzaXplIjoxMn1dLCJjcmVhdGVkQXQiOiIyMDI2LTA3LTE4VDAwOjAwOjAwLjAwMFoiLCJmb3JtYXQiOiJjZW50cmFpZC1zbmFwc2hvdC8yIiwiZ2VuZXJhdGlvbiI6Mywia2V5RXBvY2giOjEsInByZXZNYW5pZmVzdEhhc2giOm51bGwsInNlYWxlZFBheWxvYWQiOiJuTlYwY3F5bjVqNnZlVWF6bHVsakZpUFo0dnVMeVlBZys4UGtJQUNSbGg0YmQyNHU0dmcyUzRGeG5UQ0hwRGM1cVQ3cDVndDh2THFFaWNNNlo4d01HUUs2TklLOTRoMW5CYndzZDZmdG5LOTdaWFIrUWtuQysrRDM0Ympkb0Ntb3ZqQmxZUkEzUndaMmg4dXZ5UUY3OUJMczZQZjVRUEJTV2MrbFBtMkVYMHNKVG8xYkJ3bHVLeW9SYmlVa29EbDNGOXVYZmM5d0dGRExQcEVidFEzMWd0WjhxMVhHc2tkNThEV285SExDQVE0YkRET2JZRmdOU05KZEpvaFVFbnpMa3l2VmprZjFFcG1hOFNCMjBwcUlsZTlDcGYwdXlpSkFGM0xhZG5JOHRCTkY2WHlVYUJTaWtXRC8zSVBveUNiVmRIcXhEZmxJMXpVOVF0MzlLUXlmdkdaRDdDV3IrMCtpenZUMjFIbzVCcDIvYjRiZ1ZicnZJckN3OWJ2dzhVODJScjBQNGRuRkl5c2JoelpLaE1GSmt3YUM2dkY0ZmVqSHdKdWx0c1Q5c282SUdQd0VWZGtyaCszSFJSUjVNSXFsTW8xRCJ9",
+    "manifestHash": "d0c7183a7ef6c1922a2df88544845619ea8eb1c5ec267ca1068709e190cc8082"
+  }
+}

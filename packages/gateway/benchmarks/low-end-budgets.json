@@ -1,0 +1,10 @@
+{
+  "requestP99Ms": 250,
+  "rssPeakBytes": 536870912,
+  "eventLoopLagPeakP99Ms": 150,
+  "fsyncPerWrite": 6,
+  "fsWriteOpsPerWrite": 24,
+  "idleContextSwitchesPerHour": 500000,
+  "idleFsWriteOpsPerHour": 5000,
+  "idleDiskWriteBytesPerHour": 10485760
+}

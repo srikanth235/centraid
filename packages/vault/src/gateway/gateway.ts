@@ -103,6 +103,11 @@ import {
   settleDurableParkedPayload,
 } from '../replica/parked.js';
 import { transitionReplicaIntentOutcomeInTransaction } from '../replica/intents.js';
+import {
+  reclaimProvenOrdinaryInvocationCommitsInTransaction,
+  stampFinalizedInvocationCommitInTransaction,
+} from '../replica/invocation-commits.js';
+import { notifyReplicaCommit } from '../replica/doorbell.js';
 import type {
   ChangeEntry,
   ChangesRequest,
@@ -174,11 +179,83 @@ function provenanceScopeFailure(
   return null;
 }
 
+export type InvocationBatchResult<T> = { ok: true; value: T } | { ok: false; error: unknown };
+
 export class Gateway {
   /** Registered commands: handler + sealed-class declarations (issue #293). */
   private readonly commands = new Map<string, RegisteredCommand>();
+  private activeBatchInvocationIds: string[] | undefined;
 
   constructor(private readonly db: VaultDb) {}
+
+  /**
+   * Run one short arrival window inside a shared vault + journal commit pair.
+   * Each invocation keeps its own savepoints, contract checks and outcome;
+   * successful canonical markers are provisionally stamped in the vault
+   * transaction and re-verified before a later shared pair reclaims them.
+   */
+  invokeBatch<T>(runs: readonly (() => T)[]): T[] {
+    return this.invokeBatchSettled(runs).map((result) => {
+      if (!result.ok) throw result.error;
+      return result.value;
+    });
+  }
+
+  /**
+   * Batch variant used by the request queue. A post-canonical journal failure
+   * rejects only its own caller: its vault mutation and recovery marker still
+   * cross the shared vault commit boundary, while the journal savepoint is
+   * rolled back for deterministic replay on retry.
+   */
+  invokeBatchSettled<T>(runs: readonly (() => T)[]): InvocationBatchResult<T>[] {
+    if (runs.length === 0) return [];
+    if (
+      this.activeBatchInvocationIds ||
+      this.db.vault.isTransaction ||
+      this.db.journal.isTransaction
+    ) {
+      throw new Error('gateway invocation batch cannot nest');
+    }
+    const invocationIds: string[] = [];
+    this.activeBatchInvocationIds = invocationIds;
+    try {
+      this.db.vault.exec('BEGIN IMMEDIATE');
+      this.db.journal.exec('BEGIN IMMEDIATE');
+      reclaimProvenOrdinaryInvocationCommitsInTransaction(this.db);
+      const results = runs.map((run): InvocationBatchResult<T> => {
+        try {
+          return { ok: true, value: run() };
+        } catch (error) {
+          return { ok: false, error };
+        }
+      });
+      for (const invocationId of invocationIds) {
+        stampFinalizedInvocationCommitInTransaction(this.db.vault, invocationId);
+      }
+      this.db.vault.exec('COMMIT');
+      this.db.journal.exec('COMMIT');
+      // A rejected run may still have crossed the canonical boundary and left
+      // a pending marker. Publish only once journal proof is also durable.
+      notifyReplicaCommit(this.db.vault);
+      return results;
+    } catch (error) {
+      if (this.db.journal.isTransaction) this.db.journal.exec('ROLLBACK');
+      if (this.db.vault.isTransaction) this.db.vault.exec('ROLLBACK');
+      throw error;
+    } finally {
+      this.activeBatchInvocationIds = undefined;
+    }
+  }
+
+  private trackBatchInvocation(outcome: InvokeOutcome): InvokeOutcome {
+    if (
+      this.activeBatchInvocationIds &&
+      (outcome.status === 'executed' || outcome.status === 'replayed')
+    ) {
+      this.activeBatchInvocationIds.push(outcome.invocationId);
+    }
+    return outcome;
+  }
 
   /** Register a domain command: the agent.command contract row + handler. */
   registerCommand(def: CommandDefinition): void {
@@ -760,8 +837,12 @@ export class Gateway {
           consent.grantId,
         )
       : false;
-    const replayed = request.invocationId ? replayInvocation(this.db, request.invocationId) : null;
-    if (replayed) return replayed;
+    const replayed = request.invocationId
+      ? replayInvocation(this.db, request.invocationId, {
+          deferCommitSettlement: this.activeBatchInvocationIds !== undefined,
+        })
+      : null;
+    if (replayed) return this.trackBatchInvocation(replayed);
 
     // Confirmation routing (issue #306 decision 2, amending #294 decision 4):
     // an installed caller's declared commands execute under the install-time
@@ -830,14 +911,21 @@ export class Gateway {
         sealedInput,
       );
     }
-    return runContractAndExecute(
-      this.db,
-      this.commands,
-      identity,
-      request,
-      command,
-      consent,
-      invocationId,
+    return this.trackBatchInvocation(
+      runContractAndExecute(
+        this.db,
+        this.commands,
+        identity,
+        request,
+        command,
+        consent,
+        invocationId,
+        undefined,
+        {
+          deferCommitSettlement: this.activeBatchInvocationIds !== undefined,
+          deferReplicaNotify: this.activeBatchInvocationIds !== undefined,
+        },
+      ),
     );
   }
 

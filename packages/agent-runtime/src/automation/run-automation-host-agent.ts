@@ -25,6 +25,7 @@ import { spawn } from 'node:child_process';
 import type { RunnerKind } from '../types.js';
 import { codexProviderOverrideArgs } from '../backends/codex/provider-config.js';
 import { agentSpawnEnv } from '../spawn-env.js';
+import { lowPriorityCommand } from '../low-priority.js';
 
 export interface RunHostAgentInput {
   /** Which agent backend to drive. */
@@ -202,7 +203,8 @@ async function spawnCodexExec(input: RunHostAgentInput): Promise<RunHostAgentRes
     '--skip-git-repo-check',
     input.prompt,
   ];
-  const proc = spawn(input.binPath ?? 'codex', args, {
+  const command = lowPriorityCommand(input.binPath ?? 'codex', args);
+  const proc = spawn(command.bin, command.args, {
     cwd: input.cwd,
     env,
     stdio: ['ignore', 'pipe', 'pipe'],

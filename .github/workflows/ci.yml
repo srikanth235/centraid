@@ -32,4 +32,17 @@ jobs:
       # vitest with v8 coverage. `coverage` enforces the seeded engine floors
       # in vitest.config.ts; a test failure or a floor breach fails CI.
       - run: bun run build
+      # The normal @centraid/tunnel build above ships its target-specific napi
+      # module. Prove both pairing ALPNs plus streamed request/response bytes.
+      - run: bun run --cwd packages/tunnel test:native
+      # Rust format compatibility and the language-independent byte-plane
+      # lifecycle contract are non-negotiable rollout gates (N0a/N0b).
+      - run: bun run --cwd packages/data-plane test
+      # Issue #456's real-gateway budget gate. Linux strace supplies an exact
+      # fsync/write count; losing that signal is itself a benchmark failure.
+      - run: sudo apt-get update && sudo apt-get install --yes strace
+      - run: bun run --cwd packages/gateway perf:low-end
+        env:
+          CENTRAID_BENCH_REQUIRE_FSYNC: '1'
+          CENTRAID_HARDWARE_PROFILE: constrained
       - run: bun run coverage

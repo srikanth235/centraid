@@ -18,11 +18,7 @@ import { BlobCustody, type RemoteTier } from './blob/custody.js';
 import { BlobCache, readBlobCacheSettings } from './blob/cache.js';
 import { BlobContentKeyRegistry } from './blob/content-keys.js';
 import { FsBlobStore, MemoryBlobStore, type LocalBlobStore } from './blob/local.js';
-import {
-  contributeIngressPreviews,
-  type IngressPreviewInput,
-  type PreviewCodec,
-} from './blob/preview.js';
+import type { PreviewCodec } from './blob/preview.js';
 import { S3BlobStore, type S3BlobStoreOptions, type S3Credentials } from './blob/s3.js';
 import { S3TransferStore } from './blob/s3-transfer.js';
 import { desiredStoreForSha, storageClassForShaWrite } from './blob/store-routing.js';
@@ -176,9 +172,15 @@ export interface OpenVaultOptions {
    * with no codec: the backstop simply doesn't run.
    */
   previewCodec?: PreviewCodec;
+  /** Host-wide pressure gate for detached replication and other maintenance. */
+  shouldDeferBackgroundWork?: () => boolean;
+  /** Hardware-profile cap for concurrent remote blob pushes. */
+  replicationConcurrency?: number;
+  /** FULL by default; a measured low-end hardware profile may choose WAL-safe NORMAL. */
+  synchronous?: 'FULL' | 'NORMAL';
 }
 
-function openFile(location: string): DatabaseSync {
+function openFile(location: string, synchronous: 'FULL' | 'NORMAL' = 'FULL'): DatabaseSync {
   try {
     const db = new DatabaseSync(location);
     db.exec('PRAGMA foreign_keys = ON');
@@ -191,13 +193,21 @@ function openFile(location: string): DatabaseSync {
       // header is fixed and the pragma no longer takes at table-create time —
       // only a full VACUUM can then convert. So set it first (applies at DDL on
       // fresh files), then WAL.
+      db.exec('PRAGMA page_size = 8192');
       db.exec('PRAGMA auto_vacuum = INCREMENTAL');
       db.exec('PRAGMA journal_mode = WAL');
       // This is a personal-data vault with a low write rate — durability of
       // each commit matters more than write throughput, so fsync on every
       // transaction (WAL's default NORMAL can drop the last commit(s) on
       // power loss; FULL fsyncs the WAL on every commit).
-      db.exec('PRAGMA synchronous = FULL');
+      db.exec(`PRAGMA synchronous = ${synchronous}`);
+      // Read-path tuning for Pi-class hosts (issue #456 S1). The negative
+      // cache size is kibibytes, so this caps each connection at 16 MiB
+      // instead of SQLite's ~2 MiB default. mmap is virtual and demand-paged;
+      // 64 MiB keeps the address-space win without assuming desktop RAM.
+      db.exec('PRAGMA cache_size = -16000');
+      db.exec('PRAGMA mmap_size = 67108864');
+      db.exec('PRAGMA temp_store = MEMORY');
       // journal.db also carries the conversation-ledger band (the old
       // transcripts.db folded in), which worker subprocesses open by path —
       // wait for their locks instead of failing immediately.
@@ -265,13 +275,13 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   let journal: DatabaseSync;
   let local: LocalBlobStore;
   if (dir === undefined) {
-    vault = openFile(':memory:');
-    journal = openFile(':memory:');
+    vault = openFile(':memory:', options.synchronous);
+    journal = openFile(':memory:', options.synchronous);
     local = options.blobStore ?? new MemoryBlobStore();
   } else {
     mkdirSync(dir, { recursive: true });
-    vault = openFile(path.join(dir, 'vault.db'));
-    journal = openFile(path.join(dir, 'journal.db'));
+    vault = openFile(path.join(dir, 'vault.db'), options.synchronous);
+    journal = openFile(path.join(dir, 'journal.db'), options.synchronous);
     local = options.blobStore ?? new FsBlobStore(path.join(dir, 'blobs'));
   }
   // The FTS sync triggers (and the v2 backfill) decode canonical bodies via
@@ -391,6 +401,9 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   const blobCache = new BlobCache(vault, local, {
     settings: () => readBlobCacheSettings(vault),
     policy: () => readBackupPolicy(vault),
+    ...(options.replicationConcurrency !== undefined
+      ? { replicationConcurrency: options.replicationConcurrency }
+      : {}),
     ...(blobsDir
       ? {
           statfs: () => {
@@ -408,12 +421,6 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
         }
       : {}),
   });
-  let api: VaultDb | undefined;
-  const contributePreview = options.previewCodec
-    ? (input: IngressPreviewInput): void => {
-        if (api) contributeIngressPreviews(api, options.previewCodec!, input);
-      }
-    : undefined;
   const blobTransfers = new BlobTransferCoordinator({
     vault,
     dir: dir ?? ':memory:',
@@ -423,10 +430,12 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     remoteConfigured: () => readBlobStoreSettings(vault).kind === 's3',
     policy: () => readBackupPolicy(vault),
     contentKeys: blobContentKeys,
-    ...(contributePreview ? { contributePreview } : {}),
+    ...(options.shouldDeferBackgroundWork
+      ? { shouldDeferBackgroundWork: options.shouldDeferBackgroundWork }
+      : {}),
   });
 
-  api = {
+  const api: VaultDb = {
     vault,
     journal,
     dir: dir ?? ':memory:',

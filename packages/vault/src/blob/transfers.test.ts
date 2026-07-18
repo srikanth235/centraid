@@ -13,7 +13,7 @@ import { stageFallbackIngress } from './fallback-finalize.js';
 import { FsBlobStore } from './local.js';
 import { unsealBlob } from './seal.js';
 import type { BlobRange, BlobStat, BlobStore } from './store.js';
-import { BlobTransferCoordinator } from './transfers.js';
+import { BlobTransferCoordinator, INGRESS_FSYNC_BATCH_BYTES } from './transfers.js';
 
 const cleanups: (() => void | Promise<void>)[] = [];
 afterEach(async () => {
@@ -86,6 +86,25 @@ function ranged(bytes: Buffer, range?: BlobRange): Buffer {
   if (!range) return Buffer.from(bytes);
   return Buffer.from(bytes.subarray(range.start, (range.end ?? bytes.length - 1) + 1));
 }
+
+test('fallback ingress persists offsets once per 4 MiB durability batch (#456 I7)', async () => {
+  const h = fallbackRestartHarness('blob-fallback-fsync-batch-');
+  const run = await h.restart();
+  const begin = await run.coordinator.beginIngress({});
+  expect(begin.mode).toBe('spool');
+  if (begin.mode !== 'spool') throw new Error('expected spool ingress');
+
+  const first = Buffer.alloc(1024, 1);
+  await run.coordinator.appendIngress(begin.sessionId, 0, first);
+  expect(run.coordinator.state.session(begin.sessionId)?.received_bytes).toBe(0);
+
+  const remainder = Buffer.alloc(INGRESS_FSYNC_BATCH_BYTES - first.length, 2);
+  await run.coordinator.appendIngress(begin.sessionId, first.length, remainder);
+  expect(run.coordinator.state.session(begin.sessionId)).toMatchObject({
+    received_bytes: INGRESS_FSYNC_BATCH_BYTES,
+    hash_state_json: null,
+  });
+});
 
 test('strict acknowledgment returns a durable pending receipt while provider is down, then transitions', async () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'blob-strict-pending-'));

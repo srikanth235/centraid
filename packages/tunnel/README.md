@@ -10,6 +10,18 @@ loopback gateway with the bearer attached. The gateway keeps binding
 `127.0.0.1` and needs **zero HTTP changes**; the WebView needs **zero
 header tricks** (no asset-inliner, no fetch shim).
 
+The standalone gateway and Electron desktop production endpoints are
+implemented by the napi-rs module in `native/`: Rust owns both pairing modes
+and streams request/response bodies directly between iroh and loopback HTTP.
+JavaScript sees only small authorization, dynamic-upstream, and pairing JSON
+through a per-boot authenticated loopback control route. The normal package
+build creates the target-specific addon; exercise it with:
+
+```sh
+bun run --cwd packages/tunnel build
+bun run --cwd packages/tunnel test:native
+```
+
 ```
 [WKWebView] → http://127.0.0.1:<port> → iroh QUIC (E2E encrypted) → [desktop] → http://127.0.0.1:<gateway>
 ```
@@ -36,8 +48,8 @@ lockstep with it.
   UTF-8 JSON. Max 256 KiB.
 - **HTTP**: one QUIC bi-stream per request.
   - Request: header frame `{method, target, headers}` (target = path+query),
-    then raw body bytes, then FIN. Bodies are read to end before forwarding
-    (bounded at 32 MiB in v0).
+then raw body bytes, then FIN. Production request bodies stream through Rust
+with bounded backpressure and a 32 MiB aggregate limit.
   - Response: header frame `{status, headers}`, then raw body bytes
     **streamed** until FIN — SSE events arrive live.
   - Hop-by-hop headers (RFC 9110 §7.6.1) are stripped on both sides; the

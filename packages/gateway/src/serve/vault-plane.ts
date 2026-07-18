@@ -111,6 +111,7 @@ import {
   runJournalArchival,
   blobCustodyProven,
   WalShipper,
+  jitterDelayMs,
   type WalShipperOptions,
 } from '@centraid/vault';
 import { existsSync, statSync } from 'node:fs';
@@ -126,10 +127,7 @@ import {
   type VaultWorkspace,
 } from '@centraid/app-engine';
 import {
-  anchorAsOwner,
-  linkAsOwner,
   pickEntities,
-  unlinkAsOwner,
   type AnchorSelector,
   type LinkInput,
   type PickerHit,
@@ -138,6 +136,7 @@ import {
 import { applyRestoreQuarantine, type QuarantineStatus } from './vault-quarantine.js';
 import { replicaIntentContext } from './replica-intent-context.js';
 import { vaultContext } from './vault-context.js';
+import { GroupCommitQueue } from './group-commit-queue.js';
 
 /** Blob-sweep failure backoff (issue #367 §C5) — one step per consecutive failure, flat-capped. */
 const BLOB_SWEEP_BACKOFF_STEP_MS = 60_000;
@@ -237,6 +236,12 @@ export interface VaultPlaneOptions {
    * Omitted for hosts/tests without one: the backstop simply doesn't run.
    */
   previewCodec?: PreviewCodec;
+  /** SQLite durability selected by the gateway hardware profile. */
+  synchronous?: 'FULL' | 'NORMAL';
+  /** Global event-loop pressure gate for detached maintenance. */
+  shouldDeferBackgroundWork?: () => boolean;
+  /** Concurrent remote pushes selected by the gateway hardware profile. */
+  replicationConcurrency?: number;
 }
 
 /** A grant request the owner approves — scopes as the manifest declares them. */
@@ -365,6 +370,7 @@ export class VaultPlane {
   readonly dir: string;
   /** Per-vault disposable cache dir (runner scratch), outside the vault tree. */
   readonly cacheDir: string;
+  private readonly groupCommitQueue: GroupCommitQueue;
   /**
    * Set when this vault's directory carried a `RESTORE_QUARANTINE.json`
    * marker at mount (FORMAT.md restore rule 4) — `null` otherwise. See
@@ -386,6 +392,7 @@ export class VaultPlane {
   private readonly leaseConflicted: () => boolean;
   /** Whether this process is allowed to capture or checkpoint these WALs. */
   private readonly ownsWalLifecycle: boolean;
+  private readonly shouldDeferBackgroundWork: () => boolean;
   private sweepTimer: NodeJS.Timeout | undefined;
   private walTimer: NodeJS.Timeout | undefined;
   private firstWalTick: NodeJS.Immediate | undefined;
@@ -431,6 +438,7 @@ export class VaultPlane {
     this.logger = options.logger;
     this.sweepIntervalMs = options.sweepIntervalMs ?? 60 * 60 * 1000;
     this.leaseConflicted = options.leaseConflicted ?? (() => false);
+    this.shouldDeferBackgroundWork = options.shouldDeferBackgroundWork ?? (() => false);
     this.dir = options.dir;
     // Runner scratch lives in a disposable cache OUTSIDE the vault tree; fall
     // back to the vault dir only for callers that don't supply one (tests).
@@ -449,6 +457,11 @@ export class VaultPlane {
       // Preview backstop codec (issue #405 §2) — forwarded only when the host
       // wired one; a codec-less open just never runs the backstop.
       ...(options.previewCodec ? { previewCodec: options.previewCodec } : {}),
+      shouldDeferBackgroundWork: this.shouldDeferBackgroundWork,
+      ...(options.replicationConcurrency !== undefined
+        ? { replicationConcurrency: options.replicationConcurrency }
+        : {}),
+      ...(options.synchronous ? { synchronous: options.synchronous } : {}),
     });
     this.boot = ensureVaultBootstrapped(this.db, {
       ownerName: options.ownerName ?? 'Owner',
@@ -457,6 +470,9 @@ export class VaultPlane {
     });
     this.displayName = this.boot.displayName;
     this.gateway = createGateway(this.db);
+    this.groupCommitQueue = new GroupCommitQueue(options.synchronous === 'NORMAL' ? 8 : 5, (runs) =>
+      this.gateway.invokeBatchSettled(runs),
+    );
     registerScheduleCommands(this.gateway);
     registerTaskCommands(this.gateway);
     registerSocialCommands(this.gateway);
@@ -698,17 +714,33 @@ export class VaultPlane {
     }
     // Standing outbox grants die with the actor (issue #306): an
     // uninstalled app's "always allow" rules must not outlive it.
+    const outboxRevocations: string[] = [];
     for (const actorId of [app?.appId, agent?.agentId]) {
       if (!actorId) continue;
       const rules = this.db.vault
         .prepare('SELECT grant_id FROM outbox_grant WHERE actor_id = ? AND revoked_at IS NULL')
         .all(actorId) as { grant_id: string }[];
       for (const rule of rules) {
-        this.revokeOutboxGrant(rule.grant_id);
-        this.logger.info(
-          `vault plane: revoked standing outbox grant ${rule.grant_id} for "${appId}"`,
-        );
+        outboxRevocations.push(rule.grant_id);
       }
+    }
+    // App teardown is synchronous, so explicitly batch its ordinary commands
+    // through the same shared transaction pair instead of bypassing S4.
+    const revokeResults = this.gateway.invokeBatchSettled(
+      outboxRevocations.map(
+        (grantId) => () =>
+          this.gateway.invoke(this.ownerCredential, {
+            command: 'outbox.revoke_grant',
+            input: { grant_id: grantId },
+          }),
+      ),
+    );
+    for (const [index, result] of revokeResults.entries()) {
+      if (!result.ok) throw result.error;
+      const revokedGrantId = outboxRevocations[index]!;
+      this.logger.info(
+        `vault plane: revoked standing outbox grant ${revokedGrantId} for "${appId}"`,
+      );
     }
     // Uninstall wipes the consent memory (issue #308 A3/A4): the cascade's
     // own revocations just tombstoned every scope, but uninstall is "no to
@@ -948,12 +980,27 @@ export class VaultPlane {
    * so the shell invokes the link commands with the owner-device credential;
    * the app never needs read scopes on the far domain.
    */
-  linkAsOwner(input: LinkInput): InvokeOutcome {
-    return linkAsOwner(this.gateway, this.ownerCredential, input);
+  linkAsOwner(input: LinkInput): Promise<InvokeOutcome> {
+    return this.invoke(this.ownerCredential, {
+      command: 'core.link_entities',
+      input: {
+        from_type: input.from_type,
+        from_id: input.from_id,
+        to_type: input.to_type,
+        to_id: input.to_id,
+        relation: input.relation ?? 'references',
+        ...(input.selector ? { selector: input.selector } : {}),
+      },
+      purpose: 'dpv:ServiceProvision',
+    });
   }
 
-  unlinkAsOwner(linkId: string): InvokeOutcome {
-    return unlinkAsOwner(this.gateway, this.ownerCredential, linkId);
+  unlinkAsOwner(linkId: string): Promise<InvokeOutcome> {
+    return this.invoke(this.ownerCredential, {
+      command: 'core.unlink_entities',
+      input: { link_id: linkId },
+      purpose: 'dpv:ServiceProvision',
+    });
   }
 
   /**
@@ -961,8 +1008,12 @@ export class VaultPlane {
    * re-anchor / re-baseline half of inline references. A locator write, not
    * a new judgment.
    */
-  anchorAsOwner(linkId: string, selector: AnchorSelector | null): InvokeOutcome {
-    return anchorAsOwner(this.gateway, this.ownerCredential, linkId, selector);
+  anchorAsOwner(linkId: string, selector: AnchorSelector | null): Promise<InvokeOutcome> {
+    return this.invoke(this.ownerCredential, {
+      command: 'core.anchor_link',
+      input: { link_id: linkId, ...(selector ? { selector } : {}) },
+      purpose: 'dpv:ServiceProvision',
+    });
   }
 
   confirmParked(invocationId: string, approve: boolean): InvokeOutcome {
@@ -1060,8 +1111,8 @@ export class VaultPlane {
     request?: Record<string, unknown>;
     alwaysAllow?: boolean;
     note?: string;
-  }): InvokeOutcome {
-    return this.gateway.invoke(this.ownerCredential, {
+  }): Promise<InvokeOutcome> {
+    return this.invoke(this.ownerCredential, {
       command: 'outbox.decide',
       input: {
         item_id: input.itemId,
@@ -1108,8 +1159,8 @@ export class VaultPlane {
     }));
   }
 
-  revokeOutboxGrant(grantId: string): InvokeOutcome {
-    return this.gateway.invoke(this.ownerCredential, {
+  revokeOutboxGrant(grantId: string): Promise<InvokeOutcome> {
+    return this.invoke(this.ownerCredential, {
       command: 'outbox.revoke_grant',
       input: { grant_id: grantId },
     });
@@ -1326,7 +1377,7 @@ export class VaultPlane {
    * its schemas (issue #308 A4), and the self-heal below skips tombstoned
    * schemas until the owner explicitly re-approves them.
    */
-  invokeAsAssistant(request: InvokeRequest): InvokeOutcome {
+  async invokeAsAssistant(request: InvokeRequest): Promise<InvokeOutcome> {
     const agent = ensureAgentEnrolled(this.db, '_assistant', {
       modelRef: 'centraid-assistant',
       displayName: 'Assistant',
@@ -1373,7 +1424,7 @@ export class VaultPlane {
       deviceId: this.boot.deviceId,
       deviceKey: this.boot.deviceKey,
     };
-    return this.gateway.invoke(cred, request);
+    return this.invoke(cred, request);
   }
 
   /**
@@ -1461,6 +1512,15 @@ export class VaultPlane {
     return out;
   }
 
+  /** Queue every ordinary command write behind the shared durability window. */
+  invoke(cred: Credential, request: InvokeRequest): Promise<InvokeOutcome> {
+    return this.groupCommitQueue.enqueue(() => this.gateway.invoke(cred, request));
+  }
+
+  private invokeQueued(cred: Credential, request: InvokeRequest): Promise<VaultCallResult> {
+    return asVaultCallResultAsync(() => this.invoke(cred, request));
+  }
+
   /**
    * The scenario-seed `ctx.vault` executor (issue #290 phase 1): a seed
    * generator is the OWNER loading demo data, so calls ride the owner-device
@@ -1470,8 +1530,14 @@ export class VaultPlane {
    * it already minted; nothing else is exposed.
    */
   demoBridgeFor(appId: string): VaultBridge {
-    return async (call): Promise<VaultCallResult> =>
-      asVaultCallResult(() => {
+    return async (call): Promise<VaultCallResult> => {
+      if (call.op === 'invoke') {
+        return this.invokeQueued(this.ownerCredential, {
+          ...(call.payload as unknown as InvokeRequest),
+          demo: { appId },
+        });
+      }
+      return asVaultCallResult(() => {
         switch (call.op) {
           case 'read':
             return this.gateway.read(this.ownerCredential, call.payload as unknown as ReadRequest);
@@ -1481,10 +1547,7 @@ export class VaultPlane {
               call.payload as unknown as SearchRequest,
             );
           case 'invoke':
-            return this.gateway.invoke(this.ownerCredential, {
-              ...(call.payload as unknown as InvokeRequest),
-              demo: { appId },
-            });
+            throw new Error('invoke is handled by the group-commit queue');
           case 'describe':
             return this.gateway.discover(this.ownerCredential);
           case 'query':
@@ -1504,6 +1567,7 @@ export class VaultPlane {
             throw new Error(`unsupported vault op ${call.op}`);
         }
       });
+    };
   }
 
   /** Purge demo data — whole vault or one app's scenario (issue #290). */
@@ -1542,6 +1606,16 @@ export class VaultPlane {
           this.gateway.contentForAgent(cred, call.payload as unknown as AgentContentRequest),
         );
       }
+      if (call.op === 'invoke') {
+        return this.invokeQueued(cred, {
+          ...(call.payload as unknown as InvokeRequest),
+          ...(replicaIntent?.appId === appId
+            ? { intentId: replicaIntent.intentId, intentDeviceId: replicaIntent.deviceId }
+            : requestDeviceId
+              ? { intentDeviceId: requestDeviceId }
+              : {}),
+        });
+      }
       return asVaultCallResult(() => {
         switch (call.op) {
           case 'read':
@@ -1549,14 +1623,7 @@ export class VaultPlane {
           case 'search':
             return this.gateway.search(cred, call.payload as unknown as SearchRequest);
           case 'invoke':
-            return this.gateway.invoke(cred, {
-              ...(call.payload as unknown as InvokeRequest),
-              ...(replicaIntent?.appId === appId
-                ? { intentId: replicaIntent.intentId, intentDeviceId: replicaIntent.deviceId }
-                : requestDeviceId
-                  ? { intentDeviceId: requestDeviceId }
-                  : {}),
-            });
+            throw new Error('invoke is handled by the group-commit queue');
           case 'query':
             return this.gateway.queryView(
               cred,
@@ -1630,6 +1697,9 @@ export class VaultPlane {
           this.gateway.contentForAgent(cred, call.payload as unknown as AgentContentRequest),
         );
       }
+      if (call.op === 'invoke') {
+        return this.invokeQueued(cred, call.payload as unknown as InvokeRequest);
+      }
       return asVaultCallResult(() => {
         switch (call.op) {
           case 'read':
@@ -1637,7 +1707,7 @@ export class VaultPlane {
           case 'search':
             return this.gateway.search(cred, call.payload as unknown as SearchRequest);
           case 'invoke':
-            return this.gateway.invoke(cred, call.payload as unknown as InvokeRequest);
+            throw new Error('invoke is handled by the group-commit queue');
           case 'describe':
             return this.gateway.discover(cred);
           case 'parked':
@@ -1736,8 +1806,18 @@ export class VaultPlane {
       this.walTimer = undefined;
       this.walTick();
       this.scheduleWalCapture();
-    }, this.walCaptureDelayMs());
+    }, jitterDelayMs(this.walCaptureDelayMs()));
     this.walTimer.unref();
+  }
+
+  private scheduleSweep(): void {
+    if (this.closed) return;
+    this.sweepTimer = setTimeout(() => {
+      this.sweepTimer = undefined;
+      this.runSweep();
+      this.scheduleSweep();
+    }, jitterDelayMs(this.sweepIntervalMs));
+    this.sweepTimer.unref();
   }
 
   /** Re-read policy after an owner update without restarting the gateway. */
@@ -1751,8 +1831,7 @@ export class VaultPlane {
    *  WAL capture (issue #408/#414) now, then at the current policy RPO. */
   start(): void {
     this.runSweep();
-    this.sweepTimer = setInterval(() => this.runSweep(), this.sweepIntervalMs);
-    this.sweepTimer.unref();
+    this.scheduleSweep();
     if (!this.ownsWalLifecycle) return;
     // Issue #411 action 3: defer the first capture off the mount critical
     // path. On a fresh vault the first tick mints the generation base — a
@@ -1775,6 +1854,7 @@ export class VaultPlane {
   }
 
   private runSweep(): void {
+    if (this.shouldDeferBackgroundWork()) return;
     try {
       const result = this.sweep();
       const touched =
@@ -2006,7 +2086,8 @@ export class VaultPlane {
   stop(): void {
     if (this.closed) return;
     this.closed = true;
-    if (this.sweepTimer) clearInterval(this.sweepTimer);
+    this.groupCommitQueue.flush();
+    if (this.sweepTimer) clearTimeout(this.sweepTimer);
     if (this.walTimer) clearTimeout(this.walTimer);
     if (this.firstWalTick) clearImmediate(this.firstWalTick);
     if (this.walShipper) {
