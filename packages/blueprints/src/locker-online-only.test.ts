@@ -14,7 +14,7 @@ const SCRATCH = path.resolve(PKG, '.locker-online-only');
 beforeAll(() => {
   rmSync(SCRATCH, { recursive: true, force: true });
   mkdirSync(SCRATCH, { recursive: true });
-  for (const file of ['logic.js', 'format.js', 'totp.js']) {
+  for (const file of ['logic.ts', 'format.ts', 'totp.ts', 'types.ts']) {
     cpSync(path.resolve(PKG, 'apps/locker', file), path.resolve(SCRATCH, file));
   }
   for (const file of ['kit.js', 'elements.js', 'react-core.min.js']) {
@@ -26,7 +26,7 @@ afterAll(() => rmSync(SCRATCH, { recursive: true, force: true }));
 
 describe('Locker sealed writes', () => {
   it('marks add and edit payloads online-only while leaving non-secret actions queueable', async () => {
-    const { createLogic } = await import(pathToFileURL(path.resolve(SCRATCH, 'logic.js')).href);
+    const { createLogic } = await import(pathToFileURL(path.resolve(SCRATCH, 'logic.ts')).href);
     const write = vi.fn(async () => ({ status: 'failed', error: 'expected test stop' }));
     window.centraid = { write };
     const logic = createLogic({

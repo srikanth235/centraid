@@ -52,6 +52,6 @@ while IFS=: read -r file line_no match; do
     # Surface the offending SDK name in the message for easy triage.
     sdk_name=$(printf '%s' "$match" | sed -E "s/.*[\"'](.*)[\"'].*/\\1/")
     violation "$file:$line_no — handler imports provider SDK '$sdk_name' (use ctx.infer.* / gateway-supplied primitives)"
-done < <(git grep -nE "$PATTERN" -- '**/queries/*.js' '**/actions/*.js' 2>/dev/null || true)
+done < <(git grep -nE "$PATTERN" -- '**/queries/*.js' '**/queries/*.ts' '**/actions/*.js' '**/actions/*.ts' 2>/dev/null || true)
 
 directive_end

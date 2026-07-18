@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { describe, expect, test, vi } from 'vitest';
 
 const docsPdfModuleUrl = pathToFileURL(
-  path.resolve(import.meta.dirname, '../apps/docs/pdf-text.js'),
+  path.resolve(import.meta.dirname, '../apps/docs/pdf-text.ts'),
 ).href;
 const { extractPdfTextWithPdfJs, loadPdfJs } = await import(docsPdfModuleUrl);
 

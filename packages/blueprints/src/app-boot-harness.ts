@@ -84,16 +84,90 @@ const SHARED = [
 // directory, and `jsx-runtime.js` only ever lives at the app root, so a
 // nested file needs a specifier that climbs back up (`../jsx-runtime.js`,
 // `../../jsx-runtime.js`, …) rather than a bare `./jsx-runtime.js`.
-function transformJsxLikeTheGateway(source: string, depth: number): string {
-  const bin = path.resolve(PKG, '../..', 'node_modules/.bin/esbuild');
-  const code = execFileSync(bin, ['--loader=jsx', '--jsx=automatic', '--jsx-import-source=.'], {
-    input: source,
-    encoding: 'utf8',
-  });
+const ESBUILD_BIN = path.resolve(PKG, '../..', 'node_modules/.bin/esbuild');
+
+// Loader by extension, mirroring loaderForExt() in app-engine's
+// static-server.ts: `.jsx`→jsx, `.tsx`→tsx, `.ts`→ts. TS-authored apps ship
+// `app.tsx`/`.ts` siblings the gateway strips/compiles at serve time; the
+// automatic-runtime JSX config and the depth-aware `./jsx-runtime` rewrite
+// apply to `.tsx` and are inert for `.ts`.
+function loaderForExt(rel: string): 'jsx' | 'tsx' | 'ts' {
+  if (rel.endsWith('.tsx')) return 'tsx';
+  if (rel.endsWith('.ts')) return 'ts';
+  return 'jsx';
+}
+
+function transformJsxLikeTheGateway(source: string, depth: number, rel = 'app.jsx'): string {
+  const code = execFileSync(
+    ESBUILD_BIN,
+    [`--loader=${loaderForExt(rel)}`, '--jsx=automatic', '--jsx-import-source=.'],
+    { input: source, encoding: 'utf8' },
+  );
   const prefix = depth === 0 ? './' : '../'.repeat(depth);
-  return code.replace(
-    /(["'])\.\/jsx-runtime\1/g,
-    (_m, q: string) => `${q}${prefix}jsx-runtime.js${q}`,
+  return (
+    code
+      .replace(/(["'])\.\/jsx-runtime\1/g, (_m, q: string) => `${q}${prefix}jsx-runtime.js${q}`)
+      // The gateway serves a `*.module.css` request as JS at that same URL. Vite/
+      // Vitest, however, owns the `.module.css` extension and would run its own
+      // CSS-modules transform over the harness's compiled JS (see
+      // compileModuleCssLikeTheGateway) — garbage-parsing it and handing the app
+      // a bogus class map with none of the `<style data-centraid-css-module>`
+      // injection. So the harness serves that JS from a sibling
+      // `*.module.css.js` file (written in beforeAll) and rewrites every relative
+      // `*.module.css` import specifier to match — the `.js` tail is what keeps
+      // Vite from hijacking it. Behaviour is identical to the gateway; only the
+      // scratch filename differs (a harness accommodation, like the jsx-runtime
+      // rewrite above).
+      .replace(
+        /(["'])((?:\.\.?\/)[^"']*\.module\.css)\1/g,
+        (_m, q: string, spec: string) => `${q}${spec}.js${q}`,
+      )
+  );
+}
+
+// Compile a `*.module.css` to the same style-injecting, class-map-exporting JS
+// module the gateway serves (app-engine's css-module.ts). Mirrored minimally
+// via the esbuild CLI — esbuild's JS API refuses to load under jsdom (see the
+// note above transformJsxLikeTheGateway), but the CLI is a subprocess and is
+// unaffected. The CLI emits the JS class-map module and the compiled CSS as
+// two files into a temp outdir; we compose the served body from both.
+function compileModuleCssLikeTheGateway(absFile: string, appRoot: string, scratch: string): string {
+  const work = path.join(scratch, `.cssmod-${path.basename(absFile)}-${Date.now()}`);
+  mkdirSync(work, { recursive: true });
+  const entry = path.join(work, 'entry.js');
+  writeFileSync(entry, `import m from ${JSON.stringify(absFile)};\nexport default m;\n`);
+  execFileSync(
+    ESBUILD_BIN,
+    [
+      entry,
+      '--bundle',
+      '--format=esm',
+      '--platform=browser',
+      '--loader:.module.css=local-css',
+      `--outdir=${path.join(work, 'out')}`,
+    ],
+    { encoding: 'utf8', cwd: appRoot },
+  );
+  const outDir = path.join(work, 'out');
+  let js = '';
+  let css = '';
+  for (const name of readdirSync(outDir)) {
+    const body = readFileSync(path.join(outDir, name), 'utf8');
+    if (name.endsWith('.css')) css = body;
+    else js = body;
+  }
+  const key = path.relative(appRoot, absFile).split(path.sep).join('/');
+  return (
+    `(() => {\n` +
+    `  if (typeof document === 'undefined') return;\n` +
+    `  const k = ${JSON.stringify(key)};\n` +
+    `  if (document.querySelector('style[data-centraid-css-module=' + JSON.stringify(k) + ']')) return;\n` +
+    `  const el = document.createElement('style');\n` +
+    `  el.setAttribute('data-centraid-css-module', k);\n` +
+    `  el.textContent = ${JSON.stringify(css)};\n` +
+    `  document.head.appendChild(el);\n` +
+    `})();\n` +
+    js
   );
 }
 
@@ -161,14 +235,22 @@ function replicaFixture(app: string): unknown {
 // imported by the page — don't copy them into the boot scratch tree.
 const NON_UI_DIRS = new Set(['queries', 'actions', 'automations']);
 
-/** All browser-source files (.js/.jsx) of an app, as relative posix paths. */
+/** All browser-source files of an app, as relative posix paths: `.js`/`.jsx`
+ * and their TS counterparts `.ts`/`.tsx`, plus `*.module.css` (a CSS module is
+ * imported by the page as JS — see compileModuleCssLikeTheGateway). */
 function collectSources(root: string, rel = ''): string[] {
   const out: string[] = [];
   for (const e of readdirSync(path.join(root, rel), { withFileTypes: true })) {
     const r = rel ? `${rel}/${e.name}` : e.name;
     if (e.isDirectory()) {
       if (!NON_UI_DIRS.has(e.name)) out.push(...collectSources(root, r));
-    } else if (r.endsWith('.js') || r.endsWith('.jsx')) {
+    } else if (
+      r.endsWith('.js') ||
+      r.endsWith('.jsx') ||
+      r.endsWith('.ts') ||
+      r.endsWith('.tsx') ||
+      r.endsWith('.module.css')
+    ) {
       out.push(r);
     }
   }
@@ -213,16 +295,29 @@ export function describeAppBoot(app: string, options: { expectLive?: boolean } =
       // copying plain .js helpers verbatim. Filenames keep their .jsx
       // extension — that's what the browser requests and what inter-file
       // imports name; vite loads the (already-transformed) content fine.
-      if (existsSync(path.join(appDir, 'app.jsx'))) {
-        entry = 'app.jsx';
+      // Entry preference mirrors the gateway: a TS-authored app ships
+      // `app.tsx`, a React-dialect one `app.jsx`, a vanilla one `app.js`.
+      const tsxEntry = existsSync(path.join(appDir, 'app.tsx'));
+      const jsxEntry = existsSync(path.join(appDir, 'app.jsx'));
+      if (tsxEntry || jsxEntry) {
+        entry = tsxEntry ? 'app.tsx' : 'app.jsx';
         for (const rel of collectSources(appDir)) {
           const out = path.join(dir, rel);
           mkdirSync(path.dirname(out), { recursive: true });
-          if (rel.endsWith('.jsx')) {
+          if (rel.endsWith('.jsx') || rel.endsWith('.tsx') || rel.endsWith('.ts')) {
             const depth = rel.split('/').length - 1;
             writeFileSync(
               out,
-              transformJsxLikeTheGateway(readFileSync(path.join(appDir, rel), 'utf8'), depth),
+              transformJsxLikeTheGateway(readFileSync(path.join(appDir, rel), 'utf8'), depth, rel),
+            );
+          } else if (rel.endsWith('.module.css')) {
+            // Written to a `.js` sibling (imports were rewritten to match) so
+            // Vite serves the harness's gateway-faithful compile as JS instead
+            // of running its own CSS-modules transform over it. See
+            // transformJsxLikeTheGateway.
+            writeFileSync(
+              `${out}.js`,
+              compileModuleCssLikeTheGateway(path.join(appDir, rel), appDir, dir),
             );
           } else {
             cpSync(path.join(appDir, rel), out);

@@ -40,6 +40,6 @@ while IFS=: read -r file line_no match; do
     else
         violation "$file:$line_no — query handler calls stmt.run() (writes are invisible to /_changes; move to actions/)"
     fi
-done < <(git grep -nE "$PATTERN" -- '**/queries/*.js' 2>/dev/null || true)
+done < <(git grep -nE "$PATTERN" -- '**/queries/*.js' '**/queries/*.ts' 2>/dev/null || true)
 
 directive_end

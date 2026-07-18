@@ -43,7 +43,7 @@ describe('notes library query (issue #404)', () => {
   const content = { content_id: 'c1', content_uri: dataUri(body) };
 
   it('ships a bounded preview + checklist tally, never the full body', async () => {
-    const { default: library } = await importQuery('../apps/notes/queries/library.js');
+    const { default: library } = await importQuery('../apps/notes/queries/library.ts');
     const ctx = ctxOf({ 'knowledge.note': [note], 'core.content_item': [content] });
     const res = await library({ input: { limit: 50 }, query: {}, ctx });
     expect(res.notes).toHaveLength(1);
@@ -61,7 +61,7 @@ describe('notes library query (issue #404)', () => {
   });
 
   it('note query decodes and returns the full canonical body on open', async () => {
-    const { default: noteQuery } = await importQuery('../apps/notes/queries/note.js');
+    const { default: noteQuery } = await importQuery('../apps/notes/queries/note.ts');
     const ctx = ctxOf({ 'knowledge.note': [note], 'core.content_item': [content] });
     const res = await noteQuery({ input: { note_id: 'n1' }, query: { note_id: 'n1' }, ctx });
     expect(res.note_id).toBe('n1');
@@ -83,7 +83,7 @@ describe('agenda upcoming query — range-bounded recurrence (issue #404)', () =
   };
 
   async function run(range: { from: string; to?: string }) {
-    const { default: upcoming } = await importQuery('../apps/agenda/queries/upcoming.js');
+    const { default: upcoming } = await importQuery('../apps/agenda/queries/upcoming.ts');
     const ctx = ctxOf({ 'core.event': [ev] });
     return upcoming({ query: range, input: range, ctx });
   }
@@ -119,7 +119,7 @@ describe('agenda upcoming query — range-bounded recurrence (issue #404)', () =
 
 describe('replica-local search projections (issue #406)', () => {
   it('renders an Agenda search hit using only airplane-safe vault reads', async () => {
-    const { default: search } = await importQuery('../apps/agenda/queries/search.js');
+    const { default: search } = await importQuery('../apps/agenda/queries/search.ts');
     const event = {
       event_id: 'event-offline',
       summary: 'Quarterly budget review',

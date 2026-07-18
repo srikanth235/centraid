@@ -33,6 +33,6 @@ while IFS=: read -r file line_no match; do
     [[ -z "$file" ]] && continue
     has_waiver "$file" "$line_no" "data-runtime-sqlite-separation" && continue
     violation "$file:$line_no - handler references runtime.sqlite (handlers only see data.sqlite via ctx.db; runtime.sqlite is gateway-owned)"
-done < <(git grep -nE "$PATTERN" -- '**/queries/*.js' '**/actions/*.js' 2>/dev/null || true)
+done < <(git grep -nE "$PATTERN" -- '**/queries/*.js' '**/queries/*.ts' '**/actions/*.js' '**/actions/*.ts' 2>/dev/null || true)
 
 directive_end

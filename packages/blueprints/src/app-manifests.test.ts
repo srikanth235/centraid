@@ -43,14 +43,21 @@ describe('bundled blueprint manifests', () => {
   it.each(apps.map((id) => [id] as const))(
     'apps/%s declares only handlers that exist on disk',
     (id) => {
+      // Handlers may be authored as `.ts` (post TS conversion) or `.js` — the
+      // dispatcher probes `.ts` first, then `.js`. Accept whichever is present.
+      const handlerExists = (kind: 'actions' | 'queries', name: string): boolean =>
+        existsSync(path.join(PACKAGE_ROOT, 'apps', id, kind, `${name}.ts`)) ||
+        existsSync(path.join(PACKAGE_ROOT, 'apps', id, kind, `${name}.js`));
       const manifest = readManifest('apps', id);
       for (const action of manifest.actions) {
-        const file = path.join(PACKAGE_ROOT, 'apps', id, 'actions', `${action.name}.js`);
-        expect(existsSync(file), `missing actions/${action.name}.js in ${id}`).toBe(true);
+        expect(handlerExists('actions', action.name), `missing actions/${action.name}.(ts|js) in ${id}`).toBe(
+          true,
+        );
       }
       for (const query of manifest.queries) {
-        const file = path.join(PACKAGE_ROOT, 'apps', id, 'queries', `${query.name}.js`);
-        expect(existsSync(file), `missing queries/${query.name}.js in ${id}`).toBe(true);
+        expect(handlerExists('queries', query.name), `missing queries/${query.name}.(ts|js) in ${id}`).toBe(
+          true,
+        );
       }
     },
   );
