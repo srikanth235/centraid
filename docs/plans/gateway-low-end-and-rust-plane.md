@@ -12,10 +12,16 @@ that decides identity, consent, app policy, scheduling, and replication state.
 The benchmark in `packages/gateway/scripts/bench-low-end.mjs` boots a real
 authenticated gateway and submits 120 concurrent, journalled Atlas writes
 split across party/place shapes with 30 interleaved authenticated status
-reads. The checked-in budgets are request p99 <= 250 ms, peak RSS <= 512 MiB, event-loop
-peak p99 <= 150 ms, <= 6 fsyncs and <= 24 filesystem write operations per
-write, <= 500,000 idle context switches/hour, <= 5,000 idle filesystem write
-operations/hour, and <= 10 MiB idle disk writes/hour.
+reads. The checked-in budgets are request p99 <= 250 ms, peak RSS <= 512 MiB,
+event-loop peak p99 <= 150 ms, <= 6 fsyncs and <= 128 KiB physical disk writes
+per write, <= 500,000 idle context switches/hour, and <= 10 MiB idle physical
+writes/hour. Platforms without a physical-byte counter fall back to <= 5,000
+raw OS filesystem-output units/hour.
+
+The primary idle observation lasts 65 seconds, covering the 30-second and
+60-second recurring service cadences instead of extrapolating a two-second
+scheduler sample. The separate fsync-only trace ends its measured epoch before
+idle and therefore uses a one-millisecond teardown wait.
 
 | Run | Request p50 | Request p99 | Throughput | Peak RSS | Event-loop peak p99 | Boot fsync | Idle context switches/hour | Result |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
@@ -24,6 +30,10 @@ operations/hour, and <= 10 MiB idle disk writes/hour.
 | Pre-final iteration | 6.14 ms | 15.88 ms | 604.19/s | 192.2 MB | 134.02 ms | 14.56 ms | 247,895 | pass |
 | Pre-audit constrained-profile run | 15.10 ms | 24.73 ms | 265.57/s | 213.1 MB | 24.95 ms | 4.48 ms | 246,497 | pass |
 | Completed scope after parse-once router | 18.74 ms | 40.23 ms | 188.55 writes/s | 212.2 MB | 35.03 ms | 12.20 ms | 383,457 | pass |
+| First Linux traced-primary gate | 23.70 ms | 40.21 ms | 152.30 writes/s | 170.5 MB | 29.97 ms | 1.89 ms | 1,115,868 | fsync pass; OS-counter/ptrace fail |
+| Corrected untraced 2s sample | 16.33 ms | 27.87 ms | 231.09 writes/s | 212.9 MB | 29.77 ms | 5.24 ms | 375,859 | pass |
+| Two-second stability recheck | 13.21 ms | 18.05 ms | 288.15 writes/s | 208.0 MB | 23.10 ms | 5.51 ms | 507,421 | idle extrapolation fail |
+| Corrected 65-second final | 13.63 ms | 19.09 ms | 281.43 writes/s | 212.8 MB | 24.00 ms | 5.59 ms | 387,958 | pass |
 
 The first final attempt counted app install/bundle prewarming in the
 event-loop workload epoch and reported a 674.23 ms peak. Boot and prewarming
@@ -36,19 +46,24 @@ explicitly sets `CENTRAID_HARDWARE_PROFILE=constrained`; the 8-core/16 GiB
 measurement host therefore exercises the low-end worker, replication,
 compression, and SQLite defaults. Linux CI repeats the constrained profile.
 
-RSS rose from 156.8 MB to 212.2 MB after adding precompressed app variants,
+RSS rose from 156.8 MB to 212.8 MB after adding precompressed app variants,
 codec runtimes, and the performance monitor. That remains well below the
-512 MiB ceiling. The p99 improvement from 381.76 ms to 40.23 ms and event-loop
-improvement from 367.26 ms to 35.03 ms are the deciding changes; throughput
-rose from 66.06 to 188.55 writes/second after every Atlas write was moved
+512 MiB ceiling. The p99 improvement from 381.76 ms to 19.09 ms and event-loop
+improvement from 367.26 ms to 24.00 ms are the deciding changes; throughput
+rose from 66.06 to 281.43 writes/second after every Atlas write was moved
 through the shared group-commit window.
 
 macOS cannot provide an unprivileged exact SQLite fsync count. It reports
 `process.resourceUsage()` write counters, while the Linux benchmark lane uses
-`strace` and requires exact fsync collection with
+an untraced primary run plus a separately traced fsync run and requires exact
+fsync collection with
 `CENTRAID_BENCH_REQUIRE_FSYNC=1`. Missing Linux fsync data is a failure, not a
 zero. Trace markers scope the syscall count to the write epoch and resumed
-syscalls count exactly once. The macOS final artifact therefore leaves `fsyncCalls` and
+syscalls count exactly once. Keeping the primary run outside ptrace avoids
+inflating latency and idle context switches. Linux physical-write gating uses
+`/proc/self/io.write_bytes`; the OS-specific `resourceUsage().fsWrite` counter
+is diagnostic only because Linux exposes it in output blocks, not portable
+write operations. The macOS final artifact therefore leaves `fsyncCalls` and
 `fsyncPerWrite` as `null`.
 
 ### Runtime comparison (N7)
@@ -190,7 +205,7 @@ described above. It is deliberately a deferral valve, not cancellation: work
 becomes eligible again when the rolling window recovers.
 
 **A8** is a measured no-go for moving SQLite to a worker thread. The final
-40.23 ms request p99 is below the 250 ms budget and 35.03 ms event-loop peak is
+19.09 ms request p99 is below the 250 ms budget and 24.00 ms event-loop peak is
 below the 150 ms budget. Crossing the database boundary would add a second
 serialization/error surface without evidence it is needed. Revisit only if
 the Linux Pi lane fails either p99 or event-loop lag after the implemented

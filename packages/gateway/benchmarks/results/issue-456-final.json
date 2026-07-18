@@ -1,6 +1,6 @@
 {
   "schema": "centraid-gateway-low-end-benchmark/1",
-  "generatedAt": "2026-07-18T13:22:20.658Z",
+  "generatedAt": "2026-07-18T14:41:33.151Z",
   "host": {
     "platform": "darwin",
     "arch": "arm64",
@@ -21,73 +21,69 @@
       "vault.status": 30
     },
     "concurrency": 4,
-    "idleMs": 1999.7004579999998
+    "idleMs": 65001.860833000006
   },
   "request": {
-    "p50Ms": 18.737167,
-    "p99Ms": 40.226584,
-    "maxMs": 40.339750000000095,
-    "throughputPerSecond": 188.54927168860706
+    "p50Ms": 13.626166000000012,
+    "p99Ms": 19.089000000000055,
+    "maxMs": 19.378041999999937,
+    "throughputPerSecond": 281.43260094704794
   },
   "readRequest": {
-    "p50Ms": 1.2592920000001868,
-    "p99Ms": 16.764875000000075,
-    "maxMs": 16.764875000000075,
-    "throughputPerSecond": 47.137317922151766
+    "p50Ms": 1.3209590000000162,
+    "p99Ms": 2.406417000000033,
+    "maxMs": 2.406417000000033,
+    "throughputPerSecond": 70.35815023676199
   },
   "memory": {
-    "rssPeakBytes": 212189184
+    "rssPeakBytes": 212795392
   },
   "eventLoop": {
-    "p50Ms": 22.544383,
-    "p99Ms": 35.028991,
-    "maxMs": 35.028991,
-    "peakP99Ms": 35.028991,
-    "samples": 24
+    "p50Ms": 21.250047,
+    "p99Ms": 24.002559,
+    "maxMs": 24.002559,
+    "peakP99Ms": 24.002559,
+    "samples": 20
   },
   "storage": {
-    "bootFsyncMs": 12.201541999999904,
+    "bootFsyncMs": 5.592290999999989,
     "fsyncCalls": null,
     "fsyncPerWrite": null,
-    "fsWriteOps": 0,
-    "fsWriteOpsPerWrite": 0,
+    "resourceFsWrites": 0,
+    "resourceFsWritesPerWrite": 0,
     "diskWriteBytes": null,
-    "liveDataBytes": 21555285
+    "diskWriteBytesPerWrite": null,
+    "liveDataBytes": 30741104
   },
   "idle": {
-    "contextSwitchesPerHour": 383457.4308028688,
-    "fsWriteOpsPerHour": 0,
+    "contextSwitchesPerHour": 387958.1242264588,
+    "resourceFsWritesPerHour": 0,
     "diskWriteBytesPerHour": null
   },
   "budgets": {
     "checks": [
       {
         "metric": "request.p99Ms",
-        "actual": 40.226584,
+        "actual": 19.089000000000055,
         "ceiling": 250
       },
       {
         "metric": "memory.rssPeakBytes",
-        "actual": 212189184,
+        "actual": 212795392,
         "ceiling": 536870912
       },
       {
         "metric": "eventLoop.peakP99Ms",
-        "actual": 35.028991,
+        "actual": 24.002559,
         "ceiling": 150
       },
       {
-        "metric": "storage.fsWriteOpsPerWrite",
-        "actual": 0,
-        "ceiling": 24
-      },
-      {
         "metric": "idle.contextSwitchesPerHour",
-        "actual": 383457.4308028688,
+        "actual": 387958.1242264588,
         "ceiling": 500000
       },
       {
-        "metric": "idle.fsWriteOpsPerHour",
+        "metric": "idle.resourceFsWritesPerHour",
         "actual": 0,
         "ceiling": 5000
       }

@@ -52,7 +52,7 @@ async function readProcIo() {
 function resourceCounters() {
   const usage = process.resourceUsage();
   return {
-    fsWrite: usage.fsWrite,
+    fsWrites: usage.fsWrite,
     contextSwitches: usage.voluntaryContextSwitches + usage.involuntaryContextSwitches,
   };
 }
@@ -79,7 +79,9 @@ async function markTraceEpoch(suffix) {
 async function runInternal() {
   const writes = positiveInteger('--requests', 120);
   const concurrency = positiveInteger('--concurrency', 4);
-  const idleMs = positiveInteger('--idle-ms', 2_000);
+  // Cover issue #456's active 30/60-second service cadences so idle rates
+  // include real timer work instead of extrapolating a scheduler blip.
+  const idleMs = positiveInteger('--idle-ms', 65_000);
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-low-end-bench-'));
   let handle;
   try {
@@ -172,6 +174,10 @@ async function runInternal() {
     await markTraceEpoch('end');
     const resourcesAfterWrites = resourceCounters();
     const procAfterWrites = await readProcIo();
+    const diskWriteBytes =
+      procBeforeWrites && procAfterWrites
+        ? procAfterWrites.write_bytes - procBeforeWrites.write_bytes
+        : null;
 
     const healthResponse = await fetch(`${handle.url}/centraid/_gateway/health`, { headers });
     if (!healthResponse.ok) throw new Error(`health failed: ${healthResponse.status}`);
@@ -239,12 +245,11 @@ async function runInternal() {
         bootFsyncMs: health.metrics.storageFsyncMs ?? null,
         fsyncCalls: null,
         fsyncPerWrite: null,
-        fsWriteOps: resourcesAfterWrites.fsWrite - resourcesBeforeWrites.fsWrite,
-        fsWriteOpsPerWrite: (resourcesAfterWrites.fsWrite - resourcesBeforeWrites.fsWrite) / writes,
-        diskWriteBytes:
-          procBeforeWrites && procAfterWrites
-            ? procAfterWrites.write_bytes - procBeforeWrites.write_bytes
-            : null,
+        resourceFsWrites: resourcesAfterWrites.fsWrites - resourcesBeforeWrites.fsWrites,
+        resourceFsWritesPerWrite:
+          (resourcesAfterWrites.fsWrites - resourcesBeforeWrites.fsWrites) / writes,
+        diskWriteBytes,
+        diskWriteBytesPerWrite: diskWriteBytes === null ? null : diskWriteBytes / writes,
         liveDataBytes: await directoryBytes(root),
       },
       idle: {
@@ -252,8 +257,8 @@ async function runInternal() {
           idleResourcesAfter.contextSwitches - idleResourcesBefore.contextSwitches,
           idleDurationMs,
         ),
-        fsWriteOpsPerHour: ratePerHour(
-          idleResourcesAfter.fsWrite - idleResourcesBefore.fsWrite,
+        resourceFsWritesPerHour: ratePerHour(
+          idleResourcesAfter.fsWrites - idleResourcesBefore.fsWrites,
           idleDurationMs,
         ),
         diskWriteBytesPerHour:
@@ -288,14 +293,19 @@ function checkBudgets(report, budgets, requireFsync) {
     ['request.p99Ms', report.request.p99Ms, budgets.requestP99Ms],
     ['memory.rssPeakBytes', report.memory.rssPeakBytes, budgets.rssPeakBytes],
     ['eventLoop.peakP99Ms', report.eventLoop.peakP99Ms, budgets.eventLoopLagPeakP99Ms],
-    ['storage.fsWriteOpsPerWrite', report.storage.fsWriteOpsPerWrite, budgets.fsWriteOpsPerWrite],
     [
       'idle.contextSwitchesPerHour',
       report.idle.contextSwitchesPerHour,
       budgets.idleContextSwitchesPerHour,
     ],
-    ['idle.fsWriteOpsPerHour', report.idle.fsWriteOpsPerHour, budgets.idleFsWriteOpsPerHour],
   ];
+  if (report.storage.diskWriteBytesPerWrite !== null) {
+    checks.push([
+      'storage.diskWriteBytesPerWrite',
+      report.storage.diskWriteBytesPerWrite,
+      budgets.diskWriteBytesPerWrite,
+    ]);
+  }
   if (report.storage.fsyncPerWrite !== null) {
     checks.push(['storage.fsyncPerWrite', report.storage.fsyncPerWrite, budgets.fsyncPerWrite]);
   } else if (requireFsync) {
@@ -307,6 +317,12 @@ function checkBudgets(report, budgets, requireFsync) {
       report.idle.diskWriteBytesPerHour,
       budgets.idleDiskWriteBytesPerHour,
     ]);
+  } else {
+    checks.push([
+      'idle.resourceFsWritesPerHour',
+      report.idle.resourceFsWritesPerHour,
+      budgets.idleResourceFsWritesPerHour,
+    ]);
   }
   const failures = checks.filter(([, actual, ceiling]) => actual === null || actual > ceiling);
   return {
@@ -315,53 +331,76 @@ function checkBudgets(report, budgets, requireFsync) {
   };
 }
 
-async function tracedRun() {
+async function traceFsyncCalls() {
   const traceFile = path.join(os.tmpdir(), `centraid-fsync-${process.pid}.log`);
-  const reportFile = path.join(os.tmpdir(), `centraid-bench-${process.pid}.json`);
   const traceMarker = path.join(os.tmpdir(), `centraid-bench-epoch-${process.pid}`);
-  const childArgs = args.filter((arg) => arg !== '--trace-fsync' && arg !== '--check');
-  childArgs.push('--internal', `--output=${reportFile}`);
-  const result = spawnSync(
-    'strace',
-    [
-      '-f',
-      '-qq',
-      '-e',
-      'trace=fsync,fdatasync,openat',
-      '-o',
-      traceFile,
-      process.execPath,
-      fileURLToPath(import.meta.url),
-      ...childArgs,
-    ],
-    {
-      stdio: 'inherit',
-      env: {
-        ...process.env,
-        CENTRAID_BENCH_QUIET: '1',
-        CENTRAID_BENCH_TRACE_MARKER: traceMarker,
-        // The parent applies the required gate after it injects the parsed trace count.
-        CENTRAID_BENCH_REQUIRE_FSYNC: '0',
+  const childArgs = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === '--output' || arg === '--idle-ms') {
+      index += 1;
+      continue;
+    }
+    if (
+      arg === '--trace-fsync' ||
+      arg === '--check' ||
+      arg === '--internal' ||
+      arg.startsWith('--output=') ||
+      arg.startsWith('--idle-ms=')
+    ) {
+      continue;
+    }
+    childArgs.push(arg);
+  }
+  // The trace epoch ends before idle measurement, so do not repeat the
+  // primary run's 65-second observation window in this fsync-only child.
+  childArgs.push('--internal', '--idle-ms=1');
+  try {
+    const result = spawnSync(
+      'strace',
+      [
+        '-f',
+        '-qq',
+        '-e',
+        'trace=fsync,fdatasync,openat',
+        '-o',
+        traceFile,
+        process.execPath,
+        fileURLToPath(import.meta.url),
+        ...childArgs,
+      ],
+      {
+        stdio: 'inherit',
+        env: {
+          ...process.env,
+          CENTRAID_BENCH_QUIET: '1',
+          CENTRAID_BENCH_TRACE_MARKER: traceMarker,
+          // The parent applies the required gate after it injects the parsed trace count.
+          CENTRAID_BENCH_REQUIRE_FSYNC: '0',
+        },
       },
-    },
-  );
-  if (result.status !== 0) process.exit(result.status ?? 1);
-  const report = JSON.parse(await fs.readFile(reportFile, 'utf8'));
-  const fsyncCalls = fsyncCallsIn(await fs.readFile(traceFile, 'utf8'), traceMarker);
-  report.storage.fsyncCalls = fsyncCalls;
-  report.storage.fsyncPerWrite = fsyncCalls / report.workload.writes;
-  await Promise.all([
-    fs.rm(traceFile, { force: true }),
-    fs.rm(reportFile, { force: true }),
-    fs.rm(`${traceMarker}.start`, { force: true }),
-    fs.rm(`${traceMarker}.end`, { force: true }),
-  ]);
-  return report;
+    );
+    if (result.status !== 0) {
+      throw new Error(`strace benchmark child failed with status ${result.status ?? 'unknown'}`);
+    }
+    return fsyncCallsIn(await fs.readFile(traceFile, 'utf8'), traceMarker);
+  } finally {
+    await Promise.all([
+      fs.rm(traceFile, { force: true }),
+      fs.rm(`${traceMarker}.start`, { force: true }),
+      fs.rm(`${traceMarker}.end`, { force: true }),
+    ]);
+  }
 }
 
 const underTrace = args.includes('--internal');
 const straceAvailable = process.platform === 'linux' && spawnSync('which', ['strace']).status === 0;
-const report = !underTrace && straceAvailable ? await tracedRun() : await runInternal();
+const report = await runInternal();
+if (!underTrace && straceAvailable) {
+  const fsyncCalls = await traceFsyncCalls();
+  report.storage.fsyncCalls = fsyncCalls;
+  report.storage.fsyncPerWrite = fsyncCalls / report.workload.writes;
+}
 const output = option('--output', '');
 const budgets = JSON.parse(
   await fs.readFile(path.join(packageRoot, 'benchmarks', 'low-end-budgets.json'), 'utf8'),
