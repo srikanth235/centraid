@@ -31,8 +31,30 @@
  *    previous request runs, off the acquiring request's critical path.
  */
 
+import { existsSync } from 'node:fs';
+import { register } from 'node:module';
+import path from 'node:path';
 import { parentPort, workerData } from 'node:worker_threads';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+/**
+ * Install the `.ts`/`.tsx` module-customization hooks (worker/ts-loader-hooks)
+ * exactly once, lazily — only when this worker is about to run a TypeScript
+ * handler. A `.js`-only dispatch never registers them, so the native import
+ * path is byte-for-byte unchanged. The hooks module is a `.ts` source compiled
+ * to `dist/worker/ts-loader-hooks.js`; resolve the `.js` under compiled dist
+ * and fall back to the `.ts` under the tsx test loader, mirroring
+ * handler-runner's `resolveWorkerFile`.
+ */
+let tsLoaderRegistered = false;
+function ensureTsLoader(): void {
+  if (tsLoaderRegistered) return;
+  tsLoaderRegistered = true;
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const jsHooks = path.join(here, 'ts-loader-hooks.js');
+  const hooksFile = existsSync(jsHooks) ? jsHooks : path.join(here, 'ts-loader-hooks.ts');
+  register(pathToFileURL(hooksFile).href);
+}
 
 interface WorkerRequest {
   handlerFile: string;
@@ -198,6 +220,9 @@ const ctx = {
 function execute(req: WorkerRequest): void {
   void (async () => {
     try {
+      // A TS handler graph needs the esbuild loader hook before it can import
+      // under plain Node; a JS handler skips this entirely.
+      if (/\.tsx?$/.test(req.handlerFile)) ensureTsLoader();
       const mod = (await import(pathToFileURL(req.handlerFile).href)) as {
         default?: (args: unknown) => Promise<unknown>;
       };

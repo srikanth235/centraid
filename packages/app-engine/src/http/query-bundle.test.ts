@@ -24,7 +24,7 @@ const manifest = {
       writes: [],
     },
   ],
-  queries: ['list', 'leak', 'broken'].map((name) => ({
+  queries: ['list', 'leak', 'broken', 'typed'].map((name) => ({
     name,
     input: { type: 'object', properties: {}, additionalProperties: false },
   })),
@@ -52,6 +52,19 @@ async function writeCodeDir(directory: string, value: string): Promise<void> {
     `import secret from '../actions/mutate.js'; export default async () => secret;`,
   );
   await fs.writeFile(path.join(directory, 'queries', 'broken.js'), `export default async (`);
+  // TS-authored query: a `.ts` entry importing a `.ts` sibling extensionlessly
+  // (`./typed-helper` → typed-helper.ts). Exercises the `.ts`-first entry probe
+  // and the `.ts` resolveQueryImport candidate.
+  await fs.writeFile(
+    path.join(directory, 'queries', 'typed-helper.ts'),
+    `export function helper(v: string): string { return 'typed-' + v; }`,
+  );
+  await fs.writeFile(
+    path.join(directory, 'queries', 'typed.ts'),
+    `import { helper } from './typed-helper';\n` +
+      `interface Out { value: string }\n` +
+      `export default async (): Promise<Out> => ({ value: helper(${JSON.stringify(value)}) });`,
+  );
   await fs.writeFile(
     path.join(directory, 'actions', 'mutate.js'),
     `const secret = 'ACTION_SECRET_MUST_NOT_BUNDLE'; export default secret;`,
@@ -132,6 +145,20 @@ describe('query-only browser bundles', () => {
     expect(code).not.toContain('ACTION_SECRET_MUST_NOT_BUNDLE');
     await expect(evaluateDefault(code, response.headers.get('etag')!)).resolves.toEqual({
       value: 'live-v1',
+    });
+  });
+
+  it('bundles a TypeScript query entry with a .ts sibling import, stripping types', async () => {
+    const response = await request('/centraid/demo/_query/typed.mjs');
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toMatch(/^application\/javascript/);
+    expect(response.headers.get(QUERY_NAME_HEADER)).toBe('typed');
+    const code = await response.text();
+    // Type syntax is gone; the sibling helper's runtime code is bundled in.
+    expect(code).not.toMatch(/interface\s+Out/);
+    expect(code).not.toMatch(/:\s*string/);
+    await expect(evaluateDefault(code, response.headers.get('etag')!)).resolves.toEqual({
+      value: 'typed-live-v1',
     });
   });
 

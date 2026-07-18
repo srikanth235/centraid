@@ -23,9 +23,13 @@
  *     escape/reserved/extension guards hold), with the root-only
  *     {@link SHARED_ASSET_FILES} fallback to `sharedAssetsDir` when the app
  *     carries no copy of its own — per-app override wins, exactly as over
- *     HTTP. `.jsx` sources go through the same `automatic` JSX runtime as the
- *     per-file transform; the emitted `./jsx-runtime` import resolves to the
- *     app's (or shared) `jsx-runtime.js`, so React identity is preserved.
+ *     HTTP. `.jsx`/`.tsx`/`.ts` sources go through the same `automatic` JSX
+ *     runtime as the per-file transform (esbuild auto-detects the loader by
+ *     extension); the emitted `./jsx-runtime` import resolves to the app's (or
+ *     shared) `jsx-runtime.js`, so React identity is preserved. A
+ *     `*.module.css` import is compiled to a JS module in an `onLoad` hook
+ *     (css-module.ts, same helper the per-file server uses) so the graph stays
+ *     JS-only and the single-output-file invariant holds.
  *
  *   - Because the URL embeds the content hash, the bundle is served
  *     `max-age=31536000, immutable` (+ a sha256 ETag for the PWA service
@@ -59,6 +63,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import * as esbuild from 'esbuild';
 import { resolveStaticPath, SHARED_ASSET_FILES } from './security.js';
+import { compileCssModule } from './css-module.js';
 import { computeEtag } from './asset-variants.js';
 import type { Encoding } from './compression.js';
 
@@ -118,12 +123,14 @@ async function statOrNull(file: string): Promise<import('node:fs').Stats | null>
 
 /**
  * Manifest of everything that can influence a bundle's output: every
- * `.js`/`.jsx` file under the app dir (excluding non-graph dirs), plus the
- * shared JS assets the root-only fallback can pull in. `rel\0mtime\0size`
- * lines, sorted — any edit/add/delete changes the string. CSS and
- * `index.html` are deliberately NOT included: CSS is inlined fresh per HTML
- * response and the HTML itself is read per request, so neither needs to
- * invalidate the JS bundle.
+ * `.js`/`.jsx`/`.ts`/`.tsx` file under the app dir (excluding non-graph dirs),
+ * plus every `*.module.css` (a CSS module is compiled into the JS graph — see
+ * buildBundle's onLoad — so its bytes affect the bundle and MUST invalidate
+ * it), plus the shared JS assets the root-only fallback can pull in.
+ * `rel\0mtime\0size` lines, sorted — any edit/add/delete changes the string.
+ * Plain (non-module) CSS and `index.html` are deliberately NOT included: plain
+ * CSS is inlined fresh per HTML response and the HTML itself is read per
+ * request, so neither needs to invalidate the JS bundle.
  */
 async function computeManifest(appDir: string, sharedAssetsDir?: string): Promise<string> {
   const lines: string[] = [];
@@ -134,7 +141,13 @@ async function computeManifest(appDir: string, sharedAssetsDir?: string): Promis
       const r = rel ? `${rel}/${e.name}` : e.name;
       if (e.isDirectory()) {
         if (!NON_GRAPH_DIRS.has(e.name)) await walk(r);
-      } else if (r.endsWith('.js') || r.endsWith('.jsx') || r.endsWith('.mjs')) {
+      } else if (
+        r.endsWith('.js') ||
+        r.endsWith('.jsx') ||
+        r.endsWith('.ts') ||
+        r.endsWith('.tsx') ||
+        r.endsWith('.module.css')
+      ) {
         const st = await statOrNull(path.join(appDir, r));
         if (st) lines.push(`${r}\0${st.mtimeMs}\0${st.size}`);
       }
@@ -175,6 +188,20 @@ function appGraphPlugin(root: string, sharedRoot: string | null): esbuild.Plugin
   return {
     name: 'centraid-app-graph',
     setup(build) {
+      // A `*.module.css` in the graph is compiled to a JS module (style
+      // injector + class-map default export, css-module.ts) BEFORE esbuild
+      // sees it, so the whole graph stays JS-only. This is load-bearing for
+      // the single-output invariant below: `buildBundle` takes
+      // `result.outputFiles[0]`, and a raw `default` CSS import would make
+      // esbuild emit a SECOND (CSS) output that then gets silently dropped.
+      // Same shared helper as the per-file server, so the two paths compile a
+      // module identically. The `<link>`-inlining of GLOBAL css (index.html)
+      // is unaffected — those files never enter the JS graph.
+      build.onLoad({ filter: /\.module\.css$/ }, async (args) => {
+        const compiled = await compileCssModule(args.path, root);
+        return { contents: compiled.js, loader: 'js', resolveDir: path.dirname(args.path) };
+      });
+
       build.onResolve({ filter: /.*/ }, async (args) => {
         if (args.kind === 'entry-point') return null;
         const spec = args.path;
@@ -378,7 +405,7 @@ export async function prepareBundledIndex(
     if (!type || type.toLowerCase() !== 'module') continue;
     const src = attrOf(tag, 'src');
     const entryRel = rootLevelRel(src);
-    if (!entryRel || !/\.(js|jsx|mjs)$/i.test(entryRel)) continue;
+    if (!entryRel || !/\.(js|jsx|ts|tsx|mjs)$/i.test(entryRel)) continue;
     const bundle = await bundleForEntry(appDir, entryRel, sharedAssetsDir);
     if (!bundle) continue;
     const rewritten = tag.replace(src!, `./_bundle.${bundle.hash}.js`);

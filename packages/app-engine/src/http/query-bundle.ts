@@ -23,7 +23,7 @@ export const QUERY_SOURCE_HASH_HEADER = 'X-Centraid-Query-Source-Hash';
 export const QUERY_NAME_HEADER = 'X-Centraid-Query-Name';
 
 const QUERY_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
-const QUERY_MODULE_EXTENSIONS = new Set(['.js', '.mjs']);
+const QUERY_MODULE_EXTENSIONS = new Set(['.js', '.mjs', '.ts']);
 
 export class QueryBundleError extends Error {
   constructor(
@@ -133,7 +133,12 @@ async function resolveQueryImport(
   }
   const target = path.resolve(resolveDir, specifier);
   const extension = path.extname(target);
-  const candidates = extension ? [target] : [target, `${target}.js`, `${target}.mjs`];
+  // Extensionless sibling import: prefer a `.ts` source, then `.js`/`.mjs` —
+  // a TS query graph names its siblings without an extension the same way a
+  // JS one does, and `.ts` wins so a TS app resolves cleanly.
+  const candidates = extension
+    ? [target]
+    : [target, `${target}.ts`, `${target}.js`, `${target}.mjs`];
   for (const candidate of candidates) {
     const real = await fs.realpath(candidate).catch(() => undefined);
     if (!real || !isInside(queryRoot, real)) continue;
@@ -288,22 +293,27 @@ export async function bundleDeclaredQuery(
       'App query source directory is missing.',
     );
   }
-  const entryCandidate = path.resolve(queryRoot, `${queryName}.js`);
-  if (!isInside(queryRoot, entryCandidate)) {
-    throw new QueryBundleError('invalid_query_name', 400, 'Query path escapes queries/.');
+  // Prefer a `queries/<name>.ts` source, then `<name>.js` — a TS-authored app
+  // ships `.ts` handlers, a builder-generated one ships `.js`. Each candidate
+  // runs the same escape/real-file guards; the first that resolves wins.
+  let entryFile: string | undefined;
+  for (const ext of ['.ts', '.js']) {
+    const entryCandidate = path.resolve(queryRoot, `${queryName}${ext}`);
+    if (!isInside(queryRoot, entryCandidate)) {
+      throw new QueryBundleError('invalid_query_name', 400, 'Query path escapes queries/.');
+    }
+    const real = await fs.realpath(entryCandidate).catch(() => undefined);
+    const stat = real ? await fs.stat(real).catch(() => undefined) : undefined;
+    if (real && stat?.isFile() && isInside(queryRoot, real) && path.extname(real) === ext) {
+      entryFile = real;
+      break;
+    }
   }
-  const entryFile = await fs.realpath(entryCandidate).catch(() => undefined);
-  const entryStat = entryFile ? await fs.stat(entryFile).catch(() => undefined) : undefined;
-  if (
-    !entryFile ||
-    !entryStat?.isFile() ||
-    !isInside(queryRoot, entryFile) ||
-    path.extname(entryFile) !== '.js'
-  ) {
+  if (!entryFile) {
     throw new QueryBundleError(
       'query_source_missing',
       404,
-      `Declared query "${queryName}" has no safe queries/${queryName}.js source.`,
+      `Declared query "${queryName}" has no safe queries/${queryName}.{ts,js} source.`,
     );
   }
 

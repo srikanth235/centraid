@@ -137,7 +137,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     }, opts.timeoutMs);
   }
 
-  const handlerName = path.basename(opts.handlerFile).replace(/\.js$/, '');
+  const handlerName = path.basename(opts.handlerFile).replace(/\.(ts|js)$/, '');
   const persistedEntries: LogEntry[] = [];
 
   return await new Promise<HandlerOutcome>((resolve) => {
