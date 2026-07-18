@@ -18,7 +18,9 @@ Unique trace markers bracket only the authenticated measured workload (not
 boot, warmup, or shutdown), and split `<unfinished>`/`resumed` syscalls count
 once. Fsync totals are divided by the explicit write count, never by reads.
 CI sets `CENTRAID_BENCH_REQUIRE_FSYNC=1`, so losing that measurement fails the
-gate instead of silently reporting `null`. macOS still reports `fsWrite` and
+gate instead of silently reporting `null`. The traced child emits its raw
+report first; the parent injects the scoped syscall count and then applies the
+required gate. macOS still reports `fsWrite` and
 context-switch counters from `process.resourceUsage()`; exact SQLite fsync
 counts require the Linux CI lane because `fs_usage` requires elevated tracing
 privileges.

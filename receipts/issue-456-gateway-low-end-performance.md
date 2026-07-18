@@ -532,6 +532,13 @@ confirmed the 390-line relay plus 151-line private wire module are a purely
 structural split, rechecked the post-split Rust/contracts/native results and
 the exact 185-path inventory, and returned `PASS`.
 
+After the first Linux CI run exposed that the straced child inherited the
+parent's required-fsync gate before the parent could inject trace results,
+fresh-context reviewer `/root/issue456_ci_fix_audit` checked the failed run and
+the complete parent/child control flow. It confirmed the child-only override
+preserves the parent's exact fsync presence and ceiling checks and returned
+`PASS`; the replacement Linux run is the definitive runtime confirmation.
+
 ## Steering
 
 PASS — the only human instruction in this task was the opening `/goal` to
@@ -548,3 +555,4 @@ and create a PR. There were no user corrections or mid-task redirects.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | codex-019f7389-37c-1784382112-1 | codex | 019f7389-37ce-7252-abb8-77936a8e13cb | #456 | gpt-5.6-sol | 5180906 | 0 | 234673408 | 551137 | 5732043 | 79.8877 | 5180906 | 0 | 234673408 | 551137 | perf(gateway): harden low-end control and data planes (#456) -m governance: allo |
 | codex-019f7389-37c-1784383061-1 | codex | 019f7389-37ce-7252-abb8-77936a8e13cb | #456 | gpt-5.6-sol | 45439 | 0 | 6249472 | 7751 | 53190 | 1.7922 | 5226345 | 0 | 240922880 | 558888 | perf(gateway): harden low-end control and data planes (#456) -m governance: allo |
+| codex-019f7389-37c-1784384195-1 | codex | 019f7389-37ce-7252-abb8-77936a8e13cb | #456 | gpt-5.6-sol | 79079 | 0 | 9083648 | 9313 | 88392 | 2.6083 | 5305424 | 0 | 250006528 | 568201 | fix(gateway): defer fsync gate to trace parent (#456) |

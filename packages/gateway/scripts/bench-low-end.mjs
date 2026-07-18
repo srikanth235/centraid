@@ -340,6 +340,8 @@ async function tracedRun() {
         ...process.env,
         CENTRAID_BENCH_QUIET: '1',
         CENTRAID_BENCH_TRACE_MARKER: traceMarker,
+        // The parent applies the required gate after it injects the parsed trace count.
+        CENTRAID_BENCH_REQUIRE_FSYNC: '0',
       },
     },
   );
