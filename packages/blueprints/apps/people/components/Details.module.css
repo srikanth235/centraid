@@ -1,0 +1,103 @@
+/* Profile drawer shell (#detailsRoot root). The whole drawer is React-rendered
+   (no static markup), so every class here moved off the global sheet. The two
+   entrance animations are defined LOCALLY: esbuild's local-css localizes an
+   `animation-name` even when the referenced `@keyframes` is global, so a module
+   that animates must own its keyframes (the global `d-fade` is kept in app.css
+   only for the static scrim). `.lbl` is a descendant local under `.detailsHead`.
+   `.detailBtn` (the footer button) comes from shared.module.css. */
+
+.detailsBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 44;
+  background: rgba(30, 15, 20, 0.3);
+  animation: dFade 0.2s ease;
+}
+.details {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(380px, 94vw);
+  z-index: 45;
+  background: var(--bg-elev);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  animation: dSlideR 0.24s var(--ease);
+}
+.detailsHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.detailsHead .lbl {
+  font: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: var(--tk-eye);
+  color: var(--ink-3);
+}
+.detailsX {
+  margin-left: auto;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  color: var(--ink-3);
+}
+.detailsX:hover {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+.detailsBody {
+  flex: 1;
+  overflow: auto;
+  padding: 22px 18px;
+}
+.detailName {
+  font: var(--t-title);
+  font-size: 19px;
+  text-align: center;
+  margin-top: 14px;
+}
+.detailExt {
+  font: var(--t-small);
+  font-size: 12.5px;
+  color: var(--ink-3);
+  text-align: center;
+  margin-top: 3px;
+}
+.detailsFoot {
+  display: flex;
+  gap: 7px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+@keyframes dFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes dSlideR {
+  from {
+    transform: translateX(24px);
+    opacity: 0.4;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}

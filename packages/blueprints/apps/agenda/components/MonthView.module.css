@@ -1,0 +1,147 @@
+/* The month canvas: a 6×7 Monday-first grid, day cells, event pills and the
+   "+N more" affordance. Moved out of app.css. `ag-dot` stays global (built by
+   the popover glue too), so the pill→dot rule reaches it via :global(). The
+   day-cell click handler in MonthView.tsx queries `.pill, .more` via the
+   hashed `styles.*` names, so this rename stays behavior-identical. */
+
+.month {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-template-rows: auto repeat(6, minmax(5.5rem, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.dow {
+  background: var(--surface);
+  text-align: center;
+  padding: 8px 0 6px;
+  font: var(--t-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+.dayCell {
+  background: var(--surface);
+  padding: 4px 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: background 0.12s var(--ease);
+}
+.dayCell:hover {
+  background: var(--bg-sunken);
+}
+.dayCell:focus-visible {
+  outline: 2px solid var(--_accent);
+  outline-offset: -2px;
+}
+.dayCell[data-outside='true'] {
+  background: color-mix(in oklab, var(--bg-sunken) 55%, var(--surface));
+}
+.dayCell[data-outside='true'] .dayNum {
+  color: var(--ink-3);
+  opacity: 0.6;
+}
+.dayNum {
+  align-self: flex-end;
+  font: var(--t-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+  border-radius: 999px;
+  min-width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+.dayCell[data-today='true'] .dayNum {
+  background: var(--accent-deep);
+  color: #fff;
+  font-weight: 600;
+}
+.dayPills {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+.pill {
+  --ev-color: var(--_accent);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  font: var(--t-small);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: left;
+  color: var(--ink);
+  background: none;
+  border: none;
+  border-radius: 5px;
+  padding: 1px 5px;
+  cursor: pointer;
+}
+.pill:hover {
+  background: color-mix(in srgb, var(--ev-color) 14%, transparent);
+}
+.pill[data-spans='true'] {
+  background: var(--ev-color);
+  color: #fff;
+}
+.pill[data-spans='true']:hover {
+  filter: brightness(1.08);
+}
+.pill[data-status='tentative'] {
+  color: var(--ink-2);
+}
+.pill :global(.ag-dot) {
+  background: var(--ev-color);
+}
+.pillText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.more {
+  font: var(--t-mono);
+  font-size: 10px;
+  text-align: left;
+  padding: 1px 5px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--ink-3);
+}
+.more:hover {
+  background: var(--accent-soft);
+  color: var(--accent-deep-fg);
+}
+
+@media (max-width: 480px) {
+  .month {
+    grid-template-rows: auto repeat(6, minmax(3.2rem, 1fr));
+  }
+  .pill {
+    display: none;
+  }
+  .dayCell:has(.pill)::after {
+    content: '';
+    width: 0.35rem;
+    height: 0.35rem;
+    border-radius: 50%;
+    background: var(--_accent);
+    margin-top: 2px;
+  }
+}

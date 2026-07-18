@@ -5,6 +5,15 @@
    per-app knobs (font/width/accent/default-view) all retune the whole
    surface at once. The chrome is warm paper + a single rose accent; the
    per-contact avatar hue lives only inside monogram tiles.
+
+   TS + CSS-modules split: this file now keeps ONLY the global remainder — the
+   :root token/knob blocks, the base reset, the static index.html shell chrome
+   (brand/sidebar/topbar/toolbar/scroll containers + the .is-narrow layout
+   rules chrome.ts toggles on #root), and the shared kit-* vocabulary. Every
+   JSX-only d-*/
+j- rule owned by a component moved into a co-located
+   components/*.module.css (shared atoms in components/shared.module.css) and
+   is referenced there as styles.*; wall.css stays a global backdrop layer.
    ========================================================================== */
 
 :root {
@@ -251,71 +260,13 @@ button {
   padding: 5px;
   animation: d-rise 0.16s var(--ease);
 }
-.d-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 9px 11px;
-  border: none;
-  background: none;
-  border-radius: 8px;
-  color: var(--ink);
-  font: var(--t-body);
-  text-align: left;
-}
-.d-menu-item:hover {
-  background: var(--bg-sunken);
-}
-.d-menu-sep {
-  height: 1px;
-  background: var(--line);
-  margin: 5px 8px;
-}
+
 .d-nav {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
-.d-nav-item {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  width: 100%;
-  padding: 9px 11px;
-  border: none;
-  border-radius: 9px;
-  font: var(--t-body);
-  background: none;
-  color: var(--ink-2);
-}
-.d-nav-item .lbl {
-  flex: 1;
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.d-nav-item:hover {
-  background: var(--bg-sunken);
-  color: var(--ink);
-}
-.d-nav-item[aria-current='true'] {
-  background: var(--accs);
-  color: var(--accd-fg);
-  font-weight: 600;
-}
-.d-nav-count {
-  font-family: var(--mono);
-  font-size: 11px;
-  opacity: 0.6;
-}
-.d-nav-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-  flex-shrink: 0;
-}
+
 .d-section-label {
   font: var(--t-tiny);
   color: var(--ink-3);
@@ -328,71 +279,7 @@ button {
   flex-direction: column;
   gap: 2px;
 }
-.d-folder {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-.d-folder .d-nav-item {
-  padding-right: 8px;
-}
-.d-folder-tools {
-  position: absolute;
-  right: 6px;
-  display: none;
-  gap: 2px;
-  background: linear-gradient(90deg, transparent, var(--bg-elev) 22%);
-  padding-left: 14px;
-}
-.d-folder:hover .d-folder-tools,
-.d-folder:focus-within .d-folder-tools {
-  display: flex;
-}
-.d-folder:hover .d-nav-count {
-  opacity: 0;
-}
-.d-tool-btn {
-  width: 26px;
-  height: 26px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: none;
-  border-radius: 6px;
-  color: var(--ink-3);
-}
-.d-tool-btn:hover {
-  background: var(--bg-sunken);
-  color: var(--ink);
-}
-.d-tool-btn.danger:hover {
-  color: var(--danger);
-}
-.d-folder-edit {
-  display: flex;
-  gap: 6px;
-  width: 100%;
-  padding: 4px 2px;
-}
-.d-folder-edit input {
-  flex: 1;
-  min-width: 0;
-  font: var(--t-body);
-  color: var(--ink);
-  background: var(--bg-elev);
-  border: 1px solid var(--selb);
-  border-radius: 7px;
-  padding: 6px 8px;
-}
-.d-folder-edit button {
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--bg-elev);
-  color: var(--ink-2);
-  font: var(--t-small);
-  padding: 0 10px;
-}
+
 .d-side-foot {
   margin-top: auto;
   padding-top: 16px;
@@ -403,27 +290,7 @@ button {
   padding: 12px 13px;
   background: var(--bg-elev);
 }
-.d-storage-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-.d-storage-top .lbl {
-  font: var(--t-tiny);
-  text-transform: uppercase;
-  letter-spacing: var(--tk-eye);
-  color: var(--ink-3);
-}
-.d-storage-top .val {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--ink-3);
-}
-.d-storage-label {
-  font: var(--t-small);
-  color: var(--ink-2);
-}
+
 .d-consent-line {
   display: flex;
   align-items: center;
@@ -614,16 +481,7 @@ button {
   background: var(--sel);
   animation: d-rise 0.18s var(--ease);
 }
-.d-bulk-count {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--ink);
-}
-.d-bulk-actions {
-  margin-left: auto;
-  display: flex;
-  gap: 7px;
-}
+
 /* Bulk-bar actions: kit.css .kit-btn (quiet pill). */
 
 .d-scroll {
@@ -640,120 +498,11 @@ button {
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 14px;
 }
-.d-card {
-  position: relative;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  overflow: hidden;
-  background: var(--bg-elev);
-  transition:
-    border-color 0.12s,
-    box-shadow 0.12s;
-}
-.d-card:hover {
-  border-color: var(--line-strong);
-  box-shadow: var(--shadow-md);
-}
-.d-card[data-selected='true'] {
-  border-color: var(--selb);
-  box-shadow: 0 0 0 2px var(--sel);
-}
-.d-card-top {
-  position: relative;
-  height: 96px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
+
 /* Avatars are <kit-avatar> (kit.css .kit-avatar); the title face is the one
    People-specific touch kept on top of the kit's styling. */
 .kit-avatar {
   font-family: var(--font-title);
-}
-.d-card-select {
-  position: absolute;
-  top: 9px;
-  left: 9px;
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1.5px solid var(--line-strong);
-  border-radius: 6px;
-  background: color-mix(in oklab, var(--bg-elev) 78%, transparent);
-  backdrop-filter: blur(4px);
-  padding: 0;
-  opacity: 0;
-  transition: opacity 0.12s;
-}
-.d-card:hover .d-card-select,
-.d-card[data-selected='true'] .d-card-select {
-  opacity: 1;
-}
-.d-card-select[aria-pressed='true'] {
-  background: var(--accd);
-  border-color: var(--accd);
-  opacity: 1;
-}
-.d-card-star {
-  position: absolute;
-  top: 7px;
-  right: 7px;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: none;
-  border-radius: 7px;
-  color: var(--ink-3);
-  opacity: 0;
-  transition: opacity 0.12s;
-}
-.d-card:hover .d-card-star,
-.d-card-star.on {
-  opacity: 1;
-}
-.d-card-star.on {
-  color: var(--_accent);
-}
-.d-card-body {
-  padding: 11px 13px 13px;
-  cursor: pointer;
-}
-.d-card-title {
-  font: var(--t-strong);
-  font-size: 13.5px;
-  line-height: 1.3;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.d-card-role {
-  font: var(--t-small);
-  font-size: 12px;
-  color: var(--ink-2);
-  margin-top: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.d-card-meta {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--ink-3);
-  margin-top: 9px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.d-star-ind {
-  color: var(--_accent);
-  font-size: 0.85em;
-  margin-left: 5px;
 }
 
 /* ---------- List ---------- */
@@ -773,442 +522,9 @@ button {
   border-bottom: 1px solid var(--line);
   background: var(--bg-sunken);
 }
-.d-col {
-  font: var(--t-tiny);
-  text-transform: uppercase;
-  letter-spacing: var(--tk-eye);
-  color: var(--ink-3);
-}
-.d-col.name {
-  flex: 1;
-}
-.d-col.list {
-  width: 120px;
-}
-.d-col.last {
-  width: 110px;
-}
-.d-col.status {
-  width: 104px;
-}
-.d-col.end {
-  width: 40px;
-}
-.d-check {
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1.5px solid var(--line-strong);
-  border-radius: 6px;
-  background: transparent;
-  padding: 0;
-}
-.d-check[aria-pressed='true'] {
-  border-color: var(--accd);
-  background: var(--accd);
-}
-.d-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--line);
-  transition: background 0.1s;
-}
-.d-row:last-child {
-  border-bottom: none;
-}
-.d-row:hover {
-  background: var(--bg-sunken);
-}
-.d-row[data-selected='true'] {
-  background: var(--sel);
-}
-.d-row-main {
-  flex: 1;
-  min-width: 0;
-  cursor: pointer;
-}
-.d-row-title {
-  font: var(--t-strong);
-  font-size: 14px;
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  display: flex;
-  align-items: center;
-}
-.d-row-role {
-  font: var(--t-small);
-  font-size: 12px;
-  color: var(--ink-3);
-  margin-top: 1px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.d-cell {
-  color: var(--ink-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.d-cell.list {
-  width: 120px;
-  font: var(--t-small);
-  font-size: 12px;
-}
-.d-cell.last {
-  width: 110px;
-  font-family: var(--mono);
-  font-size: 11px;
-}
-.d-cell.status {
-  width: 104px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font: var(--t-small);
-  font-size: 12px;
-}
-.d-row-end {
-  width: 40px;
-  display: flex;
-  justify-content: flex-end;
-}
-.d-kebab {
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: none;
-  border-radius: 7px;
-  color: var(--ink-3);
-}
-.d-kebab:hover {
-  background: var(--bg);
-  color: var(--ink);
-}
 
 /* Empty state + popover + status dot come from kit.css
    (.kit-empty*, .kit-popover*, .kit-dotmini). */
-
-/* ---------- Details drawer ---------- */
-
-.d-details-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 44;
-  background: rgba(30, 15, 20, 0.3);
-  animation: d-fade 0.2s ease;
-}
-.d-details {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: min(380px, 94vw);
-  z-index: 45;
-  background: var(--bg-elev);
-  border-left: 1px solid var(--line);
-  box-shadow: var(--shadow-lg);
-  display: flex;
-  flex-direction: column;
-  animation: d-slide-r 0.24s var(--ease);
-}
-.d-details-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 16px 18px;
-  border-bottom: 1px solid var(--line);
-  flex-shrink: 0;
-}
-.d-details-head .lbl {
-  font: var(--t-tiny);
-  text-transform: uppercase;
-  letter-spacing: var(--tk-eye);
-  color: var(--ink-3);
-}
-.d-details-x {
-  margin-left: auto;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: none;
-  border-radius: 8px;
-  color: var(--ink-3);
-}
-.d-details-x:hover {
-  background: var(--bg-sunken);
-  color: var(--ink);
-}
-.d-details-body {
-  flex: 1;
-  overflow: auto;
-  padding: 22px 18px;
-}
-.d-detail-name {
-  font: var(--t-title);
-  font-size: 19px;
-  text-align: center;
-  margin-top: 14px;
-}
-.d-detail-ext {
-  font: var(--t-small);
-  font-size: 12.5px;
-  color: var(--ink-3);
-  text-align: center;
-  margin-top: 3px;
-}
-.d-detail-actions {
-  display: flex;
-  gap: 7px;
-  margin: 18px 0;
-}
-/* Drawer quick actions: kit.css .kit-btn (+.primary); only the equal-width
-   flex split is ours. */
-.d-detail-btn {
-  flex: 1;
-}
-.d-detail-label {
-  font: var(--t-tiny);
-  text-transform: uppercase;
-  letter-spacing: var(--tk-eye);
-  color: var(--ink-3);
-  margin: 22px 0 10px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.d-kv {
-  border: 1px solid var(--line);
-  border-radius: 11px;
-  background: var(--bg-elev);
-  overflow: hidden;
-}
-.d-kv-row {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 11px 13px;
-  border-bottom: 1px solid var(--line);
-}
-.d-kv-row:last-child {
-  border-bottom: none;
-}
-.d-kv-row svg {
-  color: var(--ink-3);
-  flex-shrink: 0;
-}
-.d-kv-v {
-  flex: 1;
-  min-width: 0;
-  font: var(--t-body);
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.d-kv-k {
-  font: var(--t-mono);
-  font-size: 10px;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
-.d-rel {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 9px 2px;
-  border-bottom: 1px solid var(--line);
-}
-.d-rel:last-child {
-  border-bottom: none;
-}
-.d-rel-badge {
-  width: 34px;
-  height: 34px;
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--ink) 6%, transparent);
-  color: var(--ink-2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font: var(--t-small);
-  font-size: 13px;
-  flex-shrink: 0;
-}
-.d-note {
-  padding: 12px 14px;
-  border-radius: 11px;
-  background: color-mix(in oklab, var(--_accent) 6%, transparent);
-  border: 1px solid color-mix(in oklab, var(--_accent) 16%, transparent);
-  margin-bottom: 8px;
-}
-.d-note p {
-  margin: 0;
-  font: var(--t-body);
-  color: var(--ink-2);
-}
-.d-note .when {
-  margin-top: 6px;
-  font: var(--t-mono);
-  font-size: 10px;
-  color: var(--ink-3);
-}
-.d-noteadd {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 6px 6px 12px;
-  border-radius: 11px;
-  border: 1px dashed var(--line-strong);
-}
-.d-noteadd input,
-.d-noteadd select {
-  flex: 1;
-  min-width: 0;
-  border: none;
-  background: none;
-  outline: none;
-  font: var(--t-body);
-  color: var(--ink);
-}
-.d-noteadd select {
-  cursor: pointer;
-}
-.d-noteadd input[type='date'] {
-  color-scheme: light dark;
-}
-.d-noteadd input.narrow {
-  flex: 0 1 92px;
-}
-.d-noteadd .dash {
-  color: var(--ink-3);
-  flex-shrink: 0;
-}
-.d-mini-btn {
-  width: 30px;
-  height: 30px;
-  flex-shrink: 0;
-  border: none;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.d-addtoggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-left: auto;
-  padding: 3px 9px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--bg-elev);
-  color: var(--ink-2);
-  font: var(--t-mono);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.d-addtoggle:hover {
-  border-color: var(--line-strong);
-  color: var(--ink);
-}
-.d-taskrow {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 9px 2px;
-  border-bottom: 1px solid var(--line);
-}
-.d-taskrow:last-child {
-  border-bottom: none;
-}
-.d-taskbox {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-  border-radius: 6px;
-  border: 1.5px solid var(--line-strong);
-  background: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.d-taskbox.on {
-  background: var(--accd);
-  border-color: var(--accd);
-}
-/* Micro chips ride kit.css .kit-chip.quiet; the compact mono-eyebrow sizing
-   is the People delta (needs the compound selector to outrank kit.css, which
-   loads after app.css). Some are plain status <span>s, not toggles. */
-.kit-chip.d-chip-sm {
-  min-height: 0;
-  padding: 3px 9px;
-  font: var(--t-mono);
-  font-size: 10px;
-  text-transform: uppercase;
-}
-span.d-chip-sm {
-  cursor: default;
-}
-/* Debt-direction toggle: kit.css .kit-seg; keep it rigid inside the add row. */
-.d-seg {
-  flex-shrink: 0;
-}
-.d-activity-item {
-  display: flex;
-  gap: 11px;
-  padding-bottom: 14px;
-}
-.d-activity-rail {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex-shrink: 0;
-}
-.d-activity-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  margin-top: 5px;
-}
-.d-activity-line {
-  width: 1px;
-  flex: 1;
-  background: var(--line);
-  margin-top: 3px;
-}
-.d-activity-kind {
-  font: var(--t-mono);
-  font-size: 10px;
-  text-transform: uppercase;
-}
-.d-activity-date {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--ink-3);
-}
-.d-details-foot {
-  display: flex;
-  gap: 7px;
-  padding: 12px 18px;
-  border-top: 1px solid var(--line);
-  flex-shrink: 0;
-}
 
 /* ---------- Modal ---------- */
 
@@ -1225,114 +541,11 @@ span.d-chip-sm {
   font: var(--t-small);
   color: var(--ink-2);
 }
-.d-input {
-  width: 100%;
-  padding: 11px 13px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: var(--bg);
-  outline: none;
-  font: var(--t-body);
-  font-size: 15px;
-  color: var(--ink);
-}
-.d-input:focus {
-  border-color: var(--selb);
-  box-shadow: var(--kit-focus-ring);
-}
-.d-modal-label {
-  font: var(--t-tiny);
-  text-transform: uppercase;
-  letter-spacing: var(--tk-eye);
-  color: var(--ink-3);
-  margin: 16px 0 8px;
-}
-.d-pick {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
+
 /* Picker chips (list/cadence): kit.css .kit-chip.quiet — they're
    aria-pressed toggles, same voice as the toolbar filters. */
-/* Modal footer: kit.css .kit-modal-foot; People right-aligns its actions. */
-.d-modal-foot {
-  justify-content: flex-end;
-}
+
 /* Ghost/primary modal buttons: kit.css .kit-btn / .kit-btn.primary. */
-
-/* ---------- Journal + activity ---------- */
-
-.j-wrap {
-  max-width: 640px;
-}
-.j-compose {
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--bg-elev);
-  padding: 16px;
-}
-.j-moodrow {
-  display: flex;
-  gap: 8px;
-  margin: 12px 0;
-}
-.j-mood {
-  width: 44px;
-  height: 44px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: none;
-  font-size: 22px;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.j-mood[aria-pressed='true'] {
-  border-color: var(--selb);
-  background: var(--sel);
-}
-.j-text {
-  width: 100%;
-  border: none;
-  resize: none;
-  outline: none;
-  background: none;
-  font: var(--t-body);
-  font-size: 14.5px;
-  line-height: 1.55;
-  color: var(--ink);
-}
-.j-entry {
-  display: flex;
-  gap: 13px;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--line);
-}
-.j-entry .em {
-  width: 40px;
-  height: 40px;
-  flex-shrink: 0;
-  border-radius: 12px;
-  background: var(--bg-sunken);
-  border: 1px solid var(--line);
-  font-size: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.j-entry .dt {
-  font: var(--t-mono);
-  font-size: 10.5px;
-  color: var(--ink-3);
-}
-.j-entry p {
-  margin: 4px 0 0;
-  font: var(--t-body);
-  font-size: 14px;
-  line-height: 1.55;
-  color: var(--ink);
-}
 
 /* Window footer (bounded browse) */
 .d-window-foot {
@@ -1440,12 +653,7 @@ span.d-chip-sm {
 .docs.is-narrow .d-grid {
   grid-template-columns: repeat(2, 1fr);
 }
-.docs.is-narrow .d-col.list,
-.docs.is-narrow .d-col.last,
-.docs.is-narrow .d-cell.list,
-.docs.is-narrow .d-cell.last {
-  display: none;
-}
+
 .docs.is-narrow .d-list-head {
   display: none !important;
 }

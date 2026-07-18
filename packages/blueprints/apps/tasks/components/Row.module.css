@@ -1,0 +1,70 @@
+/* One task row's own decorations — the row/circle/title/due primitives it
+   shares with the board's pending-add ghost live in shared.module.css; these
+   are Row-only. Authored camelCase; module hashing replaces the `tk-` prefix.
+   The priority flag is base `.flag` + a level modifier (high/medium/low),
+   joined via an explicit lookup map in Row.tsx (never a computed key). */
+
+.rowNote {
+  font: var(--t-small);
+  font-size: 12px;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 1px;
+}
+.rowNote mark {
+  background: var(--accent-soft);
+  color: var(--accent-deep-fg);
+  border-radius: 3px;
+  padding: 0 1px;
+}
+
+.badge.doing {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent-deep-fg);
+  background: var(--accent-soft);
+  border-radius: 5px;
+  padding: 1px 6px;
+}
+.recur {
+  flex-shrink: 0;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+.meta {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  align-self: center;
+}
+.flag {
+  flex-shrink: 0;
+  align-self: center;
+  font-size: 12px;
+}
+.flag.high {
+  color: var(--danger);
+}
+.flag.medium {
+  color: var(--warn);
+}
+.flag.low {
+  color: var(--ink-3);
+}
+
+.rowTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+.tagChipStatic {
+  font-size: 11px;
+  padding: 2px 8px;
+}

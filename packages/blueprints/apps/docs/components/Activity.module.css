@@ -1,0 +1,56 @@
+/* The Details drawer's real activity trail (issue #352 phase 4). Authored
+   camelCase; rendered inside the drawer's scroll body. The loading/denied/
+   empty line mirrors History's `.versionStatus` treatment (its sibling panel). */
+
+.activityItem {
+  display: flex;
+  gap: 11px;
+  padding-bottom: 14px;
+}
+.activityRail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+.activityDot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-pill);
+  background: var(--accent-deep-fg);
+  margin-top: 5px;
+}
+.activityLine {
+  width: 1px;
+  flex: 1;
+  background: var(--line);
+  margin-top: 3px;
+}
+.activityText {
+  font: var(--t-small);
+  color: var(--ink);
+}
+.activityMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+.activityDate {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.receiptChip {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--accent-deep-fg);
+  border: 1px solid var(--accent-soft);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.activityStatus {
+  font: var(--t-small);
+  color: var(--ink-3);
+  padding: 4px 0 10px;
+}

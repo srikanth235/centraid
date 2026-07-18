@@ -1,0 +1,62 @@
+/* Albums overview: a responsive card grid. Authored camelCase (old `ph-`
+   prefix dropped). */
+
+.albumGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 16px;
+}
+.albumCard {
+  border: none;
+  background: none;
+  padding: 0;
+  text-align: left;
+  transition: transform 0.16s var(--ease);
+}
+.albumCard:hover {
+  transform: translateY(-2px);
+}
+.albumCardCover {
+  display: block;
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: var(--r-card);
+  background: var(--bg-sunken) center/cover no-repeat;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--line);
+}
+.albumCardName {
+  display: block;
+  font: var(--t-body-strong);
+  font-size: 14px;
+  margin-top: 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.albumCardCount {
+  display: block;
+  font: var(--t-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-top: 2px;
+}
+.albumCardNew {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  aspect-ratio: 1;
+  border: 1.5px dashed var(--line-strong);
+  border-radius: var(--r-card);
+  background: var(--bg-elev);
+  color: var(--ink-3);
+}
+.albumCardNew:hover {
+  border-color: var(--_accent);
+  color: var(--accent-deep-fg);
+}
+.albumCardNew span:last-child {
+  font: var(--t-small);
+}

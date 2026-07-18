@@ -1,0 +1,30 @@
+/* The activity feed rows. The money-tone suffix classes live in
+   shared.module.css. Authored camelCase. */
+.act {
+  display: flex;
+  gap: 13px;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--line);
+}
+.actIc {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  background: var(--bg-sunken);
+}
+.actT {
+  font: var(--t-body);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.actD {
+  font: var(--t-mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  margin-top: 2px;
+}

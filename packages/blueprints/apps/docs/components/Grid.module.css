@@ -1,0 +1,101 @@
+/* Grid view card (mapped children of the static #grid container, whose
+   auto-fill geometry `.d-grid` stays global in app.css). Authored camelCase;
+   the play badge / star / custody dot the card shows come from
+   shared.module.css. `.card`'s `[data-selected]` attribute hook stays a real
+   attribute (glue passes it as a string) — the module localizes only the class. */
+
+.card {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  overflow: hidden;
+  background: var(--bg-elev);
+  transition:
+    border-color 0.12s,
+    box-shadow 0.12s;
+}
+.card:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-md);
+}
+.card[data-selected='true'] {
+  border-color: var(--selb);
+  box-shadow: 0 0 0 2px var(--sel);
+}
+.thumb {
+  position: relative;
+  height: 104px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.thumbLabel {
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  opacity: 0.9;
+}
+.thumbLines {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.thumbLines > i {
+  height: 4px;
+  border-radius: 2px;
+  display: block;
+}
+.cardSelect {
+  position: absolute;
+  top: 9px;
+  left: 9px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--bg-elev) 78%, transparent);
+  backdrop-filter: blur(4px);
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.card:hover .cardSelect,
+.card[data-selected='true'] .cardSelect {
+  opacity: 1;
+}
+.cardSelect[aria-pressed='true'] {
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
+  opacity: 1;
+}
+.cardBody {
+  padding: 11px 12px 12px;
+}
+.cardTitle {
+  font: var(--t-body-strong);
+  font-size: 13.5px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cardMeta {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  margin-top: 5px;
+}

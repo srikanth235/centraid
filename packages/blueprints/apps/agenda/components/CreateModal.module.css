@@ -1,0 +1,135 @@
+/* The create-event composer modal. Moved out of app.css. The modal shell and
+   footer are kit vocabulary (kit-modal / kit-modal-foot), reached via :global();
+   the field rows are the global `.ag-field-row` (app.css), so the composer's
+   descendant overrides target them through :global() too. */
+
+.createModal {
+  width: min(30rem, 100%);
+  padding: 0;
+  overflow: hidden;
+}
+.createHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.createHeading {
+  font: var(--t-body-strong);
+  font-size: 15px;
+}
+.createBody {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  max-height: 60vh;
+  overflow: auto;
+}
+.createTitle {
+  width: 100%;
+  font-family: var(--font-title);
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--ink);
+  background: none;
+  border: none;
+  border-bottom: 2px solid var(--line);
+  padding: 0 0 8px;
+  outline: none;
+}
+.createTitle:focus {
+  border-color: var(--selb);
+}
+.createTimes {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.createTimes :global(.ag-field-row) {
+  flex: 1;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 9rem;
+}
+.createTimes :global(.ag-field-row) span {
+  width: auto;
+}
+.calChips {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.calChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-elev);
+  font: var(--t-small);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.calChip[aria-pressed='true'] {
+  border-color: var(--selb);
+  background: var(--sel);
+  color: var(--ink);
+  font-weight: 600;
+}
+/* A guest chip carries a small initials avatar ahead of the name; selecting
+   it invites that person (aria-pressed reuses the calendar-chip treatment). */
+.guestChips {
+  margin-top: 4px;
+}
+.guestChipAvatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--sel);
+  color: var(--ink-2);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+}
+.calChip[aria-pressed='true'] .guestChipAvatar {
+  background: var(--bg-elev);
+  color: var(--ink);
+}
+.createDesc {
+  width: 100%;
+  min-height: 64px;
+  font: var(--t-body);
+  font-size: 13px;
+  color: var(--ink-2);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  outline: none;
+  resize: none;
+  font-family: var(--font-sans);
+}
+.createDesc:focus {
+  border-color: var(--selb);
+  box-shadow: var(--kit-focus-ring);
+}
+.createModal :global(.kit-modal-foot) {
+  margin: 0;
+  padding: 14px 20px;
+  border-top: 1px solid var(--line);
+  background: var(--bg-elev);
+  justify-content: flex-end;
+}
+
+@media (max-width: 519px) {
+  .createTimes {
+    flex-direction: column;
+  }
+}

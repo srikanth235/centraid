@@ -1,0 +1,88 @@
+/* The album picker. Authored camelCase (old `picker-` prefix dropped). The
+   panel rides the shared `.kit-modal` shell as a compound so app-specific
+   grid shape keys off the pair. The tile's media (img/placeholder) is filled
+   imperatively by media.ts, whose global `is-placeholder`/`ph-tile-*` classes
+   land inside `.tile`. */
+
+:global(.kit-modal).panel {
+  width: min(40rem, 100%);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+.head {
+  margin: 0;
+  font: var(--t-title);
+  letter-spacing: var(--tracking-h);
+}
+.grid {
+  flex: 1;
+  min-height: 8rem;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
+  gap: 3px;
+  align-content: start;
+}
+.empty {
+  grid-column: 1 / -1;
+  padding: 1.5rem 0;
+  text-align: center;
+}
+.tile {
+  position: relative;
+  aspect-ratio: 1;
+  padding: 0;
+  border: none;
+  border-radius: var(--ph-tile-r);
+  background: var(--bg-sunken);
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+.tile img,
+.tile video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+.tile:focus-visible {
+  outline: none;
+  box-shadow: var(--kit-focus-ring);
+  outline-offset: -2px;
+}
+.tile[aria-pressed='true'] {
+  outline: 3px solid var(--_accent);
+  outline-offset: -3px;
+  border-radius: var(--ph-tile-r-sel);
+}
+.tile[aria-pressed='true']::after {
+  content: '✓';
+  position: absolute;
+  top: 0.3rem;
+  left: 0.3rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  background: var(--accent-deep);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.count {
+  margin-right: auto;
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+}

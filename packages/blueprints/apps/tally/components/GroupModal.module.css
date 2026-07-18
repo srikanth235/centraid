@@ -1,0 +1,7 @@
+/* The new-group member multiselect wrapper. Field atoms (`in`/`field`/
+   `flabel`/`catrow`) come from shared.module.css. Authored camelCase. */
+.memtoggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

@@ -1,0 +1,25 @@
+/* The "+ New" menu popover contents (#newMenu root). The animated container
+   `.d-new-menu` stays global in app.css (it is the static #newMenu element);
+   only these menu-item rows moved here. Authored camelCase. */
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 11px;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  color: var(--ink);
+  font: var(--t-body);
+  text-align: left;
+}
+.menuItem:hover {
+  background: var(--bg-sunken);
+}
+.menuSep {
+  height: 1px;
+  background: var(--line);
+  margin: 5px 8px;
+}

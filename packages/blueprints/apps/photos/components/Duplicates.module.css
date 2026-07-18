@@ -1,0 +1,96 @@
+/* The duplicates shelf (issue #352). Authored camelCase (old `dup-` prefix
+   dropped). `.tileMedia` is filled imperatively by media.ts, whose global
+   `is-placeholder`/`ph-tile-*` classes land inside it — the `is-placeholder`
+   marker is referenced here as a `:global` compound. */
+
+.shelf {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0.25rem 0 1rem;
+}
+.shelfHead {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.actions {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  background: color-mix(in oklab, var(--bg) 92%, transparent);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+}
+.count {
+  margin-right: auto;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--ink-2);
+}
+.cluster {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.clusterLabel {
+  margin: 0;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.clusterRow {
+  display: flex;
+  gap: 0.6rem;
+  overflow-x: auto;
+  padding-bottom: 0.15rem;
+}
+.tile {
+  position: relative;
+  flex: 0 0 8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  cursor: pointer;
+}
+.tileMedia {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--ph-tile-r);
+  overflow: hidden;
+  background: var(--bg-sunken);
+  border: 2px solid transparent;
+}
+.tileMedia:global(.is-placeholder) {
+  position: relative;
+}
+.tile:has(input:checked) .tileMedia {
+  border-color: var(--_accent);
+  border-radius: var(--ph-tile-r-sel);
+}
+.tileMedia img,
+.tileMedia video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+.tile input[type='checkbox'] {
+  position: absolute;
+  top: 0.35rem;
+  left: 0.35rem;
+  width: 1.1rem;
+  height: 1.1rem;
+}
+.tileMeta {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--ink-2);
+  text-align: center;
+}

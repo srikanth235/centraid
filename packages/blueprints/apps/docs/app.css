@@ -5,6 +5,18 @@
    default-view) all retune the whole surface at once. Chrome is graphite +
    paper with a single per-app accent (slate by default); file-type tints live
    only inside thumbnails and badges.
+
+   TS + CSS-modules split: this file keeps the GLOBAL remainder only — the
+   token/root layer, the static index.html shell (`.docs`, the `.d-side`/
+   `.d-main` chrome, `.d-grid`/`.d-list*` containers), the consent-denied
+   collapse, and the narrow-viewport rules that target those static/state
+   classes. Every JSX-only `d-*` rule moved into a co-located
+   components/*.module.css (shared atoms — custody dot, snippet, star, media
+   play, tag chip, detail buttons — in components/shared.module.css); the
+   `d-slide-r` keyframe moved with `.d-details` into Details.module.css. The
+   `side-open`/`is-narrow`/`denied` state classes and `[data-app-*]` attrs stay
+   global (glue code toggles them on the static #root). `.d-quick-block` is a
+   vestigial rule with no JSX referent — kept global, untouched.
    ========================================================================== */
 
 :root {
@@ -137,7 +149,7 @@ button {
   overflow: hidden;
 }
 
-/* ---------- Sidebar ---------- */
+/* ---------- Sidebar (static shell) ---------- */
 
 .d-side {
   width: 250px;
@@ -232,66 +244,17 @@ button {
   padding: 5px;
   animation: kit-rise 0.16s var(--ease);
 }
-.d-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 9px 11px;
-  border: none;
-  background: none;
-  border-radius: 8px;
-  color: var(--ink);
-  font: var(--t-body);
-  text-align: left;
-}
-.d-menu-item:hover {
-  background: var(--bg-sunken);
-}
-.d-menu-sep {
-  height: 1px;
-  background: var(--line);
-  margin: 5px 8px;
-}
+/* The "+ New" menu items (.d-menu-item/.d-menu-sep) render into #newMenu and
+   moved into components/NewMenu.module.css. */
 
 .d-nav {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
-.d-nav-item {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  width: 100%;
-  padding: 9px 11px;
-  border: none;
-  border-radius: 9px;
-  font: var(--t-body);
-  background: none;
-  color: var(--ink-2);
-}
-.d-nav-item span:first-of-type {
-  flex: 1;
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.d-nav-item:hover {
-  background: var(--bg-sunken);
-  color: var(--ink);
-}
-.d-nav-item[aria-current='true'] {
-  background: var(--accent-soft);
-  color: var(--accent-deep-fg);
-  font-weight: 600;
-}
-.d-nav-count {
-  font-family: var(--mono);
-  font-size: 11px;
-  opacity: 0.6;
-}
+/* The nav items themselves (.d-nav-item*/
+.d-nav-count) render into #smartNav
+   / #folderList and moved into components/Sidebar.module.css. */
 
 .d-section-label {
   font: var(--t-tiny);
@@ -305,45 +268,9 @@ button {
   flex-direction: column;
   gap: 2px;
 }
-.d-folder {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-.d-folder .d-nav-item {
-  padding-right: 8px;
-}
-.d-folder-tools {
-  position: absolute;
-  right: 6px;
-  display: none;
-  gap: 2px;
-  background: linear-gradient(90deg, transparent, var(--bg-elev) 22%);
-  padding-left: 14px;
-}
-.d-folder:hover .d-folder-tools,
-.d-folder:focus-within .d-folder-tools {
-  display: flex;
-}
-.d-folder:hover .d-nav-count {
-  opacity: 0;
-}
-/* Rename/delete tool buttons: kit.css's .kit-icon-btn (+ .danger variant). */
-.d-folder-edit {
-  display: flex;
-  gap: 6px;
-  width: 100%;
-  padding: 4px 2px;
-}
-/* The input itself is kit.css's .kit-input.bare (transparent until focus). */
-.d-folder-edit button {
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--bg-elev);
-  color: var(--ink-2);
-  font: var(--t-small);
-  padding: 0 10px;
-}
+/* The folder rows + inline create/rename editors (.d-folder*/
+.d-folder-edit*)
+   moved into components/Sidebar.module.css. */
 
 .d-side-foot {
   margin-top: auto;
@@ -355,28 +282,9 @@ button {
   padding: 12px 13px;
   background: var(--bg-elev);
 }
-.d-storage-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-.d-storage-top .lbl {
-  font: var(--t-tiny);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
-  color: var(--ink-3);
-}
-.d-storage-top .val {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--ink-3);
-}
-.d-storage-label {
-  font: var(--t-small);
-  color: var(--ink-2);
-  margin-top: 8px;
-}
+/* The storage footprint contents (.d-storage-top*/
+.d-storage-label) render
+   into #storage and moved into components/Sidebar.module.css. */
 .d-consent-line {
   display: flex;
   align-items: center;
@@ -416,7 +324,7 @@ button {
   max-width: 32rem;
 }
 
-/* ---------- Main ---------- */
+/* ---------- Main (static shell) ---------- */
 
 .d-main {
   flex: 1;
@@ -511,7 +419,8 @@ button {
   gap: 8px;
   flex-wrap: wrap;
 }
-/* Type filter chips: kit.css .kit-chip.quiet (soft tint + accent-ink select). */
+/* Type filter chips: kit.css .kit-chip.quiet (soft tint + accent-ink select).
+   The per-chip label class (.d-tag-chip) moved into components/shared.module.css. */
 .d-toolbar-div {
   width: 1px;
   height: 22px;
@@ -520,7 +429,7 @@ button {
 }
 /* Sort + bulk/restore/window-foot buttons: kit.css .kit-btn (pill). */
 
-/* Bulk bar */
+/* Bulk bar (static container; its contents moved into BulkBar.module.css) */
 .d-bulk {
   display: flex;
   align-items: center;
@@ -532,16 +441,6 @@ button {
   background: var(--sel);
   animation: kit-rise 0.18s var(--ease);
 }
-.d-bulk-count {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--ink);
-}
-.d-bulk-actions {
-  margin-left: auto;
-  display: flex;
-  gap: 7px;
-}
 /* Scroll region */
 .d-scroll {
   flex: 1;
@@ -550,138 +449,16 @@ button {
   padding: 2px 22px 40px;
 }
 
-/* ---------- Grid ---------- */
+/* ---------- Grid + list containers (static shell) ---------- */
+/* The grid/list container geometry stays global (index.html renders these
+   nodes; the app mounts React roots into them). The card/row/cell rules moved
+   into components/Grid.module.css + components/List.module.css. */
 
 .d-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
   gap: 14px;
 }
-.d-card {
-  position: relative;
-  border: 1px solid var(--line);
-  border-radius: 13px;
-  overflow: hidden;
-  background: var(--bg-elev);
-  transition:
-    border-color 0.12s,
-    box-shadow 0.12s;
-}
-.d-card:hover {
-  border-color: var(--line-strong);
-  box-shadow: var(--shadow-md);
-}
-.d-card[data-selected='true'] {
-  border-color: var(--selb);
-  box-shadow: 0 0 0 2px var(--sel);
-}
-.d-thumb {
-  position: relative;
-  height: 104px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-.d-media-play {
-  position: absolute;
-  inset: 50% auto auto 50%;
-  transform: translate(-50%, -50%);
-  display: grid;
-  place-items: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.58);
-  color: #fff;
-  font-size: 0.8rem;
-  padding-left: 2px;
-  pointer-events: none;
-}
-.d-media-play.small {
-  width: 1.35rem;
-  height: 1.35rem;
-  font-size: 0.55rem;
-}
-.d-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.d-thumb-label {
-  font-family: var(--mono);
-  font-weight: 600;
-  font-size: 15px;
-  letter-spacing: 0.06em;
-  opacity: 0.9;
-}
-.d-thumb-lines {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.d-thumb-lines > i {
-  height: 4px;
-  border-radius: 2px;
-  display: block;
-}
-.d-card-select {
-  position: absolute;
-  top: 9px;
-  left: 9px;
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1.5px solid var(--line-strong);
-  border-radius: 6px;
-  background: color-mix(in oklab, var(--bg-elev) 78%, transparent);
-  backdrop-filter: blur(4px);
-  padding: 0;
-  opacity: 0;
-  transition: opacity 0.12s;
-}
-.d-card:hover .d-card-select,
-.d-card[data-selected='true'] .d-card-select {
-  opacity: 1;
-}
-.d-card-select[aria-pressed='true'] {
-  background: var(--accent-deep);
-  border-color: var(--accent-deep);
-  opacity: 1;
-}
-.d-card-body {
-  padding: 11px 12px 12px;
-}
-.d-card-title {
-  font: var(--t-body-strong);
-  font-size: 13.5px;
-  line-height: 1.3;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.d-card-meta {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--ink-3);
-  margin-top: 5px;
-}
-
-/* The vault-canonical star (issue #274) riding a row or card title. */
-.d-star-ind {
-  color: var(--_accent);
-  font-size: 0.85em;
-  margin-left: 5px;
-}
-
-/* ---------- List ---------- */
-
 .d-listwrap {
   border: 1px solid var(--line);
   border-radius: var(--r-card);
@@ -697,722 +474,12 @@ button {
   border-bottom: 1px solid var(--line);
   background: var(--bg-sunken);
 }
-.d-col {
-  font: var(--t-tiny);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
-  color: var(--ink-3);
-}
-.d-col.name {
-  flex: 1;
-}
-.d-col.where {
-  width: 120px;
-}
-.d-col.size {
-  width: 70px;
-  text-align: right;
-}
-.d-col.added {
-  width: 88px;
-  text-align: right;
-}
-.d-col.end {
-  width: 40px;
-}
+/* Empty states + the kebab/move popover live in kit.css (.kit-empty*,
+   .kit-popover*). Window footer: kit.css's .kit-foot. */
 
-.d-check {
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1.5px solid var(--line-strong);
-  border-radius: 6px;
-  background: transparent;
-  padding: 0;
-}
-.d-check[aria-pressed='true'] {
-  border-color: var(--accent-deep);
-  background: var(--accent-deep);
-}
-
-.d-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--line);
-  transition: background 0.1s;
-}
-.d-row:last-child {
-  border-bottom: none;
-}
-.d-row:hover {
-  background: var(--bg-sunken);
-}
-.d-row[data-selected='true'] {
-  background: var(--sel);
-}
-.d-badge {
-  position: relative;
-  flex-shrink: 0;
-  width: 34px;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 8px;
-  overflow: hidden;
-}
-.d-badge img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.d-badge span {
-  font-family: var(--mono);
-  font-weight: 600;
-  font-size: 9px;
-  letter-spacing: 0.04em;
-}
-.d-row-main {
-  flex: 1;
-  min-width: 0;
-}
-.d-row-title {
-  font: var(--t-body-strong);
-  font-size: 14px;
-  color: var(--ink);
-  background: none;
-  border: none;
-  padding: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: left;
-  max-width: 100%;
-}
-.d-row-meta {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--ink-3);
-  margin-top: 2px;
-}
-.d-snippet {
-  font: var(--t-small);
-  font-size: 12px;
-  color: var(--ink-2);
-  margin-top: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.d-snippet mark {
-  background: var(--accent-soft);
-  color: var(--accent-deep-fg);
-  border-radius: 3px;
-  padding: 0 1px;
-}
-.d-cell {
-  color: var(--ink-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.d-cell.where {
-  width: 120px;
-  font: var(--t-small);
-  font-size: 12px;
-}
-.d-cell.size {
-  width: 70px;
-  font-family: var(--mono);
-  font-size: 11px;
-  text-align: right;
-}
-.d-cell.added {
-  width: 88px;
-  font-family: var(--mono);
-  font-size: 11px;
-  /* Flex (not the shared .d-cell's plain nowrap+ellipsis) so the trailing
-     custody dot (issue #352 phase 4) sits beside the date instead of
-     getting clipped by the cell's own text-overflow. */
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-}
-.d-cell.purge {
-  color: var(--danger);
-  opacity: 0.85;
-}
-.d-row-end {
-  width: 40px;
-  display: flex;
-  justify-content: flex-end;
-}
-/* Kebab: kit.css's .kit-icon-btn, dialed down via --kit-icon-btn-size inline
-   for this dense row. Window footer: kit.css's .kit-foot.
-   Empty states + the kebab/move popover also live in kit.css (.kit-empty*,
-   .kit-popover*). */
-
-/* ---------- Details drawer ---------- */
-
-.d-details-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 44;
-  background: rgba(15, 18, 26, 0.28);
-  animation: kit-fade 0.2s ease;
-}
-.d-details {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: min(360px, 92vw);
-  z-index: 45;
-  background: var(--bg-elev);
-  border-left: 1px solid var(--line);
-  box-shadow: var(--shadow-lg);
-  display: flex;
-  flex-direction: column;
-  animation: d-slide-r 0.24s var(--ease);
-}
-.d-details-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 16px 18px;
-  border-bottom: 1px solid var(--line);
-  flex-shrink: 0;
-}
-.d-details-head .lbl {
-  font: var(--t-tiny);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
-  color: var(--ink-3);
-}
-/* Close button: kit.css's .kit-icon-btn. */
-.d-details-body {
-  flex: 1;
-  overflow: auto;
-  padding: 20px 18px;
-}
-.d-hero {
-  position: relative;
-  height: 132px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-.d-hero img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.d-hero span {
-  font-family: var(--mono);
-  font-weight: 600;
-  font-size: 22px;
-  letter-spacing: 0.06em;
-}
-.d-detail-name {
-  font: var(--t-body-strong);
-  font-size: 16px;
-  text-align: center;
-  margin-top: 14px;
-  overflow-wrap: anywhere;
-}
-.d-detail-ext {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--ink-3);
-  text-align: center;
-  margin-top: 3px;
-}
-
-/* ---------- Custody badge + tags (issue #352 phase 4) ---------- */
-
-.d-detail-custody {
-  display: flex;
-  justify-content: center;
-  margin-top: 9px;
-}
-/* Same tone vocabulary as .kit-chip.quiet's selected state, just with an
-   owner-facing tone (ok/warn/danger) instead of the generic accent —
-   mirrors the photos app's own .custody-chip exactly. */
-.custody-chip {
-  cursor: default;
-}
-.custody-chip:hover {
-  border-color: var(--line); /* not interactive — suppress kit-chip's hover cue */
-}
-.custody-chip.custody-ok {
-  color: var(--accent-deep-fg);
-  border-color: color-mix(in oklab, var(--_accent) 35%, var(--line));
-}
-.custody-chip.custody-warn {
-  color: var(--custody-warn);
-  border-color: color-mix(in oklab, #c9922e 35%, var(--line));
-}
-.custody-chip.custody-danger {
-  color: var(--danger);
-  border-color: color-mix(in oklab, var(--danger) 35%, var(--line));
-}
-/* The compact Grid/List dot version of the same three tones. */
-.d-custody-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: var(--r-pill);
-  margin-left: 5px;
-  vertical-align: middle;
-}
-.d-custody-dot.custody-ok {
-  background: var(--accent-deep-fg);
-}
-.d-custody-dot.custody-warn {
-  background: #c9922e;
-}
-.d-custody-dot.custody-danger {
-  background: var(--danger);
-}
-.d-tags-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin: 10px 0 18px;
-}
-.d-tag-chip {
-  font-family: var(--mono);
-  font-size: 11px;
-}
-.d-tag-input {
-  min-width: 6rem;
-  flex: 0 1 8rem;
-}
-
-.d-detail-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  margin: 18px 0;
-}
-.d-detail-actions .d-detail-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-}
-/* Drawer action/footer buttons are kit pills; d-detail-btn keeps only the
-   row-fill layout + link reset (the Download button is an <a>). */
-.d-detail-btn {
-  flex: 1;
-  text-decoration: none;
-}
-.d-detail-label {
-  font: var(--t-tiny);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
-  color: var(--ink-3);
-  margin-bottom: 8px;
-}
-.d-detail-grid {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 9px 14px;
-  font: var(--t-small);
-  margin-bottom: 22px;
-}
-.d-detail-grid dt {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--ink-3);
-  margin: 0;
-}
-.d-detail-grid dd {
-  color: var(--ink-2);
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-.d-activity-item {
-  display: flex;
-  gap: 11px;
-  padding-bottom: 14px;
-}
-.d-activity-rail {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex-shrink: 0;
-}
-.d-activity-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--r-pill);
-  background: var(--accent-deep-fg);
-  margin-top: 5px;
-}
-.d-activity-line {
-  width: 1px;
-  flex: 1;
-  background: var(--line);
-  margin-top: 3px;
-}
-.d-activity-text {
-  font: var(--t-small);
-  color: var(--ink);
-}
-.d-activity-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 2px;
-}
-.d-activity-date {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--ink-3);
-}
-.d-receipt-chip {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  color: var(--accent-deep-fg);
-  border: 1px solid var(--accent-soft);
-  border-radius: 4px;
-  padding: 0 4px;
-}
-/* The real activity panel's (issue #352 phase 4) loading/denied/empty
-   line — same treatment as .d-version-status, its sibling panel. */
-.d-activity-status {
-  font: var(--t-small);
-  color: var(--ink-3);
-  padding: 4px 0 10px;
-}
-.d-details-foot {
-  display: flex;
-  gap: 7px;
-  padding: 12px 18px;
-  border-top: 1px solid var(--line);
-  flex-shrink: 0;
-}
-
-/* ---------- Version history (issue #352) ---------- */
-
-.d-version-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  font: var(--t-tiny);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
-  color: var(--ink-3);
-}
-.d-version-toggle svg {
-  width: 13px;
-  height: 13px;
-}
-.d-version-status {
-  font: var(--t-small);
-  color: var(--ink-3);
-  padding: 10px 0;
-}
-.d-version-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 8px;
-}
-.d-version {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  overflow: hidden;
-}
-.d-version-current {
-  border-color: var(--accent-soft);
-}
-.d-version-row {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  padding: 8px 10px;
-  background: var(--bg-elev);
-  border: none;
-  cursor: pointer;
-  text-align: left;
-}
-.d-version-badge {
-  font-family: var(--mono);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--ink-3);
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  padding: 2px 5px;
-  flex-shrink: 0;
-}
-.d-version-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.d-version-date {
-  font: var(--t-small);
-  color: var(--ink);
-}
-.d-version-size {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--ink-3);
-}
-.d-version-tag {
-  font-family: var(--mono);
-  font-size: 9.5px;
-  color: var(--accent-deep-fg);
-  border: 1px solid var(--accent-soft);
-  border-radius: 4px;
-  padding: 0 5px;
-  flex-shrink: 0;
-}
-.d-version-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  border-top: 1px solid var(--line);
-}
-.d-version-preview {
-  max-width: 100%;
-  max-height: 220px;
-  border-radius: 8px;
-  object-fit: contain;
-  background: var(--bg-sunken);
-}
-.d-version-preview-frame {
-  width: 100%;
-  height: 220px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-}
-.d-version-audio {
-  width: 100%;
-}
-
-/* ---------- In-place editor (issue #352) ---------- */
-
-.d-editor-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: flex;
-  flex-direction: column;
-  background: color-mix(in oklab, var(--ink) 30%, rgba(10, 12, 16, 0.55));
-  animation: kit-fade 0.2s ease;
-}
-.d-editor {
-  margin: auto;
-  width: min(760px, 94vw);
-  height: min(640px, 88vh);
-  display: flex;
-  flex-direction: column;
-  background: var(--bg);
-  border: 1px solid var(--line-strong);
-  border-radius: 16px;
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
-}
-.d-editor-top {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--line);
-  flex-shrink: 0;
-}
-.d-editor-title {
-  font: var(--t-body-strong);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.d-editor-save {
-  margin-left: auto;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--ink-3);
-  flex-shrink: 0;
-}
-.d-editor-body {
-  flex: 1;
-  min-height: 0;
-  padding: 16px 20px 20px;
-}
-.d-editor-status {
-  font: var(--t-small);
-  color: var(--ink-3);
-  padding: 12px 0;
-}
-.d-editor-textarea {
-  width: 100%;
-  height: 100%;
-  resize: none;
-  font: var(--t-body);
-  font-family: var(--mono);
-  font-size: 14px;
-  line-height: 1.65;
-  color: var(--ink);
-  background: none;
-  border: none;
-  outline: none;
-}
-
-/* ---------- Quick-look ---------- */
-
-.d-quick {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: flex;
-  flex-direction: column;
-  background: color-mix(in oklab, #0b0d12 92%, #000);
-  animation: kit-fade 0.2s ease;
-}
-.d-quick-top {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 18px;
-  color: #fff;
-  flex-shrink: 0;
-}
-.d-quick-badge {
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--mono);
-  font-weight: 600;
-  font-size: 9px;
-  flex-shrink: 0;
-}
-.d-quick-title {
-  flex: 1;
-  min-width: 0;
-  font: var(--t-body-strong);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.d-quick-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-  font: var(--t-small);
-  padding: 8px 14px;
-  border-radius: var(--r-pill);
-  text-decoration: none;
-}
-.d-quick-btn:hover {
-  background: rgba(255, 255, 255, 0.18);
-}
-/* Close button: kit.css's .kit-icon-btn, on the quick-look's dark surface —
-   the two-class selector bumps specificity above .kit-icon-btn's own
-   color/hover rules so these on-dark colors win regardless of load order. */
-.d-quick-icon.kit-icon-btn {
-  color: #fff;
-}
-.d-quick-icon.kit-icon-btn:hover {
-  background: rgba(255, 255, 255, 0.14);
-}
-.d-quick-stage {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 60px 28px;
-  position: relative;
-}
-/* Prev/next: kit.css's .kit-viewer-nav (+.prev/.next); .d-quick-stage above
-   is already the required `position: relative` ancestor. */
-.d-quick-image {
-  max-width: min(760px, 90%);
-  max-height: 100%;
-  border-radius: 8px;
-  box-shadow: var(--shadow-lg);
-  object-fit: contain;
-}
-.d-quick-frame {
-  width: min(760px, 90%);
-  height: 100%;
-  border: none;
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: var(--shadow-lg);
-}
-.d-quick-media {
-  max-width: min(900px, 90%);
-  max-height: 100%;
-  border-radius: 8px;
-  background: #000;
-  box-shadow: var(--shadow-lg);
-}
-.d-quick-audio {
-  width: min(34rem, 90%);
-  display: grid;
-  justify-items: center;
-  gap: 1.25rem;
-  padding: 2.25rem;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.08);
-}
-.d-quick-audio > span {
-  display: grid;
-  place-items: center;
-  width: 5rem;
-  height: 5rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 2.2rem;
-}
-.d-quick-audio audio {
-  width: 100%;
-}
-.d-quick-page {
-  width: min(520px, 84%);
-  aspect-ratio: 8.5 / 11;
-  background: #fff;
-  border-radius: 6px;
-  box-shadow: var(--shadow-lg);
-  padding: 44px 46px;
-  overflow: hidden;
-}
-.d-quick-page > i {
-  display: block;
-  border-radius: 2px;
-}
+/* ---------- Quick-look (vestigial global) ---------- */
+/* .d-quick-block has no JSX referent (QuickLook renders .d-quick-page for the
+   document mock) — a dead rule kept here, untouched, rather than moved. */
 .d-quick-block {
   width: min(560px, 86%);
   aspect-ratio: 4 / 3;
@@ -1428,32 +495,14 @@ button {
   font-size: 34px;
   opacity: 0.85;
 }
-.d-quick-foot {
-  text-align: center;
-  color: rgba(255, 255, 255, 0.6);
-  font-family: var(--mono);
-  font-size: 11px;
-  padding-bottom: 16px;
-}
 
 /* Drag-and-drop overlay: kit.css's .kit-drop / .kit-drop-card. */
 
-/* ---------- Keyframes ---------- */
-/* d-rise/d-fade retired in favor of kit.css's kit-rise/kit-fade (equivalent
-   timing/effect). d-slide-r stays — kit.css has no slide keyframe. */
-
-@keyframes d-slide-r {
-  from {
-    transform: translateX(24px);
-    opacity: 0.4;
-  }
-  to {
-    transform: none;
-    opacity: 1;
-  }
-}
-
 /* ---------- Narrow (phone) — driven by JS .is-narrow on #root ---------- */
+/* Only the rules targeting the static shell / state classes live here; the
+   narrow overrides for moved classes (.d-col*/
+.d-cell*, .d-editor*) travel
+   with those rules into List.module.css / Editor.module.css. */
 
 .docs.is-narrow .d-side {
   position: fixed;
@@ -1503,27 +552,6 @@ button {
 .docs.is-narrow .d-grid {
   grid-template-columns: repeat(2, 1fr);
 }
-.docs.is-narrow .d-col.where,
-.docs.is-narrow .d-col.size,
-.docs.is-narrow .d-col.added,
-.docs.is-narrow .d-cell.where,
-.docs.is-narrow .d-cell.size,
-.docs.is-narrow .d-cell.added {
-  display: none;
-}
 .docs.is-narrow .d-list-head {
   display: none !important;
-}
-/* Full-bleed editor on a phone — same treatment notes/app.css's
-   .nt-shell.is-narrow .nt-editor gives its own centered modal. */
-.docs.is-narrow .d-editor-backdrop {
-  align-items: stretch;
-}
-.docs.is-narrow .d-editor {
-  margin: 0;
-  width: 100%;
-  height: 100%;
-  max-height: 100%;
-  border-radius: 0;
-  border: none;
 }

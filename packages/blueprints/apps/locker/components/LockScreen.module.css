@@ -1,0 +1,69 @@
+/* Lock overlay. Authored camelCase (old `v-` prefix dropped). The `fade`
+   keyframe is used only here, so it moves into this module — esbuild localizes
+   the keyframe name and its `animation` reference together. */
+
+.lockscreen {
+  position: absolute;
+  inset: 0;
+  z-index: 90;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  animation: fade 0.25s ease;
+}
+.lockMark {
+  width: 66px;
+  height: 66px;
+  border-radius: 18px;
+  background: linear-gradient(160deg, color-mix(in oklab, var(--_accent) 78%, #fff), var(--accd));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lockTitle {
+  font: var(--t-title);
+  font-size: 22px;
+}
+.lockSub {
+  font: var(--t-small);
+  color: var(--ink-2);
+  margin-top: -10px;
+}
+.lockIn {
+  width: 280px;
+  text-align: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--bg-elev);
+  font: var(--t-body);
+  font-size: 15px;
+  outline: none;
+  letter-spacing: 0.2em;
+}
+.lockIn:focus {
+  border-color: var(--selb);
+  box-shadow: var(--kit-focus-ring);
+}
+.lockBtn {
+  width: 280px;
+  padding: 12px;
+  border: none;
+  border-radius: 11px;
+  background: var(--accd);
+  color: #fff;
+  font: var(--t-strong);
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

@@ -1,0 +1,29 @@
+/**
+ * Propose an event through the vault's typed command. The outcome is passed
+ * through verbatim — `executed`, `parked` (awaiting owner confirmation),
+ * `denied`, or `failed` (a precondition such as the busy-conflict check) —
+ * so the UI can narrate what the consent plane decided.
+ */
+export default async ({ body, ctx }: HandlerArgs): Promise<ActionResult> => {
+  const input = (body ?? {}) as Record<string, unknown>;
+  try {
+    const outcome = await ctx.vault.invoke({
+      command: 'schedule.propose_event',
+      input: {
+        summary: String(input.summary ?? ''),
+        dtstart: String(input.dtstart ?? ''),
+        dtend: String(input.dtend ?? ''),
+        calendar_id: String(input.calendar_id ?? ''),
+        ...(input.description ? { description: String(input.description) } : {}),
+        ...(Array.isArray(input.attendee_party_ids) && input.attendee_party_ids.length
+          ? { attendee_party_ids: input.attendee_party_ids.map(String) }
+          : {}),
+      },
+      purpose: 'dpv:ServiceProvision',
+    });
+    return { status: 200, body: outcome };
+  } catch (err) {
+    const e = err as { code?: string; message?: string };
+    return { status: 200, body: { status: 'denied', reason: e.message, code: e.code } };
+  }
+};

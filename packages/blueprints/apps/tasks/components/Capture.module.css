@@ -1,0 +1,86 @@
+/* The capture bar — its own component styles. The When/Flag eyebrow label
+   comes from shared.module.css; `kit-seg`/`kit-btn` stay global. Authored
+   camelCase; module hashing replaces the `tk-` prefix. The narrow (≤519px)
+   capture reflow moves here with its rules. */
+
+.capture {
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  margin-bottom: 26px;
+  transition: border-color 0.15s var(--ease);
+}
+.capture:focus-within {
+  border-color: color-mix(in oklab, var(--_accent) 40%, var(--line-strong));
+}
+.captureRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+}
+.captureDot {
+  width: 19px;
+  height: 19px;
+  border-radius: 999px;
+  border: 2px solid var(--line-strong);
+  flex-shrink: 0;
+}
+.captureInput {
+  flex: 1;
+  min-width: 0;
+  font: var(--t-body-strong);
+  font-size: 15px;
+  color: var(--ink);
+  background: none;
+  border: none;
+  outline: none;
+}
+.captureInput::placeholder {
+  color: var(--ink-3);
+}
+.captureAdd {
+  flex-shrink: 0;
+}
+.captureMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px 13px 47px;
+  flex-wrap: wrap;
+}
+/* The When/Flag capture chips read in the metadata voice — mono, a notch
+   smaller than kit-seg's default sans buttons. */
+.captureSeg > button {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  min-height: 1.9rem;
+  padding: 0.25rem 0.6rem;
+}
+.captureDiv {
+  width: 1px;
+  height: 16px;
+  background: var(--line);
+  margin: 0 2px;
+}
+.nlHint {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--accent-deep-fg);
+}
+
+@media (max-width: 519px) {
+  .captureRow {
+    flex-wrap: wrap;
+  }
+  .captureInput {
+    flex: 1 0 100%;
+    order: -1;
+  }
+  .captureAdd {
+    margin-left: auto;
+  }
+}
