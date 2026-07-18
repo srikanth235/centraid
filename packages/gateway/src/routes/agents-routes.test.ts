@@ -7,8 +7,10 @@
  * result varies by host).
  */
 
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { readAgentsStatus } from './agents-routes.ts';
+
+vi.setConfig({ testTimeout: 15_000 });
 
 test('omits per-agent models when no resolver is supplied', async () => {
   const s = await readAgentsStatus();

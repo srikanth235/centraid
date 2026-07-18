@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Git-store backend integration (issue #137, per-vault since #280). The
  * gateway constructs a `WorktreeStore` inside the ACTIVE vault's directory,
@@ -14,7 +15,6 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import type { WorktreeStore } from '../worktree-store/index.js';
 import { serve, type GatewayServeHandle } from './serve.ts';
@@ -67,7 +67,7 @@ async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
 }
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `gateway-git-store-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`gateway-git-store-${crypto.randomUUID()}-`);
 });
 
 afterEach(async () => {

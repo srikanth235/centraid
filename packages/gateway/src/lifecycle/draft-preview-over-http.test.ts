@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Draft preview through the gateway (issue #141, "preview first").
  *
@@ -14,7 +15,6 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import type { WorktreeStore } from '../worktree-store/index.js';
 import { serve, type GatewayServeHandle } from '../serve/serve.ts';
@@ -67,7 +67,7 @@ async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
 }
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `gateway-draft-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`gateway-draft-${crypto.randomUUID()}-`);
 });
 
 afterEach(async () => {

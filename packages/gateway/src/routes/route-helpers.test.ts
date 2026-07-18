@@ -1,6 +1,6 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { describe, expect, it } from 'vitest';
-import { mkdtempSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -15,7 +15,7 @@ import {
 } from './route-helpers.js';
 
 function tmp(): string {
-  return mkdtempSync(join(tmpdir(), 'centraid-route-helpers-'));
+  return tempDirSync('centraid-route-helpers-');
 }
 
 function mockReq(body: string | Buffer): IncomingMessage {

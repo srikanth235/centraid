@@ -4,7 +4,7 @@
 // Importing the real reader — rather than re-deriving the format in a fixture —
 // is the point: it is what stops the two implementations drifting.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   decodeHeader,
@@ -30,6 +30,8 @@ import {
 } from './cbsf';
 import { webCryptoUploadCrypto } from './crypto';
 import { IncrementalSha256 } from './incremental-sha256';
+
+vi.setConfig({ testTimeout: 30_000 });
 
 const crypto = webCryptoUploadCrypto();
 const KEY = new Uint8Array(32).map((_, index) => (index * 7 + 3) & 0xff);

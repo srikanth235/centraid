@@ -1,8 +1,7 @@
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, expect, test } from 'vitest';
+import { expect, test } from 'vitest';
 import { openVaultDb } from '../db.js';
 import {
   JOURNAL_MIGRATIONS,
@@ -12,18 +11,6 @@ import {
   VaultSchemaAheadError,
 } from './migrate.js';
 import { listVaultEntities, resolveEntity } from './tables.js';
-
-const cleanups: (() => void)[] = [];
-afterEach(() => {
-  while (cleanups.length > 0) cleanups.pop()?.();
-});
-
-function tempDir(): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'vault-migrate-'));
-  cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 function userVersionOf(file: string): number {
   const raw = new DatabaseSync(file);
   const row = raw.prepare('PRAGMA user_version').get() as { user_version: number };
@@ -201,7 +188,7 @@ test('migrate: the guard also applies to journal.db migrations, not just vault.d
 });
 
 test('downgrade guard end-to-end: openVaultDb refuses a file whose schema is ahead, and leaves it untouched', () => {
-  const dir = tempDir();
+  const dir = tempDirSync();
   const first = openVaultDb({ dir });
   first.close();
 

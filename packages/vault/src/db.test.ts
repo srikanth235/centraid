@@ -1,5 +1,5 @@
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import { rmSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, test, vi } from 'vitest';
@@ -9,15 +9,8 @@ const cleanups: (() => void)[] = [];
 afterEach(() => {
   while (cleanups.length > 0) cleanups.pop()?.();
 });
-
-function tempDir(): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'vault-db-'));
-  cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 test('openVaultDb: file-backed vault.db and journal.db open with PRAGMA synchronous = FULL', () => {
-  const dir = tempDir();
+  const dir = tempDirSync();
   const db = openVaultDb({ dir });
   cleanups.push(() => db.close());
   const vaultSync = db.vault.prepare('PRAGMA synchronous').get() as { synchronous: number };
@@ -54,14 +47,14 @@ test('close() still closes both handles when PRAGMA optimize itself throws', () 
 });
 
 test('close() on a file-backed vault also survives PRAGMA optimize without error', () => {
-  const dir = mkdtempSync(path.join(tmpdir(), 'vault-db-optimize-'));
+  const dir = tempDirSync('vault-db-optimize-');
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
   const db = openVaultDb({ dir });
   expect(() => db.close()).not.toThrow();
 });
 
 test('openVaultDb: fresh vault.db and journal.db are auto_vacuum=INCREMENTAL (issue #438)', () => {
-  const dir = tempDir();
+  const dir = tempDirSync();
   const db = openVaultDb({ dir });
   cleanups.push(() => db.close());
   // SQLite auto_vacuum enum: NONE=0, FULL=1, INCREMENTAL=2. Both files must be
@@ -73,7 +66,7 @@ test('openVaultDb: fresh vault.db and journal.db are auto_vacuum=INCREMENTAL (is
 });
 
 test('openVaultDb: a journal.db created WITHOUT auto_vacuum converts to INCREMENTAL on next open (issue #438)', () => {
-  const dir = tempDir();
+  const dir = tempDirSync();
   // Pre-#438 file: WAL, freelist mode (auto_vacuum=0), non-empty.
   const seed = new DatabaseSync(path.join(dir, 'journal.db'));
   seed.exec('PRAGMA journal_mode=WAL');

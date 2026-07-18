@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Webhook-trigger route on the CORE gateway (issue #96). The desktop/daemon
  * gateway (`serve()`) IS the always-on host for desktop-only users — a
@@ -12,7 +13,6 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import { serve, type GatewayServeHandle } from '../serve/serve.ts';
 import type { GatewayPaths } from '../paths.ts';
@@ -112,7 +112,7 @@ async function createWebhookAutomation(appId: string): Promise<{ id: string; sec
 }
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `gw-webhook-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`gw-webhook-${crypto.randomUUID()}-`);
   handle = await serve({ paths: pathsUnder(dataDir) });
 });
 

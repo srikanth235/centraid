@@ -1,10 +1,10 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 // governance: allow-repo-hygiene file-size-limit one lifecycle sweep, one spec — the purge matrix (content/note/document/asset/domain-trash × every polymorphic mechanism in poly-refs.ts) is a single table of invariants; splitting it would scatter the completeness argument the registry exists to make
 // Tests for the §10 responsibilities closed after the first pass: polymorphic
 // ref validation (S4), contract version check (S3), retention policy sweeps,
 // the view service, and file custody.
 
 import { existsSync, promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { bootstrapVault, createGrant, enrollApp, type BootstrapResult } from '../bootstrap.js';
@@ -532,7 +532,7 @@ afterEach(async () => {
 });
 
 async function fileBackedVault(): Promise<{ gw2: Gateway; owner2: Credential }> {
-  custodyDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vault-custody-'));
+  custodyDir = await tempDir('vault-custody-');
   fileDb = openVaultDb({ dir: custodyDir });
   const boot2 = bootstrapVault(fileDb, { ownerName: 'Priya' });
   const gw2 = createGateway(fileDb);

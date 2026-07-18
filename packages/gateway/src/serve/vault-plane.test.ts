@@ -1,9 +1,8 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 // governance: allow-repo-hygiene file-size-limit one end-to-end suite over a single served gateway+vault fixture — the scenarios intentionally share state to test the plane as one surface
 import { afterEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import http from 'node:http';
 import { ensureAppEnrolled, uuidv7 } from '@centraid/vault';
 import { Dispatcher, Registry } from '@centraid/app-engine';
@@ -17,13 +16,6 @@ const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.();
 });
-
-async function tempDir(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `vault-plane-${crypto.randomUUID()}-`));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 function openPlane(dir: string): VaultPlane {
   const plane = openVaultPlane({ dir, logger: silentLogger, ownerName: 'Priya' });
   cleanups.push(() => plane.stop());

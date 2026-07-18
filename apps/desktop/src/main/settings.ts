@@ -30,6 +30,8 @@ import { mergePersistedSettings } from './settings-merge.js';
 export interface PersistedSettings {
   /** Active gateway id. Defaults to `'local'` on a fresh install. */
   activeGatewayId: string;
+  /** Developer-only gate for the conversational app builder. Absent → hidden. */
+  builderEnabled?: boolean;
   /** Optional URL the home shelf hits for remote-template updates. */
   remoteTemplatesUrl?: string;
   /**
@@ -96,6 +98,8 @@ export interface DesktopSettings {
   gatewayToken?: string;
   /** Persisted — the gateway the renderer is currently pointing at. */
   activeGatewayId: string;
+  /** Developer-only gate for the conversational app builder. */
+  builderEnabled?: boolean;
   /**
    * The vault the renderer is addressing on the active gateway (issue
    * #289), or `undefined` to let the gateway pick. Sent as the
@@ -166,6 +170,7 @@ function narrow(raw: Record<string, unknown>): PersistedSettings {
   return {
     activeGatewayId:
       typeof activeRaw === 'string' && activeRaw.length > 0 ? activeRaw : base.activeGatewayId,
+    ...(typeof raw.builderEnabled === 'boolean' ? { builderEnabled: raw.builderEnabled } : {}),
     ...(typeof raw.remoteTemplatesUrl === 'string'
       ? { remoteTemplatesUrl: raw.remoteTemplatesUrl }
       : {}),
@@ -267,6 +272,7 @@ async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> 
     activeProfileAvatarColor: resolved.profile.avatarColor ?? '#5B8DEF',
     gatewayUrl: resolved.url,
     gatewayToken: resolved.token,
+    ...(p.builderEnabled !== undefined ? { builderEnabled: p.builderEnabled } : {}),
     ...(activeVaultId !== undefined ? { activeVaultId } : {}),
     ...(p.remoteTemplatesUrl !== undefined ? { remoteTemplatesUrl: p.remoteTemplatesUrl } : {}),
     ...(p.onboardingCompletedAt !== undefined

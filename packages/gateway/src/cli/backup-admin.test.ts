@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * `centraid-gateway backup …` (PROTOCOL.md/FORMAT.md CLI surface): status,
  * run, list, verify, restore, kit — constructed from the same `--config`
@@ -9,7 +10,6 @@
 
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs, existsSync } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { SNAPSHOT_FORMAT, openLocalBackupProvider, type BackupProvider } from '@centraid/backup';
@@ -60,10 +60,8 @@ function lines(out: string): unknown[] {
 }
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `backup-admin-${crypto.randomUUID()}-`));
-  providerDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), `backup-admin-provider-${crypto.randomUUID()}-`),
-  );
+  dataDir = await tempDir(`backup-admin-${crypto.randomUUID()}-`);
+  providerDir = await tempDir(`backup-admin-provider-${crypto.randomUUID()}-`);
   configPath = path.join(dataDir, 'config.json');
   await fs.writeFile(
     configPath,

@@ -1,11 +1,10 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 // The import routes (issue #290 phase 2) over a real vault plane: stage a
 // file over HTTP, review its rows, publish, and see the batch in history.
 
 import { afterEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import http from 'node:http';
-import os from 'node:os';
-import path from 'node:path';
 import crypto from 'node:crypto';
 import { openVaultPlane, type VaultPlane } from '../serve/vault-plane.js';
 import { makeImportRouteHandler } from './import-routes.js';
@@ -18,7 +17,7 @@ afterEach(async () => {
 });
 
 async function fixture(): Promise<{ base: string; plane: VaultPlane }> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `import-routes-${crypto.randomUUID()}-`));
+  const dir = await tempDir(`import-routes-${crypto.randomUUID()}-`);
   cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
   const plane = openVaultPlane({ dir, logger: silentLogger, ownerName: 'Priya' });
   cleanups.push(() => plane.stop());

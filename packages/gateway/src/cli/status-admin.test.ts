@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * `centraid-gateway status` (issue #382) — a data-dir-only unit test:
  * `--data-dir` given but no service ever installed, so `queryServiceStatus`
@@ -12,7 +13,6 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import { commandStatus } from './status-admin.ts';
 import { commandVault } from './vault-admin.ts';
@@ -54,7 +54,7 @@ function lastJson(text: string): Record<string, unknown> {
 }
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `status-admin-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`status-admin-${crypto.randomUUID()}-`);
 });
 
 afterEach(async () => {

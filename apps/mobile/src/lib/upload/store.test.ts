@@ -1,8 +1,8 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // Queue conformance: enqueue, dedupe, resume, state transitions, and the
 // guarantee that the replica store's schema rebuild is not collateral damage.
 
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -27,7 +27,7 @@ function upload(overrides: Partial<NewUpload> = {}): NewUpload {
 }
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'centraid-queue-'));
+  dir = tempDirSync('centraid-queue-');
   driver = new NodeSqliteFileDriver(join(dir, 'uploads.db'));
   store = UploadQueueStore.create(driver);
 });

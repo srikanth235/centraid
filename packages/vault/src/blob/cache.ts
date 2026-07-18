@@ -19,7 +19,7 @@ import { VaultBlobBackpressureError } from '../errors.js';
 import type { LocalBlobStore } from './local.js';
 import { AccessIndex, ReplicaIndex } from './replica-index.js';
 import { OrphanTombstoneIndex } from './orphan-tombstone.js';
-import { pinnedThumbShas, previewShas, stagingShas } from './evict.js';
+import { pendingOutboxShas, pinnedThumbShas, previewShas, stagingShas } from './evict.js';
 
 /** The `blob_cache` settings bag (issue #405 §3), camelCase to match `blob_store`. */
 export interface BlobCacheSettings {
@@ -33,6 +33,19 @@ export interface BlobCacheSettings {
 
 /** Which synchronous caller has authority to shed original blobs. */
 export type BlobEvictionScope = 'admission' | 'reconciled-sweep';
+
+export function openCachedLocalReadStreamSync(
+  local: LocalBlobStore,
+  cache: BlobCache | undefined,
+  sha: string,
+): { stream: NodeJS.ReadableStream; size: number } | null {
+  const opened = local.openReadStreamSync?.(sha) ?? null;
+  if (opened && cache) {
+    cache.onLocalHit(opened.size);
+    cache.access.touch(sha, opened.size);
+  }
+  return opened;
+}
 
 /** The vault's current `blob_cache` settings (`{}`-safe on any shape). */
 export function readBlobCacheSettings(vault: DatabaseSync): BlobCacheSettings {
@@ -328,8 +341,9 @@ export class BlobCache {
    * The eviction pass. Admission may shed only reconstructible LRU previews;
    * the explicit post-reconciliation scope may then shed LRU originals. This
    * keeps stale replica evidence from authorizing original deletion before a
-   * deep remote listing has healed it. Pinned tinies, staged blobs, and blobs
-   * without replica evidence remain unevictable in either scope.
+   * deep remote listing has healed it. Pinned tinies, staged blobs, pending
+   * offsite obligations, and blobs without replica evidence remain unevictable
+   * in either scope.
    */
   runEviction(
     incoming = 0,
@@ -350,9 +364,14 @@ export class BlobCache {
     const localSet = new Set(this.local.listSync());
     const pinned = pinnedThumbShas(this.db);
     const staging = stagingShas(this.db);
+    const pendingOutbox = pendingOutboxShas(this.db);
     const preview = previewShas(this.db);
     const evictable = (sha: string): boolean =>
-      localSet.has(sha) && this.replica.has(sha) && !pinned.has(sha) && !staging.has(sha);
+      localSet.has(sha) &&
+      this.replica.has(sha) &&
+      !pinned.has(sha) &&
+      !staging.has(sha) &&
+      !pendingOutbox.has(sha);
     // (a) mediums first; (b) originals only when the caller just reconciled the
     // replica index against remote truth.
     const previews = [...preview].filter(evictable);

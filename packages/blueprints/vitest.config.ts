@@ -1,9 +1,6 @@
-import { defineProject } from 'vitest/config';
+import { nodeProject } from '@centraid/test-kit/vitest';
 
-// Project config for @centraid/blueprints. Coverage + the unified run live in the root
-// vitest.config.ts; see TESTING.md for the strategy. Default pool is 'forks'
-// (real child processes) so node:sqlite and the worker-thread handler-runner
-// behave as they did under node:test.
+// Project config for @centraid/blueprints. Coverage + the unified run live in the root.
 //
 // The app-boot harness (src/app-boot-harness.ts) serves each `*.module.css` as
 // the SAME class-map-exporting JS the gateway does, written to a sibling
@@ -11,10 +8,9 @@ import { defineProject } from 'vitest/config';
 // there. That `.js` extension is deliberately what keeps Vite/Vitest's own
 // CSS-modules transform from hijacking the `.module.css` import and handing the
 // app a bogus class map; do not "simplify" it back to a plain `.module.css`.
-export default defineProject({
+export default nodeProject({
   test: {
     name: '@centraid/blueprints',
     include: ['src/**/*.test.ts'],
-    environment: 'node',
   },
 });

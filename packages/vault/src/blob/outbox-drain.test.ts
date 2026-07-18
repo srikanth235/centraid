@@ -1,6 +1,6 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { randomBytes } from 'node:crypto';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { rmSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 import { DEFAULT_BACKUP_POLICY } from '../backup-policy.js';
@@ -36,7 +36,7 @@ async function collect(source: NodeJS.ReadableStream): Promise<Buffer> {
 }
 
 test('known-sha outbox writes CBSF straight to the final CAS key', async () => {
-  const dir = mkdtempSync(path.join(tmpdir(), 'blob-outbox-direct-'));
+  const dir = tempDirSync('blob-outbox-direct-');
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
   const db: VaultDb = openVaultDb({ dir });
   cleanups.push(() => db.close());
@@ -111,7 +111,7 @@ test('known-sha outbox writes CBSF straight to the final CAS key', async () => {
 });
 
 test('outbox drain routes a binary derivative to the derived store (issue #425 Wave 2)', async () => {
-  const dir = mkdtempSync(path.join(tmpdir(), 'blob-outbox-derived-'));
+  const dir = tempDirSync('blob-outbox-derived-');
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
   const db: VaultDb = openVaultDb({ dir });
   cleanups.push(() => db.close());
@@ -180,7 +180,7 @@ test('outbox drain routes a binary derivative to the derived store (issue #425 W
 });
 
 test('outbox-resident multipart resumes directly at the final SHA without CopyObject', async () => {
-  const dir = mkdtempSync(path.join(tmpdir(), 'blob-outbox-resume-'));
+  const dir = tempDirSync('blob-outbox-resume-');
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
   const db: VaultDb = openVaultDb({ dir });
   cleanups.push(() => db.close());
@@ -282,7 +282,7 @@ test('outbox-resident multipart resumes directly at the final SHA without CopyOb
 });
 
 test('existing corrupt, zero, or size-stale provider objects are replaced before custody ack', async () => {
-  const dir = mkdtempSync(path.join(tmpdir(), 'blob-outbox-corrupt-'));
+  const dir = tempDirSync('blob-outbox-corrupt-');
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
   const db: VaultDb = openVaultDb({ dir });
   cleanups.push(() => db.close());
@@ -344,7 +344,7 @@ test('existing corrupt, zero, or size-stale provider objects are replaced before
 });
 
 test('close fencing is rechecked after remote verification before SQLite settlement', async () => {
-  const dir = mkdtempSync(path.join(tmpdir(), 'blob-outbox-close-fence-'));
+  const dir = tempDirSync('blob-outbox-close-fence-');
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
   const db: VaultDb = openVaultDb({ dir });
   cleanups.push(() => db.close());

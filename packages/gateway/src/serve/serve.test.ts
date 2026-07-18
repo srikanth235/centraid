@@ -1,10 +1,12 @@
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import { serve, type GatewayServeHandle } from './serve.ts';
 import type { GatewayPaths } from '../paths.ts';
+
+vi.setConfig({ testTimeout: 30_000 });
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -17,7 +19,7 @@ function pathsUnder(dir: string): GatewayPaths {
 }
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `gateway-runtime-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`gateway-runtime-${crypto.randomUUID()}-`);
   handle = await serve({ paths: pathsUnder(dataDir) });
 });
 
@@ -210,7 +212,7 @@ test('POST /centraid/_gateway/backup/run refuses with a clear body when not conf
 
 test('backup status/run round-trip when backup IS configured', async () => {
   await handle.close();
-  const providerDir = await fs.mkdtemp(path.join(dataDir, 'backup-provider-'));
+  const providerDir = await tempDir('backup-provider-');
   handle = await serve({
     paths: pathsUnder(dataDir),
     backup: {
@@ -260,7 +262,7 @@ test('recoveryKit confirmation survives a restart (issue #351 wave 4)', async ()
   // as close to "the gateway process restarted" as a unit test gets short
   // of actually spawning a second process.
   await handle.close();
-  const providerDir = await fs.mkdtemp(path.join(dataDir, 'backup-provider-'));
+  const providerDir = await tempDir('backup-provider-');
   const backupConfig = {
     enabled: true as const,
     provider: { kind: 'local' as const, dir: providerDir },

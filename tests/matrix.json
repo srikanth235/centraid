@@ -1,0 +1,873 @@
+{
+  "$schema": "./matrix.schema.json",
+  "version": 1,
+  "legend": {
+    "solid": "Owned proof exists and is in the intended lane",
+    "partial": "Some proof exists, but the cell is incomplete or not continuously exercised",
+    "gap": "No adequate owning proof yet",
+    "skip": "Deliberately low-value for the current v0 product posture"
+  },
+  "cellOwners": {
+    "vault-core.correctness": {
+      "owner": "packages/vault/src/schema/atlas.test.ts",
+      "tier": "unit"
+    },
+    "vault-core.contracts": {
+      "owner": "packages/vault/src/gateway/gateway.contract.test.ts",
+      "tier": "contract"
+    },
+    "vault-core.durability": {
+      "owner": "packages/vault/src/wal-shipper.test.ts",
+      "tier": "integration"
+    },
+    "vault-core.concurrency": {
+      "owner": "packages/vault/src/enrich/leases.test.ts",
+      "tier": "integration"
+    },
+    "vault-core.performance": { "owner": "tests/perf/vault-write.perf.test.ts", "tier": "perf" },
+    "vault-core.scalability": { "owner": "tests/scale/ontology.scale.test.ts", "tier": "scale" },
+    "vault-core.security": {
+      "owner": "packages/vault/src/gateway/seal-custody.test.ts",
+      "tier": "unit"
+    },
+    "vault-core.offline": null,
+    "vault-core.compat": null,
+    "vault-core.journey": null,
+
+    "blob-custody.correctness": {
+      "owner": "packages/vault/src/blob/custody-properties.test.ts",
+      "tier": "unit"
+    },
+    "blob-custody.contracts": {
+      "owner": "packages/vault/src/blob/custody-proven.contract.test.ts",
+      "tier": "contract"
+    },
+    "blob-custody.durability": {
+      "owner": "packages/vault/src/blob/disk-full.integration.test.ts",
+      "tier": "integration"
+    },
+    "blob-custody.concurrency": {
+      "owner": "packages/vault/src/blob/outbox-drain.test.ts",
+      "tier": "integration"
+    },
+    "blob-custody.performance": { "owner": "tests/perf/blob-egress.perf.test.ts", "tier": "perf" },
+    "blob-custody.scalability": { "owner": "tests/scale/blob-gc.scale.test.ts", "tier": "scale" },
+    "blob-custody.security": { "owner": "packages/vault/src/blob/seal.test.ts", "tier": "unit" },
+    "blob-custody.offline": null,
+    "blob-custody.compat": null,
+    "blob-custody.journey": null,
+
+    "backup-restore.correctness": {
+      "owner": "packages/gateway/src/backup/backup-service.contract.test.ts",
+      "tier": "integration"
+    },
+    "backup-restore.contracts": {
+      "owner": "packages/gateway/src/backup/backup-service.contract.test.ts",
+      "tier": "contract"
+    },
+    "backup-restore.durability": {
+      "owner": "packages/gateway/src/backup/wal.integration.test.ts",
+      "tier": "integration"
+    },
+    "backup-restore.concurrency": {
+      "owner": "packages/gateway/src/backup/recover-live.integration.test.ts",
+      "tier": "integration"
+    },
+    "backup-restore.performance": null,
+    "backup-restore.scalability": {
+      "owner": "tests/scale/backup-restore.scale.test.ts",
+      "tier": "scale"
+    },
+    "backup-restore.security": {
+      "owner": "packages/gateway/src/backup/restore-verify-sealkey.test.ts",
+      "tier": "integration"
+    },
+    "backup-restore.offline": null,
+    "backup-restore.compat": {
+      "owner": "packages/backup/src/remote-provider.test.ts",
+      "tier": "unit"
+    },
+    "backup-restore.journey": {
+      "owner": "packages/gateway/src/backup/backup.integration.test.ts",
+      "tier": "integration"
+    },
+
+    "replica-sync.correctness": {
+      "owner": "packages/client/src/replica/intent-idempotency-properties.test.ts",
+      "tier": "unit"
+    },
+    "replica-sync.contracts": {
+      "owner": "packages/client/src/replica/intents.contract.test.ts",
+      "tier": "contract"
+    },
+    "replica-sync.durability": {
+      "owner": "packages/client/src/replica/sqlite-store.test.ts",
+      "tier": "integration"
+    },
+    "replica-sync.concurrency": {
+      "owner": "packages/client/src/replica/multi-writer.contract.test.ts",
+      "tier": "contract"
+    },
+    "replica-sync.performance": {
+      "owner": "tests/perf/replica-bootstrap.perf.test.ts",
+      "tier": "perf"
+    },
+    "replica-sync.scalability": {
+      "owner": "tests/scale/replica-bootstrap.scale.test.ts",
+      "tier": "scale"
+    },
+    "replica-sync.security": {
+      "owner": "packages/client/src/replica/shell-session-admission.contract.test.ts",
+      "tier": "contract"
+    },
+    "replica-sync.offline": {
+      "owner": "packages/client/src/replica/shell-session.test.ts",
+      "tier": "integration"
+    },
+    "replica-sync.compat": {
+      "owner": "packages/vault/src/replica/change-log.test.ts",
+      "tier": "unit"
+    },
+    "replica-sync.journey": { "owner": "apps/web/tests/e2e/web-pwa.spec.ts", "tier": "e2e" },
+
+    "gateway.correctness": {
+      "owner": "packages/gateway/src/serve/serve.test.ts",
+      "tier": "integration"
+    },
+    "gateway.contracts": {
+      "owner": "packages/gateway/src/serve/web-app-sessions.contract.test.ts",
+      "tier": "contract"
+    },
+    "gateway.durability": {
+      "owner": "packages/gateway/src/serve/disk-health.test.ts",
+      "tier": "integration"
+    },
+    "gateway.concurrency": {
+      "owner": "packages/gateway/src/serve/serve-multiclient.test.ts",
+      "tier": "integration"
+    },
+    "gateway.performance": { "owner": "tests/perf/gateway-request.perf.test.ts", "tier": "perf" },
+    "gateway.scalability": null,
+    "gateway.security": {
+      "owner": "packages/gateway/src/serve/web-app-sessions.contract.test.ts",
+      "tier": "contract"
+    },
+    "gateway.offline": null,
+    "gateway.compat": null,
+    "gateway.journey": {
+      "owner": "apps/desktop/tests/e2e/settings-gateways.spec.ts",
+      "tier": "e2e"
+    },
+
+    "app-engine.correctness": {
+      "owner": "packages/app-engine/src/handlers/dispatcher.test.ts",
+      "tier": "unit"
+    },
+    "app-engine.contracts": {
+      "owner": "packages/app-engine/src/handlers/handler-runner.contract.test.ts",
+      "tier": "contract"
+    },
+    "app-engine.durability": {
+      "owner": "packages/app-engine/src/conversation/archive/archive.contract.test.ts",
+      "tier": "contract"
+    },
+    "app-engine.concurrency": {
+      "owner": "packages/app-engine/src/handlers/handler-pool.test.ts",
+      "tier": "integration"
+    },
+    "app-engine.performance": null,
+    "app-engine.scalability": {
+      "owner": "tests/scale/conversation-ledger.scale.test.ts",
+      "tier": "scale"
+    },
+    "app-engine.security": {
+      "owner": "packages/app-engine/src/handlers/vault-bridge.test.ts",
+      "tier": "unit"
+    },
+    "app-engine.offline": null,
+    "app-engine.compat": null,
+    "app-engine.journey": null,
+
+    "automations.correctness": {
+      "owner": "packages/automation/src/fire/fire.test.ts",
+      "tier": "unit"
+    },
+    "automations.contracts": {
+      "owner": "packages/automation/src/fire/scheduler-ledger.contract.test.ts",
+      "tier": "contract"
+    },
+    "automations.durability": {
+      "owner": "packages/automation/src/fire/scheduler-ledger.contract.test.ts",
+      "tier": "contract"
+    },
+    "automations.concurrency": {
+      "owner": "packages/automation/src/fire/in-process-scheduler.test.ts",
+      "tier": "integration"
+    },
+    "automations.performance": null,
+    "automations.scalability": null,
+    "automations.security": {
+      "owner": "packages/automation/src/handler/lint.test.ts",
+      "tier": "unit"
+    },
+    "automations.offline": null,
+    "automations.compat": null,
+    "automations.journey": { "owner": "apps/desktop/tests/e2e/automations.spec.ts", "tier": "e2e" },
+
+    "agent-runtime.correctness": {
+      "owner": "packages/agent-runtime/src/host-tools.test.ts",
+      "tier": "unit"
+    },
+    "agent-runtime.contracts": null,
+    "agent-runtime.durability": null,
+    "agent-runtime.concurrency": null,
+    "agent-runtime.performance": null,
+    "agent-runtime.scalability": null,
+    "agent-runtime.security": {
+      "owner": "packages/agent-runtime/src/preflight.test.ts",
+      "tier": "unit"
+    },
+    "agent-runtime.offline": null,
+    "agent-runtime.compat": {
+      "owner": "packages/agent-runtime/src/backends/codex/provider-config.test.ts",
+      "tier": "unit"
+    },
+    "agent-runtime.journey": null,
+
+    "blueprints.correctness": {
+      "owner": "packages/blueprints/src/scaffold-boot.test.ts",
+      "tier": "integration"
+    },
+    "blueprints.contracts": null,
+    "blueprints.durability": null,
+    "blueprints.concurrency": null,
+    "blueprints.performance": null,
+    "blueprints.scalability": null,
+    "blueprints.security": {
+      "owner": "packages/blueprints/src/consent-cards.test.ts",
+      "tier": "unit"
+    },
+    "blueprints.offline": null,
+    "blueprints.compat": null,
+    "blueprints.journey": {
+      "owner": "apps/desktop/tests/e2e/appview-templates-insights.spec.ts",
+      "tier": "e2e"
+    },
+
+    "desktop.correctness": {
+      "owner": "apps/desktop/src/main/gateway-supervisor-core.test.ts",
+      "tier": "unit"
+    },
+    "desktop.contracts": null,
+    "desktop.durability": null,
+    "desktop.concurrency": null,
+    "desktop.performance": null,
+    "desktop.scalability": null,
+    "desktop.security": { "owner": "apps/desktop/src/main/transport.test.ts", "tier": "unit" },
+    "desktop.offline": null,
+    "desktop.compat": null,
+    "desktop.journey": {
+      "owner": "apps/desktop/tests/e2e/appview-templates-insights.spec.ts",
+      "tier": "e2e"
+    },
+
+    "web.correctness": { "owner": "apps/web/src/web-host.test.ts", "tier": "unit" },
+    "web.contracts": null,
+    "web.durability": null,
+    "web.concurrency": { "owner": "apps/web/tests/e2e/web-pwa.spec.ts", "tier": "e2e" },
+    "web.performance": { "owner": "apps/web/tests/e2e/perf-waterfall.spec.ts", "tier": "e2e" },
+    "web.scalability": null,
+    "web.security": { "owner": "apps/web/tests/e2e/web-pwa.spec.ts", "tier": "e2e" },
+    "web.offline": { "owner": "apps/web/tests/e2e/web-pwa-cache.spec.ts", "tier": "e2e" },
+    "web.compat": null,
+    "web.journey": { "owner": "apps/web/tests/e2e/web-pwa.spec.ts", "tier": "e2e" },
+
+    "mobile.correctness": {
+      "owner": "apps/mobile/src/lib/replica/native-session.test.ts",
+      "tier": "unit"
+    },
+    "mobile.contracts": null,
+    "mobile.durability": { "owner": "apps/mobile/src/lib/upload/crash.test.ts", "tier": "unit" },
+    "mobile.concurrency": {
+      "owner": "apps/mobile/src/lib/replica/sqlite-intent-store.test.ts",
+      "tier": "integration"
+    },
+    "mobile.performance": { "owner": "tests/perf/mobile-fast-path.perf.test.ts", "tier": "perf" },
+    "mobile.scalability": null,
+    "mobile.security": {
+      "owner": "apps/mobile/src/lib/bridge/transfer-policy.test.ts",
+      "tier": "unit"
+    },
+    "mobile.offline": {
+      "owner": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs",
+      "tier": "e2e"
+    },
+    "mobile.compat": null,
+    "mobile.journey": { "owner": "tests/agent-e2e-mobile/flows/home-loads.mjs", "tier": "e2e" },
+
+    "tunnel-pairing.correctness": {
+      "owner": "packages/tunnel/src/tunnel.integration.test.ts",
+      "tier": "integration"
+    },
+    "tunnel-pairing.contracts": {
+      "owner": "packages/tunnel/src/wire-conformance.contract.test.ts",
+      "tier": "contract"
+    },
+    "tunnel-pairing.durability": null,
+    "tunnel-pairing.concurrency": {
+      "owner": "packages/tunnel/src/tunnel.integration.test.ts",
+      "tier": "integration"
+    },
+    "tunnel-pairing.performance": {
+      "owner": "tests/perf/tunnel-throughput.perf.test.ts",
+      "tier": "perf"
+    },
+    "tunnel-pairing.scalability": null,
+    "tunnel-pairing.security": {
+      "owner": "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs",
+      "tier": "e2e"
+    },
+    "tunnel-pairing.offline": {
+      "owner": "tests/agent-e2e-pairing/flows/cross-network-relay.mjs",
+      "tier": "e2e"
+    },
+    "tunnel-pairing.compat": {
+      "owner": "packages/tunnel/src/wire-conformance.contract.test.ts",
+      "tier": "contract"
+    },
+    "tunnel-pairing.journey": {
+      "owner": "tests/agent-e2e-pairing/flows/cross-network-relay.mjs",
+      "tier": "e2e"
+    }
+  },
+  "dimensions": [
+    { "id": "correctness", "label": "Correctness", "lane": "per-pr" },
+    { "id": "contracts", "label": "Contracts", "lane": "per-pr" },
+    { "id": "durability", "label": "Durability", "lane": "per-pr" },
+    { "id": "concurrency", "label": "Concurrency", "lane": "per-pr" },
+    { "id": "performance", "label": "Performance", "lane": "nightly" },
+    { "id": "scalability", "label": "Scalability", "lane": "nightly" },
+    { "id": "security", "label": "Security / isolation", "lane": "per-pr+nightly" },
+    { "id": "offline", "label": "Offline / resilience", "lane": "per-pr+nightly" },
+    { "id": "compat", "label": "Compat / interop", "lane": "per-pr" },
+    { "id": "journey", "label": "Journey (e2e)", "lane": "nightly" }
+  ],
+  "surfaces": [
+    {
+      "id": "vault-core",
+      "label": "Vault core (ontology / consent / sealed)",
+      "assessment": {
+        "correctness": "solid",
+        "contracts": "solid",
+        "durability": "partial",
+        "concurrency": "partial",
+        "performance": "partial",
+        "scalability": "partial",
+        "security": "solid",
+        "offline": "skip",
+        "compat": "skip",
+        "journey": "skip"
+      }
+    },
+    {
+      "id": "blob-custody",
+      "label": "Blob custody / CAS / storage tiers",
+      "assessment": {
+        "correctness": "solid",
+        "contracts": "solid",
+        "durability": "partial",
+        "concurrency": "partial",
+        "performance": "partial",
+        "scalability": "partial",
+        "security": "partial",
+        "offline": "skip",
+        "compat": "skip",
+        "journey": "skip"
+      }
+    },
+    {
+      "id": "backup-restore",
+      "label": "Backup / restore / WAL",
+      "assessment": {
+        "correctness": "solid",
+        "contracts": "solid",
+        "durability": "solid",
+        "concurrency": "partial",
+        "performance": "skip",
+        "scalability": "partial",
+        "security": "solid",
+        "offline": "skip",
+        "compat": "solid",
+        "journey": "partial"
+      }
+    },
+    {
+      "id": "replica-sync",
+      "label": "Replica & sync (schema + client engine)",
+      "assessment": {
+        "correctness": "solid",
+        "contracts": "solid",
+        "durability": "partial",
+        "concurrency": "solid",
+        "performance": "partial",
+        "scalability": "partial",
+        "security": "partial",
+        "offline": "partial",
+        "compat": "partial",
+        "journey": "partial"
+      }
+    },
+    {
+      "id": "gateway",
+      "label": "Gateway serve / sessions / lifecycle",
+      "assessment": {
+        "correctness": "solid",
+        "contracts": "solid",
+        "durability": "partial",
+        "concurrency": "partial",
+        "performance": "partial",
+        "scalability": "gap",
+        "security": "solid",
+        "offline": "skip",
+        "compat": "skip",
+        "journey": "partial"
+      }
+    },
+    {
+      "id": "app-engine",
+      "label": "App-engine (handlers / sandbox / ledger)",
+      "assessment": {
+        "correctness": "solid",
+        "contracts": "solid",
+        "durability": "partial",
+        "concurrency": "partial",
+        "performance": "skip",
+        "scalability": "partial",
+        "security": "solid",
+        "offline": "skip",
+        "compat": "skip",
+        "journey": "skip"
+      }
+    },
+    {
+      "id": "automations",
+      "label": "Automations (triggers / fire / scheduler)",
+      "assessment": {
+        "correctness": "solid",
+        "contracts": "solid",
+        "durability": "partial",
+        "concurrency": "partial",
+        "performance": "skip",
+        "scalability": "gap",
+        "security": "partial",
+        "offline": "skip",
+        "compat": "skip",
+        "journey": "solid"
+      }
+    },
+    {
+      "id": "agent-runtime",
+      "label": "Agent runtime / chat",
+      "assessment": {
+        "correctness": "partial",
+        "contracts": "skip",
+        "durability": "skip",
+        "concurrency": "skip",
+        "performance": "skip",
+        "scalability": "skip",
+        "security": "partial",
+        "offline": "skip",
+        "compat": "partial",
+        "journey": "gap"
+      }
+    },
+    {
+      "id": "blueprints",
+      "label": "Blueprint apps (x8)",
+      "assessment": {
+        "correctness": "solid",
+        "contracts": "skip",
+        "durability": "skip",
+        "concurrency": "skip",
+        "performance": "skip",
+        "scalability": "skip",
+        "security": "partial",
+        "offline": "skip",
+        "compat": "skip",
+        "journey": "partial"
+      }
+    },
+    {
+      "id": "desktop",
+      "label": "Desktop shell (Electron)",
+      "assessment": {
+        "correctness": "partial",
+        "contracts": "skip",
+        "durability": "skip",
+        "concurrency": "skip",
+        "performance": "gap",
+        "scalability": "skip",
+        "security": "partial",
+        "offline": "skip",
+        "compat": "skip",
+        "journey": "solid"
+      }
+    },
+    {
+      "id": "web",
+      "label": "Web PWA",
+      "assessment": {
+        "correctness": "partial",
+        "contracts": "skip",
+        "durability": "skip",
+        "concurrency": "solid",
+        "performance": "solid",
+        "scalability": "skip",
+        "security": "solid",
+        "offline": "solid",
+        "compat": "skip",
+        "journey": "solid"
+      }
+    },
+    {
+      "id": "mobile",
+      "label": "Mobile (native surfaces)",
+      "assessment": {
+        "correctness": "solid",
+        "contracts": "skip",
+        "durability": "solid",
+        "concurrency": "partial",
+        "performance": "solid",
+        "scalability": "gap",
+        "security": "partial",
+        "offline": "partial",
+        "compat": "skip",
+        "journey": "solid"
+      }
+    },
+    {
+      "id": "tunnel-pairing",
+      "label": "Tunnel / pairing",
+      "assessment": {
+        "correctness": "partial",
+        "contracts": "solid",
+        "durability": "skip",
+        "concurrency": "partial",
+        "performance": "solid",
+        "scalability": "skip",
+        "security": "partial",
+        "offline": "solid",
+        "compat": "partial",
+        "journey": "solid"
+      }
+    }
+  ],
+  "flows": [
+    {
+      "id": "vault-consent-write",
+      "name": "Consent gateway and journalled write path",
+      "surface": "vault-core",
+      "dimension": "contracts",
+      "tier": "contract",
+      "owner": "packages/vault/src/gateway/gateway.contract.test.ts",
+      "minimumTests": 36
+    },
+    {
+      "id": "vault-sealed-columns",
+      "name": "Sealed columns never escape as plaintext",
+      "surface": "vault-core",
+      "dimension": "security",
+      "tier": "unit",
+      "owner": "packages/vault/src/gateway/seal-custody.test.ts"
+    },
+    {
+      "id": "vault-write-budget",
+      "name": "Vault write latency and durability budget",
+      "surface": "vault-core",
+      "dimension": "performance",
+      "tier": "perf",
+      "owner": "tests/perf/vault-write.perf.test.ts"
+    },
+    {
+      "id": "ontology-10k-query",
+      "name": "Atlas and Browse queries at 10k entities",
+      "surface": "vault-core",
+      "dimension": "scalability",
+      "tier": "scale",
+      "owner": "tests/scale/ontology.scale.test.ts"
+    },
+    {
+      "id": "blob-custody-state",
+      "name": "Blob custody and CAS state machine",
+      "surface": "blob-custody",
+      "dimension": "contracts",
+      "tier": "contract",
+      "owner": "packages/vault/src/blob/custody-proven.contract.test.ts",
+      "minimumTests": 3
+    },
+    {
+      "id": "blob-custody-properties",
+      "name": "Custody decisions hold across generated storage states",
+      "surface": "blob-custody",
+      "dimension": "correctness",
+      "tier": "unit",
+      "owner": "packages/vault/src/blob/custody-properties.test.ts"
+    },
+    {
+      "id": "blob-disk-full",
+      "name": "Disk-full writes fail without claiming custody",
+      "surface": "blob-custody",
+      "dimension": "durability",
+      "tier": "integration",
+      "owner": "packages/vault/src/blob/disk-full.integration.test.ts"
+    },
+    {
+      "id": "blob-egress-budget",
+      "name": "Large-blob egress TTFB and memory ceiling",
+      "surface": "blob-custody",
+      "dimension": "performance",
+      "tier": "perf",
+      "owner": "tests/perf/blob-egress.perf.test.ts"
+    },
+    {
+      "id": "blob-gc-volume",
+      "name": "Eviction and GC preserve mixed custody states at volume",
+      "surface": "blob-custody",
+      "dimension": "scalability",
+      "tier": "scale",
+      "owner": "tests/scale/blob-gc.scale.test.ts"
+    },
+    {
+      "id": "backup-round-trip",
+      "name": "Backup and restore round-trip with fencing",
+      "surface": "backup-restore",
+      "dimension": "contracts",
+      "tier": "contract",
+      "owner": "packages/gateway/src/backup/backup-service.contract.test.ts",
+      "minimumTests": 17
+    },
+    {
+      "id": "backup-crash-recovery",
+      "name": "WAL recovery survives interruption",
+      "surface": "backup-restore",
+      "dimension": "durability",
+      "tier": "integration",
+      "owner": "packages/gateway/src/backup/wal.integration.test.ts"
+    },
+    {
+      "id": "backup-provider",
+      "name": "Backup providers conform to the provider contract",
+      "surface": "backup-restore",
+      "dimension": "compat",
+      "tier": "unit",
+      "owner": "packages/backup/src/remote-provider.test.ts"
+    },
+    {
+      "id": "backup-big-vault",
+      "name": "Backup and restore a large deterministic vault",
+      "surface": "backup-restore",
+      "dimension": "scalability",
+      "tier": "scale",
+      "owner": "tests/scale/backup-restore.scale.test.ts"
+    },
+    {
+      "id": "replica-intents",
+      "name": "Replica convergence and intent idempotency",
+      "surface": "replica-sync",
+      "dimension": "contracts",
+      "tier": "contract",
+      "owner": "packages/client/src/replica/intents.contract.test.ts",
+      "minimumTests": 4
+    },
+    {
+      "id": "replica-intent-properties",
+      "name": "Intent replay is idempotent for generated payloads",
+      "surface": "replica-sync",
+      "dimension": "correctness",
+      "tier": "unit",
+      "owner": "packages/client/src/replica/intent-idempotency-properties.test.ts"
+    },
+    {
+      "id": "replica-multi-writer",
+      "name": "Concurrent tabs share one canonical intent result",
+      "surface": "replica-sync",
+      "dimension": "concurrency",
+      "tier": "contract",
+      "owner": "packages/client/src/replica/multi-writer.contract.test.ts",
+      "minimumTests": 2
+    },
+    {
+      "id": "replica-bootstrap-budget",
+      "name": "Windowed bootstrap latency at fixed volume",
+      "surface": "replica-sync",
+      "dimension": "performance",
+      "tier": "perf",
+      "owner": "tests/perf/replica-bootstrap.perf.test.ts"
+    },
+    {
+      "id": "replica-bootstrap-volume",
+      "name": "Windowed bootstrap converges with deletions at volume",
+      "surface": "replica-sync",
+      "dimension": "scalability",
+      "tier": "scale",
+      "owner": "tests/scale/replica-bootstrap.scale.test.ts"
+    },
+    {
+      "id": "gateway-session-boundaries",
+      "name": "Control, app and device sessions remain isolated",
+      "surface": "gateway",
+      "dimension": "contracts",
+      "tier": "contract",
+      "owner": "packages/gateway/src/serve/web-app-sessions.contract.test.ts",
+      "minimumTests": 13
+    },
+    {
+      "id": "gateway-request-budget",
+      "name": "Gateway request latency and idle CPU budget",
+      "surface": "gateway",
+      "dimension": "performance",
+      "tier": "perf",
+      "owner": "tests/perf/gateway-request.perf.test.ts"
+    },
+    {
+      "id": "web-session-e2e",
+      "name": "Generated app sessions cannot reach shell routes",
+      "surface": "web",
+      "dimension": "security",
+      "tier": "e2e",
+      "owner": "apps/web/tests/e2e/web-pwa.spec.ts"
+    },
+    {
+      "id": "app-handler-sandbox",
+      "name": "Handler validation and worker isolation",
+      "surface": "app-engine",
+      "dimension": "contracts",
+      "tier": "contract",
+      "owner": "packages/app-engine/src/handlers/handler-runner.contract.test.ts",
+      "minimumTests": 3
+    },
+    {
+      "id": "conversation-custody",
+      "name": "Conversation digest, archive and prune ordering",
+      "surface": "app-engine",
+      "dimension": "contracts",
+      "tier": "contract",
+      "owner": "packages/app-engine/src/conversation/archive/archive.contract.test.ts",
+      "minimumTests": 4
+    },
+    {
+      "id": "conversation-years",
+      "name": "Conversation archive and prune over years of history",
+      "surface": "app-engine",
+      "dimension": "scalability",
+      "tier": "scale",
+      "owner": "tests/scale/conversation-ledger.scale.test.ts"
+    },
+    {
+      "id": "scheduler-no-backfill",
+      "name": "Scheduler never backfills missed fires",
+      "surface": "automations",
+      "dimension": "contracts",
+      "tier": "contract",
+      "owner": "packages/automation/src/fire/scheduler-ledger.contract.test.ts",
+      "minimumTests": 15
+    },
+    {
+      "id": "agent-provider-compat",
+      "name": "Agent provider model configuration remains compatible",
+      "surface": "agent-runtime",
+      "dimension": "compat",
+      "tier": "unit",
+      "owner": "packages/agent-runtime/src/backends/codex/provider-config.test.ts"
+    },
+    {
+      "id": "blueprint-boot",
+      "name": "All eight built-in apps scaffold and boot",
+      "surface": "blueprints",
+      "dimension": "correctness",
+      "tier": "integration",
+      "owner": "packages/blueprints/src/scaffold-boot.test.ts"
+    },
+    {
+      "id": "desktop-real-journey",
+      "name": "Desktop onboarding, app lifecycle and settings",
+      "surface": "desktop",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "apps/desktop/tests/e2e/onboarding-home.spec.ts"
+    },
+    {
+      "id": "web-real-journey",
+      "name": "Installable web app boot and session lifecycle",
+      "surface": "web",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "apps/web/tests/e2e/web-pwa.spec.ts"
+    },
+    {
+      "id": "web-offline-cache",
+      "name": "PWA shell remains available offline",
+      "surface": "web",
+      "dimension": "offline",
+      "tier": "e2e",
+      "owner": "apps/web/tests/e2e/web-pwa-cache.spec.ts"
+    },
+    {
+      "id": "web-waterfall-budget",
+      "name": "PWA request waterfall remains within budget",
+      "surface": "web",
+      "dimension": "performance",
+      "tier": "e2e",
+      "owner": "apps/web/tests/e2e/perf-waterfall.spec.ts"
+    },
+    {
+      "id": "mobile-crash-recovery",
+      "name": "Native upload queue survives renderer crashes",
+      "surface": "mobile",
+      "dimension": "durability",
+      "tier": "unit",
+      "owner": "apps/mobile/src/lib/upload/crash.test.ts"
+    },
+    {
+      "id": "mobile-fast-path",
+      "name": "#404 PWA/mobile fast-path browser waterfall stays within budget",
+      "surface": "mobile",
+      "dimension": "performance",
+      "tier": "perf",
+      "owner": "tests/perf/mobile-fast-path.perf.test.ts"
+    },
+    {
+      "id": "mobile-real-journey",
+      "name": "Native home, template gate and resilience journeys",
+      "surface": "mobile",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "tests/agent-e2e-mobile/flows/home-loads.mjs"
+    },
+    {
+      "id": "tunnel-wire",
+      "name": "Tunnel wire protocol stays conformant",
+      "surface": "tunnel-pairing",
+      "dimension": "contracts",
+      "tier": "contract",
+      "owner": "packages/tunnel/src/wire-conformance.contract.test.ts",
+      "minimumTests": 4
+    },
+    {
+      "id": "tunnel-throughput",
+      "name": "Paired local QUIC tunnel throughput stays above its floor",
+      "surface": "tunnel-pairing",
+      "dimension": "performance",
+      "tier": "perf",
+      "owner": "tests/perf/tunnel-throughput.perf.test.ts"
+    },
+    {
+      "id": "pairing-real-journey",
+      "name": "Pair, redeem and relay across networks",
+      "surface": "tunnel-pairing",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "tests/agent-e2e-pairing/flows/cross-network-relay.mjs"
+    }
+  ]
+}

@@ -1,8 +1,8 @@
-# Agent-driven e2e — device pairing
+# Agent-driven exploratory QA — device pairing
 
-The verification loop for the device-pairing ceremony (issue #289): headless
-sibling of [`tests/agent-e2e/`](../agent-e2e) (desktop) and
-[`tests/agent-e2e-mobile/`](../agent-e2e-mobile). No Electron, no browser —
+The manual-QA verification loop for the device-pairing ceremony (issue #289),
+with three promoted journeys also scheduled nightly. It shares run/verdict
+plumbing with [`tests/agent-e2e-mobile/`](../agent-e2e-mobile), but has no Electron or browser —
 each flow boots the REAL `centraid-gateway` daemon on a fresh data dir,
 drives the REAL admin CLI as separate processes, and plays the device role
 with `@centraid/tunnel` over real iroh QUIC.

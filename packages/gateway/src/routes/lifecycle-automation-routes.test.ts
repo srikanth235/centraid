@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * `POST /centraid/_automations/update?ref=` — the instructions-first
  * editor's save path (automations UI revamp). Boots a real gateway and
@@ -9,7 +10,6 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import { serve, type GatewayServeHandle } from '../serve/serve.ts';
 import type { GatewayPaths } from '../paths.ts';
@@ -70,7 +70,7 @@ async function update(
 }
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `gw-autoupdate-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`gw-autoupdate-${crypto.randomUUID()}-`);
   handle = await serve({ paths: pathsUnder(dataDir) });
 });
 

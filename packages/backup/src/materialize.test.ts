@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * `materializeSnapshotBlobs` (issue #439 R5) — the targeted blob re-pin the
  * adopt-time reconcile leans on. It must pull ONLY the requested shas out of a
@@ -6,9 +7,8 @@
  * not carry as `absent` (which the reconcile records lost) — never write it.
  */
 
-import { afterEach, expect, test } from 'vitest';
+import { expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
@@ -16,18 +16,6 @@ import { createKeyring } from './crypto.js';
 import { openLocalBackupProvider } from './local-provider.js';
 import { createSnapshot, type SourceEntry } from './engine.js';
 import { materializeSnapshotBlobs } from './materialize.js';
-
-const cleanups: Array<() => Promise<void> | void> = [];
-afterEach(async () => {
-  while (cleanups.length > 0) await cleanups.pop()?.();
-});
-
-async function tempDir(prefix: string): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `${prefix}-`));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 const sha256 = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
 
 /** A minimal but VALID snapshot source: a real base pair plus content-addressed

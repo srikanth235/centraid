@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Seal-key custody CLI (issue #298 items 1+2+8): `centraid-gateway key
  * status|export|restore|rotate`. The DECIDED recovery story — the key
@@ -9,7 +10,6 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs, existsSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { sealKeyFileFor } from '@centraid/vault';
@@ -48,7 +48,7 @@ async function capture(fn: () => Promise<void> | void): Promise<string> {
 }
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `key-admin-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`key-admin-${crypto.randomUUID()}-`);
 });
 
 afterEach(() => {

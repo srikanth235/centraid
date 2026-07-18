@@ -1,12 +1,10 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 // The consent ceremony over HTTP (issue #304 phase 2): configure a BYO
 // oauth2 credential, start the PKCE authorize, land the provider's redirect
 // on the (bearer-free) callback, and watch the connection flip to active
 // with sealed tokens — plus the health list never leaking a secret cell.
 
 import { afterEach, expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import crypto from 'node:crypto';
 import http from 'node:http';
 import { openVaultRegistry } from '../serve/vault-registry.js';
@@ -19,13 +17,6 @@ const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.();
 });
-
-async function tempDir(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `conn-routes-${crypto.randomUUID()}-`));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 async function startHandlerServer(
   handler: (req: http.IncomingMessage, res: http.ServerResponse) => Promise<boolean>,
 ): Promise<string> {

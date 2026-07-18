@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * The ext band over HTTP (issue #286 phase 2) — the successor to the
  * silo's seed-draft-data + publish-migrations coverage.
@@ -12,7 +13,6 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import { serve, type GatewayServeHandle } from '../serve/serve.ts';
 import type { GatewayPaths } from '../paths.ts';
@@ -56,7 +56,7 @@ const EXT_V1 = {
 };
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `gw-ext-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`gw-ext-${crypto.randomUUID()}-`);
   handle = await serve({ paths: pathsUnder(dataDir) });
 });
 

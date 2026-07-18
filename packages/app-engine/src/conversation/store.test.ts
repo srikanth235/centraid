@@ -1,12 +1,11 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { describe, expect, it } from 'vitest';
-import { tmpdir } from 'node:os';
-import { mkdtempSync } from 'node:fs';
 import path from 'node:path';
 import { makeJournalDbProvider, type DatabaseProvider } from '../stores/gateway-db.js';
 import { ConversationStore } from './store.js';
 
 function newProvider(): DatabaseProvider {
-  const dir = mkdtempSync(path.join(tmpdir(), 'centraid-conv-store-'));
+  const dir = tempDirSync('centraid-conv-store-');
   return makeJournalDbProvider(path.join(dir, 'journal.db'));
 }
 

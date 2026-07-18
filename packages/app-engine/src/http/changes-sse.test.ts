@@ -1,7 +1,6 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Runtime } from '../runtime.ts';
@@ -14,7 +13,7 @@ let server: RuntimeHttpServerHandle;
 let runtime: Runtime;
 
 beforeEach(async () => {
-  workspace = await fs.mkdtemp(path.join(os.tmpdir(), `sse-${crypto.randomUUID()}-`));
+  workspace = await tempDir(`sse-${crypto.randomUUID()}-`);
   runtime = new Runtime({ appsDir: workspace });
   server = await startRuntimeHttpServer({ runtime });
   await runtime.bootstrap();

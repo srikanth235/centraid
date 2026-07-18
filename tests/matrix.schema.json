@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["version", "legend", "cellOwners", "dimensions", "surfaces", "flows"],
+  "properties": {
+    "version": { "type": "integer", "minimum": 1 },
+    "legend": { "type": "object" },
+    "cellOwners": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "null" },
+          {
+            "type": "object",
+            "required": ["owner", "tier"],
+            "additionalProperties": false,
+            "properties": {
+              "owner": { "type": "string", "minLength": 1 },
+              "tier": { "type": "string", "minLength": 1 }
+            }
+          }
+        ]
+      }
+    },
+    "dimensions": {
+      "type": "array",
+      "items": { "type": "object", "required": ["id", "label", "lane"] }
+    },
+    "surfaces": {
+      "type": "array",
+      "items": { "type": "object", "required": ["id", "label", "assessment"] }
+    },
+    "flows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "surface", "dimension", "tier", "owner"],
+        "properties": { "owner": { "type": "string", "minLength": 1 } }
+      }
+    }
+  }
+}

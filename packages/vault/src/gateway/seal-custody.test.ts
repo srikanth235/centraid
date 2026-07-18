@@ -1,11 +1,11 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // Key custody lifecycle (issue #298 items 1, 2, 8): the fingerprint stamped
 // at first seal makes a missing or regenerated key a loud open-time error,
 // never a silent re-mint discovered as GCM garbage at reveal; the reseal
 // verb rotates the DEK across the live and draft bands atomically; and the
 // sealed-value predicate is structural, so user input cannot satisfy it.
 
-import { mkdtempSync, renameSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { renameSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
@@ -35,7 +35,7 @@ let gw: Gateway;
 let owner: Credential;
 
 beforeEach(() => {
-  root = mkdtempSync(path.join(tmpdir(), 'seal-custody-'));
+  root = tempDirSync('seal-custody-');
   vaultDir = path.join(root, 'vault-a');
   db = openVaultDb({ dir: vaultDir });
   boot = bootstrapVault(db, { ownerName: 'Priya' });

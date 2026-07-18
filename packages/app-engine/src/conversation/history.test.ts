@@ -1,9 +1,9 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // governance: allow-repo-hygiene file-size-limit #181 — cohesive
 // conversation-history suite; the build-kind coverage tips it just over 500
 // lines, not worth a split.
 import { beforeEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, mkdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { ConversationHistoryStore, deriveTitle, type RecordTurnInput } from './history.js';
@@ -21,7 +21,7 @@ const APP = 'todos';
 
 /** A fresh temp vault dir with per-app data folders (default `APP`). */
 function freshVaultDir(...appIds: string[]): string {
-  const dir = mkdtempSync(join(tmpdir(), 'centraid-chat-history-'));
+  const dir = tempDirSync('centraid-chat-history-');
   for (const id of appIds.length ? appIds : [APP]) {
     mkdirSync(join(dir, 'apps', id), { recursive: true });
   }

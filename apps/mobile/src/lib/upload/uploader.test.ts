@@ -1,8 +1,8 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // Drainer behaviour: the URL gate, dedupe, resume reconciliation, retry
 // classification, and the network-policy seam.
 
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -69,7 +69,7 @@ function drainer(
 }
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'centraid-drain-'));
+  dir = tempDirSync('centraid-drain-');
   driver = new NodeSqliteFileDriver(join(dir, 'uploads.db'));
   store = UploadQueueStore.create(driver);
   killer = new Killer();

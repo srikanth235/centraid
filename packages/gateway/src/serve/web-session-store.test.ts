@@ -1,6 +1,6 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import crypto from 'node:crypto';
-import os from 'node:os';
 import path from 'node:path';
 import { promises as fs, readFileSync } from 'node:fs';
 import {
@@ -13,7 +13,7 @@ let dir: string;
 let file: string;
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), `web-session-store-${crypto.randomUUID()}-`));
+  dir = await tempDir(`web-session-store-${crypto.randomUUID()}-`);
   file = path.join(dir, 'web-sessions.json');
 });
 

@@ -11,6 +11,8 @@ out
 test-results
 playwright-report
 coverage
+artifacts
+output/playwright/
 .wrangler
 .claude
 # Python bytecode created by .governance/ hook scripts (not source).

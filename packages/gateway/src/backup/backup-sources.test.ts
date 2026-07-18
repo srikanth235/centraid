@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 // `assembleSourceEntries` (backup-sources.ts) against a REAL `VaultPlane`:
 // real blobs through the real staging/attach pipeline, a real bare git repo
 // through a real `WorktreeStore` publish, and a real sealed value through
@@ -9,8 +10,7 @@
 import { afterEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import crypto, { randomBytes, createHash } from 'node:crypto';
-import os from 'node:os';
+import { randomBytes, createHash } from 'node:crypto';
 import path from 'node:path';
 import { ReplicaIndex, sealAad, unsealValue } from '@centraid/vault';
 import { openVaultPlane, type VaultPlane } from '../serve/vault-plane.js';
@@ -24,13 +24,6 @@ const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.();
 });
-
-async function tempDir(prefix: string): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `${prefix}-${crypto.randomUUID()}-`));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 async function openPlane(): Promise<VaultPlane> {
   const dir = await tempDir('backup-sources-vault');
   const plane = openVaultPlane({ dir, logger: silentLogger, ownerName: 'Priya' });

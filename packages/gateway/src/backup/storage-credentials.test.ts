@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * `ensureProviderCasTarget` learns the provider's declared storage-class list
  * from the SAME discovery document it already reads for the `derived` grant
@@ -7,9 +8,6 @@
  */
 
 import { afterEach, expect, test } from 'vitest';
-import os from 'node:os';
-import path from 'node:path';
-import { promises as fs } from 'node:fs';
 import { startFakeProviderServer } from '@centraid/backup/dist/testing/fake-provider-server.js';
 import { openStorageConnectionStore } from './storage-connections.js';
 import { ensureProviderCasTarget } from './storage-credentials.js';
@@ -18,13 +16,6 @@ const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.();
 });
-
-async function tempDir(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'storage-creds-'));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 test('ensureProviderCasTarget stamps the declared storage-class list (issue #425 Wave 3)', async () => {
   const provider = await startFakeProviderServer();
   cleanups.push(() => provider.close());

@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * The admin plane (issue #289): `centraid-gateway vault|devices|pair` +
  * the daemon device plane. These are landlord acts guarded by shell
@@ -9,8 +10,6 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs, readFileSync } from 'node:fs';
 import http from 'node:http';
-import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import { commandVault } from './vault-admin.ts';
 import { commandDevices, commandPair } from './device-admin.ts';
@@ -65,7 +64,7 @@ async function capture(fn: () => Promise<void> | void): Promise<string> {
 }
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `admin-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`admin-${crypto.randomUUID()}-`);
   out = [];
 });
 

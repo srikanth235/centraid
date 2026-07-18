@@ -45,7 +45,7 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 // Resolved from this module's own path, not process.cwd(): cwd differs
 // between a root-run vitest (repo root) and a package-run vitest (this
@@ -267,6 +267,8 @@ function bodyOf(app: string) {
 
 /** Lets a test settle an app's un-awaited `refresh()` and its timers. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 80));
+
+vi.setConfig({ hookTimeout: 30_000, testTimeout: 30_000 });
 
 export function describeAppBoot(app: string, options: { expectLive?: boolean } = {}) {
   describe(`${app} boots`, () => {

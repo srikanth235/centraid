@@ -1,8 +1,7 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 // governance: allow-repo-hygiene file-size-limit (#406) one end-to-end consent-shape suite shares the real vault-plane fixture across field, row, temporal, identity, projection, and retention invariants
 import { afterEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import crypto from 'node:crypto';
 import { openVaultPlane, type VaultPlane } from '../serve/vault-plane.js';
 import { buildReplicaShapes, replicaShapesWire, shapeReplicaRow } from './replica-shape.js';
@@ -17,7 +16,7 @@ afterEach(async () => {
 });
 
 async function plane(): Promise<VaultPlane> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `replica-shape-${crypto.randomUUID()}-`));
+  const dir = await tempDir(`replica-shape-${crypto.randomUUID()}-`);
   const opened = openVaultPlane({ dir, logger, enableWalShipper: false });
   cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
   cleanups.push(() => opened.stop());

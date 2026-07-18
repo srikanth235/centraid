@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
-import { defineProject } from 'vitest/config';
+import { jsdomProject } from '@centraid/test-kit/vitest';
 
-export default defineProject({
+export default jsdomProject({
   resolve: {
     alias: {
       '@centraid/design-tokens': fileURLToPath(
@@ -9,11 +9,8 @@ export default defineProject({
       ),
     },
   },
-  esbuild: { jsx: 'automatic' },
   test: {
     name: '@centraid/client',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
-    environment: 'jsdom',
-    css: { modules: { classNameStrategy: 'non-scoped' } },
   },
 });

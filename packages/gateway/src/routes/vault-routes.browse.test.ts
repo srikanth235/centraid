@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 // The Vault Atlas Browse routes (issue #441 Part B, B3): the owner-gated
 // table editor over HTTP. The read/write policy is proven in packages/vault;
 // here we prove the route surface — the picker, keyset rows, column metadata,
@@ -5,10 +6,6 @@
 // delete returning a 409 with the polymorphic + engine payload.
 
 import { afterEach, expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import crypto from 'node:crypto';
 import http from 'node:http';
 import { openVaultRegistry } from '../serve/vault-registry.js';
 import type { VaultPlane } from '../serve/vault-plane.js';
@@ -20,13 +17,6 @@ const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.();
 });
-
-async function tempDir(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `vault-browse-${crypto.randomUUID()}-`));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 async function startHandlerServer(
   handler: (req: http.IncomingMessage, res: http.ServerResponse) => Promise<boolean>,
 ): Promise<string> {

@@ -1,6 +1,6 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, mkdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { ConversationHistoryStore } from './history.js';
@@ -16,7 +16,7 @@ const MODEL = 'claude-haiku-4-5';
 const EXPECTED = 1;
 
 function freshVaultDir(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'centraid-reprice-'));
+  const dir = tempDirSync('centraid-reprice-');
   mkdirSync(join(dir, 'apps', APP), { recursive: true });
   return dir;
 }

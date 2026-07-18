@@ -24,6 +24,11 @@ const APP_ID = 'web-e2e';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const REPORT_PATH = path.resolve(here, '../../test-results/perf-waterfall-report.json');
+const QUALITY_REPORT_PATH = path.resolve(
+  here,
+  '../../../..',
+  'artifacts/perf-input/pwa-waterfall-report.json',
+);
 
 interface ResourceRow {
   name: string;
@@ -263,7 +268,12 @@ test('app-open waterfall — shell + iframe, cold vs warm (real installed app)',
     },
   };
   await fs.mkdir(path.dirname(REPORT_PATH), { recursive: true });
-  await fs.writeFile(REPORT_PATH, JSON.stringify(report, null, 2));
+  await fs.mkdir(path.dirname(QUALITY_REPORT_PATH), { recursive: true });
+  await Promise.all(
+    [REPORT_PATH, QUALITY_REPORT_PATH].map((file) =>
+      fs.writeFile(file, JSON.stringify(report, null, 2)),
+    ),
+  );
 
   // Human-readable summary — the baseline the bundling workstream diffs against.
   console.log('\n================ PWA WATERFALL SUMMARY ================');

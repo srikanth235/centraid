@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Bundled-app install over HTTP (issue #434). "Use template" cloned a
  * blueprint into the vault's git code store; install instead registers the
@@ -12,7 +13,6 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import { serve, type GatewayServeHandle } from '../serve/serve.ts';
 import type { GatewayPaths } from '../paths.ts';
@@ -72,7 +72,7 @@ async function install(templateId: string): Promise<Response> {
 }
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `gw-install-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`gw-install-${crypto.randomUUID()}-`);
   handle = await serve({ paths: pathsUnder(dataDir) });
 });
 

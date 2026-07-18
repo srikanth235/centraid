@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * (gateway, vault) addressing over HTTP (issue #289).
  *
@@ -15,7 +16,6 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import type { WorktreeStore } from '../worktree-store/index.js';
 import { serve, type GatewayServeHandle } from './serve.ts';
@@ -50,7 +50,7 @@ async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
 const DEVICE_HEADER = 'x-test-device';
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `addr-gateway-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`addr-gateway-${crypto.randomUUID()}-`);
   handle = await serve({
     paths: pathsUnder(dataDir),
     // A fake device transport: the test names its device in a header the

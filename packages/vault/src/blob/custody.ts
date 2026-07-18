@@ -38,7 +38,6 @@ import { reconcileCustody } from './custody-reconcile.js';
 import { resolveWriteStore } from './store-routing.js';
 import type { ReplicaStore } from './replica-index.js';
 import type { FrameDirectory } from './seal-frames.js';
-// Re-export the split custody types so existing facade importers stay untouched.
 import {
   remoteEncryptionKey,
   storeForClass,
@@ -51,6 +50,7 @@ import {
 import {
   DEFAULT_REPLICATION_CONCURRENCY,
   EMPTY_BLOB_METRICS,
+  openCachedLocalReadStreamSync,
   type BlobCache,
   type BlobMetrics,
 } from './cache.js';
@@ -64,9 +64,6 @@ export type {
   ReconcileOptions,
   BlobSweepStatus,
 } from './custody-types.js';
-// Custody-state projection helpers live in a sibling module (issue #352);
-// re-exported here so `./custody.js` importers (index.ts, gateway.ts) are
-// untouched by the split.
 export {
   refreshCustodyState,
   custodyStateCounts,
@@ -171,6 +168,9 @@ export class BlobCustody {
   statSync(sha: string): { size: number } | null {
     return this.local.statSync(sha);
   }
+
+  readonly openLocalReadStreamSync = (sha: string) =>
+    openCachedLocalReadStreamSync(this.local, this.cache, sha);
 
   /**
    * Local hit, else remote read-through (issue #405 §1/§4). Two shapes:

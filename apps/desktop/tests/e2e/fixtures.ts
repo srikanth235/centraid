@@ -126,6 +126,11 @@ export interface MockGateway {
   close(): Promise<void>;
 }
 
+interface MockGatewayOptions {
+  /** Optional on-disk git-store mirror used by persistence e2e assertions. */
+  appsDir?: string;
+}
+
 function defaultState(): MockState {
   return {
     apps: [],
@@ -181,8 +186,13 @@ async function writeSse(res: http.ServerResponse, frames: SseFrame[]): Promise<v
   res.end();
 }
 
-export async function startMockGateway(): Promise<MockGateway> {
+export async function startMockGateway(options: MockGatewayOptions = {}): Promise<MockGateway> {
   const state = defaultState();
+  if (options.appsDir) {
+    const persisted = await readMockApps(options.appsDir);
+    state.apps = persisted.apps;
+    state.automations = persisted.automations;
+  }
   const calls: MockGateway['calls'] = [];
   const token = crypto.randomBytes(16).toString('hex');
 
@@ -214,11 +224,9 @@ export async function startMockGateway(): Promise<MockGateway> {
         return;
       }
 
-      try {
-        route(method, p, url, body, res, state);
-      } catch (err) {
+      void route(method, p, url, body, res, state, options).catch((err: unknown) => {
         json(res, 500, { error: String(err) });
-      }
+      });
     });
   });
 
@@ -245,14 +253,15 @@ export async function startMockGateway(): Promise<MockGateway> {
   };
 }
 
-function route(
+async function route(
   method: string,
   p: string,
   url: URL,
   body: string,
   res: http.ServerResponse,
   s: MockState,
-): void {
+  options: MockGatewayOptions,
+): Promise<void> {
   const seg = p.split('/').filter(Boolean); // e.g. ['centraid','_apps','todo-abc']
 
   // ---- editing/session lifecycle (match specific before /:id) ----
@@ -270,7 +279,23 @@ function route(
     return json(res, 200, { ok: true });
   }
   if (p === '/centraid/_apps/_clone' && method === 'POST') {
-    return json(res, 200, s.cloneResult ?? defaultCloneResult(body));
+    const result = s.cloneResult ?? defaultCloneResult(body);
+    const app = result.app as Partial<AppMetaEntry> | undefined;
+    if (app?.id) {
+      if (app.kind === 'automation') {
+        s.automations = [
+          ...s.automations.filter((entry) => entry.id !== app.id),
+          automationRow({ id: app.id, name: app.name }),
+        ];
+      } else {
+        s.apps = [
+          ...s.apps.filter((entry) => entry.id !== app.id),
+          appEntry({ ...app, id: app.id, hasIndex: app.hasIndex ?? true }),
+        ];
+      }
+      if (options.appsDir) await writeMockApp(options.appsDir, app.id, app);
+    }
+    return json(res, 200, result);
   }
 
   // ---- draft preview probe ----
@@ -291,7 +316,18 @@ function route(
     if (method === 'POST') {
       const parsed = safeJson(body);
       const id = (parsed.id as string) ?? 'new-app';
-      return json(res, 200, s.createAppResult ?? { app: { id, name: parsed.name, kind: 'app' } });
+      const result = s.createAppResult ?? {
+        app: { id, name: parsed.name, kind: 'app', hasIndex: true },
+      };
+      const app = result.app as Partial<AppMetaEntry> | undefined;
+      if (app?.id) {
+        s.apps = [
+          ...s.apps.filter((entry) => entry.id !== app.id),
+          appEntry({ ...app, id: app.id, hasIndex: app.hasIndex ?? true }),
+        ];
+        if (options.appsDir) await writeMockApp(options.appsDir, app.id, app);
+      }
+      return json(res, 200, result);
     }
   }
 
@@ -307,6 +343,9 @@ function route(
         // server entirely, so this handler never runs in that case.)
         if (s.deleteStatus === 200 || s.deleteStatus === 404) {
           s.apps = s.apps.filter((a) => a.id !== id);
+          if (options.appsDir) {
+            await fs.rm(path.join(options.appsDir, id), { recursive: true, force: true });
+          }
         }
         if (s.deleteStatus === 200) return json(res, 200, { id });
         return json(res, s.deleteStatus, { error: s.deleteStatus === 404 ? 'not_found' : 'error' });
@@ -400,6 +439,13 @@ function route(
     return json(res, 200, s.runnerStatus);
   if (p === '/centraid/_agents/status' && method === 'GET') return json(res, 200, s.agentsStatus);
 
+  // ---- vault consent context used by the current automation fleet/thread ----
+  if (p === '/centraid/_vault/agents' && method === 'GET') return json(res, 200, { agents: [] });
+  if (p === '/centraid/_vault/blocking' && method === 'GET')
+    return json(res, 200, { outbox: [], needsAuth: [], parked: [], scopeRequests: [] });
+  if (p === '/centraid/_vault/outbox-grants' && method === 'GET')
+    return json(res, 200, { grants: [] });
+
   // ---- unified chat turn (SSE) ----
   if (seg[0] === 'centraid' && seg[2] === '_turn' && method === 'POST') {
     void writeSse(res, s.turnFrames);
@@ -413,7 +459,15 @@ function route(
       if (method === 'GET') return json(res, 200, { sessions: s.conversations });
       if (method === 'POST') {
         const title = (safeJson(body).title as string) ?? '';
-        const conv = { id: `conv-${s.conversations.length + 1}`, title, createdAt: 0 };
+        const now = Date.now();
+        const conv = {
+          id: `conv-${s.conversations.length + 1}`,
+          title,
+          createdAt: now,
+          updatedAt: now,
+          pinned: false,
+          archived: false,
+        };
         s.conversations.unshift(conv);
         return json(res, 200, conv);
       }
@@ -434,6 +488,45 @@ function route(
 
   // Absorb ambient/unknown calls so the renderer never blows up.
   json(res, 200, {});
+}
+
+async function writeMockApp(
+  appsDir: string,
+  id: string,
+  app: Partial<AppMetaEntry>,
+): Promise<void> {
+  const directory = path.join(appsDir, id);
+  await fs.mkdir(directory, { recursive: true });
+  await fs.writeFile(
+    path.join(directory, 'app.json'),
+    `${JSON.stringify({ id, name: app.name ?? id, kind: app.kind ?? 'app' }, null, 2)}\n`,
+  );
+}
+
+async function readMockApps(
+  appsDir: string,
+): Promise<{ apps: AppMetaEntry[]; automations: Array<Record<string, unknown>> }> {
+  const entries = await fs.readdir(appsDir, { withFileTypes: true }).catch(() => []);
+  const apps: AppMetaEntry[] = [];
+  const automations: Array<Record<string, unknown>> = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    try {
+      const manifest = JSON.parse(
+        await fs.readFile(path.join(appsDir, entry.name, 'app.json'), 'utf8'),
+      ) as Partial<AppMetaEntry>;
+      const id = manifest.id ?? entry.name;
+      if (manifest.kind === 'automation') {
+        automations.push(automationRow({ id, name: manifest.name }));
+      } else {
+        apps.push(appEntry({ ...manifest, id, hasIndex: manifest.hasIndex ?? true }));
+      }
+    } catch {
+      // A half-written directory is intentionally absent from the mock's
+      // restart inventory, matching the gateway's manifest boundary.
+    }
+  }
+  return { apps, automations };
 }
 
 function safeJson(body: string): Record<string, unknown> {
@@ -542,6 +635,8 @@ export async function seedRemoteGateway(
     JSON.stringify(
       {
         activeGatewayId: env.gatewayId,
+        builderEnabled: true,
+        changelogSeenVersion: '0.1.0',
         remoteTemplatesUrl: '',
         ...(opts.onboarding ? {} : { onboardingCompletedAt: '2024-01-01T00:00:00.000Z' }),
       },
@@ -571,6 +666,14 @@ export async function launchApp(env: TestEnv): Promise<{ app: ElectronApplicatio
     env: { ...process.env, NODE_ENV: 'test' },
   });
   const page = await app.firstWindow();
+  page.on('pageerror', (error) => {
+    process.stderr.write(`[desktop-e2e pageerror] ${error.stack ?? error.message}\n`);
+  });
+  page.on('console', (message) => {
+    if (message.type() === 'error') {
+      process.stderr.write(`[desktop-e2e console] ${message.text()}\n`);
+    }
+  });
   await page.waitForLoadState('domcontentloaded');
   return { app, page };
 }
@@ -579,7 +682,12 @@ export async function launchApp(env: TestEnv): Promise<{ app: ElectronApplicatio
 
 /** A published-app metadata row for the gateway's listApps response. */
 export function appEntry(over: Partial<AppMetaEntry> & { id: string }): AppMetaEntry {
-  return { name: over.id, kind: 'app', hasIndex: true, ...over };
+  return {
+    ...over,
+    name: over.name ?? over.id,
+    kind: over.kind ?? 'app',
+    hasIndex: over.hasIndex ?? true,
+  };
 }
 
 /** Build a CentraidAutomationRow for the listAutomations / read responses. */
@@ -703,13 +811,37 @@ export async function markUserApp(
 
 /** Wait for the home shell to be present. */
 export async function waitForHome(page: Page): Promise<void> {
-  await page.locator('.cd-window').first().waitFor({ state: 'attached' });
-  await page.locator('.cd-hero, .cd-apps-grid').first().waitFor({ state: 'visible' });
+  await page.locator('[data-sidebar]').waitFor({ state: 'visible' });
+  const library = page.locator('[role="tablist"][aria-label="Filter your library by kind"]');
+  try {
+    await library.waitFor({ state: 'visible', timeout: 10_000 });
+  } catch (error) {
+    const body = (await page.locator('body').textContent())?.replaceAll(/\s+/g, ' ').slice(0, 500);
+    throw new Error(`home library did not render at ${page.url()}; shell text: ${body ?? ''}`, {
+      cause: error,
+    });
+  }
+}
+
+/** Close Electron and wait until its OS process has exited.
+ *
+ * `ElectronApplication.close()` can resolve just before Chromium releases the
+ * app's single-instance lock. Tests that immediately relaunch must wait for the
+ * process boundary, otherwise the replacement process exits without a window.
+ */
+export async function closeApp(app: ElectronApplication): Promise<void> {
+  const child = app.process();
+  const exited =
+    child.exitCode === null
+      ? new Promise<void>((resolve) => child.once('exit', () => resolve()))
+      : Promise.resolve();
+  await app.close();
+  await exited;
 }
 
 /** Click a sidebar nav item by its visible label. */
 export async function gotoNav(page: Page, label: string): Promise<void> {
-  await page.locator('.cd-sb-item', { hasText: label }).first().click();
+  await page.getByRole('button', { name: label, exact: true }).click();
 }
 
 /** The grid item for an app, keyed by its stable data-app-id anchor. */
@@ -726,23 +858,21 @@ export async function openTile(page: Page, appId: string): Promise<void> {
  * it survives card restyles — the class churn in #230 is exactly what broke
  * the old `.cd-card-more` selector. */
 export async function openTileMenu(page: Page, appId: string): Promise<void> {
-  await tile(page, appId).getByRole('button', { name: 'App actions' }).click();
-  await page.locator('.ctx-menu').waitFor({ state: 'visible' });
+  await tile(page, appId).getByRole('button', { name: 'More actions' }).click();
+  await page.getByRole('menu').waitFor({ state: 'visible' });
 }
 
 /** Click a context-menu item by text. */
 export async function clickMenuItem(page: Page, text: string): Promise<void> {
-  await page.locator('.ctx-item', { hasText: text }).first().click();
+  await page.getByRole('menuitem', { name: text, exact: true }).click();
 }
 
 /** Wait for the confirm modal with the given title. */
 export async function expectConfirm(page: Page, title: string): Promise<void> {
-  await page
-    .locator('.modal-card[role="dialog"]', { hasText: title })
-    .waitFor({ state: 'visible' });
+  await page.getByRole('dialog', { name: title, exact: true }).waitFor({ state: 'visible' });
 }
 
 /** Click the danger "Delete" button in the open confirm modal. */
 export async function confirmDelete(page: Page): Promise<void> {
-  await page.locator('.modal-card .btn-danger').first().click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
 }

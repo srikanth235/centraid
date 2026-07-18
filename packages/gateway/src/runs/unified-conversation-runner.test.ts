@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Unified chat runner (issue #141, Phase 3). One chat surface, both jobs:
  * a turn runs in the app's draft session worktree (native file edits stage
@@ -15,7 +16,6 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import { WorktreeStore } from '../worktree-store/index.js';
 import type { Dispatcher, ConversationTurnInput, TurnStreamEvent } from '@centraid/app-engine';
@@ -45,7 +45,7 @@ function baseInput(
 }
 
 beforeEach(async () => {
-  root = await fs.mkdtemp(path.join(os.tmpdir(), `gw-unified-${crypto.randomUUID()}-`));
+  root = await tempDir(`gw-unified-${crypto.randomUUID()}-`);
   store = new WorktreeStore({ root: path.join(root, 'code') });
   await store.init();
 });

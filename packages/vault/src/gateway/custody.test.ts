@@ -1,3 +1,4 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // File custody (§10): `backupVault` is the user-facing export ramp — VACUUM
 // INTO copies of the two SQLite files plus the blob CAS, hashed so the copy
 // is verifiable with standard tools. (`stageVaultDbs`, the old offsite
@@ -5,8 +6,7 @@
 // via wal-shipper.ts instead of rewriting the database per snapshot.)
 
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, expect, test } from 'vitest';
@@ -19,7 +19,7 @@ let vaultDir: string;
 let db: VaultDb;
 
 beforeEach(() => {
-  root = mkdtempSync(path.join(tmpdir(), 'custody-stage-'));
+  root = tempDirSync('custody-stage-');
   vaultDir = path.join(root, 'vault-a');
   db = openVaultDb({ dir: vaultDir });
   bootstrapVault(db, { ownerName: 'Priya' });

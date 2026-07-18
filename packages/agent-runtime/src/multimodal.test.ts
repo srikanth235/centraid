@@ -1,6 +1,6 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { describe, expect, it } from 'vitest';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   TEXT_ATTACHMENT_MAX_BYTES,
@@ -93,7 +93,7 @@ describe('multimodal blockFor', () => {
 
 describe('buildUserContent', () => {
   it('leads with the text block, then reads + encodes attachments', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'centraid-mm-'));
+    const dir = tempDirSync('centraid-mm-');
     const png = join(dir, 'p.png');
     writeFileSync(png, Buffer.from('PNGDATA'));
     const content = buildUserContent('look at this', [{ path: png, mime: 'image/png' }]);
@@ -111,7 +111,7 @@ describe('buildUserContent', () => {
   });
 
   it('includes a .txt attachment as a text block so the model can read it', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'centraid-mm-'));
+    const dir = tempDirSync('centraid-mm-');
     const txt = join(dir, 'notes.txt');
     writeFileSync(txt, 'remember to buy milk');
     const content = buildUserContent('see attached', [

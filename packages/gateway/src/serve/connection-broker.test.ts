@@ -1,13 +1,10 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 // The connection broker (issue #304): token custody correctness. The three
 // rot points each get a scenario — rotated pair persisted before use,
 // single-flight refresh under concurrency, invalid_grant flips needs-auth
 // with an owner-readable note while a 5xx stays transient (no flip).
 
 import { afterEach, expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import crypto from 'node:crypto';
 import http from 'node:http';
 import { openVaultPlane, type VaultPlane } from './vault-plane.js';
 import { ConnectionBroker } from './connection-broker.js';
@@ -18,13 +15,6 @@ const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.();
 });
-
-async function tempDir(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `conn-broker-${crypto.randomUUID()}-`));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 function openPlane(dir: string): VaultPlane {
   const plane = openVaultPlane({ dir, logger: silentLogger, ownerName: 'Priya' });
   cleanups.push(() => plane.stop());

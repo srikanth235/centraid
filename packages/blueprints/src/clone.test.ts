@@ -1,6 +1,6 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import {
   cloneTemplate,
@@ -14,7 +14,7 @@ describe('suggestCloneIdentity', () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-clone-id-'));
+    dir = await tempDir('centraid-clone-id-');
   });
   afterEach(async () => {
     await fs.rm(dir, { recursive: true, force: true });
@@ -115,7 +115,7 @@ describe('suggestCloneIdentityFrom (git-store backend — no filesystem)', () =>
 describe('suggestAppId (sanity — coexists with suggestCloneIdentity)', () => {
   let dir: string;
   beforeEach(async () => {
-    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-suggest-id-'));
+    dir = await tempDir('centraid-suggest-id-');
   });
   afterEach(async () => {
     await fs.rm(dir, { recursive: true, force: true });
@@ -137,8 +137,8 @@ describe('cloneTemplate index.html <title> rewrite', () => {
   let templateDir: string;
 
   beforeEach(async () => {
-    appsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-clone-html-'));
-    templateDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-clone-tmpl-'));
+    appsDir = await tempDir('centraid-clone-html-');
+    templateDir = await tempDir('centraid-clone-tmpl-');
     // Minimal template: app.json + index.html with a hardcoded title.
     await fs.writeFile(
       path.join(templateDir, 'app.json'),
@@ -230,7 +230,7 @@ describe('cloneTemplate index.html <title> rewrite', () => {
 
   it('rewrites automation.json#name + stamps generated for automation templates', async () => {
     // Lay down an automation-template-shaped source: app.json + automations/<id>/...
-    const templateDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-auto-tmpl-'));
+    const templateDir = await tempDir('centraid-auto-tmpl-');
     await fs.writeFile(
       path.join(templateDir, 'app.json'),
       JSON.stringify({ name: 'Briefing', version: '0.1.0' }, null, 2),

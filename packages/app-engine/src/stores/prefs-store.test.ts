@@ -1,6 +1,6 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { describe, expect, it } from 'vitest';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -12,7 +12,7 @@ import {
 } from './prefs-store.js';
 
 function freshFile(): string {
-  return join(mkdtempSync(join(tmpdir(), 'centraid-prefs-')), 'prefs.json');
+  return join(tempDirSync('centraid-prefs-'), 'prefs.json');
 }
 
 /** A minimal async-iterable IncomingMessage carrying an optional JSON body. */

@@ -1,6 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import {
   appEntry,
+  closeApp,
   cleanupEnv,
   gotoNav,
   launchApp,
@@ -21,7 +24,7 @@ let gateway: MockGateway;
 
 test.beforeEach(async () => {
   env = await makeEnv();
-  gateway = await startMockGateway();
+  gateway = await startMockGateway({ appsDir: env.appsDir });
   await seedRemoteGateway(env, gateway);
 });
 
@@ -209,36 +212,116 @@ test('10.1 — Discover renders template cards', async () => {
   try {
     await waitForHome(page);
     await gotoNav(page, 'Discover');
-    await expect(page.locator('.cd-disc-card')).toHaveCount(2);
-    await expect(page.locator('.cd-disc-card-name', { hasText: 'Habit Tracker' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Habit Tracker/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Journal/ })).toBeVisible();
   } finally {
     await app.close();
   }
 });
 
-test('10.2 — using a template clones it and opens the builder', async () => {
+test('10.2 — an automation template clone survives a fresh gateway instance and Electron process', async () => {
   gateway.state.templates = [
     {
-      id: 'habit',
-      name: 'Habit Tracker',
-      desc: 'Track habits',
+      id: 'digest',
+      name: 'Daily Digest',
+      desc: 'Summarize the day',
       colorKey: 'violet',
       iconKey: 'Todo',
       version: '1',
+      kind: 'automation',
+      triggerKind: 'cron',
+      triggerLabel: 'Every day',
     },
   ];
-  const { app, page } = await launchApp(env);
+  gateway.state.cloneResult = {
+    app: {
+      id: 'digest-clone',
+      name: 'Daily Digest',
+      description: 'Summarize the day',
+      kind: 'automation',
+      hasIndex: true,
+    },
+    template: gateway.state.templates[0],
+    webhooks: [],
+  };
+  let launched: Awaited<ReturnType<typeof launchApp>> | undefined = await launchApp(env);
   try {
-    await waitForHome(page);
-    await gotoNav(page, 'Discover');
-    await page.locator('.cd-disc-card', { hasText: 'Habit Tracker' }).click();
-    await page.locator('.cd-tmpl-preview .btn-primary', { hasText: 'Use this template' }).click();
-    await expect(page.locator('.builder-body')).toBeVisible({ timeout: 10_000 });
-    expect(
-      gateway.calls.some((c) => c.method === 'POST' && c.pathname === '/centraid/_apps/_clone'),
-    ).toBe(true);
+    await waitForHome(launched.page);
+    await gotoNav(launched.page, 'Discover');
+    await launched.page.getByRole('button', { name: /Daily Digest/ }).click();
+    await launched.page
+      .getByRole('dialog', { name: 'Daily Digest template' })
+      .getByRole('button', { name: /Use template/ })
+      .click();
+    await expect
+      .poll(
+        () =>
+          gateway.calls.some((c) => c.method === 'POST' && c.pathname === '/centraid/_apps/_clone'),
+        { timeout: 10_000 },
+      )
+      .toBe(true);
+    await expect.poll(() => gateway.state.automations).toHaveLength(1);
+    const manifestPath = path.join(env.appsDir, 'digest-clone', 'app.json');
+    const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8')) as {
+      id: string;
+      name: string;
+    };
+    expect(manifest).toMatchObject({ id: 'digest-clone', name: 'Daily Digest' });
+
+    await closeApp(launched.app);
+    launched = undefined;
+    await gateway.close();
+    gateway = await startMockGateway({ appsDir: env.appsDir });
+    await seedRemoteGateway(env, gateway);
+
+    launched = await launchApp(env);
+    await waitForHome(launched.page);
+    await gotoNav(launched.page, 'Automations');
+    await expect(launched.page.getByRole('button', { name: /Daily Digest/ })).toBeVisible();
+    await expect(fs.access(manifestPath)).resolves.toBeUndefined();
   } finally {
-    await app.close();
+    if (launched) await closeApp(launched.app);
+  }
+});
+
+test('10.3 — independent builder drafts coexist on disk and survive a full Electron restart', async () => {
+  const prompts = ['Track hydration', 'Plan daily todos', 'Keep a private journal'];
+  let launched = await launchApp(env);
+  try {
+    for (const [index, prompt] of prompts.entries()) {
+      await waitForHome(launched.page);
+      const composer = launched.page.getByPlaceholder(/Describe an app you want/i);
+      await composer.fill(prompt);
+      await composer.press('Control+Enter');
+      await expect.poll(() => gateway.state.apps.length, { timeout: 10_000 }).toBe(index + 1);
+      await closeApp(launched.app);
+      launched = await launchApp(env);
+    }
+    await waitForHome(launched.page);
+    const draftIds = gateway.state.apps.map((entry) => entry.id).sort();
+    const appDirectories = (await fs.readdir(env.appsDir)).sort();
+    expect(appDirectories).toEqual(draftIds);
+    for (const id of draftIds) {
+      const manifest = JSON.parse(
+        await fs.readFile(path.join(env.appsDir, id, 'app.json'), 'utf8'),
+      ) as { id: string; name: string };
+      expect(manifest.id).toBe(id);
+      expect(manifest.name.length).toBeGreaterThan(0);
+    }
+    await closeApp(launched.app);
+
+    const restarted = await launchApp(env);
+    try {
+      await waitForHome(restarted.page);
+      for (const id of draftIds) {
+        await expect(restarted.page.locator(`[data-app-id="${id}"]`)).toBeVisible();
+        await expect(fs.access(path.join(env.appsDir, id, 'app.json'))).resolves.toBeUndefined();
+      }
+    } finally {
+      await closeApp(restarted.app);
+    }
+  } finally {
+    await closeApp(launched.app).catch(() => undefined);
   }
 });
 
@@ -248,8 +331,7 @@ test('10.4 — empty Discover renders without cards', async () => {
   try {
     await waitForHome(page);
     await gotoNav(page, 'Discover');
-    await page.locator('.cd-disc-cats, .cd-disc-head').first().waitFor({ state: 'visible' });
-    await expect(page.locator('.cd-disc-card')).toHaveCount(0);
+    await expect(page.getByText('Nothing to install yet.')).toBeVisible();
   } finally {
     await app.close();
   }

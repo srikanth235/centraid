@@ -1,3 +1,4 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // Disk-full classification units (issue #351 wave 4). `PRAGMA max_page_count`
 // gives a deterministic, REAL SQLITE_FULL condition — no mocking node:sqlite
 // — so the classifier is verified against what node:sqlite actually throws,
@@ -11,8 +12,7 @@
 // gated instead of always-on).
 
 import { DatabaseSync } from 'node:sqlite';
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import {
@@ -46,15 +46,7 @@ vi.mock('node:fs', async (importOriginal) => {
 const cleanups: (() => void)[] = [];
 afterEach(() => {
   while (cleanups.length > 0) cleanups.pop()?.();
-});
-
-function tempDir(): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'vault-diskfull-'));
-  cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
-  return dir;
-}
-
-/** Fill a `:memory:` sqlite db past `PRAGMA max_page_count` — a real SQLITE_FULL. */
+}); /** Fill a `:memory:` sqlite db past `PRAGMA max_page_count` — a real SQLITE_FULL. */
 function triggerSqliteFull(): { db: DatabaseSync; err: unknown } {
   const db = new DatabaseSync(':memory:');
   db.exec('PRAGMA max_page_count = 4;');
@@ -152,7 +144,7 @@ test('DiskFullTracker: reports only disk-full errors, clears on demand', () => {
 });
 
 test('FsBlobStore.putSync: ENOSPC cleans up the partial tmp file and rethrows VaultDiskFullError', () => {
-  const dir = tempDir();
+  const dir = tempDirSync();
   const store = new FsBlobStore(dir);
   const sha = 'b'.repeat(64);
   writeSyncShouldFail = true;

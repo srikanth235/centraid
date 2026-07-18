@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Scheduler-on-publish reconcile (issue #149). A publish over HTTP must
  * resync the in-process cron scheduler — `serve()` reconciles in onAppLive
@@ -9,7 +10,6 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import type * as automation from '@centraid/automation';
 import { serve, type GatewayServeHandle } from './serve.ts';
@@ -73,7 +73,7 @@ const AUTOMATION_JSON = JSON.stringify({
 });
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `gw-sched-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`gw-sched-${crypto.randomUUID()}-`);
   reconcileCalls = [];
   started = 0;
   handle = await serve({

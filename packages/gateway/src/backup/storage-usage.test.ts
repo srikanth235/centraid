@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Coverage for the provider-usage poller (issue #367 §D1) against a REAL
  * in-process HTTP fake implementing just `GET /v1/storage/vaults/:id/usage`
@@ -8,10 +9,6 @@
 
 import { afterEach, expect, test, vi } from 'vitest';
 import http from 'node:http';
-import crypto from 'node:crypto';
-import os from 'node:os';
-import path from 'node:path';
-import { promises as fs } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { openStorageConnectionStore, type StorageConnectionStore } from './storage-connections.js';
 import { StorageUsagePoller } from './storage-usage.js';
@@ -20,15 +17,7 @@ const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
   vi.restoreAllMocks();
   while (cleanups.length > 0) await cleanups.pop()?.();
-});
-
-async function tempDir(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `storage-usage-${crypto.randomUUID()}-`));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
-/** Minimal fake provider — one route, PROTOCOL.md's exact envelope + shape. */
+}); /** Minimal fake provider — one route, PROTOCOL.md's exact envelope + shape. */
 function startFakeUsageServer(opts: {
   apiKey: string;
   targetId: string;

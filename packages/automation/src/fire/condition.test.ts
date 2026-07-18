@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Condition-trigger evaluation: consented read → row-content dedup → fire
  * decision. Stub bridge, real cursor persistence in the per-app
@@ -7,7 +8,6 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import type { VaultBridge } from '@centraid/app-engine';
 import { evaluateConditionTrigger, evaluateDataTrigger } from './condition.js';
@@ -37,7 +37,7 @@ describe('evaluateConditionTrigger', () => {
   let appsDir: string;
 
   beforeEach(async () => {
-    appsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-cond-'));
+    appsDir = await tempDir('centraid-cond-');
     await fs.mkdir(path.join(appsDir, 'billing'), { recursive: true });
   });
   afterEach(async () => {
@@ -108,7 +108,7 @@ describe('evaluateDataTrigger', () => {
   let appsDir: string;
 
   beforeEach(async () => {
-    appsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-data-'));
+    appsDir = await tempDir('centraid-data-');
     await fs.mkdir(path.join(appsDir, 'studio'), { recursive: true });
   });
   afterEach(async () => {

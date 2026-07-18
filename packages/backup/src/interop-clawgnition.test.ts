@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 // governance: allow-repo-hygiene file-size-limit (#363) single cross-repo interop suite against a real Clawgnition gateway (wrangler dev); the scenario is one coherent conformance run, not independently splittable cases
 /*
  * Cross-repo interop: `RemoteBackupProvider` (this package's real client)
@@ -428,10 +429,10 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
     test('b. createSnapshot registers against the real Worker+DO+D1, chunks/manifest land in the real S3 server; restoreSnapshot is byte-identical; verifySnapshot is clean', async () => {
       targetId = await freshTarget('interop-snapshot-lifecycle');
 
-      const keyringDir = await fs.mkdtemp(path.join(os.tmpdir(), 'interop-keyring-'));
+      const keyringDir = await tempDir('interop-keyring-');
       keyring = await createKeyring(path.join(keyringDir, 'keyring.json'));
 
-      sourceDir = await fs.mkdtemp(path.join(os.tmpdir(), 'interop-source-'));
+      sourceDir = await tempDir('interop-source-');
       await fs.mkdir(path.join(sourceDir, 'blobs'), { recursive: true });
       // Real WAL-quiet SQLite bases (the `/1` coordinated pair); the engine
       // verifies their sha256 and runs an integrity-checked WAL replay on

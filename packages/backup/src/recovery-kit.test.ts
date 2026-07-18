@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * The recovery-kit READER (issue #439 R1) — the counterpart to
  * `writeRecoveryKit`. A kit is the ONLY thing standing between a blank machine
@@ -8,13 +9,12 @@
 
 import { expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { createKeyring, parseRecoveryKit, writeRecoveryKit } from './index.js';
 
 async function tempFile(name: string): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `recovery-kit-${crypto.randomUUID()}-`));
+  const dir = await tempDir(`recovery-kit-${crypto.randomUUID()}-`);
   return path.join(dir, name);
 }
 

@@ -1,0 +1,33 @@
+{
+  "name": "@centraid/test-kit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared, dev-only test infrastructure for Centraid packages and quality lanes.",
+  "type": "module",
+  "exports": {
+    "./factories": "./src/factories.ts",
+    "./fake-clock": "./src/fake-clock.ts",
+    "./vitest": "./src/vitest.ts",
+    "./mock-llm": "./src/mock-llm.ts",
+    "./quality-result": "./src/quality-result.ts",
+    "./temp-dir": "./src/temp-dir.ts",
+    "./volume-fixture": "./src/volume-fixture.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node ../../node_modules/vitest/vitest.mjs run"
+  },
+  "dependencies": {
+    "@centraid/gateway": "workspace:*",
+    "@centraid/mock-llm": "workspace:*",
+    "@centraid/vault": "workspace:*"
+  },
+  "devDependencies": {
+    "@centraid/tsconfig": "workspace:*",
+    "@types/node": "^22.0.0",
+    "typescript": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.5"
+  }
+}

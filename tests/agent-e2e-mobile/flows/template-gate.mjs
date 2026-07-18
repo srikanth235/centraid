@@ -77,6 +77,7 @@ async function templateMarker(templateId) {
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 await runFlow('template-gate', async (ctx) => {
+  await ctx.configureGateway(GATEWAY_URL, GATEWAY_TOKEN);
   const templates = await uiTemplates();
   if (templates.length === 0) throw new Error('no UI templates found in blueprints index.json');
 

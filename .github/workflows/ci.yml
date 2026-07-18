@@ -33,3 +33,12 @@ jobs:
       # in vitest.config.ts; a test failure or a floor breach fails CI.
       - run: bun run build
       - run: bun run coverage
+      - name: Generate test-health report
+        if: always()
+        run: bun run test:report
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: test-health-report
+          path: dist/test-report/
+          retention-days: 14

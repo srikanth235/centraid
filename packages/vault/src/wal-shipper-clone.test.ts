@@ -1,3 +1,4 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 /*
  * The base clone must be a REFLINK, not a byte copy (issue #408).
  *
@@ -19,8 +20,7 @@
  */
 
 import { randomBytes } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync, statfsSync, statSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, rmSync, statfsSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { cloneDbFile } from './wal-shipper.js';
@@ -32,7 +32,7 @@ const SIZE = 128 * MiB;
 let root: string;
 
 beforeEach(() => {
-  root = mkdtempSync(path.join(tmpdir(), 'wal-clone-'));
+  root = tempDirSync('wal-clone-');
 });
 
 afterEach(() => {

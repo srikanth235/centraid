@@ -1,10 +1,10 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 // governance: allow-repo-hygiene file-size-limit (#408) the engine's behavior suite — snapshot/restore/verify roundtrips plus the /1 WAL+PITR+determinism cases all share the same provider/keyring/tempdir fixtures; splitting by topic would duplicate the fixture plumbing in every shard
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { ALGO_STORE, ALGO_ZSTD, unframeChunkPayload } from './compress.js';
 import {
   activeMasterKey,
@@ -22,17 +22,7 @@ import { partBuffer } from './parts.js';
 import type { ObjectStore } from './object-store.js';
 import type { BackupProvider, StoreClass } from './provider.js';
 
-const cleanups: Array<() => Promise<void>> = [];
-afterEach(async () => {
-  while (cleanups.length > 0) await cleanups.pop()?.();
-});
-
-async function tempDir(prefix = 'backup-engine-'): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
+vi.setConfig({ testTimeout: 15_000 });
 const CURRENT = { gatewayVersion: '0.1.0', vaultUserVersion: '1', ontologyVersion: '1.2' };
 const APP_META = {
   gatewayVersion: '0.1.0',

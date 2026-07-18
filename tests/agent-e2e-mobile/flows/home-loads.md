@@ -1,8 +1,8 @@
 # home-loads
 
 **Goal:** prove the agent-e2e-mobile harness loop end-to-end on a clean
-launch. Mirrors `tests/agent-e2e/flows/clone-template-and-reopen.md`'s
-role as the canonical "does the whole thing run" smoke test.
+launch. It is the canonical "does the whole thing run" smoke test, with the
+same process-boundary posture as the desktop Playwright journeys.
 
 **Setup:** the standalone dev build must be installed on a booted
 iOS Simulator (`bun run --filter=@centraid/mobile ios` once), and Metro

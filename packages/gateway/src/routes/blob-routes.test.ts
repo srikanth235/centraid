@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 // The blob routes (issue #296) over a real vault plane: stream bytes in,
 // claim them through a command, and serve them back with ETag/Range — the
 // full staged-upload loop an app performs.
@@ -5,8 +6,6 @@
 import { afterEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import http from 'node:http';
-import os from 'node:os';
-import path from 'node:path';
 import crypto from 'node:crypto';
 import { deflateSync } from 'node:zlib';
 import jpegJs from 'jpeg-js';
@@ -74,7 +73,7 @@ function compressedPdf(text: string): Buffer {
 async function fixture(
   previewCodec?: ReturnType<typeof createImagePreviewCodec>,
 ): Promise<{ base: string; plane: VaultPlane }> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `blob-routes-${crypto.randomUUID()}-`));
+  const dir = await tempDir(`blob-routes-${crypto.randomUUID()}-`);
   cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
   const plane = openVaultPlane({
     dir,

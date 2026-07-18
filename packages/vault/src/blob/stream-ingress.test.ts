@@ -1,6 +1,6 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { rmSync } from 'node:fs';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { afterEach, expect, test } from 'vitest';
@@ -117,7 +117,7 @@ function fakeRemote(keys: BlobContentKeyRegistry): FakeRemote {
 }
 
 async function harness(options: { budgetBytes: number; freeBytes?: number }) {
-  const dir = mkdtempSync(path.join(tmpdir(), 'blob-stream-ingress-'));
+  const dir = tempDirSync('blob-stream-ingress-');
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
   const db: VaultDb = openVaultDb({ dir });
   await db.blobTransfers.close();

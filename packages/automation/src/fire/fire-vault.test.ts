@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * ctx.vault in automation handlers (duaility §12): the fire spine plumbs a
  * host-injected VaultBridge factory (keyed by app id) down to the worker's
@@ -14,7 +15,6 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import type { VaultBridge, VaultCall } from '@centraid/app-engine';
 import { runFire, type DispatchSurface } from './fire.js';
@@ -58,7 +58,7 @@ describe('runFire + ctx.vault', () => {
   let appsDir: string;
 
   beforeEach(async () => {
-    appsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-fire-vault-'));
+    appsDir = await tempDir('centraid-fire-vault-');
   });
   afterEach(async () => {
     await fs.rm(appsDir, { recursive: true, force: true });
@@ -119,7 +119,7 @@ describe('runFire + ctx.vault', () => {
     // deterministic-handler contract is what the handler lint enforces.)
     const before = ids.slice();
     calls.length = 0;
-    const replayDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-fire-vault-replay-'));
+    const replayDir = await tempDir('centraid-fire-vault-replay-');
     try {
       await fs.mkdir(path.join(replayDir, 'notes'), { recursive: true });
       await fire(replayDir);

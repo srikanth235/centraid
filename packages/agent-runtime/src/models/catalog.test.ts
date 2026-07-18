@@ -1,12 +1,12 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { readCatalog, readRunnerModels, readRunnerTools, writeCatalogEntry } from './catalog.ts';
 
 let counter = 0;
 async function tmpCatalogPath(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-catalog-'));
+  const dir = await tempDir('centraid-catalog-');
   return path.join(dir, `model-catalog-${counter++}.json`);
 }
 

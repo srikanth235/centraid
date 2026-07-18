@@ -462,6 +462,19 @@ export function makeBlobRouteHandler(vaults: Pick<VaultRegistry, 'current'>): Ro
           res.end();
           return true;
         }
+        if (!range) {
+          const opened = plane.db.blobs.openLocalReadStreamSync(blob.sha256);
+          if (opened) {
+            res.statusCode = 200;
+            res.setHeader('Content-Length', String(opened.size));
+            await new Promise<void>((resolve, reject) => {
+              opened.stream.once('error', reject);
+              res.once('finish', resolve);
+              opened.stream.pipe(res);
+            });
+            return true;
+          }
+        }
         const bytes = await plane.db.blobs.open(
           blob.sha256,
           range ? { start: range.start, end: range.end } : undefined,

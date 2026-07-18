@@ -1,3 +1,4 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // governance: allow-repo-hygiene file-size-limit (#408) the detector suite shares real SQLite race hooks, restore helpers, and restart fixtures whose correctness depends on one common lifecycle harness
 // WAL shipper detectors + lifecycle (issue #408): G5 foreign-actor
 // detection (in-process stand-ins — the real second-process test lives in
@@ -12,7 +13,6 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
-  mkdtempSync,
   openSync,
   readFileSync,
   readSync,
@@ -21,7 +21,6 @@ import {
   utimesSync,
   writeFileSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, expect, test } from 'vitest';
@@ -46,7 +45,7 @@ let clock: number;
 const now = () => clock;
 
 beforeEach(() => {
-  root = mkdtempSync(path.join(tmpdir(), 'wal-det-'));
+  root = tempDirSync('wal-det-');
   vaultDir = path.join(root, 'vault-a');
   db = openVaultDb({ dir: vaultDir });
   bootstrapVault(db, { ownerName: 'Priya' });

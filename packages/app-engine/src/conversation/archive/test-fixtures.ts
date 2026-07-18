@@ -4,9 +4,8 @@
 // CAS door. Test-only module — imported by archive.test.ts / selector.test.ts,
 // never shipped.
 
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { createHash } from 'node:crypto';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { openJournalDb } from '../../stores/gateway-db.js';
@@ -32,7 +31,7 @@ export class MemoryBlobSink implements BlobSink {
 }
 
 export function openTempJournal(): { journal: DatabaseSync; dbPath: string } {
-  const dir = mkdtempSync(path.join(tmpdir(), 'centraid-conv-archive-'));
+  const dir = tempDirSync('centraid-conv-archive-');
   const dbPath = path.join(dir, 'journal.db');
   return { journal: openJournalDb(dbPath), dbPath };
 }

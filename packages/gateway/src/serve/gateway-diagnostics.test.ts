@@ -1,3 +1,4 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 /*
  * `buildDiagnosticsBundle` — document shape, vault file sizing (cheap
  * statSync, no CAS walk), the redaction contract (issue #351), and the
@@ -18,7 +19,7 @@ import type { VaultRegistry } from './vault-registry.ts';
 const tmpDirs: string[] = [];
 
 function makeTmpDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gateway-diagnostics-'));
+  const dir = tempDirSync('gateway-diagnostics-');
   tmpDirs.push(dir);
   return dir;
 }

@@ -1,8 +1,8 @@
+import { tempDir, tempDirSync } from '@centraid/test-kit/temp-dir';
 // governance: allow-repo-hygiene file-size-limit (#408) one HTTP turn-routing suite sharing the same runtime and conversation-runner fixture; splitting would duplicate the protocol harness and its state assertions
 import { afterEach, beforeEach, expect, test } from 'vitest';
-import { promises as fs, mkdirSync, mkdtempSync } from 'node:fs';
+import { promises as fs, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import { Runtime } from '../runtime.ts';
 import { startRuntimeHttpServer, type RuntimeHttpServerHandle } from './http-server.ts';
@@ -18,9 +18,7 @@ let server: RuntimeHttpServerHandle;
 let runtime: Runtime;
 
 async function bootstrap(opts: { runner?: ConversationRunner } = {}): Promise<void> {
-  workspace = await fs.mkdtemp(
-    path.join(os.tmpdir(), `centraid-chat-routes-${crypto.randomUUID()}-`),
-  );
+  workspace = await tempDir(`centraid-chat-routes-${crypto.randomUUID()}-`);
   runtime = new Runtime({ appsDir: workspace, conversationRunner: opts.runner });
   server = await startRuntimeHttpServer({ runtime });
   await runtime.bootstrap();
@@ -47,7 +45,7 @@ async function registerApp(appId: string): Promise<void> {
  * bootstrap without a store.
  */
 function newHistoryStore(): ConversationHistoryStore {
-  const dir = mkdtempSync(path.join(os.tmpdir(), `centraid-chat-history-${crypto.randomUUID()}-`));
+  const dir = tempDirSync(`centraid-chat-history-${crypto.randomUUID()}-`);
   mkdirSync(path.join(dir, 'apps'), { recursive: true });
   // One cached journal provider for this dir (mirrors history.test.ts's
   // `journalFor`) — a fresh `makeJournalDbProvider` per `workspace()` call
@@ -69,9 +67,7 @@ async function bootstrapWithStore(
 ): Promise<{
   store: ConversationHistoryStore;
 }> {
-  workspace = await fs.mkdtemp(
-    path.join(os.tmpdir(), `centraid-chat-routes-${crypto.randomUUID()}-`),
-  );
+  workspace = await tempDir(`centraid-chat-routes-${crypto.randomUUID()}-`);
   const store = newHistoryStore();
   runtime = new Runtime({
     appsDir: workspace,
@@ -448,9 +444,7 @@ test('conversationLocks are per-runtime — two runtimes sharing appId+conversat
       input.onEvent({ type: 'final', text: 'a-final' });
     },
   };
-  const workspaceA = await fs.mkdtemp(
-    path.join(os.tmpdir(), `centraid-chat-iso-A-${crypto.randomUUID()}-`),
-  );
+  const workspaceA = await tempDir(`centraid-chat-iso-A-${crypto.randomUUID()}-`);
   const runtimeA = new Runtime({ appsDir: workspaceA, conversationRunner: runnerA });
   const serverA = await startRuntimeHttpServer({ runtime: runtimeA });
   await runtimeA.bootstrap();
@@ -462,9 +456,7 @@ test('conversationLocks are per-runtime — two runtimes sharing appId+conversat
       input.onEvent({ type: 'final', text: 'b-final' });
     },
   };
-  const workspaceB = await fs.mkdtemp(
-    path.join(os.tmpdir(), `centraid-chat-iso-B-${crypto.randomUUID()}-`),
-  );
+  const workspaceB = await tempDir(`centraid-chat-iso-B-${crypto.randomUUID()}-`);
   const runtimeB = new Runtime({ appsDir: workspaceB, conversationRunner: runnerB });
   const serverB = await startRuntimeHttpServer({ runtime: runtimeB });
   await runtimeB.bootstrap();
@@ -538,12 +530,8 @@ test('chat prompt resolves the manifest via the git-store code-dir override (#13
       input.onEvent({ type: 'final', text: 'ok' });
     },
   };
-  workspace = await fs.mkdtemp(
-    path.join(os.tmpdir(), `centraid-chat-manifest-${crypto.randomUUID()}-`),
-  );
-  const codeDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), `centraid-chat-code-${crypto.randomUUID()}-`),
-  );
+  workspace = await tempDir(`centraid-chat-manifest-${crypto.randomUUID()}-`);
+  const codeDir = await tempDir(`centraid-chat-code-${crypto.randomUUID()}-`);
   await fs.writeFile(
     path.join(codeDir, 'app.json'),
     JSON.stringify({
@@ -621,9 +609,7 @@ function fakeAskModel(opts?: {
 }
 
 async function bootstrapWithAskModel(askModel: AskModelPrefs): Promise<void> {
-  workspace = await fs.mkdtemp(
-    path.join(os.tmpdir(), `centraid-chat-routes-${crypto.randomUUID()}-`),
-  );
+  workspace = await tempDir(`centraid-chat-routes-${crypto.randomUUID()}-`);
   runtime = new Runtime({ appsDir: workspace, askModel });
   server = await startRuntimeHttpServer({ runtime });
   await runtime.bootstrap();

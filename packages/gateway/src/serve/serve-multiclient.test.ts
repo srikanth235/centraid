@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Multi-client integration: prove that two independent HTTP clients
  * pointed at the same daemon see consistent gateway state. The "two
@@ -19,7 +20,6 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import type { WorktreeStore } from '../worktree-store/index.js';
 import { serve, type GatewayServeHandle } from './serve.ts';
@@ -50,7 +50,7 @@ async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
 }
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `mc-gateway-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`mc-gateway-${crypto.randomUUID()}-`);
   handle = await serve({ paths: pathsUnder(dataDir) });
   await seedApp(await handle.appsStore(), 'multiclient-test');
   await handle.syncApps();
