@@ -1,0 +1,182 @@
+/* The week canvas: a scrollable Monday-first hour grid with an all-day lane,
+   time-positioned events, a now-line and per-day columns. Moved out of app.css.
+   The column click handler in WeekView.tsx queries `.weekEv` via the hashed
+   `styles.weekEv` name, so the rename stays behavior-identical. */
+
+.week {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.weekHead,
+.weekAllday,
+.weekGrid {
+  display: grid;
+  grid-template-columns: 3.25rem repeat(7, 1fr);
+}
+.weekHead {
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.weekDayHead {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 0 7px;
+  border-left: 1px solid var(--line);
+}
+.weekDow {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+.weekNum {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  min-width: 26px;
+  height: 26px;
+  line-height: 26px;
+  text-align: center;
+  border-radius: 999px;
+  color: var(--ink);
+}
+.weekDayHead[data-today='true'] .weekNum {
+  background: var(--accent-deep);
+  color: #fff;
+  font-weight: 600;
+}
+.weekAllday {
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+  max-height: 5.5rem;
+  overflow: auto;
+}
+.weekAlldayLabel {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--ink-3);
+  padding: 6px 4px;
+  text-align: right;
+}
+.weekAlldayCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 3px;
+  border-left: 1px solid var(--line);
+  min-height: 1.4rem;
+}
+.alldayChip {
+  --ev-color: var(--_accent);
+  font: var(--t-small);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: left;
+  color: #fff;
+  background: var(--ev-color);
+  border: none;
+  border-radius: 5px;
+  padding: 1px 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.weekScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.weekAxis {
+  position: relative;
+}
+.weekHour {
+  position: absolute;
+  right: 6px;
+  transform: translateY(-50%);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--ink-3);
+  background: var(--surface);
+  padding: 0 2px;
+}
+.weekCol {
+  position: relative;
+  border-left: 1px solid var(--line);
+  cursor: pointer;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 47px,
+    var(--line) 47px,
+    var(--line) 48px
+  );
+}
+.weekCol[data-today='true'] {
+  background-color: var(--accent-soft);
+}
+.nowLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--danger);
+  z-index: 3;
+}
+.nowLine::before {
+  content: '';
+  position: absolute;
+  left: -3px;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--danger);
+}
+.weekEv {
+  --ev-color: var(--_accent);
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+  text-align: left;
+  color: #fff;
+  background: var(--ev-color);
+  border: 1px solid color-mix(in srgb, var(--ev-color) 65%, #000);
+  border-radius: 5px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+.weekEv[data-status='tentative'] {
+  background: color-mix(in srgb, var(--ev-color) 20%, var(--surface));
+  border: 1px dashed var(--ev-color);
+  color: var(--ink);
+}
+.weekEvTitle {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.weekEvTime {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  opacity: 0.9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

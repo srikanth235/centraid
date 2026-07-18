@@ -1,0 +1,103 @@
+/* Sidebar nav rows, folder rows + inline editors, and the storage footprint —
+   rendered into the static #smartNav/#folderList/#storage containers (whose
+   own geometry, `.d-nav`/`.d-folders`/`.d-storage`, stays global in app.css).
+   Authored camelCase; the old `d-` prefix is replaced by module hashing.
+   `.navItem span:first-of-type` targets the label span (the leading icon is an
+   <i> from Shared's Icon, so it never collides). */
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 9px 11px;
+  border: none;
+  border-radius: 9px;
+  font: var(--t-body);
+  background: none;
+  color: var(--ink-2);
+}
+.navItem span:first-of-type {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.navItem:hover {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+.navItem[aria-current='true'] {
+  background: var(--accent-soft);
+  color: var(--accent-deep-fg);
+  font-weight: 600;
+}
+.navCount {
+  font-family: var(--mono);
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.folder {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.folder .navItem {
+  padding-right: 8px;
+}
+.folderTools {
+  position: absolute;
+  right: 6px;
+  display: none;
+  gap: 2px;
+  background: linear-gradient(90deg, transparent, var(--bg-elev) 22%);
+  padding-left: 14px;
+}
+.folder:hover .folderTools,
+.folder:focus-within .folderTools {
+  display: flex;
+}
+.folder:hover .navCount {
+  opacity: 0;
+}
+/* Rename/delete tool buttons: kit.css's .kit-icon-btn (+ .danger variant). */
+.folderEdit {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 2px;
+}
+/* The input itself is kit.css's .kit-input.bare (transparent until focus). */
+.folderEdit button {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  font: var(--t-small);
+  padding: 0 10px;
+}
+
+.storageTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.storageTop .lbl {
+  font: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--ink-3);
+}
+.storageTop .val {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.storageLabel {
+  font: var(--t-small);
+  color: var(--ink-2);
+  margin-top: 8px;
+}

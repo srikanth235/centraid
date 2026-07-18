@@ -1,0 +1,73 @@
+/* Journal view (#journalView container). All React-rendered; the classes moved
+   here. `.em`/`.dt` are descendant locals under `.entry`. The 640px column
+   `.jWrap` (shared with Activity) lives in shared.module.css. Authored
+   camelCase; module hashing replaces the old `j-` prefix. */
+
+.compose {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--bg-elev);
+  padding: 16px;
+}
+.moodrow {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+}
+.mood {
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: none;
+  font-size: 22px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mood[aria-pressed='true'] {
+  border-color: var(--selb);
+  background: var(--sel);
+}
+.text {
+  width: 100%;
+  border: none;
+  resize: none;
+  outline: none;
+  background: none;
+  font: var(--t-body);
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+.entry {
+  display: flex;
+  gap: 13px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.entry .em {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.entry .dt {
+  font: var(--t-mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.entry p {
+  margin: 4px 0 0;
+  font: var(--t-body);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink);
+}

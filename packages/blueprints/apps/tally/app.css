@@ -5,6 +5,16 @@
    (was .sw) and every colour flows from the token layer so light/dark and the
    per-app knobs (font/accent) retune the whole surface at once. Money colours
    live in --pos / --neg; category tints are inlined per row.
+
+   app.css split (TS + CSS-modules conversion): this file keeps ONLY the global
+   shell remainder — the token/theme/knob layers, the resets, the static
+   index.html chrome (`.tally`, sidebar frame `.s-side`/`.s-brand*`/`.s-nav`/
+   `.s-seclabel`, topbar `.s-topbar`/`.s-head*`/`.s-search`/`.s-tools`, the
+   `.s-banner` trust rows, `.s-scroll`/`.s-wrap`), the `.kit-*` bridges, and the
+   narrow-viewport rules that target those static nodes (JS toggles `.is-narrow`
+   / `.side-open` / `.denied` on #root). Every JSX-only `.s-*` component rule
+   moved into a co-located components/*.module.css (shared atoms in
+   components/shared.module.css). See those files for the rest.
    ========================================================================== */
 
 :root {
@@ -150,6 +160,7 @@ select {
   overflow: hidden;
 }
 
+/* ---------- Sidebar shell (static index.html markup) ---------- */
 .s-side {
   width: 260px;
   flex-shrink: 0;
@@ -217,38 +228,12 @@ select {
 .s-add:hover {
   filter: brightness(1.06);
 }
+/* The `.s-nav` containers are static in index.html; the rendered nav rows
+   (`.s-nav-item`/`.s-listitem`/`.s-li-*`) live in components/Sidebar.module.css. */
 .s-nav {
   display: flex;
   flex-direction: column;
   gap: 2px;
-}
-.s-nav-item {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  width: 100%;
-  padding: 9px 11px;
-  border: none;
-  border-radius: 9px;
-  font: var(--t-body);
-  background: none;
-  color: var(--ink-2);
-}
-.s-nav-item .lbl {
-  flex: 1;
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.s-nav-item:hover {
-  background: var(--bg-sunken);
-  color: var(--ink);
-}
-.s-nav-item[aria-current='true'] {
-  background: var(--accs);
-  color: var(--accd-fg);
-  font-weight: 600;
 }
 .s-seclabel {
   display: flex;
@@ -277,59 +262,11 @@ select {
   background: var(--bg-sunken);
   color: var(--ink);
 }
-.s-listitem {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 8px 10px;
-  border: none;
-  background: none;
-  border-radius: 9px;
-  text-align: left;
-  color: var(--ink);
-}
-.s-listitem:hover {
-  background: var(--bg-sunken);
-}
-.s-listitem[aria-current='true'] {
-  background: var(--accs);
-}
-.s-gicon {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 15px;
-}
 /* Avatars are <kit-avatar> (kit.css .kit-avatar); the title face is the one
-   Tally-specific touch kept on top of the kit's styling. */
+   Tally-specific touch kept on top of the kit's styling. Global — a `.kit-*`
+   class is always referenced as a plain string. */
 .kit-avatar {
   font-family: var(--font-title);
-}
-.s-li-main {
-  flex: 1;
-  min-width: 0;
-}
-.s-li-name {
-  display: block;
-  font: var(--t-body);
-  font-size: 13px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.s-li-sub {
-  display: block;
-  font: var(--t-mono);
-  font-size: 10px;
-  margin-top: 1px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .s-side-foot {
   margin-top: auto;
@@ -354,6 +291,7 @@ select {
   display: none;
 }
 
+/* ---------- Main frame (static index.html markup) ---------- */
 .s-main {
   flex: 1;
   min-width: 0;
@@ -469,7 +407,7 @@ select {
   align-items: center;
 }
 
-/* Trust banners */
+/* Trust banners (static index.html markup) */
 .s-banner {
   position: relative;
   border: 1px solid var(--line);
@@ -514,478 +452,27 @@ select {
   margin: 0 auto;
 }
 
-/* Dashboard summary */
-.s-summary {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-  margin-bottom: 24px;
-}
-.s-stat {
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--bg-elev);
-  padding: 16px 18px;
-}
-.s-stat .k {
-  font: var(--t-tiny);
-  text-transform: uppercase;
-  letter-spacing: var(--tk-eye);
-  color: var(--ink-3);
-}
-.s-stat .v {
-  font: var(--font-title);
-  font-size: 26px;
-  font-weight: 600;
-  margin-top: 8px;
-  letter-spacing: -0.02em;
-}
-.s-cols {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-.s-card {
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--bg-elev);
-  overflow: hidden;
-}
-.s-card-h {
-  padding: 13px 16px;
-  border-bottom: 1px solid var(--line);
-  font: var(--t-tiny);
-  text-transform: uppercase;
-  letter-spacing: var(--tk-eye);
-  color: var(--ink-3);
-}
-.s-bal-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--line);
-  width: 100%;
-  border-left: none;
-  border-right: none;
-  border-top: none;
-  background: none;
-  text-align: left;
-}
-.s-bal-row:last-child {
-  border-bottom: none;
-}
-.s-bal-row:hover {
-  background: var(--bg-sunken);
-}
-.s-bal-main {
-  flex: 1;
-  min-width: 0;
-}
-.s-bal-name {
-  display: block;
-  font: var(--t-body);
-  font-size: 14px;
-  font-weight: 500;
-}
-.s-bal-sub {
-  display: block;
-  font: var(--t-small);
-  font-size: 12px;
-  color: var(--ink-3);
-  margin-top: 1px;
-}
-.s-bal-amt {
-  font: var(--font-title);
-  font-size: 15px;
-  font-weight: 600;
-  text-align: right;
-  flex-shrink: 0;
-}
-.s-empty-row {
-  padding: 22px 16px;
-  text-align: center;
-  font: var(--t-small);
-  color: var(--ink-3);
-}
-
-.s-section-title {
-  font: var(--t-tiny);
-  text-transform: uppercase;
-  letter-spacing: var(--tk-eye);
-  color: var(--ink-3);
-  margin: 26px 0 12px;
-}
-.s-groupgrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 14px;
-}
-.s-gcard {
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--bg-elev);
-  padding: 16px;
-  text-align: left;
-  cursor: pointer;
-}
-.s-gcard:hover {
-  border-color: var(--line-strong);
-  box-shadow: var(--shadow-md);
-}
-.s-gcard-top {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  margin-bottom: 12px;
-}
-.s-gcard-name {
-  font: var(--t-strong);
-  font-size: 14px;
-}
-.s-gcard-mem {
-  font: var(--t-mono);
-  font-size: 10px;
-  color: var(--ink-3);
-  margin-top: 1px;
-}
-.s-gcard-bal {
-  font: var(--t-small);
-  font-size: 13px;
-}
-
-.s-dash-empty {
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--bg-elev);
-  padding: 40px 24px;
-  text-align: center;
-}
-.s-dash-empty .t {
-  font: var(--t-title);
-  font-size: 17px;
-  margin-bottom: 6px;
-}
-.s-dash-empty .d {
-  font: var(--t-small);
-  color: var(--ink-2);
-  max-width: 380px;
-  margin: 0 auto 16px;
-}
-.s-dash-empty .row {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-/* Expense list */
+/* An unused toolbar remnant kept global (no component references it, so it
+   moves nowhere; every JSX-only rule that DOES render moved to its module). */
 .s-toolbar {
   display: flex;
   align-items: center;
   gap: 10px;
   margin-bottom: 14px;
 }
-.s-balpanel {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 18px;
-}
-.s-balchip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--bg-elev);
-  font: var(--t-small);
-  font-size: 12.5px;
-}
-.s-explist {
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--bg-elev);
-  overflow: hidden;
-}
-.s-exrow {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--line);
-  width: 100%;
-  border-left: none;
-  border-right: none;
-  border-top: none;
-  background: none;
-  text-align: left;
-}
-.s-exrow:last-child {
-  border-bottom: none;
-}
-.s-exrow:hover {
-  background: var(--bg-sunken);
-}
-.s-exdate {
-  width: 38px;
-  flex-shrink: 0;
-  text-align: center;
-}
-.s-exdate .mo {
-  font: var(--t-tiny);
-  font-size: 9.5px;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
-.s-exdate .dy {
-  font: var(--font-title);
-  font-size: 18px;
-  font-weight: 600;
-}
-.s-excat {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-}
-.s-exmain {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-.s-exdesc {
-  font: var(--t-body);
-  font-size: 14px;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.s-exsub {
-  font: var(--t-small);
-  font-size: 12px;
-  color: var(--ink-3);
-  margin-top: 1px;
-}
-.s-exright {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  text-align: right;
-  flex-shrink: 0;
-}
-.s-exlabel {
-  font: var(--t-tiny);
-  font-size: 9.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--ink-3);
-}
-.s-examt {
-  font: var(--font-title);
-  font-size: 15px;
-  font-weight: 600;
-  margin-top: 2px;
-}
-.pos {
-  color: var(--pos);
-}
-.neg {
-  color: var(--neg);
-}
-.muted {
-  color: var(--ink-3);
-}
 
-/* Activity */
-.s-act {
-  display: flex;
-  gap: 13px;
-  padding: 12px 4px;
-  border-bottom: 1px solid var(--line);
-}
-.s-act-ic {
-  width: 34px;
-  height: 34px;
-  border-radius: 999px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 15px;
-  background: var(--bg-sunken);
-}
-.s-act-t {
-  font: var(--t-body);
-  font-size: 13.5px;
-  line-height: 1.5;
-}
-.s-act-d {
-  font: var(--t-mono);
-  font-size: 10.5px;
-  color: var(--ink-3);
-  margin-top: 2px;
-}
-
-/* Modal — shell is the kit's (.kit-modal-back/.kit-modal/.kit-modal-foot);
-   Tally keeps only its width knob + the field internals below. */
-.s-wide {
-  width: min(500px, 100%);
-}
+/* Modal shell is the kit's (.kit-modal-back/.kit-modal/.kit-modal-foot); the
+   `.kit-modal h2` cap stays global (keyed on the global kit class). Tally's
+   own field internals moved to shared.module.css / ExpenseModal.module.css. */
 .kit-modal h2 {
   margin: 0 0 16px;
   font: var(--t-title);
   font-size: 20px;
 }
-.s-field {
-  margin-top: 15px;
-}
-.s-flabel {
-  font: var(--t-tiny);
-  text-transform: uppercase;
-  letter-spacing: var(--tk-eye);
-  color: var(--ink-3);
-  margin-bottom: 7px;
-}
-.s-in {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--bg);
-  outline: none;
-  font: var(--t-body);
-}
-.s-in:focus {
-  border-color: var(--selb);
-  box-shadow: var(--kit-focus-ring);
-}
-.s-amtwrap {
-  position: relative;
-}
-.s-amtwrap .cur {
-  position: absolute;
-  left: 13px;
-  top: 50%;
-  transform: translateY(-50%);
-  font: var(--font-title);
-  font-size: 18px;
-  color: var(--ink-3);
-}
-.s-amt {
-  width: 100%;
-  padding: 12px 12px 12px 30px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--bg);
-  outline: none;
-  font: var(--font-title);
-  font-size: 20px;
-  font-weight: 600;
-}
-.s-amt:focus {
-  border-color: var(--selb);
-  box-shadow: var(--kit-focus-ring);
-}
-.s-row2 {
-  display: flex;
-  gap: 10px;
-}
-.s-catrow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.s-splitrow {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 8px 2px;
-  border-bottom: 1px solid var(--line);
-}
-.s-splitrow:last-child {
-  border-bottom: none;
-}
-.s-splitbox {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-  border-radius: 6px;
-  border: 1.5px solid var(--line-strong);
-  background: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.s-splitbox.on {
-  background: var(--accd);
-  border-color: var(--accd);
-}
-.s-splitname {
-  flex: 1;
-  font: var(--t-body);
-  font-size: 13.5px;
-}
-.s-splitin {
-  width: 92px;
-  padding: 6px 9px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--bg);
-  outline: none;
-  font: var(--t-mono);
-  font-size: 12px;
-  text-align: right;
-}
-.s-splitin:focus {
-  border-color: var(--selb);
-}
-.s-splitshare {
-  width: 78px;
-  text-align: right;
-  font: var(--t-mono);
-  font-size: 12px;
-  color: var(--ink-2);
-}
-.s-splitsum {
-  font: var(--t-small);
-  font-size: 12px;
-  color: var(--ink-3);
-  margin-top: 8px;
-  text-align: right;
-}
-.s-splitsum.bad {
-  color: var(--neg);
-}
-/* Delete sits left of the kit footer's Cancel/Save pair. */
-.s-del {
-  margin-right: auto;
-}
-.s-memtoggle {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.s-select {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--bg);
-  outline: none;
-  font: var(--t-body);
-  -webkit-appearance: none;
-  appearance: none;
-}
 
-/* ---------- Narrow (phone) — driven by JS .is-narrow on #root ---------- */
+/* ---------- Narrow (phone) — driven by JS `.is-narrow` on static #root.
+   The rules that target rendered surfaces (`.s-summary`/`.s-cols`) live in
+   components/Dashboard.module.css as `:global(.tally.is-narrow) …`. ---------- */
 .tally.is-narrow .s-side {
   position: fixed;
   top: 0;
@@ -1021,13 +508,6 @@ select {
 }
 .tally.is-narrow .s-search {
   display: none;
-}
-.tally.is-narrow .s-summary {
-  grid-template-columns: 1fr;
-  gap: 10px;
-}
-.tally.is-narrow .s-cols {
-  grid-template-columns: 1fr;
 }
 .tally.is-narrow .s-title {
   font-size: 17px;

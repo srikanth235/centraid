@@ -1,0 +1,259 @@
+/* The right slide-over event detail drawer. Moved out of app.css. `kit-pending`
+   (the parked-write accent rail) stays a global plain string, reached via
+   :global(). The narrow (phone) full-width override couples the global shell
+   state class to the local drawer, written with a :global() ancestor. The
+   `ag-slide-r` entry keyframe is used only here, so it moves in (esbuild
+   localizes the name + reference together); `kit-fade` stays global (shared
+   with the scrim) and is referenced by name. The field rows and form notice
+   are shared/global — see shared.module.css and app.css. */
+
+.drawerBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: flex-end;
+  background: color-mix(in oklab, var(--ink) 30%, rgba(10, 12, 16, 0.55));
+  backdrop-filter: blur(2px);
+  animation: kit-fade 0.18s ease;
+}
+.drawer {
+  width: min(440px, 94vw);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border-left: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-lg);
+  animation: ag-slide-r 0.24s var(--ease);
+  overflow: auto;
+}
+@keyframes ag-slide-r {
+  from {
+    transform: translateX(24px);
+    opacity: 0.4;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+.drawerBar {
+  height: 6px;
+  flex-shrink: 0;
+}
+.drawerHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px 20px 8px;
+}
+.drawerHeadText {
+  flex: 1;
+  min-width: 0;
+}
+.drawerTitle {
+  margin: 0;
+  font: var(--t-title);
+  font-size: 20px;
+  letter-spacing: var(--tracking-h);
+  line-height: 1.25;
+}
+.drawerRange {
+  margin: 4px 0 0;
+  font: var(--t-body);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.drawerMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 20px 12px;
+}
+.drawerCal {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: var(--t-small);
+  color: var(--ink-2);
+}
+.badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  border-radius: 5px;
+  padding: 2px 8px;
+  color: var(--accent-deep-fg);
+  background: var(--accent-soft);
+}
+.badge[data-tone='muted'] {
+  color: var(--ink-3);
+  background: var(--bg-sunken);
+}
+.badge[data-tone='warn'] {
+  color: var(--warn);
+  background: color-mix(in oklab, var(--warn) 14%, transparent);
+}
+.drawerBody {
+  flex: 1;
+  min-height: 0;
+  padding: 0 20px 4px;
+}
+.drawerDesc {
+  margin: 0 0 16px;
+  font: var(--t-body);
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+}
+.guests {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+.guestRow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.guestAvatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-deep-fg);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.guestName {
+  flex: 1;
+  min-width: 0;
+  font: var(--t-body);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.guestOpts {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.guestOpt {
+  width: 28px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--bg-elev);
+  color: var(--ink-3);
+}
+.guestOpt[data-active='true'] {
+  border-color: var(--selb);
+  background: var(--accent-soft);
+  color: var(--accent-deep-fg);
+}
+.guestStat {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  border-radius: 5px;
+  padding: 2px 7px;
+  color: var(--ink-3);
+  background: var(--bg-sunken);
+}
+.guestStat[data-stat='accepted'] {
+  color: var(--accent-deep-fg);
+  background: var(--accent-soft);
+}
+.guestStat[data-stat='declined'] {
+  color: var(--danger);
+  background: color-mix(in oklab, var(--danger) 12%, transparent);
+}
+.reschedule {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.rescheduleBtn {
+  align-self: flex-start;
+}
+.activity {
+  margin-bottom: 4px;
+}
+.activityEmpty {
+  margin: 0 0 10px;
+}
+.activityItem {
+  display: flex;
+  gap: 11px;
+  padding-bottom: 12px;
+}
+.activityRail {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent-deep-fg);
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+.activityText {
+  font: var(--t-small);
+  color: var(--ink);
+}
+.activityMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+.activityDate {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.receiptChip {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--accent-deep-fg);
+  border: 1px solid var(--accent-soft);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.drawerAttach {
+  margin: 4px 0 4px;
+}
+.drawerFoot {
+  display: flex;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--line);
+  background: var(--bg-elev);
+  flex-shrink: 0;
+}
+.flex {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.drawer:global(.kit-pending) {
+  border-left: 3px solid var(--_accent);
+}
+
+/* Narrow (phone): the shell's global .is-narrow state stretches the drawer
+   full-width — a global ancestor reaching the local drawer. */
+:global(.ag-shell.is-narrow) .drawer {
+  width: 100vw;
+}

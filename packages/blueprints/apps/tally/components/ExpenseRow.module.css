@@ -1,0 +1,79 @@
+/* One expense row in a ledger / search list. The category tile (`excat`) and
+   the money-tone modifiers live in shared.module.css; the pending-state
+   treatment (`kit-pending`/`kit-pending-chip`) is kit vocabulary and stays a
+   global string. Authored camelCase. */
+.exrow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  width: 100%;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  background: none;
+  text-align: left;
+}
+.exrow:last-child {
+  border-bottom: none;
+}
+.exrow:hover {
+  background: var(--bg-sunken);
+}
+.exdate {
+  width: 38px;
+  flex-shrink: 0;
+  text-align: center;
+}
+.exdate .mo {
+  font: var(--t-tiny);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.exdate .dy {
+  font: var(--font-title);
+  font-size: 18px;
+  font-weight: 600;
+}
+.exmain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.exdesc {
+  font: var(--t-body);
+  font-size: 14px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.exsub {
+  font: var(--t-small);
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-top: 1px;
+}
+.exright {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  flex-shrink: 0;
+}
+.exlabel {
+  font: var(--t-tiny);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-3);
+}
+.examt {
+  font: var(--font-title);
+  font-size: 15px;
+  font-weight: 600;
+  margin-top: 2px;
+}

@@ -1,0 +1,36 @@
+/* The "Add someone" modal body (#modalRoot root). The kit modal shell
+   (`kit-modal-back`/`kit-modal`/`kit-modal-foot`/`kit-chip`/`kit-btn`) and the
+   `.kit-modal h2`/`.kit-modal p.hint` headings stay global in app.css (kit
+   vocabulary referenced as plain strings); only these JSX-only inputs moved
+   here. Authored camelCase; module hashing replaces the old `d-` prefix. */
+
+.input {
+  width: 100%;
+  padding: 11px 13px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  outline: none;
+  font: var(--t-body);
+  font-size: 15px;
+  color: var(--ink);
+}
+.input:focus {
+  border-color: var(--selb);
+  box-shadow: var(--kit-focus-ring);
+}
+.modalLabel {
+  font: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: var(--tk-eye);
+  color: var(--ink-3);
+  margin: 16px 0 8px;
+}
+.pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.modalFoot {
+  justify-content: flex-end;
+}

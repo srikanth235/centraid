@@ -1,0 +1,94 @@
+/* The version-history panel inside the details drawer (issue #352). Authored
+   camelCase; the restore/open buttons are kit.css's .kit-btn + shared.module.css's
+   .detailBtn. `.version` gets `.versionCurrent` as a companion class on the
+   current entry (joined at the call site). */
+
+.versionStatus {
+  font: var(--t-small);
+  color: var(--ink-3);
+  padding: 10px 0;
+}
+.versionList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.version {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.versionCurrent {
+  border-color: var(--accent-soft);
+}
+.versionRow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--bg-elev);
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+.versionBadge {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 2px 5px;
+  flex-shrink: 0;
+}
+.versionInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.versionDate {
+  font: var(--t-small);
+  color: var(--ink);
+}
+.versionSize {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.versionTag {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--accent-deep-fg);
+  border: 1px solid var(--accent-soft);
+  border-radius: 4px;
+  padding: 0 5px;
+  flex-shrink: 0;
+}
+.versionDetail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid var(--line);
+}
+.versionPreview {
+  max-width: 100%;
+  max-height: 220px;
+  border-radius: 8px;
+  object-fit: contain;
+  background: var(--bg-sunken);
+}
+.versionPreviewFrame {
+  width: 100%;
+  height: 220px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.versionAudio {
+  width: 100%;
+}

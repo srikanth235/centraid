@@ -1,0 +1,137 @@
+/* Sidebar dynamic regions — the mini-month navigator and the "My calendars"
+   visibility list. Moved out of app.css's global remainder (the brand row,
+   "Create event" button and trust footer stay global static markup). Class
+   names authored camelCase; `[data-*]` state attributes pass through untouched;
+   the kit icon-button size override reaches a global kit class via :global(). */
+
+.mini {
+  margin-bottom: 6px;
+}
+.miniHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px 8px;
+}
+.miniLabel {
+  font: var(--t-body-strong);
+  font-size: 13px;
+}
+.miniNav {
+  display: flex;
+  gap: 2px;
+}
+.miniNav :global(.kit-icon-btn) {
+  --kit-icon-btn-size: 1.625rem;
+}
+.miniDow {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  margin-bottom: 3px;
+}
+.miniDow span {
+  text-align: center;
+  font: var(--t-mono);
+  font-size: 9px;
+  color: var(--ink-3);
+  padding: 2px 0;
+}
+.miniGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+}
+.miniDay {
+  position: relative;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 7px;
+  font: var(--t-mono);
+  font-size: 11px;
+  background: none;
+  color: var(--ink-2);
+}
+.miniDay[data-outside='true'] {
+  color: var(--ink-3);
+  opacity: 0.6;
+}
+.miniDay:hover {
+  background: var(--bg-sunken);
+}
+.miniDay[data-selected='true'] {
+  background: var(--accent-soft);
+  color: var(--accent-deep-fg);
+}
+.miniDay[data-today='true'] {
+  background: var(--accent-deep);
+  color: #fff;
+  font-weight: 600;
+}
+.miniDot {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--accent-deep-fg);
+}
+.miniDay[data-today='true'] .miniDot {
+  background: #fff;
+}
+
+.cals {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.calRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  font: var(--t-body);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.calRow:hover {
+  background: var(--bg-sunken);
+}
+.calBox {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1.5px solid var(--line-strong);
+  color: #fff;
+}
+.calBox[data-shown='true'] {
+  border: none;
+}
+.calName {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.calName[data-shown='false'] {
+  color: var(--ink-3);
+}
+.calCount {
+  font-family: var(--mono);
+  font-size: 10px;
+  opacity: 0.55;
+}

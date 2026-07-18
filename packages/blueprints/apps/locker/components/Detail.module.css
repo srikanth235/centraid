@@ -1,0 +1,112 @@
+/* Detail pane shell + Watchtower + empty state. Authored camelCase (old `v-`
+   prefix dropped). Narrow-viewport rules depend on the global `.locker.is-narrow`
+   / `.show-list` state classes on the static #root, so they use `:global(...)`
+   parents. The pane chrome atoms (detailInner/dhead/dtile/dtitle/dsub/fields/
+   dlabel), the shared row atoms (itile/imain/ititle/isub) and the empty state
+   come from shared.module.css; the read-view field rows live in
+   ItemFields.module.css. */
+
+.detail {
+  flex: 1;
+  min-width: 0;
+  height: 100vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+.back {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: none;
+  color: var(--ink-2);
+  font: var(--t-small);
+  padding: 16px 16px 0;
+}
+.emptyDetail {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-3);
+  text-align: center;
+  padding: 40px;
+}
+.emptyDetail .ic {
+  width: 60px;
+  height: 60px;
+  border-radius: 16px;
+  background: var(--bg-sunken);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+/* Watchtower */
+.wtStats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 22px;
+}
+.wtStat {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg-elev);
+  padding: 15px;
+}
+.wtStat .n {
+  font: var(--font-title);
+  font-size: 28px;
+  font-weight: 600;
+}
+.wtStat .k {
+  font: var(--t-small);
+  font-size: 12px;
+  color: var(--ink-2);
+  margin-top: 3px;
+}
+.wtItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+  width: 100%;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  background: none;
+  text-align: left;
+}
+.wtItem:hover {
+  background: var(--bg-sunken);
+}
+.wtBadge {
+  font: var(--t-tiny);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 8px;
+  border-radius: 5px;
+}
+
+/* Narrow-viewport (global state classes on #root). */
+:global(.locker.is-narrow) .detail {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: var(--bg);
+}
+:global(.locker.is-narrow) .back {
+  display: flex;
+}
+:global(.locker.is-narrow.show-list) .detail {
+  display: none;
+}
+:global(.locker.is-narrow) .wtStats {
+  grid-template-columns: 1fr;
+}

@@ -1,0 +1,88 @@
+/* Sidebar nav items + the today-progress footer. The `.tk-nav` / `.tk-side-foot`
+   containers stay GLOBAL (index.html static markup mounts the React roots into
+   them); these child rules move here. The "Today" eyebrow label comes from
+   shared.module.css. Authored camelCase; module hashing replaces `tk-`. */
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 9px 11px;
+  border: none;
+  border-radius: 9px;
+  font: var(--t-body);
+  background: none;
+  color: var(--ink-2);
+}
+.navItem span:first-of-type {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.navItem:hover {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+.navItem[aria-current='true'] {
+  background: var(--accent-soft);
+  color: var(--accent-deep-fg);
+  font-weight: 600;
+}
+.navCount {
+  font-family: var(--mono);
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.progress {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 13px;
+  background: var(--bg-elev);
+}
+.progressTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.progressPct {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.progressTrack {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.progressBar {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent-deep);
+  transition: width 0.3s var(--ease);
+}
+.progressLabel {
+  font: var(--t-small);
+  color: var(--ink-2);
+  margin-top: 8px;
+}
+.consentLine {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 4px 2px;
+  color: var(--ink-3);
+}
+.consentLine svg {
+  color: var(--accent-deep-fg);
+  flex-shrink: 0;
+}
+.consentLine span {
+  font: var(--t-small);
+  font-size: 11.5px;
+}

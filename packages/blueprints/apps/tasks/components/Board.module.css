@@ -1,0 +1,48 @@
+/* The scrolling board column: section eyebrows, the bounded-window footer and
+   the column wrapper. Row/circle/title/due primitives (used by the pending-add
+   ghost row too) live in shared.module.css; the kit-* empty/foot/btn/pending
+   classes stay global. Authored camelCase; module hashing replaces `tk-`. The
+   section eyebrow is base `.eyebrow` + a tone modifier (danger/accent), joined
+   via an explicit lookup map in Board.tsx (never a computed key). */
+
+.column {
+  max-width: 760px;
+}
+
+.section {
+  margin-bottom: 26px;
+}
+.sectionHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--ink-2);
+}
+.eyebrow.toneDanger {
+  color: var(--danger);
+}
+.eyebrow.toneAccent {
+  color: var(--accent-deep-fg);
+}
+.eyebrowCount {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.hairline {
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}

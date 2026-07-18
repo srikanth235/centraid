@@ -1,0 +1,253 @@
+/* The v2 sidebar (fully React-rendered into #sidebarMount). Authored camelCase
+   (old `ph-` prefix dropped). The `.sectionLabel` eyebrow is shared with the
+   Memories strip (components/shared.module.css). `kit-icon-btn`/`kit-chip`/
+   `kit-input` stay global strings (kit.css vocabulary). */
+
+.sidebar {
+  width: var(--ph-sidebar-w);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 12px;
+  background: var(--bg-elev);
+  border-right: 1px solid var(--line);
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  overflow-y: auto;
+  z-index: 36;
+}
+.sidebarClose {
+  display: none;
+  margin-left: auto;
+}
+.scrim {
+  display: none;
+}
+@media (max-width: 859.98px) {
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    box-shadow: var(--shadow-lg);
+    transform: translateX(-110%);
+    transition: transform 0.26s var(--ease);
+  }
+  .sidebar[data-open='true'] {
+    transform: translateX(0);
+  }
+  .sidebarClose {
+    display: flex;
+  }
+  .scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: hsl(var(--app-hue) 25% 8% / 0.4);
+    z-index: 35;
+  }
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 2px 4px 12px;
+}
+.brandMark {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--accent-deep);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.brandText {
+  min-width: 0;
+  flex: 1;
+}
+.brandName {
+  font: var(--t-body-strong);
+  letter-spacing: -0.01em;
+}
+.brandTag {
+  font: var(--t-mono);
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.uploadBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  border: none;
+  border-radius: var(--r-md);
+  background: var(--accent-deep);
+  color: #fff;
+  font: var(--t-body-strong);
+  box-shadow: var(--shadow-sm);
+}
+.uploadBtn:hover {
+  filter: brightness(1.07);
+}
+.uploadBtn:active {
+  transform: scale(0.99);
+}
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.navShelves {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 9px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ink-2);
+  font: var(--t-body);
+  font-size: 13.5px;
+  text-align: left;
+}
+.navItem:hover {
+  background: var(--bg-sunken);
+}
+.navItem[data-active='true'] {
+  background: var(--accent-soft);
+  color: var(--accent-deep-fg);
+  font-weight: 600;
+}
+.navIcon {
+  display: flex;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+.navLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.navCount {
+  font: var(--t-mono);
+  font-size: 11px;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+.albumList {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.albumRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.albumRowEditing {
+  padding: 2px 0;
+}
+.albumItem {
+  padding-right: 3.5rem; /* room for the hover tools */
+}
+.albumCover {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  flex-shrink: 0;
+  background: var(--bg-sunken) center/cover no-repeat;
+}
+.albumTools {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+}
+@media (hover: hover) {
+  .albumRow:hover .albumTools,
+  .albumTools:focus-within {
+    opacity: 1;
+  }
+}
+@media (hover: none) {
+  .albumTools {
+    opacity: 1;
+  }
+}
+.newAlbum {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 8px 9px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ink-3);
+  font: var(--t-body);
+  font-size: 13px;
+  margin-top: 2px;
+}
+.newAlbum:hover {
+  color: var(--accent-deep-fg);
+  border-color: color-mix(in oklab, var(--_accent) 45%, var(--line));
+}
+.tagRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 0 2px;
+}
+:global(.kit-chip).tagChip {
+  font: var(--t-mono);
+  font-size: 11px;
+}
+.sidebarFoot {
+  margin-top: auto;
+  padding-top: 14px;
+}
+.storage {
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  padding: 10px 12px;
+  background: var(--bg-elev);
+}
+.storageTop {
+  font: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--ink-3);
+  margin-bottom: 4px;
+}
+.storageLabel {
+  font: var(--t-small);
+  color: var(--ink-2);
+}
+.trustLine {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 3px 2px;
+  color: var(--ink-3);
+}
+.trustLine span:last-child {
+  font: var(--t-small);
+  font-size: 11.5px;
+}

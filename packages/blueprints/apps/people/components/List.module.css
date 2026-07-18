@@ -1,0 +1,146 @@
+/* List view: each row (#list root's mapped children) and the head columns
+   (#listHead root). The static containers (.d-listwrap/.d-list-head/.d-list)
+   stay global in app.css, as do `.kit-avatar` / `.kit-dotmini`. Only the row/
+   column internals moved here. The narrow-viewport rule that hides the List/
+   Last columns depends on the global `.docs.is-narrow` state class on #root, so
+   it is written with a `:global(...)` parent around the local targets. `.list`/
+   `.last`/`.status`/`.name`/`.end` are shared modifiers on `.col` and `.cell`.
+   `data-selected` / `aria-pressed` are React-set attributes, kept with their
+   class. */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  transition: background 0.1s;
+}
+.row:last-child {
+  border-bottom: none;
+}
+.row:hover {
+  background: var(--bg-sunken);
+}
+.row[data-selected='true'] {
+  background: var(--sel);
+}
+.check {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 6px;
+  background: transparent;
+  padding: 0;
+}
+.check[aria-pressed='true'] {
+  border-color: var(--accd);
+  background: var(--accd);
+}
+.rowMain {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+.rowTitle {
+  font: var(--t-strong);
+  font-size: 14px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+}
+.rowRole {
+  font: var(--t-small);
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.starInd {
+  color: var(--_accent);
+  font-size: 0.85em;
+  margin-left: 5px;
+}
+.cell {
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.cell.list {
+  width: 120px;
+  font: var(--t-small);
+  font-size: 12px;
+}
+.cell.last {
+  width: 110px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.cell.status {
+  width: 104px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: var(--t-small);
+  font-size: 12px;
+}
+.col {
+  font: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: var(--tk-eye);
+  color: var(--ink-3);
+}
+.col.name {
+  flex: 1;
+}
+.col.list {
+  width: 120px;
+}
+.col.last {
+  width: 110px;
+}
+.col.status {
+  width: 104px;
+}
+.col.end {
+  width: 40px;
+}
+.rowEnd {
+  width: 40px;
+  display: flex;
+  justify-content: flex-end;
+}
+.kebab {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  border-radius: 7px;
+  color: var(--ink-3);
+}
+.kebab:hover {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+/* Narrow-viewport: hide the List/Last columns (global state class on #root). */
+:global(.docs.is-narrow) .col.list,
+:global(.docs.is-narrow) .col.last,
+:global(.docs.is-narrow) .cell.list,
+:global(.docs.is-narrow) .cell.last {
+  display: none;
+}

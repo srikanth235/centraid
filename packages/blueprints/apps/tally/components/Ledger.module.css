@@ -1,0 +1,20 @@
+/* A group's per-member balance panel. The expense list surface (`explist`),
+   the empty row and the row itself live in shared / ExpenseRow modules.
+   Authored camelCase. */
+.balpanel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+.balchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  font: var(--t-small);
+  font-size: 12.5px;
+}

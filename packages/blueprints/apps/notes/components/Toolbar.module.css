@@ -1,0 +1,46 @@
+/* The non-scrolling toolbar above the card wall: the active scope's title +
+   count and (only while browsing a notebook) its rename/delete controls.
+   Authored camelCase. The narrow-viewport padding depends on `.nt-shell
+   .is-narrow` — a global shell state class chrome.ts toggles — so it is written
+   with a `:global(...)` parent around the local `.toolbar`. The armed-delete
+   label lives in shared.module.css. */
+
+.toolbar {
+  padding: 16px 22px 4px;
+  flex-shrink: 0;
+}
+.toolbarTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.title {
+  font: var(--t-title);
+  letter-spacing: var(--tracking-h);
+}
+.titleInput {
+  font: var(--t-title);
+  letter-spacing: var(--tracking-h);
+  color: var(--ink);
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--selb);
+  outline: none;
+  min-width: 8ch;
+}
+.toolbarTools {
+  display: flex;
+  gap: 5px;
+}
+.sub {
+  font: var(--t-small);
+  color: var(--ink-2);
+  margin-top: 4px;
+}
+
+/* Narrow (phone) padding — global shell state on #shell (chrome.ts). */
+:global(.nt-shell.is-narrow) .toolbar {
+  padding-left: 16px;
+  padding-right: 16px;
+}

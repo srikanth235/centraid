@@ -1,0 +1,60 @@
+/* The Memories strip (main Photos view only). Authored camelCase (old `ph-`
+   prefix dropped). The section eyebrow comes from shared.module.css. */
+
+.memories {
+  margin: 6px 0 22px;
+}
+.memoriesStrip {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.memoriesStrip::-webkit-scrollbar {
+  height: 0;
+}
+.memoryCard {
+  position: relative;
+  flex: 0 0 auto;
+  width: 132px;
+  height: 176px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: none;
+  background: var(--bg-sunken) center/cover no-repeat;
+  box-shadow: var(--shadow-sm);
+  padding: 0;
+  transition: transform 0.16s var(--ease);
+}
+.memoryCard:hover {
+  transform: translateY(-2px);
+}
+.memoryScrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0.05) 55%, transparent);
+}
+.memoryText {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.memoryTitle {
+  font: var(--t-body-strong);
+  font-size: 13px;
+  color: #fff;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.memorySub {
+  font: var(--t-mono);
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.8);
+}

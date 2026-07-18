@@ -1,0 +1,13 @@
+/* Bulk-selection action bar contents rendered into the static #bulkBar (whose
+   pill frame `.d-bulk` stays global in app.css). Authored camelCase. */
+
+.bulkCount {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+}
+.bulkActions {
+  margin-left: auto;
+  display: flex;
+  gap: 7px;
+}

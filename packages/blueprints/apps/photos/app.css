@@ -1,3 +1,24 @@
+/* ============================================================================
+   Photos — a pure projection over the personal vault, reinvented (v2 chrome:
+   sidebar, justified timeline, memories, redesigned lightbox). Violet accent,
+   graphite + paper surfaces flowing off the token layer below so light/dark
+   and the per-app knobs retune the whole surface at once.
+
+   TS + CSS-modules split: this file now keeps ONLY the global remainder — the
+   :root token/knob blocks, the base reset, the static index.html shell chrome
+   (.ph-app/.ph-main/.ph-header*/
+.ph-zoom/.ph-scroll, the .selection-bar
+   container + its `.bar-menu-wrap` query hook, the fixed .lightbox/.slideshow
+   containers), and the class names OTHER code writes as plain strings: the
+   tile media guts media.ts injects (`.ph-tile-ph` shimmer + `@keyframes
+   ph-shimmer`, `.ph-tile-video-badge`, `.ph-tile-audio-badge`,
+   `.ph-tile-duration`) and the faces host + rows faces.ts builds (`.ph-faces`,
+   `.lightbox-faces-title`, `.lightbox-face`). Every JSX-only `ph-*`/`dup-*`/
+   `editor-*`/`slideshow-*`/`picker-*` rule moved into a co-located
+   components/*.module.css (shared eyebrow in components/shared.module.css).
+   The `kit-*` classes stay global (kit.css vocabulary).
+   ========================================================================== */
+
 :root {
   color-scheme: light dark;
   font-family: var(--font-sans);
@@ -15,7 +36,7 @@
   --accent: var(--c-violet);
   /* v2 layout constants — the ~860px sidebar/drawer breakpoint is a
      deliberate call-out in the build prompt ("off one component-width
-     breakpoint (~860px)"), NOT this repo's general 720px default; layout.js's
+     breakpoint (~860px)"), NOT this repo's general 720px default; layout.ts's
      `BREAKPOINT` mirrors this same number for the justify() math. */
   --ph-sidebar-w: 250px;
   --ph-tile-r: 3px;
@@ -75,277 +96,14 @@ button:focus-visible {
   box-shadow: var(--kit-focus-ring);
 }
 
+/* ---------- Shell (static index.html) ----------------------------------- */
+
 .ph-app {
   display: flex;
   min-height: 100vh;
 }
 
-/* ---------- Sidebar ------------------------------------------------------ */
-
-.ph-sidebar {
-  width: var(--ph-sidebar-w);
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 14px 12px;
-  background: var(--bg-elev);
-  border-right: 1px solid var(--line);
-  height: 100vh;
-  position: sticky;
-  top: 0;
-  overflow-y: auto;
-  z-index: 36;
-}
-.ph-sidebar-close {
-  display: none;
-  margin-left: auto;
-}
-.ph-scrim {
-  display: none;
-}
-
-@media (max-width: 859.98px) {
-  .ph-sidebar {
-    position: fixed;
-    inset: 0 auto 0 0;
-    box-shadow: var(--shadow-lg);
-    transform: translateX(-110%);
-    transition: transform 0.26s var(--ease);
-  }
-  .ph-sidebar[data-open='true'] {
-    transform: translateX(0);
-  }
-  .ph-sidebar-close {
-    display: flex;
-  }
-  .ph-scrim {
-    display: block;
-    position: fixed;
-    inset: 0;
-    background: hsl(var(--app-hue) 25% 8% / 0.4);
-    z-index: 35;
-  }
-}
-
-.ph-brand {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 2px 4px 12px;
-}
-.ph-brand-mark {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: var(--accent-deep);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.ph-brand-text {
-  min-width: 0;
-  flex: 1;
-}
-.ph-brand-name {
-  font: var(--t-body-strong);
-  letter-spacing: -0.01em;
-}
-.ph-brand-tag {
-  font: var(--t-mono);
-  font-size: 10px;
-  color: var(--ink-3);
-}
-
-.ph-upload-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  padding: 10px 14px;
-  margin-bottom: 12px;
-  border: none;
-  border-radius: var(--r-md);
-  background: var(--accent-deep);
-  color: #fff;
-  font: var(--t-body-strong);
-  box-shadow: var(--shadow-sm);
-}
-.ph-upload-btn:hover {
-  filter: brightness(1.07);
-}
-.ph-upload-btn:active {
-  transform: scale(0.99);
-}
-
-.ph-nav {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.ph-nav-shelves {
-  margin-top: 6px;
-  padding-top: 8px;
-  border-top: 1px solid var(--line);
-}
-.ph-nav-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 8px 9px;
-  border: none;
-  border-radius: var(--r-sm);
-  background: none;
-  color: var(--ink-2);
-  font: var(--t-body);
-  font-size: 13.5px;
-  text-align: left;
-}
-.ph-nav-item:hover {
-  background: var(--bg-sunken);
-}
-.ph-nav-item[data-active='true'] {
-  background: var(--accent-soft);
-  color: var(--accent-deep-fg);
-  font-weight: 600;
-}
-.ph-nav-icon {
-  display: flex;
-  flex-shrink: 0;
-  opacity: 0.85;
-}
-.ph-nav-label {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ph-nav-count {
-  font: var(--t-mono);
-  font-size: 11px;
-  opacity: 0.6;
-  flex-shrink: 0;
-}
-
-.ph-section-label {
-  font: var(--t-tiny);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
-  color: var(--ink-3);
-  padding: 14px 9px 6px;
-}
-.ph-album-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.ph-album-row {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-.ph-album-row-editing {
-  padding: 2px 0;
-}
-.ph-album-item {
-  padding-right: 3.5rem; /* room for the hover tools */
-}
-.ph-album-cover {
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
-  flex-shrink: 0;
-  background: var(--bg-sunken) center/cover no-repeat;
-}
-.ph-album-tools {
-  position: absolute;
-  right: 4px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  gap: 2px;
-  opacity: 0;
-}
-@media (hover: hover) {
-  .ph-album-row:hover .ph-album-tools,
-  .ph-album-tools:focus-within {
-    opacity: 1;
-  }
-}
-@media (hover: none) {
-  .ph-album-tools {
-    opacity: 1;
-  }
-}
-.ph-new-album {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  width: 100%;
-  padding: 8px 9px;
-  border: 1px dashed var(--line-strong);
-  border-radius: var(--r-sm);
-  background: none;
-  color: var(--ink-3);
-  font: var(--t-body);
-  font-size: 13px;
-  margin-top: 2px;
-}
-.ph-new-album:hover {
-  color: var(--accent-deep-fg);
-  border-color: color-mix(in oklab, var(--_accent) 45%, var(--line));
-}
-
-.ph-tag-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  padding: 0 2px;
-}
-.kit-chip.ph-tag-chip {
-  font: var(--t-mono);
-  font-size: 11px;
-}
-
-.ph-sidebar-foot {
-  margin-top: auto;
-  padding-top: 14px;
-}
-.ph-storage {
-  border: 1px solid var(--line);
-  border-radius: var(--r-card);
-  padding: 10px 12px;
-  background: var(--bg-elev);
-}
-.ph-storage-top {
-  font: var(--t-tiny);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
-  color: var(--ink-3);
-  margin-bottom: 4px;
-}
-.ph-storage-label {
-  font: var(--t-small);
-  color: var(--ink-2);
-}
-.ph-trust-line {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 10px 3px 2px;
-  color: var(--ink-3);
-}
-.ph-trust-line span:last-child {
-  font: var(--t-small);
-  font-size: 11.5px;
-}
-
-/* ---------- Main / header ------------------------------------------------ */
+/* ---------- Main / header (static index.html) --------------------------- */
 
 .ph-main {
   flex: 1;
@@ -364,6 +122,9 @@ button:focus-visible {
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
+/* Header icon buttons — static (hamburger/zoom/slideshow) AND the
+   face-proposer toggle (Enrichment.tsx renders `ph-header-icon-btn` as a
+   plain string), so this vocabulary stays global. */
 .ph-header-icon-btn {
   display: flex;
   align-items: center;
@@ -439,64 +200,11 @@ button:focus-visible {
     display: flex;
   }
 }
-.enrichment-wrap {
-  position: relative;
-  display: flex;
-}
-.kit-popover.enrichment-panel {
-  position: absolute;
-  top: calc(100% + 0.5rem);
-  right: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  width: 15rem;
-  padding: 0.7rem 0.75rem;
-  z-index: 5;
-}
 
-/* ---------- Toolbar row --------------------------------------------------- */
-
-.ph-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 20px 10px;
-  flex-wrap: wrap;
-  flex-shrink: 0;
-}
-.ph-back-btn {
-  flex-shrink: 0;
-}
-.ph-toolbar-title {
-  min-width: 0;
-}
-.ph-toolbar-h1 {
-  font: var(--t-title);
-  letter-spacing: var(--tracking-h);
-}
-.ph-toolbar-sub {
-  font: var(--t-small);
-  color: var(--ink-2);
-  margin-top: 1px;
-}
-.ph-toolbar-actions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.kit-btn.ph-pill-btn {
-  border-radius: var(--r-pill);
-}
-.kit-btn.ph-pill-btn[data-active='true'] {
-  border-color: color-mix(in oklab, var(--_accent) 40%, var(--line));
-  color: var(--accent-deep-fg);
-  background: var(--accent-soft);
-}
-
-/* ---------- Selection bar ------------------------------------------------- */
+/* ---------- Selection bar (static #selectionBar container) --------------- */
+/* The count/menu/close bits moved to components/SelectionBar.module.css;
+   `.selection-bar` is the static React-root container and `.bar-menu-wrap` is
+   queried by app.tsx's away-click handler, so both stay global. */
 
 .selection-bar {
   position: fixed;
@@ -518,58 +226,15 @@ button:focus-visible {
 .selection-bar[hidden] {
   display: none;
 }
-.bar-count {
-  font-family: var(--mono);
-  font-size: 0.82rem;
-  font-weight: 500;
-  white-space: nowrap;
-}
-.bar-btn {
-  white-space: nowrap;
-}
 .bar-menu-wrap {
   position: relative;
   display: flex;
-}
-.kit-popover.album-menu {
-  position: absolute;
-  bottom: calc(100% + 0.5rem);
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  flex-direction: column;
-  min-width: 12rem;
-  max-height: 40vh;
-  overflow-y: auto;
-}
-.album-menu-item {
-  min-height: 2.5rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.album-menu-empty {
-  padding: 0.6rem 0.7rem;
-  max-width: 14rem;
-}
-.bar-close {
-  width: 2.5rem;
-  height: 2.5rem;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--ink-2);
-  font-size: 1.2rem;
-  line-height: 1;
-}
-.bar-close:hover {
-  background: var(--bg-sunken);
 }
 body.has-selection .kit-toasts {
   bottom: 4.75rem;
 }
 
-/* ---------- Scroll pane / content ----------------------------------------- */
+/* ---------- Scroll pane / content (static index.html) ------------------- */
 
 .ph-scroll {
   flex: 1;
@@ -582,179 +247,13 @@ body.has-selection .kit-toasts {
   margin: 0.75rem 0;
 }
 
-/* ---------- Memories ------------------------------------------------------- */
-
-.ph-memories {
-  margin: 6px 0 22px;
-}
-.ph-memories-strip {
-  display: flex;
-  gap: 12px;
-  overflow-x: auto;
-  padding-bottom: 4px;
-}
-.ph-memories-strip::-webkit-scrollbar {
-  height: 0;
-}
-.ph-memory-card {
-  position: relative;
-  flex: 0 0 auto;
-  width: 132px;
-  height: 176px;
-  border-radius: 16px;
-  overflow: hidden;
-  border: none;
-  background: var(--bg-sunken) center/cover no-repeat;
-  box-shadow: var(--shadow-sm);
-  padding: 0;
-  transition: transform 0.16s var(--ease);
-}
-.ph-memory-card:hover {
-  transform: translateY(-2px);
-}
-.ph-memory-scrim {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0.05) 55%, transparent);
-}
-.ph-memory-text {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 12px;
-  text-align: left;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.ph-memory-title {
-  font: var(--t-body-strong);
-  font-size: 13px;
-  color: #fff;
-  line-height: 1.25;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ph-memory-sub {
-  font: var(--t-mono);
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.8);
-}
-
-/* ---------- Albums overview ------------------------------------------------ */
-
-.ph-album-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-  gap: 16px;
-}
-.ph-album-card {
-  border: none;
-  background: none;
-  padding: 0;
-  text-align: left;
-  transition: transform 0.16s var(--ease);
-}
-.ph-album-card:hover {
-  transform: translateY(-2px);
-}
-.ph-album-card-cover {
-  display: block;
-  position: relative;
-  aspect-ratio: 1;
-  border-radius: var(--r-card);
-  background: var(--bg-sunken) center/cover no-repeat;
-  box-shadow: var(--shadow-sm);
-  border: 1px solid var(--line);
-}
-.ph-album-card-name {
-  display: block;
-  font: var(--t-body-strong);
-  font-size: 14px;
-  margin-top: 9px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ph-album-card-count {
-  display: block;
-  font: var(--t-mono);
-  font-size: 11px;
-  color: var(--ink-3);
-  margin-top: 2px;
-}
-.ph-album-card-new {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  aspect-ratio: 1;
-  border: 1.5px dashed var(--line-strong);
-  border-radius: var(--r-card);
-  background: var(--bg-elev);
-  color: var(--ink-3);
-}
-.ph-album-card-new:hover {
-  border-color: var(--_accent);
-  color: var(--accent-deep-fg);
-}
-.ph-album-card-new span:last-child {
-  font: var(--t-small);
-}
-
-/* ---------- Justified timeline --------------------------------------------- */
-
-.ph-month-label {
-  position: sticky;
-  top: -2px;
-  z-index: 3;
-  margin: 12px 0 0;
-  padding: 8px 0 6px;
-  font: var(--t-body-strong);
-  font-size: 16px;
-  letter-spacing: var(--tracking-h);
-  background: color-mix(in oklab, var(--bg) 92%, transparent);
-  backdrop-filter: blur(6px);
-}
-.ph-day-label {
-  font: var(--t-mono);
-  font-size: 11px;
-  color: var(--ink-3);
-  margin: 6px 0 6px 2px;
-}
-.ph-row {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 4px;
-  /* Timeline windowing without a virtualization lib: the browser skips
-     layout/paint/decode for rows that are off-screen and remembers each row's
-     real height once measured (the `auto` keyword), so scrolling a deep
-     library stays cheap and the scrollbar stays stable. Progressive — ignored
-     where unsupported, where the `loading="lazy"` tiles still defer bytes. */
-  content-visibility: auto;
-  contain-intrinsic-size: auto 160px;
-}
-.ph-tile {
-  position: relative;
-  overflow: hidden;
-  border-radius: var(--ph-tile-r);
-  background: var(--bg-sunken);
-  flex: 0 0 auto;
-  transition:
-    transform 0.16s var(--ease),
-    border-radius 0.16s var(--ease);
-}
-/* Thumbless / thumb-404 / video tiles: a neutral shimmer instead of pulling a
-   full original into the grid (media.js). The `is-placeholder` class lands on
-   the media container (`.ph-tile-media` / `.picker-tile` / `.dup-tile-media`),
-   which fills the tile's justified box, so the shimmer keeps its aspect. */
-.dup-tile-media.is-placeholder {
-  position: relative;
-}
-.ph-tile-ph,
-.ph-lb-frame.is-placeholder::after {
+/* ---------- Tile media guts (injected by media.ts as plain strings) ----- */
+/* fillTileMedia() writes these class names onto nodes React never renders, so
+   they stay global; the tile SHELL classes moved to Timeline.module.css (grid)
+   / Picker.module.css / Duplicates.module.css. The placeholder shimmer lives
+   here; the lightbox filmstrip's own `is-placeholder` variant moved into
+   Lightbox.module.css and references this same `@keyframes ph-shimmer`. */
+.ph-tile-ph {
   position: absolute;
   inset: 0;
   background: linear-gradient(
@@ -766,13 +265,6 @@ body.has-selection .kit-toasts {
   background-size: 220% 100%;
   animation: ph-shimmer 1.4s var(--ease) infinite;
 }
-.ph-lb-frame.is-placeholder {
-  position: relative;
-  overflow: hidden;
-}
-.ph-lb-frame.is-placeholder::after {
-  content: '';
-}
 @keyframes ph-shimmer {
   from {
     background-position: 180% 0;
@@ -782,69 +274,9 @@ body.has-selection .kit-toasts {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ph-tile-ph,
-  .ph-lb-frame.is-placeholder::after {
+  .ph-tile-ph {
     animation: none;
   }
-}
-.ph-tile.is-selected {
-  border-radius: var(--ph-tile-r-sel);
-  transform: scale(0.85);
-  background: var(--accent-soft);
-}
-.ph-tile-media {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  padding: 0;
-  border: none;
-  background: none;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.ph-tile-media:focus-visible {
-  outline: none;
-  box-shadow: var(--kit-focus-ring);
-  outline-offset: -2px;
-}
-.ph-tile-media img,
-.ph-tile-media video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  pointer-events: none;
-}
-.ph-tile.is-trash .ph-tile-media {
-  cursor: default;
-}
-.ph-tile.is-trash img,
-.ph-tile.is-trash video {
-  filter: grayscale(0.35);
-  opacity: 0.85;
-}
-.ph-tile-scrim {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 0.32),
-    transparent 26%,
-    transparent 72%,
-    rgba(0, 0, 0, 0.28)
-  );
-  opacity: 0;
-  transition: opacity 0.15s var(--ease);
-}
-@media (hover: hover) {
-  .ph-tile:hover .ph-tile-scrim {
-    opacity: 1;
-  }
-}
-.ph-tile.is-selected .ph-tile-scrim {
-  opacity: 1;
 }
 .ph-tile-video-badge {
   position: absolute;
@@ -894,215 +326,10 @@ body.has-selection .kit-toasts {
   line-height: 1.25;
   pointer-events: none;
 }
-.ph-tile-check {
-  position: absolute;
-  top: 7px;
-  left: 7px;
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px solid #fff;
-  background: rgba(0, 0, 0, 0.18);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
-  padding: 0;
-  opacity: 0;
-  transition: opacity 0.15s var(--ease);
-  z-index: 2;
-}
-@media (hover: hover) {
-  .ph-tile:hover .ph-tile-check {
-    opacity: 1;
-  }
-}
-.ph-tile.is-selected .ph-tile-check,
-.ph-tile-check:focus-visible {
-  opacity: 1;
-  background: var(--accent-deep);
-}
-.ph-tile-heart {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 26px;
-  height: 26px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: none;
-  padding: 0;
-  color: #fff;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
-  opacity: 0;
-  transition: opacity 0.15s var(--ease);
-  z-index: 2;
-}
-@media (hover: hover) {
-  .ph-tile:hover .ph-tile-heart,
-  .ph-tile-heart:focus-visible {
-    opacity: 1;
-  }
-}
-.ph-tile-heart[aria-pressed='true'] {
-  opacity: 1;
-}
-.ph-tile-remove {
-  position: absolute;
-  top: 6px;
-  right: 36px;
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  border: none;
-  background: rgba(0, 0, 0, 0.4);
-  color: #fff;
-  font-size: 13px;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 0.15s var(--ease);
-  z-index: 2;
-}
-@media (hover: hover) {
-  .ph-tile:hover .ph-tile-remove,
-  .ph-tile-remove:focus-visible {
-    opacity: 1;
-  }
-}
-.ph-tile-trash-bar {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  padding: 8px 9px;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.72), transparent);
-  z-index: 2;
-}
-.ph-tile-purge {
-  font: var(--t-mono);
-  font-size: 9.5px;
-  color: rgba(255, 255, 255, 0.9);
-}
-.ph-tile-restore {
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
-  font: var(--t-small);
-  font-size: 11px;
-  padding: 3px 9px;
-  border-radius: 999px;
-}
-.ph-tile-restore:hover {
-  background: rgba(255, 255, 255, 0.24);
-}
-.ph-foot {
-  margin-top: 12px;
-}
 
-/* ---------- Empty state ---------------------------------------------------- */
-/* kit.css .kit-empty/.kit-empty-title/.kit-empty-sub (shared). */
-
-/* ---------- Duplicates shelf (issue #352) ---------------------------------- */
-
-.dup-shelf {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  padding: 0.25rem 0 1rem;
-}
-.dup-shelf-head {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-.dup-actions {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.5rem 0.6rem;
-  background: color-mix(in oklab, var(--bg) 92%, transparent);
-  backdrop-filter: blur(6px);
-  border: 1px solid var(--line);
-  border-radius: var(--r-card);
-}
-.dup-count {
-  margin-right: auto;
-  font-family: var(--mono);
-  font-size: 0.8rem;
-  color: var(--ink-2);
-}
-.dup-cluster {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-.dup-cluster-label {
-  margin: 0;
-  font-family: var(--mono);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-.dup-cluster-row {
-  display: flex;
-  gap: 0.6rem;
-  overflow-x: auto;
-  padding-bottom: 0.15rem;
-}
-.dup-tile {
-  position: relative;
-  flex: 0 0 8rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  cursor: pointer;
-}
-.dup-tile-media {
-  width: 100%;
-  aspect-ratio: 1;
-  border-radius: var(--ph-tile-r);
-  overflow: hidden;
-  background: var(--bg-sunken);
-  border: 2px solid transparent;
-}
-.dup-tile:has(input:checked) .dup-tile-media {
-  border-color: var(--_accent);
-  border-radius: var(--ph-tile-r-sel);
-}
-.dup-tile-media img,
-.dup-tile-media video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  pointer-events: none;
-}
-.dup-tile input[type='checkbox'] {
-  position: absolute;
-  top: 0.35rem;
-  left: 0.35rem;
-  width: 1.1rem;
-  height: 1.1rem;
-}
-.dup-tile-meta {
-  font-family: var(--mono);
-  font-size: 0.68rem;
-  color: var(--ink-2);
-  text-align: center;
-}
-
-/* ---------- Lightbox (v2) --------------------------------------------------- */
+/* ---------- Lightbox / slideshow (static containers) -------------------- */
+/* The inner chrome moved to Lightbox.module.css / Slideshow.module.css; these
+   are the fixed React-root containers (index.html elements). */
 
 .lightbox {
   position: fixed;
@@ -1112,269 +339,25 @@ body.has-selection .kit-toasts {
 .lightbox[hidden] {
   display: none;
 }
-.ph-lightbox {
+.slideshow {
   position: fixed;
   inset: 0;
-  z-index: 60;
-  display: flex;
-  flex-direction: column;
-  /* A theater stage, not a themed surface — same fixed dark backdrop as the
-     slideshow (z-index 65) it opens into, in both themes. */
-  background: hsl(var(--app-hue) 25% 4%);
-  color: #fff;
-}
-.ph-lb-topbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  flex-shrink: 0;
-}
-.ph-lb-icon-btn {
-  width: 38px;
-  height: 38px;
+  z-index: 65; /* above the lightbox (60) — the two are never open together */
   display: flex;
   align-items: center;
   justify-content: center;
-  border: none;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-  flex-shrink: 0;
-  text-decoration: none;
+  padding: 2rem 1rem;
+  background: hsl(var(--app-hue) 25% 4% / 0.97);
+  cursor: pointer;
 }
-.ph-lb-icon-btn:hover {
-  background: rgba(255, 255, 255, 0.16);
-}
-.ph-lb-icon-btn[data-active='true'] {
-  background: rgba(255, 255, 255, 0.22);
-  color: var(--ph-lb-accent, #fff);
-}
-.ph-lb-heading {
-  flex: 1;
-  min-width: 0;
-}
-.ph-lb-title {
-  font: var(--t-body-strong);
-  font-size: 14px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ph-lb-dateline {
-  font: var(--t-mono);
-  font-size: 10.5px;
-  color: rgba(255, 255, 255, 0.65);
+.slideshow[hidden] {
+  display: none;
 }
 
-.ph-lb-body {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-}
-.ph-lb-stagewrap {
-  flex: 1;
-  min-width: 0;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px 54px;
-}
-.ph-lb-stagewrap img,
-.ph-lb-stagewrap video {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  border-radius: 6px;
-  box-shadow: var(--shadow-lg);
-}
-.ph-lb-audio {
-  width: min(32rem, 90%);
-  display: grid;
-  justify-items: center;
-  gap: 1.25rem;
-  padding: 2rem;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.07);
-}
-.ph-lb-audio > span {
-  display: grid;
-  place-items: center;
-  width: 5rem;
-  height: 5rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 2.25rem;
-}
-.ph-lb-audio audio {
-  width: 100%;
-}
-.ph-lb-stagewrap img.zoomable {
-  cursor: zoom-in;
-  touch-action: none;
-  transition: transform 0.15s var(--ease);
-}
-.ph-lb-stagewrap img.zoomed {
-  cursor: grab;
-  transition: none;
-}
-.ph-lb-placeholder {
-  width: min(20rem, 80vw);
-  aspect-ratio: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.7);
-  border-radius: var(--r-sm);
-  padding: 1rem;
-  word-break: break-all;
-}
-.ph-lb-nav {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 46px;
-  height: 46px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-  z-index: 2;
-}
-.ph-lb-nav:hover {
-  background: rgba(255, 255, 255, 0.18);
-}
-.ph-lb-nav:disabled {
-  opacity: 0.2;
-  pointer-events: none;
-}
-.ph-lb-nav.prev {
-  left: 8px;
-}
-.ph-lb-nav.next {
-  right: 8px;
-}
-
-.ph-lb-info {
-  width: min(340px, 88vw);
-  flex-shrink: 0;
-  background: var(--bg-elev);
-  color: var(--ink);
-  border-left: 1px solid var(--line);
-  overflow-y: auto;
-  padding: 18px;
-}
-@media (max-width: 859.98px) {
-  .ph-lb-body {
-    position: relative;
-  }
-  .ph-lb-info {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    top: auto;
-    width: auto;
-    max-height: 72vh;
-    border-left: none;
-    border-top: 1px solid var(--line);
-    border-radius: 16px 16px 0 0;
-    box-shadow: var(--shadow-lg);
-  }
-}
-.ph-caption-input {
-  width: 100%;
-  font: var(--t-body-strong);
-  font-size: 14px;
-  color: var(--ink);
-  background: none;
-  border: none;
-  border-bottom: 1px solid var(--line);
-  padding: 0 0 8px;
-  outline: none;
-  margin-bottom: 16px;
-}
-.ph-caption-input:focus {
-  border-color: var(--selb);
-}
-.ph-info-section-label {
-  font: var(--t-tiny);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-eyebrow);
-  color: var(--ink-3);
-  margin-bottom: 8px;
-}
-.ph-details-taken {
-  margin-bottom: 8px;
-}
-.ph-details-taken .kit-input {
-  font-family: var(--mono);
-  color: var(--ink-2);
-  font-size: 0.78rem;
-}
-.ph-details-grid {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 8px 14px;
-  font: var(--t-small);
-  margin-bottom: 18px;
-}
-.ph-details-k {
-  font: var(--t-mono);
-  font-size: 11px;
-  color: var(--ink-3);
-}
-.ph-details-v {
-  color: var(--ink-2);
-  word-break: break-word;
-}
-.ph-custody-ok {
-  color: var(--accent-deep-fg);
-}
-.ph-custody-warn {
-  color: var(--custody-warn);
-}
-.ph-custody-danger {
-  color: var(--danger);
-}
-
-.ph-place-editor {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  margin-bottom: 18px;
-  flex-wrap: wrap;
-}
-.ph-place-editor select {
-  flex: 1;
-  min-width: 0;
-}
-.ph-place-empty {
-  flex: 1 1 100%;
-  margin: 0.2rem 0 0;
-}
-.ph-place-chip {
-  display: inline-flex;
-  align-self: flex-start;
-  padding: 5px 12px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--bg-sunken);
-  color: var(--ink-2);
-  font: var(--t-small);
-  font-size: 12px;
-  margin-bottom: 18px;
-}
-.ph-place-chip:hover {
-  border-color: var(--line-strong);
-  color: var(--ink);
-}
+/* ---------- Faces (built imperatively by faces.ts into `.ph-faces`) ----- */
+/* `.ph-faces` is a LightboxInfo-rendered host, but faces.ts appends its
+   `lightbox-faces-title`/`lightbox-face` rows into it as plain strings — so
+   the host + its children's rules stay global together. */
 
 .ph-faces:empty {
   display: none;
@@ -1405,377 +388,7 @@ body.has-selection .kit-toasts {
   color: inherit;
 }
 
-.ph-chip-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  margin-bottom: 18px;
-}
-.ph-album-chip {
-  padding: 6px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--bg-elev);
-  color: var(--ink-2);
-  font: var(--t-small);
-  font-size: 12px;
-}
-.ph-album-chip[data-active='true'] {
-  border-color: var(--selb);
-  background: var(--sel);
-  color: var(--accent-deep-fg);
-  font-weight: 600;
-}
-.ph-tag-chip-x,
-.ph-tag-chip-new {
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--bg-elev);
-  color: var(--ink-2);
-  font: var(--t-mono);
-  font-size: 11px;
-}
-.ph-tag-chip-new:hover {
-  border-color: color-mix(in oklab, var(--_accent) 45%, var(--line));
-  color: var(--accent-deep-fg);
-}
-.ph-tag-input {
-  border-radius: 999px;
-  font-size: 0.75rem;
-  padding: 0.25rem 0.7rem;
-  width: 8rem;
-}
-
-.ph-activity {
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 10px;
-}
-.ph-activity-row {
-  display: flex;
-  gap: 11px;
-  padding-bottom: 14px;
-}
-.ph-activity-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--accent-deep-fg);
-  margin-top: 5px;
-  flex-shrink: 0;
-}
-.ph-activity-body {
-  min-width: 0;
-}
-.ph-activity-text {
-  font: var(--t-small);
-  color: var(--ink);
-}
-.ph-activity-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 2px;
-}
-.ph-activity-meta span:first-child {
-  font: var(--t-mono);
-  font-size: 10.5px;
-  color: var(--ink-3);
-}
-.ph-receipt-chip {
-  font: var(--t-mono);
-  font-size: 9.5px;
-  color: var(--accent-deep-fg);
-  border: 1px solid var(--accent-soft);
-  border-radius: 4px;
-  padding: 0 4px;
-}
-
-.ph-delete-link {
-  width: 100%;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: none;
-  color: var(--danger);
-  font: var(--t-small);
-  padding: 8px;
-  margin-top: 4px;
-}
-.ph-delete-link:hover {
-  border-color: var(--danger);
-  background: color-mix(in oklab, var(--danger) 8%, transparent);
-}
-.ph-note {
-  color: var(--ink-2);
-  font-size: 0.78rem;
-  margin: 8px 0 0;
-}
-.ph-note:empty {
-  display: none;
-}
-
-.ph-lb-filmstrip {
-  flex-shrink: 0;
-  display: flex;
-  gap: 5px;
-  justify-content: center;
-  padding: 12px 16px 16px;
-  overflow-x: auto;
-}
-.ph-lb-filmstrip::-webkit-scrollbar {
-  height: 0;
-}
-.ph-lb-frame {
-  flex: 0 0 auto;
-  width: 56px;
-  height: 56px;
-  border-radius: 6px;
-  overflow: hidden;
-  padding: 0;
-  background: var(--bg-sunken);
-  border: 2px solid transparent;
-  opacity: 0.6;
-}
-.ph-lb-frame[data-active='true'] {
-  border-color: #fff;
-  opacity: 1;
-}
-.ph-lb-frame img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  pointer-events: none;
-}
-
-/* ---------- Crop/rotate editor (issue #352 phase 3/4) ---------------------- */
-/* v2: hosted inside the lightbox's now-dark stage — the stage bg already
-   supplies the dark surface, so the editor only needs its own icon-button
-   language to match (kit-btn stays; this just tints them for the dark
-   backdrop they now always sit on). */
-
-.editor {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  width: min(34rem, 92vw);
-  color: #fff;
-}
-.editor-canvas-wrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  max-height: 62vh;
-  touch-action: none;
-  cursor: crosshair;
-}
-.editor-canvas {
-  max-width: 100%;
-  max-height: 62vh;
-  object-fit: contain;
-  border-radius: var(--radius-sm);
-  display: block;
-  user-select: none;
-  box-shadow: var(--shadow-lg);
-}
-.editor-crop-box {
-  position: absolute;
-  border: 2px dashed #fff;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
-  pointer-events: none;
-}
-.editor-toolbar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-.editor-toolbar .kit-btn {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.16);
-  color: #fff;
-}
-.editor-toolbar .kit-btn:hover {
-  background: rgba(255, 255, 255, 0.16);
-}
-.editor-toolbar .kit-btn.primary {
-  background: var(--accent-deep);
-  border-color: transparent;
-  color: #fff;
-}
-.editor-trash-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  color: rgba(255, 255, 255, 0.75);
-  font-size: 0.8rem;
-  white-space: nowrap;
-}
-.editor-spacer {
-  flex: 1;
-}
-.editor-note {
-  min-height: 0;
-  color: rgba(255, 255, 255, 0.75);
-}
-.editor-hint {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.55);
-}
-.editor-load-error {
-  padding: 2rem;
-  color: rgba(255, 255, 255, 0.75);
-}
-
-/* ---------- Slideshow (issue #352) ------------------------------------------ */
-
-.slideshow {
-  position: fixed;
-  inset: 0;
-  z-index: 65; /* above the lightbox (60) — the two are never open together */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem 1rem;
-  background: hsl(var(--app-hue) 25% 4% / 0.97);
-  cursor: pointer;
-}
-.slideshow[hidden] {
-  display: none;
-}
-.slideshow-img {
-  max-width: 100%;
-  max-height: 82vh;
-  object-fit: contain;
-  border-radius: var(--radius-sm);
-  cursor: default;
-  box-shadow: var(--shadow-lg);
-}
-.slideshow-bar {
-  position: absolute;
-  left: 50%;
-  bottom: max(1.25rem, env(safe-area-inset-bottom));
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.4rem 0.6rem;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 999px;
-  box-shadow: var(--shadow-lg);
-  cursor: default;
-}
-.slideshow-bar .kit-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  background: none;
-  border: none;
-  color: #fff;
-}
-.slideshow-bar .kit-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-}
-.slideshow-count {
-  font-family: var(--mono);
-  font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.75);
-  white-space: nowrap;
-}
-.slideshow-empty {
-  color: #fff;
-  font-size: 0.95rem;
-  text-align: center;
-  max-width: 24rem;
-}
-
-/* ---------- Album picker ---------------------------------------------------- */
-/* Backdrop + card shell: kit.css .kit-modal-back / .kit-modal (shared). */
-.kit-modal.picker-panel {
-  width: min(40rem, 100%);
-  max-height: 85vh;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  padding: 1rem;
-}
-.picker-head {
-  margin: 0;
-  font: var(--t-title);
-  letter-spacing: var(--tracking-h);
-}
-.picker-grid {
-  flex: 1;
-  min-height: 8rem;
-  overflow-y: auto;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
-  gap: 3px;
-  align-content: start;
-}
-.picker-empty {
-  grid-column: 1 / -1;
-  padding: 1.5rem 0;
-  text-align: center;
-}
-.picker-tile {
-  position: relative;
-  aspect-ratio: 1;
-  padding: 0;
-  border: none;
-  border-radius: var(--ph-tile-r);
-  background: var(--bg-sunken);
-  overflow: hidden;
-  -webkit-tap-highlight-color: transparent;
-}
-.picker-tile img,
-.picker-tile video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  pointer-events: none;
-}
-.picker-tile:focus-visible {
-  outline: none;
-  box-shadow: var(--kit-focus-ring);
-  outline-offset: -2px;
-}
-.picker-tile[aria-pressed='true'] {
-  outline: 3px solid var(--_accent);
-  outline-offset: -3px;
-  border-radius: var(--ph-tile-r-sel);
-}
-.picker-tile[aria-pressed='true']::after {
-  content: '✓';
-  position: absolute;
-  top: 0.3rem;
-  left: 0.3rem;
-  width: 1.25rem;
-  height: 1.25rem;
-  border-radius: 50%;
-  background: var(--accent-deep);
-  color: #fff;
-  font-size: 0.75rem;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.picker-foot {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-.picker-count {
-  margin-right: auto;
-  color: var(--ink-2);
-  font-family: var(--mono);
-  font-size: 0.8rem;
-}
+/* ---------- Motion + app-level knobs ------------------------------------ */
 
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -1785,8 +398,6 @@ body.has-selection .kit-toasts {
     animation-duration: 0.01ms !important;
   }
 }
-
-/* ---------- App-level knobs --------------------------------------------- */
 
 :root[data-app-font='sans'] {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;

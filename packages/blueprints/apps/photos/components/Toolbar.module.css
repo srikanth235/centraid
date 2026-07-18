@@ -1,0 +1,42 @@
+/* The main pane's toolbar row. Authored camelCase (old `ph-` prefix dropped).
+   The pill button rides the shared `.kit-btn` base as a compound so it keeps
+   the specificity that beat kit.css's later-loaded `.kit-btn`. */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px 10px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.backBtn {
+  flex-shrink: 0;
+}
+.toolbarTitle {
+  min-width: 0;
+}
+.toolbarH1 {
+  font: var(--t-title);
+  letter-spacing: var(--tracking-h);
+}
+.toolbarSub {
+  font: var(--t-small);
+  color: var(--ink-2);
+  margin-top: 1px;
+}
+.toolbarActions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+:global(.kit-btn).pillBtn {
+  border-radius: var(--r-pill);
+}
+:global(.kit-btn).pillBtn[data-active='true'] {
+  border-color: color-mix(in oklab, var(--_accent) 40%, var(--line));
+  color: var(--accent-deep-fg);
+  background: var(--accent-soft);
+}

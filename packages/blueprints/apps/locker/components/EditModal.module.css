@@ -1,0 +1,28 @@
+/* Add/edit item modal body. Authored camelCase (old `v-` prefix dropped). The
+   `.mono` modifier on `.in` is a local compound class joined in the JSX. The
+   kit modal shell (`kit-modal-back`/`kit-modal`/`kit-modal-foot`/`kit-btn`/
+   `kit-chip`) and `.kit-modal h2` stay global. `fieldLg`, `flabel`, `genrow`
+   and `iconbtn` come from shared.module.css. */
+
+.in {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg);
+  outline: none;
+  font: var(--t-body);
+}
+.in:focus {
+  border-color: var(--selb);
+  box-shadow: var(--kit-focus-ring);
+}
+.in.mono {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+.typerow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
