@@ -6,8 +6,9 @@
           The gateway is the sovereign control plane for your data — and one machine is still one
           failure domain. A dead disk, a stolen laptop, a bad <code>rm</code> don't ask permission.
           Offsite custody turns that loss into an outage: databases and code travel in encrypted
-          snapshots, while attachments can be born as sealed bytes in your own S3 or a provider's
-          CAS. The provider sees storage, never content or keys.
+          snapshots, while attachments are born as sealed bytes in your provider's
+          content-addressed store. There's one home for those bytes — <em>on this device</em> or
+          <em>hosted</em> — and the provider sees storage, never content or keys.
         </p>
       </section>
 
@@ -88,19 +89,25 @@ backup: {
   // or: { kind: "remote", endpoint: "https://api.clawgnition.com", apiKey: "…" }
 }
 
-// Per-vault cadence and byte policy lives in Gateway → Backups:
-// RPO · snapshot/verify cadence · receipt/offsite acknowledgement
-// cache/outbox/headroom · bandwidth · storage class</div>
+// Per-vault cadence and byte budgets live on the Backups page:
+// RPO · snapshot/verify cadence · cache/outbox headroom · bandwidth</div>
           </div>
           <p class="prose r" style="--d: 0.2s; margin-top: 18px">
             The same shape covers both cases the config supports: a <b>local-folder provider</b> —
             an external drive or a mounted network share, the zero-setup default — and a
-            <b>remote provider</b> speaking the open backup protocol, where <code>endpoint</code> and
+            <b>remote provider</b> speaking the open storage protocol, where <code>endpoint</code> and
             <code>apiKey</code> are all the gateway needs to know. <b>Clawgnition</b> is the first
             commercial one: client-side encryption (the same as the local case — Clawgnition never
-            gets a key), S3-direct writes straight to Cloudflare R2, zero-egress restores. Attachment
-            destination is a separate per-vault choice: this gateway only, your S3-compatible store,
-            or the provider's CAS grant.
+            gets a key), S3-direct writes straight to Cloudflare R2, zero-egress restores.
+          </p>
+          <p class="prose r" style="--d: 0.23s; margin-top: 14px">
+            There's no per-attachment routing to reason about any more. A vault is either
+            <b>On this device</b> or <b>Hosted</b> — a single <b>home connection</b>, one managed
+            provider bundle that carries snapshots, blobs and their derivatives together. You wire
+            it in <b>Settings → Account → Storage</b>: under <b>Hosted storage</b>,
+            <b>Connect your storage provider</b> (a name, a provider URL, an access key), then flip
+            <b>This vault</b> from <b>On this device</b> to <b>Hosted</b>. Bring-your-own buckets and
+            per-use assignment are gone — one home, or none.
           </p>
           <div class="term r" style="--d: 0.26s; margin-top: 22px; max-width: 720px">
             <div class="term-bar"><span>backup CLI · admin shell</span></div>
@@ -117,7 +124,12 @@ backup: {
                 <span class="p">$</span>
                 <code>centraid-gateway backup list --data-dir ~/centraid-data --vault Local</code>
               </div>
-              <div class="cm"># status / run / list / verify / restore / kit — one verb per concern</div>
+              <div class="ln">
+                <span class="p">$</span>
+                <code>centraid-gateway backup restore-verify --data-dir ~/centraid-data --vault Local</code>
+              </div>
+              <div class="cm"># status · run · list · verify · restore · restore-verify · kit — one verb per concern</div>
+              <div class="cm"># blank machine? centraid-gateway recover --kit … --api-key … --data-dir … (top-level verb)</div>
             </div>
           </div>
           <p class="note r" style="--d: 0.3s; margin-top: 16px">
@@ -164,11 +176,30 @@ backup: {
           </h2>
           <p class="lede r" style="--d: 0.12s">
             <code>centraid-gateway backup restore</code> materializes a snapshot into a
-            <b>fresh directory</b> — it never touches, never overwrites, a running vault. Before it
-            downloads a single chunk it gates on compatibility: an unknown format, or a snapshot
-            written by a newer ontology or vault schema than the running gateway understands, is
-            refused outright. This is v0 — there is no migration path, only "update the gateway
-            first."
+            <b>fresh directory</b> — it never touches, never overwrites, never swaps the running
+            vault. It's <b>lazy by default</b>: rows and code come down first, and every blob the
+            provider's attested inventory already holds is fetched on first access rather than
+            pulled up front — <code>--full</code> forces eager materialization,
+            <code>--at&nbsp;&lt;time&gt;</code> restores to any moment between snapshots (PITR).
+            Before it downloads a single chunk it gates on compatibility: an unknown format, or a
+            snapshot written by a newer ontology or vault schema than the running gateway
+            understands, is refused outright. This is v0 — there is no migration path, only "update
+            the gateway first."
+          </p>
+          <p class="prose r" style="--d: 0.15s">
+            Restore is the surgical tool; <b>recover</b> is the front door. A truly blank machine —
+            new disk, nothing but a recovery kit and a provider access key — runs one top-level
+            verb, <code>centraid-gateway recover</code>, and the desktop wraps the very same service
+            in a first-run gate: <b>Start fresh</b>, or <b>Recover my vault</b>. Drop the kit, enter
+            your <b>Access key</b>, <b>Find my vault</b>, then <b>Recover this vault</b> — and if the
+            provider prices egress, a metered-recovery confirm stands between you and the first
+            billed byte. What you watch is three honest stages —
+            <b>Fetching your vault → Replaying recent changes → Warming previews</b> — before
+            <b>Enter Centraid</b>. Underneath, the engine walks discovering → fetching → replaying →
+            fencing → adopting → warming: it settles compatibility from registry metadata alone (a
+            refusal never bills a metered home), replays the WAL to the tip, and — lazy by default —
+            leaves the bytes the attested inventory holds to arrive on demand. The vault is live
+            before all of it is local.
           </p>
           <div class="steps r" style="--d: 0.18s; max-width: 860px">
             <div class="step">
@@ -191,11 +222,25 @@ backup: {
                 <h3>Takeover, loudly</h3>
                 <p>
                   Restoring onto a new machine and resuming backups from there is a
-                  <b>takeover</b>: the new gateway reads the provider's current generation counter and
-                  registers its next snapshot one ahead of it. If the old machine is still running and
-                  tries to back up again, its registration is refused — and it's required to surface
+                  <b>takeover</b>. The recover engine <b>fences</b> it: it reads the provider's
+                  current generation counter and seeds its own state at <b>generation + 1</b>, so
+                  the recovered machine owns the next snapshot. If the old machine is still running
+                  and tries to back up, its registration 409s — and it's required to surface
                   "another machine has taken over this vault" and stop, never silently retry with a
                   bumped number. Split-brain becomes a notification, not a silent fork.
+                </p>
+              </div>
+            </div>
+            <div class="step">
+              <span class="dot">3</span>
+              <div>
+                <h3>Orphan-grace, so PITR stays honest</h3>
+                <p>
+                  Lazy restore means bytes keep trickling in after the vault is already live, so the
+                  custody sweep can't treat a not-yet-fetched blob as garbage. <b>Orphan-grace GC</b>
+                  holds orphaned blobs for the full recovery-window duration — the same span the
+                  provider lets you restore across — so a point-in-time restore between two snapshots
+                  never finds its bytes reaped out from under it.
                 </p>
               </div>
             </div>
@@ -209,22 +254,27 @@ backup: {
         <h2 class="r" style="--d: 0.06s">Cadence, custody and proof. <em>One screen.</em></h2>
         <div class="prose r" style="--d: 0.12s">
           <p>
-            The desktop's Gateway page carries a <b>backups</b> health component alongside the
-            others, surfacing two numbers: how long since the last successful backup, and how long
-            since the last successful <b>verification</b>. The Overview tab also has a dedicated
-            <b>Backups</b> card — those ages plus the last WAL drain, pending-offsite attachment
-            bytes, every per-vault cadence, and <b>Back up now</b>/<b>Verify now</b> actions without a
-            terminal. “Confirmed when offsite” is a completion policy, not a long-held request: a
-            provider outage never rolls back a durable local claim.
+            Custody has its own screen now — <b>Operations → Backups</b>, headed "Backups" with a
+            <b>Protected by {provider}</b> badge and a <b>Manage</b> link straight to Settings →
+            Storage. One derivation renders five plain-language metrics: <b>Freshness</b> (how
+            recently you were provably protected offsite — the tightest of four custody clocks),
+            <b>Recovery window</b> (how far back you can restore), <b>Privacy</b> (a structural
+            constant: sealed bytes, client-only keys), <b>Cost</b> (bytes stored against quota), and
+            <b>Exit</b> (<b>Export everything</b>, always, with restore egress priced honestly). An
+            inline gate keeps the recovery kit honest too — <b>Export recovery kit</b> /
+            <b>I've saved my recovery kit</b>.
           </p>
           <p>
-            The same card answers <b>what the provider holds</b>: provider-attested (or raw bucket
-            computed) object and byte totals for backup and CAS, recent snapshots, the WAL/PITR
-            span, prune history, and any missing or orphaned objects. A weekly reconciliation runs
-            before eviction can trust remote custody. If a provider silently loses an attachment,
-            the gateway demotes that replica immediately and pins any remaining local copy; it never
-            auto-deletes an orphan. “Verify against bucket” independently cross-checks attestation
-            with an S3 LIST.
+            A collapsed <b>Diagnostics</b> panel holds the levers and the raw clocks: <b>Verify
+            now</b>, <b>Back up now</b>, and a four-cell grid — <b>Newest snapshot</b>, <b>Last
+            verification</b>, <b>Newest WAL segment</b>, <b>Outbox drained</b> — plus per-vault
+            policy and <b>what the provider holds</b>: provider-attested (or raw-bucket computed)
+            object and byte totals, recent snapshots, the WAL/PITR span, prune history, and any
+            missing or orphaned objects. A weekly reconciliation runs before eviction can trust
+            remote custody; if a provider silently loses an attachment, the gateway demotes that
+            replica immediately and pins any remaining local copy — it never auto-deletes an orphan.
+            “Confirmed when offsite” is a completion policy, not a long-held request: a provider
+            outage never rolls back a durable local claim.
           </p>
           <p>
             Verification is the one the protocol insists on, because the provider contract is
@@ -261,12 +311,11 @@ backup: {
             not fine print you find out about during a 300&nbsp;GB restore.
           </p>
           <p class="prose r" style="--d: 0.21s">
-            A bring-your-own S3 credential needs bucket-level <code>s3:ListBucket</code> and
-            <code>s3:ListBucketMultipartUploads</code>, plus object-level
-            <code>s3:GetObject</code>, <code>s3:PutObject</code>, <code>s3:DeleteObject</code>, and
-            <code>s3:AbortMultipartUpload</code> on the configured prefix. The multipart-list and
-            abort permissions let the gateway reap uploads orphaned by a crash after the same
-            24-hour grace it applies to its durable transfer rows.
+            Underneath, the provider fronts S3-compatible storage on your behalf — the gateway never
+            handles raw bucket credentials, and there is no bring-your-own-bucket connection to wire
+            up. That's what the <b>home connection</b> buys: one managed bundle covering every store
+            class (snapshots, CAS, derivatives), reached over the wire routes under
+            <code>/v1/storage/*</code>, with the gateway holding only an endpoint and an access key.
           </p>
           <p class="aside r" style="--d: 0.24s">
             Normative text lives in the protocol source, not here: <code>packages/backup/PROTOCOL.md</code>

@@ -88,6 +88,18 @@
             every request addresses a (gateway, vault) pair explicitly. Export is honest: copy the
             directory, verify hashes, done.
           </p>
+          <p>
+            Only <code>journal.db</code> grows without a natural ceiling, and it's kept bounded
+            without ever dropping history. Idle conversations are <b>digested</b>, their turn-ranges
+            serialized into sealed gzip segments and archived to the same content-addressed store
+            every blob uses — through the same vault blob door. The raw rows are pruned
+            <i>only</i> behind a <b>custody latch</b>: once the segment is provably replicated, or,
+            on a vault that's on this device only, provably present in the local store. Reopen an
+            archived thread and its turns <b>rehydrate lazily</b> from the segment, folded back in
+            sequence and marked <b>from-archive</b> — read-only, because the past doesn't get
+            rewritten. Insights never notice the difference: the digests stand in for whatever was
+            pruned.
+          </p>
           <p class="aside">
             Manual key custody commands are in <a href="../start/#backup">Start § back up the
             keys</a>; the full offsite backup story — snapshots, the recovery kit, restore and
@@ -140,7 +152,7 @@
           </div>
           <div class="prose r" style="--d: 0.3s">
             <p>
-              The model is versioned (currently <code>ontology 1.2</code>) and every new domain
+              The model is versioned (currently <code>ontology 1.3</code>) and every new domain
               passes a seven-point admission checklist in review — anchors, links, flags, memos,
               search, registry, doc — so drift gets caught as process, not archaeology.
             </p>
@@ -299,7 +311,9 @@
           <p class="lede r" style="--d: 0.12s">
             External services connect through a broker the gateway owns, and external rows enter
             through a staging band you review. Two mechanisms, one discipline: nothing crosses the
-            border unattributed.
+            border unattributed. This <b>connector sync</b> — pulling the outside world in — is not
+            the offline <b>device replica</b> that keeps a phone or browser working without a
+            connection; that lives in the <a href="../devices/">Devices chapter</a>.
           </p>
           <div class="steps r" style="--d: 0.16s; max-width: 880px">
             <div class="step">
@@ -466,7 +480,7 @@
             bytes, never a relationship.
           </p>
           <p>
-            With a remote tier configured, the local store becomes a <b>bounded cache</b>, not a
+            With the vault <b>Hosted</b>, the local store becomes a <b>bounded cache</b>, not a
             second full copy: a budget (yours to set, or derived from free disk) caps the spool,
             tiny previews are pinned so the grid always renders, and everything else ages out
             least-recently-used — but nothing is ever evicted unless the remote provably holds it,

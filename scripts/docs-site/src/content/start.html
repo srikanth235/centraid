@@ -66,10 +66,12 @@
             install, every automation you run, every agent you talk to works against that pair.
           </p>
           <p>
-            The shell lands on <b>Home</b>: your apps as a grid, a sidebar with your profile and a
-            vault switcher, and four destinations up top — <b>Discover</b>, <b>Assistant</b>,
-            <b>Insights</b>, <b>Settings</b>. You can create more vaults later (one per household
-            member, one for an estate, one for testing) — each is a fully separate world.
+            The shell lands on <b>Home</b>: your apps as a grid, and a sidebar with your profile and
+            a vault switcher. The sidebar groups everything into <b>Pages</b> — Home, Assistant,
+            Insights, Discover, Starred, Automations, Approvals — and <b>Operations</b> — Gateway,
+            Backups, Vault Atlas — with <b>Settings</b> pinned at the bottom. You can create more
+            vaults later (one per household member, one for an estate, one for testing) — each is a
+            fully separate world.
           </p>
           <p class="aside">
             What exactly is in that directory, and why the sealing keys live <i>outside</i> it:
@@ -81,19 +83,23 @@
       <!-- 03 FIRST APP -->
       <section class="sec wrap" id="first-app">
         <p class="eyebrow r">§03 · your first app</p>
-        <h2 class="r" style="--d: 0.06s">Clone a blueprint, <em>sign its grant.</em></h2>
+        <h2 class="r" style="--d: 0.06s">Install a blueprint, <em>sign its grant.</em></h2>
         <div class="prose r" style="--d: 0.12s">
           <p>
             Open <b>Discover</b>. Eight blueprint apps ship in the box — <b>Docs</b>, <b>Photos</b>,
             <b>Notes</b>, <b>People</b>, <b>Locker</b>, <b>Tally</b>, <b>Agenda</b>, <b>Tasks</b> —
-            plus a shelf of automation templates. Cloning one is a single click; it lands on Home
-            and opens like any app.
+            plus a shelf of automation templates. Installing one is a single click: a sheet titled
+            <b>Install Notes</b> lists <i>what Notes can access</i>, grouped into <b>Read</b> and
+            <b>Add &amp; change</b>, with a footer that reads <i>nothing is copied — the app runs
+            from the shipped release and updates with it</i>. Press <b>Install</b> and it lands
+            pinned on <b>Home</b>, opening straight away.
           </p>
           <p>
-            The part worth noticing: an app doesn't get your data by existing. Its manifest declares
-            exactly which vault tables it wants to read and which typed commands it wants to call,
-            and that declaration becomes a <b>grant</b> you can inspect and revoke. Install is not
-            consent — the grant is.
+            The part worth noticing: an app doesn't get your data by existing, and installing it
+            copies nothing. Its manifest declares exactly which vault tables it wants to read and
+            which typed commands it wants to call, and that declaration becomes a <b>grant</b> you
+            can inspect and revoke. Install is not consent — the grant is. Uninstall whenever you
+            like; the access is revoked but your data stays in the vault.
           </p>
           <p class="aside">
             Try Notes first: type <code>@</code> in a note and link a person, a document, a task —
@@ -174,14 +180,21 @@
           <p>
             <b>Settings → Phone → Connect a phone</b> shows a QR code — a one-time pairing ticket
             that expires in minutes. Scan it with the Centraid mobile companion and the two devices
-            hold a direct, encrypted peer-to-peer line (iroh QUIC) from then on: same apps, same
-            data, live updates, no relay account, no cloud copy. Revoke a device any time from the
-            same screen.
+            hold a direct, encrypted peer-to-peer line (iroh QUIC) from then on: live updates, no
+            relay account, no cloud copy. Revoke a device any time from the same screen.
+          </p>
+          <p>
+            The phone isn't a thin window on the desktop. <b>Photos</b>, <b>Docs</b>, and
+            <b>Agenda</b> run as native mobile apps over a consent-scoped <b>offline replica</b> — a
+            private copy of just what your grants allow, kept on the phone, so the timeline and
+            your files stay usable in airplane mode; the apps you built on the desktop still render
+            over the tunnel in a WebView. How the replica stays honest to one canonical writer:
+            <a href="../devices/#replica">Devices § replica →</a>
           </p>
           <p>
             Being pre-release, the companion builds from source too:
-            <code>bun run dev:mobile</code> runs the Expo project in <code>apps/mobile</code> (a dev
-            build — the native tunnel module means Expo Go won't do).
+            <code>bun run dev:mobile</code> runs the Expo project in <code>apps/mobile</code> (a
+            native dev build — the native tunnel module means Expo Go won't do).
           </p>
           <p class="aside">
             What's inside the ticket, how devices are enrolled per-vault, and what the tunnel
@@ -198,7 +211,10 @@
           <p>
             The desktop shell embeds a gateway, but automations only fire while it's open. The
             long-term shape is <b>one always-on gateway</b> — a spare machine, a home server — with
-            every device, desktop included, as a client of it.
+            every device, desktop included, as a client of it. Three client homes reach it: the
+            desktop renderer, the mobile companion, and an installable <b>web PWA</b> that pairs
+            with only a one-time ticket over a relay (iroh over WASM) — no gateway URL to type, no
+            open port to expose.
           </p>
         </div>
         <div class="term r" style="--d: 0.18s; margin-top: 26px; max-width: 760px">
@@ -299,8 +315,9 @@
         <p class="aside r" style="--d: 0.24s">
           Lose the vault, keep the key → restore and reveal. Lose the key → the sealed cells are
           gone; everything unsealed remains. <a href="../data/#sealed">Data § sealed columns →</a>
-          This is the manual version — automated, offsite, provider-backed backup with its own
-          recovery kit is <a href="../backups/">its own chapter →</a>.
+          This is the manual version. Automated, offsite, provider-backed backup — and the
+          blank-machine <code>recover</code> flow that rebuilds the whole vault from a recovery kit
+          on a fresh box — is <a href="../backups/">its own chapter →</a>.
         </p>
 
         <div class="chapter-next r">

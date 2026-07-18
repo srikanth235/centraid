@@ -44,12 +44,12 @@
               <h3>Apps</h3>
               <p>
                 Eight blueprint apps — Docs, Photos, Notes, People, Locker, Tally, Agenda, Tasks —
-                what an app actually is (a projection, not a silo), how the builder customizes one
-                in conversation, attachments and cross-references, and how agents drive the same
+                what an app actually is (a projection, not a silo), how installing one is a grant
+                and not a copy, attachments and cross-references, and how agents drive the same
                 handlers your buttons do.
               </p>
               <div class="pill-row" style="margin-top: 14px">
-                <span class="pill">blueprints</span><span class="pill">builder</span
+                <span class="pill">blueprints</span><span class="pill">install</span
                 ><span class="pill">manifest</span><span class="pill">attachments</span
                 ><span class="pill">linking</span>
               </div>
@@ -59,13 +59,15 @@
               <h3>Devices</h3>
               <p>
                 One gateway, many clients: the star topology, (gateway, vault) addressing, one-time
-                pairing tickets, the iroh peer-to-peer tunnel, the desktop shell and mobile
-                companion, and the agent runtimes a gateway can host — Claude Code, Codex.
+                pairing tickets, the iroh peer-to-peer tunnel, the desktop shell, an installable web
+                app, native mobile apps backed by a consent-scoped offline replica, and the agent
+                runtimes a gateway can host — Claude Code, Codex.
               </p>
               <div class="pill-row" style="margin-top: 14px">
                 <span class="pill">gateway</span><span class="pill">pairing</span
-                ><span class="pill">iroh</span><span class="pill">desktop</span
-                ><span class="pill">mobile</span><span class="pill">runtimes</span>
+                ><span class="pill">iroh</span><span class="pill">replica</span
+                ><span class="pill">desktop</span><span class="pill">mobile</span
+                ><span class="pill">runtimes</span>
               </div>
             </a>
           </div>
@@ -83,11 +85,12 @@
             relationships are declared exactly once, and every app either extends or references them
             — never re-declares them. It is rendered as a live, explorable document: the full
             schema, the entity map, the ownership matrix, the gateway contract, and the ten rules
-            that keep it honest.
+            that keep it honest — and it's browsable inside the product too, on the
+            <b>Vault Atlas</b> screen (Kinds · Relations · Browse).
           </p>
           <p class="aside" style="--d: 0.2s">
-            Eleven schemas · one spine · consent checked on every read and write.
-            <a href="../ontology/">Read the ontology →</a>
+            Twelve ontology packs over six machinery bands · one spine · consent checked on every
+            read and write. <a href="../ontology/">Read the ontology →</a>
           </p>
         </div>
       </section>
@@ -120,6 +123,11 @@
                 <td>the full logical model, explorable — schemas, entity map, matrix, rules</td>
               </tr>
               <tr>
+                <td>vault atlas</td>
+                <td><a class="u" href="../ontology/">Ontology</a></td>
+                <td>the in-product Operations screen over the model — Kinds, Relations, Browse</td>
+              </tr>
+              <tr>
                 <td>consent &amp; outbox</td>
                 <td><a class="u" href="../data/#consent">Data § consent</a></td>
                 <td>
@@ -147,6 +155,11 @@
                 <td>SQL-first reads, typed writes, the judgment loop</td>
               </tr>
               <tr>
+                <td>conversation ledger</td>
+                <td><a class="u" href="../data/#vault">Data § the vault</a></td>
+                <td>bounded history — idle conversations digest, archive to the blob store, prune behind a custody latch, rehydrate on reopen</td>
+              </tr>
+              <tr>
                 <td>blueprint apps</td>
                 <td><a class="u" href="../apps/#blueprints">Apps § blueprints</a></td>
                 <td>the eight shipped apps and what each proves</td>
@@ -157,9 +170,9 @@
                 <td>manifest, handlers, scopes, the ext band</td>
               </tr>
               <tr>
-                <td>builder</td>
-                <td><a class="u" href="../apps/#builder">Apps § builder</a></td>
-                <td>describe → draft → preview → publish</td>
+                <td>installing</td>
+                <td><a class="u" href="../apps/#install">Apps § installing</a></td>
+                <td>the consent sheet, granted scopes, serve-in-place, uninstall keeps your data</td>
               </tr>
               <tr>
                 <td>gateway topology</td>
@@ -182,9 +195,19 @@
                 <td>Claude Code, Codex — how a gateway hosts a brain</td>
               </tr>
               <tr>
+                <td>mobile &amp; replica</td>
+                <td><a class="u" href="../devices/#mobile">Devices § mobile</a></td>
+                <td>the web app, native Photos/Docs/Agenda, the consent-scoped offline replica, and offline writes as intents</td>
+              </tr>
+              <tr>
                 <td>offsite backup</td>
                 <td><a class="u" href="../backups/">Backups</a></td>
                 <td>client-side encryption, the recovery kit, quarantined restores, the open provider protocol</td>
+              </tr>
+              <tr>
+                <td>recovery</td>
+                <td><a class="u" href="../backups/#restore">Backups § restore</a></td>
+                <td>the recover verb on a blank machine — lazy-by-default hydration, point-in-time restore, fencing the old machine</td>
               </tr>
             </tbody>
           </table>
