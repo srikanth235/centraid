@@ -1,0 +1,16 @@
+{
+  "generatedAt": "2026-07-19T17:03:40.476Z",
+  "passed": 518,
+  "failed": 1,
+  "skipped": 0,
+  "skippedTests": 36,
+  "envGated": 36,
+  "stale": 0,
+  "unhandledErrors": 0,
+  "unhandledErrorMessages": [],
+  "cellsFailed": 0,
+  "cellsMissing": 22,
+  "envGatedOwners": [],
+  "coverageBelowFloor": [],
+  "validationErrorCount": 0
+}
