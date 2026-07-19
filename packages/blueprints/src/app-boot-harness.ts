@@ -295,13 +295,40 @@ function bodyOf(app: string) {
   return body[1];
 }
 
-/** Lets a test settle an app's un-awaited `refresh()` and its timers. */
+/** Lets a test settle an app's un-awaited `refresh()` and its timers. Use this
+ * only where the assertion needs a QUIET window (proving something did NOT
+ * happen, or did not happen twice); for "X must appear", use waitFor. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 80));
 
+/**
+ * Polls until `predicate` holds, then returns; throws naming `what` on timeout.
+ *
+ * Boot calls `refresh()` without awaiting and the apps paint through React's
+ * async scheduler, so the DOM that a fixed sleep observes is a guess. Measured:
+ * the tally trash shelf lands 4 event-loop turns (~4ms) after its module import
+ * resolves locally — 20× inside the old fixed 80ms settle — yet the loaded CI
+ * runner still queried a null shelf and failed the `check` job. Dropping settle
+ * to 1ms reproduces that exact failure locally, confirming a race rather than a
+ * budget. So poll for the precondition instead of guessing at it.
+ *
+ * 4s ceiling: an order of magnitude above any observed wait, and half the 8s
+ * per-test budget so a genuine regression still fails with THIS message rather
+ * than vitest's opaque test timeout.
+ */
+async function waitFor(predicate: () => boolean, what: string, timeoutMs = 4_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline)
+      throw new Error(`timed out after ${timeoutMs}ms waiting for ${what}`);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
 // The single boot journey runs the app's real esbuild transform + jsdom render
-// plus ~1.25s of fixed settle/reconcile sleeps; the slowest app (agenda) lands
-// ~2.5s locally, which can exceed vitest's 5s default under CI load. Budget it
-// per-test (slowest observed ×3, well under 30s) rather than blanketing every
+// plus the remaining fixed settle windows; the slowest app (agenda) lands ~1.5s
+// locally now that the appear-assertions poll (waitFor) instead of sleeping,
+// which can still exceed vitest's 5s default under CI load. Budget it
+// per-test (slowest observed ×5, well under 30s) rather than blanketing every
 // importer of this harness with a package-wide timeout. The `beforeAll` scratch
 // build tops out ~0.7s and stays on vitest's 10s default hookTimeout.
 const BOOT_TEST_TIMEOUT_MS = 8_000;
@@ -487,6 +514,10 @@ export function describeAppBoot(
         expectNoErrors('rendering its granted replica in airplane mode');
 
         if (app === 'tally' && options.expectReplica) {
+          await waitFor(
+            () => document.querySelector('[aria-label="Trashed expenses"]') !== null,
+            "Tally's trash shelf to render from the local replica",
+          );
           const shelf = document.querySelector('[aria-label="Trashed expenses"]');
           expect(shelf?.textContent).toContain('Recoverable dinner');
           const restore = Array.from(
@@ -494,7 +525,10 @@ export function describeAppBoot(
           ).find((button) => button.textContent?.trim() === 'Restore');
           expect(restore, 'Tally trash shelf lost its restore control').toBeTruthy();
           restore?.click();
-          await settle();
+          await waitFor(
+            () => writeCalls.length > 0,
+            "Tally's restore click to reach the vault write path",
+          );
           expect(writeCalls).toContainEqual({
             action: 'restore-expense',
             input: { expense_id: TALLY_TRASH_ID },
@@ -510,16 +544,26 @@ export function describeAppBoot(
           expect(live.size, `${app} never subscribed to its replica read`).toBeGreaterThan(0);
 
           if (app === 'agenda') {
+            const askToCancel = () =>
+              Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
+                (button) => button.textContent?.trim() === 'Ask to cancel',
+              );
+            await waitFor(
+              () => document.querySelector('.ag-sched-title') !== null,
+              "Agenda's schedule row to render from the local replica",
+            );
             const event = document.querySelector('.ag-sched-title');
             expect(event?.textContent).toBe(AGENDA_TITLE);
             event?.closest('button')?.click();
-            await settle();
-            const cancel = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
-              (button) => button.textContent?.trim() === 'Ask to cancel',
-            );
+            await waitFor(() => askToCancel() !== undefined, "the Agenda event's drawer to open");
+            const cancel = askToCancel();
             expect(cancel, 'populated Agenda event did not open its drawer').toBeTruthy();
             cancel?.click();
             cancel?.click();
+            // waitFor lands the first write; settle then holds a quiet window so
+            // the exactly-one assertion below still proves the second click was
+            // deduped rather than merely not yet delivered.
+            await waitFor(() => writeCalls.length > 0, "Agenda's cancel ask to reach the vault");
             await settle();
             expect(writeCalls).toEqual([
               {
@@ -532,6 +576,10 @@ export function describeAppBoot(
               bootReads,
             );
             expect(networkCalls, 'offline interaction attempted a network request').toEqual([]);
+            await waitFor(
+              () => document.querySelector('.kit-pending-chip') !== null,
+              "Agenda's pending chip to paint for the queued cancel",
+            );
             expect(document.querySelector('.kit-pending-chip')?.textContent).toBe('cancel asked');
             expect(document.body.textContent).toContain(AGENDA_TITLE);
 
@@ -545,13 +593,20 @@ export function describeAppBoot(
             // An exact denial is the rollback signal: only this chip settles and
             // the unchanged canonical event remains visible.
             emitAgendaIntentState('denied');
-            await new Promise((resolve) => setTimeout(resolve, 250));
+            await waitFor(
+              () => document.querySelector('.kit-pending-chip') === null,
+              "Agenda's pending chip to settle on the exact denial",
+            );
             expect(document.querySelector('.kit-pending-chip')).toBeNull();
             expect(document.body.textContent).toContain(AGENDA_TITLE);
             expect(readCalls, 'exact intent settlement unexpectedly re-read the replica').toBe(
               bootReads,
             );
           } else if (app === 'photos') {
+            await waitFor(
+              () => document.querySelector(`[data-asset-id="${PHOTO_ASSET_ID}"]`) !== null,
+              "Photos' local asset tile to render from the local replica",
+            );
             const tile = document.querySelector(`[data-asset-id="${PHOTO_ASSET_ID}"]`);
             expect(tile, 'the populated local Photos row did not render').toBeTruthy();
             expect(tile?.querySelector('img')?.alt).toBe(PHOTO_TITLE);
@@ -559,15 +614,21 @@ export function describeAppBoot(
 
           response = DENIED;
           for (const listener of Array.from(live)) listener(response);
-          await settle();
-          expectNoErrors('applying a denied live replica value');
           const liveBanner = document.querySelector('#consentBanner');
           expect(liveBanner, `${app}/index.html lost its #consentBanner`).toBeTruthy();
+          await waitFor(
+            () => liveBanner.hidden === false,
+            `${app} to reveal its consent banner for a denied live replica value`,
+          );
+          expectNoErrors('applying a denied live replica value');
           expect(liveBanner.hidden, `${app} ignored a denied live replica value`).toBe(false);
 
           response = granted;
           for (const listener of Array.from(live)) listener(response);
-          await settle();
+          await waitFor(
+            () => liveBanner.hidden === true,
+            `${app} to hide its consent banner for a re-granted live replica value`,
+          );
           expectNoErrors('applying a re-granted live replica value');
           expect(liveBanner.hidden, `${app} ignored a re-granted live replica value`).toBe(true);
 
@@ -585,14 +646,20 @@ export function describeAppBoot(
           } else {
             window.dispatchEvent(new Event('focus'));
           }
-          await settle();
+          await waitFor(
+            () => readCalls > beforeFailure,
+            `${app} to attempt the replacement live read`,
+          );
           expect(readCalls, `${app} did not attempt the replacement live read`).toBeGreaterThan(
             beforeFailure,
           );
           const afterFailure = readCalls;
           const table = app === 'photos' ? 'core.content_item' : 'core.event';
           for (const listener of changes) listener({ tables: [table] });
-          await new Promise((resolve) => setTimeout(resolve, 350));
+          await waitFor(
+            () => readCalls > afterFailure && live.size > 0,
+            `${app} to retry its rejected live read on the compatibility doorbell`,
+          );
           expect(
             readCalls,
             `${app} suppressed the compatibility retry after its live read rejected`,
@@ -604,19 +671,25 @@ export function describeAppBoot(
         // Revoke: every app clears its containers.
         response = DENIED;
         window.dispatchEvent(new Event('focus'));
-        await settle();
-        expectNoErrors('clearing after the grant was revoked');
 
         // Required, not optional: a guarded `if (banner)` would silently skip the
         // only assertion proving the denied read was actually observed.
         const banner = document.querySelector('#consentBanner');
         expect(banner, `${app}/index.html lost its #consentBanner`).toBeTruthy();
+        await waitFor(
+          () => banner.hidden === false,
+          `${app} to reveal its consent banner after the grant was revoked`,
+        );
+        expectNoErrors('clearing after the grant was revoked');
         expect(banner.hidden, `${app} hid its consent banner while denied`).toBe(false);
 
         // Re-grant: render back into the containers the denied path just cleared.
         response = {};
         window.dispatchEvent(new Event('focus'));
-        await settle();
+        await waitFor(
+          () => banner.hidden === true,
+          `${app} to hide its consent banner after the grant came back`,
+        );
         expectNoErrors('re-rendering after the grant came back');
         expect(banner.hidden, `${app} kept its consent banner after re-grant`).toBe(true);
       },

@@ -580,9 +580,24 @@ bunx playwright test -c apps/desktop/tests/e2e/playwright.config.ts \
   skips when the upstream web-e2e artifact is absent (expected off-CI; a hard
   failure under CI). Scale passed 5/5.
 - Full coverage passed 505 test files and 4,461 tests, with 3 files and 35
-  tests intentionally skipped. Aggregate coverage was 70.60% lines / 77.75%
+  tests intentionally skipped. Aggregate coverage was 70.60% lines / 77.78%
   branches / 81.56% functions; every repository and scoped package floor
-  passed.
+  passed. This is a post-merge re-run on the final commit.
+- The first CI run of this branch surfaced one genuine latent race, inherited
+  from main's `6b454234` (#459): the shared app-boot harness proved DOM
+  preconditions by sleeping a fixed 80 ms and then querying, so the loaded
+  runner read a null Tally trash shelf. Measured locally, that shelf lands four
+  event-loop turns (~4 ms) after its module import resolves — a 20x margin that
+  still evaporated under CI load — and dropping the sleep to 1 ms reproduces the
+  CI failure byte for byte. Every appear-or-change assertion in the harness now
+  polls a named predicate (`waitFor`, 4 s ceiling, half the per-test budget so a
+  regression reports itself rather than timing out opaquely); the fixed sleeps
+  that survive are the ones whose assertion needs a genuine quiet window
+  (proving something did not happen, or did not happen twice). No assertion was
+  weakened and no timeout was raised — the journey is faster, with Agenda
+  falling from ~2.5 s to ~1.5 s. Verified 8/8 app-boot passes across five
+  coverage runs and again under deliberate eight-way CPU contention (slowest
+  2.44 s against the 8 s budget).
 - The mobile harness modules passed Node syntax checks. A local operational
   smoke started the nightly CI gateway entry point on a tokenless loopback
   port, and an unauthenticated `GET /_apps` returned `[]` before clean shutdown.
@@ -592,9 +607,7 @@ bunx playwright test -c apps/desktop/tests/e2e/playwright.config.ts \
 - The five issue-owned Electron assertions pass (Discover populated/empty,
   clone-survives-restart with the restored no-consume assertion, three drafts
   with distinct manifests across restart, delete removes tile and app directory);
-  these and the earlier full-coverage aggregate numbers were captured against the
-  original pre-merge commit, so the coverage line above awaits a fresh green
-  re-run.
+  these were captured against the original pre-merge commit.
 - The generated report passed its structural smoke test.
 
 ## Audit
@@ -653,3 +666,4 @@ no steering events and no steering ledger rows are required.
 | claude-code-e1dd013a-4c0-1784447927-1 | claude-code | e1dd013a-4c0e-40fb-a814-df75c60d1fe9 | #458 | claude-fable-5 | 11 | 8587 | 1609032 | 3310 | 11908 | 1.8820 | 456 | 853921 | 44508036 | 239920 | test: rethink after review — measured budgets, falsifiable lanes, doc truth (#45 |
 | claude-code-e1dd013a-4c0-1784448188-1 | claude-code | e1dd013a-4c0e-40fb-a814-df75c60d1fe9 | #458 | claude-fable-5 | 58 | 29332 | 8643313 | 12349 | 41739 | 9.6280 | 514 | 883253 | 53151349 | 252269 | chore(merge): merge main (#459 vault backlog) into issue-458 test reorg (#458)On |
 | claude-code-e1dd013a-4c0-1784448522-1 | claude-code | e1dd013a-4c0e-40fb-a814-df75c60d1fe9 | #458 | claude-fable-5 | 31 | 14884 | 4873910 | 11080 | 25995 | 5.6143 | 545 | 898137 | 58025259 | 263349 | test: post-#459 merge follow-up — setConfig below imports, fresh gate numbers (# |
+| claude-code-e1dd013a-4c0-1784450799-1 | claude-code | e1dd013a-4c0e-40fb-a814-df75c60d1fe9 | #458 | claude-opus-4-8 | 94 | 171814 | 6044212 | 27561 | 199469 | 4.7854 | 639 | 1069951 | 64069471 | 290910 | test: poll app-boot preconditions instead of sleeping at them (#458)The first CI |
