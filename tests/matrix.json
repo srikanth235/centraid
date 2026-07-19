@@ -48,10 +48,7 @@
       "owner": "packages/vault/src/blob/custody-proven.contract.test.ts",
       "tier": "contract"
     },
-    "blob-custody.durability": {
-      "owner": "packages/vault/src/blob/disk-full.integration.test.ts",
-      "tier": "integration"
-    },
+    "blob-custody.durability": null,
     "blob-custody.concurrency": {
       "owner": "packages/vault/src/blob/outbox-drain.test.ts",
       "tier": "integration"
@@ -378,7 +375,7 @@
       "assessment": {
         "correctness": "solid",
         "contracts": "solid",
-        "durability": "partial",
+        "durability": "gap",
         "concurrency": "partial",
         "performance": "partial",
         "scalability": "partial",

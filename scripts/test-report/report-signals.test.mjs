@@ -79,6 +79,26 @@ describe.skipIf(process.env.CENTRAID_RUN_NATIVE_TUNNEL !== '1')('native gateway 
     });
   });
 
+  test('detects env check + t.skip in the test body (disk-full pattern)', () => {
+    const src = `
+test('FsBlobStore.putSync against a REAL full filesystem', (t) => {
+  if (process.platform !== 'darwin') {
+    t.skip('disk-full e2e only runs on darwin (hdiutil)');
+    return;
+  }
+  if (process.env.CENTRAID_DISKFULL_E2E !== '1') {
+    t.skip('set CENTRAID_DISKFULL_E2E=1 (on darwin) to run the real hdiutil disk-full e2e');
+    return;
+  }
+  expect(true).toBe(true);
+});
+`;
+    expect(detectDefaultCiEnvGate(src)).toEqual({
+      env: 'CENTRAID_DISKFULL_E2E',
+      kind: 'early-env-return',
+    });
+  });
+
   test('returns null for ordinary tests', () => {
     expect(detectDefaultCiEnvGate(`test('works', () => { expect(1).toBe(1); });`)).toBeNull();
   });

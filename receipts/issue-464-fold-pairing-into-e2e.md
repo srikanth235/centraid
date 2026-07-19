@@ -36,7 +36,7 @@ Test-health report surfaces unhandled Vitest errors and failed-vs-missing cells 
 
 Expected prewarm ENOENT no longer spams warn logs — `packages/gateway/src/serve/app-prewarm-errors.ts`, `packages/gateway/src/serve/app-prewarm-errors.test.ts`, `packages/gateway/src/serve/build-gateway.ts`.
 
-Env-gated solid/partial matrix owners are inventoried and validated — `scripts/test-report/validate-matrix.mjs` + report-signals `detectDefaultCiEnvGate` / `collectEnvGatedOwners`.
+Env-gated solid/partial matrix owners are inventoried and validated — `scripts/test-report/validate-matrix.mjs` + report-signals `detectDefaultCiEnvGate` / `collectEnvGatedOwners` (includes `t.skip` after `process.env.X !== '1'`, matching `packages/vault/src/blob/disk-full.integration.test.ts`). Demoted `blob-custody.durability` from partial→gap in `tests/matrix.json` (cellOwner null) so partial no longer claims a default-CI-skipped sole owner.
 
 agent-runtime coverage strategy recorded; floors not raised; WAL multi-day hotspot improved — `TESTING.md`; `packages/gateway/src/backup/wal.integration.test.ts` multi-day outage 8→4 simulated days.
 

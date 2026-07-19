@@ -88,13 +88,23 @@ export function detectDefaultCiEnvGate(source) {
   if (enabled && /describe\.skipIf\(\s*!?\w+\s*\)/.test(source)) {
     return { env: enabled[1], kind: 'skipIf-enabled-flag' };
   }
-  // if (process.env.FOO !== '1') { test.skip / return early at top level }
+  // if (process.env.FOO !== '1') { t.skip / test.skip / describe.skip / return }
+  // Covers disk-full.integration.test.ts style: env check then t.skip in the
+  // test callback (whole owner is a no-op on default CI without the flag).
+  const skipCall = '(?:test|it|t|describe)\\.skip';
   const early =
     source.match(
-      /if\s*\(\s*process\.env\.([A-Z0-9_]+)\s*!==\s*['"]1['"]\s*\)\s*\{[\s\S]{0,80}?(?:test\.skip|describe\.skip|return)/,
+      new RegExp(
+        String.raw`if\s*\(\s*process\.env\.([A-Z0-9_]+)\s*!==\s*['"]1['"]\s*\)\s*\{[\s\S]{0,200}?${skipCall}`,
+      ),
     ) ||
     source.match(
-      /if\s*\(\s*process\.env\.([A-Z0-9_]+)\s*!==\s*['"]1['"]\s*\)\s*(?:test\.skip|describe\.skip)/,
+      new RegExp(
+        String.raw`if\s*\(\s*process\.env\.([A-Z0-9_]+)\s*!==\s*['"]1['"]\s*\)\s*${skipCall}`,
+      ),
+    ) ||
+    source.match(
+      /if\s*\(\s*process\.env\.([A-Z0-9_]+)\s*!==\s*['"]1['"]\s*\)\s*\{[\s\S]{0,200}?\breturn\b/,
     );
   if (early) return { env: early[1], kind: 'early-env-return' };
   return null;
