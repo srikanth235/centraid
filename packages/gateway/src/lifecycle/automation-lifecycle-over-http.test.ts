@@ -12,7 +12,7 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  *      while the owning UI app survives.
  */
 
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -20,8 +20,6 @@ import { scaffoldAppFiles, type ScaffoldFile } from '@centraid/blueprints';
 import * as automation from '@centraid/automation';
 import { serve, type GatewayServeHandle } from '../serve/serve.ts';
 import type { GatewayPaths } from '../paths.ts';
-
-vi.setConfig({ testTimeout: 30_000 });
 
 let dataDir: string;
 let handle: GatewayServeHandle;

@@ -3,15 +3,13 @@ import { Buffer } from 'node:buffer';
 import { promises as fs } from 'node:fs';
 import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Runtime } from '../runtime.js';
 import {
   clearQueryBundleCaches,
   QUERY_NAME_HEADER,
   QUERY_SOURCE_HASH_HEADER,
 } from './query-bundle.js';
-
-vi.setConfig({ testTimeout: 30_000 });
 
 const manifest = {
   manifestVersion: 1,

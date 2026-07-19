@@ -7,8 +7,6 @@ import { openVaultRegistry, VaultRegistryError, type VaultRegistry } from './vau
 import { runWithVaultContext } from './vault-context.js';
 import { makeVaultRouteHandler } from '../routes/vault-routes.js';
 
-vi.setConfig({ testTimeout: 30_000 });
-
 const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
 
 const cleanups: Array<() => Promise<void> | void> = [];

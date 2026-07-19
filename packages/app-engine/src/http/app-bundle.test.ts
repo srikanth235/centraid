@@ -4,15 +4,13 @@ import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // draft exemption, invalidation, shared-asset precedence, JSX runtime, CSS
 // inlining, and the request-count collapse the feature exists for — all share
 // one fixture builder.
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, utimesSync, writeFileSync } from 'node:fs';
 import path, { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { serveStatic, type ServeStaticOptions } from './static-server.js';
 import { clearBundleCaches, findBundleByHash, prewarmAppAssets } from './app-bundle.js';
-
-vi.setConfig({ testTimeout: 30_000 });
 
 interface MockRes {
   statusCode: number;

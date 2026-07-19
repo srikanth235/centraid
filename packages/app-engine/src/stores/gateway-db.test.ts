@@ -1,11 +1,9 @@
 import { tempDirSync } from '@centraid/test-kit/temp-dir';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { openJournalDb, makeJournalDbProvider } from './gateway-db.js';
-
-vi.setConfig({ testTimeout: 30_000 });
 
 function freshDbPath(): string {
   const dir = tempDirSync('centraid-db-');

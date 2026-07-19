@@ -22,7 +22,9 @@ test('fake clock advances deterministically', async () => {
   expect(clock.now()).toBe(before + 2_500);
 });
 
-test('createTestVault opens a migrated production-shape vault', async () => {
+// Bootstraps a real on-disk vault — under the 5s default bare, above it when
+// v8 coverage instrumentation slows the migration sweep.
+test('createTestVault opens a migrated production-shape vault', { timeout: 15_000 }, async () => {
   const db = await createTestVault();
   const row = db.vault.prepare('SELECT count(*) AS n FROM core_vault').get() as { n: number };
   expect(row.n).toBe(1);

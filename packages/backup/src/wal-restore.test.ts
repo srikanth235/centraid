@@ -22,7 +22,7 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
 import fss, { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { FsObjectStore, type ObjectStore } from './object-store.js';
 import {
   lastCommitBoundary,
@@ -42,7 +42,6 @@ import {
 } from './wal-format.js';
 import { replayWalSegments } from './wal-restore.js';
 
-vi.setConfig({ testTimeout: 15_000 });
 const DATA_KEY = new Uint8Array(32).fill(0x6b);
 const VAULT_ID = 'vault-restore-test';
 

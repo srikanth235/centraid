@@ -6,11 +6,9 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
 
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { Dispatcher } from './dispatcher.js';
 import { Registry } from '../registry/registry.js';
-
-vi.setConfig({ testTimeout: 30_000 });
 
 let appsDir: string;
 let codeDir: string;

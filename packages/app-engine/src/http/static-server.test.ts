@@ -8,8 +8,6 @@ import { IncomingMessage, ServerResponse } from 'node:http';
 import { serveStatic } from './static-server.js';
 import { resolveStaticPath } from './security.js';
 
-vi.setConfig({ testTimeout: 30_000 });
-
 interface MockRes {
   statusCode: number;
   headers: Record<string, string>;

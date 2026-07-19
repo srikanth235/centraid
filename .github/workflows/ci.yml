@@ -27,6 +27,11 @@ jobs:
       # Type-aware pass (oxlint --type-aware); deps' dist is built by the
       # typecheck step's upstream `^build`.
       - run: bun run lint:types
+      # Product-flow catalog anti-rot (issue #458 Phase 4): fail if any
+      # matrix.json cell names an owning test file that no longer exists, or a
+      # named contract suite shrinks below its recorded floor. Offline and fast,
+      # so it belongs on the per-PR loop next to lint/typecheck.
+      - run: bun run test:matrix
       # Build every package's dist (the worker-thread handler tests load the
       # built worker, not the .ts source), then run the whole suite under
       # vitest with v8 coverage. `coverage` enforces the seeded engine floors

@@ -80,7 +80,9 @@ test('an unconfigured remote tier performs no fast polling (#456 I1)', async () 
     onStatus: () => undefined,
   });
   try {
-    await vi.advanceTimersByTimeAsync(54_000);
+    // The one-minute backstop is jittered ±10% (timer-jitter.ts), so the
+    // earliest possible fire is 54s — stay strictly below it.
+    await vi.advanceTimersByTimeAsync(53_000);
     expect(due).not.toHaveBeenCalled();
   } finally {
     await runner.close();
@@ -112,7 +114,9 @@ test('an unconfigured remote still reaps expired local sessions and resources', 
     onStatus: () => undefined,
   });
   try {
-    await vi.advanceTimersByTimeAsync(65_000);
+    // The backstop is jittered ±10%, so the latest possible fire is 66s —
+    // advance past it (65s used to lose the draw ~8% of the time).
+    await vi.advanceTimersByTimeAsync(70_000);
     expect(expired).toEqual(['expired-local']);
     expect(state.session('expired-local')).toBeNull();
   } finally {

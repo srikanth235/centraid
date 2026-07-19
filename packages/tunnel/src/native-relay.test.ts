@@ -1,10 +1,9 @@
 import { randomBytes } from 'node:crypto';
-import { promises as fs } from 'node:fs';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { createTunnelClient, tunnelRequest, type TunnelClient } from './client.js';
 import { DeviceStore } from './device-store.js';
 import {
@@ -116,7 +115,7 @@ describe.skipIf(process.env.CENTRAID_RUN_NATIVE_TUNNEL !== '1')('native gateway 
   }, 30_000);
 
   test('is the production desktop relay for legacy pairing and multi-megabyte bodies', async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-native-desktop-'));
+    const dir = await tempDir('centraid-native-desktop-');
     const desktopClient = await createTunnelClient({ relays: 'disabled' });
     const port = (server.address() as AddressInfo).port;
     let upstream: { baseUrl: string; token: string } | undefined = {
@@ -164,7 +163,6 @@ describe.skipIf(process.env.CENTRAID_RUN_NATIVE_TUNNEL !== '1')('native gateway 
     } finally {
       await desktopClient.close();
       await desktop.close();
-      await fs.rm(dir, { recursive: true, force: true });
     }
   }, 30_000);
 });

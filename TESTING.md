@@ -44,12 +44,17 @@ coverage result.
 | Performance | `tests/perf/*.perf.test.ts` | hot-path budgets | nightly |
 | Scale | `tests/scale/*.scale.test.ts` | correctness and duration at volume | nightly |
 
-Playwright alone owns desktop and web regression journeys. The mobile system
-is the committed agent-e2e-mobile adapter against an installed development
-app; its driver remains an implementation detail of that single journey tier.
-There is no second native suite and no Detox suite. Desktop agent-driven flows
-were retired after their unique restart/persistence assertions moved to
-Electron Playwright.
+Playwright alone owns desktop and web regression journeys. The mobile journey
+layer is the committed agent-driven flows under
+[`tests/agent-e2e-mobile/`](tests/agent-e2e-mobile); their device-driving
+substrate is **Maestro**, spawned by the harness
+([`lib/harness.mjs`](tests/agent-e2e-mobile/lib/harness.mjs) `runMaestroChunk`
+runs `maestro --udid … test <flow.yaml>` per step) against an installed
+development app on a booted iOS Simulator or Android emulator. The `mobile-e2e`
+job in [`e2e.yml`](.github/workflows/e2e.yml) installs a pinned Maestro CLI and
+runs those flows nightly. There is no second native suite and no Detox suite.
+Desktop agent-driven flows were retired after their unique restart/persistence
+assertions moved to Electron Playwright.
 
 Property-style checks follow the normal `*.test.ts` convention and say
 `property` in the suite name. `.spec.ts` is Playwright-only. Slow files set a
@@ -151,7 +156,12 @@ combined report is published. Coverage, desktop Playwright, web Playwright,
 performance, and scale commands stamp distinct lane-start markers: a cached
 result not refreshed by that invocation turns grey immediately. Vitest,
 Playwright, agent-e2e, performance, and scale evidence all carries a capture
-time and expires after 36 hours.
+time and expires after 36 hours. This staleness signal exists because a
+nightly-only suite rots silently: #458 found the entire desktop Playwright
+suite red after the React/CSS-modules migrations — hard-coded selectors like
+`.cd-sb-item`, `.ctx-menu`, and `.modal-card` had all gone dead, exactly the
+#225-class silent rot — while the per-PR loop stayed green. Grey (or expired)
+evidence in the report is the standing guard against that class of drift.
 
 ## Unified report
 

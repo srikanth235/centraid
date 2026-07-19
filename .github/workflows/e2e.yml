@@ -131,6 +131,14 @@ jobs:
           cat /tmp/centraid-mobile-gateway.log
           exit 1
       - name: Install Maestro CLI
+        # The mobile agent-e2e flows drive the installed app through Maestro
+        # (tests/agent-e2e-mobile/lib/harness.mjs → `maestro --udid … test`).
+        # Pin the CLI: the install script honors MAESTRO_VERSION and otherwise
+        # pulls whatever is at `releases/latest`, so an upstream release could
+        # silently change device-driving behavior mid-nightly. cli-2.6.1 is the
+        # current stable release (github.com/mobile-dev-inc/maestro/releases).
+        env:
+          MAESTRO_VERSION: 2.6.1
         run: |
           curl -fsSL "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"

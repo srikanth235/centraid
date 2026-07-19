@@ -261,6 +261,15 @@ test('10.2 — an automation template clone survives a fresh gateway instance an
       )
       .toBe(true);
     await expect.poll(() => gateway.state.automations).toHaveLength(1);
+
+    // Cloning must NOT consume the source template — it stays installable in
+    // Discover until the user publishes (the invariant the retired agent-e2e
+    // flows owned: "template tile disappeared after clone — expected templates
+    // to remain available until publish"). Adopt navigates to the new thread,
+    // so return to Discover and assert the Daily Digest card is still listed.
+    await gotoNav(launched.page, 'Discover');
+    await expect(launched.page.getByRole('button', { name: /Daily Digest/ })).toBeVisible();
+
     const manifestPath = path.join(env.appsDir, 'digest-clone', 'app.json');
     const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8')) as {
       id: string;

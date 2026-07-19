@@ -7,6 +7,12 @@
     "gap": "No adequate owning proof yet",
     "skip": "Deliberately low-value for the current v0 product posture"
   },
+  "notes": {
+    "web.concurrency": "Downgraded solid->partial: web-pwa.spec.ts (the former owner) has ZERO concurrency coverage. The real multi-tab proof is web-pwa-cache.spec.ts ('multiple shell tabs claim one bridge owner'); the #406-review multi-tab double-write path remains an open gap on this cell.",
+    "mobile.performance": "Gap: the file this cell used to own (tests/perf/mobile-fast-path.perf.test.ts) was a Chromium PWA waterfall mislabeled as mobile; it now correctly owns web.performance as tests/perf/pwa-waterfall.perf.test.ts. The #404 mobile budgets still gate nothing on-device, so mobile.performance owns no proof.",
+    "replica-sync.performance": "Gap: the former perf owner duplicated the scale fixture (JSON.stringify over an in-memory Map, no store/IO) and was deleted. replica-sync.scalability keeps the real windowed-bootstrap deletion-leak proof.",
+    "tunnel-pairing.performance": "tunnel-throughput.perf.test.ts measures the JS fallback relay only; the native QUIC data plane is not built in the nightly perf lane, so the floor guards gross JS-path regressions, not the native fast path."
+  },
   "cellOwners": {
     "vault-core.correctness": {
       "owner": "packages/vault/src/schema/atlas.test.ts",
@@ -108,10 +114,7 @@
       "owner": "packages/client/src/replica/multi-writer.contract.test.ts",
       "tier": "contract"
     },
-    "replica-sync.performance": {
-      "owner": "tests/perf/replica-bootstrap.perf.test.ts",
-      "tier": "perf"
-    },
+    "replica-sync.performance": null,
     "replica-sync.scalability": {
       "owner": "tests/scale/replica-bootstrap.scale.test.ts",
       "tier": "scale"
@@ -274,8 +277,8 @@
     "web.correctness": { "owner": "apps/web/src/web-host.test.ts", "tier": "unit" },
     "web.contracts": null,
     "web.durability": null,
-    "web.concurrency": { "owner": "apps/web/tests/e2e/web-pwa.spec.ts", "tier": "e2e" },
-    "web.performance": { "owner": "apps/web/tests/e2e/perf-waterfall.spec.ts", "tier": "e2e" },
+    "web.concurrency": { "owner": "apps/web/tests/e2e/web-pwa-cache.spec.ts", "tier": "e2e" },
+    "web.performance": { "owner": "tests/perf/pwa-waterfall.perf.test.ts", "tier": "perf" },
     "web.scalability": null,
     "web.security": { "owner": "apps/web/tests/e2e/web-pwa.spec.ts", "tier": "e2e" },
     "web.offline": { "owner": "apps/web/tests/e2e/web-pwa-cache.spec.ts", "tier": "e2e" },
@@ -292,7 +295,7 @@
       "owner": "apps/mobile/src/lib/replica/sqlite-intent-store.test.ts",
       "tier": "integration"
     },
-    "mobile.performance": { "owner": "tests/perf/mobile-fast-path.perf.test.ts", "tier": "perf" },
+    "mobile.performance": null,
     "mobile.scalability": null,
     "mobile.security": {
       "owner": "apps/mobile/src/lib/bridge/transfer-policy.test.ts",
@@ -409,7 +412,7 @@
         "contracts": "solid",
         "durability": "partial",
         "concurrency": "solid",
-        "performance": "partial",
+        "performance": "gap",
         "scalability": "partial",
         "security": "partial",
         "offline": "partial",
@@ -520,7 +523,7 @@
         "correctness": "partial",
         "contracts": "skip",
         "durability": "skip",
-        "concurrency": "solid",
+        "concurrency": "partial",
         "performance": "solid",
         "scalability": "skip",
         "security": "solid",
@@ -537,7 +540,7 @@
         "contracts": "skip",
         "durability": "solid",
         "concurrency": "partial",
-        "performance": "solid",
+        "performance": "gap",
         "scalability": "gap",
         "security": "partial",
         "offline": "partial",
@@ -570,7 +573,7 @@
       "dimension": "contracts",
       "tier": "contract",
       "owner": "packages/vault/src/gateway/gateway.contract.test.ts",
-      "minimumTests": 36
+      "minimumTests": 38
     },
     {
       "id": "vault-sealed-columns",
@@ -644,7 +647,7 @@
       "dimension": "contracts",
       "tier": "contract",
       "owner": "packages/gateway/src/backup/backup-service.contract.test.ts",
-      "minimumTests": 17
+      "minimumTests": 18
     },
     {
       "id": "backup-crash-recovery",
@@ -695,14 +698,6 @@
       "tier": "contract",
       "owner": "packages/client/src/replica/multi-writer.contract.test.ts",
       "minimumTests": 2
-    },
-    {
-      "id": "replica-bootstrap-budget",
-      "name": "Windowed bootstrap latency at fixed volume",
-      "surface": "replica-sync",
-      "dimension": "performance",
-      "tier": "perf",
-      "owner": "tests/perf/replica-bootstrap.perf.test.ts"
     },
     {
       "id": "replica-bootstrap-volume",
@@ -770,7 +765,7 @@
       "dimension": "contracts",
       "tier": "contract",
       "owner": "packages/automation/src/fire/scheduler-ledger.contract.test.ts",
-      "minimumTests": 15
+      "minimumTests": 16
     },
     {
       "id": "agent-provider-compat",
@@ -829,12 +824,12 @@
       "owner": "apps/mobile/src/lib/upload/crash.test.ts"
     },
     {
-      "id": "mobile-fast-path",
-      "name": "#404 PWA/mobile fast-path browser waterfall stays within budget",
-      "surface": "mobile",
+      "id": "pwa-waterfall-budget",
+      "name": "#404 PWA fast-path browser waterfall stays within budget (nightly perf lane)",
+      "surface": "web",
       "dimension": "performance",
       "tier": "perf",
-      "owner": "tests/perf/mobile-fast-path.perf.test.ts"
+      "owner": "tests/perf/pwa-waterfall.perf.test.ts"
     },
     {
       "id": "mobile-real-journey",
@@ -851,7 +846,7 @@
       "dimension": "contracts",
       "tier": "contract",
       "owner": "packages/tunnel/src/wire-conformance.contract.test.ts",
-      "minimumTests": 4
+      "minimumTests": 10
     },
     {
       "id": "tunnel-throughput",

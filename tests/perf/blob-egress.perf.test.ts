@@ -29,7 +29,7 @@ test('large local blob egress produces a first byte without whole-file buffering
     purpose: 'dpv:ServiceProvision',
   });
   if (attached.status !== 'executed') throw new Error('fixture could not attach staged blob');
-  const contentId = String(attached.output.content_id);
+  const contentId = String((attached.output as { content_id: unknown }).content_id);
   await seed.stop();
 
   const child = fork(

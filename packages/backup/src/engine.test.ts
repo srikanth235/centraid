@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { ALGO_STORE, ALGO_ZSTD, unframeChunkPayload } from './compress.js';
 import {
   activeMasterKey,
@@ -22,7 +22,6 @@ import { partBuffer } from './parts.js';
 import type { ObjectStore } from './object-store.js';
 import type { BackupProvider, StoreClass } from './provider.js';
 
-vi.setConfig({ testTimeout: 15_000 });
 const CURRENT = { gatewayVersion: '0.1.0', vaultUserVersion: '1', ontologyVersion: '1.2' };
 const APP_META = {
   gatewayVersion: '0.1.0',

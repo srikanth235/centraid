@@ -3,10 +3,10 @@ import { once } from 'node:events';
 import { promises as fs } from 'node:fs';
 import http, { type Server } from 'node:http';
 import net from 'node:net';
-import os from 'node:os';
 import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { createBlobHandoffUrl } from '../serve/data-plane-handoff.js';
 import {
   startTypeScriptBytePlane,
@@ -25,7 +25,6 @@ const secret = process.env.CENTRAID_BYTE_PLANE_SECRET ?? '0123456789abcdef012345
 let child: ChildProcess | undefined;
 let reference: TypeScriptBytePlaneHandle | undefined;
 let root = '';
-let ownsRoot = false;
 let baseUrl = '';
 let blobFile = '';
 let provider: Server | undefined;
@@ -67,8 +66,8 @@ describe.skipIf(!enabled)(
         root = path.resolve(externalRoot);
         baseUrl = externalBaseUrl.replace(/\/+$/, '');
       } else {
-        root = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-byte-plane-contract-'));
-        ownsRoot = true;
+        // tempDir cleans owned roots after the file; external roots stay.
+        root = await tempDir('centraid-byte-plane-contract-');
       }
       blobFile = path.join(root, 'vault', 'blobs', 'fixture.bin');
       await fs.mkdir(path.dirname(blobFile), { recursive: true });
@@ -125,7 +124,6 @@ describe.skipIf(!enabled)(
         provider.close();
         await once(provider, 'close');
       }
-      if (ownsRoot) await fs.rm(root, { recursive: true, force: true });
     });
 
     test('streams SHA-256 with a language-independent JSON contract', async () => {

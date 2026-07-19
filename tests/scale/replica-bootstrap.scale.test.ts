@@ -13,7 +13,11 @@ test('windowed bootstrap converges after an in-flight deletion at volume', async
     conversations: 0,
     replicaRows: 50_000,
   });
-  const result = await exerciseWindowedBootstrap(fixture.replicaRows, 2_000, 24_999);
+  // The volume fixture types row values as Record<string, unknown>; the
+  // deterministic string/number values it emits are all valid ReplicaValues, so
+  // bridge the two fixture shapes explicitly for the bootstrap harness.
+  const source = fixture.replicaRows as unknown as Parameters<typeof exerciseWindowedBootstrap>[0];
+  const result = await exerciseWindowedBootstrap(source, 2_000, 24_999);
   const passed = result.rows === 49_999 && result.cursor.seq === 11 && result.durationMs < 20_000;
   await recordQualityResult({
     lane: 'scale',

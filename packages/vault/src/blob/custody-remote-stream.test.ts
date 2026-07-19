@@ -1,7 +1,5 @@
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { BlobCustody } from './custody.js';
 import { FsBlobStore, MemoryBlobStore } from './local.js';
 import { sha256OfBytes, type BlobRange } from './store.js';
@@ -14,7 +12,7 @@ async function collect(source: NodeJS.ReadableStream): Promise<Buffer> {
 
 describe('remote-only blob streaming', () => {
   test('bounds each provider read while preserving the complete content address', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-remote-stream-'));
+    const root = await tempDir('centraid-remote-stream-');
     const bytes = Buffer.alloc(9 * 1024 * 1024 + 31, 0x5a);
     const sha = sha256OfBytes(bytes);
     const remote = new MemoryBlobStore();
@@ -38,7 +36,6 @@ describe('remote-only blob streaming', () => {
     expect(reads.every(({ start, end }) => end! - start + 1 <= 4 * 1024 * 1024)).toBe(true);
     expect(local.statSync(sha)?.size).toBe(bytes.length);
     expect(sha256OfBytes(local.getSync(sha)!)).toBe(sha);
-    await fs.rm(root, { recursive: true, force: true });
   });
 
   test('rejects a corrupt full read after bounded delivery', async () => {

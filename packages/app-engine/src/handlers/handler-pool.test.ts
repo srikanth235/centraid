@@ -7,7 +7,7 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
 
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { runHandler, HANDLER_WORKER_FILE } from './handler-runner.js';
 import {
   WorkerPool,
@@ -16,8 +16,6 @@ import {
   DEFAULT_WORKER_POOL_SIZE,
 } from './worker-pool.js';
 import { workerMaxConcurrentFromEnv } from './worker-admission.js';
-
-vi.setConfig({ testTimeout: 30_000 });
 
 let appDir: string;
 let pool: WorkerPool;

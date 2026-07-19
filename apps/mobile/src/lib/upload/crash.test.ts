@@ -10,7 +10,7 @@ import { tempDirSync } from '@centraid/test-kit/temp-dir';
 
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   decodeHeader,
@@ -35,8 +35,6 @@ import { bytesFileSource } from './file-source';
 import { NodeSqliteFileDriver } from './node-sqlite-driver';
 import { UploadQueueStore } from './store';
 import { UploadDrainer } from './uploader';
-
-vi.setConfig({ testTimeout: 30_000 });
 
 const crypto = webCryptoUploadCrypto();
 const fetchImpl = fakeBlobStoreFetch();
