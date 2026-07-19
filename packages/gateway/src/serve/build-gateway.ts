@@ -64,6 +64,7 @@ import {
 } from '@centraid/app-engine';
 import { KIT_DIR, bundledAppDir, listBundledAppTemplates } from '@centraid/blueprints';
 import * as automation from '@centraid/automation';
+import { isExpectedPrewarmSkip } from './app-prewarm-errors.js';
 import {
   runAutomation,
   runPreflight,
@@ -1289,6 +1290,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         );
       }
     } catch (error) {
+      // Test vaults and mid-install apps often lack index.html; that is an
+      // expected skip, not a prewarm regression. Keep real failures loud.
+      if (isExpectedPrewarmSkip(error)) return;
       logger.warn(
         `app assets: prewarm failed for ${appId}: ${error instanceof Error ? error.message : String(error)}`,
       );

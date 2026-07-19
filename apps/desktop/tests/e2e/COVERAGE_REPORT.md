@@ -77,7 +77,7 @@ marked **N/A** — neither has a surface in the current UI.
 
 ## CI integration
 
-The PR `ci` job ([.github/workflows/ci.yml](../../../../.github/workflows/ci.yml)) still
+The PR `ci` workflow ([.github/workflows/ci.yml](../../../../.github/workflows/ci.yml)) still
 runs vitest unit coverage only — the e2e suite builds + launches Electron, which is too
 heavy for every PR. It now runs **nightly** (and on-demand via `workflow_dispatch`) in
 [.github/workflows/e2e.yml](../../../../.github/workflows/e2e.yml): it installs the

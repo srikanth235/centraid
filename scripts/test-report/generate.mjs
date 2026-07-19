@@ -2,6 +2,12 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateMatrix } from './validate-matrix.mjs';
+import {
+  collectEnvGatedOwners,
+  extractUnhandledErrors,
+  summarizeCellStates,
+} from './report-signals.mjs';
+import { coverageScopesBelowFloor, writeSummarySidecars } from './summary-markdown.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const flags = parseFlags(process.argv.slice(2));
@@ -43,6 +49,9 @@ const cells = buildCells(matrix, evidence, validation.errors);
 const coverageRows = collectCoverage(coverage, floors);
 const vitestFiles = await collectVitestFiles(vitest);
 const laneResults = [...perf, ...scale];
+const unhandledErrors = extractUnhandledErrors(vitest);
+const cellStateCounts = summarizeCellStates(cells);
+const envGatedOwners = await collectEnvGatedOwners(matrix, { root, readFile });
 const summary = {
   passed: evidence.filter((item) => item.status === 'passed').length,
   failed: evidence.filter((item) => item.status === 'failed').length,
@@ -52,6 +61,12 @@ const summary = {
   stale:
     evidence.filter((item) => item.status === 'stale').length +
     validation.errors.filter((error) => error.includes('owner does not exist')).length,
+  unhandledErrors: unhandledErrors.length,
+  unhandledErrorMessages: unhandledErrors,
+  // Lane/cell honesty: failed = evidence ran and failed; missing = not run.
+  cellsFailed: cellStateCounts.cellsFailed,
+  cellsMissing: cellStateCounts.cellsMissing,
+  envGatedOwners,
 };
 
 const model = {
@@ -66,9 +81,21 @@ const model = {
   validationErrors: validation.errors,
 };
 
-await mkdir(path.dirname(outputPath), { recursive: true });
+const reportDir = path.dirname(outputPath);
+await mkdir(reportDir, { recursive: true });
 await writeFile(outputPath, render(model), 'utf8');
+const { jsonPath: summaryJsonPath } = await writeSummarySidecars(
+  reportDir,
+  {
+    generatedAt: model.generatedAt,
+    ...summary,
+    coverageBelowFloor: coverageScopesBelowFloor(coverageRows),
+    validationErrorCount: validation.errors.length,
+  },
+  { reportUrl: process.env.TEST_REPORT_PUBLIC_URL || undefined },
+);
 console.log(`test report: ${path.relative(root, outputPath)}`);
+console.log(`test report summary: ${path.relative(root, summaryJsonPath)}`);
 if (validation.errors.length) {
   for (const error of validation.errors) console.error(`matrix: ${error}`);
   process.exitCode = 1;
@@ -440,9 +467,26 @@ function render(model) {
 <title>Centraid test health</title><style>
 :root{color-scheme:dark;--ink:#ecf3ee;--muted:#8f9f98;--panel:#111713;--line:#273129;--bg:#090d0b;--green:#5bd697;--red:#ff766f;--amber:#e9b95c;--blue:#72a9ff;--grey:#4a544e;--sans:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 90% -10%,#173126 0,transparent 35%),var(--bg);color:var(--ink);font:14px/1.5 var(--sans)}main{width:min(1480px,calc(100% - 40px));margin:auto;padding:56px 0 80px}.eyebrow{color:var(--green);font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase}h1{font-size:clamp(34px,5vw,66px);letter-spacing:-.055em;line-height:.95;margin:14px 0 16px;max-width:780px}.lede{color:#afbbb5;font-size:16px;max-width:720px;margin:0}.hero{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:44px;align-items:end;margin-bottom:42px}.summary{display:grid;grid-template-columns:repeat(3,92px);gap:8px}.stat{background:#101612;border:1px solid var(--line);border-radius:4px;padding:15px 12px}.stat b{display:block;font-size:25px}.stat small,.muted,small{color:var(--muted)}.matrix-shell,.card{background:color-mix(in srgb,var(--panel) 94%,transparent);border:1px solid var(--line);border-radius:6px}.matrix-head{display:flex;justify-content:space-between;gap:24px;align-items:center;padding:18px 20px;border-bottom:1px solid var(--line)}.matrix-head h2,.card h2{font-size:15px;margin:0;letter-spacing:-.01em}.legend{display:flex;gap:14px;flex-wrap:wrap;color:var(--muted);font-size:12px}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}.dot.passed{background:var(--green)}.dot.failed{background:var(--red)}.dot.skipped{background:var(--amber)}.dot.missing{background:var(--grey)}.matrix-scroll{overflow:auto;padding:10px}table{border-collapse:separate;border-spacing:4px;width:100%}.heatmap th{font-size:11px;color:var(--muted);font-weight:650;text-align:left;min-width:68px}.heatmap thead th:not(:first-child){height:98px;vertical-align:bottom}.heatmap thead th span{display:block;writing-mode:vertical-rl;transform:rotate(180deg);height:74px}.heatmap thead th small{display:none}.heatmap tbody th{min-width:230px;color:#bdc9c3}.cell{width:100%;min-width:52px;height:40px;border:1px solid transparent;border-radius:3px;color:#07110c;display:flex;justify-content:space-between;align-items:center;padding:0 9px;font:700 13px var(--sans);cursor:pointer;transition:transform .16s,border-color .16s,filter .16s;animation:rise .34s both;animation-delay:calc(var(--row)*28ms)}.cell small{color:inherit;opacity:.65}.cell:hover,.cell:focus-visible{transform:translateY(-2px);filter:brightness(1.12);outline:none;border-color:#fff8}.cell.passed{background:var(--green)}.cell.failed{background:var(--red)}.cell.skipped{background:var(--amber)}.cell.missing,.cell.stale{background:#303a34;color:#aab6b0}.inspector{display:grid;grid-template-columns:220px minmax(0,1fr);gap:22px;padding:20px;border-top:1px solid var(--line);min-height:126px}.inspector .kicker{color:var(--muted);font-size:12px}.inspector h3{margin:4px 0 0;font-size:18px}.flow-list{display:grid;gap:8px}.flow{display:grid;grid-template-columns:minmax(150px,.45fr) 78px 84px 84px minmax(230px,1fr);gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid #202923}.flow:last-child{border-bottom:0}.tier{color:var(--blue);font-size:11px;text-transform:uppercase;letter-spacing:.08em}.result{font-size:11px;font-weight:750;text-transform:uppercase}.result.passed{color:var(--green)}.result.failed{color:var(--red)}.result.skipped{color:var(--amber)}.result.missing,.result.stale{color:var(--muted)}.path{color:#a8b7af;font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}.card{padding:20px;overflow:auto}.card h2{margin-bottom:14px}.data{border-spacing:0;width:100%}.data th,.data td{text-align:left;border-bottom:1px solid #202923;padding:8px 7px;font-size:12px}.data th{color:var(--muted);font-weight:650}.metric.passed{color:var(--green)}.metric.failed{color:var(--red)}.metric.missing{color:var(--muted)}.wide{grid-column:1/-1}.trend-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px}.trend{display:flex;justify-content:space-between;gap:12px;align-items:center;background:#0c110e;border:1px solid #202923;padding:12px}.trend strong,.trend small{display:block}.spark{width:120px;height:40px}.spark polyline{fill:none;stroke:var(--green);stroke-width:2;vector-effect:non-scaling-stroke}.empty{color:var(--muted);border:1px dashed #334038;padding:24px;margin:0}.foot{margin-top:20px;color:var(--muted);font-size:12px}@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}@media(max-width:900px){main{width:min(100% - 22px,1480px);padding-top:30px}.hero{grid-template-columns:1fr}.summary{grid-template-columns:repeat(3,1fr)}.grid{grid-template-columns:1fr}.wide{grid-column:auto}.inspector{grid-template-columns:1fr}.flow{grid-template-columns:1fr}.matrix-head{align-items:flex-start;flex-direction:column}}@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style></head><body><main>
-<header class="hero"><div><div class="eyebrow">Centraid · test intelligence</div><h1>Product health, with the gaps left visible.</h1><p class="lede">One view across per-PR correctness and nightly journey, performance, and scale evidence. Grey is intentional: missing proof should never disappear.</p></div><div class="summary"><div class="stat"><b>${model.summary.passed}</b><small>evidence passed</small></div><div class="stat"><b>${model.summary.failed}</b><small>evidence failed</small></div><div class="stat"><b>${model.summary.skippedTests}</b><small>tests skipped</small></div><div class="stat"><b>${model.summary.envGated}</b><small>environment-gated</small></div><div class="stat"><b>${model.summary.skipped}</b><small>owners skipped</small></div><div class="stat"><b>${model.summary.stale}</b><small>stale owners</small></div></div></header>
-<section class="matrix-shell"><div class="matrix-head"><h2>Surface × quality dimension</h2><div class="legend"><span><i class="dot passed"></i>passed</span><span><i class="dot failed"></i>failed</span><span><i class="dot skipped"></i>skipped</span><span><i class="dot missing"></i>missing / not run</span></div></div><div class="matrix-scroll"><table class="heatmap"><thead><tr><th>Product surface</th>${dimensionHeaders}</tr></thead><tbody>${rows}</tbody></table></div><div class="inspector" aria-live="polite"><div><span class="kicker" id="inspector-kicker">Select a matrix cell</span><h3 id="inspector-title">Evidence inspector</h3></div><div class="flow-list" id="inspector-flows"><p class="muted">Choose any cell to see its canonical flow owner, tier, lane, and latest result.</p></div></div></section>
-<section class="grid"><article class="card"><h2>Coverage vs ratchet floor</h2><table class="data"><thead><tr><th>Scope</th><th>Lines</th><th>Branches</th></tr></thead><tbody>${coverageRows}</tbody></table></article><article class="card"><h2>Per-package wall clock</h2><table class="data"><thead><tr><th>Package</th><th>Runtime</th></tr></thead><tbody>${runtimeRows}</tbody></table></article><article class="card wide"><h2>Slowest 10 test files · bloat watch</h2><table class="data"><thead><tr><th>#</th><th>File</th><th>Runtime</th><th>Skipped</th><th>Env-gated</th></tr></thead><tbody>${slowRows}</tbody></table></article><article class="card wide"><h2>Nightly performance and scale trends</h2><div class="trend-grid">${trends}</div></article></section>
+<header class="hero"><div><div class="eyebrow">Centraid · test intelligence</div><h1>Product health, with the gaps left visible.</h1><p class="lede">One view across per-PR correctness and nightly journey, performance, and scale evidence. Grey is intentional: missing proof should never disappear. Red cells failed with evidence; grey cells were not run.</p>${
+    model.summary.unhandledErrors
+      ? `<p class="lede" style="color:var(--red)">Unhandled Vitest errors: ${model.summary.unhandledErrors} — ${escapeHtml(
+          (model.summary.unhandledErrorMessages ?? []).join(' · ').slice(0, 400),
+        )}</p>`
+      : ''
+  }</div><div class="summary"><div class="stat"><b>${model.summary.passed}</b><small>evidence passed</small></div><div class="stat"><b>${model.summary.failed}</b><small>evidence failed</small></div><div class="stat"><b>${model.summary.cellsFailed ?? 0}</b><small>cells failed</small></div><div class="stat"><b>${model.summary.cellsMissing ?? 0}</b><small>cells not run</small></div><div class="stat"><b>${model.summary.unhandledErrors ?? 0}</b><small>unhandled errors</small></div><div class="stat"><b>${model.summary.skippedTests}</b><small>tests skipped</small></div><div class="stat"><b>${model.summary.envGated}</b><small>environment-gated</small></div><div class="stat"><b>${model.summary.stale}</b><small>stale owners</small></div></div></header>
+<section class="matrix-shell"><div class="matrix-head"><h2>Surface × quality dimension</h2><div class="legend"><span><i class="dot passed"></i>passed</span><span><i class="dot failed"></i>failed (ran)</span><span><i class="dot skipped"></i>skipped</span><span><i class="dot missing"></i>missing / not run</span></div></div><div class="matrix-scroll"><table class="heatmap"><thead><tr><th>Product surface</th>${dimensionHeaders}</tr></thead><tbody>${rows}</tbody></table></div><div class="inspector" aria-live="polite"><div><span class="kicker" id="inspector-kicker">Select a matrix cell</span><h3 id="inspector-title">Evidence inspector</h3></div><div class="flow-list" id="inspector-flows"><p class="muted">Choose any cell to see its canonical flow owner, tier, lane, and latest result.</p></div></div></section>
+<section class="grid"><article class="card"><h2>Coverage vs ratchet floor</h2><table class="data"><thead><tr><th>Scope</th><th>Lines</th><th>Branches</th></tr></thead><tbody>${coverageRows}</tbody></table></article><article class="card"><h2>Per-package wall clock</h2><table class="data"><thead><tr><th>Package</th><th>Runtime</th></tr></thead><tbody>${runtimeRows}</tbody></table></article><article class="card wide"><h2>Slowest 10 test files · bloat watch</h2><table class="data"><thead><tr><th>#</th><th>File</th><th>Runtime</th><th>Skipped</th><th>Env-gated</th></tr></thead><tbody>${slowRows}</tbody></table></article><article class="card wide"><h2>Environment-gated matrix owners</h2>${
+    (model.summary.envGatedOwners ?? []).length
+      ? `<table class="data"><thead><tr><th>Cell</th><th>Owner</th><th>Env</th><th>Kind</th></tr></thead><tbody>${(
+          model.summary.envGatedOwners ?? []
+        )
+          .map(
+            (row) =>
+              `<tr><td>${escapeHtml(row.cellId)}</td><td class="path">${escapeHtml(row.owner)}</td><td>${escapeHtml(row.env)}</td><td>${escapeHtml(row.kind)}</td></tr>`,
+          )
+          .join('')}</tbody></table>`
+      : '<p class="empty">No solid/partial matrix owners are whole-file env-gated off default CI.</p>'
+  }</article><article class="card wide"><h2>Nightly performance and scale trends</h2><div class="trend-grid">${trends}</div></article></section>
 <p class="foot">Generated ${escapeHtml(model.generatedAt)} · ${model.matrix.surfaces.length} surfaces · ${model.matrix.dimensions.length} dimensions · ${model.matrix.flows.length} canonical flows</p></main>
 <script type="application/json" id="report-data">${data}</script><script>
 const report=JSON.parse(document.querySelector('#report-data').textContent);const byId=new Map(report.cells.map(cell=>[cell.id,cell]));const kicker=document.querySelector('#inspector-kicker');const title=document.querySelector('#inspector-title');const flows=document.querySelector('#inspector-flows');for(const button of document.querySelectorAll('[data-cell]'))button.addEventListener('click',()=>{const cell=byId.get(button.dataset.cell);kicker.textContent=cell.dimensionLabel+' · '+cell.lane+' · '+cell.state;title.textContent=cell.surfaceLabel;flows.innerHTML=cell.owners.length?cell.owners.map(owner=>'<div class="flow"><strong>'+safe(owner.name)+'</strong><span class="tier">'+safe(owner.tier)+'</span><span class="result '+safe(owner.latest.status)+'">'+safe(owner.latest.status)+'</span><span>'+duration(owner.latest.duration)+'</span><span class="path">'+safe(owner.owner)+'</span></div>').join(''):'<p class="muted">No evidence owner is expected for this cell. Catalog assessment: '+safe(cell.assessment)+'.</p>';for(const current of document.querySelectorAll('[data-cell][aria-pressed]'))current.removeAttribute('aria-pressed');button.setAttribute('aria-pressed','true')});function duration(value){if(!Number.isFinite(value))return '—';return value>=1000?(value/1000).toFixed(2)+'s':Math.round(value)+'ms'}function safe(value){const span=document.createElement('span');span.textContent=value;return span.innerHTML}

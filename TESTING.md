@@ -88,6 +88,19 @@ The repo-wide line floor remains 30%. `bun run test` prints the active floors
 after package tests so the local loop never hides the CI contract;
 `bun run coverage` measures and enforces them. Floors move only upward.
 
+### agent-runtime coverage strategy
+
+`packages/agent-runtime` intentionally sits on a **low line floor (~27%)** and a
+**high branch floor (~84%)**. Most line mass is the Codex/Claude backend
+adapters and CLI spawn paths that need a real binary or long integration; those
+are covered by contract/unit tests on pure surfaces (host-tools, multimodal,
+catalog, safe stdin write) rather than a line-percentage campaign to 70%+.
+
+Do **not** raise the agent-runtime line floor without a dedicated coverage
+campaign. Do **not** lower any engine floor in this table without an explicit
+issue + receipt. Prefer new pure modules (like `safe-stdin-write`) with unit
+tests over expanding spawn-heavy turn drivers for coverage alone.
+
 ## Named invariant contracts
 
 These suites encode product law and are cataloged by name. The matrix validator
@@ -139,14 +152,30 @@ test-kit's stable facade.
 
 | Command / workflow | Contents |
 | --- | --- |
+| `bun run check:pr` | **Before every push:** format + oxlint + turbo lint + typecheck + lint:types + lint:css + test:matrix (`ci.yml` **static** job). Vitest alone is not a substitute. |
 | `bun run test` | package unit + integration + contract tests; prints floors |
-| `bun run coverage` | unified per-PR suite, v8 report, floor enforcement, Vitest JSON |
-| `bun run test:matrix` | catalog/owner/contract validation |
+| `bun run coverage` | unified per-PR suite, v8 report, floor enforcement, Vitest JSON (`ci.yml` **verify** job) |
+| `bun run test:matrix` | catalog/owner/contract validation (also inside `check:pr`) |
 | `bun run test:perf` | six generous hot-path budget tests; nightly only |
 | `bun run test:scale` | five deterministic volume tests; nightly only |
-| `bun run test:report` | build `dist/test-report/index.html` from available evidence |
-| `.github/workflows/e2e.yml` | desktop, web, mobile, perf, scale, full report |
-| `.github/workflows/pairing-relay-e2e.yml` | three independent pairing journey jobs + merged report |
+| `bun run test:report` | build `dist/test-report/index.html` (+ `summary.json` / `summary.md`) from available evidence |
+| `.github/workflows/ci.yml` | parallel **static** + **verify**, **publish-report** (Pages + sticky PR comment), required **check** aggregator; Bun/Turbo/Cargo caches |
+| `.github/workflows/e2e.yml` | desktop, web, mobile, three pairing journeys, perf, scale, full report → **publish-nightly-report** on Pages |
+
+### Test-health report (one hop)
+
+Per-PR and nightly CI publish a public HTML report on GitHub Pages and
+surface a short markdown summary on the job **Summary** tab and (for PRs) a
+sticky comment:
+
+| Slot | URL |
+| --- | --- |
+| This PR | `https://srikanth235.github.io/centraid/test-report/pr/<n>/` |
+| main | `https://srikanth235.github.io/centraid/test-report/main/` |
+| Nightly | `https://srikanth235.github.io/centraid/test-report/nightly/` |
+| Landing | `https://srikanth235.github.io/centraid/` |
+
+Artifacts remain available as backup; prefer the Pages link or the PR comment.
 
 Performance and scale budgets use generous regression multipliers. A noisy
 budget is fixed or removed; it is never promoted to the per-PR loop. Lane

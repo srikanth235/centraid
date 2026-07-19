@@ -1,15 +1,14 @@
 name: e2e
 
-# Desktop Playwright suite. It builds every package and launches the REAL
-# Electron app under a virtual framebuffer, so it's far heavier than the unit
-# `ci` job — we run it nightly and on-demand rather than on every PR.
+# Nightly product lanes: desktop/web Playwright, mobile agent-e2e, pairing
+# journeys (loopback + cross-network relay), plus the unified test-health
+# report. Heavier than per-PR `ci` — schedule and workflow_dispatch only.
 on:
   schedule:
     - cron: '0 6 * * *' # 06:00 UTC nightly
   workflow_dispatch:
 
 permissions:
-  actions: read
   contents: read
 
 jobs:
@@ -187,8 +186,93 @@ jobs:
             tests/agent-e2e-mobile/runs/
           retention-days: 7
 
+  # Pairing journeys (issue #289 / matrix tunnel-pairing). Independent jobs so
+  # one failure still leaves evidence from the others for the health report.
+  pairing-lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '22'
+      - run: bun install --frozen-lockfile
+      - run: bunx turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
+      - run: node scripts/test-report/prepare.mjs
+      - run: node tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-evidence-pairing-lifecycle
+          path: |
+            artifacts/
+            tests/agent-e2e-pairing/runs/
+          retention-days: 7
+
+  pairing-ticket-hygiene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '22'
+      - run: bun install --frozen-lockfile
+      - run: bunx turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
+      - run: node scripts/test-report/prepare.mjs
+      - run: node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-evidence-pairing-ticket-hygiene
+          path: |
+            artifacts/
+            tests/agent-e2e-pairing/runs/
+          retention-days: 7
+
+  pairing-cross-network-relay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '22'
+      - run: bun install --frozen-lockfile
+      - run: docker info
+      - run: bunx turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
+      - run: node scripts/test-report/prepare.mjs
+      # Production must never silently fall back to the JS byte pump.
+      - run: test -f packages/tunnel/native/centraid-tunnel-native.linux-x64.node
+      - run: node tests/agent-e2e-pairing/flows/cross-network-relay.mjs
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-evidence-pairing-cross-network-relay
+          path: |
+            artifacts/
+            tests/agent-e2e-pairing/runs/
+          retention-days: 7
+
   test-health-report:
-    needs: [desktop-e2e, web-e2e, mobile-e2e]
+    needs:
+      [
+        desktop-e2e,
+        web-e2e,
+        mobile-e2e,
+        pairing-lifecycle,
+        pairing-ticket-hygiene,
+        pairing-cross-network-relay,
+      ]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -201,26 +285,13 @@ jobs:
         with:
           bun-version: 1.3.13
       - run: bun install --frozen-lockfile
+      # Same-run evidence only (desktop/web/mobile/pairing). Pairing no longer
+      # pulls artifacts from a separate scheduled workflow run.
       - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
         with:
           pattern: nightly-evidence-*
           path: artifacts
           merge-multiple: true
-      - name: Merge the latest completed pairing/relay evidence
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          pairing_run_id="$(gh run list --workflow pairing-relay-e2e.yml --status completed --limit 1 --json databaseId --jq '.[0].databaseId')"
-          if [ -z "$pairing_run_id" ]; then
-            echo "::warning::No completed pairing/relay run is available; the report will keep that evidence grey."
-            exit 0
-          fi
-          mkdir -p /tmp/centraid-pairing-evidence
-          if ! gh run download "$pairing_run_id" --name nightly-evidence-pairing --dir /tmp/centraid-pairing-evidence; then
-            echo "::warning::The latest pairing/relay run has no evidence artifact; the report will keep that evidence grey."
-            exit 0
-          fi
-          cp -R /tmp/centraid-pairing-evidence/artifacts/. artifacts/
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
@@ -248,6 +319,92 @@ jobs:
           name: nightly-test-health-report
           path: dist/test-report/
           retention-days: 30
+      - name: Write Job Summary
+        if: always()
+        env:
+          TEST_REPORT_PUBLIC_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/test-report/nightly/
+        run: node scripts/test-report/write-job-summary.mjs --report-url "$TEST_REPORT_PUBLIC_URL" --title "Nightly test health"
       - name: Preserve lane failures after publishing the report
         if: steps.coverage.outcome == 'failure' || steps.perf.outcome == 'failure' || steps.scale.outcome == 'failure'
         run: exit 1
+
+  # Public nightly HTML (same Pages tree as per-PR reports).
+  publish-nightly-report:
+    needs: [test-health-report]
+    if: always() && needs.test-health-report.result != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: github-pages-test-report
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.slot.outputs.url }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Download nightly report
+        id: download_report
+        continue-on-error: true
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: nightly-test-health-report
+          path: dist/test-report
+      - name: Require report HTML
+        id: has_report
+        run: |
+          if [ -f dist/test-report/index.html ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::nightly-test-health-report missing; skip Pages publish"
+          fi
+      - name: Restore previous Pages tree (gh-pages)
+        if: steps.has_report.outputs.ok == 'true'
+        continue-on-error: true
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: gh-pages
+          path: site
+      - name: Seed site if gh-pages missing
+        if: steps.has_report.outputs.ok == 'true'
+        run: |
+          mkdir -p site
+          rm -rf site/.git
+      - name: Resolve report slot
+        if: steps.has_report.outputs.ok == 'true'
+        id: slot
+        run: |
+          SLOT="nightly"
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
+          echo "slot=${SLOT}" >> "$GITHUB_OUTPUT"
+          echo "url=https://${OWNER}.github.io/${REPO}/test-report/${SLOT}/" >> "$GITHUB_OUTPUT"
+      - name: Merge report into site tree
+        if: steps.has_report.outputs.ok == 'true'
+        run: |
+          node scripts/test-report/prepare-pages-site.mjs \
+            --report dist/test-report \
+            --site site \
+            --slot "${{ steps.slot.outputs.slot }}"
+      - name: Persist site on gh-pages
+        if: steps.has_report.outputs.ok == 'true'
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          force_orphan: false
+          enable_jekyll: false
+          user_name: github-actions[bot]
+          user_email: 41898282+github-actions[bot]@users.noreply.github.com
+      - name: Upload Pages artifact
+        if: steps.has_report.outputs.ok == 'true'
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
+        with:
+          path: site
+      - name: Deploy to GitHub Pages
+        if: steps.has_report.outputs.ok == 'true'
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
