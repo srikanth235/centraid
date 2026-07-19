@@ -1,13 +1,13 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { WorktreeStore } from './worktree-store.js';
 import { exportToRemote, importFromRemote } from './remote.js';
 import { run } from './git.js';
 
 async function makeTempRoot(): Promise<string> {
-  return fs.mkdtemp(path.join(os.tmpdir(), 'apps-store-remote-'));
+  return tempDir('apps-store-remote-');
 }
 
 async function seedAndPublish(

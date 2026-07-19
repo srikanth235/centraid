@@ -1,6 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { afterEach, expect, test } from 'vitest';
 import { openVaultDb, type VaultDb } from './db.js';
 import { createGateway } from './gateway/gateway.js';
@@ -23,15 +21,8 @@ const cleanups: (() => void)[] = [];
 afterEach(() => {
   while (cleanups.length > 0) cleanups.pop()?.();
 });
-
-function tempDir(): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'vault-host-'));
-  cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 test('ensureVaultBootstrapped: first boot creates, second boot recovers the same identity', () => {
-  const dir = tempDir();
+  const dir = tempDirSync();
   const first = openVaultDb({ dir });
   const boot1 = ensureVaultBootstrapped(first, { ownerName: 'Priya' });
   expect(boot1.fresh).toBe(true);

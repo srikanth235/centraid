@@ -1,6 +1,6 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 import { readBackupPolicy } from '../backup-policy.js';
@@ -30,7 +30,7 @@ interface FallbackRun {
 function fallbackRestartHarness(prefix: string): {
   restart(): Promise<FallbackRun>;
 } {
-  const dir = mkdtempSync(path.join(tmpdir(), prefix));
+  const dir = tempDirSync(prefix);
   let current: FallbackRun | null = null;
   let initialized = false;
   const closeCurrent = async (): Promise<void> => {
@@ -131,7 +131,7 @@ test('restart commit truncates a non-durable tail before adopting unknown-size i
 });
 
 test('strict acknowledgment returns a durable pending receipt while provider is down, then transitions', async () => {
-  const dir = mkdtempSync(path.join(tmpdir(), 'blob-strict-pending-'));
+  const dir = tempDirSync('blob-strict-pending-');
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
   const db: VaultDb = openVaultDb({ dir });
   cleanups.push(() => db.close());

@@ -1,7 +1,7 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, expect, test } from 'vitest';
 import crypto from 'node:crypto';
 import http from 'node:http';
-import os from 'node:os';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import type { AddressInfo } from 'node:net';
@@ -32,7 +32,7 @@ async function fixture(options: { capability?: 'poster' | 'transcript' } = {}): 
   searchContentIds: (query: string) => string[];
 }> {
   const capability = options.capability ?? 'poster';
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `device-work-${crypto.randomUUID()}-`));
+  const dir = await tempDir(`device-work-${crypto.randomUUID()}-`);
   cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
   const plane = openVaultPlane({
     dir: path.join(dir, 'vault'),

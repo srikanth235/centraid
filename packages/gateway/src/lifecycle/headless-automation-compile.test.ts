@@ -1,6 +1,6 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import {
   ConversationStore,
@@ -20,7 +20,7 @@ afterEach(async () => {
 });
 
 async function harness(runner: ConversationRunner) {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-headless-compile-'));
+  const dir = await tempDir('centraid-headless-compile-');
   dirs.push(dir);
   const journalDbFile = path.join(dir, 'journal.db');
   const onSuccess = vi.fn().mockResolvedValue(undefined);

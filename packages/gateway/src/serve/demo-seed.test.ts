@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 // Scenario seeds end-to-end (issue #290 phase 1): every blueprint seed.js
 // runs in the real handler worker against a real vault plane through the
 // demo bridge — the same path the demo route drives — then purges clean.
@@ -6,10 +7,8 @@
 // first click.
 
 import { afterEach, expect, test } from 'vitest';
-import { existsSync, promises as fs } from 'node:fs';
-import os from 'node:os';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { runHandler } from '@centraid/app-engine';
 import { openVaultPlane, type VaultPlane } from './vault-plane.js';
@@ -20,13 +19,6 @@ const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.();
 });
-
-async function tempDir(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `demo-seed-${crypto.randomUUID()}-`));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 function openPlane(dir: string): VaultPlane {
   const plane = openVaultPlane({ dir, logger: silentLogger, ownerName: 'Priya' });
   cleanups.push(() => plane.stop());

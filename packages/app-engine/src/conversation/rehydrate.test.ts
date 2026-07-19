@@ -1,11 +1,11 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // Lazy read-only rehydration of archived conversations (issue #438 wave 3).
 // Real journal.db on a temp file + an in-memory content-addressed blob sink
 // standing in for the vault CAS door, shared by the archival engine (writer)
 // and the history store's `archiveBlobReader` (reader). No SQL is mocked.
 
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -40,7 +40,7 @@ class MemoryBlobSink implements BlobSink {
 }
 
 function freshVaultDir(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'centraid-rehydrate-'));
+  const dir = tempDirSync('centraid-rehydrate-');
   mkdirSync(join(dir, 'apps', APP), { recursive: true });
   return dir;
 }

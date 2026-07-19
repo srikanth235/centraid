@@ -1,6 +1,5 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import type { RunnerModel } from '@centraid/app-engine';
 import type { HostTool } from '../host-tools.ts';
@@ -9,7 +8,7 @@ import { CatalogWarmer, deriveStatus } from './catalog-warmer.ts';
 
 let counter = 0;
 async function tmpCatalogPath(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-warmer-'));
+  const dir = await tempDir('centraid-warmer-');
   return path.join(dir, `model-catalog-${counter++}.json`);
 }
 

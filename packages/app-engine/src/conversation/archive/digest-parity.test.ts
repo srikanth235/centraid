@@ -1,3 +1,4 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // Digest parity (issue #438 decision 5): the numbers Insights reports must be
 // identical before archive (all live run_summary rows) and after archive+prune
 // (live rows + conversation_digest rollups), driven through the REAL
@@ -6,8 +7,6 @@
 // byModel.
 
 import { createHash } from 'node:crypto';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
@@ -88,7 +87,7 @@ function seedFinishedTurn(
 
 describe('digest parity with pre-archive rollups', () => {
   it('kpis / byAutomation / byModel are identical before archive and after prune', () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'centraid-digest-parity-'));
+    const dir = tempDirSync('centraid-digest-parity-');
     const dbPath = path.join(dir, 'journal.db');
     const journal = openJournalDb(dbPath);
     const blobSink = new MemoryBlobSink();

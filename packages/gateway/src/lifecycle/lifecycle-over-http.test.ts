@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Gateway-owned app lifecycle over HTTP (issue #141, Phase 2). The
  * deterministic builder — scaffold / clone / update-meta / automation
@@ -15,7 +16,6 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import { serve, type GatewayServeHandle } from '../serve/serve.ts';
 import type { GatewayPaths } from '../paths.ts';
@@ -52,7 +52,7 @@ async function listSessions(): Promise<string[]> {
 }
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `gw-lifecycle-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`gw-lifecycle-${crypto.randomUUID()}-`);
   handle = await serve({
     paths: pathsUnder(dataDir),
   });

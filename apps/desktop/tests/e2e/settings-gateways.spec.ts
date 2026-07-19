@@ -79,6 +79,32 @@ test('12.5 — appearance choices persist across a reload', async () => {
   }
 });
 
+test('12.6 — an explicit dark theme survives a full Electron restart', async () => {
+  const launched = await launchApp(env);
+  try {
+    await waitForHome(launched.page);
+    await gotoNav(launched.page, 'Settings');
+    await launched.page.locator('.cd-settings-page').first().waitFor({ state: 'visible' });
+    await launched.page.getByRole('radio', { name: /dark/i }).first().click();
+    await expect
+      .poll(() => launched.page.evaluate(() => document.documentElement.dataset.theme))
+      .toBe('dark');
+    await launched.app.close();
+
+    const restarted = await launchApp(env);
+    try {
+      await waitForHome(restarted.page);
+      await expect
+        .poll(() => restarted.page.evaluate(() => document.documentElement.dataset.theme))
+        .toBe('dark');
+    } finally {
+      await restarted.app.close();
+    }
+  } finally {
+    await launched.app.close().catch(() => undefined);
+  }
+});
+
 test('12.2 — "Match system" resolves the OS scheme to a theme and persists it', async () => {
   const { app, page } = await launchApp(env);
   try {

@@ -1,6 +1,6 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, describe, expect, it } from 'vitest';
-import { existsSync, promises as fs, readFileSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import type { RuntimeLogger } from '@centraid/app-engine';
@@ -22,13 +22,6 @@ const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.();
 });
-
-async function tempDir(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `gateway-lease-${crypto.randomUUID()}-`));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 function writeForeignLease(dir: string, patch: Partial<LeaseRecord> = {}): LeaseRecord {
   const record: LeaseRecord = {
     instanceId: crypto.randomUUID(),

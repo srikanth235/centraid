@@ -1,0 +1,8 @@
+{
+  "extends": "@centraid/tsconfig/base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["perf/**/*.ts", "scale/**/*.ts", "quality/**/*.ts"]
+}

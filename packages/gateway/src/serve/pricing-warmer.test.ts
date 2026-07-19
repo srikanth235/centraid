@@ -1,6 +1,6 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { costForUsage, setPricingCatalog } from '@centraid/app-engine';
 import { PricingWarmer } from './pricing-warmer.js';
@@ -23,7 +23,7 @@ function okResponse(body: string): Response {
 }
 
 function freshCacheFile(): string {
-  return join(mkdtempSync(join(tmpdir(), 'centraid-pricing-')), 'model-pricing.json');
+  return join(tempDirSync('centraid-pricing-'), 'model-pricing.json');
 }
 
 afterEach(() => {

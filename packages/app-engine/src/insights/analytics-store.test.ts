@@ -1,6 +1,5 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { describe, expect, it } from 'vitest';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { makeJournalDbProvider } from '../stores/gateway-db.js';
@@ -13,7 +12,7 @@ import { AnalyticsStore } from './analytics-store.js';
  * assert what the read-only lens derives. There is no write path to test.
  */
 function setup(): { runs: ConversationStore; analytics: AnalyticsStore } {
-  const dir = mkdtempSync(join(tmpdir(), 'centraid-analytics-'));
+  const dir = tempDirSync('centraid-analytics-');
   const ledger = makeJournalDbProvider(join(dir, 'journal.db'));
   return { runs: new ConversationStore(ledger), analytics: new AnalyticsStore(ledger) };
 }

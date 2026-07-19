@@ -1,8 +1,7 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, expect, test, vi } from 'vitest';
 import { existsSync, promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import http from 'node:http';
 import { openVaultRegistry, VaultRegistryError, type VaultRegistry } from './vault-registry.js';
 import { runWithVaultContext } from './vault-context.js';
@@ -14,13 +13,6 @@ const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.();
 });
-
-async function tempDir(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `vault-registry-${crypto.randomUUID()}-`));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 function openRegistry(rootDir: string): VaultRegistry {
   const registry = openVaultRegistry({ rootDir, logger: silentLogger, ownerName: 'Priya' });
   cleanups.push(() => registry.stop());

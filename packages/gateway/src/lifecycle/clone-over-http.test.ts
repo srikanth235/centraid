@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Template clone over HTTP (issue #141). The desktop no longer writes a
  * cloned template into a local worktree — it reads the bundled catalog,
@@ -13,7 +14,6 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import { cloneTemplateFiles } from '@centraid/blueprints';
 import { provisionPendingWebhooksInFiles } from '@centraid/automation';
@@ -82,7 +82,7 @@ function templateFiles(): { path: string; content: string }[] {
 }
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `gw-clone-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`gw-clone-${crypto.randomUUID()}-`);
   handle = await serve({
     paths: pathsUnder(dataDir),
   });

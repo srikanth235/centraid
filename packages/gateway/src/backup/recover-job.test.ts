@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * The daemon-owned recovery JOB model (issue #439 R1 wave 4). Drives the job
  * lifecycle with a DETERMINISTIC stand-in for `recover()` (injected `recoverFn`)
@@ -12,9 +13,7 @@
 
 import { afterEach, expect, test } from 'vitest';
 import { existsSync, promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import {
   RecoverJobConflictError,
   RecoverJobRunner,
@@ -29,13 +28,6 @@ const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.();
 });
-
-async function tempDir(prefix: string): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `${prefix}-${crypto.randomUUID()}-`));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 function makeReport(over: Partial<RecoverReport> = {}): RecoverReport {
   return {
     vaultId: 'vault-1',

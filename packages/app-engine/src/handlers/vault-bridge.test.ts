@@ -1,6 +1,6 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { Registry } from '../registry/registry.js';
 import { Dispatcher } from './dispatcher.js';
@@ -69,8 +69,8 @@ describe('ctx.vault worker channel', () => {
   let registry: Registry;
 
   beforeAll(async () => {
-    workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-vault-bridge-'));
-    codeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-vault-bridge-code-'));
+    workDir = await tempDir('centraid-vault-bridge-');
+    codeRoot = await tempDir('centraid-vault-bridge-code-');
     await makeVaultApp(codeRoot, 'planner');
     registry = new Registry(workDir);
     await registry.load();

@@ -1,6 +1,5 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { describe, expect, it } from 'vitest';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { makeJournalDbProvider } from '../stores/gateway-db.js';
@@ -13,7 +12,7 @@ import { InsightsStore, INSIGHTS_QUOTA_TOKENS } from './insights-store.js';
  * owning conversation, the dominant model from the step items).
  */
 function setup(): { runs: ConversationStore; insights: InsightsStore } {
-  const dir = mkdtempSync(join(tmpdir(), 'centraid-insights-'));
+  const dir = tempDirSync('centraid-insights-');
   const ledger = makeJournalDbProvider(join(dir, 'journal.db'));
   return {
     runs: new ConversationStore(ledger),
@@ -253,7 +252,7 @@ function setupWithDb(): {
   insights: InsightsStore;
   db: ReturnType<ReturnType<typeof makeJournalDbProvider>>;
 } {
-  const dir = mkdtempSync(join(tmpdir(), 'centraid-insights-digest-'));
+  const dir = tempDirSync('centraid-insights-digest-');
   const ledger = makeJournalDbProvider(join(dir, 'journal.db'));
   return {
     runs: new ConversationStore(ledger),

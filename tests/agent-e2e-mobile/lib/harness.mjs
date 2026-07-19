@@ -18,19 +18,14 @@
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { defaultRunId, writeFlowVerdict } from '../../agent-e2e-shared/harness.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const RUNS_DIR = path.join(__dirname, '..', 'runs');
 
 export const APP_ID = 'com.centraid.mobile';
-
-function defaultRunId() {
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace(/Z$/, '');
-  return `${stamp}-${crypto.randomBytes(3).toString('hex')}`;
-}
 
 function spawnText(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
@@ -217,38 +212,6 @@ async function runMaestroChunk(yaml, { state, label }) {
   });
 }
 
-function renderVerdict({ slug, pass, error, notes, result, elapsedMs, state }) {
-  const lines = [
-    `# ${slug}`,
-    '',
-    `**${pass ? 'PASS' : 'FAIL'}** — ${elapsedMs}ms`,
-    '',
-    `- run dir: \`${state.runDir}\``,
-    `- platform: \`${state.platform}\``,
-    `- udid: \`${state.udid}\``,
-    `- app: \`${state.appId}\``,
-    '',
-  ];
-  if (error) {
-    lines.push('## Error', '```', error.stack ?? String(error), '```', '');
-    lines.push(
-      '## Debug',
-      '',
-      'Maestro keeps its own debug artifacts (per-step screenshots + ai-report.html) under `~/.maestro/tests/<timestamp>/`. Sort by mtime — the latest one matches this run.',
-      '',
-    );
-  }
-  if (notes.length) {
-    lines.push('## Notes');
-    for (const n of notes) lines.push(`- ${n}`);
-    lines.push('');
-  }
-  if (result?.notes) {
-    lines.push('## Result', String(result.notes), '');
-  }
-  return lines.join('\n');
-}
-
 /**
  * Run a mobile agent-e2e flow end-to-end: discover sim → setup run dir →
  * exec → verdict.
@@ -272,6 +235,7 @@ function renderVerdict({ slug, pass, error, notes, result, elapsedMs, state }) {
  *   ctx.state               read-only snapshot of {runId, runDir, udid, appId, ...}
  *   ctx.run(yaml, label?)   execute a YAML chunk; screenshots land under runs/.../screenshots/
  *   ctx.restart()           stopApp + launchApp without clearing state — mirrors desktop's ctx.restart()
+ *   ctx.configureGateway()  clear state, then save the journey's gateway through the real Settings UI
  *   ctx.note(msg)           record an observation; surfaces in verdict.md
  *
  * Failure model: throw OR return { pass: false, ... }. Either writes a FAIL
@@ -312,6 +276,46 @@ export async function runFlow(slug, fn) {
     await runMaestroChunk(yaml, { state, label });
   };
 
+  ctx.configureGateway = async (
+    gatewayUrl = process.env.MAESTRO_GATEWAY_URL,
+    gatewayToken = process.env.MAESTRO_GATEWAY_TOKEN ?? '',
+  ) => {
+    if (!gatewayUrl) {
+      throw new Error('MAESTRO_GATEWAY_URL is required for this mobile journey');
+    }
+    const tokenSteps = gatewayToken
+      ? `- tapOn:
+    text: "paste token here"
+- inputText: ${JSON.stringify(gatewayToken)}
+`
+      : '';
+    await ctx.run(
+      `appId: ${APP_ID}
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      text: "Pair with your desktop"
+    timeout: 30000
+- tapOn: "Open Settings"
+- extendedWaitUntil:
+    visible: "Settings"
+    timeout: 10000
+- tapOn: "Advanced (developer)"
+- tapOn:
+    text: "http://127.0.0.1:18789"
+- inputText: ${JSON.stringify(gatewayUrl)}
+${tokenSteps}- tapOn: "Save"
+- extendedWaitUntil:
+    visible: "Apps"
+    timeout: 30000
+`,
+      'configure-gateway',
+    );
+    ctx.note(`configured the journey gateway at ${gatewayUrl}`);
+  };
+
   // Mirror desktop's ctx.restart(): kill the app process so AsyncStorage
   // flushes, then relaunch without clearing state. The 300ms delay before
   // stopApp gives RN's AsyncStorage time to enter its persistence pipeline
@@ -341,13 +345,20 @@ export async function runFlow(slug, fn) {
   const elapsedMs = Date.now() - t0;
   const pass = !error && result?.pass !== false;
 
-  await fs.writeFile(
-    path.join(state.runDir, 'verdict.md'),
-    renderVerdict({ slug, pass, error, notes, result, elapsedMs, state }),
-  );
+  await writeFlowVerdict({
+    repoRoot: REPO_ROOT,
+    slug,
+    runDir: state.runDir,
+    elapsedMs,
+    error,
+    notes,
+    result,
+    metadata: { platform: state.platform, udid: state.udid, app: state.appId },
+    debug:
+      'Maestro keeps per-step screenshots and ai-report.html under `~/.maestro/tests/<timestamp>/`; the newest directory belongs to this run.',
+    owner: `tests/agent-e2e-mobile/flows/${slug}.mjs`,
+  });
 
-  console.log(`[runFlow] ${slug} ${pass ? 'PASS' : 'FAIL'} in ${elapsedMs}ms`);
-  console.log(`  verdict : ${path.relative(REPO_ROOT, path.join(state.runDir, 'verdict.md'))}`);
   if (!pass) {
     if (error) console.error(error);
     process.exit(1);

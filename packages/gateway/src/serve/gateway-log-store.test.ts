@@ -1,3 +1,4 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 /*
  * GatewayLogStore: ring buffer + fan-out + the RuntimeLogger tee that
  * feeds the realtime Logs surface, plus the optional JSONL persistence
@@ -6,7 +7,6 @@
  */
 
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { RuntimeLogger } from '@centraid/app-engine';
@@ -34,7 +34,7 @@ vi.mock('node:fs', async (importOriginal) => {
 const tmpDirs: string[] = [];
 
 function makeTmpDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gateway-log-store-'));
+  const dir = tempDirSync('gateway-log-store-');
   tmpDirs.push(dir);
   return dir;
 }

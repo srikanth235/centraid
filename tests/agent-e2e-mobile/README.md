@@ -1,8 +1,10 @@
-# Agent-driven e2e — mobile
+# Agent-driven exploratory QA — mobile
 
-Mobile counterpart to [`tests/agent-e2e/`](../agent-e2e/README.md). That
-layer drives Electron over CDP via Playwright; this one drives the Expo
-app on an iOS Simulator **or Android emulator** via [Maestro](https://docs.maestro.dev/).
+This is the committed manual-QA adapter for the Expo app on an iOS Simulator
+or Android emulator. Desktop regression ownership lives in Playwright; this
+directory is mobile-only and drives the native surface via
+[Maestro](https://docs.maestro.dev/). The three stable journeys are also run
+nightly, while ad-hoc agent exploration remains its primary authoring loop.
 
 The structural payoff matches the desktop layer: the device (sim,
 emulator, or real) outlives the runner, so an agent (Claude Code) can
@@ -132,6 +134,10 @@ ctx surface:
 - `ctx.restart()` — `stopApp` + `launchApp { clearState: false }` with
   a 300ms pre-stop delay (analogous to the desktop harness's flushMs
   before SIGTERM, gives AsyncStorage time to flush).
+- `ctx.configureGateway(url?, token?)` — clear app state, then save the
+  declared gateway through the real Settings → Advanced UI. Journeys that
+  need a gateway call this themselves so their prerequisites do not depend on
+  execution order.
 - `ctx.note(msg)` — record an observation; surfaces under `## Notes`
   in `verdict.md`.
 

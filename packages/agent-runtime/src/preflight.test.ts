@@ -1,6 +1,6 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import {
   compareSemver,
@@ -82,7 +82,7 @@ test('attaches an empty model list when no catalog path is set (no seed)', async
 
 test('reads the model list from the catalog without enumerating', async () => {
   invalidatePreflightCache();
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-preflight-'));
+  const dir = await tempDir('centraid-preflight-');
   const catalogPath = path.join(dir, 'model-catalog.json');
 
   // Cold catalog → empty list (a loading/empty state, no seed). The read must
@@ -212,7 +212,7 @@ afterEach(() => {
 });
 
 test('probeCliAvailability resolves the real install past a node_modules/.bin shim on PATH', async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-preflight-pathfix-'));
+  const root = await tempDir('centraid-preflight-pathfix-');
   const shimDir = path.join(root, 'node_modules', '.bin'); // e.g. a stray ~/node_modules/.bin
   const realDir = path.join(root, 'real-bin'); // e.g. ~/.local/bin
   await writeFakeBin(shimDir, 'codex', '1.0.128');
@@ -229,7 +229,7 @@ test('probeCliAvailability resolves the real install past a node_modules/.bin sh
 });
 
 test('probeCliAvailability still finds the shim if it is the only thing on PATH (sanitization is not overzealous)', async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-preflight-pathfix-'));
+  const root = await tempDir('centraid-preflight-pathfix-');
   const shimDir = path.join(root, 'node_modules', '.bin');
   await writeFakeBin(shimDir, 'codex', '1.0.128');
 
@@ -241,7 +241,7 @@ test('probeCliAvailability still finds the shim if it is the only thing on PATH 
 });
 
 test('probeCliAvailability with an explicit binPath ignores PATH sanitization entirely', async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-preflight-pathfix-'));
+  const root = await tempDir('centraid-preflight-pathfix-');
   const explicitDir = path.join(root, 'node_modules', '.bin'); // even if it LOOKS like a shim dir
   const explicitBin = await writeFakeBin(explicitDir, 'codex', '3.3.3');
 

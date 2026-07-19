@@ -1,10 +1,10 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 // The dispatcher after issue #286 phase 2: declared-handler routing ONLY.
 // What must hold: manifest lookup + Ajv validation + worker hand-off work;
 // `_sql` and every other underscore name is just an unknown handler now;
 // describe returns the manifest (there is no per-app schema to read).
 
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { Dispatcher } from './dispatcher.js';
@@ -42,7 +42,7 @@ const MANIFEST = {
 };
 
 beforeEach(async () => {
-  appsDir = await mkdtemp(path.join(tmpdir(), 'centraid-dispatch-'));
+  appsDir = await tempDir('centraid-dispatch-');
   codeDir = path.join(appsDir, 'code');
   await mkdir(path.join(codeDir, 'actions'), { recursive: true });
   await mkdir(path.join(codeDir, 'queries'), { recursive: true });
@@ -112,7 +112,7 @@ describe('TypeScript handlers', () => {
     const read = await dispatcher.read({ app: 'demo', query: 'list_notes' });
     expect(read.isError).toBe(false);
     expect(read.structuredContent).toEqual({ notes: [3, 4] });
-  }, 10_000);
+  }, 30_000);
 });
 
 describe('declared routing', () => {

@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * `VaultPlane`'s blob-sweep scheduling (issue #367 §C5/§C6/§C9): the
  * failure-backoff decision (pure function, unit tests) plus a real S3-backed
@@ -8,9 +9,6 @@
 
 import { afterAll, describe, expect, test } from 'vitest';
 import crypto from 'node:crypto';
-import os from 'node:os';
-import path from 'node:path';
-import { promises as fs } from 'node:fs';
 import { S3TestServer } from '@centraid/backup/dist/testing/s3-test-server.js';
 import { blobUriFor, updateBlobStoreSettings, uuidv7 } from '@centraid/vault';
 import { blobSweepBackoff, openVaultPlane, type VaultPlane } from './vault-plane.js';
@@ -21,13 +19,6 @@ const cleanups: Array<() => Promise<void> | void> = [];
 afterAll(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.();
 });
-
-async function tempDir(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `vault-plane-sweep-${crypto.randomUUID()}-`));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 async function startServer(): Promise<S3TestServer> {
   const server = await S3TestServer.start();
   cleanups.push(() => server.close());

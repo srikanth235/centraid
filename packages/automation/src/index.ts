@@ -162,7 +162,7 @@ export {
   type MockLlmServerOptions,
   type StagedTurn,
   type CapturedToolResult,
-} from './mock-llm/mock-llm-server.js';
+} from '@centraid/mock-llm';
 export {
   startPersistentMockSession,
   type AgentDriver,
@@ -170,7 +170,7 @@ export {
   type AgentDriveResult,
   type PersistentMockSession,
   type PersistentMockSessionOptions,
-} from './mock-llm/persistent-mock-session.js';
+} from '@centraid/mock-llm';
 // Authoring-time handler lint (issue #167): a static scan that flags ambient
 // I/O and nondeterminism (`Date.now`, `Math.random`, raw `fetch`/`fs`, …) in a
 // handler — effects that bypass the audited `ctx.*` rails or make a re-run

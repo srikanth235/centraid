@@ -130,7 +130,9 @@ describe('CBSF device sealer', () => {
   ] as const;
 
   for (const [label, size] of sizes) {
-    it(`round-trips ${label} through the vault reader`, async () => {
+    // The multi-frame sizes seal 64+ MiB; fine bare, above the 5s default
+    // under v8 coverage instrumentation — measured per-test budget.
+    it(`round-trips ${label} through the vault reader`, { timeout: 15_000 }, async () => {
       const plain = plaintextOf(size);
       const sha256 = shaOf(plain);
       const sealed = await sealWholeObject(plain);

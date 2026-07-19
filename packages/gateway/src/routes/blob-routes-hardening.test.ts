@@ -1,8 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import { promises as fs } from 'node:fs';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import http from 'node:http';
-import os from 'node:os';
-import path from 'node:path';
 import crypto from 'node:crypto';
 import { Readable } from 'node:stream';
 import { openVaultPlane, type VaultPlane } from '../serve/vault-plane.js';
@@ -25,8 +23,7 @@ async function fixture(dataPlane?: {
   baseUrl: string;
   secret: string;
 }): Promise<{ base: string; plane: VaultPlane }> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `blob-hardening-${crypto.randomUUID()}-`));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
+  const dir = await tempDir(`blob-hardening-${crypto.randomUUID()}-`);
   const plane = openVaultPlane({ dir, logger: silentLogger, ownerName: 'Priya' });
   cleanups.push(() => plane.stop());
   const handler = makeBlobRouteHandler(

@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * The admin plane (issue #289): `centraid-gateway vault|devices|pair` +
  * the daemon device plane. These are landlord acts guarded by shell
@@ -9,8 +10,6 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs, readFileSync } from 'node:fs';
 import http from 'node:http';
-import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import { commandVault } from './vault-admin.ts';
 import { commandDevices, commandPair } from './device-admin.ts';
@@ -27,11 +26,11 @@ import { DeviceTokenStore } from '../serve/device-token-store.ts';
 import { PairingTicketStore } from '../serve/pairing-store.ts';
 
 const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
-
-// These filesystem-heavy CLI cases create several complete vaults. Installing
-// the issue #406 all-entity trigger catalog is real bootstrap work, and the
-// package suite runs many other SQLite/WAL fixtures in parallel; retain a
-// bounded timeout without making correctness depend on shared-runner load.
+// Every test here bootstraps a real vault/daemon layout on disk. Bare runs
+// stay under the 5s default (slowest ~3.7s), but the v8-instrumented
+// coverage lane measured ~2.5s/test average with individual tests crossing
+// 5s (admin 32s/13, backup-admin 23s/9, key-admin 14s/6) — a measured
+// file-level budget, per the issue #458 timeout policy.
 vi.setConfig({ testTimeout: 15_000 });
 
 let dataDir: string;
@@ -70,7 +69,7 @@ async function capture(fn: () => Promise<void> | void): Promise<string> {
 }
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `admin-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`admin-${crypto.randomUUID()}-`);
   out = [];
 });
 
@@ -210,50 +209,57 @@ test('devices add / list / revoke, scoped by vault', async () => {
   ).rejects.toThrow(/no enrollment/);
 });
 
-test("devices revoke cascades into that device key's HTTP token (issue #376)", async () => {
-  await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
-  await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Other'], fail));
-  const layout = daemonLayoutFor(dataDir);
-  const deviceTokens = DeviceTokenStore.open(layout.deviceTokensFile);
-  const { token } = deviceTokens.mint({ deviceKey: 'http:device-1', label: 'phone' });
+// Bootstraps two full vaults then polls up to 10s (vi.waitFor below) for the
+// revoked device key to drop its HTTP token, so this one case needs a budget
+// above the 5s default; the rest of the file stays on the default.
+test(
+  "devices revoke cascades into that device key's HTTP token (issue #376)",
+  { timeout: 15_000 },
+  async () => {
+    await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
+    await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Other'], fail));
+    const layout = daemonLayoutFor(dataDir);
+    const deviceTokens = DeviceTokenStore.open(layout.deviceTokensFile);
+    const { token } = deviceTokens.mint({ deviceKey: 'http:device-1', label: 'phone' });
 
-  // Two enrollments for the SAME device key, in different vaults.
-  await capture(() =>
-    commandDevices(
-      ['add', '--data-dir', dataDir, 'http:device-1', '--vault', 'Family', '--label', 'phone'],
-      fail,
-    ),
-  );
-  await capture(() =>
-    commandDevices(
-      ['add', '--data-dir', dataDir, 'http:device-1', '--vault', 'Other', '--label', 'phone'],
-      fail,
-    ),
-  );
+    // Two enrollments for the SAME device key, in different vaults.
+    await capture(() =>
+      commandDevices(
+        ['add', '--data-dir', dataDir, 'http:device-1', '--vault', 'Family', '--label', 'phone'],
+        fail,
+      ),
+    );
+    await capture(() =>
+      commandDevices(
+        ['add', '--data-dir', dataDir, 'http:device-1', '--vault', 'Other', '--label', 'phone'],
+        fail,
+      ),
+    );
 
-  const familyRow = JSON.parse(
-    (
-      await capture(() =>
-        commandDevices(['list', '--data-dir', dataDir, '--vault', 'Family'], fail),
+    const familyRow = JSON.parse(
+      (
+        await capture(() =>
+          commandDevices(['list', '--data-dir', dataDir, '--vault', 'Family'], fail),
+        )
       )
-    )
-      .trim()
-      .split('\n')[0]!,
-  ) as { enrollmentId: string };
+        .trim()
+        .split('\n')[0]!,
+    ) as { enrollmentId: string };
 
-  // Revoking ONE enrollment (by its row id) leaves the other — the token
-  // that key holds must survive.
-  await capture(() =>
-    commandDevices(['revoke', '--data-dir', dataDir, familyRow.enrollmentId], fail),
-  );
-  expect(DeviceTokenStore.open(layout.deviceTokensFile).authorize(token)).toEqual({
-    deviceKey: 'http:device-1',
-  });
+    // Revoking ONE enrollment (by its row id) leaves the other — the token
+    // that key holds must survive.
+    await capture(() =>
+      commandDevices(['revoke', '--data-dir', dataDir, familyRow.enrollmentId], fail),
+    );
+    expect(DeviceTokenStore.open(layout.deviceTokensFile).authorize(token)).toEqual({
+      deviceKey: 'http:device-1',
+    });
 
-  // Revoking by KEY removes every remaining enrollment — the token dies too.
-  await capture(() => commandDevices(['revoke', '--data-dir', dataDir, 'http:device-1'], fail));
-  expect(DeviceTokenStore.open(layout.deviceTokensFile).authorize(token)).toBeUndefined();
-});
+    // Revoking by KEY removes every remaining enrollment — the token dies too.
+    await capture(() => commandDevices(['revoke', '--data-dir', dataDir, 'http:device-1'], fail));
+    expect(DeviceTokenStore.open(layout.deviceTokensFile).authorize(token)).toBeUndefined();
+  },
+);
 
 test('devices admin rejects bad usage + unknown vault', async () => {
   await expect(
@@ -391,30 +397,36 @@ test('device plane: deviceKeyFor trusts only the in-process proof header', async
   registry.stop();
 });
 
-test('device plane: SSH CLI revocation closes the native relay endpoint', async () => {
-  const layout = daemonLayoutFor(dataDir);
-  await fs.mkdir(dataDir, { recursive: true });
-  const registry = openVaultRegistry({ rootDir: layout.vaultDir, logger: silentLogger });
-  const vaultId = registry.defaultVaultId();
-  const enrollments = EnrollmentStore.open(layout.devicesFile);
-  enrollments.enroll({ endpointId: 'ep-live-cli', vaultId, label: 'live CLI device' });
-  const revoked: string[] = [];
-  const watcher = watchEnrollmentRevocations({
-    file: layout.devicesFile,
-    enrollments,
-    onRevoked: (endpointId) => {
-      revoked.push(endpointId);
-    },
-    logger: silentLogger,
-  });
-  try {
-    await capture(() => commandDevices(['revoke', '--data-dir', dataDir, 'ep-live-cli'], fail));
-    await vi.waitFor(() => expect(revoked).toEqual(['ep-live-cli']), { timeout: 10_000 });
-  } finally {
-    await watcher.close();
-    registry.stop();
-  }
-});
+// Bootstraps a registry + watches revocations; marginal under coverage
+// instrumentation like the vault/device admin tests above.
+test(
+  'device plane: SSH CLI revocation closes the native relay endpoint',
+  { timeout: 15_000 },
+  async () => {
+    const layout = daemonLayoutFor(dataDir);
+    await fs.mkdir(dataDir, { recursive: true });
+    const registry = openVaultRegistry({ rootDir: layout.vaultDir, logger: silentLogger });
+    const vaultId = registry.defaultVaultId();
+    const enrollments = EnrollmentStore.open(layout.devicesFile);
+    enrollments.enroll({ endpointId: 'ep-live-cli', vaultId, label: 'live CLI device' });
+    const revoked: string[] = [];
+    const watcher = watchEnrollmentRevocations({
+      file: layout.devicesFile,
+      enrollments,
+      onRevoked: (endpointId) => {
+        revoked.push(endpointId);
+      },
+      logger: silentLogger,
+    });
+    try {
+      await capture(() => commandDevices(['revoke', '--data-dir', dataDir, 'ep-live-cli'], fail));
+      await vi.waitFor(() => expect(revoked).toEqual(['ep-live-cli']), { timeout: 10_000 });
+    } finally {
+      await watcher.close();
+      registry.stop();
+    }
+  },
+);
 
 test('device plane: an unenrolled endpoint start still writes endpoint identity', async () => {
   const layout = daemonLayoutFor(dataDir);

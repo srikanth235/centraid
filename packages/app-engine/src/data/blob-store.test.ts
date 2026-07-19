@@ -1,11 +1,11 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { describe, expect, it } from 'vitest';
-import { mkdtempSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { BlobStore, hashBytes, blobUrl } from './blob-store.js';
 
 function freshAppsDir(appId = 'app'): string {
-  const dir = mkdtempSync(join(tmpdir(), 'centraid-blobs-'));
+  const dir = tempDirSync('centraid-blobs-');
   mkdirSync(join(dir, appId), { recursive: true });
   return dir;
 }

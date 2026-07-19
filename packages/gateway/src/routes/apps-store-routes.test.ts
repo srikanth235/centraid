@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Publish/session/files HTTP surface for the git-store backend
  * (issue #137). Drives a booted `serve()` over HTTP
@@ -9,7 +10,6 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import { serve, type GatewayServeHandle } from '../serve/serve.ts';
 import type { GatewayPaths } from '../paths.ts';
@@ -45,7 +45,7 @@ const MANIFEST = JSON.stringify({
 });
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `gw-routes-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`gw-routes-${crypto.randomUUID()}-`);
   handle = await serve({
     paths: pathsUnder(dataDir),
   });

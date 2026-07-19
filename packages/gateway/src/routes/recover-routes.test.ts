@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * HTTP-level coverage for the pre-vault recovery routes (issue #439 R1 wave 4).
  * A minimal "machine A" is seeded and backed up against the REAL fake HTTP
@@ -13,10 +14,6 @@
 
 import { afterEach, expect, test } from 'vitest';
 import http from 'node:http';
-import os from 'node:os';
-import path from 'node:path';
-import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { openRemoteBackupProvider, SNAPSHOT_FORMAT } from '@centraid/backup';
 import { startFakeProviderServer } from '@centraid/backup/dist/testing/fake-provider-server.js';
@@ -56,13 +53,6 @@ function startHandlerServer(handler: RouteHandler): Promise<string> {
     });
   });
 }
-
-async function tempDir(prefix: string): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `${prefix}-${crypto.randomUUID()}-`));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 function invoke(plane: VaultPlane, command: string, input: Record<string, unknown>): void {
   const out = plane.gateway.invoke(plane.ownerCredential, { command, input });
   if (out.status !== 'executed') throw new Error(`${command} failed: ${JSON.stringify(out)}`);

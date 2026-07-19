@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Device enrollment + pairing tickets (issue #289 phase 2).
  *
@@ -9,7 +10,6 @@
 
 import { afterEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { EnrollmentStore } from './enrollment-store.js';
@@ -22,7 +22,7 @@ afterEach(async () => {
 });
 
 async function tempFile(name: string): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `device-plane-${crypto.randomUUID()}-`));
+  const dir = await tempDir(`device-plane-${crypto.randomUUID()}-`);
   cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
   return path.join(dir, name);
 }

@@ -1,6 +1,6 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { describe, it, beforeEach, afterEach, expect } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { scaffoldApp, updateAppMeta } from './scaffold.js';
 import { AppScaffoldError } from './scaffold-types.js';
@@ -9,7 +9,7 @@ describe('updateAppMeta', () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-updatemeta-'));
+    dir = await tempDir('centraid-updatemeta-');
   });
   afterEach(async () => {
     await fs.rm(dir, { recursive: true, force: true });

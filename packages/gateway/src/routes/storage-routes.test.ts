@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * HTTP-level coverage for the storage-connection routes (issue #367 §C1):
  * CRUD against a REAL `StorageConnectionStore` (real sealed JSON file on
@@ -7,8 +8,6 @@
 
 import { afterEach, expect, test, vi } from 'vitest';
 import http from 'node:http';
-import crypto from 'node:crypto';
-import os from 'node:os';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import type { AddressInfo } from 'node:net';
@@ -46,15 +45,7 @@ function startHandlerServer(handler: RouteHandler): Promise<string> {
       resolve(`http://127.0.0.1:${port}`);
     });
   });
-}
-
-async function tempDir(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `storage-routes-${crypto.randomUUID()}-`));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
-/**
+} /**
  * Minimal fake storage provider — serves just the discovery document
  * (`GET /v1/storage/provider`, PROTOCOL.md) the home-profile gate (#436 §1)
  * reads on create/test. `home: true` advertises the `home` profile with the

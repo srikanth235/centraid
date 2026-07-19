@@ -11,6 +11,8 @@ out
 test-results
 playwright-report
 coverage
+artifacts
+output/playwright/
 target
 packages/tunnel/native/*.node
 .wrangler

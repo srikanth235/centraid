@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * `centraid-gateway backup …` (PROTOCOL.md/FORMAT.md CLI surface): status,
  * run, list, verify, restore, kit — constructed from the same `--config`
@@ -7,15 +8,19 @@
  * than the unit-level `backup-service.test.ts`.
  */
 
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+
 import { promises as fs, existsSync } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { SNAPSHOT_FORMAT, openLocalBackupProvider, type BackupProvider } from '@centraid/backup';
 import { openVaultRegistry } from '../serve/vault-registry.js';
 import { commandBackup } from './backup-admin.js';
 import { daemonLayoutFor } from './paths.js';
+
+// See admin.test.ts: real vault/daemon bootstrap per test — measured file
+// budget for the v8-instrumented coverage lane (issue #458 timeout policy).
+vi.setConfig({ testTimeout: 15_000 });
 
 class CliFailError extends Error {
   constructor(
@@ -60,10 +65,8 @@ function lines(out: string): unknown[] {
 }
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `backup-admin-${crypto.randomUUID()}-`));
-  providerDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), `backup-admin-provider-${crypto.randomUUID()}-`),
-  );
+  dataDir = await tempDir(`backup-admin-${crypto.randomUUID()}-`);
+  providerDir = await tempDir(`backup-admin-provider-${crypto.randomUUID()}-`);
   configPath = path.join(dataDir, 'config.json');
   await fs.writeFile(
     configPath,

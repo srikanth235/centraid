@@ -1,7 +1,7 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { Buffer } from 'node:buffer';
 import { promises as fs } from 'node:fs';
 import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'node:http';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Runtime } from '../runtime.js';
@@ -108,7 +108,7 @@ async function evaluateDefault(code: string, etag: string): Promise<unknown> {
 
 beforeEach(async () => {
   clearQueryBundleCaches();
-  workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-query-bundle-'));
+  workspace = await tempDir('centraid-query-bundle-');
   liveDir = path.join(workspace, 'live');
   draftDir = path.join(workspace, 'draft');
   await writeCodeDir(liveDir, 'live-v1');

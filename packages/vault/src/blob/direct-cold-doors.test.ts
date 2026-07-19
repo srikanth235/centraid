@@ -1,3 +1,4 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // Direct-to-IA storage class for large media originals (issue #425 Wave 3
 // Part B) — the remote-primary ingress doors, where the CAS object is minted
 // BEFORE the staging row exists, so the class is resolved from a media hint the
@@ -11,8 +12,7 @@
 
 import { randomBytes } from 'node:crypto';
 import http from 'node:http';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { rmSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 import { resolveBackupPolicy, type BackupPolicy } from '../backup-policy.js';
@@ -127,7 +127,7 @@ function openStreamHarness(
   policy: BackupPolicy,
   supported: readonly string[] | undefined,
 ): StreamHarness {
-  const dir = mkdtempSync(path.join(tmpdir(), 'blob-cold-stream-'));
+  const dir = tempDirSync('blob-cold-stream-');
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
   const db = openVaultDb({ dir });
   cleanups.push(() => db.close());

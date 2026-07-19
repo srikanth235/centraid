@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Per-device HTTP bearer tokens (issue #376) — mint/authorize/revoke over
  * the cross-process JSON store (same reload-on-mtime contract as its
@@ -6,7 +7,6 @@
 
 import { afterEach, expect, test, vi } from 'vitest';
 import fsSync, { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { DeviceTokenStore, formatDeviceToken, parseDeviceToken } from './device-token-store.js';
@@ -17,7 +17,7 @@ afterEach(async () => {
 });
 
 async function tempFile(name: string): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `device-tokens-${crypto.randomUUID()}-`));
+  const dir = await tempDir(`device-tokens-${crypto.randomUUID()}-`);
   cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
   return path.join(dir, name);
 }

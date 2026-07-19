@@ -1,6 +1,6 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { applyAppVisualIdentity, stampAppVisualIdentity } from './app-rewrites.js';
 
@@ -44,7 +44,7 @@ describe('stampAppVisualIdentity', () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-visual-'));
+    dir = await tempDir('centraid-visual-');
   });
   afterEach(async () => {
     await fs.rm(dir, { recursive: true, force: true });

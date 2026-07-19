@@ -1,7 +1,7 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import { cleanupDeregisteredApp } from './deregister-cleanup.ts';
 import type { RegistryEntry } from '../types.ts';
@@ -16,7 +16,7 @@ const logger = {
 };
 
 beforeEach(async () => {
-  workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-cleanup-'));
+  workspace = await tempDir('centraid-cleanup-');
   appsDir = path.join(workspace, 'centraid');
   await fs.mkdir(appsDir, { recursive: true });
   warnings.length = 0;

@@ -9,7 +9,9 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 1 : 0,
-  reporter: 'list',
+  reporter: process.env.CI
+    ? [['list'], ['json', { outputFile: '../../artifacts/test-results/web-playwright.json' }]]
+    : 'list',
   timeout: 60_000,
   expect: { timeout: 10_000 },
   use: {

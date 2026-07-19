@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Per-device HTTP bearer tokens (issue #376) — the HTTP twin of the iroh
  * device-key ACL. Proves the whole lane end-to-end against a real
@@ -10,7 +11,6 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import { AUTHED_DEVICE_HEADER, type BearerAuthorization } from '@centraid/app-engine';
 import { serve, type GatewayServeHandle } from './serve.ts';
@@ -40,7 +40,7 @@ function timingSafeStrEqual(a: string, b: string): boolean {
 }
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `device-tok-gateway-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`device-tok-gateway-${crypto.randomUUID()}-`);
   enrollments = EnrollmentStore.open(path.join(dataDir, 'devices.json'));
   tickets = PairingTicketStore.open(path.join(dataDir, 'pairing-tickets.json'));
   deviceTokens = DeviceTokenStore.open(path.join(dataDir, 'device-tokens.json'));

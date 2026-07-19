@@ -1,6 +1,7 @@
 import { APP_ID, runFlow } from '../lib/harness.mjs';
 
 await runFlow('native-v0-resilience', async (ctx) => {
+  await ctx.configureGateway();
   await ctx.run(
     `appId: ${APP_ID}
 ---

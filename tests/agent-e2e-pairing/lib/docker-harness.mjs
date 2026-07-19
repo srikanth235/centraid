@@ -40,6 +40,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { ensureBuilt, parseTicket } from './harness.mjs';
+import { defaultRunId, writeFlowVerdict } from '../../agent-e2e-shared/harness.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
@@ -76,11 +77,6 @@ async function shQuiet(cmd, args, opts = {}) {
   } catch (e) {
     console.error(`  [teardown warning] ${cmd} ${args.join(' ')}: ${e.message}`);
   }
-}
-
-function defaultRunId() {
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace(/Z$/, '');
-  return `${stamp}-${crypto.randomBytes(3).toString('hex')}`;
 }
 
 /**
@@ -277,33 +273,6 @@ async function verifyNetworksIsolated(netA, netB) {
   } finally {
     await shQuiet('docker', ['rm', '-f', probeServerName]);
   }
-}
-
-function renderVerdict({ slug, pass, error, notes, result, elapsedMs, state }) {
-  const lines = [
-    `# ${slug}`,
-    '',
-    `**${pass ? 'PASS' : 'FAIL'}** — ${elapsedMs}ms`,
-    '',
-    `- run dir: \`${state.runDir}\``,
-    `- network A (gateway): \`${state.netA}\` (${state.subnetA ?? '?'})`,
-    `- network B (device): \`${state.netB}\` (${state.subnetB ?? '?'})`,
-    `- gateway container: \`${state.gwName}\``,
-    `- gateway endpoint: \`${state.gateway?.endpointId ?? 'never became ready'}\``,
-    '',
-  ];
-  if (error) {
-    lines.push('## Error', '```', error.stack ?? String(error), '```', '');
-  }
-  if (notes.length) {
-    lines.push('## Notes');
-    for (const n of notes) lines.push(`- ${n}`);
-    lines.push('');
-  }
-  if (result?.notes) {
-    lines.push('## Result', String(result.notes), '');
-  }
-  return lines.join('\n');
 }
 
 /**
@@ -583,13 +552,23 @@ export async function runFlow(slug, fn) {
   const elapsedMs = Date.now() - t0;
   const pass = !error && result?.pass !== false;
 
-  await fs.writeFile(
-    path.join(runDir, 'verdict.md'),
-    renderVerdict({ slug, pass, error, notes, result, elapsedMs, state }),
-  );
+  await writeFlowVerdict({
+    repoRoot: REPO_ROOT,
+    slug,
+    runDir,
+    elapsedMs,
+    error,
+    notes,
+    result,
+    metadata: {
+      'network A (gateway)': `${state.netA} (${state.subnetA ?? '?'})`,
+      'network B (device)': `${state.netB} (${state.subnetB ?? '?'})`,
+      'gateway container': state.gwName,
+      'gateway endpoint': state.gateway?.endpointId ?? 'never became ready',
+    },
+    owner: `tests/agent-e2e-pairing/flows/${slug}.mjs`,
+  });
 
-  console.log(`[runFlow] ${slug} ${pass ? 'PASS' : 'FAIL'} in ${elapsedMs}ms`);
-  console.log(`  verdict : ${path.relative(REPO_ROOT, path.join(runDir, 'verdict.md'))}`);
   if (!pass) {
     if (error) console.error(error);
     process.exit(1);

@@ -1,9 +1,10 @@
 # AGENTS.md — agent-driven e2e (mobile)
 
 Notes for any agent (or human) writing or running flows in this folder.
-Pair with [README.md](README.md) (general user-facing how-to) and
-[../agent-e2e/AGENTS.md](../agent-e2e/AGENTS.md) (the desktop sibling,
-which sets the conventions this one inherits).
+Pair with [README.md](README.md) (general user-facing how-to). Shared run-id
+and verdict conventions live in
+[`../agent-e2e-shared/harness.mjs`](../agent-e2e-shared/harness.mjs); desktop
+regression ownership lives in `apps/desktop/tests/e2e/`.
 
 ## What this layer is for
 
@@ -75,7 +76,7 @@ workspaces like desktop's `userData`.
    selector or assertion Maestro objected to.
 5. **Commit both files.** `runs/` is gitignored.
 
-## Conventions inherited from the desktop layer
+## Shared exploratory-flow conventions
 
 - **Slug = filename = `runFlow()` first arg.** Keep them identical so
   verdicts and run dirs are greppable.
@@ -173,7 +174,7 @@ workspaces like desktop's `userData`.
   preflight, ctx surface. Read this before adding a helper.
 - [flows/home-loads.mjs](flows/home-loads.mjs) — canonical example
   flow (5 directives, runs in ~20s).
-- [../agent-e2e/AGENTS.md](../agent-e2e/AGENTS.md) — desktop sibling,
+- [../agent-e2e-shared/harness.mjs](../agent-e2e-shared/harness.mjs) — shared run identity and verdict writer,
   parent of these conventions.
 - [../../AGENTS.md](../../AGENTS.md) — repo-wide conventions agents
   must follow on top of these.

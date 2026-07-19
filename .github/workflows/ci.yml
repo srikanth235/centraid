@@ -27,6 +27,11 @@ jobs:
       # Type-aware pass (oxlint --type-aware); deps' dist is built by the
       # typecheck step's upstream `^build`.
       - run: bun run lint:types
+      # Product-flow catalog anti-rot (issue #458 Phase 4): fail if any
+      # matrix.json cell names an owning test file that no longer exists, or a
+      # named contract suite shrinks below its recorded floor. Offline and fast,
+      # so it belongs on the per-PR loop next to lint/typecheck.
+      - run: bun run test:matrix
       # Build every package's dist (the worker-thread handler tests load the
       # built worker, not the .ts source), then run the whole suite under
       # vitest with v8 coverage. `coverage` enforces the seeded engine floors
@@ -46,3 +51,12 @@ jobs:
           CENTRAID_BENCH_REQUIRE_FSYNC: '1'
           CENTRAID_HARDWARE_PROFILE: constrained
       - run: bun run coverage
+      - name: Generate test-health report
+        if: always()
+        run: bun run test:report
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: test-health-report
+          path: dist/test-report/
+          retention-days: 14

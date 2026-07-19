@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Automation fire spine (issue #147, Concern 2). The per-fire orchestration
  * lives here in app-engine; the live `ctx.tool` / `ctx.agent` dispatch
@@ -10,7 +11,6 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import {
   ConversationStore,
@@ -68,7 +68,7 @@ describe('runFire', () => {
   let journalDbFile: string;
 
   beforeEach(async () => {
-    appsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-fire-'));
+    appsDir = await tempDir('centraid-fire-');
     journalDbFile = path.join(appsDir, 'journal.db');
   });
   afterEach(async () => {

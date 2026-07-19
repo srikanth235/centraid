@@ -1,12 +1,9 @@
-import { defineProject } from 'vitest/config';
+import { nodeProject } from '@centraid/test-kit/vitest';
 
-// Project config for @centraid/vault. Coverage + the unified run live in the root
-// vitest.config.ts; see TESTING.md for the strategy. Default pool is 'forks'
-// (real child processes) so node:sqlite behaves as it does in production.
-export default defineProject({
+// Project config for @centraid/vault. Coverage + the unified run live in the root.
+export default nodeProject({
   test: {
     name: '@centraid/vault',
     include: ['src/**/*.test.ts'],
-    environment: 'node',
   },
 });

@@ -1,11 +1,11 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // governance: allow-repo-hygiene file-size-limit pre-existing cohesive blob regression suite; decomposition is outside issue #417
 // Blob custody units (issue #296): the stores, the spool pipeline, and the
 // two-tier custody facade — including the S3 driver against an in-process
 // fake S3 endpoint (SigV4-signed requests over real HTTP, no SDK).
 
-import { mkdtempSync, rmSync } from 'node:fs';
+import { rmSync } from 'node:fs';
 import http from 'node:http';
-import os from 'node:os';
 import path from 'node:path';
 import { deflateSync } from 'node:zlib';
 import { afterEach, beforeEach, expect, test } from 'vitest';
@@ -24,7 +24,7 @@ const PNG_BYTES = Buffer.from(
 
 let tmp: string;
 beforeEach(() => {
-  tmp = mkdtempSync(path.join(os.tmpdir(), 'blob-test-'));
+  tmp = tempDirSync('blob-test-');
 });
 afterEach(() => {
   rmSync(tmp, { recursive: true, force: true });

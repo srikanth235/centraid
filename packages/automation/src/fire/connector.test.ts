@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 // governance: allow-repo-hygiene file-size-limit one suite over the whole connector contract — manifest, tool allowlist, secret injection (#293) and connection-credential injection (#304) share the runFire fixture
 /*
  * Connector broker invariants (issue #290 phase 4): manifest contract
@@ -9,7 +10,6 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import type { VaultBridge } from '@centraid/app-engine';
 import { runFire, type DispatchSurface, type OpenDispatchArgs } from './fire.js';
@@ -63,7 +63,7 @@ describe('connector runtime gates', () => {
   let journalDbFile: string;
 
   beforeEach(async () => {
-    appsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-connector-'));
+    appsDir = await tempDir('centraid-connector-');
     journalDbFile = path.join(appsDir, 'journal.db');
   });
   afterEach(async () => {
@@ -177,7 +177,7 @@ describe('connector secrets (issue #293)', () => {
   let journalDbFile: string;
 
   beforeEach(async () => {
-    appsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-secrets-'));
+    appsDir = await tempDir('centraid-secrets-');
     journalDbFile = path.join(appsDir, 'journal.db');
   });
   afterEach(async () => {
@@ -399,7 +399,7 @@ describe('broker-injected connection credentials (issue #304)', () => {
   let journalDbFile: string;
 
   beforeEach(async () => {
-    appsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-connauth-'));
+    appsDir = await tempDir('centraid-connauth-');
     journalDbFile = path.join(appsDir, 'journal.db');
   });
   afterEach(async () => {
@@ -731,7 +731,7 @@ describe('read-only ceiling on injected fetches (issue #304 phase 5)', () => {
   let journalDbFile: string;
 
   beforeEach(async () => {
-    appsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-ro-'));
+    appsDir = await tempDir('centraid-ro-');
     journalDbFile = path.join(appsDir, 'journal.db');
   });
   afterEach(async () => {

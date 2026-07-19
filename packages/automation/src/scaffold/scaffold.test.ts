@@ -1,6 +1,6 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { parseManifest } from '../manifest/manifest.js';
 import { scaffoldApp, validateId, validateAppId } from './scaffold.js';
@@ -10,7 +10,7 @@ describe('scaffoldApp', () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-autoscaffold-'));
+    dir = await tempDir('centraid-autoscaffold-');
   });
   afterEach(async () => {
     await fs.rm(dir, { recursive: true, force: true });

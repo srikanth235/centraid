@@ -1,7 +1,7 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import http from 'node:http';
 import crypto from 'node:crypto';
 import { buildGateway, type BuiltGateway } from './build-gateway.ts';
@@ -45,7 +45,7 @@ async function mountUnauthed(
 }
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `build-gateway-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`build-gateway-${crypto.randomUUID()}-`);
   gateway = await buildGateway({ paths: pathsUnder(dataDir) });
 });
 

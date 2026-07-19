@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import {
   appEntry,
   cleanupEnv,
@@ -30,7 +32,7 @@ let gateway: MockGateway;
 
 test.beforeEach(async () => {
   env = await makeEnv();
-  gateway = await startMockGateway();
+  gateway = await startMockGateway({ appsDir: env.appsDir });
   await seedRemoteGateway(env, gateway);
 });
 
@@ -51,20 +53,37 @@ const deletes = (g: MockGateway, id?: string) =>
 
 test('3.1 — deleting a draft removes it via the gateway', async () => {
   gateway.state.apps = [appEntry({ id: 'draft-grocery', name: 'Grocery list' })];
+  const draftDir = path.join(env.appsDir, 'draft-grocery');
+  await fs.mkdir(draftDir, { recursive: true });
+  await fs.writeFile(
+    path.join(draftDir, 'app.json'),
+    `${JSON.stringify({ id: 'draft-grocery', name: 'Grocery list' })}\n`,
+  );
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
     // Not in userApps → classed as a draft.
     await openTileMenu(page, 'draft-grocery');
-    await clickMenuItem(page, 'Delete');
+    await clickMenuItem(page, 'Delete draft');
     await expectConfirm(page, 'Delete draft?');
     await confirmDelete(page);
 
     await expect(page.locator('[data-app-id="draft-grocery"]')).toHaveCount(0);
-    await expect(page.locator('.global-toast')).toContainText('Deleted draft');
+    await expect(page.locator('[data-global-toast]')).toContainText('Deleted draft');
     expect(deletes(gateway, 'draft-grocery').length).toBeGreaterThanOrEqual(1);
-  } finally {
+    await expect(fs.access(draftDir)).rejects.toThrow();
+
     await app.close();
+    const restarted = await launchApp(env);
+    try {
+      await waitForHome(restarted.page);
+      await expect(restarted.page.locator('[data-app-id="draft-grocery"]')).toHaveCount(0);
+      await expect(fs.access(draftDir)).rejects.toThrow();
+    } finally {
+      await restarted.app.close();
+    }
+  } finally {
+    await app.close().catch(() => undefined);
   }
 });
 

@@ -15,20 +15,15 @@
 import { spawn } from 'node:child_process';
 import { promises as fs, createWriteStream, readFileSync } from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createTunnelClient, tunnelRequest } from '../../../packages/tunnel/dist/index.js';
+import { defaultRunId, writeFlowVerdict } from '../../agent-e2e-shared/harness.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const GATEWAY_CLI = path.join(REPO_ROOT, 'packages', 'gateway', 'dist', 'cli', 'cli.js');
 const TUNNEL_DIST = path.join(REPO_ROOT, 'packages', 'tunnel', 'dist', 'index.js');
 const RUNS_DIR = path.join(__dirname, '..', 'runs');
-
-function defaultRunId() {
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace(/Z$/, '');
-  return `${stamp}-${crypto.randomBytes(3).toString('hex')}`;
-}
 
 // Exported so lib/docker-harness.mjs (cross-network-relay flow) can reuse
 // the exact same scoped build instead of re-deriving the turbo filter set.
@@ -157,31 +152,6 @@ export function parseTicket(raw) {
   return payload;
 }
 
-function renderVerdict({ slug, pass, error, notes, result, elapsedMs, state }) {
-  const lines = [
-    `# ${slug}`,
-    '',
-    `**${pass ? 'PASS' : 'FAIL'}** — ${elapsedMs}ms`,
-    '',
-    `- run dir: \`${state.runDir}\``,
-    `- gateway data dir: \`${state.dataDir}\``,
-    `- gateway endpoint: \`${state.gateway?.endpointId ?? 'never became ready'}\``,
-    '',
-  ];
-  if (error) {
-    lines.push('## Error', '```', error.stack ?? String(error), '```', '');
-  }
-  if (notes.length) {
-    lines.push('## Notes');
-    for (const n of notes) lines.push(`- ${n}`);
-    lines.push('');
-  }
-  if (result?.notes) {
-    lines.push('## Result', String(result.notes), '');
-  }
-  return lines.join('\n');
-}
-
 /**
  * Run a pairing flow end-to-end: build → daemon boot → exec → verdict →
  * teardown. The flow function receives a ctx with:
@@ -300,17 +270,25 @@ export async function runFlow(slug, fn) {
   const elapsedMs = Date.now() - t0;
   const pass = !error && result?.pass !== false;
 
-  await fs.writeFile(
-    path.join(runDir, 'verdict.md'),
-    renderVerdict({ slug, pass, error, notes, result, elapsedMs, state }),
-  );
+  await writeFlowVerdict({
+    repoRoot: REPO_ROOT,
+    slug,
+    runDir,
+    elapsedMs,
+    error,
+    notes,
+    result,
+    metadata: {
+      'gateway data dir': state.dataDir,
+      'gateway endpoint': state.gateway?.endpointId ?? 'never became ready',
+    },
+    owner: `tests/agent-e2e-pairing/flows/${slug}.mjs`,
+  });
 
   // Keep the workspace on failure so devices.json / pairing-tickets.json /
   // gateway.log can be inspected; wipe on pass (verdict + log stay in runDir).
   if (pass) await fs.rm(workspace, { recursive: true, force: true });
 
-  console.log(`[runFlow] ${slug} ${pass ? 'PASS' : 'FAIL'} in ${elapsedMs}ms`);
-  console.log(`  verdict : ${path.relative(REPO_ROOT, path.join(runDir, 'verdict.md'))}`);
   if (!pass) {
     if (error) console.error(error);
     process.exit(1);

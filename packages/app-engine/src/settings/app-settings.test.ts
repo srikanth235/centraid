@@ -1,6 +1,6 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { describe, expect, it } from 'vitest';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   readAppSettings,
@@ -12,7 +12,7 @@ import {
 } from './app-settings.js';
 
 function newAppDir(): string {
-  return mkdtempSync(join(tmpdir(), 'centraid-app-settings-'));
+  return tempDirSync('centraid-app-settings-');
 }
 
 describe('readAppSettings', () => {

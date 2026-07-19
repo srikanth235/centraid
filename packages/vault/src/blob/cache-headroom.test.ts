@@ -3,6 +3,7 @@ import { DEFAULT_BACKUP_POLICY } from '../backup-policy.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { nowIso, uuidv7 } from '../ids.js';
 import { BlobCache } from './cache.js';
+import { BlobCustody } from './custody.js';
 import { MemoryBlobStore } from './local.js';
 import { blobUriFor, sha256OfBytes } from './store.js';
 
@@ -55,4 +56,36 @@ test('physical headroom pressure evicts a replicated preview below its logical b
   expect(local.hasSync(secondSha)).toBe(true);
   expect(cache.metrics().evictedBytes).toBe(50);
   expect(cache.admissionCapacity().freeBytes).toBe(110);
+});
+
+test('a promoted pending-outbox blob stays local after staging is consumed', async () => {
+  db = openVaultDb();
+  const local = new MemoryBlobStore();
+  const remote = new MemoryBlobStore();
+  const budget = { bytes: 1_000 };
+  const cache = new BlobCache(db.vault, local, {
+    settings: () => ({ budgetBytes: budget.bytes }),
+  });
+  const custody = new BlobCustody(local, () => ({ store: remote }), cache);
+  const bytes = Buffer.from('post-promotion-pending-offsite');
+  const sha = sha256OfBytes(bytes);
+  custody.ingestSync(bytes);
+  await custody.replicate();
+  cache.replica.heal('cas', new Set([sha]), () => bytes.length);
+  const now = new Date().toISOString();
+  db.vault
+    .prepare(
+      `INSERT INTO blob_outbox (sha256, byte_size, created_at, updated_at)
+       VALUES (?, ?, ?, ?)`,
+    )
+    .run(sha, bytes.length, now, now);
+  expect(db.vault.prepare('SELECT 1 FROM blob_staging WHERE sha256 = ?').get(sha)).toBeUndefined();
+
+  budget.bytes = 1;
+  expect(custody.evictAfterReconcile().evictedBlobs).toBe(0);
+  expect(local.hasSync(sha)).toBe(true);
+
+  db.vault.prepare('DELETE FROM blob_outbox WHERE sha256 = ?').run(sha);
+  expect(custody.evictAfterReconcile().evictedBlobs).toBe(1);
+  expect(local.hasSync(sha)).toBe(false);
 });

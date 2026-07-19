@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Adopt-time inventory reconcile (issue #439 R5) — the four outcomes, in
  * isolation: a restored `blob_replica` index of beliefs, a provider inventory
@@ -10,7 +11,6 @@
 
 import { afterEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
@@ -28,7 +28,7 @@ const manifestPath = (s: string): string => `blobs/sha256/${s.slice(0, 2)}/${s}`
 /** A minimal vault dir: a `vault.db` carrying just `blob_replica` (all the
  *  reconcile reads) with the given shas marked 'cas'-durable, plus a `blobs/` store. */
 async function makeVault(believedCas: string[]): Promise<{ dir: string; blobs: FsBlobStore }> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `reconcile-${crypto.randomUUID()}-`));
+  const dir = await tempDir(`reconcile-${crypto.randomUUID()}-`);
   cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
   const db = new DatabaseSync(path.join(dir, 'vault.db'));
   db.exec(`CREATE TABLE blob_replica (

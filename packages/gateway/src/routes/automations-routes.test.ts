@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Automation/insights HTTP routes (issue #141). Drives
  * `makeAutomationsRouteHandler` with mock req/res, real (empty) stores
@@ -8,7 +9,6 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
@@ -28,7 +28,7 @@ let fired: Array<{ automationRef: string; runId: string }>;
 let handler: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), `auto-routes-${crypto.randomUUID()}-`));
+  dir = await tempDir(`auto-routes-${crypto.randomUUID()}-`);
   const journalDbFile = path.join(dir, 'journal.db');
   const provider = makeJournalDbProvider(journalDbFile);
   analytics = new AnalyticsStore(provider);
