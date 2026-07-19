@@ -225,9 +225,37 @@ describe('InProcessScheduler onTick hook (issue #351)', () => {
       onError: (err, ref) => errors.push({ err, ref }),
       now: () => at(8, 0),
     });
+    await s.reconcile([row('a/one', true, ['0 8 * * *'])]);
     expect(() => s.tick()).not.toThrow();
     expect(errors).toHaveLength(1);
     expect(errors[0]!.err).toBeInstanceOf(Error);
+  });
+
+  it('does not persist a scheduler tick when no automations are enabled (#456 I3)', () => {
+    let ticks = 0;
+    const s = new InProcessScheduler({
+      fire: () => {},
+      onTick: () => {
+        ticks += 1;
+      },
+      now: () => at(8, 0),
+    });
+    s.tick();
+    expect(ticks).toBe(0);
+  });
+
+  it('reports only active/dormant transitions so the host can reset liveness once', async () => {
+    const transitions: boolean[] = [];
+    const s = new InProcessScheduler({
+      fire: () => {},
+      onDormancyChange: (dormant) => void transitions.push(dormant),
+      now: () => at(8, 0),
+    });
+    await s.reconcile([]);
+    await s.reconcile([row('a/one', true, ['0 8 * * *'])]);
+    await s.reconcile([row('a/one', true, ['0 8 * * *'])]);
+    await s.reconcile([]);
+    expect(transitions).toEqual([false, true]);
   });
 
   it('onTick is optional — omitting it changes nothing about firing', async () => {

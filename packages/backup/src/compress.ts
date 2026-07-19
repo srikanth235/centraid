@@ -71,16 +71,7 @@ function compressBody(plain: Uint8Array): { algo: number; body: Buffer } {
   return { algo: ALGO_DEFLATE, body: zlib.deflateRawSync(plain) };
 }
 
-/**
- * Frame raw part bytes into the sealed-payload plaintext `[algo-id][body]`.
- *
- * Keep-if-smaller gate (#405 §1): both candidate frames carry the same 1-byte
- * header, so the comparison reduces to `compressedBody.length < raw.length` —
- * strictly smaller wins, ties and inflation store raw. That bounds the worst
- * case (incompressible input) at exactly one extra byte, never inflation.
- */
-export function frameChunkPayload(plain: Uint8Array): Uint8Array {
-  const { algo, body } = compressBody(plain);
+function frameCompressed(plain: Uint8Array, algo: number, body: Buffer): Uint8Array {
   if (body.length < plain.length) {
     const framed = new Uint8Array(body.length + 1);
     framed[0] = algo;
@@ -91,6 +82,40 @@ export function frameChunkPayload(plain: Uint8Array): Uint8Array {
   framed[0] = ALGO_STORE;
   framed.set(plain, 1);
   return framed;
+}
+
+/**
+ * Frame raw part bytes into the sealed-payload plaintext `[algo-id][body]`.
+ *
+ * Keep-if-smaller gate (#405 §1): both candidate frames carry the same 1-byte
+ * header, so the comparison reduces to `compressedBody.length < raw.length` —
+ * strictly smaller wins, ties and inflation store raw. That bounds the worst
+ * case (incompressible input) at exactly one extra byte, never inflation.
+ */
+export function frameChunkPayload(plain: Uint8Array): Uint8Array {
+  const { algo, body } = compressBody(plain);
+  return frameCompressed(plain, algo, body);
+}
+
+/** Snapshot writer path: compression runs on libuv, never the gateway loop. */
+export function frameChunkPayloadAsync(plain: Uint8Array): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
+    const done =
+      (algo: number) =>
+      (error: Error | null, body: Buffer): void => {
+        if (error) reject(error);
+        else resolve(frameCompressed(plain, algo, body));
+      };
+    if (zstdCompressSync && typeof zlib.zstdCompress === 'function') {
+      zlib.zstdCompress(
+        plain,
+        { params: { [zlib.constants.ZSTD_c_compressionLevel]: ZSTD_LEVEL } },
+        done(ALGO_ZSTD),
+      );
+      return;
+    }
+    zlib.deflateRaw(plain, done(ALGO_DEFLATE));
+  });
 }
 
 /**

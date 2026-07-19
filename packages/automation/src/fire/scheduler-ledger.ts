@@ -66,6 +66,8 @@ export interface MissedWindowEntry {
 export interface SchedulerLedgerSnapshot {
   /** ISO instant of the scheduler's last processed tick. Absent before the first tick ever lands. */
   readonly lastTickAt?: string;
+  /** True while the scheduler has no enabled time-based entries. */
+  readonly dormant?: boolean;
   /** Missed-window entries, oldest-first, bounded to `MAX_MISSED_ENTRIES`. */
   readonly missed: readonly MissedWindowEntry[];
 }
@@ -85,6 +87,7 @@ export function parseSchedulerLedgerSnapshot(
     const parsed = JSON.parse(json) as Partial<SchedulerLedgerSnapshot>;
     return {
       ...(typeof parsed.lastTickAt === 'string' ? { lastTickAt: parsed.lastTickAt } : {}),
+      ...(typeof parsed.dormant === 'boolean' ? { dormant: parsed.dormant } : {}),
       missed: Array.isArray(parsed.missed) ? (parsed.missed as MissedWindowEntry[]) : [],
     };
   } catch {
@@ -121,7 +124,18 @@ export class SchedulerLedgerStore {
 
   recordTick(at: Date): void {
     const current = this.load();
-    this.write({ ...current, lastTickAt: at.toISOString() });
+    const { dormant: _dormant, ...active } = current;
+    this.write({ ...active, lastTickAt: at.toISOString() });
+  }
+
+  setDormant(dormant: boolean, at: Date): void {
+    const current = this.load();
+    if (dormant) {
+      this.write({ ...current, dormant: true });
+      return;
+    }
+    const { dormant: _dormant, ...active } = current;
+    this.write({ ...active, lastTickAt: at.toISOString() });
   }
 
   recordMissed(entries: readonly MissedWindowEntry[]): void {

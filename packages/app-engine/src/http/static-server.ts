@@ -364,7 +364,7 @@ export async function serveStatic(
     )) {
       res.setHeader(k, v);
     }
-    writeCompressible(req, res, raw, contentType, DYNAMIC_QUALITY);
+    await writeCompressible(req, res, raw, contentType, DYNAMIC_QUALITY);
     return true;
   }
 

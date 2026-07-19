@@ -81,6 +81,8 @@ export interface StorageRouteDeps {
   vaults: VaultRegistry;
   /** Provider usage cache (issue #367 §D1) — backs `GET storage/usage`. */
   storageUsage: StorageUsagePoller;
+  /** Re-arm the WAL clock immediately when a live backup backend changes. */
+  onConnectionsChanged?: () => Promise<void> | void;
 }
 
 /** Sum of a connection's local custody bytes across every vault whose
@@ -345,6 +347,7 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
           // `provider_not_home_profile` StorageConnectionError → 400.
           await assertProviderHomeProfile(body.baseUrl, body.apiKey);
           const connection = await deps.storageConnections.create(body);
+          await deps.onConnectionsChanged?.();
           return sendJson(res, 201, { connection, recoveryKitConfirmed });
         } catch (err) {
           return sendConnectionError(res, err);
@@ -375,6 +378,7 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
           try {
             const body = await readJson(req);
             const connection = await deps.storageConnections.update(id, body);
+            await deps.onConnectionsChanged?.();
             return sendJson(res, 200, { connection });
           } catch (err) {
             return sendConnectionError(res, err);
@@ -383,6 +387,7 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
         if (method === 'DELETE') {
           try {
             await deps.storageConnections.delete(id);
+            await deps.onConnectionsChanged?.();
             return sendJson(res, 200, { ok: true });
           } catch (err) {
             return sendConnectionError(res, err);

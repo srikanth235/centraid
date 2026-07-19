@@ -55,6 +55,12 @@ export interface InProcessSchedulerOptions {
    * so an injected test double (`stubScheduler` et al.) never needs it.
    */
   onTick?: (at: Date) => void;
+  /**
+   * Fired only on active↔dormant transitions. Hosts use it to suppress stale
+   * health while empty and reset the downtime baseline before schedules are
+   * re-enabled, without writing a ledger every idle minute.
+   */
+  onDormancyChange?: (dormant: boolean, at: Date) => void | Promise<void>;
 }
 
 interface SchedulerEntry {
@@ -79,6 +85,7 @@ export class InProcessScheduler implements LocalScheduler {
   private readonly now: () => Date;
   private readonly onError?: (err: unknown, ref: string) => void;
   private readonly onTick?: (at: Date) => void;
+  private readonly onDormancyChange?: (dormant: boolean, at: Date) => void | Promise<void>;
   private boundary?: ReturnType<typeof setTimeout>;
   private interval?: ReturnType<typeof setInterval>;
   private lastFiredMinute?: string;
@@ -89,21 +96,27 @@ export class InProcessScheduler implements LocalScheduler {
     this.now = opts.now ?? (() => new Date());
     this.onError = opts.onError;
     this.onTick = opts.onTick;
+    this.onDormancyChange = opts.onDormancyChange;
   }
 
   async register(row: Row): Promise<void> {
+    const wasDormant = this.entries.size === 0;
     const entry = entryOf(row);
     // The host's toggle path: a disabled or trigger-less automation is
     // simply not scheduled.
     if (!row.enabled || (entry.crons.length === 0 && entry.watches.length === 0)) {
       this.entries.delete(row.ref);
+      await this.notifyDormancyChange(wasDormant);
       return;
     }
     this.entries.set(row.ref, entry);
+    await this.notifyDormancyChange(wasDormant);
   }
 
   async unregister(ref: string): Promise<void> {
+    const wasDormant = this.entries.size === 0;
     this.entries.delete(ref);
+    await this.notifyDormancyChange(wasDormant);
   }
 
   async list(): Promise<readonly string[]> {
@@ -111,6 +124,7 @@ export class InProcessScheduler implements LocalScheduler {
   }
 
   async reconcile(desired: ReadonlyArray<Row>): Promise<ReconcileResult> {
+    const wasDormant = this.entries.size === 0;
     const next = new Map<string, SchedulerEntry>();
     for (const row of desired) {
       if (!row.enabled) continue;
@@ -133,7 +147,18 @@ export class InProcessScheduler implements LocalScheduler {
 
     this.entries.clear();
     for (const [ref, entry] of next) this.entries.set(ref, entry);
+    await this.notifyDormancyChange(wasDormant);
     return { added: added.sort(), updated: updated.sort(), removed: removed.sort() };
+  }
+
+  private async notifyDormancyChange(wasDormant: boolean): Promise<void> {
+    const dormant = this.entries.size === 0;
+    if (dormant === wasDormant || !this.onDormancyChange) return;
+    try {
+      await this.onDormancyChange(dormant, this.now());
+    } catch (err) {
+      this.onError?.(err, '<scheduler-dormancy>');
+    }
   }
 
   /**
@@ -147,6 +172,10 @@ export class InProcessScheduler implements LocalScheduler {
     const minute = minuteKey(at);
     if (minute === this.lastFiredMinute) return;
     this.lastFiredMinute = minute;
+    // With no enabled schedules there is no missed-fire state to persist.
+    // Skipping the host hook avoids a journal.db write every minute on the
+    // common zero-automation gateway (#456 I3).
+    if (this.entries.size === 0) return;
     try {
       this.onTick?.(at);
     } catch (err) {

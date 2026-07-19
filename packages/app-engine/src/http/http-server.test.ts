@@ -79,6 +79,44 @@ test('sets CORS headers on a successful authed response', async () => {
   expect(res.headers.get('access-control-allow-origin')).toBe('*');
 });
 
+test('contains rejected handlers at the HTTP boundary before and after headers', async () => {
+  const runtime = new Runtime({ appsDir: workspace });
+  const guarded = await startRuntimeHttpServer({
+    runtime,
+    extraHandlers: [
+      async (req, res) => {
+        if (req.url === '/reject-before') throw new Error('before headers');
+        if (req.url === '/reject-after') {
+          res.writeHead(200, { 'content-type': 'application/octet-stream' });
+          res.write('x');
+          throw new Error('after headers');
+        }
+        return false;
+      },
+    ],
+  });
+  try {
+    const before = await fetch(`${guarded.url}/reject-before`, {
+      headers: { Authorization: `Bearer ${guarded.token}` },
+    });
+    expect(before.status).toBe(500);
+    expect(await before.json()).toEqual({ error: 'internal_server_error' });
+
+    await expect(
+      fetch(`${guarded.url}/reject-after`, {
+        headers: { Authorization: `Bearer ${guarded.token}` },
+      }).then((response) => response.arrayBuffer()),
+    ).rejects.toThrow();
+
+    const healthy = await fetch(`${guarded.url}/centraid/_apps`, {
+      headers: { Authorization: `Bearer ${guarded.token}` },
+    });
+    expect(healthy.status).toBe(200);
+  } finally {
+    await guarded.close();
+  }
+});
+
 test('publicPaths serve without the bearer; everything else still 401s (issue #304)', async () => {
   const runtime = new Runtime({ appsDir: workspace });
   const publicServer = await startRuntimeHttpServer({

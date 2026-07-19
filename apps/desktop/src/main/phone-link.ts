@@ -18,7 +18,7 @@ import path from 'node:path';
 import { app, BrowserWindow } from 'electron';
 import {
   DeviceStore,
-  startDesktopTunnel,
+  startPreferredDesktopTunnel,
   type DesktopTunnelHandle,
   type PairedDevice,
 } from '@centraid/tunnel';
@@ -79,7 +79,7 @@ export async function ensurePhoneLink(): Promise<DesktopTunnelHandle> {
   if (handle) return handle;
   if (starting) return starting;
   starting = (async () => {
-    const started = await startDesktopTunnel({
+    const started = await startPreferredDesktopTunnel({
       secretKey: readOrMintSecretKey(path.join(phoneLinkDir(), 'key.bin')),
       deviceStore: deviceStore(),
       desktopName: os.hostname().replace(/\.local$/, ''),

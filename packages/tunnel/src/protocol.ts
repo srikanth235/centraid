@@ -5,8 +5,8 @@
  *
  *   `centraid/tunnel/1` — HTTP forwarding. One QUIC bi-stream per HTTP
  *     request. Each direction is a header frame followed by raw body bytes
- *     until stream FIN. Responses stream (SSE stays live); requests are
- *     read to end before forwarding (tool payloads are small JSON in v0).
+ *     until stream FIN. Both request and response bodies stream with bounded
+ *     backpressure so concurrent uploads never multiply the old 32 MiB cap.
  *
  *   `centraid/pair/1` — pairing. One bi-stream: the phone sends a
  *     PairRequest frame (then FIN), the desktop answers a PairResponse

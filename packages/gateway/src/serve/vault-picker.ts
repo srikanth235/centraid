@@ -17,7 +17,6 @@ import {
   SEARCHABLE,
   type Credential,
   type Gateway as VaultGateway,
-  type InvokeOutcome,
   type RefCard,
 } from '@centraid/vault';
 import type { RuntimeLogger } from '@centraid/app-engine';
@@ -122,61 +121,4 @@ export interface AnchorSelector {
   prefix: string;
   suffix: string;
   start: number;
-}
-
-/**
- * Assert a link as the owner — the pick already carried the intent, so the
- * shell invokes core.link_entities with the owner-device credential and the
- * app never needs read scopes on the far domain. Relation defaults to
- * `references`.
- */
-export function linkAsOwner(
-  gateway: VaultGateway,
-  cred: Credential,
-  input: LinkInput,
-): InvokeOutcome {
-  return gateway.invoke(cred, {
-    command: 'core.link_entities',
-    input: {
-      from_type: input.from_type,
-      from_id: input.from_id,
-      to_type: input.to_type,
-      to_id: input.to_id,
-      relation: input.relation ?? 'references',
-      ...(input.selector ? { selector: input.selector } : {}),
-    },
-    purpose: 'dpv:ServiceProvision',
-  });
-}
-
-/**
- * Move or clear the standoff anchor of a live link as the owner (issue
- * #282): with a selector the anchor upserts (re-anchor / re-baseline);
- * without one it clears, demoting the reference to strip-only. A locator
- * write — the link judgment itself is untouched.
- */
-export function anchorAsOwner(
-  gateway: VaultGateway,
-  cred: Credential,
-  linkId: string,
-  selector: AnchorSelector | null,
-): InvokeOutcome {
-  return gateway.invoke(cred, {
-    command: 'core.anchor_link',
-    input: { link_id: linkId, ...(selector ? { selector } : {}) },
-    purpose: 'dpv:ServiceProvision',
-  });
-}
-
-/** End a link as the owner (temporal — the row survives with valid_to set). */
-export function unlinkAsOwner(
-  gateway: VaultGateway,
-  cred: Credential,
-  linkId: string,
-): InvokeOutcome {
-  return gateway.invoke(cred, {
-    command: 'core.unlink_entities',
-    input: { link_id: linkId },
-    purpose: 'dpv:ServiceProvision',
-  });
 }

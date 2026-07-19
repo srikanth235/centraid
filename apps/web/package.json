@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && node scripts/precompress.mjs",
     "build:iroh": "bash scripts/build-iroh-wasm.sh",
     "dev": "vite --host 127.0.0.1",
     "e2e": "node ../../scripts/test-report/prepare.mjs --lane web-playwright && bun run --cwd ../../packages/app-engine build && bun run --cwd ../../packages/gateway build && playwright test -c tests/e2e/playwright.config.ts",

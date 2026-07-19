@@ -25,6 +25,8 @@
     "test:report": "node scripts/test-report/generate.mjs",
     "test:report:smoke": "node scripts/test-report/smoke.mjs",
     "test:quality:nightly": "bun run test:perf && bun run test:scale && bun run test:report",
+    "perf:gateway": "turbo run build --filter=@centraid/gateway && bun run --cwd packages/gateway perf:low-end",
+    "perf:runtime-probe": "node packages/gateway/scripts/probe-runtime-sqlite.mjs",
     "typecheck": "turbo run typecheck",
     "format": "oxfmt --threads=1 .",
     "format:check": "oxfmt --check --threads=1 .",

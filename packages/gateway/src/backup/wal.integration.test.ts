@@ -49,6 +49,9 @@ const silentLogger = { info: () => undefined, warn: () => undefined, error: () =
 
 /** Tiny rollover threshold so a few-KB write batch closes a group. */
 const WAL_THRESHOLD = 8 * 1024;
+/** SQLite WAL layout for the 8 KiB pages required by issue #456 S7. */
+const WAL_HEADER_BYTES = 32;
+const WAL_FRAME_BYTES = 24 + 8 * 1024;
 
 const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
@@ -705,7 +708,12 @@ test('offline for EIGHT DAYS: daily base rotations fire, the WAL and the local d
   for (const day of perDay) {
     // A CONSTANT bound — a few rollovers' worth — held on day eight as on day
     // one, and never a function of the outage's length.
-    expect(day.wal).toBeLessThanOrEqual(8 * WAL_THRESHOLD);
+    // The on-disk WAL contains a 32-byte header plus a 24-byte header per
+    // database page. Bound frame count, not just payload bytes: an 8 KiB page
+    // makes twelve frames 98,624 bytes even though their payload is 98,304.
+    // Daily rotation can write eleven fixed metadata/data frames; twelve keeps
+    // the bound independent of outage length without relying on byte payloads.
+    expect(day.wal).toBeLessThanOrEqual(WAL_HEADER_BYTES + 12 * WAL_FRAME_BYTES);
     expect(day.wal).toBeLessThanOrEqual(day0.wal * 2);
     expect(day.local).toBeLessThanOrEqual(day0.local * 2);
   }

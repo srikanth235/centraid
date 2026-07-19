@@ -29,6 +29,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 const TOKEN_PREFIX = 'cdt_';
+const DEFAULT_STAT_TTL_MS = 1_000;
 
 export interface DeviceTokenRow {
   /** Row id — the public half of the token, safe to log. */
@@ -71,17 +72,32 @@ export function parseDeviceToken(raw: string): { tokenId: string; secret: string
 export class DeviceTokenStore {
   private tokens: DeviceTokenRow[] = [];
   private loadedMtimeMs = -1;
+  private nextStatAt = 0;
 
-  private constructor(private readonly file: string) {}
+  private constructor(
+    private readonly file: string,
+    private readonly statTtlMs: number,
+    private readonly now: () => number,
+  ) {}
 
-  static open(file: string): DeviceTokenStore {
-    const store = new DeviceTokenStore(file);
+  static open(
+    file: string,
+    options: { statTtlMs?: number; now?: () => number } = {},
+  ): DeviceTokenStore {
+    const store = new DeviceTokenStore(
+      file,
+      options.statTtlMs ?? DEFAULT_STAT_TTL_MS,
+      options.now ?? Date.now,
+    );
     store.reloadIfChanged();
     return store;
   }
 
   /** Re-read the file when another process (CLI ↔ daemon) rewrote it. */
-  private reloadIfChanged(): void {
+  private reloadIfChanged(force = false): void {
+    const now = this.now();
+    if (!force && now < this.nextStatAt) return;
+    this.nextStatAt = now + this.statTtlMs;
     let mtimeMs: number;
     try {
       mtimeMs = fs.statSync(this.file).mtimeMs;
@@ -119,6 +135,7 @@ export class DeviceTokenStore {
     fs.writeFileSync(tmp, `${JSON.stringify(payload, null, 2)}\n`, { mode: 0o600 });
     fs.renameSync(tmp, this.file);
     this.loadedMtimeMs = fs.statSync(this.file).mtimeMs;
+    this.nextStatAt = this.now() + this.statTtlMs;
   }
 
   /**
@@ -126,7 +143,7 @@ export class DeviceTokenStore {
    * held — one token per device; a re-mint invalidates the old one.
    */
   mint(input: { deviceKey: string; label: string }): { token: string; tokenId: string } {
-    this.reloadIfChanged();
+    this.reloadIfChanged(true);
     this.tokens = this.tokens.filter((t) => t.deviceKey !== input.deviceKey);
     const tokenId = crypto.randomUUID();
     const secret = crypto.randomBytes(32).toString('hex');
@@ -161,7 +178,7 @@ export class DeviceTokenStore {
 
   /** Revoke every token belonging to a device key ("enrollment gone → token dead too"). */
   revokeForDeviceKey(deviceKey: string): DeviceTokenRow[] {
-    this.reloadIfChanged();
+    this.reloadIfChanged(true);
     const removed = this.tokens.filter((t) => t.deviceKey === deviceKey);
     if (removed.length === 0) return [];
     this.tokens = this.tokens.filter((t) => t.deviceKey !== deviceKey);

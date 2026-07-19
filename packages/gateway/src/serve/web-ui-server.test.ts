@@ -4,6 +4,7 @@ import http from 'node:http';
 import { promises as fs } from 'node:fs';
 import { AddressInfo } from 'node:net';
 import path from 'node:path';
+import { brotliCompressSync } from 'node:zlib';
 import { startWebUiServer, type WebUiServerHandle } from './web-ui-server.js';
 
 let root: string;
@@ -17,6 +18,10 @@ beforeEach(async () => {
     '<!doctype html><head><script type="module" src="/assets/app.js"></script></head><div id="root"></div>',
   );
   await fs.writeFile(path.join(root, 'assets', 'app.js'), 'export {};');
+  await fs.writeFile(
+    path.join(root, 'assets', 'app.js.br'),
+    brotliCompressSync(Buffer.from('export {};')),
+  );
   await fs.writeFile(path.join(root, 'assets', 'centraid_web_iroh_bg.wasm'), '\0asm');
   await fs.writeFile(path.join(root, 'sw.js'), 'self.addEventListener("fetch", () => {});');
   await fs.writeFile(path.join(root, 'manifest.webmanifest'), '{"name":"Centraid"}');
@@ -95,6 +100,18 @@ test('publishes gateway discovery and immutable versioned assets', async () => {
   const asset = await fetch(`${server.url}/assets/app.js`);
   expect(asset.status).toBe(200);
   expect(asset.headers.get('cache-control')).toContain('immutable');
+});
+
+test('serves build-time Brotli sidecars without compressing the nonce-stamped shell', async () => {
+  const asset = await fetch(`${server.url}/assets/app.js`, {
+    headers: { 'accept-encoding': 'br' },
+  });
+  expect(asset.headers.get('content-encoding')).toBe('br');
+  expect(asset.headers.get('vary')).toContain('Accept-Encoding');
+  expect(await asset.text()).toBe('export {};');
+
+  const shell = await fetch(server.url, { headers: { 'accept-encoding': 'br' } });
+  expect(shell.headers.get('content-encoding')).toBeNull();
 });
 
 test('degrades to an ephemeral port instead of failing on a collision', async () => {

@@ -19,6 +19,7 @@ import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import type { Readable, Writable } from 'node:stream';
 import type { RunnerModel } from '@centraid/app-engine';
 import { agentSpawnEnv } from '../../spawn-env.js';
+import { lowPriorityCommand } from '../../low-priority.js';
 
 /** `model/list` is a local catalog read — keep the cap short. */
 const MODEL_LIST_TIMEOUT_MS = 8_000;
@@ -54,7 +55,8 @@ export function enumerateCodexModels(
       // caller-supplied path bypasses it; the bare-name default ('codex') is
       // resolved off a sanitized PATH so a stray dev-toolchain shim can't
       // shadow the user's real install (see spawn-env.ts).
-      child = spawn(binPath ?? 'codex', ['app-server', ...extraArgs], {
+      const command = lowPriorityCommand(binPath ?? 'codex', ['app-server', ...extraArgs]);
+      child = spawn(command.bin, command.args, {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: agentSpawnEnv({ binPath }),
       }) as ChildProcessByStdio<Writable, Readable, Readable>;

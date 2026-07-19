@@ -116,6 +116,7 @@ test('DELETE cascades: enrollment gone AND the device token revoked when no enro
   const { token } = deviceTokens.mint({ deviceKey: 'http:lone', label: 'Lone' });
   expect(deviceTokens.authorize(token)).toEqual({ deviceKey: 'http:lone' });
   const onRevoked = vi.fn();
+  const onEndpointRevoked = vi.fn();
 
   const base = await startHandlerServer(
     makeDevicesRouteHandler({
@@ -125,6 +126,7 @@ test('DELETE cascades: enrollment gone AND the device token revoked when no enro
       vaultName,
       endpointTicket,
       onRevoked,
+      onEndpointRevoked,
     }),
   );
   const res = await fetch(`${base}/centraid/_gateway/devices/${row.enrollmentId}`, {
@@ -136,6 +138,7 @@ test('DELETE cascades: enrollment gone AND the device token revoked when no enro
   expect(enrollments.list()).toHaveLength(0);
   expect(deviceTokens.authorize(token)).toBeUndefined();
   expect(onRevoked).toHaveBeenCalledWith([row]);
+  expect(onEndpointRevoked).toHaveBeenCalledWith('http:lone');
 });
 
 test('DELETE keeps the token when the device still holds another vault', async () => {
@@ -143,15 +146,24 @@ test('DELETE keeps the token when the device still holds another vault', async (
   const a = enrollments.enroll({ endpointId: 'http:multi', vaultId: 'vault-a', label: 'Multi' });
   enrollments.enroll({ endpointId: 'http:multi', vaultId: 'vault-b', label: 'Multi' });
   const { token } = deviceTokens.mint({ deviceKey: 'http:multi', label: 'Multi' });
+  const onEndpointRevoked = vi.fn();
 
   const base = await startHandlerServer(
-    makeDevicesRouteHandler({ enrollments, deviceTokens, tickets, vaultName, endpointTicket }),
+    makeDevicesRouteHandler({
+      enrollments,
+      deviceTokens,
+      tickets,
+      vaultName,
+      endpointTicket,
+      onEndpointRevoked,
+    }),
   );
   await fetch(`${base}/centraid/_gateway/devices/${a.enrollmentId}`, { method: 'DELETE' });
 
   // vault-b row still there ⇒ key still enrolled ⇒ token survives.
   expect(enrollments.isEnrolled('http:multi')).toBe(true);
   expect(deviceTokens.authorize(token)).toEqual({ deviceKey: 'http:multi' });
+  expect(onEndpointRevoked).not.toHaveBeenCalled();
 });
 
 test('DELETE of an enrollment outside a device caller’s vault → 404 and the row survives', async () => {

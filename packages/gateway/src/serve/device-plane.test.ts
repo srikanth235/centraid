@@ -65,7 +65,7 @@ test('enrollment: multi-vault = multiple rows; revoke by row or by key', async (
 
 test("enrollment: a second process's writes are visible without restart", async () => {
   const file = await tempFile('devices.json');
-  const daemon = EnrollmentStore.open(file);
+  const daemon = EnrollmentStore.open(file, { statTtlMs: 0 });
   expect(daemon.isEnrolled('ep-new')).toBe(false);
 
   // The admin CLI (separate process = separate store instance) enrolls.

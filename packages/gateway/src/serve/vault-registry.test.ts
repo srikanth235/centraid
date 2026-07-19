@@ -151,6 +151,23 @@ test('a vault created out of band (admin CLI) mounts on first lookup', async () 
   expect(registry.list().map((v) => v.vaultId)).toContain(fresh.vaultId);
 });
 
+test('late-mount listeners observe out-of-band mounts and can unsubscribe', async () => {
+  const root = await tempDir();
+  const registry = openRegistry(root);
+  const mounted: string[] = [];
+  const unsubscribe = registry.onMount((plane) => mounted.push(plane.boot.vaultId));
+
+  const cli = openVaultRegistry({ rootDir: root, logger: silentLogger, ownerName: 'Priya' });
+  const fresh = cli.create('Recovered');
+  cli.stop();
+  expect(registry.get(fresh.vaultId)).toBeDefined();
+  expect(mounted).toEqual([fresh.vaultId]);
+
+  unsubscribe();
+  registry.create('After unsubscribe');
+  expect(mounted).toEqual([fresh.vaultId]);
+});
+
 test('owner routes: list + rename/presentation; create/delete are admin-plane (405)', async () => {
   const root = await tempDir();
   const registry = openRegistry(root);

@@ -73,6 +73,22 @@ export type RecoverJobEvent =
   | { kind: 'failed'; error: string }
   | { kind: 'interrupted' };
 
+export interface SerializedRecoverJobEvent {
+  data: string;
+  end?: string;
+}
+
+function serializeRecoverJobEvent(ev: RecoverJobEvent): SerializedRecoverJobEvent {
+  if (ev.kind === 'phase') return { data: JSON.stringify({ phase: ev.phase }) };
+  if (ev.kind === 'done') {
+    return { data: JSON.stringify(ev.report), end: JSON.stringify({ state: 'done' }) };
+  }
+  if (ev.kind === 'failed') {
+    return { data: JSON.stringify({ error: ev.error }), end: JSON.stringify({ state: 'failed' }) };
+  }
+  return { data: '{}', end: JSON.stringify({ state: 'interrupted' }) };
+}
+
 function isTerminal(ev: RecoverJobEvent): boolean {
   return ev.kind !== 'phase';
 }
@@ -136,7 +152,9 @@ export class RecoverJobRunner {
   /** Full ordered event history for the CURRENT job — a late/reconnecting SSE
    *  subscriber replays this before going live (mirrors the run-event bus). */
   private events: RecoverJobEvent[] = [];
-  private readonly subscribers = new Set<(ev: RecoverJobEvent) => void>();
+  private readonly subscribers = new Set<
+    (ev: RecoverJobEvent, serialized: SerializedRecoverJobEvent) => void
+  >();
   /** Serializes the atomic writes so rapid phase transitions never overlap
    *  (temp+rename races) and the last write always reflects the latest record. */
   private persistChain: Promise<void> = Promise.resolve();
@@ -211,7 +229,10 @@ export class RecoverJobRunner {
   /** Subscribe to a job's live events. Returns an idempotent unsubscribe. Only
    *  the current job has a live stream; a stale jobId gets no events (the caller
    *  should replay `snapshot()` and check `currentRecord()` first). */
-  subscribe(jobId: string, fn: (ev: RecoverJobEvent) => void): () => void {
+  subscribe(
+    jobId: string,
+    fn: (ev: RecoverJobEvent, serialized: SerializedRecoverJobEvent) => void,
+  ): () => void {
     if (this.record?.jobId !== jobId) return () => undefined;
     this.subscribers.add(fn);
     return () => {
@@ -306,9 +327,10 @@ export class RecoverJobRunner {
   private emit(jobId: string, ev: RecoverJobEvent): void {
     if (this.record?.jobId !== jobId) return;
     this.events.push(ev);
+    const serialized = serializeRecoverJobEvent(ev);
     for (const fn of Array.from(this.subscribers)) {
       try {
-        fn(ev);
+        fn(ev, serialized);
       } catch {
         /* one wedged subscriber must not break the fanout */
       }

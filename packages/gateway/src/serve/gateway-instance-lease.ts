@@ -40,7 +40,7 @@ import type { HealthRegistry } from './health-registry.js';
 export const LEASE_FILE_NAME = 'gateway.lease';
 
 /** How often a live instance rewrites its own `renewedAt` into the lease file. */
-export const LEASE_RENEW_INTERVAL_MS = 30_000;
+export const LEASE_RENEW_INTERVAL_MS = 60_000;
 
 /**
  * A lease last renewed within this window is treated as belonging to a
@@ -50,7 +50,7 @@ export const LEASE_RENEW_INTERVAL_MS = 30_000;
  * "live" (and block a would-be second instance from reclaiming it) for up
  * to this long after its last renew.
  */
-export const LEASE_FRESH_WINDOW_MS = 90_000;
+export const LEASE_FRESH_WINDOW_MS = LEASE_RENEW_INTERVAL_MS * 3;
 
 export interface LeaseRecord {
   instanceId: string;

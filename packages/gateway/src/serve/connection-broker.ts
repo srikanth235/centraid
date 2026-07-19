@@ -177,7 +177,7 @@ export class ConnectionBroker {
     if (!response.ok) {
       throw new Error(`authorization code exchange failed: ${response.detail}`);
     }
-    const outcome: InvokeOutcome = plane.gateway.invoke(plane.ownerCredential, {
+    const outcome: InvokeOutcome = await plane.invoke(plane.ownerCredential, {
       command: 'sync.store_tokens',
       input: {
         connection_id: connectionId,
@@ -374,7 +374,7 @@ export class ConnectionBroker {
     const { accessToken, refreshToken, expiresAt } = response;
     // Rot point 1: persist BEFORE first use — receipted, sealed by the
     // command pipeline, journal-redacted via sealedInput.
-    const outcome: InvokeOutcome = plane.gateway.invoke(plane.ownerCredential, {
+    const outcome: InvokeOutcome = await plane.invoke(plane.ownerCredential, {
       command: 'sync.store_tokens',
       input: {
         connection_id: connectionId,
@@ -469,7 +469,7 @@ export class ConnectionBroker {
     connectionId: string,
     note: string,
   ): Promise<void> {
-    plane.gateway.invoke(plane.ownerCredential, {
+    await plane.invoke(plane.ownerCredential, {
       command: 'sync.set_connection_status',
       input: { connection_id: connectionId, status: 'needs-auth', note },
       purpose: BROKER_PURPOSE,

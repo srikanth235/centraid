@@ -125,6 +125,8 @@ export class RemoteStreamIngress {
     if (this.chunkBytes % frameSize !== 0) {
       throw new Error('stream ingress chunk size must align to the CBSF frame size');
     }
+    const initialHash = await IncrementalSha256.create();
+    const hashState = initialHash.exportState();
     const row = this.deps.state.createSession({
       sessionId,
       kind: 'stream-through',
@@ -133,7 +135,7 @@ export class RemoteStreamIngress {
       remoteTempId: tempId,
       expiresAt,
       partCount: Math.max(1, Math.ceil(input.expectedSize / this.chunkBytes)),
-      hashState: new IncrementalSha256().exportState(),
+      hashState,
       ...(input.mediaType ? { mediaType: input.mediaType } : {}),
       ...(input.filename ? { filename: input.filename } : {}),
       ...(input.stagedBy ? { stagedBy: input.stagedBy } : {}),
@@ -141,7 +143,7 @@ export class RemoteStreamIngress {
     this.deps.state.recordRemoteAppend({
       sessionId,
       receivedBytes: 0,
-      hashState: new IncrementalSha256().exportState(),
+      hashState,
       parts: [],
       meta: { frameSize, sealedLens: [], sealedBytes: 0 },
     });
@@ -185,13 +187,13 @@ export class RemoteStreamIngress {
     if (startFrame !== meta.sealedLens.length) {
       throw new VaultBlobSessionError('stream-through frame ledger does not match its byte offset');
     }
-    const state = new IncrementalSha256(
+    const state = await IncrementalSha256.create(
       JSON.parse(row.hash_state_json ?? '{}') as SerializableSha256State,
     );
     state.update(bytes);
     const nextOffset = offset + bytes.length;
     if (nextOffset === expectedSize) {
-      const actual = new IncrementalSha256(state.exportState()).digestHex();
+      const actual = await state.digestHex();
       if (actual !== sha) throw new VaultBlobHashMismatchError(sha, actual);
     }
     const key = remoteEncryptionKey(remote, sha)!;
@@ -272,10 +274,10 @@ export class RemoteStreamIngress {
         row.received_bytes,
       );
     }
-    const state = new IncrementalSha256(
+    const state = await IncrementalSha256.create(
       JSON.parse(row.hash_state_json ?? '{}') as SerializableSha256State,
     );
-    const actual = state.digestHex();
+    const actual = await state.digestHex();
     if (actual !== sha) throw new VaultBlobHashMismatchError(sha, actual);
     const remote = this.requireRemote(sha);
     const meta = parseMeta(row);
@@ -360,7 +362,7 @@ export class RemoteStreamIngress {
     this.deps.state.recordRemoteAppend({
       sessionId: row.session_id,
       receivedBytes: 0,
-      hashState: new IncrementalSha256().exportState(),
+      hashState: (await IncrementalSha256.create()).exportState(),
       parts: [{ partNumber: 1, etag }],
       meta: { ...meta, sealedBytes: bytes.length },
     });

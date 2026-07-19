@@ -1,0 +1,24 @@
+[package]
+name = "centraid-tunnel-native"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.91"
+license = "UNLICENSED"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+centraid-data-plane = { path = "../../data-plane" }
+hex = "0.4"
+napi = { version = "3.9.2", features = ["napi8", "tokio_rt"] }
+napi-derive = "3.5.6"
+
+[build-dependencies]
+napi-build = "2.3.2"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

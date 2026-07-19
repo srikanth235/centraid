@@ -65,7 +65,7 @@ import * as esbuild from 'esbuild';
 import { resolveStaticPath, SHARED_ASSET_FILES } from './security.js';
 import { compileCssModule } from './css-module.js';
 import { computeEtag } from './asset-variants.js';
-import type { Encoding } from './compression.js';
+import { compress, staticQualityForHost, type Encoding } from './compression.js';
 
 /**
  * Served rel path of a whole-app bundle: `_bundle.<16-hex>.js`. The leading
@@ -352,6 +352,36 @@ export function findBundleByHash(appDir: string, hash: string): BuiltBundle | nu
     if (b.ok && b.hash === hash) return b;
   }
   return null;
+}
+
+/**
+ * Publish/install hook: build every HTML entry and both wire variants before
+ * a human can request the app. The same cache is used by the serve path, so
+ * neither esbuild nor brotli lands on first paint.
+ */
+export async function prewarmAppAssets(
+  appDir: string,
+  sharedAssetsDir?: string,
+): Promise<{ bundles: number; variants: number }> {
+  const html = await fs.readFile(path.join(appDir, 'index.html'), 'utf8');
+  const prepared = await prepareBundledIndex(html, appDir, sharedAssetsDir);
+  const hashes = new Set(
+    [...prepared.matchAll(/_bundle\.([0-9a-f]{16})\.js/g)].map((match) => match[1]!),
+  );
+  let variants = 0;
+  for (const hash of hashes) {
+    const bundle = findBundleByHash(appDir, hash);
+    if (!bundle) continue;
+    const quality = staticQualityForHost();
+    const [br, gzip] = await Promise.all([
+      compress(bundle.code, 'br', quality),
+      compress(bundle.code, 'gzip', quality),
+    ]);
+    bundle.variants.set('br', br);
+    bundle.variants.set('gzip', gzip);
+    variants += 2;
+  }
+  return { bundles: hashes.size, variants };
 }
 
 // --- index.html rewriting ---------------------------------------------------

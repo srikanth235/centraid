@@ -17,6 +17,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
+const DEFAULT_STAT_TTL_MS = 1_000;
+
 export interface DeviceEnrollment {
   /** Row id — the revocation handle. */
   enrollmentId: string;
@@ -83,17 +85,32 @@ interface EnrollmentFile {
 export class EnrollmentStore {
   private enrollments: DeviceEnrollment[] = [];
   private loadedRevision = '';
+  private nextStatAt = 0;
 
-  private constructor(private readonly file: string) {}
+  private constructor(
+    private readonly file: string,
+    private readonly statTtlMs: number,
+    private readonly now: () => number,
+  ) {}
 
-  static open(file: string): EnrollmentStore {
-    const store = new EnrollmentStore(file);
+  static open(
+    file: string,
+    options: { statTtlMs?: number; now?: () => number } = {},
+  ): EnrollmentStore {
+    const store = new EnrollmentStore(
+      file,
+      options.statTtlMs ?? DEFAULT_STAT_TTL_MS,
+      options.now ?? Date.now,
+    );
     store.reloadIfChanged();
     return store;
   }
 
   /** Re-read the file when another process (CLI ↔ daemon) rewrote it. */
-  private reloadIfChanged(): void {
+  private reloadIfChanged(force = false): void {
+    const now = this.now();
+    if (!force && now < this.nextStatAt) return;
+    this.nextStatAt = now + this.statTtlMs;
     let revision: string;
     try {
       const stat = fs.statSync(this.file, { bigint: true });
@@ -129,13 +146,14 @@ export class EnrollmentStore {
     fs.renameSync(tmp, this.file);
     const stat = fs.statSync(this.file, { bigint: true });
     this.loadedRevision = `${stat.mtimeNs}:${stat.size}`;
+    this.nextStatAt = this.now() + this.statTtlMs;
   }
 
   private mutate<T>(change: () => T): T {
     return withEnrollmentFileLock(this.file, () => {
       // Never trust an in-memory snapshot after waiting for another process.
       this.loadedRevision = '';
-      this.reloadIfChanged();
+      this.reloadIfChanged(true);
       const result = change();
       this.persist();
       return result;
@@ -145,6 +163,12 @@ export class EnrollmentStore {
   /** Every enrollment, oldest first. */
   list(): DeviceEnrollment[] {
     this.reloadIfChanged();
+    return [...this.enrollments];
+  }
+
+  /** Force an external-process refresh (used only after an OS file-change event). */
+  listFresh(): DeviceEnrollment[] {
+    this.reloadIfChanged(true);
     return [...this.enrollments];
   }
 

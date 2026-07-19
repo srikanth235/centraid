@@ -13,6 +13,7 @@ import {
   ALGO_STORE,
   ALGO_ZSTD,
   frameChunkPayload,
+  frameChunkPayloadAsync,
   unframeChunkPayload,
   zstdAvailable,
 } from './compress.js';
@@ -23,6 +24,15 @@ function compressible(size: number): Uint8Array {
 }
 
 describe('frameChunkPayload / unframeChunkPayload', () => {
+  test('the async writer preserves the wire format and retry determinism', async () => {
+    const raw = new TextEncoder().encode('async-compression'.repeat(10_000));
+    const first = await frameChunkPayloadAsync(raw);
+    const retry = await frameChunkPayloadAsync(raw);
+    expect(first).toEqual(retry);
+    expect(first[0]).toBe(frameChunkPayload(raw)[0]);
+    expect(unframeChunkPayload(first)).toEqual(raw);
+  });
+
   test('algo id bytes are the format-normative values', () => {
     expect(ALGO_STORE).toBe(0x00);
     expect(ALGO_ZSTD).toBe(0x01);

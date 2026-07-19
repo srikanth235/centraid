@@ -49,6 +49,9 @@ function makeOpts(): LifecycleRouteOptions {
     ensureRegistered: async () => {
       calls.push('ensureRegistered');
     },
+    preparePublishedApp: async () => {
+      calls.push('preparePublishedApp');
+    },
     deregister: async () => {
       calls.push('deregister');
     },
@@ -79,7 +82,13 @@ test('publishAndReconcile validates, publishes, registers, reconciles, then clos
     ephemeralSession: true,
   });
 
-  expect(calls).toEqual(['publish', 'ensureRegistered', 'reconcile', 'closeSession']);
+  expect(calls).toEqual([
+    'publish',
+    'ensureRegistered',
+    'preparePublishedApp',
+    'reconcile',
+    'closeSession',
+  ]);
 });
 
 test('publishAndReconcile keeps a non-ephemeral session open', async () => {
@@ -92,7 +101,7 @@ test('publishAndReconcile keeps a non-ephemeral session open', async () => {
     message: 'publish notes',
   });
 
-  expect(calls).toEqual(['publish', 'ensureRegistered', 'reconcile']);
+  expect(calls).toEqual(['publish', 'ensureRegistered', 'preparePublishedApp', 'reconcile']);
 });
 
 test('publishAndReconcile rejects an invalid manifest before publishing', async () => {

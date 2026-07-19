@@ -7,9 +7,13 @@ import { drainOutboxRow } from './outbox-drain.js';
 import { cleanupOrphanedMultipartUploads } from './orphan-multipart.js';
 import { desiredStoreForSha } from './store-routing.js';
 import type { BlobTransferState, OutboxRow } from './transfer-state.js';
+import { jitterDelayMs } from '../timer-jitter.js';
 
 const ORPHAN_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 const ORPHAN_SWEEP_RETRY_MS = 60 * 1000;
+export const OUTBOX_ACTIVE_INTERVAL_MS = 1_000;
+export const OUTBOX_IDLE_INTERVAL_MS = 30_000;
+export const OUTBOX_UNCONFIGURED_INTERVAL_MS = 60_000;
 
 export interface BlobOutboxRunnerOptions {
   vault: DatabaseSync;
@@ -17,30 +21,69 @@ export interface BlobOutboxRunnerOptions {
   local: LocalBlobStore;
   cache: BlobCache;
   remote: () => RemoteTier | null;
+  remoteConfigured: () => boolean;
   onStatus(): void;
+  /** Host-wide event-loop pressure gate. Explicit `drainSha` calls stay foreground. */
+  shouldDeferBackgroundWork?: () => boolean;
+  /** Close coordinator-owned resources before an expired row/file is removed. */
+  onExpireSession?: (sessionId: string) => void;
   intervalMs?: number;
 }
 
 /** Continuous single-flight custody drain with bounded per-blob workers (#414). */
 export class BlobOutboxRunner {
-  private readonly timer: NodeJS.Timeout;
+  private timer: NodeJS.Timeout | undefined;
   private flight: Promise<void> | null = null;
   private closing = false;
   private closed = false;
   private nextOrphanSweepAt = 0;
 
   constructor(private readonly options: BlobOutboxRunnerOptions) {
-    this.timer = setInterval(() => this.kick(), options.intervalMs ?? 1_000);
-    this.timer.unref();
+    this.scheduleNext();
   }
 
   kick(): void {
     if (this.closing || this.closed || this.flight) return;
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = undefined;
+    }
+    // No remote tier means there is nowhere to drain, but local upload spools
+    // still expire and must be reaped. Run that cheap lifecycle pass on the
+    // one-minute configuration backstop (#456 I1).
+    if (!this.options.remoteConfigured()) {
+      this.flight = this.cleanupExpiredSessions()
+        .catch(() => undefined)
+        .finally(() => {
+          this.flight = null;
+          this.scheduleNext();
+        });
+      return;
+    }
+    if (this.options.shouldDeferBackgroundWork?.()) {
+      this.scheduleNext();
+      return;
+    }
     this.flight = this.drainDue()
       .catch(() => undefined)
       .finally(() => {
         this.flight = null;
+        this.scheduleNext();
       });
+  }
+
+  private scheduleNext(): void {
+    if (this.closing || this.closed || this.timer) return;
+    const delay = !this.options.remoteConfigured()
+      ? OUTBOX_UNCONFIGURED_INTERVAL_MS
+      : this.options.state.dueOutbox().length > 0
+        ? (this.options.intervalMs ?? OUTBOX_ACTIVE_INTERVAL_MS)
+        : OUTBOX_IDLE_INTERVAL_MS;
+    this.timer = setTimeout(() => {
+      this.timer = undefined;
+      this.kick();
+    }, jitterDelayMs(delay));
+    this.timer.unref();
   }
 
   private deps() {
@@ -107,6 +150,7 @@ export class BlobOutboxRunner {
 
   private async cleanupExpiredSessions(): Promise<void> {
     for (const row of this.options.state.expiredSessions()) {
+      this.options.onExpireSession?.(row.session_id);
       if (row.temp_path) rmSync(row.temp_path, { force: true });
       const transfer = this.options.remote()?.transfer;
       if (row.remote_temp_id && row.remote_upload_id) {
@@ -139,7 +183,7 @@ export class BlobOutboxRunner {
 
   async close(): Promise<void> {
     this.closing = true;
-    clearInterval(this.timer);
+    if (this.timer) clearTimeout(this.timer);
     await this.flight?.catch(() => undefined);
     this.closed = true;
   }
@@ -148,6 +192,6 @@ export class BlobOutboxRunner {
   abandon(): void {
     this.closing = true;
     this.closed = true;
-    clearInterval(this.timer);
+    if (this.timer) clearTimeout(this.timer);
   }
 }

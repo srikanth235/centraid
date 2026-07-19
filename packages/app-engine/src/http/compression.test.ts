@@ -8,6 +8,7 @@ import {
   MIN_COMPRESS_BYTES,
   negotiateEncoding,
   sendJsonNegotiated,
+  staticQualityForHost,
   STATIC_QUALITY,
 } from './compression.js';
 
@@ -103,14 +104,14 @@ describe('isCompressibleType', () => {
 describe('compress — round-trips', () => {
   const payload = Buffer.from('{"rows":[' + '"x",'.repeat(2000) + '"end"]}');
 
-  it('brotli output decompresses to the original', () => {
-    const out = compress(payload, 'br', STATIC_QUALITY);
+  it('brotli output decompresses to the original', async () => {
+    const out = await compress(payload, 'br', STATIC_QUALITY);
     expect(out.length).toBeLessThan(payload.length);
     expect(zlib.brotliDecompressSync(out).equals(payload)).toBe(true);
   });
 
-  it('gzip output decompresses to the original', () => {
-    const out = compress(payload, 'gzip', DYNAMIC_QUALITY);
+  it('gzip output decompresses to the original', async () => {
+    const out = await compress(payload, 'gzip', DYNAMIC_QUALITY);
     expect(out.length).toBeLessThan(payload.length);
     expect(zlib.gunzipSync(out).equals(payload)).toBe(true);
   });
@@ -119,9 +120,9 @@ describe('compress — round-trips', () => {
 describe('sendJsonNegotiated', () => {
   const big = { rows: Array.from({ length: 500 }, (_, i) => ({ i, name: `row-${i}` })) };
 
-  it('compresses a large body with brotli and sets Vary + Content-Encoding', () => {
+  it('compresses a large body with brotli and sets Vary + Content-Encoding', async () => {
     const { res, data } = mockRes();
-    sendJsonNegotiated(mockReq({ 'accept-encoding': 'br' }), res, 200, big);
+    await sendJsonNegotiated(mockReq({ 'accept-encoding': 'br' }), res, 200, big);
     expect(data.statusCode).toBe(200);
     expect(data.headers['Content-Encoding']).toBe('br');
     expect(data.headers['Vary']).toBe('Accept-Encoding');
@@ -129,28 +130,44 @@ describe('sendJsonNegotiated', () => {
     expect(JSON.parse(zlib.brotliDecompressSync(data.body).toString('utf8'))).toEqual(big);
   });
 
-  it('uses gzip when br is not offered', () => {
+  it('uses gzip when br is not offered', async () => {
     const { res, data } = mockRes();
-    sendJsonNegotiated(mockReq({ 'accept-encoding': 'gzip' }), res, 200, big);
+    await sendJsonNegotiated(mockReq({ 'accept-encoding': 'gzip' }), res, 200, big);
     expect(data.headers['Content-Encoding']).toBe('gzip');
     expect(JSON.parse(zlib.gunzipSync(data.body).toString('utf8'))).toEqual(big);
   });
 
-  it('ships raw JSON (no Content-Encoding) when the request offers no encoding', () => {
+  it('ships raw JSON (no Content-Encoding) when the request offers no encoding', async () => {
     const { res, data } = mockRes();
-    sendJsonNegotiated(mockReq(), res, 200, big);
+    await sendJsonNegotiated(mockReq(), res, 200, big);
     expect(data.headers['Content-Encoding']).toBeUndefined();
     // Still sets Vary so a cache keys per Accept-Encoding.
     expect(data.headers['Vary']).toBe('Accept-Encoding');
     expect(JSON.parse(data.body.toString('utf8'))).toEqual(big);
   });
 
-  it('skips compression for a sub-1KB body even when br is offered', () => {
+  it('skips compression for a sub-1KB body even when br is offered', async () => {
     const small = { ok: true };
     expect(Buffer.byteLength(JSON.stringify(small))).toBeLessThan(MIN_COMPRESS_BYTES);
     const { res, data } = mockRes();
-    sendJsonNegotiated(mockReq({ 'accept-encoding': 'br' }), res, 200, small);
+    await sendJsonNegotiated(mockReq({ 'accept-encoding': 'br' }), res, 200, small);
     expect(data.headers['Content-Encoding']).toBeUndefined();
     expect(JSON.parse(data.body.toString('utf8'))).toEqual(small);
   });
+});
+
+it('low-end hosts choose bounded static compression quality', () => {
+  expect(staticQualityForHost({ cores: 4, totalMemoryBytes: 2 * 1024 ** 3 })).toEqual({
+    brotli: 5,
+    gzip: 6,
+  });
+  expect(staticQualityForHost({ cores: 8, totalMemoryBytes: 16 * 1024 ** 3 })).toEqual(
+    STATIC_QUALITY,
+  );
+  expect(
+    staticQualityForHost(
+      { cores: 8, totalMemoryBytes: 16 * 1024 ** 3 },
+      { CENTRAID_RESOLVED_HARDWARE_PROFILE: 'constrained' },
+    ),
+  ).toEqual({ brotli: 5, gzip: 6 });
 });

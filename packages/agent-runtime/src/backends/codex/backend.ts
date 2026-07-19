@@ -39,6 +39,7 @@ import type { ToolContext } from '../../runtime.js';
 import { centraidDynamicToolSpecs, handleCentraidToolCall } from './host-tools.js';
 import { codexImageItems, codexUnsupportedPdfs } from '../../multimodal.js';
 import { agentSpawnEnv } from '../../spawn-env.js';
+import { lowPriorityCommand } from '../../low-priority.js';
 
 export interface CodexTurnInput {
   cwd: string;
@@ -109,7 +110,8 @@ export async function runCodexTurn(
 
   const args = ['app-server', ...(config.extraArgs ?? [])];
   const childEnv = agentSpawnEnv({ binPath: config.binPath, extraPath: input.extraPath });
-  const child = spawn(bin, args, {
+  const command = lowPriorityCommand(bin, args);
+  const child = spawn(command.bin, command.args, {
     cwd: input.cwd,
     env: childEnv,
     stdio: ['pipe', 'pipe', 'pipe'],

@@ -120,6 +120,45 @@ test('composedHandler dispatches runtime routes with NO bearer check', async () 
   }
 });
 
+test('production route table reaches both tunnel controls and the OAuth callback', async () => {
+  await gateway.stop();
+  const secret = 'compiled-route-secret';
+  gateway = await buildGateway({
+    paths: pathsUnder(dataDir),
+    dataPlaneControl: {
+      secret,
+      authorize: (endpointId) => ({ allowed: endpointId === 'device-a' }),
+      pair: (request, endpointId) => ({ ok: true, endpointId, request }),
+    },
+  });
+  const srv = await mountUnauthed(gateway.composedHandler);
+  try {
+    const authorize = await fetch(
+      `${srv.url}/centraid/_gateway/tunnel/authorize?endpointId=device-a`,
+      { headers: { 'x-centraid-data-plane-secret': secret } },
+    );
+    expect(authorize.status).toBe(200);
+    expect(await authorize.json()).toEqual({ allowed: true });
+
+    const pair = await fetch(`${srv.url}/centraid/_gateway/tunnel/pair?endpointId=device-a`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-centraid-data-plane-secret': secret,
+      },
+      body: JSON.stringify({ ticketId: 'ticket-a' }),
+    });
+    expect(pair.status).toBe(200);
+    expect(await pair.json()).toMatchObject({ ok: true, endpointId: 'device-a' });
+
+    const callback = await fetch(`${srv.url}/centraid/_vault/oauth/callback?error=access_denied`);
+    expect(callback.status).toBe(400);
+    expect(await callback.text()).toContain('Not connected');
+  } finally {
+    await srv.close();
+  }
+});
+
 test('composedHandler routes the chat-history + prefs prefixes', async () => {
   await gateway.start('http://127.0.0.1:0');
   const srv = await mountUnauthed(gateway.composedHandler);

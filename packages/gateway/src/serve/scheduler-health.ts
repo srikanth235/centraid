@@ -55,10 +55,10 @@ export function createSchedulerHealthProbe(options: SchedulerHealthOptions): Hea
       const tag = vault.vaultId.slice(0, 8);
       // Before the first tick ever lands for a vault (fresh boot; or an
       // automation-free vault whose scheduler nonetheless ticks — see
-      // in-process-scheduler.ts, ticking is unconditional) there is nothing
-      // to compare against yet. Skip rather than false-flag "stale" — the
-      // very next tick (well within `staleMs`) settles this.
-      if (snapshot.lastTickAt) {
+      // in-process-scheduler.ts) there is nothing to compare against yet.
+      // Dormant schedulers deliberately stop ticking; the transition hook
+      // resets the baseline before work is enabled again.
+      if (snapshot.lastTickAt && !snapshot.dormant) {
         const age = now() - Date.parse(snapshot.lastTickAt);
         if (Number.isFinite(age) && age > staleMs) {
           stale.push(`${tag} (last tick ${Math.round(age / 1000)}s ago)`);
@@ -85,7 +85,7 @@ export function createSchedulerHealthProbe(options: SchedulerHealthOptions): Hea
     if (notes.length === 0) {
       return {
         status: 'ok',
-        detail: `${vaults.length} vault scheduler${vaults.length === 1 ? '' : 's'} ticking`,
+        detail: `${vaults.length} vault scheduler${vaults.length === 1 ? '' : 's'} healthy`,
       };
     }
     return { status: 'degraded', detail: notes.join('; ') };

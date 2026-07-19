@@ -52,6 +52,7 @@ import {
   resolveSubsystemModel,
   resolveSubsystemRunner,
   TurnLimiter,
+  prewarmAppAssets,
   type AskModelInfo,
   type ConversationRunner,
   type ModelSubsystem,
@@ -79,7 +80,12 @@ import {
   type RunnerPrefs,
   type SurfaceStatus,
 } from '@centraid/agent-runtime';
-import { readBlobStoreSettings, custodyStateCounts } from '@centraid/vault';
+import {
+  readBlobStoreSettings,
+  custodyStateCounts,
+  jitterDelayMs,
+  type PreviewCodec,
+} from '@centraid/vault';
 import { createImagePreviewCodec } from '../preview/codec.js';
 import { WorktreeStore } from '../worktree-store/index.js';
 import { openVaultRegistry, type VaultRegistry } from './vault-registry.js';
@@ -108,6 +114,11 @@ import { makeConnectionsRouteHandler } from '../routes/connections-routes.js';
 import { makeDemoRouteHandler } from '../routes/demo-routes.js';
 import { makeImportRouteHandler } from '../routes/import-routes.js';
 import { makeBlobRouteHandler } from '../routes/blob-routes.js';
+import {
+  makeDataPlaneControlHandler,
+  type DataPlaneControlOptions,
+} from '../routes/data-plane-control.js';
+import type { DataPlaneHttpOptions } from './data-plane-handoff.js';
 import { makeAppsStoreRouteHandler } from '../routes/apps-store-routes.js';
 import { makeDraftCodeDirResolver, type ExtBandOps } from '../lifecycle/ext-band.js';
 import {
@@ -140,6 +151,9 @@ import { makeGatewayInfoRouteHandler } from '../routes/gateway-info-routes.js';
 import { makeHealthRouteHandler } from '../routes/health-routes.js';
 import { makeRemindersRouteHandler } from '../routes/reminders-routes.js';
 import { HealthRegistry } from './health-registry.js';
+import { GatewayPerformanceMonitor } from './gateway-performance.js';
+import { measureStorageLatency } from './storage-latency.js';
+import { resolveGatewayHardwareProfile } from './hardware-profile.js';
 import { logsEventsSubscriberCount, makeLogsRouteHandler } from '../routes/logs-routes.js';
 import { sendJson } from '../routes/route-helpers.js';
 import type { GatewayPaths } from '../paths.js';
@@ -194,6 +208,12 @@ export interface BuildGatewayOptions {
    * transport is implicitly enrolled in every vault.
    */
   deviceAccess?: DeviceAccess;
+  /** Optional Rust byte-plane X-Sendfile handoff (issue #456 N3). */
+  dataPlaneHttp?: DataPlaneHttpOptions;
+  /** Auth callback used only by the native iroh relay on loopback. */
+  dataPlaneControl?: DataPlaneControlOptions;
+  /** Host-selected preview engine; daemon defaults to native sharp/libvips. */
+  previewCodec?: PreviewCodec;
   /**
    * The daemon's device-pairing plane (issue #376): its `EnrollmentStore`
    * + `PairingTicketStore` + `DeviceTokenStore`. When set, `buildGateway`
@@ -213,6 +233,8 @@ export interface BuildGatewayOptions {
      * mint time. Undefined before the daemon has an endpoint.
      */
     endpointTicket?: () => string | undefined;
+    /** Close Rust-owned iroh transports after a device loses its final enrollment. */
+    onEndpointRevoked?: (endpointId: string) => void | Promise<void>;
   };
   /**
    * Durable PWA control sessions (issue #376). When `controlsFile` is set,
@@ -251,6 +273,77 @@ export type FireAutomation = (
 
 /** A route handler in the gateway chain: `true` when it owned the response. */
 export type RouteHandler = (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
+
+export interface RoutePrefixRegistration {
+  readonly prefixes: readonly string[];
+  readonly handler: RouteHandler;
+}
+
+/** Register a handler in the immutable prefix table built at gateway boot (#456 R1). */
+export function forRoutePrefixes(
+  prefixes: string | readonly string[],
+  handler: RouteHandler,
+): RoutePrefixRegistration {
+  return { prefixes: typeof prefixes === 'string' ? [prefixes] : prefixes, handler };
+}
+
+interface RoutePrefixNode {
+  readonly children: Map<string, RoutePrefixNode>;
+  readonly registrations: RoutePrefixRegistration[];
+}
+
+function routeSegments(pathname: string): string[] {
+  return pathname.split('/').filter(Boolean);
+}
+
+/**
+ * Compile route families into a segment trie. Dispatch reads and strips the
+ * request query exactly once, performs O(path-depth) map lookups, then invokes
+ * only matching handlers from most-specific prefix to least-specific prefix.
+ */
+export function createRoutePrefixDispatch(
+  registrations: readonly RoutePrefixRegistration[],
+): RouteHandler {
+  const root: RoutePrefixNode = { children: new Map(), registrations: [] };
+  for (const registration of registrations) {
+    for (const prefix of registration.prefixes) {
+      let node = root;
+      for (const segment of routeSegments(prefix)) {
+        let child = node.children.get(segment);
+        if (!child) {
+          child = { children: new Map(), registrations: [] };
+          node.children.set(segment, child);
+        }
+        node = child;
+      }
+      node.registrations.push(registration);
+    }
+  }
+
+  return async (req, res) => {
+    const raw = req.url ?? '/';
+    const query = raw.indexOf('?');
+    const pathname = query === -1 ? raw : raw.slice(0, query);
+    const matches: RoutePrefixRegistration[][] = [];
+    let node: RoutePrefixNode | undefined = root;
+    if (node.registrations.length > 0) matches.push(node.registrations);
+    for (const segment of routeSegments(pathname)) {
+      node = node.children.get(segment);
+      if (!node) break;
+      if (node.registrations.length > 0) matches.push(node.registrations);
+    }
+
+    const invoked = new Set<RoutePrefixRegistration>();
+    for (let depth = matches.length - 1; depth >= 0; depth--) {
+      for (const registration of matches[depth]!) {
+        if (invoked.has(registration)) continue;
+        invoked.add(registration);
+        if (await registration.handler(req, res)) return true;
+      }
+    }
+    return false;
+  };
+}
 
 export function replicaDispatchOutcome(result: ToolResult): ReplicaIntentDispatchOutcome {
   if (result.isError) {
@@ -469,6 +562,52 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // aggregates it all. Hosts push externally-owned components (e.g. the
   // desktop's iroh tunnel) through `BuiltGateway.health`.
   const health = new HealthRegistry();
+  const performanceMonitor = new GatewayPerformanceMonitor();
+  health.setPerformanceMetricsSource(
+    () => performanceMonitor.snapshot(),
+    () => performanceMonitor.resetMeasurement(),
+  );
+  let storageFsyncMs: number | undefined;
+  try {
+    const storageLatency = await measureStorageLatency(paths.vaultDir);
+    storageFsyncMs = storageLatency.fsyncMs;
+    performanceMonitor.setStorageFsyncMs(storageLatency.fsyncMs);
+    health.reportOk('storage-latency', `4 KiB fsync ${storageLatency.fsyncMs.toFixed(1)} ms`);
+  } catch (err) {
+    health.reportDegraded(
+      'storage-latency',
+      `boot fsync probe failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  health.registerProbe('event-loop', async () => {
+    const sample = performanceMonitor.snapshot();
+    const detail = `p50 ${sample.eventLoopLagP50Ms.toFixed(1)} ms; p99 ${sample.eventLoopLagP99Ms.toFixed(1)} ms; max ${sample.eventLoopLagMaxMs.toFixed(1)} ms`;
+    return sample.eventLoopLagP99Ms >= 50
+      ? { status: 'degraded', detail }
+      : { status: 'ok', detail };
+  });
+  const hardwareProfile = resolveGatewayHardwareProfile(
+    storageFsyncMs === undefined ? {} : { storageFsyncMs },
+  );
+  // App-engine's worker/compression seams initialize lazily, after this boot
+  // probe. Publish the resolved class so slow storage and explicit overrides
+  // select the same actual limits that this health line reports.
+  process.env.CENTRAID_RESOLVED_HARDWARE_PROFILE = hardwareProfile.class;
+  // Publish the exact resolved values, including validated operator
+  // overrides. Lazy consumers read these values instead of independently
+  // reclassifying the host and drifting from this health record.
+  process.env.CENTRAID_WORKER_MAX_CONCURRENT = String(hardwareProfile.workerMaxConcurrent);
+  process.env.CENTRAID_WORKER_MAX_OLD_GENERATION_MB = String(
+    hardwareProfile.workerMaxOldGenerationMb,
+  );
+  process.env.CENTRAID_WORKER_POOL_SIZE = String(hardwareProfile.workerPoolSize);
+  process.env.CENTRAID_REPLICATION_CONCURRENCY = String(hardwareProfile.replicationConcurrency);
+  process.env.CENTRAID_STATIC_BROTLI_QUALITY = String(hardwareProfile.staticBrotliQuality);
+  process.env.CENTRAID_STATIC_GZIP_QUALITY = String(hardwareProfile.staticGzipQuality);
+  health.reportOk(
+    'hardware-profile',
+    `${hardwareProfile.class}; sqlite=${hardwareProfile.sqliteSynchronous}; workers=${hardwareProfile.workerMaxConcurrent}x${hardwareProfile.workerMaxOldGenerationMb}MB; pool=${hardwareProfile.workerPoolSize}; replication=${hardwareProfile.replicationConcurrency}; compression=br${hardwareProfile.staticBrotliQuality}/gz${hardwareProfile.staticGzipQuality}; mount=${hardwareProfile.vaultMountStrategy}; sweep=${hardwareProfile.vaultSweepIntervalMs}ms`,
+  );
   const webAppSessions = new WebAppSessions(options.webSessions ?? {});
 
   // Bundled blueprint apps (issue #434): these ids serve in place from the
@@ -508,6 +647,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // inside a vault directory a raw copy could carry off-box.
   const storageDir = paths.storageDir ?? path.join(path.dirname(paths.vaultDir), 'storage');
   const storageConnections = await openStorageConnectionStore(storageDir);
+  let walCaptureConfigured =
+    options.backup?.enabled === true || (await storageConnections.list()).length > 0;
   const recoveryKit = new RecoveryKitStateStore(storageDir);
   // Provider usage cache (issue #367 §D1) — cache-with-TTL + stale-while-
   // refresh in front of a provider connection's optional `usage` capability
@@ -536,6 +677,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // vault-less mode.
   const vaultRegistry: VaultRegistry = openVaultRegistry({
     rootDir: paths.vaultDir,
+    synchronous: hardwareProfile.sqliteSynchronous,
+    replicationConcurrency: hardwareProfile.replicationConcurrency,
+    sweepIntervalMs: hardwareProfile.vaultSweepIntervalMs,
+    shouldDeferBackgroundWork: () => health.shouldDeferBackgroundWork(),
+    walCaptureEnabled: () => walCaptureConfigured,
     // Disposable runner cache lives outside the vault tree (defaults to a
     // `-cache` sibling of `vaultDir` when the host doesn't pin one).
     ...(paths.cacheDir ? { cacheRootDir: paths.cacheDir } : {}),
@@ -554,7 +700,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // codec instance fans out to every mounted plane's blob sweep, closing the
     // "no raster codec in the runtime" gap for imported / weak-client /
     // server-ingested images (capable clients still generate at capture).
-    previewCodec: createImagePreviewCodec(),
+    previewCodec: options.previewCodec ?? createImagePreviewCodec(),
   });
 
   // Vault mounts are pull-checked at snapshot time — nothing pushes when a
@@ -1128,7 +1274,58 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   const grantDeclaredBundledScopes = (plane: VaultPlane, appId: string): Promise<void> =>
     grantScopesFromDir(plane, appId, bundledAppDir(appId));
 
+  const prewarmApp = async (appId: string, dir: string): Promise<void> => {
+    try {
+      const result = await prewarmAppAssets(dir, KIT_DIR);
+      if (result.bundles > 0) {
+        logger.info(
+          `app assets: prewarmed ${appId} (${result.bundles} bundle(s), ${result.variants} compressed variant(s))`,
+        );
+      }
+    } catch (error) {
+      logger.warn(
+        `app assets: prewarm failed for ${appId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  };
+
   let outboxTimer: NodeJS.Timeout | undefined;
+  const scheduleOutboxSweep = (delayMs: number): void => {
+    if (outboxTimer) clearTimeout(outboxTimer);
+    outboxTimer = setTimeout(() => {
+      void runOutboxSweep();
+    }, jitterDelayMs(delayMs));
+    outboxTimer.unref();
+  };
+  const runOutboxSweep = async (): Promise<void> => {
+    if (health.shouldDeferBackgroundWork()) {
+      scheduleOutboxSweep(hardwareProfile.outboxIdleIntervalMs);
+      return;
+    }
+    const settled = await Promise.allSettled(
+      vaultRegistry.planesList().map((plane) => outboxExecutor.drain(plane)),
+    );
+    let active = false;
+    let failed = false;
+    for (const result of settled) {
+      if (result.status === 'fulfilled') {
+        active ||= result.value.approved > 0 || result.value.deferred > 0;
+      } else {
+        failed = true;
+        logger.warn(
+          `outbox sweep failed: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
+        );
+      }
+    }
+    if (failed) health.reportError('outbox', 'one or more adaptive outbox sweeps failed');
+    else health.reportOk('outbox');
+    const nextDelay = failed
+      ? Math.min(hardwareProfile.outboxIdleIntervalMs * 2, 15 * 60 * 1000)
+      : active
+        ? 5_000
+        : hardwareProfile.outboxIdleIntervalMs;
+    scheduleOutboxSweep(nextDelay);
+  };
 
   // The one fire path, shared by "run now" (manual) and the cron schedulers
   // (scheduled). Runs on THIS host with the gateway's own runner pref,
@@ -1205,6 +1402,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         await requireRuntime().registry.ensureUploaded(appId);
         vaultRegistry.enrollApp(appId);
         await grantDeclaredAppScopes(plane, host.store, appId);
+        const appDir = await host.store.resolveActiveAppDir(appId);
+        if (appDir) await prewarmApp(appId, appDir);
       }
       // Installed bundled apps (issue #434) aren't in the git store, so the
       // loop above misses them — re-register each from the enrollment record
@@ -1212,6 +1411,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       for (const appId of plane.installedAppIds()) {
         await requireRuntime().registry.ensureUploaded(appId);
         await grantDeclaredBundledScopes(plane, appId);
+        await prewarmApp(appId, bundledAppDir(appId));
       }
       settledHosts.set(vaultId, host);
       reconcileScheduler(vaultId);
@@ -1307,6 +1507,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         await grantDeclaredAppScopes(plane, store, appId);
         invalidateToolCatalog();
       },
+      preparePublishedApp: prewarmApp,
       deregister: deregisterAndCleanup,
       reconcile: () => reconcileScheduler(vaultId),
       // Bundled ids are reserved (issue #434): a scaffold/clone must never
@@ -1323,6 +1524,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         plane.installApp(templateId, meta.name);
         await requireRuntime().registry.ensureUploaded(templateId);
         await grantDeclaredBundledScopes(plane, templateId);
+        await prewarmApp(templateId, bundledAppDir(templateId));
         invalidateToolCatalog();
         return {
           id: templateId,
@@ -1557,6 +1759,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
                 );
               });
             },
+            onDormancyChange: (dormant, at) =>
+              runWithVaultContext({ vaultId }, () => {
+                schedulerLedgerFor(vaultId).setDormant(dormant, at);
+              }),
           });
     schedulers.set(vaultId, created);
     if (schedulersStarted) created.start();
@@ -2035,187 +2241,250 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     });
 
   // ── Route chain ───────────────────────────────────────────────────────
-  const extraHandlers: RouteHandler[] = [
-    webAppSessions.handler,
+  const routeEntries: RoutePrefixRegistration[] = [
+    forRoutePrefixes(['/centraid/_web', '/centraid/_apps'], webAppSessions.handler),
     // Gateway identity + version handshake (issue #289): cheap static
     // JSON, mounted first — health polling hits it every few seconds.
-    makeGatewayInfoRouteHandler({ instanceId: instanceLease.instanceId }),
+    forRoutePrefixes(
+      '/centraid/_gateway/info',
+      makeGatewayInfoRouteHandler({ instanceId: instanceLease.instanceId }),
+    ),
+    ...(options.dataPlaneControl
+      ? [
+          forRoutePrefixes(
+            '/centraid/_gateway/tunnel',
+            makeDataPlaneControlHandler(options.dataPlaneControl),
+          ),
+        ]
+      : []),
     // HTTP ticket redemption (issue #376): the direct-transport twin of
     // the iroh `gw-pair` ceremony. Mounted only when the daemon wired its
     // device-pairing stores; `serve.ts` marks its path bearer-free. A
     // no-op passthrough (`return false`) on every other host.
     ...(options.devicePairing
       ? [
-          makePairRouteHandler({
-            vaults: vaultRegistry,
-            tickets: options.devicePairing.tickets,
-            enrollments: options.devicePairing.enrollments,
-            deviceTokens: options.devicePairing.deviceTokens,
-          }),
+          forRoutePrefixes(
+            '/centraid/_gateway/pair',
+            makePairRouteHandler({
+              vaults: vaultRegistry,
+              tickets: options.devicePairing.tickets,
+              enrollments: options.devicePairing.enrollments,
+              deviceTokens: options.devicePairing.deviceTokens,
+            }),
+          ),
           // Paired-device roster + revoke (issue #376): the wire twin of
           // `cli/device-admin.ts`'s list/revoke, scoped to the caller's plane
           // (device caller sees only its vaults; admin sees all). Mounted only
           // when the daemon wired its device-pairing stores.
-          makeDevicesRouteHandler({
-            enrollments: options.devicePairing.enrollments,
-            deviceTokens: options.devicePairing.deviceTokens,
-            tickets: options.devicePairing.tickets,
-            endpointTicket: options.devicePairing.endpointTicket,
-            vaultName: (id) => vaultRegistry.get(id)?.name,
-            onRevoked: (rows) => {
-              for (const row of rows) {
-                const plane = vaultRegistry.get(row.vaultId);
-                plane?.forgetReplicaDevice(row.endpointId);
-                plane?.db.blobTransfers.revokePairedDevice(row.endpointId);
-              }
-            },
-          }),
-          makeDeviceWorkRouteHandler({
-            vaults: vaultRegistry,
-            enrollments: options.devicePairing.enrollments,
-          }),
+          forRoutePrefixes(
+            '/centraid/_gateway/devices',
+            makeDevicesRouteHandler({
+              enrollments: options.devicePairing.enrollments,
+              deviceTokens: options.devicePairing.deviceTokens,
+              tickets: options.devicePairing.tickets,
+              endpointTicket: options.devicePairing.endpointTicket,
+              onEndpointRevoked: options.devicePairing.onEndpointRevoked,
+              vaultName: (id) => vaultRegistry.get(id)?.name,
+              onRevoked: (rows) => {
+                for (const row of rows) {
+                  const plane = vaultRegistry.get(row.vaultId);
+                  plane?.forgetReplicaDevice(row.endpointId);
+                  plane?.db.blobTransfers.revokePairedDevice(row.endpointId);
+                }
+              },
+            }),
+          ),
+          forRoutePrefixes(
+            '/centraid/_gateway/device-work',
+            makeDeviceWorkRouteHandler({
+              vaults: vaultRegistry,
+              enrollments: options.devicePairing.enrollments,
+            }),
+          ),
         ]
       : []),
     // Component-level health + structured error tail. `_gateway/info`
     // is the liveness probe; this is the "what's actually wrong" surface.
-    makeHealthRouteHandler(health),
+    forRoutePrefixes('/centraid/_gateway/health', makeHealthRouteHandler(health)),
     // A single JSON document a user can save + hand to support: version,
     // health snapshot, log tail, vault sizes, and a redacted config
     // summary. Mounted right after health — same bearer gate, same
     // "owner-facing diagnostics" family.
-    makeDiagnosticsRouteHandler(buildDiagnostics),
+    forRoutePrefixes(
+      '/centraid/_gateway/diagnostics',
+      makeDiagnosticsRouteHandler(buildDiagnostics),
+    ),
     // Backup status + manual "run now" (issue #351): thin wiring over
     // `BackupService`. `backupService` is `undefined` when
     // `options.backup?.enabled` is false — the handler answers
     // `{configured: false}` rather than 404 in that case. Same bearer
     // gate, same owner-facing-diagnostics family as health/diagnostics.
-    makeBackupRouteHandler({
-      vaults: vaultRegistry,
-      recoveryKitStore: recoveryKit,
-      backupService,
-    }),
+    forRoutePrefixes(
+      '/centraid/_gateway/backup',
+      makeBackupRouteHandler({
+        vaults: vaultRegistry,
+        recoveryKitStore: recoveryKit,
+        backupService,
+      }),
+    ),
     // Gateway-level storage connections (issue #367 §C1): CRUD + real
     // connectivity probe + per-vault replication status. Same bearer gate,
     // same owner-facing-diagnostics family as backup/health.
-    makeStorageRouteHandler({
-      storageConnections,
-      recoveryKit,
-      vaults: vaultRegistry,
-      storageUsage,
-    }),
+    forRoutePrefixes(
+      '/centraid/_gateway/storage',
+      makeStorageRouteHandler({
+        storageConnections,
+        recoveryKit,
+        vaults: vaultRegistry,
+        storageUsage,
+        onConnectionsChanged: async () => {
+          walCaptureConfigured =
+            options.backup?.enabled === true || (await storageConnections.list()).length > 0;
+          for (const plane of vaultRegistry.planesList()) plane.rescheduleWalCapture();
+          await backupService.refreshWalSchedule();
+        },
+      }),
+    ),
     // Due task/event reminders, computed live — the desktop main process
     // polls this to fire OS notifications (issue: Tasks/Agenda comparison
     // flagged "no time-based alerts, anywhere").
-    makeRemindersRouteHandler(vaultRegistry),
+    forRoutePrefixes('/centraid/_reminders', makeRemindersRouteHandler(vaultRegistry)),
     // Realtime gateway logs (JSON tail + SSE) — the diagnostics surface
     // the desktop's Settings → Logs screen streams from.
-    makeLogsRouteHandler(logStore),
+    forRoutePrefixes('/centraid/_logs', makeLogsRouteHandler(logStore)),
     // The assistant's `_turn`/`resolve` surface — mounted BEFORE the
     // generic `_vault` handler, which answers 404 for any sub-route it
     // doesn't know (same prefix family).
-    makeAssistantRouteHandler({
-      vaults: vaultRegistry,
-      conversationStore: conversationHistoryStore,
-      runner: assistantRunner,
-      conversationLocks: new Map(),
-      resolveModel,
-      generateTitle: generateAssistantTitle,
-      limiter: turnLimiterForCurrentVault,
-    }),
+    forRoutePrefixes(
+      '/centraid/_vault/assistant',
+      makeAssistantRouteHandler({
+        vaults: vaultRegistry,
+        conversationStore: conversationHistoryStore,
+        runner: assistantRunner,
+        conversationLocks: new Map(),
+        resolveModel,
+        generateTitle: generateAssistantTitle,
+        limiter: turnLimiterForCurrentVault,
+      }),
+    ),
     // Scenario seeds (issue #290 phase 1): load/reset an app's demo data.
     // Mounted BEFORE the generic `_vault` handler (same prefix family).
-    makeDemoRouteHandler(vaultRegistry, {
-      codeAppsDir: () => currentSettledHost().codeAppsDir(),
-    }),
+    forRoutePrefixes(
+      '/centraid/_vault/demo',
+      makeDemoRouteHandler(vaultRegistry, {
+        codeAppsDir: () => currentSettledHost().codeAppsDir(),
+      }),
+    ),
     // File-drop imports (issue #290 phase 2): stage → review → publish.
-    makeImportRouteHandler(vaultRegistry),
+    forRoutePrefixes('/centraid/_vault/imports', makeImportRouteHandler(vaultRegistry)),
     // Blob custody (issue #296): staged uploads in, consent-checked +
     // Range-capable bytes out. Mounted BEFORE the generic `_vault`
     // handler (same prefix family).
-    makeBlobRouteHandler(vaultRegistry),
+    forRoutePrefixes(
+      '/centraid/_vault/blobs',
+      makeBlobRouteHandler(vaultRegistry, options.dataPlaneHttp),
+    ),
     // Broker-carried connection credentials (issue #304): health list,
     // configure, pause/resume, and the PKCE consent ceremony. Mounted
     // BEFORE the generic `_vault` handler (same prefix family).
-    makeConnectionsRouteHandler(vaultRegistry, connectionBroker, {
-      onConnectionChanged: invalidateToolCatalog,
-    }),
+    forRoutePrefixes(
+      ['/centraid/_vault/connections', '/centraid/_vault/oauth/callback'],
+      makeConnectionsRouteHandler(vaultRegistry, connectionBroker, {
+        onConnectionChanged: invalidateToolCatalog,
+      }),
+    ),
     // Consent-derived offline replica protocol (#406). Mounted before the
     // generic owner `_vault` handler because both share that prefix. The
     // intent lane executes through the ordinary app dispatcher; the route
     // only adds durable device-scoped admission/dedupe around it.
-    makeReplicaRouteHandler(vaultRegistry, {
-      ...(options.devicePairing ? { enrollments: options.devicePairing.enrollments } : {}),
-      dispatchIntent: async (input) =>
-        replicaDispatchOutcome(
-          await getDispatcher().write({
-            app: input.appId,
-            action: input.action,
-            input: input.input,
-            intentId: input.intentId,
-          }),
-        ),
-    }),
+    forRoutePrefixes(
+      ['/centraid/_vault/replica', '/centraid/_vault/changes'],
+      makeReplicaRouteHandler(vaultRegistry, {
+        ...(options.devicePairing ? { enrollments: options.devicePairing.enrollments } : {}),
+        dispatchIntent: async (input) =>
+          replicaDispatchOutcome(
+            await getDispatcher().write({
+              app: input.appId,
+              action: input.action,
+              input: input.input,
+              intentId: input.intentId,
+            }),
+          ),
+      }),
+    ),
     // Owner consent surface for the vault plane (grants, parked
     // confirmations, rename/presentation). Its `_vault` prefix
     // is disjoint from every other route family. Vault create/delete are
     // ADMIN acts (server CLI) — they no longer ride HTTP (#289).
-    makeVaultRouteHandler(vaultRegistry, {
-      ...(options.deviceAccess ? { deviceAccess: options.deviceAccess } : {}),
-      onOutboxDecided: drainOutbox,
-      // Storage-connection attach flow (issue #367 §C1/§C4/§C10): resolves
-      // `blob_store.connectionId` and gates on the recovery-kit nudge.
-      storageConnections,
-      recoveryKit,
-      // fix (this session): agent-grant approval can be the FIRST enrollment
-      // touch for an automation's agent — resolve its real manifest name
-      // the same way reconcileScheduler does, so `approveAgentGrant` never
-      // has to fall back to a bare id-derived name.
-      resolveAutomationName: async (appId) => {
-        const { rows } = await automation.list(currentSettledHost().codeAppsDir());
-        return rows.find((r) => r.ownerApp === appId)?.name;
-      },
-    }),
+    forRoutePrefixes(
+      '/centraid/_vault',
+      makeVaultRouteHandler(vaultRegistry, {
+        ...(options.deviceAccess ? { deviceAccess: options.deviceAccess } : {}),
+        onOutboxDecided: drainOutbox,
+        // Storage-connection attach flow (issue #367 §C1/§C4/§C10): resolves
+        // `blob_store.connectionId` and gates on the recovery-kit nudge.
+        storageConnections,
+        recoveryKit,
+        // fix (this session): agent-grant approval can be the FIRST enrollment
+        // touch for an automation's agent — resolve its real manifest name
+        // the same way reconcileScheduler does, so `approveAgentGrant` never
+        // has to fall back to a bare id-derived name.
+        resolveAutomationName: async (appId) => {
+          const { rows } = await automation.list(currentSettledHost().codeAppsDir());
+          return rows.find((r) => r.ownerApp === appId)?.name;
+        },
+      }),
+    ),
     // Template catalog (issue #141): the gateway owns it, so the renderer
     // reads `GET /centraid/_templates` directly. Templates are SEEDS —
     // gateway-level, read-only material instantiated INTO a vault (#280).
-    makeTemplatesRouteHandler({
-      ...(paths.templatesCacheDir ? { cacheDir: paths.templatesCacheDir } : {}),
-      // Remote template fetch is deferred for v1 (issue #434, Phase 4): the
-      // catalog serves only the shipped @centraid/blueprints. Remote install
-      // is the one case where install legitimately copies (a download), so
-      // the `remoteTemplatesUrl` refresh wiring is intentionally NOT passed
-      // here — the mechanism stays in makeTemplatesRouteHandler and returns
-      // when the remote/third-party app catalog is designed.
-      // Catalog installed-state (issue #434): whether each bundled app is
-      // already installed in the request's vault, so the Discover card shows
-      // "Open" instead of "Install". Degrades to "nothing installed" if no
-      // vault is addressed — the catalog is readable before any vault exists.
-      installedAppIds: () => {
-        try {
-          return vaultRegistry.current().installedAppIds();
-        } catch {
-          return new Set<string>();
-        }
-      },
-    }),
-    // Coding-agent detection (codex/claude credentials on the gateway host).
-    makeAgentsRouteHandler(
-      catalogPath
-        ? {
-            ...(resolveCatalogModels ? { resolveModels: resolveCatalogModels } : {}),
-            ...(resolveCatalogTools ? { resolveTools: resolveCatalogTools } : {}),
+    forRoutePrefixes(
+      '/centraid/_templates',
+      makeTemplatesRouteHandler({
+        ...(paths.templatesCacheDir ? { cacheDir: paths.templatesCacheDir } : {}),
+        // Remote template fetch is deferred for v1 (issue #434, Phase 4): the
+        // catalog serves only the shipped @centraid/blueprints. Remote install
+        // is the one case where install legitimately copies (a download), so
+        // the `remoteTemplatesUrl` refresh wiring is intentionally NOT passed
+        // here — the mechanism stays in makeTemplatesRouteHandler and returns
+        // when the remote/third-party app catalog is designed.
+        // Catalog installed-state (issue #434): whether each bundled app is
+        // already installed in the request's vault, so the Discover card shows
+        // "Open" instead of "Install". Degrades to "nothing installed" if no
+        // vault is addressed — the catalog is readable before any vault exists.
+        installedAppIds: () => {
+          try {
+            return vaultRegistry.current().installedAppIds();
+          } catch {
+            return new Set<string>();
           }
-        : {},
+        },
+      }),
+    ),
+    // Coding-agent detection (codex/claude credentials on the gateway host).
+    forRoutePrefixes(
+      '/centraid/_agents',
+      makeAgentsRouteHandler(
+        catalogPath
+          ? {
+              ...(resolveCatalogModels ? { resolveModels: resolveCatalogModels } : {}),
+              ...(resolveCatalogTools ? { resolveTools: resolveCatalogTools } : {}),
+            }
+          : {},
+      ),
     ),
     // The request vault's store-backed handlers (apps-store / lifecycle /
     // automations), resolved per request off the ambient vault scope.
-    async (req, res) => {
-      const host = await currentVaultHost();
-      for (const handler of host.handlers) {
-        if (await handler(req, res)) return true;
-      }
-      return false;
-    },
+    forRoutePrefixes(
+      ['/centraid/_apps', '/centraid/_automations', '/centraid/_insights'],
+      async (req, res) => {
+        const host = await currentVaultHost();
+        for (const handler of host.handlers) {
+          if (await handler(req, res)) return true;
+        }
+        return false;
+      },
+    ),
   ];
 
   // `composedHandler` owns the whole request: resolve the vault the request
@@ -2229,13 +2498,16 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     () => prefs,
     () => currentWorkspace().ownerPartyId,
   );
+  const prefixDispatch = createRoutePrefixDispatch([
+    forRoutePrefixes(CONVERSATIONS_PREFIX, conversationHandler),
+    forRoutePrefixes(USER_STORE_PREFIX, userStoreHandler),
+    ...routeEntries,
+  ]);
+  // Retain the public BuiltGateway seam as a one-entry compiled dispatcher;
+  // callers never receive or linearly walk the underlying route registry.
+  const extraHandlers: RouteHandler[] = [prefixDispatch];
   const dispatchChain: RouteHandler = async (req, res) => {
-    const url = req.url ?? '';
-    if (url.startsWith(CONVERSATIONS_PREFIX) && (await conversationHandler(req, res))) return true;
-    if (url.startsWith(USER_STORE_PREFIX) && (await userStoreHandler(req, res))) return true;
-    for (const handler of extraHandlers) {
-      if (await handler(req, res)) return true;
-    }
+    if (await prefixDispatch(req, res)) return true;
     await runtime.handle(req, res);
     return true;
   };
@@ -2306,6 +2578,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     );
   };
 
+  let unsubscribeLateMount = (): void => undefined;
+  const lateMountTasks = new Set<Promise<void>>();
+
   const start = async (publicBaseUrl: string): Promise<void> => {
     // Publish the live origin to the unified chat runner so post-turn
     // webhook minting can build absolute `_centraid-hook` URLs.
@@ -2315,6 +2590,30 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // flip `instance` health red as early in boot as possible, well before
     // any vault mounts (issue #351).
     instanceLease.start();
+
+    // A vault arriving after boot can introduce an earlier WAL RPO than the
+    // currently armed timer and also needs its host/scheduler activated.
+    unsubscribeLateMount();
+    unsubscribeLateMount = vaultRegistry.onMount((plane) => {
+      const task = Promise.all([
+        hostFor(plane).catch((error) =>
+          logger.warn(
+            `late vault host mount failed (${plane.boot.vaultId}): ` +
+              (error instanceof Error ? error.message : String(error)),
+          ),
+        ),
+        backupService
+          .refreshWalSchedule()
+          .catch((error) =>
+            logger.warn(
+              `late vault WAL schedule refresh failed: ` +
+                (error instanceof Error ? error.message : String(error)),
+            ),
+          ),
+      ]).then(() => undefined);
+      lateMountTasks.add(task);
+      void task.finally(() => lateMountTasks.delete(task));
+    });
 
     // Start the per-vault in-process cron schedulers as they mount. Under
     // n8n semantics they only fire while running — downtime is not
@@ -2332,13 +2631,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Vault standing duties on the gateway clock: a sweep now, then hourly.
     vaultRegistry.start();
 
-    // The outbox slow clock (issue #306): a periodic drain per mounted
-    // vault backstops the event-driven kicks (owner approvals, post-fire) —
-    // e.g. items deferred on a transient 5xx or a needs-auth reconnect.
-    outboxTimer = setInterval(() => {
-      for (const plane of vaultRegistry.planesList()) drainOutbox(plane);
-    }, 60_000);
-    outboxTimer.unref();
+    // Adaptive backstop: active/deferred work retries quickly, an empty queue
+    // follows the hardware profile's idle cadence, and errors back off.
+    scheduleOutboxSweep(hardwareProfile.outboxIdleIntervalMs);
 
     // Warm the host-capability catalog — BOTH models and tools — for each
     // detected runner on EVERY gateway start, in the background so it never
@@ -2379,8 +2674,13 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   };
 
   const stop = async (): Promise<void> => {
+    unsubscribeLateMount();
+    // A mount notification may already be building its code host. Let that
+    // bounded work settle before closing vault databases or removing temp
+    // roots; otherwise shutdown races git/SQLite initialization.
+    await Promise.all(lateMountTasks);
     await Promise.all([...schedulers.values()].map((sched) => sched.stop()));
-    if (outboxTimer) clearInterval(outboxTimer);
+    if (outboxTimer) clearTimeout(outboxTimer);
     // Await the in-flight backup run (if any): its post-registration steps
     // write shipper + backup state, and the vault registry teardown below
     // closes the very planes it would touch.
@@ -2394,6 +2694,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     instanceLease.stop();
     // Sweep clock down, WAL checkpoint, files closed. Idempotent.
     vaultRegistry.stop();
+    performanceMonitor.close();
   };
 
   return {

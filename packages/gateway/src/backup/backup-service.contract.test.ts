@@ -22,7 +22,7 @@ import {
 } from '@centraid/vault';
 import { openVaultRegistry, type VaultRegistry } from '../serve/vault-registry.js';
 import { HealthRegistry } from '../serve/health-registry.js';
-import { BackupService, recoveryWindowMs } from './backup-service.js';
+import { BackupService, recoveryWindowMs, walDrainDelayMs } from './backup-service.js';
 import type { BackupConfig } from './backup-config.js';
 import { runCasOnlyReconciliation } from './backup-cas-reconciliation.js';
 
@@ -149,6 +149,25 @@ test('recoveryWindowMs maps a retention ladder to its daily rung, non-ladder to 
   // A local provider (no ladder) advertises no recovery window ⇒ grace disengaged.
   expect(recoveryWindowMs({ kind: 'none' })).toBeUndefined();
   expect(recoveryWindowMs(undefined)).toBeUndefined();
+});
+
+test('the WAL clock is absent without a backend and follows actual remaining RPO (#456 I4)', () => {
+  const now = 1_000_000;
+  expect(walDrainDelayMs(false, [{ rpoSeconds: 30 }], now)).toBeUndefined();
+  expect(
+    walDrainDelayMs(
+      true,
+      [
+        { rpoSeconds: 120, lastAttemptMs: now - 30_000 },
+        { rpoSeconds: 60, lastAttemptMs: now - 30_000 },
+        { rpoSeconds: 300, lastAttemptMs: now - 250_000 },
+      ],
+      now,
+    ),
+  ).toBe(30_000);
+  expect(walDrainDelayMs(true, [{ rpoSeconds: 60, lastAttemptMs: now - 90_000 }], now)).toBe(0);
+  expect(walDrainDelayMs(true, [{ rpoSeconds: 60 }], now)).toBe(60_000);
+  expect(walDrainDelayMs(true, [], now)).toBe(30_000);
 });
 
 test('first run creates a target, mints a keyring, and registers a snapshot', async () => {

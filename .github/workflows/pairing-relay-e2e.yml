@@ -78,8 +78,14 @@ jobs:
       - run: docker info
       - run: bunx turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
       - run: node scripts/test-report/prepare.mjs
-      # The Docker harness fetches the Linux iroh native addon when a local
-      # Apple-Silicon install did not place it in this amd64 runner's tree.
+      # Production must never silently fall back to the JS byte pump.
+      - run: test -f packages/tunnel/native/centraid-tunnel-native.linux-x64.node
+      # The flow's own harness (lib/docker-harness.mjs) additionally fetches
+      # @number0/iroh's LINUX native addon package if it's missing — the
+      # `bun install` above ran on this same amd64 runner, so on
+      # ubuntu-latest that's already satisfied and it's a no-op; documented
+      # here because it is NOT a no-op on Apple Silicon + OrbStack, where
+      # local runs of this flow actually need it.
       - run: node tests/agent-e2e-pairing/flows/cross-network-relay.mjs
       - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         if: always()

@@ -119,6 +119,37 @@ interface InvocationRow {
   receipt_id: string | null;
 }
 
+interface SqlUnit {
+  savepoint: string | null;
+  open: boolean;
+}
+
+function beginSqlUnit(db: DatabaseSync, savepoint: string): SqlUnit {
+  if (db.isTransaction) {
+    db.exec(`SAVEPOINT ${savepoint}`);
+    return { savepoint, open: true };
+  }
+  db.exec('BEGIN IMMEDIATE');
+  return { savepoint: null, open: true };
+}
+
+function commitSqlUnit(db: DatabaseSync, unit: SqlUnit): void {
+  if (!unit.open) return;
+  db.exec(unit.savepoint ? `RELEASE ${unit.savepoint}` : 'COMMIT');
+  unit.open = false;
+}
+
+function rollbackSqlUnit(db: DatabaseSync, unit: SqlUnit): void {
+  if (!unit.open) return;
+  if (unit.savepoint) {
+    db.exec(`ROLLBACK TO ${unit.savepoint}`);
+    db.exec(`RELEASE ${unit.savepoint}`);
+  } else {
+    db.exec('ROLLBACK');
+  }
+  unit.open = false;
+}
+
 function commitOf(row: InvocationCommitRow): ReplicaInvocationCommit {
   return {
     invocationId: row.invocation_id,
@@ -198,11 +229,9 @@ export function finalizeInvocationJournal(
   executedAt = nowIso(),
 ): FinalizedInvocationJournal {
   validateAudit(audit);
-  let began = false;
+  const unit = beginSqlUnit(db.journal, 'centraid_finalize_journal');
   let changed = false;
   try {
-    db.journal.exec('BEGIN IMMEDIATE');
-    began = true;
     const invocation = db.journal
       .prepare(
         `SELECT command_id, agent_id, grant_id, status, receipt_id
@@ -239,11 +268,10 @@ export function finalizeInvocationJournal(
       changed = true;
     }
     assertAuditComplete(db.journal, invocationId, audit, receipt.receiptId);
-    db.journal.exec('COMMIT');
-    began = false;
+    commitSqlUnit(db.journal, unit);
     return { receiptId: receipt.receiptId, changed };
   } catch (error) {
-    if (began) db.journal.exec('ROLLBACK');
+    rollbackSqlUnit(db.journal, unit);
     throw error;
   }
 }
@@ -252,6 +280,7 @@ export function finalizeInvocationJournal(
 export function finalizeReplicaInvocationCommit(
   db: InvocationDatabases,
   invocationId: string,
+  options: { deferSettlement?: boolean } = {},
 ): FinalizedInvocationJournal & { commit: ReplicaInvocationCommit } {
   const commit = readReplicaInvocationCommit(db.vault, invocationId);
   if (!commit) throw new Error(`replica invocation commit ${invocationId} is missing`);
@@ -266,24 +295,154 @@ export function finalizeReplicaInvocationCommit(
   // This second database write is intentionally after the atomic journal
   // commit. A crash before it merely causes the next replay to verify again;
   // it can never falsely claim the audit was repaired.
-  db.vault.exec('BEGIN IMMEDIATE');
-  try {
-    db.vault
-      .prepare(
-        `UPDATE replica_invocation_commit
-            SET journal_finalized_at = COALESCE(journal_finalized_at, ?)
-          WHERE invocation_id = ?`,
-      )
-      .run(nowIso(), invocationId);
-    db.vault.exec('COMMIT');
-  } catch (error) {
-    db.vault.exec('ROLLBACK');
-    throw error;
-  }
+  if (!options.deferSettlement) settleFinalizedInvocationCommit(db, invocationId);
   return {
     ...finalized,
     commit: readReplicaInvocationCommit(db.vault, invocationId) ?? commit,
   };
+}
+
+/**
+ * Ordinary online commands do not need a durable replica outcome to retain
+ * their canonical marker. Once the journal transaction is proven, delete the
+ * marker directly in one vault transaction instead of stamping
+ * `journal_finalized_at` and deleting it in a second transaction (#456 S2).
+ * A crash between the journal commit and this delete leaves the NULL marker;
+ * replay/startup repair re-verifies the idempotent journal rows before trying
+ * the delete again.
+ */
+export function finalizeOrdinaryInvocationCommit(
+  db: InvocationDatabases,
+  invocationId: string,
+  options: { deferSettlement?: boolean } = {},
+): FinalizedInvocationJournal {
+  const commit = readReplicaInvocationCommit(db.vault, invocationId);
+  if (!commit) throw new Error(`replica invocation commit ${invocationId} is missing`);
+  if (commit.intentId) {
+    throw new Error(`replica invocation commit ${invocationId} belongs to a device intent`);
+  }
+  const finalized = finalizeInvocationJournal(
+    db,
+    invocationId,
+    commit.commandId,
+    commit.audit,
+    commit.committedAt,
+  );
+  if (!options.deferSettlement) settleFinalizedInvocationCommit(db, invocationId);
+  return finalized;
+}
+
+/**
+ * Publish the vault-side proof that the already-committed journal evidence is
+ * final. A group commit calls this for every member inside one cleanup
+ * transaction after the shared vault then journal commits succeed.
+ */
+export function settleFinalizedInvocationCommit(
+  db: InvocationDatabases,
+  invocationId: string,
+): void {
+  const commit = readReplicaInvocationCommit(db.vault, invocationId);
+  if (!commit) return;
+  const unit = beginSqlUnit(db.vault, 'centraid_settle_invocation');
+  try {
+    if (commit.intentId) {
+      db.vault
+        .prepare(
+          `UPDATE replica_invocation_commit
+              SET journal_finalized_at = COALESCE(journal_finalized_at, ?)
+            WHERE invocation_id = ?`,
+        )
+        .run(nowIso(), invocationId);
+    } else {
+      db.vault
+        .prepare(
+          `DELETE FROM replica_invocation_commit
+            WHERE invocation_id = ? AND intent_id IS NULL`,
+        )
+        .run(invocationId);
+    }
+    commitSqlUnit(db.vault, unit);
+  } catch (error) {
+    rollbackSqlUnit(db.vault, unit);
+    throw error;
+  }
+}
+
+/**
+ * Stamp a batch member inside the canonical vault transaction. The stamp is
+ * provisional until the already-open journal transaction commits: startup
+ * repair always re-verifies it, and the next batch reclaims it only after
+ * observing the matching executed journal row. This lets a whole arrival
+ * window cross exactly one vault + one journal commit boundary (#456 S4).
+ */
+export function stampFinalizedInvocationCommitInTransaction(
+  vault: DatabaseSync,
+  invocationId: string,
+): void {
+  if (!vault.isTransaction) {
+    throw new Error('invocation commit stamps require an open vault transaction');
+  }
+  vault
+    .prepare(
+      `UPDATE replica_invocation_commit
+          SET journal_finalized_at = COALESCE(journal_finalized_at, ?)
+        WHERE invocation_id = ?`,
+    )
+    .run(nowIso(), invocationId);
+}
+
+interface ProvenOrdinaryCommitRow {
+  invocation_id: string;
+  command_id: string;
+}
+
+/**
+ * Piggyback cleanup of a previous batch on the next shared commit pair. A
+ * provisional stamp is never trusted by itself: the matching journal row
+ * must be executed and name the same command. Failed or crash-interrupted
+ * members remain durable for retry/startup repair.
+ */
+export function reclaimProvenOrdinaryInvocationCommitsInTransaction(
+  db: InvocationDatabases,
+  limit = DEFAULT_REPLICA_INVOCATION_REPAIR_BATCH_SIZE,
+): number {
+  if (!db.vault.isTransaction || !db.journal.isTransaction) {
+    throw new Error('invocation commit reclamation requires both shared transactions');
+  }
+  if (
+    !Number.isSafeInteger(limit) ||
+    limit < 1 ||
+    limit > MAX_REPLICA_INVOCATION_REPAIR_BATCH_SIZE
+  ) {
+    throw new RangeError('invocation commit reclamation limit must be between 1 and 5000');
+  }
+  const rows = db.vault
+    .prepare(
+      `SELECT invocation_id, command_id
+         FROM replica_invocation_commit
+        WHERE intent_id IS NULL AND journal_finalized_at IS NOT NULL
+        ORDER BY committed_at, invocation_id
+        LIMIT ?`,
+    )
+    .all(limit) as unknown as ProvenOrdinaryCommitRow[];
+  let reclaimed = 0;
+  const journalRow = db.journal.prepare(
+    `SELECT command_id, status
+       FROM agent_command_invocation
+      WHERE invocation_id = ?`,
+  );
+  const remove = db.vault.prepare(
+    `DELETE FROM replica_invocation_commit
+      WHERE invocation_id = ? AND intent_id IS NULL AND journal_finalized_at IS NOT NULL`,
+  );
+  for (const row of rows) {
+    const proof = journalRow.get(row.invocation_id) as
+      | { command_id: string; status: string }
+      | undefined;
+    if (proof?.command_id !== row.command_id || proof.status !== 'executed') continue;
+    reclaimed += Number(remove.run(row.invocation_id).changes);
+  }
+  return reclaimed;
 }
 
 interface RepairCandidateRow {
@@ -338,10 +497,11 @@ export function repairReplicaInvocationCommits(
       try {
         const before = readReplicaInvocationCommit(db.vault, row.invocation_id);
         if (!before) continue;
-        if (!before.journalFinalizedAt) {
-          finalizeReplicaInvocationCommit(db, row.invocation_id);
-          result.finalized += 1;
-        }
+        // A group-commit stamp is deliberately provisional until journal.db
+        // commits. Always re-verify the journal proof, even when the stamp is
+        // present, before reclaiming the marker after a crash.
+        finalizeReplicaInvocationCommit(db, row.invocation_id);
+        result.finalized += 1;
         const reclaimed = reclaimFinalizedReplicaInvocationCommit(db.vault, row.invocation_id);
         result.reclaimed += reclaimed;
         if (reclaimed === 0) result.retained += 1;

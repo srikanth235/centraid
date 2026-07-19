@@ -36,7 +36,14 @@ export {
   type HealthEvent,
   type HealthSnapshot,
   type HealthProbe,
+  type HealthMetrics,
 } from './serve/health-registry.js';
+export {
+  GatewayPerformanceMonitor,
+  type GatewayPerformanceSnapshot,
+  type GatewayPerformanceMonitorOptions,
+} from './serve/gateway-performance.js';
+export { measureStorageLatency, type StorageLatencySample } from './serve/storage-latency.js';
 export {
   GatewayLogStore,
   type GatewayLogEntry,
@@ -79,4 +86,5 @@ export {
 // can generate missing tiny/medium derivatives for imported / weak-client /
 // server-ingested images.
 export { createImagePreviewCodec } from './preview/codec.js';
+export { createWasmImagePreviewCodec } from './preview/wasm-codec.js';
 export { GATEWAY_VERSION, GATEWAY_SCHEMA_EPOCH } from './version.js';

@@ -125,7 +125,7 @@ test('an approved item drains: credential injected toward the pinned host, recei
   const plane = openPlane(await tempDir());
   configureApiKey(plane);
   const itemId = stageItem(plane);
-  const approved = plane.decideOutbox({ itemId, decision: 'approve' });
+  const approved = await plane.decideOutbox({ itemId, decision: 'approve' });
   expect(approved.status).toBe('executed');
 
   const api = fetchDouble();
@@ -169,7 +169,7 @@ test('a discarded item is terminal: no egress, ever', async () => {
   const plane = openPlane(await tempDir());
   configureApiKey(plane);
   const itemId = stageItem(plane);
-  plane.decideOutbox({ itemId, decision: 'discard' });
+  await plane.decideOutbox({ itemId, decision: 'discard' });
   const api = fetchDouble();
   await executorFor(plane, api).drain(plane);
   expect(api.calls).toHaveLength(0);
@@ -187,7 +187,7 @@ test('a request outside the allowed_hosts pin fails terminally with zero egress'
       body: '{"raw":"x"}',
     },
   });
-  plane.decideOutbox({ itemId, decision: 'approve' });
+  await plane.decideOutbox({ itemId, decision: 'approve' });
   const api = fetchDouble();
   const report = await executorFor(plane, api).drain(plane);
   expect(report).toMatchObject({ failed: 1, sent: 0 });
@@ -239,7 +239,7 @@ test('a 401 gets one forced refresh, then the drain succeeds (oauth2 lane)', asy
       body: '{"raw":"x"}',
     },
   });
-  plane.decideOutbox({ itemId, decision: 'approve' });
+  await plane.decideOutbox({ itemId, decision: 'approve' });
 
   const api = fetchDouble();
   api.respond(401, '{"error":"invalid credentials"}');
@@ -256,7 +256,7 @@ test('a hung external write times out; deferred per the existing network-failure
   const plane = openPlane(await tempDir());
   configureApiKey(plane);
   const itemId = stageItem(plane);
-  plane.decideOutbox({ itemId, decision: 'approve' });
+  await plane.decideOutbox({ itemId, decision: 'approve' });
 
   const broker = new ConnectionBroker(() => plane);
   // A short write timeout so the test doesn't wait out the real 60s default.
@@ -280,7 +280,7 @@ test('a credential-less connection defers the item — it survives for the recon
     )
     .run(new Date().toISOString());
   const itemId = stageItem(plane);
-  plane.decideOutbox({ itemId, decision: 'approve' });
+  await plane.decideOutbox({ itemId, decision: 'approve' });
   const api = fetchDouble();
   const report = await executorFor(plane, api).drain(plane);
   expect(report).toMatchObject({ approved: 1, deferred: 1, sent: 0, failed: 0 });
@@ -292,7 +292,7 @@ test('a stale approval reparks to pending instead of draining (issue #308 A7)', 
   const plane = openPlane(await tempDir());
   configureApiKey(plane);
   const itemId = stageItem(plane);
-  plane.decideOutbox({ itemId, decision: 'approve' });
+  await plane.decideOutbox({ itemId, decision: 'approve' });
   // Monday's approval, Thursday's drain: age the decision past the window.
   plane.db.vault
     .prepare('UPDATE outbox_item SET decided_at = ? WHERE item_id = ?')
@@ -309,7 +309,7 @@ test('a stale approval reparks to pending instead of draining (issue #308 A7)', 
   expect(row.decided_at).toBeNull();
   expect(row.note).toContain('expired');
   // A fresh approval within the window drains normally.
-  plane.decideOutbox({ itemId, decision: 'approve' });
+  await plane.decideOutbox({ itemId, decision: 'approve' });
   api.respond(200, '{"id":"msg-9"}');
   const second = await executorFor(plane, api).drain(plane);
   expect(second).toMatchObject({ sent: 1, reparked: 0 });
@@ -319,7 +319,7 @@ test('one pass drains a bounded batch; the surplus stays approved for the next p
   const plane = openPlane(await tempDir());
   configureApiKey(plane);
   const items = [stageItem(plane), stageItem(plane), stageItem(plane)];
-  for (const itemId of items) plane.decideOutbox({ itemId, decision: 'approve' });
+  await Promise.all(items.map((itemId) => plane.decideOutbox({ itemId, decision: 'approve' })));
   const api = fetchDouble();
   api.respond(200);
   api.respond(200);
@@ -339,7 +339,7 @@ test('the per-actor cap bounds a single actor flushing the whole pass (issue #30
   const plane = openPlane(await tempDir());
   configureApiKey(plane);
   const items = [stageItem(plane), stageItem(plane)];
-  for (const itemId of items) plane.decideOutbox({ itemId, decision: 'approve' });
+  await Promise.all(items.map((itemId) => plane.decideOutbox({ itemId, decision: 'approve' })));
   const api = fetchDouble();
   api.respond(200);
   const report = await executorFor(plane, api, { maxItemsPerActor: 1 }).drain(plane);
