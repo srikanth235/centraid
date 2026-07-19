@@ -10,9 +10,6 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
 
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
-// See admin.test.ts: real vault/daemon bootstrap per test — measured file
-// budget for the v8-instrumented coverage lane (issue #458 timeout policy).
-vi.setConfig({ testTimeout: 15_000 });
 import { promises as fs, existsSync } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -20,6 +17,10 @@ import { SNAPSHOT_FORMAT, openLocalBackupProvider, type BackupProvider } from '@
 import { openVaultRegistry } from '../serve/vault-registry.js';
 import { commandBackup } from './backup-admin.js';
 import { daemonLayoutFor } from './paths.js';
+
+// See admin.test.ts: real vault/daemon bootstrap per test — measured file
+// budget for the v8-instrumented coverage lane (issue #458 timeout policy).
+vi.setConfig({ testTimeout: 15_000 });
 
 class CliFailError extends Error {
   constructor(

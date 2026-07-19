@@ -298,6 +298,14 @@ function bodyOf(app: string) {
 /** Lets a test settle an app's un-awaited `refresh()` and its timers. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 80));
 
+// The single boot journey runs the app's real esbuild transform + jsdom render
+// plus ~1.25s of fixed settle/reconcile sleeps; the slowest app (agenda) lands
+// ~2.5s locally, which can exceed vitest's 5s default under CI load. Budget it
+// per-test (slowest observed ×3, well under 30s) rather than blanketing every
+// importer of this harness with a package-wide timeout. The `beforeAll` scratch
+// build tops out ~0.7s and stays on vitest's 10s default hookTimeout.
+const BOOT_TEST_TIMEOUT_MS = 8_000;
+
 export function describeAppBoot(
   app: string,
   options: { expectLive?: boolean; expectReplica?: boolean } = {},
@@ -400,206 +408,218 @@ export function describeAppBoot(
       rmSync(dir, { recursive: true, force: true });
     });
 
-    it('renders its replica while offline, survives revoke, and re-renders', async () => {
-      document.body.innerHTML = bodyOf(app);
-      if (app === 'agenda') {
-        // Schedule view renders the populated fixture independent of the
-        // machine's current month, keeping this browser journey deterministic.
-        document.documentElement.dataset.appDefaultView = 'schedule';
-      }
-      const granted = options.expectLive || options.expectReplica ? replicaFixture(app) : {};
-      let response: unknown = granted;
-      let nextReadError: Error | undefined;
-      let readCalls = 0;
-      const networkCalls: unknown[] = [];
-      const writeCalls: unknown[] = [];
-      const live = new Set<(value: unknown) => void>();
-      const changes = new Set<(detail: unknown) => void>();
-      Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
-      globalThis.fetch = async (...args: unknown[]) => {
-        networkCalls.push(args[0]);
-        throw new Error('synthetic airplane mode');
-      };
-      window.centraid = {
-        appId: app,
-        read: () => {
-          readCalls += 1;
-          const error = nextReadError;
-          nextReadError = undefined;
-          const result = error
-            ? Promise.reject(new Error(error.message))
-            : Promise.resolve(response);
-          result.subscribe = (listener: (value: unknown) => void) => {
-            live.add(listener);
-            void result.then(listener, () => undefined);
-            return () => live.delete(listener);
-          };
-          return result;
-        },
-        write: async (request: unknown) => {
-          writeCalls.push(request);
-          if (app === 'agenda' && (request as { action?: string }).action === 'cancel-event') {
-            return { status: 'queued', intentId: AGENDA_INTENT_ID };
-          }
-          return {};
-        },
-        onChange: (listener: (detail: unknown) => void) => {
-          changes.add(listener);
-          return () => changes.delete(listener);
-        },
-      };
-
-      const emitAgendaIntentState = (state: 'parked' | 'denied') => {
-        const invalidations = replicaIntentInvalidations([
-          {
-            intentId: AGENDA_INTENT_ID,
-            payloadHash: 'harness-payload',
-            appId: 'agenda',
-            action: 'cancel-event',
-            input: { event_id: AGENDA_EVENT_ID },
-            state,
-            createdOrder: 1,
-            attempts: 1,
-            optimistic: [],
-            dependencies: [{ shapeId: 'shape-agenda-events', entity: 'core.event' }],
-          },
-        ]);
-        for (const invalidation of invalidations) {
-          for (const listener of changes) {
-            listener({ ...invalidation, tables: [invalidation.entity] });
-          }
-        }
-      };
-
-      await import(pathToFileURL(path.join(dir, entry)).href);
-      await settle();
-      expectNoErrors('rendering its granted replica in airplane mode');
-
-      if (app === 'tally' && options.expectReplica) {
-        const shelf = document.querySelector('[aria-label="Trashed expenses"]');
-        expect(shelf?.textContent).toContain('Recoverable dinner');
-        const restore = Array.from(shelf?.querySelectorAll<HTMLButtonElement>('button') ?? []).find(
-          (button) => button.textContent?.trim() === 'Restore',
-        );
-        expect(restore, 'Tally trash shelf lost its restore control').toBeTruthy();
-        restore?.click();
-        await settle();
-        expect(writeCalls).toContainEqual({
-          action: 'restore-expense',
-          input: { expense_id: TALLY_TRASH_ID },
-        });
-      }
-
-      if (options.expectLive) {
-        const bootReads = readCalls;
-        expect(bootReads, `${app} issued an unbounded initial read fanout`).toBeLessThanOrEqual(2);
-        expect(networkCalls, `${app} blocked local paint on the network`).toEqual([]);
-        expect(live.size, `${app} never subscribed to its replica read`).toBeGreaterThan(0);
-
+    it(
+      'renders its replica while offline, survives revoke, and re-renders',
+      { timeout: BOOT_TEST_TIMEOUT_MS },
+      async () => {
+        document.body.innerHTML = bodyOf(app);
         if (app === 'agenda') {
-          const event = document.querySelector('.ag-sched-title');
-          expect(event?.textContent).toBe(AGENDA_TITLE);
-          event?.closest('button')?.click();
-          await settle();
-          const cancel = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
-            (button) => button.textContent?.trim() === 'Ask to cancel',
-          );
-          expect(cancel, 'populated Agenda event did not open its drawer').toBeTruthy();
-          cancel?.click();
-          cancel?.click();
-          await settle();
-          expect(writeCalls).toEqual([
-            { action: 'cancel-event', input: { event_id: AGENDA_EVENT_ID }, optimistic: undefined },
+          // Schedule view renders the populated fixture independent of the
+          // machine's current month, keeping this browser journey deterministic.
+          document.documentElement.dataset.appDefaultView = 'schedule';
+        }
+        const granted = options.expectLive || options.expectReplica ? replicaFixture(app) : {};
+        let response: unknown = granted;
+        let nextReadError: Error | undefined;
+        let readCalls = 0;
+        const networkCalls: unknown[] = [];
+        const writeCalls: unknown[] = [];
+        const live = new Set<(value: unknown) => void>();
+        const changes = new Set<(detail: unknown) => void>();
+        Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
+        globalThis.fetch = async (...args: unknown[]) => {
+          networkCalls.push(args[0]);
+          throw new Error('synthetic airplane mode');
+        };
+        window.centraid = {
+          appId: app,
+          read: () => {
+            readCalls += 1;
+            const error = nextReadError;
+            nextReadError = undefined;
+            const result = error
+              ? Promise.reject(new Error(error.message))
+              : Promise.resolve(response);
+            result.subscribe = (listener: (value: unknown) => void) => {
+              live.add(listener);
+              void result.then(listener, () => undefined);
+              return () => live.delete(listener);
+            };
+            return result;
+          },
+          write: async (request: unknown) => {
+            writeCalls.push(request);
+            if (app === 'agenda' && (request as { action?: string }).action === 'cancel-event') {
+              return { status: 'queued', intentId: AGENDA_INTENT_ID };
+            }
+            return {};
+          },
+          onChange: (listener: (detail: unknown) => void) => {
+            changes.add(listener);
+            return () => changes.delete(listener);
+          },
+        };
+
+        const emitAgendaIntentState = (state: 'parked' | 'denied') => {
+          const invalidations = replicaIntentInvalidations([
+            {
+              intentId: AGENDA_INTENT_ID,
+              payloadHash: 'harness-payload',
+              appId: 'agenda',
+              action: 'cancel-event',
+              input: { event_id: AGENDA_EVENT_ID },
+              state,
+              createdOrder: 1,
+              attempts: 1,
+              optimistic: [],
+              dependencies: [{ shapeId: 'shape-agenda-events', entity: 'core.event' }],
+            },
           ]);
-          expect(readCalls, 'offline interaction unexpectedly re-read the replica').toBe(bootReads);
-          expect(networkCalls, 'offline interaction attempted a network request').toEqual([]);
-          expect(document.querySelector('.kit-pending-chip')?.textContent).toBe('cancel asked');
-          expect(document.body.textContent).toContain(AGENDA_TITLE);
+          for (const invalidation of invalidations) {
+            for (const listener of changes) {
+              listener({ ...invalidation, tables: [invalidation.entity] });
+            }
+          }
+        };
 
-          // Reconnect admission parks the exact queued intent: the event stays
-          // canonical and the chip remains until a terminal owner decision.
-          Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
-          emitAgendaIntentState('parked');
-          await new Promise((resolve) => setTimeout(resolve, 250));
-          expect(document.querySelector('.kit-pending-chip')?.textContent).toBe('cancel asked');
+        await import(pathToFileURL(path.join(dir, entry)).href);
+        await settle();
+        expectNoErrors('rendering its granted replica in airplane mode');
 
-          // An exact denial is the rollback signal: only this chip settles and
-          // the unchanged canonical event remains visible.
-          emitAgendaIntentState('denied');
-          await new Promise((resolve) => setTimeout(resolve, 250));
-          expect(document.querySelector('.kit-pending-chip')).toBeNull();
-          expect(document.body.textContent).toContain(AGENDA_TITLE);
-          expect(readCalls, 'exact intent settlement unexpectedly re-read the replica').toBe(
-            bootReads,
+        if (app === 'tally' && options.expectReplica) {
+          const shelf = document.querySelector('[aria-label="Trashed expenses"]');
+          expect(shelf?.textContent).toContain('Recoverable dinner');
+          const restore = Array.from(
+            shelf?.querySelectorAll<HTMLButtonElement>('button') ?? [],
+          ).find((button) => button.textContent?.trim() === 'Restore');
+          expect(restore, 'Tally trash shelf lost its restore control').toBeTruthy();
+          restore?.click();
+          await settle();
+          expect(writeCalls).toContainEqual({
+            action: 'restore-expense',
+            input: { expense_id: TALLY_TRASH_ID },
+          });
+        }
+
+        if (options.expectLive) {
+          const bootReads = readCalls;
+          expect(bootReads, `${app} issued an unbounded initial read fanout`).toBeLessThanOrEqual(
+            2,
           );
-        } else if (app === 'photos') {
-          const tile = document.querySelector(`[data-asset-id="${PHOTO_ASSET_ID}"]`);
-          expect(tile, 'the populated local Photos row did not render').toBeTruthy();
-          expect(tile?.querySelector('img')?.alt).toBe(PHOTO_TITLE);
+          expect(networkCalls, `${app} blocked local paint on the network`).toEqual([]);
+          expect(live.size, `${app} never subscribed to its replica read`).toBeGreaterThan(0);
+
+          if (app === 'agenda') {
+            const event = document.querySelector('.ag-sched-title');
+            expect(event?.textContent).toBe(AGENDA_TITLE);
+            event?.closest('button')?.click();
+            await settle();
+            const cancel = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
+              (button) => button.textContent?.trim() === 'Ask to cancel',
+            );
+            expect(cancel, 'populated Agenda event did not open its drawer').toBeTruthy();
+            cancel?.click();
+            cancel?.click();
+            await settle();
+            expect(writeCalls).toEqual([
+              {
+                action: 'cancel-event',
+                input: { event_id: AGENDA_EVENT_ID },
+                optimistic: undefined,
+              },
+            ]);
+            expect(readCalls, 'offline interaction unexpectedly re-read the replica').toBe(
+              bootReads,
+            );
+            expect(networkCalls, 'offline interaction attempted a network request').toEqual([]);
+            expect(document.querySelector('.kit-pending-chip')?.textContent).toBe('cancel asked');
+            expect(document.body.textContent).toContain(AGENDA_TITLE);
+
+            // Reconnect admission parks the exact queued intent: the event stays
+            // canonical and the chip remains until a terminal owner decision.
+            Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
+            emitAgendaIntentState('parked');
+            await new Promise((resolve) => setTimeout(resolve, 250));
+            expect(document.querySelector('.kit-pending-chip')?.textContent).toBe('cancel asked');
+
+            // An exact denial is the rollback signal: only this chip settles and
+            // the unchanged canonical event remains visible.
+            emitAgendaIntentState('denied');
+            await new Promise((resolve) => setTimeout(resolve, 250));
+            expect(document.querySelector('.kit-pending-chip')).toBeNull();
+            expect(document.body.textContent).toContain(AGENDA_TITLE);
+            expect(readCalls, 'exact intent settlement unexpectedly re-read the replica').toBe(
+              bootReads,
+            );
+          } else if (app === 'photos') {
+            const tile = document.querySelector(`[data-asset-id="${PHOTO_ASSET_ID}"]`);
+            expect(tile, 'the populated local Photos row did not render').toBeTruthy();
+            expect(tile?.querySelector('img')?.alt).toBe(PHOTO_TITLE);
+          }
+
+          response = DENIED;
+          for (const listener of Array.from(live)) listener(response);
+          await settle();
+          expectNoErrors('applying a denied live replica value');
+          const liveBanner = document.querySelector('#consentBanner');
+          expect(liveBanner, `${app}/index.html lost its #consentBanner`).toBeTruthy();
+          expect(liveBanner.hidden, `${app} ignored a denied live replica value`).toBe(false);
+
+          response = granted;
+          for (const listener of Array.from(live)) listener(response);
+          await settle();
+          expectNoErrors('applying a re-granted live replica value');
+          expect(liveBanner.hidden, `${app} ignored a re-granted live replica value`).toBe(true);
+
+          // A replacement live read can fail before it registers any upstream
+          // dependency. The app must release that dead subscription and let a
+          // later compatibility doorbell retry it.
+          const beforeFailure = readCalls;
+          nextReadError = new Error('synthetic initial replica read failure');
+          if (app === 'photos') {
+            const realNow = Date.now;
+            const afterStaleWindow = realNow() + 31_000;
+            Date.now = () => afterStaleWindow;
+            window.dispatchEvent(new Event('focus'));
+            Date.now = realNow;
+          } else {
+            window.dispatchEvent(new Event('focus'));
+          }
+          await settle();
+          expect(readCalls, `${app} did not attempt the replacement live read`).toBeGreaterThan(
+            beforeFailure,
+          );
+          const afterFailure = readCalls;
+          const table = app === 'photos' ? 'core.content_item' : 'core.event';
+          for (const listener of changes) listener({ tables: [table] });
+          await new Promise((resolve) => setTimeout(resolve, 350));
+          expect(
+            readCalls,
+            `${app} suppressed the compatibility retry after its live read rejected`,
+          ).toBeGreaterThan(afterFailure);
+          expect(live.size, `${app} did not restore a managed live dependency`).toBeGreaterThan(0);
+          return;
         }
 
+        // Revoke: every app clears its containers.
         response = DENIED;
-        for (const listener of Array.from(live)) listener(response);
+        window.dispatchEvent(new Event('focus'));
         await settle();
-        expectNoErrors('applying a denied live replica value');
-        const liveBanner = document.querySelector('#consentBanner');
-        expect(liveBanner, `${app}/index.html lost its #consentBanner`).toBeTruthy();
-        expect(liveBanner.hidden, `${app} ignored a denied live replica value`).toBe(false);
+        expectNoErrors('clearing after the grant was revoked');
 
-        response = granted;
-        for (const listener of Array.from(live)) listener(response);
+        // Required, not optional: a guarded `if (banner)` would silently skip the
+        // only assertion proving the denied read was actually observed.
+        const banner = document.querySelector('#consentBanner');
+        expect(banner, `${app}/index.html lost its #consentBanner`).toBeTruthy();
+        expect(banner.hidden, `${app} hid its consent banner while denied`).toBe(false);
+
+        // Re-grant: render back into the containers the denied path just cleared.
+        response = {};
+        window.dispatchEvent(new Event('focus'));
         await settle();
-        expectNoErrors('applying a re-granted live replica value');
-        expect(liveBanner.hidden, `${app} ignored a re-granted live replica value`).toBe(true);
-
-        // A replacement live read can fail before it registers any upstream
-        // dependency. The app must release that dead subscription and let a
-        // later compatibility doorbell retry it.
-        const beforeFailure = readCalls;
-        nextReadError = new Error('synthetic initial replica read failure');
-        if (app === 'photos') {
-          const realNow = Date.now;
-          const afterStaleWindow = realNow() + 31_000;
-          Date.now = () => afterStaleWindow;
-          window.dispatchEvent(new Event('focus'));
-          Date.now = realNow;
-        } else {
-          window.dispatchEvent(new Event('focus'));
-        }
-        await settle();
-        expect(readCalls, `${app} did not attempt the replacement live read`).toBeGreaterThan(
-          beforeFailure,
-        );
-        const afterFailure = readCalls;
-        const table = app === 'photos' ? 'core.content_item' : 'core.event';
-        for (const listener of changes) listener({ tables: [table] });
-        await new Promise((resolve) => setTimeout(resolve, 350));
-        expect(
-          readCalls,
-          `${app} suppressed the compatibility retry after its live read rejected`,
-        ).toBeGreaterThan(afterFailure);
-        expect(live.size, `${app} did not restore a managed live dependency`).toBeGreaterThan(0);
-        return;
-      }
-
-      // Revoke: every app clears its containers.
-      response = DENIED;
-      window.dispatchEvent(new Event('focus'));
-      await settle();
-      expectNoErrors('clearing after the grant was revoked');
-
-      // Required, not optional: a guarded `if (banner)` would silently skip the
-      // only assertion proving the denied read was actually observed.
-      const banner = document.querySelector('#consentBanner');
-      expect(banner, `${app}/index.html lost its #consentBanner`).toBeTruthy();
-      expect(banner.hidden, `${app} hid its consent banner while denied`).toBe(false);
-
-      // Re-grant: render back into the containers the denied path just cleared.
-      response = {};
-      window.dispatchEvent(new Event('focus'));
-      await settle();
-      expectNoErrors('re-rendering after the grant came back');
-      expect(banner.hidden, `${app} kept its consent banner after re-grant`).toBe(true);
-    });
+        expectNoErrors('re-rendering after the grant came back');
+        expect(banner.hidden, `${app} kept its consent banner after re-grant`).toBe(true);
+      },
+    );
   });
 }

@@ -9,9 +9,6 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
 
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
-// See admin.test.ts: real vault/daemon bootstrap per test — measured file
-// budget for the v8-instrumented coverage lane (issue #458 timeout policy).
-vi.setConfig({ testTimeout: 15_000 });
 import { promises as fs, existsSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -20,6 +17,10 @@ import { sealKeyFileFor } from '@centraid/vault';
 import { commandVault } from './vault-admin.ts';
 import { commandKey } from './key-admin.ts';
 import { daemonLayoutFor } from './paths.ts';
+
+// See admin.test.ts: real vault/daemon bootstrap per test — measured file
+// budget for the v8-instrumented coverage lane (issue #458 timeout policy).
+vi.setConfig({ testTimeout: 15_000 });
 
 class CliFailError extends Error {
   constructor(

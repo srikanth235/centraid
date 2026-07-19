@@ -579,9 +579,9 @@ bunx playwright test -c apps/desktop/tests/e2e/playwright.config.ts \
 - The performance lane passed 4 budgets and skipped 1 locally: `pwa-waterfall`
   skips when the upstream web-e2e artifact is absent (expected off-CI; a hard
   failure under CI). Scale passed 5/5.
-- Full coverage passed 505 test files and 4,445 tests, with 3 files and 35
-  tests intentionally skipped. Aggregate coverage was 70.44% lines / 77.69%
-  branches / 81.43% functions; every repository and scoped package floor
+- Full coverage passed 505 test files and 4,461 tests, with 3 files and 35
+  tests intentionally skipped. Aggregate coverage was 70.60% lines / 77.75%
+  branches / 81.56% functions; every repository and scoped package floor
   passed.
 - The mobile harness modules passed Node syntax checks. A local operational
   smoke started the nightly CI gateway entry point on a tokenless loopback
@@ -652,3 +652,4 @@ no steering events and no steering ledger rows are required.
 | claude-code-e1dd013a-4c0-1784447848-1 | claude-code | e1dd013a-4c0e-40fb-a814-df75c60d1fe9 | #458 | claude-fable-5 | 6 | 5197 | 792715 | 749 | 5952 | 0.8952 | 445 | 845334 | 42899004 | 236610 | test: rethink after review — measured budgets, falsifiable lanes, doc truth (#45 |
 | claude-code-e1dd013a-4c0-1784447927-1 | claude-code | e1dd013a-4c0e-40fb-a814-df75c60d1fe9 | #458 | claude-fable-5 | 11 | 8587 | 1609032 | 3310 | 11908 | 1.8820 | 456 | 853921 | 44508036 | 239920 | test: rethink after review — measured budgets, falsifiable lanes, doc truth (#45 |
 | claude-code-e1dd013a-4c0-1784448188-1 | claude-code | e1dd013a-4c0e-40fb-a814-df75c60d1fe9 | #458 | claude-fable-5 | 58 | 29332 | 8643313 | 12349 | 41739 | 9.6280 | 514 | 883253 | 53151349 | 252269 | chore(merge): merge main (#459 vault backlog) into issue-458 test reorg (#458)On |
+| claude-code-e1dd013a-4c0-1784448522-1 | claude-code | e1dd013a-4c0e-40fb-a814-df75c60d1fe9 | #458 | claude-fable-5 | 31 | 14884 | 4873910 | 11080 | 25995 | 5.6143 | 545 | 898137 | 58025259 | 263349 | test: post-#459 merge follow-up — setConfig below imports, fresh gate numbers (# |
