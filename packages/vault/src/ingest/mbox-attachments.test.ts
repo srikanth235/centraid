@@ -90,7 +90,7 @@ test('stage → publish: attachment bytes claim onto the message with an edge', 
     .prepare(
       `SELECT a.content_id, c.content_uri, c.media_type, c.title
          FROM core_attachment a JOIN core_content_item c ON c.content_id = a.content_id
-        WHERE a.subject_type = 'social.message' AND a.subject_id = ?`,
+        WHERE a.target_type = 'social.message' AND a.target_id = ?`,
     )
     .get(message.message_id) as Record<string, string>;
   expect(attachment.content_uri).toBe(blobUriFor(sha));

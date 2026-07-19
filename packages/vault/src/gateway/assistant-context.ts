@@ -15,7 +15,7 @@ import { VAULT_TABLES } from '../schema/tables.js';
 import { extPhysicalNames } from './ext.js';
 
 const CONVENTIONS = `## Conventions
-- Logical entities are schema-qualified (core.party); physical SQLite tables are underscore-joined (core_party). Polymorphic refs (core_link.from_type, core_tag.subject_type, …) store the LOGICAL name.
+- Logical entities are schema-qualified (core.party); physical SQLite tables are underscore-joined (core_party). Polymorphic refs (core_link.from_type, core_tag.target_type, …) store the LOGICAL name.
 - Primary keys are UUIDv7 strings — lexicographic order IS creation-time order. Timestamps are ISO-8601 strings; compare with plain string comparison or the date() family.
 - core.party is the universal person/org row (kind column). People, contacts, senders, attendees, clients all reference party_id.
 - core_link is the ONLY cross-entity relationship fabric: (from_type, from_id) → (to_type, to_id) with relation_concept_id → core_concept. A live link has valid_to IS NULL; ended links keep their row (temporal, never deleted). Employment ("works-for"), references, about — all links.

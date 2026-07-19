@@ -22,7 +22,7 @@
 //
 // The graph joins (issue #310 S2): `target` stays the wire-level address the
 // standing-grant key needs, but it is not an entity — so an item also
-// carries typed refs the graph can walk. `(subject_type, subject_id)` is
+// carries typed refs the graph can walk. `(target_type, target_id)` is
 // the canonical row the write is ABOUT (the invoice being sent, the event
 // being created); `recipient_party_id` is the resolved destination person.
 // And a drain is not the end of the story: a sent message-shaped artifact
@@ -49,8 +49,8 @@ CREATE TABLE IF NOT EXISTS outbox_item (
   actor_kind           TEXT NOT NULL CHECK (actor_kind IN ('owner','app','ai_agent')),
   verb                 TEXT NOT NULL,
   target               TEXT NOT NULL,
-  subject_type         TEXT,
-  subject_id           TEXT,
+  target_type          TEXT,
+  target_id            TEXT,
   recipient_party_id   TEXT REFERENCES core_party(party_id),
   artifact_json        TEXT NOT NULL CHECK (json_valid(artifact_json)),
   request_json         TEXT NOT NULL CHECK (json_valid(request_json)),
@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS outbox_item (
   result_json          TEXT CHECK (result_json IS NULL OR json_valid(result_json)),
   published_message_id TEXT REFERENCES social_message(message_id),
   note                 TEXT,
-  CHECK ((subject_type IS NULL) = (subject_id IS NULL))
+  CHECK ((target_type IS NULL) = (target_id IS NULL))
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_outbox_item_status ON outbox_item(status, staged_at);
 CREATE INDEX IF NOT EXISTS idx_outbox_item_connection ON outbox_item(connection_id);

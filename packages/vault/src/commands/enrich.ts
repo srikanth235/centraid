@@ -332,7 +332,7 @@ const REQUEST_ENRICHMENT: CommandDefinition = {
     const requestId = ctx.newId();
     ctx.db
       .prepare(
-        `INSERT INTO enrich_request (request_id, entity_type, entity_id, reason, detail, requested_at, drained_at)
+        `INSERT INTO enrich_request (request_id, target_type, target_id, reason, detail, requested_at, drained_at)
          VALUES (?, ?, ?, ?, ?, ?, NULL)`,
       )
       .run(
@@ -377,7 +377,7 @@ const UPSERT_EMBEDDING: CommandDefinition = {
     {
       name: 'embedding_present',
       sql: `SELECT count(*) AS n FROM enrich_embedding
-             WHERE entity_type = :entity_type AND entity_id = :entity_id AND model = :model`,
+             WHERE target_type = :entity_type AND target_id = :entity_id AND model = :model`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -394,7 +394,7 @@ const UPSERT_EMBEDDING: CommandDefinition = {
     };
     const existing = ctx.db
       .prepare(
-        `SELECT embedding_id FROM enrich_embedding WHERE entity_type = ? AND entity_id = ? AND model = ?`,
+        `SELECT embedding_id FROM enrich_embedding WHERE target_type = ? AND target_id = ? AND model = ?`,
       )
       .get(input.entity_type, input.entity_id, input.model) as { embedding_id: string } | undefined;
     const embeddingId = existing?.embedding_id ?? ctx.newId();
@@ -408,7 +408,7 @@ const UPSERT_EMBEDDING: CommandDefinition = {
     } else {
       ctx.db
         .prepare(
-          `INSERT INTO enrich_embedding (embedding_id, entity_type, entity_id, model, dim, vector, created_at)
+          `INSERT INTO enrich_embedding (embedding_id, target_type, target_id, model, dim, vector, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(

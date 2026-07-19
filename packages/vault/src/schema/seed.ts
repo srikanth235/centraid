@@ -13,10 +13,10 @@ export const SEED_DDL = `
 CREATE TABLE IF NOT EXISTS consent_seed_row (
   seed_id     TEXT PRIMARY KEY,
   app_id      TEXT NOT NULL,
-  entity_type TEXT NOT NULL,
-  entity_id   TEXT NOT NULL,
+  target_type TEXT NOT NULL,
+  target_id   TEXT NOT NULL,
   seeded_at   TEXT NOT NULL,
-  UNIQUE (entity_type, entity_id)
+  UNIQUE (target_type, target_id)
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_seed_row_app ON consent_seed_row(app_id);
 `;

@@ -16,6 +16,7 @@ import { sha256Hex } from '../ids.js';
 import { assertTextBodyWithinBudget } from './inline-body-guard.js';
 import { releaseContentIfUnreferenced } from './media.js';
 import { recordRevision } from './revisions.js';
+import { cleanupPolyRefs } from '../schema/poly-refs.js';
 
 /** The acting party: the caller's own party, else the vault owner (apps). */
 function actorPartyId(ctx: HandlerCtx): string {
@@ -34,7 +35,7 @@ const MEDIA_TYPE: Record<string, string> = {
 };
 
 /** Dedupe-or-insert a text body as a canonical content item (P2). */
-function contentItemFor(ctx: HandlerCtx, bodyText: string, format: string): string {
+export function contentItemFor(ctx: HandlerCtx, bodyText: string, format: string): string {
   const mediaType = MEDIA_TYPE[format] ?? 'text/plain';
   // Text bodies stay inline forever (the FTS trigger reads content_uri
   // in-transaction, no CAS redirect possible) — refuse rather than let an
@@ -542,6 +543,7 @@ function deleteNotebook(ctx: HandlerCtx): Record<string, unknown> {
     .prepare('DELETE FROM core_collection_entry WHERE collection_id = ?')
     .run(input.notebook_id);
   ctx.db.prepare('DELETE FROM core_collection WHERE collection_id = ?').run(input.notebook_id);
+  cleanupPolyRefs(ctx.db, ctx.now, 'core.collection', input.notebook_id);
   ctx.wrote('core.collection', input.notebook_id);
   ctx.cite({
     claim: `notebook ${input.notebook_id} deleted; ${filed.n} member notes unfiled, none destroyed`,

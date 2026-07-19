@@ -74,17 +74,17 @@ const $ = (id: string) => document.getElementById(id)!;
 // only when a change names one of these (or names none, i.e. "this app acted").
 const CHANGE_TABLES = [
   'people.profile',
-  'people.relationship',
-  'people.interaction',
   'people.important_date',
-  'people.gift',
-  'people.debt',
-  'people.journal_entry',
-  'people.task',
+  'tally.obligation',
+  'schedule.task',
   'core.party',
+  'core.activity',
+  'core.link',
+  'core.content_item',
   'core.party_identifier',
   'core.tag',
   'core.concept',
+  'knowledge.note',
   'knowledge.annotation',
 ];
 

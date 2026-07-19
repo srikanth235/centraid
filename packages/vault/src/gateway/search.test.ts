@@ -133,7 +133,7 @@ describe('index-backed matching', () => {
     ).toEqual(['photo-a']);
   });
 
-  test('a People interaction body is searchable through the command layer (issue #441 A2.2)', () => {
+  test('a People interaction annotation is searchable through the canonical command layer (issue #450)', () => {
     // "Everything I wrote about Ravi" — the interaction body must reach search.
     const { party_id } = execOut<{ party_id: string }>('people.add_person', {
       display_name: 'Ravi',
@@ -146,14 +146,14 @@ describe('index-backed matching', () => {
     });
 
     const hits = gw.search(owner, {
-      entity: 'people.interaction',
+      entity: 'knowledge.annotation',
       query: 'ladakh trek',
       purpose: PURPOSE,
     }).rows;
-    expect(hits.map((r) => r.interaction_id)).toContain(interaction_id);
+    expect(hits.map((r) => r.target_id)).toContain(interaction_id);
   });
 
-  test('People gift and journal bodies are searchable too (issue #441 A2.2)', () => {
+  test('People canonical gift tasks and journal notes are searchable too (issue #450)', () => {
     const { party_id } = execOut<{ party_id: string }>('people.add_person', {
       display_name: 'Ravi',
       cadence_days: 30,
@@ -164,8 +164,8 @@ describe('index-backed matching', () => {
     });
     expect(
       gw
-        .search(owner, { entity: 'people.gift', query: 'ceramic mug', purpose: PURPOSE })
-        .rows.map((r) => r.gift_id),
+        .search(owner, { entity: 'schedule.task', query: 'ceramic mug', purpose: PURPOSE })
+        .rows.map((r) => r.task_id),
     ).toContain(gift_id);
 
     const { entry_id } = execOut<{ entry_id: string }>('people.add_journal_entry', {
@@ -175,8 +175,8 @@ describe('index-backed matching', () => {
     });
     expect(
       gw
-        .search(owner, { entity: 'people.journal_entry', query: 'quiet morning', purpose: PURPOSE })
-        .rows.map((r) => r.entry_id),
+        .search(owner, { entity: 'knowledge.note', query: 'quiet morning', purpose: PURPOSE })
+        .rows.map((r) => r.note_id),
     ).toContain(entry_id);
   });
 

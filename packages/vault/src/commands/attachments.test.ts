@@ -50,12 +50,12 @@ test('attach pins a data-URI file to a subject as its cover content item', () =>
 
   const att = db.vault
     .prepare(
-      'SELECT subject_type, subject_id, role, is_primary FROM core_attachment WHERE attachment_id = ?',
+      'SELECT target_type, target_id, role, is_primary FROM core_attachment WHERE attachment_id = ?',
     )
     .get(output.attachment_id);
   expect(att).toMatchObject({
-    subject_type: 'schedule.task',
-    subject_id: taskId,
+    target_type: 'schedule.task',
+    target_id: taskId,
     role: 'photo', // derived from image/* media type
     is_primary: 1,
   });
@@ -111,7 +111,7 @@ test('a second file on the same subject is not primary', () => {
   const so = (second as { output: { is_primary: number } }).output;
   expect(so.is_primary).toBe(0);
   const roles = db.vault
-    .prepare('SELECT role FROM core_attachment WHERE subject_id = ? ORDER BY is_primary DESC')
+    .prepare('SELECT role FROM core_attachment WHERE target_id = ? ORDER BY is_primary DESC')
     .all(taskId) as { role: string }[];
   expect(roles.map((r) => r.role)).toEqual(['photo', 'other']); // text defaults to 'other'
 });
@@ -193,7 +193,7 @@ test('attach by content_id pins an EXISTING content item — no re-upload (issue
   const out = (reused as { output: { content_id: string; is_primary: number } }).output;
   expect(out.content_id).toBe(contentId);
   expect(out.is_primary).toBe(1); // first edge on subject B
-  const role = db.vault.prepare('SELECT role FROM core_attachment WHERE subject_id = ?').get(b) as {
+  const role = db.vault.prepare('SELECT role FROM core_attachment WHERE target_id = ?').get(b) as {
     role: string;
   };
   expect(role.role).toBe('photo'); // derived from the existing item's media type

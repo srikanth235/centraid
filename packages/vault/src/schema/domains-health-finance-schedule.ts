@@ -156,6 +156,42 @@ CREATE TABLE schedule_attendee (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_attendee_party ON schedule_attendee(party_id);
 
+-- iCalendar carries an ORGANIZER property separately from attendee roles, so
+-- both encodings stay. The invariant is directional (issue #450): a chair,
+-- when present, is the organizer; an organizer need not be duplicated as an
+-- attendee because imported calendars often omit that self-entry.
+CREATE TRIGGER schedule_chair_matches_organizer_insert
+BEFORE INSERT ON schedule_attendee
+WHEN NEW.role = 'chair' AND NOT EXISTS (
+  SELECT 1 FROM core_event e
+   WHERE e.event_id = NEW.event_id
+     AND e.organizer_party_id = NEW.party_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'chair attendee must match the event organizer');
+END;
+CREATE TRIGGER schedule_chair_matches_organizer_update
+BEFORE UPDATE OF event_id, party_id, role ON schedule_attendee
+WHEN NEW.role = 'chair' AND NOT EXISTS (
+  SELECT 1 FROM core_event e
+   WHERE e.event_id = NEW.event_id
+     AND e.organizer_party_id = NEW.party_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'chair attendee must match the event organizer');
+END;
+CREATE TRIGGER schedule_organizer_matches_chair_update
+BEFORE UPDATE OF organizer_party_id ON core_event
+WHEN EXISTS (
+  SELECT 1 FROM schedule_attendee a
+   WHERE a.event_id = OLD.event_id
+     AND a.role = 'chair'
+     AND a.party_id IS NOT NEW.organizer_party_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'event organizer must match its chair attendee');
+END;
+
 CREATE TABLE schedule_task (
   task_id        TEXT PRIMARY KEY,
   owner_party_id TEXT NOT NULL REFERENCES core_party(party_id),
@@ -182,5 +218,8 @@ CREATE TABLE schedule_availability_rule (
   kind           TEXT NOT NULL CHECK (kind IN ('work','focus','personal','blocked')),
   tz             TEXT NOT NULL
 ) STRICT;
+-- Deliberate recurrence split (issue #450): recurring events/tasks/plans use
+-- RFC 5545 RRULE text for interchange fidelity; availability is a compact
+-- weekly constraint, so weekday_mask is its native, queryable encoding.
 CREATE INDEX IF NOT EXISTS idx_availability_rule_owner_party ON schedule_availability_rule(owner_party_id);
 `;

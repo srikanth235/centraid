@@ -1,6 +1,6 @@
 // Attachments (core §01): the one cross-cutting write every projection wants
 // — pin a file (image, PDF, any media) to a canonical row. An attachment is
-// a polymorphic edge (core_attachment.subject_type/subject_id) onto a
+// a polymorphic edge (core_attachment.target_type/target_id) onto a
 // canonical core_content_item.
 //
 // Byte custody is issue #296: large files arrive STAGED (POST /_vault/blobs
@@ -125,7 +125,7 @@ const ATTACH: CommandDefinition = {
       name: 'attachment_links_subject_to_content',
       sql: `SELECT count(*) AS n FROM core_attachment
              WHERE attachment_id = :attachment_id
-               AND subject_type = :subject_type AND subject_id = :subject_id`,
+               AND target_type = :subject_type AND target_id = :subject_id`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -195,13 +195,13 @@ function attach(ctx: HandlerCtx): Record<string, unknown> {
   const role = input.role ?? (mediaType.startsWith('image/') ? 'photo' : 'other');
   // The first file on a subject is its cover; the rest ride along.
   const existing = ctx.db
-    .prepare('SELECT count(*) AS n FROM core_attachment WHERE subject_type = ? AND subject_id = ?')
+    .prepare('SELECT count(*) AS n FROM core_attachment WHERE target_type = ? AND target_id = ?')
     .get(input.subject_type, input.subject_id) as { n: number };
   const isPrimary = existing.n === 0 ? 1 : 0;
   const attachmentId = ctx.newId();
   ctx.db
     .prepare(
-      `INSERT INTO core_attachment (attachment_id, subject_type, subject_id, content_id, role, is_primary, created_at)
+      `INSERT INTO core_attachment (attachment_id, target_type, target_id, content_id, role, is_primary, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(attachmentId, input.subject_type, input.subject_id, contentId, role, isPrimary, ctx.now);

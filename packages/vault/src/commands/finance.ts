@@ -6,6 +6,7 @@
 
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
+import { cleanupPolyRefs } from '../schema/poly-refs.js';
 
 const CATEGORIZE_TXN: CommandDefinition = {
   name: 'finance.categorize_txn',
@@ -293,6 +294,7 @@ const REMOVE_BUDGET: CommandDefinition = {
 function removeBudget(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { budget_id: string };
   ctx.db.prepare('DELETE FROM finance_budget WHERE budget_id = ?').run(input.budget_id);
+  cleanupPolyRefs(ctx.db, ctx.now, 'finance.budget', input.budget_id);
   ctx.wrote('finance.budget', input.budget_id);
   return { budget_id: input.budget_id };
 }

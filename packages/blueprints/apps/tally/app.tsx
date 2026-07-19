@@ -74,6 +74,7 @@ const dash: Dash = {
   currency: 'USD',
   friends: [],
   groups: [],
+  trash: [],
   owe_total_minor: 0,
   owed_total_minor: 0,
 };
@@ -251,6 +252,7 @@ function render() {
         onOpenGroup={(groupId) => logic.setNav({ view: 'group', groupId, search: '' })}
         onOpenAddFriend={logic.openAddFriend}
         onOpenNewGroup={logic.openNewGroup}
+        onRestoreExpense={logic.restoreExpense}
       />,
     );
     return;
@@ -406,6 +408,7 @@ async function refreshDashboard(): Promise<boolean> {
   dash.currency = merged.currency;
   dash.friends = merged.friends ?? [];
   dash.groups = merged.groups ?? [];
+  dash.trash = merged.trash ?? [];
   dash.owe_total_minor = merged.owe_total_minor;
   dash.owed_total_minor = merged.owed_total_minor;
   if (merged.me) dash.me = merged.me;

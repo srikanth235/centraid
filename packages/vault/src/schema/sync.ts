@@ -34,8 +34,8 @@ CREATE TABLE IF NOT EXISTS sync_external_entity (
   map_id        TEXT PRIMARY KEY,
   connection_id TEXT NOT NULL REFERENCES sync_connection(connection_id),
   external_id   TEXT NOT NULL,
-  entity_type   TEXT NOT NULL,
-  entity_id     TEXT NOT NULL,
+  target_type   TEXT NOT NULL,
+  target_id     TEXT NOT NULL,
   content_hash  TEXT NOT NULL,
   first_seen_at TEXT NOT NULL,
   last_seen_at  TEXT NOT NULL,
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS sync_external_entity (
   UNIQUE (connection_id, external_id)
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_sync_external_entity
-  ON sync_external_entity(entity_type, entity_id);
+  ON sync_external_entity(target_type, target_id);
 
 CREATE TABLE IF NOT EXISTS sync_import_batch (
   batch_id      TEXT PRIMARY KEY,

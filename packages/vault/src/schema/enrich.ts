@@ -74,21 +74,21 @@ SELECT 'docs', 'local', datetime('now')
 
 CREATE TABLE IF NOT EXISTS enrich_embedding (
   embedding_id TEXT PRIMARY KEY,
-  entity_type  TEXT NOT NULL,
-  entity_id    TEXT NOT NULL,
+  target_type  TEXT NOT NULL,
+  target_id    TEXT NOT NULL,
   model        TEXT NOT NULL,
   dim          INTEGER NOT NULL CHECK (dim > 0),
   vector       BLOB NOT NULL,
   created_at   TEXT NOT NULL,
-  UNIQUE (entity_type, entity_id, model)
+  UNIQUE (target_type, target_id, model)
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_enrich_embedding_entity
-  ON enrich_embedding(entity_type, entity_id);
+  ON enrich_embedding(target_type, target_id);
 
 CREATE TABLE IF NOT EXISTS enrich_request (
   request_id          TEXT PRIMARY KEY,
-  entity_type         TEXT NOT NULL,
-  entity_id           TEXT,
+  target_type         TEXT NOT NULL,
+  target_id           TEXT,
   reason              TEXT NOT NULL CHECK (reason IN ('search-miss','on-view','manual')),
   detail              TEXT,
   -- NULL capability = the existing gateway/automation queue. A named
@@ -107,7 +107,7 @@ CREATE TABLE IF NOT EXISTS enrich_request (
   CHECK ((lease_device_id IS NULL) = (lease_expires_at IS NULL))
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_enrich_request_open
-  ON enrich_request(entity_type, requested_at) WHERE drained_at IS NULL;
+  ON enrich_request(target_type, requested_at) WHERE drained_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_enrich_request_leaseable
   ON enrich_request(required_capability, lease_expires_at, requested_at)
   WHERE drained_at IS NULL AND required_capability IS NOT NULL;

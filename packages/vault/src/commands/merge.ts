@@ -15,16 +15,7 @@
 
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
-
-/** Polymorphic (type, id) columns that may reference a party (§10 S4). */
-const POLY_COLUMNS: { table: string; typeCol: string; idCol: string }[] = [
-  { table: 'core_link', typeCol: 'from_type', idCol: 'from_id' },
-  { table: 'core_link', typeCol: 'to_type', idCol: 'to_id' },
-  { table: 'core_tag', typeCol: 'target_type', idCol: 'target_id' },
-  { table: 'core_attachment', typeCol: 'subject_type', idCol: 'subject_id' },
-  { table: 'core_collection_entry', typeCol: 'target_type', idCol: 'target_id' },
-  { table: 'knowledge_annotation', typeCol: 'target_type', idCol: 'target_id' },
-];
+import { POLY_REF_REGISTRY } from '../schema/poly-refs.js';
 
 const MERGE_PARTY: CommandDefinition = {
   name: 'core.merge_party',
@@ -154,7 +145,12 @@ function mergeParty(ctx: HandlerCtx): Record<string, unknown> {
     }
   }
 
-  for (const poly of POLY_COLUMNS) {
+  // Re-point every live polymorphic mechanism from the same closed registry
+  // purge uses. Merge semantics differ from cleanup policies, but the column
+  // set must not drift independently (issue #450).
+  for (const poly of POLY_REF_REGISTRY.flatMap((entry) =>
+    entry.pairs.map((pair) => ({ table: entry.table, ...pair })),
+  )) {
     const pkRow = (
       ctx.db.prepare(`PRAGMA table_info(${JSON.stringify(poly.table)})`).all() as {
         name: string;
@@ -181,14 +177,6 @@ function mergeParty(ctx: HandlerCtx): Record<string, unknown> {
       }
     }
   }
-  // The external-id map follows: future syncs of B's source land on A.
-  const mapRes = ctx.db
-    .prepare(
-      `UPDATE sync_external_entity SET entity_id = ? WHERE entity_type = 'core.party' AND entity_id = ?`,
-    )
-    .run(survivor, merged);
-  repointed += Number(mapRes.changes);
-
   ctx.db.prepare('DELETE FROM core_party WHERE party_id = ?').run(merged);
   ctx.wrote('core.party', survivor);
   ctx.wrote('core.party', merged);

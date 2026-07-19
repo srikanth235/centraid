@@ -32,11 +32,11 @@ import { SEED_DDL } from './seed.js';
 import { SYNC_CREDENTIAL_DDL, SYNC_DDL } from './sync.js';
 
 /**
- * Ontology contract version stamped on rows (rule R07). Bumped to 1.3 with
- * issue #352: core_document gives documents identity separate from their
- * bytes, with `revises` core.link version lineage over content items.
+ * Ontology contract version stamped on rows (rule R07). Bumped to 1.4 for
+ * issue #450's canonical People consolidation, target-pair convention, and
+ * cross-table invariant guards.
  */
-export const ONTOLOGY_VERSION = '1.3';
+export const ONTOLOGY_VERSION = '1.4';
 
 // Composition order is dependency order:
 //   - CORE first (everything references the spine), anchors ride with it;

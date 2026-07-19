@@ -3,7 +3,7 @@
   "id": "agenda",
   "name": "Agenda",
   "description": "Your calendar as a projection of the personal vault: upcoming events from core.event, proposals, RSVPs and cancellation asks through consent-checked typed commands (cancelling is medium-risk, so it parks for the owner's confirmation). No data of its own — revoke the grant and the app goes dark.",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "iconKey": "Calendar",
   "colorKey": "indigo",
   "vault": {

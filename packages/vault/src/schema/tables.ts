@@ -60,16 +60,7 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
   media: ['media_asset', 'face_region', 'asset_phash'],
   home: ['asset_item', 'warranty', 'maintenance_plan', 'utility_meter', 'meter_reading'],
   business: ['client', 'project', 'time_entry', 'invoice', 'invoice_line'],
-  people: [
-    'profile',
-    'interaction',
-    'task',
-    'important_date',
-    'relationship',
-    'gift',
-    'debt',
-    'journal_entry',
-  ],
+  people: ['profile', 'important_date'],
   locker: ['item'],
   sync: [
     'connection',
@@ -81,7 +72,7 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     'connection_credential',
     'connection_health',
   ],
-  tally: ['friend', 'group', 'expense', 'expense_split', 'settlement'],
+  tally: ['friend', 'group', 'expense', 'expense_split', 'settlement', 'obligation'],
   enrich: ['embedding', 'request', 'policy'],
   outbox: ['item', 'grant'],
   // Read-only custody projection (issue #352): local-vs-replicated state per

@@ -48,6 +48,12 @@ export interface InProcessSchedulerOptions {
   /** Sink for fire rejections and diagnostics. */
   onError?: (err: unknown, ref: string) => void;
   /**
+   * Fixed coalescing window for commit-time doorbells. Defaults to 25 ms: a
+   * tight write burst becomes one cursor evaluation without compromising the
+   * sub-second live path. Exposed only as a deterministic test seam.
+   */
+  nudgeDelayMs?: number;
+  /**
    * Fired once per processed minute, BEFORE any fire (issue #351): the host's
    * hook for per-tick bookkeeping that has nothing to do with any one
    * automation — the missed-run ledger (`scheduler-ledger.ts`) and liveness
@@ -67,11 +73,22 @@ interface SchedulerEntry {
   readonly ref: string;
   readonly crons: readonly string[];
   /** Condition-trigger gates: the `every` cron + the trigger's index. */
-  readonly watches: readonly { readonly expr: string; readonly index: number }[];
+  readonly watches: readonly {
+    readonly expr: string;
+    readonly index: number;
+    readonly kind: 'condition' | 'data';
+    readonly entities: readonly string[];
+  }[];
 }
 
 /** `Host` + the lifecycle the owning server drives. */
 export interface LocalScheduler extends Host {
+  /**
+   * Hint that committed provenance may be available. Data-trigger cursors
+   * remain the source of truth; implementations coalesce bursts and evaluate
+   * off-cycle without applying the minute cron gate.
+   */
+  nudge(entityTypes?: readonly string[]): void;
   /** Start the minute-boundary timer. Idempotent. */
   start(): void;
   /** Stop the timer. Idempotent. */
@@ -85,10 +102,18 @@ export class InProcessScheduler implements LocalScheduler {
   private readonly now: () => Date;
   private readonly onError?: (err: unknown, ref: string) => void;
   private readonly onTick?: (at: Date) => void;
+  private readonly nudgeDelayMs: number;
   private readonly onDormancyChange?: (dormant: boolean, at: Date) => void | Promise<void>;
   private boundary?: ReturnType<typeof setTimeout>;
   private interval?: ReturnType<typeof setInterval>;
   private lastFiredMinute?: string;
+  private nudgeTimer?: ReturnType<typeof setTimeout>;
+  private nudgeAll = false;
+  private readonly nudgedEntityTypes = new Set<string>();
+  private readonly watchEvaluations = new Map<
+    string,
+    { inFlight: Promise<void>; dirty: boolean }
+  >();
 
   constructor(opts: InProcessSchedulerOptions) {
     this.fire = opts.fire;
@@ -96,6 +121,7 @@ export class InProcessScheduler implements LocalScheduler {
     this.now = opts.now ?? (() => new Date());
     this.onError = opts.onError;
     this.onTick = opts.onTick;
+    this.nudgeDelayMs = opts.nudgeDelayMs ?? 25;
     this.onDormancyChange = opts.onDormancyChange;
   }
 
@@ -145,8 +171,36 @@ export class InProcessScheduler implements LocalScheduler {
       if (!next.has(ref)) removed.push(ref);
     }
 
+    const previous = new Map(this.entries);
     this.entries.clear();
     for (const [ref, entry] of next) this.entries.set(ref, entry);
+    // A fresh data trigger must establish its no-history watermark before
+    // the next commit rings the doorbell. Otherwise that first doorbell is
+    // consumed by evaluateDataTrigger's intentional bootstrap pull and the
+    // first post-install write is missed. Await the bootstrap so a publisher
+    // can treat a completed reconcile as a real readiness boundary.
+    if (this.evaluate && (added.length > 0 || updated.length > 0)) {
+      const changed = new Set([...added, ...updated]);
+      try {
+        await Promise.all(
+          [...next.values()].flatMap((entry) =>
+            changed.has(entry.ref)
+              ? entry.watches
+                  .filter((watch) => watch.kind === 'data')
+                  .map((watch) => this.evaluateWatch(entry.ref, watch.index))
+              : [],
+          ),
+        );
+      } catch (err) {
+        // A publisher may only treat reconcile as the readiness boundary when
+        // bootstrap succeeded. Restore the previous registry so the next
+        // reconcile retries the added/updated watcher instead of mistaking a
+        // failed bootstrap for an already-settled entry.
+        this.entries.clear();
+        for (const [ref, entry] of previous) this.entries.set(ref, entry);
+        throw err;
+      }
+    }
     await this.notifyDormancyChange(wasDormant);
     return { added: added.sort(), updated: updated.sort(), removed: removed.sort() };
   }
@@ -193,6 +247,40 @@ export class InProcessScheduler implements LocalScheduler {
     }
   }
 
+  /**
+   * Ring the data-trigger doorbell. This deliberately bypasses
+   * `lastFiredMinute`: the persisted provenance cursor makes duplicate or
+   * reordered hints harmless, while a short fixed window coalesces a burst of
+   * nearby vault commits into one evaluation pass. Per-trigger evaluation is
+   * also single-flight with one dirty rerun, so a nudge racing the minute tick
+   * cannot read and advance the same persisted cursor concurrently.
+   */
+  nudge(entityTypes?: readonly string[]): void {
+    if (entityTypes === undefined) {
+      this.nudgeAll = true;
+      this.nudgedEntityTypes.clear();
+    } else if (!this.nudgeAll) {
+      for (const entityType of entityTypes) this.nudgedEntityTypes.add(entityType);
+    }
+    if (this.nudgeTimer) return;
+    this.nudgeTimer = setTimeout(() => {
+      this.nudgeTimer = undefined;
+      const all = this.nudgeAll;
+      const written = new Set(this.nudgedEntityTypes);
+      this.nudgeAll = false;
+      this.nudgedEntityTypes.clear();
+      if (!this.evaluate) return;
+      for (const entry of this.entries.values()) {
+        for (const watch of entry.watches) {
+          if (watch.kind !== 'data') continue;
+          if (!all && !watch.entities.some((entity) => written.has(entity))) continue;
+          this.evaluateSafely(entry.ref, watch.index);
+        }
+      }
+    }, this.nudgeDelayMs);
+    this.nudgeTimer.unref?.();
+  }
+
   start(): void {
     if (this.boundary || this.interval) return;
     // Align the first tick to the top of the next minute, then tick every
@@ -215,6 +303,12 @@ export class InProcessScheduler implements LocalScheduler {
       clearInterval(this.interval);
       this.interval = undefined;
     }
+    if (this.nudgeTimer) {
+      clearTimeout(this.nudgeTimer);
+      this.nudgeTimer = undefined;
+    }
+    this.nudgeAll = false;
+    this.nudgedEntityTypes.clear();
   }
 
   private fireSafely(ref: string): void {
@@ -229,14 +323,39 @@ export class InProcessScheduler implements LocalScheduler {
   }
 
   private evaluateSafely(ref: string, triggerIndex: number): void {
-    try {
-      const r = this.evaluate?.(ref, triggerIndex);
-      if (r && typeof (r as Promise<void>).catch === 'function') {
-        (r as Promise<void>).catch((err) => this.onError?.(err, ref));
-      }
-    } catch (err) {
-      this.onError?.(err, ref);
+    void this.evaluateWatch(ref, triggerIndex).catch((err) => this.onError?.(err, ref));
+  }
+
+  /**
+   * Serialize one persisted watch cursor across cron and doorbell callers.
+   * A caller arriving during evaluation marks one dirty rerun; any additional
+   * arrivals collapse into that same rerun. The returned promise includes the
+   * rerun and deliberately rejects so reconcile can fail its readiness gate;
+   * fire-and-forget callers attach the diagnostic catch in evaluateSafely.
+   */
+  private evaluateWatch(ref: string, triggerIndex: number): Promise<void> {
+    if (!this.evaluate) return Promise.resolve();
+    const key = `${ref}\u0000${triggerIndex}`;
+    const current = this.watchEvaluations.get(key);
+    if (current) {
+      current.dirty = true;
+      return current.inFlight;
     }
+    const state = { inFlight: Promise.resolve(), dirty: false };
+    const run = async (): Promise<void> => {
+      do {
+        state.dirty = false;
+        await this.evaluate?.(ref, triggerIndex);
+      } while (state.dirty);
+    };
+    // Publish the single-flight state before invoking the evaluator: an
+    // evaluator may synchronously cause another write/ring before its first
+    // await, and that re-entrant caller must see this pass as in-flight.
+    this.watchEvaluations.set(key, state);
+    state.inFlight = run().finally(() => {
+      if (this.watchEvaluations.get(key) === state) this.watchEvaluations.delete(key);
+    });
+    return state.inFlight;
   }
 }
 
@@ -244,7 +363,12 @@ function entryOf(row: Row): SchedulerEntry {
   return {
     ref: row.ref,
     crons: cronTriggersOf(row.triggers).map((t) => t.expr),
-    watches: watchTriggersOf(row.triggers).map(({ expr, index }) => ({ expr, index })),
+    watches: watchTriggersOf(row.triggers).map(({ trigger, expr, index }) => ({
+      expr,
+      index,
+      kind: trigger.kind,
+      entities: trigger.kind === 'data' ? trigger.entities : [],
+    })),
   };
 }
 
@@ -252,12 +376,17 @@ function sameCrons(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((expr, i) => expr === b[i]);
 }
 
-function sameWatches(
-  a: readonly { expr: string; index: number }[],
-  b: readonly { expr: string; index: number }[],
-): boolean {
+function sameWatches(a: SchedulerEntry['watches'], b: SchedulerEntry['watches']): boolean {
   return (
-    a.length === b.length && a.every((w, i) => w.expr === b[i]!.expr && w.index === b[i]!.index)
+    a.length === b.length &&
+    a.every(
+      (w, i) =>
+        w.expr === b[i]!.expr &&
+        w.index === b[i]!.index &&
+        w.kind === b[i]!.kind &&
+        w.entities.length === b[i]!.entities.length &&
+        w.entities.every((entity, entityIndex) => entity === b[i]!.entities[entityIndex]),
+    )
   );
 }
 

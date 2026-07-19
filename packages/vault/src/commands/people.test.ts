@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from 'vitest';
-import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
+import { bootstrapVault, createGrant, enrollApp, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
 import type { Credential } from '../gateway/types.js';
@@ -27,7 +27,7 @@ function invoke(command: string, input: Record<string, unknown>) {
 }
 
 function out<T = Record<string, unknown>>(o: ReturnType<typeof invoke>): T {
-  expect(o.status).toBe('executed');
+  expect(o.status, JSON.stringify(o)).toBe('executed');
   return (o as { output: T }).output;
 }
 
@@ -148,7 +148,15 @@ test('log_interaction records the touch and stamps last_contacted_at (clears ove
     .get(partyId) as { last_contacted_at: string | null };
   expect(profile.last_contacted_at).not.toBeNull();
   const interaction = db.vault
-    .prepare('SELECT kind, body_text FROM people_interaction WHERE party_id = ?')
+    .prepare(
+      `SELECT c.pref_label AS kind, a.body_text
+         FROM core_activity i
+         JOIN core_concept c ON c.concept_id = i.kind_concept_id
+         JOIN core_link l ON l.from_type = 'core.activity' AND l.from_id = i.activity_id
+         LEFT JOIN knowledge_annotation a
+           ON a.target_type = 'core.activity' AND a.target_id = i.activity_id
+        WHERE l.to_type = 'core.party' AND l.to_id = ? AND l.valid_to IS NULL`,
+    )
     .get(partyId);
   expect(interaction).toMatchObject({ kind: 'Call', body_text: 'Sunday catch-up' });
 });
@@ -217,15 +225,15 @@ test('tasks add and toggle done', () => {
   ).task_id;
   const doneOf = () =>
     (
-      db.vault.prepare('SELECT done FROM people_task WHERE task_id = ?').get(taskId) as {
-        done: number;
+      db.vault.prepare('SELECT status FROM schedule_task WHERE task_id = ?').get(taskId) as {
+        status: string;
       }
-    ).done;
-  expect(doneOf()).toBe(0);
+    ).status;
+  expect(doneOf()).toBe('needs-action');
   expect(invoke('people.toggle_task', { task_id: taskId }).status).toBe('executed');
-  expect(doneOf()).toBe(1);
+  expect(doneOf()).toBe('completed');
   expect(invoke('people.toggle_task', { task_id: taskId }).status).toBe('executed');
-  expect(doneOf()).toBe(0);
+  expect(doneOf()).toBe('needs-action');
 });
 
 test('important dates: a birthday auto-creates its reminder; toggle flips it', () => {
@@ -335,9 +343,22 @@ test('relationships add with an optional pet species', () => {
     }).status,
   ).toBe('executed');
   const rel = db.vault
-    .prepare('SELECT name, kind, pet FROM people_relationship WHERE party_id = ?')
+    .prepare(
+      `SELECT p.display_name AS name, p.kind AS party_kind, c.pref_label AS kind,
+              c.notation
+         FROM core_link l
+         JOIN core_party p ON p.party_id = l.to_id
+         JOIN core_concept c ON c.concept_id = l.relation_concept_id
+        WHERE l.from_type = 'core.party' AND l.from_id = ?
+          AND l.to_type = 'core.party' AND l.valid_to IS NULL`,
+    )
     .get(partyId);
-  expect(rel).toMatchObject({ name: 'Miso', kind: 'Cat', pet: 'cat' });
+  expect(rel).toMatchObject({
+    name: 'Miso',
+    party_kind: 'animal',
+    kind: 'Cat',
+    notation: 'people-cat-cat',
+  });
 });
 
 test('gifts add as an idea and toggle to given and back', () => {
@@ -347,15 +368,27 @@ test('gifts add as an idea and toggle to given and back', () => {
   ).gift_id;
   const stateOf = () =>
     (
-      db.vault.prepare('SELECT state FROM people_gift WHERE gift_id = ?').get(giftId) as {
-        state: string;
+      db.vault.prepare('SELECT status FROM schedule_task WHERE task_id = ?').get(giftId) as {
+        status: string;
       }
-    ).state;
-  expect(stateOf()).toBe('idea');
-  expect(invoke('people.toggle_gift', { gift_id: giftId }).status).toBe('executed');
-  expect(stateOf()).toBe('given');
-  expect(invoke('people.toggle_gift', { gift_id: giftId }).status).toBe('executed');
-  expect(stateOf()).toBe('idea');
+    ).status;
+  expect(stateOf()).toBe('needs-action');
+  expect(
+    db.vault
+      .prepare(
+        `SELECT c.notation FROM core_link l
+          JOIN core_concept c ON c.concept_id = l.relation_concept_id
+         WHERE l.from_type = 'schedule.task' AND l.from_id = ?
+           AND l.to_type = 'core.party' AND l.to_id = ? AND l.valid_to IS NULL`,
+      )
+      .get(giftId, partyId),
+  ).toMatchObject({ notation: 'gift-for' });
+  const given = invoke('people.toggle_gift', { gift_id: giftId });
+  expect(given.status, JSON.stringify(given)).toBe('executed');
+  expect(stateOf()).toBe('completed');
+  const reopened = invoke('people.toggle_gift', { gift_id: giftId });
+  expect(reopened.status, JSON.stringify(reopened)).toBe('executed');
+  expect(stateOf()).toBe('needs-action');
 });
 
 test('debts add in minor units and settle (a settled debt refuses re-settling)', () => {
@@ -369,15 +402,61 @@ test('debts add in minor units and settle (a settled debt refuses re-settling)',
     }),
   ).debt_id;
   const row = db.vault
-    .prepare('SELECT direction, amount_minor, settled_at FROM people_debt WHERE debt_id = ?')
-    .get(debtId) as { direction: string; amount_minor: number; settled_at: string | null };
-  expect(row).toMatchObject({ direction: 'owed', amount_minor: 4000, settled_at: null });
+    .prepare(
+      'SELECT from_party, to_party, amount_minor, settled_at FROM tally_obligation WHERE obligation_id = ?',
+    )
+    .get(debtId) as {
+    from_party: string;
+    to_party: string;
+    amount_minor: number;
+    settled_at: string | null;
+  };
+  expect(row).toMatchObject({
+    from_party: partyId,
+    to_party: boot.ownerPartyId,
+    amount_minor: 4000,
+    settled_at: null,
+  });
   expect(invoke('people.settle_debt', { debt_id: debtId }).status).toBe('executed');
   const again = invoke('people.settle_debt', { debt_id: debtId });
   expect(again.status).toBe('failed');
   if (again.status === 'failed') expect(again.predicate).toContain('debt_open');
 });
 
+test('the installed People grant can write an obligation and read it through Tally', () => {
+  const partyId = addPerson();
+  const app = enrollApp(db, { name: 'people' });
+  createGrant(db, {
+    appId: app.appId,
+    purposeConceptId: boot.concepts['dpv:ServiceProvision'] as string,
+    grantedByPartyId: boot.ownerPartyId,
+    scopes: [
+      { schema: 'people', verbs: 'read+act' },
+      { schema: 'tally', table: 'obligation', verbs: 'read' },
+    ],
+  });
+  const appCredential: Credential = {
+    kind: 'app',
+    appId: app.appId,
+    signingKey: app.signingKey,
+  };
+  const added = gw.invoke(appCredential, {
+    command: 'people.add_debt',
+    input: { party_id: partyId, direction: 'owed', amount_minor: 7250, reason: 'Train fare' },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(added.status).toBe('executed');
+  const debtId = (added as { output: { debt_id: string } }).output.debt_id;
+  expect(
+    gw
+      .read(appCredential, {
+        entity: 'tally.obligation',
+        where: [{ column: 'obligation_id', op: 'eq', value: debtId }],
+        purpose: 'dpv:ServiceProvision',
+      })
+      .rows.map((row) => row.obligation_id),
+  ).toContain(debtId);
+});
 test('lists create with unique names, rename, and delete only when empty', () => {
   const work = createList('Work');
   const twin = invoke('people.create_list', { name: 'Work' });
@@ -404,11 +483,18 @@ test('journal entries attach to the owner party', () => {
   });
   expect(o.status).toBe('executed');
   const entry = db.vault
-    .prepare('SELECT owner_party_id, mood, entry_date FROM people_journal_entry LIMIT 1')
-    .get() as { owner_party_id: string; mood: string; entry_date: string };
+    .prepare(
+      `SELECT n.author_party_id, n.title, n.created_at
+         FROM knowledge_note n
+         JOIN core_tag t ON t.target_type = 'knowledge.note' AND t.target_id = n.note_id
+         JOIN core_concept c ON c.concept_id = t.concept_id
+         JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
+        WHERE s.uri = 'https://centraid.dev/schemes/people-journal'`,
+    )
+    .get() as { author_party_id: string; title: string; created_at: string };
   expect(entry).toMatchObject({
-    owner_party_id: boot.ownerPartyId,
-    mood: '😄',
-    entry_date: '2026-07-04',
+    author_party_id: boot.ownerPartyId,
+    title: 'People journal · 😄',
+    created_at: '2026-07-04T12:00:00.000Z',
   });
 });

@@ -132,7 +132,7 @@ export async function readAssetJoins({
   ]);
 
   // Free-form labels (issue #352): core.tag_item targets the ASSET itself
-  // (subject_type 'media.media_asset'), unlike the content-item-scoped
+  // (target_type 'media.media_asset'), unlike the content-item-scoped
   // favorite star above — see tags.ts's SUBJECT_PK. Each entry carries the
   // tag_id too: untag-asset.js removes by tag_id (core.untag_item), not by
   // label, so the UI needs it to render a working remove control.

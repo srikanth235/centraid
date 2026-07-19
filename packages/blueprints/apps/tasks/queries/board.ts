@@ -27,8 +27,8 @@ interface RawTask {
 }
 interface RawAttachment {
   attachment_id: string;
-  subject_type: string;
-  subject_id: string;
+  target_type: string;
+  target_id: string;
   content_id: string;
   role?: string;
   is_primary?: number;
@@ -68,7 +68,7 @@ interface DecoratedAttachment {
 
 /**
  * Group the owner's attachments for one subject type into a map keyed by
- * subject_id, each value a UI-ready list joined to its content item. This is
+ * target_id, each value a UI-ready list joined to its content item. This is
  * the shared attachment-projection shape every app copies — polymorphic edges
  * in core.attachment, bytes in core.content_item.
  */
@@ -84,10 +84,10 @@ function attachmentsBySubject(
       : c?.content_uri;
   const bySubject = new Map<string, DecoratedAttachment[]>();
   for (const a of attachments) {
-    if (a.subject_type !== subjectType) continue;
+    if (a.target_type !== subjectType) continue;
     const content = contentById.get(a.content_id);
-    if (!bySubject.has(a.subject_id)) bySubject.set(a.subject_id, []);
-    bySubject.get(a.subject_id)!.push({
+    if (!bySubject.has(a.target_id)) bySubject.set(a.target_id, []);
+    bySubject.get(a.target_id)!.push({
       attachment_id: a.attachment_id,
       content_id: a.content_id,
       role: a.role,
@@ -178,8 +178,8 @@ export default async ({ input, ctx }: HandlerArgs) => {
         ? await ctx.vault.read({
             entity: 'core.attachment',
             where: [
-              { column: 'subject_type', op: 'eq', value: 'schedule.task' },
-              { column: 'subject_id', op: 'in', value: taskIds },
+              { column: 'target_type', op: 'eq', value: 'schedule.task' },
+              { column: 'target_id', op: 'in', value: taskIds },
             ],
             purpose,
           })

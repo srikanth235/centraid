@@ -179,6 +179,11 @@ function provenanceScopeFailure(
   return null;
 }
 
+export interface GatewayDeps {
+  /** Best-effort hint emitted only after journal.db provenance is durable. */
+  onProvenanceCommitted?: (entityTypes?: readonly string[]) => void;
+}
+
 export type InvocationBatchResult<T> = { ok: true; value: T } | { ok: false; error: unknown };
 
 export class Gateway {
@@ -186,7 +191,10 @@ export class Gateway {
   private readonly commands = new Map<string, RegisteredCommand>();
   private activeBatchInvocationIds: string[] | undefined;
 
-  constructor(private readonly db: VaultDb) {}
+  constructor(
+    private readonly db: VaultDb,
+    private readonly deps: GatewayDeps = {},
+  ) {}
 
   /**
    * Run one short arrival window inside a shared vault + journal commit pair.
@@ -440,7 +448,7 @@ export class Gateway {
     const demoExclusion =
       identity.kind === 'agent' && ref.file === 'vault' && ref.schema !== 'consent'
         ? ` AND NOT EXISTS (SELECT 1 FROM consent_seed_row _s
-             WHERE _s.entity_type = ? AND _s.entity_id = "${ref.physical}"."${pkColumn(target, ref.physical)}")`
+             WHERE _s.target_type = ? AND _s.target_id = "${ref.physical}"."${pkColumn(target, ref.physical)}")`
         : '';
     const rows = target
       .prepare(
@@ -631,13 +639,13 @@ export class Gateway {
       const open = this.db.vault
         .prepare(
           `SELECT 1 AS x FROM enrich_request
-            WHERE entity_type = ? AND reason = 'search-miss' AND detail = ? AND drained_at IS NULL`,
+            WHERE target_type = ? AND reason = 'search-miss' AND detail = ? AND drained_at IS NULL`,
         )
         .get(request.entity, request.query);
       if (!open) {
         this.db.vault
           .prepare(
-            `INSERT INTO enrich_request (request_id, entity_type, entity_id, reason, detail, requested_at, drained_at)
+            `INSERT INTO enrich_request (request_id, target_type, target_id, reason, detail, requested_at, drained_at)
              VALUES (?, ?, NULL, 'search-miss', ?, ?, NULL)`,
           )
           .run(uuidv7(), request.entity, request.query, nowIso());
@@ -921,6 +929,7 @@ export class Gateway {
         consent,
         invocationId,
         undefined,
+        this.deps.onProvenanceCommitted,
         {
           deferCommitSettlement: this.activeBatchInvocationIds !== undefined,
           deferReplicaNotify: this.activeBatchInvocationIds !== undefined,
@@ -1034,6 +1043,7 @@ export class Gateway {
       consent,
       invocationId,
       { confirmedBy: owner.partyId, confirmedAt: nowIso() },
+      this.deps.onProvenanceCommitted,
     );
     settleDurableParkedPayload(
       this.db,
@@ -1090,6 +1100,7 @@ export class Gateway {
     if (result.extRetained.length > 0 && result.appId) {
       this.deregisterExtCommands(result.appId);
     }
+    this.ringProvenance();
     return result;
   }
 
@@ -1113,6 +1124,7 @@ export class Gateway {
       requestedAt: nowIso(),
       limit: 100,
     });
+    this.ringProvenance();
     // Sweeps commit canonical changes outside the command execution path.
     // Wake replica SSE streams at the same post-commit boundary.
     notifyReplicaCommit(this.db.vault);
@@ -1311,7 +1323,9 @@ export class Gateway {
    */
   purgeDemo(cred: Credential, appId?: string): DemoPurgeResult {
     const owner = this.requireOwner(cred, 'only the owner purges demo data');
-    return purgeDemoRows(this.db, owner, appId);
+    const result = purgeDemoRows(this.db, owner, appId);
+    this.ringProvenance();
+    return result;
   }
 
   /** Seeded-row counts per app — the "demo data present" surface. */
@@ -1333,7 +1347,7 @@ export class Gateway {
   /** Publish a reviewed draft batch — creates/updates land, receipted. */
   publishImport(cred: Credential, batchId: string): PublishResult {
     const owner = this.requireOwner(cred, 'only the owner publishes imports (v0)');
-    return publishBatch(this.db, owner, batchId, PUBLISHERS);
+    return publishBatch(this.db, owner, batchId, PUBLISHERS, this.deps.onProvenanceCommitted);
   }
 
   /** Discard a draft batch — rows dropped, nothing published. */
@@ -1589,7 +1603,9 @@ export class Gateway {
     const owner = this.identify(cred);
     if (owner.kind !== 'owner-device')
       throw new GatewayError('consent', 'only the owner imports (v0)');
-    return importIcsEvents(this.db, owner, icsText);
+    const result = importIcsEvents(this.db, owner, icsText);
+    this.ringProvenance();
+    return result;
   }
 
   /** Standing duty: ingest customs — vCards resolve to identities, never duplicates. */
@@ -1597,7 +1613,9 @@ export class Gateway {
     const owner = this.identify(cred);
     if (owner.kind !== 'owner-device')
       throw new GatewayError('consent', 'only the owner imports (v0)');
-    return importVcardParties(this.db, owner, vcfText);
+    const result = importVcardParties(this.db, owner, vcfText);
+    this.ringProvenance();
+    return result;
   }
 
   /** Standing duty: export & portability — the whole model out, verifiable. */
@@ -1657,8 +1675,16 @@ export class Gateway {
       .get(identity.callerId) as { name: string } | undefined;
     return row?.name ?? null;
   }
+
+  private ringProvenance(entityTypes?: readonly string[]): void {
+    try {
+      this.deps.onProvenanceCommitted?.(entityTypes);
+    } catch {
+      // Doorbells are hints; the persisted cursor + cron poll own correctness.
+    }
+  }
 }
 
-export function createGateway(db: VaultDb): Gateway {
-  return new Gateway(db);
+export function createGateway(db: VaultDb, deps: GatewayDeps = {}): Gateway {
+  return new Gateway(db, deps);
 }

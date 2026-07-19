@@ -160,36 +160,6 @@ const SPECS: readonly FtsEntitySpec[] = [
     columns: [{ name: 'role', kind: 'column' }],
   },
   {
-    // The People pack authored its own text-bearing rows (issue #441 A2.2):
-    // "everything I wrote about Ravi" — #274's own worked example — must reach
-    // interactions, journal entries, tasks and gift ideas, not just the role
-    // line. Each indexes its body plus any natural label.
-    entity: 'people.interaction',
-    idColumn: 'interaction_id',
-    columns: [
-      { name: 'kind', kind: 'column' },
-      { name: 'body_text', kind: 'column' },
-    ],
-  },
-  {
-    entity: 'people.journal_entry',
-    idColumn: 'entry_id',
-    columns: [
-      { name: 'mood', kind: 'column' },
-      { name: 'body_text', kind: 'column' },
-    ],
-  },
-  {
-    entity: 'people.task',
-    idColumn: 'task_id',
-    columns: [{ name: 'body_text', kind: 'column' }],
-  },
-  {
-    entity: 'people.gift',
-    idColumn: 'gift_id',
-    columns: [{ name: 'body_text', kind: 'column' }],
-  },
-  {
     // The locker's non-secret face (issue #310 C6): title, username, url.
     // Sealed columns structurally cannot feed the index — the gate below
     // throws at DDL-build time (issue #293) — and `notes` stays out

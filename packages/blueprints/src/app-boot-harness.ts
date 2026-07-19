@@ -179,6 +179,7 @@ const AGENDA_INTENT_ID = 'intent-airplane-cancel';
 const AGENDA_TITLE = 'Airplane-mode planning';
 const PHOTO_ASSET_ID = 'asset-airplane';
 const PHOTO_TITLE = 'Airplane-mode photo';
+const TALLY_TRASH_ID = 'expense-airplane-trash';
 
 /** Populated, clone-safe rows shaped exactly like each app's local query. */
 function replicaFixture(app: string): unknown {
@@ -229,6 +230,35 @@ function replicaFixture(app: string): unknown {
       window: 500,
     };
   }
+  if (app === 'tally') {
+    return {
+      me: 'party-owner',
+      currency: 'USD',
+      friends: [],
+      groups: [
+        {
+          group_id: 'group-airplane',
+          name: 'Offline group',
+          icon: '✈️',
+          color: '#4E68DD',
+          member_count: 1,
+          owner_net_minor: 0,
+        },
+      ],
+      trash: [
+        {
+          expense_id: TALLY_TRASH_ID,
+          description: 'Recoverable dinner',
+          amount_minor: 4200,
+          group_name: 'Offline group',
+          deleted_at: '2026-07-15T08:00:00.000Z',
+          purge_at: null,
+        },
+      ],
+      owe_total_minor: 0,
+      owed_total_minor: 0,
+    };
+  }
   return {};
 }
 
@@ -268,7 +298,10 @@ function bodyOf(app: string) {
 /** Lets a test settle an app's un-awaited `refresh()` and its timers. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 80));
 
-export function describeAppBoot(app: string, options: { expectLive?: boolean } = {}) {
+export function describeAppBoot(
+  app: string,
+  options: { expectLive?: boolean; expectReplica?: boolean } = {},
+) {
   describe(`${app} boots`, () => {
     let dir: string;
     let entry: string;
@@ -374,7 +407,7 @@ export function describeAppBoot(app: string, options: { expectLive?: boolean } =
         // machine's current month, keeping this browser journey deterministic.
         document.documentElement.dataset.appDefaultView = 'schedule';
       }
-      const granted = options.expectLive ? replicaFixture(app) : {};
+      const granted = options.expectLive || options.expectReplica ? replicaFixture(app) : {};
       let response: unknown = granted;
       let nextReadError: Error | undefined;
       let readCalls = 0;
@@ -441,6 +474,21 @@ export function describeAppBoot(app: string, options: { expectLive?: boolean } =
       await import(pathToFileURL(path.join(dir, entry)).href);
       await settle();
       expectNoErrors('rendering its granted replica in airplane mode');
+
+      if (app === 'tally' && options.expectReplica) {
+        const shelf = document.querySelector('[aria-label="Trashed expenses"]');
+        expect(shelf?.textContent).toContain('Recoverable dinner');
+        const restore = Array.from(shelf?.querySelectorAll<HTMLButtonElement>('button') ?? []).find(
+          (button) => button.textContent?.trim() === 'Restore',
+        );
+        expect(restore, 'Tally trash shelf lost its restore control').toBeTruthy();
+        restore?.click();
+        await settle();
+        expect(writeCalls).toContainEqual({
+          action: 'restore-expense',
+          input: { expense_id: TALLY_TRASH_ID },
+        });
+      }
 
       if (options.expectLive) {
         const bootReads = readCalls;

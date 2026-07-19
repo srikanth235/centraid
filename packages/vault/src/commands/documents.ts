@@ -21,6 +21,7 @@
 
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
+import { cleanupPolyRefs } from '../schema/poly-refs.js';
 import { MAX_INLINE_DATA_URI_CHARS, mintContentFromDataUri } from '../blob/mint.js';
 import { setStarred, starredExistsSql } from './flags.js';
 import { assertInlineDataUriWithinBudget } from './inline-body-guard.js';
@@ -1014,6 +1015,7 @@ const DELETE_FOLDER: CommandDefinition = {
 function deleteFolder(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { folder_id: string };
   ctx.db.prepare('DELETE FROM core_concept WHERE concept_id = ?').run(input.folder_id);
+  cleanupPolyRefs(ctx.db, ctx.now, 'core.concept', input.folder_id);
   ctx.wrote('core.concept', input.folder_id);
   return { folder_id: input.folder_id };
 }
