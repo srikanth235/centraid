@@ -26,3 +26,20 @@
   flex-wrap: wrap;
   gap: 6px;
 }
+.matchPolicy {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  cursor: pointer;
+}
+.matchPolicy input {
+  margin-top: 2px;
+}
+.matchPolicy small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+}

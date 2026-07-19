@@ -156,6 +156,30 @@ export async function getBlocking(): Promise<BlockingSummary> {
   return readJson<BlockingSummary>(res, 'fetch blocking inbox');
 }
 
+export interface ReviewEntry {
+  receiptId: string;
+  action: string;
+  objectType: string;
+  objectId: string | null;
+  decision: string;
+  occurredAt: string;
+  risk: string | null;
+  invocationId: string | null;
+  actorId: string | null;
+  context: { kind: 'fill'; origin: string } | null;
+}
+
+/** Recent low-friction acts and Locker reveals for review after the fact. */
+export async function getReview(limit = 20): Promise<ReviewEntry[]> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_vault/review?limit=${enc(String(limit))}`, {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  const body = await readJson<{ entries: ReviewEntry[] }>(res, 'fetch review feed');
+  return body.entries ?? [];
+}
+
 /** Outbox items, optionally filtered by status (e.g. `['pending']`). */
 export async function listOutboxItems(statuses?: readonly string[]): Promise<OutboxItem[]> {
   const { baseUrl, token } = await auth();

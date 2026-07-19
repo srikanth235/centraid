@@ -29,6 +29,7 @@ export interface LockerDetail {
   username?: string | null;
   password?: string | null;
   url?: string | null;
+  url_match_policy?: 'registrable-domain' | 'exact-host' | null;
   otp_seed?: string | null;
   notes?: string | null;
   cardholder?: string | null;
@@ -78,6 +79,7 @@ export interface EditSeed {
   fields: Record<string, string>;
   tags: string;
   alias: string;
+  urlMatchPolicy: 'registrable-domain' | 'exact-host';
 }
 
 /** The payload the edit modal hands back to `saveItem`. */
@@ -88,6 +90,7 @@ export interface SavePayload {
   title: string;
   tags: string;
   alias?: string;
+  urlMatchPolicy: 'registrable-domain' | 'exact-host';
   fields: Record<string, string>;
   allowedKeys: string[];
 }

@@ -238,6 +238,10 @@ const ADD_ITEM: CommandDefinition = {
       // The service anchor (issue #310 S3): the broker connection this
       // credential is for, validated live.
       connection_id: { type: 'string' },
+      url_match_policy: {
+        type: 'string',
+        enum: ['registrable-domain', 'exact-host'],
+      },
       ...FIELD_SCHEMA,
     },
   },
@@ -259,11 +263,11 @@ const ADD_ITEM: CommandDefinition = {
     ctx.db
       .prepare(
         `INSERT INTO locker_item
-           (item_id, type, title, username, password, url, otp_seed, notes,
+           (item_id, type, title, username, password, url, url_match_policy, otp_seed, notes,
             cardholder, card_number, expiry, cvv, brand, content,
             fullname, email, phone, address, network, compromised, created_at, updated_at)
          VALUES
-           (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         itemId,
@@ -272,6 +276,7 @@ const ADD_ITEM: CommandDefinition = {
         f.username ?? null,
         f.password ?? null,
         f.url ?? null,
+        input.url_match_policy === 'exact-host' ? 'exact-host' : 'registrable-domain',
         f.otp_seed ?? null,
         f.notes ?? null,
         f.cardholder ?? null,
@@ -322,6 +327,10 @@ const EDIT_ITEM: CommandDefinition = {
       alias: { type: 'string', pattern: '^[A-Za-z0-9._-]{0,64}$' },
       // Set to re-anchor the service connection; '' clears it.
       connection_id: { type: 'string' },
+      url_match_policy: {
+        type: 'string',
+        enum: ['registrable-domain', 'exact-host'],
+      },
       ...FIELD_SCHEMA,
     },
   },
@@ -356,6 +365,11 @@ const EDIT_ITEM: CommandDefinition = {
     }
     if (input.connection_id != null) {
       setConnection(ctx, itemId, String(input.connection_id));
+    }
+    if (input.url_match_policy != null) {
+      if (row.type !== 'login') throw new Error('url_match_policy is login-only');
+      sets.push('url_match_policy = :url_match_policy');
+      params.url_match_policy = String(input.url_match_policy);
     }
     for (const [col, val] of Object.entries(f)) {
       if (isPlaceholder(val)) continue; // round-tripped «sealed» = unchanged

@@ -124,6 +124,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     title,
     tags,
     alias,
+    urlMatchPolicy,
     fields,
     allowedKeys,
   }: SavePayload): Promise<VaultOutcome | undefined> {
@@ -136,6 +137,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     // rest too, but keep the payload clean).
     const allowed = new Set(allowedKeys);
     const input: Record<string, unknown> = { title: title.trim(), tags: tagList };
+    if (type === 'login') input.url_match_policy = urlMatchPolicy;
     for (const [k, v] of Object.entries(fields)) {
       if (allowed.has(k) && v != null && v !== '') input[k] = v;
     }

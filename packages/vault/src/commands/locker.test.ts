@@ -91,6 +91,14 @@ test('add_item stores the login with its secret fields (sealed at rest) and tags
   expect(unsealCell(id, 'password')).toBe('H2$kL9mVq!pR4wZ');
   expect(r.deleted_at).toBeNull();
   expect(tagsOf(id)).toEqual(['dev', 'work']);
+  expect(r.url_match_policy).toBe('registrable-domain');
+});
+
+test('login origin matching policy is explicit and editable', () => {
+  const id = addLogin({ url_match_policy: 'exact-host' });
+  expect(row(id)?.url_match_policy).toBe('exact-host');
+  out(invoke('locker.edit_item', { item_id: id, url_match_policy: 'registrable-domain' }));
+  expect(row(id)?.url_match_policy).toBe('registrable-domain');
 });
 
 test('add_item nulls fields that do not belong to the item type', () => {

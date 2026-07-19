@@ -46,6 +46,19 @@
         "vite": "^7.0.0",
       },
     },
+    "apps/extension": {
+      "name": "@centraid/extension",
+      "version": "0.1.0",
+      "dependencies": {
+        "tldts": "6.1.86",
+      },
+      "devDependencies": {
+        "@centraid/tsconfig": "workspace:*",
+        "@playwright/test": "^1.60.0",
+        "sharp": "^0.35.3",
+        "typescript": "catalog:",
+      },
+    },
     "apps/mobile": {
       "name": "@centraid/mobile",
       "version": "0.1.0",
@@ -214,11 +227,13 @@
         "@centraid/design-tokens": "workspace:*",
         "@sqlite.org/sqlite-wasm": "3.53.0-build1",
         "pdfjs-dist": "5.7.284",
+        "qrcode": "^1.5.4",
         "react": "19.1.0",
         "react-dom": "19.1.0",
       },
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
+        "@types/qrcode": "^1.5.5",
         "@types/react": "~19.1.0",
         "@types/react-dom": "~19.1.0",
         "typescript": "catalog:",
@@ -598,6 +613,8 @@
     "@centraid/design-tokens": ["@centraid/design-tokens@workspace:packages/design-tokens"],
 
     "@centraid/desktop": ["@centraid/desktop@workspace:apps/desktop"],
+
+    "@centraid/extension": ["@centraid/extension@workspace:apps/extension"],
 
     "@centraid/gateway": ["@centraid/gateway@workspace:packages/gateway"],
 

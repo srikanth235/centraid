@@ -12,7 +12,7 @@ Install an app and a local gateway runs it — on your desktop, browser, and pho
 - **Automate your data** — 16 automation templates (Google/GitHub connectors plus enrichers like photo captioner and document deadlines) that fire on a schedule, webhook, condition, or vault data change. Each is a saved conversation; its handler runs in a worker thread with a curated `ctx` surface (`ctx.vault`, `ctx.agent`, `ctx.fetch`, KV state, run history). Templates still copy into the vault.
 - **Ask your vault** — a vault-wide assistant reads across every app through one tool register; each app also answers data questions on its own `/centraid/<id>/_turn` surface.
 - **Explore the model** — **Vault Atlas** maps every kind, how kinds relate (a star centered on `core_party`), and a browsable table editor — every write going through the journalled command path.
-- **Run it anywhere** — one gateway core, two hosts: embedded in Electron or the standalone `centraid-gateway` daemon. Desktop and the installable web PWA share one React client (the PWA pairs with just a ticket over relay-only Iroh/WASM); mobile is an Expo client with native **Photos, Docs, and Agenda** over a consent-scoped offline replica, and remote apps over the iroh tunnel.
+- **Run it anywhere** — one gateway core, two hosts: embedded in Electron or the standalone `centraid-gateway` daemon. Desktop and the installable web PWA share one React client (the PWA pairs with just a ticket over relay-only Iroh/WASM); mobile is an Expo client with native **Photos, Docs, and Agenda** over a consent-scoped offline replica, and the Centraid Companion extension adds explicit Locker fill plus web capture through a constrained paired-device profile.
 - **Hosted or on-device** — databases, code, and consent stay with your gateway. Keep the vault **On this device**, or connect one storage provider for an encrypted **Hosted** copy where devices upload only framed ciphertext and the gateway verifies what the provider holds; a blank machine plus your recovery kit runs `recover` to bring the vault back, lazily.
 
 ## How it works (30 seconds)
@@ -76,6 +76,7 @@ Full tour: [Get started](https://centraid.dev/docs/start/) — install → vault
 | Path | What it is |
 |---|---|
 | `apps/desktop` | Electron host for the shared React client. Embeds the gateway in-process. |
+| `apps/extension` | MV3 Centraid Companion for explicit Locker fill and web capture over paired Iroh/WASM. |
 | `apps/web` | Vite PWA host plus its application-specific Iroh/WASM transport; embeds no gateway. |
 | `apps/mobile` | Expo app for iOS / Android / web. Connects to a gateway over HTTP; embeds nothing. |
 | `packages/client` | Browser-safe gateway client plus the React shell/UI shared by desktop and web. |
@@ -107,6 +108,8 @@ bun run ci             # check + typecheck + lint:types
 Desktop e2e: Playwright tests across 14 scenario sections, driving the real Electron app against a mock gateway — see [apps/desktop/tests/e2e](apps/desktop/tests/e2e/README.md).
 
 Web e2e: `bun run --cwd apps/web build && bun run --cwd apps/web e2e` drives the production PWA against a real gateway and verifies pairing, preview/publish, app execution, and session isolation.
+
+Companion: `bun run --cwd apps/extension package` emits Chrome and Firefox ZIPs; its real-browser pairing/fill/revoke flow lives in [tests/agent-e2e-pairing/flows/extension-companion.md](tests/agent-e2e-pairing/flows/extension-companion.md).
 
 ## Documentation
 

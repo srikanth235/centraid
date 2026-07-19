@@ -3,6 +3,7 @@ import {
   decideOutboxItem,
   decideScopeRequest,
   getBlocking,
+  getReview,
   listOutboxGrants,
   revokeOutboxGrant,
 } from '../../../gateway-client-outbox.js';
@@ -14,6 +15,7 @@ import { PageEmpty, PageLoading } from '../status.js';
 import { useAsyncData } from '../useAsyncData.js';
 import {
   buildGrantRow,
+  buildActivityRow,
   buildNeedsAuthRow,
   buildOutboxRow,
   buildParkedRow,
@@ -35,8 +37,12 @@ export default function ApprovalsRoute(): JSX.Element {
   const [refreshTick, setRefreshTick] = useState(0);
 
   const state = useAsyncData(async () => {
-    const [blocking, grants] = await Promise.all([getBlocking(), listOutboxGrants()]);
-    return { blocking, grants };
+    const [blocking, grants, review] = await Promise.all([
+      getBlocking(),
+      listOutboxGrants(),
+      getReview(),
+    ]);
+    return { blocking, grants, review };
   }, [refreshTick]);
 
   const reload = (): void => setRefreshTick((t) => t + 1);
@@ -168,7 +174,7 @@ export default function ApprovalsRoute(): JSX.Element {
     );
   }
 
-  const { blocking, grants } = state.data;
+  const { blocking, grants, review } = state.data;
   return (
     <PageScroll>
       <ApprovalsScreen
@@ -177,6 +183,7 @@ export default function ApprovalsRoute(): JSX.Element {
         parked={blocking.parked.map(buildParkedRow)}
         scopeRequests={blocking.scopeRequests.map(buildScopeRequestRow)}
         grants={grants.filter((g) => g.revokedAt === null).map(buildGrantRow)}
+        activity={review.map(buildActivityRow)}
         busyId={busyId}
         onApproveOutbox={handleApproveOutbox}
         onDenyOutbox={handleDenyOutbox}

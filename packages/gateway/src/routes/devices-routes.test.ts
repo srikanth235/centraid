@@ -82,6 +82,7 @@ test('GET as admin lists every vault, with transport + vaultName + current mappi
     vaultId: 'vault-b',
     label: 'Amy phone',
     platform: 'ios',
+    grantProfile: ['locker', 'notes'],
   });
   deviceTokens.mint({ deviceKey: 'http:xyz', label: 'Amy phone' });
 
@@ -98,6 +99,7 @@ test('GET as admin lists every vault, with transport + vaultName + current mappi
   expect(amy.transport).toBe('http');
   expect(amy.vaultName).toBe('Beta');
   expect(amy.platform).toBe('ios');
+  expect(amy.grantProfile).toEqual(['locker', 'notes']);
   expect(amy.current).toBe(false);
   const zed = devices[1]!;
   expect(zed.deviceId).toBe(iroh.enrollmentId);

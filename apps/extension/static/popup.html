@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Centraid Companion</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="mark">C</div>
+        <div><strong>Centraid Companion</strong><small>your vault, at hand</small></div>
+      </header>
+
+      <section id="pairing" class="hero">
+        <p class="eyebrow">Pair this browser</p>
+        <h1>A narrow door to your Centraid.</h1>
+        <p>Use a one-time code from Settings → Devices. No gateway software is installed here.</p>
+        <form id="pair-form">
+          <label for="ticket">Pairing code</label>
+          <textarea id="ticket" rows="4" required autocomplete="off"></textarea>
+          <fieldset class="grant-grid">
+            <legend>Allow on this device</legend>
+            <label><input type="checkbox" name="grant" value="locker" checked /> Locker</label>
+            <label><input type="checkbox" name="grant" value="tasks" checked /> Tasks</label>
+            <label><input type="checkbox" name="grant" value="notes" checked /> Notes</label>
+            <label><input type="checkbox" name="grant" value="docs" checked /> Docs</label>
+            <label><input type="checkbox" name="grant" value="agenda" /> Agenda</label>
+            <label><input type="checkbox" name="grant" value="people" /> People</label>
+          </fieldset>
+          <div class="button-row">
+            <button class="primary" type="submit">Pair device</button
+            ><button id="scan" type="button">Scan QR</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="companion" hidden>
+        <div class="status-card">
+          <span class="pulse"></span>
+          <div>
+            <strong id="gateway">Paired gateway</strong><small id="vault">Personal vault</small>
+          </div>
+          <button id="lock" class="quiet" type="button">Lock</button>
+        </div>
+        <p class="lock-note">
+          Lock closes the live tunnel and hides actions. The paired device key remains on this
+          browser until you unpair or revoke it.
+        </p>
+        <p id="approvals" class="approval-summary">Checking approvals…</p>
+
+        <div id="actions">
+          <p class="eyebrow">This page</p>
+          <div class="action-grid">
+            <button id="task" type="button">
+              <strong>Task</strong><small>anchor selection</small>
+            </button>
+            <button id="note" type="button">
+              <strong>Note</strong><small>clip selection</small>
+            </button>
+            <button id="document" type="button">
+              <strong>Docs</strong><small>save screenshot</small>
+            </button>
+          </div>
+
+          <details id="agenda-module">
+            <summary>Agenda quick-add</summary>
+            <form id="agenda-form" class="stack">
+              <input id="agenda-summary" placeholder="Event title" required />
+              <div class="split">
+                <input id="agenda-start" type="datetime-local" required /><input
+                  id="agenda-end"
+                  type="datetime-local"
+                  required
+                />
+              </div>
+              <input id="agenda-calendar" placeholder="Calendar id" required />
+              <button class="primary" type="submit">Add to Agenda</button>
+            </form>
+          </details>
+
+          <details id="people-module">
+            <summary>Capture a person</summary>
+            <form id="people-form" class="stack">
+              <input id="person-name" placeholder="Name" required />
+              <input id="person-role" placeholder="Role or context" />
+              <label for="person-cadence">Reconnect every</label>
+              <div class="suffix">
+                <input id="person-cadence" type="number" min="1" value="90" required /><span
+                  >days</span
+                >
+              </div>
+              <button class="primary" type="submit">Add to People</button>
+            </form>
+          </details>
+        </div>
+
+        <details class="permissions">
+          <summary>Granted modules</summary>
+          <ul id="modules"></ul>
+        </details>
+        <button id="unpair" class="danger quiet" type="button">Unpair this browser</button>
+      </section>
+
+      <p id="notice" role="status"></p>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

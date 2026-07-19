@@ -129,6 +129,25 @@
   opacity: 0.8;
 }
 
+.grantProfile {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 2px;
+}
+.grantProfile span {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--accent-deep, var(--accent));
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+.grantProfile span:first-child {
+  color: var(--ink-3);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
 .computeToggle {
   width: fit-content;
   display: inline-flex;
@@ -309,6 +328,20 @@
   align-items: stretch;
   gap: 8px;
 }
+.pairTicketSurface {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 12px;
+}
+.pairQr {
+  width: 176px;
+  height: 176px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
 .ticket {
   flex: 1 1 auto;
   min-width: 0;
@@ -340,4 +373,12 @@
   font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--ink-3);
+}
+@media (max-width: 620px) {
+  .pairTicketSurface {
+    grid-template-columns: 1fr;
+  }
+  .pairQr {
+    justify-self: center;
+  }
 }

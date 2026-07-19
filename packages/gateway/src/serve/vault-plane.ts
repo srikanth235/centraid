@@ -293,6 +293,8 @@ export interface ReviewEntry {
   invocationId: string | null;
   /** Acting identity row id (agent/app/device) when an invocation exists. */
   actorId: string | null;
+  /** Safe, normalized use context for reveal receipts (never secret values). */
+  context: { kind: 'fill'; origin: string } | null;
 }
 
 /**
@@ -1224,7 +1226,7 @@ export class VaultPlane {
                 r.detail_json, r.invocation_id, i.agent_id
            FROM consent_receipt r
            LEFT JOIN agent_command_invocation i ON i.invocation_id = r.invocation_id
-          WHERE r.action LIKE 'act %'
+          WHERE r.action LIKE 'act %' OR r.action = 'reveal'
           ORDER BY r.receipt_id DESC LIMIT 500`,
       )
       .all() as {
@@ -1241,9 +1243,21 @@ export class VaultPlane {
     const riskRank: Record<string, number> = { high: 2, medium: 1, low: 0 };
     const entries = window.map((r) => {
       let risk: string | null = null;
+      let context: ReviewEntry['context'] = null;
       if (r.detail_json) {
-        const detail = JSON.parse(r.detail_json) as { risk?: unknown };
+        const detail = JSON.parse(r.detail_json) as { risk?: unknown; context?: unknown };
         if (typeof detail.risk === 'string') risk = detail.risk;
+        if (
+          detail.context &&
+          typeof detail.context === 'object' &&
+          (detail.context as { kind?: unknown }).kind === 'fill' &&
+          typeof (detail.context as { origin?: unknown }).origin === 'string'
+        ) {
+          context = {
+            kind: 'fill',
+            origin: (detail.context as { origin: string }).origin,
+          };
+        }
       }
       return {
         entry: {
@@ -1256,6 +1270,7 @@ export class VaultPlane {
           risk,
           invocationId: r.invocation_id,
           actorId: r.agent_id,
+          context,
         } satisfies ReviewEntry,
         salience: (riskRank[risk ?? ''] ?? 0) + (r.decision === 'deny' ? 1 : 0),
       };

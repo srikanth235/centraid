@@ -29,6 +29,7 @@ import type { TurnLimiter } from './http/turn-limiter.js';
 import type { ConversationRunner } from './conversation/runner.js';
 import type { VaultBridge } from './handlers/vault-bridge.js';
 import type { AppRef, RegistryEntry } from './types.js';
+import { COMPANION_GRANTS_HEADER, companionToolAllowed } from './http/internal-headers.js';
 
 const WEB_APP_HEADER = 'x-centraid-web-app';
 const WEB_SHELL_ORIGIN_HEADER = 'x-centraid-web-shell-origin';
@@ -474,6 +475,20 @@ export class Runtime {
     if (typeof webApp === 'string') {
       if (typeof body.app !== 'string' || body.app !== webApp) {
         sendError(res, 403, 'app_session_scope', 'This browser session is scoped to another app.');
+        return;
+      }
+    }
+
+    const companionProfile = req.headers[COMPANION_GRANTS_HEADER];
+    if (typeof companionProfile === 'string') {
+      const allowed = new Set(companionProfile.split(',').filter(Boolean));
+      if (!companionToolAllowed(allowed, toolName, body)) {
+        sendError(
+          res,
+          403,
+          'app_session_scope',
+          'This Companion device has no grant for that module operation.',
+        );
         return;
       }
     }

@@ -11,6 +11,8 @@ Centraid is personal software over a sovereign vault. Its backend is a single ho
 
 The web app (`apps/web`) is an installable Vite PWA and, like mobile, embeds no backend. It shares the browser-safe React shell in `packages/client` with desktop. It supports two data planes: direct HTTP (the gateway serves the PWA from a dedicated origin and the shell uses an Origin-bound HttpOnly control session), or ticket-only Iroh through an application-specific Rust/WASM client. Browsers have no UDP access, so Iroh/WASM is relay-only. A service-worker bridge carries generated-app documents, assets, and streams over the same tunnel; their one-time app sessions remain vault- and app-scoped, and the tunnel deliberately defers those requests to cookie authorization instead of injecting its broader device bearer.
 
+The browser extension (`apps/extension`) is a narrower paired-device client over that same checked-in Iroh/WASM binding. Its MV3 worker enrolls with an owner-selected app allow-list that is persisted on the device row and re-enforced by the gateway before dispatch. It can reach only app tools plus narrow read-only status/module/count surfaces; every tool body is clamped to the enrolled app ids. Locker suggestions are secret-free and top-frame-only, explicit fill reveals carry a normalized origin in their receipt, and the extension stores no secret cache. Chrome is the v1 store target; the package also emits a Firefox 121+ build, while Safari needs a separate port.
+
 The monorepo is orchestrated by [Turborepo](https://turbo.build) and run on [Bun](https://bun.sh) (`packageManager` pinned at the root). Linting and formatting use [oxlint](https://oxc.rs/docs/guide/usage/linter) and [oxfmt](https://github.com/oxc-project/oxfmt); type checking is TypeScript per workspace; tests run on [vitest](https://vitest.dev) with v8 coverage.
 
 ## Runtime model: `conversation ⊃ turn ⊃ item`
@@ -37,6 +39,7 @@ The same journalled command path backs **Vault Atlas** (#441), the Operations sc
 .
 ├── apps/
 │   ├── desktop/                   # @centraid/desktop — Electron host; embeds the gateway
+│   ├── extension/                 # @centraid/extension — MV3 Companion; constrained Iroh/WASM device
 │   ├── web/                       # @centraid/web — installable Vite PWA; HTTP or relay-only Iroh/WASM
 │   └── mobile/                    # @centraid/mobile — Expo; HTTP client to a gateway
 ├── packages/
@@ -106,7 +109,7 @@ contract for this policy.
 - `lint` — depends on `^lint`; run via `oxlint .` at the root.
 - `test` — depends on `^build` and `build`; per-package `vitest run`.
 
-The desktop app builds its main process, preload bundle, and shared client renderer. The web app builds the same React shell as a service-worker-backed Vite PWA; its checked-in WASM binding is regenerated from `apps/web/iroh-wasm` with `bun run --cwd apps/web build:iroh`. The gateway daemon bundles the static assets and serves them on a dedicated origin. The gateway, app-engine, agent-runtime, automation, skills, and blueprints packages each emit `dist/` via `tsc` (blueprints first builds a template manifest). The mobile app delegates dev/build to the Expo CLI.
+The desktop app builds its main process, preload bundle, and shared client renderer. The web app builds the same React shell as a service-worker-backed Vite PWA; its checked-in WASM binding is regenerated from `apps/web/iroh-wasm` with `bun run --cwd apps/web build:iroh`. The extension bundles that binding with its worker/content/popup code and packages reviewable Chrome and Firefox ZIPs via `bun run --cwd apps/extension package`. The gateway daemon bundles the static assets and serves them on a dedicated origin. The gateway, app-engine, agent-runtime, automation, skills, and blueprints packages each emit `dist/` via `tsc` (blueprints first builds a template manifest). The mobile app delegates dev/build to the Expo CLI.
 
 ## Cross-surface design tokens
 

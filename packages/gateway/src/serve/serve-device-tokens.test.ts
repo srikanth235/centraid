@@ -124,6 +124,124 @@ test('redemption itself needs no bearer at all — the ticket secret is the auth
   expect(res.status).toBe(200);
 });
 
+test('Companion pairing requires and server-enforces the selected module grants', async () => {
+  const missingTicket = mintTicket(vaultA);
+  const missing = await redeem(missingTicket, 'Companion', { platform: 'extension' });
+  expect(missing.status).toBe(400);
+  expect(await missing.json()).toMatchObject({ ok: false, error: 'malformed_request' });
+
+  const ticket = mintTicket(vaultA);
+  const paired = await redeem(ticket, 'Companion', {
+    platform: 'extension',
+    grantProfile: ['locker'],
+  });
+  expect(paired.status).toBe(200);
+  const body = (await paired.json()) as {
+    deviceToken: string;
+    deviceKey: string;
+    enrollmentId: string;
+  };
+  expect(enrollments.get(body.deviceKey, vaultA)?.grantProfile).toEqual(['locker']);
+
+  const status = await fetch(`${handle.url}/centraid/_vault/status`, {
+    headers: { Authorization: `Bearer ${body.deviceToken}` },
+  });
+  expect(status.status).toBe(200);
+
+  const count = await fetch(`${handle.url}/centraid/_vault/blocking`, {
+    headers: { Authorization: `Bearer ${body.deviceToken}` },
+  });
+  expect(count.status).toBe(200);
+  expect(await count.json()).toMatchObject({ count: 0 });
+
+  const modules = await fetch(`${handle.url}/centraid/_vault/apps`, {
+    headers: { Authorization: `Bearer ${body.deviceToken}` },
+  });
+  expect(modules.status).toBe(200);
+  expect(await modules.json()).toMatchObject({
+    modules: expect.arrayContaining([
+      { id: 'locker', state: 'unavailable' },
+      { id: 'notes', state: 'revoked' },
+    ]),
+  });
+
+  const ownerSurface = await fetch(`${handle.url}/centraid/_vault/vaults`, {
+    headers: { Authorization: `Bearer ${body.deviceToken}` },
+  });
+  expect(ownerSurface.status).toBe(403);
+  expect(await ownerSurface.json()).toMatchObject({ error: 'companion_profile' });
+
+  const lockerBlob = await fetch(`${handle.url}/centraid/_vault/blobs`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${body.deviceToken}`,
+      'content-type': 'image/png',
+    },
+    body: new Uint8Array([1, 2, 3]),
+  });
+  expect(lockerBlob.status).toBe(403);
+
+  const docsTicket = mintTicket(vaultA);
+  const docsPair = await redeem(docsTicket, 'Docs Companion', {
+    platform: 'extension',
+    grantProfile: ['docs'],
+  });
+  const docs = (await docsPair.json()) as { deviceToken: string; enrollmentId: string };
+  const docsBlob = await fetch(`${handle.url}/centraid/_vault/blobs`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${docs.deviceToken}`,
+      'content-type': 'image/png',
+    },
+    body: new Uint8Array([1, 2, 3]),
+  });
+  expect(docsBlob.status).toBe(200);
+  expect(await docsBlob.json()).toMatchObject({ sha256: expect.stringMatching(/^[a-f0-9]{64}$/) });
+
+  const notesTool = await fetch(`${handle.url}/centraid/_tool/centraid_read`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${body.deviceToken}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ app: 'notes', query: 'list' }),
+  });
+  expect(notesTool.status).toBe(403);
+  expect(await notesTool.json()).toMatchObject({ code: 'app_session_scope' });
+
+  const unbundledLockerAction = await fetch(`${handle.url}/centraid/_tool/centraid_write`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${body.deviceToken}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ app: 'locker', action: 'trash-item', input: { item_id: 'item-1' } }),
+  });
+  expect(unbundledLockerAction.status).toBe(403);
+  expect(await unbundledLockerAction.json()).toMatchObject({ code: 'app_session_scope' });
+
+  const otherDevice = await fetch(
+    `${handle.url}/centraid/_gateway/devices/${encodeURIComponent(docs.enrollmentId)}`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${body.deviceToken}` },
+    },
+  );
+  expect(otherDevice.status).toBe(403);
+  expect(await otherDevice.json()).toMatchObject({ error: 'companion_profile' });
+
+  const unpair = await fetch(
+    `${handle.url}/centraid/_gateway/devices/${encodeURIComponent(body.enrollmentId)}`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${body.deviceToken}` },
+    },
+  );
+  expect(unpair.status).toBe(200);
+  expect(await unpair.json()).toEqual({ removed: true });
+  expect(enrollments.get(body.deviceKey, vaultA)).toBeUndefined();
+});
+
 test('(b) device-token caller is confined: a non-enrolled vault is 403', async () => {
   const vaultB = handle.vaults.create('Second').vaultId;
   const ticket = mintTicket(vaultA);
@@ -225,6 +343,7 @@ test('(g) a forged x-centraid-authed-device header from a client is stripped', a
     headers: {
       Authorization: `Bearer ${ADMIN_TOKEN}`,
       [AUTHED_DEVICE_HEADER]: 'http:legit-device',
+      'x-centraid-companion-grants': '',
     },
   });
   expect(res.status).toBe(200);

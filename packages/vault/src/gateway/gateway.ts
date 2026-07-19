@@ -491,6 +491,7 @@ export class Gateway {
   reveal(cred: Credential, rawRequest: RevealRequest): RevealResult {
     const identity = this.identify(cred);
     const request = { ...rawRequest, purpose: rawRequest.purpose ?? DEFAULT_PURPOSE };
+    let context: { kind: 'fill'; origin: string } | undefined;
     const deny = (failing: string, grantId: string | null = null): never => {
       const receiptId = writeReceipt(this.db.journal, {
         grantId,
@@ -500,10 +501,22 @@ export class Gateway {
         objectId: request.entityId ?? (request.alias ? `@${request.alias}` : null),
         purpose: request.purpose,
         decision: 'deny',
-        detail: { failing },
+        detail: { failing, ...(context ? { context } : {}) },
       });
       throw new GatewayError('consent', `deny (receipt ${receiptId}): ${failing}`);
     };
+    if (request.context !== undefined) {
+      if (request.context.kind !== 'fill') return deny('reveal context kind must be fill');
+      try {
+        const url = new URL(request.context.origin);
+        if (!['http:', 'https:'].includes(url.protocol) || request.context.origin !== url.origin) {
+          throw new Error('not an origin');
+        }
+        context = { kind: 'fill', origin: url.origin };
+      } catch {
+        return deny('reveal fill context needs an absolute HTTP origin');
+      }
+    }
     const ref = resolveEntity(request.entity, this.db.vault);
     if (!ref || ref.file !== 'vault') return deny(`unknown entity ${request.entity}`);
     const sealedCols = sealedColumnsOf(request.entity, this.db.vault);
@@ -572,7 +585,11 @@ export class Gateway {
       objectId: entityId,
       purpose: request.purpose,
       decision: 'allow',
-      detail: { columns, ...(request.alias !== undefined ? { alias: request.alias } : {}) },
+      detail: {
+        columns,
+        ...(request.alias !== undefined ? { alias: request.alias } : {}),
+        ...(context ? { context } : {}),
+      },
     });
     return { values, receiptId };
   }

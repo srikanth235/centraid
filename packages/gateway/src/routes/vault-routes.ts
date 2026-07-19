@@ -84,6 +84,7 @@ import { readJson, sendJson } from './route-helpers.js';
 import type { StorageConnectionStore } from '../backup/storage-connections.js';
 import type { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
 import { ensureProviderCasTarget } from '../backup/storage-credentials.js';
+import { COMPANION_MODULES, companionModuleState } from './companion-grants.js';
 
 const PREFIX = '/centraid/_vault';
 
@@ -416,6 +417,19 @@ export function makeVaultRouteHandler(
       }
 
       if (method === 'GET' && segments[0] === 'apps' && segments.length === 1) {
+        const companionProfile = vaultContext()?.grantProfile;
+        if (companionProfile !== undefined) {
+          const allowed = new Set(companionProfile);
+          const apps = new Map(plane.listApps().map((app) => [app.name, app]));
+          const modules = COMPANION_MODULES.map((id) => {
+            const app = apps.get(id);
+            return {
+              id,
+              state: companionModuleState(allowed, id, app),
+            };
+          });
+          return sendJson(res, 200, { modules });
+        }
         return sendJson(res, 200, { apps: plane.listApps() });
       }
 
@@ -619,6 +633,15 @@ export function makeVaultRouteHandler(
       // salience-ranked, with receipts.
       if (method === 'GET' && segments[0] === 'blocking' && segments.length === 1) {
         const blocking = plane.blocking();
+        if (vaultContext()?.grantProfile !== undefined) {
+          return sendJson(res, 200, {
+            count:
+              blocking.outbox.length +
+              blocking.needsAuth.length +
+              blocking.parked.length +
+              blocking.scopeRequests.length,
+          });
+        }
         return sendJson(res, 200, { ...blocking, outbox: withCanEdit(blocking.outbox) });
       }
 

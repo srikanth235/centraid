@@ -32,6 +32,8 @@ CREATE TABLE locker_item (
   username     TEXT,
   password     TEXT,
   url          TEXT,
+  url_match_policy TEXT NOT NULL DEFAULT 'registrable-domain'
+    CHECK (url_match_policy IN ('registrable-domain','exact-host')),
   otp_seed     TEXT,
   notes        TEXT,
   -- card

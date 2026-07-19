@@ -5,8 +5,8 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use futures_util::stream;
 use iroh::{
-    Endpoint, SecretKey,
-    endpoint::{Connection, QuicTransportConfig, RecvStream, SendStream},
+    Endpoint, RelayMode, RelayUrl, SecretKey,
+    endpoint::{Connection, ConnectionError, QuicTransportConfig, RecvStream, SendStream},
 };
 use iroh_tickets::endpoint::EndpointTicket;
 use js_sys::Uint8Array;
@@ -17,6 +17,9 @@ use wasm_streams::{ReadableStream, readable::sys::ReadableStream as JsReadableSt
 const PAIR_ALPN: &[u8] = b"centraid/gw-pair/1";
 const TUNNEL_ALPN: &[u8] = b"centraid/tunnel/1";
 const MAX_HEADER_BYTES: usize = 256 * 1024;
+const CONNECT_FAILURE_CONTEXT: &str = "could not connect to gateway tunnel";
+const DEVICE_REVOKED_CONTEXT: &str = "Centraid device enrollment was revoked";
+const CLOSE_UNAUTHORIZED: u32 = 401;
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -29,6 +32,8 @@ struct GatewayPairRequest {
     remember_device: Option<bool>,
     #[serde(default)]
     trust: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    grant_profile: Option<Vec<String>>,
 }
 
 #[derive(Serialize)]
@@ -49,6 +54,22 @@ fn start() {
     console_error_panic_hook::set_once();
 }
 
+/// Stable marker shared with TypeScript retry classifiers. A non-idempotent
+/// request may be retried only when this proves the request never reached the
+/// gateway tunnel.
+#[wasm_bindgen]
+pub fn connect_failure_marker() -> String {
+    CONNECT_FAILURE_CONTEXT.to_owned()
+}
+
+/// Stable marker for the server's authenticated QUIC close code. Unlike a
+/// generic dial failure, this is authoritative proof that the paired device
+/// key is no longer enrolled, so clients may purge local pairing state.
+#[wasm_bindgen]
+pub fn device_revoked_marker() -> String {
+    DEVICE_REVOKED_CONTEXT.to_owned()
+}
+
 #[wasm_bindgen]
 pub struct BrowserEndpoint {
     endpoint: Endpoint,
@@ -60,8 +81,22 @@ pub struct BrowserEndpoint {
 
 #[wasm_bindgen]
 impl BrowserEndpoint {
-    pub async fn spawn(secret_key: Option<Vec<u8>>) -> Result<BrowserEndpoint, JsError> {
+    pub async fn spawn(
+        secret_key: Option<Vec<u8>>,
+        relay_urls: Option<Vec<String>>,
+    ) -> Result<BrowserEndpoint, JsError> {
         let mut builder = Endpoint::builder(iroh::endpoint::presets::N0);
+        if let Some(raw_urls) = relay_urls.filter(|urls| !urls.is_empty()) {
+            let urls = raw_urls
+                .into_iter()
+                .map(|raw| {
+                    raw.parse::<RelayUrl>()
+                        .with_context(|| format!("invalid Iroh relay URL: {raw}"))
+                })
+                .collect::<Result<Vec<_>>>()
+                .map_err(to_js_error)?;
+            builder = builder.relay_mode(RelayMode::custom(urls));
+        }
         // Keep the pooled connection warm across brief idle gaps (heartbeat)
         // and let it die cleanly instead of hanging when the app is
         // abandoned; resume after an idle death is covered by the redial path
@@ -147,12 +182,19 @@ impl BrowserEndpoint {
             let slot = self.tunnel.borrow();
             match slot.as_ref() {
                 Some(conn) if conn.close_reason().is_none() => Some(conn.clone()),
+                Some(conn) if is_unauthorized(conn.close_reason().as_ref()) => {
+                    anyhow::bail!(DEVICE_REVOKED_CONTEXT)
+                }
                 _ => None,
             }
         };
         if let Some(conn) = cached {
-            if let Ok((send, recv)) = conn.open_bi().await {
-                return Ok((send, recv, conn));
+            match conn.open_bi().await {
+                Ok((send, recv)) => return Ok((send, recv, conn)),
+                Err(error) if is_unauthorized(Some(&error)) => {
+                    anyhow::bail!(DEVICE_REVOKED_CONTEXT)
+                }
+                Err(_) => {}
             }
             // The pooled connection went stale between the check and the open;
             // drop it so the redial below installs a fresh one.
@@ -162,8 +204,14 @@ impl BrowserEndpoint {
             .endpoint
             .connect(ticket.endpoint_addr().clone(), TUNNEL_ALPN)
             .await
-            .context("could not connect to gateway tunnel")?;
-        let (send, recv) = conn.open_bi().await?;
+            .context(CONNECT_FAILURE_CONTEXT)?;
+        let (send, recv) = conn.open_bi().await.map_err(|error| {
+            if is_unauthorized(Some(&error)) {
+                anyhow::anyhow!(DEVICE_REVOKED_CONTEXT)
+            } else {
+                error.into()
+            }
+        })?;
         *self.tunnel.borrow_mut() = Some(conn.clone());
         Ok((send, recv, conn))
     }
@@ -171,6 +219,45 @@ impl BrowserEndpoint {
     pub async fn close(&self) {
         self.tunnel.borrow_mut().take();
         self.endpoint.close().await;
+    }
+}
+
+fn is_unauthorized(error: Option<&ConnectionError>) -> bool {
+    matches!(
+        error,
+        Some(ConnectionError::ApplicationClosed(frame))
+            if frame.error_code == CLOSE_UNAUTHORIZED.into()
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CONNECT_FAILURE_CONTEXT, DEVICE_REVOKED_CONTEXT, GatewayPairRequest};
+
+    #[test]
+    fn retry_and_revocation_markers_are_wire_stable() {
+        assert_eq!(
+            CONNECT_FAILURE_CONTEXT,
+            "could not connect to gateway tunnel"
+        );
+        assert_eq!(
+            DEVICE_REVOKED_CONTEXT,
+            "Centraid device enrollment was revoked"
+        );
+    }
+
+    #[test]
+    fn legacy_pair_request_keeps_grant_profile_omitted() {
+        let request: GatewayPairRequest = serde_json::from_value(serde_json::json!({
+            "ticketId": "ticket",
+            "secret": "secret",
+            "deviceName": "Web",
+            "platform": "web"
+        }))
+        .expect("legacy request should deserialize");
+        assert!(request.grant_profile.is_none());
+        let encoded = serde_json::to_value(request).expect("pair request should serialize");
+        assert!(encoded.get("grantProfile").is_none());
     }
 }
 

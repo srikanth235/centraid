@@ -192,5 +192,6 @@ describe('DevicesCard', () => {
     expect(onCreateTicket).toHaveBeenCalledWith({ ttlMinutes: 15 });
     expect(container.textContent).toContain('CENTRAID-TICKET-XYZ');
     expect(container.textContent).toContain('Personal');
+    expect(container.querySelector('img[alt="One-time Centraid pairing QR code"]')).toBeTruthy();
   });
 });

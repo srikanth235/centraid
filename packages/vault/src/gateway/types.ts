@@ -384,6 +384,8 @@ export interface RevealRequest {
   alias?: string;
   /** Sealed columns to reveal. Default: all of the entity's sealed columns. */
   columns?: string[];
+  /** Optional, non-secret reason attached to the evidence receipt. */
+  context?: { kind: 'fill'; origin: string };
   purpose?: string;
 }
 

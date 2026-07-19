@@ -117,12 +117,17 @@ export class BrowserEndpoint {
   }
   /**
    * @param {Uint8Array | null} [secret_key]
+   * @param {string[] | null} [relay_urls]
    * @returns {Promise<BrowserEndpoint>}
    */
-  static spawn(secret_key) {
+  static spawn(secret_key, relay_urls) {
     var ptr0 = isLikeNone(secret_key) ? 0 : passArray8ToWasm0(secret_key, wasm.__wbindgen_export);
     var len0 = WASM_VECTOR_LEN;
-    const ret = wasm.browserendpoint_spawn(ptr0, len0);
+    var ptr1 = isLikeNone(relay_urls)
+      ? 0
+      : passArrayJsValueToWasm0(relay_urls, wasm.__wbindgen_export);
+    var len1 = WASM_VECTOR_LEN;
+    const ret = wasm.browserendpoint_spawn(ptr0, len0, ptr1, len1);
     return takeObject(ret);
   }
 }
@@ -313,6 +318,52 @@ export class IntoUnderlyingSource {
 }
 if (Symbol.dispose)
   IntoUnderlyingSource.prototype[Symbol.dispose] = IntoUnderlyingSource.prototype.free;
+
+/**
+ * Stable marker shared with TypeScript retry classifiers. A non-idempotent
+ * request may be retried only when this proves the request never reached the
+ * gateway tunnel.
+ * @returns {string}
+ */
+export function connect_failure_marker() {
+  let deferred1_0;
+  let deferred1_1;
+  try {
+    const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+    wasm.connect_failure_marker(retptr);
+    var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+    var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+    deferred1_0 = r0;
+    deferred1_1 = r1;
+    return getStringFromWasm0(r0, r1);
+  } finally {
+    wasm.__wbindgen_add_to_stack_pointer(16);
+    wasm.__wbindgen_export4(deferred1_0, deferred1_1, 1);
+  }
+}
+
+/**
+ * Stable marker for the server's authenticated QUIC close code. Unlike a
+ * generic dial failure, this is authoritative proof that the paired device
+ * key is no longer enrolled, so clients may purge local pairing state.
+ * @returns {string}
+ */
+export function device_revoked_marker() {
+  let deferred1_0;
+  let deferred1_1;
+  try {
+    const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+    wasm.device_revoked_marker(retptr);
+    var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+    var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+    deferred1_0 = r0;
+    deferred1_1 = r1;
+    return getStringFromWasm0(r0, r1);
+  } finally {
+    wasm.__wbindgen_add_to_stack_pointer(16);
+    wasm.__wbindgen_export4(deferred1_0, deferred1_1, 1);
+  }
+}
 
 export function start() {
   wasm.start();
@@ -640,7 +691,7 @@ function __wbg_get_imports() {
           const a = state0.a;
           state0.a = 0;
           try {
-            return __wasm_bindgen_func_elem_4294(a, state0.b, arg0, arg1);
+            return __wasm_bindgen_func_elem_4346(a, state0.b, arg0, arg1);
           } finally {
             state0.a = a;
           }
@@ -910,52 +961,52 @@ function __wbg_get_imports() {
       return ret;
     },
     __wbindgen_cast_0000000000000001: function (arg0, arg1) {
-      // Cast intrinsic for `Closure(Closure { dtor_idx: 175, function: Function { arguments: [NamedExternref("CloseEvent")], shim_idx: 176, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+      // Cast intrinsic for `Closure(Closure { dtor_idx: 179, function: Function { arguments: [NamedExternref("CloseEvent")], shim_idx: 180, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
       const ret = makeMutClosure(
         arg0,
         arg1,
-        wasm.__wasm_bindgen_func_elem_1991,
-        __wasm_bindgen_func_elem_1992,
+        wasm.__wasm_bindgen_func_elem_2043,
+        __wasm_bindgen_func_elem_2044,
       );
       return addHeapObject(ret);
     },
     __wbindgen_cast_0000000000000002: function (arg0, arg1) {
-      // Cast intrinsic for `Closure(Closure { dtor_idx: 185, function: Function { arguments: [], shim_idx: 173, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+      // Cast intrinsic for `Closure(Closure { dtor_idx: 188, function: Function { arguments: [], shim_idx: 177, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
       const ret = makeMutClosure(
         arg0,
         arg1,
-        wasm.__wasm_bindgen_func_elem_6208,
-        __wasm_bindgen_func_elem_4989,
+        wasm.__wasm_bindgen_func_elem_6258,
+        __wasm_bindgen_func_elem_5040,
       );
       return addHeapObject(ret);
     },
     __wbindgen_cast_0000000000000003: function (arg0, arg1) {
-      // Cast intrinsic for `Closure(Closure { dtor_idx: 56, function: Function { arguments: [Externref], shim_idx: 176, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+      // Cast intrinsic for `Closure(Closure { dtor_idx: 56, function: Function { arguments: [Externref], shim_idx: 180, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
       const ret = makeMutClosure(
         arg0,
         arg1,
-        wasm.__wasm_bindgen_func_elem_4988,
-        __wasm_bindgen_func_elem_1992,
+        wasm.__wasm_bindgen_func_elem_5039,
+        __wasm_bindgen_func_elem_2044,
       );
       return addHeapObject(ret);
     },
     __wbindgen_cast_0000000000000004: function (arg0, arg1) {
-      // Cast intrinsic for `Closure(Closure { dtor_idx: 56, function: Function { arguments: [NamedExternref("MessageEvent")], shim_idx: 176, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+      // Cast intrinsic for `Closure(Closure { dtor_idx: 56, function: Function { arguments: [NamedExternref("MessageEvent")], shim_idx: 180, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
       const ret = makeMutClosure(
         arg0,
         arg1,
-        wasm.__wasm_bindgen_func_elem_4988,
-        __wasm_bindgen_func_elem_1992,
+        wasm.__wasm_bindgen_func_elem_5039,
+        __wasm_bindgen_func_elem_2044,
       );
       return addHeapObject(ret);
     },
     __wbindgen_cast_0000000000000005: function (arg0, arg1) {
-      // Cast intrinsic for `Closure(Closure { dtor_idx: 56, function: Function { arguments: [], shim_idx: 173, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+      // Cast intrinsic for `Closure(Closure { dtor_idx: 56, function: Function { arguments: [], shim_idx: 177, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
       const ret = makeMutClosure(
         arg0,
         arg1,
-        wasm.__wasm_bindgen_func_elem_4988,
-        __wasm_bindgen_func_elem_4989,
+        wasm.__wasm_bindgen_func_elem_5039,
+        __wasm_bindgen_func_elem_5040,
       );
       return addHeapObject(ret);
     },
@@ -964,8 +1015,8 @@ function __wbg_get_imports() {
       const ret = makeClosure(
         arg0,
         arg1,
-        wasm.__wasm_bindgen_func_elem_4988,
-        __wasm_bindgen_func_elem_5006,
+        wasm.__wasm_bindgen_func_elem_5039,
+        __wasm_bindgen_func_elem_5057,
       );
       return addHeapObject(ret);
     },
@@ -993,20 +1044,20 @@ function __wbg_get_imports() {
   };
 }
 
-function __wasm_bindgen_func_elem_4989(arg0, arg1) {
-  wasm.__wasm_bindgen_func_elem_4989(arg0, arg1);
+function __wasm_bindgen_func_elem_5040(arg0, arg1) {
+  wasm.__wasm_bindgen_func_elem_5040(arg0, arg1);
 }
 
-function __wasm_bindgen_func_elem_5006(arg0, arg1) {
-  wasm.__wasm_bindgen_func_elem_5006(arg0, arg1);
+function __wasm_bindgen_func_elem_5057(arg0, arg1) {
+  wasm.__wasm_bindgen_func_elem_5057(arg0, arg1);
 }
 
-function __wasm_bindgen_func_elem_1992(arg0, arg1, arg2) {
-  wasm.__wasm_bindgen_func_elem_1992(arg0, arg1, addHeapObject(arg2));
+function __wasm_bindgen_func_elem_2044(arg0, arg1, arg2) {
+  wasm.__wasm_bindgen_func_elem_2044(arg0, arg1, addHeapObject(arg2));
 }
 
-function __wasm_bindgen_func_elem_4294(arg0, arg1, arg2, arg3) {
-  wasm.__wasm_bindgen_func_elem_4294(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
+function __wasm_bindgen_func_elem_4346(arg0, arg1, arg2, arg3) {
+  wasm.__wasm_bindgen_func_elem_4346(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
 }
 
 const __wbindgen_enum_BinaryType = ['blob', 'arraybuffer'];
@@ -1121,7 +1172,7 @@ function debugString(val) {
   if (val instanceof Error) {
     return `${val.name}: ${val.message}\n${val.stack}`;
   }
-  // wasm-bindgen deliberately keeps this debug formatter conservative (#406).
+  // Follow-up (issue #462): we could test for more things here, like `Set`s and `Map`s.
   return className;
 }
 
@@ -1238,6 +1289,16 @@ function passArray8ToWasm0(arg, malloc) {
   const ptr = malloc(arg.length * 1, 1) >>> 0;
   getUint8ArrayMemory0().set(arg, ptr / 1);
   WASM_VECTOR_LEN = arg.length;
+  return ptr;
+}
+
+function passArrayJsValueToWasm0(array, malloc) {
+  const ptr = malloc(array.length * 4, 4) >>> 0;
+  const mem = getDataViewMemory0();
+  for (let i = 0; i < array.length; i++) {
+    mem.setUint32(ptr + 4 * i, addHeapObject(array[i]), true);
+  }
+  WASM_VECTOR_LEN = array.length;
   return ptr;
 }
 

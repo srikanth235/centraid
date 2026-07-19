@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Pair Centraid Companion</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body style="max-width: 640px; margin: 40px auto">
+    <main>
+      <header>
+        <div class="mark">C</div>
+        <div>
+          <strong>Pair Centraid Companion</strong
+          ><small>QR codes are processed only in this browser</small>
+        </div>
+      </header>
+      <section class="hero">
+        <h1>Point this browser at your one-time code.</h1>
+        <video
+          playsinline
+          muted
+          style="width: 100%; border-radius: 12px; background: #172033; min-height: 240px"
+        ></video>
+        <fieldset class="grant-grid">
+          <legend>Allow on this device</legend>
+          <label><input type="checkbox" name="grant" value="locker" checked /> Locker</label>
+          <label><input type="checkbox" name="grant" value="tasks" checked /> Tasks</label>
+          <label><input type="checkbox" name="grant" value="notes" checked /> Notes</label>
+          <label><input type="checkbox" name="grant" value="docs" checked /> Docs</label>
+          <label><input type="checkbox" name="grant" value="agenda" /> Agenda</label>
+          <label><input type="checkbox" name="grant" value="people" /> People</label>
+        </fieldset>
+        <div class="button-row"><button class="primary" type="button">Start camera</button></div>
+        <p data-status role="status">Camera access starts only when you ask.</p>
+      </section>
+    </main>
+    <script type="module" src="pair.js"></script>
+  </body>
+</html>

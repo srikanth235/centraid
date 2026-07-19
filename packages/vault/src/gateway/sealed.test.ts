@@ -134,6 +134,7 @@ test('the owner reveals; the reveal is receipted per item with column names only
     entity: 'locker.item',
     entityId: itemId,
     columns: ['password'],
+    context: { kind: 'fill', origin: 'https://example.com' },
     purpose: PURPOSE,
   });
   expect(revealed.values.password).toBe('pw-for-reveal');
@@ -155,6 +156,28 @@ test('the owner reveals; the reveal is receipted per item with column names only
     decision: 'allow',
   });
   expect(receipt.detail_json.includes('pw-for-reveal')).toBe(false);
+  expect(JSON.parse(receipt.detail_json)).toMatchObject({
+    columns: ['password'],
+    context: { kind: 'fill', origin: 'https://example.com' },
+  });
+});
+
+test('reveal fill context accepts origins only and receipts malformed attempts', () => {
+  const itemId = addLogin();
+  expect(() =>
+    gw.reveal(owner, {
+      entity: 'locker.item',
+      entityId: itemId,
+      columns: ['password'],
+      context: { kind: 'fill', origin: 'https://example.com/login' },
+      purpose: PURPOSE,
+    }),
+  ).toThrow(/absolute HTTP origin/);
+  const denied = db.journal
+    .prepare(`SELECT decision, detail_json FROM consent_receipt ORDER BY rowid DESC LIMIT 1`)
+    .get() as { decision: string; detail_json: string };
+  expect(denied.decision).toBe('deny');
+  expect(denied.detail_json).toContain('absolute HTTP origin');
 });
 
 test('read scope does not reveal; an explicit reveal scope does — clamped by its row filter', () => {

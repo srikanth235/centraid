@@ -82,6 +82,8 @@ export interface CentraidGatewayDevice {
   trust: 'full' | 'readonly' | 'revoked';
   /** Whether this device consented to durable OPFS/IndexedDB state. */
   rememberDevice: boolean;
+  /** Server-enforced app allow-list for a constrained Companion device. */
+  grantProfile?: string[];
   compute?: DeviceComputeProfile;
   checkpoint?: {
     epoch: string;

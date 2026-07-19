@@ -30,6 +30,8 @@ export interface VaultRequestContext {
    * no per-device token) — which is implicitly enrolled in every vault.
    */
   deviceKey?: string;
+  /** App-id allow-list for a constrained Companion device. */
+  grantProfile?: readonly string[];
 }
 
 /**

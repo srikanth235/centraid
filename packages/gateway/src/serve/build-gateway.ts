@@ -37,6 +37,7 @@ import {
   AnalyticsStore,
   ASSISTANT_APP_ID,
   AUTHED_DEVICE_HEADER,
+  COMPANION_GRANTS_HEADER,
   ConversationHistoryStore,
   ConversationStore,
   InsightsStore,
@@ -108,6 +109,7 @@ import { makeVaultRouteHandler } from '../routes/vault-routes.js';
 import { makePairRouteHandler } from '../routes/pair-routes.js';
 import { makeDevicesRouteHandler } from '../routes/devices-routes.js';
 import { makeDeviceWorkRouteHandler } from '../routes/device-work-routes.js';
+import { companionRequestAllowed } from './companion-access.js';
 import { makeReplicaRouteHandler } from '../routes/replica-routes.js';
 import type { ReplicaIntentDispatchOutcome } from '../routes/replica-intent-route.js';
 import { makeConnectionsRouteHandler } from '../routes/connections-routes.js';
@@ -2553,6 +2555,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // #376). Both headers are deleted from the client-supplied request
     // before either can be trusted — a bearer-holder can never forge a
     // device identity for itself.
+    // This header is authoritative only when stamped below from the proved
+    // enrollment. A client-provided copy may restrict itself but can never
+    // widen access, so discard it before device resolution.
+    delete req.headers[COMPANION_GRANTS_HEADER];
     const rawHeader = req.headers[VAULT_HEADER];
     const requested = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
     const authedHeader = req.headers[AUTHED_DEVICE_HEADER];
@@ -2596,8 +2602,24 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         message: 'this device is enrolled read-only and cannot mutate the gateway',
       });
     }
-    return runWithVaultContext({ vaultId, ...(deviceKey !== undefined ? { deviceKey } : {}) }, () =>
-      dispatchChain(req, res),
+    if (enrollment?.grantProfile !== undefined) {
+      if (!companionRequestAllowed(req, enrollment.grantProfile, enrollment.enrollmentId)) {
+        return sendJson(res, 403, {
+          error: 'companion_profile',
+          message: 'this Companion device is not granted access to that gateway surface',
+        });
+      }
+      req.headers[COMPANION_GRANTS_HEADER] = enrollment.grantProfile.join(',');
+    }
+    return runWithVaultContext(
+      {
+        vaultId,
+        ...(deviceKey !== undefined ? { deviceKey } : {}),
+        ...(enrollment?.grantProfile !== undefined
+          ? { grantProfile: enrollment.grantProfile }
+          : {}),
+      },
+      () => dispatchChain(req, res),
     );
   };
 
