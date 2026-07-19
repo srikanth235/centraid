@@ -111,7 +111,7 @@ test('FsBlobStore.putSync against a REAL full filesystem', (t) => {
 });
 
 describe('renderSummaryMarkdown', () => {
-  test('renders health table and sticky marker', () => {
+  test('renders health table and report marker', () => {
     const md = renderSummaryMarkdown(
       {
         passed: 10,
@@ -161,8 +161,8 @@ describe('coverageScopesBelowFloor', () => {
 
 describe('publicReportUrl', () => {
   test('builds project pages URL', () => {
-    expect(publicReportUrl({ owner: 'srikanth235', repo: 'centraid', slot: 'pr/465' })).toBe(
-      'https://srikanth235.github.io/centraid/test-report/pr/465/',
+    expect(publicReportUrl({ owner: 'srikanth235', repo: 'centraid', slot: 'main' })).toBe(
+      'https://srikanth235.github.io/centraid/test-report/main/',
     );
   });
 });

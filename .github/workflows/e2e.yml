@@ -328,7 +328,7 @@ jobs:
         if: steps.coverage.outcome == 'failure' || steps.perf.outcome == 'failure' || steps.scale.outcome == 'failure'
         run: exit 1
 
-  # Public nightly HTML (same Pages tree as per-PR reports).
+  # Public nightly HTML (same Pages tree as main; no per-PR slots).
   publish-nightly-report:
     needs: [test-health-report]
     if: always() && needs.test-health-report.result != 'cancelled'

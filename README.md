@@ -104,9 +104,9 @@ bun run check:pr       # REQUIRED before push (mirrors ci.yml early steps)
 alone is not enough — package `typecheck` includes test files and catches TS
 errors tests still run under. GitHub `ci` runs `static` and `verify` in
 parallel (`verify` = build, native tunnel, data-plane, gateway perf,
-coverage), then `publish-report` (public Pages HTML + sticky PR comment) and
-a thin required `check` aggregator. Report URL:
-`https://srikanth235.github.io/centraid/test-report/pr/<n>/`.
+coverage), then a thin required `check` aggregator. On **main** only,
+`publish-report` deploys the public HTML test-health report:
+`https://srikanth235.github.io/centraid/test-report/main/`.
 
 ```sh
 bun run build          # all apps + packages

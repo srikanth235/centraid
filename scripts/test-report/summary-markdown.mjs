@@ -1,6 +1,7 @@
 /**
- * Markdown views of the test-health summary for Job Summary + sticky PR comments.
- * Rendering helpers stay pure; writeSummarySidecars is the only I/O entry.
+ * Markdown views of the test-health summary for Actions Job Summary (and
+ * optional sidecars). Rendering helpers stay pure; writeSummarySidecars is
+ * the only I/O entry.
  */
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -61,7 +62,7 @@ export function renderSummaryMarkdown(summary, meta = {}) {
     lines.push(`**Full report:** ${meta.reportUrl}`, '');
   } else {
     lines.push(
-      '_Full HTML report is published to GitHub Pages after this job (see sticky PR comment)._',
+      '_Public HTML report publishes on main (and nightly); this run keeps the artifact + Job Summary only._',
       '',
     );
   }
@@ -81,7 +82,7 @@ export function renderSummaryMarkdown(summary, meta = {}) {
 /**
  * Build public Pages URL for a report slot.
  * @param {{ owner: string, repo: string, slot: string }} opts
- * slot e.g. `pr/465`, `nightly`, `main`
+ * slot e.g. `main`, `nightly` (PR slots are not published)
  */
 export function publicReportUrl({ owner, repo, slot }) {
   const clean = String(slot).replace(/^\/+|\/+$/g, '');
