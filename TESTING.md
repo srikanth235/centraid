@@ -158,9 +158,24 @@ test-kit's stable facade.
 | `bun run test:matrix` | catalog/owner/contract validation (also inside `check:pr`) |
 | `bun run test:perf` | six generous hot-path budget tests; nightly only |
 | `bun run test:scale` | five deterministic volume tests; nightly only |
-| `bun run test:report` | build `dist/test-report/index.html` from available evidence |
-| `.github/workflows/ci.yml` | parallel **static** + **verify**, required **check** aggregator; Bun/Turbo/Cargo caches; cancel-in-progress on new pushes |
-| `.github/workflows/e2e.yml` | desktop, web, mobile, three pairing journeys (lifecycle, ticket-hygiene, cross-network-relay), perf, scale, full report |
+| `bun run test:report` | build `dist/test-report/index.html` (+ `summary.json` / `summary.md`) from available evidence |
+| `.github/workflows/ci.yml` | parallel **static** + **verify**, **publish-report** (Pages + sticky PR comment), required **check** aggregator; Bun/Turbo/Cargo caches |
+| `.github/workflows/e2e.yml` | desktop, web, mobile, three pairing journeys, perf, scale, full report → **publish-nightly-report** on Pages |
+
+### Test-health report (one hop)
+
+Per-PR and nightly CI publish a public HTML report on GitHub Pages and
+surface a short markdown summary on the job **Summary** tab and (for PRs) a
+sticky comment:
+
+| Slot | URL |
+| --- | --- |
+| This PR | `https://srikanth235.github.io/centraid/test-report/pr/<n>/` |
+| main | `https://srikanth235.github.io/centraid/test-report/main/` |
+| Nightly | `https://srikanth235.github.io/centraid/test-report/nightly/` |
+| Landing | `https://srikanth235.github.io/centraid/` |
+
+Artifacts remain available as backup; prefer the Pages link or the PR comment.
 
 Performance and scale budgets use generous regression multipliers. A noisy
 budget is fixed or removed; it is never promoted to the per-PR loop. Lane

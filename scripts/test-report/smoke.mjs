@@ -92,6 +92,21 @@ try {
   ]) {
     if (!html.includes(required)) throw new Error(`report missing ${required}`);
   }
+  const summaryJson = path.join(path.dirname(output), 'summary.json');
+  const summaryMd = path.join(path.dirname(output), 'summary.md');
+  await access(summaryJson);
+  await access(summaryMd);
+  const summary = JSON.parse(await readFile(summaryJson, 'utf8'));
+  if (typeof summary.cellsFailed !== 'number' || typeof summary.cellsMissing !== 'number') {
+    throw new Error('summary.json missing cell honesty fields');
+  }
+  if (!Array.isArray(summary.coverageBelowFloor)) {
+    throw new Error('summary.json missing coverageBelowFloor');
+  }
+  const md = await readFile(summaryMd, 'utf8');
+  if (!md.includes('Test health') || !md.includes('<!-- centraid-test-health-report -->')) {
+    throw new Error('summary.md missing sticky marker or title');
+  }
   for (const owner of [
     'apps/desktop/tests/e2e/appview-templates-insights.spec.ts',
     'packages/client/src/replica/intents.contract.test.ts',
@@ -120,8 +135,30 @@ try {
     throw new Error('summarizeCellStates must separate failed from missing');
   }
 
-  const badVitest = path.join(temp, 'vitest-unhandled.json');
-  await writeFile(
+  const {
+    REPORT_COMMENT_MARKER,
+    coverageScopesBelowFloor,
+    publicReportUrl,
+    renderSummaryMarkdown,
+  } = await import('./summary-markdown.mjs');
+  if (
+    publicReportUrl({ owner: 'o', repo: 'r', slot: 'pr/1' }) !==
+    'https://o.github.io/r/test-report/pr/1/'
+  ) {
+    throw new Error('publicReportUrl shape wrong');
+  }
+  if (coverageScopesBelowFloor([{ scope: 'x', lines: 10, lineFloor: 20 }]).join() !== 'x') {
+    throw new Error('coverageScopesBelowFloor missed under-floor scope');
+  }
+  const sticky = renderSummaryMarkdown(
+    { failed: 1, unhandledErrors: 0, cellsFailed: 0, cellsMissing: 0, coverageBelowFloor: [] },
+    { reportUrl: 'https://example.test/' },
+  );
+  if (!sticky.includes(REPORT_COMMENT_MARKER) || !sticky.includes('https://example.test/')) {
+    throw new Error('renderSummaryMarkdown missing sticky marker or URL');
+  }
+
+  const badVitest = path.join(temp, 'vitest-unhandled.json');  await writeFile(
     badVitest,
     JSON.stringify({
       success: false,

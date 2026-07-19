@@ -319,6 +319,92 @@ jobs:
           name: nightly-test-health-report
           path: dist/test-report/
           retention-days: 30
+      - name: Write Job Summary
+        if: always()
+        env:
+          TEST_REPORT_PUBLIC_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/test-report/nightly/
+        run: node scripts/test-report/write-job-summary.mjs --report-url "$TEST_REPORT_PUBLIC_URL" --title "Nightly test health"
       - name: Preserve lane failures after publishing the report
         if: steps.coverage.outcome == 'failure' || steps.perf.outcome == 'failure' || steps.scale.outcome == 'failure'
         run: exit 1
+
+  # Public nightly HTML (same Pages tree as per-PR reports).
+  publish-nightly-report:
+    needs: [test-health-report]
+    if: always() && needs.test-health-report.result != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: github-pages-test-report
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.slot.outputs.url }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Download nightly report
+        id: download_report
+        continue-on-error: true
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: nightly-test-health-report
+          path: dist/test-report
+      - name: Require report HTML
+        id: has_report
+        run: |
+          if [ -f dist/test-report/index.html ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::nightly-test-health-report missing; skip Pages publish"
+          fi
+      - name: Restore previous Pages tree (gh-pages)
+        if: steps.has_report.outputs.ok == 'true'
+        continue-on-error: true
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: gh-pages
+          path: site
+      - name: Seed site if gh-pages missing
+        if: steps.has_report.outputs.ok == 'true'
+        run: |
+          mkdir -p site
+          rm -rf site/.git
+      - name: Resolve report slot
+        if: steps.has_report.outputs.ok == 'true'
+        id: slot
+        run: |
+          SLOT="nightly"
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
+          echo "slot=${SLOT}" >> "$GITHUB_OUTPUT"
+          echo "url=https://${OWNER}.github.io/${REPO}/test-report/${SLOT}/" >> "$GITHUB_OUTPUT"
+      - name: Merge report into site tree
+        if: steps.has_report.outputs.ok == 'true'
+        run: |
+          node scripts/test-report/prepare-pages-site.mjs \
+            --report dist/test-report \
+            --site site \
+            --slot "${{ steps.slot.outputs.slot }}"
+      - name: Persist site on gh-pages
+        if: steps.has_report.outputs.ok == 'true'
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          force_orphan: false
+          enable_jekyll: false
+          user_name: github-actions[bot]
+          user_email: 41898282+github-actions[bot]@users.noreply.github.com
+      - name: Upload Pages artifact
+        if: steps.has_report.outputs.ok == 'true'
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
+        with:
+          path: site
+      - name: Deploy to GitHub Pages
+        if: steps.has_report.outputs.ok == 'true'
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5

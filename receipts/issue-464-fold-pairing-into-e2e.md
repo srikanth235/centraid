@@ -16,6 +16,7 @@ GitHub issue: [#464](https://github.com/srikanth235/centraid/issues/464)
 - [x] Env-gated solid/partial matrix owners are inventoried and validated
 - [x] agent-runtime coverage strategy recorded; floors not raised; WAL multi-day hotspot improved
 - [x] Per-PR `ci.yml` parallelized (static + verify) with Bun/Turbo/Cargo caches; required `check` aggregator kept
+- [x] Test-health report one-hop UX: Job Summary, sticky PR comment, public GitHub Pages URL
 
 ## What changed
 
@@ -50,7 +51,7 @@ Also: `package.json` `test:matrix` chain; `scripts/test-report/validate-nightly-
 - Full agent-runtime line-coverage campaign to 70%+.
 - Making every GitHub Actions nightly desktop/web/mobile job green in this environment.
 - Companion PR #463 security follow-ups.
-- Hosted report URL / PR comment bots.
+
 
 ## Decisions
 
@@ -62,12 +63,15 @@ Also: `package.json` `test:matrix` chain; `scripts/test-report/validate-nightly-
 - Multi-day WAL outage uses 4 days instead of 8: same constant-bound claim, less wall clock.
 - CI parallelization keeps coverage/perf/native on every PR (no demotion to nightly in this change); gains come from job parallelism + caches, not weaker gates.
 - Required GitHub check stays named `check` via aggregator so existing branch protection does not need a rename.
+- Report UX: public Pages for full HTML; Job Summary + sticky comment for zero-download signals; artifacts kept as backup. `publish-report` does not gate the required `check` job.
+- Pages deploys serialize on `github-pages-test-report` and merge via the `gh-pages` branch so concurrent PR slots are not wiped.
 
 ## Verification
 
 ```sh
 bun run format:check
 bun run test:matrix
+bun run test:report:smoke
 bun run test:report:smoke
 bun run --cwd packages/agent-runtime test -- src/backends/codex/safe-stdin-write.test.ts
 bun run --cwd packages/gateway test -- src/serve/app-prewarm-errors.test.ts
@@ -85,9 +89,11 @@ Pre-push local gates: `package.json` `check:pr` (aliased as `ci`) runs the early
 
 Per-PR `ci.yml` parallelized (static + verify) with Bun/Turbo/Cargo caches; required `check` aggregator kept — former serial `check` job (~18 min) becomes parallel **`static`** (format/lint/typecheck/matrix) and **`verify`** (build/native/data-plane/perf/coverage/report), plus thin required **`check`** aggregator for branch protection. Bun install, Turbo `.turbo`, and data-plane Cargo caches; cancel-in-progress concurrency. Docs: `AGENTS.md`, `README.md`, `TESTING.md`; wording only in `apps/desktop/tests/e2e/COVERAGE_REPORT.md` (PR `ci` job → workflow).
 
+Test-health report one-hop UX: Job Summary, sticky PR comment, public GitHub Pages URL — `scripts/test-report/summary-markdown.mjs`, `scripts/test-report/write-job-summary.mjs`, `scripts/test-report/prepare-pages-site.mjs`; `scripts/test-report/generate.mjs` emits `summary.json`/`summary.md`; CI `publish-report` + e2e `publish-nightly-report` merge into `gh-pages` and `actions/deploy-pages`; sticky PR comment with `<!-- centraid-test-health-report -->`. Also touches `scripts/test-report/smoke.mjs` and `scripts/test-report/report-signals.test.mjs`.
+
 ## Audit
 
-PASS — pairing fold plus inventory backlog (EPIPE, report signals, prewarm, env-gate, strategy/floors/WAL) and CI wall-clock parallelization match the expanded #464 work on PR #465.
+PASS — pairing fold plus inventory backlog (EPIPE, report signals, prewarm, env-gate, strategy/floors/WAL), CI wall-clock parallelization, and test-health one-hop UX (Job Summary / sticky PR comment / Pages) match the expanded #464 work on PR #465.
 
 ## Steering
 

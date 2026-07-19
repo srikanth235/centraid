@@ -7,6 +7,7 @@ import {
   extractUnhandledErrors,
   summarizeCellStates,
 } from './report-signals.mjs';
+import { coverageScopesBelowFloor, writeSummarySidecars } from './summary-markdown.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const flags = parseFlags(process.argv.slice(2));
@@ -80,9 +81,21 @@ const model = {
   validationErrors: validation.errors,
 };
 
-await mkdir(path.dirname(outputPath), { recursive: true });
+const reportDir = path.dirname(outputPath);
+await mkdir(reportDir, { recursive: true });
 await writeFile(outputPath, render(model), 'utf8');
+const { jsonPath: summaryJsonPath } = await writeSummarySidecars(
+  reportDir,
+  {
+    generatedAt: model.generatedAt,
+    ...summary,
+    coverageBelowFloor: coverageScopesBelowFloor(coverageRows),
+    validationErrorCount: validation.errors.length,
+  },
+  { reportUrl: process.env.TEST_REPORT_PUBLIC_URL || undefined },
+);
 console.log(`test report: ${path.relative(root, outputPath)}`);
+console.log(`test report summary: ${path.relative(root, summaryJsonPath)}`);
 if (validation.errors.length) {
   for (const error of validation.errors) console.error(`matrix: ${error}`);
   process.exitCode = 1;

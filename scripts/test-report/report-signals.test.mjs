@@ -4,6 +4,12 @@ import {
   extractUnhandledErrors,
   summarizeCellStates,
 } from './report-signals.mjs';
+import {
+  REPORT_COMMENT_MARKER,
+  coverageScopesBelowFloor,
+  publicReportUrl,
+  renderSummaryMarkdown,
+} from './summary-markdown.mjs';
 
 describe('extractUnhandledErrors', () => {
   test('reads explicit unhandledErrors array from vitest JSON', () => {
@@ -101,5 +107,62 @@ test('FsBlobStore.putSync against a REAL full filesystem', (t) => {
 
   test('returns null for ordinary tests', () => {
     expect(detectDefaultCiEnvGate(`test('works', () => { expect(1).toBe(1); });`)).toBeNull();
+  });
+});
+
+describe('renderSummaryMarkdown', () => {
+  test('renders health table and sticky marker', () => {
+    const md = renderSummaryMarkdown(
+      {
+        passed: 10,
+        failed: 1,
+        cellsFailed: 2,
+        cellsMissing: 3,
+        unhandledErrors: 1,
+        unhandledErrorMessages: ['write EPIPE'],
+        coverageBelowFloor: ['packages/gateway/**'],
+        validationErrorCount: 0,
+        generatedAt: '2026-07-19T00:00:00.000Z',
+      },
+      { reportUrl: 'https://example.test/report/', runUrl: 'https://example.test/run/1' },
+    );
+    expect(md).toContain('needs attention');
+    expect(md).toContain('| Evidence failed | 1 |');
+    expect(md).toContain('https://example.test/report/');
+    expect(md).toContain(REPORT_COMMENT_MARKER);
+    expect(md).toContain('write EPIPE');
+  });
+
+  test('marks ok when all signals clean', () => {
+    const md = renderSummaryMarkdown({
+      passed: 5,
+      failed: 0,
+      cellsFailed: 0,
+      cellsMissing: 1,
+      unhandledErrors: 0,
+      coverageBelowFloor: [],
+      validationErrorCount: 0,
+    });
+    expect(md).toContain('**Status:** ok');
+  });
+});
+
+describe('coverageScopesBelowFloor', () => {
+  test('lists scopes under line floor only', () => {
+    expect(
+      coverageScopesBelowFloor([
+        { scope: 'a', lines: 50, lineFloor: 60 },
+        { scope: 'b', lines: 90, lineFloor: 80 },
+        { scope: 'c', lines: null, lineFloor: 70 },
+      ]),
+    ).toEqual(['a']);
+  });
+});
+
+describe('publicReportUrl', () => {
+  test('builds project pages URL', () => {
+    expect(publicReportUrl({ owner: 'srikanth235', repo: 'centraid', slot: 'pr/465' })).toBe(
+      'https://srikanth235.github.io/centraid/test-report/pr/465/',
+    );
   });
 });
