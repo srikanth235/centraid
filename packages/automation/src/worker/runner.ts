@@ -66,7 +66,8 @@ type ParentMessage =
       error?: string;
       code?: string;
     }
-  | { type: 'abort'; reason?: string };
+  | { type: 'abort'; reason?: string }
+  | { type: 'run'; request: WorkerRequest };
 
 /**
  * A `ctx.fetch` request (issue #293 decision 8, connector-only). Any string
@@ -121,7 +122,8 @@ if (!parentPort) {
   throw new Error('centraid automation worker must be run as a worker_thread');
 }
 const port = parentPort;
-const req = workerData as WorkerRequest;
+const boot = workerData as { pooled?: boolean } & Partial<WorkerRequest>;
+let req = boot as WorkerRequest;
 
 let nextCallId = 1;
 // One id space, one pending map for every request/reply lane except tool
@@ -193,6 +195,10 @@ function rejectAllPending(reason: string): void {
 }
 
 port.on('message', (msg: ParentMessage) => {
+  if (msg.type === 'run') {
+    execute(msg.request);
+    return;
+  }
   if (msg.type === 'tool-reply') {
     const batch = pendingToolBatchById.get(msg.id);
     if (!batch) return;
@@ -392,24 +398,32 @@ const ctx = {
   abortSignal: abortController.signal,
 };
 
-void (async () => {
-  try {
-    const mod = (await import(pathToFileURL(req.handlerFile).href)) as {
-      default?: (args: unknown) => Promise<unknown>;
-    };
-    if (typeof mod.default !== 'function') {
-      throw new Error(`${req.handlerFile} has no default export`);
+function execute(request: WorkerRequest): void {
+  req = request;
+  ctx.now = request.now;
+  ctx.input = request.input;
+  void (async () => {
+    try {
+      const mod = (await import(pathToFileURL(req.handlerFile).href)) as {
+        default?: (args: unknown) => Promise<unknown>;
+      };
+      if (typeof mod.default !== 'function') {
+        throw new Error(`${req.handlerFile} has no default export`);
+      }
+      const fullArgs = { ...(req.args as object), log, ctx };
+      const value = await mod.default(fullArgs);
+      port.postMessage({ type: 'result', ok: true, value } satisfies WorkerMessage);
+    } catch (err) {
+      port.postMessage({
+        type: 'result',
+        ok: false,
+        error: err instanceof Error ? (err.stack ?? err.message) : String(err),
+      } satisfies WorkerMessage);
+    } finally {
+      abortController.abort();
     }
-    const fullArgs = { ...(req.args as object), log, ctx };
-    const value = await mod.default(fullArgs);
-    port.postMessage({ type: 'result', ok: true, value } satisfies WorkerMessage);
-  } catch (err) {
-    port.postMessage({
-      type: 'result',
-      ok: false,
-      error: err instanceof Error ? (err.stack ?? err.message) : String(err),
-    } satisfies WorkerMessage);
-  } finally {
-    abortController.abort();
-  }
-})();
+  })();
+}
+
+if (boot.pooled) port.postMessage({ type: 'ready' });
+else execute(boot as WorkerRequest);

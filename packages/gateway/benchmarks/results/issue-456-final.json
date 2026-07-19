@@ -1,0 +1,99 @@
+{
+  "schema": "centraid-gateway-low-end-benchmark/1",
+  "generatedAt": "2026-07-18T17:58:06.481Z",
+  "host": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "node": "v24.4.1",
+    "cpus": 8,
+    "totalMemoryBytes": 17179869184,
+    "requestedHardwareProfile": "constrained"
+  },
+  "workload": {
+    "requests": 150,
+    "writes": 120,
+    "reads": 30,
+    "writeMix": {
+      "atlas.insert core.party": 60,
+      "atlas.insert core.place": 60
+    },
+    "readMix": {
+      "vault.status": 30
+    },
+    "concurrency": 4,
+    "idleMs": 65001.960208
+  },
+  "request": {
+    "p50Ms": 14.457124999999905,
+    "p99Ms": 29.45500000000004,
+    "maxMs": 29.46591699999999,
+    "throughputPerSecond": 247.27696952644345
+  },
+  "readRequest": {
+    "p50Ms": 1.7662500000001273,
+    "p99Ms": 8.39733299999989,
+    "maxMs": 8.39733299999989,
+    "throughputPerSecond": 61.81924238161086
+  },
+  "memory": {
+    "rssPeakBytes": 184254464
+  },
+  "eventLoop": {
+    "p50Ms": 0.8568309999999997,
+    "p99Ms": 1.3811190000000018,
+    "maxMs": 1.3811190000000018,
+    "peakP99Ms": 10.015487,
+    "samples": 3
+  },
+  "storage": {
+    "bootFsyncMs": 7.109207999999967,
+    "fsyncCalls": null,
+    "fsyncPerWrite": null,
+    "resourceFsWrites": 0,
+    "resourceFsWritesPerWrite": 0,
+    "diskWriteBytes": null,
+    "diskWriteBytesPerWrite": null,
+    "liveDataBytes": 38642289
+  },
+  "idle": {
+    "contextSwitchesPerHour": 418307.3850848815,
+    "resourceFsWritesPerHour": 0,
+    "diskWriteBytesPerHour": null,
+    "liveDataGrowthBytesPerHour": 0
+  },
+  "budgets": {
+    "checks": [
+      {
+        "metric": "request.p99Ms",
+        "actual": 29.45500000000004,
+        "ceiling": 250
+      },
+      {
+        "metric": "memory.rssPeakBytes",
+        "actual": 184254464,
+        "ceiling": 536870912
+      },
+      {
+        "metric": "eventLoop.peakP99Ms",
+        "actual": 10.015487,
+        "ceiling": 150
+      },
+      {
+        "metric": "idle.contextSwitchesPerHour",
+        "actual": 418307.3850848815,
+        "ceiling": 500000
+      },
+      {
+        "metric": "idle.liveDataGrowthBytesPerHour",
+        "actual": 0,
+        "ceiling": 10485760
+      },
+      {
+        "metric": "idle.resourceFsWritesPerHour",
+        "actual": 0,
+        "ceiling": 5000
+      }
+    ],
+    "failures": []
+  }
+}

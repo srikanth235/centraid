@@ -18,7 +18,6 @@
  *     tables. Retention runs at end-of-run per `manifest.history.keep`.
  */
 
-import { Worker } from 'node:worker_threads';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +31,9 @@ import {
   type RunStreamEvent,
   type VaultBridge,
   type VaultOp,
+  WorkerPool,
+  workerPoolSizeFromEnv,
+  workerResourceLimitsFromEnv,
 } from '@centraid/app-engine';
 import type { HistoryConfig, OutputSchema } from '../manifest/manifest.js';
 import { validateOutputAgainstSchema } from '../manifest/manifest-output.js';
@@ -65,6 +67,20 @@ function resolveWorkerFile(): string {
 }
 
 const WORKER_FILE = resolveWorkerFile();
+let automationWorkerPoolInstance: WorkerPool | undefined;
+
+/** Resolve only after gateway boot publishes its storage-aware profile. */
+function automationWorkerPool(): WorkerPool {
+  if (!automationWorkerPoolInstance) {
+    automationWorkerPoolInstance = new WorkerPool(
+      WORKER_FILE,
+      workerPoolSizeFromEnv(),
+      workerResourceLimitsFromEnv(),
+    );
+    automationWorkerPoolInstance.prewarm();
+  }
+  return automationWorkerPoolInstance;
+}
 
 export interface ToolCall {
   readonly name: string;
@@ -572,15 +588,13 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     /* swallow */
   }
 
-  const worker = new Worker(WORKER_FILE, {
-    workerData: {
-      handlerFile: opts.handlerFile,
-      args: { automation: { id: opts.automationId } },
-      now: new Date(startedAt).toISOString(),
-      input: opts.input,
-    },
-    resourceLimits: { maxOldGenerationSizeMb: 256, maxYoungGenerationSizeMb: 32 },
-  });
+  const worker = automationWorkerPool().acquire();
+  const workerRequest = {
+    handlerFile: opts.handlerFile,
+    args: { automation: { id: opts.automationId } },
+    now: new Date(startedAt).toISOString(),
+    input: opts.input,
+  };
 
   let timeoutHandle: NodeJS.Timeout | undefined;
   if (timeoutMs > 0) {
@@ -865,5 +879,9 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
         });
       }
     });
+
+    // The acquired spare has already paid thread/module boot. It remains
+    // single-use: this kickoff is its only handler, and finish() terminates it.
+    send({ type: 'run', request: workerRequest });
   });
 }

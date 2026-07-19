@@ -6,6 +6,9 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { Readable } from 'node:stream';
+import { createBrotliCompress, createGzip, constants } from 'node:zlib';
+import { negotiateEncoding } from '@centraid/app-engine';
 
 /** Default request-body cap (1 MiB) for JSON + draft-file bodies. */
 export const DEFAULT_MAX_BODY_BYTES = 1 * 1024 * 1024;
@@ -90,9 +93,25 @@ async function walkFileMap(root: string, rel: string, out: FileMapEntry[]): Prom
 }
 
 export function sendJson(res: ServerResponse, status: number, body: unknown): true {
+  const bytes = Buffer.from(JSON.stringify(body));
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.end(JSON.stringify(body));
+  const encoding =
+    bytes.length >= 1024
+      ? (negotiateEncoding(res.req?.headers['accept-encoding']) ?? undefined)
+      : undefined;
+  if (!encoding) {
+    res.end(bytes);
+    return true;
+  }
+  res.setHeader('Content-Encoding', encoding);
+  res.setHeader('Vary', 'Accept-Encoding');
+  const compressor =
+    encoding === 'br'
+      ? createBrotliCompress({ params: { [constants.BROTLI_PARAM_QUALITY]: 4 } })
+      : createGzip({ level: 6 });
+  compressor.once('error', (error) => res.destroy(error));
+  Readable.from(bytes).pipe(compressor).pipe(res);
   return true;
 }
 

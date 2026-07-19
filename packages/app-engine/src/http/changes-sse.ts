@@ -126,17 +126,10 @@ export async function handleAppChanges(
   // instead of waiting for the first real event.
   res.write(`: connected to ${appId}\n\n`);
 
-  const unsubscribe = bus.subscribe(appId, (change) => {
+  const unsubscribe = bus.subscribe(appId, (_change, serialized) => {
     if (res.writableEnded) return;
     res.write(`event: change\n`);
-    const payload: Record<string, unknown> = {
-      tables: change.tables,
-      ts: change.ts,
-      source: change.source,
-    };
-    if (change.toolCallId) payload.toolCallId = change.toolCallId;
-    if (change.turnId) payload.turnId = change.turnId;
-    res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    res.write(`data: ${serialized}\n\n`);
   });
 
   const heartbeat = setInterval(() => {

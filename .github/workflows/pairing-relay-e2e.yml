@@ -47,6 +47,8 @@ jobs:
       # each package needs at runtime, same as the other two flows in this
       # tier (see tests/agent-e2e-pairing/lib/harness.mjs's ensureBuilt).
       - run: bunx turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
+      # Production must never silently fall back to the JS byte pump.
+      - run: test -f packages/tunnel/native/centraid-tunnel-native.linux-x64.node
       # The flow's own harness (lib/docker-harness.mjs) additionally fetches
       # @number0/iroh's LINUX native addon package if it's missing — the
       # `bun install` above ran on this same amd64 runner, so on

@@ -35,6 +35,7 @@ import type { RunnerKind } from '../types.js';
 import { runClaudeTurn } from '../backends/claude/backend.js';
 import { defaultRunHostAgent, type RunHostAgent } from './run-automation-host-agent.js';
 import { agentSpawnEnv } from '../spawn-env.js';
+import { lowPriorityCommand } from '../low-priority.js';
 
 export interface LiveDispatchOptions {
   /** The automation app directory — also the CLI's cwd. */
@@ -244,7 +245,8 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
     }
     args.push(effectivePrompt);
 
-    const result = await collectProcess(spawn('codex', args, spawnOpts));
+    const command = lowPriorityCommand('codex', args);
+    const result = await collectProcess(spawn(command.bin, command.args, spawnOpts));
     if (!result.ok) {
       const detail = result.stderr.trim() || result.stdout.trim();
       throw new Error(`ctx.agent CLI failed: ${detail.slice(0, 2000)}`);

@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { AddressInfo } from 'node:net';
+import { tuneGatewayHttpServer } from '@centraid/app-engine';
 
 const TYPES: Record<string, string> = {
   '.css': 'text/css; charset=utf-8',
@@ -83,6 +84,13 @@ function stampShellNonce(bytes: Buffer, nonce: string): Buffer {
   return Buffer.from(html, 'utf8');
 }
 
+function acceptedSidecar(req: http.IncomingMessage): '.br' | '.gz' | undefined {
+  const accepted = String(req.headers['accept-encoding'] ?? '');
+  if (/(?:^|,)\s*br(?:\s*;|\s*,|\s*$)/i.test(accepted)) return '.br';
+  if (/(?:^|,)\s*gzip(?:\s*;|\s*,|\s*$)/i.test(accepted)) return '.gz';
+  return undefined;
+}
+
 export async function startWebUiServer(options: WebUiServerOptions): Promise<WebUiServerHandle> {
   const host = options.host ?? '127.0.0.1';
   const server = http.createServer((req, res) => {
@@ -99,9 +107,20 @@ export async function startWebUiServer(options: WebUiServerOptions): Promise<Web
       const resolved = fileFor(options.rootDir, pathname);
       let bytes: Buffer;
       let served = resolved;
+      let contentEncoding: string | undefined;
       try {
         if (!resolved) throw new Error('outside root');
-        bytes = await fs.readFile(resolved);
+        const sidecar = path.extname(resolved) === '.html' ? undefined : acceptedSidecar(req);
+        if (sidecar) {
+          try {
+            bytes = await fs.readFile(`${resolved}${sidecar}`);
+            contentEncoding = sidecar === '.br' ? 'br' : 'gzip';
+          } catch {
+            bytes = await fs.readFile(resolved);
+          }
+        } else {
+          bytes = await fs.readFile(resolved);
+        }
       } catch {
         served = path.join(options.rootDir, 'index.html');
         try {
@@ -118,6 +137,10 @@ export async function startWebUiServer(options: WebUiServerOptions): Promise<Web
       res.setHeader('cache-control', cacheControlFor(options.rootDir, servedPath, extension));
       res.setHeader('x-content-type-options', 'nosniff');
       res.setHeader('referrer-policy', 'no-referrer');
+      if (contentEncoding) {
+        res.setHeader('content-encoding', contentEncoding);
+        res.setHeader('vary', 'Accept-Encoding');
+      }
       if (extension === '.html') {
         const scriptNonce = crypto.randomBytes(16).toString('base64');
         bytes = stampShellNonce(bytes, scriptNonce);
@@ -145,6 +168,7 @@ export async function startWebUiServer(options: WebUiServerOptions): Promise<Web
       res.end(bytes);
     })().catch(() => res.writeHead(500).end());
   });
+  tuneGatewayHttpServer(server);
 
   // Bind the requested port, but degrade gracefully on a collision. The daemon
   // derives the web port from its API port (`config.port + 1`); if some

@@ -12,7 +12,7 @@ import { deflateSync } from 'node:zlib';
 import jpegJs from 'jpeg-js';
 import { createImagePreviewCodec } from '../preview/codec.js';
 import { openVaultPlane, type VaultPlane } from '../serve/vault-plane.js';
-import { makeBlobRouteHandler } from './blob-routes.js';
+import { MAX_OPEN_RANGE_BYTES, makeBlobRouteHandler, parseRange } from './blob-routes.js';
 
 const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
 
@@ -25,6 +25,17 @@ const PNG_BYTES = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
   'base64',
 );
+
+test('open-ended byte ranges are clamped to one bounded streaming window', () => {
+  expect(parseRange('bytes=0-', MAX_OPEN_RANGE_BYTES * 3)).toEqual({
+    start: 0,
+    end: MAX_OPEN_RANGE_BYTES - 1,
+  });
+  expect(parseRange(`bytes=${MAX_OPEN_RANGE_BYTES}-`, MAX_OPEN_RANGE_BYTES * 3)).toEqual({
+    start: MAX_OPEN_RANGE_BYTES,
+    end: MAX_OPEN_RANGE_BYTES * 2 - 1,
+  });
+});
 
 /** A structurally valid one-page PDF with a real Flate-compressed content stream. */
 function compressedPdf(text: string): Buffer {
@@ -73,6 +84,7 @@ function compressedPdf(text: string): Buffer {
 
 async function fixture(
   previewCodec?: ReturnType<typeof createImagePreviewCodec>,
+  dataPlane?: { baseUrl: string; secret: string },
 ): Promise<{ base: string; plane: VaultPlane }> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), `blob-routes-${crypto.randomUUID()}-`));
   cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
@@ -83,7 +95,10 @@ async function fixture(
     ...(previewCodec ? { previewCodec } : {}),
   });
   cleanups.push(() => plane.stop());
-  const handler = makeBlobRouteHandler({ current: () => plane });
+  const handler = makeBlobRouteHandler(
+    { current: () => plane },
+    dataPlane ? { ...dataPlane, rootDir: dir } : undefined,
+  );
   const server = http.createServer((req, res) => {
     void handler(req, res).then((handled) => {
       if (!handled) {
@@ -165,12 +180,12 @@ test('raw upload → claim via core.add_document → serve with ETag/Range/304',
   expect(dl.headers.get('content-disposition')).toBe('attachment; filename="pixel.png"');
 });
 
-test('bare raw JPEG ingress publishes thumb, preview and inline phash/thumbhash backstops', async () => {
+test('bare raw JPEG ingress defers preview CPU to the bounded backstop sweep', async () => {
   const codec = createImagePreviewCodec();
   const { base, plane } = await fixture(codec);
   const jpeg = makeJpeg(18, 8);
-  const expectedPhash = codec.perceptualHash(jpeg, 'image/jpeg');
-  const expectedThumbhash = codec.thumbhash(jpeg, 'image/jpeg');
+  const expectedPhash = await codec.perceptualHash(jpeg, 'image/jpeg');
+  const expectedThumbhash = await codec.thumbhash(jpeg, 'image/jpeg');
 
   const response = await fetch(`${base}?filename=curl.jpg`, {
     method: 'POST',
@@ -186,6 +201,12 @@ test('bare raw JPEG ingress publishes thumb, preview and inline phash/thumbhash 
   });
   expect(outcome.status).toBe('executed');
   const output = (outcome as { output: { asset_id: string; content_id: string } }).output;
+  expect(
+    plane.db.vault
+      .prepare('SELECT COUNT(*) AS n FROM core_content_derivative WHERE content_id = ?')
+      .get(output.content_id),
+  ).toEqual({ n: 0 });
+  await plane.gateway.sweepBlobs(plane.ownerCredential);
   const derivatives = plane.db.vault
     .prepare(
       `SELECT variant, sha256, text_content FROM core_content_derivative

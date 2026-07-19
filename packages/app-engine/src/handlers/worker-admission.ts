@@ -9,8 +9,39 @@
  * either hangs or piles on more workers.
  */
 
+import { availableParallelism, totalmem } from 'node:os';
+
+export interface WorkerHostCapacity {
+  cores: number;
+  totalMemoryBytes: number;
+}
+
+function currentHostCapacity(): WorkerHostCapacity {
+  return { cores: availableParallelism(), totalMemoryBytes: totalmem() };
+}
+
+export function isConstrainedWorkerHost(host: WorkerHostCapacity = currentHostCapacity()): boolean {
+  return host.cores <= 4 || host.totalMemoryBytes <= 4 * 1024 ** 3;
+}
+
+/** Resolve the app-handler ceiling; explicit env always wins over host classification. */
+export function workerMaxConcurrentFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  host: WorkerHostCapacity = currentHostCapacity(),
+): number {
+  const resolvedProfile = env.CENTRAID_HARDWARE_PROFILE ?? env.CENTRAID_RESOLVED_HARDWARE_PROFILE;
+  const constrained =
+    resolvedProfile === 'constrained' ||
+    (resolvedProfile !== 'standard' && isConstrainedWorkerHost(host));
+  const fallback = constrained ? 2 : 8;
+  const raw = env.CENTRAID_WORKER_MAX_CONCURRENT;
+  if (raw === undefined || raw === '') return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 32) : fallback;
+}
+
 /** Concurrent app-handler workers allowed at once. */
-export const WORKER_MAX_CONCURRENT = 8;
+export const WORKER_MAX_CONCURRENT = workerMaxConcurrentFromEnv();
 /** Requests allowed to wait for a free slot before admission refuses. */
 export const WORKER_MAX_QUEUE = 16;
 /** Longest a queued request waits for a slot before it gives up. */
@@ -99,9 +130,15 @@ export class WorkerAdmission {
 }
 
 /** The one admission gate guarding every real worker spawn (`handler-runner.ts`'s default). */
-export const sharedWorkerAdmission = new WorkerAdmission();
+let sharedWorkerAdmissionInstance: WorkerAdmission | undefined;
+
+/** Lazily resolve the hardware profile after the gateway's boot fsync probe. */
+export function sharedWorkerAdmission(): WorkerAdmission {
+  sharedWorkerAdmissionInstance ??= new WorkerAdmission(workerMaxConcurrentFromEnv());
+  return sharedWorkerAdmissionInstance;
+}
 
 /** Live counts on the shared production admission gate (issue #351). */
 export function workerAdmissionStats(): { inFlight: number; queued: number } {
-  return sharedWorkerAdmission.stats();
+  return sharedWorkerAdmission().stats();
 }

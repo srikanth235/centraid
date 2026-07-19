@@ -77,11 +77,15 @@ export interface PreviewOutput {
  * so a skipped item simply renders a placeholder.
  */
 export interface PreviewCodec {
-  downscale(source: Buffer, mediaType: string, maxEdge: number): PreviewOutput | null;
+  downscale(
+    source: Buffer,
+    mediaType: string,
+    maxEdge: number,
+  ): PreviewOutput | null | Promise<PreviewOutput | null>;
   /** 64-bit dHash, encoded as 16 lowercase hexadecimal characters. */
-  perceptualHash(source: Buffer, mediaType: string): string | null;
+  perceptualHash(source: Buffer, mediaType: string): string | null | Promise<string | null>;
   /** ThumbHash bytes as unpadded standard base64, or null for an undecodable input. */
-  thumbhash(source: Buffer, mediaType: string): string | null;
+  thumbhash(source: Buffer, mediaType: string): string | null | Promise<string | null>;
 }
 
 /** What one backstop pass touched — folded into the sweep receipt. */
@@ -108,11 +112,11 @@ export interface IngressPreviewInput {
 }
 
 /** Generate capture-time rungs + dHash while complete plaintext is in hand. */
-export function contributeIngressPreviews(
+export async function contributeIngressPreviews(
   db: VaultDb,
   codec: PreviewCodec,
   input: IngressPreviewInput,
-): number {
+): Promise<number> {
   if (
     !input.mediaType.startsWith('image/') ||
     input.bytes.length === 0 ||
@@ -122,7 +126,7 @@ export function contributeIngressPreviews(
   }
   let generated = 0;
   for (const rung of PREVIEW_LADDER) {
-    const output = codec.downscale(input.bytes, input.mediaType, rung.maxEdge);
+    const output = await codec.downscale(input.bytes, input.mediaType, rung.maxEdge);
     if (!output) break;
     stageBlobBytes(db, {
       bytes: output.bytes,
@@ -136,7 +140,7 @@ export function contributeIngressPreviews(
   }
   if (!hasStagedOrClaimedVariant(db, input.sha256, 'phash')) {
     try {
-      const phash = codec.perceptualHash(input.bytes, input.mediaType);
+      const phash = await codec.perceptualHash(input.bytes, input.mediaType);
       if (phash) {
         stageBlobBytes(db, {
           bytes: Buffer.from(phash),
@@ -154,7 +158,7 @@ export function contributeIngressPreviews(
   }
   if (!hasStagedOrClaimedVariant(db, input.sha256, 'thumbhash')) {
     try {
-      const thumbhash = codec.thumbhash(input.bytes, input.mediaType);
+      const thumbhash = await codec.thumbhash(input.bytes, input.mediaType);
       if (thumbhash) {
         stageBlobBytes(db, {
           bytes: Buffer.from(thumbhash),
@@ -276,7 +280,7 @@ export async function backfillPreviews(
       }
       let unsupported = false;
       for (const rung of missing) {
-        const out = codec.downscale(bytes, item.media_type, rung.maxEdge);
+        const out = await codec.downscale(bytes, item.media_type, rung.maxEdge);
         if (!out) {
           // A codec that declines the tiny rung declines the medium too —
           // it's the same decode. Skip the whole item, count it once.
@@ -292,7 +296,7 @@ export async function backfillPreviews(
         result.generated += 1;
       }
       if (missingPhash) {
-        const phash = codec.perceptualHash(bytes, item.media_type);
+        const phash = await codec.perceptualHash(bytes, item.media_type);
         if (phash && !hasVariant(db, item.content_id, 'phash')) {
           stageBlobBytes(db, {
             bytes: Buffer.from(phash),
@@ -307,7 +311,7 @@ export async function backfillPreviews(
         }
       }
       if (missingThumbhash && !unsupported) {
-        const thumbhash = codec.thumbhash(bytes, item.media_type);
+        const thumbhash = await codec.thumbhash(bytes, item.media_type);
         if (thumbhash && !hasVariant(db, item.content_id, 'thumbhash')) {
           stageBlobBytes(db, {
             bytes: Buffer.from(thumbhash),

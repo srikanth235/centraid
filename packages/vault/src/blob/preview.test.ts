@@ -138,7 +138,7 @@ test('backstop stages both rungs for an image missing them, idempotent on re-run
   // Both derivative blobs actually landed in the CAS (so they replicate).
   expect(db.blobs.hasSync(rungs.thumb!)).toBe(true);
   expect(db.blobs.hasSync(rungs.preview!)).toBe(true);
-  const expectedPhash = stubCodec.perceptualHash(
+  const expectedPhash = await stubCodec.perceptualHash(
     Buffer.concat([PNG_BYTES, Buffer.alloc(1)]),
     'image/png',
   );
@@ -146,7 +146,7 @@ test('backstop stages both rungs for an image missing them, idempotent on re-run
   expect(mediaPhash(contentId)).toBe(expectedPhash);
   // The ThumbHash hole gets filled too (issue #419), inline like the phash.
   expect(first.thumbhashesGenerated).toBe(1);
-  const expectedThumbhash = stubCodec.thumbhash(
+  const expectedThumbhash = await stubCodec.thumbhash(
     Buffer.concat([PNG_BYTES, Buffer.alloc(1)]),
     'image/png',
   );

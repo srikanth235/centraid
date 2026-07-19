@@ -5,7 +5,7 @@ import type { AppRef } from '../types.js';
 import { appendLogs, type LogEntry } from '../data/log-store.js';
 import type { VaultBridge, VaultOp } from './vault-bridge.js';
 import { sharedWorkerAdmission, type WorkerAdmission } from './worker-admission.js';
-import { WorkerPool, workerPoolSizeFromEnv } from './worker-pool.js';
+import { WorkerPool, workerPoolSizeFromEnv, workerResourceLimitsFromEnv } from './worker-pool.js';
 
 function resolveWorkerFile(): string {
   // `here` is this module's dir (`src/handlers` → `dist/handlers` once built);
@@ -37,7 +37,11 @@ export const HANDLER_WORKER_FILE = WORKER_FILE;
 let sharedWorkerPoolInstance: WorkerPool | undefined;
 function sharedWorkerPool(): WorkerPool {
   if (!sharedWorkerPoolInstance) {
-    sharedWorkerPoolInstance = new WorkerPool(WORKER_FILE, workerPoolSizeFromEnv());
+    sharedWorkerPoolInstance = new WorkerPool(
+      WORKER_FILE,
+      workerPoolSizeFromEnv(),
+      workerResourceLimitsFromEnv(),
+    );
     sharedWorkerPoolInstance.prewarm();
   }
   return sharedWorkerPoolInstance;
@@ -90,7 +94,7 @@ export interface HandlerOutcome {
  * #286 phase 2).
  */
 export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcome> {
-  const admission = opts.admission ?? sharedWorkerAdmission;
+  const admission = opts.admission ?? sharedWorkerAdmission();
   // Admission gates the WORKER SPAWN itself (issue #351) — a saturated
   // gateway must fail fast here, before a single extra worker thread comes
   // into existence, not after.

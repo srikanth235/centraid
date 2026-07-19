@@ -14,9 +14,14 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { commandVault } from './vault-admin.ts';
 import { commandDevices, commandPair } from './device-admin.ts';
-import { makeDaemonDevicePlane, DEVICE_HEADER, DEVICE_PROOF_HEADER } from './endpoint-host.ts';
+import {
+  makeDaemonDevicePlane,
+  watchEnrollmentRevocations,
+  DEVICE_HEADER,
+  DEVICE_PROOF_HEADER,
+} from './endpoint-host.ts';
 import { daemonLayoutFor } from './paths.ts';
-import { openVaultRegistry, type VaultRegistry } from '../serve/vault-registry.ts';
+import { openVaultRegistry } from '../serve/vault-registry.ts';
 import { EnrollmentStore } from '../serve/enrollment-store.ts';
 import { DeviceTokenStore } from '../serve/device-token-store.ts';
 import { PairingTicketStore } from '../serve/pairing-store.ts';
@@ -358,17 +363,16 @@ test('pair --json failure emits {ok:false,error,message} on stdout, then still f
 test('device plane: deviceKeyFor trusts only the in-process proof header', async () => {
   const layout = daemonLayoutFor(dataDir);
   await fs.mkdir(dataDir, { recursive: true });
-  let registry: VaultRegistry | undefined;
-  const plane = makeDaemonDevicePlane({ layout, vaults: () => registry, logger: silentLogger });
 
   // Enroll a device out of band, then check the deviceAccess resolution.
-  registry = openVaultRegistry({ rootDir: layout.vaultDir, logger: silentLogger });
+  const registry = openVaultRegistry({ rootDir: layout.vaultDir, logger: silentLogger });
   const vaultId = registry.defaultVaultId();
   EnrollmentStore.open(layout.devicesFile).enroll({
     endpointId: 'ep-known',
     vaultId,
     label: 'known',
   });
+  const plane = makeDaemonDevicePlane({ layout, vaults: () => registry, logger: silentLogger });
 
   // No headers → not a device transport (shared bearer).
   const bare = { headers: {} } as unknown as http.IncomingMessage;
@@ -385,6 +389,31 @@ test('device plane: deviceKeyFor trusts only the in-process proof header', async
   expect(plane.deviceAccess.vaultsFor('ep-known')).toEqual([vaultId]);
   expect(plane.deviceAccess.vaultsFor('ep-nobody')).toEqual([]);
   registry.stop();
+});
+
+test('device plane: SSH CLI revocation closes the native relay endpoint', async () => {
+  const layout = daemonLayoutFor(dataDir);
+  await fs.mkdir(dataDir, { recursive: true });
+  const registry = openVaultRegistry({ rootDir: layout.vaultDir, logger: silentLogger });
+  const vaultId = registry.defaultVaultId();
+  const enrollments = EnrollmentStore.open(layout.devicesFile);
+  enrollments.enroll({ endpointId: 'ep-live-cli', vaultId, label: 'live CLI device' });
+  const revoked: string[] = [];
+  const watcher = watchEnrollmentRevocations({
+    file: layout.devicesFile,
+    enrollments,
+    onRevoked: (endpointId) => {
+      revoked.push(endpointId);
+    },
+    logger: silentLogger,
+  });
+  try {
+    await capture(() => commandDevices(['revoke', '--data-dir', dataDir, 'ep-live-cli'], fail));
+    await vi.waitFor(() => expect(revoked).toEqual(['ep-live-cli']), { timeout: 10_000 });
+  } finally {
+    await watcher.close();
+    registry.stop();
+  }
 });
 
 test('device plane: an unenrolled endpoint start still writes endpoint identity', async () => {

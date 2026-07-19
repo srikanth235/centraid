@@ -189,12 +189,14 @@ test('confirmed recovery kit: create proceeds without force; list/get/patch/dele
   const storageConnections = await openStorageConnectionStore(dir);
   const recoveryKit = new RecoveryKitStateStore(dir);
   await recoveryKit.confirm();
+  const onConnectionsChanged = vi.fn(async () => undefined);
   const base = await startHandlerServer(
     makeStorageRouteHandler({
       storageConnections,
       recoveryKit,
       vaults: fakeVaults(),
       storageUsage: new StorageUsagePoller({ storageConnections }),
+      onConnectionsChanged,
     }),
   );
 
@@ -236,6 +238,7 @@ test('confirmed recovery kit: create proceeds without force; list/get/patch/dele
     `${base}/centraid/_gateway/storage/connections/${connection.id}`,
   );
   expect(goneAfterDelete.status).toBe(404);
+  expect(onConnectionsChanged).toHaveBeenCalledTimes(3);
 });
 
 test('DELETE an unknown connection 404s', async () => {

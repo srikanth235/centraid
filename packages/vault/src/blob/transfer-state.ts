@@ -103,14 +103,18 @@ export class BlobTransferState {
     );
   }
 
-  recordAppend(sessionId: string, receivedBytes: number, hashState: SerializableSha256State): void {
+  recordAppend(
+    sessionId: string,
+    receivedBytes: number,
+    hashState?: SerializableSha256State,
+  ): void {
     this.db
       .prepare(
         `UPDATE blob_ingress_session
             SET received_bytes = ?, hash_state_json = ?, updated_at = ?
           WHERE session_id = ? AND state = 'open'`,
       )
-      .run(receivedBytes, JSON.stringify(hashState), nowIso(), sessionId);
+      .run(receivedBytes, hashState ? JSON.stringify(hashState) : null, nowIso(), sessionId);
   }
 
   setSessionState(sessionId: string, state: IngressSessionRow['state']): void {

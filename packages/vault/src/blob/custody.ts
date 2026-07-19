@@ -1,23 +1,17 @@
-// Blob custody facade (issue #296, cache model reworked in #405 §3/§4): the
-// two tiers behind one surface.
+// Blob custody facade (#296, cache reworked in #405): two tiers, one surface.
 //
-//   local  — a LocalBlobStore that is the spool AND a BOUNDED cache (issue #405
-//            §3 — it was "ALWAYS present and always complete" before the bounded
-//            storage tier). It no longer mirrors the whole vault: tinies are
-//            pinned unevictable, replicated mediums/originals evict LRU under
-//            budget, and a `remote-only` blob reads through on demand (`open`)
-//            and re-promotes. The eviction path may NEVER delete the last local
-//            copy of a `local-only` (un-replicated) blob — cache pressure
-//            BACKPRESSURES ingest, it never loses bytes (evict-only-if-
-//            replicated, enforced in the custody layer / cache.ts primitive).
+//   local  — the spool and bounded cache (#405). It no longer mirrors the whole
+//            vault: tinies are pinned unevictable, replicated objects evict LRU
+//            under budget, and a `remote-only` blob reads through on demand
+//            and re-promotes. Eviction never removes the last local-only copy;
+//            cache pressure backpressures ingest instead.
 //   remote — an optional BlobStore (S3-compatible) that REPLICATES the local
 //            tier for durability. Replication is a sweep, never in-line with
 //            a write; remote deletes are reconciliation's job (list-diff), so
 //            a crash between a local purge and a remote delete costs an
 //            orphan object, never a dangling row.
 //
-// The bounded cache is coordinated by an optional `BlobCache` (blob/cache.ts):
-// budget, spool accounting, the replication index, LRU tracking, eviction,
+// Optional `BlobCache` coordinates budget, replication, LRU, eviction,
 // metrics and the QoS gate. With one wired (db.ts), custody consults the
 // replication INDEX instead of a live `remote.list()` for `statusFor`/
 // `replicate` (§4 — no O(all-objects) listing per sweep) and runs the ingest
@@ -34,6 +28,8 @@ import { resolveRange, sha256OfBytes, type BlobRange, type BlobStore } from './s
 import { sealBlob, sealBlobStream, unsealBlob } from './seal.js';
 import { exportLocalTier } from './custody-export.js';
 import { fetchFrameDirectory, fetchRemoteRange, fetchRemoteWhole } from './custody-read.js';
+import { localBlobPath, openLocalBlobStream, readLocalBlob } from './custody-local-read.js';
+import { createRemoteBlobStream } from './custody-remote-stream.js';
 import { reconcileCustody } from './custody-reconcile.js';
 import { resolveWriteStore } from './store-routing.js';
 import type { ReplicaStore } from './replica-index.js';
@@ -159,28 +155,33 @@ export class BlobCustody {
     return this.local.hasSync(sha);
   }
 
-  getSync(sha: string, range?: BlobRange): Buffer | null {
-    const hit = this.local.getSync(sha, range);
-    if (hit && this.cache) {
-      this.cache.onLocalHit(hit.length);
-      this.cache.access.touch(sha);
-    }
-    return hit;
+  localPathSync(sha: string): string | null {
+    return localBlobPath(this.local, sha);
   }
-
+  getSync(sha: string, range?: BlobRange): Buffer | null {
+    return readLocalBlob(this.local, this.cache, sha, range);
+  }
   statSync(sha: string): { size: number } | null {
     return this.local.statSync(sha);
   }
+  openReadStreamSync(sha: string, range?: BlobRange) {
+    return openLocalBlobStream(this.local, this.cache, sha, range);
+  }
 
-  /**
-   * Local hit, else remote read-through (issue #405 §1/§4). Two shapes:
-   *  - RANGE on a SEALED remote: fetch the footer directory + ONLY the covering
-   *    frames, unseal those, serve the slice — never the whole object, and NOT
-   *    promoting (a partial read can't verify the whole-blob sha; per-frame
-   *    GCM+AAD is the integrity story). The directory fetch coalesces.
-   *  - Everything else: single-flight coalesced FULL read-through — one provider
-   *    GET, unseal whole, verify the sha, promote into local, then slice.
-   */
+  openRemoteReadStream(sha: string, size: number, range?: BlobRange) {
+    const remote = this.remoteTier();
+    if (!remote) return null;
+    return createRemoteBlobStream(
+      remote,
+      this.storeForRead(remote, sha),
+      sha,
+      size,
+      range,
+      this.cache,
+      this.local,
+    );
+  }
+
   async open(sha: string, range?: BlobRange): Promise<Buffer | null> {
     const localHit = this.local.getSync(sha, range);
     if (localHit) {

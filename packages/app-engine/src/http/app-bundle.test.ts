@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import path, { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { serveStatic, type ServeStaticOptions } from './static-server.js';
-import { clearBundleCaches } from './app-bundle.js';
+import { clearBundleCaches, findBundleByHash, prewarmAppAssets } from './app-bundle.js';
 
 interface MockRes {
   statusCode: number;
@@ -181,6 +181,19 @@ describe('live index.html — bundle rewrite + CSS inlining', () => {
 });
 
 describe('bundle serving — ETag, immutability, 304', () => {
+  it('prebuilds the bundle and both wire encodings before the first request', async () => {
+    const app = newApp();
+    const shared = newSharedDir();
+
+    await expect(prewarmAppAssets(app, shared)).resolves.toEqual({ bundles: 1, variants: 2 });
+
+    const html = (await serve(app, 'index.html', { sharedAssetsDir: shared })).body.toString();
+    const hash = BUNDLE_URL_RE.exec(html)![1]!;
+    const bundle = findBundleByHash(app, hash);
+    expect(bundle?.variants.get('br')?.length).toBeGreaterThan(0);
+    expect(bundle?.variants.get('gzip')?.length).toBeGreaterThan(0);
+  });
+
   it('serves the bundle with a sha256 ETag, immutable cache-control, and honors If-None-Match', async () => {
     const app = newApp();
     const shared = newSharedDir();

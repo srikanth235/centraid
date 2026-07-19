@@ -36,6 +36,17 @@ function tableNames(path: string): string[] {
 }
 
 describe('openJournalDb (the conversation-ledger band of the vault journal)', () => {
+  it('uses the bounded low-end read pragmas (#456 S1)', () => {
+    const db = openJournalDb(freshDbPath());
+    try {
+      expect(db.prepare('PRAGMA cache_size').get()).toEqual({ cache_size: -16000 });
+      expect(db.prepare('PRAGMA mmap_size').get()).toEqual({ mmap_size: 67_108_864 });
+      expect(db.prepare('PRAGMA temp_store').get()).toEqual({ temp_store: 2 });
+    } finally {
+      db.close();
+    }
+  });
+
   it('NEVER touches PRAGMA user_version — that belongs to the vault audit ladder', () => {
     // Fresh file: the ensure creates the ledger band and leaves the version 0.
     const path = freshDbPath();
@@ -86,6 +97,8 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
         .prepare(`SELECT name FROM sqlite_master WHERE type='trigger' ORDER BY name`)
         .all() as Array<{ name: string }>;
       expect(triggers.map((t) => t.name)).toEqual([
+        'conversation_item_count_ad',
+        'conversation_item_count_ai',
         'fts_conversation_conv_ad',
         'fts_conversation_conv_ai',
         'fts_conversation_conv_au',
@@ -253,6 +266,15 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
       // Incremental mode actually returned pages to the OS (freelist mode never
       // shrinks the file — this is the whole point of #438 step 0).
       expect(after).toBeLessThan(before);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('uses 8 KiB pages for fresh low-end databases (#456 S7)', () => {
+    const db = openJournalDb(freshDbPath());
+    try {
+      expect((db.prepare('PRAGMA page_size').get() as { page_size: number }).page_size).toBe(8192);
     } finally {
       db.close();
     }

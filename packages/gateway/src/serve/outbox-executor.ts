@@ -144,7 +144,7 @@ export class OutboxExecutor {
       // staleness is judged even when the caps would have deferred the item.
       const decidedAtMs = row.decided_at ? Date.parse(row.decided_at) : Number.NaN;
       if (Number.isFinite(decidedAtMs) && now - decidedAtMs > this.staleAfterMs) {
-        this.repark(
+        await this.repark(
           plane,
           row.item_id,
           `approval expired undrained after ${Math.round(this.staleAfterMs / 3_600_000)}h — approve again to send`,
@@ -183,8 +183,8 @@ export class OutboxExecutor {
   }
 
   /** Park a stale approval back to pending via the typed command (one door). */
-  private repark(plane: VaultPlane, itemId: string, note: string): void {
-    const outcome = plane.gateway.invoke(plane.ownerCredential, {
+  private async repark(plane: VaultPlane, itemId: string, note: string): Promise<void> {
+    const outcome = await plane.invoke(plane.ownerCredential, {
       command: 'outbox.repark',
       input: { item_id: itemId, note },
     });
@@ -214,7 +214,7 @@ export class OutboxExecutor {
     } catch (err) {
       // Structural refusals (bad request row, host outside the pin) are
       // terminal: waiting will not move the pin.
-      this.recordResult(plane, row.item_id, 'failed', undefined, errText(err, auth));
+      await this.recordResult(plane, row.item_id, 'failed', undefined, errText(err, auth));
       return 'failed';
     }
     let refreshed = false;
@@ -260,7 +260,7 @@ export class OutboxExecutor {
         return 'deferred';
       }
       const disposition = response.status < 300 ? 'sent' : 'failed';
-      this.recordResult(
+      await this.recordResult(
         plane,
         row.item_id,
         disposition,
@@ -292,14 +292,14 @@ export class OutboxExecutor {
     return auth.limit ? auth.limit(run) : run();
   }
 
-  private recordResult(
+  private async recordResult(
     plane: VaultPlane,
     itemId: string,
     disposition: 'sent' | 'failed',
     statusCode?: number,
     detail?: string,
-  ): void {
-    const outcome = plane.gateway.invoke(plane.ownerCredential, {
+  ): Promise<void> {
+    const outcome = await plane.invoke(plane.ownerCredential, {
       command: 'outbox.record_result',
       input: {
         item_id: itemId,

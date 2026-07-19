@@ -23,6 +23,7 @@ import {
   writeSync,
 } from 'node:fs';
 import path from 'node:path';
+import type { Readable } from 'node:stream';
 import { randomBytes } from 'node:crypto';
 import { asVaultDiskFullError } from '../errors.js';
 import { assertSha, resolveRange, type BlobRange, type BlobStat, type BlobStore } from './store.js';
@@ -43,6 +44,8 @@ export interface LocalBlobStore extends BlobStore {
    * memory stores may read it for test parity. Returns false on a dedup hit.
    */
   adoptTempSync?(sha256: string, tempPath: string): boolean;
+  /** Allocate a same-filesystem temp path for a bounded remote promotion. */
+  promotionTempPathSync?(sha256: string): string;
   /**
    * Open a large blob for streaming (issue #367 §C8) instead of reading it
    * whole into memory — the replication path uses this for anything over
@@ -50,7 +53,12 @@ export interface LocalBlobStore extends BlobStore {
    * (e.g. `MemoryBlobStore`) or the blob is absent; callers fall back to
    * `getSync`.
    */
-  openReadStreamSync?(sha256: string): { stream: NodeJS.ReadableStream; size: number } | null;
+  openReadStreamSync?(
+    sha256: string,
+    range?: BlobRange,
+  ): { stream: Readable; size: number; range: { start: number; end: number } } | null;
+  /** Local path for an authorized X-Sendfile-style native handoff. */
+  localPathSync?(sha256: string): string | null;
 }
 
 export class FsBlobStore implements LocalBlobStore {
@@ -152,10 +160,24 @@ export class FsBlobStore implements LocalBlobStore {
     }
   }
 
-  openReadStreamSync(sha: string): { stream: NodeJS.ReadableStream; size: number } | null {
+  openReadStreamSync(
+    sha: string,
+    range?: BlobRange,
+  ): { stream: Readable; size: number; range: { start: number; end: number } } | null {
     const stat = this.statSync(sha);
     if (!stat) return null;
-    return { stream: createReadStream(this.fileFor(sha)), size: stat.size };
+    const resolved = resolveRange(stat.size, range);
+    if (!resolved) return null;
+    return {
+      stream: createReadStream(this.fileFor(sha), resolved),
+      size: stat.size,
+      range: resolved,
+    };
+  }
+
+  localPathSync(sha: string): string | null {
+    const file = this.fileFor(sha);
+    return existsSync(file) ? file : null;
   }
 
   adoptTempSync(sha: string, tempPath: string): boolean {
@@ -171,6 +193,12 @@ export class FsBlobStore implements LocalBlobStore {
     } catch (err) {
       throw asVaultDiskFullError('blob CAS temp adoption', err);
     }
+  }
+
+  promotionTempPathSync(sha: string): string {
+    const file = this.fileFor(sha);
+    mkdirSync(path.dirname(file), { recursive: true });
+    return `${file}.${randomBytes(6).toString('hex')}.read-through.tmp`;
   }
 
   put(sha: string, bytes: Buffer): Promise<void> {

@@ -58,7 +58,7 @@ test.skipIf(process.platform !== 'darwin')(
 
     const before = freeBytes(root);
     const dst = path.join(root, 'base.db');
-    cloneDbFile(src, dst);
+    expect(cloneDbFile(src, dst)).toBe(true);
     const consumed = before - freeBytes(root);
 
     // The clone must be a complete, independent file...
@@ -75,9 +75,10 @@ test('the clone is byte-identical to the source, reflink or not', () => {
   writeFileSync(src, bytes);
 
   const dst = path.join(root, 'base.db');
-  cloneDbFile(src, dst);
+  const reflinked = cloneDbFile(src, dst);
 
   // Correctness of the copy is platform-independent; only its COST is not.
   expect(statSync(dst).size).toBe(bytes.length);
   expect(Buffer.compare(Buffer.from(bytes), readFileSync(dst))).toBe(0);
+  expect(typeof reflinked).toBe('boolean');
 });

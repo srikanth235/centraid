@@ -5,6 +5,7 @@
 // limit while sharing the stage-vs-publish fork and error mapping.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import path from 'node:path';
 import { AppScaffoldError } from '@centraid/blueprints';
 import { ExtSpecError } from '@centraid/vault';
 import { ManifestError } from '@centraid/automation';
@@ -36,6 +37,8 @@ export interface LifecycleRouteOptions {
   /** Reconcile the gateway's in-process cron scheduler after a publish
    *  changed the live set (issue #149/#150). */
   reconcile: () => void;
+  /** Bundle + precompress the newly-live app before publish returns. */
+  preparePublishedApp?: (appId: string, appDir: string) => Promise<void>;
   /**
    * The vault plane's ext-band operations (issue #286 phase 2). Injected
    * so a lifecycle publish applies the staged app's declared extension
@@ -193,6 +196,7 @@ export async function publishAndReconcile(
       : {}),
   });
   await opts.ensureRegistered(input.appId);
+  await opts.preparePublishedApp?.(input.appId, path.join(opts.codeAppsDir(), input.appId));
   opts.reconcile();
   if (input.ephemeralSession) await opts.store.closeSession(input.sessionId);
 }

@@ -41,10 +41,12 @@ import { DEFAULT_PURPOSE, GatewayError } from './types.js';
 import { readDurableParkedDenial, readDurableParkedPayload } from '../replica/parked.js';
 import {
   finalizeReplicaInvocationCommit,
+  finalizeOrdinaryInvocationCommit,
   readReplicaInvocationCommit,
   recordReplicaInvocationCommitInTransaction,
   type ReplicaInvocationAudit,
 } from '../replica/invocation-commits.js';
+import { notifyReplicaCommit } from '../replica/doorbell.js';
 
 /**
  * A registered command as the gateway executes it: the handler plus the
@@ -56,6 +58,36 @@ export interface RegisteredCommand {
   sealedInput: readonly string[];
   unseals: readonly string[];
   transcriptSensitive: boolean;
+}
+
+interface InvocationTransaction {
+  savepoint: string | null;
+  open: boolean;
+}
+
+function beginInvocationTransaction(db: DatabaseSync): InvocationTransaction {
+  if (db.isTransaction) {
+    db.exec('SAVEPOINT centraid_invocation');
+    return { savepoint: 'centraid_invocation', open: true };
+  }
+  db.exec('BEGIN');
+  return { savepoint: null, open: true };
+}
+
+function commitInvocationTransaction(db: DatabaseSync, transaction: InvocationTransaction): void {
+  db.exec(transaction.savepoint ? `RELEASE ${transaction.savepoint}` : 'COMMIT');
+  transaction.open = false;
+}
+
+function rollbackInvocationTransaction(db: DatabaseSync, transaction: InvocationTransaction): void {
+  if (!transaction.open) return;
+  if (transaction.savepoint) {
+    db.exec(`ROLLBACK TO ${transaction.savepoint}`);
+    db.exec(`RELEASE ${transaction.savepoint}`);
+  } else {
+    db.exec('ROLLBACK');
+  }
+  transaction.open = false;
 }
 
 // §10 S4: polymorphic (type, id) pairs that declarative FKs cannot express.
@@ -307,7 +339,11 @@ function receiptOutput(journal: DatabaseSync, receiptId: string | null): unknown
 }
 
 /** Idempotent replay (§10 S4): a re-sent invocation id never double-writes. */
-export function replayInvocation(db: VaultDb, invocationId: string): InvokeOutcome | null {
+export function replayInvocation(
+  db: VaultDb,
+  invocationId: string,
+  options: { deferCommitSettlement?: boolean } = {},
+): InvokeOutcome | null {
   const denied = readDurableParkedDenial(db, invocationId);
   if (denied) return { status: 'denied', ...denied };
   // Canonical commit proof takes precedence over journal status. It carries
@@ -316,16 +352,14 @@ export function replayInvocation(db: VaultDb, invocationId: string): InvokeOutco
   // ordinary online invocations preserve their established receipt replay.
   const committed = readReplicaInvocationCommit(db.vault, invocationId);
   if (committed) {
-    const finalized = finalizeReplicaInvocationCommit(db, invocationId);
+    const finalized = committed.intentId
+      ? finalizeReplicaInvocationCommit(db, invocationId, {
+          deferSettlement: options.deferCommitSettlement,
+        })
+      : finalizeOrdinaryInvocationCommit(db, invocationId, {
+          deferSettlement: options.deferCommitSettlement,
+        });
     const output = receiptOutput(db.journal, finalized.receiptId);
-    if (!committed.intentId) {
-      db.vault
-        .prepare(
-          `DELETE FROM replica_invocation_commit
-            WHERE invocation_id = ? AND journal_finalized_at IS NOT NULL`,
-        )
-        .run(invocationId);
-    }
     return {
       status: 'replayed',
       invocationId,
@@ -384,6 +418,7 @@ export function runContractAndExecute(
   invocationId: string,
   confirmation?: Record<string, unknown>,
   onProvenanceCommitted?: (entityTypes: readonly string[]) => void,
+  options: { deferCommitSettlement?: boolean; deferReplicaNotify?: boolean } = {},
 ): InvokeOutcome {
   // The purpose that applies (issue #306 decision 4) — journaled even when
   // the caller declared none.
@@ -527,9 +562,7 @@ export function runContractAndExecute(
   let output!: Record<string, unknown>;
   let audit!: ReplicaInvocationAudit;
   let postResults: ReturnType<typeof evaluateConditions> = [];
-  let vaultTransactionOpen = false;
-  db.vault.exec('BEGIN');
-  vaultTransactionOpen = true;
+  const vaultTransaction = beginInvocationTransaction(db.vault);
   try {
     output = handler(ctx);
     // §10 S4: polymorphic refs validated before the transaction may commit.
@@ -546,8 +579,7 @@ export function runContractAndExecute(
     postResults = evaluateConditions(db.vault, postSpecs, { ...request.input, ...output });
     const failedPost = postResults.find((r) => !r.passed);
     if (failedPost) {
-      db.vault.exec('ROLLBACK');
-      vaultTransactionOpen = false;
+      rollbackInvocationTransaction(db.vault, vaultTransaction);
       for (const r of postResults)
         writeCheck(db.journal, invocationId, 'post', r.predicate, r.passed, r.observed);
       setInvocationStatus(db, invocationId, 'rolled_back');
@@ -636,10 +668,10 @@ export function runContractAndExecute(
       audit,
       committedAt: ctx.now,
     });
-    db.vault.exec('COMMIT');
-    vaultTransactionOpen = false;
+    commitInvocationTransaction(db.vault, vaultTransaction);
+    if (!options.deferReplicaNotify) notifyReplicaCommit(db.vault);
   } catch (err) {
-    if (vaultTransactionOpen) db.vault.exec('ROLLBACK');
+    rollbackInvocationTransaction(db.vault, vaultTransaction);
     setInvocationStatus(db, invocationId, 'failed');
     // A handler (or SQLite constraint message) that echoes its input would
     // put a submitted secret into the journal and the HTTP error — scrub
@@ -666,24 +698,22 @@ export function runContractAndExecute(
   // Everything after the canonical COMMIT is one idempotent journal
   // transaction. If it aborts, the marker survives and replay repairs it
   // before returning; the command handler is never re-entered.
-  const finalized = finalizeReplicaInvocationCommit(db, invocationId);
-  // The doorbell is strictly post-journal-commit: `finalizeReplicaInvocationCommit`
-  // has made every provenance row readable on journal.db before the hint can
-  // ask a data-trigger cursor to look. It is intentionally best-effort — a
-  // thrown host callback must never turn a committed vault write into an
-  // apparent failure; the cron poll remains the correctness backstop.
+  const finalized = request.intentId
+    ? finalizeReplicaInvocationCommit(db, invocationId, {
+        deferSettlement: options.deferCommitSettlement,
+      })
+    : finalizeOrdinaryInvocationCommit(db, invocationId, {
+        deferSettlement: options.deferCommitSettlement,
+      });
+  // The doorbell is strictly post-journal-commit: the finalize above has made
+  // every provenance row readable on journal.db before the hint can ask a
+  // data-trigger cursor to look. It is intentionally best-effort — a thrown
+  // host callback must never turn a committed vault write into an apparent
+  // failure; the cron poll remains the correctness backstop.
   try {
     onProvenanceCommitted?.([...new Set(writes.map((write) => write.entityType))]);
   } catch {
     // Hint only; the persisted cursor and poll backstop own correctness.
-  }
-  if (!request.intentId) {
-    db.vault
-      .prepare(
-        `DELETE FROM replica_invocation_commit
-          WHERE invocation_id = ? AND journal_finalized_at IS NOT NULL`,
-      )
-      .run(invocationId);
   }
   return { status: 'executed', invocationId, receiptId: finalized.receiptId, output };
 }

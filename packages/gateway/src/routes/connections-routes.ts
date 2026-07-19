@@ -53,13 +53,13 @@ function listConnections(plane: VaultPlane): Record<string, unknown>[] {
   }));
 }
 
-function invokeAsOwner(
+async function invokeAsOwner(
   plane: VaultPlane,
   res: ServerResponse,
   command: string,
   input: Record<string, unknown>,
-): void {
-  const outcome = plane.gateway.invoke(plane.ownerCredential, {
+): Promise<void> {
+  const outcome = await plane.invoke(plane.ownerCredential, {
     command,
     input,
     purpose: 'dpv:ServiceProvision',
@@ -164,7 +164,7 @@ export function makeConnectionsRouteHandler(
         sendJson(res, 400, { error: 'body must be JSON' });
         return true;
       }
-      invokeAsOwner(plane, res, 'sync.configure_credential', body);
+      await invokeAsOwner(plane, res, 'sync.configure_credential', body);
       options.onConnectionChanged?.();
       return true;
     }
@@ -178,7 +178,7 @@ export function makeConnectionsRouteHandler(
         sendJson(res, 400, { error: 'body must carry {status}' });
         return true;
       }
-      invokeAsOwner(plane, res, 'sync.set_connection_status', {
+      await invokeAsOwner(plane, res, 'sync.set_connection_status', {
         connection_id: segments[0],
         status: body.status,
         ...(body.note ? { note: body.note } : {}),
@@ -199,7 +199,7 @@ export function makeConnectionsRouteHandler(
         sendJson(res, 404, { error: `no such connection ${connectionId}` });
         return true;
       }
-      const outcome = plane.gateway.invoke(plane.ownerCredential, {
+      const outcome = await plane.invoke(plane.ownerCredential, {
         command: 'sync.remove_connection',
         input: { connection_id: connectionId },
         purpose: 'dpv:ServiceProvision',

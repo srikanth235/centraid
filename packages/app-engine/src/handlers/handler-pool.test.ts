@@ -9,7 +9,13 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { runHandler, HANDLER_WORKER_FILE } from './handler-runner.js';
-import { WorkerPool, workerPoolSizeFromEnv, DEFAULT_WORKER_POOL_SIZE } from './worker-pool.js';
+import {
+  WorkerPool,
+  workerPoolSizeFromEnv,
+  workerResourceLimitsFromEnv,
+  DEFAULT_WORKER_POOL_SIZE,
+} from './worker-pool.js';
+import { workerMaxConcurrentFromEnv } from './worker-admission.js';
 
 let appDir: string;
 let pool: WorkerPool;
@@ -190,13 +196,46 @@ test('a worker that crashes mid-run leaves the pool usable for the next run', as
 }, 10_000);
 
 test('workerPoolSizeFromEnv clamps and defaults sanely', () => {
-  expect(workerPoolSizeFromEnv({})).toBe(DEFAULT_WORKER_POOL_SIZE);
-  expect(workerPoolSizeFromEnv({ CENTRAID_WORKER_POOL_SIZE: '' })).toBe(DEFAULT_WORKER_POOL_SIZE);
+  const standard = { CENTRAID_RESOLVED_HARDWARE_PROFILE: 'standard' };
+  expect(workerPoolSizeFromEnv(standard)).toBe(DEFAULT_WORKER_POOL_SIZE);
+  expect(workerPoolSizeFromEnv({ ...standard, CENTRAID_WORKER_POOL_SIZE: '' })).toBe(
+    DEFAULT_WORKER_POOL_SIZE,
+  );
+  expect(workerPoolSizeFromEnv({ CENTRAID_RESOLVED_HARDWARE_PROFILE: 'constrained' })).toBe(0);
   expect(workerPoolSizeFromEnv({ CENTRAID_WORKER_POOL_SIZE: '0' })).toBe(0);
   expect(workerPoolSizeFromEnv({ CENTRAID_WORKER_POOL_SIZE: '3' })).toBe(3);
   expect(workerPoolSizeFromEnv({ CENTRAID_WORKER_POOL_SIZE: '999' })).toBe(8);
-  expect(workerPoolSizeFromEnv({ CENTRAID_WORKER_POOL_SIZE: 'nonsense' })).toBe(
+  expect(workerPoolSizeFromEnv({ ...standard, CENTRAID_WORKER_POOL_SIZE: 'nonsense' })).toBe(
     DEFAULT_WORKER_POOL_SIZE,
   );
-  expect(workerPoolSizeFromEnv({ CENTRAID_WORKER_POOL_SIZE: '-2' })).toBe(DEFAULT_WORKER_POOL_SIZE);
+  expect(workerPoolSizeFromEnv({ ...standard, CENTRAID_WORKER_POOL_SIZE: '-2' })).toBe(
+    DEFAULT_WORKER_POOL_SIZE,
+  );
+});
+
+test('worker memory and concurrency ceilings default down on constrained hosts and remain tunable', () => {
+  const constrained = { cores: 4, totalMemoryBytes: 2 * 1024 ** 3 };
+  const large = { cores: 8, totalMemoryBytes: 16 * 1024 ** 3 };
+  expect(workerMaxConcurrentFromEnv({}, constrained)).toBe(2);
+  expect(workerMaxConcurrentFromEnv({}, large)).toBe(8);
+  expect(
+    workerMaxConcurrentFromEnv({ CENTRAID_RESOLVED_HARDWARE_PROFILE: 'constrained' }, large),
+  ).toBe(2);
+  expect(workerMaxConcurrentFromEnv({ CENTRAID_WORKER_MAX_CONCURRENT: '3' }, constrained)).toBe(3);
+  expect(workerResourceLimitsFromEnv({}, constrained)).toEqual({
+    maxOldGenerationSizeMb: 128,
+    maxYoungGenerationSizeMb: 16,
+  });
+  expect(
+    workerResourceLimitsFromEnv({ CENTRAID_RESOLVED_HARDWARE_PROFILE: 'constrained' }, large),
+  ).toEqual({ maxOldGenerationSizeMb: 128, maxYoungGenerationSizeMb: 16 });
+  expect(
+    workerResourceLimitsFromEnv(
+      {
+        CENTRAID_WORKER_MAX_OLD_GENERATION_MB: '96',
+        CENTRAID_WORKER_MAX_YOUNG_GENERATION_MB: '12',
+      },
+      constrained,
+    ),
+  ).toEqual({ maxOldGenerationSizeMb: 96, maxYoungGenerationSizeMb: 12 });
 });

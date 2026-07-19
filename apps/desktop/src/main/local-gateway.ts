@@ -1,4 +1,4 @@
-import { serve, type GatewayServeHandle } from '@centraid/gateway';
+import { createWasmImagePreviewCodec, serve, type GatewayServeHandle } from '@centraid/gateway';
 import { invalidatePreflightCache } from '@centraid/agent-runtime';
 import path from 'node:path';
 import {
@@ -128,6 +128,9 @@ export async function ensureLocalGateway(gatewayId: string): Promise<GatewayServ
     // need `remoteTemplatesUrl` here, which the persisted settings already carry.
     const settings = await loadPersistedSettings();
     const handle = await serve({
+      // Keep Electron independent of native-addon ABI packaging while still
+      // moving libvips work off the gateway JS implementation.
+      previewCodec: createWasmImagePreviewCodec(),
       paths: {
         // The vault is the unit (#280): apps, app code, transcripts, and
         // run history all live inside the active vault's directory under

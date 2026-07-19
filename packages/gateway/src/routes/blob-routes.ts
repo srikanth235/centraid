@@ -10,12 +10,10 @@
 //        staged_sha) is, and that is where the receipt mints.
 //
 //   GET  /centraid/_vault/blobs/<contentId>[?variant=thumb|preview]
-//        consent-checked, DERIVED-reachability-gated byte serving:
-//        Range (video scrubbing), ETag = sha256 (content-addressed ⇒
+//        consent + DERIVED-reachability gated: Range, ETag = sha256
 //        immutable caching), inline disposition — ?download=1 for saves.
-//        Transport auth is the outer Bearer + vault scope (#289); the
-//        desktop's auth-injector stamps both onto bare <img>/<video>
-//        subresource loads, so app tiles need no token plumbing.
+//        Outer Bearer + vault-scope auth (#289) is stamped onto <img>/<video>
+//        subresource loads without app-level token plumbing.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { AUTHED_DEVICE_HEADER } from '@centraid/app-engine';
@@ -29,9 +27,13 @@ import {
 import type { RouteHandler } from '../serve/build-gateway.js';
 import { vaultContext } from '../serve/vault-context.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
+import type { DataPlaneHttpOptions } from '../serve/data-plane-handoff.js';
 import { openBlobCustodyEvents } from './blob-custody-events.js';
+import { serveBlobRead } from './blob-read-route.js';
 import { sendBlobRouteError } from './blob-route-errors.js';
 import { readBody, readJson, sendJson } from './route-helpers.js';
+
+export { MAX_OPEN_RANGE_BYTES, parseRange } from './blob-response.js';
 
 const PREFIX = '/centraid/_vault/blobs';
 /** Upload cap — a phone video fits; a Takeout goes through the import door. */
@@ -83,23 +85,10 @@ function authenticatedDevice(req: IncomingMessage): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
-/** `bytes=<start>-<end?>` → a single satisfiable range, else null. */
-function parseRange(
-  header: string | undefined,
-  size: number,
-): { start: number; end: number } | null {
-  const m = header?.match(/^bytes=(\d*)-(\d*)$/);
-  if (!m) return null;
-  const [, rawStart, rawEnd] = m;
-  if (rawStart === '' && rawEnd === '') return null;
-  // Suffix form `bytes=-N`: the final N bytes.
-  const start = rawStart === '' ? Math.max(0, size - Number(rawEnd)) : Number(rawStart);
-  const end = rawStart === '' ? size - 1 : rawEnd === '' ? size - 1 : Number(rawEnd);
-  if (Number.isNaN(start) || Number.isNaN(end) || start > end || start >= size) return null;
-  return { start, end: Math.min(end, size - 1) };
-}
-
-export function makeBlobRouteHandler(vaults: Pick<VaultRegistry, 'current'>): RouteHandler {
+export function makeBlobRouteHandler(
+  vaults: Pick<VaultRegistry, 'current'>,
+  dataPlane?: DataPlaneHttpOptions,
+): RouteHandler {
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
     const url = new URL(req.url ?? '/', 'http://gateway.local');
     if (url.pathname !== PREFIX && !url.pathname.startsWith(`${PREFIX}/`)) return false;
@@ -246,7 +235,8 @@ export function makeBlobRouteHandler(vaults: Pick<VaultRegistry, 'current'>): Ro
           await plane.db.blobTransfers.abortIngress(begin.sessionId);
           return sendJson(res, 400, { error: 'empty upload' });
         }
-        return sendCommitted(res, await plane.db.blobTransfers.commitIngress(begin.sessionId));
+        const committed = await plane.db.blobTransfers.commitIngress(begin.sessionId);
+        return sendCommitted(res, committed);
       }
 
       if (method === 'HEAD' && segments[0] === '_sha' && segments.length === 2) {
@@ -430,52 +420,15 @@ export function makeBlobRouteHandler(vaults: Pick<VaultRegistry, 'current'>): Ro
         if (outcome.status !== 'ok') {
           return sendJson(res, 404, { error: outcome.status });
         }
-        const blob = outcome.blob;
-        const etag = `"${blob.sha256}"`;
-        res.setHeader('ETag', etag);
-        res.setHeader('Accept-Ranges', 'bytes');
-        // Content-addressed bytes never change under their id+variant —
-        // cache forever, privately (this is the owner's data).
-        res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
-        res.setHeader('Content-Type', blob.mediaType);
-        const disposition = url.searchParams.get('download') ? 'attachment' : 'inline';
-        const name = (blob.title ?? blob.sha256.slice(0, 12)).replace(/["\\\r\n]/g, '');
-        res.setHeader('Content-Disposition', `${disposition}; filename="${name}"`);
-        if (req.headers['if-none-match'] === etag) {
-          res.statusCode = 304;
-          res.end();
-          return true;
-        }
-        const range = parseRange(
-          typeof req.headers.range === 'string' ? req.headers.range : undefined,
-          blob.byteSize,
-        );
-        if (typeof req.headers.range === 'string' && !range) {
-          res.statusCode = 416;
-          res.setHeader('Content-Range', `bytes */${blob.byteSize}`);
-          res.end();
-          return true;
-        }
-        if (method === 'HEAD') {
-          res.statusCode = 200;
-          res.setHeader('Content-Length', String(blob.byteSize));
-          res.end();
-          return true;
-        }
-        const bytes = await plane.db.blobs.open(
-          blob.sha256,
-          range ? { start: range.start, end: range.end } : undefined,
-        );
-        if (!bytes) return sendJson(res, 404, { error: 'bytes missing from custody' });
-        if (range) {
-          res.statusCode = 206;
-          res.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${blob.byteSize}`);
-        } else {
-          res.statusCode = 200;
-        }
-        res.setHeader('Content-Length', String(bytes.length));
-        res.end(bytes);
-        return true;
+        return serveBlobRead({
+          req,
+          res,
+          method,
+          blob: outcome.blob,
+          custody: plane.db.blobs,
+          download: url.searchParams.has('download'),
+          ...(dataPlane ? { dataPlane } : {}),
+        });
       }
     } catch (error) {
       return sendBlobRouteError(res, error);

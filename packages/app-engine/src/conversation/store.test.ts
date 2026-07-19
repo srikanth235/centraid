@@ -68,7 +68,8 @@ describe('ConversationStore — conversations', () => {
   });
 
   it('listConversationsMeta returns chat/build threads with a transcript count', () => {
-    const store = newStore();
+    const provider = newProvider();
+    const store = new ConversationStore(provider);
     const c = store.createConversation({ kind: 'chat', userId: 'u1', appId: 'app' });
     store.ensureAutomationConversation('app/auto'); // automation — excluded from chat list
     store.insertTurn({
@@ -82,6 +83,21 @@ describe('ConversationStore — conversations', () => {
     expect(list.length).toBe(1);
     expect(list[0]?.id).toBe(c.id);
     expect(list[0]?.messageCount).toBe(1);
+
+    store.insertItem({
+      itemId: 'i2',
+      turnId: 't1',
+      ordinal: 1,
+      kind: 'step',
+      ok: true,
+      startedAt: 2,
+      endedAt: 3,
+      durationMs: 1,
+    });
+    expect(store.listConversationsMeta('u1')[0]?.messageCount).toBe(2);
+
+    provider().prepare(`DELETE FROM items WHERE id = ?`).run('i2');
+    expect(store.listConversationsMeta('u1')[0]?.messageCount).toBe(1);
     store.close();
   });
 });

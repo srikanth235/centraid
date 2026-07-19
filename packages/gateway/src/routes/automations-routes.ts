@@ -82,7 +82,10 @@ export interface AutomationsRouteOptions {
    * gateway's `RunEventBus`. Returns an unsubscribe. Omitted in hosts that
    * don't stream — the SSE endpoint then replays the ledger and closes.
    */
-  subscribeRunEvents?: (runId: string, listener: (ev: RunStreamEvent) => void) => () => void;
+  subscribeRunEvents?: (
+    runId: string,
+    listener: (ev: RunStreamEvent, serialized: string) => void,
+  ) => () => void;
   /** Overridable for tests; production callers take the shared default. */
   subscriberCap?: SseSubscriberCap;
 }
@@ -315,21 +318,21 @@ export function makeAutomationsRouteHandler(
     req.on('close', cleanup);
     res.on('error', cleanup);
 
-    const write = (ev: RunStreamEvent): void => {
+    const write = (ev: RunStreamEvent, serialized = JSON.stringify(ev)): void => {
       if (res.writableEnded) return;
       res.write(`event: ${ev.type}\n`);
-      res.write(`data: ${JSON.stringify(ev)}\n\n`);
+      res.write(`data: ${serialized}\n\n`);
     };
 
     // Buffer live events that land during replay; drain once the snapshot is
     // written. The client dedupes by ordinal, so a replay/live overlap on the
     // same node is harmless.
-    const queue: RunStreamEvent[] = [];
+    const queue: Array<readonly [RunStreamEvent, string]> = [];
     let replayed = false;
     const drain = (): void => {
       while (queue.length > 0) {
-        const ev = queue.shift()!;
-        write(ev);
+        const [ev, serialized] = queue.shift()!;
+        write(ev, serialized);
         if (ev.type === 'run.end') {
           cleanup();
           return;
@@ -337,8 +340,8 @@ export function makeAutomationsRouteHandler(
       }
     };
     unsub =
-      opts.subscribeRunEvents?.(runId, (ev) => {
-        queue.push(ev);
+      opts.subscribeRunEvents?.(runId, (ev, serialized) => {
+        queue.push([ev, serialized]);
         if (replayed) drain();
       }) ?? ((): void => undefined);
 
