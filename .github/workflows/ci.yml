@@ -130,30 +130,33 @@ jobs:
       - name: Generate test-health report
         if: always()
         run: bun run test:report
+      # Job Summary is local to the Actions run (PRs included). Public Pages
+      # HTML is main-only — see publish-report.
       - name: Write Job Summary
         if: always()
         env:
-          # Anticipated Pages URL (publish-report deploys the same slot).
-          TEST_REPORT_PUBLIC_URL: ${{ github.event_name == 'pull_request' && format('https://{0}.github.io/{1}/test-report/pr/{2}/', github.repository_owner, github.event.repository.name, github.event.pull_request.number) || format('https://{0}.github.io/{1}/test-report/main/', github.repository_owner, github.event.repository.name) }}
-        run: node scripts/test-report/write-job-summary.mjs --report-url "$TEST_REPORT_PUBLIC_URL"      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+          TEST_REPORT_PUBLIC_URL: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && format('https://{0}.github.io/{1}/test-report/main/', github.repository_owner, github.event.repository.name) || '' }}
+        run: node scripts/test-report/write-job-summary.mjs --report-url "$TEST_REPORT_PUBLIC_URL"
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         if: always()
         with:
           name: test-health-report
           path: dist/test-report/
           retention-days: 14
 
-  # Public HTML report + sticky PR comment (one-hop from the PR).
-  # Merges into the gh-pages tree so prior PR/nightly slots survive, then
-  # deploys the full site via GitHub Pages (workflow build type).
+  # Public HTML on GitHub Pages — main branch only (not PRs).
+  # Merges into the gh-pages tree so nightly slots survive, then deploys via
+  # GitHub Pages (workflow build type). Does not gate the required `check` job.
   publish-report:
     needs: [verify]
     if: >
       always() &&
       needs.verify.result != 'cancelled' &&
-      (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Serialize deploys so concurrent PRs do not wipe each other's slots.
+    # Serialize with nightly so deploys do not race on gh-pages.
     concurrency:
       group: github-pages-test-report
       cancel-in-progress: false
@@ -161,7 +164,6 @@ jobs:
       contents: write
       pages: write
       id-token: write
-      pull-requests: write
     environment:
       name: github-pages
       url: ${{ steps.slot.outputs.url }}
@@ -199,11 +201,7 @@ jobs:
         if: steps.has_report.outputs.ok == 'true'
         id: slot
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            SLOT="pr/${{ github.event.pull_request.number }}"
-          else
-            SLOT="main"
-          fi
+          SLOT="main"
           OWNER="${{ github.repository_owner }}"
           REPO="${{ github.event.repository.name }}"
           echo "slot=${SLOT}" >> "$GITHUB_OUTPUT"
@@ -234,54 +232,6 @@ jobs:
         if: steps.has_report.outputs.ok == 'true'
         id: deployment
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
-      - name: Build sticky PR comment body
-        if: steps.has_report.outputs.ok == 'true' && github.event_name == 'pull_request'
-        env:
-          TEST_REPORT_PUBLIC_URL: ${{ steps.slot.outputs.url }}
-        run: |
-          node --input-type=module <<'EOF'
-          import { readFile, writeFile } from 'node:fs/promises';
-          import { renderSummaryMarkdown } from './scripts/test-report/summary-markdown.mjs';
-          const summary = JSON.parse(await readFile('dist/test-report/summary.json', 'utf8'));
-          const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-          await writeFile(
-            'dist/test-report/pr-comment.md',
-            renderSummaryMarkdown(summary, {
-              reportUrl: process.env.TEST_REPORT_PUBLIC_URL,
-              runUrl,
-            }),
-          );
-          EOF
-      - name: Sticky PR comment with report link
-        if: steps.has_report.outputs.ok == 'true' && github.event_name == 'pull_request'
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
-        with:
-          script: |
-            const fs = require('fs');
-            const marker = '<!-- centraid-test-health-report -->';
-            const body = fs.readFileSync('dist/test-report/pr-comment.md', 'utf8');
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              per_page: 100,
-            });
-            const existing = comments.find((c) => c.body && c.body.includes(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body,
-              });
-            }
 
   # Required status check name stays `check` (historical branch protection /
   # PR rollup). Fails the workflow when either parallel lane fails or is

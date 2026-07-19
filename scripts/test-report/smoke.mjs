@@ -105,7 +105,7 @@ try {
   }
   const md = await readFile(summaryMd, 'utf8');
   if (!md.includes('Test health') || !md.includes('<!-- centraid-test-health-report -->')) {
-    throw new Error('summary.md missing sticky marker or title');
+    throw new Error('summary.md missing marker or title');
   }
   for (const owner of [
     'apps/desktop/tests/e2e/appview-templates-insights.spec.ts',
@@ -142,23 +142,37 @@ try {
     renderSummaryMarkdown,
   } = await import('./summary-markdown.mjs');
   if (
-    publicReportUrl({ owner: 'o', repo: 'r', slot: 'pr/1' }) !==
-    'https://o.github.io/r/test-report/pr/1/'
+    publicReportUrl({ owner: 'o', repo: 'r', slot: 'main' }) !==
+    'https://o.github.io/r/test-report/main/'
   ) {
     throw new Error('publicReportUrl shape wrong');
   }
   if (coverageScopesBelowFloor([{ scope: 'x', lines: 10, lineFloor: 20 }]).join() !== 'x') {
     throw new Error('coverageScopesBelowFloor missed under-floor scope');
   }
-  const sticky = renderSummaryMarkdown(
+  const summaryMdBody = renderSummaryMarkdown(
     { failed: 1, unhandledErrors: 0, cellsFailed: 0, cellsMissing: 0, coverageBelowFloor: [] },
     { reportUrl: 'https://example.test/' },
   );
-  if (!sticky.includes(REPORT_COMMENT_MARKER) || !sticky.includes('https://example.test/')) {
-    throw new Error('renderSummaryMarkdown missing sticky marker or URL');
+  if (
+    !summaryMdBody.includes(REPORT_COMMENT_MARKER) ||
+    !summaryMdBody.includes('https://example.test/')
+  ) {
+    throw new Error('renderSummaryMarkdown missing marker or URL');
+  }
+  const noPublicUrl = renderSummaryMarkdown({
+    failed: 0,
+    unhandledErrors: 0,
+    cellsFailed: 0,
+    cellsMissing: 0,
+    coverageBelowFloor: [],
+  });
+  if (!noPublicUrl.includes('main (and nightly)')) {
+    throw new Error('renderSummaryMarkdown should note main-only public HTML when no reportUrl');
   }
 
-  const badVitest = path.join(temp, 'vitest-unhandled.json');  await writeFile(
+  const badVitest = path.join(temp, 'vitest-unhandled.json');
+  await writeFile(
     badVitest,
     JSON.stringify({
       success: false,

@@ -5,10 +5,10 @@
  *   node scripts/test-report/prepare-pages-site.mjs \
  *     --report dist/test-report \
  *     --site site \
- *     --slot pr/465
+ *     --slot main
  *
  * Copies report files to site/test-report/<slot>/ and writes a small landing
- * page at site/index.html that links known slots (for one-hop browsing).
+ * page at site/index.html that links known slots (main + nightly).
  */
 import { cp, mkdir, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -92,7 +92,7 @@ function renderLanding(slots, { repo, generatedAt, highlight }) {
 <body>
   <h1>Centraid test health reports</h1>
   <p class="meta">${escapeHtml(repo)} · updated ${escapeHtml(generatedAt)}</p>
-  <p>Open a report below, or use the sticky link on the pull request.</p>
+  <p>Public reports publish from <code>main</code> and the nightly e2e workflow only.</p>
   <ul>
 ${items || '    <li><em>No reports published yet.</em></li>'}
   </ul>
@@ -119,4 +119,3 @@ function parseFlags(args) {
   }
   return result;
 }
-
