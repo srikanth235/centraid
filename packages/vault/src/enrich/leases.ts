@@ -53,8 +53,8 @@ interface WantedDerivative {
 
 interface LeaseRow {
   request_id: string;
-  entity_type: string;
-  entity_id: string | null;
+  target_type: string;
+  target_id: string | null;
   reason: EnrichmentLease['reason'];
   detail: string | null;
   required_capability: EnrichmentCapability;
@@ -86,8 +86,8 @@ function knownCapabilities(values: readonly EnrichmentCapability[]): EnrichmentC
 function leaseOf(row: LeaseRow): EnrichmentLease {
   return {
     requestId: row.request_id,
-    entityType: row.entity_type,
-    entityId: row.entity_id,
+    entityType: row.target_type,
+    entityId: row.target_id,
     reason: row.reason,
     detail: row.detail,
     capability: row.required_capability,
@@ -119,7 +119,7 @@ export function queueDeviceEnrichmentRequest(
   vault
     .prepare(
       `INSERT INTO enrich_request
-         (request_id, entity_type, entity_id, reason, detail, required_capability,
+         (request_id, target_type, target_id, reason, detail, required_capability,
           contribution_variant, requested_at, drained_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
     )
@@ -171,8 +171,8 @@ function missingDerivativeSql(wanted: WantedDerivative): string {
      WHERE d.content_id = core_content_item.content_id AND d.variant = '${wanted.variant}'
   ) AND NOT EXISTS (
     SELECT 1 FROM enrich_request r
-     WHERE r.entity_type = 'core.content_item'
-       AND r.entity_id = core_content_item.content_id
+     WHERE r.target_type = 'core.content_item'
+       AND r.target_id = core_content_item.content_id
        AND r.required_capability = '${wanted.capability}'
        AND r.contribution_variant = '${wanted.variant}' AND r.drained_at IS NULL
   ))`;
@@ -202,7 +202,7 @@ export function queueMissingDeviceEnrichmentRequests(
   );
   const hasOpenRequest = vault.prepare(
     `SELECT 1 AS present FROM enrich_request
-      WHERE entity_type = 'core.content_item' AND entity_id = ?
+      WHERE target_type = 'core.content_item' AND target_id = ?
         AND required_capability = ? AND contribution_variant = ?
         AND drained_at IS NULL`,
   );
@@ -294,7 +294,7 @@ export function leaseNextEnrichmentRequest(
            ORDER BY requested_at, request_id
            LIMIT 1
         )
-        RETURNING request_id, entity_type, entity_id, reason, detail,
+        RETURNING request_id, target_type, target_id, reason, detail,
           required_capability, contribution_variant, lease_device_id,
           lease_token, lease_expires_at, lease_attempts`,
     )
@@ -324,10 +324,10 @@ export function completeEnrichmentLease(
               lease_expires_at = NULL
         WHERE request_id = ? AND drained_at IS NULL
           AND lease_device_id = ? AND lease_token = ? AND lease_expires_at > ?
-          AND entity_type = 'core.content_item' AND contribution_variant IS NOT NULL
+          AND target_type = 'core.content_item' AND contribution_variant IS NOT NULL
           AND EXISTS (
             SELECT 1 FROM core_content_derivative d
-             WHERE d.content_id = enrich_request.entity_id
+             WHERE d.content_id = enrich_request.target_id
                AND d.variant = enrich_request.contribution_variant
           )`,
     )
@@ -344,7 +344,7 @@ export function completeEnrichmentLease(
           AND contribution_variant IS NOT NULL
           AND NOT EXISTS (
             SELECT 1 FROM core_content_derivative d
-             WHERE d.content_id = enrich_request.entity_id
+             WHERE d.content_id = enrich_request.target_id
                AND d.variant = enrich_request.contribution_variant
           )`,
     )
@@ -395,11 +395,11 @@ export function drainSatisfiedEnrichmentRequests(
           SET drained_at = ?, lease_device_id = NULL, lease_token = NULL,
               lease_expires_at = NULL
         WHERE drained_at IS NULL
-          AND entity_type = 'core.content_item' AND contribution_variant IS NOT NULL
+          AND target_type = 'core.content_item' AND contribution_variant IS NOT NULL
           AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
           AND EXISTS (
             SELECT 1 FROM core_content_derivative d
-             WHERE d.content_id = enrich_request.entity_id
+             WHERE d.content_id = enrich_request.target_id
                AND d.variant = enrich_request.contribution_variant
           )`,
     )

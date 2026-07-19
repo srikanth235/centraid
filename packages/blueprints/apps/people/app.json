@@ -2,8 +2,8 @@
   "manifestVersion": 1,
   "id": "people",
   "name": "People",
-  "description": "Your circle, remembered — a personal CRM as a projection of the vault. Each person is a canonical core.party (kind='person') enriched by a 1:1 people_profile carrying the keep-in-touch facts: role, avatar hue, how-often-to-reach-out cadence, and when you last spoke. Lists are SKOS concepts in your lists scheme, filed one tag per person exactly like Docs folders; favorites are the one canonical flags-scheme star every surface shares; notes are annotations on the party. Logging a touch stamps last-contacted so they drop off Reconnect. Interactions, tasks, important dates (birthdays auto-remind), relationships, gift ideas, debts and an owner journal each hang off the party. Every write runs through a typed vault command — consent-checked and receipted, all risk low. No data of its own — revoke the grant and the app goes dark.",
-  "version": "0.1.0",
+  "description": "Your circle, remembered — a personal CRM projected from the canonical vault. people_profile keeps only the genuine 1:1 CRM decoration; interactions are core activities, tasks are schedule tasks, relationships are typed core links, IOUs are Tally obligations, and journal entries are knowledge notes. Lists, favorites, notes, important dates, and gift ideas reuse the vault's shared mechanisms too. Every write runs through a typed command — consent-checked and receipted. No data of its own — revoke the grant and the app goes dark.",
+  "version": "0.1.1",
   "iconKey": "Users",
   "colorKey": "rose",
   "vault": {
@@ -12,11 +12,18 @@
     "scopes": [
       { "schema": "people", "verbs": "read+act" },
       { "schema": "core", "table": "party", "verbs": "read" },
+      { "schema": "core", "table": "vault", "verbs": "read" },
       { "schema": "core", "table": "party_identifier", "verbs": "read" },
+      { "schema": "core", "table": "activity", "verbs": "read" },
+      { "schema": "core", "table": "link", "verbs": "read" },
+      { "schema": "core", "table": "content_item", "verbs": "read" },
       { "schema": "core", "table": "tag", "verbs": "read" },
       { "schema": "core", "table": "concept", "verbs": "read" },
       { "schema": "core", "table": "concept_scheme", "verbs": "read" },
-      { "schema": "knowledge", "table": "annotation", "verbs": "read" }
+      { "schema": "knowledge", "table": "annotation", "verbs": "read" },
+      { "schema": "knowledge", "table": "note", "verbs": "read" },
+      { "schema": "schedule", "table": "task", "verbs": "read" },
+      { "schema": "tally", "table": "obligation", "verbs": "read" }
     ]
   },
   "actions": [
@@ -295,7 +302,7 @@
     },
     {
       "name": "add-relationship",
-      "description": "Record a relationship (partner, child, pet…) for a person through people.add_relationship.",
+      "description": "Record a typed core.link to a related canonical party through people.add_relationship; related_party_id reuses an existing party.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -303,7 +310,8 @@
           "party_id": { "type": "string", "minLength": 1 },
           "name": { "type": "string", "minLength": 1 },
           "kind": { "type": "string", "minLength": 1 },
-          "pet": { "type": "string" }
+          "pet": { "type": "string" },
+          "related_party_id": { "type": "string", "minLength": 1 }
         },
         "required": ["party_id", "name", "kind"],
         "additionalProperties": false

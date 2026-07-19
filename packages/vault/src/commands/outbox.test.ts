@@ -371,8 +371,8 @@ describe('outbox graph joins', () => {
     if (staged.status !== 'executed') return;
     const row = itemRow((staged.output as { item_id: string }).item_id);
     expect(row.recipient_party_id).toBe('p-ravi');
-    expect(row.subject_type).toBe('core.party');
-    expect(row.subject_id).toBe('p-ravi');
+    expect(row.target_type).toBe('core.party');
+    expect(row.target_id).toBe('p-ravi');
 
     // Half a subject ref, an unknown entity, and a dead row all refuse.
     expect(invoke(agent, 'outbox.stage', stageInput({ subject_type: 'core.party' })).status).toBe(

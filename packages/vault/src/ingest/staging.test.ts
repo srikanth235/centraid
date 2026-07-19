@@ -52,9 +52,9 @@ test('stage → review → publish: first contact is a draft, publish lands rows
     .get('evt-1@example.com') as { summary: string };
   expect(event.summary).toBe('Dentist');
   const map = db.vault
-    .prepare('SELECT entity_type, gone_upstream FROM sync_external_entity WHERE external_id = ?')
-    .get('evt-1@example.com') as { entity_type: string; gone_upstream: number };
-  expect(map).toMatchObject({ entity_type: 'core.event', gone_upstream: 0 });
+    .prepare('SELECT target_type, gone_upstream FROM sync_external_entity WHERE external_id = ?')
+    .get('evt-1@example.com') as { target_type: string; gone_upstream: number };
+  expect(map).toMatchObject({ target_type: 'core.event', gone_upstream: 0 });
 });
 
 test('re-import: unchanged skips, changed stages an update (vault-wins review)', () => {

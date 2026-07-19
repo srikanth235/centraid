@@ -26,15 +26,15 @@ export function upsertContentEmbedding(
   vault
     .prepare(
       `DELETE FROM enrich_embedding
-        WHERE entity_type = 'core.content_item' AND entity_id = ? AND model <> ?`,
+        WHERE target_type = 'core.content_item' AND target_id = ? AND model <> ?`,
     )
     .run(input.contentId, payload.model);
   vault
     .prepare(
       `INSERT INTO enrich_embedding
-         (embedding_id, entity_type, entity_id, model, dim, vector, created_at)
+         (embedding_id, target_type, target_id, model, dim, vector, created_at)
        VALUES (?, 'core.content_item', ?, ?, ?, ?, ?)
-       ON CONFLICT (entity_type, entity_id, model) DO UPDATE SET
+       ON CONFLICT (target_type, target_id, model) DO UPDATE SET
          dim = excluded.dim, vector = excluded.vector,
          created_at = excluded.created_at`,
     )

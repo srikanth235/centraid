@@ -231,16 +231,16 @@ export async function backfillPreviews(
                           WHERE d.content_id = i.content_id AND d.variant = 'thumb'
                             AND d.sha256 IS NOT NULL)
              AND NOT EXISTS (SELECT 1 FROM enrich_request r
-                              WHERE r.entity_type = 'core.content_item'
-                                AND r.entity_id = i.content_id
+                              WHERE r.target_type = 'core.content_item'
+                                AND r.target_id = i.content_id
                                 AND r.contribution_variant = 'thumb'
                                 AND r.drained_at IS NULL AND r.lease_expires_at > ?))
             OR (NOT EXISTS (SELECT 1 FROM core_content_derivative d
                              WHERE d.content_id = i.content_id AND d.variant = 'preview'
                                AND d.sha256 IS NOT NULL)
                 AND NOT EXISTS (SELECT 1 FROM enrich_request r
-                                 WHERE r.entity_type = 'core.content_item'
-                                   AND r.entity_id = i.content_id
+                                 WHERE r.target_type = 'core.content_item'
+                                   AND r.target_id = i.content_id
                                    AND r.contribution_variant = 'preview'
                                    AND r.drained_at IS NULL AND r.lease_expires_at > ?))
             OR NOT EXISTS (SELECT 1 FROM core_content_derivative d
@@ -383,7 +383,7 @@ function hasLiveDeviceLease(
     db.vault
       .prepare(
         `SELECT 1 FROM enrich_request
-          WHERE entity_type = 'core.content_item' AND entity_id = ?
+          WHERE target_type = 'core.content_item' AND target_id = ?
             AND contribution_variant = ? AND drained_at IS NULL
             AND lease_expires_at > ? LIMIT 1`,
       )

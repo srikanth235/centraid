@@ -20,13 +20,18 @@
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 import { ONTOLOGY_VERSION } from '../schema/migrate.js';
+import { cleanupPolyRefs } from '../schema/poly-refs.js';
 import { annotate } from './annotations.js';
 import { setStarred, starredExistsSql } from './flags.js';
+import { contentItemFor } from './knowledge.js';
+import { RELATIONS_SCHEME_URI, RELATIONS_SCHEME_URI_SQL } from './links.js';
 
 // An https URI, not a urn: one — this literal interpolates into condition SQL,
 // where `:lists` would read as a named parameter (the issue-258 colon-literal
 // trap); `https://` survives because no parameter name starts with a slash.
 export const LIST_SCHEME_URI = 'https://centraid.dev/schemes/lists';
+const ACTIVITY_KIND_SCHEME_URI = 'urn:duaility:activity-kinds';
+const JOURNAL_SCHEME_URI = 'https://centraid.dev/schemes/people-journal';
 
 /** The acting party: the caller's own party, else the vault owner (apps). */
 function actorPartyId(ctx: HandlerCtx): string {
@@ -87,6 +92,77 @@ function fileIntoList(ctx: HandlerCtx, partyId: string, listConceptId: string | 
     )
     .run(tagId, partyId, listConceptId, actorPartyId(ctx), ctx.now);
   ctx.wrote('core.tag', tagId);
+}
+
+/** Resolve or mint one controlled-vocabulary concept used by a People gesture. */
+function conceptId(
+  ctx: HandlerCtx,
+  schemeUri: string,
+  schemeTitle: string,
+  notation: string,
+  label: string,
+): string {
+  let scheme = ctx.db
+    .prepare('SELECT scheme_id FROM core_concept_scheme WHERE uri = ?')
+    .get(schemeUri) as { scheme_id: string } | undefined;
+  if (!scheme) {
+    scheme = { scheme_id: ctx.newId() };
+    ctx.db
+      .prepare(
+        `INSERT INTO core_concept_scheme (scheme_id, uri, title, publisher, version)
+         VALUES (?, ?, ?, 'centraid', '1')`,
+      )
+      .run(scheme.scheme_id, schemeUri, schemeTitle);
+  }
+  const existing = ctx.db
+    .prepare('SELECT concept_id FROM core_concept WHERE scheme_id = ? AND notation = ?')
+    .get(scheme.scheme_id, notation) as { concept_id: string } | undefined;
+  if (existing) return existing.concept_id;
+  const id = ctx.newId();
+  ctx.db
+    .prepare(
+      `INSERT INTO core_concept
+         (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition)
+       VALUES (?, ?, ?, ?, NULL, NULL, NULL)`,
+    )
+    .run(id, scheme.scheme_id, notation, label);
+  ctx.wrote('core.concept', id);
+  return id;
+}
+
+function assertedBy(ctx: HandlerCtx): 'owner' | 'app' | 'agent' {
+  return ctx.identity.kind === 'app' ? 'app' : ctx.identity.kind === 'agent' ? 'agent' : 'owner';
+}
+
+/** Assert one temporal core.link and return its id. */
+function linkToParty(
+  ctx: HandlerCtx,
+  fromType: string,
+  fromId: string,
+  partyId: string,
+  relationConceptId: string,
+): string {
+  const linkId = ctx.newId();
+  ctx.db
+    .prepare(
+      `INSERT INTO core_link
+         (link_id, from_type, from_id, to_type, to_id, relation_concept_id,
+          valid_from, valid_to, asserted_by, provenance_id)
+       VALUES (?, ?, ?, 'core.party', ?, ?, ?, NULL, ?, NULL)`,
+    )
+    .run(linkId, fromType, fromId, partyId, relationConceptId, ctx.now, assertedBy(ctx));
+  ctx.wrote('core.link', linkId);
+  return linkId;
+}
+
+function slug(text: string): string {
+  return (
+    text
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || 'related'
+  );
 }
 
 // Condition fragment: the id is a CRM person (a person party with a profile).
@@ -335,7 +411,11 @@ const LOG_INTERACTION: CommandDefinition = {
       // "overdue".
       name: 'interaction_logged',
       sql: `SELECT (
-              EXISTS(SELECT 1 FROM people_interaction WHERE interaction_id = :interaction_id)
+              EXISTS(SELECT 1 FROM core_activity WHERE activity_id = :interaction_id)
+              AND EXISTS(SELECT 1 FROM core_link
+                           WHERE from_type = 'core.activity' AND from_id = :interaction_id
+                             AND to_type = 'core.party' AND to_id = :party_id
+                             AND valid_to IS NULL)
               AND EXISTS(SELECT 1 FROM people_profile WHERE party_id = :party_id AND last_contacted_at IS NOT NULL)
             ) AS n`,
       column: 'n',
@@ -351,13 +431,25 @@ const LOG_INTERACTION: CommandDefinition = {
 function logInteraction(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { party_id: string; kind: string; text?: string };
   const interactionId = ctx.newId();
+  const kindConceptId = conceptId(
+    ctx,
+    ACTIVITY_KIND_SCHEME_URI,
+    'Activity kinds',
+    slug(input.kind),
+    input.kind,
+  );
   ctx.db
     .prepare(
-      `INSERT INTO people_interaction (interaction_id, party_id, kind, body_text, occurred_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO core_activity
+         (activity_id, actor_party_id, kind_concept_id, started_at, ended_at,
+          location_place_id, source_app_id, created_at)
+       VALUES (?, ?, ?, ?, NULL, NULL, NULL, ?)`,
     )
-    .run(interactionId, input.party_id, input.kind, input.text ?? null, ctx.now, ctx.now);
-  ctx.wrote('people.interaction', interactionId);
+    .run(interactionId, ownerPartyId(ctx), kindConceptId, ctx.now, ctx.now);
+  ctx.wrote('core.activity', interactionId);
+  const about = conceptId(ctx, RELATIONS_SCHEME_URI, 'Link relation types', 'about', 'About');
+  linkToParty(ctx, 'core.activity', interactionId, input.party_id, about);
+  if (input.text) annotate(ctx, 'core.activity', interactionId, input.text);
   ctx.db
     .prepare('UPDATE people_profile SET last_contacted_at = ? WHERE party_id = ?')
     .run(ctx.now, input.party_id);
@@ -563,7 +655,10 @@ const ADD_TASK: CommandDefinition = {
   postconditions: [
     {
       name: 'task_added',
-      sql: 'SELECT count(*) AS n FROM people_task WHERE task_id = :task_id',
+      sql: `SELECT count(*) AS n FROM schedule_task t
+             JOIN core_link l ON l.from_type = 'schedule.task' AND l.from_id = t.task_id
+            WHERE t.task_id = :task_id AND l.to_type = 'core.party'
+              AND l.to_id = :party_id AND l.valid_to IS NULL`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -576,11 +671,15 @@ const ADD_TASK: CommandDefinition = {
     const taskId = ctx.newId();
     ctx.db
       .prepare(
-        `INSERT INTO people_task (task_id, party_id, body_text, done, created_at)
-         VALUES (?, ?, ?, 0, ?)`,
+        `INSERT INTO schedule_task
+           (task_id, owner_party_id, title, description, status, priority, due_at,
+            completed_at, effort_min, parent_task_id, rrule, remind_before_min)
+         VALUES (?, ?, ?, NULL, 'needs-action', 0, NULL, NULL, NULL, NULL, NULL, NULL)`,
       )
-      .run(taskId, input.party_id, input.text, ctx.now);
-    ctx.wrote('people.task', taskId);
+      .run(taskId, ownerPartyId(ctx), input.text);
+    ctx.wrote('schedule.task', taskId);
+    const about = conceptId(ctx, RELATIONS_SCHEME_URI, 'Link relation types', 'about', 'About');
+    linkToParty(ctx, 'schedule.task', taskId, input.party_id, about);
     return { task_id: taskId };
   },
 };
@@ -602,7 +701,10 @@ const TOGGLE_TASK: CommandDefinition = {
   preconditions: [
     {
       name: 'task_exists',
-      sql: 'SELECT count(*) AS n FROM people_task WHERE task_id = :task_id',
+      sql: `SELECT count(*) AS n FROM schedule_task t
+             JOIN core_link l ON l.from_type = 'schedule.task' AND l.from_id = t.task_id
+             JOIN people_profile p ON p.party_id = l.to_id
+            WHERE t.task_id = :task_id AND l.to_type = 'core.party' AND l.valid_to IS NULL`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -613,8 +715,16 @@ const TOGGLE_TASK: CommandDefinition = {
   risk: 'low',
   handler: (ctx) => {
     const input = ctx.input as { task_id: string };
-    ctx.db.prepare('UPDATE people_task SET done = 1 - done WHERE task_id = ?').run(input.task_id);
-    ctx.wrote('people.task', input.task_id);
+    ctx.db
+      .prepare(
+        `UPDATE schedule_task
+            SET status = CASE status
+              WHEN 'completed' THEN 'needs-action' ELSE 'completed' END,
+                completed_at = CASE status WHEN 'completed' THEN NULL ELSE ? END
+          WHERE task_id = ?`,
+      )
+      .run(ctx.now, input.task_id);
+    ctx.wrote('schedule.task', input.task_id);
     return { task_id: input.task_id };
   },
 };
@@ -774,6 +884,7 @@ const ADD_RELATIONSHIP: CommandDefinition = {
       name: { type: 'string', minLength: 1 },
       kind: { type: 'string', minLength: 1 },
       pet: { type: 'string' },
+      related_party_id: { type: 'string', minLength: 1 },
     },
   },
   outputSchema: {
@@ -787,7 +898,9 @@ const ADD_RELATIONSHIP: CommandDefinition = {
   postconditions: [
     {
       name: 'relationship_added',
-      sql: 'SELECT count(*) AS n FROM people_relationship WHERE relationship_id = :relationship_id',
+      sql: `SELECT count(*) AS n FROM core_link
+             WHERE link_id = :relationship_id AND from_type = 'core.party'
+               AND from_id = :party_id AND to_type = 'core.party' AND valid_to IS NULL`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -796,20 +909,62 @@ const ADD_RELATIONSHIP: CommandDefinition = {
   idempotency: 'once',
   risk: 'low',
   handler: (ctx) => {
-    const input = ctx.input as { party_id: string; name: string; kind: string; pet?: string };
-    const relationshipId = ctx.newId();
-    ctx.db
-      .prepare(
-        `INSERT INTO people_relationship (relationship_id, party_id, name, kind, pet, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      )
-      .run(relationshipId, input.party_id, input.name, input.kind, input.pet ?? null, ctx.now);
-    ctx.wrote('people.relationship', relationshipId);
+    const input = ctx.input as {
+      party_id: string;
+      name: string;
+      kind: string;
+      pet?: string;
+      related_party_id?: string;
+    };
+    const targetKind = input.pet ? 'animal' : 'person';
+    let targetId = input.related_party_id;
+    if (targetId) {
+      const target = ctx.db
+        .prepare('SELECT 1 AS n FROM core_party WHERE party_id = ?')
+        .get(targetId);
+      if (!target) throw new Error(`no related party ${targetId}`);
+    } else {
+      const existing = ctx.db
+        .prepare(
+          `SELECT party_id FROM core_party
+            WHERE kind = ? AND display_name = ? COLLATE NOCASE
+            ORDER BY party_id LIMIT 1`,
+        )
+        .get(targetKind, input.name) as { party_id: string } | undefined;
+      targetId = existing?.party_id;
+      if (!targetId) {
+        targetId = ctx.newId();
+        ctx.db
+          .prepare(
+            `INSERT INTO core_party
+               (party_id, kind, display_name, sort_name, birth_date, avatar_content_id,
+                created_at, updated_at, ontology_version)
+             VALUES (?, ?, ?, NULL, NULL, NULL, ?, ?, ?)`,
+          )
+          .run(targetId, targetKind, input.name, ctx.now, ctx.now, ONTOLOGY_VERSION);
+        ctx.wrote('core.party', targetId);
+      }
+    }
+    const relationNotation = `people-${slug(input.kind)}${input.pet ? `-${slug(input.pet)}` : ''}`;
+    const relationConceptId = conceptId(
+      ctx,
+      RELATIONS_SCHEME_URI,
+      'Link relation types',
+      relationNotation,
+      input.kind,
+    );
+    const relationshipId = linkToParty(
+      ctx,
+      'core.party',
+      input.party_id,
+      targetId,
+      relationConceptId,
+    );
     return { relationship_id: relationshipId };
   },
 };
 
-// ---------- Gifts ----------
+// ---------- Gifts (canonical schedule tasks linked to their recipient) ----------
 
 const ADD_GIFT: CommandDefinition = {
   name: 'people.add_gift',
@@ -834,7 +989,10 @@ const ADD_GIFT: CommandDefinition = {
   postconditions: [
     {
       name: 'gift_added',
-      sql: 'SELECT count(*) AS n FROM people_gift WHERE gift_id = :gift_id',
+      sql: `SELECT count(*) AS n FROM schedule_task t
+             JOIN core_link l ON l.from_type = 'schedule.task' AND l.from_id = t.task_id
+            WHERE t.task_id = :gift_id AND l.to_type = 'core.party'
+              AND l.to_id = :party_id AND l.valid_to IS NULL`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -847,11 +1005,21 @@ const ADD_GIFT: CommandDefinition = {
     const giftId = ctx.newId();
     ctx.db
       .prepare(
-        `INSERT INTO people_gift (gift_id, party_id, body_text, state, created_at)
-         VALUES (?, ?, ?, 'idea', ?)`,
+        `INSERT INTO schedule_task
+           (task_id, owner_party_id, title, description, status, priority, due_at,
+            completed_at, effort_min, parent_task_id, rrule, remind_before_min)
+         VALUES (?, ?, ?, NULL, 'needs-action', 0, NULL, NULL, NULL, NULL, NULL, NULL)`,
       )
-      .run(giftId, input.party_id, input.text, ctx.now);
-    ctx.wrote('people.gift', giftId);
+      .run(giftId, ownerPartyId(ctx), input.text);
+    ctx.wrote('schedule.task', giftId);
+    const giftFor = conceptId(
+      ctx,
+      RELATIONS_SCHEME_URI,
+      'Link relation types',
+      'gift-for',
+      'Gift for',
+    );
+    linkToParty(ctx, 'schedule.task', giftId, input.party_id, giftFor);
     return { gift_id: giftId };
   },
 };
@@ -873,7 +1041,12 @@ const TOGGLE_GIFT: CommandDefinition = {
   preconditions: [
     {
       name: 'gift_exists',
-      sql: 'SELECT count(*) AS n FROM people_gift WHERE gift_id = :gift_id',
+      sql: `SELECT count(*) AS n FROM schedule_task t
+             JOIN core_link l ON l.from_type = 'schedule.task' AND l.from_id = t.task_id
+             JOIN core_concept c ON c.concept_id = l.relation_concept_id
+             JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
+            WHERE t.task_id = :gift_id AND l.to_type = 'core.party' AND l.valid_to IS NULL
+              AND s.uri = ${RELATIONS_SCHEME_URI_SQL} AND c.notation = 'gift-for'`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -886,10 +1059,13 @@ const TOGGLE_GIFT: CommandDefinition = {
     const input = ctx.input as { gift_id: string };
     ctx.db
       .prepare(
-        `UPDATE people_gift SET state = CASE state WHEN 'idea' THEN 'given' ELSE 'idea' END WHERE gift_id = ?`,
+        `UPDATE schedule_task
+            SET completed_at = CASE status WHEN 'completed' THEN NULL ELSE ? END,
+                status = CASE status WHEN 'completed' THEN 'needs-action' ELSE 'completed' END
+          WHERE task_id = ?`,
       )
-      .run(input.gift_id);
-    ctx.wrote('people.gift', input.gift_id);
+      .run(ctx.now, input.gift_id);
+    ctx.wrote('schedule.task', input.gift_id);
     return { gift_id: input.gift_id };
   },
 };
@@ -906,7 +1082,7 @@ const ADD_DEBT: CommandDefinition = {
     properties: {
       party_id: { type: 'string', minLength: 1 },
       direction: { type: 'string', enum: ['owe', 'owed'] },
-      amount_minor: { type: 'integer', minimum: 0 },
+      amount_minor: { type: 'integer', minimum: 1 },
       reason: { type: 'string' },
     },
   },
@@ -921,7 +1097,7 @@ const ADD_DEBT: CommandDefinition = {
   postconditions: [
     {
       name: 'debt_added',
-      sql: 'SELECT count(*) AS n FROM people_debt WHERE debt_id = :debt_id',
+      sql: 'SELECT count(*) AS n FROM tally_obligation WHERE obligation_id = :debt_id',
       column: 'n',
       op: 'eq',
       value: 1,
@@ -937,21 +1113,37 @@ const ADD_DEBT: CommandDefinition = {
       reason?: string;
     };
     const debtId = ctx.newId();
+    const owner = ownerPartyId(ctx);
+    const fromParty = input.direction === 'owe' ? owner : input.party_id;
+    const toParty = input.direction === 'owe' ? input.party_id : owner;
+    const friend = ctx.db
+      .prepare('SELECT friend_id FROM tally_friend WHERE party_id = ?')
+      .get(input.party_id) as { friend_id: string } | undefined;
+    if (!friend) {
+      const friendId = ctx.newId();
+      ctx.db
+        .prepare('INSERT INTO tally_friend (friend_id, party_id, created_at) VALUES (?, ?, ?)')
+        .run(friendId, input.party_id, ctx.now);
+      ctx.wrote('tally.friend', friendId);
+    }
     ctx.db
       .prepare(
-        `INSERT INTO people_debt (debt_id, party_id, direction, amount_minor, currency, reason, settled_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, NULL, ?)`,
+        `INSERT INTO tally_obligation
+           (obligation_id, from_party, to_party, amount_minor, currency, reason,
+            incurred_on, settled_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
       )
       .run(
         debtId,
-        input.party_id,
-        input.direction,
+        fromParty,
+        toParty,
         input.amount_minor,
         baseCurrency(ctx),
         input.reason ?? null,
+        ctx.now.slice(0, 10),
         ctx.now,
       );
-    ctx.wrote('people.debt', debtId);
+    ctx.wrote('tally.obligation', debtId);
     return { debt_id: debtId };
   },
 };
@@ -973,7 +1165,7 @@ const SETTLE_DEBT: CommandDefinition = {
   preconditions: [
     {
       name: 'debt_open',
-      sql: 'SELECT count(*) AS n FROM people_debt WHERE debt_id = :debt_id AND settled_at IS NULL',
+      sql: 'SELECT count(*) AS n FROM tally_obligation WHERE obligation_id = :debt_id AND settled_at IS NULL',
       column: 'n',
       op: 'eq',
       value: 1,
@@ -982,7 +1174,7 @@ const SETTLE_DEBT: CommandDefinition = {
   postconditions: [
     {
       name: 'debt_settled',
-      sql: 'SELECT count(*) AS n FROM people_debt WHERE debt_id = :debt_id AND settled_at IS NOT NULL',
+      sql: 'SELECT count(*) AS n FROM tally_obligation WHERE obligation_id = :debt_id AND settled_at IS NOT NULL',
       column: 'n',
       op: 'eq',
       value: 1,
@@ -993,9 +1185,9 @@ const SETTLE_DEBT: CommandDefinition = {
   handler: (ctx) => {
     const input = ctx.input as { debt_id: string };
     ctx.db
-      .prepare('UPDATE people_debt SET settled_at = ? WHERE debt_id = ?')
+      .prepare('UPDATE tally_obligation SET settled_at = ? WHERE obligation_id = ?')
       .run(ctx.now, input.debt_id);
-    ctx.wrote('people.debt', input.debt_id);
+    ctx.wrote('tally.obligation', input.debt_id);
     return { debt_id: input.debt_id };
   },
 };
@@ -1152,6 +1344,7 @@ const DELETE_LIST: CommandDefinition = {
   handler: (ctx) => {
     const input = ctx.input as { list_id: string };
     ctx.db.prepare('DELETE FROM core_concept WHERE concept_id = ?').run(input.list_id);
+    cleanupPolyRefs(ctx.db, ctx.now, 'core.concept', input.list_id);
     ctx.wrote('core.concept', input.list_id);
     return { list_id: input.list_id };
   },
@@ -1181,7 +1374,12 @@ const ADD_JOURNAL_ENTRY: CommandDefinition = {
   postconditions: [
     {
       name: 'entry_added',
-      sql: 'SELECT count(*) AS n FROM people_journal_entry WHERE entry_id = :entry_id',
+      sql: `SELECT count(*) AS n FROM knowledge_note n
+             JOIN core_tag t ON t.target_type = 'knowledge.note' AND t.target_id = n.note_id
+             JOIN core_concept c ON c.concept_id = t.concept_id
+             JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
+            WHERE n.note_id = :entry_id AND s.uri = '${JOURNAL_SCHEME_URI}'
+              AND c.notation = 'entry'`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -1192,20 +1390,34 @@ const ADD_JOURNAL_ENTRY: CommandDefinition = {
   handler: (ctx) => {
     const input = ctx.input as { mood: string; text: string; entry_date?: string };
     const entryId = ctx.newId();
+    const entryDate = input.entry_date ?? ctx.now.slice(0, 10);
+    const contentId = contentItemFor(ctx, input.text, 'plain');
     ctx.db
       .prepare(
-        `INSERT INTO people_journal_entry (entry_id, owner_party_id, entry_date, mood, body_text, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO knowledge_note
+           (note_id, author_party_id, title, body_content_id, format, pinned,
+            created_at, updated_at, deleted_at, purge_at)
+         VALUES (?, ?, ?, ?, 'plain', 0, ?, ?, NULL, NULL)`,
       )
       .run(
         entryId,
         ownerPartyId(ctx),
-        input.entry_date ?? ctx.now.slice(0, 10),
-        input.mood,
-        input.text,
+        `People journal · ${input.mood}`,
+        contentId,
+        `${entryDate}T12:00:00.000Z`,
         ctx.now,
       );
-    ctx.wrote('people.journal_entry', entryId);
+    ctx.wrote('knowledge.note', entryId);
+    const marker = conceptId(ctx, JOURNAL_SCHEME_URI, 'People journal', 'entry', 'Journal entry');
+    const tagId = ctx.newId();
+    ctx.db
+      .prepare(
+        `INSERT INTO core_tag
+           (tag_id, target_type, target_id, concept_id, tagged_by_party_id, confidence, tagged_at)
+         VALUES (?, 'knowledge.note', ?, ?, ?, NULL, ?)`,
+      )
+      .run(tagId, entryId, marker, actorPartyId(ctx), ctx.now);
+    ctx.wrote('core.tag', tagId);
     return { entry_id: entryId };
   },
 };

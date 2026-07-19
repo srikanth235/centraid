@@ -101,7 +101,7 @@ const POLY_RULES: Record<string, { pk: string; refs: [string, string][] }> = {
       ['to_type', 'to_id'],
     ],
   },
-  'core.attachment': { pk: 'attachment_id', refs: [['subject_type', 'subject_id']] },
+  'core.attachment': { pk: 'attachment_id', refs: [['target_type', 'target_id']] },
   'core.tag': { pk: 'tag_id', refs: [['target_type', 'target_id']] },
   'core.collection_entry': { pk: 'entry_id', refs: [['target_type', 'target_id']] },
   'knowledge.annotation': { pk: 'annotation_id', refs: [['target_type', 'target_id']] },
@@ -417,6 +417,7 @@ export function runContractAndExecute(
   consent: ConsentAllow,
   invocationId: string,
   confirmation?: Record<string, unknown>,
+  onProvenanceCommitted?: (entityTypes: readonly string[]) => void,
   options: { deferCommitSettlement?: boolean; deferReplicaNotify?: boolean } = {},
 ): InvokeOutcome {
   // The purpose that applies (issue #306 decision 4) — journaled even when
@@ -609,9 +610,9 @@ export function runContractAndExecute(
     // and visible to triggers (issue #290 phase 1).
     if (request.demo) {
       const seedStmt = db.vault.prepare(
-        `INSERT INTO consent_seed_row (seed_id, app_id, entity_type, entity_id, seeded_at)
+        `INSERT INTO consent_seed_row (seed_id, app_id, target_type, target_id, seeded_at)
          VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT (entity_type, entity_id) DO NOTHING`,
+         ON CONFLICT (target_type, target_id) DO NOTHING`,
       );
       for (const write of writes) {
         seedStmt.run(uuidv7(), request.demo.appId, write.entityType, write.entityId, ctx.now);
@@ -704,5 +705,15 @@ export function runContractAndExecute(
     : finalizeOrdinaryInvocationCommit(db, invocationId, {
         deferSettlement: options.deferCommitSettlement,
       });
+  // The doorbell is strictly post-journal-commit: the finalize above has made
+  // every provenance row readable on journal.db before the hint can ask a
+  // data-trigger cursor to look. It is intentionally best-effort — a thrown
+  // host callback must never turn a committed vault write into an apparent
+  // failure; the cron poll remains the correctness backstop.
+  try {
+    onProvenanceCommitted?.([...new Set(writes.map((write) => write.entityType))]);
+  } catch {
+    // Hint only; the persisted cursor and poll backstop own correctness.
+  }
   return { status: 'executed', invocationId, receiptId: finalized.receiptId, output };
 }

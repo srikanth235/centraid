@@ -1,7 +1,7 @@
 /**
  * Scenario generator (issue #290 phase 1): a small living circle — people
- * with contact cadences, logged interactions, birthdays, gift ideas and one
- * outstanding debt. Runs under the demo register — `seed.demo` provenance,
+ * with contact cadences, logged interactions, birthdays, canonical gift tasks
+ * and one outstanding debt. Runs under the demo register — `seed.demo` provenance,
  * one-click purge, never fires triggers or reminders.
  */
 const PURPOSE = 'dpv:ServiceProvision';

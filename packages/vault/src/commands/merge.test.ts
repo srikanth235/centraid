@@ -48,11 +48,12 @@ function merge(survivor: string, merged: string): InvokeOutcome {
 test('merge re-points identifiers (primary demoted), FK rows and the map; duplicate gone', () => {
   const john = addParty('John Smith', 'john@work.example');
   const dupe = addParty('J. Smith', 'jsmith@personal.example');
-  // A people-domain row hanging off the duplicate (engine FK).
+  // A canonical task hanging off the duplicate (engine FK).
   db.vault
     .prepare(
-      `INSERT INTO people_interaction (interaction_id, party_id, kind, body_text, occurred_at, created_at)
-       VALUES ('i1', ?, 'call', 'quarterly catch-up', '2026-07-06T00:00:00Z', '2026-07-06T00:00:00Z')`,
+      `INSERT INTO schedule_task
+         (task_id, owner_party_id, title, status, priority)
+       VALUES ('task-1', ?, 'quarterly catch-up', 'needs-action', 0)`,
     )
     .run(dupe);
   // A mapped external id pointing at the duplicate.
@@ -64,7 +65,7 @@ test('merge re-points identifiers (primary demoted), FK rows and the map; duplic
     .run();
   db.vault
     .prepare(
-      `INSERT INTO sync_external_entity (map_id, connection_id, external_id, entity_type, entity_id, content_hash, first_seen_at, last_seen_at, gone_upstream)
+      `INSERT INTO sync_external_entity (map_id, connection_id, external_id, target_type, target_id, content_hash, first_seen_at, last_seen_at, gone_upstream)
        VALUES ('m1', 'c1', 'email:jsmith@personal.example', 'core.party', ?, 'h', '2026-07-06', '2026-07-06', 0)`,
     )
     .run(dupe);
@@ -72,7 +73,7 @@ test('merge re-points identifiers (primary demoted), FK rows and the map; duplic
   const outcome = merge(john, dupe);
   expect(outcome.status).toBe('executed');
   const output = (outcome as { output: { repointed: number } }).output;
-  expect(output.repointed).toBeGreaterThanOrEqual(3); // identifier + interaction + map
+  expect(output.repointed).toBeGreaterThanOrEqual(3); // identifier + task + map
 
   // Duplicate gone; references live on the survivor.
   expect(
@@ -88,13 +89,13 @@ test('merge re-points identifiers (primary demoted), FK rows and the map; duplic
     { value: 'jsmith@personal.example', is_primary: 0 }, // demoted, never lost
   ]);
   const moved = db.vault
-    .prepare('SELECT count(*) AS n FROM people_interaction WHERE party_id = ?')
+    .prepare('SELECT count(*) AS n FROM schedule_task WHERE owner_party_id = ?')
     .get(john) as { n: number };
   expect(moved.n).toBe(1);
   const map = db.vault
-    .prepare('SELECT entity_id FROM sync_external_entity WHERE map_id = ?')
-    .get('m1') as { entity_id: string };
-  expect(map.entity_id).toBe(john);
+    .prepare('SELECT target_id FROM sync_external_entity WHERE map_id = ?')
+    .get('m1') as { target_id: string };
+  expect(map.target_id).toBe(john);
 });
 
 test('merging the vault owner away is refused by contract', () => {

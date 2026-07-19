@@ -282,6 +282,22 @@ describe('AtlasBrowseTab — grid', () => {
 });
 
 describe('AtlasBrowseTab — row editor', () => {
+  it('updates only edited, non-primary, unsealed fields through browseUpdateRow', async () => {
+    const el = await mount('core.party');
+    const row = $(el, '[data-testid="atlas-browse-row"][data-id="p1"]');
+    await click($(row!, '[data-testid="atlas-row-edit"]'));
+
+    await type($(el, '[data-testid="atlas-field"][data-col="display_name"]'), 'Alice Cooper');
+    await submitForm($(el, '[data-testid="atlas-row-editor"]'));
+
+    expect(browseUpdateRowMock).toHaveBeenCalledTimes(1);
+    expect(browseUpdateRowMock).toHaveBeenCalledWith({
+      table: 'core.party',
+      id: 'p1',
+      set: { display_name: 'Alice Cooper' },
+    });
+  });
+
   it('FK field searches the target table and stores the picked id', async () => {
     const el = await mount('core.party');
     await click($(el, '[data-testid="atlas-browse-insert"]'));

@@ -270,14 +270,14 @@ function seedPolyDependents(
   const embeddingId = uuidv7();
   db.vault
     .prepare(
-      `INSERT INTO enrich_embedding (embedding_id, entity_type, entity_id, model, dim, vector, created_at)
+      `INSERT INTO enrich_embedding (embedding_id, target_type, target_id, model, dim, vector, created_at)
        VALUES (?, ?, ?, 'test-model', 1, ?, ?)`,
     )
     .run(embeddingId, type, id, new Uint8Array([1, 2, 3, 4]), now);
   // A drained request stays (inert history); an open one must go.
   db.vault
     .prepare(
-      `INSERT INTO enrich_request (request_id, entity_type, entity_id, reason, requested_at)
+      `INSERT INTO enrich_request (request_id, target_type, target_id, reason, requested_at)
        VALUES (?, ?, ?, 'on-view', ?)`,
     )
     .run(uuidv7(), type, id, now);
@@ -291,7 +291,7 @@ function seedPolyDependents(
   const mapId = uuidv7();
   db.vault
     .prepare(
-      `INSERT INTO sync_external_entity (map_id, connection_id, external_id, entity_type, entity_id, content_hash, first_seen_at, last_seen_at)
+      `INSERT INTO sync_external_entity (map_id, connection_id, external_id, target_type, target_id, content_hash, first_seen_at, last_seen_at)
        VALUES (?, ?, ?, ?, ?, 'h', ?, ?)`,
     )
     .run(mapId, connId, `ext-${mapId}`, type, id, now, now);
@@ -312,7 +312,7 @@ function seedPolyDependents(
   const attachmentId = uuidv7();
   db.vault
     .prepare(
-      `INSERT INTO core_attachment (attachment_id, subject_type, subject_id, content_id, role, is_primary, created_at)
+      `INSERT INTO core_attachment (attachment_id, target_type, target_id, content_id, role, is_primary, created_at)
        VALUES (?, ?, ?, ?, 'other', 0, ?)`,
     )
     .run(attachmentId, type, id, attachBytes, now);
@@ -335,7 +335,7 @@ function expectPolyDependentsCleaned(
   expect(
     db.vault
       .prepare(
-        'SELECT 1 FROM enrich_request WHERE entity_type = ? AND entity_id = ? AND drained_at IS NULL',
+        'SELECT 1 FROM enrich_request WHERE target_type = ? AND target_id = ? AND drained_at IS NULL',
       )
       .get(type, id),
     'open enrich request must be gone',
@@ -404,32 +404,45 @@ test('purge sweep cleans every polymorphic dependent of a purged media asset (is
 test('lifecycle sweep purges lapsed trashed People/Tally rows and cleans their poly refs (issue #441 A4)', () => {
   const now = new Date().toISOString();
   const past = '2020-01-01T00:00:00Z';
-  // A lapsed trashed People content row (representative of the table-driven set).
   db.vault
     .prepare(
-      `INSERT INTO people_interaction (interaction_id, party_id, kind, body_text, occurred_at, created_at, deleted_at, purge_at)
-       VALUES ('poly-int', ?, 'call', 'hi', ?, ?, ?, ?)`,
+      `INSERT INTO core_party
+         (party_id, kind, display_name, created_at, updated_at, ontology_version)
+       VALUES ('sweep-friend', 'person', 'Sweep Friend', ?, ?, '1.3')`,
     )
-    .run(boot.ownerPartyId, past, past, past, past);
-  const deps = seedPolyDependents('people.interaction', 'poly-int');
+    .run(now, now);
+  // A lapsed trashed Tally obligation (representative of the table-driven set).
+  db.vault
+    .prepare(
+      `INSERT INTO tally_obligation
+         (obligation_id, from_party, to_party, amount_minor, currency, incurred_on,
+          created_at, deleted_at, purge_at)
+       VALUES ('poly-obligation', ?, ?, 100, 'USD', '2020-01-01', ?, ?, ?)`,
+    )
+    .run('sweep-friend', boot.ownerPartyId, past, past, past);
+  const deps = seedPolyDependents('tally.obligation', 'poly-obligation');
   // A trashed row still inside its grace window must survive the sweep.
   db.vault
     .prepare(
-      `INSERT INTO people_interaction (interaction_id, party_id, kind, body_text, occurred_at, created_at, deleted_at, purge_at)
-       VALUES ('poly-int-fresh', ?, 'call', 'later', ?, ?, ?, '2999-01-01T00:00:00Z')`,
+      `INSERT INTO tally_obligation
+         (obligation_id, from_party, to_party, amount_minor, currency, incurred_on,
+          created_at, deleted_at, purge_at)
+       VALUES ('poly-obligation-fresh', ?, ?, 100, 'USD', '2020-01-01', ?, ?, '2999-01-01T00:00:00Z')`,
     )
-    .run(boot.ownerPartyId, now, now, now);
+    .run('sweep-friend', boot.ownerPartyId, now, now);
   const result = gw.sweep(owner);
   expect(result.domainRowsPurged).toBe(1);
   expect(
-    db.vault.prepare(`SELECT 1 FROM people_interaction WHERE interaction_id = 'poly-int'`).get(),
+    db.vault
+      .prepare(`SELECT 1 FROM tally_obligation WHERE obligation_id = 'poly-obligation'`)
+      .get(),
   ).toBe(undefined);
   expect(
     db.vault
-      .prepare(`SELECT 1 FROM people_interaction WHERE interaction_id = 'poly-int-fresh'`)
+      .prepare(`SELECT 1 FROM tally_obligation WHERE obligation_id = 'poly-obligation-fresh'`)
       .get(),
   ).toBeTruthy();
-  expectPolyDependentsCleaned(deps, 'people.interaction', 'poly-int');
+  expectPolyDependentsCleaned(deps, 'tally.obligation', 'poly-obligation');
 });
 
 function calendarAppWithEvent(): { cred: Credential; appId: string } {

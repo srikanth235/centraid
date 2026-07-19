@@ -136,6 +136,31 @@
   font: var(--t-small);
   font-size: 13px;
 }
+.trashRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.trashRow:last-child {
+  border-bottom: none;
+}
+.trashMain {
+  flex: 1;
+  min-width: 0;
+}
+.trashName {
+  display: block;
+  font: var(--t-body);
+  font-weight: 500;
+}
+.trashMeta {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink-3);
+  font: var(--t-small);
+}
 
 .dashEmpty {
   border: 1px solid var(--line);

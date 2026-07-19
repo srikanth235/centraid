@@ -173,6 +173,39 @@ describe('S2 consent', () => {
 });
 
 describe('S3/S4 command execution', () => {
+  test('the provenance doorbell rings only after journal commit and cannot fail the write', () => {
+    const observed: Array<{ entityTypes: readonly string[]; provenanceRows: number }> = [];
+    gw = createGateway(db, {
+      onProvenanceCommitted: (entityTypes = []) => {
+        const placeholders = entityTypes.map(() => '?').join(',');
+        const provenanceRows = (
+          db.journal
+            .prepare(
+              `SELECT count(*) AS n FROM consent_provenance
+                WHERE entity_type IN (${placeholders})`,
+            )
+            .get(...entityTypes) as { n: number }
+        ).n;
+        observed.push({ entityTypes, provenanceRows });
+        throw new Error('a hint must never change a committed outcome');
+      },
+    });
+    registerScheduleCommands(gw);
+
+    const outcome = gw.invoke(owner, {
+      command: 'schedule.propose_event',
+      input: proposeInput(),
+      purpose: 'dpv:ServiceProvision',
+    });
+
+    expect(outcome.status).toBe('executed');
+    expect(observed).toHaveLength(1);
+    expect(observed[0]?.entityTypes).toEqual(
+      expect.arrayContaining(['core.event', 'schedule.event_ext']),
+    );
+    expect(observed[0]?.provenanceRows).toBeGreaterThanOrEqual(2);
+  });
+
   test('group commit crosses exactly one vault + journal commit pair', () => {
     const vaultExec = vi.spyOn(db.vault, 'exec');
     const journalExec = vi.spyOn(db.journal, 'exec');

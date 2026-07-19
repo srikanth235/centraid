@@ -89,9 +89,9 @@ export const POLY_REF_REGISTRY: readonly PolyRefEntry[] = [
   },
   {
     table: 'core_attachment',
-    pairs: [{ typeCol: 'subject_type', idCol: 'subject_id' }],
+    pairs: [{ typeCol: 'target_type', idCol: 'target_id' }],
     policy: 'delete',
-    note: 'An attachment ON a purged subject dangles; previously cleaned ONLY for notes (issue #441 A1 — now for every subject).',
+    note: 'An attachment ON a purged target dangles; previously cleaned ONLY for notes (issue #441 A1 — now for every target).',
   },
   {
     table: 'knowledge_annotation',
@@ -101,26 +101,26 @@ export const POLY_REF_REGISTRY: readonly PolyRefEntry[] = [
   },
   {
     table: 'enrich_embedding',
-    pairs: [{ typeCol: 'entity_type', idCol: 'entity_id' }],
+    pairs: [{ typeCol: 'target_type', idCol: 'target_id' }],
     policy: 'delete',
     note: 'Never cleaned before (issue #441 A1): an orphan vector lets deleted content resurface in vector search — the worst-feeling class of vault bug.',
   },
   {
     table: 'enrich_request',
-    pairs: [{ typeCol: 'entity_type', idCol: 'entity_id' }],
+    pairs: [{ typeCol: 'target_type', idCol: 'target_id' }],
     policy: 'delete',
     predicate: 'drained_at IS NULL',
     note: 'Open queue rows only (issue #441 A1): drop pending enrichment for a purged entity so no enricher chases a dead row. Drained rows are inert completed history.',
   },
   {
     table: 'sync_external_entity',
-    pairs: [{ typeCol: 'entity_type', idCol: 'entity_id' }],
+    pairs: [{ typeCol: 'target_type', idCol: 'target_id' }],
     policy: 'delete',
     note: 'Never cleaned before (issue #441 A1): a stale map row makes the next import believe a purged entity is still known, so re-import SILENTLY skips it — silent data loss.',
   },
   {
     table: 'consent_seed_row',
-    pairs: [{ typeCol: 'entity_type', idCol: 'entity_id' }],
+    pairs: [{ typeCol: 'target_type', idCol: 'target_id' }],
     policy: 'delete',
     note: 'Judgment call beyond the A1 brief (see below): a demo marker has no meaning once its entity is gone, like a tag. gateway/demo.ts already drops it on its OWN purge path; the general sweep does too now, so a demo row purged via the normal lifecycle (owner trashes a demo photo) leaves no stale marker and demoStatus stays honest.',
   },
@@ -163,7 +163,7 @@ export const POLY_REF_EXCLUSIONS: ReadonlyMap<string, string> = new Map([
   ],
   [
     'outbox_item',
-    'The external-write outbox owns its own drain lifecycle (pending → sent/discarded). subject_type/subject_id is the canonical row the artifact was ABOUT; a sent-message record stays meaningful after its subject is purged.',
+    'The external-write outbox owns its own drain lifecycle (pending → sent/discarded). target_type/target_id is the canonical row the artifact was ABOUT; a sent-message record stays meaningful after its target is purged.',
   ],
   [
     'sync_import_row',

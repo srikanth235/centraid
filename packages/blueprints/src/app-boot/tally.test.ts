@@ -4,4 +4,4 @@
 // test). See ../app-boot-harness.ts for why.
 import { describeAppBoot } from '../app-boot-harness.js';
 
-describeAppBoot('tally');
+describeAppBoot('tally', { expectReplica: true });

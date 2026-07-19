@@ -2,7 +2,7 @@
 // owe"/"you are owed" lists and the groups grid. Pure function of the
 // dashboard snapshot (`dash`) plus navigation/modal callbacks.
 import { balLabelGroup, money, tint } from '../format.ts';
-import type { Dash, Friend, Group } from '../types.ts';
+import type { Dash, Friend, Group, TrashedExpense } from '../types.ts';
 import { KitAvatar } from './Shared.tsx';
 import styles from './Dashboard.module.css';
 import shared from './shared.module.css';
@@ -70,18 +70,52 @@ function GroupCard({
   );
 }
 
+function TrashShelf({
+  expenses,
+  currency,
+  onRestore,
+}: {
+  expenses: TrashedExpense[];
+  currency: string;
+  onRestore: (expenseId: string) => void;
+}) {
+  if (expenses.length === 0) return null;
+  return (
+    <>
+      <div className={styles.sectionTitle}>Trash</div>
+      <div className={styles.card} aria-label="Trashed expenses">
+        {expenses.map((expense) => (
+          <div className={styles.trashRow} key={expense.expense_id}>
+            <span className={styles.trashMain}>
+              <span className={styles.trashName}>{expense.description}</span>
+              <span className={styles.trashMeta}>
+                {expense.group_name} · {money(expense.amount_minor, currency)}
+              </span>
+            </span>
+            <button type="button" className="kit-btn" onClick={() => onRestore(expense.expense_id)}>
+              Restore
+            </button>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
 export function Dashboard({
   dash,
   onOpenFriend,
   onOpenGroup,
   onOpenAddFriend,
   onOpenNewGroup,
+  onRestoreExpense,
 }: {
   dash: Dash;
   onOpenFriend: (friendId: string) => void;
   onOpenGroup: (groupId: string) => void;
   onOpenAddFriend: () => void;
   onOpenNewGroup: () => void;
+  onRestoreExpense: (expenseId: string) => void;
 }) {
   const { friends, groups, currency } = dash;
 
@@ -187,6 +221,7 @@ export function Dashboard({
           ))}
         </div>
       )}
+      <TrashShelf expenses={dash.trash} currency={currency} onRestore={onRestoreExpense} />
     </>
   );
 }

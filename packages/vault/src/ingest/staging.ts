@@ -170,7 +170,7 @@ export function stageBatchTx(
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
   );
   const mapLookup = vault.prepare(
-    `SELECT entity_type, entity_id, content_hash FROM sync_external_entity
+    `SELECT target_type AS entity_type, target_id AS entity_id, content_hash FROM sync_external_entity
       WHERE connection_id = ? AND external_id = ?`,
   );
   let seq = 0;
@@ -374,10 +374,10 @@ export function applyBatchTx(
 
   const upsertMap = vault.prepare(
     `INSERT INTO sync_external_entity
-       (map_id, connection_id, external_id, entity_type, entity_id, content_hash, first_seen_at, last_seen_at, gone_upstream)
+       (map_id, connection_id, external_id, target_type, target_id, content_hash, first_seen_at, last_seen_at, gone_upstream)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
      ON CONFLICT (connection_id, external_id) DO UPDATE SET
-       entity_id = excluded.entity_id, content_hash = excluded.content_hash,
+       target_id = excluded.target_id, content_hash = excluded.content_hash,
        last_seen_at = excluded.last_seen_at, gone_upstream = 0`,
   );
   const markRow = vault.prepare(
@@ -532,6 +532,7 @@ export function publishBatch(
   owner: Identity,
   batchId: string,
   publishers: ReadonlyMap<string, Publisher>,
+  onProvenanceCommitted?: (entityTypes: readonly string[]) => void,
 ): PublishResult {
   const now = nowIso();
   let applied: AppliedBatch;
@@ -560,6 +561,11 @@ export function publishBatch(
     decision: 'allow',
     detail: { created, updated, skipped, failed, by: owner.partyId },
   });
+  try {
+    onProvenanceCommitted?.([...new Set(applied.provenanced.map((write) => write.type))]);
+  } catch {
+    // Hint only; the change-feed cursor and cron poll remain authoritative.
+  }
   return { batchId, created, updated, skipped, failed, receiptId };
 }
 

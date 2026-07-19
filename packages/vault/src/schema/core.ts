@@ -22,7 +22,7 @@ CREATE INDEX IF NOT EXISTS idx_vault_owner_party ON core_vault(owner_party_id);
 
 CREATE TABLE core_party (
   party_id          TEXT PRIMARY KEY,
-  kind              TEXT NOT NULL CHECK (kind IN ('person','org','group','agent')),
+  kind              TEXT NOT NULL CHECK (kind IN ('person','org','group','agent','animal')),
   display_name      TEXT NOT NULL,
   sort_name         TEXT,
   birth_date        TEXT,
@@ -150,14 +150,15 @@ CREATE INDEX IF NOT EXISTS idx_document_current_content ON core_document(current
 
 CREATE TABLE core_attachment (
   attachment_id TEXT PRIMARY KEY,
-  subject_type  TEXT NOT NULL,
-  subject_id    TEXT NOT NULL,
+  target_type   TEXT NOT NULL,
+  target_id     TEXT NOT NULL,
   content_id    TEXT NOT NULL REFERENCES core_content_item(content_id),
   role          TEXT NOT NULL CHECK (role IN ('photo','manual','receipt','warranty','contract','embed','other')),
   is_primary    INTEGER NOT NULL CHECK (is_primary IN (0,1)),
   created_at    TEXT NOT NULL
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_attachment_content ON core_attachment(content_id);
+CREATE INDEX IF NOT EXISTS idx_attachment_target ON core_attachment(target_type, target_id);
 
 CREATE TABLE core_activity (
   activity_id       TEXT PRIMARY KEY,

@@ -29,6 +29,7 @@ const ADD_ITEM: CommandDefinition = {
       acquired_on: { type: 'string' },
       serial_no: { type: 'string' },
       place_id: { type: 'string', minLength: 1 },
+      acquired_txn_id: { type: 'string', minLength: 1 },
       purchase_price_minor: { type: 'integer', minimum: 0 },
       purchase_currency: { type: 'string', minLength: 3, maxLength: 3 },
     },
@@ -56,11 +57,35 @@ const ADD_ITEM: CommandDefinition = {
       op: 'eq',
       value: 1,
     },
+    {
+      name: 'bound_purchase_agrees_with_transaction',
+      sql: `SELECT CASE WHEN :acquired_txn_id IS NULL THEN 1 ELSE EXISTS(
+               SELECT 1 FROM core_transaction t
+                WHERE t.txn_id = :acquired_txn_id
+                  AND (:purchase_price_minor IS NULL OR :purchase_price_minor = abs(t.amount_minor))
+                  AND (:purchase_currency IS NULL OR :purchase_currency = t.currency)
+             ) END AS n`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   postconditions: [
     {
       name: 'item_created',
       sql: 'SELECT count(*) AS n FROM home_asset_item WHERE item_id = :item_id',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+    {
+      name: 'bound_purchase_is_transaction_projection',
+      sql: `SELECT CASE WHEN :acquired_txn_id IS NULL THEN 1 ELSE EXISTS(
+               SELECT 1 FROM home_asset_item i JOIN core_transaction t ON t.txn_id = i.acquired_txn_id
+                WHERE i.item_id = :item_id
+                  AND i.purchase_price_minor = abs(t.amount_minor)
+                  AND i.purchase_currency = t.currency
+             ) END AS n`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -77,24 +102,31 @@ function addItem(ctx: HandlerCtx): Record<string, unknown> {
     acquired_on?: string;
     serial_no?: string;
     place_id?: string;
+    acquired_txn_id?: string;
     purchase_price_minor?: number;
     purchase_currency?: string;
   };
+  const transaction = input.acquired_txn_id
+    ? (ctx.db
+        .prepare('SELECT amount_minor, currency FROM core_transaction WHERE txn_id = ?')
+        .get(input.acquired_txn_id) as { amount_minor: number; currency: string })
+    : undefined;
   const itemId = ctx.newId();
   ctx.db
     .prepare(
       `INSERT INTO home_asset_item (item_id, owner_party_id, name, category_concept_id, place_id, acquired_txn_id, acquired_on, serial_no, purchase_price_minor, purchase_currency, photo_asset_id, disposed_on)
-       VALUES (?, ?, ?, NULL, ?, NULL, ?, ?, ?, ?, NULL, NULL)`,
+       VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, NULL, NULL)`,
     )
     .run(
       itemId,
       actorPartyId(ctx),
       input.name,
       input.place_id ?? null,
+      input.acquired_txn_id ?? null,
       input.acquired_on ?? null,
       input.serial_no ?? null,
-      input.purchase_price_minor ?? null,
-      input.purchase_currency ?? null,
+      transaction ? Math.abs(transaction.amount_minor) : (input.purchase_price_minor ?? null),
+      transaction?.currency ?? input.purchase_currency ?? null,
     );
   ctx.wrote('home.asset_item', itemId);
   return { item_id: itemId };
@@ -113,6 +145,7 @@ const UPDATE_ITEM: CommandDefinition = {
       acquired_on: { type: 'string' },
       serial_no: { type: 'string' },
       place_id: { type: 'string', minLength: 1 },
+      acquired_txn_id: { type: 'string', minLength: 1 },
       purchase_price_minor: { type: 'integer', minimum: 0 },
       purchase_currency: { type: 'string', minLength: 3, maxLength: 3 },
     },
@@ -150,6 +183,30 @@ const UPDATE_ITEM: CommandDefinition = {
       op: 'eq',
       value: 1,
     },
+    {
+      name: 'bound_purchase_agrees_with_transaction',
+      sql: `SELECT CASE
+              WHEN COALESCE(:acquired_txn_id,
+                    (SELECT acquired_txn_id FROM home_asset_item WHERE item_id = :item_id)) IS NULL
+              THEN 1 ELSE EXISTS(
+                SELECT 1
+                  FROM home_asset_item i
+                 JOIN core_transaction t
+                    ON t.txn_id = COALESCE(:acquired_txn_id, i.acquired_txn_id)
+                 WHERE i.item_id = :item_id
+                   AND CASE WHEN :acquired_txn_id IS NOT NULL
+                         THEN COALESCE(:purchase_price_minor, abs(t.amount_minor))
+                         ELSE COALESCE(:purchase_price_minor, i.purchase_price_minor)
+                       END = abs(t.amount_minor)
+                   AND CASE WHEN :acquired_txn_id IS NOT NULL
+                         THEN COALESCE(:purchase_currency, t.currency)
+                         ELSE COALESCE(:purchase_currency, i.purchase_currency)
+                       END = t.currency
+              ) END AS n`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   postconditions: [
     {
@@ -181,11 +238,19 @@ function updateItem(ctx: HandlerCtx): Record<string, unknown> {
     acquired_on?: string;
     serial_no?: string;
     place_id?: string;
+    acquired_txn_id?: string;
     purchase_price_minor?: number;
     purchase_currency?: string;
   };
   const sets: string[] = [];
   const values: (string | number)[] = [];
+  if (input.acquired_txn_id !== undefined) {
+    const transaction = ctx.db
+      .prepare('SELECT amount_minor, currency FROM core_transaction WHERE txn_id = ?')
+      .get(input.acquired_txn_id) as { amount_minor: number; currency: string };
+    sets.push('acquired_txn_id = ?', 'purchase_price_minor = ?', 'purchase_currency = ?');
+    values.push(input.acquired_txn_id, Math.abs(transaction.amount_minor), transaction.currency);
+  }
   if (input.name !== undefined) {
     sets.push('name = ?');
     values.push(input.name);
@@ -202,11 +267,11 @@ function updateItem(ctx: HandlerCtx): Record<string, unknown> {
     sets.push('place_id = ?');
     values.push(input.place_id);
   }
-  if (input.purchase_price_minor !== undefined) {
+  if (input.purchase_price_minor !== undefined && input.acquired_txn_id === undefined) {
     sets.push('purchase_price_minor = ?');
     values.push(input.purchase_price_minor);
   }
-  if (input.purchase_currency !== undefined) {
+  if (input.purchase_currency !== undefined && input.acquired_txn_id === undefined) {
     sets.push('purchase_currency = ?');
     values.push(input.purchase_currency);
   }

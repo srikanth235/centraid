@@ -348,15 +348,10 @@ function purgeContentItem(db: VaultDb, owner: Identity, now: string, contentId: 
  * PRAGMA foreign_keys is ON (db.ts) — so no child needs manual deletion here.
  */
 const DOMAIN_TRASH_TABLES: readonly { physical: string; idCol: string; entity: string }[] = [
-  { physical: 'people_interaction', idCol: 'interaction_id', entity: 'people.interaction' },
-  { physical: 'people_task', idCol: 'task_id', entity: 'people.task' },
-  { physical: 'people_gift', idCol: 'gift_id', entity: 'people.gift' },
   { physical: 'people_important_date', idCol: 'date_id', entity: 'people.important_date' },
-  { physical: 'people_relationship', idCol: 'relationship_id', entity: 'people.relationship' },
-  { physical: 'people_debt', idCol: 'debt_id', entity: 'people.debt' },
-  { physical: 'people_journal_entry', idCol: 'entry_id', entity: 'people.journal_entry' },
   { physical: 'tally_expense', idCol: 'expense_id', entity: 'tally.expense' },
   { physical: 'tally_settlement', idCol: 'settlement_id', entity: 'tally.settlement' },
+  { physical: 'tally_obligation', idCol: 'obligation_id', entity: 'tally.obligation' },
 ];
 
 /**

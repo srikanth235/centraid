@@ -17,7 +17,7 @@ interface RawSearchTask {
 }
 interface RawAttachment {
   attachment_id: string;
-  subject_id: string;
+  target_id: string;
   content_id: string;
   role?: string;
   is_primary?: number;
@@ -61,8 +61,8 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const attachments = await ctx.vault.read({
       entity: 'core.attachment',
       where: [
-        { column: 'subject_type', op: 'eq', value: 'schedule.task' },
-        { column: 'subject_id', op: 'in', value: taskIds },
+        { column: 'target_type', op: 'eq', value: 'schedule.task' },
+        { column: 'target_id', op: 'in', value: taskIds },
       ],
       purpose,
     });
@@ -86,8 +86,8 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const attByTask = new Map<string, DecoratedAttachment[]>();
     for (const a of attachmentRows) {
       const content = contentById.get(a.content_id);
-      if (!attByTask.has(a.subject_id)) attByTask.set(a.subject_id, []);
-      attByTask.get(a.subject_id)!.push({
+      if (!attByTask.has(a.target_id)) attByTask.set(a.target_id, []);
+      attByTask.get(a.target_id)!.push({
         attachment_id: a.attachment_id,
         content_id: a.content_id,
         role: a.role,

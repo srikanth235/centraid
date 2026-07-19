@@ -139,6 +139,55 @@ test('add_item and update_item carry room and value; place must exist, price nam
   expect(naked.status).toBe('failed');
 });
 
+test('a bound purchase is a faithful transaction projection and cannot drift', () => {
+  const now = new Date().toISOString();
+  db.vault
+    .prepare(
+      `INSERT INTO core_account (account_id, owner_party_id, name, kind, currency, is_asset)
+       VALUES ('home-account', ?, 'Card', 'credit', 'EUR', 0)`,
+    )
+    .run(boot.ownerPartyId);
+  db.vault
+    .prepare(
+      `INSERT INTO core_transaction
+         (txn_id, account_id, posted_at, amount_minor, currency, direction, status, description)
+       VALUES ('home-purchase', 'home-account', ?, -64900, 'EUR', 'debit', 'posted', 'Espresso machine')`,
+    )
+    .run(now);
+
+  const bound = addItem({ name: 'Espresso machine', acquired_txn_id: 'home-purchase' });
+  expect(
+    db.vault
+      .prepare(
+        'SELECT acquired_txn_id, purchase_price_minor, purchase_currency FROM home_asset_item WHERE item_id = ?',
+      )
+      .get(bound),
+  ).toMatchObject({
+    acquired_txn_id: 'home-purchase',
+    purchase_price_minor: 64900,
+    purchase_currency: 'EUR',
+  });
+
+  const unbound = addItem({
+    name: 'Grinder',
+    purchase_price_minor: 1000,
+    purchase_currency: 'EUR',
+  });
+  expect(
+    invoke('home.update_item', { item_id: unbound, acquired_txn_id: 'home-purchase' }).status,
+  ).toBe('executed');
+  expect(() =>
+    db.vault
+      .prepare("UPDATE core_transaction SET currency = 'USD' WHERE txn_id = 'home-purchase'")
+      .run(),
+  ).toThrow(/bound to an asset purchase/);
+  expect(() =>
+    db.vault
+      .prepare('UPDATE home_asset_item SET purchase_price_minor = 1 WHERE item_id = ?')
+      .run(bound),
+  ).toThrow(/must agree with its transaction/);
+});
+
 test('complete_maintenance stamps last_done_on; a missing plan is refused', () => {
   const itemId = addItem({ name: 'Boiler' });
   const planId = 'plan-descale';
