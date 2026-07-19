@@ -5,10 +5,7 @@ import { isIgnorableStdinError, safeStdinWrite } from './safe-stdin-write.js';
 class FakeStdin extends EventEmitter {
   writable = true;
   writes: string[] = [];
-  write(
-    chunk: string,
-    cb?: (err?: Error | null) => void,
-  ): boolean {
+  write(chunk: string, cb?: (err?: Error | null) => void): boolean {
     this.writes.push(chunk);
     if (cb) queueMicrotask(() => cb(null));
     return true;

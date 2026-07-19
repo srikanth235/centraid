@@ -63,6 +63,7 @@ Also: `package.json` `test:matrix` chain; `scripts/test-report/validate-nightly-
 ## Verification
 
 ```sh
+bun run format:check
 bun run test:matrix
 bun run test:report:smoke
 bun run --cwd packages/agent-runtime test -- src/backends/codex/safe-stdin-write.test.ts
@@ -70,6 +71,8 @@ bun run --cwd packages/gateway test -- src/serve/app-prewarm-errors.test.ts
 bun run --cwd packages/gateway test -- src/backup/wal.integration.test.ts -t "offline for multiple"
 git diff origin/main -- tests/coverage-floors.json   # empty = floors not raised
 ```
+
+Format: oxfmt on `safe-stdin-write.test.ts` and `app-prewarm-errors.test.ts` (CI `format:check` fix).
 
 ## Audit
 

@@ -3,9 +3,12 @@ import { isExpectedPrewarmSkip } from './app-prewarm-errors.js';
 
 describe('isExpectedPrewarmSkip', () => {
   test('treats ENOENT code as expected (missing index in test vaults)', () => {
-    const err = Object.assign(new Error("ENOENT: no such file or directory, open '.../index.html'"), {
-      code: 'ENOENT',
-    });
+    const err = Object.assign(
+      new Error("ENOENT: no such file or directory, open '.../index.html'"),
+      {
+        code: 'ENOENT',
+      },
+    );
     expect(isExpectedPrewarmSkip(err)).toBe(true);
   });
 
