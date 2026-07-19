@@ -15,6 +15,7 @@ GitHub issue: [#464](https://github.com/srikanth235/centraid/issues/464)
 - [x] Expected prewarm ENOENT no longer spams warn logs
 - [x] Env-gated solid/partial matrix owners are inventoried and validated
 - [x] agent-runtime coverage strategy recorded; floors not raised; WAL multi-day hotspot improved
+- [x] Per-PR `ci.yml` parallelized (static + verify) with Bun/Turbo/Cargo caches; required `check` aggregator kept
 
 ## What changed
 
@@ -59,6 +60,8 @@ Also: `package.json` `test:matrix` chain; `scripts/test-report/validate-nightly-
 - Env-gate honesty is a hard matrix validation error for solid/partial owners, not only a report footnote.
 - agent-runtime keeps a low line floor by design; document rather than raise.
 - Multi-day WAL outage uses 4 days instead of 8: same constant-bound claim, less wall clock.
+- CI parallelization keeps coverage/perf/native on every PR (no demotion to nightly in this change); gains come from job parallelism + caches, not weaker gates.
+- Required GitHub check stays named `check` via aggregator so existing branch protection does not need a rename.
 
 ## Verification
 
@@ -80,9 +83,11 @@ Typecheck: annotate `FakeStdin` interface so `makeFakeStdin` no longer hits TS70
 
 Pre-push local gates: `package.json` `check:pr` (aliased as `ci`) runs the early [`.github/workflows/ci.yml`](.github/workflows/ci.yml) steps — format, oxlint, turbo lint, typecheck, lint:types, lint:css, test:matrix — so agents catch CI failures before Actions. Documented in `README.md`, `AGENTS.md`, and `TESTING.md`.
 
+Per-PR `ci.yml` parallelized (static + verify) with Bun/Turbo/Cargo caches; required `check` aggregator kept — former serial `check` job (~18 min) becomes parallel **`static`** (format/lint/typecheck/matrix) and **`verify`** (build/native/data-plane/perf/coverage/report), plus thin required **`check`** aggregator for branch protection. Bun install, Turbo `.turbo`, and data-plane Cargo caches; cancel-in-progress concurrency. Docs: `AGENTS.md`, `README.md`, `TESTING.md`; wording only in `apps/desktop/tests/e2e/COVERAGE_REPORT.md` (PR `ci` job → workflow).
+
 ## Audit
 
-PASS — pairing fold plus inventory backlog (EPIPE, report signals, prewarm, env-gate, strategy/floors/WAL) match the expanded #464 work on PR #465.
+PASS — pairing fold plus inventory backlog (EPIPE, report signals, prewarm, env-gate, strategy/floors/WAL) and CI wall-clock parallelization match the expanded #464 work on PR #465.
 
 ## Steering
 

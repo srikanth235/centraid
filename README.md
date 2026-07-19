@@ -100,9 +100,11 @@ bun run check:pr       # REQUIRED before push (mirrors ci.yml early steps)
 ```
 
 `check:pr` is: `format:check` → `oxlint` → turbo `lint` → `typecheck` →
-`lint:types` → `lint:css` → `test:matrix`. Vitest alone is not enough —
-package `typecheck` includes test files and catches TS errors tests still run
-under. Full GitHub `ci` also runs build, native tunnel, perf, and coverage.
+`lint:types` → `lint:css` → `test:matrix` (the GitHub `static` job). Vitest
+alone is not enough — package `typecheck` includes test files and catches TS
+errors tests still run under. GitHub `ci` runs `static` and `verify` in
+parallel (`verify` = build, native tunnel, data-plane, gateway perf,
+coverage), then a thin required `check` aggregator.
 
 ```sh
 bun run build          # all apps + packages

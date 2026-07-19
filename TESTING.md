@@ -152,13 +152,14 @@ test-kit's stable facade.
 
 | Command / workflow | Contents |
 | --- | --- |
-| `bun run check:pr` | **Before every push:** format + oxlint + turbo lint + typecheck + lint:types + lint:css + test:matrix (early `ci.yml` gates). Vitest alone is not a substitute. |
+| `bun run check:pr` | **Before every push:** format + oxlint + turbo lint + typecheck + lint:types + lint:css + test:matrix (`ci.yml` **static** job). Vitest alone is not a substitute. |
 | `bun run test` | package unit + integration + contract tests; prints floors |
-| `bun run coverage` | unified per-PR suite, v8 report, floor enforcement, Vitest JSON |
+| `bun run coverage` | unified per-PR suite, v8 report, floor enforcement, Vitest JSON (`ci.yml` **verify** job) |
 | `bun run test:matrix` | catalog/owner/contract validation (also inside `check:pr`) |
 | `bun run test:perf` | six generous hot-path budget tests; nightly only |
 | `bun run test:scale` | five deterministic volume tests; nightly only |
 | `bun run test:report` | build `dist/test-report/index.html` from available evidence |
+| `.github/workflows/ci.yml` | parallel **static** + **verify**, required **check** aggregator; Bun/Turbo/Cargo caches; cancel-in-progress on new pushes |
 | `.github/workflows/e2e.yml` | desktop, web, mobile, three pairing journeys (lifecycle, ticket-hygiene, cross-network-relay), perf, scale, full report |
 
 Performance and scale budgets use generous regression multipliers. A noisy
