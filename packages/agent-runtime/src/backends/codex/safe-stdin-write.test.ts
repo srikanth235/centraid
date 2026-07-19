@@ -3,14 +3,22 @@ import { isIgnorableStdinError, safeStdinWrite } from './safe-stdin-write.js';
 
 type ErrorListener = (err: Error) => void;
 
-/** Minimal Writable stand-in with on/emit so we do not pull in EventEmitter. */
+interface FakeStdin {
+  writable: boolean;
+  writes: string[];
+  write(chunk: string, cb?: (err?: Error | null) => void): boolean;
+  on(event: string, listener: ErrorListener): FakeStdin;
+  emit(event: string, err: Error): void;
+}
+
+/** Minimal Writable stand-in with on/emit (no EventEmitter). */
 function makeFakeStdin(opts?: {
   writable?: boolean;
   writeImpl?: (chunk: string, cb?: (err?: Error | null) => void) => boolean;
-}) {
+}): FakeStdin {
   const listeners = new Set<ErrorListener>();
   const writes: string[] = [];
-  const stdin = {
+  const stdin: FakeStdin = {
     writable: opts?.writable ?? true,
     writes,
     write(chunk: string, cb?: (err?: Error | null) => void): boolean {
@@ -19,7 +27,7 @@ function makeFakeStdin(opts?: {
       if (cb) queueMicrotask(() => cb(null));
       return true;
     },
-    on(event: string, listener: ErrorListener): typeof stdin {
+    on(event: string, listener: ErrorListener): FakeStdin {
       if (event === 'error') listeners.add(listener);
       return stdin;
     },

@@ -76,6 +76,8 @@ Format: oxfmt on `safe-stdin-write.test.ts` and `app-prewarm-errors.test.ts` (CI
 
 Lint: oxlint clean on `safe-stdin-write.ts` / `.test.ts` (no useless returns, no EventEmitter in tests).
 
+Typecheck: annotate `FakeStdin` interface so `makeFakeStdin` no longer hits TS7022 circular self-reference on CI `bun run typecheck`.
+
 ## Audit
 
 PASS — pairing fold plus inventory backlog (EPIPE, report signals, prewarm, env-gate, strategy/floors/WAL) match the expanded #464 work on PR #465.
