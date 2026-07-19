@@ -74,6 +74,8 @@ git diff origin/main -- tests/coverage-floors.json   # empty = floors not raised
 
 Format: oxfmt on `safe-stdin-write.test.ts` and `app-prewarm-errors.test.ts` (CI `format:check` fix).
 
+Lint: oxlint clean on `safe-stdin-write.ts` / `.test.ts` (no useless returns, no EventEmitter in tests).
+
 ## Audit
 
 PASS — pairing fold plus inventory backlog (EPIPE, report signals, prewarm, env-gate, strategy/floors/WAL) match the expanded #464 work on PR #465.

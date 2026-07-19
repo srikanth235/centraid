@@ -14,15 +14,12 @@ export function safeStdinWrite(stdin: Writable | null | undefined, line: string)
   ensureStdinErrorSink(stdin);
   try {
     stdin.write(line, (err) => {
-      if (!err) return;
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code && IGNORED_CODES.has(code)) return;
-      // Other write errors are still ignored at the send boundary: the turn
-      // path already fails via process exit / pending RPC rejection.
+      // Swallow closed-pipe and all other write-boundary errors: the turn path
+      // already fails via process exit / pending RPC rejection.
+      void err;
     });
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException | undefined)?.code;
-    if (code && IGNORED_CODES.has(code)) return;
+  } catch {
+    // Sync throw on a destroyed stream — ignore.
   }
 }
 
@@ -30,10 +27,8 @@ function ensureStdinErrorSink(stdin: Writable): void {
   const marker = '__centraidSafeStdinSink';
   if ((stdin as { [marker]?: boolean })[marker]) return;
   (stdin as { [marker]?: boolean })[marker] = true;
-  stdin.on('error', (err: NodeJS.ErrnoException) => {
-    if (err.code && IGNORED_CODES.has(err.code)) return;
-    // Swallow: a dead child is reported via the process `exit` / `error` handlers.
-  });
+  // Swallow stream errors so Node does not promote them to uncaughtException.
+  stdin.on('error', () => undefined);
 }
 
 /** Test helper: is this error code one we intentionally ignore on stdin? */
