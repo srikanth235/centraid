@@ -40,6 +40,7 @@ import { centraidDynamicToolSpecs, handleCentraidToolCall } from './host-tools.j
 import { codexImageItems, codexUnsupportedPdfs } from '../../multimodal.js';
 import { agentSpawnEnv } from '../../spawn-env.js';
 import { lowPriorityCommand } from '../../low-priority.js';
+import { safeStdinWrite } from './safe-stdin-write.js';
 
 export interface CodexTurnInput {
   cwd: string;
@@ -146,8 +147,9 @@ export async function runCodexTurn(
   };
 
   const send = (msg: object): void => {
-    if (!child.stdin.writable) return;
-    child.stdin.write(JSON.stringify(msg) + '\n');
+    // Never let a late EPIPE after codex exits become an uncaught exception
+    // that fails the whole Vitest/coverage process (lifecycle-automation paths).
+    safeStdinWrite(child.stdin, JSON.stringify(msg) + '\n');
   };
 
   const request = <T = unknown>(method: string, params: unknown): Promise<T> => {

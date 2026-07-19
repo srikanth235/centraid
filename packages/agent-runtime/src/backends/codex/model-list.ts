@@ -20,6 +20,7 @@ import type { Readable, Writable } from 'node:stream';
 import type { RunnerModel } from '@centraid/app-engine';
 import { agentSpawnEnv } from '../../spawn-env.js';
 import { lowPriorityCommand } from '../../low-priority.js';
+import { safeStdinWrite } from './safe-stdin-write.js';
 
 /** `model/list` is a local catalog read — keep the cap short. */
 const MODEL_LIST_TIMEOUT_MS = 8_000;
@@ -88,12 +89,8 @@ export function enumerateCodexModels(
     timer.unref?.();
 
     const send = (msg: object): void => {
-      if (!child.stdin.writable) return;
-      try {
-        child.stdin.write(JSON.stringify(msg) + '\n');
-      } catch {
-        /* ignore */
-      }
+      // Same closed-pipe policy as the turn backend.
+      safeStdinWrite(child.stdin, JSON.stringify(msg) + '\n');
     };
 
     const request = (method: string, params: unknown): Promise<RpcMessage> =>

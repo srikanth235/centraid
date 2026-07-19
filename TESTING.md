@@ -88,6 +88,19 @@ The repo-wide line floor remains 30%. `bun run test` prints the active floors
 after package tests so the local loop never hides the CI contract;
 `bun run coverage` measures and enforces them. Floors move only upward.
 
+### agent-runtime coverage strategy
+
+`packages/agent-runtime` intentionally sits on a **low line floor (~27%)** and a
+**high branch floor (~84%)**. Most line mass is the Codex/Claude backend
+adapters and CLI spawn paths that need a real binary or long integration; those
+are covered by contract/unit tests on pure surfaces (host-tools, multimodal,
+catalog, safe stdin write) rather than a line-percentage campaign to 70%+.
+
+Do **not** raise the agent-runtime line floor without a dedicated coverage
+campaign. Do **not** lower any engine floor in this table without an explicit
+issue + receipt. Prefer new pure modules (like `safe-stdin-write`) with unit
+tests over expanding spawn-heavy turn drivers for coverage alone.
+
 ## Named invariant contracts
 
 These suites encode product law and are cataloged by name. The matrix validator

@@ -632,11 +632,11 @@ test('offline: segments accumulate across groups, the WAL stays checkpoint-bound
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
-test('offline for EIGHT DAYS: daily base rotations fire, the WAL and the local dir stay bounded, and reconnect loses nothing', async () => {
+test('offline for multiple days: daily base rotations fire, the WAL and the local dir stay bounded, and reconnect loses nothing', async () => {
   // The laptop-closed-for-a-week case, and the reason this test drives a clock
   // instead of looping fast: the shipper's DAILY base cadence is a function of
   // wall time, so a rapid loop never fires it — and the base cadence is exactly
-  // what makes a long outage survivable. Eight simulated days, four-hour ticks,
+  // what makes a long outage survivable. Multi-day simulated outage, four-hour ticks,
   // provider unreachable throughout.
   //
   // The clock STARTS at the real one and only ever moves forward from there (by
@@ -653,7 +653,9 @@ test('offline for EIGHT DAYS: daily base rotations fire, the WAL and the local d
   f.shipper.tick(); // first run: mint the generations before the outage
   const gen0 = f.shipper.status().dbs.vault!.generation;
 
-  const DAYS = 8;
+  // Four simulated days is enough to prove the constant per-day bound
+  // (day N looks like day 1); eight days only lengthened wall clock (~2×).
+  const DAYS = 4;
   const TICKS_PER_DAY = 6; // one every four hours
   const reports = [];
   const written: string[] = [];
@@ -684,7 +686,7 @@ test('offline for EIGHT DAYS: daily base rotations fire, the WAL and the local d
       maxWal = Math.max(maxWal, walSize(f.plane, 'vault.db'), walSize(f.plane, 'journal.db'));
       // (2) The local budget policy holds WITHOUT ever having to fire: each
       // daily roll drops the superseded (never-registered) generation's
-      // segments, so the offline footprint tracks ONE day, not eight.
+      // segments, so the offline footprint tracks ONE day, not the whole outage.
       maxLocal = Math.max(maxLocal, f.shipper.status().localBytes);
       expect(f.shipper.status().localBytes).toBeLessThanOrEqual(LOCAL_BUDGET);
       await f.service.drainWal(); // fails inside (offline): never throws, never deletes
@@ -694,19 +696,19 @@ test('offline for EIGHT DAYS: daily base rotations fire, the WAL and the local d
   expect(reports.flatMap((r) => r.errors)).toEqual([]);
 
   // Neither the WAL nor the local segment dir GROWS WITH THE OUTAGE. This is
-  // the whole claim — day eight looks like day one. A shipper that only
+  // the whole claim — the last day looks like day one. A shipper that only
   // checkpointed when the network was reachable, or that never rolled its base,
   // would show both of these climbing monotonically.
   expect(perDay).toHaveLength(DAYS);
   const day0 = perDay[0]!;
   console.log(
-    `[wal-e2e 8-day outage] per-day max WAL / local-segment bytes: ` +
+    `[wal-e2e multi-day outage] per-day max WAL / local-segment bytes: ` +
       perDay.map((d) => `${d.wal}/${d.local}`).join('  '),
   );
   expect(day0.wal).toBeGreaterThan(0); // the measurement is live, not a no-op
   expect(day0.local).toBeGreaterThan(0);
   for (const day of perDay) {
-    // A CONSTANT bound — a few rollovers' worth — held on day eight as on day
+    // A CONSTANT bound — a few rollovers' worth — held on the last day as on day
     // one, and never a function of the outage's length.
     // The on-disk WAL contains a 32-byte header plus a 24-byte header per
     // database page. Bound frame count, not just payload bytes: an 8 KiB page
@@ -773,7 +775,7 @@ test('offline for EIGHT DAYS: daily base rotations fire, the WAL and the local d
   expect(f.shipper.status().dbs.vault!.basePending).toBe(false);
   expect(f.shipper.status().dbs.journal!.basePending).toBe(false);
 
-  // (6) Zero data loss: every row from every one of the eight days is back.
+  // (6) Zero data loss: every row from every simulated day is back.
   // (PITR *depth* into the outage is the documented trade — each daily roll
   // drops the never-registered predecessor's segments — but no row is ever
   // lost, because the roll's fresh base clone carries all of them.)

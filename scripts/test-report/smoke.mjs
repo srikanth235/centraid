@@ -81,10 +81,14 @@ try {
     'Surface × quality dimension',
     'Coverage vs ratchet floor',
     'environment-gated',
+    'cells not run',
+    'unhandled errors',
+    'failed (ran)',
     'owner.latest.status',
     'duration(owner.latest.duration)',
     'report-data',
     '"status":"stale"',
+    'Environment-gated matrix owners',
   ]) {
     if (!html.includes(required)) throw new Error(`report missing ${required}`);
   }
@@ -95,6 +99,69 @@ try {
     if (!html.includes(`"latest":{"owner":"${owner}","status":"stale"`)) {
       throw new Error(`old green evidence did not turn stale for ${owner}`);
     }
+  }
+
+  // Unhandled-error signal: success=false + zero failed assertions (EPIPE class).
+  const { extractUnhandledErrors, summarizeCellStates } = await import('./report-signals.mjs');
+  const unhandled = extractUnhandledErrors({
+    success: false,
+    unhandledErrors: [{ message: 'write EPIPE' }],
+    testResults: [{ status: 'passed', assertionResults: [{ status: 'passed' }] }],
+  });
+  if (!unhandled.includes('write EPIPE')) {
+    throw new Error('extractUnhandledErrors missed explicit unhandledErrors');
+  }
+  const cellCounts = summarizeCellStates([
+    { state: 'failed' },
+    { state: 'missing' },
+    { state: 'missing' },
+  ]);
+  if (cellCounts.cellsFailed !== 1 || cellCounts.cellsMissing !== 2) {
+    throw new Error('summarizeCellStates must separate failed from missing');
+  }
+
+  const badVitest = path.join(temp, 'vitest-unhandled.json');
+  await writeFile(
+    badVitest,
+    JSON.stringify({
+      success: false,
+      startTime: Date.parse(currentRun),
+      unhandledErrors: [{ message: 'write EPIPE' }],
+      testResults: [
+        {
+          name: 'packages/example/x.test.ts',
+          status: 'passed',
+          startTime: Date.parse(currentRun),
+          endTime: Date.parse(currentRun) + 5,
+          assertionResults: [{ status: 'passed' }],
+        },
+      ],
+    }),
+  );
+  const unhandledOut = path.join(temp, 'unhandled.html');
+  execFileSync(
+    process.execPath,
+    [
+      'scripts/test-report/generate.mjs',
+      '--output',
+      unhandledOut,
+      '--vitest',
+      badVitest,
+      '--lane-markers',
+      markers,
+      '--perf',
+      perf,
+      '--playwright',
+      playwright,
+    ],
+    { stdio: 'inherit' },
+  );
+  const unhandledHtml = await readFile(unhandledOut, 'utf8');
+  if (!unhandledHtml.includes('Unhandled Vitest errors')) {
+    throw new Error('report did not surface unhandled Vitest errors banner');
+  }
+  if (!unhandledHtml.includes('write EPIPE')) {
+    throw new Error('report did not include unhandled error message');
   }
   console.log('test report smoke: ok');
 } finally {

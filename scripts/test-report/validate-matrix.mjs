@@ -1,6 +1,7 @@
 import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { detectDefaultCiEnvGate } from './report-signals.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const allowedStatuses = new Set(['solid', 'partial', 'gap', 'skip']);
@@ -35,7 +36,23 @@ export async function validateMatrix(matrix, options = {}) {
           errors.push(`${cellId} owner must be a repository-relative path`);
         } else if (options.checkFiles !== false) {
           try {
-            await access(path.join(options.root ?? root, cellOwner.owner));
+            const ownerPath = path.join(options.root ?? root, cellOwner.owner);
+            await access(ownerPath);
+            // Solid/partial cells whose only owner is whole-file env-gated off
+            // default CI claim coverage they never get on PR/nightly defaults.
+            if (options.checkEnvGates !== false && !cellOwner.owner.endsWith('.mjs')) {
+              try {
+                const source = await readFile(ownerPath, 'utf8');
+                const gate = detectDefaultCiEnvGate(source);
+                if (gate) {
+                  errors.push(
+                    `${cellId} is ${status} but owner ${cellOwner.owner} is always env-gated off default CI (${gate.env} / ${gate.kind}); demote assessment or ungated the suite`,
+                  );
+                }
+              } catch {
+                // access already succeeded
+              }
+            }
           } catch {
             errors.push(`${cellId} owner does not exist: ${cellOwner.owner}`);
           }

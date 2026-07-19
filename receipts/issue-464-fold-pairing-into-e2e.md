@@ -1,4 +1,4 @@
-# Issue #464 — Fold pairing-relay journeys into nightly e2e
+# Issue #464 — Fold pairing-relay into nightly e2e + testing inventory
 
 GitHub issue: [#464](https://github.com/srikanth235/centraid/issues/464)
 
@@ -10,49 +10,74 @@ GitHub issue: [#464](https://github.com/srikanth235/centraid/issues/464)
 - [x] Docs describe one nightly lane
 - [x] Matrix owners unchanged; `bun run test:matrix` passes
 - [x] PR open with clear summary
+- [x] Codex backend write EPIPE no longer fails Vitest after child stdin closes
+- [x] Test-health report surfaces unhandled Vitest errors and failed-vs-missing cells
+- [x] Expected prewarm ENOENT no longer spams warn logs
+- [x] Env-gated solid/partial matrix owners are inventoried and validated
+- [x] agent-runtime coverage strategy recorded; floors not raised; WAL multi-day hotspot improved
 
 ## What changed
 
-Three pairing owners run as jobs inside nightly e2e (not a separate top-level workflow): `pairing-lifecycle`, `pairing-ticket-hygiene`, and `pairing-cross-network-relay` now live in `.github/workflows/e2e.yml` and invoke `tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs`, `pairing-ticket-hygiene.mjs`, and `cross-network-relay.mjs`.
+Three pairing owners run as jobs inside nightly e2e (not a separate top-level workflow): `pairing-lifecycle`, `pairing-ticket-hygiene`, and `pairing-cross-network-relay` live in `.github/workflows/e2e.yml`.
 
-Report job merges same-run pairing artifacts; no `gh run list --workflow pairing-relay-e2e.yml` — deleted the foreign-run merge step; uploads use `nightly-evidence-pairing-lifecycle`, `nightly-evidence-pairing-ticket-hygiene`, and `nightly-evidence-pairing-cross-network-relay` so `pattern: nightly-evidence-*` already covers them.
+Report job merges same-run pairing artifacts; no `gh run list --workflow pairing-relay-e2e.yml` — foreign-run merge step deleted; `nightly-evidence-pairing-*` artifacts merge via existing `nightly-evidence-*` pattern.
 
-`pairing-relay-e2e.yml` removed — deleted `.github/workflows/pairing-relay-e2e.yml`.
+`pairing-relay-e2e.yml` removed.
 
-Docs describe one nightly lane — `TESTING.md` lane table and `tests/agent-e2e-pairing/README.md` point at e2e only.
+Docs describe one nightly lane — `TESTING.md` and `tests/agent-e2e-pairing/README.md`.
 
-Matrix owners unchanged; `bun run test:matrix` passes — catalog still points at the same flow scripts; `package.json` `test:matrix` now also runs `scripts/test-report/validate-nightly-wiring.mjs` so the fold cannot silently regress.
+Matrix owners unchanged; `bun run test:matrix` passes — plus `validate-nightly-wiring.mjs` and env-gate checks in `validate-matrix.mjs`.
 
-PR open with clear summary — this work ships via the PR that closes #464 with the fold described above.
+PR open with clear summary — https://github.com/srikanth235/centraid/pull/465.
+
+Codex backend write EPIPE no longer fails Vitest after child stdin closes — `packages/agent-runtime/src/backends/codex/safe-stdin-write.ts` and `packages/agent-runtime/src/backends/codex/safe-stdin-write.test.ts`; wired from `packages/agent-runtime/src/backends/codex/backend.ts` and `packages/agent-runtime/src/backends/codex/model-list.ts`.
+
+Test-health report surfaces unhandled Vitest errors and failed-vs-missing cells — `scripts/test-report/report-signals.mjs`, `scripts/test-report/report-signals.test.mjs`, `scripts/test-report/generate.mjs`, `scripts/test-report/smoke.mjs` (unhandled banner + cellsFailed/cellsMissing legend).
+
+Expected prewarm ENOENT no longer spams warn logs — `packages/gateway/src/serve/app-prewarm-errors.ts`, `packages/gateway/src/serve/app-prewarm-errors.test.ts`, `packages/gateway/src/serve/build-gateway.ts`.
+
+Env-gated solid/partial matrix owners are inventoried and validated — `scripts/test-report/validate-matrix.mjs` + report-signals `detectDefaultCiEnvGate` / `collectEnvGatedOwners`.
+
+agent-runtime coverage strategy recorded; floors not raised; WAL multi-day hotspot improved — `TESTING.md`; `packages/gateway/src/backup/wal.integration.test.ts` multi-day outage 8→4 simulated days.
+
+Also: `package.json` `test:matrix` chain; `scripts/test-report/validate-nightly-wiring.mjs`.
 
 ## Out of scope
 
 - Fixing the cross-network-relay `isRelay` / Docker isolation flake on runners.
 - Running pairing journeys on every PR `ci` job.
-- Companion extension e2e, Codex EPIPE, report UX changes.
-- Renaming the workflow from `e2e` to `nightly`.
+- Full agent-runtime line-coverage campaign to 70%+.
+- Making every GitHub Actions nightly desktop/web/mobile job green in this environment.
+- Companion PR #463 security follow-ups.
+- Hosted report URL / PR comment bots.
 
 ## Decisions
 
-- Keep three independent jobs (not one sequential job) so one flaky relay run still leaves lifecycle/hygiene evidence for the health report — same isolation rationale as the old standalone workflow, without a second top-level workflow file.
-- Do not mark cross-network-relay `continue-on-error`; failure still fails that job, but `test-health-report` runs with `if: always()` so partial evidence still publishes.
+- Keep three independent pairing jobs (not one sequential job) for failure isolation without a second workflow file.
+- EPIPE handled at the real stdin write boundary (error sink + write callback), not only a `writable` check — matches the async failure mode Vitest reported.
+- Prewarm ENOENT is silent; other prewarm errors stay at warn.
+- Env-gate honesty is a hard matrix validation error for solid/partial owners, not only a report footnote.
+- agent-runtime keeps a low line floor by design; document rather than raise.
+- Multi-day WAL outage uses 4 days instead of 8: same constant-bound claim, less wall clock.
 
 ## Verification
 
 ```sh
 bun run test:matrix
-# expects: matrix summary + "nightly-wiring: e2e.yml owns pairing lifecycle..."
+bun run test:report:smoke
+bun run --cwd packages/agent-runtime test -- src/backends/codex/safe-stdin-write.test.ts
+bun run --cwd packages/gateway test -- src/serve/app-prewarm-errors.test.ts
+bun run --cwd packages/gateway test -- src/backup/wal.integration.test.ts -t "offline for multiple"
+git diff origin/main -- tests/coverage-floors.json   # empty = floors not raised
 ```
-
-Structural proof greps e2e.yml for the three flow scripts, `nightly-evidence-pairing-*` artifact names, report `needs`, absence of `pairing-relay-e2e.yml`, and no executable `gh run download` / pairing-relay workflow list. Captured under the implementer scratch as `test-matrix.txt` and `pairing-fold-diff.txt`.
 
 ## Audit
 
-PASS — diff matches the checklist: pairing jobs live only under e2e.yml, standalone workflow file deleted, report job no longer fetches foreign runs, docs and matrix-validation wiring updated, flow owners unchanged.
+PASS — pairing fold plus inventory backlog (EPIPE, report signals, prewarm, env-gate, strategy/floors/WAL) match the expanded #464 work on PR #465.
 
 ## Steering
 
-PASS — no user interrupts or mid-task corrections redirected this work; single-shot fold of pairing-relay into e2e per the agreed plan for issue #464.
+PASS — user redirected scope mid-stream from fold-only to “fix all of them into this PR” (the testing-inventory prioritized list); that correction is recorded here. No other interrupts.
 
 ## Accounting
 
