@@ -152,9 +152,10 @@ test-kit's stable facade.
 
 | Command / workflow | Contents |
 | --- | --- |
+| `bun run check:pr` | **Before every push:** format + oxlint + turbo lint + typecheck + lint:types + lint:css + test:matrix (early `ci.yml` gates). Vitest alone is not a substitute. |
 | `bun run test` | package unit + integration + contract tests; prints floors |
 | `bun run coverage` | unified per-PR suite, v8 report, floor enforcement, Vitest JSON |
-| `bun run test:matrix` | catalog/owner/contract validation |
+| `bun run test:matrix` | catalog/owner/contract validation (also inside `check:pr`) |
 | `bun run test:perf` | six generous hot-path budget tests; nightly only |
 | `bun run test:scale` | five deterministic volume tests; nightly only |
 | `bun run test:report` | build `dist/test-report/index.html` from available evidence |

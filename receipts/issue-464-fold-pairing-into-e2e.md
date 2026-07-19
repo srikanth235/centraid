@@ -78,6 +78,8 @@ Lint: oxlint clean on `safe-stdin-write.ts` / `.test.ts` (no useless returns, no
 
 Typecheck: annotate `FakeStdin` interface so `makeFakeStdin` no longer hits TS7022 circular self-reference on CI `bun run typecheck`.
 
+Pre-push local gates: `package.json` `check:pr` (aliased as `ci`) runs the early [`.github/workflows/ci.yml`](.github/workflows/ci.yml) steps — format, oxlint, turbo lint, typecheck, lint:types, lint:css, test:matrix — so agents catch CI failures before Actions. Documented in `README.md`, `Agents.md`, and `TESTING.md`.
+
 ## Audit
 
 PASS — pairing fold plus inventory backlog (EPIPE, report signals, prewarm, env-gate, strategy/floors/WAL) match the expanded #464 work on PR #465.

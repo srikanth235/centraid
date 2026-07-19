@@ -92,16 +92,26 @@ Full tour: [Get started](https://centraid.dev/docs/start/) — install → vault
 
 ## Build / check
 
-Turborepo + Bun. What CI runs is `bun run ci`.
+Turborepo + Bun. **Before every push**, run the early PR gates locally so CI
+does not burn minutes on format/lint/type errors:
+
+```sh
+bun run check:pr       # REQUIRED before push (mirrors ci.yml early steps)
+```
+
+`check:pr` is: `format:check` → `oxlint` → turbo `lint` → `typecheck` →
+`lint:types` → `lint:css` → `test:matrix`. Vitest alone is not enough —
+package `typecheck` includes test files and catches TS errors tests still run
+under. Full GitHub `ci` also runs build, native tunnel, perf, and coverage.
 
 ```sh
 bun run build          # all apps + packages
 bun run test           # per-package vitest (hundreds of test files)
 bun run coverage       # repo-wide v8 coverage
-bun run typecheck
-bun run check          # oxfmt --check + oxlint
-bun run lint:types     # type-aware lint
-bun run ci             # check + typecheck + lint:types
+bun run typecheck      # turbo typecheck + tests/ tsc (included in check:pr)
+bun run check          # format:check + oxlint + turbo lint only
+bun run lint:types     # type-aware lint (included in check:pr)
+bun run ci             # alias of check:pr
 ```
 
 Desktop e2e: Playwright tests across 14 scenario sections, driving the real Electron app against a mock gateway — see [apps/desktop/tests/e2e](apps/desktop/tests/e2e/README.md).
