@@ -1,15 +1,14 @@
 name: e2e
 
-# Desktop Playwright suite. It builds every package and launches the REAL
-# Electron app under a virtual framebuffer, so it's far heavier than the unit
-# `ci` job — we run it nightly and on-demand rather than on every PR.
+# Nightly product lanes: desktop/web Playwright, mobile agent-e2e, pairing
+# journeys (loopback + cross-network relay), plus the unified test-health
+# report. Heavier than per-PR `ci` — schedule and workflow_dispatch only.
 on:
   schedule:
     - cron: '0 6 * * *' # 06:00 UTC nightly
   workflow_dispatch:
 
 permissions:
-  actions: read
   contents: read
 
 jobs:
@@ -187,8 +186,93 @@ jobs:
             tests/agent-e2e-mobile/runs/
           retention-days: 7
 
+  # Pairing journeys (issue #289 / matrix tunnel-pairing). Independent jobs so
+  # one failure still leaves evidence from the others for the health report.
+  pairing-lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '22'
+      - run: bun install --frozen-lockfile
+      - run: bunx turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
+      - run: node scripts/test-report/prepare.mjs
+      - run: node tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-evidence-pairing-lifecycle
+          path: |
+            artifacts/
+            tests/agent-e2e-pairing/runs/
+          retention-days: 7
+
+  pairing-ticket-hygiene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '22'
+      - run: bun install --frozen-lockfile
+      - run: bunx turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
+      - run: node scripts/test-report/prepare.mjs
+      - run: node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-evidence-pairing-ticket-hygiene
+          path: |
+            artifacts/
+            tests/agent-e2e-pairing/runs/
+          retention-days: 7
+
+  pairing-cross-network-relay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '22'
+      - run: bun install --frozen-lockfile
+      - run: docker info
+      - run: bunx turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
+      - run: node scripts/test-report/prepare.mjs
+      # Production must never silently fall back to the JS byte pump.
+      - run: test -f packages/tunnel/native/centraid-tunnel-native.linux-x64.node
+      - run: node tests/agent-e2e-pairing/flows/cross-network-relay.mjs
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-evidence-pairing-cross-network-relay
+          path: |
+            artifacts/
+            tests/agent-e2e-pairing/runs/
+          retention-days: 7
+
   test-health-report:
-    needs: [desktop-e2e, web-e2e, mobile-e2e]
+    needs:
+      [
+        desktop-e2e,
+        web-e2e,
+        mobile-e2e,
+        pairing-lifecycle,
+        pairing-ticket-hygiene,
+        pairing-cross-network-relay,
+      ]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -201,26 +285,13 @@ jobs:
         with:
           bun-version: 1.3.13
       - run: bun install --frozen-lockfile
+      # Same-run evidence only (desktop/web/mobile/pairing). Pairing no longer
+      # pulls artifacts from a separate scheduled workflow run.
       - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
         with:
           pattern: nightly-evidence-*
           path: artifacts
           merge-multiple: true
-      - name: Merge the latest completed pairing/relay evidence
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          pairing_run_id="$(gh run list --workflow pairing-relay-e2e.yml --status completed --limit 1 --json databaseId --jq '.[0].databaseId')"
-          if [ -z "$pairing_run_id" ]; then
-            echo "::warning::No completed pairing/relay run is available; the report will keep that evidence grey."
-            exit 0
-          fi
-          mkdir -p /tmp/centraid-pairing-evidence
-          if ! gh run download "$pairing_run_id" --name nightly-evidence-pairing --dir /tmp/centraid-pairing-evidence; then
-            echo "::warning::The latest pairing/relay run has no evidence artifact; the report will keep that evidence grey."
-            exit 0
-          fi
-          cp -R /tmp/centraid-pairing-evidence/artifacts/. artifacts/
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |

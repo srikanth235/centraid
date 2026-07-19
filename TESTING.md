@@ -145,8 +145,7 @@ test-kit's stable facade.
 | `bun run test:perf` | six generous hot-path budget tests; nightly only |
 | `bun run test:scale` | five deterministic volume tests; nightly only |
 | `bun run test:report` | build `dist/test-report/index.html` from available evidence |
-| `.github/workflows/e2e.yml` | desktop, web, mobile, perf, scale, full report |
-| `.github/workflows/pairing-relay-e2e.yml` | three independent pairing journey jobs + merged report |
+| `.github/workflows/e2e.yml` | desktop, web, mobile, three pairing journeys (lifecycle, ticket-hygiene, cross-network-relay), perf, scale, full report |
 
 Performance and scale budgets use generous regression multipliers. A noisy
 budget is fixed or removed; it is never promoted to the per-PR loop. Lane
