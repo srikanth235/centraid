@@ -58,6 +58,11 @@ centraid-gateway serve --data-dir ./gw-data --host 127.0.0.1 --port 8765
 centraid-gateway print-token --data-dir ./gw-data   # Bearer token for clients
 ```
 
+For Pi-class always-on hosts, prefer f2fs/btrfs or a USB SSD and mount the data volume with
+`noatime`. ext4 does not provide reflink clones on common Pi kernels, so daily recovery bases
+fall back to a full database copy; the gateway detects that fallback and logs a storage-wear
+warning.
+
 Mobile companion: `bun run dev:mobile` (Expo dev build), then pair it via Settings → Phone on the desktop (one-time QR).
 
 Optional device-local transcription: run an OpenAI-compatible file-ASR service such as whisper.cpp on the desktop and set `CENTRAID_DEVICE_ASR_URL` to its loopback `/v1/audio/transcriptions` endpoint. `CENTRAID_DEVICE_ASR_TOKEN` and `CENTRAID_DEVICE_ASR_MODEL` are optional. Centraid advertises the transcript work capability only while that loopback adapter answers; media and credentials stay in the Electron main process.

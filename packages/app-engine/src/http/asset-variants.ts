@@ -6,7 +6,7 @@ import {
   isCompressibleType,
   MIN_COMPRESS_BYTES,
   negotiateEncoding,
-  STATIC_QUALITY,
+  staticQualityForHost,
   type CompressQuality,
   type Encoding,
 } from './compression.js';
@@ -134,7 +134,7 @@ export async function finishStaticAsset(
   }
   let variant = variants.get(encoding);
   if (!variant) {
-    variant = compress(await loadRaw(), encoding, STATIC_QUALITY);
+    variant = await compress(await loadRaw(), encoding, staticQualityForHost());
     variants.set(encoding, variant);
   }
   res.setHeader('Content-Encoding', encoding);
@@ -147,13 +147,13 @@ export async function finishStaticAsset(
  * body is worth it. For uncached, per-response bodies (the HTML shell) — no
  * variant cache; the caller has already set every other header.
  */
-export function writeCompressible(
+export async function writeCompressible(
   req: IncomingMessage,
   res: ServerResponse,
   raw: Buffer,
   contentType: string,
   quality: CompressQuality,
-): void {
+): Promise<void> {
   if (isCompressibleType(contentType)) res.setHeader('Vary', 'Accept-Encoding');
   const encoding =
     raw.length >= MIN_COMPRESS_BYTES && isCompressibleType(contentType)
@@ -164,5 +164,5 @@ export function writeCompressible(
     return;
   }
   res.setHeader('Content-Encoding', encoding);
-  res.end(compress(raw, encoding, quality));
+  res.end(await compress(raw, encoding, quality));
 }

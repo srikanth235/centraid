@@ -27,6 +27,24 @@ test('openVaultDb: file-backed vault.db and journal.db open with PRAGMA synchron
   expect(journalSync.synchronous).toBe(2);
 });
 
+test('openVaultDb: NORMAL applies only to vault.db; journal proof remains FULL', () => {
+  const db = openVaultDb({ dir: tempDir(), synchronous: 'NORMAL' });
+  cleanups.push(() => db.close());
+  expect(db.vault.prepare('PRAGMA synchronous').get()).toEqual({ synchronous: 1 });
+  expect(db.journal.prepare('PRAGMA synchronous').get()).toEqual({ synchronous: 2 });
+});
+
+test('openVaultDb: file-backed handles use the bounded low-end read pragmas (#456 S1)', () => {
+  const dir = tempDir();
+  const db = openVaultDb({ dir });
+  cleanups.push(() => db.close());
+  for (const handle of [db.vault, db.journal]) {
+    expect(handle.prepare('PRAGMA cache_size').get()).toEqual({ cache_size: -16000 });
+    expect(handle.prepare('PRAGMA mmap_size').get()).toEqual({ mmap_size: 67_108_864 });
+    expect(handle.prepare('PRAGMA temp_store').get()).toEqual({ temp_store: 2 });
+  }
+});
+
 test('openVaultDb: in-memory vaults still open fine (pragma is file-backed only)', () => {
   const db = openVaultDb();
   cleanups.push(() => db.close());
@@ -70,6 +88,18 @@ test('openVaultDb: fresh vault.db and journal.db are auto_vacuum=INCREMENTAL (is
   const journalAv = db.journal.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum: number };
   expect(vaultAv.auto_vacuum).toBe(2);
   expect(journalAv.auto_vacuum).toBe(2);
+});
+
+test('openVaultDb: fresh databases use 8 KiB pages (#456 S7)', () => {
+  const dir = tempDir();
+  const db = openVaultDb({ dir });
+  cleanups.push(() => db.close());
+  expect((db.vault.prepare('PRAGMA page_size').get() as { page_size: number }).page_size).toBe(
+    8192,
+  );
+  expect((db.journal.prepare('PRAGMA page_size').get() as { page_size: number }).page_size).toBe(
+    8192,
+  );
 });
 
 test('openVaultDb: a journal.db created WITHOUT auto_vacuum converts to INCREMENTAL on next open (issue #438)', () => {

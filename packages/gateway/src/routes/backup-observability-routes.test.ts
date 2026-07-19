@@ -130,6 +130,7 @@ test('backup status reports durable pending transfer counts and bytes', async ()
 });
 
 test('policy update surfaces policy_unmet while retaining the local desired policy', async () => {
+  const refreshWalSchedule = vi.fn(async () => undefined);
   const syncPolicy = vi.fn(async () => ({
     status: 'rejected' as const,
     desired: {
@@ -143,7 +144,10 @@ test('policy update surfaces policy_unmet while retaining the local desired poli
     errorCode: 'policy_unmet',
   }));
   const target: BackupTargetState = { targetId: 'target', label: 'opaque', generation: 1 };
-  const { db, plane, handler } = harness(target, { syncPolicy } as Partial<BackupService>);
+  const { db, plane, handler } = harness(target, {
+    refreshWalSchedule,
+    syncPolicy,
+  } as Partial<BackupService>);
   const out = response();
   await handler(
     request('/centraid/_gateway/backup/policy/vault-a', 'PUT', { rpoSeconds: 900 }),
@@ -155,6 +159,7 @@ test('policy update surfaces policy_unmet while retaining the local desired poli
   });
   expect(readBackupPolicy(db.vault).rpoSeconds).toBe(900);
   expect(plane.rescheduleWalCapture).toHaveBeenCalledOnce();
+  expect(refreshWalSchedule).toHaveBeenCalledOnce();
 });
 
 test('verify-against-bucket returns the completed raw cross-check report', async () => {

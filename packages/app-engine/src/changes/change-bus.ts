@@ -48,7 +48,18 @@ export interface AppChange {
   turnId?: string;
 }
 
-export type ChangeListener = (change: AppChange) => void;
+export type ChangeListener = (change: AppChange, serialized: string) => void;
+
+function serializeChange(change: AppChange): string {
+  const payload: Record<string, unknown> = {
+    tables: change.tables,
+    ts: change.ts,
+    source: change.source,
+  };
+  if (change.toolCallId) payload.toolCallId = change.toolCallId;
+  if (change.turnId) payload.turnId = change.turnId;
+  return JSON.stringify(payload);
+}
 
 /**
  * In-process pub-sub keyed by appId. Construct once per `Runtime`. A no-op
@@ -92,13 +103,14 @@ export class ChangeBus {
   emit(change: AppChange): void {
     const set = this.listeners.get(change.appId);
     if (!set || set.size === 0) return;
+    const serialized = serializeChange(change);
     // Set iteration is safe under concurrent delete in JS (the deleted
     // element is skipped, the rest are still visited in insertion order),
     // so a listener can unsubscribe itself during dispatch without
     // breaking the loop.
     for (const listener of set) {
       try {
-        listener(change);
+        listener(change, serialized);
       } catch (err) {
         this.logger?.warn(
           `[change-bus] listener for app "${change.appId}" threw: ${

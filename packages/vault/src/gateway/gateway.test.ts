@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit one pipeline suite over a single bootstrapped vault fixture — identity/consent/contract/execution/evidence stages are asserted against shared state
-import { beforeEach, describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { registerScheduleCommands } from '../commands/schedule.js';
 import {
   bootstrapVault,
@@ -173,6 +173,70 @@ describe('S2 consent', () => {
 });
 
 describe('S3/S4 command execution', () => {
+  test('group commit crosses exactly one vault + journal commit pair', () => {
+    const vaultExec = vi.spyOn(db.vault, 'exec');
+    const journalExec = vi.spyOn(db.journal, 'exec');
+    const outcomes = gw.invokeBatch(
+      Array.from(
+        { length: 10 },
+        (_, index) => () =>
+          gw.invoke(owner, {
+            command: 'schedule.propose_event',
+            invocationId: `batch-invocation-${index}`,
+            input: proposeInput({
+              summary: `Batched event ${index}`,
+              dtstart: `2026-07-${String(index + 3).padStart(2, '0')}T10:00:00Z`,
+              dtend: `2026-07-${String(index + 3).padStart(2, '0')}T10:15:00Z`,
+            }),
+          }),
+      ),
+    );
+    expect(outcomes.map((outcome) => outcome.status)).toEqual(
+      Array.from({ length: 10 }, () => 'executed'),
+    );
+    expect(vaultExec.mock.calls.filter(([sql]) => sql === 'COMMIT')).toHaveLength(1);
+    expect(journalExec.mock.calls.filter(([sql]) => sql === 'COMMIT')).toHaveLength(1);
+    expect(
+      db.journal
+        .prepare(
+          `SELECT count(*) AS n FROM agent_command_invocation
+            WHERE invocation_id LIKE 'batch-invocation-%' AND status = 'executed'`,
+        )
+        .get(),
+    ).toEqual({ n: 10 });
+    expect(
+      db.vault
+        .prepare(
+          `SELECT invocation_id, journal_finalized_at FROM replica_invocation_commit
+            WHERE invocation_id LIKE 'batch-invocation-%' ORDER BY invocation_id`,
+        )
+        .all(),
+    ).toHaveLength(10);
+
+    gw.invokeBatch([
+      () =>
+        gw.invoke(owner, {
+          command: 'schedule.propose_event',
+          invocationId: 'next-batch-invocation',
+          input: proposeInput({
+            summary: 'Next batch reclaims proven predecessors',
+            dtstart: '2026-07-03T11:00:00Z',
+            dtend: '2026-07-03T11:15:00Z',
+          }),
+        }),
+    ]);
+    expect(
+      (
+        db.vault
+          .prepare(
+            `SELECT COUNT(*) AS n FROM replica_invocation_commit
+              WHERE invocation_id LIKE 'batch-invocation-%'`,
+          )
+          .get() as { n: number }
+      ).n,
+    ).toBe(0);
+  });
+
   test('an app invocation is bound to the durable intent owner device and app', () => {
     const app = enrollApp(db, { name: 'agenda' });
     createGrant(db, {
@@ -653,6 +717,27 @@ describe('S3/S4 command execution', () => {
         .prepare(`SELECT 1 AS present FROM replica_invocation_commit WHERE invocation_id = ?`)
         .get(invocationId),
     ).toBeUndefined();
+  });
+
+  test('ordinary success deletes its marker without stamping journal_finalized_at (#456 S2)', () => {
+    db.vault.exec(`CREATE TEMP TRIGGER reject_redundant_finalize_stamp
+      BEFORE UPDATE OF journal_finalized_at ON replica_invocation_commit
+      BEGIN
+        SELECT RAISE(ABORT, 'ordinary path stamped the marker');
+      END`);
+    const invocationId = 'ordinary-direct-marker-delete';
+    const outcome = gw.invoke(owner, {
+      command: 'schedule.propose_event',
+      input: proposeInput(),
+      purpose: 'dpv:ServiceProvision',
+      invocationId,
+    });
+    expect(outcome.status).toBe('executed');
+    expect(
+      db.vault
+        .prepare('SELECT count(*) AS n FROM replica_invocation_commit WHERE invocation_id = ?')
+        .get(invocationId),
+    ).toEqual({ n: 0 });
   });
 
   test('judgment veto blocks an otherwise-valid call', () => {

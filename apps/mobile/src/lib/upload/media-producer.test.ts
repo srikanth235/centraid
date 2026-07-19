@@ -102,7 +102,10 @@ beforeEach(() => {
   deletedFiles.length = 0;
   generateDeviceDerivatives.mockReset();
   generateDeviceDerivatives.mockResolvedValue({
-    binary: [{ variant: 'thumb', uri: 'file://durable/thumb.jpg', mediaType: 'image/jpeg' }],
+    binary: [
+      { variant: 'thumb', uri: 'file://durable/thumb.jpg', mediaType: 'image/jpeg' },
+      { variant: 'preview', uri: 'file://durable/preview.jpg', mediaType: 'image/jpeg' },
+    ],
     phash: 'phash-value',
     thumbhash: 'thumbhash-value',
   });
@@ -111,7 +114,7 @@ beforeEach(() => {
 });
 
 describe('backupDeviceMedia', () => {
-  it('maps device input to the photos follow-up with derivative hashes', async () => {
+  it('carries C2 client-contributed thumb, preview, pHash, and ThumbHash together', async () => {
     await backupDeviceMedia(session, 'http://gw', {
       localUri: 'file://cam/IMG.heic',
       filename: 'IMG.heic',
@@ -139,7 +142,12 @@ describe('backupDeviceMedia', () => {
         thumbhash: 'thumbhash-value',
       },
     });
-    expect(q.capturedFollowup?.derivatives).toHaveLength(1);
+    const binary = q.capturedFollowup?.derivatives;
+    expect(
+      Array.isArray(binary)
+        ? (binary as Array<{ variant: string }>).map((entry) => entry.variant)
+        : [],
+    ).toEqual(['thumb', 'preview']);
   });
 
   it('owns the foreground service across the drain and always closes the queue', async () => {

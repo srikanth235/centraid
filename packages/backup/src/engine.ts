@@ -10,7 +10,7 @@
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { frameChunkPayload, unframeChunkPayload } from './compress.js';
+import { frameChunkPayloadAsync, unframeChunkPayload } from './compress.js';
 import {
   activeMasterKey,
   chunkId as computeChunkId,
@@ -272,7 +272,7 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
       // /2 (#405 §1): compress-then-seal. The sealed plaintext is the framed
       // payload `[algo-id][possibly-compressed body]`, not the raw part —
       // keep-if-smaller, so incompressible parts cost at most one extra byte.
-      const encrypted = encryptWithNonce(dataKey, nonce, frameChunkPayload(plain));
+      const encrypted = encryptWithNonce(dataKey, nonce, await frameChunkPayloadAsync(plain));
       uploads.push(
         store
           .head(objectKey)

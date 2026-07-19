@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit one end-to-end suite over a single served gateway+vault fixture — the scenarios intentionally share state to test the plane as one surface
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -22,6 +22,15 @@ async function tempDir(): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), `vault-plane-${crypto.randomUUID()}-`));
   cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
   return dir;
+}
+
+async function directoryBytes(dir: string): Promise<number> {
+  let total = 0;
+  for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    total += entry.isDirectory() ? await directoryBytes(full) : (await fs.stat(full)).size;
+  }
+  return total;
 }
 
 function openPlane(dir: string): VaultPlane {
@@ -52,6 +61,87 @@ test("a WAL-disabled admin plane never checkpoints another process's stream on s
   expect(checkpoints).toBe(0);
 });
 
+test('WAL capture sleeps without backup and re-arms immediately when configured', async () => {
+  const dir = await tempDir();
+  let backupConfigured = false;
+  const plane = openVaultPlane({
+    dir,
+    logger: silentLogger,
+    ownerName: 'Priya',
+    walCaptureEnabled: () => backupConfigured,
+  });
+  cleanups.push(() => plane.stop());
+  const tick = vi.spyOn(plane.walShipper!, 'tick');
+  const close = vi.spyOn(plane.walShipper!, 'close');
+  const autocheckpointPages = () =>
+    [plane.db.vault, plane.db.journal].map((db) => {
+      const row = db.prepare('PRAGMA wal_autocheckpoint').get() as Record<string, number>;
+      return Object.values(row)[0];
+    });
+
+  plane.start();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(tick).not.toHaveBeenCalled();
+  expect(autocheckpointPages().every((pages) => (pages ?? 0) > 0)).toBe(true);
+
+  backupConfigured = true;
+  plane.rescheduleWalCapture();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(tick).toHaveBeenCalledTimes(1);
+  expect(autocheckpointPages()).toEqual([0, 0]);
+
+  backupConfigured = false;
+  plane.rescheduleWalCapture();
+  expect(autocheckpointPages().every((pages) => (pages ?? 0) > 0)).toBe(true);
+
+  const shipBytesBeforeStop = await directoryBytes(path.join(dir, 'wal-ship'));
+  plane.stop();
+  expect(close).not.toHaveBeenCalled();
+  expect(await directoryBytes(path.join(dir, 'wal-ship'))).toBe(shipBytesBeforeStop);
+});
+
+test('re-enabling capture after fallback autocheckpoint mints a coordinated generation', async () => {
+  const dir = await tempDir();
+  let backupConfigured = true;
+  const plane = openVaultPlane({
+    dir,
+    logger: silentLogger,
+    ownerName: 'Priya',
+    walCaptureEnabled: () => backupConfigured,
+  });
+  cleanups.push(() => plane.stop());
+
+  plane.start();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const before = plane.walShipper!.status().dbs;
+  expect(before.vault?.generation).toMatch(/^[0-9a-f]{32}$/);
+  expect(before.journal?.generation).toMatch(/^[0-9a-f]{32}$/);
+
+  backupConfigured = false;
+  plane.rescheduleWalCapture();
+  // Force the production fallback's ordinary SQLite checkpoint transition
+  // with one page so this regression does not need to write 64 MiB.
+  plane.db.vault.exec('PRAGMA wal_autocheckpoint = 1');
+  plane.db.vault.exec(
+    'CREATE TABLE fallback_checkpoint_probe (id INTEGER PRIMARY KEY, value TEXT NOT NULL)',
+  );
+  plane.db.vault
+    .prepare('INSERT INTO fallback_checkpoint_probe (value) VALUES (?)')
+    .run('folded while backup was disabled');
+
+  backupConfigured = true;
+  plane.rescheduleWalCapture();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const after = plane.walShipper!.status();
+  expect(after.dbs.vault?.generation).not.toBe(before.vault?.generation);
+  expect(after.dbs.journal?.generation).not.toBe(before.journal?.generation);
+  expect(after.dbs.vault?.generation).toMatch(/^[0-9a-f]{32}$/);
+  expect(after.dbs.journal?.generation).toMatch(/^[0-9a-f]{32}$/);
+  expect(after.dbs.vault?.basePending).toBe(true);
+  expect(after.dbs.journal?.basePending).toBe(true);
+  expect(after.foreignCheckpointCount).toBeGreaterThan(0);
+});
+
 function seedCalendar(plane: VaultPlane): string {
   const id = uuidv7();
   plane.db.vault
@@ -62,6 +152,101 @@ function seedCalendar(plane: VaultPlane): string {
     .run(id, plane.boot.ownerPartyId);
   return id;
 }
+
+test('ten real commands in one arrival window share one database batch', async () => {
+  const dir = await tempDir();
+  const plane = openPlane(dir);
+  const calendarId = seedCalendar(plane);
+  const batchSpy = vi.spyOn(plane.gateway, 'invokeBatchSettled');
+
+  const outcomes = await Promise.all(
+    Array.from({ length: 10 }, (_, index) =>
+      plane.invoke(plane.ownerCredential, {
+        command: 'schedule.propose_event',
+        invocationId: `queue-real-${index}`,
+        input: {
+          summary: `Queued event ${index}`,
+          dtstart: `2026-10-${String(index + 1).padStart(2, '0')}T09:00:00Z`,
+          dtend: `2026-10-${String(index + 1).padStart(2, '0')}T09:15:00Z`,
+          calendar_id: calendarId,
+        },
+      }),
+    ),
+  );
+
+  expect(outcomes.every((outcome) => outcome.status === 'executed')).toBe(true);
+  expect(batchSpy).toHaveBeenCalledTimes(1);
+  expect(batchSpy.mock.calls[0]?.[0]).toHaveLength(10);
+  expect(plane.db.vault.prepare('SELECT count(*) AS n FROM core_event').get()).toEqual({ n: 10 });
+  expect(
+    plane.db.journal
+      .prepare(
+        `SELECT count(*) AS n FROM agent_command_invocation
+          WHERE invocation_id LIKE 'queue-real-%' AND status = 'executed'`,
+      )
+      .get(),
+  ).toEqual({ n: 10 });
+});
+
+test('one journal failure preserves its canonical marker while sibling writes commit', async () => {
+  const dir = await tempDir();
+  const plane = openPlane(dir);
+  const calendarId = seedCalendar(plane);
+  plane.db.journal.exec(`CREATE TEMP TRIGGER fail_one_queued_receipt
+    BEFORE INSERT ON consent_receipt
+    WHEN NEW.invocation_id = 'queue-fail'
+    BEGIN
+      SELECT RAISE(ABORT, 'synthetic queued journal failure');
+    END`);
+
+  const requests = ['queue-ok-a', 'queue-fail', 'queue-ok-b'].map((invocationId, index) =>
+    plane.invoke(plane.ownerCredential, {
+      command: 'schedule.propose_event',
+      invocationId,
+      input: {
+        summary: invocationId,
+        dtstart: `2026-11-0${index + 1}T09:00:00Z`,
+        dtend: `2026-11-0${index + 1}T09:15:00Z`,
+        calendar_id: calendarId,
+      },
+    }),
+  );
+  const results = await Promise.allSettled(requests);
+
+  expect(results.map((result) => result.status)).toEqual(['fulfilled', 'rejected', 'fulfilled']);
+  expect(results[1]).toMatchObject({
+    status: 'rejected',
+    reason: expect.objectContaining({ message: expect.stringContaining('queued journal failure') }),
+  });
+  expect(plane.db.vault.prepare('SELECT count(*) AS n FROM core_event').get()).toEqual({ n: 3 });
+  await plane.invoke(plane.ownerCredential, {
+    command: 'schedule.propose_event',
+    invocationId: 'cleanup-proven-queue-markers',
+    input: {
+      summary: 'Cleanup pass',
+      dtstart: '2026-11-04T09:00:00Z',
+      dtend: '2026-11-04T09:15:00Z',
+      calendar_id: calendarId,
+    },
+  });
+  expect(
+    plane.db.vault
+      .prepare(
+        `SELECT invocation_id, journal_finalized_at FROM replica_invocation_commit
+          WHERE invocation_id LIKE 'queue-%' ORDER BY invocation_id`,
+      )
+      .all(),
+  ).toEqual([{ invocation_id: 'queue-fail', journal_finalized_at: null }]);
+  expect(
+    plane.db.journal
+      .prepare(
+        `SELECT invocation_id FROM agent_command_invocation
+          WHERE invocation_id LIKE 'queue-ok-%' AND status = 'executed'
+          ORDER BY invocation_id`,
+      )
+      .all(),
+  ).toEqual([{ invocation_id: 'queue-ok-a' }, { invocation_id: 'queue-ok-b' }]);
+});
 
 test('deny-by-default → owner grant → allowed → uninstall goes dark', async () => {
   const dir = await tempDir();
@@ -411,7 +596,13 @@ test('owner routes: status, apps, grant, parked confirm, revoke', async () => {
     });
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  cleanups.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  cleanups.push(
+    () =>
+      new Promise<void>((resolve) => {
+        server.closeAllConnections();
+        server.close(() => resolve());
+      }),
+  );
   const addr = server.address();
   if (!addr || typeof addr === 'string') throw new Error('no address');
   const base = `http://127.0.0.1:${addr.port}/centraid/_vault`;
@@ -799,7 +990,7 @@ test('cross-referencing (issue #272): shell pick → owner link → app resolves
   });
 
   // The pick is the consent: the shell asserts the link as the owner.
-  const linked = plane.linkAsOwner({
+  const linked = await plane.linkAsOwner({
     from_type: 'knowledge.note',
     from_id: noteId,
     to_type: 'media.media_asset',
@@ -862,7 +1053,7 @@ test('cross-referencing (issue #272): shell pick → owner link → app resolves
       { schema: 'core', table: 'link', verbs: 'read' },
     ],
   });
-  const unlinked = plane.unlinkAsOwner(linkId);
+  const unlinked = await plane.unlinkAsOwner(linkId);
   expect(unlinked.status).toBe('executed');
   const dark = await bridge({
     op: 'resolve',
@@ -901,7 +1092,13 @@ test('owner routes (issue #272): picker searches, POST links asserts, DELETE end
     });
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  cleanups.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  cleanups.push(
+    () =>
+      new Promise<void>((resolve) => {
+        server.closeAllConnections();
+        server.close(() => resolve());
+      }),
+  );
   const addr = server.address();
   if (!addr || typeof addr === 'string') throw new Error('no address');
   const base = `http://127.0.0.1:${addr.port}/centraid/_vault`;
@@ -950,7 +1147,7 @@ test('invokeAsAssistant: low-risk executes under a standing grant, high-risk par
   const plane = openPlane(dir);
 
   // First use mints the `_assistant` agent + its standing act grant.
-  const created = plane.invokeAsAssistant({
+  const created = await plane.invokeAsAssistant({
     command: 'knowledge.create_note',
     input: { title: 'From the assistant', body_text: 'hello' },
     purpose: 'dpv:ServiceProvision',
@@ -958,7 +1155,7 @@ test('invokeAsAssistant: low-risk executes under a standing grant, high-risk par
   expect(created.status).toBe('executed');
 
   // Second call reuses the enrollment — no duplicate agent/grant rows.
-  const again = plane.invokeAsAssistant({
+  const again = await plane.invokeAsAssistant({
     command: 'knowledge.create_note',
     input: { title: 'Second', body_text: 'again' },
     purpose: 'dpv:ServiceProvision',
@@ -970,7 +1167,7 @@ test('invokeAsAssistant: low-risk executes under a standing grant, high-risk par
   expect(agents.n).toBe(1);
 
   // Confirm-gated commands park for the assistant like any non-owner.
-  const risky = plane.invokeAsAssistant({
+  const risky = await plane.invokeAsAssistant({
     command: 'social.send_message',
     input: { message_id: 'not-yet-real' },
     purpose: 'dpv:ServiceProvision',
@@ -981,7 +1178,7 @@ test('invokeAsAssistant: low-risk executes under a standing grant, high-risk par
   // The credential-touching pair parks for the assistant too (issue #308
   // A1): the all-schema grant reaches sync, but confirm holds the line on
   // exactly the fields #304 pinned.
-  const credentialGrab = plane.invokeAsAssistant({
+  const credentialGrab = await plane.invokeAsAssistant({
     command: 'sync.configure_credential',
     input: {
       kind: 'pull.gmail',
@@ -999,7 +1196,7 @@ test('the assistant self-heal respects owner narrowing — a revoked schema stay
   const dir = await tempDir();
   const plane = openPlane(dir);
   // Mint the standing grant, then have the owner revoke it wholesale.
-  const created = plane.invokeAsAssistant({
+  const created = await plane.invokeAsAssistant({
     command: 'knowledge.create_note',
     input: { title: 'Before narrowing', body_text: 'x' },
     purpose: 'dpv:ServiceProvision',
@@ -1010,7 +1207,7 @@ test('the assistant self-heal respects owner narrowing — a revoked schema stay
   for (const grant of assistant!.grants) plane.revokeGrant(grant.grantId);
 
   // The next turn does NOT silently re-mint: the write is a receipted deny.
-  const denied = plane.invokeAsAssistant({
+  const denied = await plane.invokeAsAssistant({
     command: 'knowledge.create_note',
     input: { title: 'After narrowing', body_text: 'y' },
     purpose: 'dpv:ServiceProvision',
@@ -1022,7 +1219,7 @@ test('the assistant self-heal respects owner narrowing — a revoked schema stay
     purpose: 'dpv:ServiceProvision',
     scopes: [{ schema: 'knowledge', verbs: 'act' }],
   });
-  const healed = plane.invokeAsAssistant({
+  const healed = await plane.invokeAsAssistant({
     command: 'knowledge.create_note',
     input: { title: 'Re-approved', body_text: 'z' },
     purpose: 'dpv:ServiceProvision',

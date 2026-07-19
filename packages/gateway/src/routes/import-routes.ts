@@ -129,7 +129,7 @@ export function makeImportRouteHandler(vaults: Pick<VaultRegistry, 'current'>): 
         segments[2] === 'status'
       ) {
         const body = await readJson(req);
-        const outcome = plane.gateway.invoke(owner, {
+        const outcome = await plane.invoke(owner, {
           command: 'sync.set_connection_status',
           input: { connection_id: segments[1], status: String(body.status ?? '') },
           purpose,

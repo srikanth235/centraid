@@ -17,6 +17,8 @@
     "build": "tsc -p tsconfig.json && rm -rf dist/web && cp -R ../../apps/web/dist dist/web",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run",
+    "perf:low-end": "node scripts/bench-low-end.mjs --check",
+    "perf:runtime-probe": "node scripts/probe-runtime-sqlite.mjs",
     "clean": "rm -rf dist"
   },
   "dependencies": {
@@ -29,7 +31,9 @@
     "@centraid/tunnel": "workspace:*",
     "@centraid/vault": "workspace:*",
     "jpeg-js": "^0.4.4",
-    "pngjs": "^7.0.0"
+    "pngjs": "^7.0.0",
+    "sharp": "^0.35.3",
+    "wasm-vips": "^0.0.18"
   },
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",

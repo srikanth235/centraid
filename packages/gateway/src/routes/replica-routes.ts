@@ -8,6 +8,7 @@ import {
   parseReplicaCursor,
   readReplicaIntentOutcome,
   ReplicaRebootstrapRequiredError,
+  subscribeReplicaCommits,
   withReplicaSnapshot,
   type ReplicaCursor,
   type ReplicaLogState,
@@ -490,11 +491,18 @@ async function streamChanges(
   const expected = expectedReplicaShapeIds(url);
   let baseline = expected;
   let closed = false;
+  let signalPending = false;
+  let wake: (() => void) | undefined;
   const close = () => {
     closed = true;
+    wake?.();
   };
   req.on('close', close);
   res.on('close', close);
+  const unsubscribe = subscribeReplicaCommits(db, () => {
+    signalPending = true;
+    wake?.();
+  });
   let heartbeatAt = Date.now();
   while (!closed) {
     const access = resolveReplicaAccess(req, url, vaultId, options.enrollments);
@@ -529,12 +537,40 @@ async function streamChanges(
         message: error instanceof Error ? error.message : String(error),
       });
     }
-    if (Date.now() - heartbeatAt >= (options.heartbeatMs ?? 15_000)) {
+    const heartbeatMs = options.heartbeatMs ?? 15_000;
+    if (Date.now() - heartbeatAt >= heartbeatMs) {
       res.write(': heartbeat\n\n');
       heartbeatAt = Date.now();
     }
-    await new Promise<void>((resolve) => setTimeout(resolve, options.pollIntervalMs ?? 250));
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      const settle = (): void => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      if (signalPending || closed) {
+        signalPending = false;
+        settle();
+        return;
+      }
+      const timer = setTimeout(
+        () => {
+          wake = undefined;
+          settle();
+        },
+        Math.max(1, heartbeatMs - (Date.now() - heartbeatAt)),
+      );
+      timer.unref?.();
+      wake = () => {
+        clearTimeout(timer);
+        wake = undefined;
+        signalPending = false;
+        settle();
+      };
+    });
   }
+  unsubscribe();
   req.off('close', close);
   res.off('close', close);
   if (!closed && !res.writableEnded) res.end();

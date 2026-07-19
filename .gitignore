@@ -11,6 +11,8 @@ out
 test-results
 playwright-report
 coverage
+target
+packages/tunnel/native/*.node
 .wrangler
 .claude
 # Python bytecode created by .governance/ hook scripts (not source).

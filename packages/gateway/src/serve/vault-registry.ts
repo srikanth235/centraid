@@ -84,12 +84,20 @@ export interface VaultRegistryOptions {
   sweepIntervalMs?: number;
   /** False for admin/read-only opens that must never own or checkpoint WALs. */
   enableWalShipper?: boolean;
+  /** Forwarded live backup-configuration gate for each plane's WAL capture clock. */
+  walCaptureEnabled?: () => boolean;
   /** Forwarded to every plane (issue #367 §C6) — see `VaultPlaneOptions.leaseConflicted`. */
   leaseConflicted?: () => boolean;
   /** Forwarded to every plane (issue #367 §C3) — see `VaultPlaneOptions.s3Credentials`. */
   s3Credentials?: (settings: BlobStoreSettings) => Promise<S3Credentials>;
   /** Forwarded to every plane (issue #405 §2) — see `VaultPlaneOptions.previewCodec`. */
   previewCodec?: PreviewCodec;
+  /** SQLite durability selected by the gateway hardware profile. */
+  synchronous?: 'FULL' | 'NORMAL';
+  /** Global event-loop pressure gate forwarded to mounted planes. */
+  shouldDeferBackgroundWork?: () => boolean;
+  /** Concurrent remote pushes selected by the gateway hardware profile. */
+  replicationConcurrency?: number;
 }
 
 /** One row of the vault list. */
@@ -122,12 +130,17 @@ export class VaultRegistry {
   private readonly ownerName: string | undefined;
   private readonly sweepIntervalMs: number | undefined;
   private readonly enableWalShipper: boolean;
+  private readonly walCaptureEnabled: (() => boolean) | undefined;
   private readonly leaseConflicted: (() => boolean) | undefined;
   private readonly s3Credentials:
     | ((settings: BlobStoreSettings) => Promise<S3Credentials>)
     | undefined;
   private readonly previewCodec: PreviewCodec | undefined;
+  private readonly synchronous: 'FULL' | 'NORMAL' | undefined;
+  private readonly shouldDeferBackgroundWork: (() => boolean) | undefined;
+  private readonly replicationConcurrency: number | undefined;
   private readonly planes = new Map<string, VaultPlane>();
+  private readonly mountListeners = new Set<(plane: VaultPlane) => void>();
   /**
    * Vault ids THIS registry auto-created on an empty root at construction
    * (issue #439 R1) — never an admin `create(name)`. The airtight signal
@@ -153,9 +166,13 @@ export class VaultRegistry {
     this.ownerName = options.ownerName;
     this.sweepIntervalMs = options.sweepIntervalMs;
     this.enableWalShipper = options.enableWalShipper ?? true;
+    this.walCaptureEnabled = options.walCaptureEnabled;
     this.leaseConflicted = options.leaseConflicted;
     this.s3Credentials = options.s3Credentials;
     this.previewCodec = options.previewCodec;
+    this.synchronous = options.synchronous;
+    this.shouldDeferBackgroundWork = options.shouldDeferBackgroundWork;
+    this.replicationConcurrency = options.replicationConcurrency;
     mkdirSync(this.rootDir, { recursive: true });
     if (existsSync(path.join(this.rootDir, 'vault.db'))) {
       // Pre-multi-vault layout (v0: no data migrations) — the files stay put
@@ -217,6 +234,7 @@ export class VaultRegistry {
         this.scannedDirs.add(dir);
         this.failedMountsByDir.delete(dir);
         if (this.started) plane.start();
+        this.notifyMounted(plane);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         const schemaAhead =
@@ -243,6 +261,22 @@ export class VaultRegistry {
   /** Re-scan the vault root now — retries any previously-failed mount past its backoff window. */
   rescan(): void {
     this.scan();
+  }
+
+  /** Observe vaults mounted after registration (admin create or recovery). */
+  onMount(listener: (plane: VaultPlane) => void): () => void {
+    this.mountListeners.add(listener);
+    return () => this.mountListeners.delete(listener);
+  }
+
+  private notifyMounted(plane: VaultPlane): void {
+    for (const listener of this.mountListeners) {
+      try {
+        listener(plane);
+      } catch {
+        // Follow-up host work cannot roll back a successful durable mount.
+      }
+    }
   }
 
   /**
@@ -320,9 +354,17 @@ export class VaultRegistry {
       ...(this.ownerName ? { ownerName: this.ownerName } : {}),
       ...(this.sweepIntervalMs !== undefined ? { sweepIntervalMs: this.sweepIntervalMs } : {}),
       enableWalShipper: this.enableWalShipper,
+      ...(this.walCaptureEnabled ? { walCaptureEnabled: this.walCaptureEnabled } : {}),
       ...(this.leaseConflicted ? { leaseConflicted: this.leaseConflicted } : {}),
       ...(this.s3Credentials ? { s3Credentials: this.s3Credentials } : {}),
       ...(this.previewCodec ? { previewCodec: this.previewCodec } : {}),
+      ...(this.synchronous ? { synchronous: this.synchronous } : {}),
+      ...(this.shouldDeferBackgroundWork
+        ? { shouldDeferBackgroundWork: this.shouldDeferBackgroundWork }
+        : {}),
+      ...(this.replicationConcurrency !== undefined
+        ? { replicationConcurrency: this.replicationConcurrency }
+        : {}),
       ...boot,
     });
   }
@@ -402,6 +444,7 @@ export class VaultRegistry {
     this.scannedDirs.add(dir);
     this.planes.set(plane.boot.vaultId, plane);
     if (this.started) plane.start();
+    this.notifyMounted(plane);
     this.logger.info(`vault registry: created vault ${plane.boot.vaultId} ("${plane.name}")`);
     return this.info(plane);
   }

@@ -127,6 +127,7 @@ function permits(scope: SessionScope, pathname: string): boolean {
 export class WebAppSessions {
   private readonly pending = new Map<string, PendingSession>();
   private readonly active = new Map<string, ActiveSession>();
+  private readonly activeByCookieName = new Map<string, ActiveSession>();
   private readonly controlStore: WebControlSessionStore;
   private readonly isDeviceValid?: (deviceKey: string) => boolean;
   private readonly now: () => number;
@@ -256,16 +257,20 @@ export class WebAppSessions {
         ? { plane: 'device', deviceKey: control.deviceKey }
         : { plane: 'admin' };
     }
-    const session = [...this.active.values()].find(
-      (candidate) =>
-        tokenMatches(presented.get(candidate.cookieName), candidate.token) &&
-        permits(candidate, pathname),
-    );
+    let session: ActiveSession | undefined;
+    for (const [cookieName, token] of presented) {
+      const candidate = this.activeByCookieName.get(cookieName);
+      if (candidate && tokenMatches(token, candidate.token) && permits(candidate, pathname)) {
+        session = candidate;
+        break;
+      }
+    }
     if (!session) return undefined;
     // Revocation propagation for active app sessions (issue #376): a live
     // `__centraid_app_*` cookie whose device enrollment was revoked is dead.
     if (this.revoked(session.deviceKey)) {
       this.active.delete(session.token);
+      this.activeByCookieName.delete(session.cookieName);
       return undefined;
     }
     // Origin-bind active app sessions. CORS is now credentialed and reflects
@@ -308,12 +313,14 @@ export class WebAppSessions {
     }
     const token = crypto.randomBytes(32).toString('base64url');
     const cookieName = `__centraid_app_${crypto.randomBytes(8).toString('hex')}`;
-    this.active.set(token, {
+    const session: ActiveSession = {
       ...pending,
       token,
       cookieName,
       expiresAt: this.now() + SESSION_TTL_MS,
-    });
+    };
+    this.active.set(token, session);
+    this.activeByCookieName.set(cookieName, session);
     const forwarded = req.headers['x-forwarded-proto'];
     const secure = forwarded === 'https' ? '; Secure' : '';
     res.statusCode = 303;
@@ -387,8 +394,12 @@ export class WebAppSessions {
     const now = this.now();
     for (const [code, session] of this.pending)
       if (session.expiresAt <= now) this.pending.delete(code);
-    for (const [token, session] of this.active)
-      if (session.expiresAt <= now) this.active.delete(token);
+    for (const [token, session] of this.active) {
+      if (session.expiresAt <= now) {
+        this.active.delete(token);
+        this.activeByCookieName.delete(session.cookieName);
+      }
+    }
     this.controlStore.sweepExpired();
   }
 }

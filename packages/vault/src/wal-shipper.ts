@@ -381,6 +381,12 @@ const MAX_CAPTURE_BYTES = 64 * 1024 * 1024;
  */
 const TRUNCATE_SETTLE_PASSES = 8;
 const noopLog: Required<WalShipperLogger> = { info: () => undefined, warn: () => undefined };
+/** Reflink support is a filesystem property; remember failed probes per device pair. */
+const reflinkCapability = new Map<string, boolean>();
+
+function reflinkDeviceKey(src: string, dst: string): string {
+  return `${process.platform}:${statSync(src).dev}:${statSync(path.dirname(dst)).dev}`;
+}
 
 /**
  * Copy-on-write clone of a database file — the base of a new generation.
@@ -404,16 +410,34 @@ const noopLog: Required<WalShipperLogger> = { info: () => undefined, warn: () =>
  * the cross-database ordering guarantee (journal cut strictly before vault, no
  * commit interleaving) rests on this whole path being one event-loop turn.
  */
-export function cloneDbFile(src: string, dst: string): void {
+export function cloneDbFile(src: string, dst: string): boolean {
+  const capabilityKey = reflinkDeviceKey(src, dst);
   if (process.platform === 'darwin') {
-    try {
-      execFileSync('/bin/cp', ['-c', src, dst], { stdio: 'ignore' });
-      return;
-    } catch {
-      // Not a clone-capable volume — the byte copy below is the real fallback.
+    if (reflinkCapability.get(capabilityKey) !== false) {
+      try {
+        execFileSync('/bin/cp', ['-c', src, dst], { stdio: 'ignore' });
+        reflinkCapability.set(capabilityKey, true);
+        return true;
+      } catch {
+        reflinkCapability.set(capabilityKey, false);
+        // Not a clone-capable volume — the byte copy below is the real fallback.
+      }
     }
   }
-  copyFileSync(src, dst, fsConstants.COPYFILE_FICLONE);
+  if (process.platform === 'linux') {
+    if (reflinkCapability.get(capabilityKey) !== false) {
+      try {
+        copyFileSync(src, dst, fsConstants.COPYFILE_FICLONE_FORCE);
+        reflinkCapability.set(capabilityKey, true);
+        return true;
+      } catch {
+        reflinkCapability.set(capabilityKey, false);
+        // ext4 and other non-reflink filesystems take the explicit byte-copy fallback.
+      }
+    }
+  }
+  copyFileSync(src, dst);
+  return false;
 }
 
 function fsyncDirBestEffort(dir: string): void {
@@ -466,6 +490,7 @@ export class WalShipper {
    * backlog the budget exists to handle.
    */
   private localSegmentBytes = 0;
+  private warnedPlainClone = false;
 
   constructor(opts: WalShipperOptions) {
     if (opts.db.dir === ':memory:') {
@@ -1343,7 +1368,14 @@ export class WalShipper {
     const baseName = path.join('bases', db, `${generation}.db`);
     const baseAbs = this.basePath(baseName);
     mkdirSync(path.dirname(baseAbs), { recursive: true });
-    cloneDbFile(this.dbPath(db), baseAbs);
+    const reflinked = cloneDbFile(this.dbPath(db), baseAbs);
+    if (!reflinked && !this.warnedPlainClone) {
+      this.warnedPlainClone = true;
+      this.log.warn(
+        'wal-ship: filesystem has no reflink support; daily base snapshots require a full DB copy. ' +
+          'For Pi-class hosts prefer f2fs, btrfs, or a USB SSD and mount with noatime.',
+      );
+    }
     const fd = openSync(baseAbs, 'r');
     try {
       fsyncSync(fd);

@@ -99,6 +99,22 @@ export async function startDesktopTunnel(
   return tunnel.handle();
 }
 
+/** Prefer the Rust byte pump, but keep phone linking available on any target
+ * supported by the upstream iroh binding when our own addon is unavailable. */
+export async function startPreferredDesktopTunnel(
+  options: DesktopTunnelOptions,
+): Promise<DesktopTunnelHandle> {
+  if (options.secretKey) {
+    try {
+      const { startNativeDesktopTunnel } = await import('./native-relay.js');
+      return await startNativeDesktopTunnel(options);
+    } catch {
+      // Fall through to the portable relay below.
+    }
+  }
+  return startDesktopTunnel(options);
+}
+
 class DesktopTunnel {
   private pairing: ActivePairing | undefined;
   private closed = false;

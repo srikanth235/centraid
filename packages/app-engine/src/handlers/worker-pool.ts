@@ -25,6 +25,7 @@
  */
 
 import { Worker } from 'node:worker_threads';
+import { isConstrainedWorkerHost, type WorkerHostCapacity } from './worker-admission.js';
 
 /** Resource caps mirrored from the pre-pool spawn (handler-runner.ts). */
 export interface WorkerResourceLimits {
@@ -37,6 +38,31 @@ const DEFAULT_LIMITS: WorkerResourceLimits = {
   maxYoungGenerationSizeMb: 32,
 };
 
+export function workerResourceLimitsFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  host?: WorkerHostCapacity,
+): WorkerResourceLimits {
+  const resolvedProfile = env.CENTRAID_HARDWARE_PROFILE ?? env.CENTRAID_RESOLVED_HARDWARE_PROFILE;
+  const constrained =
+    resolvedProfile === 'constrained' ||
+    (resolvedProfile !== 'standard' && isConstrainedWorkerHost(host));
+  const fallbackOld = constrained ? 128 : DEFAULT_LIMITS.maxOldGenerationSizeMb;
+  const fallbackYoung = constrained ? 16 : DEFAULT_LIMITS.maxYoungGenerationSizeMb;
+  const parse = (raw: string | undefined, fallback: number, ceiling: number): number => {
+    if (raw === undefined || raw === '') return fallback;
+    const value = Number.parseInt(raw, 10);
+    return Number.isFinite(value) && value >= 8 ? Math.min(value, ceiling) : fallback;
+  };
+  return {
+    maxOldGenerationSizeMb: parse(env.CENTRAID_WORKER_MAX_OLD_GENERATION_MB, fallbackOld, 1024),
+    maxYoungGenerationSizeMb: parse(
+      env.CENTRAID_WORKER_MAX_YOUNG_GENERATION_MB,
+      fallbackYoung,
+      128,
+    ),
+  };
+}
+
 /** Default warm-spare count when unset by env/option (small: 2 threads). */
 export const DEFAULT_WORKER_POOL_SIZE = 2;
 
@@ -47,9 +73,15 @@ export const DEFAULT_WORKER_POOL_SIZE = 2;
  */
 export function workerPoolSizeFromEnv(env: NodeJS.ProcessEnv = process.env): number {
   const raw = env.CENTRAID_WORKER_POOL_SIZE;
-  if (raw === undefined || raw === '') return DEFAULT_WORKER_POOL_SIZE;
+  const resolvedProfile = env.CENTRAID_HARDWARE_PROFILE ?? env.CENTRAID_RESOLVED_HARDWARE_PROFILE;
+  const fallback =
+    resolvedProfile === 'constrained' ||
+    (resolvedProfile !== 'standard' && isConstrainedWorkerHost())
+      ? 0
+      : DEFAULT_WORKER_POOL_SIZE;
+  if (raw === undefined || raw === '') return fallback;
   const n = Number.parseInt(raw, 10);
-  if (!Number.isFinite(n) || n < 0) return DEFAULT_WORKER_POOL_SIZE;
+  if (!Number.isFinite(n) || n < 0) return fallback;
   // A very large pool defeats the point (idle memory) — cap it.
   return Math.min(n, 8);
 }
@@ -67,7 +99,7 @@ export class WorkerPool {
   constructor(
     private readonly workerFile: string,
     private readonly size: number = DEFAULT_WORKER_POOL_SIZE,
-    private readonly resourceLimits: WorkerResourceLimits = DEFAULT_LIMITS,
+    private readonly resourceLimits: WorkerResourceLimits = workerResourceLimitsFromEnv(),
   ) {}
 
   /** Live warm-spare count — for a health/metrics surface or tests. */

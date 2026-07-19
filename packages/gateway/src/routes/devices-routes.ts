@@ -88,7 +88,9 @@ export interface DevicesRouteDeps {
    */
   endpointTicket?: () => string | undefined;
   /** Purge vault-local protocol state owned by removed enrollment rows. */
-  onRevoked?: (rows: DeviceEnrollment[]) => void;
+  onRevoked?: (rows: DeviceEnrollment[]) => void | Promise<void>;
+  /** Close Rust-owned live transports once a device loses its final enrollment. */
+  onEndpointRevoked?: (endpointId: string) => void | Promise<void>;
 }
 
 /** The caller's device key when it authorized as the device plane, else undefined (admin). */
@@ -250,14 +252,17 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
       // Already gone — idempotent, not an error.
       return sendJson(res, 200, { removed: false });
     }
-    deps.onRevoked?.(removed);
+    await deps.onRevoked?.(removed);
     // A device key that no longer holds ANY enrollment loses its HTTP token
     // too (mirrors device-admin.ts): the ACL bit is gone; the token dies with
     // it. A key still holding another vault's row keeps its token.
     const deadKeys = new Set(
       removed.map((r) => r.endpointId).filter((key) => !deps.enrollments.isEnrolled(key)),
     );
-    for (const key of deadKeys) deps.deviceTokens.revokeForDeviceKey(key);
+    for (const key of deadKeys) {
+      deps.deviceTokens.revokeForDeviceKey(key);
+      await deps.onEndpointRevoked?.(key);
+    }
     return sendJson(res, 200, { removed: true });
   };
 }

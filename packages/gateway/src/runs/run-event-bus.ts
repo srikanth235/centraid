@@ -14,7 +14,7 @@
 
 import type { RunStreamEvent } from '@centraid/app-engine';
 
-export type RunEventListener = (ev: RunStreamEvent) => void;
+export type RunEventListener = (ev: RunStreamEvent, serialized: string) => void;
 
 export class RunEventBus {
   private readonly listeners = new Map<string, Set<RunEventListener>>();
@@ -23,10 +23,11 @@ export class RunEventBus {
   publish(runId: string, ev: RunStreamEvent): void {
     const set = this.listeners.get(runId);
     if (!set) return;
+    const serialized = JSON.stringify(ev);
     // Snapshot: a listener may unsubscribe itself (e.g. on `run.end`) mid-fanout.
     for (const fn of Array.from(set)) {
       try {
-        fn(ev);
+        fn(ev, serialized);
       } catch {
         /* one wedged subscriber must not break the fanout */
       }

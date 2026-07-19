@@ -230,6 +230,7 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
         }
         const policy = updateBackupPolicy(plane.db.vault, patch);
         plane.rescheduleWalCapture();
+        await deps.backupService?.refreshWalSchedule?.();
         const providerPolicy =
           deps.backupService && typeof deps.backupService.syncPolicy === 'function'
             ? await deps.backupService.syncPolicy(vaultId)

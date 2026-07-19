@@ -16,6 +16,7 @@ import type { RunnerStatus } from '@centraid/app-engine';
 import type { RunnerKind, RunnerPrefs } from './types.js';
 import { readRunnerModels } from './models/catalog.js';
 import { agentSpawnEnv } from './spawn-env.js';
+import { lowPriorityCommand } from './low-priority.js';
 
 const VERSION_TIMEOUT_MS = 5_000;
 
@@ -195,7 +196,8 @@ export function compareSemver(a: SemVer, b: SemVer): number {
 
 async function execVersion(bin: string, env: NodeJS.ProcessEnv): Promise<string> {
   return new Promise<string>((resolve, reject) => {
-    const child = spawn(bin, ['--version'], {
+    const command = lowPriorityCommand(bin, ['--version']);
+    const child = spawn(command.bin, command.args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       env,
     });

@@ -46,6 +46,7 @@ import {
   RecoverJobConflictError,
   type RecoverJobEvent,
   type RecoverJobRunner,
+  type SerializedRecoverJobEvent,
 } from '../backup/recover-job.js';
 import { SseSubscriberCap } from './sse-cap.js';
 import { readJson, sendError, sendJson } from './route-helpers.js';
@@ -154,17 +155,27 @@ export function makeRecoverRouteHandler(deps: RecoverRouteDeps): RouteHandler {
     res.on('error', cleanup);
 
     // Terminal → write the closing `event: end` and tear down.
-    const write = (ev: RecoverJobEvent): void => {
+    const write = (
+      ev: RecoverJobEvent,
+      serialized: SerializedRecoverJobEvent = ev.kind === 'phase'
+        ? { data: JSON.stringify({ phase: ev.phase }) }
+        : ev.kind === 'done'
+          ? { data: JSON.stringify(ev.report), end: JSON.stringify({ state: 'done' }) }
+          : ev.kind === 'failed'
+            ? {
+                data: JSON.stringify({ error: ev.error }),
+                end: JSON.stringify({ state: 'failed' }),
+              }
+            : { data: '{}', end: JSON.stringify({ state: 'interrupted' }) },
+    ): void => {
       if (res.writableEnded) return;
       if (ev.kind === 'phase') {
-        res.write(`event: phase\ndata: ${JSON.stringify({ phase: ev.phase })}\n\n`);
+        res.write(`event: phase\ndata: ${serialized.data}\n\n`);
         return;
       }
-      if (ev.kind === 'done') res.write(`event: report\ndata: ${JSON.stringify(ev.report)}\n\n`);
-      else if (ev.kind === 'failed')
-        res.write(`event: error\ndata: ${JSON.stringify({ error: ev.error })}\n\n`);
-      const state = ev.kind === 'done' ? 'done' : ev.kind === 'failed' ? 'failed' : 'interrupted';
-      res.write(`event: end\ndata: ${JSON.stringify({ state })}\n\n`);
+      if (ev.kind === 'done') res.write(`event: report\ndata: ${serialized.data}\n\n`);
+      else if (ev.kind === 'failed') res.write(`event: error\ndata: ${serialized.data}\n\n`);
+      res.write(`event: end\ndata: ${serialized.end}\n\n`);
       cleanup();
     };
 

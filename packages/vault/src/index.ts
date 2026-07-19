@@ -74,6 +74,7 @@ export {
   CACHE_BUDGET_FLOOR_BYTES,
   CACHE_BUDGET_CEILING_BYTES,
   DEFAULT_REPLICATION_CONCURRENCY,
+  replicationConcurrencyFromEnv,
   type BlobCacheSettings,
   type BlobCacheOptions,
   type BlobMetrics,
@@ -125,6 +126,8 @@ export {
   type PreviewBackfillResult,
 } from './blob/preview.js';
 export { uuidv7, nowIso, sha256Hex } from './ids.js';
+export { notifyReplicaCommit, subscribeReplicaCommits } from './replica/doorbell.js';
+export { jitterDelayMs } from './timer-jitter.js';
 export {
   ONTOLOGY_VERSION,
   VAULT_MIGRATIONS,

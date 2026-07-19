@@ -6,15 +6,9 @@
 // `VaultDb.previewCodec` and the blob-sweep backstop (`backfillPreviews`)
 // downscales imported / weak-client / server-ingested images through it.
 //
-// PURE-JS ONLY, on purpose (issue #405 §2): `jpeg-js` (decode + encode) and
-// `pngjs` (decode) run identically in the Electron main process and the Linux
-// daemon with zero native build step — no node-gyp, no per-platform prebuilds,
-// no WASM boot. The trade is speed: a pure-JS decode of a 24-MP original is
-// hundreds of ms, which is exactly why generation is a BOUNDED, event-loop-
-// yielding backstop (24 items/sweep) and never a foreground request path. The
-// named upgrade path when throughput ever matters is `wasm-vips` (libvips
-// compiled to WASM — SIMD downscaling, HEIC/AVIF/WebP decode) swapped in
-// behind this same interface; nothing above the interface changes.
+// The portable implementation remains as a deterministic fallback and test
+// oracle. Production selects native sharp/libvips for the daemon and the
+// wasm-vips implementation for Electron through BuildGatewayOptions.
 //
 // Scope (issue #405 §2): JPEG and PNG in, JPEG out. GIF / WebP / video →
 // `null` (unsupported → the browse surface's placeholder contract, issue
@@ -189,7 +183,7 @@ function perceptualHash(src: Raster): string {
  * covers it". The output is always JPEG regardless of input type (a PNG
  * screenshot's thumbnail is a JPEG), which is what the browse grid paints.
  */
-export function createImagePreviewCodec(): PreviewCodec {
+export function createPortableImagePreviewCodec(): PreviewCodec {
   return {
     downscale(source: Buffer, mediaType: string, maxEdge: number): PreviewOutput | null {
       const raster = decode(source, mediaType);
@@ -229,5 +223,49 @@ export function createImagePreviewCodec(): PreviewCodec {
         return null;
       }
     },
+  };
+}
+
+/** Production default: native libvips work stays off the gateway JS thread. */
+export function createImagePreviewCodec(
+  nativeLoader: () => Promise<PreviewCodec | undefined> = () =>
+    import('./native-codec.js').then(({ createNativeImagePreviewCodec }) =>
+      createNativeImagePreviewCodec(),
+    ),
+): PreviewCodec {
+  const portable = createPortableImagePreviewCodec();
+  let native: Promise<PreviewCodec | undefined> | undefined;
+  const loadNative = (): Promise<PreviewCodec | undefined> => {
+    native ??= nativeLoader().catch(() => undefined);
+    return native;
+  };
+  const withFallback = async <T>(
+    nativeCall: (codec: PreviewCodec) => T | Promise<T>,
+    portableCall: () => T | Promise<T>,
+  ): Promise<T> => {
+    const codec = await loadNative();
+    if (!codec) return await portableCall();
+    try {
+      return await nativeCall(codec);
+    } catch {
+      return await portableCall();
+    }
+  };
+  return {
+    downscale: (source, mediaType, maxEdge) =>
+      withFallback(
+        (codec) => codec.downscale(source, mediaType, maxEdge),
+        () => portable.downscale(source, mediaType, maxEdge),
+      ),
+    perceptualHash: (source, mediaType) =>
+      withFallback(
+        (codec) => codec.perceptualHash(source, mediaType),
+        () => portable.perceptualHash(source, mediaType),
+      ),
+    thumbhash: (source, mediaType) =>
+      withFallback(
+        (codec) => codec.thumbhash(source, mediaType),
+        () => portable.thumbhash(source, mediaType),
+      ),
   };
 }

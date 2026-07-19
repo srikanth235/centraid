@@ -485,7 +485,7 @@ export class Runtime {
     // service-worker path never forwards Accept-Encoding, so it opts out and
     // receives raw JSON — see http/compression.ts.
     if (result.isError) {
-      sendJsonNegotiated(
+      await sendJsonNegotiated(
         req,
         res,
         statusForToolError(result.structuredContent.code),
@@ -493,7 +493,7 @@ export class Runtime {
       );
       return;
     }
-    sendJsonNegotiated(req, res, 200, result.structuredContent ?? null);
+    await sendJsonNegotiated(req, res, 200, result.structuredContent ?? null);
   }
 
   private async dispatchTool(

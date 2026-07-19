@@ -14,6 +14,7 @@
 // replica-index row to delete an original's last local copy.
 
 import type { DatabaseSync } from 'node:sqlite';
+import { availableParallelism, totalmem } from 'node:os';
 import type { BackupPolicy } from '../backup-policy.js';
 import { VaultBlobBackpressureError } from '../errors.js';
 import type { LocalBlobStore } from './local.js';
@@ -55,6 +56,20 @@ export const CACHE_BUDGET_FLOOR_BYTES = 1 * 1024 ** 3; // 1 GiB
 export const CACHE_BUDGET_CEILING_BYTES = 100 * 1024 ** 3; // 100 GiB
 /** Default concurrent pushes per `replicate()` (issue #405 §4). */
 export const DEFAULT_REPLICATION_CONCURRENCY = 3;
+
+export function replicationConcurrencyFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  host: { cores: number; totalMemoryBytes: number } = {
+    cores: availableParallelism(),
+    totalMemoryBytes: totalmem(),
+  },
+): number {
+  const fallback = host.cores <= 4 || host.totalMemoryBytes <= 4 * 1024 ** 3 ? 1 : 3;
+  const raw = env.CENTRAID_REPLICATION_CONCURRENCY;
+  if (raw === undefined || raw === '') return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 8) : fallback;
+}
 /** Default QoS cooldown after the last interactive read before bulk resumes (issue #405 §7). */
 export const DEFAULT_QOS_COOLDOWN_MS = 500;
 /** Default poll interval while replication is parked behind an interactive read. */
@@ -154,7 +169,7 @@ export class BlobCache {
     this.replica = new ReplicaIndex(db);
     this.access = new AccessIndex(db);
     this.orphan = new OrphanTombstoneIndex(db);
-    this.replicationConcurrency = options.replicationConcurrency ?? DEFAULT_REPLICATION_CONCURRENCY;
+    this.replicationConcurrency = options.replicationConcurrency ?? replicationConcurrencyFromEnv();
     this.qosCooldownMs = options.qosCooldownMs ?? DEFAULT_QOS_COOLDOWN_MS;
     this.qosPollMs = options.qosPollMs ?? DEFAULT_QOS_POLL_MS;
     this.nowMs = options.nowMs ?? (() => Date.now());

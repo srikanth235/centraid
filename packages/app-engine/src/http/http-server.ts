@@ -5,6 +5,7 @@ import { timingSafeEqual } from './security.js';
 import { makeConversationRouteHandler } from './conversation-routes.js';
 import { makeUserStoreRouteHandler } from '../stores/prefs-store.js';
 import type { Runtime } from '../runtime.js';
+import { tuneGatewayHttpServer } from './server-tuning.js';
 
 export interface RuntimeHttpServerOptions {
   runtime: Runtime;
@@ -178,8 +179,25 @@ export async function startRuntimeHttpServer(
     : undefined;
 
   const server = http.createServer((req, res) => {
-    void route(req, res);
+    void route(req, res).catch(() => {
+      // Route handlers normally translate their own domain errors. This is the
+      // final transport boundary: never leave a rejected async handler as an
+      // unhandled rejection, and never try to serialize JSON after bytes have
+      // already been sent.
+      if (res.destroyed) return;
+      if (res.headersSent) {
+        // Do not pass the handler error to destroy(): that re-emits it on the
+        // response and can turn containment into an uncaught transport error.
+        res.destroy();
+        return;
+      }
+      res.statusCode = 500;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Connection', 'close');
+      res.end(JSON.stringify({ error: 'internal_server_error' }));
+    });
   });
+  tuneGatewayHttpServer(server);
 
   async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     setCorsHeaders(req, res);

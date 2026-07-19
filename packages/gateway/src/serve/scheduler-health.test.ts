@@ -17,7 +17,24 @@ describe('createSchedulerHealthProbe', () => {
     });
     const result = await probe();
     expect(result.status).toBe('ok');
-    expect(result.detail).toContain('1 vault scheduler ticking');
+    expect(result.detail).toContain('1 vault scheduler healthy');
+  });
+
+  it('does not flag a formerly ticking scheduler while it is deliberately dormant', async () => {
+    const probe = createSchedulerHealthProbe({
+      vaults: () => [
+        {
+          vaultId: 'vault-a',
+          snapshot: () => ({
+            lastTickAt: new Date(0).toISOString(),
+            dormant: true,
+            missed: [],
+          }),
+        },
+      ],
+      now: () => 60 * 60_000,
+    });
+    expect((await probe()).status).toBe('ok');
   });
 
   it('does not flag a vault that has never ticked yet (fresh boot, not stale)', async () => {

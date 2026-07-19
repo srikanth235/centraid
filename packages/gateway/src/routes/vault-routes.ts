@@ -591,7 +591,7 @@ export function makeVaultRouteHandler(
             });
           }
         }
-        const outcome = plane.decideOutbox({
+        const outcome = await plane.decideOutbox({
           itemId,
           decision: body.decision,
           ...(isRecord(body.artifact) ? { artifact: body.artifact } : {}),
@@ -610,7 +610,7 @@ export function makeVaultRouteHandler(
       }
 
       if (method === 'DELETE' && segments[0] === 'outbox-grants' && segments.length === 2) {
-        const outcome = plane.revokeOutboxGrant(segments[1] ?? '');
+        const outcome = await plane.revokeOutboxGrant(segments[1] ?? '');
         return sendJson(res, outcome.status === 'executed' ? 200 : 409, outcome);
       }
 
@@ -836,7 +836,7 @@ export function makeVaultRouteHandler(
             });
           }
         }
-        const outcome = plane.linkAsOwner({
+        const outcome = await plane.linkAsOwner({
           from_type: body.from_type as string,
           from_id: body.from_id as string,
           to_type: body.to_type as string,
@@ -850,7 +850,7 @@ export function makeVaultRouteHandler(
       }
 
       if (method === 'DELETE' && segments[0] === 'links' && segments.length === 2) {
-        return sendJson(res, 200, plane.unlinkAsOwner(segments[1] ?? ''));
+        return sendJson(res, 200, await plane.unlinkAsOwner(segments[1] ?? ''));
       }
 
       // Re-anchor / re-baseline (issue #282): move the standoff anchor of a
@@ -872,7 +872,7 @@ export function makeVaultRouteHandler(
             message: 'selector must be {exact, prefix, suffix, start} or null',
           });
         }
-        return sendJson(res, 200, plane.anchorAsOwner(segments[1] ?? '', selector));
+        return sendJson(res, 200, await plane.anchorAsOwner(segments[1] ?? '', selector));
       }
 
       if (method === 'POST' && segments[0] === 'parked' && segments.length === 2) {
@@ -988,13 +988,13 @@ async function handleVaultsRoute(
  * NOT NULL / CHECK violations, sealed-column or machinery refusals all land
  * here as a clean error, never a crash).
  */
-function runBrowseWrite(
+async function runBrowseWrite(
   res: ServerResponse,
   plane: VaultPlane,
   command: string,
   input: Record<string, unknown>,
-): boolean {
-  const outcome = plane.gateway.invoke(plane.ownerCredential, {
+): Promise<boolean> {
+  const outcome = await plane.invoke(plane.ownerCredential, {
     command,
     input,
     purpose: 'dpv:ServiceProvision',

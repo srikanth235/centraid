@@ -4,8 +4,8 @@
  * `enrollment-store.ts`/`pairing-store.ts` siblings).
  */
 
-import { afterEach, expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
+import { afterEach, expect, test, vi } from 'vitest';
+import fsSync, { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -73,4 +73,20 @@ test('a second process (fresh .open()) sees writes via mtime reload', async () =
 
   const reader = DeviceTokenStore.open(file);
   expect(reader.authorize(token)).toEqual({ deviceKey: 'http:cross-proc' });
+});
+
+test('hot authorization stats the cross-process file at most once per TTL', async () => {
+  const file = await tempFile('device-tokens.json');
+  let now = 0;
+  const store = DeviceTokenStore.open(file, { statTtlMs: 1_000, now: () => now });
+  const { token } = store.mint({ deviceKey: 'http:ttl', label: 'ttl' });
+  const stat = vi.spyOn(fsSync, 'statSync');
+
+  expect(store.authorize(token)).toEqual({ deviceKey: 'http:ttl' });
+  expect(store.authorize(token)).toEqual({ deviceKey: 'http:ttl' });
+  expect(stat).not.toHaveBeenCalled();
+  now = 1_001;
+  expect(store.authorize(token)).toEqual({ deviceKey: 'http:ttl' });
+  expect(stat).toHaveBeenCalledTimes(1);
+  stat.mockRestore();
 });
