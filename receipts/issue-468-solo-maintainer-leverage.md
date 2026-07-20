@@ -369,12 +369,13 @@ GitHub issue: [#468](https://github.com/srikanth235/centraid/issues/468)
 
 ## Out of scope
 
-- Apple Developer / Azure Trusted Signing / Play App Signing **live enrollment and CI secrets** (I2/I3/J1 human residual; checklist in `docs/enrollment.md`)
+Human-only or follow-up residuals (agent-doable items above are shipped):
+
+- Apple Developer / Azure Trusted Signing / Play App Signing **live enrollment and CI secrets** (I2/I3/J1; checklist in `docs/enrollment.md`)
 - Live notarized/signed publish and store submission
-- Full electron-updater production install path (pure rollout + scaffolding landed; mtime poller remains for unpackaged dev)
-- Onboarding UI that offers H5 service install (settings flag + pure helper only)
-- E1/E5–E7 deeper CI babysitting; L5 hard-fail timing budgets
-- E7 durable main-green (extends #467) — lockfile lint is partial E5 only
+- Full electron-updater download/install edge with enrolled signing secrets (I4 pure math + `admitUpdate` live wiring + optional packaged checker shipped; release secrets still human)
+- **E6** fully automated bot pin regenerator (scaffold only: `scripts/ci/bot-pins.yml.example`)
+- **E7** durable main-green (extends #467)
 - Browser extension pairing (#462) implementation
 - F-Droid, major versions before 1.0, bespoke dev-manifest formats
 

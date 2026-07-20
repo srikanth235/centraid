@@ -41,6 +41,23 @@ describe('nativeBuildNumber (J6)', () => {
     for (const v of versions) {
       expect(Number(v)).toBe(expected);
     }
+    // MARKETING_VERSION must be the app semver everywhere (no leftover "1.0").
+    const marketing = [...pbx.matchAll(/MARKETING_VERSION = ([^;]+);/g)].map((m) => m[1].trim());
+    expect(marketing.length).toBeGreaterThan(0);
+    for (const v of marketing) {
+      expect(v).toBe('0.1.0');
+    }
+
+    // Info.plist CFBundleVersion must match the formula (not a stale 1000000).
+    const infoPlist = readFileSync(path.join(mobileRoot, 'ios/Centraid/Info.plist'), 'utf8');
+    const cfBundleVersion = infoPlist.match(
+      /<key>CFBundleVersion<\/key>\s*<string>([^<]+)<\/string>/,
+    )?.[1];
+    expect(cfBundleVersion).toBe(String(expected));
+    const shortVersion = infoPlist.match(
+      /<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/,
+    )?.[1];
+    expect(shortVersion).toBe('0.1.0');
 
     const configSrc = readFileSync(path.join(mobileRoot, 'app.config.ts'), 'utf8');
     expect(configSrc).toContain('nativeBuildNumber(VERSION)');
