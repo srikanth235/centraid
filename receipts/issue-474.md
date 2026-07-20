@@ -32,6 +32,7 @@
 | claude-code-3cef613e-dec-1784559997-1 | claude-code | 3cef613e-dece-4259-ba2b-7e6f173aea56 | #474 | claude-opus-4-8 | 887 | 748094 | 87217147 | 310662 | 1059643 | 56.0551 | 2330 | 2020669 | 244198445 | 831248 | fix(gateway): close the second SSE-pinned listener and a test that proved nothin |
 | claude-code-3cef613e-dec-1784560068-1 | claude-code | 3cef613e-dece-4259-ba2b-7e6f173aea56 | #474 | claude-opus-4-8 | 12 | 12671 | 620884 | 3386 | 16069 | 0.4743 | 2342 | 2033340 | 244819329 | 834634 | fix(gateway): close the second SSE-pinned listener and a test that proved nothin |
 | claude-code-3cef613e-dec-1784560236-1 | claude-code | 3cef613e-dece-4259-ba2b-7e6f173aea56 | #474 | claude-opus-4-8 | 39 | 32722 | 2469286 | 8800 | 41561 | 1.6594 | 2381 | 2066062 | 247288615 | 843434 | fix(mobile): make the op-sqlite FTS5 build config reach the iOS toolchain (#474) |
+| claude-code-3cef613e-dec-1784561618-1 | claude-code | 3cef613e-dece-4259-ba2b-7e6f173aea56 | #474 | claude-opus-4-8 | 137 | 354407 | 9967699 | 30263 | 384807 | 7.9562 | 2518 | 2420469 | 257256314 | 873697 | test(client): put React into act mode and fix the un-acted updates it exposed (# |
 
 ### Steering
 
@@ -54,6 +55,7 @@
 - [x] Apply the SSE-safe close to the gateway web-UI server
 - [x] Make the headless-compile lifecycle test wait on a real deadline instead of a 500ms iteration budget
 - [x] Make the dead `op-sqlite` FTS5 build config actually reach the iOS toolchain
+- [x] Put React into act mode for every jsdom project and fix the un-acted updates it exposed
 
 ## What changed
 
@@ -72,6 +74,8 @@
 **A lifecycle test that proved nothing.** `packages/gateway/src/routes/lifecycle-automation-routes.test.ts` — the headless-compile test polled for the run's `endedAt` on an iteration budget of 20 × 25ms = 500ms, and on expiry simply fell through: `endedAt` was never asserted, so the two assertions that remained passed against a run row that had not finished. A compile spawns a real app-server subprocess and takes ~7s, so the budget was expiring on *every* run, including locally — the test had never once observed a completed run. Worse, falling through left the compile still writing objects into `code/apps.git` while `afterEach` deleted the data dir, which surfaced in CI run 29751584092 as an unrelated-looking `ENOTEMPTY` from `rm`. The poll is now a wall-clock deadline and `endedAt` is asserted, which is what makes both the claim and the teardown honest.
 
 **FTS5 was never compiled into the iOS build.** `package.json` (root) gains the `op-sqlite` block; `apps/mobile/package.json` keeps its copy, because the two native toolchains resolve *different* files. The iOS podspec walks up from `node_modules/@op-engineering/op-sqlite` and takes the first `package.json` it finds — bun hoists op-sqlite to the repo root, so that is the ROOT file, which had no config. Android's `build.gradle` takes a different branch (`isUserApp` is false for an app build, since gradle's `rootDir` is `apps/mobile/android`) and reads `$rootDir/../package.json`, i.e. the app's — so Android was correct all along and deleting the app copy would break it. `apps/mobile/src/lib/replica/op-sqlite-build-config.test.ts` guards both placements and re-implements the podspec's upward walk, so a future hoisting change fails the test rather than silently shipping a search-less build.
+
+**React was never in act mode.** `packages/test-kit/src/jsdom-setup.ts` (new) sets `IS_REACT_ACT_ENVIRONMENT` once for every jsdom project via a `setupFiles` entry on `jsdomPreset` in `packages/test-kit/src/vitest.ts`; the two hand-rolled copies in `packages/client/src/react/screens/AtlasBrowseTab.test.tsx` and `packages/client/src/react/screens/AtlasRelationsTab.test.tsx` are removed. Every other React test ran without the flag, so React printed "the current testing environment is not configured to support act(...)" on each Testing-Library call — and, more importantly, suppressed the companion "not wrapped in act" diagnostics. Turning the flag on surfaced 32 of those, all from one file: `packages/client/src/react/screens/AssistantScreen.test.tsx`, whose `mount()` helper kicked off `loadModelPicker()` and let the resulting state update land after the `act()` block closed. `mount()` is now async and settles that fetch inside act, with its 22 call sites awaited. Both warning classes are now zero across all three jsdom projects.
 
 **Earlier commits on this issue.** `.github/workflows/e2e.yml` (globalTimeout / `timeout-minutes` sizing, dated report slots), `apps/desktop/tests/e2e/playwright.config.ts`, `apps/web/tests/e2e/playwright.config.ts`, `apps/web/tests/e2e/web-pwa.spec.ts`, `apps/web/tests/e2e/perf-waterfall.spec.ts`, `tests/agent-e2e-mobile/lib/harness.mjs`, `tests/agent-e2e-mobile/flows/home-loads.mjs`, `tests/agent-e2e-pairing/lib/device-redeem.mjs`, `scripts/test-report/prepare-pages-site.mjs`, `scripts/test-report/generate.mjs`, `scripts/test-report/summary-markdown.mjs`, `scripts/test-report/smoke.mjs`, `packages/blueprints/turbo.json` (undeclared build outputs made cached builds diverge from uncached), and the `format-check` governance directive: `.governance/packs.lock`, `.governance/packs/srikanth235/centraid/directives/format-check/directive.yaml`, `.governance/packs/srikanth235/centraid/directives/format-check/constitution.md`, `.governance/packs/srikanth235/centraid/directives/format-check/check.sh`.
 
@@ -93,6 +97,8 @@ Each checked item above, mapped to the work that satisfies it:
 - Make the headless-compile lifecycle test wait on a real deadline instead of a 500ms iteration budget — `packages/gateway/src/routes/lifecycle-automation-routes.test.ts` now polls to a wall-clock deadline and asserts `endedAt`, which also stops `afterEach` racing the live compile's writes into `code/apps.git`.
 
 - Make the dead `op-sqlite` FTS5 build config actually reach the iOS toolchain — the block now also lives in the root `package.json`, guarded by `apps/mobile/src/lib/replica/op-sqlite-build-config.test.ts`; `apps/mobile/ios/Podfile.lock` carries the resulting op-sqlite checksum change.
+
+- Put React into act mode for every jsdom project and fix the un-acted updates it exposed — `packages/test-kit/src/jsdom-setup.ts` wired through `packages/test-kit/src/vitest.ts`, with `packages/client/src/react/screens/AssistantScreen.test.tsx` awaiting its mount and `packages/client/src/react/screens/AtlasBrowseTab.test.tsx` / `packages/client/src/react/screens/AtlasRelationsTab.test.tsx` dropping their local copies.
 
 ## Out of scope
 
@@ -135,6 +141,8 @@ CI run 29751583983 confirmed the relay lane green for the first time (`pairing-c
 The lifecycle-automation fix was verified by the file's own runtime: it ran 12.4s before the change and 19.3s after, across repeated local runs (11/11 tests passing each time). That ~7s delta is the compile run actually finishing — direct evidence that the previous 500ms budget was expiring every time rather than observing completion.
 
 FTS5 was verified by A/B on the generated artifact: `Pods/Target Support Files/op-sqlite/op-sqlite.{debug,release}.xcconfig` carried `GCC_PREPROCESSOR_DEFINITIONS = $(inherited) COCOAPODS=1` before and `... COCOAPODS=1 SQLITE_ENABLE_FTS5=1` after a real `pod install`. The guard test was mutation-tested — deleting the root key fails it (1 failed | 2 passed), restoring it passes 3/3.
+
+act mode: all three jsdom projects run clean — **156 files, 1257 tests passing**, with `grep -c` of both "not configured to support act" and "not wrapped in act" at **0** (each was non-zero before). The `AssistantScreen` fix was proven by the warning count on that file alone going 32 → 0 with its 22 tests still passing.
 
 **A premise correction worth recording.** The CI line `[OP-SQLITE] using pure SQLite` was read as evidence of missing FTS5. It is not: reading the podspec, that line is the `else` branch of the *backend* selector (sqlcipher / turso / libsql / pure) and is printed regardless of `fts5`. The podspec logs nothing at all about FTS5 — the only tell on iOS is the absent define in the generated xcconfig. The config was genuinely dead, but not for the reason the log suggested.
 

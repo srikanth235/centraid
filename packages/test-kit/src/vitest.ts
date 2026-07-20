@@ -1,6 +1,12 @@
+import { fileURLToPath } from 'node:url';
 import { defineProject, mergeConfig, type UserWorkspaceConfig } from 'vitest/config';
 
 type ProjectConfig = UserWorkspaceConfig;
+
+// Resolved from this file rather than named as a bare specifier: consuming
+// projects run with their own cwd, and setupFiles paths are resolved against
+// the project root, not against test-kit.
+const JSDOM_SETUP = fileURLToPath(new URL('jsdom-setup.ts', import.meta.url));
 
 const nodePreset = {
   test: {
@@ -35,6 +41,8 @@ const jsdomPreset = {
   test: {
     environment: 'jsdom',
     css: { modules: { classNameStrategy: 'non-scoped' as const } },
+    // Puts React into act mode for every jsdom project — see jsdom-setup.ts.
+    setupFiles: [JSDOM_SETUP],
   },
 } satisfies ProjectConfig;
 
