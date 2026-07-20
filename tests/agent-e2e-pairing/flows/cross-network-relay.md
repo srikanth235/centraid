@@ -117,12 +117,18 @@ hosts without any external VPS or persistent infrastructure:
 
    Rule **order** is load-bearing and silently invertible: `iptables -I`
    inserts at position 1, so the last rule inserted is the first evaluated.
-   The catch-all `DROP` is therefore inserted *before* its `ACCEPT`
+   The catch-all `DROP` is therefore inserted *before* its DNS `ACCEPT`
    exception, and the whole port-class block is inserted *before* the two
-   address blocks — so the address `DROP`s stay above the port `ACCEPT`s and
-   an address covered by the host rules stays covered. Like the host-address
-   rules, the port-class rules go into **both** `DOCKER-USER` and `INPUT`,
-   for the same two-fates reason.
+   address blocks — so the address `DROP`s stay above the DNS `ACCEPT`s and
+   an address covered by the host rules stays covered. The probe's own
+   `--sport` `ACCEPT` is the one rule that must outrank *everything*, so it
+   is inserted after all three blocks; see the fourth correction below. Like
+   the host-address rules, the port-class rules go into **both**
+   `DOCKER-USER` and `INPUT`, for the same two-fates reason.
+
+   Resulting evaluation order per chain, top-first: `ACCEPT -p udp --sport
+   9999` (probe-scoped, gone before the ceremony) → host-address `DROP`s →
+   peer-subnet `DROP`s → `ACCEPT -p udp --dport 53` → `DROP -p udp`.
 
    All three fronts are then **proven** before any part of the ceremony
    runs, with probes that dial each path rather than re-testing a rule just
@@ -138,17 +144,28 @@ hosts without any external VPS or persistent infrastructure:
    came up" are the same observation — silence — and a silently-broken UDP
    probe would report `ISOLATED` for entirely the wrong reason, putting us
    back exactly where the Azure run left us. So a **control** runs first,
-   from the privileged host-network helper (its source address is the host,
-   which none of the isolation rules match): it sends the same datagrams to
+   from the privileged host-network helper: it sends the same datagrams to
    the same two target classes and **requires** replies. Only once the
    server has demonstrably answered is silence from `netB` treated as
    evidence of blocking; if the control is silent, the harness throws with
    that reason rather than claiming isolation it hasn't earned. One narrow
    `ACCEPT` exists purely to make this possible — the echo server sits on
-   `netA`, so its *reply* datagrams originate from a test subnet and the
-   catch-all `DROP` would eat them; the exception is matched on `--sport`
+   `netA`, so its *reply* datagrams originate from a test subnet and our own
+   `DROP` rules would eat them; the exception is matched on `--sport`
    (the probe server's fixed port), so it only ever lets the echo server
    answer.
+
+   That exception is inserted **last of all**, after both address blocks, so
+   it evaluates **first** — above the host-address `DROP`s, not just above the
+   port-class one. That ordering is the fourth correction in this file and it
+   is written up at the end. Briefly: the control dials a *host* address, so
+   the reply it is waiting for carries `src=<test subnet>` and `dst=<that host
+   address>`, which is precisely what the host-address `DROP` matches. Placing
+   the exception above only the port-class block leaves the reply blocked. It
+   does not weaken the test, because every probe *request* leaves from an
+   ephemeral source port and so matches no `--sport 9999` rule: the requests
+   still fall through to the `DROP`s they exist to exercise, and only the echo
+   server's answers are exempt.
 
    **That exception does not outlive the probe.** It is a UDP hole, and
    leaving it open during the ceremony would mean the flow's one real
@@ -292,6 +309,55 @@ That guess would have left an open UDP hole justified by a comment asserting
 something false about the transport, which is strictly worse than no comment,
 because the next person would have had no reason to re-check it. The rule set
 is now smaller *and* stronger than the guess: allow DNS, drop the rest.
+
+The fourth correction is the one the control run caught itself, which is the
+only cheerful thing about it. CI run 29743139605 (job
+`pairing-cross-network-relay`) threw *before* the ceremony with "UDP isolation
+probe is not trustworthy": the control got no reply from
+`udp host-routed 10.1.0.201:46321`, while its docker-internal leg answered
+normally. The probe refused to report isolation it had not established —
+exactly the failure mode the control exists to produce instead of a false
+`ISOLATED` — but the reason was not a broken echo server. It was our own rule
+set eating the **reply**.
+
+The error message carried the mistaken premise in its own text: the control
+runs "from the host network, which no isolation rule matches." That is true of
+the outbound datagram and false of the return one. The echo server lives on
+`netA`, so its reply leaves with `src=<subnetA>`, `sport=9999` and `dst=<the
+host address the control dialed>` — and `-s <subnetA> -d <hostAddr> -j DROP` is
+exactly the host-address rule, present in both `DOCKER-USER` and `INPUT`.
+Because the `--sport 9999` `ACCEPT` had been inserted inside the port-class
+block, and the host-address block is inserted *after* it (hence *above* it),
+the `DROP` won. The `--sport` exception had only ever protected the reply from
+the port-class `DROP`; it never protected it from the host-address one. The
+docker-internal leg passing in the same run is the tell — its reply goes to the
+bridge address `172.x.0.1`, which the host-address enumeration deliberately
+skips, so no rule named it.
+
+The fix is ordering, not policy: the probe exception is now inserted last, so
+it sits at the top of both chains and outranks the host-address `DROP`. Nothing
+the probe tests is weakened, because the exemption is `--sport`-scoped and every
+probe *request* leaves from an ephemeral port (Linux 32768–60999, never 9999).
+The `netB` host-routed UDP probe is therefore still dropped by the host-address
+rule, the `netB` docker-internal one still by the subnet rule, both TCP probes
+are untouched (`-p udp`), and the exemption is still retired — and its removal
+still read back out of `iptables -S` — before the ceremony starts.
+
+The `ESTABLISHED,RELATED` `ACCEPT` that would also have fixed this was
+considered and rejected: it admits return traffic for *any* connection rather
+than for one named port, which is a materially larger hole in the block this
+flow exists to prove closed, and it buys nothing the reordering doesn't. So was
+dropping the host-routed UDP probe and keeping only the docker-internal one —
+that trades away the strictly harder published-port test, which is the front
+that caught the original escape.
+
+Worth noting, because the asymmetry looks suspicious: the TCP host-routed probe
+has never had this problem, and not by luck. There is no TCP control run. The
+only TCP probe dials **from `netB`**, and its request is dropped on the way out,
+so no reply is ever generated for a host-address rule to eat; and had one been
+generated, its destination would be a container in `netB`, not a host address,
+so the host-address rule would not have matched it anyway. The reply-path
+hazard is specific to the host-originated control leg, which only UDP has.
 
 ## Setup gotchas this flow's harness (`lib/docker-harness.mjs`) works around
 

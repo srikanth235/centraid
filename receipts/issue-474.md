@@ -27,6 +27,8 @@
 | claude-code-3cef613e-dec-1784552042-1 | claude-code | 3cef613e-dece-4259-ba2b-7e6f173aea56 | #474 | claude-opus-4-8 | 2 | 430 | 275911 | 133 | 565 | 0.1440 | 1260 | 1164810 | 127654513 | 444340 |  |
 | claude-code-3cef613e-dec-1784552095-1 | claude-code | 3cef613e-dece-4259-ba2b-7e6f173aea56 | #474 | claude-opus-4-8 | 10 | 1760 | 1382428 | 3478 | 5248 | 0.7892 | 1270 | 1166570 | 129036941 | 447818 |  |
 | claude-code-3cef613e-dec-1784552152-1 | claude-code | 3cef613e-dece-4259-ba2b-7e6f173aea56 | #474 | claude-opus-4-8 | 6 | 3153 | 831024 | 4974 | 8133 | 0.5596 | 1276 | 1169723 | 129867965 | 452792 |  |
+| claude-code-3cef613e-dec-1784558232-1 | claude-code | 3cef613e-dece-4259-ba2b-7e6f173aea56 | #474 | claude-opus-4-8 | 161 | 100122 | 26147690 | 64281 | 164564 | 15.3074 | 1437 | 1269845 | 156015655 | 517073 |  |
+| claude-code-3cef613e-dec-1784558286-1 | claude-code | 3cef613e-dece-4259-ba2b-7e6f173aea56 | #474 | claude-opus-4-8 | 6 | 2730 | 965643 | 3513 | 6249 | 0.5877 | 1443 | 1272575 | 156981298 | 520586 |  |
 
 ### Steering
 

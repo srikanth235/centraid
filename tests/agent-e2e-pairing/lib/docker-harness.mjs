@@ -68,10 +68,24 @@
 //      probe (control datagram first, so silence is evidence of blocking
 //      rather than of a probe server that never came up) for the port-class
 //      front. The one ACCEPT that probe needs — the echo server's replies
-//      come FROM a test subnet, so the catch-all would eat them — is scoped
-//      to the probe and deleted before the ceremony starts, with its absence
-//      read back out of `iptables -S`. The ceremony must not run with a
-//      probe-shaped hole in the very block it exists to prove closed.
+//      come FROM a test subnet, so our own DROP rules would eat them — is
+//      scoped to the probe and deleted before the ceremony starts, with its
+//      absence read back out of `iptables -S`. The ceremony must not run with
+//      a probe-shaped hole in the very block it exists to prove closed.
+//
+//      That ACCEPT has to outrank the HOST-ADDRESS drops, not just the
+//      port-class one, and getting this wrong is the third correction this
+//      design has needed. CI run 29743139605 failed the control because the
+//      exception was inserted inside the port-class block and therefore landed
+//      BELOW the host-address DROPs: the control dials a host address, so the
+//      echo server's reply carries src=<test subnet>, dst=<that host address>,
+//      which is exactly what those DROPs match. The blocked packet was the
+//      REPLY, not the request — "the control comes from the host, which no
+//      rule matches" is true only of the outbound direction. The exception is
+//      therefore inserted LAST of all (block (d)), so it evaluates FIRST. It
+//      does not weaken the test: it matches --sport 9999, while every probe
+//      REQUEST leaves from an ephemeral port, so the requests still fall
+//      through to the DROPs they exist to exercise.
 
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
@@ -426,16 +440,22 @@ async function runProbe(dockerArgs, script, what) {
  * tell "blocked" from "the echo server never came up" — both look like
  * silence, and a silently-broken probe would report ISOLATED for entirely the
  * wrong reason. So a CONTROL runs first, from the privileged host-network
- * helper (whose source address is the host, not a test subnet, so no rule of
- * ours matches it): it sends the same datagrams to the same two target
- * classes and REQUIRES replies. Only once the server has demonstrably answered
- * is silence from netB treated as evidence of blocking; if the control is
- * silent, this throws instead of reporting isolation it hasn't earned.
+ * helper: it sends the same datagrams to the same two target classes and
+ * REQUIRES replies. Only once the server has demonstrably answered is silence
+ * from netB treated as evidence of blocking; if the control is silent, this
+ * throws instead of reporting isolation it hasn't earned.
  *
- * The `--sport` ACCEPT that lets the echo server answer at all is the
- * caller's to retire the moment this returns — see the removal right after
- * the call site. Nothing in here should be relied on to still be in force
- * once the ceremony starts.
+ * What makes the control work is NOT that its source address is the host and
+ * therefore matches no rule of ours. That is true of the control's outbound
+ * datagram and false of the reply, which is the packet that actually has to
+ * survive: the echo server sits on netA, so its reply carries src=<subnetA>
+ * and dst=<the host address the control dialed> — matching the (c) host-address
+ * DROP head-on. CI run 29743139605 failed the control on exactly that. The
+ * control works only because the probe's `--sport` ACCEPT is inserted AFTER
+ * blocks (b) and (c) and so outranks them; see block (d) at the insert site.
+ * That ACCEPT is the caller's to retire the moment this returns — see the
+ * removal right after the call site. Nothing in here should be relied on to
+ * still be in force once the ceremony starts.
  */
 async function verifyNetworksIsolated(netA, netB, hostAddrs, fwName) {
   const probeServerName = `pairing-relay-isoprobe-${crypto.randomBytes(3).toString('hex')}`;
@@ -499,11 +519,13 @@ async function verifyNetworksIsolated(netA, netB, hostAddrs, fwName) {
     const deadControls = control.filter((r) => r.verdict !== 'REACHABLE');
     if (deadControls.length > 0) {
       throw new Error(
-        `UDP isolation probe is not trustworthy: the control run (from the host network, which ` +
-          `no isolation rule matches) got no reply from ` +
-          `${deadControls.map((r) => `${r.label}: ${r.verdict}`).join('; ')}. The echo server or ` +
-          `its port publishing is broken, so silence from ${netB} would prove nothing — refusing ` +
-          `to report isolation this probe hasn't actually established.`,
+        `UDP isolation probe is not trustworthy: the control run (from the host network) got no ` +
+          `reply from ${deadControls.map((r) => `${r.label}: ${r.verdict}`).join('; ')}. Either ` +
+          `the echo server / its port publishing is broken, or one of our own DROP rules is ` +
+          `eating the server's REPLY (it leaves netA for the dialed host address, so the (c) ` +
+          `host-address DROP matches it unless the probe's --sport ACCEPT outranks (c) — see ` +
+          `block (d) in this file). Silence from ${netB} would prove nothing either way — ` +
+          `refusing to report isolation this probe hasn't actually established.`,
       );
     }
 
@@ -695,51 +717,24 @@ export async function runFlow(slug, fn) {
     // ORDER, which silently inverts if you get it wrong: `iptables -I` inserts
     // at position 1, so the LAST rule inserted is the FIRST evaluated. The
     // catch-all DROP therefore has to be inserted BEFORE its ACCEPT
-    // exceptions, so that the ACCEPTs end up ahead of it. Resulting evaluation
-    // order per chain, top-first: ACCEPT sport 9999, ACCEPT dport 53, DROP udp
-    // — the sport rule being probe-scoped, so by the time the ceremony runs
-    // it's just ACCEPT dport 53, DROP udp.
+    // exception, so that the ACCEPT ends up ahead of it. Resulting evaluation
+    // order within this block, top-first: ACCEPT dport 53, DROP udp.
     //
     // This whole block is also inserted before (b) and (c) for the same
     // reason at a larger scale: those address-based DROP rules must land
-    // nearer position 1 than these ACCEPT exceptions, so an address (c)
-    // covers stays covered rather than being let through by the ACCEPT here.
+    // nearer position 1 than the ACCEPT exception here, so an address (c)
+    // covers stays covered rather than being let through by this ACCEPT.
+    //
+    // The probe's own ACCEPT exception is NOT here — it has to outrank (c) as
+    // well, so it is inserted after (c). See the block below (c) for why.
     //
     // Both chains, for the same two-fates reason spelled out at (c).
-    //
-    // Rules whose lifetime is the PROBE's, not the run's — retired as soon as
-    // verifyNetworksIsolated returns, so the ceremony runs under a fully
-    // closed UDP policy. They stay in firewallRulesInserted until they're
-    // actually removed, so the failure path needs no second teardown.
-    const probeExceptionRules = [];
     for (const chain of ['DOCKER-USER', 'INPUT']) {
       for (const subnet of [state.subnetA, state.subnetB]) {
         await insertRule(chain, ['-s', subnet, '-p', 'udp'], 'DROP');
         for (const port of ALLOWED_UDP_DPORTS) {
           await insertRule(chain, ['-s', subnet, '-p', 'udp', '--dport', String(port)], 'ACCEPT');
         }
-        // One more exception, and it is NOT part of the relay path — it
-        // belongs to the PROBE, and it is retired the moment the probe is
-        // done (see removeProbeExceptions below). The isolation probe's UDP
-        // echo server lives on netA, so its REPLY datagrams originate from a
-        // test subnet and the catch-all DROP above would eat them; the control
-        // run would then be silent for reasons that have nothing to do with
-        // isolation, i.e. exactly the false-ISOLATED failure mode the control
-        // exists to rule out. Matched on --sport, so it only ever lets the
-        // echo server answer.
-        //
-        // It is still a UDP hole, and it must not be open while the ceremony
-        // runs: "a one-directional flow can't form" is probably true but it is
-        // the wrong standard for the single assertion this whole flow exists
-        // to make, and it's avoidable. So this is the one rule whose lifetime
-        // is scoped to the probe rather than to the run.
-        probeExceptionRules.push(
-          await insertRule(
-            chain,
-            ['-s', subnet, '-p', 'udp', '--sport', String(PROBE_UDP_PORT)],
-            'ACCEPT',
-          ),
-        );
       }
     }
     console.log(
@@ -788,6 +783,62 @@ export async function runFlow(slug, fn) {
       }
     }
     console.log(`  hostaddr: DROP ${hostAddrs.join(', ')} from both test subnets`);
+
+    // (d) The probe's ONE exception, inserted LAST so it evaluates FIRST —
+    // ahead of (c), (b) and (a) alike. It is not part of the relay path; it
+    // belongs to the PROBE, and it is retired the moment the probe is done
+    // (see the removal after verifyNetworksIsolated). It exists because the
+    // isolation probe's UDP echo server lives on netA, so its REPLY datagrams
+    // originate from a test subnet and our own DROP rules would eat them — the
+    // control run would then be silent for reasons that have nothing to do
+    // with isolation, i.e. exactly the false-ISOLATED failure mode the control
+    // exists to rule out.
+    //
+    // It sits above (c) rather than merely above (a), and that placement is
+    // the whole point of this block being here instead of up there. An earlier
+    // revision inserted it inside (a), which put it BELOW (c), and CI run
+    // 29743139605 failed the control on precisely that: the control dials a
+    // HOST address, so the echo server's reply carries src=<subnetA>
+    // sport=9999 and dst=<hostAddr> — which is exactly what (c) drops
+    // (`-s <subnet> -d <hostAddr> -j DROP`, in both chains). The reply, not
+    // the request, was the packet being blocked; the error message's premise
+    // ("from the host network, which no isolation rule matches") was true of
+    // the outbound datagram and false of the return one. The docker-internal
+    // control leg passed in that same run and is the tell: its reply goes to
+    // the bridge address 172.x.0.1, which hostAddresses() deliberately skips,
+    // so no (c) rule named it.
+    //
+    // Why this does NOT defeat the test it exists to enable:
+    //   - The netB host-routed UDP probe sends from an EPHEMERAL source port
+    //     (Linux 32768-60999, so never 9999) to the published dport. It
+    //     therefore does not match `--sport 9999`, falls through to (c)'s
+    //     `-s <subnetB> -d <hostAddr>` DROP, and is still blocked. The probe
+    //     still proves exactly what it claims.
+    //   - The netB docker-internal UDP probe likewise carries dport 9999, not
+    //     sport 9999, so it falls through to (b)'s subnet-to-subnet DROP.
+    //   - Both TCP probes are untouched: this rule is `-p udp`.
+    //   - The only packet the exemption admits is the echo server's reply, and
+    //     the exemption is retired before the ceremony starts, with its absence
+    //     read back out of `iptables -S` (verifyProbeExceptionsRemoved).
+    //
+    // The netB copy of the rule is dead weight — no echo server ever runs on
+    // netB — but it is kept for symmetry with every other rule here and is
+    // retired on the same schedule, so it is never open during the ceremony.
+    //
+    // These stay in firewallRulesInserted until they are actually removed, so
+    // the failure path needs no second teardown.
+    const probeExceptionRules = [];
+    for (const chain of ['DOCKER-USER', 'INPUT']) {
+      for (const subnet of [state.subnetA, state.subnetB]) {
+        probeExceptionRules.push(
+          await insertRule(
+            chain,
+            ['-s', subnet, '-p', 'udp', '--sport', String(PROBE_UDP_PORT)],
+            'ACCEPT',
+          ),
+        );
+      }
+    }
 
     const isolationVerdict = await verifyNetworksIsolated(netA, netB, hostAddrs, fwName);
     notes.push(`network isolation verified before ceremony: ${isolationVerdict}`);
