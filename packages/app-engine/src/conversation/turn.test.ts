@@ -10,6 +10,14 @@ test('RUNNER_KINDS is the source-of-truth list of runner kinds', () => {
     'opencode',
     'grok',
     'kimi',
+    'copilot',
+    'cursor',
+    'kilo',
+    'cline',
+    'goose',
+    'auggie',
+    'vibe',
+    'droid',
     'acp',
   ]);
 });

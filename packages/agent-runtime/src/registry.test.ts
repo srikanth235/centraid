@@ -10,6 +10,7 @@ import {
 } from '@centraid/app-engine';
 import { RUNNER_BACKENDS, acpConfigFor, getRunnerBackend } from './registry.ts';
 import { resolveAdapterEntry } from './backends/acp/adapter-bin.ts';
+import { planLaunch } from './backends/acp/launch.ts';
 import { runTurn } from './runtime.ts';
 
 test('every known runner kind is registered with coherent metadata', () => {
@@ -34,11 +35,43 @@ test('every kind keeps the USER-FACING CLI as its default bin; custom acp has no
   expect(RUNNER_BACKENDS.opencode.defaultBin).toBe('opencode');
   expect(RUNNER_BACKENDS.grok.defaultBin).toBe('grok');
   expect(RUNNER_BACKENDS.kimi.defaultBin).toBe('kimi');
+  expect(RUNNER_BACKENDS.kilo.defaultBin).toBe('kilo');
+  expect(RUNNER_BACKENDS.cline.defaultBin).toBe('cline');
+  expect(RUNNER_BACKENDS.goose.defaultBin).toBe('goose');
+  expect(RUNNER_BACKENDS.auggie.defaultBin).toBe('auggie');
+  expect(RUNNER_BACKENDS.droid.defaultBin).toBe('droid');
+  // copilot: the npm package is `@github/copilot` but the BIN is `copilot`.
+  // Also NOT `copilot-language-server` — that is a different package entirely
+  // (an LSP for editor completions), and it does not speak ACP.
+  expect(RUNNER_BACKENDS.copilot.defaultBin).toBe('copilot');
+  expect(RUNNER_BACKENDS.copilot.defaultBin).not.toBe('@github/copilot');
+  expect(RUNNER_BACKENDS.copilot.defaultBin).not.toBe('copilot-language-server');
+  // cursor: the installer makes BOTH `agent` and `cursor-agent`. We use the
+  // qualified one on purpose — a bare `agent` on PATH is far too generic.
+  expect(RUNNER_BACKENDS.cursor.defaultBin).toBe('cursor-agent');
+  expect(RUNNER_BACKENDS.cursor.defaultBin).not.toBe('agent');
+  // vibe: `vibe-acp` is a SEPARATE binary from `vibe`, not a mode of it.
+  expect(RUNNER_BACKENDS.vibe.defaultBin).toBe('vibe-acp');
   expect(RUNNER_BACKENDS.acp.defaultBin).toBeUndefined();
 });
 
 test('natively ACP-speaking kinds enumerate no models (no hardcoded provider ids)', async () => {
-  for (const kind of ['gemini', 'qwen', 'opencode', 'grok', 'kimi', 'acp'] as const) {
+  for (const kind of [
+    'gemini',
+    'qwen',
+    'opencode',
+    'grok',
+    'kimi',
+    'copilot',
+    'cursor',
+    'kilo',
+    'cline',
+    'goose',
+    'auggie',
+    'vibe',
+    'droid',
+    'acp',
+  ] as const) {
     expect(await RUNNER_BACKENDS[kind].enumerateModels({})).toEqual([]);
   }
 });
@@ -87,6 +120,141 @@ test('kimi install hint uses the Python toolchain, not npm', () => {
   // Grok's paid-subscription requirement is what makes an install-but-fail
   // runner self-explanatory, so it must stay in the hint.
   expect(RUNNER_BACKENDS.grok.installHint).toMatch(/SuperGrok|X Premium/);
+});
+
+// ---- wave 7: eight more ACP-native kinds ---------------------------------
+
+test('the eight added kinds pin their exact ACP invocation', () => {
+  // The invocation is the whole per-kind difference, so each is pinned
+  // exactly — a "tidy-up" that changes any of these ships a broken runner.
+  expect(acpConfigFor('copilot', {}).acpArgs).toEqual(['--acp']);
+  expect(acpConfigFor('cursor', {}).acpArgs).toEqual(['acp']);
+  expect(acpConfigFor('kilo', {}).acpArgs).toEqual(['acp']);
+  expect(acpConfigFor('cline', {}).acpArgs).toEqual(['--acp']);
+  expect(acpConfigFor('goose', {}).acpArgs).toEqual(['acp']);
+  expect(acpConfigFor('auggie', {}).acpArgs).toEqual(['--acp']);
+  // droid: a subcommand plus a VALUE-BEARING flag. The three tokens are one
+  // invocation; splitting or reordering them is not equivalent.
+  expect(acpConfigFor('droid', {}).acpArgs).toEqual(['exec', '--output-format', 'acp-daemon']);
+  // vibe: EMPTY. `vibe-acp` is its own entrypoint, so there is no mode flag to
+  // pass. If this ever becomes `['acp']`, the runner is broken.
+  expect(acpConfigFor('vibe', {}).acpArgs).toEqual([]);
+});
+
+test('copilot is never launched in TCP mode', () => {
+  // `--acp --port <n>` is a real Copilot mode, but it puts the agent on a
+  // socket our stdio ACP client never reads. We contribute only `--acp`.
+  expect(acpConfigFor('copilot', {}).acpArgs).not.toContain('--port');
+});
+
+test('the eight added kinds are native: no adapter, binPath is the spawn target', () => {
+  for (const kind of [
+    'copilot',
+    'cursor',
+    'kilo',
+    'cline',
+    'goose',
+    'auggie',
+    'vibe',
+    'droid',
+  ] as const) {
+    const config = acpConfigFor(kind, { binPath: `/opt/bin/${kind}` });
+    expect(config.adapter, kind).toBeUndefined();
+    expect(config.binPath, kind).toBe(`/opt/bin/${kind}`);
+    // Claude tier vocabulary must not leak onto non-Claude runners.
+    expect(config.resolveModel, kind).toBeUndefined();
+  }
+});
+
+test('auggie and droid carry their self-update suppressors as native launch env', () => {
+  // These CLIs update themselves by default, which can swap the binary out
+  // from under a running turn. The env vars are the fix — and they prove the
+  // launch-env field reaches NATIVE kinds, not just adapter-backed ones.
+  expect(acpConfigFor('auggie', {}).env).toEqual({ AUGMENT_DISABLE_AUTO_UPDATE: '1' });
+  expect(acpConfigFor('droid', {}).env).toEqual({
+    DROID_DISABLE_AUTO_UPDATE: 'true',
+    FACTORY_DROID_AUTO_UPDATE_ENABLED: 'false',
+  });
+  // Kinds that need no launch env carry none.
+  expect(acpConfigFor('kilo', {}).env).toBeUndefined();
+});
+
+test('a native kind with launch env spawns with it applied', () => {
+  // The seam that matters: `planLaunch` must merge `config.env` on the native
+  // path too. Asserted on the spawn plan, so nothing is actually spawned.
+  const plan = planLaunch(acpConfigFor('droid', {}), undefined, []);
+  expect(plan.bin).toBe('droid');
+  expect(plan.args).toEqual(['exec', '--output-format', 'acp-daemon']);
+  expect(plan.env.DROID_DISABLE_AUTO_UPDATE).toBe('true');
+  expect(plan.env.FACTORY_DROID_AUTO_UPDATE_ENABLED).toBe('false');
+  // PATH still comes from `agentSpawnEnv` — per-kind env must not clobber it.
+  expect(typeof plan.env.PATH).toBe('string');
+
+  const auggie = planLaunch(acpConfigFor('auggie', {}), undefined, []);
+  expect(auggie.env.AUGMENT_DISABLE_AUTO_UPDATE).toBe('1');
+});
+
+test('cursor pins a CalVer floor, which still compares numerically', () => {
+  // 2026.07.16 is year.month.day, NOT semver. It flows through the same
+  // numeric comparison and orders correctly, so it needs no special case —
+  // but do not "normalise" the major down to something semver-shaped.
+  expect(RUNNER_BACKENDS.cursor.minVersion).toEqual({ major: 2026, minor: 7, patch: 16 });
+  expect(RUNNER_BACKENDS.copilot.minVersion).toEqual({ major: 1, minor: 0, patch: 71 });
+  expect(RUNNER_BACKENDS.kilo.minVersion).toEqual({ major: 7, minor: 4, patch: 11 });
+  expect(RUNNER_BACKENDS.cline.minVersion).toEqual({ major: 3, minor: 0, patch: 46 });
+  expect(RUNNER_BACKENDS.goose.minVersion).toEqual({ major: 1, minor: 43, patch: 0 });
+  expect(RUNNER_BACKENDS.auggie.minVersion).toEqual({ major: 0, minor: 33, patch: 0 });
+  expect(RUNNER_BACKENDS.vibe.minVersion).toEqual({ major: 2, minor: 21, patch: 0 });
+  expect(RUNNER_BACKENDS.droid.minVersion).toEqual({ major: 0, minor: 175, patch: 1 });
+});
+
+test('paid-plan and out-of-band-setup requirements stay in the install hints', () => {
+  // An installed-but-failing runner has to explain itself, or it reads as our
+  // bug. These three fail AFTER a successful install for reasons only the
+  // hint can convey.
+  expect(RUNNER_BACKENDS.copilot.installHint).toMatch(/paid Copilot subscription/i);
+  expect(RUNNER_BACKENDS.cursor.installHint).toMatch(/paid Cursor plan/i);
+  expect(RUNNER_BACKENDS.auggie.installHint).toMatch(/paid Augment plan/i);
+  // goose fails session/new with an opaque -32603, NOT ACP's AUTH_REQUIRED,
+  // until a provider is configured — so the hint has to say so up front.
+  expect(RUNNER_BACKENDS.goose.installHint).toMatch(/goose configure/);
+  // vibe is a Python tool, like kimi — an npm hint would be wrong.
+  expect(RUNNER_BACKENDS.vibe.installHint).toMatch(/uv tool install mistral-vibe/);
+  expect(RUNNER_BACKENDS.vibe.installHint).not.toMatch(/npm/);
+});
+
+test('the eight added kinds route their turns through the generic ACP client', async () => {
+  // An already-aborted turn can only terminate with the ACP client's own
+  // `aborted` event, and nothing is spawned on that path.
+  for (const kind of [
+    'copilot',
+    'cursor',
+    'kilo',
+    'cline',
+    'goose',
+    'auggie',
+    'vibe',
+    'droid',
+  ] as const) {
+    const events: TurnStreamEvent[] = [];
+    const controller = new AbortController();
+    controller.abort();
+    const result = await RUNNER_BACKENDS[kind].runTurn(
+      {
+        cwd: await tempDir('registry-acp-wave7-'),
+        message: 'hi',
+        extraSystemPrompt: '',
+        abortSignal: controller.signal,
+        onEvent: (e: TurnStreamEvent) => events.push(e),
+      } as unknown as TurnInput,
+      { prefs: { kind } },
+    );
+    expect(result.adapterKind, kind).toBe(kind);
+    expect(
+      events.map((e) => e.type),
+      kind,
+    ).toContain('aborted');
+  }
 });
 
 // ---- issue #479: one integration path, per-kind launch config -------------
@@ -145,7 +313,9 @@ test('codex launches headless; claude launches in bypass mode; binPath targets t
   const codex = acpConfigFor('codex', { binPath: '/opt/bin/codex' });
   expect(codex.adapter?.packageName).toBe('@agentclientprotocol/codex-acp');
   // Parity with the retired `approvalPolicy:'never'` + full-access sandbox.
-  expect(codex.adapter?.env).toEqual({ INITIAL_AGENT_MODE: 'agent-full-access' });
+  // Launch env is ONE field shared by native and adapter-backed kinds, so it
+  // reads off the config, not off `adapter`.
+  expect(codex.env).toEqual({ INITIAL_AGENT_MODE: 'agent-full-access' });
   // binPath now means "the agent CLI", so it rides in as CODEX_PATH.
   expect(codex.adapter?.binPathEnvVar).toBe('CODEX_PATH');
   expect(codex.binPath).toBe('/opt/bin/codex');

@@ -62,8 +62,6 @@ export interface AcpTurnInput {
 export interface AcpAdapterSpec {
   /** npm package providing the adapter. Its `bin` entry is resolved from node_modules. */
   readonly packageName: string;
-  /** Static env for the adapter process — the headless/launch preset for this kind. */
-  readonly env?: Readonly<Record<string, string>>;
   /**
    * Env var through which `RunnerPrefs.binPath` reaches the UNDERLYING CLI.
    * With an adapter in the middle, `binPath` means "the agent CLI"
@@ -113,6 +111,17 @@ export interface AcpTurnConfig {
   binPath?: string;
   /** Extra args passed verbatim after the ACP flag. */
   extraArgs?: string[];
+  /**
+   * Static env applied to whatever process we spawn — the ACP-speaking CLI for
+   * native kinds, the adapter for adapter-backed ones. ONE field for both
+   * flavours: a headless preset (codex's `INITIAL_AGENT_MODE`) and a
+   * self-update suppressor (auggie's `AUGMENT_DISABLE_AUTO_UPDATE`) are the
+   * same kind of fact — "this kind needs these vars at launch" — and splitting
+   * them by flavour is exactly the per-kind branching #479 removed. Applied
+   * AFTER `agentSpawnEnv`, so a kind can override an inherited var but never
+   * the sanitized PATH.
+   */
+  env?: Readonly<Record<string, string>>;
   /** Launch through a first-party ACP adapter instead of spawning the CLI directly. */
   adapter?: AcpAdapterSpec;
   /**

@@ -13,9 +13,10 @@
  * client in `./backends/acp/backend.ts`. Every kind is a `makeAcpBackend`
  * entry; kinds differ only in how the ACP-speaking process is launched.
  *
- *   - `gemini` / `qwen` / `opencode` / `grok` / `kimi` / custom `acp`: the
- *     CLI speaks ACP natively, so we spawn it with its ACP flag or
- *     subcommand.
+ *   - `gemini` / `qwen` / `opencode` / `grok` / `kimi` / `copilot` / `cursor` /
+ *     `kilo` / `cline` / `goose` / `auggie` / `vibe` / `droid` / custom `acp`:
+ *     the CLI speaks ACP natively, so we spawn it with its ACP flag or
+ *     subcommand (or, for `vibe`, its dedicated ACP binary).
  *   - `codex` / `claude-code`: neither CLI speaks ACP (Claude Code has no
  *     `--acp`; codex-rs has no ACP surface), so we spawn their official
  *     Apache-2.0 adapters — pinned dependencies of this package, never an
@@ -90,6 +91,14 @@ interface AcpBackendSpec {
   acpArgs: string[];
   minVersion: RunnerVersion;
   installHint: string;
+  /**
+   * Static env for the spawned process, whichever flavour this kind is: the
+   * CLI itself for native kinds, the adapter for adapter-backed ones. See
+   * `AcpTurnConfig.env` — deliberately ONE field rather than an adapter-only
+   * one, so a native kind that needs launch env (auggie, droid) doesn't grow
+   * a second path.
+   */
+  env?: Readonly<Record<string, string>>;
   /** Launch through a first-party adapter (kinds whose CLI has no ACP mode). */
   adapter?: AcpAdapterSpec;
   /** Tier → native-alias mapping applied before matching the agent's model options. */
@@ -116,6 +125,7 @@ export function buildAcpConfig(
     installHint: spec.installHint,
     acpArgs: spec.acpArgs,
     ...(spec.defaultBin ? { defaultBin: spec.defaultBin } : {}),
+    ...(spec.env ? { env: spec.env } : {}),
     ...(spec.adapter ? { adapter: spec.adapter } : {}),
     ...(spec.resolveModel ? { resolveModel: spec.resolveModel } : {}),
     ...(prefs.binPath ? { binPath: prefs.binPath } : {}),
@@ -188,12 +198,13 @@ const codexBackend = makeAcpBackend({
   acpArgs: [],
   minVersion: { major: 0, minor: 128, patch: 0 },
   installHint: 'Install Codex CLI (https://platform.openai.com/docs/codex) and run `codex login`.',
+  // Headless parity with the retired bespoke backend's `approvalPolicy:'never'`
+  // + full-access sandbox. Set at startup, so the adapter never round-trips an
+  // approval this surface cannot show. Lives on the spec, not the adapter:
+  // launch env is one field for native and adapter-backed kinds alike.
+  env: { INITIAL_AGENT_MODE: 'agent-full-access' },
   adapter: {
     packageName: '@agentclientprotocol/codex-acp',
-    // Headless parity with the retired bespoke backend's
-    // `approvalPolicy:'never'` + full-access sandbox. Set at startup, so the
-    // adapter never round-trips an approval this surface cannot show.
-    env: { INITIAL_AGENT_MODE: 'agent-full-access' },
     binPathEnvVar: 'CODEX_PATH',
   },
   enumerateModels: (prefs) => enumerateCodexModels(prefs.binPath, prefs.extraArgs),
@@ -303,6 +314,124 @@ const kimiBackend = makeAcpBackend({
     'Install Kimi CLI (`uv tool install kimi-cli`, or `curl -LsSf https://code.kimi.com/install.sh | bash`) and run `kimi login`.',
 });
 
+const copilotBackend = makeAcpBackend({
+  kind: 'copilot',
+  label: 'GitHub Copilot CLI',
+  // The npm package is `@github/copilot`, but the BINARY it installs is
+  // `copilot` — package name and bin name differ here, unlike every other
+  // kind. Do not "correct" this to the package name.
+  //
+  // There is also a separate `@github/copilot-language-server` package whose
+  // bin is `copilot-language-server`. That is an LSP server for editor
+  // completions, NOT this agent, and it does not speak ACP. Do not add it.
+  defaultBin: 'copilot',
+  // Stdio ACP. `--acp` also accepts a `--port` for TCP mode; we speak stdio,
+  // so `--port` must never be passed — it would put the agent on a socket the
+  // ACP client isn't reading.
+  acpArgs: ['--acp'],
+  minVersion: { major: 1, minor: 0, patch: 71 },
+  installHint:
+    'Install GitHub Copilot CLI (`curl -fsSL https://gh.io/copilot-install | bash`, or `brew install copilot-cli`) and sign in with `/login`. Requires a paid Copilot subscription.',
+});
+
+const cursorBackend = makeAcpBackend({
+  kind: 'cursor',
+  // The installer creates BOTH `agent` and `cursor-agent` symlinks. We
+  // deliberately use `cursor-agent`: a bare `agent` on PATH is a dangerously
+  // generic name that could resolve to anything. Do not switch to `agent`.
+  label: 'Cursor',
+  defaultBin: 'cursor-agent',
+  acpArgs: ['acp'],
+  // CalVer, NOT semver: `2026.07.16` is year.month.day. It still compares
+  // numerically and sorts correctly through the same `compareSemver`, so this
+  // needs no special casing — but it is not a semantic version, and
+  // "normalising" it to something small would silently drop the floor.
+  minVersion: { major: 2026, minor: 7, patch: 16 },
+  installHint:
+    'Install Cursor CLI (`curl https://cursor.com/install -fsS | bash`) and sign in with `cursor-agent login`. Requires a paid Cursor plan.',
+});
+
+const kiloBackend = makeAcpBackend({
+  kind: 'kilo',
+  label: 'Kilo',
+  defaultBin: 'kilo',
+  acpArgs: ['acp'],
+  minVersion: { major: 7, minor: 4, patch: 11 },
+  installHint: 'Install Kilo (`npm i -g @kilocode/cli`) and run `kilo auth`.',
+});
+
+const clineBackend = makeAcpBackend({
+  kind: 'cline',
+  label: 'Cline',
+  defaultBin: 'cline',
+  acpArgs: ['--acp'],
+  minVersion: { major: 3, minor: 0, patch: 46 },
+  installHint: 'Install Cline (`npm i -g cline`) and run `cline auth`.',
+});
+
+const gooseBackend = makeAcpBackend({
+  kind: 'goose',
+  label: 'goose',
+  // Homebrew's formula is `block-goose-cli`, but the binary it installs is
+  // `goose` — hence the hint spelling out both.
+  defaultBin: 'goose',
+  acpArgs: ['acp'],
+  minVersion: { major: 1, minor: 43, patch: 0 },
+  // goose does NOT answer an unconfigured provider with ACP's `AUTH_REQUIRED`.
+  // It fails `session/new` with an opaque JSON-RPC `-32603 Internal error`,
+  // which our AUTH_REQUIRED handling cannot turn into an actionable message.
+  // Telling the user to configure a provider up front is the only fix
+  // available from here — keep `goose configure` in this hint.
+  installHint:
+    'Install goose (`brew install block-goose-cli`; the binary is `goose`) and run `goose configure` to set a provider before use.',
+});
+
+const auggieBackend = makeAcpBackend({
+  kind: 'auggie',
+  label: 'Auggie CLI',
+  defaultBin: 'auggie',
+  acpArgs: ['--acp'],
+  // Suppresses the CLI's own auto-update. Without it Auggie can update itself
+  // mid-session, swapping the binary underneath a running turn.
+  env: { AUGMENT_DISABLE_AUTO_UPDATE: '1' },
+  minVersion: { major: 0, minor: 33, patch: 0 },
+  installHint:
+    'Install Auggie CLI (`npm i -g @augmentcode/auggie`) and sign in from a terminal. Requires a paid Augment plan.',
+});
+
+const vibeBackend = makeAcpBackend({
+  kind: 'vibe',
+  label: 'Mistral Vibe',
+  // `vibe-acp` is a SEPARATE binary from `vibe` — the ACP server is its own
+  // entrypoint, not a mode of the main CLI. That is also why `acpArgs` is
+  // empty: there is no flag or subcommand to add. Do not "fix" this to
+  // `vibe` + `['acp']`; that command does not exist.
+  defaultBin: 'vibe-acp',
+  acpArgs: [],
+  minVersion: { major: 2, minor: 21, patch: 0 },
+  // A Python tool (like kimi), not an npm package.
+  installHint:
+    'Install Mistral Vibe (`uv tool install mistral-vibe`, needs Python 3.12+) and set a Mistral API key.',
+});
+
+const droidBackend = makeAcpBackend({
+  kind: 'droid',
+  label: 'Factory Droid',
+  defaultBin: 'droid',
+  // A SUBCOMMAND plus a value-bearing flag, not a mode flag: `acp-daemon` is
+  // the value of `--output-format`, so the three tokens are inseparable.
+  acpArgs: ['exec', '--output-format', 'acp-daemon'],
+  // Both vars suppress the CLI's own auto-update (it honours two names).
+  // Without them droid can update itself mid-session.
+  env: {
+    DROID_DISABLE_AUTO_UPDATE: 'true',
+    FACTORY_DROID_AUTO_UPDATE_ENABLED: 'false',
+  },
+  minVersion: { major: 0, minor: 175, patch: 1 },
+  installHint:
+    'Install Factory Droid (`curl -fsSL https://app.factory.ai/cli | sh`, or `brew install --cask droid`) and sign in in a browser, or set `FACTORY_API_KEY`.',
+});
+
 const acpBackend = makeAcpBackend({
   kind: 'acp',
   label: 'Custom ACP agent',
@@ -322,6 +451,14 @@ export const RUNNER_BACKENDS: Record<RunnerKind, RunnerBackend> = {
   opencode: opencodeBackend,
   grok: grokBackend,
   kimi: kimiBackend,
+  copilot: copilotBackend,
+  cursor: cursorBackend,
+  kilo: kiloBackend,
+  cline: clineBackend,
+  goose: gooseBackend,
+  auggie: auggieBackend,
+  vibe: vibeBackend,
+  droid: droidBackend,
   acp: acpBackend,
 };
 

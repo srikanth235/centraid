@@ -639,6 +639,14 @@ export const AGENT_RUNNER_KINDS = [
   'opencode',
   'grok',
   'kimi',
+  'copilot',
+  'cursor',
+  'kilo',
+  'cline',
+  'goose',
+  'auggie',
+  'vibe',
+  'droid',
   'acp',
 ] as const;
 export interface AgentModelDTO {

@@ -10,8 +10,10 @@
  *
  *   - `codex` / `claude-code` → their first-party ACP adapter, which drives
  *     the user's `codex` / `claude` CLI underneath
- *   - `gemini` / `qwen` / `opencode` / `grok` / `kimi` / `acp` → the CLI
- *     itself, with its own ACP flag or subcommand
+ *   - every other kind (`gemini`, `qwen`, `opencode`, `grok`, `kimi`,
+ *     `copilot`, `cursor`, `kilo`, `cline`, `goose`, `auggie`, `vibe`,
+ *     `droid`, custom `acp`) → the CLI itself, with its own ACP flag,
+ *     subcommand, or dedicated ACP binary
  *
  * Every backend emits the same `TurnStreamEvent` shape, so callers don't
  * need to know which one ran a given turn. The returned `adapterSessionId`

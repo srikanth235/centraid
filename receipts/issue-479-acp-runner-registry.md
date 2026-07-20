@@ -28,6 +28,7 @@ gone.
 | claude-code-5e7d278e-75e-1784572082-1 | claude-code | 5e7d278e-75e6-4ac4-a4a5-1cba173c5d98 | #479 | claude-opus-4-8 | 12 | 14722 | 1946089 | 5951 | 20685 | 1.2139 | 520 | 1168944 | 47436463 | 319095 | feat(agent-runtime): make ACP the single runner integration path (#479) -m The r |
 | claude-code-5e7d278e-75e-1784572126-1 | claude-code | 5e7d278e-75e6-4ac4-a4a5-1cba173c5d98 | #479 | claude-opus-4-8 | 6 | 31710 | 988503 | 1362 | 33078 | 0.7265 | 526 | 1200654 | 48424966 | 320457 | wip (#479) |
 | claude-code-5e7d278e-75e-1784572209-1 | claude-code | 5e7d278e-75e6-4ac4-a4a5-1cba173c5d98 | #479 | claude-opus-4-8 | 14 | 7523 | 2393351 | 7105 | 14642 | 1.4214 | 540 | 1208177 | 50818317 | 327562 | feat(agent-runtime): make ACP the single runner integration path (#479) -m The r |
+| claude-code-5e7d278e-75e-1784573146-1 | claude-code | 5e7d278e-75e6-4ac4-a4a5-1cba173c5d98 | #479 | claude-opus-4-8 | 34 | 45293 | 6051378 | 30427 | 75754 | 4.0696 | 574 | 1253470 | 56869695 | 357989 | feat(agent-runtime): add eight recognized ACP agent kinds (#479) -m copilot, cur |
 
 ### Steering
 
@@ -44,6 +45,8 @@ gone.
 - [x] Attachments mapped to ACP content blocks
 - [x] Auth-required surfaced as an actionable message
 - [x] opencode, grok, and kimi added as runner kinds
+- [x] Eight more ACP-native runner kinds added
+- [x] Launch env unified across native and adapter-backed kinds
 - [x] Agents status is list-shaped
 - [x] Per-agent tools listing retired
 
@@ -118,6 +121,39 @@ form is deprecated *and* semantically different (single-session, no
 `session/load`), so the subcommand is required for resume; that is recorded in a
 comment. Gemini and Qwen were also moved off the now-deprecated
 `--experimental-acp` onto `--acp`.
+
+**Eight more ACP-native runner kinds added.** `copilot` (GitHub Copilot CLI),
+`cursor`, `kilo`, `cline`, `goose`, `auggie` (Auggie CLI), `vibe` (Mistral Vibe)
+and `droid` (Factory Droid) all speak ACP natively, so each is one registry
+entry plus its kind literal — sixteen kinds now, up from eight. Launch commands
+and version floors were taken from each project's own docs and arg-parsing
+source plus the ACP registry's daily capability probe, never from a catalog
+alone. The traps that would otherwise be "fixed" back are recorded as code
+comments next to the entry and asserted in tests: `copilot`'s binary is
+`copilot` while its npm package is `@github/copilot` (and it is *not*
+`@github/copilot-language-server`, a different package that speaks no ACP), and
+its `--port` TCP mode is never passed because we speak stdio; `cursor` uses
+CalVer (`2026.07.16` = year.month.day, which still compares numerically through
+the existing `compareSemver`) and deliberately takes the `cursor-agent` symlink
+rather than the dangerously generic bare `agent` the installer also creates;
+`vibe`'s `defaultBin` is the separate `vibe-acp` binary with **empty** `acpArgs`,
+because its ACP server is its own entrypoint rather than a mode flag; `droid`'s
+invocation is a subcommand plus a value-bearing flag (`exec --output-format
+acp-daemon`), not a mode flag; and `goose` fails `session/new` with an opaque
+`-32603` rather than ACP's `AUTH_REQUIRED` until a provider is configured, which
+is why its hint leads with `goose configure`.
+
+**Launch env unified across native and adapter-backed kinds.** `auggie` and
+`droid` ship self-updating CLIs that can swap the binary out from under a
+running turn, so both need launch env — and they are the first *native* kinds
+that do. Rather than add a second env path beside the adapter's, the existing
+`AcpAdapterSpec.env` was lifted to `AcpTurnConfig.env` (and `env` on the registry
+spec), and `planLaunch` now applies it on both the native and the adapter branch.
+Codex's `INITIAL_AGENT_MODE=agent-full-access` moved onto that shared field with
+no behaviour change: a headless preset and a self-update suppressor are the same
+fact, "this kind needs these vars at launch". It is applied after
+`agentSpawnEnv`, so a kind can override an inherited var but never the sanitized
+`PATH`.
 
 **Agents status is list-shaped.** `AgentsStatus` moved from bespoke
 `codexAvailable` / `claudeModels` field pairs to `{ agents: AgentStatusEntry[] }`,
@@ -212,6 +248,21 @@ the new `packages/client/src/react/shell/routes/settingsProvidersData.test.ts`,
 `packages/client/src/react/screens/SettingsProvidersScreen.module.css` (16
 orphaned tools-drawer rules removed).
 
+**Eight more ACP-native runner kinds added / Launch env unified across native
+and adapter-backed kinds** — the eight entries and codex's relocated `env` in
+`packages/agent-runtime/src/registry.ts`, the kind literals in
+`packages/app-engine/src/conversation/turn.ts`, the shared `env` field in
+`packages/agent-runtime/src/backends/acp/types.ts` applied on both spawn
+branches by `packages/agent-runtime/src/backends/acp/launch.ts`, and the flavour
+note in `packages/agent-runtime/src/runtime.ts`. Tests:
+`packages/agent-runtime/src/registry.test.ts`,
+`packages/agent-runtime/src/preflight.test.ts`,
+`packages/app-engine/src/conversation/turn.test.ts`. Cosmetic client lists:
+`packages/client/src/react/shell/routes/settingsProvidersData.ts` (accent only —
+no third-party icon artwork) and `packages/client/src/react/screen-contracts.ts`.
+Documented in `docs/runners.md`; recorded here in
+`receipts/issue-479-acp-runner-registry.md`.
+
 ## Out of scope
 
 - **Token usage and cost accounting** — deferred to its own exercise at the
@@ -239,6 +290,12 @@ orphaned tools-drawer rules removed).
   has an active native-ACP proposal with maintainer engagement; if it lands, Pi
   becomes a one-line entry. Until then it is reachable through the custom `acp`
   kind via config, with no code from us.
+- **Devin as a kind** — skipped deliberately while adding the other eight, and
+  it would have shipped broken. Its `session/new` times out with no response at
+  all in the ACP registry's daily capability probe, it reports its version as
+  `0.0.0-dev`, and its own documentation describes no `acp` subcommand. Like Pi,
+  it stays reachable through the custom `acp` kind via config, with no code from
+  us; it becomes a one-line entry if and when it has a working ACP surface.
 - **A binPath/extraArgs settings UI** — the custom `acp` kind is configured
   through the daemon config file; no new settings surface was invented.
 
@@ -295,7 +352,7 @@ validators.
 Per-package suites, run sequentially:
 
 ```
-agent-runtime  Tests  140 passed (140)
+agent-runtime  Tests  152 passed (152)
 app-engine     Tests  490 passed (490)
 automation     Tests  219 passed (219)
 gateway        Tests  799 passed | 6 skipped (805)
@@ -329,6 +386,23 @@ kinds** are pinned by registry tests covering per-kind default binaries, ACP arg
 cannot reintroduce the sort trap), and routing through the ACP backend;
 **Automation dispatch routed through the registry** asserts every kind resolves
 through it and that ACP kinds fail `ctx.tool` with a named constraint.
+
+**Eight more ACP-native runner kinds added** is pinned the same way, one
+assertion per trap so a plausible-looking "cleanup" fails loudly: each kind's
+exact `acpArgs` (including `vibe`'s empty array and `droid`'s three inseparable
+tokens), each `defaultBin` with explicit negative assertions that `copilot` is
+not its npm package name or the language-server package and that `cursor` is not
+the bare `agent` symlink, `cursor`'s CalVer floor as numeric `{2026, 7, 16}`
+plus the `2026.7.16` string preflight reports, that `--port` never reaches
+copilot, that all eight are adapter-free and route an aborted turn through the
+generic ACP client, and that the paid-plan (`copilot`, `cursor`, `auggie`) and
+`goose configure` requirements survive in the install hints. Preflight covers
+all eight probing their own binary and reporting unavailable-with-hint when it
+is missing. **Launch env unified across native and adapter-backed kinds** is
+asserted on the spawn plan itself — `planLaunch` for `droid` and `auggie`
+carries their suppressor vars while `PATH` still comes from `agentSpawnEnv` —
+and codex's relocated `env` is read off the config rather than off `adapter`.
+Everything is hermetic: no real CLI is installed or spawned.
 **Claude Code and Codex folded onto their ACP adapters** is asserted through an
 exported launch-config seam, so env and adapter resolution are checked without
 spawning. **Agents status is list-shaped** and **Per-agent tools listing retired**
@@ -344,9 +418,12 @@ wire method read from the SDK's `AGENT_METHODS`; the MCP HTTP entry shape from
 adapter's MCP transport support and permission-mode gating from its own dist.
 
 **Not verified:** no turn has been driven against a real installed CLI for any of
-the eight kinds — all runner coverage is against the scripted fake agent, so
+the sixteen kinds — all runner coverage is against the scripted fake agent, so
 version floors and launch flags are verified from upstream sources rather than by
-execution. Repo-wide parallel `bun run test` produced two load-dependent failures
+execution. That caveat applies with full force to the eight kinds added last:
+their launch commands, version floors and failure modes come from each project's
+own docs and arg-parsing source plus the ACP registry's daily capability probe,
+not from a turn we ran. Repo-wide parallel `bun run test` produced two load-dependent failures
 in packages this change does not touch (`client/App.test.tsx`, then
 `vault/stream-ingress.test.ts` on a re-run, plus a known
 `gateway/lifecycle-automation-routes` timeout flake); each passes in isolation and

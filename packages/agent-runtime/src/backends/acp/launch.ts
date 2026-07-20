@@ -6,6 +6,9 @@
  * spawn `node <adapter entry>`; the user's `binPath` is redirected into the
  * adapter's "where is the real CLI" env var, since with an adapter in the
  * middle `binPath` names the agent CLI, not the process we launch.
+ *
+ * `config.env` is the ONE per-kind launch-env field and applies to both
+ * flavours — headless presets and self-update suppressors are the same fact.
  */
 
 import type { TurnStreamEvent } from '@centraid/app-engine';
@@ -42,14 +45,15 @@ export function planLaunch(
         'No binary configured for the ACP runner — set its path in Settings → Agents.',
       );
     }
-    return {
-      bin,
-      args: [...config.acpArgs, ...extraArgs],
-      env: agentSpawnEnv({
-        ...(config.binPath ? { binPath: config.binPath } : {}),
-        ...(extraPath ? { extraPath } : {}),
-      }),
-    };
+    const nativeEnv = agentSpawnEnv({
+      ...(config.binPath ? { binPath: config.binPath } : {}),
+      ...(extraPath ? { extraPath } : {}),
+    });
+    // Native kinds get the same per-kind launch env as adapter-backed ones —
+    // it is one field on the config, not an adapter-only concern. `auggie` and
+    // `droid` need theirs to stop the CLI self-updating mid-session.
+    Object.assign(nativeEnv, config.env ?? {});
+    return { bin, args: [...config.acpArgs, ...extraArgs], env: nativeEnv };
   }
 
   const entry = resolveAdapterEntry(adapter.packageName);
@@ -57,7 +61,7 @@ export function planLaunch(
     ...(config.binPath ? { binPath: config.binPath } : {}),
     ...(extraPath ? { extraPath } : {}),
   });
-  Object.assign(env, adapter.env ?? {});
+  Object.assign(env, config.env ?? {});
   if (config.binPath && adapter.binPathEnvVar) env[adapter.binPathEnvVar] = config.binPath;
 
   // The claude adapter computes `ALLOW_BYPASS = !IS_ROOT || !!IS_SANDBOX` at

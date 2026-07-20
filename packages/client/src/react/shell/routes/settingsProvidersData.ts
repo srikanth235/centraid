@@ -43,6 +43,14 @@ const ACCENT_BY_KIND: Record<string, string> = {
   opencode: '#0ea5e9',
   grok: '#e11d48',
   kimi: '#8b5cf6',
+  copilot: '#6366f1',
+  cursor: '#14b8a6',
+  kilo: '#d946ef',
+  cline: '#22c55e',
+  goose: '#f97316',
+  auggie: '#06b6d4',
+  vibe: '#fb7185',
+  droid: '#eab308',
   acp: '#64748b',
 };
 const DEFAULT_ACCENT = '#64748b';
