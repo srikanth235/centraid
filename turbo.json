@@ -3,7 +3,17 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", "native/*.node"]
+      "outputs": [
+        "dist/**",
+        "native/*.node",
+        // blueprints vendor-browser-shared + vendor-pdfjs (gitignored kit bits)
+        "kit/blob-format.js",
+        "kit/video-frame.js",
+        "kit/pdf.min.mjs",
+        "kit/pdf.worker.min.mjs",
+        // web iroh wasm ensure path when rebuilt on CI
+        "src/generated/centraid_web_iroh_bg.wasm"
+      ]
     },
     "dev": {
       "cache": false,

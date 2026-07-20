@@ -9,7 +9,7 @@ iOS Simulator (`bun run --filter=@centraid/mobile ios` once), and Metro
 must be running on `:8081` (the dev build fetches its JS bundle from there).
 
 **Steps:**
-1. Launch `com.centraid.mobile` with `clearState: true` → AsyncStorage
+1. Launch `dev.centraid.mobile` with `clearState: true` → AsyncStorage
    wiped (pairing included), so Home renders in its `no-gateway` branch.
 2. Wait up to 30s for `"Connect your desktop"` text — only present after
    the JS bundle has downloaded from Metro and `<Home>` has mounted.

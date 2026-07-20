@@ -41,27 +41,22 @@ function initials(name: string): string {
 }
 
 /**
- * First-run onboarding (issue #325, redesigned around (gateway, vault) pairs
- * for issue #382) — two steps on one root: (1) identity — a name and a
- * color, (2) "Where does your data live?" — the shared ConnectFlow wizard's
- * method cards, embedded. Styles are co-located in
- * `OnboardingScreen.module.css` (scoped CSS Modules).
+ * First-run onboarding — identity → connect → (local only) H5 OS service
+ * offer → complete. Styles in `OnboardingScreen.module.css`.
  */
 export default function OnboardingScreen({ onComplete }: OnboardingScreenProps): JSX.Element {
-  const [step, setStep] = useState<'identity' | 'connect'>('identity');
+  const [step, setStep] = useState<'identity' | 'connect' | 'service'>('identity');
   const [displayName, setDisplayName] = useState('');
-  // Random initial color so two fresh installs on the same machine don't both
-  // start on the same swatch.
   const [avatarColor, setAvatarColor] = useState<string>(
     () => AVATAR_PALETTE[Math.floor(Math.random() * AVATAR_PALETTE.length)] ?? AVATAR_PALETTE[0],
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingResult, setPendingResult] = useState<ConnectFlowResult | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (step !== 'identity') return;
-    // One frame so the CSS entry animation isn't fighting the focus shift.
     const id = requestAnimationFrame(() => nameRef.current?.focus());
     return () => cancelAnimationFrame(id);
   }, [step]);
@@ -84,10 +79,55 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps):
           displayName: displayName.trim(),
           gatewayId: result.gatewayId,
         });
-        // Host replaces the root with home — nothing else to do.
       } catch (err) {
         setSubmitting(false);
         setError(`Couldn't save your profile: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    })();
+  };
+
+  /**
+   * After connect: for the local gateway, offer H5 OS service install
+   * (default off). Remote gateways skip — service install is about the
+   * machine's own detached child.
+   */
+  const afterConnect = (result: ConnectFlowResult): void => {
+    const isLocal = result.gatewayId === 'local' || result.gatewayId.startsWith('local');
+    const canInstall = typeof window.CentraidApi?.installGatewayService === 'function';
+    if (isLocal && canInstall) {
+      setPendingResult(result);
+      setStep('service');
+      return;
+    }
+    finish(result);
+  };
+
+  const declineService = (): void => {
+    if (!pendingResult) return;
+    void window.CentraidApi.saveSettings?.({ offerGatewayService: false });
+    finish(pendingResult);
+  };
+
+  const acceptService = (): void => {
+    if (!pendingResult || submitting) return;
+    setSubmitting(true);
+    setError(null);
+    void (async () => {
+      try {
+        const install = window.CentraidApi.installGatewayService;
+        if (install) {
+          const res = await install();
+          if (!res.ok) {
+            setSubmitting(false);
+            setError(res.error || 'Service install failed');
+            return;
+          }
+        }
+        await window.CentraidApi.saveSettings?.({ offerGatewayService: true });
+        finish(pendingResult);
+      } catch (err) {
+        setSubmitting(false);
+        setError(err instanceof Error ? err.message : String(err));
       }
     })();
   };
@@ -115,7 +155,7 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps):
               A name and a color. We use them for your profile — you can change either at any time.
             </p>
           </>
-        ) : (
+        ) : step === 'connect' ? (
           <>
             <h1 className={styles.title}>
               Where does your <em>data live</em>?
@@ -123,6 +163,17 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps):
             <p className={styles.sub}>
               Everything you do happens inside one space. Keep it on this Mac, or connect to a
               gateway running elsewhere.
+            </p>
+          </>
+        ) : (
+          <>
+            <h1 className={styles.title}>
+              Keep your vault <em>reachable</em>?
+            </h1>
+            <p className={styles.sub}>
+              Optionally install a small background service so your gateway stays up when Centraid
+              is closed — phones and other devices can still reach your vault. Default is off; we
+              never install this without asking.
             </p>
           </>
         )}
@@ -211,13 +262,40 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps):
               </span>
             </button>
           </form>
-        ) : (
+        ) : step === 'connect' ? (
           <div className={styles.connectPanel} data-theme="dark">
             <ConnectFlow
               context="onboarding"
               onCancel={() => setStep('identity')}
-              onDone={finish}
+              onDone={afterConnect}
             />
+            {error ? (
+              <div className={styles.error} role="alert">
+                {error}
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className={styles.form}>
+            <button
+              type="button"
+              className={styles.cta}
+              disabled={submitting}
+              data-testid="onboarding-service-accept"
+              onClick={acceptService}
+            >
+              <span>{submitting ? 'Installing…' : 'Keep vault reachable'}</span>
+            </button>
+            <button
+              type="button"
+              className={styles.cta}
+              style={{ marginTop: 12, opacity: 0.85 }}
+              disabled={submitting}
+              data-testid="onboarding-service-decline"
+              onClick={declineService}
+            >
+              <span>Not now</span>
+            </button>
             {error ? (
               <div className={styles.error} role="alert">
                 {error}

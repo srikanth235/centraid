@@ -1,0 +1,10 @@
+{
+  "appId": "dev.centraid.desktop",
+  "productName": "Centraid",
+  "protocols": [
+    {
+      "name": "Centraid",
+      "schemes": ["centraid"]
+    }
+  ]
+}

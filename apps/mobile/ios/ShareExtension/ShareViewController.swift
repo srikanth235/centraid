@@ -11,7 +11,7 @@ import Social
 import UIKit
 
 class ShareViewController: UIViewController {
-  let hostAppGroupIdentifier = "group.com.centraid.mobile"
+  let hostAppGroupIdentifier = "group.dev.centraid.mobile"
   let shareProtocol = "centraid"
   let sharedKey = "centraidShareKey"
   var sharedMedia: [SharedMediaFile] = []

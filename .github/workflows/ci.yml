@@ -55,9 +55,12 @@ jobs:
           restore-keys: |
             cargo-dataplane-${{ runner.os }}-
       - run: bun install --frozen-lockfile
+      # E5 — https-only / integrity markers on the lockfile (supply-chain gate).
+      - run: bun run lockfile:lint
       - run: bun run format:check
       # `--format github` emits inline PR annotations on the offending lines.
       - run: bunx oxlint --format github .
+
       # Per-package lint scripts (mobile import boundaries, blueprint app
       # no-undef, data-plane cargo fmt/clippy) only exist under turbo.
       - run: bunx turbo run lint
@@ -96,17 +99,26 @@ jobs:
           restore-keys: |
             turbo-verify-${{ runner.os }}-${{ hashFiles('bun.lock', 'turbo.json', 'package.json', 'packages/*/package.json', 'apps/*/package.json') }}-
             turbo-verify-${{ runner.os }}-
-      - name: Cache Cargo (data-plane)
+      - name: Cache Cargo (data-plane + iroh-wasm)
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
+            ~/.cargo/bin
             packages/data-plane/target
-          key: cargo-dataplane-${{ runner.os }}-${{ hashFiles('packages/data-plane/Cargo.lock') }}
+            apps/web/iroh-wasm/target
+          key: cargo-verify-${{ runner.os }}-${{ hashFiles('packages/data-plane/Cargo.lock', 'apps/web/iroh-wasm/Cargo.lock') }}
           restore-keys: |
+            cargo-verify-${{ runner.os }}-
             cargo-dataplane-${{ runner.os }}-
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      # K15 — wasm is gitignored; clean CI must rebuild via ensure-iroh-wasm.
+      - name: Ensure Iroh WASM toolchain
+        run: bash scripts/ci/ensure-iroh-wasm-toolchain.sh
       - run: bun install --frozen-lockfile
       # Build every package's dist (the worker-thread handler tests load the
       # built worker, not the .ts source), then run the whole suite under

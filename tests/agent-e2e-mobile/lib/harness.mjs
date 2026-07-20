@@ -25,7 +25,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const RUNS_DIR = path.join(__dirname, '..', 'runs');
 
-export const APP_ID = 'com.centraid.mobile';
+export const APP_ID = 'dev.centraid.mobile';
 
 function spawnText(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
@@ -221,7 +221,7 @@ async function runMaestroChunk(yaml, { state, label }) {
  *   import { runFlow } from '../lib/harness.mjs';
  *   await runFlow('home-loads', async (ctx) => {
  *     await ctx.run(`
- *       appId: com.centraid.mobile
+ *       appId: dev.centraid.mobile
  *       ---
  *       - launchApp: { clearState: true }
  *       - extendedWaitUntil: { visible: { text: "Connect your desktop" }, timeout: 30000 }

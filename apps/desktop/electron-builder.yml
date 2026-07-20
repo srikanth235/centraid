@@ -1,0 +1,59 @@
+# I1 / I10 — electron-builder packaging (issue #468)
+# appId uses the decided reverse-DNS root dev.centraid (J5).
+# Signing/notarization jobs are secret-gated in CI; this file is scaffolding.
+
+appId: dev.centraid.desktop
+productName: Centraid
+copyright: Copyright © Centraid
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - package.json
+  - '!dist/**/*.map'
+
+extraMetadata:
+  main: dist/main.js
+
+# I10: ZIP (updater) + DMG (humans) on macOS; per-user NSIS on Windows.
+mac:
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.inherit.plist
+  # I2: notarization when APPLE_* secrets present (see workflow)
+  identity: null
+
+win:
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+  # I3: Azure Trusted Signing when secrets present
+  azureSignOptions: null
+
+nsis:
+  oneClick: true
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+
+linux:
+  target:
+    - AppImage
+  category: Office
+  # I10: version-less filename so self-update overwrites in place
+  artifactName: Centraid-${arch}.${ext}
+
+publish:
+  provider: github
+  releaseType: release
+
+# electron-updater channel: stable by default; beta tags use channel beta (D5)

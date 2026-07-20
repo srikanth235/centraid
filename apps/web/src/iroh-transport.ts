@@ -1,4 +1,5 @@
 import initWasm, { BrowserEndpoint, type BrowserResponse } from './generated/centraid_web_iroh.js';
+import { SERVICE_WORKER_VERSION } from './sw-version.js';
 import { loadConnection, webGatewayId } from './web-state.js';
 
 const KEY_STORAGE = 'centraid.web.v1.iroh-device-key';
@@ -6,8 +7,8 @@ const BRIDGE_STORAGE = 'centraid.web.v1.iroh-bridge';
 const VIRTUAL_PREFIX = '/__centraid_iroh__/';
 // A versioned script URL prevents an older shell worker from being treated as
 // ready merely because it controls the page. The virtual Iroh route only
-// exists in this worker generation.
-const SERVICE_WORKER_VERSION = 'iroh-bridge-v9';
+// exists in this worker generation. VERSION is shared with public/sw.js via
+// sw-version.ts (issue #468 K8).
 const SERVICE_WORKER_URL = `/sw.js?v=${SERVICE_WORKER_VERSION}`;
 
 // Transient tunnel failures (a redialed-then-still-dead connection, a stream

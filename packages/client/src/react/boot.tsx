@@ -11,9 +11,11 @@
 
 import '../theme-vars.js';
 import '../icons.js';
+import type { ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { Gallery } from './ui/index.js';
 import App from './shell/App.js';
+import ErrorBoundary from './shell/ErrorBoundary.js';
 import FirstRunGate from './screens/FirstRunGate.js';
 import { resetGatewayAuthCache } from '../gateway-client-core.js';
 import {
@@ -98,52 +100,57 @@ void (async (): Promise<void> => {
   const settings = await window.CentraidApi.getSettings().catch(
     () => ({}) as Awaited<ReturnType<typeof window.CentraidApi.getSettings>>,
   );
+  const wrap = (node: ReactNode) => (
+    <ErrorBoundary title="Centraid hit a problem">{node}</ErrorBoundary>
+  );
   if (settings.onboardingCompletedAt) {
-    shellRoot.render(<App />);
+    shellRoot.render(wrap(<App />));
     return;
   }
   shellRoot.render(
-    <FirstRunGate
-      recover={{
-        validateKit: validateRecoveryKit,
-        discover: discoverRecovery,
-        start: startRecovery,
-        status: getRecoverStatus,
-        streamEvents: streamRecoverEvents,
-      }}
-      onOnboardingComplete={async ({ displayName, avatarColor, gatewayId }) => {
-        // issue #382 fix: write the name/color to the profile of the
-        // gateway ConnectFlow actually connected — pairing a remote gateway
-        // during onboarding used to always land on 'local', leaving the
-        // gateway the user just connected to with no display name/color.
-        await window.CentraidApi.updateProfileMetadata({
-          id: gatewayId || 'local',
-          displayName,
-          avatarColor,
-        }).catch(() => undefined);
-        await window.CentraidApi.saveSettings({
-          onboardingCompletedAt: new Date().toISOString(),
-        }).catch(() => undefined);
-        shellRoot.render(<App />);
-      }}
-      onRecoveryComplete={async () => {
-        // The gateway (local embedded on desktop, or the connected gateway on
-        // web) already mounted the recovered vault in-process — the adopt fired
-        // on first mount and the quarantine parked. The RECOVER path skips
-        // identity/connect: the recovered vault already carries its own profile,
-        // so there's no updateProfileMetadata here. Drop the cached pre-vault
-        // auth so the next read addresses the recovered vault the gateway now
-        // serves (its vaultId is undefined on a fresh install ⇒ the gateway
-        // picks, and the only mounted vault is the recovered one), stamp
-        // onboarding done, and boot the app against it — same terminal state as
-        // the fresh path.
-        resetGatewayAuthCache();
-        await window.CentraidApi.saveSettings({
-          onboardingCompletedAt: new Date().toISOString(),
-        }).catch(() => undefined);
-        shellRoot.render(<App />);
-      }}
-    />,
+    wrap(
+      <FirstRunGate
+        recover={{
+          validateKit: validateRecoveryKit,
+          discover: discoverRecovery,
+          start: startRecovery,
+          status: getRecoverStatus,
+          streamEvents: streamRecoverEvents,
+        }}
+        onOnboardingComplete={async ({ displayName, avatarColor, gatewayId }) => {
+          // issue #382 fix: write the name/color to the profile of the
+          // gateway ConnectFlow actually connected — pairing a remote gateway
+          // during onboarding used to always land on 'local', leaving the
+          // gateway the user just connected to with no display name/color.
+          await window.CentraidApi.updateProfileMetadata({
+            id: gatewayId || 'local',
+            displayName,
+            avatarColor,
+          }).catch(() => undefined);
+          await window.CentraidApi.saveSettings({
+            onboardingCompletedAt: new Date().toISOString(),
+          }).catch(() => undefined);
+          shellRoot.render(wrap(<App />));
+        }}
+        onRecoveryComplete={async () => {
+          // The gateway (local embedded on desktop, or the connected gateway on
+          // web) already mounted the recovered vault in-process — the adopt fired
+          // on first mount and the quarantine parked. The RECOVER path skips
+          // identity/connect: the recovered vault already carries its own profile,
+          // so there's no updateProfileMetadata here. Drop the cached pre-vault
+          // auth so the next read addresses the recovered vault the gateway now
+          // serves (its vaultId is undefined on a fresh install ⇒ the gateway
+          // picks, and the only mounted vault is the recovered one), stamp
+          // onboarding done, and boot the app against it — same terminal state as
+          // the fresh path.
+          resetGatewayAuthCache();
+          await window.CentraidApi.saveSettings({
+            onboardingCompletedAt: new Date().toISOString(),
+          }).catch(() => undefined);
+          shellRoot.render(wrap(<App />));
+        }}
+      />,
+    ),
   );
 })();
 

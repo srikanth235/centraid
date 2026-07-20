@@ -184,6 +184,8 @@ export const Channel = {
   // relaunch through these two.
   UPDATE_STATUS: 'centraid:update:status',
   UPDATE_RELAUNCH: 'centraid:update:relaunch',
+  /** H5 — opt-in OS service install for the detached local gateway. */
+  GATEWAY_SERVICE_INSTALL: 'centraid:gateway:service-install',
 
   // "What's new" changelog: main fetches the project's GitHub Releases (there
   // is no bundled CHANGELOG — each release's notes are the changelog) and
@@ -833,6 +835,14 @@ export function registerIpcHandlers(): void {
   // Status snapshot for windows that mount after the UPDATE_AVAILABLE
   // broadcast; relaunch restarts the process so it loads the new dist.
   ipcMain.handle(Channel.UPDATE_STATUS, async () => getUpdateStatus());
+  ipcMain.handle(
+    Channel.GATEWAY_SERVICE_INSTALL,
+    async (): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const { installGatewayOsService } = await import('./detached-gateway.js');
+      const { gatewayDir, LOCAL_GATEWAY_ID } = await import('./gateway-paths.js');
+      return installGatewayOsService(gatewayDir(LOCAL_GATEWAY_ID));
+    },
+  );
   ipcMain.handle(Channel.UPDATE_RELAUNCH, async () => {
     relaunchToUpdate();
     return { ok: true as const };

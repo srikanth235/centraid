@@ -18,9 +18,8 @@
 // the ratios (warm-vs-cold, connect-vs-stream) hold regardless of app size,
 // and the absolute ceilings move with the fixture, not with production apps.
 //
-// Timing budgets are intentionally SOFT (log-only, see `enforceTiming`): wall
-// clock on a shared CI runner is the flakiest signal, so request-count and
-// byte budgets are the hard gates and timing is advisory until proven stable.
+// Timing budgets hard-fail when `enforceTiming` is true (issue #468 L5).
+// Request-count and byte budgets remain hard gates regardless.
 
 export interface OpenBudget {
   /** Max resource-timing entries (`performance.getEntriesByType('resource')`). */
@@ -144,7 +143,8 @@ export const perfBudgets: PerfBudgets = {
 };
 
 /**
- * Timing budgets are advisory. Flip to `true` (and tighten the ceilings) only
- * once the CI runner shows the numbers are stable across ~20 green runs.
+ * Timing budgets are enforced (issue #468 L5). Soft log-only mode was the
+ * previous default; CI now fails when cold/warm open exceed the ceilings in
+ * `perfBudgets.timing`. Request/byte budgets remain hard gates too.
  */
-export const enforceTiming = false;
+export const enforceTiming = true;

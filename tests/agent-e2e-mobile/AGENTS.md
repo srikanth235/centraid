@@ -12,7 +12,7 @@ A loose, exploratory complement to whatever scripted-mobile tier
 eventually lands in `apps/mobile/tests/e2e/` (Detox is the planned
 inhabitant — not wired up yet). The harness ([`lib/harness.mjs`](lib/harness.mjs))
 discovers a booted iOS Simulator **or Android emulator**, checks
-`com.centraid.mobile` is installed and Metro is reachable, allocates a
+`dev.centraid.mobile` is installed and Metro is reachable, allocates a
 run dir, and exposes a `ctx` surface (`run`, `restart`, `note`) to the
 flow body via `runFlow(slug, fn)`. Each `ctx.run(yaml)` spawns
 `maestro test` once with cwd set to the run's `screenshots/` dir, so
@@ -97,9 +97,9 @@ workspaces like desktop's `userData`.
   `assertVisible: "<substring>"` against it doesn't match). For
   AsyncStorage assertions, read it directly via platform-specific
   paths:
-  - **iOS**: `xcrun simctl get_app_container <udid> com.centraid.mobile data`
-    then `Library/Application Support/com.centraid.mobile/RCTAsyncLocalStorage_V1/manifest.json`.
-  - **Android**: `adb -s <udid> shell run-as com.centraid.mobile cat databases/RKStorage` —
+  - **iOS**: `xcrun simctl get_app_container <udid> dev.centraid.mobile data`
+    then `Library/Application Support/dev.centraid.mobile/RCTAsyncLocalStorage_V1/manifest.json`.
+  - **Android**: `adb -s <udid> shell run-as dev.centraid.mobile cat databases/RKStorage` —
     RKStorage is a SQLite DB; query with `sqlite3 :memory: '.read /dev/stdin' "SELECT * FROM catalystLocalStorage WHERE key='centraid.v1.settings.gatewayUrl';"`.
     Or `adb pull` it to host disk first.
 
@@ -162,7 +162,7 @@ workspaces like desktop's `userData`.
 - **Don't use `clearState: true` without acknowledging the cost.**
   It wipes the Expo dev client's Metro URL cache along with
   AsyncStorage. The next launch may need a deep-link relaunch via
-  `xcrun simctl openurl <udid> "com.centraid.mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"`
+  `xcrun simctl openurl <udid> "dev.centraid.mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"`
   to recover.
 - **Don't trust the UI alone for persistence assertions.** Read the
   AsyncStorage manifest from disk for round-trip claims.
