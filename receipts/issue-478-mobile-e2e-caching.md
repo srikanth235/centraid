@@ -115,12 +115,24 @@ fp() { git ls-files -z -- 'apps/mobile/ios' 'apps/mobile/modules' 'apps/mobile/p
 before=$(fp); printf '\n' >> apps/mobile/app.config.ts; after=$(fp); git checkout apps/mobile/app.config.ts; test "$before" != "$after" && test "$before" = "$(fp)"
 ```
 
-**Not verified, and it cannot be from here:** none of this has executed on a
-macOS runner. The `.app` discovery path out of derived data, the tar round-trip
-of the bundle, and behavioural parity of `simctl install` versus `expo run:ios`
-all need a real run. A cold run only proves the build path still works — the
-meaningful proof is run N+1 on an unchanged native tree showing a hit AND a
-correct app launch, not merely a green Maestro result.
+**Now verified on real runners.** The caveat below was written before any CI
+run; it is superseded by the record here.
+
+- Cold build + save: run 29777868306's predecessors built the `.app` and, once
+  the `if: always()` save fix landed, banked it (`Save the built iOS app` →
+  `success`, was `skipped` while the lane was red under `actions/cache`'s
+  `post-if: success()`).
+- Warm hit: run **29777868306** restored the cache and SKIPPED the native build
+  entirely — `Restore the built iOS app` 67s → `Build and install` **skipped** →
+  `Install the cached mobile development app` 32s `success`. The 32-minute build
+  became a 32-second install, and the app launched correctly (all three Maestro
+  flows passed against it). That is the run-N+1-on-an-unchanged-tree proof the
+  original caveat asked for.
+- Job wall-clock: 51 min → **29 min** on the warm path.
+
+Original caveat, left for the record: none of this had executed on a macOS
+runner at commit time; the `.app` discovery path, the bundle round-trip, and
+`simctl install` vs `expo run:ios` parity were unproven until the runs above.
 
 ## Audit
 
@@ -211,3 +223,6 @@ Evidence for rubric checks:
 | claude-code-caa407fd-499-1784565417-1 | claude-code | caa407fd-4992-4b19-9083-0461b452f3bb | #478 | claude-opus-4-8 | 18 | 17871 | 2100539 | 9015 | 26904 | 1.3874 | 396 | 612687 | 27564609 | 162200 |  |
 | claude-code-caa407fd-499-1784565521-1 | claude-code | caa407fd-4992-4b19-9083-0461b452f3bb | #478 | claude-opus-4-8 | 4 | 824 | 437066 | 642 | 1470 | 0.2398 | 400 | 613511 | 28001675 | 162842 |  |
 | claude-code-caa407fd-499-1784565594-1 | claude-code | caa407fd-4992-4b19-9083-0461b452f3bb | #478 | claude-opus-4-8 | 4 | 1032 | 437890 | 1414 | 2450 | 0.2608 | 404 | 614543 | 28439565 | 164256 |  |
+| claude-code-caa407fd-499-1784583437-1 | claude-code | caa407fd-4992-4b19-9083-0461b452f3bb | #478 | claude-opus-4-8 | 57 | 24764 | 10671755 | 17592 | 42413 | 5.9307 | 845 | 1464665 | 96532804 | 365463 |  |
+| claude-code-caa407fd-499-1784583474-1 | claude-code | caa407fd-4992-4b19-9083-0461b452f3bb | #478 | claude-opus-4-8 | 4 | 8678 | 705782 | 434 | 9116 | 0.4180 | 849 | 1473343 | 97238586 | 365897 |  |
+| claude-code-caa407fd-499-1784583517-1 | claude-code | caa407fd-4992-4b19-9083-0461b452f3bb | #478 | claude-opus-4-8 | 6 | 942 | 1071690 | 1743 | 2691 | 0.5853 | 855 | 1474285 | 98310276 | 367640 |  |
