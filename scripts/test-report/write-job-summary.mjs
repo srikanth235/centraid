@@ -9,9 +9,7 @@ import { renderSummaryMarkdown } from './summary-markdown.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const flags = parseFlags(process.argv.slice(2));
-const summaryPath = path.resolve(
-  flags.summary ?? path.join(root, 'dist/test-report/summary.json'),
-);
+const summaryPath = path.resolve(flags.summary ?? path.join(root, 'dist/test-report/summary.json'));
 const reportUrl = flags['report-url'] ?? process.env.TEST_REPORT_PUBLIC_URL ?? '';
 const runUrl =
   process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY && process.env.GITHUB_RUN_ID

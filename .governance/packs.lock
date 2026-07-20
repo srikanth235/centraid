@@ -70,3 +70,4 @@ packs:
   - actions-declare-table-writes
   - gateway-engine-mode-agnostic
   - data-runtime-sqlite-separation
+  - format-check
