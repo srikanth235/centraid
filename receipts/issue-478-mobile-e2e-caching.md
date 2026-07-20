@@ -89,7 +89,10 @@ the per-test timeout sweep committed separately, recorded in
 `packages/app-engine/src/handlers/handler-runner.contract.test.ts`,
 `packages/gateway/src/preview/codec.test.ts`,
 `packages/gateway/src/serve/connection-broker.test.ts`,
-`packages/gateway/src/serve/outbox-executor.test.ts`.
+`packages/gateway/src/serve/outbox-executor.test.ts`. Likewise the Metro prewarm
+fix and its extracted module, also #474:
+`tests/agent-e2e-mobile/lib/harness.mjs`,
+`tests/agent-e2e-mobile/lib/metro.mjs`.
 
 ## Verification
 

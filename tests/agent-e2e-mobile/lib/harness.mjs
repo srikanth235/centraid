@@ -20,6 +20,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultRunId, writeFlowVerdict } from '../../agent-e2e-shared/harness.mjs';
+import { metroReachable, prewarmMetroBundle } from './metro.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
@@ -168,60 +169,6 @@ async function ensureMetroReverseForAndroid(udid) {
   await spawnText('adb', ['-s', udid, 'reverse', 'tcp:8081', 'tcp:8081']);
 }
 
-// The Expo dev build fetches its JS bundle from Metro at runtime. If
-// clearState wipes the cached bundle and Metro isn't reachable, the
-// app shows a redbox ("No script URL provided") and every `assertVisible`
-// times out cryptically. Fail loudly instead.
-async function metroReachable() {
-  try {
-    const res = await fetch('http://127.0.0.1:8081/status', {
-      signal: AbortSignal.timeout(1500),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-// Build the JS bundle once, before any flow starts its clock.
-//
-// Every flow opens with `launchApp: { clearState: true }`, which drops the dev
-// build's cached bundle, so the app refetches it from Metro on that first launch.
-// If Metro's transform cache is also cold — as it is on a fresh CI runner — that
-// build lands *inside* the flow's first `extendedWaitUntil` and eats the whole
-// budget. Paying it here keeps flow timeouts about the app, not about bundling.
-//
-// Best-effort by design: a failure here is not a flow failure. If the bundle is
-// genuinely broken the flow's own assertions will say so, with a screenshot.
-async function prewarmMetroBundle(platform) {
-  // Metro's project root is the monorepo root (Expo runs from the workspace
-  // bin), so the app's entry is served at `apps/mobile/index.ts` — plain
-  // `/index.bundle` 404s here. `/.expo/.virtual-metro-entry.bundle` answers 200
-  // but builds a 1-module stub, which is why the size floor below matters: a
-  // 200 alone does not mean the real graph was built.
-  const query = `platform=${platform}&dev=true&minify=false`;
-  const candidates = [
-    `http://127.0.0.1:8081/apps/mobile/index.bundle?${query}`,
-    `http://127.0.0.1:8081/index.bundle?${query}`,
-  ];
-  const MIN_REAL_BUNDLE_BYTES = 1_000_000;
-  for (const url of candidates) {
-    const t0 = Date.now();
-    try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(300_000) });
-      // Drain the body: Metro streams the bundle and isn't done building until
-      // the last byte is out.
-      const bytes = (await res.arrayBuffer()).byteLength;
-      if (!res.ok || bytes < MIN_REAL_BUNDLE_BYTES) continue;
-      console.log(`  prewarm : bundle ready in ${Date.now() - t0}ms (${bytes} bytes)`);
-      return;
-    } catch (err) {
-      console.log(`  prewarm : ${url.split('?')[0]} failed (${err.message ?? err})`);
-    }
-  }
-  console.log('  prewarm : no bundle endpoint matched — flows will pay the cold build');
-}
-
 export async function setup({ runId } = {}) {
   const device = await bootedDevice();
   if (!device) {
@@ -250,7 +197,7 @@ export async function setup({ runId } = {}) {
         'serve the JS bundle — start it with `cd apps/mobile && bun expo start --dev-client`.',
     );
   }
-  await prewarmMetroBundle(device.platform);
+  await prewarmMetroBundle(device.platform, APP_ID);
   const id = runId ?? defaultRunId();
   const runDir = path.join(RUNS_DIR, id);
   const screenshotsDir = path.join(runDir, 'screenshots');
@@ -279,9 +226,26 @@ export async function setup({ runId } = {}) {
 async function runMaestroChunk(yaml, { state, label }) {
   const flowFile = path.join(state.flowsDir, `${label}.yaml`);
   await fs.writeFile(flowFile, yaml);
-  await spawnLive('maestro', ['--udid', state.udid, 'test', flowFile], {
-    cwd: state.screenshotsDir,
-  });
+  // `--debug-output` redirects Maestro's own per-step screenshots and view
+  // hierarchies into the run dir. Without it they land in `~/.maestro/tests/`,
+  // which the nightly workflow does not upload — so a CI failure arrived with
+  // literally no picture of the screen. A flow that fails *before* its first
+  // `takeScreenshot` (the 2026-07-20 home-loads failure did) then leaves
+  // nothing to diagnose at all. Keep this pointed inside `state.runDir`, which
+  // is already an uploaded artifact path.
+  await spawnLive(
+    'maestro',
+    [
+      '--udid',
+      state.udid,
+      'test',
+      '--debug-output',
+      path.join(state.runDir, 'maestro-debug', label),
+      '--flatten-debug-output',
+      flowFile,
+    ],
+    { cwd: state.screenshotsDir },
+  );
 }
 
 /**
