@@ -18,9 +18,8 @@
 // the ratios (warm-vs-cold, connect-vs-stream) hold regardless of app size,
 // and the absolute ceilings move with the fixture, not with production apps.
 //
-// Timing budgets are intentionally SOFT (log-only, see `enforceTiming`): wall
-// clock on a shared CI runner is the flakiest signal, so request-count and
-// byte budgets are the hard gates and timing is advisory until proven stable.
+// Timing budgets hard-fail when `enforceTiming` is true (issue #468 L5).
+// Request-count and byte budgets remain hard gates regardless.
 
 export interface OpenBudget {
   /** Max resource-timing entries (`performance.getEntriesByType('resource')`). */

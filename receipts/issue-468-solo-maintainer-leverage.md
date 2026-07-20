@@ -439,3 +439,4 @@ PASS — no human interrupt or mid-task correction in this session; the original
 
 | steer-key | session | issue | type | tier | user-reason | commit | ordinal | timestamp |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+- L5 comment in perf-budgets.ts aligned with enforceTiming=true.
