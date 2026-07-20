@@ -3,9 +3,6 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AtlasBrowseTab from './AtlasBrowseTab.js';
 
-// React 18 act() support flag.
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-
 // The Browse tab self-fetches through the vault client (its only prop is the
 // preselected table), so the client module is mocked wholesale and each helper
 // resolves from a per-test vi.fn. vitest hoists this above the import above.

@@ -180,7 +180,7 @@ export default function AppViewRoute({
       titlebarLead={brandChip}
       titlebarRight={titlebarRight}
     >
-      <div className={styles.view}>
+      <div className={styles.view} data-testid="app-view">
         <div className={styles.body}>
           {/* data-fullbleed replaces the vanilla `app-view-fullbleed` class
               (mountUserApp added it imperatively): a hosted app fills the pane

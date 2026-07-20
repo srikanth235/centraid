@@ -1,20 +1,19 @@
 // governance: allow-repo-hygiene file-size-limit cohesive tunnel protocol; splitting would obscure issue #417 review
-// Single source of truth for cache-bucket versioning. Bumping VERSION purges
-// every prior bucket on activate. The worker's own script URL carries a
-// separate ?v= token minted in src/iroh-transport.ts (SERVICE_WORKER_VERSION);
-// that token gates the virtual-Iroh route and lives outside this file. Keep
-// the two in step when either changes.
+// Cache-bucket versioning. Single source is apps/web/src/sw-version.ts —
+// `bun run build` runs scripts/stamp-sw-version.mjs which rewrites this line
+// (issue #468 K8). Do not hand-bump here.
 const VERSION = 'v11';
 const SHELL_CACHE = `centraid-shell-${VERSION}`;
-const ASSET_CACHE = `centraid-tunnel-assets-${VERSION}`;
-const BLOB_CACHE = `centraid-tunnel-blobs-${VERSION}`;
+const ASSET_CACHE = 'centraid-tunnel-assets-' + VERSION;
+const BLOB_CACHE = 'centraid-tunnel-blobs-' + VERSION;
 const CURRENT_CACHES = new Set([SHELL_CACHE, ASSET_CACHE, BLOB_CACHE]);
 
 // Static shell entries that never change name across builds. Hashed Vite
-// assets are not known to a static worker at install time, so they are
-// runtime-cached (stale-while-revalidate) on first navigation instead.
+// assets are also precached at install by parsing index.html for /assets/*
+// script/link hrefs (issue #468 K4).
 const SHELL = [
   '/',
+  '/offline.html',
   '/manifest.webmanifest',
   '/centraid.svg',
   '/icon-192.png',
@@ -36,8 +35,30 @@ const appCookies = new Map();
 const bridgeOwners = new Map();
 let cacheGeneration = 0;
 
+/** Extract same-origin /assets/* URLs referenced by the built index.html. */
+async function assetUrlsFromIndex() {
+  try {
+    const res = await fetch('/');
+    if (!res.ok) return [];
+    const html = await res.text();
+    const found = new Set();
+    const re = /(?:src|href)="(\/assets\/[^"]+)"/g;
+    let match;
+    while ((match = re.exec(html))) found.add(match[1]);
+    return [...found];
+  } catch {
+    return [];
+  }
+}
+
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL)));
+  event.waitUntil(
+    (async () => {
+      const cache = await caches.open(SHELL_CACHE);
+      const assets = await assetUrlsFromIndex();
+      await cache.addAll([...SHELL, ...assets]);
+    })(),
+  );
   self.skipWaiting();
 });
 
@@ -506,6 +527,7 @@ async function shell(event) {
   // carries the (mutable) gateway URL. A stale copy could pin the app to a
   // dead gateway.
   const noStore = url.pathname === '/web-config.json';
+  const isNavigation = request.mode === 'navigate';
 
   const fromNetwork = async () => {
     const preloaded = await event.preloadResponse;
@@ -516,14 +538,29 @@ async function shell(event) {
     return response;
   };
 
-  if (noStore) return fromNetwork().catch(() => cached || cache.match('/'));
+  // Friendly offline page for navigations (issue #468 K3) — never raw JSON.
+  const offlineFallback = async () => {
+    if (isNavigation) {
+      return (
+        (await cache.match('/offline.html')) ||
+        (await cache.match('/')) ||
+        new Response('You’re offline.', {
+          status: 503,
+          headers: { 'content-type': 'text/html; charset=utf-8' },
+        })
+      );
+    }
+    return cached || (await cache.match('/'));
+  };
+
+  if (noStore) return fromNetwork().catch(() => offlineFallback());
   if (cached) {
     // Stale-while-revalidate: paint from cache now, refresh the entry (and
     // consume any navigation preload) in the background.
     event.waitUntil(fromNetwork().catch(() => undefined));
     return cached;
   }
-  return fromNetwork().catch(() => cache.match('/'));
+  return fromNetwork().catch(() => offlineFallback());
 }
 
 self.addEventListener('fetch', (event) => {

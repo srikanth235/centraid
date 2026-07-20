@@ -1,0 +1,19 @@
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
+with the release rules in [docs/release.md](docs/release.md) (issue #468 **D3** / **D4** / **I12**):
+
+- **Patch** — every entry under *Fixed* only.
+- **Minor** — anything *Added*, *Changed*, or *Removed*.
+- **Major** — not used before 1.0; agents never propose one.
+- GitHub Release bodies are generated from the matching section here (D3).
+- In-app "what's new" is re-wired from this feed as an explicit D3 checklist item (I12); no permanent placeholder UI.
+
+## [Unreleased]
+
+### Added
+
+- Agent self-serve documentation set for solo-maintainer leverage ([#468](https://github.com/srikanth235/centraid/issues/468)): decisions, glossary, coding standards, protocol, release, recovery, traps, enrollment, identifiers, and related root docs.

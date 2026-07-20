@@ -12,7 +12,7 @@ A loose, exploratory complement to whatever scripted-mobile tier
 eventually lands in `apps/mobile/tests/e2e/` (Detox is the planned
 inhabitant — not wired up yet). The harness ([`lib/harness.mjs`](lib/harness.mjs))
 discovers a booted iOS Simulator **or Android emulator**, checks
-`com.centraid.mobile` is installed and Metro is reachable, allocates a
+`dev.centraid.mobile` is installed and Metro is reachable, allocates a
 run dir, and exposes a `ctx` surface (`run`, `restart`, `note`) to the
 flow body via `runFlow(slug, fn)`. Each `ctx.run(yaml)` spawns
 `maestro test` once with cwd set to the run's `screenshots/` dir, so
@@ -91,15 +91,25 @@ workspaces like desktop's `userData`.
 
 ## Conventions specific to this layer
 
+- **Never write a selector from the React source.** Boot the simulator,
+  install the app, and read `inspect_view_hierarchy` before asserting on
+  any string. Selectors inferred from JSX shipped a `mobile-e2e` lane in
+  which the pairing tap was a silent no-op, the "arrived at Settings"
+  assertion passed on Home, the gateway URL was typed into nothing, and a
+  tab was asserted by its route name (`Apps`) rather than its label
+  (`Home`) — all green, all meaningless. See "A passing step is not a
+  working step" in `README.md` for the specific traps. A step that reports
+  COMPLETED has not necessarily done anything: confirm the screen actually
+  changed.
 - **Verify on disk when state is the unit of truth.** Maestro's text
   matcher is unreliable on RN `TextInput` values (the value is in
   `inspect_view_hierarchy` under both `text=` and `value=`, but
   `assertVisible: "<substring>"` against it doesn't match). For
   AsyncStorage assertions, read it directly via platform-specific
   paths:
-  - **iOS**: `xcrun simctl get_app_container <udid> com.centraid.mobile data`
-    then `Library/Application Support/com.centraid.mobile/RCTAsyncLocalStorage_V1/manifest.json`.
-  - **Android**: `adb -s <udid> shell run-as com.centraid.mobile cat databases/RKStorage` —
+  - **iOS**: `xcrun simctl get_app_container <udid> dev.centraid.mobile data`
+    then `Library/Application Support/dev.centraid.mobile/RCTAsyncLocalStorage_V1/manifest.json`.
+  - **Android**: `adb -s <udid> shell run-as dev.centraid.mobile cat databases/RKStorage` —
     RKStorage is a SQLite DB; query with `sqlite3 :memory: '.read /dev/stdin' "SELECT * FROM catalystLocalStorage WHERE key='centraid.v1.settings.gatewayUrl';"`.
     Or `adb pull` it to host disk first.
 
@@ -121,8 +131,8 @@ workspaces like desktop's `userData`.
   that. Coordinates rot the moment a layout changes.
 - **Anchor with regex when you need exact text.** `tapOn: "Settings"`
   matches both the Home header gear icon (accessibility text
-  "Settings") AND the "Open Settings" / "Check Settings" body
-  buttons. Use `tapOn: { text: "^Settings$" }` to isolate the gear.
+  "Settings") AND the "Check settings" body button. Use
+  `tapOn: { text: "^Settings$" }` to isolate the gear.
 - **Pre-flight checks are part of `setup()`.** The harness already
   fails loudly when no sim is booted, Centraid.app isn't installed,
   or Metro isn't reachable. Don't paper over those in a flow — fix
@@ -162,7 +172,7 @@ workspaces like desktop's `userData`.
 - **Don't use `clearState: true` without acknowledging the cost.**
   It wipes the Expo dev client's Metro URL cache along with
   AsyncStorage. The next launch may need a deep-link relaunch via
-  `xcrun simctl openurl <udid> "com.centraid.mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"`
+  `xcrun simctl openurl <udid> "dev.centraid.mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"`
   to recover.
 - **Don't trust the UI alone for persistence assertions.** Read the
   AsyncStorage manifest from disk for round-trip claims.

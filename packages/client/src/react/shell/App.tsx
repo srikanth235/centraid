@@ -6,7 +6,6 @@ import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import type { IconName } from '@centraid/design-tokens';
 import type { ShellRoute } from '../../app-shell-context.js';
 import PaletteScreen from '../screens/PaletteScreen.js';
-import WhatsNewModal from '../screens/WhatsNewModal.js';
 import { type ShellActions, ShellActionsProvider } from './actions.js';
 import { openConfirm } from './confirm.js';
 import { openMenu } from './contextMenu.js';
@@ -190,7 +189,8 @@ export default function App(): JSX.Element {
     [],
   );
   const [vaultSwitcherOpen, setVaultSwitcherOpen] = useState(false);
-  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+  // What's new modal is parked (issue #468 I12) — keep changelog-core for a
+  // future D3 re-wire; do not auto-open or expose UI until then.
   // The switcher's per-gateway actions (issue #382) — "New space…", "Test
   // connection…", "Rename…" and the footer "Add gateway…" all open one of
   // these small modals; the switcher popover itself already closed by the
@@ -255,35 +255,6 @@ export default function App(): JSX.Element {
       closeVaultSwitcher();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- (#325) mount-once shim/listener wiring, deliberately []
-  }, []);
-
-  // Auto-open "What's new" once per version, matching Claude Code. On boot,
-  // compare the running build's version (from the changelog read) against the
-  // version we last showed the modal for (persisted in settings). When they
-  // differ AND there are notes to show, open the modal and record the version
-  // so it won't re-open on the next launch. Skipped offline / on a cold error
-  // (no releases), and no-op if the bridge is stubbed (tests).
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const [settings, changelog] = await Promise.all([
-          window.CentraidApi.getSettings?.(),
-          window.CentraidApi.getChangelog?.(),
-        ]);
-        if (cancelled || !changelog) return;
-        const { currentVersion, releases } = changelog;
-        if (!currentVersion || releases.length === 0) return;
-        if (settings?.changelogSeenVersion === currentVersion) return;
-        setWhatsNewOpen(true);
-        await window.CentraidApi.saveSettings?.({ changelogSeenVersion: currentVersion });
-      } catch {
-        // Offline / bridge unavailable — no auto-open, no persisted version.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   // Sidebar "Chats" row delete — mirrors the vanilla AssistantRoute's old
@@ -562,7 +533,6 @@ export default function App(): JSX.Element {
           onSelectConversation={(id) => nav.navigate({ kind: 'assistant', conversationId: id })}
           onDeleteConversation={deleteAssistantConversation}
           onConversationMenu={conversationMenu}
-          onWhatsNew={() => setWhatsNewOpen(true)}
           {...(updateStatus?.available
             ? { updateVersion: updateStatus.version, onRelaunchToUpdate: relaunchToUpdate }
             : {})}
@@ -758,7 +728,6 @@ export default function App(): JSX.Element {
           }
         />
       ) : null}
-      {whatsNewOpen ? <WhatsNewModal onClose={() => setWhatsNewOpen(false)} /> : null}
       {addGatewayOpen ? (
         <ConnectFlowModal
           context="switcher"

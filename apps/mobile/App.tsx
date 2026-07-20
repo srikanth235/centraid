@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect } from 'react';
-import { View, useColorScheme } from 'react-native';
+import { Text, View, useColorScheme } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
@@ -16,6 +16,7 @@ import { navThemeFor, resolveTheme } from './src/kit/theme';
 import { useUploadReconciliation } from './src/lib/upload/boot';
 import { ReplicaProvider, useReplica } from './src/kit/replica/ReplicaProvider';
 import { ShareIntentIngest } from './src/kit/hooks/ShareIntentIngest';
+import ErrorBoundary from './src/ErrorBoundary';
 
 // Direct sub-path imports avoid the package's barrel index.js which
 // re-exports every weight (some of which Metro fails to resolve).
@@ -169,6 +170,24 @@ function SettingsNavigator(): React.JSX.Element {
   );
 }
 
+/** Surfaces ReplicaProvider.error when the session fails to open (issue #468 K2). */
+function ReplicaErrorBanner(): React.JSX.Element | null {
+  const { error, ready } = useReplica();
+  const { colors } = resolveTheme(useColorScheme());
+  if (!ready || !error) return null;
+  return (
+    <View
+      style={{
+        backgroundColor: colors.danger ?? '#c44',
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+      }}
+    >
+      <Text style={{ color: '#fff', fontFamily: 'Geist_500Medium', fontSize: 13 }}>{error}</Text>
+    </View>
+  );
+}
+
 function Tabs(): React.JSX.Element {
   const { colors } = resolveTheme(useColorScheme());
   return (
@@ -262,28 +281,31 @@ export default function App(): React.JSX.Element | null {
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <View style={{ backgroundColor: colors.bg, flex: 1 }} onLayout={onReady}>
-          <ShareIntentProvider options={{ scheme: 'centraid', resetOnBackground: false }}>
-            <ReplicaProvider>
-              <UploadReconciliation />
-              <ShareIntentIngest />
-              <NavigationContainer theme={navThemeFor(scheme)}>
-                <StatusBar style="auto" />
-                <RootStack.Navigator screenOptions={{ headerShown: false }}>
-                  <RootStack.Screen name="Tabs" component={Tabs} />
-                  <RootStack.Screen
-                    name="MobileFallback"
-                    component={MobileFallbackScreen}
-                    options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
-                  />
-                </RootStack.Navigator>
-              </NavigationContainer>
-            </ReplicaProvider>
-          </ShareIntentProvider>
-        </View>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <View style={{ backgroundColor: colors.bg, flex: 1 }} onLayout={onReady}>
+            <ShareIntentProvider options={{ scheme: 'centraid', resetOnBackground: false }}>
+              <ReplicaProvider>
+                <UploadReconciliation />
+                <ShareIntentIngest />
+                <ReplicaErrorBanner />
+                <NavigationContainer theme={navThemeFor(scheme)}>
+                  <StatusBar style="auto" />
+                  <RootStack.Navigator screenOptions={{ headerShown: false }}>
+                    <RootStack.Screen name="Tabs" component={Tabs} />
+                    <RootStack.Screen
+                      name="MobileFallback"
+                      component={MobileFallbackScreen}
+                      options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
+                    />
+                  </RootStack.Navigator>
+                </NavigationContainer>
+              </ReplicaProvider>
+            </ShareIntentProvider>
+          </View>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }

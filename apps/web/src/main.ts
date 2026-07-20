@@ -37,6 +37,10 @@ window.CentraidTokens = {
   type: tokens.type,
 };
 
+// Surface the real package version for diagnostics / about UI (issue #468 K9).
+// Vite injects __APP_VERSION__ from package.json.
+(window as unknown as { __CENTRAID_VERSION__?: string }).__CENTRAID_VERSION__ = __APP_VERSION__;
+
 installWebHost();
 installWebChrome();
 

@@ -1,8 +1,9 @@
 // governance: allow-repo-hygiene file-size-limit — one cohesive e2e harness (mock
 // gateway + record builders + DOM helpers) shared by every spec; splitting it would
 // scatter the single source of fixture truth. See receipts/issue-225-desktop-e2e-suite.md.
-import { _electron, type ElectronApplication, type Page } from '@playwright/test';
+import { _electron, test, type ElectronApplication, type Page } from '@playwright/test';
 import { promises as fs } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import http from 'node:http';
 import path from 'node:path';
 import os from 'node:os';
@@ -405,6 +406,12 @@ async function route(
   }
   if (p === '/centraid/_automations/run-now' && method === 'POST') {
     if (s.runNowStatus !== 200) return json(res, s.runNowStatus, { error: 'run_failed' });
+    // Mirror the gateway: firing a run materialises its ledger row, so the
+    // automation thread's run feed shows the new run on its next poll. The
+    // thread is the only route to the run viewer now (Run now no longer
+    // navigates there itself), so without this the feed stays empty.
+    const fired = s.runsById[s.nextRunId];
+    if (fired && !s.runs.some((r) => r['runId'] === s.nextRunId)) s.runs = [fired, ...s.runs];
     return json(res, 200, { runId: s.nextRunId });
   }
   if (p === '/centraid/_automations/runs' && method === 'GET') {
@@ -428,6 +435,12 @@ async function route(
     return json(res, 200, { ok: true });
   if (p === '/centraid/_automations/set-enabled' && method === 'POST') {
     if (s.setEnabledStatus !== 200) return json(res, s.setEnabledStatus, { error: 'failed' });
+    // Mirror the gateway: the toggle persists, so the thread's reload-after-
+    // toggle renders the new state instead of snapping back to the seeded one.
+    // `ref` travels in the query string; `enabled` in the body.
+    const ref = url.searchParams.get('ref');
+    const next = safeJson(body)['enabled'];
+    s.automations = s.automations.map((a) => (a['ref'] === ref ? { ...a, enabled: next } : a));
     return json(res, 200, { ok: true });
   }
 
@@ -599,7 +612,96 @@ export async function makeEnv(): Promise<TestEnv> {
 }
 
 export async function cleanupEnv(env: TestEnv): Promise<void> {
+  // Detached gateway children OUTLIVE the Electron process on purpose (#468
+  // H1: quit skips them so pairing keeps working with the window closed).
+  // Under e2e that means `centraid-gateway serve --data-dir <userData>/...`
+  // is still running, reparented to init, renewing its instance lease every
+  // 60s INTO THE DIRECTORY WE ARE ABOUT TO DELETE. A renew that lands mid-`rm`
+  // recreates `gateways/<id>/vault/` under a directory the walk has already
+  // emptied, and the removal dies with ENOTEMPTY; a renew that lands just
+  // after leaves silent debris in $TMPDIR instead. Same race, two faces.
+  //
+  // So stop the child before removing its data dir. Not a workaround for the
+  // rm — the process really is still alive and really is still writing.
+  await stopDetachedGateways(env);
   await fs.rm(env.workspace, { recursive: true, force: true });
+}
+
+/** How long a detached gateway child gets to honour SIGTERM before SIGKILL. */
+const DETACHED_STOP_TIMEOUT_MS = 5_000;
+
+/**
+ * Stop every detached gateway child rooted in this test's workspace.
+ *
+ * The desktop records each spawned child in `<dataDir>/gateway.status.json`
+ * and the gateway itself writes `<dataDir>/vault/gateway.lease`; both carry a
+ * pid. We read both, then REFUSE to signal any pid whose live command line
+ * does not mention this workspace — pids are recycled, and a fixture that
+ * SIGKILLs a stranger is far worse than a leaked temp directory.
+ */
+async function stopDetachedGateways(env: TestEnv): Promise<void> {
+  const gatewaysDir = path.join(env.userData, 'gateways');
+  const entries = await fs.readdir(gatewaysDir, { withFileTypes: true }).catch(() => []);
+  const pids = new Set<number>();
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const dir = path.join(gatewaysDir, entry.name);
+    for (const file of [
+      path.join(dir, 'gateway.status.json'),
+      path.join(dir, 'vault', 'gateway.lease'),
+    ]) {
+      const pid = await readPid(file);
+      if (pid !== undefined) pids.add(pid);
+    }
+  }
+  // macOS hands tests `/var/folders/...` but `ps` reports the resolved
+  // `/private/var/folders/...`, so match on either spelling.
+  const real = await fs.realpath(env.workspace).catch(() => env.workspace);
+  const names = [...new Set([env.workspace, real])];
+  await Promise.all([...pids].map((pid) => stopIfOurs(pid, names)));
+}
+
+async function readPid(file: string): Promise<number | undefined> {
+  try {
+    const parsed = JSON.parse(await fs.readFile(file, 'utf8')) as { pid?: unknown };
+    return typeof parsed.pid === 'number' && parsed.pid > 0 ? parsed.pid : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** True only when `pid` is alive AND its command line names one of `names`. */
+function ownsWorkspace(pid: number, names: string[]): boolean {
+  const probe = spawnSync('ps', ['-p', String(pid), '-o', 'command='], { encoding: 'utf8' });
+  const command = probe.stdout ?? '';
+  return names.some((name) => command.includes(name));
+}
+
+async function stopIfOurs(pid: number, names: string[]): Promise<void> {
+  if (!ownsWorkspace(pid, names)) return;
+  try {
+    process.kill(pid, 'SIGTERM');
+  } catch {
+    return; // already gone
+  }
+  const deadline = Date.now() + DETACHED_STOP_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return; // exited
+    }
+  }
+  process.stderr.write(
+    `\n[desktop-e2e] detached gateway pid ${pid} ignored SIGTERM for ` +
+      `${DETACHED_STOP_TIMEOUT_MS}ms; escalating to SIGKILL.\n\n`,
+  );
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch {
+    // Raced us to exit.
+  }
 }
 
 /**
@@ -823,20 +925,77 @@ export async function waitForHome(page: Page): Promise<void> {
   }
 }
 
+/** How long a test waits for a well-behaved Electron shutdown before forcing it. */
+const CLOSE_TIMEOUT_MS = 8_000;
+
 /** Close Electron and wait until its OS process has exited.
  *
  * `ElectronApplication.close()` can resolve just before Chromium releases the
  * app's single-instance lock. Tests that immediately relaunch must wait for the
  * process boundary, otherwise the replacement process exits without a window.
+ *
+ * The close is BOUNDED. A hung teardown used to surface as "Test timeout of
+ * 60000ms exceeded" pointing at the test body, even though every assertion had
+ * already passed — the trace showed a `close()` with no matching `after`. That
+ * is maximally misleading: a shutdown bug gets reported as a product bug. So we
+ * cap the wait, SIGKILL the Electron process if it overruns, and shout about it
+ * on stderr. The test still passes (its assertions did pass), but the force-kill
+ * is loud enough to be findable in CI logs instead of silently absorbed.
  */
 export async function closeApp(app: ElectronApplication): Promise<void> {
-  const child = app.process();
+  // Idempotent: the restart tests close mid-body and close again from their
+  // outer `finally` as a backstop. Playwright throws from `process()` once the
+  // application is gone, which for a teardown helper just means "already
+  // closed" — nothing left to do.
+  let child: ReturnType<ElectronApplication['process']>;
+  try {
+    child = app.process();
+  } catch {
+    return;
+  }
   const exited =
     child.exitCode === null
       ? new Promise<void>((resolve) => child.once('exit', () => resolve()))
       : Promise.resolve();
-  await app.close();
-  await exited;
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<'timeout'>((resolve) => {
+    timer = setTimeout(() => resolve('timeout'), CLOSE_TIMEOUT_MS);
+  });
+
+  // Swallowed here, not at the race: if we end up force-killing, the pending
+  // `close()` rejects later with nobody awaiting it, and an unhandled rejection
+  // would fail an unrelated test further down the file.
+  const closed = app.close().catch(() => undefined);
+
+  try {
+    const outcome = await Promise.race([
+      Promise.all([closed, exited]).then(() => 'closed' as const),
+      deadline,
+    ]);
+    if (outcome === 'timeout') {
+      const where = testTitle();
+      process.stderr.write(
+        `\n[desktop-e2e] !! FORCE-KILL: electronApplication.close() did not return within ` +
+          `${CLOSE_TIMEOUT_MS}ms during "${where}". The test body is NOT at fault — this is a ` +
+          `main-process teardown hang. SIGKILLing pid ${child.pid ?? '?'} so the worker is not ` +
+          `wedged.\n\n`,
+      );
+      child.kill('SIGKILL');
+      await exited;
+    }
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/** Best-effort name of the running test, for the force-kill warning. */
+function testTitle(): string {
+  try {
+    return test.info().titlePath.slice(1).join(' › ') || 'unknown test';
+  } catch {
+    return 'unknown test (outside a test)';
+  }
 }
 
 /** Click a sidebar nav item by its visible label. */

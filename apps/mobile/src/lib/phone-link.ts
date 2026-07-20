@@ -18,6 +18,7 @@ import {
   stopTunnel,
 } from '../../modules/centraid-tunnel';
 import type { TunnelStatus } from '../../modules/centraid-tunnel';
+import { getSecure, hydrateSecure, setSecure } from './secure-storage';
 import { Store } from '../storage';
 
 export const LINK_TICKET_KEY = 'phoneLink.ticket';
@@ -57,18 +58,18 @@ export function parsePairQr(raw: string): { ticket: string; code: string } | und
   }
 }
 
-/** Pull all link keys into the Store's sync cache. Idempotent. */
+/** Pull link prefs into Store + secrets into secure storage. Idempotent. */
 export async function hydratePhoneLink(): Promise<void> {
   await Promise.all([
-    Store.hydrate<string>(LINK_TICKET_KEY, ''),
+    hydrateSecure(LINK_TICKET_KEY, ''),
     Store.hydrate<string>(LINK_DESKTOP_NAME_KEY, ''),
     Store.hydrate<string>(LINK_DEVICE_ID_KEY, ''),
-    Store.hydrate<string>(LINK_SECRET_KEY, ''),
+    hydrateSecure(LINK_SECRET_KEY, ''),
   ]);
 }
 
 export function isPaired(): boolean {
-  return Boolean(Store.get<string>(LINK_TICKET_KEY, '') && Store.get<string>(LINK_SECRET_KEY, ''));
+  return Boolean(getSecure(LINK_TICKET_KEY, '') && getSecure(LINK_SECRET_KEY, ''));
 }
 
 export function getDesktopName(): string {
@@ -97,10 +98,10 @@ export async function pair(
     );
   }
   await hydratePhoneLink();
-  let secretKeyB64 = Store.get<string>(LINK_SECRET_KEY, '');
+  let secretKeyB64 = getSecure(LINK_SECRET_KEY, '');
   if (!secretKeyB64) {
     secretKeyB64 = await generateSecretKey();
-    Store.set<string>(LINK_SECRET_KEY, secretKeyB64);
+    await setSecure(LINK_SECRET_KEY, secretKeyB64);
   }
   const result = await pairWithDesktop({
     code: parsed.code,
@@ -112,7 +113,7 @@ export async function pair(
   if (!result.ok || !result.deviceId) {
     throw new PhoneLinkError('pair_failed', result.error ?? 'Pairing was refused by the desktop.');
   }
-  Store.set<string>(LINK_TICKET_KEY, parsed.ticket);
+  await setSecure(LINK_TICKET_KEY, parsed.ticket);
   Store.set<string>(LINK_DESKTOP_NAME_KEY, result.desktopName ?? '');
   Store.set<string>(LINK_DEVICE_ID_KEY, result.deviceId);
   return { desktopName: result.desktopName ?? '', deviceId: result.deviceId };
@@ -128,7 +129,7 @@ export async function unpair(): Promise<void> {
       /* already stopped */
     });
   }
-  Store.set<string>(LINK_TICKET_KEY, '');
+  await setSecure(LINK_TICKET_KEY, '');
   Store.set<string>(LINK_DESKTOP_NAME_KEY, '');
   Store.set<string>(LINK_DEVICE_ID_KEY, '');
 }
@@ -153,8 +154,8 @@ export async function ensureTunnelStarted(): Promise<{ baseUrl: string } | undef
     }
     try {
       const { port } = await startTunnel({
-        secretKeyB64: Store.get<string>(LINK_SECRET_KEY, ''),
-        ticket: Store.get<string>(LINK_TICKET_KEY, ''),
+        secretKeyB64: getSecure(LINK_SECRET_KEY, ''),
+        ticket: getSecure(LINK_TICKET_KEY, ''),
       });
       return { baseUrl: `http://127.0.0.1:${port}` };
     } catch (err) {

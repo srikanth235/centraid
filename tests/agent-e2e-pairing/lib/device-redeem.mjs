@@ -41,8 +41,22 @@ function parseTicket(raw) {
 
 function selectedPath(connection) {
   const paths = connection.paths();
-  const selected = paths.find((p) => p.isSelected) ?? paths[0];
-  if (!selected) return null;
+  // No `?? paths[0]` fallback: paths() reports every CANDIDATE path, and only
+  // the one flagged isSelected is actually carrying data. Falling back to the
+  // first candidate would let an unvalidated direct address be reported to
+  // the flow as "the selected path" — exactly the claim this whole harness
+  // exists to make honestly. If nothing is flagged, say so and let the flow
+  // fail loudly rather than assert on a guess.
+  const selected = paths.find((p) => p.isSelected);
+  if (!selected) {
+    if (paths.length > 0) {
+      log(
+        `paths() returned ${paths.length} candidate(s) but none flagged isSelected: ` +
+          JSON.stringify(paths.map((p) => ({ remoteAddr: p.remoteAddr, isRelay: p.isRelay }))),
+      );
+    }
+    return null;
+  }
   return {
     isRelay: selected.isRelay,
     isIp: selected.isIp,

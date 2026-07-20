@@ -4,7 +4,11 @@
  * `app.getPath('userData')` + real filesystem writes.
  */
 
-export type CrashKind = 'uncaughtException' | 'unhandledRejection';
+export type CrashKind =
+  | 'uncaughtException'
+  | 'unhandledRejection'
+  | 'render-process-gone'
+  | 'child-process-gone';
 
 export interface CrashRecord {
   /** ISO timestamp. */

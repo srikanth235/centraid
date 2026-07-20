@@ -657,6 +657,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
           <div className={styles.editPreClip}>
             <pre
               className={styles.editPre}
+              data-testid="code-edit-pre"
               ref={preRef}
               dangerouslySetInnerHTML={{
                 __html: tokenize(buf.current, lang, TOKEN_CLASSES) + '\n',

@@ -74,15 +74,23 @@ export interface PersistedSettings {
   changelogSeenVersion?: string;
   /**
    * Launch Centraid automatically at OS login (issue #351, tier 4 — the
-   * cheap 80% fix for "always-on": the desktop-hosted gateway still dies
-   * when the app quits, and there's deliberately no OS scheduler, but the
-   * app can at least come back up after a reboot/login without the user
-   * remembering to open it). Applied via `app.setLoginItemSettings` — see
-   * `login-item.ts`. Absent → disabled (opt-in; a fresh install never
-   * silently adds itself to login items). No-op on Linux — Electron
-   * doesn't implement `setLoginItemSettings` there.
+   * cheap 80% fix for "always-on": with the detached gateway (#468 H1)
+   * the child can outlive a single session, and launch-at-login still
+   * brings the app UI back after reboot). Applied via
+   * `app.setLoginItemSettings` — see `login-item.ts`. Absent → disabled
+   * (opt-in; a fresh install never silently adds itself to login items).
+   * No-op on Linux — Electron doesn't implement `setLoginItemSettings`
+   * there.
    */
   launchAtLogin?: boolean;
+  /**
+   * H5 / issue #468 — offer OS service install (`centraid-gateway service
+   * install`, label `dev.centraid.gateway`) during onboarding so the
+   * gateway survives logout/reboot. **Default off**; silent install is
+   * forbidden. Wiring the onboarding UI is a follow-up; this flag is the
+   * settings key. See `shouldOfferServiceInstall` in detached-gateway-core.
+   */
+  offerGatewayService?: boolean;
 }
 
 export interface DesktopSettings {
@@ -144,6 +152,11 @@ export interface DesktopSettings {
   changelogSeenVersion?: string;
   /** Launch Centraid at OS login (absent → disabled). See `PersistedSettings.launchAtLogin`. */
   launchAtLogin?: boolean;
+  /**
+   * Offer OS service install for the detached gateway (H5). Absent → false.
+   * See `PersistedSettings.offerGatewayService`.
+   */
+  offerGatewayService?: boolean;
 }
 
 const FILE_NAME = 'centraid-settings.json';
@@ -189,6 +202,9 @@ function narrow(raw: Record<string, unknown>): PersistedSettings {
       ? { changelogSeenVersion: raw.changelogSeenVersion }
       : {}),
     ...(typeof raw.launchAtLogin === 'boolean' ? { launchAtLogin: raw.launchAtLogin } : {}),
+    ...(typeof raw.offerGatewayService === 'boolean'
+      ? { offerGatewayService: raw.offerGatewayService }
+      : {}),
   };
 }
 
@@ -286,6 +302,7 @@ async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> 
       ? { changelogSeenVersion: p.changelogSeenVersion }
       : {}),
     ...(p.launchAtLogin !== undefined ? { launchAtLogin: p.launchAtLogin } : {}),
+    ...(p.offerGatewayService !== undefined ? { offerGatewayService: p.offerGatewayService } : {}),
   };
 }
 

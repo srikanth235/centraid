@@ -854,7 +854,7 @@ export default function AutomationEditorScreen({
   };
 
   return (
-    <div className={styles.page}>
+    <div className={styles.page} data-testid="automation-editor">
       {d.mode === 'edit' ? (
         <div className={styles.head} data-hue={hue}>
           <div className={styles.headIdentity}>

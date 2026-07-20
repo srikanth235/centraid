@@ -1,0 +1,16 @@
+# format-check - staged files must already be oxfmt-formatted.
+category: Repo hygiene
+recommended: true
+summary: |
+  Every staged file that oxfmt owns (ts, tsx, js, jsx, mjs, cjs, mts, cts,
+  json, jsonc, yml, yaml, css) must already be formatted. CI runs
+  `bun run format:check` across the whole tree, but nothing local did —
+  so a commit could pass every hook and still fail CI on a stripped
+  trailing newline. This closes that gap at the point the file is staged.
+
+  Scope is STAGED FILES ONLY, deliberately. A repo-wide check would block
+  commits on pre-existing debt in files the author never touched, which
+  trains people to reach for --no-verify. Formatting is mechanical and
+  involves no judgement, so the fix is always `bun run format`.
+surface: repo-state
+hook: pre-commit

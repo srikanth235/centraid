@@ -19,17 +19,19 @@ dependencies {
 
   // Iroh Kotlin binding (uniffi, n0-computer/iroh-ffi 1.0.0).
   //
-  // NOTE (issue #419 M0.1): the official Maven artifact `computer.iroh:iroh`
-  // is a *desktop-JVM* jar — it bundles native libs for darwin/linux/win32
-  // only (JNA resources), has no Android ABI variant and no `.so` under
-  // jni/. A plain `implementation("computer.iroh:iroh:1.0.0")` therefore
-  // does NOT deliver a loadable Android native library. Until upstream
-  // publishes an Android AAR (with arm64-v8a/x86_64 jniLibs), Android must
-  // keep cross-compiling the native lib: the generated bindings live in
-  // src/main/java/computer/iroh/ (iroh_ffi.kt + IrohAndroid.kt) and the
-  // cargo-ndk `.so` in src/main/jniLibs/<abi>/libiroh_ffi.so. Both are
-  // git-ignored; the build steps are in ../README.md ("Android binding").
-  // TunnelWire.kt is the only file that touches the binding's API surface.
+  // Compile-time: Maven `computer.iroh:iroh` provides the uniffi Kotlin API
+  // (Endpoint, Connection, …) so assembleDebug / CI can typecheck without the
+  // gitignored cargo-ndk tree (issue #468 J8).
+  //
+  // Exclude its transitive JNA *jar* — we pin the Android `@aar` below so
+  // checkDebugDuplicateClasses does not see jna-jar + jna-aar together.
+  //
+  // Runtime on device: the Maven jar is desktop-JVM-native (no Android ABI
+  // `.so`). For a *running* tunnel on phone, still place the cargo-ndk
+  // `libiroh_ffi.so` under src/main/jniLibs as documented in ../README.md.
+  implementation('computer.iroh:iroh:1.0.0') {
+    exclude group: 'net.java.dev.jna', module: 'jna'
+  }
   implementation 'net.java.dev.jna:jna:5.15.0@aar'
   implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0'
 

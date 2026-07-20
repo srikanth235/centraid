@@ -43,7 +43,7 @@ async function openApp(
   await page.reload();
   await waitForHome(page);
   await openTile(page, id);
-  await page.locator('.app-view').waitFor({ state: 'visible' });
+  await page.getByTestId('app-view').waitFor({ state: 'visible' });
 }
 
 // ─────────────────────────── §7 app view + chat ───────────────────────────
@@ -56,13 +56,33 @@ test('7.1 — opening an app shows the iframe; back returns home', async () => {
     await expect(page.locator('iframe[data-centraid-app]')).toHaveCount(1);
     await page.keyboard.press('Meta+[');
     await waitForHome(page);
-    await expect(page.locator('.cd-apps-grid')).toBeVisible();
+    await expect(page.getByTestId('apps-grid')).toBeVisible();
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
-test('7.2 — the chat FAB opens the copilot panel', async () => {
+// §7.2-7.4 are skipped, not deleted: the surface they drive no longer exists
+// in the shell, and the surface that replaced it is unreachable from this
+// harness.
+//
+//  - The shell's "Ask <App>" FAB + slide-in copilot panel was removed
+//    deliberately (see the rationale comment in
+//    packages/client/src/react/shell/routes/AppViewRoute.tsx): its hit area
+//    intercepted the kit Ask panel's send button, so the kit panel every
+//    blueprint app ships is the sole Ask affordance now.
+//  - The kit panel lives inside the sandboxed app iframe, and this harness's
+//    mock gateway never serves blueprint bundles. Probed: the iframe for an
+//    installed app resolves to `/centraid/<id>/`, which falls through to the
+//    mock's catch-all `{}` (fixtures.ts), so the frame's body is literally
+//    `<pre>{}</pre>` — Chromium's JSON viewer — with zero Ask affordances.
+//
+// Un-skipping is tracked in
+// https://github.com/srikanth235/centraid/issues/470 (teach the mock to serve
+// blueprint bundles + the kit). Do not "fix" these by reinstating the old
+// `.app-chat-*` selectors — they address a removed feature.
+
+test.skip('7.2 — the chat FAB opens the copilot panel', async () => {
   gateway.state.apps = [appEntry({ id: 'notes', name: 'Notes' })];
   const { app, page } = await launchApp(env);
   try {
@@ -70,11 +90,11 @@ test('7.2 — the chat FAB opens the copilot panel', async () => {
     await page.locator('.app-chat-fab').click();
     await expect(page.locator('.app-chat-panel.open')).toBeVisible();
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
-test('7.3 — a chat turn streams an assistant reply and a SQL tool result', async () => {
+test.skip('7.3 — a chat turn streams an assistant reply and a SQL tool result', async () => {
   gateway.state.apps = [appEntry({ id: 'notes', name: 'Notes' })];
   gateway.state.turnFrames = [
     { data: { type: 'assistant.start' }, delayMs: 20 },
@@ -122,11 +142,11 @@ test('7.3 — a chat turn streams an assistant reply and a SQL tool result', asy
       gateway.calls.some((c) => c.method === 'POST' && /\/centraid\/.*\/_turn$/.test(c.pathname)),
     ).toBe(true);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
-test('7.4 — the copilot past-chats history lists prior sessions and filters by search', async () => {
+test.skip('7.4 — the copilot past-chats history lists prior sessions and filters by search', async () => {
   gateway.state.apps = [appEntry({ id: 'notes', name: 'Notes' })];
   gateway.state.conversations = [
     {
@@ -183,7 +203,7 @@ test('7.4 — the copilot past-chats history lists prior sessions and filters by
       page.locator('.app-chat-history-title', { hasText: 'Trip planning' }),
     ).toBeVisible();
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -215,7 +235,7 @@ test('10.1 — Discover renders template cards', async () => {
     await expect(page.getByRole('button', { name: /Habit Tracker/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /Journal/ })).toBeVisible();
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -342,7 +362,7 @@ test('10.4 — empty Discover renders without cards', async () => {
     await gotoNav(page, 'Discover');
     await expect(page.getByText('Nothing to install yet.')).toBeVisible();
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -373,9 +393,9 @@ test('11.1 — Insights renders the KPI cards', async () => {
   try {
     await waitForHome(page);
     await gotoNav(page, 'Insights');
-    await expect(page.locator('.cd-ins-kpis')).toBeVisible();
-    await expect(page.locator('.cd-ins-kpis')).toContainText('Generations');
+    await expect(page.getByTestId('insights-kpis')).toBeVisible();
+    await expect(page.getByTestId('insights-kpis')).toContainText('Generations');
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });

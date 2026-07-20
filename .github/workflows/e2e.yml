@@ -14,7 +14,12 @@ permissions:
 jobs:
   desktop-e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Outer backstop only — the suite's own `globalTimeout` (22m, see
+    # tests/e2e/playwright.config.ts) is what fails a runaway run, because it
+    # aborts while the reporter can still flush traces and the JSON report.
+    # This cap MUST stay above setup (~8m) + globalTimeout so it never fires
+    # first; when it does fire, the job is cancelled and all evidence is lost.
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
@@ -79,7 +84,9 @@ jobs:
 
   web-e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # Outer backstop only — see desktop-e2e. The suite's `globalTimeout` is
+    # 10m against ~1m of healthy tests; setup is ~7m.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
@@ -310,6 +317,23 @@ jobs:
       - id: scale
         continue-on-error: true
         run: bun run test:scale
+      # Durable trend source: the append-only summary series committed to
+      # gh-pages. Unlike the quality-history cache above it is never evicted.
+      - name: Restore durable report history (gh-pages)
+        if: always()
+        continue-on-error: true
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: gh-pages
+          path: .gh-pages-history
+      - name: Stage durable report history
+        if: always()
+        run: |
+          mkdir -p artifacts/report-history
+          if [ -d .gh-pages-history/test-report/history ]; then
+            cp .gh-pages-history/test-report/history/*.json artifacts/report-history/ || true
+          fi
+          rm -rf .gh-pages-history
       - name: Generate full nightly report
         if: always()
         run: bun run test:report
@@ -377,11 +401,22 @@ jobs:
       - name: Resolve report slot
         if: steps.has_report.outputs.ok == 'true'
         id: slot
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           SLOT="nightly"
           OWNER="${{ github.repository_owner }}"
           REPO="${{ github.event.repository.name }}"
+          # Authoritative run timestamp (not `date` at publish time, so a
+          # re-publish of the same run lands in the same dated slot).
+          RUN_DATE="$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --jq '.created_at' 2>/dev/null | cut -c1-10 || true)"
+          case "$RUN_DATE" in
+            [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
+            *) RUN_DATE="$(date -u +%F)" ;;
+          esac
           echo "slot=${SLOT}" >> "$GITHUB_OUTPUT"
+          echo "date=${RUN_DATE}" >> "$GITHUB_OUTPUT"
           echo "url=https://${OWNER}.github.io/${REPO}/test-report/${SLOT}/" >> "$GITHUB_OUTPUT"
       - name: Merge report into site tree
         if: steps.has_report.outputs.ok == 'true'
@@ -389,7 +424,11 @@ jobs:
           node scripts/test-report/prepare-pages-site.mjs \
             --report dist/test-report \
             --site site \
-            --slot "${{ steps.slot.outputs.slot }}"
+            --slot "${{ steps.slot.outputs.slot }}" \
+            --date "${{ steps.slot.outputs.date }}" \
+            --run-id "${{ github.run_id }}" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --keep 30
       - name: Persist site on gh-pages
         if: steps.has_report.outputs.ok == 'true'
         uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0

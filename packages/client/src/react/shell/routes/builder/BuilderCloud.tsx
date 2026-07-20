@@ -331,6 +331,7 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
       key={key}
       type="button"
       className={styles.railItem}
+      data-testid="cloud-rail-item"
       data-active={String(active === key)}
       data-ready={String(ready)}
       onClick={() => selectSection(key, ready)}
@@ -665,7 +666,12 @@ function Logs({
             const when = new Date(entry.ts);
             const ts = `${pad2(when.getHours())}:${pad2(when.getMinutes())}:${pad2(when.getSeconds())}`;
             return (
-              <div className={styles.logsRow} data-level={entry.level} key={`${entry.ts}-${i}`}>
+              <div
+                className={styles.logsRow}
+                data-level={entry.level}
+                data-testid="cloud-logs-row"
+                key={`${entry.ts}-${i}`}
+              >
                 <span className={styles.logsTs}>{ts}</span>
                 <span className={styles.logsLevel}>{entry.level.toUpperCase()}</span>
                 <span className={styles.logsSource}>{`${entry.source}/${entry.handler}`}</span>
@@ -686,6 +692,7 @@ function Logs({
             key={lvl}
             type="button"
             className={styles.logsChip}
+            data-testid="cloud-logs-chip"
             data-active={String(logsLevelFilter === lvl)}
             data-level={lvl}
             onClick={() => {
@@ -697,6 +704,7 @@ function Logs({
         ))}
         <input
           className={styles.logsSearch}
+          data-testid="cloud-logs-search"
           placeholder="Filter…"
           type="search"
           value={logsSearch}

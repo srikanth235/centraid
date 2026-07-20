@@ -25,7 +25,39 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const RUNS_DIR = path.join(__dirname, '..', 'runs');
 
-export const APP_ID = 'com.centraid.mobile';
+export const APP_ID = 'dev.centraid.mobile';
+
+/**
+ * Budget for the first `assertVisible` after a `clearState: true` launch.
+ *
+ * `clearState` wipes the dev build's cached JS bundle, so that first launch has
+ * to refetch it from Metro. With a warm Metro transform cache that costs a few
+ * seconds; with a cold one it is the dominant cost of the whole flow. Measured
+ * on this repo: home-loads takes ~19s end-to-end against a warm Metro and ~43s
+ * against a cold one on an M-series Mac. The nightly macOS runner is slower
+ * still, which is exactly how the old 30s budget failed — CI's launch completed
+ * at 13:05:24 and the assertion gave up at 13:05:55, 30s later, on copy that was
+ * correct and did eventually render.
+ *
+ * `setup()` prewarms the bundle so this budget covers app start plus render
+ * rather than a cold Metro build, but keep it generous: it is a bundle-fetch
+ * wait, not a product-latency assertion, and nothing is proven by making it tight.
+ */
+export const FIRST_LAUNCH_TIMEOUT_MS = 120_000;
+
+/**
+ * The first `inputText` on a freshly-booted simulator raises iOS's multilingual
+ * keyboard onboarding sheet ("Type English and Dutch … Continue"). It covers the
+ * bottom of the screen — including the tab bar — so every subsequent tap silently
+ * lands on the sheet instead. CI boots a clean simulator each run, so it hits
+ * this every time. Dismiss it if it showed up; do nothing if it didn't.
+ */
+export const DISMISS_KEYBOARD_ONBOARDING = `- runFlow:
+    when:
+      visible: "Continue"
+    commands:
+      - tapOn: "Continue"
+`;
 
 function spawnText(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
@@ -151,6 +183,45 @@ async function metroReachable() {
   }
 }
 
+// Build the JS bundle once, before any flow starts its clock.
+//
+// Every flow opens with `launchApp: { clearState: true }`, which drops the dev
+// build's cached bundle, so the app refetches it from Metro on that first launch.
+// If Metro's transform cache is also cold — as it is on a fresh CI runner — that
+// build lands *inside* the flow's first `extendedWaitUntil` and eats the whole
+// budget. Paying it here keeps flow timeouts about the app, not about bundling.
+//
+// Best-effort by design: a failure here is not a flow failure. If the bundle is
+// genuinely broken the flow's own assertions will say so, with a screenshot.
+async function prewarmMetroBundle(platform) {
+  // Metro's project root is the monorepo root (Expo runs from the workspace
+  // bin), so the app's entry is served at `apps/mobile/index.ts` — plain
+  // `/index.bundle` 404s here. `/.expo/.virtual-metro-entry.bundle` answers 200
+  // but builds a 1-module stub, which is why the size floor below matters: a
+  // 200 alone does not mean the real graph was built.
+  const query = `platform=${platform}&dev=true&minify=false`;
+  const candidates = [
+    `http://127.0.0.1:8081/apps/mobile/index.bundle?${query}`,
+    `http://127.0.0.1:8081/index.bundle?${query}`,
+  ];
+  const MIN_REAL_BUNDLE_BYTES = 1_000_000;
+  for (const url of candidates) {
+    const t0 = Date.now();
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(300_000) });
+      // Drain the body: Metro streams the bundle and isn't done building until
+      // the last byte is out.
+      const bytes = (await res.arrayBuffer()).byteLength;
+      if (!res.ok || bytes < MIN_REAL_BUNDLE_BYTES) continue;
+      console.log(`  prewarm : bundle ready in ${Date.now() - t0}ms (${bytes} bytes)`);
+      return;
+    } catch (err) {
+      console.log(`  prewarm : ${url.split('?')[0]} failed (${err.message ?? err})`);
+    }
+  }
+  console.log('  prewarm : no bundle endpoint matched — flows will pay the cold build');
+}
+
 export async function setup({ runId } = {}) {
   const device = await bootedDevice();
   if (!device) {
@@ -179,6 +250,7 @@ export async function setup({ runId } = {}) {
         'serve the JS bundle — start it with `cd apps/mobile && bun expo start --dev-client`.',
     );
   }
+  await prewarmMetroBundle(device.platform);
   const id = runId ?? defaultRunId();
   const runDir = path.join(RUNS_DIR, id);
   const screenshotsDir = path.join(runDir, 'screenshots');
@@ -221,10 +293,10 @@ async function runMaestroChunk(yaml, { state, label }) {
  *   import { runFlow } from '../lib/harness.mjs';
  *   await runFlow('home-loads', async (ctx) => {
  *     await ctx.run(`
- *       appId: com.centraid.mobile
+ *       appId: dev.centraid.mobile
  *       ---
  *       - launchApp: { clearState: true }
- *       - extendedWaitUntil: { visible: { text: "Open Settings" }, timeout: 30000 }
+ *       - extendedWaitUntil: { visible: { text: "Connect your desktop" }, timeout: 30000 }
  *       - takeScreenshot: 01-home-fresh
  *     `);
  *     ctx.note('home rendered in no-gateway state');
@@ -283,12 +355,38 @@ export async function runFlow(slug, fn) {
     if (!gatewayUrl) {
       throw new Error('MAESTRO_GATEWAY_URL is required for this mobile journey');
     }
+    // The token field's placeholder is unique on the screen, so it needs no
+    // relative anchor the way the URL field does.
     const tokenSteps = gatewayToken
-      ? `- tapOn:
-    text: "paste token here"
+      ? `- tapOn: "paste token here"
 - inputText: ${JSON.stringify(gatewayToken)}
-`
+${DISMISS_KEYBOARD_ONBOARDING}`
       : '';
+    // Every selector below was checked against a running build. The previous
+    // version of this helper was written from the source instead, and each of
+    // these lines is a place where that produced something that "passed" while
+    // doing nothing. Please don't shorten them back:
+    //
+    //   * Reaching Settings: Home's "Pair desktop" button sits *under* the tab
+    //     bar on a fresh launch, so tapping it is a silent no-op — Maestro still
+    //     reports COMPLETED. Use the header gear, which is always on screen.
+    //   * Confirming we arrived: `assertVisible: "Settings"` is vacuous — the
+    //     header gear, the tab, and the screen title are all "Settings", so it
+    //     passes on Home too. "Desktop link" is unique to the Settings screen.
+    //   * The URL field: Maestro matches text as a SUBSTRING, so a bare
+    //     `tapOn: "http://127.0.0.1:18789"` matched the help paragraph above the
+    //     field ("…e.g. http://127.0.0.1:18789. An authed gateway…") and focused
+    //     nothing; the URL was never typed and Save persisted an empty string.
+    //     The `below:` anchor is the paragraph itself, so only the input matches.
+    //     (An accessibilityLabel on the TextInput does not help — RN does not
+    //     surface it to the iOS a11y tree for text fields; it stays the placeholder.)
+    //   * `hideKeyboard` before Save: the software keyboard covers the Save
+    //     button, so tapping it lands on a key instead.
+    //   * After Save: Settings calls `navigation.navigate('Apps', …)`, so the
+    //     old `extendedWaitUntil: visible: "Apps"` looks right in the source —
+    //     but 'Apps' is the *route* name and the tab renders as "Home". Assert on
+    //     what a user sees, and prove the setting actually took by requiring the
+    //     no-gateway card to be gone.
     await ctx.run(
       `appId: ${APP_ID}
 ---
@@ -296,20 +394,26 @@ export async function runFlow(slug, fn) {
     clearState: true
 - extendedWaitUntil:
     visible:
-      text: "Pair with your desktop"
-    timeout: 30000
-- tapOn: "Open Settings"
+      text: "Everything you build, in one place."
+    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+- tapOn: "Settings"
 - extendedWaitUntil:
-    visible: "Settings"
-    timeout: 10000
+    visible: "Desktop link"
+    timeout: 15000
 - tapOn: "Advanced (developer)"
+- extendedWaitUntil:
+    visible: "Gateway URL"
+    timeout: 10000
 - tapOn:
     text: "http://127.0.0.1:18789"
+    below: "Dev fallback for simulators.*"
 - inputText: ${JSON.stringify(gatewayUrl)}
-${tokenSteps}- tapOn: "Save"
+${DISMISS_KEYBOARD_ONBOARDING}${tokenSteps}- hideKeyboard
+- tapOn: "Save"
 - extendedWaitUntil:
-    visible: "Apps"
+    visible: "Everything you build, in one place."
     timeout: 30000
+- assertNotVisible: "Connect your desktop"
 `,
       'configure-gateway',
     );

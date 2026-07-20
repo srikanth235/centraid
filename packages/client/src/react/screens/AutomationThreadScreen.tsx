@@ -179,7 +179,9 @@ function TriggerChips({
             <span className={styles.chipIc} aria-hidden="true">
               <Icon name="Webhook" size={12} />
             </span>
-            <code className={styles.chipUrl}>{header.webhook.url}</code>
+            <code className={styles.chipUrl} data-testid="automation-webhook-url">
+              {header.webhook.url}
+            </code>
             <button
               type="button"
               className={styles.chipIconBtn}
@@ -383,7 +385,13 @@ function RunEntry({
     minute: '2-digit',
   });
   return (
-    <button type="button" className={styles.entry} data-run-status={run.status} onClick={onOpen}>
+    <button
+      type="button"
+      className={styles.entry}
+      data-run-status={run.status}
+      data-testid="run-entry"
+      onClick={onOpen}
+    >
       <span className={styles.entryDot} data-run-status={run.status} aria-hidden="true" />
       <span className={styles.entryOrigin}>
         <span className={styles.entryOriginIc} aria-hidden="true">
@@ -537,7 +545,7 @@ export default function AutomationThreadScreen({
   const groups = groupRuns(runs);
 
   return (
-    <div className={styles.screen} data-hue={header.hue}>
+    <div className={styles.screen} data-hue={header.hue} data-testid="automation-thread">
       <div className={styles.head}>
         <div className={au.auCrumb}>
           <button type="button" onClick={onBack}>

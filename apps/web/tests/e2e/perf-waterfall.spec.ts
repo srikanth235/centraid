@@ -138,6 +138,11 @@ async function establishSession(page: Page): Promise<void> {
 
   await page.evaluate(
     ({ apiUrl, vault }) => {
+      // See web-pwa.spec.ts: sessionStorage wins in `loadConnection`, so the
+      // boot-time bootstrap record must go. Setting rememberDevice keeps this
+      // record durable — matching what `saveConnection` would itself write —
+      // so the reload we measure never re-fetches /web-config.json.
+      sessionStorage.removeItem('centraid.web.v1.connection');
       localStorage.setItem(
         'centraid.web.v1.connection',
         JSON.stringify({
@@ -147,11 +152,20 @@ async function establishSession(page: Page): Promise<void> {
           avatarColor: '#6f5bf6',
           vaultId: vault,
           control: true,
+          rememberDevice: true,
         }),
       );
+      // The fixture app is published to the app store but never *installed*
+      // (no Home pin), so the shell classifies it as a DRAFT — and drafts,
+      // the builder preview, and Publish are all gated behind the
+      // `builderEnabled` dev flag (issue #434, default false). ensureInstalled()
+      // below drives exactly those builder surfaces, so opt the harness in.
       localStorage.setItem(
         'centraid.web.v1.settings',
-        JSON.stringify({ onboardingCompletedAt: new Date().toISOString() }),
+        JSON.stringify({
+          onboardingCompletedAt: new Date().toISOString(),
+          builderEnabled: true,
+        }),
       );
     },
     { apiUrl: API_URL, vault: vaultId },

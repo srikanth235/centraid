@@ -10,8 +10,10 @@ the durable contract for the suite reorganized in #458.
    owner. More tests and more runtime are costs, not progress.
 2. **One flow, one home.** Prove a flow at the cheapest tier that can falsify
    it. A higher tier does not repeat a lower tier's ownership.
-3. **Runtime is a budget.** Unit, integration, and contracts run per PR. UI
-   journeys, performance, and scale run nightly and on demand.
+3. **Runtime is a budget.** Unit, integration, and contracts run per PR. Full
+   cross-client UI journeys, performance, and scale run nightly and on demand.
+   Path-filtered client e2e and boot-the-artifact smoke are the PR-time client
+   gates (issue #468 **L1** / **E2** — see [PR vs nightly](#pr-vs-nightly-l1--e2)).
 4. **Duplication is visible.** Two candidate owners for one flow are merged;
    they are not both added to the catalog.
 5. **Coverage floors ratchet up, never down.** A lower floor requires an
@@ -37,12 +39,28 @@ coverage result.
 | Unit / logic | `*.test.ts[x]` | one module's observable behaviour | per PR |
 | Integration | `*.integration.test.ts` | real SQLite, sockets, processes, or cross-component behaviour | per PR |
 | Contract | `*.contract.test.ts` | named product law that refactors must preserve | per PR |
-| Desktop journey | `apps/desktop/tests/e2e/*.spec.ts` | real Electron-only assertions | nightly |
-| Web journey | `apps/web/tests/e2e/*.spec.ts` | real Chromium/PWA/network assertions | nightly |
+| Boot-the-artifact smoke | packaged gateway/desktop health (E3 / L2) | "builds but doesn't start" | per PR (when packaging lands; until then track as gap) |
+| Desktop journey | `apps/desktop/tests/e2e/*.spec.ts` | real Electron-only assertions | **PR path-filtered** + full nightly |
+| Web journey | `apps/web/tests/e2e/*.spec.ts` | real Chromium/PWA/network assertions | **PR path-filtered** + full nightly |
 | Mobile journey | `tests/agent-e2e-mobile/flows/*.mjs` | native installed-app assertions | nightly + exploratory |
 | Pairing journey | `tests/agent-e2e-pairing/flows/*.mjs` | daemon/CLI/device and relay ceremony | nightly + exploratory |
 | Performance | `tests/perf/*.perf.test.ts` | hot-path budgets | nightly |
 | Scale | `tests/scale/*.scale.test.ts` | correctness and duration at volume | nightly |
+
+### PR vs nightly (L1 / E2)
+
+Decided in [#468](https://github.com/srikanth235/centraid/issues/468); cite
+[docs/decisions.md](docs/decisions.md).
+
+| Lane | Runs |
+| --- | --- |
+| **Every PR** | Unit, integration, contract; matrix validation via `check:pr`; **boot-the-artifact smoke** unconditionally (when the job exists); **path-filtered client e2e** |
+| **Path filters (client e2e)** | **Web** e2e when `apps/web`, `packages/client`, or service-worker files change; **desktop** e2e when `apps/desktop` changes. Shard to keep wall-clock roughly under ten minutes. |
+| **Nightly** | Full cross-client suites, perf budgets, mobile, pairing journeys, scale |
+
+**Promotion rule:** if a nightly-only area burns us **twice**, move it to PR-time.
+
+`TESTING.md` wins over any suite README that contradicts this split (**L3**).
 
 Playwright alone owns desktop and web regression journeys. The mobile journey
 layer is the committed agent-driven flows under
@@ -57,9 +75,20 @@ Desktop agent-driven flows were retired after their unique restart/persistence
 assertions moved to Electron Playwright.
 
 Property-style checks follow the normal `*.test.ts` convention and say
-`property` in the suite name. `.spec.ts` is Playwright-only. Slow files set a
-local timeout with `vi.setConfig`; packages do not raise the timeout for every
-fast test.
+`property` in the suite name. `.spec.ts` is Playwright-only.
+
+Timeouts come in two tiers. Node projects — the `node:sqlite` ones, which
+bootstrap real vault/daemon layouts and are therefore fsync-bound — get a 30s
+default from the shared `nodeProject` preset in
+[`packages/test-kit/src/vitest.ts`](packages/test-kit/src/vitest.ts); the
+measurements justifying that number are in the comment there. jsdom projects do
+no disk I/O and keep Vitest's tight 5s default. The budget is sized for
+hosted-runner **disk latency variance**, which was measured at up to ~10x
+between two runner instances executing the identical command — not for v8
+coverage instrumentation, which is enabled in the per-PR `ci` lane too. Files
+slower still than the node default escalate locally with `vi.setConfig` (the
+gateway CLI suites use 60s); do not add a per-test `timeout` option that sits
+*below* its file's budget.
 
 ## Product tiers and coverage gates
 

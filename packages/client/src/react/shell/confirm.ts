@@ -31,6 +31,7 @@ export function openConfirm(opts: ConfirmOpts): Promise<boolean> {
 
     const backdrop = document.createElement('div');
     backdrop.className = modalCss.backdrop ?? '';
+    backdrop.dataset.testid = 'modal-backdrop';
     backdrop.addEventListener('click', () => finish(false));
 
     const card = document.createElement('div');

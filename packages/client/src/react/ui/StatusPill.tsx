@@ -24,6 +24,7 @@ export default function StatusPill({
   return (
     <span
       className={cx(styles.status, tight && styles.tight, className)}
+      data-testid="status-pill"
       data-tone={tone ?? undefined}
     >
       <span className={styles.dot} />

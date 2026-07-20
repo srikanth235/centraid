@@ -1,7 +1,14 @@
 # native-v0-resilience
 
 **Goal:** preserve a repeatable native v0 smoke and resilience matrix across
-the Photos, Docs, Agenda, Apps, and Settings families.
+the Home, Photos, Docs, Agenda, and Settings families.
+
+Note the tab is **Home**, not "Apps". The route is registered as `Apps` (see
+`navigation.ts` and Settings' `navigate('Apps', …)`), but it renders as "Home",
+and an earlier version of this flow asserted the route name — matching nothing.
+Each tab is also verified by a string unique to the screen it opens rather than
+by its own label: the label is in the tab bar on every screen, so
+`tapOn: "Docs"` + `assertVisible: "Docs"` passes even when the tap does nothing.
 
 **Setup:** install a development build, start Metro, and expose a reachable
 gateway through `MAESTRO_GATEWAY_URL`. The flow clears app state and saves that
