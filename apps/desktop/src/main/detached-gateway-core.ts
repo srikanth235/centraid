@@ -152,13 +152,22 @@ export function buildStatusFile(input: {
 }
 
 /**
- * H5 — OS service install is opt-in, default off. Onboarding may offer it;
- * silent install is forbidden. Returns true only when the setting is
- * explicitly enabled.
+ * H5 — whether onboarding should **show** the OS service install step.
+ * Opt-in; install itself defaults off ({@link DEFAULT_OFFER_GATEWAY_SERVICE}).
+ * Silent install is forbidden.
+ *
+ * - `offerGatewayService` already set (true|false) → user decided → do not re-offer
+ * - `onboardingCompletedAt` set → first-run over → do not re-offer here
+ * - otherwise (fresh install) → show the step
  */
-export function shouldOfferServiceInstall(settings: { offerGatewayService?: boolean }): boolean {
-  return settings.offerGatewayService === true;
+export function shouldOfferServiceInstall(settings: {
+  /** Explicit opt-in (true) or declined (false). Absent = not asked yet. */
+  offerGatewayService?: boolean;
+  onboardingCompletedAt?: string;
+}): boolean {
+  if (typeof settings.offerGatewayService === 'boolean') return false;
+  return !settings.onboardingCompletedAt;
 }
 
-/** Default for the offerGatewayService settings key (H5). */
+/** Default for whether the OS service is installed (H5) — off until opted in. */
 export const DEFAULT_OFFER_GATEWAY_SERVICE = false;

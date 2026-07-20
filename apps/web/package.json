@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node scripts/ensure-iroh-wasm.mjs && vite build && node scripts/precompress.mjs",
+    "build": "node scripts/stamp-sw-version.mjs && node scripts/ensure-iroh-wasm.mjs && vite build && node scripts/precompress.mjs",
     "build:iroh": "bash scripts/build-iroh-wasm.sh",
     "build:iroh:force": "FORCE_IROH_WASM=1 node scripts/ensure-iroh-wasm.mjs",
     "dev": "vite --host 127.0.0.1",

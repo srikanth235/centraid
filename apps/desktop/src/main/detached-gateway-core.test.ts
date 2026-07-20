@@ -135,13 +135,17 @@ describe('status / ownership helpers', () => {
 });
 
 describe('shouldOfferServiceInstall (H5)', () => {
-  it('defaults off', () => {
+  it('defaults install off but offers the step during first-run onboarding', () => {
     expect(DEFAULT_OFFER_GATEWAY_SERVICE).toBe(false);
-    expect(shouldOfferServiceInstall({})).toBe(false);
-    expect(shouldOfferServiceInstall({ offerGatewayService: false })).toBe(false);
+    // No decision + no onboarding stamp → show the opt-in step.
+    expect(shouldOfferServiceInstall({})).toBe(true);
   });
 
-  it('is true only when explicitly enabled', () => {
-    expect(shouldOfferServiceInstall({ offerGatewayService: true })).toBe(true);
+  it('does not re-offer after the user decides or finishes onboarding', () => {
+    expect(shouldOfferServiceInstall({ offerGatewayService: false })).toBe(false);
+    expect(shouldOfferServiceInstall({ offerGatewayService: true })).toBe(false);
+    expect(shouldOfferServiceInstall({ onboardingCompletedAt: '2026-07-20T00:00:00.000Z' })).toBe(
+      false,
+    );
   });
 });

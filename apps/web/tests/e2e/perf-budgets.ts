@@ -144,7 +144,8 @@ export const perfBudgets: PerfBudgets = {
 };
 
 /**
- * Timing budgets are advisory. Flip to `true` (and tighten the ceilings) only
- * once the CI runner shows the numbers are stable across ~20 green runs.
+ * Timing budgets are enforced (issue #468 L5). Soft log-only mode was the
+ * previous default; CI now fails when cold/warm open exceed the ceilings in
+ * `perfBudgets.timing`. Request/byte budgets remain hard gates too.
  */
-export const enforceTiming = false;
+export const enforceTiming = true;

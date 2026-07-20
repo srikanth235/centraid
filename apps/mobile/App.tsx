@@ -16,6 +16,7 @@ import { navThemeFor, resolveTheme } from './src/kit/theme';
 import { useUploadReconciliation } from './src/lib/upload/boot';
 import { ReplicaProvider, useReplica } from './src/kit/replica/ReplicaProvider';
 import { ShareIntentIngest } from './src/kit/hooks/ShareIntentIngest';
+import ErrorBoundary from './src/ErrorBoundary';
 
 // Direct sub-path imports avoid the package's barrel index.js which
 // re-exports every weight (some of which Metro fails to resolve).
@@ -280,29 +281,31 @@ export default function App(): React.JSX.Element | null {
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <View style={{ backgroundColor: colors.bg, flex: 1 }} onLayout={onReady}>
-          <ShareIntentProvider options={{ scheme: 'centraid', resetOnBackground: false }}>
-            <ReplicaProvider>
-              <UploadReconciliation />
-              <ShareIntentIngest />
-              <ReplicaErrorBanner />
-              <NavigationContainer theme={navThemeFor(scheme)}>
-                <StatusBar style="auto" />
-                <RootStack.Navigator screenOptions={{ headerShown: false }}>
-                  <RootStack.Screen name="Tabs" component={Tabs} />
-                  <RootStack.Screen
-                    name="MobileFallback"
-                    component={MobileFallbackScreen}
-                    options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
-                  />
-                </RootStack.Navigator>
-              </NavigationContainer>
-            </ReplicaProvider>
-          </ShareIntentProvider>
-        </View>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <View style={{ backgroundColor: colors.bg, flex: 1 }} onLayout={onReady}>
+            <ShareIntentProvider options={{ scheme: 'centraid', resetOnBackground: false }}>
+              <ReplicaProvider>
+                <UploadReconciliation />
+                <ShareIntentIngest />
+                <ReplicaErrorBanner />
+                <NavigationContainer theme={navThemeFor(scheme)}>
+                  <StatusBar style="auto" />
+                  <RootStack.Navigator screenOptions={{ headerShown: false }}>
+                    <RootStack.Screen name="Tabs" component={Tabs} />
+                    <RootStack.Screen
+                      name="MobileFallback"
+                      component={MobileFallbackScreen}
+                      options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
+                    />
+                  </RootStack.Navigator>
+                </NavigationContainer>
+              </ReplicaProvider>
+            </ShareIntentProvider>
+          </View>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }

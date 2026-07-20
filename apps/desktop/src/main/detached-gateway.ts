@@ -559,4 +559,39 @@ export function preferEmbeddedGateway(env: NodeJS.ProcessEnv = process.env): boo
   return env.CENTRAID_EMBEDDED_GATEWAY === '1';
 }
 
+/**
+ * H5/H6 — install the OS service unit via the same CLI `service-admin` uses
+ * (`centraid-gateway service install --data-dir …`, label `dev.centraid.gateway`).
+ * Opt-in only; never call from a silent path.
+ */
+export function installGatewayOsService(
+  dataDir: string,
+): { ok: true } | { ok: false; error: string } {
+  try {
+    const cliPath = resolveGatewayCliPath();
+    const nodeBin = process.execPath;
+    const port = resolveListenPort();
+    const result = spawnSync(
+      nodeBin,
+      [
+        cliPath,
+        'service',
+        'install',
+        '--data-dir',
+        dataDir,
+        '--host',
+        DEFAULT_HOST,
+        '--port',
+        String(port),
+      ],
+      { encoding: 'utf8', timeout: 30_000 },
+    );
+    if (result.status === 0) return { ok: true };
+    const err = (result.stderr || result.stdout || `exit ${result.status}`).trim();
+    return { ok: false, error: err || 'service install failed' };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 export { DEFAULT_GATEWAY_PORT, resolveListenPort };

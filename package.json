@@ -45,7 +45,9 @@
     "release:prepare": "node scripts/release/prepare.mjs",
     "release:publish": "node scripts/release/publish.mjs",
     "release:classify": "node scripts/release/classify.mjs",
-    "boot:smoke": "node scripts/release/boot-smoke.mjs"
+    "boot:smoke": "node scripts/release/boot-smoke.mjs",
+    "lockfile:lint": "node scripts/ci/lockfile-lint.mjs",
+    "ci:retry": "node scripts/ci/retry.mjs"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "3.2.4",

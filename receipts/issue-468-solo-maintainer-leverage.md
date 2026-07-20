@@ -339,6 +339,34 @@ GitHub issue: [#468](https://github.com/srikanth235/centraid/issues/468)
 - `tests/agent-e2e-mobile/lib/harness.mjs`
 - `tests/agent-e2e-mobile/README.md`
 - `receipts/issue-468-solo-maintainer-leverage.md` (this receipt)
+
+### Skeptic-fix follow-up
+
+- **J6** `nativeBuildNumber('0.1.0')=1000` single-sourced via `apps/mobile/app.config.ts`; android `versionCode 1000`, iOS `CURRENT_PROJECT_VERSION = 1000`; test asserts formula matches native projects.
+- **I4** `update-watcher.ts` gates every announce through `admitUpdate` / `announceUpdateIfAdmitted`; packaged path `startPackagedUpdateChecker`; wiring test.
+- **H5** Onboarding service step after local connect; `shouldOfferServiceInstall` first-run offer; `installGatewayOsService` + IPC `installGatewayService`.
+- **K1** Mobile `ErrorBoundary` wraps `App.tsx`.
+- **K8** `stamp-sw-version.mjs` stamps `public/sw.js` from `sw-version.ts` on build; `sw-version.test.ts`.
+- **L5** `enforceTiming = true` in web perf budgets.
+- **E1/E5** `scripts/ci/retry.mjs`, `lockfile-lint.mjs` + `bun run lockfile:lint` in CI static; E6 scaffold `scripts/ci/bot-pins.yml.example`.
+
+
+### Additional files (skeptic fix)
+
+- `.github/workflows/ci.yml`
+- `apps/desktop/src/main/ipc.ts`
+- `apps/desktop/src/main/update-watcher-wiring.test.ts`
+- `apps/desktop/src/main/update-watcher.ts`
+- `apps/desktop/src/preload.ts`
+- `apps/mobile/src/ErrorBoundary.tsx`
+- `apps/web/scripts/stamp-sw-version.mjs`
+- `apps/web/src/sw-version.test.ts`
+- `apps/web/tests/e2e/perf-budgets.ts`
+- `packages/client/src/centraid-api.d.ts`
+- `packages/client/src/react/screens/OnboardingScreen.tsx`
+- `scripts/ci/lockfile-lint.mjs`
+- `scripts/test-report/write-job-summary.mjs`
+
 ## Out of scope
 
 - Apple Developer / Azure Trusted Signing / Play App Signing **live enrollment and CI secrets** (I2/I3/J1 human residual; checklist in `docs/enrollment.md`)
@@ -346,6 +374,7 @@ GitHub issue: [#468](https://github.com/srikanth235/centraid/issues/468)
 - Full electron-updater production install path (pure rollout + scaffolding landed; mtime poller remains for unpackaged dev)
 - Onboarding UI that offers H5 service install (settings flag + pure helper only)
 - E1/E5–E7 deeper CI babysitting; L5 hard-fail timing budgets
+- E7 durable main-green (extends #467) — lockfile lint is partial E5 only
 - Browser extension pairing (#462) implementation
 - F-Droid, major versions before 1.0, bespoke dev-manifest formats
 

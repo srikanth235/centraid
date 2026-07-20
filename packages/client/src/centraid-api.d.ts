@@ -104,6 +104,11 @@ export interface CentraidSettings {
    */
   launchAtLogin?: boolean;
   /**
+   * H5 — OS service install for the detached gateway. Absent = not asked yet
+   * (onboarding will offer). Explicit false = declined; true = opted in.
+   */
+  offerGatewayService?: boolean;
+  /**
    * DEV FLAG (issue #434, Phase 3) — reveal the in-app builder and every
    * surface that reaches it: the Home composer, "Build new", the ⌘K "Build a
    * new app…" row, draft apps + their menus, "Edit with Centraid", and the
@@ -905,6 +910,11 @@ interface CentraidApi {
   relaunchToUpdate?(): Promise<{ ok: true }>;
   /** Subscribe to "a new build landed on disk". Returns the unsubscribe. */
   onUpdateAvailable?(cb: (msg: { available: boolean; version: string }) => void): () => void;
+  /**
+   * H5 — opt-in OS service install for the detached local gateway
+   * (`centraid-gateway service install`). Never silent; onboarding offers it.
+   */
+  installGatewayService?(): Promise<{ ok: true } | { ok: false; error: string }>;
 
   // ----- "What's new" changelog -----
   /**
