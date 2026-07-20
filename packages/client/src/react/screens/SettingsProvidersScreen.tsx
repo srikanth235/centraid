@@ -115,7 +115,6 @@ function RouteRow({
 export default function SettingsProvidersScreen({
   loadStatus,
   refreshModels,
-  refreshTools,
   activateRunner,
   setAgentModel,
   setSubsystemModel,
@@ -130,9 +129,7 @@ export default function SettingsProvidersScreen({
   const [runnerBySubsystem, setRunnerBySubsystem] = useState<
     Partial<Record<ModelSubsystem, AgentRunnerKind>>
   >({});
-  const [open, setOpen] = useState<Set<AgentRunnerKind>>(new Set());
   const [busyModels, setBusyModels] = useState(false);
-  const [busyTools, setBusyTools] = useState(false);
   const deadlineRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -148,7 +145,7 @@ export default function SettingsProvidersScreen({
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
       void loadStatus().then((s) => {
-        // Poll only fills in loading model/tool lists — keep the user's
+        // Poll only fills in loading model lists — keep the user's
         // optimistic runner/model selection, don't reapply from the server.
         setStatus(s);
         if (s.anyLoading && Date.now() < deadlineRef.current) poll();
@@ -219,15 +216,6 @@ export default function SettingsProvidersScreen({
       return next;
     });
     setSubsystemRunner(subsystem, v as AgentRunnerKind | '');
-  };
-
-  const toggleTools = (kind: AgentRunnerKind): void => {
-    setOpen((s) => {
-      const next = new Set(s);
-      if (next.has(kind)) next.delete(kind);
-      else next.add(kind);
-      return next;
-    });
   };
 
   const cards = status?.cards ?? [];
@@ -317,8 +305,6 @@ export default function SettingsProvidersScreen({
                 usedBy={usedBy(card.kind)}
                 isDefault={card.kind === defaultKind}
                 saved={savedByKind[card.kind] ?? ''}
-                open={open.has(card.kind)}
-                onToggle={() => toggleTools(card.kind)}
                 onSetModel={(v) => onSetModel(card.kind, v)}
               />
             ))
@@ -332,14 +318,6 @@ export default function SettingsProvidersScreen({
             disabled={busyModels}
             label="Refresh models"
             onClick={() => doRefresh(refreshModels, setBusyModels)}
-          />
-          <Button
-            variant="soft"
-            size="sm"
-            icon="Refresh"
-            disabled={busyTools}
-            label={busyTools ? 'Scanning tools…' : 'Refresh tools'}
-            onClick={() => doRefresh(refreshTools, setBusyTools)}
           />
         </div>
       </DrawerGroup>

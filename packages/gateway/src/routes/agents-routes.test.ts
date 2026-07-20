@@ -1,22 +1,71 @@
 /*
- * The agents-status route reports CLI availability and — when the gateway
- * supplies a per-agent model/tool resolver (issue #188) — each agent's models
- * and tools plus their load tri-state, so Settings → Agents can offer a
- * per-agent picker with a loading/empty state. These tests cover the resolver
+ * The agents-status route reports one entry per REGISTERED runner kind — the
+ * list is derived from the runner-backend registry, not a hardcoded
+ * codex/claude pair, so a kind added to the registry shows up here without
+ * touching this route. These tests cover the list shape and the resolver
  * plumbing; the CLI probe itself runs for real and is not asserted on (its
  * result varies by host).
  */
 
 import { expect, test } from 'vitest';
+import { RUNNER_KINDS } from '@centraid/app-engine';
 import { readAgentsStatus } from './agents-routes.ts';
 
-test('omits per-agent models when no resolver is supplied', async () => {
+test('reports one entry per registered runner kind', async () => {
   const s = await readAgentsStatus();
-  expect('codexModels' in s).toBe(false);
-  expect('claudeModels' in s).toBe(false);
-  expect('codexModelsStatus' in s).toBe(false);
-  expect(typeof s.codexAvailable).toBe('boolean');
-  expect(typeof s.claudeAvailable).toBe('boolean');
+  expect(s.agents.map((a) => a.kind).sort()).toEqual([...RUNNER_KINDS].sort());
+  // Every entry is self-describing: the client renders off these, never off a
+  // local table keyed on kinds it happens to know.
+  for (const agent of s.agents) {
+    expect(typeof agent.label).toBe('string');
+    expect(agent.label.length).toBeGreaterThan(0);
+    expect(typeof agent.available).toBe('boolean');
+    expect(agent.minVersion).toMatch(/^\d+\.\d+\.\d+$/);
+  }
+});
+
+test('carries no per-agent tools surface — that retired with the drawer', async () => {
+  const s = await readAgentsStatus({
+    resolveModels: async () => ({ list: [], status: 'ready' }),
+  });
+  for (const agent of s.agents) {
+    expect('tools' in agent).toBe(false);
+    expect('toolsStatus' in agent).toBe(false);
+  }
+  expect(JSON.stringify(s)).not.toContain('Tools');
+});
+
+test('an unavailable agent carries the install hint; an available one does not', async () => {
+  // `acp` has no default binary, so it is always unavailable without a
+  // configured path — a stable way to assert the unavailable branch on any host.
+  const s = await readAgentsStatus();
+  const acp = s.agents.find((a) => a.kind === 'acp');
+  expect(acp?.available).toBe(false);
+  expect(acp?.hint).toBeTruthy();
+  for (const agent of s.agents) {
+    if (agent.available) expect(agent.hint).toBeUndefined();
+  }
+});
+
+test('probes the configured binary for a kind when one is supplied', async () => {
+  const seen: Array<string | undefined> = [];
+  await readAgentsStatus({
+    binPathFor: (kind) => {
+      seen.push(kind);
+      return kind === 'acp' ? '/nonexistent/custom-agent' : undefined;
+    },
+  });
+  // Every registered kind is offered the override, not just a known pair.
+  expect(seen.sort()).toEqual([...RUNNER_KINDS].sort());
+});
+
+test('defaults every agent to an empty model surface when no resolver is supplied', async () => {
+  const s = await readAgentsStatus();
+  for (const agent of s.agents) {
+    expect(agent.models).toEqual([]);
+    expect(agent.modelsStatus).toBe('empty');
+    expect(agent.defaultModel).toBeUndefined();
+  }
 });
 
 test('attaches each agent’s models + status from the resolver', async () => {
@@ -24,31 +73,26 @@ test('attaches each agent’s models + status from the resolver', async () => {
   const s = await readAgentsStatus({
     resolveModels: async (kind, refresh) => {
       calls.push([kind, refresh]);
-      return kind === 'codex'
-        ? { list: [{ id: 'gpt-x', name: 'GPT-X', default: true }], status: 'ready' }
-        : { list: [{ id: 'claude-x', name: 'Claude X' }], status: 'ready' };
+      return { list: [{ id: `${kind}-x`, name: 'X', default: true }], status: 'ready' };
     },
   });
-  expect(s.codexModels).toEqual([{ id: 'gpt-x', name: 'GPT-X', default: true }]);
-  expect(s.claudeModels).toEqual([{ id: 'claude-x', name: 'Claude X' }]);
-  expect(s.codexModelsStatus).toBe('ready');
-  expect(s.claudeModelsStatus).toBe('ready');
-  expect(calls.sort((a, b) => a[0].localeCompare(b[0]))).toEqual([
-    ['claude-code', false],
-    ['codex', false],
-  ]);
+  // Asked once per registered kind, and each answer landed on its own entry.
+  expect(calls.map(([k]) => k).sort()).toEqual([...RUNNER_KINDS].sort());
+  const codex = s.agents.find((a) => a.kind === 'codex');
+  expect(codex?.models).toEqual([{ id: 'codex-x', name: 'X', default: true }]);
+  expect(codex?.modelsStatus).toBe('ready');
+  // The catalog's own default is surfaced so a picker can name what it inherits.
+  expect(codex?.defaultModel).toBe('codex-x');
 });
 
 test('surfaces a loading surface so the client knows to poll', async () => {
   const s = await readAgentsStatus({
     resolveModels: async () => ({ list: [], status: 'loading' }),
   });
-  expect(s.codexModels).toEqual([]);
-  expect(s.codexModelsStatus).toBe('loading');
-  expect(s.claudeModelsStatus).toBe('loading');
+  expect(s.agents.every((a) => a.modelsStatus === 'loading')).toBe(true);
 });
 
-test('threads the refresh flag to the resolver for both agents', async () => {
+test('threads the refresh flag to the resolver for every agent', async () => {
   const seen: boolean[] = [];
   await readAgentsStatus({
     resolveModels: async (_kind, refresh) => {
@@ -57,59 +101,19 @@ test('threads the refresh flag to the resolver for both agents', async () => {
     },
     refresh: true,
   });
-  expect(seen).toEqual([true, true]);
+  expect(seen).toEqual(RUNNER_KINDS.map(() => true));
 });
 
 test('a throwing resolver degrades that agent to an empty list', async () => {
   const s = await readAgentsStatus({
-    resolveModels: async () => {
-      throw new Error('boom');
+    resolveModels: async (kind) => {
+      if (kind === 'codex') throw new Error('boom');
+      return { list: [{ id: 'ok' }], status: 'ready' };
     },
   });
-  expect(s.codexModels).toEqual([]);
-  expect(s.claudeModels).toEqual([]);
-  expect(s.codexModelsStatus).toBe('empty');
-  expect(s.claudeModelsStatus).toBe('empty');
-});
-
-test('omits per-agent tools when no tools resolver is supplied', async () => {
-  const s = await readAgentsStatus();
-  expect('codexTools' in s).toBe(false);
-  expect('claudeTools' in s).toBe(false);
-  expect('codexToolsStatus' in s).toBe(false);
-});
-
-test('attaches each agent’s tools + status and threads refreshTools independently', async () => {
-  const calls: Array<[string, boolean]> = [];
-  const s = await readAgentsStatus({
-    resolveModels: async () => ({ list: [], status: 'empty' }), // models present but NOT refreshed
-    resolveTools: async (kind, refresh) => {
-      calls.push([kind, refresh]);
-      return {
-        list: [{ name: kind === 'codex' ? 'exec_command' : 'Read', source: 'native' }],
-        status: 'ready',
-      };
-    },
-    refreshTools: true, // tools refreshed; refresh (models) defaults false
-  });
-  expect(s.codexTools).toEqual([{ name: 'exec_command', source: 'native' }]);
-  expect(s.claudeTools).toEqual([{ name: 'Read', source: 'native' }]);
-  expect(s.codexToolsStatus).toBe('ready');
-  // refreshTools (not refresh) reached the tools resolver for both agents.
-  expect(calls.sort((a, b) => a[0].localeCompare(b[0]))).toEqual([
-    ['claude-code', true],
-    ['codex', true],
-  ]);
-});
-
-test('a throwing tools resolver degrades that agent to an empty list', async () => {
-  const s = await readAgentsStatus({
-    resolveTools: async () => {
-      throw new Error('boom');
-    },
-  });
-  expect(s.codexTools).toEqual([]);
-  expect(s.claudeTools).toEqual([]);
-  expect(s.codexToolsStatus).toBe('empty');
-  expect(s.claudeToolsStatus).toBe('empty');
+  const codex = s.agents.find((a) => a.kind === 'codex');
+  expect(codex?.models).toEqual([]);
+  expect(codex?.modelsStatus).toBe('empty');
+  // One agent's failure never takes the rest of the list down with it.
+  expect(s.agents.find((a) => a.kind === 'gemini')?.modelsStatus).toBe('ready');
 });

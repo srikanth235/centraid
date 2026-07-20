@@ -10,6 +10,11 @@
  * Claude SDK turn, or a `codex exec` subprocess). This file
  * builds that surface (capturing the runner kind + spawn fn) and injects it as
  * `openDispatch`, leaving the spine — and the onFailure cascade — to app-engine.
+ *
+ * The captured kind is any registered `RunnerKind`, not just codex/claude:
+ * `startLiveDispatch` routes `ctx.agent` for ACP-backed kinds through the
+ * `RunnerBackend` registry (issue #479). `'codex'` remains the default only
+ * because a caller that names no runner gets the historical one.
  */
 
 import {

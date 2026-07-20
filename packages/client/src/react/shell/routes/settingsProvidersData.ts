@@ -1,10 +1,18 @@
 import { getAgentsStatus, getUserPrefs, saveUserPrefs } from '../../../gateway-client.js';
 import type { AgentRunnerKind, AgentsStatusDTO, ModelSubsystem } from '../../screen-contracts.js';
+import type { CentraidAgentStatusEntry } from '../../../centraid-api.js';
 
-// Providers (agents) console data — ports the vanilla app-settings.ts agent
-// status derivation. Centraid runs the user's installed coding-agent CLIs in
-// place; the gateway reports which are runnable on its host. This maps that
-// snapshot into the AgentsStatusDTO the SettingsProvidersScreen renders.
+// Providers (agents) console data. Centraid runs the user's installed
+// coding-agent CLIs in place; the gateway reports which are runnable on its
+// host. This maps that snapshot into the AgentsStatusDTO the
+// SettingsProvidersScreen renders.
+//
+// The snapshot is a LIST (`{ agents: [...] }`), one entry per runner kind the
+// gateway registers — it used to be `codex*`/`claude*` field pairs matched
+// against a local 2-row table, which meant a runner the gateway grew was
+// invisible here until this file was edited too. Nothing below enumerates
+// runner kinds locally any more: the gateway's list drives the cards, the
+// model-prefs read, and the pickers alike.
 //
 // Model selection moved off desktop-local settings and onto the gateway
 // prefs store (`GET/PUT /_centraid-user/prefs`) so every client sharing a
@@ -21,10 +29,26 @@ import type { AgentRunnerKind, AgentsStatusDTO, ModelSubsystem } from '../../scr
 
 type Snap = Awaited<ReturnType<typeof getAgentsStatus>>;
 
-const RUNNER_META = [
-  { kind: 'codex', title: 'Codex', bin: 'codex', accent: '#10b981' },
-  { kind: 'claude-code', title: 'Claude Code', bin: 'claude', accent: '#a855f7' },
-] as const;
+/**
+ * Card accents, keyed by the kinds this build happens to recognise. Purely
+ * cosmetic — an agent whose kind is missing here (a newer gateway's) still
+ * renders, just on the neutral accent. This map must never gate what the
+ * console shows; the gateway's list is the source of truth for that.
+ */
+const ACCENT_BY_KIND: Record<string, string> = {
+  codex: '#10b981',
+  'claude-code': '#a855f7',
+  gemini: '#3b82f6',
+  qwen: '#f59e0b',
+  opencode: '#0ea5e9',
+  grok: '#e11d48',
+  kimi: '#8b5cf6',
+  acp: '#64748b',
+};
+const DEFAULT_ACCENT = '#64748b';
+
+/** The runner every unpinned subsystem falls back to when prefs name none. */
+const FALLBACK_KIND: AgentRunnerKind = 'codex';
 
 const SUBSYSTEMS: readonly ModelSubsystem[] = ['assistant', 'ask', 'builder', 'automations'];
 
@@ -48,32 +72,63 @@ function readRunnerPrefs(
   const byKey: Partial<Record<ModelSubsystem, AgentRunnerKind>> = {};
   for (const s of SUBSYSTEMS) {
     const v = prefs[runnerPrefKey(s)];
-    // Only a known kind counts as a pin — anything else (absent, empty,
-    // or junk) means "inherit the default agent", which is what the
-    // gateway's own resolution does with it.
-    if (v === 'codex' || v === 'claude-code') byKey[s] = v;
+    // Any non-empty string counts as a pin. This used to check against a
+    // closed pair, which would have silently dropped a pin onto a runner
+    // kind this build predates — the gateway is what resolves a pin, and it
+    // treats an unknown one as "inherit" anyway.
+    if (typeof v === 'string' && v) byKey[s] = v;
   }
   return byKey;
 }
 
-/** Pull every `model.<kind>.<slot>` string out of the raw prefs snapshot. */
-function readModelPrefs(prefs: Record<string, unknown>): {
+/**
+ * Pull every `model.<kind>.<slot>` string out of the raw prefs snapshot, for
+ * each kind the gateway reported. Driven by the gateway's list rather than a
+ * local table so a new runner's saved models are read, not stranded.
+ */
+function readModelPrefs(
+  prefs: Record<string, unknown>,
+  kinds: readonly AgentRunnerKind[],
+): {
   defaultByKind: Record<string, string>;
   subsystemByKind: Record<string, Partial<Record<ModelSubsystem, string>>>;
 } {
   const defaultByKind: Record<string, string> = {};
   const subsystemByKind: Record<string, Partial<Record<ModelSubsystem, string>>> = {};
-  for (const r of RUNNER_META) {
-    const d = prefs[modelPrefKey(r.kind, 'default')];
-    if (typeof d === 'string' && d) defaultByKind[r.kind] = d;
+  for (const kind of kinds) {
+    const d = prefs[modelPrefKey(kind, 'default')];
+    if (typeof d === 'string' && d) defaultByKind[kind] = d;
     const subs: Partial<Record<ModelSubsystem, string>> = {};
     for (const s of SUBSYSTEMS) {
-      const v = prefs[modelPrefKey(r.kind, s)];
+      const v = prefs[modelPrefKey(kind, s)];
       if (typeof v === 'string' && v) subs[s] = v;
     }
-    subsystemByKind[r.kind] = subs;
+    subsystemByKind[kind] = subs;
   }
   return { defaultByKind, subsystemByKind };
+}
+
+/**
+ * One wire entry → one card. Every displayed string comes from the gateway
+ * (`label`, `version`, `hint`), so a runner kind this build has never heard of
+ * still renders a complete, honest card — only the accent falls back.
+ */
+function toCard(entry: CentraidAgentStatusEntry): AgentsStatusDTO['cards'][number] {
+  const models = entry.models ?? [];
+  return {
+    accent: ACCENT_BY_KIND[entry.kind] ?? DEFAULT_ACCENT,
+    connected: entry.available,
+    kind: entry.kind,
+    models: models.map((m) => ({ default: m.default, id: m.id, name: m.name, tier: m.tier })),
+    modelsLoading: entry.modelsStatus === 'loading' && models.length === 0,
+    // The gateway's install hint IS the "why not" for an unavailable agent —
+    // more useful than the old locally-composed "<bin> not found on PATH",
+    // which this client could only write for binaries it knew about.
+    subtitle: entry.available
+      ? (entry.version ?? `${entry.label} · detected`)
+      : (entry.hint ?? `${entry.label} CLI not found`),
+    title: entry.label,
+  };
 }
 
 function toDTO(
@@ -83,39 +138,10 @@ function toDTO(
   subsystemByKind: Record<string, Partial<Record<ModelSubsystem, string>>>,
   subsystemRunnerByKey: Partial<Record<ModelSubsystem, AgentRunnerKind>>,
 ): AgentsStatusDTO {
+  const agents = status.agents ?? [];
   return {
-    anyLoading: [
-      status.codexModelsStatus,
-      status.claudeModelsStatus,
-      status.codexToolsStatus,
-      status.claudeToolsStatus,
-    ].some((s) => s === 'loading'),
-    cards: RUNNER_META.map((r) => {
-      const available = r.kind === 'codex' ? status.codexAvailable : status.claudeAvailable;
-      const ver = r.kind === 'codex' ? status.codexVersion : status.claudeVersion;
-      const models = (r.kind === 'codex' ? status.codexModels : status.claudeModels) ?? [];
-      const tools = (r.kind === 'codex' ? status.codexTools : status.claudeTools) ?? [];
-      const modelsStatus =
-        r.kind === 'codex' ? status.codexModelsStatus : status.claudeModelsStatus;
-      const toolsStatus = r.kind === 'codex' ? status.codexToolsStatus : status.claudeToolsStatus;
-      return {
-        accent: r.accent,
-        connected: available,
-        kind: r.kind,
-        models: models.map((m) => ({ default: m.default, id: m.id, name: m.name, tier: m.tier })),
-        modelsLoading: modelsStatus === 'loading' && models.length === 0,
-        subtitle: available ? (ver ?? `${r.bin} · detected`) : `${r.bin} CLI not found on PATH`,
-        title: r.title,
-        tools: tools.map((t) => ({
-          description: t.description,
-          hasArgs: t.inputSchema !== undefined,
-          name: t.name,
-          server: t.server,
-          source: t.source,
-        })),
-        toolsLoading: toolsStatus === 'loading' && tools.length === 0,
-      };
-    }),
+    anyLoading: agents.some((a) => a.modelsStatus === 'loading'),
+    cards: agents.map(toCard),
     savedModelByKind: defaultByKind,
     subsystemModelByKind: subsystemByKind,
     subsystemRunnerByKey,
@@ -123,23 +149,21 @@ function toDTO(
   };
 }
 
-export async function loadProviders(opts?: {
-  refresh?: boolean;
-  refreshTools?: boolean;
-}): Promise<AgentsStatusDTO> {
+export async function loadProviders(opts?: { refresh?: boolean }): Promise<AgentsStatusDTO> {
   const [status, prefs] = await Promise.all([
-    getAgentsStatus(opts).catch(() => ({ codexAvailable: false, claudeAvailable: false }) as Snap),
+    getAgentsStatus(opts).catch(() => ({ agents: [] }) as Snap),
     getUserPrefs().catch(() => ({}) as Record<string, unknown>),
   ]);
   const kindRaw = prefs['agent.runner.kind'];
-  const { defaultByKind, subsystemByKind } = readModelPrefs(prefs);
-  return toDTO(
-    status,
-    kindRaw === 'claude-code' ? 'claude-code' : 'codex',
-    defaultByKind,
-    subsystemByKind,
-    readRunnerPrefs(prefs),
+  // Trust the persisted kind as-is (the gateway validated it on write and
+  // resolves it on read); only an absent/blank value falls back.
+  const selectedKind =
+    typeof kindRaw === 'string' && kindRaw ? (kindRaw as AgentRunnerKind) : FALLBACK_KIND;
+  const { defaultByKind, subsystemByKind } = readModelPrefs(
+    prefs,
+    (status.agents ?? []).map((a) => a.kind),
   );
+  return toDTO(status, selectedKind, defaultByKind, subsystemByKind, readRunnerPrefs(prefs));
 }
 
 /** Switch the DEFAULT agent — the runner every unpinned subsystem inherits. */

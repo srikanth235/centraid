@@ -7,8 +7,22 @@
  * cascade). This module owns the "live" side: the persistent mock-LLM
  * session, the single long-lived agent turn that executes every
  * `ctx.tool` batch (an in-process Claude SDK `query()` for claude, a
- * `codex exec` subprocess for codex), and the `ctx.agent` one-shot
+ * `codex exec` subprocess for codex — see `run-automation-host-agent.ts`
+ * for why only those two can host it), and the `ctx.agent` one-shot
  * against the user's real provider.
+ *
+ * Issue #479 — `ctx.agent` honours every registered runner kind through ONE
+ * path: `getRunnerBackend(kind).runTurn`, the same seam chat uses. The
+ * bespoke codex (`codex exec`) and claude (SDK `query()`) arms are gone
+ * along with the bespoke turn backends they belonged to, so pinning
+ * `runner.automations` to any kind actually drives that agent.
+ *
+ * Note the asymmetry with `ctx.tool` below, and that it is deliberate:
+ * tool dispatch still invokes the claude/codex CLIs NATIVELY (see
+ * `run-automation-host-agent.ts`) because it works by pointing a CLI at a
+ * per-fire mock LLM endpoint — a deterministic test/dispatch harness, not a
+ * user-facing runner. ACP agents drive their own model loop and expose no
+ * base URL to redirect, so that mechanism cannot move to ACP.
  *
  * Issue #166 — persistent session: a fire opens ONE agent session pointed
  * at the mock and keeps it alive across the whole handler run. The
@@ -26,16 +40,13 @@
  * automation id (no owning app).
  */
 
-import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import * as automation from '@centraid/automation';
 import type { RunnerKind } from '../types.js';
-import { runClaudeTurn } from '../backends/claude/backend.js';
+import { getRunnerBackend } from '../registry.js';
 import { defaultRunHostAgent, type RunHostAgent } from './run-automation-host-agent.js';
-import { agentSpawnEnv } from '../spawn-env.js';
-import { lowPriorityCommand } from '../low-priority.js';
 
 export interface LiveDispatchOptions {
   /** The automation app directory — also the CLI's cwd. */
@@ -64,49 +75,6 @@ export interface LiveDispatch {
   agentDispatcher: automation.AgentDispatcher;
   /** Tear down the mock server + scratch dir. Safe to call once. */
   close(): Promise<void>;
-}
-
-/** Drain a spawned CLI's stdout/stderr and resolve once it exits. */
-async function collectProcess(
-  proc: ChildProcess,
-): Promise<{ ok: boolean; stdout: string; stderr: string }> {
-  const out: Buffer[] = [];
-  const err: Buffer[] = [];
-  proc.stdout?.on('data', (c: Buffer) => out.push(c));
-  proc.stderr?.on('data', (c: Buffer) => err.push(c));
-  return await new Promise((resolve) => {
-    proc.on('exit', (code) =>
-      resolve({
-        ok: code === 0,
-        stdout: Buffer.concat(out).toString('utf8'),
-        stderr: Buffer.concat(err).toString('utf8'),
-      }),
-    );
-    proc.on('error', (e) =>
-      resolve({ ok: false, stdout: '', stderr: `spawn error: ${e.message}` }),
-    );
-  });
-}
-
-/**
- * OpenAI structured outputs reject any object schema that doesn't
- * explicitly set `additionalProperties: false`. Codex forwards the
- * `--output-schema` file verbatim, so we deep-normalise the schema an
- * automation passes to `ctx.agent({ json })` before writing it out.
- */
-function normalizeOutputSchema(schema: unknown): unknown {
-  if (Array.isArray(schema)) return schema.map(normalizeOutputSchema);
-  if (schema && typeof schema === 'object') {
-    const obj: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(schema as Record<string, unknown>)) {
-      obj[k] = normalizeOutputSchema(v);
-    }
-    if (obj.type === 'object' && obj.additionalProperties === undefined) {
-      obj.additionalProperties = false;
-    }
-    return obj;
-  }
-  return schema;
 }
 
 /**
@@ -170,40 +138,28 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
     return `${call.prompt}\n\nAttached files — read each from disk before answering (images are visual input):\n${lines.join('\n')}`;
   };
 
-  // ctx.agent routes to the user's REAL provider via the local CLI —
-  // no mock involvement. The final answer is read from a file the CLI
-  // writes (codex `--output-last-message`) rather than parsed out of
-  // the event stream, and `--output-schema` enforces the JSON shape.
+  // ctx.agent routes to the user's REAL provider through the SAME runner
+  // registry chat uses — one integration path for every kind (issue #479).
+  // `runTurn` normalizes each agent's stream into TurnStreamEvents, so this
+  // reads `final` / `error` and coerces the answer with no per-backend wire
+  // format anywhere in this file.
+  //
+  // Two deliberate limits. (1) ACP has no `--output-schema` equivalent, so
+  // `call.json` is enforced by `coerceAgentAnswer` alone — this is what the
+  // claude arm always did, and codex now matches it (it previously had the
+  // schema handed to `codex exec`). (2) A fire carries only the runner KIND
+  // (the gateway drops binPath / extraArgs for every kind), so the backend
+  // resolves its default binary off PATH. The custom `acp` kind has no
+  // default binary and therefore surfaces a clear `error` event, raised below.
   const agentDispatcher: automation.AgentDispatcher = async (call, ctx): Promise<unknown> => {
     const effectivePrompt = await stageAttachments(call);
-    // No configurable binPath on this path — always a bare-name `codex`
-    // spawn, so PATH is always sanitized (see spawn-env.ts).
-    const env = agentSpawnEnv();
-    // `stdin: 'ignore'` is load-bearing: `codex exec` treats an open
-    // stdin pipe as an appended `<stdin>` instruction block and blocks
-    // until EOF — leaving it piped hangs the call until the run times
-    // out. `signal` lets a run timeout kill the CLI child too.
-    const spawnOpts: SpawnOptions = {
-      env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      signal: ctx.abortSignal,
-    };
-
-    if (opts.runner === 'claude-code') {
-      // Phase 2 (issue #158): route ctx.agent through the Claude SDK chat
-      // adapter — the same one chat uses — instead of a collect-on-exit
-      // `claude -p` spawn. The turn now streams token-level TurnStreamEvents
-      // (forwarded to the run bus as node.delta via `call.onEvent`). The
-      // return contract is unchanged: accumulate the final text and coerce
-      // it exactly as before. `bypassPermissions` preserves the old
-      // non-interactive behavior (a detached turn must not block on a prompt).
-      let finalText = '';
-      let errorMessage: string | undefined;
-      await runClaudeTurn({
+    let finalText = '';
+    let errorMessage: string | undefined;
+    await getRunnerBackend(opts.runner).runTurn(
+      {
         cwd: opts.workdir,
         message: effectivePrompt,
         extraSystemPrompt: '',
-        permissionMode: 'bypassPermissions',
         ...(opts.model ? { model: opts.model } : {}),
         abortSignal: ctx.abortSignal,
         onEvent: (ev) => {
@@ -211,55 +167,13 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
           else if (ev.type === 'error') errorMessage = ev.message;
           call.onEvent?.(ev);
         },
-      });
-      if (errorMessage && !finalText) {
-        throw new Error(`ctx.agent (claude) failed: ${errorMessage}`);
-      }
-      return automation.coerceAgentAnswer(finalText, call.json);
+      },
+      { prefs: { kind: opts.runner } },
+    );
+    if (errorMessage && !finalText) {
+      throw new Error(`ctx.agent (${opts.runner}) failed: ${errorMessage}`);
     }
-
-    // codex exec — non-interactive, no approval prompts, runnable
-    // outside a git repo. The final assistant message is written to a
-    // file so we never have to parse the `--json` event stream.
-    const uid = randomUUID().slice(0, 8);
-    const lastMessageFile = path.join(scratchDir, `agent-${uid}.out.txt`);
-    const args = [
-      'exec',
-      '--dangerously-bypass-approvals-and-sandbox',
-      '--skip-git-repo-check',
-      '--ephemeral',
-      '--color',
-      'never',
-      '--cd',
-      opts.workdir,
-      '--output-last-message',
-      lastMessageFile,
-    ];
-    // `codex exec -m/--model <MODEL>` (codex-cli supports this natively —
-    // same flag the interactive CLI takes).
-    if (opts.model) args.push('-m', opts.model);
-    if (call.json) {
-      const schemaFile = path.join(scratchDir, `agent-${uid}.schema.json`);
-      await fs.writeFile(schemaFile, JSON.stringify(normalizeOutputSchema(call.json)), 'utf8');
-      args.push('--output-schema', schemaFile);
-    }
-    args.push(effectivePrompt);
-
-    const command = lowPriorityCommand('codex', args);
-    const result = await collectProcess(spawn(command.bin, command.args, spawnOpts));
-    if (!result.ok) {
-      const detail = result.stderr.trim() || result.stdout.trim();
-      throw new Error(`ctx.agent CLI failed: ${detail.slice(0, 2000)}`);
-    }
-    let answer: string;
-    try {
-      answer = await fs.readFile(lastMessageFile, 'utf8');
-    } catch {
-      // CLI exited 0 but didn't write the message file — fall back to
-      // whatever it printed to stdout.
-      answer = result.stdout;
-    }
-    return automation.coerceAgentAnswer(answer, call.json);
+    return automation.coerceAgentAnswer(finalText, call.json);
   };
 
   let closed = false;

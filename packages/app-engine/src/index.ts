@@ -76,6 +76,7 @@ export type {
   VaultSqlRunner,
   VaultSqlToolResult,
 } from './conversation/turn.js';
+export { RUNNER_KINDS, isRunnerKind } from './conversation/turn.js';
 
 export {
   startRuntimeHttpServer,

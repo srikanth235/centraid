@@ -18,13 +18,26 @@
  * (`--host`/`--port`/`--data-dir`) override file fields. The `runner`
  * block is *seeded* into the gateway's identity DB on first boot so the
  * runtime's per-turn prefs loader picks it up unchanged.
+ *
+ * `runner.kind` accepts any registered `RUNNER_KIND` — this file is also the
+ * ONLY way to configure the custom `acp` kind, which has no default binary:
+ *
+ *   "runner": { "kind": "acp", "binPath": "/usr/local/bin/my-agent",
+ *               "extraArgs": ["--acp"] }
  */
 
 import { promises as fs } from 'node:fs';
+import { RUNNER_KINDS, isRunnerKind, type RunnerKind } from '@centraid/app-engine';
 import { validateBackupConfig, type BackupConfig } from '../backup/backup-config.js';
 
 export interface DaemonRunnerConfig {
-  kind: 'codex' | 'claude-code';
+  /** Any kind the runtime registers — validated against `RUNNER_KINDS`. */
+  kind: RunnerKind;
+  /**
+   * Override the binary location; defaults to the kind's own PATH lookup.
+   * REQUIRED for the custom `acp` kind, which ships no default binary (its
+   * ACP flag goes in `extraArgs`).
+   */
   binPath?: string;
   extraArgs?: string[];
 }
@@ -113,8 +126,10 @@ export function validateConfig(value: unknown): DaemonConfig {
 function validateRunner(value: unknown): DaemonRunnerConfig {
   if (!isRecord(value)) throw new DaemonConfigError('`runner` must be an object');
   const kind = value.kind;
-  if (kind !== 'codex' && kind !== 'claude-code') {
-    throw new DaemonConfigError('`runner.kind` must be "codex" or "claude-code"');
+  if (!isRunnerKind(kind)) {
+    throw new DaemonConfigError(
+      `\`runner.kind\` must be one of ${RUNNER_KINDS.map((k) => `"${k}"`).join(', ')}`,
+    );
   }
   const out: DaemonRunnerConfig = { kind };
   if (value.binPath !== undefined) {

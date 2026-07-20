@@ -102,6 +102,77 @@ test('reads the model list from the catalog without enumerating', async () => {
   expect(warm.models?.map((m) => m.id)).toEqual(['gpt-x']);
 });
 
+// ---- pluggable runner kinds (gemini / qwen / custom acp) ----------------
+
+test('gemini/qwen preflight probe their bin and carry the registry min version', async () => {
+  invalidatePreflightCache();
+  const gemini = await runPreflight({ kind: 'gemini', binPath: 'true' });
+  expect(gemini.kind).toBe('gemini');
+  expect(gemini.ok).toBe(true);
+  expect(gemini.minVersion).toBe(minVersionString('gemini'));
+
+  invalidatePreflightCache();
+  const qwen = await runPreflight({ kind: 'qwen', binPath: 'true' });
+  expect(qwen.ok).toBe(true);
+  expect(qwen.minVersion).toBe(minVersionString('qwen'));
+});
+
+test('opencode/grok/kimi preflight probe their bin and carry the registry min version', async () => {
+  for (const kind of ['opencode', 'grok', 'kimi'] as const) {
+    invalidatePreflightCache();
+    const status = await runPreflight({ kind, binPath: 'true' });
+    expect(status.kind).toBe(kind);
+    expect(status.ok).toBe(true);
+    expect(status.minVersion).toBe(minVersionString(kind));
+  }
+});
+
+test('a missing opencode/grok/kimi binary reports unavailable with the install hint', async () => {
+  // The hint IS the "why not" the providers console shows, so an unavailable
+  // runner must never come back hintless.
+  const expected = {
+    opencode: /opencode-ai/,
+    grok: /SuperGrok|X Premium/,
+    kimi: /uv tool install kimi-cli/,
+  } as const;
+  for (const [kind, pattern] of Object.entries(expected)) {
+    invalidatePreflightCache();
+    const status = await runPreflight({
+      kind: kind as 'opencode' | 'grok' | 'kimi',
+      binPath: `/no/such/${kind}`,
+    });
+    expect(status.ok, kind).toBe(false);
+    expect(status.hint ?? '', kind).toMatch(pattern);
+  }
+});
+
+test('gemini install hint points at the Gemini CLI', async () => {
+  invalidatePreflightCache();
+  const status = await runPreflight({ kind: 'gemini', binPath: '/no/such/gemini' });
+  expect(status.ok).toBe(false);
+  expect(status.hint ?? '').toMatch(/Gemini CLI/);
+});
+
+test('custom acp kind is unavailable until a binPath is configured', async () => {
+  invalidatePreflightCache();
+  const status = await runPreflight({ kind: 'acp' });
+  expect(status.kind).toBe('acp');
+  expect(status.ok).toBe(false);
+  expect(status.reason ?? '').toMatch(/no binary configured/);
+  expect(status.hint ?? '').toMatch(/Settings/);
+});
+
+test('custom acp kind probes a configured binPath like any other runner', async () => {
+  invalidatePreflightCache();
+  const status = await runPreflight({ kind: 'acp', binPath: 'true' });
+  expect(status.ok).toBe(true);
+});
+
+test('probeCliAvailability reports unavailable for custom acp with no binPath', async () => {
+  const status = await probeCliAvailability('acp');
+  expect(status.available).toBe(false);
+});
+
 // ---- probeCliAvailability tests -----------------------------------------
 
 test('probeCliAvailability reports available + version when the CLI runs', async () => {

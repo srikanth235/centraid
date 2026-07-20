@@ -57,19 +57,26 @@ export {
 // inputSchema). Both coding-agent backends declare their tools from these.
 export { VAULT_SQL_TOOL, VAULT_INVOKE_TOOL, VAULT_CONTENT_TOOL } from './vault-sql-tool.js';
 
+// The single turn-driving path (issue #479). codex and claude-code no longer
+// have bespoke backends — they are ACP entries whose adapter is launched by
+// `AcpAdapterSpec`, same as every other kind.
 export {
-  runCodexTurn,
-  type CodexTurnInput,
-  type CodexTurnConfig,
-  type CodexTurnResult,
-} from './backends/codex/backend.js';
+  runAcpTurn,
+  type AcpAdapterSpec,
+  type AcpTurnInput,
+  type AcpTurnConfig,
+  type AcpTurnResult,
+} from './backends/acp/backend.js';
 
+// Runner-backend registry — the single dispatch table every runner kind
+// registers with. `runTurn`, preflight, and model enumeration all read from
+// it; the gateway can enumerate `RUNNER_BACKENDS` for labels / defaults.
 export {
-  runClaudeTurn,
-  type ClaudeTurnInput,
-  type ClaudeTurnConfig,
-  type ClaudeTurnResult,
-} from './backends/claude/backend.js';
+  RUNNER_BACKENDS,
+  getRunnerBackend,
+  type RunnerBackend,
+  type RunnerVersion,
+} from './registry.js';
 
 export {
   runPreflight,

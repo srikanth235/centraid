@@ -424,6 +424,11 @@ async function probeRuntimeTools(
   kind: RunnerKind,
   opts: { cwd: string; binPath?: string },
 ): Promise<HostTool[]> {
+  // Only codex/claude-code expose a capturable tool set via their
+  // mock-LLM / SDK probe. ACP-backed kinds (gemini/qwen/acp) have no
+  // equivalent capture path — report no host tools rather than mis-spawning
+  // one CLI under another's probe protocol.
+  if (kind !== 'codex' && kind !== 'claude-code') return [];
   const captured =
     kind === 'claude-code' ? await captureClaudeTools(opts) : await captureCodexTools(opts);
   if (!captured) return [];
