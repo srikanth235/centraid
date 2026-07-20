@@ -2,17 +2,12 @@
 <html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; connect-src 'self' http://127.0.0.1:* http://localhost:*; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; frame-src http://127.0.0.1:* http://localhost:*;"
+      content="default-src 'self'; connect-src 'self' http://127.0.0.1:* http://localhost:*; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'; frame-src http://127.0.0.1:* http://localhost:*;"
     />
     <title>Centraid</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
-      rel="stylesheet"
-    />
     <link rel="stylesheet" href="styles.css" />
     <!-- Co-located component styles, bundled by Vite from the React island's
          `*.module.css` imports (issue #325, Phase 4 CSS refactor). Blocking +

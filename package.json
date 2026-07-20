@@ -37,15 +37,21 @@
     "fix": "ultracite fix",
     "check:pr": "bun run format:check && bunx oxlint . && bunx turbo run lint && bun run typecheck && bun run lint:types && bun run lint:css && bun run test:matrix",
     "ci": "bun run check:pr",
+    "knip": "knip",
     "docs:build": "node scripts/docs-site/build.mjs",
     "docs:bundle": "DOCS_SITE_BASE_PATH=/docs node scripts/docs-site/build.mjs && node scripts/docs-site/assemble.mjs",
     "docs:serve": "python3 -m http.server 4173 --bind 127.0.0.1 -d dist/docs-site",
-    "docs:smoke": "node scripts/docs-site/smoke.mjs"
+    "docs:smoke": "node scripts/docs-site/smoke.mjs",
+    "release:prepare": "node scripts/release/prepare.mjs",
+    "release:publish": "node scripts/release/publish.mjs",
+    "release:classify": "node scripts/release/classify.mjs",
+    "boot:smoke": "node scripts/release/boot-smoke.mjs"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "3.2.4",
     "astro": "^7.0.6",
     "jsdom": "26.1.0",
+    "knip": "^5.66.0",
     "oxfmt": "^0.43.0",
     "oxlint": "1.57.0",
     "oxlint-tsgolint": "^0.23.0",

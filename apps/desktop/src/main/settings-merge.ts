@@ -37,6 +37,11 @@ export interface PersistedSettingsPatch {
   changelogSeenVersion?: string;
   /** Launch Centraid at OS login (issue #351). Preserve-or-set boolean. */
   launchAtLogin?: boolean;
+  /**
+   * Offer OS service install for the detached gateway (issue #468 H5).
+   * Preserve-or-set boolean; default off when never set.
+   */
+  offerGatewayService?: boolean;
 }
 
 /** Preserve-or-set for a plain optional string field (`undefined` = preserve). */
@@ -94,6 +99,11 @@ export function mergePersistedSettings(
       ? { launchAtLogin: patch.launchAtLogin }
       : current.launchAtLogin !== undefined
         ? { launchAtLogin: current.launchAtLogin }
+        : {}),
+    ...(patch.offerGatewayService !== undefined
+      ? { offerGatewayService: patch.offerGatewayService }
+      : current.offerGatewayService !== undefined
+        ? { offerGatewayService: current.offerGatewayService }
         : {}),
   };
 }

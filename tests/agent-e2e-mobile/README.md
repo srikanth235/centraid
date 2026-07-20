@@ -147,7 +147,7 @@ Authoring rules of thumb (carried over from desktop):
   the harness write the FAIL verdict — don't swallow with try/catch.
 - **Verify the actual unit of truth.** For persistence claims, read
   the AsyncStorage manifest directly via
-  `xcrun simctl get_app_container <udid> com.centraid.mobile data`
+  `xcrun simctl get_app_container <udid> dev.centraid.mobile data`
   rather than only trusting Maestro's text matcher (see "Known
   caveats" below).
 - **Slug = filename = `runFlow()` first arg.** Keeps verdicts and run
@@ -243,7 +243,7 @@ reaches Metro on the host. No manual port forwarding needed.
   show a red "No script URL provided" screen. The harness's Metro
   reachability check catches the obvious failure mode; if the
   redbox still appears, deep-link the dev client once with
-  `xcrun simctl openurl <udid> "com.centraid.mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"`
+  `xcrun simctl openurl <udid> "dev.centraid.mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"`
   to re-inject the URL.
 - **Metro starts from `apps/mobile/` cwd.** Running it from the repo
   root resolves to an empty project root and fails with

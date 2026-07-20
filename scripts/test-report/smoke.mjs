@@ -147,7 +147,7 @@ try {
   ) {
     throw new Error('publicReportUrl shape wrong');
   }
-  if (coverageScopesBelowFloor([{ scope: 'x', lines: 10, lineFloor: 20 }]).join() !== 'x') {
+  if (coverageScopesBelowFloor([{ scope: 'x', lines: 10, lineFloor: 20 }]).join(',') !== 'x') {
     throw new Error('coverageScopesBelowFloor missed under-floor scope');
   }
   const summaryMdBody = renderSummaryMarkdown(

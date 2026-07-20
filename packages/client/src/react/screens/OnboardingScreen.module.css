@@ -19,10 +19,9 @@
   background: #07080d;
   overflow: hidden;
   isolation: isolate;
-  /* Geist is a clean grotesque; Space Grotesk is the display face for
-     the hero headline only. Both are loaded by index.html. */
+  /* System UI stack (issue #468 K11) — no webfont network load. */
   font-family:
-    Geist,
+    system-ui,
     -apple-system,
     BlinkMacSystemFont,
     'Segoe UI',
@@ -132,8 +131,7 @@
 
 .title {
   font-family:
-    'Space Grotesk',
-    Geist,
+    system-ui,
     -apple-system,
     sans-serif;
   font-size: 34px;
@@ -213,7 +211,12 @@
   display: inline-grid;
   place-items: center;
   color: white;
-  font-family: 'Space Grotesk', Geist, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
   font-size: 28px;
   font-weight: 600;
   letter-spacing: -0.01em;

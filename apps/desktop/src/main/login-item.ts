@@ -1,12 +1,12 @@
 /*
  * Launch-at-login (issue #351, tier 4).
  *
- * Centraid's gateway is desktop-hosted and deliberately has no OS scheduler
- * keeping it alive independent of the app (see gateway-supervisor-core.ts's
- * doc comment) — quitting the app really does take the gateway down.
- * Launch-at-login is the cheap 80% fix: it can't survive a running app being
- * force-quit, but it does mean a reboot or a fresh login brings Centraid (and
- * its embedded gateway) back up without the user remembering to open it.
+ * With the detached gateway (#468 H1) the child can outlive the UI, but it
+ * still does not survive logout/reboot unless the user opts into the OS
+ * service (H5, `offerGatewayService` / `centraid-gateway service install`).
+ * Launch-at-login remains the cheap 80% fix for bringing the app UI (and a
+ * re-spawned detached child on next ensure) back after reboot without the
+ * user remembering to open Centraid.
  *
  * This just wraps `app.setLoginItemSettings` — thin enough that it doesn't
  * need a `-core.ts` split, but pulled out of settings.ts/main.ts so both the

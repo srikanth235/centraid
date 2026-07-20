@@ -1,0 +1,26 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/**/*.{js,mjs,ts}", ".github/workflows/*.{yml,yaml}"],
+      "project": ["packages/*/src/**/*.{ts,tsx}", "apps/*/src/**/*.{ts,tsx}"]
+    },
+    "packages/*": {
+      "entry": ["src/index.ts", "src/**/*.ts", "src/**/*.tsx"],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
+    "apps/*": {
+      "entry": ["src/**/*.{ts,tsx}", "index.ts", "App.tsx"],
+      "project": ["src/**/*.{ts,tsx}", "App.tsx", "index.ts"]
+    }
+  },
+  "ignore": [
+    "**/dist/**",
+    "**/node_modules/**",
+    "**/generated/**",
+    "receipts/**",
+    ".governance/**",
+    "tests/**"
+  ],
+  "ignoreDependencies": ["typescript"]
+}

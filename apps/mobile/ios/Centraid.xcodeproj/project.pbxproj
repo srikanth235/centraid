@@ -462,7 +462,7 @@
 				);
 				MARKETING_VERSION = 0.1.0;
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
-				PRODUCT_BUNDLE_IDENTIFIER = "com.centraid.mobile.share-extension";
+				PRODUCT_BUNDLE_IDENTIFIER = "dev.centraid.mobile.share";
 				PRODUCT_NAME = ShareExtension;
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -497,7 +497,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
-				PRODUCT_BUNDLE_IDENTIFIER = com.centraid.mobile;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.centraid.mobile;
 				PRODUCT_NAME = Centraid;
 				SWIFT_OBJC_BRIDGING_HEADER = "Centraid/Centraid-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -528,7 +528,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
-				PRODUCT_BUNDLE_IDENTIFIER = com.centraid.mobile;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.centraid.mobile;
 				PRODUCT_NAME = Centraid;
 				SWIFT_OBJC_BRIDGING_HEADER = "Centraid/Centraid-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
@@ -675,7 +675,7 @@
 				);
 				MARKETING_VERSION = 0.1.0;
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
-				PRODUCT_BUNDLE_IDENTIFIER = "com.centraid.mobile.share-extension";
+				PRODUCT_BUNDLE_IDENTIFIER = "dev.centraid.mobile.share";
 				PRODUCT_NAME = ShareExtension;
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;

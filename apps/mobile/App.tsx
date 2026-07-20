@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect } from 'react';
-import { View, useColorScheme } from 'react-native';
+import { Text, View, useColorScheme } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
@@ -169,6 +169,24 @@ function SettingsNavigator(): React.JSX.Element {
   );
 }
 
+/** Surfaces ReplicaProvider.error when the session fails to open (issue #468 K2). */
+function ReplicaErrorBanner(): React.JSX.Element | null {
+  const { error, ready } = useReplica();
+  const { colors } = resolveTheme(useColorScheme());
+  if (!ready || !error) return null;
+  return (
+    <View
+      style={{
+        backgroundColor: colors.danger ?? '#c44',
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+      }}
+    >
+      <Text style={{ color: '#fff', fontFamily: 'Geist_500Medium', fontSize: 13 }}>{error}</Text>
+    </View>
+  );
+}
+
 function Tabs(): React.JSX.Element {
   const { colors } = resolveTheme(useColorScheme());
   return (
@@ -269,6 +287,7 @@ export default function App(): React.JSX.Element | null {
             <ReplicaProvider>
               <UploadReconciliation />
               <ShareIntentIngest />
+              <ReplicaErrorBanner />
               <NavigationContainer theme={navThemeFor(scheme)}>
                 <StatusBar style="auto" />
                 <RootStack.Navigator screenOptions={{ headerShown: false }}>

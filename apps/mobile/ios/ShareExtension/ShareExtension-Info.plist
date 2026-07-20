@@ -36,6 +36,6 @@
       <string>com.apple.share-services</string>
     </dict>
     <key>AppGroupIdentifier</key>
-    <string>group.com.centraid.mobile</string>
+    <string>group.dev.centraid.mobile</string>
   </dict>
 </plist>

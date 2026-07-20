@@ -72,4 +72,21 @@ export function installCrashHandlers(): void {
   process.on('unhandledRejection', (reason) => {
     recordCrash('unhandledRejection', reason);
   });
+  // Renderer / GPU / utility process exits (issue #468 K12).
+  app.on('render-process-gone', (_event, webContents, details) => {
+    recordCrash(
+      'render-process-gone',
+      new Error(
+        `render process gone reason=${details.reason} exitCode=${details.exitCode} url=${webContents.getURL?.() ?? ''}`,
+      ),
+    );
+  });
+  app.on('child-process-gone', (_event, details) => {
+    recordCrash(
+      'child-process-gone',
+      new Error(
+        `child process gone type=${details.type} reason=${details.reason} exitCode=${details.exitCode} name=${details.name ?? ''}`,
+      ),
+    );
+  });
 }

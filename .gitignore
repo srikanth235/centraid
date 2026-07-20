@@ -60,3 +60,7 @@ ds-bundle-desktop/
 # CSS-module carve tooling bookkeeping (class -> local-name maps used only by
 # the carve/rewrite scripts, never read by the app or its build).
 *.module.css.map.json
+
+# Built by apps/web/scripts/build-iroh-wasm.sh — never commit the binary
+# (issue #468 K15). JS/TS glue may stay; CI/build must regenerate the .wasm.
+apps/web/src/generated/centraid_web_iroh_bg.wasm
