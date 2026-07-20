@@ -137,7 +137,7 @@ async function establishSession(page: Page): Promise<void> {
   const vaultId = (control.body as { vaultId: string }).vaultId;
 
   await page.evaluate(
-    ({ apiUrl, vault }) => {
+    ({ apiUrl, vault, appId }) => {
       // loadConnection prefers sessionStorage; pin control session there
       // (same model as web-state saveConnection without rememberDevice).
       sessionStorage.removeItem('centraid.web.v1.connection');
@@ -157,8 +157,23 @@ async function establishSession(page: Page): Promise<void> {
         'centraid.web.v1.settings',
         JSON.stringify({ onboardingCompletedAt: new Date().toISOString() }),
       );
+      // Pin fixture on Home (builder off hides unpinned drafts — issue #434).
+      localStorage.setItem(
+        'centraid.v1.home.userApps',
+        JSON.stringify([
+          {
+            id: appId,
+            name: 'Web E2E App',
+            desc: 'Perf fixture',
+            iconKey: 'Sparkle',
+            color: '#6f5bf6',
+            colorKey: 'violet',
+          },
+        ]),
+      );
+      localStorage.setItem('centraid.v1.home.userApps.vault', JSON.stringify(vault));
     },
-    { apiUrl: API_URL, vault: vaultId },
+    { apiUrl: API_URL, vault: vaultId, appId: APP_ID },
   );
   await page.reload();
   await expect(page.locator(`[data-app-id="${APP_ID}"]`).first()).toBeVisible();

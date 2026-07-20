@@ -55,6 +55,24 @@ test('boots as a PWA, establishes a cookie control session, and runs an isolated
         'centraid.web.v1.settings',
         JSON.stringify({ onboardingCompletedAt: new Date().toISOString() }),
       );
+      // Home only renders *pinned* apps when the builder is off (issue #434):
+      // unpinned code-store rows become drafts and drafts are hidden
+      // (`builderEnabled ? drafts : NO_DRAFTS`). Seed a Home pin for the
+      // e2e fixture the same way Discover install would.
+      localStorage.setItem(
+        'centraid.v1.home.userApps',
+        JSON.stringify([
+          {
+            id: 'web-e2e',
+            name: 'Web E2E App',
+            desc: 'A browser-isolation fixture.',
+            iconKey: 'Sparkle',
+            color: '#6f5bf6',
+            colorKey: 'violet',
+          },
+        ]),
+      );
+      localStorage.setItem('centraid.v1.home.userApps.vault', JSON.stringify(vault));
     },
     { apiUrl: API_URL, vault: vaultId },
   );
