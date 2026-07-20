@@ -184,16 +184,16 @@ async function establishSession(page: Page): Promise<void> {
 
 // Open the installed app from Home and measure the iframe waterfall from the
 // iframe's OWN origin (cross-origin timing from the shell would read 0 bytes).
-// The very first tile click opens a builder PREVIEW; a Publish promotes it to
-// the installed `iframe[title="app"]` path a user actually re-opens. We
-// deliberately do NOT invoke `window.centraid.read` — the asset waterfall is
-// the subject, and the query runtime is a separate concern.
+// establishSession already pins the fixture on Home (builder-off path, #434);
+// a Home pin opens `iframe[title="app"]` directly — no builder Publish step.
+// We deliberately do NOT invoke `window.centraid.read` — the asset waterfall
+// is the subject, and the query runtime is a separate concern.
 async function ensureInstalled(page: Page): Promise<void> {
+  await expect(page.locator(`[data-app-id="${APP_ID}"]`).first()).toBeVisible();
+  // Smoke that the pin opens the installed app iframe, then return Home so
+  // cold open measurement starts from the shelf.
   await page.locator(`[data-app-id="${APP_ID}"] [data-testid="app-tile"]`).first().click();
-  const preview = page.frameLocator('iframe[title="App preview"]');
-  await expect(preview.locator('#ready')).toHaveText('generated app ready');
-  await page.getByRole('button', { name: 'Publish', exact: true }).click();
-  await expect(page.getByText(/added to Home/i).first()).toBeVisible();
+  await page.frameLocator('iframe[title="app"]').locator('#ready').waitFor({ state: 'visible' });
   await page.getByRole('button', { name: 'Home', exact: true }).click();
   await expect(page.locator(`[data-app-id="${APP_ID}"]`).first()).toBeVisible();
 }

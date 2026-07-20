@@ -372,6 +372,7 @@ GitHub issue: [#468](https://github.com/srikanth235/centraid/issues/468)
 - **mobile assemble:** after Expo config fixed, Kotlin failed on missing gitignored `computer.iroh` sources; compile-time Maven `computer.iroh:iroh:1.0.0` for API types (device runtime still needs cargo-ndk `.so` per README).
 - **web-e2e:** tests wrote control session only to localStorage; `loadConnection` prefers sessionStorage — pin session there.
 - **web-e2e Home empty:** builder-off hides drafts; seed pins `centraid.v1.home.userApps` for web-e2e fixture (issue #434).
+- **web-e2e open path:** pinned tiles open `iframe[title="app"]` (not builder preview); drop draft→Publish dance.
 - **verify coverage:** blueprints kit (`blob-format.js`, pdfjs) is gitignored and not in turbo build outputs; cache/restore left kit missing mid-suite. turbo outputs + `coverage` re-runs `vendor:assets`.
 - **mobile JNA:** iroh Maven pulls jna.jar; we already had jna@aar → checkDebugDuplicateClasses; exclude transitive jna from iroh.
 

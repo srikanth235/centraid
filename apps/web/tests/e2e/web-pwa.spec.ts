@@ -112,21 +112,10 @@ test('boots as a PWA, establishes a cookie control session, and runs an isolated
     .poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null))
     .toBe(true);
 
+  // Pinned Home tiles open the installed app iframe (title="app"), not the
+  // builder preview (title="App preview"). Builder is off on web (#434), so
+  // the old draft→Publish dance is not the product path anymore.
   await page.locator('[data-app-id="web-e2e"] [data-testid="app-tile"]').click();
-  const preview = page.frameLocator('iframe[title="App preview"]');
-  await expect(preview.getByRole('heading', { name: 'Web E2E App' })).toBeVisible();
-  await expect(preview.locator('#ready')).toHaveText('generated app ready');
-
-  const previewPing = await preview.locator('body').evaluate(async () => {
-    return window.centraid.read({ query: 'ping', input: {} });
-  });
-  expect(previewPing).toEqual({ pong: true, surface: 'web' });
-
-  await page.getByRole('button', { name: 'Publish', exact: true }).click();
-  await expect(page.getByText('Already up to date — added to Home.')).toBeVisible();
-  await page.getByRole('button', { name: 'Home', exact: true }).click();
-  await expect(page.locator('[data-app-id="web-e2e"]').first()).toBeVisible();
-  await page.locator('[data-app-id="web-e2e"] [data-testid="app-tile"]').first().click();
   const app = page.frameLocator('iframe[title="app"]');
   await expect(app.getByRole('heading', { name: 'Web E2E App' })).toBeVisible();
   await expect(app.locator('#ready')).toHaveText('generated app ready');
