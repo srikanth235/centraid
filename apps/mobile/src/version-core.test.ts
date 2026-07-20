@@ -2,16 +2,27 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { createRequire } from 'node:module';
 import { nativeBuildNumber } from './version-core.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const mobileRoot = path.resolve(here, '..');
+const require = createRequire(import.meta.url);
+const { nativeBuildNumber: nativeBuildNumberCjs } = require('./version-core.cjs') as {
+  nativeBuildNumber: (version: string) => number;
+};
 
 describe('nativeBuildNumber (J6)', () => {
   it('maps semver with the deterministic formula', () => {
     expect(nativeBuildNumber('0.1.0')).toBe(1_000);
     expect(nativeBuildNumber('1.2.3')).toBe(1_002_003);
     expect(nativeBuildNumber('0.0.1')).toBe(1);
+  });
+
+  it('CJS twin (Expo app.config path) matches the TS formula', () => {
+    for (const v of ['0.1.0', '1.2.3', '0.0.1', '0.2.1-beta.3'] as const) {
+      expect(nativeBuildNumberCjs(v)).toBe(nativeBuildNumber(v));
+    }
   });
 
   it('ignores prerelease suffix in the first three numbers', () => {
@@ -36,13 +47,18 @@ describe('nativeBuildNumber (J6)', () => {
       'utf8',
     );
     // Every CURRENT_PROJECT_VERSION must equal the formula (no leftover "1").
-    const versions = [...pbx.matchAll(/CURRENT_PROJECT_VERSION = (\d+);/g)].map((m) => m[1]);
+    const versions = [...pbx.matchAll(/CURRENT_PROJECT_VERSION = (\d+);/g)]
+      .map((m) => m[1])
+      .filter((v): v is string => v != null);
     expect(versions.length).toBeGreaterThan(0);
     for (const v of versions) {
       expect(Number(v)).toBe(expected);
     }
     // MARKETING_VERSION must be the app semver everywhere (no leftover "1.0").
-    const marketing = [...pbx.matchAll(/MARKETING_VERSION = ([^;]+);/g)].map((m) => m[1].trim());
+    const marketing = [...pbx.matchAll(/MARKETING_VERSION = ([^;]+);/g)]
+      .map((m) => m[1])
+      .filter((v): v is string => v != null)
+      .map((v) => v.trim());
     expect(marketing.length).toBeGreaterThan(0);
     for (const v of marketing) {
       expect(v).toBe('0.1.0');
@@ -62,5 +78,7 @@ describe('nativeBuildNumber (J6)', () => {
     const configSrc = readFileSync(path.join(mobileRoot, 'app.config.ts'), 'utf8');
     expect(configSrc).toContain('nativeBuildNumber(VERSION)');
     expect(configSrc).toContain("const VERSION = '0.1.0'");
+    // Expo CJS resolve — must import the .cjs twin, not extensionless TS.
+    expect(configSrc).toMatch(/from ['"]\.\/src\/version-core\.cjs['"]/);
   });
 });

@@ -18,11 +18,10 @@ if (!m) {
 const version = m[1];
 const swPath = path.join(root, 'public/sw.js');
 let sw = readFileSync(swPath, 'utf8');
-const next = sw.replace(
-  /const VERSION = ['"][^'"]*['"]/,
-  `const VERSION = ${JSON.stringify(version)}`,
-);
-if (next === sw && !sw.includes(`const VERSION = ${JSON.stringify(version)}`)) {
+// Single-quoted assignment so oxfmt --check stays clean after stamp (CI static).
+const assignment = `const VERSION = '${version.replace(/'/g, "\\'")}'`;
+const next = sw.replace(/const VERSION = ['"][^'"]*['"]/, assignment);
+if (next === sw && !sw.includes(assignment)) {
   console.error('stamp-sw-version: VERSION assignment not found in public/sw.js');
   process.exit(1);
 }

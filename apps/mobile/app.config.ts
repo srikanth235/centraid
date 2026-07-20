@@ -3,7 +3,10 @@
  * Build numbers come from {@link nativeBuildNumber} so app.json hardcodes cannot drift.
  */
 import type { ExpoConfig, ConfigContext } from 'expo/config';
-import { nativeBuildNumber } from './src/version-core';
+// Expo evaluates app.config via Node CJS resolve (require-from-string). An
+// extensionless TS import of `./src/version-core` fails with MODULE_NOT_FOUND
+// on CI; the .cjs twin is the same formula and resolves under plain require.
+import { nativeBuildNumber } from './src/version-core.cjs';
 
 // Keep in lockstep with monorepo root / package.json workspaces (0.1.0).
 const VERSION = '0.1.0';

@@ -367,6 +367,28 @@ GitHub issue: [#468](https://github.com/srikanth235/centraid/issues/468)
 - `scripts/ci/lockfile-lint.mjs`
 - `scripts/test-report/write-job-summary.mjs`
 
+### CI green follow-up (PR #469 reds)
+
+Root causes and fixes for the red PR gates after the shipping surface landed:
+
+- **Format / static:** `scripts/test-report/write-job-summary.mjs` was not oxfmt-clean (process skip of manual `check:pr`, not a broken pre-commit hook — governance pre-commit does not run oxfmt).
+- **K15 wasm / verify + client-e2e:** `.gitignore` omits `centraid_web_iroh_bg.wasm`; `apps/web/scripts/build-iroh-wasm.sh` called bare `brew` under `set -e`, which exits **127** on Ubuntu before cargo runs. Portable clang discovery + `scripts/ci/ensure-iroh-wasm-toolchain.sh` on `ci` verify and `client-e2e-pr` jobs.
+- **Mobile assemble-debug:** Expo config CJS resolve could not load extensionless `./src/version-core`; `apps/mobile/src/version-core.cjs` is the Node-resolvable twin; `app.config.ts` imports it.
+- **stamp-sw-version:** assignment now single-quoted so oxfmt stays clean after build stamp.
+
+Files:
+
+- `apps/mobile/src/version-core.cjs`
+- `apps/web/scripts/build-iroh-wasm.sh`
+- `scripts/ci/ensure-iroh-wasm-toolchain.sh`
+- `.github/workflows/ci.yml`
+- `.github/workflows/client-e2e-pr.yml`
+- `apps/mobile/app.config.ts`
+- `apps/mobile/src/version-core.test.ts`
+- `apps/mobile/src/version-core.ts`
+- `apps/web/scripts/stamp-sw-version.mjs`
+- `scripts/test-report/write-job-summary.mjs`
+
 ## Out of scope
 
 Human-only or follow-up residuals (agent-doable items above are shipped):
@@ -417,6 +439,12 @@ bun run boot:smoke
 
 # PR static gate
 bun run check:pr
+
+# Expo config resolves version-core.cjs (J6 / assemble-debug)
+node -e "const {getConfig}=require('@expo/config'); const c=getConfig('apps/mobile',{skipSDKVersionRequirement:true}); if(c.exp.android.versionCode!==1000) process.exit(1)"
+
+# Clean-tree wasm ensure (hide binary first if present)
+# node apps/web/scripts/ensure-iroh-wasm.mjs && bun run --cwd apps/web build
 ```
 
 Evidence captured under the implementer scratch dir: `issue-468-unit.log`, `issue-468-struct.log`, `issue-468-check-pr.log`, `issue-468-pack.log`.
