@@ -405,6 +405,12 @@ async function route(
   }
   if (p === '/centraid/_automations/run-now' && method === 'POST') {
     if (s.runNowStatus !== 200) return json(res, s.runNowStatus, { error: 'run_failed' });
+    // Mirror the gateway: firing a run materialises its ledger row, so the
+    // automation thread's run feed shows the new run on its next poll. The
+    // thread is the only route to the run viewer now (Run now no longer
+    // navigates there itself), so without this the feed stays empty.
+    const fired = s.runsById[s.nextRunId];
+    if (fired && !s.runs.some((r) => r['runId'] === s.nextRunId)) s.runs = [fired, ...s.runs];
     return json(res, 200, { runId: s.nextRunId });
   }
   if (p === '/centraid/_automations/runs' && method === 'GET') {
@@ -428,6 +434,12 @@ async function route(
     return json(res, 200, { ok: true });
   if (p === '/centraid/_automations/set-enabled' && method === 'POST') {
     if (s.setEnabledStatus !== 200) return json(res, s.setEnabledStatus, { error: 'failed' });
+    // Mirror the gateway: the toggle persists, so the thread's reload-after-
+    // toggle renders the new state instead of snapping back to the seeded one.
+    // `ref` travels in the query string; `enabled` in the body.
+    const ref = url.searchParams.get('ref');
+    const next = safeJson(body)['enabled'];
+    s.automations = s.automations.map((a) => (a['ref'] === ref ? { ...a, enabled: next } : a));
     return json(res, 200, { ok: true });
   }
 

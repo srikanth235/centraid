@@ -27,22 +27,44 @@ hosts without any external VPS or persistent infrastructure:
 1. Two `docker network create --driver bridge --ipv6=false` networks
    (`netA` for the gateway, `netB` for the device), each with normal
    internet egress via Docker's own NAT.
-2. **Real isolation is enforced explicitly, not assumed.** On a stock Linux
-   Docker Engine (e.g. GitHub Actions' `ubuntu-latest`), separate
-   user-defined bridge networks are isolated from each other by default.
-   That default does **not** hold everywhere — on OrbStack (this repo's
-   local dev Docker), a container on `netA` could dial a container on
-   `netB`'s IP directly with no extra configuration at all; OrbStack's
-   networking doesn't populate the iptables/nftables isolation rules a
-   stock Docker Engine does. So `lib/docker-harness.mjs` doesn't trust the
+2. **Real isolation is enforced explicitly, not assumed — on two separate
+   paths.**
+
+   *The docker-internal path.* On a stock Linux Docker Engine (e.g. GitHub
+   Actions' `ubuntu-latest`), separate user-defined bridge networks are
+   isolated from each other by default. That default does **not** hold
+   everywhere — on OrbStack (this repo's local dev Docker), a container on
+   `netA` could dial a container on `netB`'s IP directly with no extra
+   configuration at all. So `lib/docker-harness.mjs` doesn't trust the
    driver: it inserts explicit `DOCKER-USER` `DROP` rules for the two
    networks' subnets (Docker's documented user-hook chain, evaluated before
    Docker's own rules — safe to add even where the driver already
-   isolates) and then **proves** isolation with a real cross-network raw
-   TCP connect attempt before running any part of the ceremony. If that
-   probe can still connect, the flow throws immediately rather than
-   running a "relay" assertion that would be meaningless on a routable
-   topology.
+   isolates).
+
+   *The host-routed path.* Subnet rules alone are **not** sufficient, and
+   assuming they were is what made this flow's first run on a GitHub-hosted
+   runner select a `isRelay: false` direct path while still reporting
+   `ISOLATED`. Both containers NAT out through the host's single public
+   NIC, so the public address iroh's endpoint discovers for itself via the
+   relay is the **host's own public IP** — a destination that matches
+   neither subnet rule. The harness therefore also enumerates every
+   non-loopback, non-bridge host IPv4 address at run time (`ip -4 -o addr
+   show` inside the privileged helper) and drops traffic to each of them
+   from both test subnets. Those rules go into **both** `DOCKER-USER` and
+   `INPUT`: a packet a container sends to a host address is either
+   hairpinned back toward a container (routed as `FORWARD`, so
+   `DOCKER-USER` sees it) or delivered to the host itself (routed as
+   `INPUT`, which `DOCKER-USER` never sees). Covering both chains covers
+   both outcomes by construction, rather than by assuming which one a given
+   host's netfilter path produces. Bridge interfaces (`docker0`, `br-*`,
+   `veth*`) are deliberately excluded — they're the containers' next hop for
+   legitimate internet egress (apt-get, the n0 relays).
+
+   Both paths are then **proven** with real raw TCP connect attempts before
+   any part of the ceremony runs: one to the peer's docker-internal IP, and
+   one per host address to a port published from the probe server. If either
+   connects, the flow throws immediately rather than running a "relay"
+   assertion that would be meaningless on a routable topology.
 3. `--ipv6=false` on both networks. This one is load-bearing, discovered by
    running the flow and reading what `paths()` actually reported (see
    below) — OrbStack hands containers a real, globally-routable IPv6
@@ -63,9 +85,17 @@ identical to `device-pairing-lifecycle`; only the transport changed.
 
 ## What's proven vs. what's inferred
 
-- **Network isolation: proven, not inferred.** The pre-ceremony TCP probe
-  either times out/errors (isolated — the flow proceeds) or connects
-  (not isolated — the flow throws before running the ceremony at all).
+- **Network isolation: proven, not inferred — on both paths.** Each
+  pre-ceremony TCP probe either times out/errors (blocked) or connects (not
+  isolated — the flow throws before running the ceremony at all), and the
+  per-target reason is preserved verbatim in the log and verdict rather than
+  flattened, so `blocked (timeout)` and `blocked (ECONNREFUSED)` stay
+  distinguishable. The single-probe version of this check was
+  **tautological** and is why the first CI run passed isolation while a
+  direct path was live: it dialed only the peer's docker-internal IP, which
+  is exactly and only the traffic the subnet rules block, so it re-tested
+  the rule that had just been installed and could not observe the
+  host-routed path.
 - **Relay-vs-direct: proven, not inferred, and a hard gate on the flow's
   pass/fail.** `@number0/iroh`'s native `Connection` binding exposes
   `paths()` with an `isRelay` flag per candidate path — present on the
@@ -74,19 +104,47 @@ identical to `device-pairing-lifecycle`; only the transport changed.
   `Connection.paths(): Array<PathSnapshot>`, `PathSnapshot.isRelay:
   boolean`). `device-redeem.mjs` reads it right after the tunneled probe
   request, once a path has actually been selected, and reports it in its
-  output JSON. The flow **asserts** on this value: if no path was selected
-  at all, or a path was selected but `isRelay` is `false`, the flow throws
-  rather than passing — this is the one thing the whole Docker-network-
-  isolation harness exists to prove, so it can't be allowed to silently not
-  be proven. On this repo's runs so far the selected path has consistently
-  been a real n0 relay URL (e.g. `https://aps1-1.relay.n0.iroh.link./`) with
-  `isRelay: true`, confirmed loudly in `ctx.note()` on success.
-- **What this does NOT prove:** that iroh attempted and failed a hole-punch
-  before falling back (vs. deciding not to try at all because discovery
-  never found a candidate address) — `paths()` gives you the *selected*
-  path's kind, not a negotiation trace. `watchPathEvents`/`watchPaths` exist
-  on the binding for that level of detail; not used here to keep the flow
-  focused on the ceremony, not iroh's internals.
+  output JSON. It reports **only** the candidate flagged `isSelected` —
+  there is deliberately no "first candidate" fallback, since `paths()` lists
+  every candidate and an unvalidated direct address among them must never be
+  reported as the path that carried data. If nothing is flagged, the device
+  reports `path: null` and the flow throws. The flow **asserts** on this
+  value: no path selected, or a path selected with `isRelay: false`, both
+  fail — this is the one thing the whole Docker-network-isolation harness
+  exists to prove, so it can't be allowed to silently not be proven.
+- **What this does NOT prove:**
+  - That iroh attempted and failed a hole-punch before falling back (vs.
+    deciding not to try at all because discovery never found a candidate
+    address) — `paths()` gives you the *selected* path's kind, not a
+    negotiation trace. `watchPathEvents`/`watchPaths` exist on the binding
+    for that level of detail; not used here to keep the flow focused on the
+    ceremony, not iroh's internals.
+  - That the host-routed probe is byte-identical to the escape it guards
+    against. The probe is TCP to a **published** port; the escape observed on
+    CI was QUIC/UDP reaching an **unpublished** container through the host's
+    NAT. The probe is a strictly harder reachability test (publishing makes
+    the target reachable in a way the ceremony's own topology does not), and
+    the `DROP` rules it validates carry no `-p` so they apply to UDP equally
+    — but "the TCP probe was blocked" is evidence for, not proof of, "no UDP
+    path to a host address exists".
+  - Anything about hosts whose topology differs again. The failure this flow
+    hit was found by CI, not by reasoning; treat a future `isRelay: false`
+    as another such discovery rather than as noise.
+
+## A correction worth keeping
+
+An earlier version of this document had the environment reasoning backwards:
+it treated stock Linux Docker (GitHub Actions) as the stricter environment
+and OrbStack as the leaky one that needed firewalling. The opposite was true
+for the failure that mattered. On macOS/OrbStack the "host" is a Linux VM
+behind macOS's own NAT, so the relay-observed public address is the Mac's ISP
+address, no return path exists, and the relay was the only option — the flow
+passed **for the wrong reason**, and every green run before this flow's first
+CI execution was that non-proof. On a GitHub-hosted runner, with a real
+public NIC on the Docker host, the direct path was live and the flow failed
+on its very first honest run. The subnet-only rules and the single-probe
+check were never sufficient; they had just never been run somewhere that
+could tell.
 
 ## Setup gotchas this flow's harness (`lib/docker-harness.mjs`) works around
 

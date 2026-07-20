@@ -404,6 +404,51 @@ Files:
 - `turbo.json`
 - `package.json` (coverage vendor:assets)
 
+
+### Merge from main (#474)
+
+Integrated `origin/main` after #474 (`fix(e2e): repair every failing nightly lane…`). Those files are owned by `receipts/issue-474.md`; listed here so this branch's merge commit satisfies receipt-per-issue file coverage.
+
+- `.github/workflows/e2e.yml`
+- `apps/desktop/tests/e2e/appview-templates-insights.spec.ts`
+- `apps/desktop/tests/e2e/automations.spec.ts`
+- `apps/desktop/tests/e2e/builder.spec.ts`
+- `apps/desktop/tests/e2e/delete-app.spec.ts`
+- `apps/desktop/tests/e2e/fixtures.ts`
+- `apps/desktop/tests/e2e/onboarding-home.spec.ts`
+- `apps/desktop/tests/e2e/playwright.config.ts`
+- `apps/desktop/tests/e2e/settings-gateways.spec.ts`
+- `apps/web/tests/e2e/perf-waterfall.spec.ts`
+- `apps/web/tests/e2e/playwright.config.ts`
+- `apps/web/tests/e2e/web-pwa.spec.ts`
+- `packages/client/src/react/screens/AutomationEditorScreen.tsx`
+- `packages/client/src/react/screens/AutomationsOverviewScreen.tsx`
+- `packages/client/src/react/screens/AutomationThreadScreen.tsx`
+- `packages/client/src/react/screens/BuilderChatPane.tsx`
+- `packages/client/src/react/screens/HomeScreen.tsx`
+- `packages/client/src/react/screens/InsightsScreen.tsx`
+- `packages/client/src/react/screens/OnboardingScreen.tsx`
+- `packages/client/src/react/screens/RunViewScreen.tsx`
+- `packages/client/src/react/shell/confirm.ts`
+- `packages/client/src/react/shell/routes/AppViewRoute.tsx`
+- `packages/client/src/react/shell/routes/builder/BuilderCloud.tsx`
+- `packages/client/src/react/shell/routes/builder/BuilderCode.tsx`
+- `packages/client/src/react/shell/routes/builder/BuilderShell.tsx`
+- `packages/client/src/react/shell/routes/SettingsRoute.tsx`
+- `packages/client/src/react/ui/StatusPill.tsx`
+- `receipts/issue-474.md`
+- `scripts/test-report/generate.mjs`
+- `scripts/test-report/prepare-pages-site.mjs`
+- `scripts/test-report/summary-markdown.mjs`
+- `tests/agent-e2e-mobile/AGENTS.md`
+- `tests/agent-e2e-mobile/flows/home-loads.md`
+- `tests/agent-e2e-mobile/flows/home-loads.mjs`
+- `tests/agent-e2e-mobile/lib/harness.mjs`
+- `tests/agent-e2e-mobile/README.md`
+- `tests/agent-e2e-pairing/flows/cross-network-relay.md`
+- `tests/agent-e2e-pairing/lib/device-redeem.mjs`
+- `tests/agent-e2e-pairing/lib/docker-harness.mjs`
+
 ## Out of scope
 
 Human-only or follow-up residuals (agent-doable items above are shipped):

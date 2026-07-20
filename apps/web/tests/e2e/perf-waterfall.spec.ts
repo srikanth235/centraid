@@ -137,11 +137,13 @@ async function establishSession(page: Page): Promise<void> {
   const vaultId = (control.body as { vaultId: string }).vaultId;
 
   await page.evaluate(
-    ({ apiUrl, vault, appId }) => {
-      // loadConnection prefers sessionStorage; pin control session there
-      // (same model as web-state saveConnection without rememberDevice).
+    ({ apiUrl, vault }) => {
+      // See web-pwa.spec.ts: sessionStorage wins in `loadConnection`, so the
+      // boot-time bootstrap record must go. Setting rememberDevice keeps this
+      // record durable — matching what `saveConnection` would itself write —
+      // so the reload we measure never re-fetches /web-config.json.
       sessionStorage.removeItem('centraid.web.v1.connection');
-      sessionStorage.setItem(
+      localStorage.setItem(
         'centraid.web.v1.connection',
         JSON.stringify({
           baseUrl: apiUrl,
@@ -150,30 +152,23 @@ async function establishSession(page: Page): Promise<void> {
           avatarColor: '#6f5bf6',
           vaultId: vault,
           control: true,
+          rememberDevice: true,
         }),
       );
-      localStorage.removeItem('centraid.web.v1.connection');
+      // The fixture app is published to the app store but never *installed*
+      // (no Home pin), so the shell classifies it as a DRAFT — and drafts,
+      // the builder preview, and Publish are all gated behind the
+      // `builderEnabled` dev flag (issue #434, default false). ensureInstalled()
+      // below drives exactly those builder surfaces, so opt the harness in.
       localStorage.setItem(
         'centraid.web.v1.settings',
-        JSON.stringify({ onboardingCompletedAt: new Date().toISOString() }),
+        JSON.stringify({
+          onboardingCompletedAt: new Date().toISOString(),
+          builderEnabled: true,
+        }),
       );
-      // Pin fixture on Home (builder off hides unpinned drafts — issue #434).
-      localStorage.setItem(
-        'centraid.v1.home.userApps',
-        JSON.stringify([
-          {
-            id: appId,
-            name: 'Web E2E App',
-            desc: 'Perf fixture',
-            iconKey: 'Sparkle',
-            color: '#6f5bf6',
-            colorKey: 'violet',
-          },
-        ]),
-      );
-      localStorage.setItem('centraid.v1.home.userApps.vault', JSON.stringify(vault));
     },
-    { apiUrl: API_URL, vault: vaultId, appId: APP_ID },
+    { apiUrl: API_URL, vault: vaultId },
   );
   await page.reload();
   await expect(page.locator(`[data-app-id="${APP_ID}"]`).first()).toBeVisible();
@@ -184,16 +179,16 @@ async function establishSession(page: Page): Promise<void> {
 
 // Open the installed app from Home and measure the iframe waterfall from the
 // iframe's OWN origin (cross-origin timing from the shell would read 0 bytes).
-// establishSession already pins the fixture on Home (builder-off path, #434);
-// a Home pin opens `iframe[title="app"]` directly — no builder Publish step.
-// We deliberately do NOT invoke `window.centraid.read` — the asset waterfall
-// is the subject, and the query runtime is a separate concern.
+// The very first tile click opens a builder PREVIEW; a Publish promotes it to
+// the installed `iframe[title="app"]` path a user actually re-opens. We
+// deliberately do NOT invoke `window.centraid.read` — the asset waterfall is
+// the subject, and the query runtime is a separate concern.
 async function ensureInstalled(page: Page): Promise<void> {
-  await expect(page.locator(`[data-app-id="${APP_ID}"]`).first()).toBeVisible();
-  // Smoke that the pin opens the installed app iframe, then return Home so
-  // cold open measurement starts from the shelf.
   await page.locator(`[data-app-id="${APP_ID}"] [data-testid="app-tile"]`).first().click();
-  await page.frameLocator('iframe[title="app"]').locator('#ready').waitFor({ state: 'visible' });
+  const preview = page.frameLocator('iframe[title="App preview"]');
+  await expect(preview.locator('#ready')).toHaveText('generated app ready');
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(page.getByText(/added to Home/i).first()).toBeVisible();
   await page.getByRole('button', { name: 'Home', exact: true }).click();
   await expect(page.locator(`[data-app-id="${APP_ID}"]`).first()).toBeVisible();
 }

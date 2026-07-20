@@ -196,7 +196,7 @@ export default function InsightsScreen({ summary }: InsightsBridgeProps): JSX.El
       </div>
 
       <div>
-        <div className={styles.kpis}>
+        <div className={styles.kpis} data-testid="insights-kpis">
           <StatCard
             icon={<Icon name="Activity" size={12} />}
             label="Tokens · 30 days"

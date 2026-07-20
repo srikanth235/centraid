@@ -34,12 +34,12 @@ test('boots as a PWA, establishes a cookie control session, and runs an isolated
 
   await page.evaluate(
     ({ apiUrl, vault }) => {
-      // loadConnection prefers sessionStorage over localStorage. Control
-      // sessions without rememberDevice live in sessionStorage (web-state
-      // saveConnection); writing only localStorage is ignored when a
-      // partial session entry exists or is re-written on boot.
+      // `loadConnection` reads sessionStorage BEFORE localStorage, and the
+      // boot-time /web-config.json bootstrap in main.ts writes a baseUrl-only
+      // record there (rememberDevice defaults false). Drop it, or it shadows
+      // this one across the reload and `vaultId`/`control` never land.
       sessionStorage.removeItem('centraid.web.v1.connection');
-      sessionStorage.setItem(
+      localStorage.setItem(
         'centraid.web.v1.connection',
         JSON.stringify({
           baseUrl: apiUrl,
@@ -48,31 +48,21 @@ test('boots as a PWA, establishes a cookie control session, and runs an isolated
           avatarColor: '#6f5bf6',
           vaultId: vault,
           control: true,
+          rememberDevice: true,
         }),
       );
-      localStorage.removeItem('centraid.web.v1.connection');
+      // The fixture app is published to the app store but never *installed*
+      // (no Home pin), so the shell classifies it as a DRAFT — and drafts,
+      // the builder preview, and Publish are all gated behind the
+      // `builderEnabled` dev flag (issue #434, default false). This flow
+      // exercises exactly those builder surfaces, so opt the harness in.
       localStorage.setItem(
         'centraid.web.v1.settings',
-        JSON.stringify({ onboardingCompletedAt: new Date().toISOString() }),
+        JSON.stringify({
+          onboardingCompletedAt: new Date().toISOString(),
+          builderEnabled: true,
+        }),
       );
-      // Home only renders *pinned* apps when the builder is off (issue #434):
-      // unpinned code-store rows become drafts and drafts are hidden
-      // (`builderEnabled ? drafts : NO_DRAFTS`). Seed a Home pin for the
-      // e2e fixture the same way Discover install would.
-      localStorage.setItem(
-        'centraid.v1.home.userApps',
-        JSON.stringify([
-          {
-            id: 'web-e2e',
-            name: 'Web E2E App',
-            desc: 'A browser-isolation fixture.',
-            iconKey: 'Sparkle',
-            color: '#6f5bf6',
-            colorKey: 'violet',
-          },
-        ]),
-      );
-      localStorage.setItem('centraid.v1.home.userApps.vault', JSON.stringify(vault));
     },
     { apiUrl: API_URL, vault: vaultId },
   );
@@ -99,11 +89,7 @@ test('boots as a PWA, establishes a cookie control session, and runs an isolated
     JSON.stringify(gatewayResponses, null, 2),
   ).toBeVisible();
   expect(
-    await page.evaluate(
-      () =>
-        sessionStorage.getItem('centraid.web.v1.connection') ??
-        localStorage.getItem('centraid.web.v1.connection'),
-    ),
+    await page.evaluate(() => localStorage.getItem('centraid.web.v1.connection')),
   ).not.toContain(ADMIN_TOKEN);
 
   const manifest = await page.request.get('/manifest.webmanifest');
@@ -112,10 +98,21 @@ test('boots as a PWA, establishes a cookie control session, and runs an isolated
     .poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null))
     .toBe(true);
 
-  // Pinned Home tiles open the installed app iframe (title="app"), not the
-  // builder preview (title="App preview"). Builder is off on web (#434), so
-  // the old draft→Publish dance is not the product path anymore.
   await page.locator('[data-app-id="web-e2e"] [data-testid="app-tile"]').click();
+  const preview = page.frameLocator('iframe[title="App preview"]');
+  await expect(preview.getByRole('heading', { name: 'Web E2E App' })).toBeVisible();
+  await expect(preview.locator('#ready')).toHaveText('generated app ready');
+
+  const previewPing = await preview.locator('body').evaluate(async () => {
+    return window.centraid.read({ query: 'ping', input: {} });
+  });
+  expect(previewPing).toEqual({ pong: true, surface: 'web' });
+
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(page.getByText('Already up to date — added to Home.')).toBeVisible();
+  await page.getByRole('button', { name: 'Home', exact: true }).click();
+  await expect(page.locator('[data-app-id="web-e2e"]').first()).toBeVisible();
+  await page.locator('[data-app-id="web-e2e"] [data-testid="app-tile"]').first().click();
   const app = page.frameLocator('iframe[title="app"]');
   await expect(app.getByRole('heading', { name: 'Web E2E App' })).toBeVisible();
   await expect(app.locator('#ready')).toHaveText('generated app ready');

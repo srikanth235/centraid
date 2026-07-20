@@ -9,7 +9,7 @@ import path from 'node:path';
 export const REPORT_COMMENT_MARKER = '<!-- centraid-test-health-report -->';
 /**
  * @param {object} summary - payload from generate.mjs `summary.json`
- * @param {{ reportUrl?: string, runUrl?: string, title?: string }} [meta] optional report/run URLs and title
+ * @param {{ reportUrl?: string, runUrl?: string, title?: string }} [meta] - links and heading for the rendered block
  */
 export function renderSummaryMarkdown(summary, meta = {}) {
   const s = summary && typeof summary === 'object' ? summary : {};
@@ -91,7 +91,7 @@ export function publicReportUrl({ owner, repo, slot }) {
 
 /**
  * From generate.mjs coverage rows, list scopes under their line floor.
- * @param {Array<{ scope: string, lines: number|null, lineFloor?: number|null }>} coverageRows coverage summary rows with optional floors
+ * @param {Array<{ scope: string, lines: number|null, lineFloor?: number|null }>} coverageRows - coverage rows to check
  */
 export function coverageScopesBelowFloor(coverageRows) {
   const below = [];

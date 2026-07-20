@@ -21,18 +21,20 @@
 //   2. The gateway daemon shells out to a real `git` binary
 //      (worktree-store/git.ts) on boot; node:22-bookworm-slim doesn't ship
 //      one. apt-get installed once per gateway container start.
-//   3. On at least one real Docker installation (OrbStack — see the flow
-//      .md), user-defined bridge networks do NOT isolate each other by
-//      default the way they do on a stock Linux Docker Engine (e.g. GitHub
-//      Actions' ubuntu-latest): a container on network A could dial a
-//      container on network B's IP directly. So this harness does not
-//      trust the driver's default isolation — it adds explicit
-//      DOCKER-USER DROP rules for the two networks' subnets (Docker's
-//      documented user-hook chain, evaluated before Docker's own rules)
-//      and then PROVES isolation with a real cross-network TCP probe
-//      before running the ceremony. This is redundant-but-harmless on
-//      hosts where the driver already isolates, and load-bearing on hosts
-//      (like this one) where it doesn't.
+//   3. Isolation has to be enforced on TWO paths, not one, and proven on
+//      both. The docker-internal path first: on at least one real Docker
+//      installation (OrbStack — see the flow .md) user-defined bridge
+//      networks do NOT isolate each other by default, so this harness does
+//      not trust the driver and adds explicit DOCKER-USER DROP rules for
+//      the two subnets. But that alone is NOT enough, as this flow's first
+//      run on a GitHub-hosted runner showed: both containers NAT out
+//      through the host's single public NIC, iroh's relay-observed address
+//      for the gateway is therefore the HOST's public IP, and a dial to it
+//      matches no subnet rule. So the harness also drops traffic from both
+//      test subnets to every host address (DOCKER-USER *and* INPUT — see
+//      the comment at the insert site for why both), and the pre-ceremony
+//      probe now dials BOTH paths instead of only re-testing the rule it
+//      just installed.
 
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
@@ -219,9 +221,92 @@ async function waitForGatewayReady(containerName, logFile, { timeoutMs = 90000 }
   );
 }
 
-/** Raw cross-network TCP probe — proves isolation topologically, independent of the app under test. */
-async function verifyNetworksIsolated(netA, netB) {
+/**
+ * Host IPv4 addresses a container could route to INSTEAD of the peer's
+ * docker-internal IP — the escape hatch that made this flow's first
+ * GitHub-Actions run report a direct path (see the flow .md). Enumerated at
+ * run time inside the privileged host-network helper, because the set is
+ * host-specific (an Azure runner has one public NIC address; a laptop has
+ * several).
+ *
+ * Interfaces deliberately skipped:
+ *   - `lo`: never a cross-container path.
+ *   - `docker0` / `br-*`: these ARE the bridge gateways the test networks use
+ *     as their next hop. Dropping traffic *to* them would cut the containers'
+ *     legitimate internet egress (apt-get, the n0 relays) along with the
+ *     escape hatch — and they're not an escape hatch anyway, since anything
+ *     forwarded through them toward the peer subnet is already covered by the
+ *     subnet-to-subnet rules.
+ *   - `veth*`: the host-side halves of container pairs, same reasoning.
+ */
+async function hostAddresses(fwName) {
+  const out = await sh('docker', ['exec', fwName, 'ip', '-4', '-o', 'addr', 'show']);
+  const addrs = [];
+  for (const line of out.split('\n')) {
+    // "2: eth0    inet 10.1.0.4/16 brd 10.1.255.255 scope global eth0"
+    const m = line.match(/^\d+:\s+(\S+)\s+inet\s+(\d+\.\d+\.\d+\.\d+)\//);
+    if (!m) continue;
+    const [, iface, addr] = m;
+    if (
+      iface === 'lo' ||
+      iface === 'docker0' ||
+      iface.startsWith('br-') ||
+      iface.startsWith('veth')
+    ) {
+      continue;
+    }
+    if (!addrs.includes(addr)) addrs.push(addr);
+  }
+  return addrs;
+}
+
+/** Probe script body: dial every target concurrently, report one verdict each. */
+function probeScript(targets) {
+  return `
+    const net = require('net');
+    const targets = ${JSON.stringify(targets)};
+    const results = [];
+    let pending = targets.length;
+    for (const t of targets) {
+      const s = net.createConnection({ host: t.host, port: t.port, timeout: 4000 });
+      let settled = false;
+      const done = (verdict) => {
+        if (settled) return;
+        settled = true;
+        s.destroy();
+        results.push({ label: t.label, verdict });
+        if (--pending === 0) { console.log(JSON.stringify(results)); process.exit(0); }
+      };
+      s.on('connect', () => done('REACHABLE'));
+      s.on('timeout', () => done('blocked (timeout)'));
+      s.on('error', (e) => done('blocked (' + e.code + ')'));
+    }
+  `;
+}
+
+/**
+ * Raw cross-network TCP probes — isolation proven topologically, independent
+ * of the app under test.
+ *
+ * TWO probes, because the original single probe was tautological: it dialed
+ * only the peer's docker-internal IP, which is exactly and only the traffic
+ * the subnet-to-subnet DROP rules block. It therefore re-tested the rule that
+ * had just been installed and could not observe the host-routed path that
+ * actually carried a direct connection on CI.
+ *
+ *   1. docker-internal — netB → netA container IP (the original probe).
+ *   2. host-routed — netB → each host address, at a port published from the
+ *      netA probe server. Publishing is what makes this reachable at all in
+ *      the absence of the DROP rules, so it's a strictly harder test than the
+ *      unpublished topology the ceremony itself runs on.
+ *
+ * Either probe getting through fails the flow, naming which path leaked.
+ */
+async function verifyNetworksIsolated(netA, netB, hostAddrs) {
   const probeServerName = `pairing-relay-isoprobe-${crypto.randomBytes(3).toString('hex')}`;
+  // High random port so concurrent runs on one host don't collide; `docker
+  // run` fails loudly rather than silently sharing if one is already bound.
+  const hostPort = 30000 + Math.floor(Math.random() * 20000);
   await sh('docker', [
     'run',
     '-d',
@@ -229,6 +314,8 @@ async function verifyNetworksIsolated(netA, netB) {
     probeServerName,
     '--network',
     netA,
+    '-p',
+    `${hostPort}:8080`,
     NODE_IMAGE,
     'node',
     '-e',
@@ -244,13 +331,10 @@ async function verifyNetworksIsolated(netA, netB) {
         `{{(index .NetworkSettings.Networks "${netA}").IPAddress}}`,
       ])
     ).trim();
-    const probeScript = `
-      const net = require('net');
-      const s = net.createConnection({ host: '${ip}', port: 8080, timeout: 3000 });
-      s.on('connect', () => { console.log('REACHABLE'); process.exit(1); });
-      s.on('timeout', () => { console.log('ISOLATED (timeout)'); s.destroy(); process.exit(0); });
-      s.on('error', (e) => { console.log('ISOLATED (' + e.code + ')'); process.exit(0); });
-    `;
+    const targets = [
+      { label: `docker-internal ${ip}:8080`, host: ip, port: 8080 },
+      ...hostAddrs.map((h) => ({ label: `host-routed ${h}:${hostPort}`, host: h, port: hostPort })),
+    ];
     const { code, stdout } = await run('docker', [
       'run',
       '--rm',
@@ -259,17 +343,30 @@ async function verifyNetworksIsolated(netA, netB) {
       NODE_IMAGE,
       'node',
       '-e',
-      probeScript,
+      probeScript(targets),
     ]);
-    if (code !== 0 || !stdout.includes('ISOLATED')) {
+    let results;
+    try {
+      results = JSON.parse(stdout.trim().split('\n').at(-1) ?? '');
+    } catch {
       throw new Error(
-        `network isolation NOT confirmed: a container on ${netB} reached ${netA}'s container ` +
-          `IP (${ip}) directly — probe said "${stdout.trim()}". The DOCKER-USER DROP rules ` +
-          `didn't take effect; refusing to proceed since the flow's relay-path proof would be ` +
-          `meaningless on a topology that isn't actually isolated.`,
+        `isolation probe container printed no verdict JSON (exit ${code}): ${stdout.trim()}`,
       );
     }
-    return stdout.trim();
+    const leaked = results.filter((r) => r.verdict === 'REACHABLE');
+    if (leaked.length > 0) {
+      throw new Error(
+        `network isolation NOT confirmed: a container on ${netB} reached ${netA} via ` +
+          `${leaked.map((r) => r.label).join(', ')}. The DOCKER-USER/INPUT DROP rules didn't ` +
+          `take effect on ${leaked.length === results.length ? 'any' : 'that'} path; refusing ` +
+          `to proceed since the flow's relay-path proof would be meaningless on a topology ` +
+          `that isn't actually isolated.`,
+      );
+    }
+    // Honest status: the per-target reason is preserved rather than flattened
+    // to a single word, so "blocked (timeout)" and "blocked (ECONNREFUSED)"
+    // stay distinguishable in the log and the verdict file.
+    return `ISOLATED — ${results.map((r) => `${r.label}: ${r.verdict}`).join('; ')}`;
   } finally {
     await shQuiet('docker', ['rm', '-f', probeServerName]);
   }
@@ -358,44 +455,60 @@ export async function runFlow(slug, fn) {
       fwName,
       'bash',
       '-c',
-      'apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq iptables >/dev/null 2>&1',
+      'apt-get update -qq >/dev/null 2>&1 && ' +
+        'apt-get install -y -qq iptables iproute2 >/dev/null 2>&1',
     ]);
-    const insertRule = async (src, dst) => {
-      const deleteArgs = [
-        'exec',
-        fwName,
-        'iptables',
-        '-D',
-        'DOCKER-USER',
-        '-s',
-        src,
-        '-d',
-        dst,
-        '-j',
-        'DROP',
-      ];
-      await sh('docker', [
-        'exec',
-        fwName,
-        'iptables',
-        '-I',
-        'DOCKER-USER',
-        '-s',
-        src,
-        '-d',
-        dst,
-        '-j',
-        'DROP',
-      ]);
-      // Recorded immediately after THIS insert succeeds, not after both —
-      // so a throw on the second insert still leaves the first one queued
-      // for teardown.
+    const insertRule = async (chain, src, dst) => {
+      const match = ['-s', src, '-d', dst, '-j', 'DROP'];
+      const deleteArgs = ['exec', fwName, 'iptables', '-D', chain, ...match];
+      await sh('docker', ['exec', fwName, 'iptables', '-I', chain, ...match]);
+      // Recorded immediately after THIS insert succeeds, not after all of
+      // them — so a throw partway through still leaves everything that
+      // landed queued for teardown.
       firewallRulesInserted.push(deleteArgs);
     };
-    await insertRule(state.subnetA, state.subnetB);
-    await insertRule(state.subnetB, state.subnetA);
+    // (a) Peer-subnet rules: the docker-internal path. DOCKER-USER is
+    // Docker's documented hook chain for user firewall rules, evaluated
+    // before Docker's own bridge rules, so this holds regardless of whether
+    // the driver's own default isolation does.
+    await insertRule('DOCKER-USER', state.subnetA, state.subnetB);
+    await insertRule('DOCKER-USER', state.subnetB, state.subnetA);
 
-    const isolationVerdict = await verifyNetworksIsolated(netA, netB);
+    // (b) Host-address rules: the escape hatch that made this flow's first
+    // run on a GitHub-hosted runner select a DIRECT path despite (a) being
+    // in force. Both containers NAT out through the host's single public
+    // NIC, so iroh's relay-observed public address for the gateway is the
+    // HOST's public IP — a destination (a) doesn't match, since it isn't in
+    // either test subnet.
+    //
+    // Installed into BOTH chains on purpose, because a packet a container
+    // sends to a host address has two possible fates and only one of them
+    // reaches DOCKER-USER:
+    //   - un-NAT'd/hairpinned back toward a container → routed as FORWARD →
+    //     DOCKER-USER (and, with the destination already rewritten to the
+    //     peer's container IP by then, (a) catches it too);
+    //   - delivered to the host itself → routed as INPUT, which DOCKER-USER
+    //     never sees. Hence the INPUT copy.
+    // Between them the two chains cover both outcomes by construction rather
+    // than by assuming which one a given host's netfilter path produces.
+    // No `-p`, so TCP and UDP (i.e. QUIC) alike.
+    const hostAddrs = await hostAddresses(fwName);
+    if (hostAddrs.length === 0) {
+      throw new Error(
+        'no non-loopback, non-bridge host IPv4 address found — cannot install the ' +
+          'host-routed isolation rules, and without them a direct path can survive ' +
+          'the subnet rules (see flows/cross-network-relay.md)',
+      );
+    }
+    for (const hostAddr of hostAddrs) {
+      for (const subnet of [state.subnetA, state.subnetB]) {
+        await insertRule('DOCKER-USER', subnet, hostAddr);
+        await insertRule('INPUT', subnet, hostAddr);
+      }
+    }
+    console.log(`  hostaddr: DROP ${hostAddrs.join(', ')} from both test subnets`);
+
+    const isolationVerdict = await verifyNetworksIsolated(netA, netB, hostAddrs);
     notes.push(`network isolation verified before ceremony: ${isolationVerdict}`);
     console.log(`  isolate : ${isolationVerdict}`);
 
@@ -539,8 +652,11 @@ export async function runFlow(slug, fn) {
       await shQuiet('docker', ['rm', '-f', name]);
     }
     // Remove exactly whatever was actually inserted, regardless of where in
-    // setup a failure happened — each entry is independent, so a crash
-    // between the two `-I`s above still tears down the one that landed.
+    // setup a failure happened — each entry is independent and carries its
+    // own chain, so a crash partway through the (a)/(b) rule sets above
+    // still tears down every rule that landed. These live in the HOST's real
+    // netfilter tables; leaking one would silently affect later jobs on the
+    // same runner.
     for (const deleteArgs of firewallRulesInserted) {
       await shQuiet('docker', deleteArgs);
     }
