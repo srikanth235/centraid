@@ -47,11 +47,14 @@ export const APP_ID = 'dev.centraid.mobile';
 export const FIRST_LAUNCH_TIMEOUT_MS = 120_000;
 
 /**
- * The first `inputText` on a freshly-booted simulator raises iOS's multilingual
+ * The first keystroke on a freshly-booted simulator raises iOS's multilingual
  * keyboard onboarding sheet ("Type English and Dutch … Continue"). It covers the
  * bottom of the screen — including the tab bar — so every subsequent tap silently
- * lands on the sheet instead. CI boots a clean simulator each run, so it hits
- * this every time. Dismiss it if it showed up; do nothing if it didn't.
+ * lands on the sheet instead, and any keystrokes typed while it animates in are
+ * swallowed (that is what corrupts text fields — see configureGateway). CI boots
+ * a clean simulator each run, so it hits this every time. Dismiss it if it showed
+ * up; do nothing if it didn't. Provoke it with a throwaway keystroke FIRST so its
+ * appearance is deterministic rather than racing the real input.
  */
 export const DISMISS_KEYBOARD_ONBOARDING = `- runFlow:
     when:
@@ -380,8 +383,26 @@ ${DISMISS_KEYBOARD_ONBOARDING}`
 - tapOn:
     text: "http://127.0.0.1:18789"
     below: "Dev fallback for simulators.*"
+# The multilingual-keyboard onboarding sheet is a one-time, per-boot modal that
+# iOS raises on the first keystroke and which silently swallows the ones after
+# it. Dismissing it AFTER typing the URL — as this flow used to — is a race: on
+# ci run 29773028739 it appeared mid-input and corrupted the gateway URL to
+# "h7.0.0.1:18789" (the app then redboxed on the malformed address and the Save
+# assertion below failed for an unrelated-looking reason). Force it up with one
+# throwaway keystroke, dismiss it, then erase and type into a settled keyboard.
+# If the sheet never appears (a sim that was already onboarded), the dismiss is a
+# no-op and the erase clears the throwaway — so this is safe either way.
+- inputText: "x"
+${DISMISS_KEYBOARD_ONBOARDING}- eraseText
 - inputText: ${JSON.stringify(gatewayUrl)}
-${DISMISS_KEYBOARD_ONBOARDING}${tokenSteps}- hideKeyboard
+# Prove the field actually holds the URL before Save, anchored below the help
+# paragraph so it checks the INPUT, not the paragraph that quotes the same URL.
+# A dropped keystroke fails here, at the field, instead of as a redbox two steps
+# on.
+- assertVisible:
+    text: ${JSON.stringify(gatewayUrl)}
+    below: "Dev fallback for simulators.*"
+${tokenSteps}- hideKeyboard
 - tapOn: "Save"
 - extendedWaitUntil:
     visible: "Everything you build, in one place."
