@@ -34,6 +34,11 @@ test('boots as a PWA, establishes a cookie control session, and runs an isolated
 
   await page.evaluate(
     ({ apiUrl, vault }) => {
+      // `loadConnection` reads sessionStorage BEFORE localStorage, and the
+      // boot-time /web-config.json bootstrap in main.ts writes a baseUrl-only
+      // record there (rememberDevice defaults false). Drop it, or it shadows
+      // this one across the reload and `vaultId`/`control` never land.
+      sessionStorage.removeItem('centraid.web.v1.connection');
       localStorage.setItem(
         'centraid.web.v1.connection',
         JSON.stringify({
@@ -43,11 +48,20 @@ test('boots as a PWA, establishes a cookie control session, and runs an isolated
           avatarColor: '#6f5bf6',
           vaultId: vault,
           control: true,
+          rememberDevice: true,
         }),
       );
+      // The fixture app is published to the app store but never *installed*
+      // (no Home pin), so the shell classifies it as a DRAFT — and drafts,
+      // the builder preview, and Publish are all gated behind the
+      // `builderEnabled` dev flag (issue #434, default false). This flow
+      // exercises exactly those builder surfaces, so opt the harness in.
       localStorage.setItem(
         'centraid.web.v1.settings',
-        JSON.stringify({ onboardingCompletedAt: new Date().toISOString() }),
+        JSON.stringify({
+          onboardingCompletedAt: new Date().toISOString(),
+          builderEnabled: true,
+        }),
       );
     },
     { apiUrl: API_URL, vault: vaultId },

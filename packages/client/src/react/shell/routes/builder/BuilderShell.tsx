@@ -180,6 +180,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
       <button
         type="button"
         className={cx(buttonCss.btn, buttonCss.primary, styles.tlPublish)}
+        data-testid="builder-publish"
         data-kind={vm.primaryKind}
         disabled={vm.primaryDisabled}
         onClick={vm.handlePrimary}
@@ -312,7 +313,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
       titlebarRight={titlebarRight}
     >
       <div className={styles.builder} data-chat={chatVisible ? 'open' : 'closed'}>
-        <div className={styles.builderBody}>
+        <div className={styles.builderBody} data-testid="builder-body">
           <div className={styles.chatPane}>
             <BuilderChatPane
               onReady={(u) => vm.registerChatUpdater(u)}
@@ -337,7 +338,9 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
           </div>
           <div className={rightPaneClass}>
             {rbToolbar}
-            <div className={styles.rightPaneContent}>{pane}</div>
+            <div className={styles.rightPaneContent} data-testid="builder-right-pane">
+              {pane}
+            </div>
           </div>
         </div>
       </div>

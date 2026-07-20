@@ -1,3 +1,9 @@
+// governance: allow-repo-hygiene file-size-limit (#474) this generator was
+// already at 498/500 before the durable-history reader landed, so any addition
+// trips the cap; the report is one model built in a single pass and then
+// rendered, and splitting the reader from the model it feeds would scatter the
+// evidence-collection vocabulary across files without making either half
+// independently testable. Worth a real decomposition, but not inside a CI fix.
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -39,6 +45,13 @@ const playwright = await readPlaywright(
 const e2e = await readLane(path.resolve(flags.e2e ?? path.join(root, 'artifacts/e2e')));
 const perf = await readLane(path.resolve(flags.perf ?? path.join(root, 'artifacts/perf')));
 const scale = await readLane(path.resolve(flags.scale ?? path.join(root, 'artifacts/scale')));
+// Durable, gh-pages-committed summary series. Preferred trend source because it
+// survives the 7-day/10GB eviction of the `quality-history-` Actions cache that
+// feeds artifacts/perf and artifacts/scale.
+const durableHistory = await readDurableHistory(
+  path.resolve(flags.history ?? path.join(root, 'artifacts/report-history')),
+  Number(flags['history-limit'] ?? 30) || 30,
+);
 
 const evidence = collectEvidence(vitest, playwright, e2e, perf, scale, {
   laneMarkers,
@@ -78,6 +91,7 @@ const model = {
   packageRuntime: packageRuntime(vitestFiles),
   laneResults,
   summary,
+  healthHistory: [...durableHistory, historyPoint({ label: 'this run', ...summary })],
   validationErrors: validation.errors,
 };
 
@@ -129,6 +143,48 @@ async function readLane(directory) {
   } catch {
     return [];
   }
+}
+
+/**
+ * Read the append-only summary series published to gh-pages
+ * (`test-report/history/`). Accepts the directory, its `index.json`, or a bare
+ * directory of `<slug>.json` records. Returns oldest-first points.
+ */
+async function readDurableHistory(target, limit) {
+  const index = await readJson(
+    target.endsWith('.json') ? target : path.join(target, 'index.json'),
+    null,
+  );
+  let records = Array.isArray(index?.entries) ? index.entries : null;
+  if (!records) {
+    const files = (await readdir(target).catch(() => []))
+      .filter((file) => file.endsWith('.json') && file !== 'index.json')
+      .sort();
+    records = (
+      await Promise.all(files.map((file) => readJson(path.join(target, file), null)))
+    ).filter(Boolean);
+  }
+  const points = records
+    .map((record) =>
+      historyPoint({ label: record.slug ?? record.date, ...record.summary, ...record }),
+    )
+    .filter((point) => point.label);
+  points.sort((a, b) => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
+  return points.slice(Math.max(0, points.length - limit));
+}
+
+function historyPoint(record) {
+  const numeric = (value) =>
+    value == null || value === '' || !Number.isFinite(Number(value)) ? null : Number(value);
+  return {
+    label: String(record.label ?? ''),
+    passed: numeric(record.passed),
+    failed: numeric(record.failed),
+    stale: numeric(record.stale),
+    cellsFailed: numeric(record.cellsFailed),
+    cellsMissing: numeric(record.cellsMissing),
+    unhandledErrors: numeric(record.unhandledErrors),
+  };
 }
 
 async function readPlaywright(target) {
@@ -453,7 +509,24 @@ function render(model) {
         )
         .join('')
     : '<tr><td colspan="5" class="muted">No Vitest timing evidence found</td></tr>';
-  const trends = model.laneResults.length
+  // Prefer the durable gh-pages series; lane artifacts remain as the fallback
+  // (and as per-owner detail) so a first run with no series still renders.
+  const durableSeries = model.healthHistory ?? [];
+  const durableTrends =
+    durableSeries.length > 1
+      ? [
+          ['evidence passed', 'passed'],
+          ['evidence failed', 'failed'],
+          ['cells not run', 'cellsMissing'],
+          ['stale owners', 'stale'],
+        ]
+          .map(
+            ([label, key]) =>
+              `<article class="trend"><div><strong>${escapeHtml(label)}</strong><small>durable series · ${durableSeries.length} runs · latest ${escapeHtml(String(durableSeries.at(-1)?.[key] ?? '—'))}</small></div>${trendSvg(durableSeries.map((point) => point[key]))}</article>`,
+          )
+          .join('')
+      : '';
+  const laneTrends = model.laneResults.length
     ? model.laneResults
         .map(
           (result) =>
@@ -461,6 +534,7 @@ function render(model) {
         )
         .join('')
     : '<p class="empty">Perf and scale results are missing. The lane stays visible until nightly evidence arrives.</p>';
+  const trends = `${durableTrends}${laneTrends}`;
 
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">

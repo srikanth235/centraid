@@ -95,6 +95,7 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps):
   return (
     <div
       className={styles.view}
+      data-testid="onboarding-view"
       data-mounted="true"
       style={{ '--onb-accent': avatarColor } as CSSProperties}
     >

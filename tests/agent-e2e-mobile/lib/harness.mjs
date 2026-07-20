@@ -224,7 +224,7 @@ async function runMaestroChunk(yaml, { state, label }) {
  *       appId: com.centraid.mobile
  *       ---
  *       - launchApp: { clearState: true }
- *       - extendedWaitUntil: { visible: { text: "Open Settings" }, timeout: 30000 }
+ *       - extendedWaitUntil: { visible: { text: "Connect your desktop" }, timeout: 30000 }
  *       - takeScreenshot: 01-home-fresh
  *     `);
  *     ctx.note('home rendered in no-gateway state');
@@ -296,9 +296,9 @@ export async function runFlow(slug, fn) {
     clearState: true
 - extendedWaitUntil:
     visible:
-      text: "Pair with your desktop"
+      text: "Connect your desktop"
     timeout: 30000
-- tapOn: "Open Settings"
+- tapOn: "Pair desktop"
 - extendedWaitUntil:
     visible: "Settings"
     timeout: 10000

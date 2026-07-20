@@ -50,13 +50,21 @@ function FleetRow({
   onOpen: (ref: string) => void;
 }): JSX.Element {
   return (
-    <button type="button" className={styles.row} data-hue={row.hue} onClick={() => onOpen(row.ref)}>
+    <button
+      type="button"
+      className={styles.row}
+      data-hue={row.hue}
+      data-testid="automation-row"
+      onClick={() => onOpen(row.ref)}
+    >
       <span className={au.auGlyph} data-hue={row.hue} data-size="sm" aria-hidden="true">
         <Icon name={row.glyphIcon as IconName} size={16} />
       </span>
       <span className={styles.rowMain}>
         <span className={styles.rowNameLine}>
-          <span className={styles.rowName}>{row.name}</span>
+          <span className={styles.rowName} data-testid="automation-row-name">
+            {row.name}
+          </span>
           <StatusPill kind={row.statusKind} label={row.statusLabel} />
         </span>
         <span className={styles.rowMeta}>
@@ -240,7 +248,7 @@ export default function AutomationsOverviewScreen({
 
   if (state === 'error') {
     return (
-      <div className={styles.error}>
+      <div className={styles.error} data-testid="automations-error">
         <div className={styles.errorIcon} aria-hidden="true">
           <Icon name="AlertCircle" size={22} />
         </div>
@@ -273,7 +281,7 @@ export default function AutomationsOverviewScreen({
   const runGroups = groupRuns(recentRuns);
 
   return (
-    <div className={styles.page}>
+    <div className={styles.page} data-testid="automations-overview">
       <header className={styles.head}>
         <div className={styles.headText}>
           <h1 className={styles.title}>Automations</h1>

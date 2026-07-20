@@ -121,8 +121,8 @@ workspaces like desktop's `userData`.
   that. Coordinates rot the moment a layout changes.
 - **Anchor with regex when you need exact text.** `tapOn: "Settings"`
   matches both the Home header gear icon (accessibility text
-  "Settings") AND the "Open Settings" / "Check Settings" body
-  buttons. Use `tapOn: { text: "^Settings$" }` to isolate the gear.
+  "Settings") AND the "Check settings" body button. Use
+  `tapOn: { text: "^Settings$" }` to isolate the gear.
 - **Pre-flight checks are part of `setup()`.** The harness already
   fails loudly when no sim is booted, Centraid.app isn't installed,
   or Metro isn't reachable. Don't paper over those in a flow — fix

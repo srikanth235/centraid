@@ -91,6 +91,7 @@ function ToolGroup({
   return (
     <div
       className={tgCss.group}
+      data-testid="tool-group"
       data-open={String(m.open)}
       data-running={String(m.running)}
       data-error={String(m.error)}
@@ -195,7 +196,7 @@ function Message({
           <span className={styles.msgAiAvatar}>
             <Icon name="Sparkle" size={11} />
           </span>
-          <div className={chatCss.aiText}>
+          <div className={chatCss.aiText} data-testid="builder-ai-text">
             {m.paras.map((p, i) => (
               <p key={i}>{p}</p>
             ))}
@@ -335,7 +336,7 @@ export default function BuilderChatPane({
 
   return (
     <div className={styles.chatBody}>
-      <div className={chatCss.scroll} ref={scrollRef}>
+      <div className={chatCss.scroll} ref={scrollRef} data-testid="builder-chat-scroll">
         {snap.messages.map((m, i) => (
           <Message key={i} m={m} onToggleGroup={onToggleGroup} />
         ))}

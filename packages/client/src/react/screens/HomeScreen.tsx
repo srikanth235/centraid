@@ -294,7 +294,7 @@ function EmptyState({
               : 'Install an app or automation from Discover to get started.',
           ];
   return (
-    <div className={styles.shelfEmpty}>
+    <div className={styles.shelfEmpty} data-testid="shelf-empty">
       <div className={styles.shelfEmptyIcon}>
         <Icon name={icon} size={20} />
       </div>
@@ -369,6 +369,7 @@ export default function HomeScreen({
               <textarea
                 ref={taRef}
                 className={styles.composerInput}
+                data-testid="home-composer"
                 placeholder="Describe an app you want — a habit tracker, a journal, a tiny tool…"
                 rows={2}
                 value={prompt}
@@ -511,7 +512,11 @@ export default function HomeScreen({
           {cardCount === 0 ? (
             <EmptyState kind={kind} builderEnabled={builderEnabled} />
           ) : (
-            <div className={cx(styles.appsGrid, styles.appsGridSmall)} data-layout={layout}>
+            <div
+              className={cx(styles.appsGrid, styles.appsGridSmall)}
+              data-layout={layout}
+              data-testid="apps-grid"
+            >
               {showApps
                 ? appItems.map((a) => (
                     <AppCard

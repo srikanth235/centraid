@@ -111,7 +111,7 @@ await runFlow('my-flow', async (ctx) => {
 ---
 - launchApp: { clearState: true }
 - extendedWaitUntil:
-    visible: { text: "Open Settings" }
+    visible: { text: "Connect your desktop" }
     timeout: 30000
 - takeScreenshot: home
 `, 'home');
