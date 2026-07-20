@@ -256,9 +256,21 @@ jobs:
       # change forces a rebuild. No `restore-keys`: a partial-match fallback is
       # exactly the stale-binary false-pass this must never allow — the key is
       # all-or-nothing.
+      #
+      # restore + save are SPLIT rather than the one-step `actions/cache`, because
+      # that action declares `post-if: success()` — it saves only when the whole
+      # job succeeded. On a lane that is currently red that means the cache never
+      # populates, so the 32-minute build is paid on every run and the warm path
+      # is unreachable until the very greenness the cache is meant to help
+      # deliver. Observed exactly that in runs 29762312605 and 29765712825: the
+      # post step reported `skipped` and the native build ran full-length both
+      # times. The save below runs `if: always()`, so a red run still banks the
+      # binary it built. That is safe because the key is content-addressed: the
+      # artifact is the product of those inputs whether or not a later Maestro
+      # flow passed.
       - name: Restore the built iOS app
         id: ios_app
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/centraid-mobile-e2e
           key: ios-app-${{ runner.os }}-${{ steps.native.outputs.hash }}
@@ -272,6 +284,7 @@ jobs:
       # cache is empty then. It would fail on the second native change, which is
       # exactly the path a pods cache exists to serve.
       - name: Build and install the mobile development app
+        id: ios_build
         if: steps.ios_app.outputs.cache-hit != 'true'
         working-directory: apps/mobile
         run: |
@@ -287,6 +300,18 @@ jobs:
           mkdir -p ~/.cache/centraid-mobile-e2e
           # -R preserves the bundle's symlinks/permissions.
           cp -R "$app" ~/.cache/centraid-mobile-e2e/Centraid.app
+          # Signals the save step below that there is a real bundle to bank.
+          echo 'built=true' >> "$GITHUB_OUTPUT"
+      # Banked even when a later step fails — see the note on the restore step.
+      # Guarded on the build having actually run and produced a bundle, so a
+      # cache-hit run does not re-save what it just restored, and a run that
+      # died before the build cannot cache an empty directory.
+      - name: Save the built iOS app
+        if: always() && steps.ios_build.outputs.built == 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/centraid-mobile-e2e
+          key: ios-app-${{ runner.os }}-${{ steps.native.outputs.hash }}
       - name: Install the cached mobile development app
         if: steps.ios_app.outputs.cache-hit == 'true'
         run: |

@@ -368,6 +368,15 @@ ${DISMISS_KEYBOARD_ONBOARDING}`
 - extendedWaitUntil:
     visible: "Gateway URL"
     timeout: 10000
+# This literal is the field's PLACEHOLDER, not the URL being configured — the
+# input is empty after clearState, and an empty TextInput exposes only its
+# placeholder as matchable text. It must therefore stay byte-equal to
+# placeholder="http://127.0.0.1:18789" in apps/mobile/src/screens/Settings.tsx,
+# even when this flow configures a DIFFERENT gateway (a port already in use
+# locally is the common case). The below: anchor is load-bearing too: the help
+# paragraph above quotes the same URL, and matching it instead used to type the
+# address into nothing. The durable fix is an accessibilityLabel on that
+# TextInput so this can select the field by name — see #482.
 - tapOn:
     text: "http://127.0.0.1:18789"
     below: "Dev fallback for simulators.*"

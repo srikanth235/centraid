@@ -45,12 +45,26 @@ async function gw(pathname, init = {}) {
   return text ? JSON.parse(text) : undefined;
 }
 
+// Apps the mobile shell implements NATIVELY rather than as a WebView. Home
+// filters these out of the remote app list (`NATIVE_APPS` in
+// apps/mobile/src/screens/Home.tsx) and `openApp` navigates to a native screen
+// for each, so there is no web document to assert against — this gate's whole
+// premise ("the template's own <h1> rendered inside the WebView") does not
+// apply to them. They are excluded here rather than asserted loosely: a gate
+// that cannot fail is worse than one that does not run.
+//
+// Keep in sync with NATIVE_APPS. The sync is manual because that list lives in
+// TSX the flow cannot import; the cost of drift is a WebView app silently going
+// ungated, so treat this list as load-bearing.
+const NATIVE_ON_MOBILE = new Set(['photos', 'docs', 'agenda']);
+
 // UI templates only — automations have no index.html to open on the phone.
 async function uiTemplates() {
   const raw = await readFile(path.join(REPO_ROOT, 'packages', 'blueprints', 'index.json'), 'utf8');
   const index = JSON.parse(raw);
   return index.templates
     .filter((t) => (t.kind ?? 'app') === 'app')
+    .filter((t) => !NATIVE_ON_MOBILE.has(t.id))
     .filter((t) => ONLY.length === 0 || ONLY.includes(t.id));
 }
 
@@ -125,6 +139,18 @@ await runFlow('template-gate', async (ctx) => {
       try {
         // Relaunch per template: React Navigation state isn't persisted, so
         // a fresh launch always lands on Home (and Home re-fetches on focus).
+        //
+        // The tile is selected by its accessibility label, "Open <name>", not
+        // by the tile's own title text. The card is a Pressable carrying
+        // `accessibilityRole="button"` + `accessibilityLabel={`Open ${name}`}`
+        // (apps/mobile/src/screens/Home.tsx), which makes it a single
+        // accessibility element on iOS and collapses its children — so the
+        // inner <Text>{name}</Text> is not exposed as its own node. Matching
+        // the raw title failed with `ElementNotFound: Text matching regex:
+        // Tasks` for all five WebView apps in ci run 29765712825, while the
+        // screenshot plainly showed the tile. The label is what the product
+        // deliberately publishes as this control's accessible name, so it is
+        // the honest thing to drive.
         await ctx.run(
           `appId: ${APP_ID}
 ---
@@ -137,10 +163,10 @@ await runFlow('template-gate', async (ctx) => {
     timeout: 30000
 - scrollUntilVisible:
     element:
-      text: "${c.appName}"
+      text: "Open ${c.appName}"
     direction: DOWN
 - tapOn:
-    text: "${c.appName}"
+    text: "Open ${c.appName}"
 - extendedWaitUntil:
     visible:
       text: "${webMarker}"
