@@ -18,7 +18,7 @@
     "dev:web": "turbo run dev --filter=@centraid/web",
     "build": "turbo run build",
     "test": "turbo run test && node scripts/test-report/report-floors.mjs",
-    "coverage": "node scripts/test-report/prepare.mjs --lane vitest && node node_modules/vitest/vitest.mjs run --coverage --reporter=default --reporter=json --outputFile=artifacts/test-results/vitest.json",
+    "coverage": "bun run --cwd packages/blueprints vendor:assets && node scripts/test-report/prepare.mjs --lane vitest && node node_modules/vitest/vitest.mjs run --coverage --reporter=default --reporter=json --outputFile=artifacts/test-results/vitest.json",
     "test:matrix": "node scripts/test-report/validate-matrix.mjs && node scripts/test-report/validate-nightly-wiring.mjs",
     "test:perf": "node scripts/test-report/prepare.mjs --lane perf && node node_modules/vitest/vitest.mjs run --config vitest.perf.config.ts",
     "test:scale": "node scripts/test-report/prepare.mjs --lane scale && node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts",

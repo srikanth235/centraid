@@ -23,12 +23,15 @@ dependencies {
   // (Endpoint, Connection, …) so assembleDebug / CI can typecheck without the
   // gitignored cargo-ndk tree (issue #468 J8).
   //
-  // Runtime on device: the Maven jar is desktop-JVM-native (JNA resources for
-  // darwin/linux/win32 only — no Android ABI `.so`). For a *running* tunnel on
-  // phone, still place the cargo-ndk `libiroh_ffi.so` + optional generated
-  // sources under src/main/jniLibs and java/computer/iroh as documented in
-  // ../README.md. TunnelWire.kt is the only file that touches this API.
-  implementation 'computer.iroh:iroh:1.0.0'
+  // Exclude its transitive JNA *jar* — we pin the Android `@aar` below so
+  // checkDebugDuplicateClasses does not see jna-jar + jna-aar together.
+  //
+  // Runtime on device: the Maven jar is desktop-JVM-native (no Android ABI
+  // `.so`). For a *running* tunnel on phone, still place the cargo-ndk
+  // `libiroh_ffi.so` under src/main/jniLibs as documented in ../README.md.
+  implementation('computer.iroh:iroh:1.0.0') {
+    exclude group: 'net.java.dev.jna', module: 'jna'
+  }
   implementation 'net.java.dev.jna:jna:5.15.0@aar'
   implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0'
 

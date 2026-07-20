@@ -371,6 +371,8 @@ GitHub issue: [#468](https://github.com/srikanth235/centraid/issues/468)
 - **static typecheck:** turbo typecheck builds `@centraid/web` without the verify-job wasm toolchain; re-tracked `centraid_web_iroh_bg.wasm` so ensure-iroh skips (ARCHITECTURE checked-in binding; ensure still rebuilds if deleted).
 - **mobile assemble:** after Expo config fixed, Kotlin failed on missing gitignored `computer.iroh` sources; compile-time Maven `computer.iroh:iroh:1.0.0` for API types (device runtime still needs cargo-ndk `.so` per README).
 - **web-e2e:** tests wrote control session only to localStorage; `loadConnection` prefers sessionStorage — pin session there.
+- **verify coverage:** blueprints kit (`blob-format.js`, pdfjs) is gitignored and not in turbo build outputs; cache/restore left kit missing mid-suite. turbo outputs + `coverage` re-runs `vendor:assets`.
+- **mobile JNA:** iroh Maven pulls jna.jar; we already had jna@aar → checkDebugDuplicateClasses; exclude transitive jna from iroh.
 
 
 Root causes and fixes for the red PR gates after the shipping surface landed:
@@ -397,6 +399,8 @@ Files:
 - `apps/web/tests/e2e/web-pwa.spec.ts`
 - `apps/web/tests/e2e/perf-waterfall.spec.ts`
 - `.gitignore`
+- `turbo.json`
+- `package.json` (coverage vendor:assets)
 
 ## Out of scope
 
