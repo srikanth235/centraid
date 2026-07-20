@@ -368,6 +368,10 @@ GitHub issue: [#468](https://github.com/srikanth235/centraid/issues/468)
 - `scripts/test-report/write-job-summary.mjs`
 
 ### CI green follow-up (PR #469 reds)
+- **static typecheck:** turbo typecheck builds `@centraid/web` without the verify-job wasm toolchain; re-tracked `centraid_web_iroh_bg.wasm` so ensure-iroh skips (ARCHITECTURE checked-in binding; ensure still rebuilds if deleted).
+- **mobile assemble:** after Expo config fixed, Kotlin failed on missing gitignored `computer.iroh` sources; compile-time Maven `computer.iroh:iroh:1.0.0` for API types (device runtime still needs cargo-ndk `.so` per README).
+- **web-e2e:** tests wrote control session only to localStorage; `loadConnection` prefers sessionStorage — pin session there.
+
 
 Root causes and fixes for the red PR gates after the shipping surface landed:
 
@@ -388,6 +392,11 @@ Files:
 - `apps/mobile/src/version-core.ts`
 - `apps/web/scripts/stamp-sw-version.mjs`
 - `scripts/test-report/write-job-summary.mjs`
+- `apps/web/src/generated/centraid_web_iroh_bg.wasm`
+- `apps/mobile/modules/centraid-tunnel/android/build.gradle`
+- `apps/web/tests/e2e/web-pwa.spec.ts`
+- `apps/web/tests/e2e/perf-waterfall.spec.ts`
+- `.gitignore`
 
 ## Out of scope
 

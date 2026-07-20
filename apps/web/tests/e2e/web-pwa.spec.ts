@@ -34,7 +34,12 @@ test('boots as a PWA, establishes a cookie control session, and runs an isolated
 
   await page.evaluate(
     ({ apiUrl, vault }) => {
-      localStorage.setItem(
+      // loadConnection prefers sessionStorage over localStorage. Control
+      // sessions without rememberDevice live in sessionStorage (web-state
+      // saveConnection); writing only localStorage is ignored when a
+      // partial session entry exists or is re-written on boot.
+      sessionStorage.removeItem('centraid.web.v1.connection');
+      sessionStorage.setItem(
         'centraid.web.v1.connection',
         JSON.stringify({
           baseUrl: apiUrl,
@@ -45,6 +50,7 @@ test('boots as a PWA, establishes a cookie control session, and runs an isolated
           control: true,
         }),
       );
+      localStorage.removeItem('centraid.web.v1.connection');
       localStorage.setItem(
         'centraid.web.v1.settings',
         JSON.stringify({ onboardingCompletedAt: new Date().toISOString() }),
@@ -75,7 +81,11 @@ test('boots as a PWA, establishes a cookie control session, and runs an isolated
     JSON.stringify(gatewayResponses, null, 2),
   ).toBeVisible();
   expect(
-    await page.evaluate(() => localStorage.getItem('centraid.web.v1.connection')),
+    await page.evaluate(
+      () =>
+        sessionStorage.getItem('centraid.web.v1.connection') ??
+        localStorage.getItem('centraid.web.v1.connection'),
+    ),
   ).not.toContain(ADMIN_TOKEN);
 
   const manifest = await page.request.get('/manifest.webmanifest');

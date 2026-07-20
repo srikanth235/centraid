@@ -138,7 +138,10 @@ async function establishSession(page: Page): Promise<void> {
 
   await page.evaluate(
     ({ apiUrl, vault }) => {
-      localStorage.setItem(
+      // loadConnection prefers sessionStorage; pin control session there
+      // (same model as web-state saveConnection without rememberDevice).
+      sessionStorage.removeItem('centraid.web.v1.connection');
+      sessionStorage.setItem(
         'centraid.web.v1.connection',
         JSON.stringify({
           baseUrl: apiUrl,
@@ -149,6 +152,7 @@ async function establishSession(page: Page): Promise<void> {
           control: true,
         }),
       );
+      localStorage.removeItem('centraid.web.v1.connection');
       localStorage.setItem(
         'centraid.web.v1.settings',
         JSON.stringify({ onboardingCompletedAt: new Date().toISOString() }),
