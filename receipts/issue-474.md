@@ -29,6 +29,8 @@
 | claude-code-3cef613e-dec-1784552152-1 | claude-code | 3cef613e-dece-4259-ba2b-7e6f173aea56 | #474 | claude-opus-4-8 | 6 | 3153 | 831024 | 4974 | 8133 | 0.5596 | 1276 | 1169723 | 129867965 | 452792 |  |
 | claude-code-3cef613e-dec-1784558232-1 | claude-code | 3cef613e-dece-4259-ba2b-7e6f173aea56 | #474 | claude-opus-4-8 | 161 | 100122 | 26147690 | 64281 | 164564 | 15.3074 | 1437 | 1269845 | 156015655 | 517073 |  |
 | claude-code-3cef613e-dec-1784558286-1 | claude-code | 3cef613e-dece-4259-ba2b-7e6f173aea56 | #474 | claude-opus-4-8 | 6 | 2730 | 965643 | 3513 | 6249 | 0.5877 | 1443 | 1272575 | 156981298 | 520586 |  |
+| claude-code-3cef613e-dec-1784559997-1 | claude-code | 3cef613e-dece-4259-ba2b-7e6f173aea56 | #474 | claude-opus-4-8 | 887 | 748094 | 87217147 | 310662 | 1059643 | 56.0551 | 2330 | 2020669 | 244198445 | 831248 | fix(gateway): close the second SSE-pinned listener and a test that proved nothin |
+| claude-code-3cef613e-dec-1784560068-1 | claude-code | 3cef613e-dece-4259-ba2b-7e6f173aea56 | #474 | claude-opus-4-8 | 12 | 12671 | 620884 | 3386 | 16069 | 0.4743 | 2342 | 2033340 | 244819329 | 834634 | fix(gateway): close the second SSE-pinned listener and a test that proved nothin |
 
 ### Steering
 
@@ -48,6 +50,8 @@
 - [x] Force the relay path in `pairing-cross-network-relay` on a NAT'd hosted runner
 - [x] Fix the iOS `op-sqlite` / `expo-updates` header collision that broke the mobile build
 - [x] Size node-project test timeouts for hosted-runner disk latency
+- [x] Apply the SSE-safe close to the gateway web-UI server
+- [x] Make the headless-compile lifecycle test wait on a real deadline instead of a 500ms iteration budget
 
 ## What changed
 
@@ -60,6 +64,10 @@
 **Mobile iOS build.** `apps/mobile/ios/Podfile` and `apps/mobile/ios/Podfile.lock` — `op-sqlite` publishes its vendored SQLite amalgamation as a public pod header, so `<sqlite3.h>` resolved to it for every target. `expo-updates` (added in #468) stores its database in the OS SQLite via `import SQLite3`, putting both headers in one translation unit with mismatched guards (`SQLITE3_H` vs `_SQLITE3_H_`). A `post_install` hook unpublishes the public copy; op-sqlite still compiles against its own via the private header path. The hook raises if op-sqlite is installed but the header is missing, so a layout change fails loudly at `pod install` rather than silently no-opping.
 
 **Test timeouts.** `packages/test-kit/src/vitest.ts` raises the `nodePreset` default to 30s; `packages/gateway/src/cli/{admin,backup-admin,key-admin}.test.ts` escalate to 60s and drop two inline per-test `timeout` options that would have capped those tests back below their file budget. `TESTING.md` documents the two tiers.
+
+**Web-UI server shutdown (same defect, second listener).** `packages/gateway/src/serve/web-ui-server.ts` — the returned `close()` was a bare `server.close(cb)`, carrying the identical defect fixed in `http-server.ts`: one subscribed `text/event-stream` client pins the listener open forever, and `serve()` awaits this during teardown, so it can wedge a gateway switch or quit. It now closes idle connections and force-destroys survivors after `GATEWAY_SHUTDOWN_GRACE_MS`, which `packages/app-engine/src/index.ts` now re-exports so consumers outside app-engine can share the one grace window.
+
+**A lifecycle test that proved nothing.** `packages/gateway/src/routes/lifecycle-automation-routes.test.ts` — the headless-compile test polled for the run's `endedAt` on an iteration budget of 20 × 25ms = 500ms, and on expiry simply fell through: `endedAt` was never asserted, so the two assertions that remained passed against a run row that had not finished. A compile spawns a real app-server subprocess and takes ~7s, so the budget was expiring on *every* run, including locally — the test had never once observed a completed run. Worse, falling through left the compile still writing objects into `code/apps.git` while `afterEach` deleted the data dir, which surfaced in CI run 29751584092 as an unrelated-looking `ENOTEMPTY` from `rm`. The poll is now a wall-clock deadline and `endedAt` is asserted, which is what makes both the claim and the teardown honest.
 
 **Earlier commits on this issue.** `.github/workflows/e2e.yml` (globalTimeout / `timeout-minutes` sizing, dated report slots), `apps/desktop/tests/e2e/playwright.config.ts`, `apps/web/tests/e2e/playwright.config.ts`, `apps/web/tests/e2e/web-pwa.spec.ts`, `apps/web/tests/e2e/perf-waterfall.spec.ts`, `tests/agent-e2e-mobile/lib/harness.mjs`, `tests/agent-e2e-mobile/flows/home-loads.mjs`, `tests/agent-e2e-pairing/lib/device-redeem.mjs`, `scripts/test-report/prepare-pages-site.mjs`, `scripts/test-report/generate.mjs`, `scripts/test-report/summary-markdown.mjs`, `scripts/test-report/smoke.mjs`, `packages/blueprints/turbo.json` (undeclared build outputs made cached builds diverge from uncached), and the `format-check` governance directive: `.governance/packs.lock`, `.governance/packs/srikanth235/centraid/directives/format-check/directive.yaml`, `.governance/packs/srikanth235/centraid/directives/format-check/constitution.md`, `.governance/packs/srikanth235/centraid/directives/format-check/check.sh`.
 
@@ -76,6 +84,9 @@ Each checked item above, mapped to the work that satisfies it:
 - Force the relay path in `pairing-cross-network-relay` on a NAT'd hosted runner — `tests/agent-e2e-pairing/lib/docker-harness.mjs`, by transport class rather than by address.
 - Fix the iOS `op-sqlite` / `expo-updates` header collision that broke the mobile build — `apps/mobile/ios/Podfile`, unpublishing the shadowing public header.
 - Size node-project test timeouts for hosted-runner disk latency — `packages/test-kit/src/vitest.ts` at 30s, with `packages/gateway/src/cli/admin.test.ts`, `packages/gateway/src/cli/backup-admin.test.ts` and `packages/gateway/src/cli/key-admin.test.ts` escalating to 60s.
+
+- Apply the SSE-safe close to the gateway web-UI server — `packages/gateway/src/serve/web-ui-server.ts`, with `GATEWAY_SHUTDOWN_GRACE_MS` now re-exported from `packages/app-engine/src/index.ts` so both listeners share one grace window.
+- Make the headless-compile lifecycle test wait on a real deadline instead of a 500ms iteration budget — `packages/gateway/src/routes/lifecycle-automation-routes.test.ts` now polls to a wall-clock deadline and asserts `endedAt`, which also stops `afterEach` racing the live compile's writes into `code/apps.git`.
 
 ## Out of scope
 
@@ -112,6 +123,10 @@ Desktop e2e on the rebased tree: **53 passed, 5 skipped, 0 failed (7.6m)**, with
 iOS: `** BUILD SUCCEEDED **`, exit 0, zero redefinition errors, from a wiped `Pods/` and empty derived data on the rebased tree. Header resolution verified to flip: the app target now reaches the SDK's `sqlite3.h` while op-sqlite still reaches its own private copy.
 
 Coverage lane: all 12 originally-failing files pass locally (120 tests). The nightly host penalty could not be reproduced on this machine, which performs like the fast runner.
+
+CI run 29751583983 confirmed the relay lane green for the first time (`pairing-cross-network-relay` had never passed before), alongside `desktop-e2e`, `pairing-lifecycle` and `pairing-ticket-hygiene`.
+
+The lifecycle-automation fix was verified by the file's own runtime: it ran 12.4s before the change and 19.3s after, across repeated local runs (11/11 tests passing each time). That ~7s delta is the compile run actually finishing — direct evidence that the previous 500ms budget was expiring every time rather than observing completion.
 
 **Not verified locally, CI-only:** the relay flow requires Docker on a Linux host with the NAT topology, so the port-class rules have never been executed against real netfilter. The iOS fix was verified for mechanism, not by reproducing the original failure — this Mac has Xcode 26.6 / iOS 26.5 SDK against CI's Xcode 16.x / iOS 18.x, and locally the two headers are close enough (3.51.3 vs 3.51.0) that the collision stays latent.
 
