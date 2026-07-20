@@ -92,7 +92,9 @@ the per-test timeout sweep committed separately, recorded in
 `packages/gateway/src/serve/outbox-executor.test.ts`. Likewise the Metro prewarm
 fix and its extracted module, also #474:
 `tests/agent-e2e-mobile/lib/harness.mjs`,
-`tests/agent-e2e-mobile/lib/metro.mjs`.
+`tests/agent-e2e-mobile/lib/metro.mjs`. And the template-gate clone→install
+contract fix, also #474: `tests/agent-e2e-mobile/flows/template-gate.mjs`,
+`tests/agent-e2e-mobile/flows/template-gate.md`.
 
 ## Verification
 

@@ -1,14 +1,14 @@
 // Per-template mobile compatibility gate (issue #263).
 //
 // For each bundled UI template (kind "app" in packages/blueprints/index.json)
-// the flow clones + publishes it over the gateway HTTP API, opens the clone
-// from the phone's Home tile, waits for the app's header/title to render
-// inside the WebView, screenshots, and asserts the shell's error state
-// never appeared. See template-gate.md for preconditions.
+// the flow installs it over the gateway HTTP API, opens it from the phone's
+// Home tile, waits for the app's header/title to render inside the WebView,
+// screenshots, and asserts the shell's error state never appeared. See
+// template-gate.md for preconditions.
 //
 // Gateway access for the RN-side HTTP calls comes from env:
 //   MAESTRO_GATEWAY_URL    (default http://127.0.0.1:18789)
-//   MAESTRO_GATEWAY_TOKEN  (bearer for the clone/publish/delete calls)
+//   MAESTRO_GATEWAY_TOKEN  (bearer for the install/delete calls)
 //   MAESTRO_TEMPLATES      (optional comma-separated template-id subset)
 
 import { readFile } from 'node:fs/promises';
@@ -55,9 +55,10 @@ async function uiTemplates() {
 }
 
 // The in-WebView marker: the template's own <h1> (falling back to <title>).
-// Clones keep the template's index.html markup, so this is the text that
-// proves the web document actually rendered — the native AppHeader alone
-// shows the name even when the WebView 401s or errors.
+// Install is in place and copies nothing, so the served markup IS the
+// template's own index.html — this is the text that proves the web document
+// actually rendered. The native AppHeader alone shows the name even when the
+// WebView 401s or errors.
 async function templateMarker(templateId) {
   try {
     const html = await readFile(
@@ -81,23 +82,42 @@ await runFlow('template-gate', async (ctx) => {
   const templates = await uiTemplates();
   if (templates.length === 0) throw new Error('no UI templates found in blueprints index.json');
 
-  const cloned = [];
+  const installed = [];
   const failures = [];
   try {
-    // Clone + publish everything up front so a single Home refresh sees all tiles.
+    // Install everything up front so a single Home refresh sees all tiles.
+    //
+    // `_install`, not `_clone`: since #434 a bundled blueprint app is installed
+    // IN PLACE — a consent row plus grants, with zero code copied — and the
+    // clone route now rejects bundled ids outright ("is a bundled app — install
+    // it via /centraid/_apps/_install, not clone"). This flow filters to
+    // `kind === 'app'`, which is exactly the bundled set, so every id here
+    // takes the install path. Automation templates still clone, since the
+    // hidden builder is their compiler.
     for (const tmpl of templates) {
-      const res = await gw('/centraid/_apps/_clone', {
-        body: JSON.stringify({ templateId: tmpl.id, publish: true }),
+      const res = await gw('/centraid/_apps/_install', {
+        body: JSON.stringify({ templateId: tmpl.id }),
         method: 'POST',
       });
-      cloned.push({ appId: res.app.id, appName: res.app.name, templateId: tmpl.id });
-      ctx.note(`cloned ${tmpl.id} -> ${res.app.id} ("${res.app.name}")`);
+      installed.push({
+        appId: res.app.id,
+        appName: res.app.name,
+        templateId: tmpl.id,
+        // Install is idempotent and reports whether the row already existed.
+        // Only tear down what THIS run created — deleting an app the vault
+        // already had would be a side effect the flow has no business causing.
+        preexisting: res.alreadyInstalled === true,
+      });
+      ctx.note(
+        `installed ${tmpl.id} -> ${res.app.id} ("${res.app.name}")` +
+          (res.alreadyInstalled === true ? ' [already present — will not delete]' : ''),
+      );
     }
 
-    for (const c of cloned) {
+    for (const c of installed) {
       const marker = await templateMarker(c.templateId);
-      // Accept either the template's own header text or the clone's minted
-      // name — clone rewrites app.json but not necessarily the HTML header.
+      // Accept either the template's own header text or the registered app
+      // name — the HTML header and app.json need not agree.
       const webMarker =
         marker && marker !== c.appName
           ? `(${escapeRe(marker)}|${escapeRe(c.appName)})`
@@ -138,8 +158,9 @@ await runFlow('template-gate', async (ctx) => {
       }
     }
   } finally {
-    // Best-effort cleanup so repeat runs don't accumulate "Notes 2, Notes 3…".
-    for (const c of cloned) {
+    // Best-effort cleanup so repeat runs start from a known state. Skips
+    // anything that was already installed before this run.
+    for (const c of installed.filter((entry) => !entry.preexisting)) {
       try {
         await gw(`/centraid/_apps/${encodeURIComponent(c.appId)}`, { method: 'DELETE' });
       } catch (err) {
@@ -150,11 +171,11 @@ await runFlow('template-gate', async (ctx) => {
 
   if (failures.length > 0) {
     throw new Error(
-      `template gate failed for ${failures.length}/${cloned.length}:\n${failures.join('\n')}`,
+      `template gate failed for ${failures.length}/${installed.length}:\n${failures.join('\n')}`,
     );
   }
   return {
     pass: true,
-    notes: `all ${cloned.length} UI templates rendered in the mobile WebView`,
+    notes: `all ${installed.length} UI templates rendered in the mobile WebView`,
   };
 });
