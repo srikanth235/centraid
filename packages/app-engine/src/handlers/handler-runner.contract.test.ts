@@ -64,7 +64,7 @@ test('a burst beyond cap+queue fails fast with a busy outcome; admitted calls st
 
   // The gate is empty again once every call has settled.
   expect(admission.stats()).toEqual({ inFlight: 0, queued: 0 });
-}, 10_000);
+});
 
 test('queued requests drain in FIFO order as slots free up', async () => {
   // Only 1 concurrent slot — every later call queues behind the first.
@@ -78,7 +78,7 @@ test('queued requests drain in FIFO order as slots free up', async () => {
     .toSorted((a, b) => a.finishedAt - b.finishedAt)
     .map((v) => v.seq);
   expect(finishOrder).toEqual([1, 2, 3, 4]);
-}, 10_000);
+});
 
 test('a request that times out waiting in queue gets a busy outcome, not a hang', async () => {
   // 1 concurrent slot, held by a handler that outlives the queue wait.

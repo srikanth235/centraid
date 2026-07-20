@@ -123,7 +123,7 @@ test('the medium rung of a large source is meaningfully bigger than the tiny run
   const medium = await codec.downscale(src, 'image/jpeg', 2048);
   expect(Math.max(medium!.width, medium!.height)).toBe(2048);
   expect(medium!.bytes.length).toBeGreaterThan(tiny!.bytes.length);
-}, 20_000);
+});
 
 test('unsupported media types return null (placeholder contract covers them)', async () => {
   const png = makePng(64, 64);

@@ -268,7 +268,7 @@ test('a hung external write times out; deferred per the existing network-failure
   // the item stays approved for a later pass, nothing terminal happens.
   expect(report).toMatchObject({ approved: 1, sent: 0, failed: 0, deferred: 1 });
   expect(itemRow(plane, itemId).status).toBe('approved');
-}, 10_000);
+});
 
 test('a credential-less connection defers the item — it survives for the reconnect', async () => {
   const plane = openPlane(await tempDir());

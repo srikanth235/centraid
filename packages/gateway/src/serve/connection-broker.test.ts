@@ -291,7 +291,7 @@ test('a hung token endpoint times out; treated as transient (retried, no flip) â
   expect(auth && 'refused' in auth ? auth.refused : undefined).toMatch(/transient/);
   // Same outcome as the 5xx-transient case: no flip, connection stays active.
   expect(connectionRow(plane, connectionId).status).toBe('active');
-}, 10_000);
+});
 
 test('force refresh (the 401 lane) refreshes even an unexpired token', async () => {
   const plane = openPlane(await tempDir());

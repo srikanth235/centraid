@@ -166,7 +166,7 @@ test('a hung handler is still terminated on timeout without poisoning the pool',
   });
   expect(after.ok).toBe(true);
   expect(after.value).toBe('alive');
-}, 10_000);
+});
 
 test('a worker that crashes mid-run leaves the pool usable for the next run', async () => {
   pool = new WorkerPool(HANDLER_WORKER_FILE, 2);
@@ -193,7 +193,7 @@ test('a worker that crashes mid-run leaves the pool usable for the next run', as
   });
   expect(after.ok).toBe(true);
   expect(after.value).toBe('recovered');
-}, 10_000);
+});
 
 test('workerPoolSizeFromEnv clamps and defaults sanely', () => {
   const standard = { CENTRAID_RESOLVED_HARDWARE_PROFILE: 'standard' };
