@@ -1,11 +1,11 @@
 ## Test health
 
-**Status:** needs attention
+**Status:** ok
 
 | Signal | Value |
 | --- | ---: |
-| Evidence passed | 518 |
-| Evidence failed | 1 |
+| Evidence passed | 519 |
+| Evidence failed | 0 |
 | Cells failed (ran) | 0 |
 | Cells not run | 22 |
 | Unhandled errors | 0 |
@@ -14,6 +14,6 @@
 
 _Public HTML report publishes on main (and nightly); this run keeps the artifact + Job Summary only._
 
-Generated: `2026-07-19T17:03:40.476Z`
+Generated: `2026-07-20T09:28:46.379Z`
 
 <!-- centraid-test-health-report -->
