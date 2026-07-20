@@ -31,6 +31,7 @@
 | claude-code-3cef613e-dec-1784558286-1 | claude-code | 3cef613e-dece-4259-ba2b-7e6f173aea56 | #474 | claude-opus-4-8 | 6 | 2730 | 965643 | 3513 | 6249 | 0.5877 | 1443 | 1272575 | 156981298 | 520586 |  |
 | claude-code-3cef613e-dec-1784559997-1 | claude-code | 3cef613e-dece-4259-ba2b-7e6f173aea56 | #474 | claude-opus-4-8 | 887 | 748094 | 87217147 | 310662 | 1059643 | 56.0551 | 2330 | 2020669 | 244198445 | 831248 | fix(gateway): close the second SSE-pinned listener and a test that proved nothin |
 | claude-code-3cef613e-dec-1784560068-1 | claude-code | 3cef613e-dece-4259-ba2b-7e6f173aea56 | #474 | claude-opus-4-8 | 12 | 12671 | 620884 | 3386 | 16069 | 0.4743 | 2342 | 2033340 | 244819329 | 834634 | fix(gateway): close the second SSE-pinned listener and a test that proved nothin |
+| claude-code-3cef613e-dec-1784560236-1 | claude-code | 3cef613e-dece-4259-ba2b-7e6f173aea56 | #474 | claude-opus-4-8 | 39 | 32722 | 2469286 | 8800 | 41561 | 1.6594 | 2381 | 2066062 | 247288615 | 843434 | fix(mobile): make the op-sqlite FTS5 build config reach the iOS toolchain (#474) |
 
 ### Steering
 
@@ -52,6 +53,7 @@
 - [x] Size node-project test timeouts for hosted-runner disk latency
 - [x] Apply the SSE-safe close to the gateway web-UI server
 - [x] Make the headless-compile lifecycle test wait on a real deadline instead of a 500ms iteration budget
+- [x] Make the dead `op-sqlite` FTS5 build config actually reach the iOS toolchain
 
 ## What changed
 
@@ -68,6 +70,8 @@
 **Web-UI server shutdown (same defect, second listener).** `packages/gateway/src/serve/web-ui-server.ts` — the returned `close()` was a bare `server.close(cb)`, carrying the identical defect fixed in `http-server.ts`: one subscribed `text/event-stream` client pins the listener open forever, and `serve()` awaits this during teardown, so it can wedge a gateway switch or quit. It now closes idle connections and force-destroys survivors after `GATEWAY_SHUTDOWN_GRACE_MS`, which `packages/app-engine/src/index.ts` now re-exports so consumers outside app-engine can share the one grace window.
 
 **A lifecycle test that proved nothing.** `packages/gateway/src/routes/lifecycle-automation-routes.test.ts` — the headless-compile test polled for the run's `endedAt` on an iteration budget of 20 × 25ms = 500ms, and on expiry simply fell through: `endedAt` was never asserted, so the two assertions that remained passed against a run row that had not finished. A compile spawns a real app-server subprocess and takes ~7s, so the budget was expiring on *every* run, including locally — the test had never once observed a completed run. Worse, falling through left the compile still writing objects into `code/apps.git` while `afterEach` deleted the data dir, which surfaced in CI run 29751584092 as an unrelated-looking `ENOTEMPTY` from `rm`. The poll is now a wall-clock deadline and `endedAt` is asserted, which is what makes both the claim and the teardown honest.
+
+**FTS5 was never compiled into the iOS build.** `package.json` (root) gains the `op-sqlite` block; `apps/mobile/package.json` keeps its copy, because the two native toolchains resolve *different* files. The iOS podspec walks up from `node_modules/@op-engineering/op-sqlite` and takes the first `package.json` it finds — bun hoists op-sqlite to the repo root, so that is the ROOT file, which had no config. Android's `build.gradle` takes a different branch (`isUserApp` is false for an app build, since gradle's `rootDir` is `apps/mobile/android`) and reads `$rootDir/../package.json`, i.e. the app's — so Android was correct all along and deleting the app copy would break it. `apps/mobile/src/lib/replica/op-sqlite-build-config.test.ts` guards both placements and re-implements the podspec's upward walk, so a future hoisting change fails the test rather than silently shipping a search-less build.
 
 **Earlier commits on this issue.** `.github/workflows/e2e.yml` (globalTimeout / `timeout-minutes` sizing, dated report slots), `apps/desktop/tests/e2e/playwright.config.ts`, `apps/web/tests/e2e/playwright.config.ts`, `apps/web/tests/e2e/web-pwa.spec.ts`, `apps/web/tests/e2e/perf-waterfall.spec.ts`, `tests/agent-e2e-mobile/lib/harness.mjs`, `tests/agent-e2e-mobile/flows/home-loads.mjs`, `tests/agent-e2e-pairing/lib/device-redeem.mjs`, `scripts/test-report/prepare-pages-site.mjs`, `scripts/test-report/generate.mjs`, `scripts/test-report/summary-markdown.mjs`, `scripts/test-report/smoke.mjs`, `packages/blueprints/turbo.json` (undeclared build outputs made cached builds diverge from uncached), and the `format-check` governance directive: `.governance/packs.lock`, `.governance/packs/srikanth235/centraid/directives/format-check/directive.yaml`, `.governance/packs/srikanth235/centraid/directives/format-check/constitution.md`, `.governance/packs/srikanth235/centraid/directives/format-check/check.sh`.
 
@@ -87,6 +91,8 @@ Each checked item above, mapped to the work that satisfies it:
 
 - Apply the SSE-safe close to the gateway web-UI server — `packages/gateway/src/serve/web-ui-server.ts`, with `GATEWAY_SHUTDOWN_GRACE_MS` now re-exported from `packages/app-engine/src/index.ts` so both listeners share one grace window.
 - Make the headless-compile lifecycle test wait on a real deadline instead of a 500ms iteration budget — `packages/gateway/src/routes/lifecycle-automation-routes.test.ts` now polls to a wall-clock deadline and asserts `endedAt`, which also stops `afterEach` racing the live compile's writes into `code/apps.git`.
+
+- Make the dead `op-sqlite` FTS5 build config actually reach the iOS toolchain — the block now also lives in the root `package.json`, guarded by `apps/mobile/src/lib/replica/op-sqlite-build-config.test.ts`; `apps/mobile/ios/Podfile.lock` carries the resulting op-sqlite checksum change.
 
 ## Out of scope
 
@@ -128,7 +134,11 @@ CI run 29751583983 confirmed the relay lane green for the first time (`pairing-c
 
 The lifecycle-automation fix was verified by the file's own runtime: it ran 12.4s before the change and 19.3s after, across repeated local runs (11/11 tests passing each time). That ~7s delta is the compile run actually finishing — direct evidence that the previous 500ms budget was expiring every time rather than observing completion.
 
-**Not verified locally, CI-only:** the relay flow requires Docker on a Linux host with the NAT topology, so the port-class rules have never been executed against real netfilter. The iOS fix was verified for mechanism, not by reproducing the original failure — this Mac has Xcode 26.6 / iOS 26.5 SDK against CI's Xcode 16.x / iOS 18.x, and locally the two headers are close enough (3.51.3 vs 3.51.0) that the collision stays latent.
+FTS5 was verified by A/B on the generated artifact: `Pods/Target Support Files/op-sqlite/op-sqlite.{debug,release}.xcconfig` carried `GCC_PREPROCESSOR_DEFINITIONS = $(inherited) COCOAPODS=1` before and `... COCOAPODS=1 SQLITE_ENABLE_FTS5=1` after a real `pod install`. The guard test was mutation-tested — deleting the root key fails it (1 failed | 2 passed), restoring it passes 3/3.
+
+**A premise correction worth recording.** The CI line `[OP-SQLITE] using pure SQLite` was read as evidence of missing FTS5. It is not: reading the podspec, that line is the `else` branch of the *backend* selector (sqlcipher / turso / libsql / pure) and is printed regardless of `fts5`. The podspec logs nothing at all about FTS5 — the only tell on iOS is the absent define in the generated xcconfig. The config was genuinely dead, but not for the reason the log suggested.
+
+**Not verified locally, CI-only:** the Android FTS5 conclusion is read from `build.gradle` plus the documented meaning of gradle `rootDir`, not from observed build output — the Android path *does* log `[OP-SQLITE] FTS5 enabled`, so the next nightly can settle it cheaply. No Xcode compile or runtime `PRAGMA compile_options` was run, so the define was verified as far as the xcconfig only. The relay flow requires Docker on a Linux host with the NAT topology, so the port-class rules have never been executed against real netfilter. The iOS fix was verified for mechanism, not by reproducing the original failure — this Mac has Xcode 26.6 / iOS 26.5 SDK against CI's Xcode 16.x / iOS 18.x, and locally the two headers are close enough (3.51.3 vs 3.51.0) that the collision stays latent.
 
 ## Audit
 

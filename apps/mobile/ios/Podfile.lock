@@ -2678,7 +2678,7 @@ SPEC CHECKSUMS:
   libdav1d: 23581a4d8ec811ff171ed5e2e05cd27bad64c39f
   libwebp: 02b23773aedb6ff1fd38cec7a77b81414c6842a8
   NitroModules: 4d19ff59969b2c67a19175fb17b66917af6708e0
-  op-sqlite: d8d5eae2bddb0b55d6f48cf7ac356b63d26cb4f0
+  op-sqlite: c63298568f844c1ccc010c91508689194af67e98
   OpenSSL-Universal: ecee7b138fa75a74ecf00d7ffd248fb584739b9e
   QuickCrypto: 6ae25c87ea1eb98a095fe21b8ffcdff44c44d51e
   RCTDeprecation: 943572d4be82d480a48f4884f670135ae30bf990
