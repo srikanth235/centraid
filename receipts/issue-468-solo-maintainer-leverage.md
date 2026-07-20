@@ -77,7 +77,7 @@ GitHub issue: [#468](https://github.com/srikanth235/centraid/issues/468)
 - [x] **J5** `dev.centraid.*` identifiers
 - [x] **J6** `nativeBuildNumber` formula + tests
 - [x] **J7** expo-updates dormant (`appVersion`, `ON_ERROR_RECOVERY`, no eas update CI)
-- [x] **J8** `mobile-android.yml` workflow
+- [ ] **J8** `mobile-android.yml` workflow — deferred (removed from PR; re-add when assemble is green)
 
 ### K — PWA / cross-client
 
@@ -136,7 +136,7 @@ GitHub issue: [#468](https://github.com/srikanth235/centraid/issues/468)
 - **J5** `dev.centraid.*` identifiers
 - **J6** `nativeBuildNumber` formula + tests
 - **J7** expo-updates dormant (`appVersion`, `ON_ERROR_RECOVERY`, no eas update CI)
-- **J8** `mobile-android.yml` workflow
+- **J8** `mobile-android.yml` deferred: workflow file removed until Android assemble is reliable
 - **K1–K15** error boundaries, error surfacing, offline page, precache, manifest id `/`, safe-area, recoverable install prompt, SW version collapse, real version string, handshake on web, system fonts, crash handlers, window state, menu/tray/deep-link + well-known, wasm not committed / build helper
 - **L1** path-filtered PR e2e workflow
 - **L2** boot-smoke structural gate
@@ -368,6 +368,9 @@ GitHub issue: [#468](https://github.com/srikanth235/centraid/issues/468)
 - `scripts/test-report/write-job-summary.mjs`
 
 ### CI green follow-up (PR #469 reds)
+
+- **desktop-e2e onboarding 1.2:** H5 service step after local connect; test declines with `onboarding-service-decline`.
+- **J8 mobile-android:** workflow removed from PR until assemble is reliable (user request).
 - **static typecheck:** turbo typecheck builds `@centraid/web` without the verify-job wasm toolchain; re-tracked `centraid_web_iroh_bg.wasm` so ensure-iroh skips (ARCHITECTURE checked-in binding; ensure still rebuilds if deleted).
 - **mobile assemble:** after Expo config fixed, Kotlin failed on missing gitignored `computer.iroh` sources; compile-time Maven `computer.iroh:iroh:1.0.0` for API types (device runtime still needs cargo-ndk `.so` per README).
 - **web-e2e:** tests wrote control session only to localStorage; `loadConnection` prefers sessionStorage — pin session there.
@@ -450,6 +453,8 @@ Integrated `origin/main` after #474 (`fix(e2e): repair every failing nightly lan
 - `tests/agent-e2e-pairing/lib/docker-harness.mjs`
 
 ## Out of scope
+
+- **J8** path-filtered `mobile-android` assembleDebug CI (workflow removed for now; Expo config + version-core.cjs still land)
 
 Human-only or follow-up residuals (agent-doable items above are shipped):
 

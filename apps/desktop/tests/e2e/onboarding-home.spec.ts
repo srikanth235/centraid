@@ -70,12 +70,13 @@ test('1.2 — completing onboarding persists the profile and lands on home', asy
     await onboarding.getByRole('radio').nth(2).click();
     await page.getByRole('button', { name: 'Continue' }).click();
 
-    // Realigned: onboarding is two steps now (identity, then "Where does your
-    // data live?" — the embedded ConnectFlow wizard, OnboardingScreen.tsx:51
-    // and :214). Picking "This Mac" in the onboarding context auto-selects the
-    // single local vault and commits without a further click
-    // (ConnectFlow.tsx:138-147), which is what finishes onboarding.
+    // Realigned: onboarding is three steps when the host exposes
+    // installGatewayService (identity → "Where does your data live?" → H5 OS
+    // service offer — OnboardingScreen afterConnect). Picking "This Mac"
+    // auto-selects the local vault (ConnectFlow.tsx), then the H5 step appears.
+    // Decline with "Not now" (default off); accept is the opt-in path.
     await page.getByRole('radio', { name: 'This Mac' }).click();
+    await page.getByTestId('onboarding-service-decline').click();
 
     // Onboarding view gone, home shell present.
     await onboarding.waitFor({ state: 'detached' });
