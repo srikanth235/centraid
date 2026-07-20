@@ -11,10 +11,6 @@ import {
 } from './atlasOrreryGeometry.js';
 import type { AtlasFkEdge, AtlasGraphNode, AtlasGraphPayload } from '../../gateway-client.js';
 
-// React 18 act() support flag — lets act() flush effects/state without the
-// "environment is not configured to support act" warning.
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-
 // ── Sample payload ────────────────────────────────────────────────────────
 // A slice of the real vault graph: core_party at the hub, a health/observation
 // chain (the readout example), a self-referencing concept, one ghost edge, and

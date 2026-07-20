@@ -91,6 +91,16 @@ workspaces like desktop's `userData`.
 
 ## Conventions specific to this layer
 
+- **Never write a selector from the React source.** Boot the simulator,
+  install the app, and read `inspect_view_hierarchy` before asserting on
+  any string. Selectors inferred from JSX shipped a `mobile-e2e` lane in
+  which the pairing tap was a silent no-op, the "arrived at Settings"
+  assertion passed on Home, the gateway URL was typed into nothing, and a
+  tab was asserted by its route name (`Apps`) rather than its label
+  (`Home`) — all green, all meaningless. See "A passing step is not a
+  working step" in `README.md` for the specific traps. A step that reports
+  COMPLETED has not necessarily done anything: confirm the screen actually
+  changed.
 - **Verify on disk when state is the unit of truth.** Maestro's text
   matcher is unreliable on RN `TextInput` values (the value is in
   `inspect_view_hierarchy` under both `text=` and `value=`, but

@@ -18,9 +18,10 @@ import { commandVault } from './vault-admin.ts';
 import { commandKey } from './key-admin.ts';
 import { daemonLayoutFor } from './paths.ts';
 
-// See admin.test.ts: real vault/daemon bootstrap per test — measured file
-// budget for the v8-instrumented coverage lane (issue #458 timeout policy).
-vi.setConfig({ testTimeout: 15_000 });
+// See admin.test.ts: real vault/daemon bootstrap per test, so this file is
+// fsync-bound and needs an escalation above the 30s node-project default.
+// Same 60s budget as its sibling CLI suites.
+vi.setConfig({ testTimeout: 60_000 });
 
 class CliFailError extends Error {
   constructor(

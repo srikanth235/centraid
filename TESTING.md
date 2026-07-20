@@ -75,9 +75,20 @@ Desktop agent-driven flows were retired after their unique restart/persistence
 assertions moved to Electron Playwright.
 
 Property-style checks follow the normal `*.test.ts` convention and say
-`property` in the suite name. `.spec.ts` is Playwright-only. Slow files set a
-local timeout with `vi.setConfig`; packages do not raise the timeout for every
-fast test.
+`property` in the suite name. `.spec.ts` is Playwright-only.
+
+Timeouts come in two tiers. Node projects — the `node:sqlite` ones, which
+bootstrap real vault/daemon layouts and are therefore fsync-bound — get a 30s
+default from the shared `nodeProject` preset in
+[`packages/test-kit/src/vitest.ts`](packages/test-kit/src/vitest.ts); the
+measurements justifying that number are in the comment there. jsdom projects do
+no disk I/O and keep Vitest's tight 5s default. The budget is sized for
+hosted-runner **disk latency variance**, which was measured at up to ~10x
+between two runner instances executing the identical command — not for v8
+coverage instrumentation, which is enabled in the per-PR `ci` lane too. Files
+slower still than the node default escalate locally with `vi.setConfig` (the
+gateway CLI suites use 60s); do not add a per-test `timeout` option that sits
+*below* its file's budget.
 
 ## Product tiers and coverage gates
 

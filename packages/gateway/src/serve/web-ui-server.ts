@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { AddressInfo } from 'node:net';
-import { tuneGatewayHttpServer } from '@centraid/app-engine';
+import { GATEWAY_SHUTDOWN_GRACE_MS, tuneGatewayHttpServer } from '@centraid/app-engine';
 
 const TYPES: Record<string, string> = {
   '.css': 'text/css; charset=utf-8',
@@ -207,13 +207,24 @@ export async function startWebUiServer(options: WebUiServerOptions): Promise<Web
     url: `http://${host}:${address.port}`,
     close: () =>
       new Promise<void>((resolve, reject) => {
+        // Same defect as the runtime HTTP server: `server.close()` only
+        // resolves once every connection has ended, and an active
+        // `text/event-stream` response never ends on its own — so a single
+        // subscribed client would pin this listener open forever. `serve()`
+        // awaits this during teardown, so that wedges a gateway switch or
+        // quit. Stop accepting, hurry the idle sockets along, then destroy
+        // whatever is left after the grace window.
+        let force: ReturnType<typeof setTimeout> | undefined;
         server.close((error) => {
+          if (force) clearTimeout(force);
           if (error) {
             reject(error);
             return;
           }
           resolve();
         });
+        server.closeIdleConnections();
+        force = setTimeout(() => server.closeAllConnections(), GATEWAY_SHUTDOWN_GRACE_MS);
       }),
   };
 }

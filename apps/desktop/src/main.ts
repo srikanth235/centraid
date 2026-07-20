@@ -227,12 +227,18 @@ if (!gotSingleInstanceLock) {
       // The iroh phone tunnel holds its own endpoint + device store.
       shutdownPhoneLink(),
     ]);
+    // Deliberately NOT unref'd. This timer is the hard cap that guarantees
+    // `app.quit()` is reached even when teardown wedges — an unref'd timer
+    // does not hold the loop open, so it is precisely the wrong primitive for
+    // a deadline you are relying on to fire. It is cleared implicitly by the
+    // process exiting, and the race below always settles.
+    let cap: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<void>((resolve) => {
-      const t = setTimeout(resolve, QUIT_TEARDOWN_TIMEOUT_MS);
-      t.unref?.();
+      cap = setTimeout(resolve, QUIT_TEARDOWN_TIMEOUT_MS);
     });
 
     void Promise.race([teardown, timeout]).finally(() => {
+      if (cap) clearTimeout(cap);
       app.quit();
     });
   });

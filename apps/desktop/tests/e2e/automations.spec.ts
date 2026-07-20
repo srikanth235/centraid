@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import {
   automationRow,
   cleanupEnv,
+  closeApp,
   confirmDelete,
   expectConfirm,
   gotoNav,
@@ -59,7 +60,7 @@ test('8.1 — the automations list renders rows with status pills', async () => 
     // Every row carries a status pill (`data-au-status` is the pill's stable hook).
     await expect(page.locator('[data-au-status]').first()).toBeVisible();
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -75,7 +76,7 @@ test('8.2 — a list load failure shows the error card and Retry recovers', asyn
     await page.getByTestId('automations-error').getByRole('button', { name: 'Retry' }).click();
     await expect(page.getByTestId('automation-row')).toHaveCount(1);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -103,7 +104,7 @@ test('8.3 — "New automation" opens the editor; the draft is posted on Save', a
       )
       .toBe(true);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -116,7 +117,7 @@ test('8.4 — clicking an automation row opens its viewer', async () => {
     await expect(page.getByTestId('automation-thread')).toBeVisible();
     await expect(page.getByTestId('automation-thread')).toContainText('Inbox Digest');
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -156,7 +157,7 @@ test('8.5 — toggling the enable switch posts set-enabled; a failed toggle toas
       /Could not enable Inbox Digest/i,
     );
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -176,7 +177,7 @@ test('8.6 — a webhook automation shows its URL and copies it', async () => {
     await page.getByRole('button', { name: 'Copy webhook URL' }).click();
     await expect(page.locator('[data-global-toast]')).toContainText(/Webhook URL copied/i);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -195,7 +196,7 @@ test('8.7 — deleting an automation confirms, posts DELETE, returns to the list
       gateway.calls.some((c) => c.method === 'DELETE' && c.pathname === '/centraid/_automations'),
     ).toBe(true);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -209,7 +210,7 @@ test('8.8 — Edit opens the automation builder', async () => {
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await expect(page.getByTestId('automation-editor')).toBeVisible();
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -256,7 +257,7 @@ test('9.1 + 9.2 — Run now opens the run viewer and the timeline resolves to su
       ),
     ).toBe(true);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -292,7 +293,7 @@ test('9.3 — a failed run surfaces the failure outcome', async () => {
       timeout: 10_000,
     });
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -315,7 +316,7 @@ test('9.4 + 9.9 — a timeline node expands to show payloads and Escape collapse
     await expect(head).toHaveAttribute('aria-expanded', 'true');
     await expect(page.getByTestId('run-step-payload').first()).toBeVisible();
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -336,6 +337,6 @@ test('9.7 — Run again fires another run from the run viewer', async () => {
       .poll(() => gateway.countCalls('POST', (p) => p === '/centraid/_automations/run-now'))
       .toBeGreaterThan(before);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });

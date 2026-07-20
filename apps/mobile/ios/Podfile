@@ -68,5 +68,49 @@ target 'Centraid' do
       end
     end
 
+    # op-sqlite vendors a complete SQLite amalgamation and publishes its
+    # `cpp/sqlite3.h` as a *public* pod header. CocoaPods therefore puts
+    # `${PODS_ROOT}/Headers/Public/op-sqlite` on the HEADER_SEARCH_PATHS of every
+    # target in the workspace, including the Centraid app target — so a plain
+    # `#include <sqlite3.h>` anywhere in the app resolves to op-sqlite's
+    # amalgamation instead of the SDK's libsqlite3 header.
+    #
+    # That was harmless until expo-updates landed: it stores its update database
+    # in the OS SQLite (`import SQLite3` in EXUpdates/Database/*.swift), so the
+    # SDK's sqlite3.h and op-sqlite's now reach the same translation unit. They
+    # are different SQLite releases with different struct layouts, and Apple's
+    # header guard (`_SQLITE3_H_`) does not match the amalgamation's
+    # (`SQLITE3_H`), so neither suppresses the other and the compiler emits ~18
+    # `redefinition of 'sqlite3_*'` errors.
+    #
+    # op-sqlite's own sources reach the header through
+    # `${PODS_ROOT}/Headers/Private/op-sqlite`, which is searched first and is
+    # scoped to the op-sqlite target alone, so dropping the public copy keeps
+    # op-sqlite compiling against its bundled SQLite while `<sqlite3.h>` goes
+    # back to meaning "the SDK's SQLite" for everyone else. No pod depends on
+    # op-sqlite, so nothing else consumes its public headers.
+    #
+    # This must fail loudly rather than no-op: if a CocoaPods upgrade or an
+    # op-sqlite release moves these paths, a silent skip would hand the problem
+    # back to CI as the same inscrutable wall of redefinition errors. So we only
+    # skip when op-sqlite is genuinely not installed, and otherwise insist the
+    # layout is what we expect.
+    exists = ->(path) { File.exist?(path) || File.symlink?(path) }
+    if installer.pod_targets.any? { |pod_target| pod_target.pod_name == 'op-sqlite' }
+      public_sqlite = File.join(installer.sandbox.public_headers.root, 'op-sqlite', 'sqlite3.h')
+      private_sqlite = File.join(installer.sandbox.root, 'Headers', 'Private', 'op-sqlite', 'sqlite3.h')
+      unless exists.call(public_sqlite)
+        raise "op-sqlite is installed but #{public_sqlite} is missing. The pod's header " \
+              'layout changed; re-check whether its bundled sqlite3.h still shadows the ' \
+              "SDK's <sqlite3.h> before deleting this hook."
+      end
+      unless exists.call(private_sqlite)
+        raise "op-sqlite has no private sqlite3.h at #{private_sqlite}; refusing to " \
+              'unpublish the public copy, as op-sqlite would then compile against the SDK.'
+      end
+      File.delete(public_sqlite)
+      Pod::UI.puts '[centraid] unpublished op-sqlite/sqlite3.h so it cannot shadow the SDK <sqlite3.h>'
+    end
+
   end
 end

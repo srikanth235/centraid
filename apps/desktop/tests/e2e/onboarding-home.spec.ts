@@ -3,6 +3,7 @@ import {
   appEntry,
   cleanupEnv,
   clickMenuItem,
+  closeApp,
   launchApp,
   makeEnv,
   markUserApp,
@@ -50,7 +51,7 @@ test('1.1 — first launch shows onboarding with the CTA disabled until a name i
     await name.fill('');
     await expect(cta).toBeDisabled();
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -85,7 +86,7 @@ test('1.2 — completing onboarding persists the profile and lands on home', asy
     const persisted = await page.evaluate(() => window.CentraidApi.getSettings());
     expect((persisted as { onboardingCompletedAt?: string }).onboardingCompletedAt).toBeTruthy();
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -96,7 +97,7 @@ test('1.4 — a returning user (onboarding already complete) boots straight to h
     await waitForHome(page);
     await expect(page.getByTestId('onboarding-view')).toHaveCount(0);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -125,7 +126,7 @@ test('2.1 — home renders tiles with the right badges (draft vs new)', async ()
     await expect(newPill).toBeVisible();
     await expect(newPill).toHaveAttribute('data-tone', 'new');
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -146,7 +147,7 @@ test('2.2 — empty state renders the shelf-empty card with the composer still p
     await page.getByRole('tab', { name: 'Apps' }).click();
     await expect(empty).toContainText('No apps yet');
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -179,7 +180,7 @@ test('2.3 — renaming a tile via the context menu patches meta and shows a toas
       ),
     ).toBe(true);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -200,7 +201,7 @@ test('2.5 — the tile context menu exposes Open / Edit / Rename / Star / Delete
     // spell the current item list out, including the removal rationale.
     await expect(items).toContainText(['Open', 'Edit with Centraid', 'Rename', 'Star', 'Delete']);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -218,7 +219,7 @@ test('2.6 — clicking a tile opens the app view iframe', async () => {
     await expect(page.getByTestId('app-view')).toBeVisible();
     await expect(page.locator('iframe[data-centraid-app]')).toHaveCount(1);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -235,7 +236,7 @@ test('2.7 — the sidebar toggle flips the window sidebar state', async () => {
     await page.locator('button[aria-label="Show sidebar"]').first().click();
     await expect(win).toHaveAttribute('data-sidebar', 'open');
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -255,6 +256,6 @@ test('2.8 — the command palette opens from the sidebar Search item', async () 
     await page.keyboard.press('Escape');
     await expect(palette).toHaveCount(0);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
