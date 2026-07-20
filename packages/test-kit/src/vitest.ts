@@ -6,6 +6,27 @@ const nodePreset = {
   test: {
     environment: 'node',
     pool: 'forks',
+    // Node projects are the node:sqlite ones: they bootstrap real vault/daemon
+    // layouts on disk, so their wall clock is fsync-bound, not CPU-bound.
+    // Hosted-runner storage latency varies enough between runner instances to
+    // blow the 5s default even though nothing about the code changed. Measured
+    // on one day, same `bun run coverage` command, same ubuntu-24.04 image,
+    // same node 22.23.1 — ci run 29733633559 (passed) vs nightly 29733737906
+    // (failed), per test FILE:
+    //   serve/vault-plane      10.7s -> 71.5s  (6.7x)
+    //   serve/vault-registry   11.2s -> 65.0s  (5.8x)
+    //   stores/gateway-db       2.1s -> 18.7s  (8.8x)
+    //   routes/import-routes    1.1s -> 10.9s  (9.8x)
+    // The median file across the whole run was 0.83x — CPU-bound tests were
+    // unaffected, so this is disk latency on the slow host, NOT v8 coverage
+    // instrumentation (coverage is on in BOTH lanes) and NOT a regression: all
+    // 16 nightly failures were timeouts, zero assertion failures.
+    // Budget: the slowest test still on this default measured ~2.9s on a fast
+    // host; at the ~10x worst observed host penalty that is ~29s, so 30s. Kept
+    // well below a real-hang signal — a deadlock never completes at any budget,
+    // it just takes 30s instead of 5s to report. jsdom projects deliberately
+    // keep Vitest's tight 5s default: they do no disk I/O.
+    testTimeout: 30_000,
   },
 } satisfies ProjectConfig;
 

@@ -3,6 +3,7 @@ import {
   appEntry,
   cleanupEnv,
   clickMenuItem,
+  closeApp,
   launchApp,
   makeEnv,
   markUserApp,
@@ -80,7 +81,7 @@ test('4.1 + 4.2 — composer opens the builder and the initial turn streams a to
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('tool-group').first()).toBeVisible({ timeout: 15_000 });
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -113,7 +114,7 @@ test.skip('4.4 — Publish posts to the gateway and returns to home on success',
     await expect(page.getByTestId('apps-grid')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('builder-body')).toHaveCount(0);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -134,7 +135,7 @@ test('4.5 — a failed Publish surfaces an error and does not claim success', as
       timeout: 15_000,
     });
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -151,7 +152,7 @@ test('4.3 — the builder Preview tab mounts the draft iframe', async () => {
       timeout: 10_000,
     });
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -169,7 +170,7 @@ test('5.1 — Edit with Centraid opens the existing app in the builder', async (
       gateway.calls.some((c) => c.method === 'POST' && c.pathname === '/centraid/_apps/_sessions'),
     ).toBe(true);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -194,7 +195,7 @@ test('6.1 + 6.2 — switching to the Code tab lists files and opens one in the e
       timeout: 10_000,
     });
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -240,6 +241,6 @@ test('6.6 — Cloud Logs renders entries and filters by level + search', async (
     await expect(page.getByTestId('cloud-logs-row')).toHaveCount(1);
     await expect(page.getByTestId('cloud-logs-row')).toContainText('started up');
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });

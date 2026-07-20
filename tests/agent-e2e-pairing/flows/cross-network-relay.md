@@ -27,8 +27,8 @@ hosts without any external VPS or persistent infrastructure:
 1. Two `docker network create --driver bridge --ipv6=false` networks
    (`netA` for the gateway, `netB` for the device), each with normal
    internet egress via Docker's own NAT.
-2. **Real isolation is enforced explicitly, not assumed — on two separate
-   paths.**
+2. **Real isolation is enforced explicitly, not assumed — on three separate
+   fronts.**
 
    *The docker-internal path.* On a stock Linux Docker Engine (e.g. GitHub
    Actions' `ubuntu-latest`), separate user-defined bridge networks are
@@ -60,11 +60,119 @@ hosts without any external VPS or persistent infrastructure:
    `veth*`) are deliberately excluded — they're the containers' next hop for
    legitimate internet egress (apt-get, the n0 relays).
 
-   Both paths are then **proven** with real raw TCP connect attempts before
-   any part of the ceremony runs: one to the peer's docker-internal IP, and
-   one per host address to a port published from the probe server. If either
-   connects, the flow throws immediately rather than running a "relay"
-   assertion that would be meaningless on a routable topology.
+   *The port-class front.* Address rules — both of the above — were still
+   not sufficient, and the way they failed is worth stating precisely,
+   because it is not a bug in the rules but a limit on what any
+   address-based rule can express. On an Azure-hosted GitHub runner (CI run
+   29733737906) the flow reported `ISOLATED` and then selected a **direct**
+   path to `20.116.79.56:64512`. `hostAddresses()` had enumerated only
+   `10.1.1.124`, the runner's **private** NIC. `20.116.79.56` is the
+   runner's **public, NAT-mapped** address — the one the n0 relay observes
+   and hands back as the peer's direct candidate — and Azure performs that
+   translation **upstream**, so the address appears on no local interface.
+   `ip -4 -o addr show` structurally cannot see it, no `DROP` rule ever
+   covered it, and the isolation probe passed while the escape hatch stayed
+   wide open.
+
+   Discovering that address would mean an external lookup service, a
+   different answer on every runner, and a dependency that can change under
+   us — no foundation for a hard gate. So the harness stopped trying to name
+   the address and blocks by **transport** instead, which is
+   host-independent — and this works because of an asymmetry in iroh that is
+   worth stating with its sources, since the intuitive guess about it is
+   wrong:
+
+   - Every **direct** path iroh can build is **QUIC over UDP**, to an
+     ephemeral high port (`64512` in the failure above).
+   - The **relay-carried data path is not UDP at all.** In `iroh` /
+     `iroh-relay` 1.0.2 — the versions all three of this repo's lockfiles
+     pin — it is a WebSocket over TLS over **TCP 443**:
+     `iroh-relay/src/client.rs` rewrites the relay URL's `https` scheme to
+     `wss` and dials via `TcpStream::connect`, and the production relay URLs
+     (`https://use1-1.relay.n0.iroh.link`, …) carry no explicit port. There
+     is no QUIC anywhere in the relay data transport.
+
+   So the policy is simply: **`DROP` all UDP out of both test subnets except
+   `--dport 53`** (DNS, or the containers can't resolve the relay hostnames
+   at all). TCP is untouched, so `apt-get` and — crucially — the relay
+   itself keep working. This is why the change **degrades correctly**: the
+   rules are incapable of breaking the connection, only its *directness*. A
+   run that can't reach the relay is failing for some other reason.
+
+   An earlier revision of this harness allowed `--dport 443` on UDP too, on
+   the assumption that "QUIC" implied it. That was a hole with no purpose,
+   and it has been removed — a firewall comment asserting something false
+   about the transport is worse than no comment.
+
+   **QAD on UDP 7842 is blocked on purpose.** The one thing the relay does
+   speak over UDP is QUIC address discovery, on `DEFAULT_RELAY_QUIC_PORT =
+   7842` (`iroh-relay/src/defaults.rs`), driven by the `QadIpv4`/`QadIpv6`
+   probes in `net_report/reportgen.rs`. It is deliberately *not* allowed:
+   QAD is the mechanism by which a peer learns its own public NAT-mapped
+   address — precisely the mechanism that produced the `20.116.79.56`
+   candidate that defeated the previous fix. Blocking it attacks the failure
+   at its source rather than only blocking the dial it leads to. (STUN/3478
+   does not appear here either; it is gone in iroh 1.0.x, and the surviving
+   `re_stun` identifiers are vestigial names that now drive QAD.)
+
+   Rule **order** is load-bearing and silently invertible: `iptables -I`
+   inserts at position 1, so the last rule inserted is the first evaluated.
+   The catch-all `DROP` is therefore inserted *before* its `ACCEPT`
+   exception, and the whole port-class block is inserted *before* the two
+   address blocks — so the address `DROP`s stay above the port `ACCEPT`s and
+   an address covered by the host rules stays covered. Like the host-address
+   rules, the port-class rules go into **both** `DOCKER-USER` and `INPUT`,
+   for the same two-fates reason.
+
+   All three fronts are then **proven** before any part of the ceremony
+   runs, with probes that dial each path rather than re-testing a rule just
+   installed: raw TCP connects to the peer's docker-internal IP and to each
+   host address at a port published from the probe server, plus the **UDP**
+   counterparts of both against a UDP echo server on the same probe
+   container. If anything connects or replies, the flow throws immediately
+   rather than running a "relay" assertion that would be meaningless on a
+   routable topology.
+
+   The UDP probes are **self-validating**, which matters more than it
+   sounds: UDP has no handshake, so "blocked" and "the echo server never
+   came up" are the same observation — silence — and a silently-broken UDP
+   probe would report `ISOLATED` for entirely the wrong reason, putting us
+   back exactly where the Azure run left us. So a **control** runs first,
+   from the privileged host-network helper (its source address is the host,
+   which none of the isolation rules match): it sends the same datagrams to
+   the same two target classes and **requires** replies. Only once the
+   server has demonstrably answered is silence from `netB` treated as
+   evidence of blocking; if the control is silent, the harness throws with
+   that reason rather than claiming isolation it hasn't earned. One narrow
+   `ACCEPT` exists purely to make this possible — the echo server sits on
+   `netA`, so its *reply* datagrams originate from a test subnet and the
+   catch-all `DROP` would eat them; the exception is matched on `--sport`
+   (the probe server's fixed port), so it only ever lets the echo server
+   answer.
+
+   **That exception does not outlive the probe.** It is a UDP hole, and
+   leaving it open during the ceremony would mean the flow's one real
+   assertion ran with a known exception in the very block it exists to prove
+   closed. The argument that it's harmless anyway — a peer's *initiating*
+   datagram is still dropped, so no flow can form one-directionally — is
+   probably correct, but "probably correct" is the wrong standard here and
+   the cost of not relying on it is two `iptables -D` calls. So the rules are
+   deleted as soon as the probe returns, and their removal is **asserted**,
+   not assumed: `iptables -S DOCKER-USER` / `INPUT` are read back and any
+   surviving `--sport` `ACCEPT` scoped to this run's subnets fails the flow.
+   The verdict records that the ceremony ran with the port-class block fully
+   closed. Teardown bookkeeping stays single-pathed — each rule is spliced
+   out of the harness's teardown queue only *after* its `-D` succeeds, so the
+   failure path removes them via the normal `finally` and a success can't
+   produce a double delete.
+
+   Deliberately **not** done: re-running a UDP probe after the removal to
+   re-confirm blocking. It would prove nothing. Taking the `--sport` `ACCEPT`
+   away also removes the echo server's ability to reply at all, so silence
+   afterwards is guaranteed by construction whether or not the `DROP` is
+   working — the probe stops being self-validating at exactly the moment you'd
+   want to trust it. Reading the rule set back is both cheaper and actually
+   falsifiable.
 3. `--ipv6=false` on both networks. This one is load-bearing, discovered by
    running the flow and reading what `paths()` actually reported (see
    below) — OrbStack hands containers a real, globally-routable IPv6
@@ -85,17 +193,19 @@ identical to `device-pairing-lifecycle`; only the transport changed.
 
 ## What's proven vs. what's inferred
 
-- **Network isolation: proven, not inferred — on both paths.** Each
+- **Network isolation: proven, not inferred — on every front.** Each
   pre-ceremony TCP probe either times out/errors (blocked) or connects (not
-  isolated — the flow throws before running the ceremony at all), and the
+  isolated — the flow throws before running the ceremony at all); each UDP
+  probe either gets its datagram echoed back (not isolated) or stays silent
+  after a control run has established that a reply was possible at all. The
   per-target reason is preserved verbatim in the log and verdict rather than
-  flattened, so `blocked (timeout)` and `blocked (ECONNREFUSED)` stay
-  distinguishable. The single-probe version of this check was
-  **tautological** and is why the first CI run passed isolation while a
-  direct path was live: it dialed only the peer's docker-internal IP, which
-  is exactly and only the traffic the subnet rules block, so it re-tested
-  the rule that had just been installed and could not observe the
-  host-routed path.
+  flattened, so `blocked (timeout)`, `blocked (ECONNREFUSED)` and `blocked
+  (no reply in 4000ms)` stay distinguishable and a leak names **which** path
+  leaked. The single-probe version of this check was **tautological** and is
+  why the first CI run passed isolation while a direct path was live: it
+  dialed only the peer's docker-internal IP, which is exactly and only the
+  traffic the subnet rules block, so it re-tested the rule that had just
+  been installed and could not observe the host-routed path.
 - **Relay-vs-direct: proven, not inferred, and a hard gate on the flow's
   pass/fail.** `@number0/iroh`'s native `Connection` binding exposes
   `paths()` with an `isRelay` flag per candidate path — present on the
@@ -119,14 +229,25 @@ identical to `device-pairing-lifecycle`; only the transport changed.
     negotiation trace. `watchPathEvents`/`watchPaths` exist on the binding
     for that level of detail; not used here to keep the flow focused on the
     ceremony, not iroh's internals.
-  - That the host-routed probe is byte-identical to the escape it guards
-    against. The probe is TCP to a **published** port; the escape observed on
-    CI was QUIC/UDP reaching an **unpublished** container through the host's
-    NAT. The probe is a strictly harder reachability test (publishing makes
-    the target reachable in a way the ceremony's own topology does not), and
-    the `DROP` rules it validates carry no `-p` so they apply to UDP equally
-    — but "the TCP probe was blocked" is evidence for, not proof of, "no UDP
-    path to a host address exists".
+  - That any probe is byte-identical to the escape it guards against. The
+    probes reach a **published** port; the escape observed on CI was QUIC/UDP
+    reaching an **unpublished** container through the host's NAT. Publishing
+    makes the target reachable in a way the ceremony's own topology does not,
+    so these are strictly harder reachability tests — but harder is not
+    identical.
+  - That the transport split holds forever. The port-class front rests on one
+    claim about iroh — direct paths are UDP, the relay's data path is TCP —
+    read out of the `iroh-relay` 1.0.2 sources for the version this repo
+    pins, **not** observed against a running relay. If a future iroh carries
+    relayed data over QUIC, these rules would break the connection outright
+    instead of steering it. That failure is loud (the ceremony can't
+    complete) rather than quiet (a dishonest PASS), which is the right way
+    round, but it would look like an unrelated breakage, so: if this flow
+    starts failing to connect at all after an iroh bump, check the relay
+    transport before anything else.
+  - That the public NAT-mapped address is *unblockable* — only that it is
+    **unenumerable** from the host, which is why isolation is enforced by
+    port class rather than by address.
   - Anything about hosts whose topology differs again. The failure this flow
     hit was found by CI, not by reasoning; treat a future `isRelay: false`
     as another such discovery rather than as noise.
@@ -145,6 +266,32 @@ public NIC on the Docker host, the direct path was live and the flow failed
 on its very first honest run. The subnet-only rules and the single-probe
 check were never sufficient; they had just never been run somewhere that
 could tell.
+
+The second correction is narrower and sharper. The fix for the above —
+enumerate the host's addresses and drop traffic to each — was written as
+though "the host's public IP" were something the host knows. On an
+Azure-hosted runner it is not: the runner sees only its private NIC
+(`10.1.1.124`), while the address the relay observes and advertises
+(`20.116.79.56`) is assigned by NAT somewhere upstream and appears on no
+interface the runner can enumerate. The rule set was not mis-ordered or
+mis-applied; it was asking a question the host cannot answer. That is the
+whole reason this harness now blocks by transport as well: the transport of a
+direct path is a property of the protocol, which every host can observe,
+rather than a property of the network topology, which some hosts cannot.
+Both address fronts are kept anyway — they're cheap, they're correct where
+they apply, and each one narrows the space the port-class rules have to hold
+alone.
+
+There is a third correction embedded in the second, and it is the same
+mistake in a smaller costume. The first attempt at the transport front
+allowed UDP 443 alongside DNS, reasoning "the relay is QUIC, QUIC is UDP,
+HTTPS is 443." Every step of that is plausible and the conclusion is wrong:
+the relay's data path is a TCP WebSocket, and the only UDP it speaks is
+address discovery on 7842 — which is the one thing we most want blocked.
+That guess would have left an open UDP hole justified by a comment asserting
+something false about the transport, which is strictly worse than no comment,
+because the next person would have had no reason to re-check it. The rule set
+is now smaller *and* stronger than the guess: allow DNS, drop the rest.
 
 ## Setup gotchas this flow's harness (`lib/docker-harness.mjs`) works around
 
@@ -201,7 +348,9 @@ misleading PASS).
 
 ## Teardown
 
-Containers, the firewall-rule helper container, the `DOCKER-USER` rules it
-inserted, and both networks are removed in a `finally` — best-effort, on
+Containers, the firewall-rule helper container, every `DOCKER-USER` and
+`INPUT` rule it inserted (each one registered for teardown the moment its own
+insert succeeds, so a throw partway through the rule sets still leaks
+nothing), and both networks are removed in a `finally` — best-effort, on
 both PASS and FAIL, so a crashed run doesn't leak Docker state. Run-scoped
 names (`crypto.randomBytes(4)` suffix) so concurrent runs never collide.

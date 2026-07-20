@@ -58,7 +58,7 @@ test('7.1 — opening an app shows the iframe; back returns home', async () => {
     await waitForHome(page);
     await expect(page.getByTestId('apps-grid')).toBeVisible();
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -90,7 +90,7 @@ test.skip('7.2 — the chat FAB opens the copilot panel', async () => {
     await page.locator('.app-chat-fab').click();
     await expect(page.locator('.app-chat-panel.open')).toBeVisible();
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -142,7 +142,7 @@ test.skip('7.3 — a chat turn streams an assistant reply and a SQL tool result'
       gateway.calls.some((c) => c.method === 'POST' && /\/centraid\/.*\/_turn$/.test(c.pathname)),
     ).toBe(true);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -203,7 +203,7 @@ test.skip('7.4 — the copilot past-chats history lists prior sessions and filte
       page.locator('.app-chat-history-title', { hasText: 'Trip planning' }),
     ).toBeVisible();
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -235,7 +235,7 @@ test('10.1 — Discover renders template cards', async () => {
     await expect(page.getByRole('button', { name: /Habit Tracker/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /Journal/ })).toBeVisible();
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -362,7 +362,7 @@ test('10.4 — empty Discover renders without cards', async () => {
     await gotoNav(page, 'Discover');
     await expect(page.getByText('Nothing to install yet.')).toBeVisible();
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -396,6 +396,6 @@ test('11.1 — Insights renders the KPI cards', async () => {
     await expect(page.getByTestId('insights-kpis')).toBeVisible();
     await expect(page.getByTestId('insights-kpis')).toContainText('Generations');
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });

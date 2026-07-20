@@ -5,7 +5,7 @@ import { timingSafeEqual } from './security.js';
 import { makeConversationRouteHandler } from './conversation-routes.js';
 import { makeUserStoreRouteHandler } from '../stores/prefs-store.js';
 import type { Runtime } from '../runtime.js';
-import { tuneGatewayHttpServer } from './server-tuning.js';
+import { GATEWAY_SHUTDOWN_GRACE_MS, tuneGatewayHttpServer } from './server-tuning.js';
 
 export interface RuntimeHttpServerOptions {
   runtime: Runtime;
@@ -279,10 +279,20 @@ export async function startRuntimeHttpServer(
     token,
     close: () =>
       new Promise<void>((resolve, reject) => {
+        // `server.close()` alone waits for EVERY connection to end. Node drops
+        // idle keep-alive sockets itself, but an open SSE response is an
+        // *active* request that never ends, so a subscribed client would pin
+        // the listener open forever. Stop accepting, hurry the idle sockets
+        // along, then destroy whatever is left after the grace window — see
+        // GATEWAY_SHUTDOWN_GRACE_MS.
+        let force: ReturnType<typeof setTimeout> | undefined;
         server.close((err) => {
+          if (force) clearTimeout(force);
           if (err) reject(err);
           else resolve();
         });
+        server.closeIdleConnections();
+        force = setTimeout(() => server.closeAllConnections(), GATEWAY_SHUTDOWN_GRACE_MS);
       }),
   };
 }

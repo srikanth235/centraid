@@ -5,6 +5,7 @@ import {
   appEntry,
   cleanupEnv,
   clickMenuItem,
+  closeApp,
   confirmDelete,
   expectConfirm,
   launchApp,
@@ -73,17 +74,17 @@ test('3.1 — deleting a draft removes it via the gateway', async () => {
     expect(deletes(gateway, 'draft-grocery').length).toBeGreaterThanOrEqual(1);
     await expect(fs.access(draftDir)).rejects.toThrow();
 
-    await app.close();
+    await closeApp(app);
     const restarted = await launchApp(env);
     try {
       await waitForHome(restarted.page);
       await expect(restarted.page.locator('[data-app-id="draft-grocery"]')).toHaveCount(0);
       await expect(fs.access(draftDir)).rejects.toThrow();
     } finally {
-      await restarted.app.close();
+      await closeApp(restarted.app);
     }
   } finally {
-    await app.close().catch(() => undefined);
+    await closeApp(app);
   }
 });
 
@@ -115,7 +116,7 @@ test('3.2 — deleting a published app deregisters on the gateway and clears loc
     );
     expect(JSON.parse(stored)).toEqual([]);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -141,7 +142,7 @@ test('3.3 — gateway offline: surfaces an error and keeps the tile', async () =
     await expect(page.locator('[data-global-toast]')).toContainText(/Could not delete.*gateway/i);
     await expect(page.locator(`[data-app-id="${id}"]`)).toBeVisible();
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -189,7 +190,7 @@ test.skip('3.4 — 404 from the gateway is treated as success', async () => {
     await expect(page.locator('[data-global-toast]')).toContainText('Deleted "Pomodoro"');
     await expect(page.locator(`[data-app-id="${id}"]`)).toHaveCount(0);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -216,7 +217,7 @@ test('3.5a — Cancel keeps the tile and fires no DELETE', async () => {
     await expect(page.locator(`[data-app-id="${id}"]`)).toBeVisible();
     expect(deletes(gateway).length).toBe(0);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -235,7 +236,7 @@ test('3.5b — Escape dismisses without firing DELETE', async () => {
     await expect(page.locator(`[data-app-id="${id}"]`)).toBeVisible();
     expect(deletes(gateway).length).toBe(0);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -255,7 +256,7 @@ test('3.5d — Enter confirms the delete', async () => {
     await expect(page.locator('[data-global-toast]')).toContainText('Deleted "Enter App"');
     expect(deletes(gateway, id).length).toBeGreaterThanOrEqual(1);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -274,6 +275,6 @@ test('3.5c — backdrop click dismisses the dialog', async () => {
     await expect(page.locator(`[data-app-id="${id}"]`)).toBeVisible();
     expect(deletes(gateway).length).toBe(0);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });

@@ -3,6 +3,7 @@ import {
   appEntry,
   cleanupEnv,
   clickMenuItem,
+  closeApp,
   launchApp,
   makeEnv,
   markUserApp,
@@ -75,7 +76,7 @@ test('12.1 — picking an accent in Appearance applies it live and saves to the 
       )
       .toBe(true);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -96,7 +97,7 @@ test('12.5 — appearance choices persist across a reload', async () => {
     );
     expect(after).toBe(accent);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -119,7 +120,7 @@ test('12.6 — an explicit dark theme survives a full Electron restart', async (
     await expect
       .poll(() => launched.page.evaluate(() => document.documentElement.dataset.theme))
       .toBe('dark');
-    await launched.app.close();
+    await closeApp(launched.app);
 
     const restarted = await launchApp(env);
     try {
@@ -128,10 +129,10 @@ test('12.6 — an explicit dark theme survives a full Electron restart', async (
         .poll(() => restarted.page.evaluate(() => document.documentElement.dataset.theme))
         .toBe('dark');
     } finally {
-      await restarted.app.close();
+      await closeApp(restarted.app);
     }
   } finally {
-    await launched.app.close().catch(() => undefined);
+    await closeApp(launched.app);
   }
 });
 
@@ -159,7 +160,7 @@ test('12.2 — "Match system" resolves the OS scheme to a theme and persists it'
       )
       .toBe(true);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -181,7 +182,7 @@ test('12.4 — the Agents (providers) settings page renders', async () => {
       timeout: 10_000,
     });
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -202,7 +203,7 @@ test('13.2 — adding a remote gateway registers it in the store', async () => {
     expect((after as unknown[]).length).toBe(before + 1);
     expect((after as Array<{ label: string }>).some((g) => g.label === 'Staging')).toBe(true);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -233,7 +234,7 @@ test('13.4 — switching the active gateway re-scopes home', async () => {
     await expect.poll(() => gateway.calls.length).toBeGreaterThan(callsBefore);
     await waitForHome(page);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -259,7 +260,7 @@ test('13.7 — a remote gateway can be removed; the local one cannot', async () 
     );
     expect(localErr).toBeTruthy();
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -293,7 +294,7 @@ test('13.5 + 13.6 — a remote gateway can be renamed and have its token rotated
     );
     expect(rotateErr).toBeNull();
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -311,7 +312,7 @@ test('13.8 — switching to an unreachable gateway degrades gracefully', async (
     // `[data-sidebar]` is the shell chrome root (ShellFrame.tsx:165).
     await expect(page.locator('[data-sidebar]')).toBeVisible();
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -336,7 +337,7 @@ test('14.2 — an auth failure on publish surfaces a token/Settings prompt', asy
       timeout: 15_000,
     });
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -351,6 +352,6 @@ test('14.4 — Cmd+K opens the command palette', async () => {
     await page.keyboard.press('Escape');
     await expect(palette).toHaveCount(0);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
