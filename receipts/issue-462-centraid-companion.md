@@ -231,6 +231,8 @@ vitest.config.ts
   non-blocking warning until hermetic byte-exact rebuild is real.
 - **vendor-browser-shared:** resolve `@centraid/blob-format` from TS sources so
   pure-local CI does not require a prebuilt `dist/`.
+- **Companion grant denial shape:** assertions use `error: 'app_session_scope'`
+  (sendError wire shape), not `code`.
 - **Companion e2e:** live n0-relay job is schedule/workflow_dispatch only; PRs
   get pure-local `companion-static` (extension build/test + locker
   `query-handlers` only — full blueprints app-boot is out of scope for this gate).

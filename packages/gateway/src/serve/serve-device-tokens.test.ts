@@ -207,7 +207,7 @@ test('Companion pairing requires and server-enforces the selected module grants'
     body: JSON.stringify({ app: 'notes', query: 'list' }),
   });
   expect(notesTool.status).toBe(403);
-  expect(await notesTool.json()).toMatchObject({ code: 'app_session_scope' });
+  expect(await notesTool.json()).toMatchObject({ error: 'app_session_scope' });
 
   const unbundledLockerAction = await fetch(`${handle.url}/centraid/_tool/centraid_write`, {
     method: 'POST',
@@ -218,7 +218,7 @@ test('Companion pairing requires and server-enforces the selected module grants'
     body: JSON.stringify({ app: 'locker', action: 'trash-item', input: { item_id: 'item-1' } }),
   });
   expect(unbundledLockerAction.status).toBe(403);
-  expect(await unbundledLockerAction.json()).toMatchObject({ code: 'app_session_scope' });
+  expect(await unbundledLockerAction.json()).toMatchObject({ error: 'app_session_scope' });
 
   const otherDevice = await fetch(
     `${handle.url}/centraid/_gateway/devices/${encodeURIComponent(docs.enrollmentId)}`,
