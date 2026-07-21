@@ -29,7 +29,7 @@ gone.
 | claude-code-5e7d278e-75e-1784572126-1 | claude-code | 5e7d278e-75e6-4ac4-a4a5-1cba173c5d98 | #479 | claude-opus-4-8 | 6 | 31710 | 988503 | 1362 | 33078 | 0.7265 | 526 | 1200654 | 48424966 | 320457 | wip (#479) |
 | claude-code-5e7d278e-75e-1784572209-1 | claude-code | 5e7d278e-75e6-4ac4-a4a5-1cba173c5d98 | #479 | claude-opus-4-8 | 14 | 7523 | 2393351 | 7105 | 14642 | 1.4214 | 540 | 1208177 | 50818317 | 327562 | feat(agent-runtime): make ACP the single runner integration path (#479) -m The r |
 | claude-code-5e7d278e-75e-1784573146-1 | claude-code | 5e7d278e-75e6-4ac4-a4a5-1cba173c5d98 | #479 | claude-opus-4-8 | 34 | 45293 | 6051378 | 30427 | 75754 | 4.0696 | 574 | 1253470 | 56869695 | 357989 | feat(agent-runtime): add eight recognized ACP agent kinds (#479) -m copilot, cur |
-| claude-code-5e7d278e-75e-1784611542-1 | claude-code | 5e7d278e-75e6-4ac4-a4a5-1cba173c5d98 | #479 | claude-opus-4-8 | 1124 | 2014487 | 104894444 | 684069 | 2699680 | 82.1451 | 1698 | 3267957 | 161764139 | 1042058 | test(agent-runtime): cover ACP helper branch paths to hold the 84 percent floor  |
+| claude-code-5e7d278e-75e-1784611542-1 | claude-code | 5e7d278e-75e6-4ac4-a4a5-1cba173c5d98 | #479 | claude-opus-4-8 | 444 | 548115 | 39803282 | 283584 | 832143 | 30.4192 | 1698 | 3267957 | 161764139 | 1042058 | test(agent-runtime): cover ACP helper branch paths to hold the 84 percent floor |
 
 ### Steering
 
