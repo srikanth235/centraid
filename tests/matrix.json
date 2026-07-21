@@ -215,7 +215,7 @@
     "automations.journey": { "owner": "apps/desktop/tests/e2e/automations.spec.ts", "tier": "e2e" },
 
     "agent-runtime.correctness": {
-      "owner": "packages/agent-runtime/src/host-tools.test.ts",
+      "owner": "packages/agent-runtime/src/backends/acp/backend.test.ts",
       "tier": "unit"
     },
     "agent-runtime.contracts": null,
@@ -229,7 +229,7 @@
     },
     "agent-runtime.offline": null,
     "agent-runtime.compat": {
-      "owner": "packages/agent-runtime/src/backends/codex/provider-config.test.ts",
+      "owner": "packages/agent-runtime/src/backends/acp/enumerate-models.test.ts",
       "tier": "unit"
     },
     "agent-runtime.journey": null,
@@ -770,7 +770,7 @@
       "surface": "agent-runtime",
       "dimension": "compat",
       "tier": "unit",
-      "owner": "packages/agent-runtime/src/backends/codex/provider-config.test.ts"
+      "owner": "packages/agent-runtime/src/backends/acp/enumerate-models.test.ts"
     },
     {
       "id": "blueprint-boot",

@@ -13,7 +13,7 @@
 
 import type { ChildProcessByStdio } from 'node:child_process';
 import type { Readable, Writable } from 'node:stream';
-import { safeStdinWrite } from '../codex/safe-stdin-write.js';
+import { safeStdinWrite } from './safe-stdin-write.js';
 
 /** Protocol major version we speak (single integer per the spec). */
 export const ACP_PROTOCOL_VERSION = 1;

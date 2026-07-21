@@ -37,8 +37,7 @@ import type {
   TurnResult,
 } from '@centraid/app-engine';
 import { runAcpTurn, type AcpAdapterSpec, type AcpTurnConfig } from './backends/acp/backend.js';
-import { enumerateCodexModels } from './backends/codex/model-list.js';
-import { enumerateClaudeModels } from './backends/claude/model-list.js';
+import { enumerateAcpModels } from './backends/acp/enumerate-models.js';
 import { resolveClaudeModel } from './models/tiers.js';
 
 /** A pinned semantic version — the minimum whose protocol we've verified. */
@@ -103,8 +102,18 @@ interface AcpBackendSpec {
   adapter?: AcpAdapterSpec;
   /** Tier → native-alias mapping applied before matching the agent's model options. */
   resolveModel?: (model: string) => string;
-  /** Models this runner can serve. Defaults to none (ACP exposes them per-session). */
-  enumerateModels?: (prefs: EnumeratePrefs) => Promise<RunnerModel[]>;
+  /**
+   * Enumerate this kind's models by probing a real ACP session (launch →
+   * initialize → session/new → read the model config option). Off by default:
+   * the probe spawns the agent, and the boot warmer warms EVERY detected
+   * runner, so a universal default would spawn a process per installed native
+   * kind at boot — many of which just answer `AUTH_REQUIRED`. The two
+   * adapter-backed kinds that had bespoke enumerators before #484 (codex,
+   * claude-code) opt in; every native kind stays on "Gateway default" and
+   * still pins a model per-session at turn time. See `./backends/acp/
+   * enumerate-models.ts`.
+   */
+  probeModels?: boolean;
 }
 
 /**
@@ -180,10 +189,15 @@ function makeAcpBackend(spec: AcpBackendSpec): RunnerBackend {
       };
     },
     // Models are an ACP *session* concern (the agent advertises its own
-    // `configOptions` at session/new, and the backend pins one from there), so
-    // the default enumerator returns nothing and the picker stays on "Gateway
-    // default". Kinds with a real out-of-band catalog override this.
-    enumerateModels: spec.enumerateModels ?? ((): Promise<RunnerModel[]> => Promise.resolve([])),
+    // `configOptions` at session/new, and the backend pins one from there). A
+    // kind that opts into `probeModels` enumerates via the generic ACP probe —
+    // one launch → session/new → read the model option — reusing the exact
+    // launch config a turn would. Everything else returns nothing and the
+    // picker stays on "Gateway default".
+    enumerateModels: spec.probeModels
+      ? (prefs: EnumeratePrefs): Promise<RunnerModel[]> =>
+          enumerateAcpModels(buildAcpConfig(spec, prefs))
+      : (): Promise<RunnerModel[]> => Promise.resolve([]),
   };
 }
 
@@ -207,7 +221,10 @@ const codexBackend = makeAcpBackend({
     packageName: '@agentclientprotocol/codex-acp',
     binPathEnvVar: 'CODEX_PATH',
   },
-  enumerateModels: (prefs) => enumerateCodexModels(prefs.binPath, prefs.extraArgs),
+  // The codex-acp adapter advertises a `model` config option on session/new
+  // (its `createModelConfigOption`), so the generic probe replaces the old
+  // `codex app-server model/list` enumerator.
+  probeModels: true,
 });
 
 // ---- claude-code ---------------------------------------------------------
@@ -233,7 +250,10 @@ const claudeBackend = makeAcpBackend({
   // The picker offers capability tiers; map them to the CLI's aliases before
   // matching against the concrete model ids the adapter advertises.
   resolveModel: resolveClaudeModel,
-  enumerateModels: (prefs) => enumerateClaudeModels(prefs.binPath),
+  // The claude-agent-acp adapter advertises a `model` config option on
+  // session/new (its `buildConfigOptions`), so the generic probe replaces the
+  // old Agent-SDK `supportedModels()` enumerator.
+  probeModels: true,
 });
 
 const geminiBackend = makeAcpBackend({

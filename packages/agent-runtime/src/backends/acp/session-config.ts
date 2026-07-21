@@ -75,15 +75,21 @@ export function modeAvailable(modes: SessionModes | undefined, modeId: string): 
   return list.some((m) => isObject(m) && m.id === modeId);
 }
 
+/** One concrete model the agent offers on its `model` select option. */
+export interface OfferedModel {
+  value: string;
+  name?: string;
+}
+
 /** The agent's model selector, identified by id or semantic category. */
 function findModelOption(options: SessionConfigOption[]): SessionConfigOption | undefined {
   return options.find((o) => o.id === 'model' || o.category === 'model');
 }
 
 /** Flatten `SessionConfigSelectOptions` — either a flat list or groups of one. */
-function flattenSelectOptions(raw: unknown): Array<{ value: string; name?: string }> {
+function flattenSelectOptions(raw: unknown): OfferedModel[] {
   if (!Array.isArray(raw)) return [];
-  const out: Array<{ value: string; name?: string }> = [];
+  const out: OfferedModel[] = [];
   for (const entry of raw) {
     if (!isObject(entry)) continue;
     if (Array.isArray(entry.options)) {
@@ -98,6 +104,29 @@ function flattenSelectOptions(raw: unknown): Array<{ value: string; name?: strin
     }
   }
   return out;
+}
+
+/**
+ * The concrete models an agent advertises on its `model` config option, plus
+ * the option's `currentValue` (its own default selection). Empty when the
+ * agent exposes no model selector — which is how a kind that picks its own
+ * model per session yields an empty catalog rather than a fabricated one.
+ *
+ * This is the enumeration counterpart to `pinModel`: same option lookup, but
+ * it reports the whole offered set instead of matching one request against it.
+ * Both stay here so "what is the model option, and what does it offer" lives
+ * in exactly one place.
+ */
+export function readOfferedModels(configOptions: SessionConfigOption[]): {
+  models: OfferedModel[];
+  currentValue?: string;
+} {
+  const option = findModelOption(configOptions);
+  if (!option) return { models: [] };
+  return {
+    models: flattenSelectOptions(option.options),
+    ...(typeof option.currentValue === 'string' ? { currentValue: option.currentValue } : {}),
+  };
 }
 
 /**

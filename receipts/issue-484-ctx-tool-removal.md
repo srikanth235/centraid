@@ -18,6 +18,7 @@ child processes and zero HTTP servers, on every runner kind.
 | cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | claude-code-5e7d278e-75e-1784608446-1 | claude-code | 5e7d278e-75e6-4ac4-a4a5-1cba173c5d98 | #484 | claude-opus-4-8 | 38 | 97205 | 5939418 | 48808 | 146051 | 4.7976 | 1242 | 2707698 | 119972115 | 752135 |  |
+| claude-code-5e7d278e-75e-1784608516-1 | claude-code | 5e7d278e-75e6-4ac4-a4a5-1cba173c5d98 | #484 | claude-opus-4-8 | 6 | 5376 | 991683 | 4425 | 9807 | 0.6401 | 1248 | 2713074 | 120963798 | 756560 |  |
 
 ### Steering
 
