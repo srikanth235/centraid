@@ -1,5 +1,4 @@
 import { createWasmImagePreviewCodec, serve, type GatewayServeHandle } from '@centraid/gateway';
-import { invalidatePreflightCache } from '@centraid/agent-runtime';
 import path from 'node:path';
 import {
   gatewayDir,
@@ -310,16 +309,6 @@ export async function restartLocalGateway(gatewayId: string): Promise<void> {
   });
   restarting.set(gatewayId, p);
   return p;
-}
-
-/**
- * Called by the settings-save IPC handler when the user's `agent.runner.*`
- * prefs may have changed. The preflight result is cached in-memory by
- * `@centraid/agent-runtime`; invalidating forces the next status
- * read to re-probe `--version`.
- */
-export function noteRunnerPrefsChanged(): void {
-  invalidatePreflightCache();
 }
 
 /**

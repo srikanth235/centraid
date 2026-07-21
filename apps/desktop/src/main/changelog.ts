@@ -85,8 +85,3 @@ export async function getChangelog(): Promise<ChangelogResult> {
     };
   }
 }
-
-/** Drop the cache — test hook so a stubbed `fetch` is observed on next call. */
-export function _resetChangelogCache(): void {
-  cache = null;
-}

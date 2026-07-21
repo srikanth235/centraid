@@ -26,7 +26,7 @@
 // The per-agent TOOLS listing that used to ride this route (`codexTools`,
 // `?refreshTools=1`, …) is gone — Connections is where the user reasons about
 // what an agent can reach. Host-tool enumeration itself is untouched: it still
-// feeds the builder's grounding block (`@centraid/skills`), read off the same
+// feeds the builder's grounding block (`src/skills/`), read off the same
 // catalog by `makeUnifiedConversationRunner`.
 //
 // Mounted via `startRuntimeHttpServer`'s `extraHandlers` seam, after the

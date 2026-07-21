@@ -65,11 +65,6 @@ export const t = (key: TypeKey): Pick<TextStyle, 'fontSize' | 'lineHeight' | 'fo
   };
 };
 
-// `colors` is the light theme — kept for callers that read colors at module
-// scope (shared components, static StyleSheets). Screens that follow dark
-// mode read `useTheme().colors` instead.
-export const colors: Theme = themes.light;
-
 export { themes, densities, spacing, palette, radii, fonts, tileFinish, TILE_VARIANTS };
 export type { Theme, ThemeName, DensityName, TileVariant, TileFinish };
 
@@ -78,4 +73,3 @@ export { useTheme } from './useTheme';
 export { resolveTheme, navThemes, navThemeFor } from './resolve';
 export type { ThemeValue, ThemeColors, Scheme } from './resolve';
 export { lightPalette, darkPalette } from './tokens.generated';
-export type { PaletteKey } from './tokens.generated';

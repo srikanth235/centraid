@@ -14,7 +14,7 @@ export const BRAND = '#3EC8B4';
 // primary CTAs, brand mark, focus rings, and active state in version
 // history. Only Centraid's own light/dark themes read these — the
 // emulation presets (Notion, GitHub, …) define their own accents inline.
-export const ACCENT = BRAND;
+// The base accent is BRAND itself (see above); the ramp extends from it.
 export const ACCENT_LIGHT = '#62D6C6';
 export const ACCENT_DEEP = '#2AA593';
 export const ACCENT_MIDNIGHT = '#12645A';

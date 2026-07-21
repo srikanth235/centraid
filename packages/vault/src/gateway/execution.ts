@@ -263,14 +263,6 @@ export function insertInvocation(
   return invocationId;
 }
 
-export function invocationExists(db: VaultDb, invocationId: string): boolean {
-  return (
-    db.journal
-      .prepare('SELECT 1 AS x FROM agent_command_invocation WHERE invocation_id = ?')
-      .get(invocationId) !== undefined
-  );
-}
-
 /**
  * Bind a caller-supplied idempotency key to the immutable journal identity
  * before a handler can run. Canonical commit repair repeats this check after

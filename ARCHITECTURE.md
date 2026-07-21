@@ -7,7 +7,7 @@ Centraid is personal software over a sovereign vault. Its backend is a single ho
 - **Embedded** in the Electron desktop's main process (`apps/desktop`). The renderer is a **thin client** that talks to the embedded gateway over HTTP with a Bearer token; Electron IPC is reserved for genuinely native operations (token storage, keychain, reveal-in-Finder, gateway lifecycle).
 - **Standalone** as the `centraid-gateway` daemon (a bin shipped by `@centraid/gateway`), serving the same HTTP surface under a config-file `dataDir`.
 
-`serve()` boots a gateway and fronts it with a loopback HTTP listener plus Bearer auth; `buildGateway()` constructs the same host-agnostic graph without a socket. The mobile app (`apps/mobile`, Expo) embeds no gateway — it connects to one over HTTP. `@centraid/design-tokens` and `@centraid/tsconfig` are the cross-surface shared packages.
+`serve()` boots a gateway and fronts it with a loopback HTTP listener plus Bearer auth; `buildGateway()` constructs the same host-agnostic graph without a socket. The mobile app (`apps/mobile`, Expo) embeds no gateway — it connects to one over HTTP. `@centraid/design-tokens` is the cross-surface shared package; per-runtime TypeScript settings live in the root `tsconfig.base.json` / `tsconfig.electron.json` / `tsconfig.expo.json` files.
 
 The web app (`apps/web`) is an installable Vite PWA and, like mobile, embeds no backend. It shares the browser-safe React shell in `packages/client` with desktop. It supports two data planes: direct HTTP (the gateway serves the PWA from a dedicated origin and the shell uses an Origin-bound HttpOnly control session), or ticket-only Iroh through an application-specific Rust/WASM client. Browsers have no UDP access, so Iroh/WASM is relay-only. A service-worker bridge carries generated-app documents, assets, and streams over the same tunnel; their one-time app sessions remain vault- and app-scoped, and the tunnel deliberately defers those requests to cookie authorization instead of injecting its broader device bearer.
 
@@ -41,24 +41,23 @@ The same journalled command path backs **Vault Atlas** (#441), the Operations sc
 │   └── mobile/                    # @centraid/mobile — Expo; HTTP client to a gateway
 ├── packages/
 │   ├── client/                    # @centraid/client — shared React shell + browser-safe HTTP clients
-│   ├── gateway/                   # @centraid/gateway — host-agnostic gateway; centraid-gateway daemon bin
+│   ├── gateway/                   # @centraid/gateway — host-agnostic gateway; centraid-gateway daemon bin; src/skills/ holds SKILL.md grounding + dynamic renderers
 │   ├── data-plane/                # Shared Rust byte-plane core + direct-HTTP sidecar
 │   ├── vault/                     # @centraid/vault — the ontology: vault.db+journal.db DDL, consent gateway, typed commands
 │   ├── app-engine/                # @centraid/app-engine — handler loader, dispatcher, /centraid HTTP surface, stores
 │   ├── agent-runtime/             # @centraid/agent-runtime — ACP turn driver for every runner kind (docs/runners.md); centraid CLI bin
 │   ├── automation/                # @centraid/automation — manifest, fire spine, scheduler, webhook ingress
 │   ├── blueprints/                # @centraid/blueprints — scaffolders + bundled template gallery
-│   ├── skills/                    # @centraid/skills — SKILL.md grounding + dynamic renderers
 │   ├── tunnel/                    # @centraid/tunnel — wire protocol + packaged Rust napi relay
-│   ├── design-tokens/             # @centraid/design-tokens — colors, type, spacing, icons
-│   └── tsconfig/                  # @centraid/tsconfig — base.json, electron.json, expo.json
+│   └── design-tokens/             # @centraid/design-tokens — colors, type, spacing, icons
+├── tsconfig.base.json             # shared TS compilerOptions (electron/expo variants extend it)
 ├── turbo.json                     # task graph (build / dev / typecheck / lint / test)
 └── package.json                   # workspaces, top-level scripts, devDependencies
 ```
 
 ### Dependency shape
 
-`@centraid/app-engine` is the foundation (depends only on `ajv`). `@centraid/backup` is a Node-builtins-only leaf containing both the opaque provider seam and the pure authenticated WAL codecs; `@centraid/vault` depends on that codec surface for capture and otherwise stands beside app-engine. The gateway is where the vault and app engine meet (handlers reach the vault through an injected `ctx.vault` bridge, never an app-engine package import). `@centraid/automation` builds on app-engine + blueprints; `@centraid/agent-runtime` on app-engine + automation; `@centraid/gateway` on app-engine + agent-runtime + automation + backup + blueprints + skills + vault. The Rust `packages/data-plane` core is packaged both as `packages/tunnel/native`'s napi relay and as the optional direct-HTTP sidecar for ticketed Range delivery, hashing, compression, previews, and provider byte pumping. Both receive only pre-authorized metadata/capabilities and own no identity, consent, journal, replica, agent, or automation decision. The desktop app depends on gateway + agent-runtime + app-engine + automation + design-tokens + tunnel. Both apps share `@centraid/design-tokens` (mobile resolves it from `src` for React Native). The low-end measurements, hardware decision table, deferred cache/materialization designs, Rust protocol boundary, and rollback contract are recorded in [`docs/plans/gateway-low-end-and-rust-plane.md`](docs/plans/gateway-low-end-and-rust-plane.md).
+`@centraid/app-engine` is the foundation (depends only on `ajv`). `@centraid/backup` is a Node-builtins-only leaf containing both the opaque provider seam and the pure authenticated WAL codecs; `@centraid/vault` depends on that codec surface for capture and otherwise stands beside app-engine. The gateway is where the vault and app engine meet (handlers reach the vault through an injected `ctx.vault` bridge, never an app-engine package import). `@centraid/automation` builds on app-engine + blueprints; `@centraid/agent-runtime` on app-engine + automation; `@centraid/gateway` on app-engine + agent-runtime + automation + backup + blueprints + skills + vault. The Rust `packages/tunnel/data-plane` core is packaged both as `packages/tunnel/native`'s napi relay and as the optional direct-HTTP sidecar for ticketed Range delivery, hashing, compression, previews, and provider byte pumping. Both receive only pre-authorized metadata/capabilities and own no identity, consent, journal, replica, agent, or automation decision. The desktop app depends on gateway + agent-runtime + app-engine + automation + design-tokens + tunnel. Both apps share `@centraid/design-tokens` (mobile resolves it from `src` for React Native). The low-end measurements, hardware decision table, deferred cache/materialization designs, Rust protocol boundary, and rollback contract are recorded in [`docs/plans/gateway-low-end-and-rust-plane.md`](docs/plans/gateway-low-end-and-rust-plane.md).
 
 ## On-disk layout
 

@@ -17,7 +17,7 @@ import {
 } from './crypto.js';
 import { createSnapshot, restoreSnapshot, verifySnapshot, type SourceEntry } from './engine.js';
 import { LocalBackupProvider } from './local-provider.js';
-import { openManifest, READABLE_SNAPSHOT_FORMATS, SNAPSHOT_FORMAT } from './manifest.js';
+import { openManifest, READABLE_SNAPSHOT_FORMATS, SNAPSHOT_FORMAT_V2 } from './manifest.js';
 import { partBuffer } from './parts.js';
 import type { ObjectStore } from './object-store.js';
 import type { BackupProvider, StoreClass } from './provider.js';
@@ -599,7 +599,7 @@ describe('/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs', (
     });
     expect(row).not.toBeNull();
     expect(row!.format).toBe('centraid-snapshot/2');
-    expect(row!.format).toBe(SNAPSHOT_FORMAT);
+    expect(row!.format).toBe(SNAPSHOT_FORMAT_V2);
 
     const destDir = await tempDir('backup-engine-v2-restore-');
     await fs.rm(destDir, { recursive: true, force: true });
@@ -874,7 +874,7 @@ describe('/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs', (
 describe('snapshot format gate', () => {
   test('v0 reads and writes only the current compressed snapshot format', () => {
     expect(READABLE_SNAPSHOT_FORMATS).toEqual(['centraid-snapshot/2']);
-    expect(SNAPSHOT_FORMAT).toBe('centraid-snapshot/2');
+    expect(SNAPSHOT_FORMAT_V2).toBe('centraid-snapshot/2');
   });
 
   test('restore refuses a row whose format is outside the reader guarantee', async () => {

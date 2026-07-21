@@ -10,6 +10,7 @@ import {
   Tray,
   nativeImage,
   type MenuItemConstructorOptions,
+  type NativeImage,
 } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -105,13 +106,34 @@ export function installApplicationMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+/**
+ * The tray image. On macOS the menu bar wants a monochrome **template** image
+ * so the OS tints it to the bar (light/dark, active-highlight) — exactly how
+ * the other status items render. A colored icon ignores that and looks out of
+ * place, so we load the black-on-transparent `iconTemplate.png` (its sibling
+ * `iconTemplate@2x.png` is auto-picked for Retina) and flag it as a template
+ * rather than resizing the full-color app icon. Windows/Linux trays are not
+ * auto-tinted, so they keep the color icon.
+ */
+function loadTrayImage(colorIconPath: string): NativeImage {
+  if (process.platform === 'darwin') {
+    const templatePath = path.join(path.dirname(colorIconPath), 'iconTemplate.png');
+    const templ = nativeImage.createFromPath(templatePath);
+    if (!templ.isEmpty()) {
+      templ.setTemplateImage(true);
+      return templ;
+    }
+    // Fall through to the color icon if the template asset is missing.
+  }
+  const image = nativeImage.createFromPath(colorIconPath);
+  return image.isEmpty() ? image : image.resize({ width: 16, height: 16 });
+}
+
 export function installTray(iconPath?: string): void {
   if (tray) return;
-  const resolved = iconPath ?? path.join(__dirname, '..', 'icon.png');
-  const image = nativeImage.createFromPath(resolved);
-  tray = new Tray(
-    image.isEmpty() ? nativeImage.createEmpty() : image.resize({ width: 16, height: 16 }),
-  );
+  const colorIcon = iconPath ?? path.join(__dirname, '..', 'icon.png');
+  const image = loadTrayImage(colorIcon);
+  tray = new Tray(image.isEmpty() ? nativeImage.createEmpty() : image);
   rebuildTrayMenu();
   tray.on('click', () => focusMainWindow());
 }

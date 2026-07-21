@@ -26,8 +26,8 @@ Components:
 Build and verify:
 
 ```sh
-cargo test --manifest-path packages/data-plane/Cargo.toml
-cargo build --release --manifest-path packages/data-plane/Cargo.toml
+cargo test --manifest-path packages/tunnel/data-plane/Cargo.toml
+cargo build --release --manifest-path packages/tunnel/data-plane/Cargo.toml
 ```
 
 The HTTP implementation is contract-tested by the gateway's env-switchable

@@ -12,6 +12,7 @@ import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
+import * as pagefind from 'pagefind';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const outDir = join(repoRoot, 'dist', 'docs-site');
@@ -79,19 +80,21 @@ async function normalizePagefindAnchors() {
 }
 
 async function buildSearchIndex() {
-  await run('bun', [
-    'x',
-    'pagefind',
-    '--site',
-    outDir,
-    '--output-subdir',
-    'pagefind',
-    '--force-language',
-    'en',
-    '--include-characters',
-    '._:/<>-',
-    '--quiet',
-  ]);
+  // Pagefind's Node API instead of `bun x pagefind` — the dependency is now a
+  // real import the lockfile pins and knip can trace, not an opaque subprocess.
+  // Flag parity with the old CLI call: --force-language en, --include-characters
+  // '._:/<>-', --site outDir (addDirectory), --output-subdir pagefind
+  // (writeFiles outputPath). --quiet maps to the API's default (no logging).
+  const { errors, index } = await pagefind.createIndex({
+    forceLanguage: 'en',
+    includeCharacters: '._:/<>-',
+  });
+  if (errors.length > 0 || !index) {
+    throw new Error(`pagefind: createIndex failed — ${errors.join('; ')}`);
+  }
+  await index.addDirectory({ path: outDir });
+  await index.writeFiles({ outputPath: join(outDir, 'pagefind') });
+  await pagefind.close();
   console.log(`docs-site search: Pagefind index built for ${basePrefix()} routes`);
 }
 

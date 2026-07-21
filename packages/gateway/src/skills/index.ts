@@ -1,5 +1,5 @@
 /*
- * @centraid/skills
+ * Skills — gateway agent grounding (`src/skills/`)
  *
  * Agent grounding for the centraid app builder, modeled as a `skills/`
  * directory of `SKILL.md` units (the home of the grounding half of the retired

@@ -72,20 +72,6 @@ export function ensureIrohDeviceKey(gatewayId: string): Uint8Array {
 }
 
 /**
- * The EndpointId this device presents to a gateway (its enrollment key).
- * Shown in Settings so the admin can `centraid-gateway devices add` it, and
- * used by the pairing flow. Mints the stable key on first read.
- */
-export async function deviceEndpointId(gatewayId: string): Promise<string> {
-  const existing = connections.get(gatewayId);
-  if (existing) return existing.client.endpointId;
-  const client = await createTunnelClient({ secretKey: ensureIrohDeviceKey(gatewayId) });
-  const id = client.endpointId;
-  await client.close();
-  return id;
-}
-
-/**
  * Ensure a loopback proxy to the iroh gateway named by `endpointTicket`
  * (the EndpointTicket string — EndpointId + relay hint) is up, and return
  * its base URL. Deduped per gateway id; the connection is torn down by

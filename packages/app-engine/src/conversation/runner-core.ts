@@ -18,7 +18,7 @@
  *                              chat opens the app's draft worktree.
  *   - `buildExtraSystemPrompt` — defaults to passing the route's preamble
  *                              through unchanged; builder chat folds in the
- *                              authoring grounding (owned by `@centraid/skills`).
+ *                              authoring grounding (owned by the gateway's `src/skills/`).
  *   - `onTurnComplete`        — builder chat mints webhook secrets here.
  *   - `extraPath`             — builder chat puts the bundled `centraid` CLI
  *                              on the agent's PATH; data chat doesn't.

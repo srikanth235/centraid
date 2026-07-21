@@ -128,49 +128,11 @@ export function relativeTime(iso?: string): string {
   }
 }
 
-// Small chevron-down — ArrowLeft rotated -90°, matching Day1Composer.
-export function chevronDown(size: number): string {
-  return `<span style="display:inline-flex;transform:rotate(-90deg);opacity:0.6">${Icon.ArrowLeft({
-    size,
-  })}</span>`;
-}
-
-// Format a raw token count as a compact k / M string.
-export function insK(v: number): string {
-  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`;
-  if (v >= 1_000) return `${Math.round(v / 1_000)}k`;
-  return String(v);
-}
-
-// Format a USD figure for a KPI / table cell.
-export function insUsd(n: number): string {
-  if (n > 0 && n < 0.01) return '<$0.01';
-  return `$${n.toFixed(2)}`;
-}
-
-// Title-case a run `kind` for display ('chat' → 'Chat').
-export function insKindLabel(kind: string): string {
-  if (kind === 'chat') return 'Chat';
-  if (kind === 'build') return 'Build';
-  if (kind === 'automation') return 'Automation';
-  return kind;
-}
-
 // Compact token count for the standing-order list / run rail.
 export function fmtTokens(n: number): string {
   if (n <= 0) return '—';
   if (n < 1000) return String(n);
   return `${(n / 1000).toFixed(1)}k`;
-}
-
-// Retention label for the Behavior panel — mirrors the builder's config
-// pane wording ("Keep …") over the manifest's `history.keep` shape.
-export function fmtRetention(keep: CentraidAutomationManifest['history']['keep']): string {
-  if (keep === 'all') return 'Keep all runs';
-  if (keep === 'errors') return 'Keep failed only';
-  if (typeof keep === 'object' && 'count' in keep) return `Keep ${keep.count} runs`;
-  if (typeof keep === 'object' && 'days' in keep) return `Keep ${keep.days} days`;
-  return '—';
 }
 
 // A cron next-run pill label: "Today, 6:00 PM" / "Tomorrow, 6:00 PM" /

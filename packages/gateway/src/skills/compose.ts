@@ -31,14 +31,14 @@ const SKILL_FILE = 'SKILL.md';
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 
 /**
- * Absolute path to the package's `skills/` catalog. Resolves the same from
- * compiled `dist/` and from `tsx`-run `src/`: the loader file sits one level
- * under the package root in both layouts, so its grandparent is the package
- * root.
+ * Absolute path to the gateway's `skills/` grounding catalog (package root,
+ * shipped via the package's `files` allow-list). Resolves the same from
+ * compiled `dist/skills/` and from `tsx`/vitest-run `src/skills/`: this loader
+ * sits two levels under the package root in both layouts, so `../../skills`
+ * lands on the catalog either way.
  */
 export function skillsDir(): string {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  return path.join(path.dirname(here), 'skills');
+  return fileURLToPath(new URL('../../skills', import.meta.url));
 }
 
 /** Split a `SKILL.md` into its frontmatter map and its markdown body. */

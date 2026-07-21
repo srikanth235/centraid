@@ -11,14 +11,6 @@ const PREFIX = 'centraid.v1.';
 // after hydrateSecure().
 const cache = new Map<string, string>();
 
-export const SECURE_KEYS = {
-  LINK_SECRET: 'phoneLink.secretKey',
-  LINK_TICKET: 'phoneLink.ticket',
-  SETTINGS_TOKEN: 'settings.gatewayToken',
-} as const;
-
-export type SecureKey = (typeof SECURE_KEYS)[keyof typeof SECURE_KEYS];
-
 function storageKey(key: string): string {
   return PREFIX + key;
 }
@@ -67,14 +59,5 @@ export async function setSecure(key: string, value: string): Promise<void> {
     }
   } catch {
     /* best-effort: cache still holds the value for this session */
-  }
-}
-
-export async function deleteSecure(key: string): Promise<void> {
-  cache.set(key, '');
-  try {
-    await SecureStore.deleteItemAsync(storageKey(key));
-  } catch {
-    /* swallow */
   }
 }

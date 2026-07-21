@@ -24,7 +24,11 @@ import { existsSync, promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto, { randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { BackupProviderError, openRemoteBackupProvider, SNAPSHOT_FORMAT } from '@centraid/backup';
+import {
+  BackupProviderError,
+  openRemoteBackupProvider,
+  SNAPSHOT_FORMAT_V2,
+} from '@centraid/backup';
 import { startFakeProviderServer } from '@centraid/backup/dist/testing/fake-provider-server.js';
 import { FsBlobStore, ReplicaIndex } from '@centraid/vault';
 import { openVaultRegistry } from '../serve/vault-registry.js';
@@ -306,7 +310,7 @@ test('a blank machine recovers a whole vault from nothing but the kit and the ap
     totalBytes: 0,
     objectCount: 0,
     generation: report.generation,
-    format: SNAPSHOT_FORMAT,
+    format: SNAPSHOT_FORMAT_V2,
     appMeta: {},
   });
   let fenced = false;
@@ -318,7 +322,7 @@ test('a blank machine recovers a whole vault from nothing but the kit and the ap
       totalBytes: 0,
       objectCount: 0,
       generation: a.oldGeneration,
-      format: SNAPSHOT_FORMAT,
+      format: SNAPSHOT_FORMAT_V2,
       appMeta: {},
     });
   } catch (err) {
@@ -357,7 +361,7 @@ test('recovery refuses a snapshot written by newer software BEFORE any byte is f
     totalBytes: 0,
     objectCount: 0,
     generation: a.oldGeneration,
-    format: SNAPSHOT_FORMAT,
+    format: SNAPSHOT_FORMAT_V2,
     appMeta: { vaultUserVersion: '9999', ontologyVersion: '1.0' },
   });
 

@@ -17,7 +17,7 @@
  *     same turn can author code and look at the real data it projects;
  *   - the unified system prompt: the data/schema preamble the chat route
  *     builds (`input.extraSystemPrompt`) followed by the builder authoring
- *     prompt + UI grounding (composed by `@centraid/skills`).
+ *     prompt + UI grounding (composed by `src/skills/`).
  *
  * Code edits STAGE in the draft worktree; ext-table schema changes are
  * DECLARED there (`app.json#ext.tables`) and mirrored into the vault's
@@ -31,7 +31,7 @@
  * Since issue #147 (Concern 1) this is a thin config over
  * `makeConversationRunnerCore` (`@centraid/app-engine`): the shared per-turn
  * spine lives there; this file supplies only the builder seams — draft-worktree cwd,
- * the authoring prompt (delegated to `@centraid/skills`), and post-turn
+ * the authoring prompt (delegated to `src/skills/`), and post-turn
  * webhook minting.
  *
  * Replaces the data-only `makeConversationRunner` injection in `serve.ts` whenever a
@@ -56,7 +56,7 @@ import {
   type VaultSqlRunner,
 } from '@centraid/app-engine';
 import { provisionAppPendingWebhooks, WEBHOOK_ROUTE_PREFIX } from '@centraid/automation';
-import { buildAuthoringExtraPrompt } from '@centraid/skills';
+import { buildAuthoringExtraPrompt } from '../skills/index.js';
 import { WorktreeStore } from '../worktree-store/index.js';
 import { ensureSession } from '../lifecycle/lifecycle-shared.js';
 import { ensureDraftBand, type ExtBandOps } from '../lifecycle/ext-band.js';
@@ -164,7 +164,7 @@ export function makeUnifiedConversationRunner(
 
   // Builder chat is the data-chat spine plus three seams: cwd = the app's
   // shared draft worktree, the unified authoring prompt (grounding owned by
-  // `@centraid/skills`), and post-turn webhook minting.
+  // `src/skills/`), and post-turn webhook minting.
   return makeConversationRunnerCore({
     prefsLoader: opts.prefsLoader,
     ...(opts.subsystem ? { subsystem: opts.subsystem } : {}),

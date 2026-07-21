@@ -39,21 +39,10 @@ function markDismissed(): void {
   }
 }
 
-/** Clear dismiss so a settings/menu action can re-offer immediately. */
-export function reofferInstallPrompt(): void {
-  try {
-    localStorage.removeItem(DISMISS_KEY);
-  } catch {
-    /* private mode */
-  }
-}
-
-let deferredPrompt: InstallPromptEvent | null = null;
 let bannerEl: HTMLDivElement | null = null;
 
 function showInstallBanner(event: InstallPromptEvent): void {
   if (bannerEl || dismissedRecently()) return;
-  deferredPrompt = event;
   const banner = notice('install', 'Install Centraid for a focused, app-like workspace.');
   bannerEl = banner;
   const install = document.createElement('button');
@@ -70,7 +59,6 @@ function showInstallBanner(event: InstallPromptEvent): void {
       .finally(() => {
         banner.remove();
         bannerEl = null;
-        deferredPrompt = null;
       });
   });
   dismiss.addEventListener('click', () => {
@@ -79,17 +67,6 @@ function showInstallBanner(event: InstallPromptEvent): void {
     bannerEl = null;
   });
   banner.append(install, dismiss);
-}
-
-/**
- * Manually re-show a deferred install prompt (e.g. from a menu action).
- * Returns false when the browser has not offered an install event yet.
- */
-export function requestInstallPrompt(): boolean {
-  reofferInstallPrompt();
-  if (!deferredPrompt) return false;
-  showInstallBanner(deferredPrompt);
-  return true;
 }
 
 export function installWebChrome(): void {
@@ -109,7 +86,6 @@ export function installWebChrome(): void {
   window.addEventListener('beforeinstallprompt', (raw) => {
     raw.preventDefault();
     const event = raw as InstallPromptEvent;
-    deferredPrompt = event;
     if (!dismissedRecently()) showInstallBanner(event);
   });
 }

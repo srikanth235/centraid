@@ -31,7 +31,7 @@
 // pending-chip assertions consume the production intent-invalidation
 // derivation, so the harness cannot invent a terminal browser signal that the
 // real coordinator would never publish.
-import { replicaIntentInvalidations } from '@centraid/client/replica/intent-invalidations';
+import { replicaIntentInvalidations } from '../kit/intent-invalidations.js';
 import { execFileSync } from 'node:child_process';
 import {
   cpSync,

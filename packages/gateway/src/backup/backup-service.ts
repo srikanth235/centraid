@@ -1797,8 +1797,4 @@ export class BackupService {
   }
 }
 
-export function createBackupService(opts: BackupServiceOptions): BackupService {
-  return new BackupService(opts);
-}
-
 export type { BackupState, RecoveryKitState };

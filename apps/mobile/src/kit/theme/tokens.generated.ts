@@ -82,8 +82,3 @@ export const fonts = {
     semibold: 'SpaceGrotesk_600SemiBold',
   },
 } as const;
-
-export type PaletteKey = keyof typeof lightPalette;
-export type Palette = Record<PaletteKey, string>;
-export type RadiusKey = keyof typeof radii;
-export type SpacingKey = keyof typeof spacing;

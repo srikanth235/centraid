@@ -23,7 +23,7 @@ import {
   loadKeyring,
   openLocalBackupProvider,
   openManifest,
-  SNAPSHOT_FORMAT,
+  SNAPSHOT_FORMAT_V2,
   verifySnapshot,
   type BackupProvider,
 } from '@centraid/backup';
@@ -624,7 +624,7 @@ test('restore refusal: a registered snapshot with a newer vaultUserVersion refus
       // A READABLE format (the current one) so the refusal comes from the
       // version gate, not the format gate — the whole point of this test is
       // that a newer vaultUserVersion is refused before any download.
-      format: SNAPSHOT_FORMAT,
+      format: SNAPSHOT_FORMAT_V2,
       appMeta: { ...realRow.appMeta, vaultUserVersion: '99999' },
     });
     const destDir = path.join(await tempDir('e2e-refusal-dest-parent'), 'refusal-dest');

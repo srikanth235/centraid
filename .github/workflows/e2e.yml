@@ -205,12 +205,10 @@ jobs:
         # `bun run build`. tests/agent-e2e-mobile/lib/ci-gateway.mjs imports only
         # packages/gateway/dist, and turbo pulls every workspace dependency
         # (vault, app-engine, agent-runtime, automation, backup, blueprints,
-        # skills, tunnel, client, web, design-tokens) in transitively — nothing
-        # the mobile job needs is dropped.
-        # Measured with `turbo run build --dry=json`: this schedules 15 of 19
-        # build tasks. The saving is narrow but real, and comes almost entirely
-        # from dropping @centraid/data-plane (a `cargo build --locked`) and
-        # @centraid/desktop.
+        # tunnel, client, web, design-tokens) in transitively — nothing
+        # the mobile job needs is dropped. The saving is narrow but real, and
+        # comes almost entirely from dropping @centraid/desktop (skills and
+        # data-plane folded into gateway/tunnel in #495).
         run: |
           bunx turbo run build --filter=@centraid/gateway
           gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"

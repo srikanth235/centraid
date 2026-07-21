@@ -378,29 +378,6 @@ export function compileSchema(schema: JsonSchema): ValidateFunction {
 }
 
 /**
- * Format an Ajv error array into a single `{path, message}` pair. We
- * surface the first error since the chat-facing error format only
- * carries one message.
- */
-export function formatAjvErrors(validate: ValidateFunction): {
-  path: string;
-  message: string;
-} {
-  const errs = validate.errors ?? [];
-  if (errs.length === 0) return { path: '', message: 'validation failed' };
-  const first = errs[0]!;
-  const path =
-    first.instancePath || (first.params as { missingProperty?: string }).missingProperty
-      ? first.instancePath ||
-        `/${(first.params as { missingProperty?: string }).missingProperty ?? ''}`
-      : '';
-  return {
-    path,
-    message: first.message ?? 'validation failed',
-  };
-}
-
-/**
  * Parse + validate `app.json` content. Throws `ManifestError` on any
  * shape problem.
  */

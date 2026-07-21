@@ -62,15 +62,6 @@ export async function getGatewayToken(gatewayId: string): Promise<string | undef
   }
 }
 
-export async function hasGatewayToken(gatewayId: string): Promise<boolean> {
-  try {
-    const stat = await fs.stat(tokenFilePath(gatewayId));
-    return stat.isFile() && stat.size > 0;
-  } catch {
-    return false;
-  }
-}
-
 export async function clearGatewayToken(gatewayId: string): Promise<void> {
   await fs.rm(tokenFilePath(gatewayId), { force: true });
 }

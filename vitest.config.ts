@@ -15,7 +15,6 @@ export default defineConfig({
       'packages/blueprints',
       'packages/client',
       'packages/gateway',
-      'packages/skills',
       'packages/tunnel',
       'packages/test-kit',
       'packages/vault',
