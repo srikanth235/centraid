@@ -262,6 +262,45 @@ describe('SettingsProvidersScreen', () => {
     expect(props.refreshModels).toHaveBeenCalledTimes(1);
   });
 
+  it('renders each agent card with its identity glyph tile', async () => {
+    const el = await mount(makeProps());
+    const tiles = el.querySelectorAll('.glyphTile');
+    // One tile per inventory entry, each holding a vendored glyph svg.
+    expect(tiles.length).toBe(2);
+    for (const tile of tiles) {
+      expect(tile.querySelector('svg')).toBeTruthy();
+    }
+    // The unavailable agent's tile is muted rather than dropped.
+    const [, claude] = [...el.querySelectorAll('.entry')] as HTMLElement[];
+    expect(claude?.querySelector('.glyphTile[data-unavail="true"]')).toBeTruthy();
+  });
+
+  it('falls back to a generic glyph for a kind this build has no artwork for', async () => {
+    const base = makeStatus();
+    // A kind with no entry in AGENT_GLYPHS must still render an svg, not throw.
+    const el = await mount(
+      makeProps({
+        loadStatus: vi.fn().mockResolvedValue({
+          ...base,
+          cards: [
+            {
+              kind: 'some-future-agent',
+              title: 'Some Future Agent',
+              accent: '#64748b',
+              subtitle: 'detected',
+              connected: true,
+              modelsLoading: false,
+              models: [],
+            },
+          ],
+        }),
+      }),
+    );
+    const tile = el.querySelector('.entry .glyphTile');
+    expect(tile).toBeTruthy();
+    expect(tile?.querySelector('svg')).toBeTruthy();
+  });
+
   it('lists a runner kind this build predates, disabled until it is available', async () => {
     const base = makeStatus();
     const el = await mount(

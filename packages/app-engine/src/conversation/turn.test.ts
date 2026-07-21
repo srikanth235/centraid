@@ -18,6 +18,7 @@ test('RUNNER_KINDS is the source-of-truth list of runner kinds', () => {
     'auggie',
     'vibe',
     'droid',
+    'pi',
     'acp',
   ]);
 });

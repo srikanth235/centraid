@@ -2,6 +2,11 @@
  * Runner backend registry — the single dispatch table for every runner
  * kind the runtime can drive.
  *
+ * governance: allow-repo-hygiene file-size-limit — this is a per-kind
+ * dispatch table; it grows one backend entry per RunnerKind by design, so it
+ * legitimately exceeds the 500-line file cap. Split into a data module before
+ * it doubles, not per added kind.
+ *
  * Before this existed, three sites hardcoded a per-kind switch: `runTurn`
  * (a two-arm `if`), `preflight` (`MIN_VERSIONS` / `defaultBinFor` /
  * `hintFor`), and `models/enumerators` (a `switch`). They now all read
@@ -14,9 +19,9 @@
  * entry; kinds differ only in how the ACP-speaking process is launched.
  *
  *   - `gemini` / `qwen` / `opencode` / `grok` / `kimi` / `copilot` / `cursor` /
- *     `kilo` / `cline` / `goose` / `auggie` / `vibe` / `droid` / custom `acp`:
- *     the CLI speaks ACP natively, so we spawn it with its ACP flag or
- *     subcommand (or, for `vibe`, its dedicated ACP binary).
+ *     `kilo` / `cline` / `goose` / `auggie` / `vibe` / `droid` / `pi` / custom
+ *     `acp`: the CLI speaks ACP natively, so we spawn it with its ACP flag or
+ *     subcommand (or, for `vibe` and `pi`, its dedicated ACP binary).
  *   - `codex` / `claude-code`: neither CLI speaks ACP (Claude Code has no
  *     `--acp`; codex-rs has no ACP surface), so we spawn their official
  *     Apache-2.0 adapters — pinned dependencies of this package, never an
@@ -452,6 +457,19 @@ const droidBackend = makeAcpBackend({
     'Install Factory Droid (`curl -fsSL https://app.factory.ai/cli | sh`, or `brew install --cask droid`) and sign in in a browser, or set `FACTORY_API_KEY`.',
 });
 
+const piBackend = makeAcpBackend({
+  kind: 'pi',
+  label: 'pi',
+  // `pi-acp` is a SEPARATE ACP server binary, not a mode of a `pi` CLI — the
+  // same shape as `vibe`/`vibe-acp`. That is why `acpArgs` is empty: there is
+  // no flag or subcommand to add. Do not "fix" this to a `pi` + `['acp']`
+  // invocation; that command does not exist.
+  defaultBin: 'pi-acp',
+  acpArgs: [],
+  minVersion: { major: 0, minor: 0, patch: 31 },
+  installHint: 'Install the pi ACP adapter (`npm i -g pi-acp`) and sign in.',
+});
+
 const acpBackend = makeAcpBackend({
   kind: 'acp',
   label: 'Custom ACP agent',
@@ -479,6 +497,7 @@ export const RUNNER_BACKENDS: Record<RunnerKind, RunnerBackend> = {
   auggie: auggieBackend,
   vibe: vibeBackend,
   droid: droidBackend,
+  pi: piBackend,
   acp: acpBackend,
 };
 

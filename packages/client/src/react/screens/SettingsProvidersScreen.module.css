@@ -76,12 +76,30 @@
 .row[data-unavail='true'] {
   opacity: 0.55;
 }
-.rowDot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
+/* Identity chip: a rounded square tinted by the agent's accent, holding the
+   vendored `currentColor` glyph. Replaces the old bare accent dot — same
+   `--row-accent` mechanism, more identity. The glyph itself inherits the tint
+   from `AgentGlyph`'s inline `color`; here we only tint the tile's fill/ring. */
+.glyphTile {
   flex: none;
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--row-accent, var(--accent)) 16%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-md);
+  background: color-mix(in oklab, var(--row-accent, var(--accent)) 12%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--row-accent, var(--accent)) 30%, transparent);
+}
+.glyphTile svg {
+  width: 18px;
+  height: 18px;
+}
+/* Muted when the agent is unavailable: fall off the accent onto neutral ink,
+   matching the row's own dimmed state. */
+.glyphTile[data-unavail='true'] {
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--ink) 12%, transparent);
 }
 .rowMeta {
   flex: 1;

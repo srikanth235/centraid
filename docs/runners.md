@@ -1,6 +1,6 @@
 # Runners (coding-agent harnesses)
 
-A **runner** is a coding-agent CLI Centraid can drive to produce a turn — `codex`, `claude-code`, `gemini`, `qwen`, `opencode`, `grok`, `kimi`, `copilot`, `cursor`, `kilo`, `cline`, `goose`, `auggie`, `vibe`, `droid`, or a custom `acp` binary. The user-facing ids (`RunnerKind`) are stable; how we talk to them is not.
+A **runner** is a coding-agent CLI Centraid can drive to produce a turn — `codex`, `claude-code`, `gemini`, `qwen`, `opencode`, `grok`, `kimi`, `copilot`, `cursor`, `kilo`, `cline`, `goose`, `auggie`, `vibe`, `droid`, `pi`, or a custom `acp` binary. The user-facing ids (`RunnerKind`) are stable; how we talk to them is not.
 
 ## Supported harnesses
 
@@ -21,6 +21,7 @@ A **runner** is a coding-agent CLI Centraid can drive to produce a turn — `cod
 | `auggie` | Auggie CLI | `auggie` | `--acp` | 0.33.0 | `npm i -g @augmentcode/auggie` + terminal sign-in (paid Augment plan) |
 | `vibe` | Mistral Vibe | `vibe-acp` | *(none — dedicated binary)* | 2.21.0 | `uv tool install mistral-vibe` (Python 3.12+) + a Mistral API key |
 | `droid` | Factory Droid | `droid` | `exec --output-format acp-daemon` | 0.175.1 | `curl -fsSL https://app.factory.ai/cli \| sh` (or `brew install --cask droid`) + browser sign-in or `FACTORY_API_KEY` |
+| `pi` | pi | `pi-acp` | *(none — dedicated binary)* | 0.0.31 | `npm i -g pi-acp` + sign in |
 | `acp` | Custom ACP agent | — | user-supplied `extraArgs` | — | configure `binPath` in Settings → Agents |
 
 Per-kind notes worth not rediscovering:
@@ -33,6 +34,7 @@ Per-kind notes worth not rediscovering:
 - **cursor** — versions are **CalVer** (`2026.07.16` = year.month.day), not semver. They flow through the same numeric `compareSemver` and order correctly, so no special case is needed — but do not "normalise" the major down to a semver-shaped number. The installer creates **both** `agent` and `cursor-agent` symlinks; we deliberately use `cursor-agent`, because a bare `agent` on PATH is a dangerously generic name.
 - **goose** — Homebrew's formula is `block-goose-cli`, but the binary is `goose`. With no provider configured it fails `session/new` with an opaque **`-32603 Internal error`**, *not* ACP's `AUTH_REQUIRED`, so the backend's auth handling cannot turn it into an actionable message. Telling the user to run `goose configure` first is the only fix available from here — keep it in the hint.
 - **vibe** — `defaultBin` is **`vibe-acp`**, a separate binary from `vibe`: the ACP server is its own entrypoint, not a mode of the main CLI. That is why `acpArgs` is empty. `vibe acp` does not exist. Like kimi it is a Python tool (`uv`), not npm.
+- **pi** — `defaultBin` is **`pi-acp`**, a standalone ACP server binary (npm package `pi-acp`, bin `pi-acp`), not a mode of a `pi` CLI — the same shape as `vibe`, so `acpArgs` is empty too.
 - **droid** — the ACP invocation is a **subcommand plus a value-bearing flag** (`exec --output-format acp-daemon`), not a mode flag; the three tokens are inseparable.
 - **auggie / droid** — both ship self-updating CLIs, which can swap the binary out from under a running turn. Each carries launch env to suppress it (`AUGMENT_DISABLE_AUTO_UPDATE=1`; `DROID_DISABLE_AUTO_UPDATE=true` + `FACTORY_DROID_AUTO_UPDATE_ENABLED=false`).
 - **Devin is deliberately NOT a kind.** Its `session/new` times out with no response at all in the ACP registry's daily probe, it reports its version as `0.0.0-dev`, and its own docs document no `acp` subcommand. It would ship as a broken runner. It remains reachable through the custom `acp` kind if someone wants to try it.
@@ -45,7 +47,7 @@ Runners come in two flavours, and the difference is confined to *how the ACP-spe
 
 | Flavour | Kinds | Launch |
 | --- | --- | --- |
-| Speaks ACP natively | `gemini`, `qwen`, `opencode`, `grok`, `kimi`, `copilot`, `cursor`, `kilo`, `cline`, `goose`, `auggie`, `vibe`, `droid`, custom `acp` | spawn the CLI with its ACP flag or subcommand (`--acp`, `acp`, `agent stdio`, `exec --output-format acp-daemon`) — or, for `vibe`, its dedicated `vibe-acp` binary with no args at all |
+| Speaks ACP natively | `gemini`, `qwen`, `opencode`, `grok`, `kimi`, `copilot`, `cursor`, `kilo`, `cline`, `goose`, `auggie`, `vibe`, `droid`, `pi`, custom `acp` | spawn the CLI with its ACP flag or subcommand (`--acp`, `acp`, `agent stdio`, `exec --output-format acp-daemon`) — or, for `vibe` and `pi`, its dedicated `vibe-acp` / `pi-acp` binary with no args at all |
 | Needs an adapter | `codex`, `claude-code` | spawn the official first-party adapter, which drives the CLI underneath |
 
 Native is the overwhelming majority and the cheap case; the adapter flavour exists only because Claude Code and Codex have no ACP mode of their own.

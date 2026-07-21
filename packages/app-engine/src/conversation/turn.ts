@@ -44,6 +44,7 @@ export const RUNNER_KINDS = [
   'auggie',
   'vibe',
   'droid',
+  'pi',
   'acp',
 ] as const;
 

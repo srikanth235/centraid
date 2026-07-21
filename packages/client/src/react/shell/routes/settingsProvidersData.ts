@@ -51,6 +51,7 @@ const ACCENT_BY_KIND: Record<string, string> = {
   auggie: '#06b6d4',
   vibe: '#fb7185',
   droid: '#eab308',
+  pi: '#e07a5f',
   acp: '#64748b',
 };
 const DEFAULT_ACCENT = '#64748b';
