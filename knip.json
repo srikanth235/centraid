@@ -24,9 +24,8 @@
       ]
     },
     "packages/gateway": {
-      "entry": ["src/index.ts", "src/cli/cli.ts"],
-      "project": ["src/**/*.{ts,tsx}"],
-      "ignoreDependencies": ["@centraid/web"]
+      "entry": ["src/index.ts", "src/cli/cli.ts", "scripts/*.mjs"],
+      "project": ["src/**/*.{ts,tsx}", "scripts/*.mjs"]
     },
     "packages/app-engine": {
       "entry": ["src/index.ts", "src/worker/runner.ts", "src/worker/ts-loader-hooks.ts"],

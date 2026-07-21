@@ -14,7 +14,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.json && rm -rf dist/web && cp -R ../../apps/web/dist dist/web",
+    "build": "tsc -p tsconfig.json && node scripts/embed-web.mjs",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run",
     "perf:low-end": "node scripts/bench-low-end.mjs --check",

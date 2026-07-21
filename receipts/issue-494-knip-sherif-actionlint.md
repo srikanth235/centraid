@@ -20,6 +20,7 @@ files + dependency hygiene tool and adds two fast monorepo gates: **sherif**
 | claude-code-5ac9baf3-ae7-1784644900-1 | claude-code | 5ac9baf3-ae74-4663-8f3f-7858b340fc66 | #494 | claude-fable-5 | 334 | 1559392 | 23727113 | 194817 | 1754543 | 52.9637 | 1071 | 3932582 | 107896390 | 698583 | chore(cleanup): burn down all knip findings and gate knip in check:pr + CI (#494 |
 | claude-code-5ac9baf3-ae7-1784644941-1 | claude-code | 5ac9baf3-ae74-4663-8f3f-7858b340fc66 | #494 | claude-fable-5 | 2 | 1043 | 154532 | 263 | 1308 | 0.1807 | 1073 | 3933625 | 108050922 | 698846 | chore(tooling): tune knip; add sherif + actionlint gates (#494)x |
 | claude-code-5ac9baf3-ae7-1784645120-1 | claude-code | 5ac9baf3-ae74-4663-8f3f-7858b340fc66 | #494 | claude-fable-5 | 29 | 25737 | 2430967 | 9257 | 35023 | 3.2158 | 1102 | 3959362 | 110481889 | 708103 | chore(cleanup): burn down all knip findings and gate knip in check:pr + CI (#494 |
+| claude-code-5ac9baf3-ae7-1784645429-1 | claude-code | 5ac9baf3-ae74-4663-8f3f-7858b340fc66 | #494 | claude-fable-5 | 58 | 30148 | 5342079 | 19583 | 49789 | 6.6987 | 1160 | 3989510 | 115823968 | 727686 | chore(gateway): consume @centraid/web via module resolution, drop the knip ignor |
 
 ### Steering
 
@@ -93,14 +94,19 @@ suppressed with a stated reason. Concretely:
 - **Duplicate exports resolved, not excluded** — `SNAPSHOT_FORMAT` alias
   deleted in favour of `SNAPSHOT_FORMAT_V2` (backup + gateway tests), and the
   `ACCENT = BRAND` alias deleted in favour of `BRAND` (design-tokens).
-- **False positives suppressed with a reason** — `@centraid/web` restored in
-  gateway devDependencies (its build script copies `apps/web/dist` into
-  `dist/web`; the devDep is the turbo build-order edge) and ignored in
-  `knip.json`; `@centraid/blueprints` in client is consumed as static `kit/`
-  assets (declaring it would create a turbo build cycle with blueprints →
-  client); `nativeReplicaIdFactory` tagged `@public` (used via a conditional
-  dynamic import knip cannot trace); `tokens.generated.ts` ignored (generated
-  file mirroring design-tokens).
+- **False positives suppressed with a reason** — `@centraid/blueprints` in
+  client is consumed as static `kit/` assets (declaring it would create a
+  turbo build cycle with blueprints → client); `nativeReplicaIdFactory`
+  tagged `@public` (used via a conditional dynamic import knip cannot trace);
+  `tokens.generated.ts` ignored (generated file mirroring design-tokens).
+- **`@centraid/web` made a provably-consumed dependency instead of an
+  ignore** — `packages/gateway/scripts/embed-web.mjs` replaces the build
+  script's `cp -R ../../apps/web/dist dist/web` shell copy: it locates
+  `@centraid/web` via `createRequire().resolve()` and copies its `dist` into
+  the gateway's publishable `dist/web`. The dependency edge is now stated
+  once in `packages/gateway/package.json` (turbo build order) and consumed
+  through module resolution (knip proves it; no `ignoreDependencies` entry,
+  no layout-coupled relative path).
 
 **`packages/vault/src/db.ts`** — the capture-time ingress preview path is
 wired: a vault opened with a previewCodec now passes contributePreview through
@@ -170,6 +176,8 @@ db.ts wiring):
 - `packages/vault/src/db.ts`
 - `packages/vault/src/gateway/execution.ts`
 - `packages/vault/src/gateway/ext.ts`
+- `packages/gateway/package.json`
+- `packages/gateway/scripts/embed-web.mjs`
 
 ## Decisions
 
