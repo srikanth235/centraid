@@ -179,9 +179,14 @@ export async function handleCompanionRequest(
       return companionJson<{ count: number }>('/centraid/_vault/blocking');
     case 'locker:candidates': {
       const result = await candidates(message.pageUrl);
-      if (sender.tab?.id && result.some((candidate) => candidate.warning)) {
-        await chrome.action.setBadgeBackgroundColor({ color: '#b42318' });
-        await chrome.action.setBadgeText({ text: 'W', tabId: sender.tab.id });
+      if (sender.tab?.id) {
+        if (result.some((candidate) => candidate.warning)) {
+          await chrome.action.setBadgeBackgroundColor({ color: '#b42318' });
+          await chrome.action.setBadgeText({ text: 'W', tabId: sender.tab.id });
+        } else {
+          // Clear a prior Watchtower badge when this tab no longer has warnings.
+          await chrome.action.setBadgeText({ text: '', tabId: sender.tab.id });
+        }
       }
       return result;
     }

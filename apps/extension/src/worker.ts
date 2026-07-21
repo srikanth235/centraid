@@ -1,7 +1,7 @@
 import { handleCompanionRequest } from './companion-api.js';
 import { companionJson } from './transport.js';
 import { isLocked, loadPairing } from './storage.js';
-import type { CompanionRequest, LockerCandidate, PageCapture } from './types.js';
+import type { CompanionRequest, PageCapture } from './types.js';
 import { clearFillMaterial, clearSavedPassword } from './credential-gesture.js';
 
 const APPROVAL_ALARM = 'centraid-companion-approvals';
@@ -75,9 +75,3 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   };
   void handleCompanionRequest({ type: 'capture:task', capture }, {}).catch(() => undefined);
 });
-
-// A content-script candidate response can surface Watchtower without revealing
-// a password. Keep this helper exported for worker tests and future tab badges.
-export function warningCount(candidates: readonly LockerCandidate[]): number {
-  return candidates.filter((candidate) => candidate.warning).length;
-}

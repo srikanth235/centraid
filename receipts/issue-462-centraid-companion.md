@@ -85,6 +85,8 @@ apps/extension/src/credential-gesture.test.ts
 apps/extension/src/credential-gesture.ts
 apps/extension/src/origin-matching.test.ts
 apps/extension/src/origin-matching.ts
+apps/extension/src/page-fields.test.ts
+apps/extension/src/page-fields.ts
 apps/extension/src/pair.ts
 apps/extension/src/popup.ts
 apps/extension/src/popup-state.test.ts
@@ -106,6 +108,7 @@ apps/extension/store/release-checklist.md
 apps/extension/tsconfig.json
 apps/extension/vitest.config.ts
 apps/web/iroh-wasm/RELAY-POLICY.md
+apps/web/iroh-wasm/rust-toolchain.toml
 apps/web/iroh-wasm/src/lib.rs
 apps/web/scripts/build-iroh-wasm.sh
 apps/web/src/generated/centraid_web_iroh.d.ts
@@ -115,6 +118,7 @@ apps/web/src/generated/centraid_web_iroh_bg.wasm.d.ts
 apps/web/src/iroh-transport.ts
 bun.lock
 docs/security/locker-origin-matching.md
+knip.json
 packages/app-engine/src/http/http-server.ts
 packages/app-engine/src/http/internal-headers.test.ts
 packages/app-engine/src/http/internal-headers.ts
@@ -130,8 +134,10 @@ packages/blueprints/apps/locker/logic.ts
 packages/blueprints/apps/locker/queries/autofill-candidates.ts
 packages/blueprints/apps/locker/queries/autofill-item.ts
 packages/blueprints/apps/locker/queries/item.ts
+packages/blueprints/apps/locker/queries/origin-matching.ts
 packages/blueprints/apps/locker/types.ts
 packages/blueprints/manifest.json
+packages/blueprints/package.json
 packages/blueprints/src/query-handlers.test.ts
 packages/client/package.json
 packages/client/src/gateway-client-devices.ts
@@ -202,6 +208,39 @@ vitest.config.ts
   listing, privacy policy, permission justifications, and release checklist.
 - Public Firefox support is not claimed until the generated Firefox package
   passes its manual live pair/fill release gate.
+
+## PR #463 review follow-ups
+
+### Bugs fixed
+- **Loopback false-positive:** `isLoopback` now parses real IPv4 and requires
+  `127.0.0.0/8` (plus exact `localhost` / `::1`). Vectors cover
+  `http://127.0.0.1.evil.test` and `127.foo.bar` as ineligible / non-matching.
+- **SPA stale fields:** content-script fill/save/generate re-call `findFields()`
+  at gesture time and only write into still-connected visible inputs
+  (`page-fields.ts` + unit tests).
+
+### High-value suggestions addressed
+- **Server-side origin re-check** on `autofill-item` before reveal (shared rules
+  in `queries/origin-matching.ts`).
+- **Closed shadow** for Locker menu chrome.
+- **Watchtower badge clear** when candidates are warning-free.
+- **grantProfile clear** when re-enrolling the same endpoint as non-extension.
+- **WASM CI:** pin rustc via `rust-toolchain.toml`, pin binaryen apt version,
+  invoke build via `bash`, drift-gate JS/d.ts only (wasm binary warns).
+- **Companion e2e:** live n0-relay job is schedule/workflow_dispatch only; PRs
+  get pure-local `companion-static` (build + unit tests).
+
+### Deferred nits (with rationale)
+- **Ticket decoder unification / relays field:** non-blocking; gateway still
+  enforces v=1 on redeem. Shared schema deferred to a follow-up (#462 X7a-class).
+- **warmTab debounce:** deferred; no security issue, battery/timing only.
+- **COMPANION_MODULES single source:** deferred sync cleanup; current three
+  package lists match for v1 modules.
+- **add_item url_match_policy for non-login:** deferred consistency nit;
+  edit_item already rejects login-only field.
+- **vault.db recreate note:** intentional under v0 no-migrations — recreate
+  local `vault.db` after pull if schema errors appear on `url_match_policy`.
+- **Password modulo bias:** fixed in the same pass (rejection sampling).
 
 ## Verification
 

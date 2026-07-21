@@ -1,26 +1,21 @@
 /**
  * One explicit-gesture fill. Only password is revealed; TOTP is requested as
  * a derivative from locker.totp_code, so the OTP seed never leaves the sealed
- * command boundary. The page origin is normalized and attached to the reveal
- * receipt for the Approvals/audit surface.
+ * command boundary. The page origin is normalized, matched against the item's
+ * stored URL + policy (same rules as Companion origin-matching), and attached
+ * to the reveal receipt for the Approvals/audit surface.
  */
+
+import { matchesOrigin, pageOrigin } from './origin-matching.ts';
 
 interface LoginRow {
   item_id: string;
   type: string;
   username?: string | null;
+  url?: string | null;
+  url_match_policy?: 'registrable-domain' | 'exact-host' | null;
   otp_seed?: string | null;
   deleted_at?: string | null;
-}
-
-function pageOrigin(raw: unknown): string | undefined {
-  try {
-    const url = new URL(String(raw ?? ''));
-    if (!['http:', 'https:'].includes(url.protocol) || url.origin !== raw) return undefined;
-    return url.origin;
-  } catch {
-    return undefined;
-  }
 }
 
 export default async ({ input, ctx }: { input?: Record<string, unknown>; ctx: HandlerCtx }) => {
@@ -42,6 +37,13 @@ export default async ({ input, ctx }: { input?: Record<string, unknown>; ctx: Ha
     });
     const row = ((response.rows ?? []) as unknown as LoginRow[])[0];
     if (!row) return { fill: null };
+    if (typeof row.url !== 'string' || !row.url) {
+      return { fill: null, reason: 'This login has no stored origin to match against.' };
+    }
+    const policy = row.url_match_policy === 'exact-host' ? 'exact-host' : 'registrable-domain';
+    if (!matchesOrigin({ url: row.url, url_match_policy: policy }, origin)) {
+      return { fill: null, reason: 'Page origin does not match this login.' };
+    }
     const revealed = (await ctx.vault.reveal({
       entity: 'locker.item',
       entityId: itemId,

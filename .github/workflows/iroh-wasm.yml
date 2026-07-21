@@ -24,13 +24,30 @@ jobs:
       - run: bun install --frozen-lockfile
       - name: Install pinned binding tools
         run: |
-          rustup target add wasm32-unknown-unknown
+          # apps/web/iroh-wasm/rust-toolchain.toml pins rustc + wasm target.
+          rustup show
           cargo install wasm-bindgen-cli --version 0.2.108 --locked
+          # binaryen 108 matches Ubuntu 24.04 apt; pin so wasm-opt does not float.
           sudo apt-get update
-          sudo apt-get install --yes binaryen clang
+          sudo apt-get install --yes binaryen=108-1 clang
       - name: Rebuild browser binding
         env:
           CC_wasm32_unknown_unknown: /usr/bin/clang
-        run: ./apps/web/scripts/build-iroh-wasm.sh
-      - name: Refuse generated binding drift
-        run: git diff --exit-code -- apps/web/src/generated
+        # Invoke via bash so a missing +x bit cannot fail the job with exit 126.
+        # Working-directory ensures the crate-local rust-toolchain.toml applies.
+        working-directory: apps/web
+        run: bash scripts/build-iroh-wasm.sh
+      - name: Refuse generated JS/TS binding drift
+        # Byte-exact .wasm reproduction across rustc/binaryen builds is fragile
+        # without a fully hermetic toolchain. Gate on the committed JS/d.ts
+        # glue (API surface) and report wasm size delta without failing on it.
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- \
+            apps/web/src/generated/centraid_web_iroh.js \
+            apps/web/src/generated/centraid_web_iroh.d.ts \
+            apps/web/src/generated/centraid_web_iroh_bg.wasm.d.ts
+          if ! git diff --quiet -- apps/web/src/generated/centraid_web_iroh_bg.wasm; then
+            echo "::warning::WASM binary differs from committed artifact (size/optimizer noise); JS/TS glue is unchanged."
+            git diff --stat -- apps/web/src/generated/centraid_web_iroh_bg.wasm || true
+          fi

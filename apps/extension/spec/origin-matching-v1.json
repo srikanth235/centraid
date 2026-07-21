@@ -140,6 +140,34 @@
       "page": "ftp://example.com",
       "policy": "registrable-domain",
       "match": false
+    },
+    {
+      "name": "evil 127 hostname is not loopback",
+      "stored": "https://example.com",
+      "page": "http://127.0.0.1.evil.test",
+      "policy": "registrable-domain",
+      "match": false
+    },
+    {
+      "name": "evil 127 hostname ineligible as stored",
+      "stored": "http://127.0.0.1.evil.test",
+      "page": "http://127.0.0.1.evil.test",
+      "policy": "registrable-domain",
+      "match": false
+    },
+    {
+      "name": "127 prefix hostname is not loopback",
+      "stored": "http://127.foo.bar",
+      "page": "http://127.foo.bar",
+      "policy": "exact-host",
+      "match": false
+    },
+    {
+      "name": "real 127.0.0.0/8 loopback still matches",
+      "stored": "http://127.1.2.3:3000",
+      "page": "http://127.1.2.3:3000/login",
+      "policy": "registrable-domain",
+      "match": true
     }
   ]
 }

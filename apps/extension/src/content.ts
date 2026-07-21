@@ -4,6 +4,7 @@ import {
   isTrustedCredentialGesture,
   passwordForSave,
 } from './credential-gesture.js';
+import { applyFillToLiveFields, findFields, isLiveFillTarget } from './page-fields.js';
 
 if (window.top === window.self && window.isSecureContext) installCompanion();
 
@@ -26,55 +27,34 @@ function nativeSet(input: HTMLInputElement, value: string): void {
   input.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
-function visible(input: HTMLInputElement): boolean {
-  const rect = input.getBoundingClientRect();
-  const style = getComputedStyle(input);
-  return (
-    rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none'
-  );
-}
-
-function findFields(): {
-  username?: HTMLInputElement;
-  password?: HTMLInputElement;
-  totp?: HTMLInputElement;
-  newPassword?: HTMLInputElement;
-} {
-  const inputs = [...document.querySelectorAll<HTMLInputElement>('input')].filter(visible);
-  const password = inputs.find(
-    (input) => input.type === 'password' && input.autocomplete !== 'new-password',
-  );
-  const newPassword = inputs.find(
-    (input) => input.type === 'password' && input.autocomplete === 'new-password',
-  );
-  const totp = inputs.find(
-    (input) =>
-      input.autocomplete === 'one-time-code' ||
-      /(?:otp|totp|one.?time|verification.?code)/i.test(`${input.name} ${input.id}`),
-  );
-  const username = inputs.find(
-    (input) =>
-      input.autocomplete === 'username' ||
-      input.type === 'email' ||
-      /(?:user|email|login)/i.test(`${input.name} ${input.id}`),
-  );
-  return { username, password, totp, newPassword };
-}
-
+/** Unbiased charset sampling (rejection sampling over crypto.getRandomValues). */
 function randomPassword(length = 20): string {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*';
-  const values = new Uint32Array(length);
-  crypto.getRandomValues(values);
-  return [...values].map((value) => alphabet[value % alphabet.length]).join('');
+  const out: string[] = [];
+  // Largest multiple of alphabet.length that fits in a uint32 bucket.
+  const bound = Math.floor(0x1_0000_0000 / alphabet.length) * alphabet.length;
+  while (out.length < length) {
+    const values = new Uint32Array(length - out.length);
+    crypto.getRandomValues(values);
+    for (const value of values) {
+      if (value >= bound) continue;
+      out.push(alphabet[value % alphabet.length]!);
+      if (out.length === length) break;
+    }
+  }
+  return out.join('');
 }
 
 function installCompanion(): void {
   let mountedFor: HTMLInputElement | undefined;
   let host: HTMLElement | undefined;
+  // Closed shadow keeps page script from inspecting titles/usernames.
+  let shadow: ShadowRoot | undefined;
 
   const remove = (): void => {
     host?.remove();
     host = undefined;
+    shadow = undefined;
     mountedFor = undefined;
   };
 
@@ -99,7 +79,7 @@ function installCompanion(): void {
     mountedFor = anchor;
     host = document.createElement('div');
     host.dataset['centraidCompanion'] = 'true';
-    const shadow = host.attachShadow({ mode: 'open' });
+    shadow = host.attachShadow({ mode: 'closed' });
     shadow.innerHTML = `<style>
       :host{all:initial}.wrap{position:relative;font:13px/1.35 ui-sans-serif,system-ui;color:#172033}
       button{font:inherit;border:1px solid #d7dbe5;background:#fff;color:#172033;border-radius:8px;padding:6px 10px;cursor:pointer;box-shadow:0 4px 18px #18233c1a}
@@ -111,14 +91,12 @@ function installCompanion(): void {
     anchor.after(host);
     trigger?.addEventListener('click', (event) => {
       if (!isTrustedCredentialGesture(event)) return;
-      void showMenu(wrap, fields);
+      // Re-resolve fields at gesture time — SPA re-renders detach mount-time nodes.
+      void showMenu(wrap);
     });
   };
 
-  async function showMenu(
-    wrap: HTMLElement | null,
-    fields: ReturnType<typeof findFields>,
-  ): Promise<void> {
+  async function showMenu(wrap: HTMLElement | null): Promise<void> {
     if (!wrap) return;
     wrap.querySelector('.menu')?.remove();
     const menu = document.createElement('div');
@@ -146,19 +124,24 @@ function installCompanion(): void {
         }
         button.addEventListener('click', (event) => {
           if (!isTrustedCredentialGesture(event)) return;
-          void fillCandidate(candidate, fields, menu);
+          void fillCandidate(candidate, menu);
         });
         menu.append(button);
       }
-      if (passwordForSave(fields)) {
+      // Re-check live fields for save/generate affordances (SPA may have swapped inputs).
+      const live = findFields();
+      if (passwordForSave(live)) {
         const save = document.createElement('button');
         save.className = 'item';
         save.type = 'button';
         save.textContent = 'Save this login in Centraid';
         save.addEventListener('click', (event) => {
           if (!isTrustedCredentialGesture(event)) return;
-          let password = passwordForSave(fields);
-          const username = fields.username?.value;
+          const gestureFields = findFields();
+          let password = passwordForSave(gestureFields);
+          const username = isLiveFillTarget(gestureFields.username)
+            ? gestureFields.username.value
+            : undefined;
           void send({
             type: 'locker:save',
             pageUrl: location.href,
@@ -173,24 +156,27 @@ function installCompanion(): void {
         });
         menu.append(save);
       }
-      if (fields.newPassword) {
+      if (isLiveFillTarget(live.newPassword)) {
         const generate = document.createElement('button');
         generate.className = 'item';
         generate.type = 'button';
         generate.textContent = 'Generate a strong password';
         generate.addEventListener('click', (event) => {
           if (!isTrustedCredentialGesture(event)) return;
+          const gestureFields = findFields();
+          if (!isLiveFillTarget(gestureFields.newPassword)) return;
           let password = randomPassword();
-          nativeSet(fields.newPassword!, password);
+          nativeSet(gestureFields.newPassword, password);
           const confirmation = [...document.querySelectorAll<HTMLInputElement>('input')].find(
             (input) =>
-              input !== fields.newPassword &&
+              input !== gestureFields.newPassword &&
+              isLiveFillTarget(input) &&
               input.type === 'password' &&
               input.autocomplete === 'new-password',
           );
           if (confirmation) nativeSet(confirmation, password);
           password = '';
-          void showMenu(wrap, findFields());
+          void showMenu(wrap);
         });
         menu.append(generate);
       }
@@ -203,20 +189,15 @@ function installCompanion(): void {
     }
   }
 
-  async function fillCandidate(
-    candidate: LockerCandidate,
-    fields: ReturnType<typeof findFields>,
-    menu: HTMLElement,
-  ): Promise<void> {
+  async function fillCandidate(candidate: LockerCandidate, menu: HTMLElement): Promise<void> {
     const material = await send<FillMaterial>({
       type: 'locker:fill',
       itemId: candidate.item_id,
       pageUrl: location.href,
     });
     try {
-      if (fields.username && material.username) nativeSet(fields.username, material.username);
-      if (fields.password && material.password) nativeSet(fields.password, material.password);
-      if (fields.totp && material.totp) nativeSet(fields.totp, material.totp);
+      // Gesture-time re-resolution: never write into mount-time detached nodes.
+      applyFillToLiveFields(findFields(), material, nativeSet);
       menu.remove();
     } finally {
       clearFillMaterial(material);

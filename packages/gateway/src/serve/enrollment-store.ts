@@ -213,7 +213,13 @@ export class EnrollmentStore {
         if (input.platform !== undefined) existing.platform = input.platform;
         if (input.trust !== undefined) existing.trust = input.trust;
         if (input.rememberDevice !== undefined) existing.rememberDevice = input.rememberDevice;
-        if (input.grantProfile !== undefined) existing.grantProfile = [...input.grantProfile];
+        if (input.grantProfile !== undefined) {
+          existing.grantProfile = [...input.grantProfile];
+        } else if (input.platform !== undefined && input.platform !== 'extension') {
+          // Re-pairing the same endpoint as a full/non-extension client must
+          // drop a sticky companion allow-list so the device is not surface-clamped.
+          delete existing.grantProfile;
+        }
         return { ...existing };
       }
       const row: DeviceEnrollment = {

@@ -940,6 +940,7 @@
         "queries/autofill-item.ts",
         "queries/item.ts",
         "queries/items.ts",
+        "queries/origin-matching.ts",
         "queries/search.ts",
         "queries/trash.ts",
         "queries/watchtower.ts",

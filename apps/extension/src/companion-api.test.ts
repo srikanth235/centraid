@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { handleCompanionRequest } from './companion-api.js';
 
 const state = vi.hoisted(() => ({ paired: true }));
 const transport = vi.hoisted(() => ({
@@ -31,8 +32,6 @@ vi.mock('./storage.js', () => ({
   savePairing: vi.fn(),
   setLocked: vi.fn(),
 }));
-
-import { handleCompanionRequest } from './companion-api.js';
 
 describe('Companion unpair', () => {
   beforeEach(() => {

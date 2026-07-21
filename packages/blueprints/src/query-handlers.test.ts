@@ -78,7 +78,16 @@ describe('Locker Companion queries (#462)', () => {
     const ctx = {
       vault: {
         read: vi.fn().mockResolvedValue({
-          rows: [{ item_id: 'login-1', type: 'login', username: 'priya', otp_seed: '«sealed»' }],
+          rows: [
+            {
+              item_id: 'login-1',
+              type: 'login',
+              username: 'priya',
+              otp_seed: '«sealed»',
+              url: 'https://example.com/login',
+              url_match_policy: 'registrable-domain',
+            },
+          ],
         }),
         reveal,
         invoke,
@@ -104,6 +113,64 @@ describe('Locker Companion queries (#462)', () => {
       expect.objectContaining({ command: 'locker.totp_code', input: { item_id: 'login-1' } }),
     );
     expect(JSON.stringify(result)).not.toContain('otp_seed');
+  });
+
+  it('refuses reveal when page origin does not match the stored login URL', async () => {
+    const { default: fill } = await importQuery('../apps/locker/queries/autofill-item.ts');
+    const reveal = vi.fn();
+    const ctx = {
+      vault: {
+        read: vi.fn().mockResolvedValue({
+          rows: [
+            {
+              item_id: 'login-1',
+              type: 'login',
+              username: 'priya',
+              url: 'https://example.com/login',
+              url_match_policy: 'exact-host',
+            },
+          ],
+        }),
+        reveal,
+        invoke: vi.fn(),
+      },
+    };
+    const result = await fill({
+      input: { item_id: 'login-1', page_origin: 'https://evil.example' },
+      ctx,
+    });
+    expect(result.fill).toBeNull();
+    expect(result.reason).toMatch(/does not match/i);
+    expect(reveal).not.toHaveBeenCalled();
+  });
+
+  it('refuses forged evil 127 hostnames that are not true loopback', async () => {
+    const { default: fill } = await importQuery('../apps/locker/queries/autofill-item.ts');
+    const reveal = vi.fn();
+    const ctx = {
+      vault: {
+        read: vi.fn().mockResolvedValue({
+          rows: [
+            {
+              item_id: 'login-1',
+              type: 'login',
+              username: 'priya',
+              url: 'http://127.0.0.1:3000',
+              url_match_policy: 'exact-host',
+            },
+          ],
+        }),
+        reveal,
+        invoke: vi.fn(),
+      },
+    };
+    // pageOrigin requires origin === raw; evil hostname fails match even if stored is loopback.
+    const result = await fill({
+      input: { item_id: 'login-1', page_origin: 'https://example.com' },
+      ctx,
+    });
+    expect(result.fill).toBeNull();
+    expect(reveal).not.toHaveBeenCalled();
   });
 });
 
