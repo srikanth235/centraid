@@ -8,10 +8,21 @@ type ProjectConfig = UserWorkspaceConfig;
 // the project root, not against test-kit.
 const JSDOM_SETUP = fileURLToPath(new URL('jsdom-setup.ts', import.meta.url));
 
+// #496 E5 — fail any test that runs zero assertions. Cheap partial defense
+// against assertion-gutting (matrix minimumTests counts `test(`/`it(` call
+// sites, not expect calls). Legitimately assertion-free tests must call
+// `expect.assertions(0)` or be rewritten to assert an outcome.
+const requireAssertions = {
+  expect: {
+    requireAssertions: true,
+  },
+} as const;
+
 const nodePreset = {
   test: {
     environment: 'node',
     pool: 'forks',
+    ...requireAssertions,
     // Node projects are the node:sqlite ones: they bootstrap real vault/daemon
     // layouts on disk, so their wall clock is fsync-bound, not CPU-bound.
     // Hosted-runner storage latency varies enough between runner instances to
@@ -49,6 +60,7 @@ const jsdomPreset = {
   test: {
     environment: 'jsdom',
     css: { modules: { classNameStrategy: 'non-scoped' as const } },
+    ...requireAssertions,
     // Puts React into act mode for every jsdom project — see jsdom-setup.ts.
     setupFiles: [JSDOM_SETUP],
   },

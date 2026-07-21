@@ -1,15 +1,13 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
-import crypto from 'node:crypto';
 import { appendLogs, readLogs, type LogEntry } from './log-store.ts';
 
 let workspace: string;
 
 beforeEach(async () => {
-  workspace = path.join(os.tmpdir(), `centraid-logs-${crypto.randomBytes(6).toString('hex')}`);
-  await fs.mkdir(workspace, { recursive: true });
+  workspace = await tempDir('centraid-logs-');
 });
 
 afterEach(async () => {

@@ -91,6 +91,12 @@ jobs:
       # named contract suite shrinks below its recorded floor. Offline and fast,
       # so it belongs on the per-PR loop next to lint/typecheck.
       - run: bun run test:matrix
+      # #496 E4 — floors/minimumTests may only move upward vs the merge base
+      # (or carry an approvedDeviation / approvedMinimumTestsDeviation marker).
+      - name: Ratchet coverage floors and minimumTests
+        run: |
+          git fetch --no-tags --depth=1 origin main 2>/dev/null || true
+          bun run test:ratchet
       # Mobile agent-e2e flow anti-rot (issue #483): fail if a Maestro flow
       # asserts on a tab/route label that is drawn on every screen, or types
       # input it never verifies. The flows themselves run nightly, but linting
@@ -134,7 +140,7 @@ jobs:
           restore-keys: |
             cargo-verify-${{ runner.os }}-
             cargo-dataplane-${{ runner.os }}-
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
         with:
           targets: wasm32-unknown-unknown
       # K15 — wasm is gitignored; clean CI must rebuild via ensure-iroh-wasm.

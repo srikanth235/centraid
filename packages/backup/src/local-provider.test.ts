@@ -15,7 +15,11 @@ async function makeHarness(): Promise<ConformanceHarness> {
 
 describe('conformance suite', () => {
   for (const c of providerConformanceCases(makeHarness)) {
-    test(c.name, c.run);
+    test(c.name, async () => {
+      await c.run();
+      // Conformance kit uses node:assert (framework-agnostic); pin a vitest expect for requireAssertions (#496 E5).
+      expect(true).toBe(true);
+    });
   }
 });
 

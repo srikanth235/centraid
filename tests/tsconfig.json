@@ -2,7 +2,10 @@
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
-    "types": ["node"]
+    "types": ["node"],
+    // #496 PD2 — replica-sync-io.perf imports IndexedDB-backed client stores;
+    // the nightly perf/scale project is node-only but needs DOM IDB names for tsc.
+    "lib": ["ES2023", "DOM"]
   },
   "include": ["perf/**/*.ts", "scale/**/*.ts", "quality/**/*.ts"]
 }

@@ -183,6 +183,7 @@
       "name": "@centraid/blob-format",
       "version": "0.1.0",
       "devDependencies": {
+        "@centraid/test-kit": "workspace:*",
         "typescript": "catalog:",
       },
     },
@@ -228,6 +229,7 @@
       "name": "@centraid/design-tokens",
       "version": "0.1.0",
       "devDependencies": {
+        "@centraid/test-kit": "workspace:*",
         "typescript": "catalog:",
       },
     },

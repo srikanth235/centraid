@@ -54,11 +54,59 @@ Decided in [#468](https://github.com/srikanth235/centraid/issues/468); cite
 
 | Lane | Runs |
 | --- | --- |
-| **Every PR** | Unit, integration, contract; matrix validation via `check:pr`; **boot-the-artifact smoke** unconditionally (when the job exists); **path-filtered client e2e** |
-| **Path filters (client e2e)** | **Web** e2e when `apps/web`, `packages/client`, or service-worker files change; **desktop** e2e when `apps/desktop` changes. Shard to keep wall-clock roughly under ten minutes. |
-| **Nightly** | Full cross-client suites, perf budgets, mobile, pairing journeys, scale |
+| **Every PR** | Unit, integration, contract; matrix validation + **floors ratchet** via `check:pr`; **affected-package vitest** (`turbo run test --filter='...[origin/main]'`); **boot-the-artifact smoke** when client-e2e-pr triggers (includes `packages/gateway` + `packages/app-engine` path filters — #496 E7); **path-filtered client e2e** |
+| **Path filters (client e2e)** | **Web** e2e when `apps/web`, `packages/client`, or service-worker files change; **desktop** e2e when `apps/desktop` changes; **boot-smoke** also when gateway/app-engine change. Shard to keep wall-clock roughly under ten minutes. |
+| **Nightly** | Full cross-client suites, perf budgets, mobile (**iOS + Android home-loads**), pairing journeys, scale |
 
 **Promotion rule:** if a nightly-only area burns us **twice**, move it to PR-time.
+
+### Nightly SLA (#496 E3)
+
+Soft SLA (auto-issue, not a hard age gate):
+
+1. A **scheduled** nightly that fails opens or updates a single tracking issue
+   titled `[nightly] e2e lane red — tracking` with the Actions run URL and the
+   nightly Pages report link.
+2. **Expected response:** within **24 hours** or before the next scheduled run
+   — triage, fix, or document a temporary waiver in the issue.
+3. Branch `workflow_dispatch` runs **do not** publish to GitHub Pages (main-only
+   guard on `publish-nightly-report`) so they cannot spuriously red the workflow
+   with a Pages deploy error.
+4. Missing nightly HTML is **visible** (error annotation + tracking issue), not
+   a silent `::warning` only.
+
+### Floors ratchet (#496 E4)
+
+`tests/coverage-floors.json` values and matrix flow `minimumTests` **move only
+upward**. CI and `bun run test:ratchet` / `check:pr` fail on any decrease unless
+the JSON carries:
+
+- top-level `approvedDeviation` on `coverage-floors.json`, or
+- per-flow `approvedMinimumTestsDeviation` on the lowered flow.
+
+### Skipped-gate honesty + partial → solid (#496 B2/B3)
+
+- Env-gated **cell or flow owners** (`CENTRAID_*`, `CLAWGNITION_*`, whole-file
+  `describe.skipIf` / early `t.skip`) cannot keep a `solid` or `partial`
+  assessment — `bun run test:matrix` fails until the gate is removed or the
+  assessment is demoted.
+- Closing a QUALITY / matrix note item **must** promote the assessment and
+  delete/update the note. `partial` is temporary evidence, not permanent
+  furniture.
+
+### Confidence map (#496 J1)
+
+```
+HIGH  vault/backup/replica contracts, handler isolation, web offline/PWA,
+      pairing when nightly green, engine coverage floors, ENOSPC fault-inject,
+      agent chat journey (fake-acp integration)
+MED   desktop Playwright, mobile Maestro iOS + Android home-loads, perf/scale
+      (generous), tunnel native when module present, multi-writer double-write
+SOFT  desktop copilot UI e2e (blocked on #470), builder publish (punted v0),
+      mobile on-device perf/scale (honest skip), nightly red → human action
+```
+
+Parent backlog: [#496](https://github.com/srikanth235/centraid/issues/496).
 
 `TESTING.md` wins over any suite README that contradicts this split (**L3**).
 
@@ -185,15 +233,17 @@ chat turns use — there is no automation-specific mock LLM (the
 
 | Command / workflow | Contents |
 | --- | --- |
-| `bun run check:pr` | **Before every push:** format + oxlint + turbo lint + typecheck + lint:types + lint:css + test:matrix (`ci.yml` **static** job). Vitest alone is not a substitute. |
+| `bun run check:pr` | **Before every push:** format + oxlint + turbo lint + typecheck + lint:types + lint:css + test:matrix + **test:ratchet** + **test:affected** (`ci.yml` **static** job + local vitest). Vitest alone is not a substitute. |
 | `bun run test` | package unit + integration + contract tests; prints floors |
+| `bun run test:affected` | vitest for packages changed since `origin/main` (`turbo --filter='...[origin/main]'`) |
+| `bun run test:ratchet` | fail if coverage floors or `minimumTests` decreased vs merge base |
 | `bun run coverage` | unified per-PR suite, v8 report, floor enforcement, Vitest JSON (`ci.yml` **verify** job) |
 | `bun run test:matrix` | catalog/owner/contract validation (also inside `check:pr`) |
-| `bun run test:perf` | six generous hot-path budget tests; nightly only |
-| `bun run test:scale` | five deterministic volume tests; nightly only |
+| `bun run test:perf` | hot-path budget tests; nightly only |
+| `bun run test:scale` | deterministic volume tests; nightly only |
 | `bun run test:report` | build `dist/test-report/index.html` (+ `summary.json` / `summary.md`) from available evidence |
-| `.github/workflows/ci.yml` | parallel **static** + **verify**, required **check** aggregator; **publish-report** on main only (Pages); Bun/Turbo/Cargo caches |
-| `.github/workflows/e2e.yml` | desktop, web, mobile, three pairing journeys, perf, scale, full report → **publish-nightly-report** on Pages |
+| `.github/workflows/ci.yml` | parallel **static** + **verify**, required **check** aggregator (ruleset-required); **publish-report** on main only (Pages); Bun/Turbo/Cargo caches |
+| `.github/workflows/e2e.yml` | desktop, web, mobile (iOS + Android home-loads), pairing, perf, scale, full report → **publish-nightly-report** on main only; red scheduled nightly → auto-issue |
 
 ### Test-health report (main + nightly)
 

@@ -11,6 +11,7 @@
  * installs runs `/bin/sleep`, not the actual gateway binary.
  */
 
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -42,8 +43,9 @@ test('real launchctl bootstrap/print/bootout round-trip against a TEST label, ne
 
   const home = os.homedir();
   const plistPath = launchAgentPlistPath(home, TEST_LABEL);
-  const stdoutLog = path.join(os.tmpdir(), `${TEST_LABEL}-stdout.log`);
-  const stderrLog = path.join(os.tmpdir(), `${TEST_LABEL}-stderr.log`);
+  const work = tempDirSync('launchd-e2e-');
+  const stdoutLog = path.join(work, `${TEST_LABEL}-stdout.log`);
+  const stderrLog = path.join(work, `${TEST_LABEL}-stderr.log`);
 
   // A trivial long-running stand-in — NOT the real gateway — so this
   // test never boots an actual centraid-gateway process under launchd.
@@ -53,7 +55,7 @@ test('real launchctl bootstrap/print/bootout round-trip against a TEST label, ne
     args: [],
     stdoutLog,
     stderrLog,
-    workingDirectory: os.tmpdir(),
+    workingDirectory: work,
   };
   const plist = buildLaunchdPlist(TEST_LABEL, spec);
 

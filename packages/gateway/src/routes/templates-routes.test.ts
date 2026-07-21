@@ -7,7 +7,7 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * stripped metadata rows (no `files`/`source`), behind the bearer check.
  */
 
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -106,9 +106,10 @@ test('handler refreshes the cache from the remote URL on construction', async ()
     remoteTemplatesUrl: 'https://templates.example.test',
     fetchImpl,
   });
-  // Fire-and-forget — let the microtask/IO turn run.
-  await new Promise((resolve) => setTimeout(resolve, 20));
-  expect(calls.some((u) => u.startsWith('https://templates.example.test'))).toBeTruthy();
+  // Fire-and-forget — poll until the remote fetch lands (no fixed sleep).
+  await vi.waitFor(() => {
+    expect(calls.some((u) => u.startsWith('https://templates.example.test'))).toBeTruthy();
+  });
 });
 
 test('handler does not fetch when no remote URL is configured', async () => {
@@ -119,6 +120,8 @@ test('handler does not fetch when no remote URL is configured', async () => {
   }) as typeof fetch;
 
   makeTemplatesRouteHandler({ cacheDir: path.join(dataDir, 'tmpl-cache'), fetchImpl });
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  // Allow a microtask turn for any accidental fire-and-forget, then assert quiet.
+  await Promise.resolve();
+  await Promise.resolve();
   expect(calls.length).toBe(0);
 });

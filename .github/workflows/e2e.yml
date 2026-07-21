@@ -7,12 +7,38 @@ on:
   schedule:
     - cron: '0 6 * * *' # 06:00 UTC nightly
   workflow_dispatch:
+    inputs:
+      # #496 C3 — re-run one broken lane without the full ~70-min graph.
+      suite:
+        description: 'Which suite to run (all | desktop | web | mobile | mobile-android | pairing | report)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - desktop
+          - web
+          - mobile
+          - mobile-android
+          - pairing
+          - report
+
+# #496 C3 — overlapping schedule + dispatch must not double-run macOS.
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
+  # E3 auto-issue on red nightly needs issues:write when the failure job runs.
+  issues: write
 
 jobs:
   desktop-e2e:
+    if: >
+      github.event_name != 'workflow_dispatch' ||
+      github.event.inputs.suite == 'all' ||
+      github.event.inputs.suite == 'desktop'
     runs-on: ubuntu-latest
     # Outer backstop only — the suite's own `globalTimeout` (22m, see
     # tests/e2e/playwright.config.ts) is what fails a runaway run, because it
@@ -83,6 +109,10 @@ jobs:
           retention-days: 7
 
   web-e2e:
+    if: >
+      github.event_name != 'workflow_dispatch' ||
+      github.event.inputs.suite == 'all' ||
+      github.event.inputs.suite == 'web'
     runs-on: ubuntu-latest
     # Outer backstop only — see desktop-e2e. The suite's `globalTimeout` is
     # 10m against ~1m of healthy tests; setup is ~7m.
@@ -112,6 +142,10 @@ jobs:
           retention-days: 7
 
   mobile-e2e:
+    if: >
+      github.event_name != 'workflow_dispatch' ||
+      github.event.inputs.suite == 'all' ||
+      github.event.inputs.suite == 'mobile'
     runs-on: macos-15
     timeout-minutes: 60
     steps:
@@ -353,9 +387,63 @@ jobs:
             tests/agent-e2e-mobile/runs/
           retention-days: 7
 
+  # #496 PC1 — Android home-loads at least every nightly (macOS minutes free on
+  # public repos). Leaner than iOS: only home-loads; longer paths stay on iOS.
+  # Flake budget: one retry at the flow harness; job failure still reds nightly.
+  mobile-e2e-android:
+    if: >
+      github.event_name != 'workflow_dispatch' ||
+      github.event.inputs.suite == 'all' ||
+      github.event.inputs.suite == 'mobile-android'
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '22'
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      - name: Install Maestro CLI
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      - name: Set up Android SDK + emulator
+        uses: reactivecircus/android-emulator-runner@1dcd0090116d15dd95c8371a98ef77c0cff894dd # v2.34.0
+        with:
+          api-level: 34
+          arch: x86_64
+          profile: pixel_6
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            bunx turbo run build --filter=@centraid/mobile...
+            cd apps/mobile
+            # Install a debug build onto the booted emulator; Expo prebuild if needed.
+            bunx expo run:android --no-bundler --device || bunx expo run:android --device
+            cd ../..
+            node scripts/test-report/prepare.mjs
+            MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/home-loads.mjs
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-evidence-mobile-android
+          path: |
+            artifacts/
+            tests/agent-e2e-mobile/runs/
+          retention-days: 7
+
   # Pairing journeys (issue #289 / matrix tunnel-pairing). Independent jobs so
   # one failure still leaves evidence from the others for the health report.
   pairing-lifecycle:
+    if: >
+      github.event_name != 'workflow_dispatch' ||
+      github.event.inputs.suite == 'all' ||
+      github.event.inputs.suite == 'pairing'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -380,6 +468,10 @@ jobs:
           retention-days: 7
 
   pairing-ticket-hygiene:
+    if: >
+      github.event_name != 'workflow_dispatch' ||
+      github.event.inputs.suite == 'all' ||
+      github.event.inputs.suite == 'pairing'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -404,6 +496,10 @@ jobs:
           retention-days: 7
 
   pairing-cross-network-relay:
+    if: >
+      github.event_name != 'workflow_dispatch' ||
+      github.event.inputs.suite == 'all' ||
+      github.event.inputs.suite == 'pairing'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -440,7 +536,13 @@ jobs:
         pairing-ticket-hygiene,
         pairing-cross-network-relay,
       ]
-    if: always()
+    if: >
+      always() &&
+      (
+        github.event_name != 'workflow_dispatch' ||
+        github.event.inputs.suite == 'all' ||
+        github.event.inputs.suite == 'report'
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -513,9 +615,14 @@ jobs:
         run: exit 1
 
   # Public nightly HTML (same Pages tree as main; no per-PR slots).
+  # #496 E2 — main-only so branch workflow_dispatch cannot red the workflow
+  # with "Branch … is not allowed to deploy to github-pages".
   publish-nightly-report:
     needs: [test-health-report]
-    if: always() && needs.test-health-report.result != 'cancelled'
+    if: >
+      always() &&
+      needs.test-health-report.result != 'cancelled' &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:
@@ -545,6 +652,27 @@ jobs:
           else
             echo "ok=false" >> "$GITHUB_OUTPUT"
             echo "::warning::nightly-test-health-report missing; skip Pages publish"
+            echo "::error::nightly report HTML missing — publish skipped (visible, not silent)"
+          fi
+      - name: Open tracking issue when HTML is missing
+        if: steps.has_report.outputs.ok != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TITLE='[nightly] test-health report HTML missing'
+          BODY="Nightly publish skipped because \`dist/test-report/index.html\` was missing.
+
+          - Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          - Workflow: e2e / publish-nightly-report
+          - Ref: \`${{ github.ref }}\`
+
+          Auto-filed by #496 E2/E3. Update this issue rather than opening duplicates."
+          existing="$(gh issue list --search "in:title [nightly] test-health report HTML missing" --state open --json number --jq '.[0].number' || true)"
+          if [ -n "$existing" ] && [ "$existing" != "null" ]; then
+            gh issue comment "$existing" --body "$BODY"
+          else
+            gh issue create --title "$TITLE" --body "$BODY" --label 'tech-debt' || \
+              gh issue create --title "$TITLE" --body "$BODY"
           fi
       - name: Restore previous Pages tree (gh-pages)
         if: steps.has_report.outputs.ok == 'true'
@@ -607,3 +735,75 @@ jobs:
       - name: Deploy to GitHub Pages
         if: steps.has_report.outputs.ok == 'true'
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
+
+  # #496 E3 — single tracking issue when a *scheduled* nightly goes red.
+  # Soft SLA (documented in TESTING.md): open/update issue with run + report links.
+  nightly-failure-issue:
+    needs:
+      [
+        desktop-e2e,
+        web-e2e,
+        mobile-e2e,
+        pairing-lifecycle,
+        pairing-ticket-hygiene,
+        pairing-cross-network-relay,
+        test-health-report,
+      ]
+    if: >
+      always() &&
+      github.event_name == 'schedule' &&
+      github.ref == 'refs/heads/main' &&
+      (
+        needs.desktop-e2e.result == 'failure' ||
+        needs.web-e2e.result == 'failure' ||
+        needs.mobile-e2e.result == 'failure' ||
+        needs.pairing-lifecycle.result == 'failure' ||
+        needs.pairing-ticket-hygiene.result == 'failure' ||
+        needs.pairing-cross-network-relay.result == 'failure' ||
+        needs.test-health-report.result == 'failure'
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Open or update nightly red tracking issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          REPORT_URL="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/test-report/nightly/"
+          TITLE='[nightly] e2e lane red — tracking'
+          BODY="$(cat <<EOF
+          ## Nightly e2e failure
+
+          A **scheduled** nightly run failed. Soft SLA (#496 / TESTING.md): respond within **24h** or before the next scheduled run.
+
+          | Signal | Link |
+          | --- | --- |
+          | Actions run | ${RUN_URL} |
+          | Nightly report (Pages) | ${REPORT_URL} |
+          | Job Summary | open the run → Summary |
+
+          ### Job results
+          - desktop-e2e: \`${{ needs.desktop-e2e.result }}\`
+          - web-e2e: \`${{ needs.web-e2e.result }}\`
+          - mobile-e2e: \`${{ needs.mobile-e2e.result }}\`
+          - pairing-lifecycle: \`${{ needs.pairing-lifecycle.result }}\`
+          - pairing-ticket-hygiene: \`${{ needs.pairing-ticket-hygiene.result }}\`
+          - pairing-cross-network-relay: \`${{ needs.pairing-cross-network-relay.result }}\`
+          - test-health-report: \`${{ needs.test-health-report.result }}\`
+
+          _Auto-filed by e2e.yml \`nightly-failure-issue\`. Prefer updating this issue over opening duplicates._
+          EOF
+          )"
+          existing="$(gh issue list --search 'in:title [nightly] e2e lane red' --state open --json number --jq '.[0].number' || true)"
+          if [ -n "${existing:-}" ] && [ "$existing" != "null" ]; then
+            gh issue comment "$existing" --body "$BODY"
+            echo "Updated issue #$existing"
+          else
+            gh issue create --title "$TITLE" --body "$BODY" || true
+          fi

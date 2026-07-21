@@ -87,12 +87,14 @@ describe('readAppSetting / writeAppSetting / deleteAppSetting', () => {
   });
 
   it('delete is a no-op when file / key is missing', () => {
-    // None of these should throw.
-    deleteAppSetting('/nonexistent/app/dir', 'k');
+    // None of these should throw; missing path/key leaves state unchanged.
+    expect(() => deleteAppSetting('/nonexistent/app/dir', 'k')).not.toThrow();
     const dir = newAppDir();
-    deleteAppSetting(dir, 'k'); // no file yet
+    expect(() => deleteAppSetting(dir, 'k')).not.toThrow(); // no file yet
     writeAppSetting(dir, 'other', 1);
-    deleteAppSetting(dir, 'k'); // file exists, key doesn't
+    expect(() => deleteAppSetting(dir, 'k')).not.toThrow(); // file exists, key doesn't
+    expect(readAppSetting(dir, 'other')).toBe(1);
+    expect(readAppSetting(dir, 'k')).toBeUndefined();
   });
 
   it('automationEnabledKey builds the reserved key shape', () => {
