@@ -97,6 +97,8 @@ jobs:
         run: |
           git fetch --no-tags --depth=1 origin main 2>/dev/null || true
           bun run test:ratchet
+      # Pure-function unit tests for the ratchet (deletion/missing-key cases).
+      - run: bun run test:ratchet:unit
       # Mobile agent-e2e flow anti-rot (issue #483): fail if a Maestro flow
       # asserts on a tab/route label that is drawn on every screen, or types
       # input it never verifies. The flows themselves run nightly, but linting

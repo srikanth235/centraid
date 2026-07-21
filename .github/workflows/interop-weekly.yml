@@ -13,6 +13,7 @@ concurrency:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   backup-interop:
@@ -36,3 +37,39 @@ jobs:
         env:
           CLAWGNITION_INTEROP: '1'
         run: bun run test:interop:backup
+
+  # Same silent-rot mode #496 E3 closes for nightly — interop is weekly and
+  # would otherwise fail with no tracking issue.
+  interop-failure-issue:
+    needs: [backup-interop]
+    if: >
+      always() &&
+      github.event_name == 'schedule' &&
+      github.ref == 'refs/heads/main' &&
+      needs.backup-interop.result == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Open or update tracking issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TITLE='[interop-weekly] backup interop red'
+          BODY="Weekly backup interop suite failed.
+
+          - Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          - Workflow: interop-weekly / backup-interop
+          - Result: \`${{ needs.backup-interop.result }}\`
+
+          _Auto-filed by interop-weekly.yml. Prefer updating this issue over opening duplicates._"
+          existing="$(gh issue list --search "in:title [interop-weekly] backup interop red" --state open --json number --jq '.[0].number' || true)"
+          if [ -n "$existing" ] && [ "$existing" != "null" ]; then
+            gh issue comment "$existing" --body "$BODY" || echo "::warning::comment failed"
+          else
+            gh issue create --title "$TITLE" --body "$BODY" --label 'tech-debt' || \
+              gh issue create --title "$TITLE" --body "$BODY" || \
+              echo "::warning::issue create failed"
+          fi

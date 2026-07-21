@@ -16,6 +16,28 @@ describe('diffCoverageFloors', () => {
     ]);
   });
 
+  test('flags removal of a package scope', () => {
+    const base = { 'packages/vault/src/**': { lines: 90 } };
+    const head = { lines: 30 };
+    expect(diffCoverageFloors(base, head)).toEqual([
+      'coverage floor scope "packages/vault/src/**" removed',
+    ]);
+  });
+
+  test('flags removal of a single metric key', () => {
+    const base = { 'packages/vault/src/**': { lines: 90, branches: 78 } };
+    const head = { 'packages/vault/src/**': { lines: 90 } };
+    expect(diffCoverageFloors(base, head)).toEqual([
+      'coverage floor "packages/vault/src/**.branches" removed (was 78)',
+    ]);
+  });
+
+  test('flags removal of a top-level number floor', () => {
+    expect(diffCoverageFloors({ lines: 30, branches: 20 }, { lines: 30 })).toEqual([
+      'coverage floor "branches" removed (was 20)',
+    ]);
+  });
+
   test('allows increases and equal floors', () => {
     expect(diffCoverageFloors({ lines: 30 }, { lines: 31 })).toEqual([]);
     expect(diffCoverageFloors({ lines: 30 }, { lines: 30 })).toEqual([]);
@@ -27,6 +49,18 @@ describe('diffMinimumTests', () => {
     const base = { flows: [{ id: 'a', minimumTests: 10 }] };
     const head = { flows: [{ id: 'a', minimumTests: 8 }] };
     expect(diffMinimumTests(base, head)).toHaveLength(1);
+  });
+
+  test('flags removal of minimumTests key', () => {
+    const base = { flows: [{ id: 'a', minimumTests: 10 }] };
+    const head = { flows: [{ id: 'a' }] };
+    expect(diffMinimumTests(base, head).join('')).toMatch(/minimumTests removed/);
+  });
+
+  test('flags deletion of a flow that had minimumTests', () => {
+    const base = { flows: [{ id: 'a', minimumTests: 10 }] };
+    const head = { flows: [] };
+    expect(diffMinimumTests(base, head).join('')).toMatch(/flow "a" removed/);
   });
 
   test('allows decrease with approvedMinimumTestsDeviation', () => {
@@ -66,5 +100,15 @@ describe('ratchetFloors', () => {
       headMatrix: { flows: [] },
     });
     expect(errors.length).toBeGreaterThan(0);
+  });
+
+  test('deletion of a floor scope is not waived without approvedDeviation', () => {
+    const { errors } = ratchetFloors({
+      baseFloors: { 'packages/vault/src/**': { lines: 90 } },
+      headFloors: {},
+      baseMatrix: { flows: [] },
+      headMatrix: { flows: [] },
+    });
+    expect(errors.some((e) => e.includes('removed'))).toBe(true);
   });
 });

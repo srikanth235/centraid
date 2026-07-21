@@ -31,8 +31,10 @@ extends its existing owner.
 Every package extends one of the presets in
 [`packages/test-kit`](packages/test-kit), and every node preset explicitly uses
 the `forks` pool so `node:sqlite` and Worker threads are process-isolated. The
-root [`vitest.config.ts`](vitest.config.ts) aggregates all projects for one v8
-coverage result.
+node and jsdom presets also set **`expect.requireAssertions: true`** (#496 E5)
+so an assertion-free test fails; perf/scale configs opt out intentionally.
+The root [`vitest.config.ts`](vitest.config.ts) aggregates all projects for one
+v8 coverage result.
 
 | Tier | Marker / location | Owns | Schedule |
 | --- | --- | --- | --- |
@@ -54,7 +56,7 @@ Decided in [#468](https://github.com/srikanth235/centraid/issues/468); cite
 
 | Lane | Runs |
 | --- | --- |
-| **Every PR** | Unit, integration, contract; matrix validation + **floors ratchet** via `check:pr`; **affected-package vitest** (`turbo run test --filter='...[origin/main]'`); **boot-the-artifact smoke** when client-e2e-pr triggers (includes `packages/gateway` + `packages/app-engine` path filters — #496 E7); **path-filtered client e2e** |
+| **Every PR** | Unit, integration, contract; matrix validation + **floors ratchet** via `check:pr`; **affected-package vitest** (`turbo run test --filter='[origin/main]'` — changed packages only, not the full dependent graph); **boot-the-artifact smoke** when client-e2e-pr triggers (includes `packages/gateway` + `packages/app-engine` path filters — #496 E7); **path-filtered client e2e** |
 | **Path filters (client e2e)** | **Web** e2e when `apps/web`, `packages/client`, or service-worker files change; **desktop** e2e when `apps/desktop` changes; **boot-smoke** also when gateway/app-engine change. Shard to keep wall-clock roughly under ten minutes. |
 | **Nightly** | Full cross-client suites, perf budgets, mobile (**iOS + Android home-loads**), pairing journeys, scale |
 
@@ -233,9 +235,11 @@ chat turns use — there is no automation-specific mock LLM (the
 
 | Command / workflow | Contents |
 | --- | --- |
-| `bun run check:pr` | **Before every push:** format + oxlint + turbo lint + typecheck + lint:types + lint:css + test:matrix + **test:ratchet** + **test:affected** (`ci.yml` **static** job + local vitest). Vitest alone is not a substitute. |
+| `bun run check:pr` | **Before every push:** format + oxlint + turbo lint + typecheck + lint:types + knip + lint:css + test:matrix + **test:ratchet** + **test:ratchet:unit** + **test:affected**. Superset of CI `static` (which omits `test:affected`; full vitest is on `verify`). Vitest alone is not a substitute. |
 | `bun run test` | package unit + integration + contract tests; prints floors |
-| `bun run test:affected` | vitest for packages changed since `origin/main` (`turbo --filter='...[origin/main]'`) |
+| `bun run test:affected` | vitest for packages changed since `origin/main` (`turbo --filter='[origin/main]'` — changed packages only; dependents stay on full CI `verify`) |
+| `bun run test:ratchet` | Floors / `minimumTests` up-only vs `origin/main` (deletions count as decreases) |
+| `bun run test:ratchet:unit` | Unit tests for the ratchet pure functions (`scripts/test-report/vitest.config.ts`) |
 | `bun run test:ratchet` | fail if coverage floors or `minimumTests` decreased vs merge base |
 | `bun run coverage` | unified per-PR suite, v8 report, floor enforcement, Vitest JSON (`ci.yml` **verify** job) |
 | `bun run test:matrix` | catalog/owner/contract validation (also inside `check:pr`) |

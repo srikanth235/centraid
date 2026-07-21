@@ -8,25 +8,26 @@
     "skip": "Deliberately low-value for the current v0 product posture"
   },
   "notes": {
-    "web.concurrency": "Partial→stronger: multi-writer.contract.test.ts now covers double-write distinct intents + exclusive claims (P3). web-pwa-cache.spec.ts still owns multi-tab shell bridge; Playwright double-write remains opportunistic.",
+    "web.concurrency": "Partial\u2192stronger: multi-writer.contract.test.ts now covers double-write distinct intents + exclusive claims (P3). web-pwa-cache.spec.ts still owns multi-tab shell bridge; Playwright double-write remains opportunistic.",
     "mobile.performance": "Honest skip for on-device budget until a Maestro metric owner lands; #404 PWA waterfall owns web.performance. Android home-loads runs nightly (PC1).",
     "replica-sync.performance": "Partial: tests/perf/replica-sync-io.perf.test.ts exercises store/bootstrap/IO budget (replaces deleted in-memory fake).",
     "tunnel-pairing.performance": "JS fallback floor remains in tunnel-throughput.perf.test.ts; native QUIC budget is tests/perf/tunnel-native.perf.test.ts (nightly when native module present).",
     "blob-custody.durability": "Owned by packages/vault/src/blob/enospc-custody.integration.test.ts (always-on fault-injected ENOSPC). Real hdiutil path remains in disk-full.integration.test.ts behind CENTRAID_DISKFULL_E2E=1 (darwin).",
-    "agent-runtime.journey": "Owned by packages/agent-runtime/src/backends/acp/journey.integration.test.ts (fake-acp message→vault side-effect→transcript). Desktop copilot Playwright specs stay skipped until mock serves blueprint kits (#470).",
-    "builder.publish": "Punted (#496): builder is not in v0. builder.spec.ts \"Publish posts to the gateway\" stays skipped with this product reason — declared gap, not fake solid.",
-    "desktop.copilot-e2e": "Unconditional Playwright skips in appview-templates-insights (7.2–7.4) target removed FAB UI; journey owned at agent-runtime.journey until #470 mock blueprint serving.",
+    "agent-runtime.journey": "Owned by packages/agent-runtime/src/backends/acp/journey.integration.test.ts (fake-acp message\u2192vault side-effect\u2192transcript). Desktop copilot Playwright specs stay skipped until mock serves blueprint kits (#470).",
+    "builder.publish": "Punted (#496): builder is not in v0. builder.spec.ts \"Publish posts to the gateway\" stays skipped with this product reason \u2014 declared gap, not fake solid.",
+    "desktop.copilot-e2e": "Unconditional Playwright skips in appview-templates-insights (7.2\u20137.4) target removed FAB UI; journey owned at agent-runtime.journey until #470 mock blueprint serving.",
     "mobile.scalability": "Honest skip: no volume proof on-device yet; mobile-real-journey + crash durability cover the correctness path.",
     "gateway.scalability": "Owned by tests/scale/gateway-sessions.scale.test.ts (multi-session headroom).",
-    "automations.scalability": "Owned by tests/scale/automations-fire.scale.test.ts (scheduler fire at volume + no-backfill).",
-    "desktop.performance": "Partial crude cold-path budget in tests/perf/desktop-cold.perf.test.ts (module import / first-paint proxy — not full Electron launch).",
+    "automations.scalability": "Owned by tests/scale/automations-fire.scale.test.ts (computeMissedWindows at volume \u2014 one missed entry per auto per gap; not live fire).",
+    "desktop.performance": "Partial crude cold-path budget in tests/perf/desktop-cold.perf.test.ts (module import / first-paint proxy \u2014 not full Electron launch).",
     "G4.mutation": "Optional Stryker on vault consent + replica intents deferred; not scheduled in CI (documented skip).",
-    "G5.interop": "packages/backup test:interop wired into test:quality:nightly and weekly interop workflow when CLAWGNITION_INTEROP=1.",
-    "client.react.floor": "No whole-surface coverage floor on packages/client/src/react — journeys + extracted pure modules only (documented #496 open Q5).",
+    "G5.interop": "packages/backup test:interop runs via .github/workflows/interop-weekly.yml (schedule + workflow_dispatch, CLAWGNITION_INTEROP=1). Not part of test:quality:nightly (perf+scale+report only).",
+    "client.react.floor": "No whole-surface coverage floor on packages/client/src/react \u2014 journeys + extracted pure modules only (documented #496 open Q5).",
     "search": "Flow vault-search owns search over ext/FTS (packages/vault/src/gateway/search.test.ts).",
-    "enrichment": "Flow vault-enrichment owns device enrichment → searchable transcript (packages/gateway/src/routes/device-work-routes.test.ts).",
+    "enrichment": "Flow vault-enrichment owns device enrichment \u2192 searchable transcript (packages/gateway/src/routes/device-work-routes.test.ts).",
     "cross-linking": "Flow vault-cross-link owns core.link_entities (packages/vault/src/gateway/ext.test.ts).",
-    "people": "Flow people-crm owns people.* commands (packages/vault/src/commands/people.test.ts)."
+    "people": "Flow people-crm owns people.* commands (packages/vault/src/commands/people.test.ts).",
+    "blank-machine-restore": "Product blank-machine journey is recover.integration.test.ts (recover() + kit). Backup primitive round-trips live under packages/backup engine tests."
   },
   "cellOwners": {
     "vault-core.correctness": {
@@ -975,7 +976,7 @@
     },
     {
       "id": "agent-chat-journey",
-      "name": "Chat message → vault side effect → transcript (fake-acp)",
+      "name": "Chat message \u2192 vault side effect \u2192 transcript (fake-acp)",
       "surface": "agent-runtime",
       "dimension": "journey",
       "tier": "integration",
@@ -984,12 +985,12 @@
     },
     {
       "id": "blank-machine-restore",
-      "name": "Blank-machine restore: snapshot → empty dest → mountable tree",
+      "name": "Blank-machine recover: kit + api-key \u2192 mountable vault (recover())",
       "surface": "backup-restore",
       "dimension": "journey",
       "tier": "integration",
-      "owner": "packages/gateway/src/backup/blank-machine-restore.journey.test.ts",
-      "minimumTests": 1
+      "owner": "packages/gateway/src/backup/recover.integration.test.ts",
+      "minimumTests": 2
     },
     {
       "id": "vault-search",
@@ -1025,7 +1026,7 @@
     },
     {
       "id": "blueprint-handler-crud",
-      "name": "Blueprint app handler CRUD smoke (declared handlers non-empty + export)",
+      "name": "Blueprint app handlers load and export callable defaults",
       "surface": "blueprints",
       "dimension": "correctness",
       "tier": "integration",

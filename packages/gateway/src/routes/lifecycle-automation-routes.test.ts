@@ -239,15 +239,12 @@ test('headless compile returns a run id and records failure in the automation th
         }>;
       };
       const found = body.runs.find((candidate) => candidate.runId === runId);
-      // Terminal failure: ok is false. Prefer endedAt when present; some
-      // failure paths record ok:false before stamping endedAt under load.
+      // Terminal failure: ok is false AND endedAt is a number. Accepting
+      // endedAt null/undefined reduced the wait to `ok === false` and
+      // reinstated the ENOTEMPTY teardown race this comment warns about —
+      // the run must be fully over before this test returns.
       expect(found).toMatchObject({ triggerKind: 'compile', ok: false });
-      const terminal =
-        found?.ok === false &&
-        (typeof found.endedAt === 'number' ||
-          found.endedAt === null ||
-          found.endedAt === undefined);
-      expect(terminal).toBe(true);
+      expect(typeof found?.endedAt).toBe('number');
     },
     { timeout: 30_000, interval: 100 },
   );

@@ -390,6 +390,8 @@ jobs:
   # #496 PC1 — Android home-loads at least every nightly (macOS minutes free on
   # public repos). Leaner than iOS: only home-loads; longer paths stay on iOS.
   # Flake budget: one retry at the flow harness; job failure still reds nightly.
+  # macos-15 is Apple Silicon → arm64-v8a AVD (x86_64 will not boot without HAX).
+  # Metro must be up before Maestro (harness hard-fails without it; iOS job does this).
   mobile-e2e-android:
     if: >
       github.event_name != 'workflow_dispatch' ||
@@ -410,21 +412,33 @@ jobs:
         run: |
           curl -fsSL "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      - name: Build mobile workspace (host, before emulator)
+        run: bunx turbo run build --filter=@centraid/mobile...
+      - name: Start Metro
+        working-directory: apps/mobile
+        run: |
+          CI=1 nohup bunx expo start --dev-client > /tmp/centraid-metro-android.log 2>&1 &
+          for attempt in {1..90}; do
+            if curl -fsS http://127.0.0.1:8081/status; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/centraid-metro-android.log
+          exit 1
       - name: Set up Android SDK + emulator
         uses: reactivecircus/android-emulator-runner@1dcd0090116d15dd95c8371a98ef77c0cff894dd # v2.34.0
         with:
           api-level: 34
-          arch: x86_64
+          arch: arm64-v8a
           profile: pixel_6
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |
             set -euo pipefail
-            bunx turbo run build --filter=@centraid/mobile...
             cd apps/mobile
-            # Install a debug build onto the booted emulator; Expo prebuild if needed.
-            bunx expo run:android --no-bundler --device || bunx expo run:android --device
+            # Always --no-bundler: Metro is already running on the host. A fallback
+            # without --no-bundler would spawn a second Metro and hang the job.
+            bunx expo run:android --no-bundler --device
             cd ../..
             node scripts/test-report/prepare.mjs
             MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/home-loads.mjs
@@ -532,6 +546,7 @@ jobs:
         desktop-e2e,
         web-e2e,
         mobile-e2e,
+        mobile-e2e-android,
         pairing-lifecycle,
         pairing-ticket-hygiene,
         pairing-cross-network-relay,
@@ -617,11 +632,14 @@ jobs:
   # Public nightly HTML (same Pages tree as main; no per-PR slots).
   # #496 E2 — main-only so branch workflow_dispatch cannot red the workflow
   # with "Branch … is not allowed to deploy to github-pages".
+  # Only when test-health-report actually produced the artifact. Single-lane
+  # dispatch (suite != all/report) skips the report job; running publish on
+  # skipped/failure would false-alarm "HTML missing" (#496 review).
   publish-nightly-report:
     needs: [test-health-report]
     if: >
       always() &&
-      needs.test-health-report.result != 'cancelled' &&
+      needs.test-health-report.result == 'success' &&
       github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -632,6 +650,9 @@ jobs:
       contents: write
       pages: write
       id-token: write
+      # Job-level permissions replace workflow-level; without this, the
+      # "HTML missing" auto-issue step 403s on the exact alert path (#496 E2).
+      issues: write
     environment:
       name: github-pages
       url: ${{ steps.slot.outputs.url }}
@@ -669,10 +690,11 @@ jobs:
           Auto-filed by #496 E2/E3. Update this issue rather than opening duplicates."
           existing="$(gh issue list --search "in:title [nightly] test-health report HTML missing" --state open --json number --jq '.[0].number' || true)"
           if [ -n "$existing" ] && [ "$existing" != "null" ]; then
-            gh issue comment "$existing" --body "$BODY"
+            gh issue comment "$existing" --body "$BODY" || echo "::warning::could not comment on issue #$existing"
           else
             gh issue create --title "$TITLE" --body "$BODY" --label 'tech-debt' || \
-              gh issue create --title "$TITLE" --body "$BODY"
+              gh issue create --title "$TITLE" --body "$BODY" || \
+              echo "::warning::could not open tracking issue (permission or label)"
           fi
       - name: Restore previous Pages tree (gh-pages)
         if: steps.has_report.outputs.ok == 'true'

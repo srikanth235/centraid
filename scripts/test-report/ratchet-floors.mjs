@@ -6,6 +6,9 @@
  * touched JSON carries an `approvedDeviation` / flow-level `approvedMinimumTestsDeviation`
  * marker explaining the constitutional exception.
  *
+ * Deletion of a floor scope, metric key, or flow `minimumTests` counts as a
+ * decrease (cannot bypass the ratchet by deleting the key).
+ *
  * Usage:
  *   node scripts/test-report/ratchet-floors.mjs
  *   node scripts/test-report/ratchet-floors.mjs --base origin/main
@@ -21,7 +24,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 /**
- * Compare coverage floor objects for any downward movement.
+ * Compare coverage floor objects for any downward movement or deletion.
  * @param {unknown} base Floors on the merge base.
  * @param {unknown} head Floors on the working tree.
  * @returns {string[]} Human-readable decrease errors.
@@ -38,21 +41,26 @@ export function diffCoverageFloors(base, head) {
     if (key === 'approvedDeviation' || key.startsWith('_')) continue;
     const b = baseObj[key];
     const h = headObj[key];
-    if (typeof b === 'number' && typeof h === 'number') {
-      if (h < b) {
+    if (typeof b === 'number') {
+      if (typeof h !== 'number') {
+        errors.push(`coverage floor "${key}" removed (was ${b})`);
+      } else if (h < b) {
         errors.push(`coverage floor "${key}" decreased ${b} → ${h}`);
       }
       continue;
     }
-    if (b && typeof b === 'object' && h && typeof h === 'object') {
+    if (b && typeof b === 'object') {
+      if (!h || typeof h !== 'object') {
+        errors.push(`coverage floor scope "${key}" removed`);
+        continue;
+      }
       const bb = /** @type {Record<string, number>} */ (b);
       const hh = /** @type {Record<string, number>} */ (h);
       for (const metric of new Set([...Object.keys(bb), ...Object.keys(hh)])) {
-        if (
-          typeof bb[metric] === 'number' &&
-          typeof hh[metric] === 'number' &&
-          hh[metric] < bb[metric]
-        ) {
+        if (typeof bb[metric] !== 'number') continue;
+        if (typeof hh[metric] !== 'number') {
+          errors.push(`coverage floor "${key}.${metric}" removed (was ${bb[metric]})`);
+        } else if (hh[metric] < bb[metric]) {
           errors.push(`coverage floor "${key}.${metric}" decreased ${bb[metric]} → ${hh[metric]}`);
         }
       }
@@ -62,18 +70,37 @@ export function diffCoverageFloors(base, head) {
 }
 
 /**
- * Compare matrix flow minimumTests floors for any downward movement.
+ * Compare matrix flow minimumTests floors for any downward movement or removal.
  * @param {{ flows?: Array<{ id?: string; minimumTests?: number; approvedMinimumTestsDeviation?: string }> }} base Matrix on the merge base.
  * @param {{ flows?: Array<{ id?: string; minimumTests?: number; approvedMinimumTestsDeviation?: string }> }} head Matrix on the working tree.
  * @returns {string[]} Human-readable decrease errors.
  */
 export function diffMinimumTests(base, head) {
   const errors = [];
-  const baseMap = new Map((base?.flows ?? []).filter((f) => f?.id).map((f) => [f.id, f]));
-  for (const flow of head?.flows ?? []) {
-    if (!flow?.id || flow.minimumTests === undefined) continue;
-    const prev = baseMap.get(flow.id);
-    if (!prev || prev.minimumTests === undefined) continue;
+  const headMap = new Map((head?.flows ?? []).filter((f) => f?.id).map((f) => [f.id, f]));
+  for (const prev of base?.flows ?? []) {
+    if (!prev?.id || prev.minimumTests === undefined) continue;
+    const flow = headMap.get(prev.id);
+    if (!flow || flow.minimumTests === undefined) {
+      if (
+        flow &&
+        typeof flow.approvedMinimumTestsDeviation === 'string' &&
+        flow.approvedMinimumTestsDeviation.trim()
+      ) {
+        continue;
+      }
+      // Flow deleted entirely, or minimumTests key dropped.
+      if (!flow) {
+        errors.push(
+          `flow "${prev.id}" removed (had minimumTests ${prev.minimumTests}); add approvedMinimumTestsDeviation on a residual entry or restore the flow`,
+        );
+      } else {
+        errors.push(
+          `flow "${prev.id}" minimumTests removed (was ${prev.minimumTests}; add approvedMinimumTestsDeviation to allow)`,
+        );
+      }
+      continue;
+    }
     if (flow.minimumTests < prev.minimumTests) {
       if (
         typeof flow.approvedMinimumTestsDeviation === 'string' &&
@@ -168,20 +195,39 @@ function main() {
   }
   const baseRef = resolveBase(args.base);
   if (!baseRef) {
-    console.warn('ratchet-floors: no merge base found; skipping (local only)');
-    process.exit(0);
+    console.error(
+      'ratchet-floors: no merge base found (tried origin/main, main, origin/master, master). Fetch the default branch or pass --base <ref>.',
+    );
+    process.exitCode = 1;
+    return;
   }
 
   const floorsPath = 'tests/coverage-floors.json';
   const matrixPath = 'tests/matrix.json';
+  if (!existsSync(path.join(root, floorsPath)) || !existsSync(path.join(root, matrixPath))) {
+    console.error(`ratchet-floors: missing ${floorsPath} or ${matrixPath} in working tree`);
+    process.exitCode = 1;
+    return;
+  }
   const headFloors = JSON.parse(readFileSync(path.join(root, floorsPath), 'utf8'));
   const headMatrix = JSON.parse(readFileSync(path.join(root, matrixPath), 'utf8'));
   const baseFloors = readJsonAt(baseRef, floorsPath);
   const baseMatrix = readJsonAt(baseRef, matrixPath);
 
   if (!baseFloors || !baseMatrix) {
-    console.warn(`ratchet-floors: ${floorsPath} or ${matrixPath} missing on ${baseRef}; skipping`);
-    process.exit(0);
+    // First introduction of either file on a brand-new branch vs a base that
+    // never had them is fine; anything else is a broken checkout.
+    if (!baseFloors && !baseMatrix) {
+      console.log(
+        `ratchet-floors: ${floorsPath} and ${matrixPath} absent on ${baseRef}; nothing to ratchet (first land)`,
+      );
+      return;
+    }
+    console.error(
+      `ratchet-floors: ${!baseFloors ? floorsPath : matrixPath} missing on ${baseRef} while present on head — refusing silent skip`,
+    );
+    process.exitCode = 1;
+    return;
   }
 
   const { errors } = ratchetFloors({ baseFloors, headFloors, baseMatrix, headMatrix });
@@ -197,9 +243,7 @@ function main() {
   console.log(`ratchet-floors: ok (no decreases vs ${baseRef})`);
 }
 
-const isMain =
-  process.argv[1] &&
-  existsSync(process.argv[1]) &&
-  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-
-if (isMain) main();
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  main();
+}

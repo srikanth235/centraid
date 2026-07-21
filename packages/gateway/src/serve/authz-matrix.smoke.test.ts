@@ -50,7 +50,18 @@ const CASES: Array<{
   expect: number | ((status: number) => boolean);
 }> = [
   {
-    name: 'no bearer → 401 on health is still open, but vault plane is closed',
+    name: 'no bearer → 401 on health (detail is host-auth gated)',
+    route: '/centraid/_gateway/health',
+    expect: 401,
+  },
+  {
+    name: 'admin bearer → 200 on health',
+    route: '/centraid/_gateway/health',
+    authorization: `Bearer ${ADMIN}`,
+    expect: 200,
+  },
+  {
+    name: 'no bearer → 401 on vault plane',
     route: '/_centraid/vault/sql',
     method: 'POST',
     expect: 401,
@@ -67,15 +78,18 @@ const CASES: Array<{
     expect: 401,
   },
   {
-    name: 'admin bearer reaches apps (2xx or empty 404-shaped, not 401/403)',
+    name: 'admin bearer reaches apps (not 401/403)',
     route: '/centraid/_apps',
     authorization: `Bearer ${ADMIN}`,
-    expect: (s) => s !== 401 && s !== 403,
+    expect: (s) => s !== 401 && s !== 403 && s < 500,
   },
   {
-    name: 'admin bearer not confused with device confinement on public pair',
-    route: '/_pair/status',
-    expect: (s) => s === 401 || s === 404 || s === 405 || s < 500,
+    name: 'admin bearer on vault plane is not 401 (auth accepted)',
+    route: '/_centraid/vault/sql',
+    method: 'POST',
+    authorization: `Bearer ${ADMIN}`,
+    // Auth must succeed; body may still 4xx for missing SQL — never 401/403/5xx.
+    expect: (s) => s !== 401 && s !== 403 && s < 500,
   },
 ];
 
