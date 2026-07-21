@@ -30,6 +30,12 @@ for (const module of modules) {
     platform: 'browser',
     target: 'es2022',
     legalComments: 'none',
+    // Resolve workspace packages from TypeScript sources so vendor does not
+    // require a pre-built packages/*/dist (CI pure-local jobs skip turbo build).
+    packages: 'bundle',
+    alias: {
+      '@centraid/blob-format': path.join(WORKSPACE_ROOT, 'packages/blob-format/src/index.ts'),
+    },
     banner: {
       js: `// Generated from ${module.source} by scripts/vendor-browser-shared.mjs.`,
     },

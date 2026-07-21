@@ -138,6 +138,7 @@ packages/blueprints/apps/locker/queries/origin-matching.ts
 packages/blueprints/apps/locker/types.ts
 packages/blueprints/manifest.json
 packages/blueprints/package.json
+packages/blueprints/scripts/vendor-browser-shared.mjs
 packages/blueprints/src/query-handlers.test.ts
 packages/client/package.json
 packages/client/src/gateway-client-devices.ts
@@ -225,8 +226,11 @@ vitest.config.ts
 - **Closed shadow** for Locker menu chrome.
 - **Watchtower badge clear** when candidates are warning-free.
 - **grantProfile clear** when re-enrolling the same endpoint as non-extension.
-- **WASM CI:** pin rustc via `rust-toolchain.toml`, pin binaryen apt version,
-  invoke build via `bash`, drift-gate JS/d.ts only (wasm binary warns).
+- **WASM CI:** pin rustc via crate-local `rust-toolchain.toml`, pin binaryen,
+  invoke build via `bash`; rebuild success is the gate and binding drift is a
+  non-blocking warning until hermetic byte-exact rebuild is real.
+- **vendor-browser-shared:** resolve `@centraid/blob-format` from TS sources so
+  pure-local CI does not require a prebuilt `dist/`.
 - **Companion e2e:** live n0-relay job is schedule/workflow_dispatch only; PRs
   get pure-local `companion-static` (extension build/test + locker
   `query-handlers` only — full blueprints app-boot is out of scope for this gate).
