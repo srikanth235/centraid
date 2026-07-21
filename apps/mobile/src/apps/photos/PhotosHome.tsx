@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
@@ -15,16 +15,35 @@ import { backupDeviceMedia } from '../../lib/upload/media-producer';
 import { Store } from '../../storage';
 import type { PhotosScreenProps } from '../../navigation';
 import PhotoTimeline from './PhotoTimeline';
+import PhotosCollectionsView from './PhotosCollectionsView';
+import PhotosCreateView from './PhotosCreateView';
+import PhotosAskView from './PhotosAskView';
+import PhotosDrawer from './PhotosDrawer';
 import { imageSource } from './media-source';
 import { onThisDay } from './timeline-model';
 import { usePhotoTimeline } from './timeline-source';
+
+// The bottom-nav active tint is the ochre accent from the design (#B47B3F),
+// distinct from the theme's blue `accent` used elsewhere on this screen.
+const NAV_ACTIVE = '#B47B3F';
+
+type PhotosView = 'photos' | 'collections' | 'create' | 'ask';
+
+const NAV_ITEMS: Array<{ view: PhotosView; icon: keyof typeof Feather.glyphMap; label: string }> = [
+  { view: 'photos', icon: 'grid', label: 'Photos' },
+  { view: 'collections', icon: 'layers', label: 'Collections' },
+  { view: 'create', icon: 'plus-square', label: 'Create' },
+];
 
 export default function PhotosHome({
   navigation,
 }: PhotosScreenProps<'PhotosHome'>): React.JSX.Element {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const { session, gatewayBase } = useReplica();
   const timeline = usePhotoTimeline();
+  const [view, setView] = useState<PhotosView>('photos');
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [selection, setSelection] = useState(new Set<string>());
   const [backingUp, setBackingUp] = useState(false);
   const collections = useReplicaQuery(
@@ -32,6 +51,7 @@ export default function PhotosHome({
     useMemo(() => ({ entity: 'core.collection' }), []),
   );
   const memories = useMemo(() => onThisDay(timeline.assets), [timeline.assets]);
+  const hero = memories[0];
 
   useEffect(() => {
     if (memories.length === 0) return;
@@ -142,142 +162,202 @@ export default function PhotosHome({
     ]);
   };
 
+  const yearsAgo = hero ? new Date().getFullYear() - new Date(hero.capturedAt).getFullYear() : 0;
+  const selecting = selection.size > 0;
+
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]} edges={['top']}>
-      <View style={styles.header}>
-        {selection.size ? (
-          <>
-            <Pressable onPress={() => setSelection(new Set())}>
-              <Feather name="x" size={23} color={colors.ink} />
-            </Pressable>
-            <Text style={[styles.selectionTitle, { color: colors.ink }]}>
-              {selection.size} selected
-            </Text>
+      {selecting ? (
+        <View style={styles.header}>
+          <Pressable onPress={() => setSelection(new Set())}>
+            <Feather name="x" size={23} color={colors.ink} />
+          </Pressable>
+          <Text style={[styles.selectionTitle, { color: colors.ink }]}>
+            {selection.size} selected
+          </Text>
+          <View style={styles.headerActions}>
             <Pressable onPress={addToAlbum}>
               <Feather name="folder-plus" size={21} color={colors.accent} />
             </Pressable>
             <Pressable disabled={backingUp} onPress={() => void backupSelection()}>
               <Feather name="upload-cloud" size={22} color={colors.accent} />
             </Pressable>
-          </>
-        ) : (
+          </View>
+        </View>
+      ) : (
+        <View style={styles.searchRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Menu"
+            onPress={() => setDrawerOpen(true)}
+            style={styles.menuBtn}
+          >
+            <Feather name="menu" size={23} color={colors.ink2} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Search photos and moments"
+            onPress={() => navigation.navigate('PhotosSearch')}
+            style={[styles.searchPill, { backgroundColor: colors.bgSunken }]}
+          >
+            <Feather name="search" size={17} color={colors.ink3} />
+            <Text style={[styles.searchPlaceholder, { color: colors.ink3 }]}>
+              Search photos &amp; moments
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityLabel="Ask about your photos"
+            onPress={() => setView('ask')}
+            style={styles.sparkleBtn}
+          >
+            <Feather name="star" size={22} color={colors.accent} />
+          </Pressable>
+        </View>
+      )}
+
+      <View style={styles.body}>
+        {view === 'photos' ? (
           <>
-            <Text style={[styles.title, { color: colors.ink }]}>Photos</Text>
-            <View style={styles.headerActions}>
+            {hero && !selecting ? (
               <Pressable
-                accessibilityLabel="Search photos"
-                onPress={() => navigation.navigate('PhotosSearch')}
+                style={styles.heroWrap}
+                onPress={() => navigation.navigate('PhotoLightbox', { assetId: hero.id })}
               >
-                <Feather name="search" size={21} color={colors.ink} />
+                <Image source={imageSource(hero.uri)} contentFit="cover" style={styles.heroImage} />
+                <View style={styles.heroShade} />
+                <View style={[styles.memoryPill, { backgroundColor: 'rgba(0,0,0,.32)' }]}>
+                  <Feather name="star" size={12} color="#fff" />
+                  <Text style={styles.memoryPillText}>Memory</Text>
+                </View>
+                <View style={styles.heroCopy}>
+                  <Text style={styles.heroEyebrow}>ON THIS DAY</Text>
+                  <Text style={styles.heroTitle}>
+                    {yearsAgo > 0 ? `${yearsAgo} year${yearsAgo === 1 ? '' : 's'} ago` : 'Today'}
+                    {memories.length > 1 ? ` · ${memories.length} moments` : ''}
+                  </Text>
+                </View>
               </Pressable>
-              <Pressable
-                accessibilityLabel="Photo library"
-                onPress={() => navigation.navigate('PhotosLibrary')}
-              >
-                <Feather name="more-horizontal" size={22} color={colors.ink} />
-              </Pressable>
-            </View>
+            ) : null}
+
+            {!selecting && timeline.assets.length ? (
+              <View style={styles.timelineHeading}>
+                <View>
+                  <Text style={[styles.timelineTitle, { color: colors.ink }]}>Timeline</Text>
+                  <Text style={[styles.timelineMeta, { color: colors.ink2 }]}>
+                    {timeline.assets.length} items · pinch to change density
+                  </Text>
+                </View>
+                <View style={styles.protectedStatus}>
+                  <Feather name="shield" size={13} color={colors.accent} />
+                  <Text style={[styles.protectedText, { color: colors.accent }]}>Private</Text>
+                </View>
+              </View>
+            ) : null}
+
+            {timeline.loading ? (
+              <View style={styles.center}>
+                <Text style={[styles.body2, { color: colors.ink2 }]}>Opening your library…</Text>
+              </View>
+            ) : timeline.sections.length === 0 ? (
+              <View style={styles.center}>
+                <Feather name="image" size={40} color={colors.accent} />
+                <Text style={[styles.emptyTitle, { color: colors.ink }]}>
+                  Your library starts here
+                </Text>
+                <Text style={[styles.body2, { color: colors.ink2 }]}>
+                  Camera-roll photos appear instantly; long-press any item to back it up.
+                </Text>
+              </View>
+            ) : (
+              <PhotoTimeline
+                sections={timeline.sections}
+                selection={selection}
+                onSelectionChange={setSelection}
+                onOpen={(asset) => navigation.navigate('PhotoLightbox', { assetId: asset.id })}
+              />
+            )}
           </>
+        ) : view === 'collections' ? (
+          <PhotosCollectionsView navigation={navigation} />
+        ) : view === 'create' ? (
+          <PhotosCreateView />
+        ) : (
+          <PhotosAskView navigation={navigation} />
         )}
       </View>
 
-      {!selection.size ? (
-        <View style={[styles.sectionNav, { backgroundColor: colors.bgSunken }]}>
-          <View style={[styles.sectionNavItem, { backgroundColor: colors.bgElev }]}>
-            <Feather name="clock" size={15} color={colors.accent} />
-            <Text style={[styles.sectionNavText, { color: colors.ink }]}>Timeline</Text>
-          </View>
+      {selecting ? null : (
+        <View
+          style={[
+            styles.bottomNav,
+            {
+              backgroundColor: colors.bg,
+              borderTopColor: colors.line,
+              paddingBottom: Math.max(insets.bottom, 14),
+            },
+          ]}
+        >
+          {NAV_ITEMS.map((item) => {
+            const active = view === item.view;
+            return (
+              <Pressable
+                key={item.view}
+                style={styles.navItem}
+                onPress={() => setView(item.view)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={item.label}
+              >
+                <Feather name={item.icon} size={23} color={active ? NAV_ACTIVE : colors.ink3} />
+                <Text style={[styles.navLabel, { color: active ? NAV_ACTIVE : colors.ink3 }]}>
+                  {item.label}
+                </Text>
+              </Pressable>
+            );
+          })}
           <Pressable
+            style={styles.navItem}
+            onPress={() => navigation.navigate('Apps', { screen: 'Home' })}
             accessibilityRole="button"
-            accessibilityLabel="Open photo library"
-            onPress={() => navigation.navigate('PhotosLibrary')}
-            style={styles.sectionNavItem}
+            accessibilityLabel="Home"
           >
-            <Feather name="grid" size={15} color={colors.ink2} />
-            <Text style={[styles.sectionNavText, { color: colors.ink2 }]}>Library</Text>
+            <Feather name="home" size={23} color={colors.ink3} />
+            <Text style={[styles.navLabel, { color: colors.ink3 }]}>Home</Text>
           </Pressable>
         </View>
-      ) : null}
-
-      {memories.length > 0 && !selection.size ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.memories}
-        >
-          {memories.slice(0, 3).map((memory, index) => (
-            <Pressable
-              key={memory.id}
-              style={styles.memory}
-              onPress={() => navigation.navigate('PhotoLightbox', { assetId: memory.id })}
-            >
-              <Image
-                source={imageSource(memory.uri)}
-                contentFit="cover"
-                style={styles.memoryImage}
-              />
-              <View style={styles.memoryShade} />
-              <View style={styles.memoryCopy}>
-                <Text style={styles.memoryEyebrow}>{index === 0 ? 'ON THIS DAY' : 'MEMORY'}</Text>
-                <Text style={styles.memoryTitle}>
-                  {index === 0 ? `${memories.length} moments` : memory.filename || 'A moment'}
-                </Text>
-                <Text style={styles.memoryMeta}>
-                  {new Date().getFullYear() - new Date(memory.capturedAt).getFullYear()} years ago
-                </Text>
-              </View>
-            </Pressable>
-          ))}
-        </ScrollView>
-      ) : null}
-
-      {!selection.size && timeline.assets.length ? (
-        <View style={styles.timelineHeading}>
-          <View>
-            <Text style={[styles.timelineTitle, { color: colors.ink }]}>Timeline</Text>
-            <Text style={[styles.timelineMeta, { color: colors.ink2 }]}>
-              {timeline.assets.length} items · pinch to change density
-            </Text>
-          </View>
-          <View style={styles.protectedStatus}>
-            <Feather name="shield" size={13} color={colors.accent} />
-            <Text style={[styles.protectedText, { color: colors.accent }]}>Private</Text>
-          </View>
-        </View>
-      ) : null}
-
-      {timeline.loading ? (
-        <View style={styles.center}>
-          <Text style={[styles.body, { color: colors.ink2 }]}>Opening your library…</Text>
-        </View>
-      ) : timeline.sections.length === 0 ? (
-        <View style={styles.center}>
-          <Feather name="image" size={40} color={colors.accent} />
-          <Text style={[styles.emptyTitle, { color: colors.ink }]}>Your library starts here</Text>
-          <Text style={[styles.body, { color: colors.ink2 }]}>
-            Camera-roll photos appear instantly; long-press any item to back it up.
-          </Text>
-        </View>
-      ) : (
-        <PhotoTimeline
-          sections={timeline.sections}
-          selection={selection}
-          onSelectionChange={setSelection}
-          onOpen={(asset) => navigation.navigate('PhotoLightbox', { assetId: asset.id })}
-        />
       )}
+
+      <PhotosDrawer
+        visible={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        onHome={() => {
+          setDrawerOpen(false);
+          navigation.navigate('Apps', { screen: 'Home' });
+        }}
+        onSettings={() => {
+          setDrawerOpen(false);
+          navigation.navigate('SettingsTab', { screen: 'Settings' });
+        }}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  body: {
+  body: { flex: 1 },
+  body2: {
     fontFamily: family.sansRegular,
     fontSize: 14,
     lineHeight: 20,
     marginTop: 12,
     maxWidth: 290,
     textAlign: 'center',
+  },
+  bottomNav: {
+    borderTopWidth: 0.5,
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingTop: 10,
   },
   center: { alignItems: 'center', flex: 1, justifyContent: 'center', paddingHorizontal: 28 },
   emptyTitle: { fontFamily: family.displayBold, fontSize: 21, marginTop: 18 },
@@ -289,43 +369,80 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
   headerActions: { flexDirection: 'row', gap: 22 },
-  memories: { gap: 10, paddingHorizontal: 16, paddingVertical: 12 },
-  memory: { borderRadius: 15, height: 132, overflow: 'hidden', width: 218 },
-  memoryCopy: { bottom: 13, left: 14, position: 'absolute', right: 12 },
-  memoryEyebrow: { color: '#fff', fontFamily: family.monoBold, fontSize: 9, letterSpacing: 1 },
-  memoryImage: { ...StyleSheet.absoluteFillObject },
-  memoryMeta: {
-    color: 'rgba(255,255,255,.82)',
-    fontFamily: family.sansRegular,
+  heroCopy: { bottom: 15, left: 16, position: 'absolute', right: 16 },
+  heroEyebrow: {
+    color: '#fff',
+    fontFamily: family.monoMedium,
     fontSize: 11,
-    marginTop: 3,
+    letterSpacing: 1,
+    opacity: 0.9,
   },
-  memoryShade: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(10,14,24,.33)' },
-  memoryTitle: { color: '#fff', fontFamily: family.displayBold, fontSize: 18, marginTop: 5 },
+  heroImage: { ...StyleSheet.absoluteFillObject },
+  heroShade: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(10,14,24,.28)',
+  },
+  heroTitle: {
+    color: '#fff',
+    fontFamily: family.displayBold,
+    fontSize: 21,
+    letterSpacing: -0.4,
+    marginTop: 6,
+  },
+  heroWrap: {
+    borderRadius: 16,
+    height: 176,
+    marginBottom: 4,
+    marginHorizontal: 16,
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  memoryPill: {
+    alignItems: 'center',
+    borderRadius: 999,
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    position: 'absolute',
+    right: 12,
+    top: 11,
+  },
+  memoryPillText: { color: '#fff', fontFamily: family.sansMedium, fontSize: 12 },
+  menuBtn: { alignItems: 'flex-start', height: 44, justifyContent: 'center', width: 24 },
+  navItem: { alignItems: 'center', flex: 1, gap: 4 },
+  navLabel: { fontFamily: family.sansMedium, fontSize: 10 },
   protectedStatus: { alignItems: 'center', flexDirection: 'row', gap: 5 },
   protectedText: { fontFamily: family.sansMedium, fontSize: 11 },
   safe: { flex: 1 },
-  sectionNav: { borderRadius: 11, flexDirection: 'row', marginHorizontal: 16, padding: 3 },
-  sectionNavItem: {
+  searchPill: {
     alignItems: 'center',
-    borderRadius: 8,
+    borderRadius: 22,
     flex: 1,
     flexDirection: 'row',
-    gap: 6,
-    justifyContent: 'center',
-    minHeight: 34,
+    gap: 9,
+    height: 44,
+    paddingHorizontal: 16,
   },
-  sectionNavText: { fontFamily: family.sansMedium, fontSize: 12 },
+  searchPlaceholder: { fontFamily: family.sansRegular, fontSize: 15 },
+  searchRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    paddingBottom: 10,
+    paddingHorizontal: 16,
+    paddingTop: 6,
+  },
   selectionTitle: { fontFamily: family.sansBold, fontSize: 15 },
+  sparkleBtn: { alignItems: 'center', height: 44, justifyContent: 'center', width: 32 },
   timelineHeading: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingBottom: 7,
     paddingHorizontal: 18,
-    paddingTop: 6,
+    paddingTop: 10,
   },
   timelineMeta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 2 },
   timelineTitle: { fontFamily: family.displayBold, fontSize: 17 },
-  title: { fontFamily: family.displayBold, fontSize: 23, letterSpacing: -0.6 },
 });

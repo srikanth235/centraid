@@ -44,6 +44,10 @@ export const family = {
   sansBold: 'Geist_600SemiBold',
   sansMedium: 'Geist_500Medium',
   sansRegular: 'Geist_400Regular',
+  // Playfair Display — the editorial serif used for the home greeting
+  // (upright for the salutation, italic for the name). Loaded in App.tsx.
+  serif: 'PlayfairDisplay_600SemiBold',
+  serifItalic: 'PlayfairDisplay_600SemiBold_Italic',
 } as const;
 
 type FamilyKey = 'sans' | 'display' | 'mono';

@@ -16,6 +16,8 @@ import { navThemeFor, resolveTheme } from './src/kit/theme';
 import { useUploadReconciliation } from './src/lib/upload/boot';
 import { ReplicaProvider, useReplica } from './src/kit/replica/ReplicaProvider';
 import { ShareIntentIngest } from './src/kit/hooks/ShareIntentIngest';
+import { hydrateProfile, isOnboarded } from './src/lib/profile';
+import OnboardingScreen from './src/screens/Onboarding';
 import ErrorBoundary from './src/ErrorBoundary';
 
 // Direct sub-path imports avoid the package's barrel index.js which
@@ -28,6 +30,8 @@ import SpaceGrotesk_600SemiBold from '@expo-google-fonts/space-grotesk/600SemiBo
 import JetBrainsMono_400Regular from '@expo-google-fonts/jetbrains-mono/400Regular/JetBrainsMono_400Regular.ttf';
 import JetBrainsMono_500Medium from '@expo-google-fonts/jetbrains-mono/500Medium/JetBrainsMono_500Medium.ttf';
 import JetBrainsMono_600SemiBold from '@expo-google-fonts/jetbrains-mono/600SemiBold/JetBrainsMono_600SemiBold.ttf';
+import PlayfairDisplay_600SemiBold from '@expo-google-fonts/playfair-display/600SemiBold/PlayfairDisplay_600SemiBold.ttf';
+import PlayfairDisplay_600SemiBold_Italic from '@expo-google-fonts/playfair-display/600SemiBold_Italic/PlayfairDisplay_600SemiBold_Italic.ttf';
 
 import HomeScreen from './src/screens/Home';
 import AppDetailScreen from './src/screens/AppDetail';
@@ -189,7 +193,6 @@ function ReplicaErrorBanner(): React.JSX.Element | null {
 }
 
 function Tabs(): React.JSX.Element {
-  const { colors } = resolveTheme(useColorScheme());
   return (
     <Tab.Navigator
       initialRouteName="Apps"
@@ -202,10 +205,10 @@ function Tabs(): React.JSX.Element {
       }}
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.accent,
-        tabBarInactiveTintColor: colors.ink3,
-        tabBarLabelStyle: { fontFamily: 'Geist_500Medium', fontSize: 11 },
-        tabBarStyle: { backgroundColor: colors.bgElev, borderTopColor: colors.line },
+        // The Centraid Mobile design is a launcher model: Home and each app
+        // screen carry their own bottom bar, so the OS tab bar is hidden and
+        // the tab navigator is used purely as a route container.
+        tabBarStyle: { display: 'none' },
       }}
     >
       <Tab.Screen
@@ -253,6 +256,8 @@ function Tabs(): React.JSX.Element {
 export default function App(): React.JSX.Element | null {
   const scheme = useColorScheme();
   const { colors } = resolveTheme(scheme);
+  // `null` while the profile prefs hydrate; then true/false gates onboarding.
+  const [onboarded, setOnboarded] = React.useState<boolean | null>(null);
   const [fontsLoaded, fontError] = useFonts({
     Geist_400Regular,
     Geist_500Medium,
@@ -262,21 +267,27 @@ export default function App(): React.JSX.Element | null {
     JetBrainsMono_600SemiBold,
     SpaceGrotesk_500Medium,
     SpaceGrotesk_600SemiBold,
+    PlayfairDisplay_600SemiBold,
+    PlayfairDisplay_600SemiBold_Italic,
   });
 
+  useEffect(() => {
+    void hydrateProfile().then(() => setOnboarded(isOnboarded()));
+  }, []);
+
   const onReady = useCallback(async () => {
-    if (fontsLoaded || fontError) {
+    if ((fontsLoaded || fontError) && onboarded !== null) {
       await SplashScreen.hideAsync().catch(() => {
         /* noop */
       });
     }
-  }, [fontsLoaded, fontError]);
+  }, [fontsLoaded, fontError, onboarded]);
 
   useEffect(() => {
     void onReady();
   }, [onReady]);
 
-  if (!fontsLoaded && !fontError) {
+  if ((!fontsLoaded && !fontError) || onboarded === null) {
     return null;
   }
 
@@ -289,18 +300,28 @@ export default function App(): React.JSX.Element | null {
               <ReplicaProvider>
                 <UploadReconciliation />
                 <ShareIntentIngest />
-                <ReplicaErrorBanner />
-                <NavigationContainer theme={navThemeFor(scheme)}>
-                  <StatusBar style="auto" />
-                  <RootStack.Navigator screenOptions={{ headerShown: false }}>
-                    <RootStack.Screen name="Tabs" component={Tabs} />
-                    <RootStack.Screen
-                      name="MobileFallback"
-                      component={MobileFallbackScreen}
-                      options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
-                    />
-                  </RootStack.Navigator>
-                </NavigationContainer>
+                {/* The replica error banner is only meaningful inside the app
+                    shell — during onboarding the user hasn't paired yet, so a
+                    "couldn't open replica" banner would just be noise. */}
+                {onboarded ? <ReplicaErrorBanner /> : null}
+                {onboarded ? (
+                  <NavigationContainer theme={navThemeFor(scheme)}>
+                    <StatusBar style="auto" />
+                    <RootStack.Navigator screenOptions={{ headerShown: false }}>
+                      <RootStack.Screen name="Tabs" component={Tabs} />
+                      <RootStack.Screen
+                        name="MobileFallback"
+                        component={MobileFallbackScreen}
+                        options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
+                      />
+                    </RootStack.Navigator>
+                  </NavigationContainer>
+                ) : (
+                  <>
+                    <StatusBar style="light" />
+                    <OnboardingScreen onDone={() => setOnboarded(true)} />
+                  </>
+                )}
               </ReplicaProvider>
             </ShareIntentProvider>
           </View>
