@@ -43,7 +43,11 @@ is now `../data-plane`. The old data-plane test/lint scripts were ported into
 `lint:data-plane`, a top-level `lint` so `turbo lint` still runs cargo fmt/clippy).
 `.github/workflows/ci.yml` cache paths and the verify-lane
 `bun run --cwd packages/tunnel test:data-plane` were repointed, and the stale
-`e2e.yml` build-filter comment was refreshed.
+`e2e.yml` build-filter comment was refreshed. The two Node-side golden tests that
+read `format-golden.json` — `packages/backup/src/rust-golden.test.ts` and
+`packages/vault/src/rust-golden.test.ts` — had their fixture `new URL(...)` paths
+repointed from `../../data-plane/fixtures/` to `../../tunnel/data-plane/fixtures/`
+so the cross-language golden still resolves after the crate moved.
 
 **tsconfig → root.** packages/tsconfig is folded into root tsconfig files and the
 package is deleted. `base.json`/`electron.json`/`expo.json` moved to root as
@@ -101,7 +105,8 @@ Data-plane fold: `packages/tunnel/data-plane/Cargo.toml`, `packages/tunnel/data-
 `packages/tunnel/data-plane/src/main.rs`, `packages/tunnel/data-plane/src/ticket.rs`,
 `packages/tunnel/data-plane/tests/golden.rs`, `packages/tunnel/native/Cargo.toml`,
 `packages/tunnel/package.json`, `packages/data-plane/package.json`, `.github/workflows/ci.yml`,
-`.github/workflows/e2e.yml`.
+`.github/workflows/e2e.yml`, `packages/backup/src/rust-golden.test.ts`,
+`packages/vault/src/rust-golden.test.ts`.
 
 Tsconfig fold: `tsconfig.base.json`, `tsconfig.electron.json`, `tsconfig.expo.json`,
 `packages/tsconfig/package.json`, `tests/tsconfig.json`,
@@ -200,3 +205,5 @@ bun run --cwd packages/tunnel test:data-plane
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | claude-code-5ac9baf3-ae7-1784648909-1 | claude-code | 5ac9baf3-ae74-4663-8f3f-7858b340fc66 | #495 | claude-opus-4-8 | 1051 | 6150517 | 124449551 | 676761 | 6828329 | 117.5898 | 2315 | 10204326 | 251441338 | 1444725 |  |
 | claude-code-5ac9baf3-ae7-1784649003-1 | claude-code | 5ac9baf3-ae74-4663-8f3f-7858b340fc66 | #495 | claude-opus-4-8 | 13 | 24101 | 611410 | 8466 | 32580 | 0.6681 | 2328 | 10228427 | 252052748 | 1453191 |  |
+| claude-code-5ac9baf3-ae7-1784650314-1 | claude-code | 5ac9baf3-ae74-4663-8f3f-7858b340fc66 | #495 | claude-opus-4-8 | 1593 | 6885848 | 163298810 | 928336 | 7815777 | 147.9023 | 3921 | 17114275 | 415351558 | 2381527 | fix(tests): repoint golden-fixture paths after data-plane fold (#495)The data-pl |
+| claude-code-5ac9baf3-ae7-1784650374-1 | claude-code | 5ac9baf3-ae74-4663-8f3f-7858b340fc66 | #495 | claude-opus-4-8 | 6 | 11257 | 254893 | 776 | 12039 | 0.2172 | 3927 | 17125532 | 415606451 | 2382303 | fix(tests): repoint golden-fixture paths after data-plane fold (#495)The data-pl |

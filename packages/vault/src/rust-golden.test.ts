@@ -20,7 +20,10 @@ interface GoldenFixture {
 }
 
 const fixture = JSON.parse(
-  readFileSync(new URL('../../data-plane/fixtures/format-golden.json', import.meta.url), 'utf8'),
+  readFileSync(
+    new URL('../../tunnel/data-plane/fixtures/format-golden.json', import.meta.url),
+    'utf8',
+  ),
 ) as GoldenFixture;
 
 test('CBSF v2 golden is byte-identical across Node and Rust', () => {
