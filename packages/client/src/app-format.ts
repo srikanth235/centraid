@@ -196,8 +196,14 @@ export function cronToHuman(expr: string): string {
     date.setUTCHours(h, m, 0, 0);
     return date;
   };
+  // Force en-US 12-hour clock so host locale (24h vs 12h, AM vs am) cannot
+  // drift product copy or the app-format unit suite.
   const fmtTime = (h: number, m: number): string =>
-    utcAnchor(h, m).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    utcAnchor(h, m).toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
   // When the conversion crosses midnight, day-of-week labels shift too:
   // -1, 0, or +1 days relative to the UTC day.
   const dayShift = (h: number, m: number): number => {

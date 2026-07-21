@@ -81,6 +81,11 @@ test('7.1 — opening an app shows the iframe; back returns home', async () => {
 // https://github.com/srikanth235/centraid/issues/470 (teach the mock to serve
 // blueprint bundles + the kit). Do not "fix" these by reinstating the old
 // `.app-chat-*` selectors — they address a removed feature.
+//
+// #496 P1/P8 — matrix note desktop.copilot-e2e: journey ownership moved to
+// packages/agent-runtime/src/backends/acp/journey.integration.test.ts (fake-acp
+// message → vault side effect → transcript). These Playwright skips stay until
+// the mock serves blueprint kits; they must not be un-skipped against dead UI.
 
 test.skip('7.2 — the chat FAB opens the copilot panel', async () => {
   gateway.state.apps = [appEntry({ id: 'notes', name: 'Notes' })];

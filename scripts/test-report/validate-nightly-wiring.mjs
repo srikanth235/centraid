@@ -67,6 +67,7 @@ if (reportIdx === -1) {
 } else {
   const reportChunk = e2eCode.slice(reportIdx, reportIdx + 1_200);
   for (const need of [
+    'mobile-e2e-android',
     'pairing-lifecycle',
     'pairing-ticket-hygiene',
     'pairing-cross-network-relay',

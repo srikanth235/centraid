@@ -7,7 +7,7 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * sibling create/set-enabled/rotate-webhook/delete routes.
  */
 
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -223,20 +223,29 @@ test('headless compile returns a run id and records failure in the automation th
   // code/apps.git, surfacing as ENOTEMPTY from an unrelated-looking rm.
   // Asserting endedAt is what makes the wait real: the run must be over before
   // this test returns, which is also what makes teardown safe.
-  const deadline = Date.now() + 20_000;
-  let runs: Array<{ runId: string; triggerKind: string; endedAt?: number; ok: boolean }> = [];
-  let run: (typeof runs)[number] | undefined;
-  do {
-    const feed = await fetch(
-      `${handle.url}/centraid/_automations/runs?ref=${encodeURIComponent(created.row.ref)}`,
-      { headers: auth() },
-    );
-    runs = ((await feed.json()) as { runs: typeof runs }).runs;
-    run = runs.find((candidate) => candidate.runId === runId);
-    if (run?.endedAt !== undefined) break;
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  } while (Date.now() < deadline);
-
-  expect(run).toMatchObject({ triggerKind: 'compile', ok: false });
-  expect(run?.endedAt).toBeTypeOf('number');
-});
+  // #496 H1 — poll with vi.waitFor rather than a fixed-sleep loop.
+  await vi.waitFor(
+    async () => {
+      const feed = await fetch(
+        `${handle.url}/centraid/_automations/runs?ref=${encodeURIComponent(created.row.ref)}`,
+        { headers: auth() },
+      );
+      const body = (await feed.json()) as {
+        runs: Array<{
+          runId: string;
+          triggerKind: string;
+          endedAt?: number | null;
+          ok: boolean | null;
+        }>;
+      };
+      const found = body.runs.find((candidate) => candidate.runId === runId);
+      // Terminal failure: ok is false AND endedAt is a number. Accepting
+      // endedAt null/undefined reduced the wait to `ok === false` and
+      // reinstated the ENOTEMPTY teardown race this comment warns about —
+      // the run must be fully over before this test returns.
+      expect(found).toMatchObject({ triggerKind: 'compile', ok: false });
+      expect(typeof found?.endedAt).toBe('number');
+    },
+    { timeout: 30_000, interval: 100 },
+  );
+}, 35_000);

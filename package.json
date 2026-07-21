@@ -38,7 +38,7 @@
     "lint:actions": "actionlint",
     "check": "bun run format:check && bun run lint",
     "fix": "ultracite fix",
-    "check:pr": "bun run format:check && bunx oxlint . && bun run lint:packages && bunx turbo run lint && bun run typecheck && bun run lint:types && bun run knip && bun run lint:css && bun run lint:e2e-flows && bun run test:matrix",
+    "check:pr": "bun run format:check && bunx oxlint . && bun run lint:packages && bunx turbo run lint && bun run typecheck && bun run lint:types && bun run knip && bun run lint:css && bun run lint:e2e-flows && bun run test:matrix && bun run test:ratchet && bun run test:ratchet:unit && bun run test:affected",
     "ci": "bun run check:pr",
     "knip": "knip",
     "docs:build": "node scripts/docs-site/build.mjs",
@@ -50,7 +50,11 @@
     "release:classify": "node scripts/release/classify.mjs",
     "boot:smoke": "node scripts/release/boot-smoke.mjs",
     "lockfile:lint": "node scripts/ci/lockfile-lint.mjs",
-    "ci:retry": "node scripts/ci/retry.mjs"
+    "ci:retry": "node scripts/ci/retry.mjs",
+    "test:ratchet": "node scripts/test-report/ratchet-floors.mjs",
+    "test:ratchet:unit": "node node_modules/vitest/vitest.mjs run --config scripts/test-report/vitest.config.ts",
+    "test:affected": "turbo run test --filter='[origin/main]' --concurrency=6",
+    "test:interop:backup": "bun run --cwd packages/backup test:interop"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "3.2.4",

@@ -91,13 +91,28 @@ export async function validateMatrix(matrix, options = {}) {
       try {
         const ownerPath = path.join(options.root ?? root, flow.owner);
         await access(ownerPath);
+        const source = await readFile(ownerPath, 'utf8');
         if (flow.minimumTests !== undefined) {
-          const source = await readFile(ownerPath, 'utf8');
           const testCount = source.match(/\b(?:test|it)\s*\(/g)?.length ?? 0;
           if (testCount < flow.minimumTests) {
             errors.push(
               `${flow.id} contract shrank: ${testCount} tests, minimum ${flow.minimumTests}`,
             );
+          }
+        }
+        // #496 B2 — env-gated *flow* owners cannot claim solid/partial cells
+        // without evidence that the gate runs in the default lane.
+        if (options.checkEnvGates !== false && !flow.owner.endsWith('.mjs')) {
+          const gate = detectDefaultCiEnvGate(source);
+          if (gate) {
+            const cellId = `${flow.surface}.${flow.dimension}`;
+            const surface = surfaces.get(flow.surface);
+            const status = surface?.assessment?.[flow.dimension];
+            if (status === 'solid' || status === 'partial') {
+              errors.push(
+                `flow ${flow.id} owner ${flow.owner} is env-gated off default CI (${gate.env} / ${gate.kind}) while cell ${cellId} is ${status}; demote assessment, ungated the suite, or mark the flow skip`,
+              );
+            }
           }
         }
       } catch {

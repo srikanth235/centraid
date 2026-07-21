@@ -385,8 +385,9 @@ describe('ReplicaCoordinator', () => {
     expect((await client.status()).cursor).toBeNull();
 
     await replica.bootstrap({ ...snapshot, cursor: { epoch: 'new-epoch', seq: 0 } });
-    await new Promise<void>((resolve) => setTimeout(resolve, 10));
-    expect(pulls).toBe(1);
+    await vi.waitFor(() => {
+      expect(pulls).toBe(1);
+    });
     expect((await client.status()).cursor).toEqual({ epoch: 'new-epoch', seq: 0 });
     await replica.close();
   });

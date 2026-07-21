@@ -87,13 +87,9 @@ test('4.1 + 4.2 — composer opens the builder and the initial turn streams a to
 
 // SKIPPED — open product question, tracked in
 // https://github.com/srikanth235/centraid/issues/471.
-// Publish succeeds here (the POST lands and the chat renders "Published v1"),
-// but the app stays in the builder. useBuilder.ts's publish success path calls
-// `onAddToHome(...)`, which PINS the app to Home; it never navigates there.
-// This test conflated the two — "added to Home" is not "returns to home".
-// Whether Publish should navigate home, or staying in the builder is correct
-// and this assertion is stale, is decided in #471. Deliberately not loosened:
-// the navigation assertion is left intact rather than quietly dropped.
+// #496 P8 / matrix note builder.publish — builder is not in v0 (hidden surface).
+// Declared skip with product reason; not a fake solid journey. Do not revive
+// until builder is in-scope for the product.
 test.skip('4.4 — Publish posts to the gateway and returns to home on success', async () => {
   const id = 'todoer';
   gateway.state.apps = [appEntry({ id, name: 'Todoer' })];

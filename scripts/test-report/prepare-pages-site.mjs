@@ -225,7 +225,14 @@ function renderLanding(slots, { repo, generatedAt, highlight, series, retained }
 <body>
   <h1>Centraid test health reports</h1>
   <p class="meta">${escapeHtml(repo)} · updated ${escapeHtml(generatedAt)}</p>
-  <p>Public reports publish from <code>main</code> and the nightly e2e workflow only.</p>
+  <p>Public reports publish from <code>main</code> (per-merge CI) and the <strong>nightly</strong> e2e workflow only — <strong>no PR slots</strong>.</p>
+  <h2>What “solid” means</h2>
+  <p class="meta">A matrix cell is <strong>solid</strong> only when an owning test exists, runs in the intended lane (per-PR or nightly), and is not whole-file env-gated off default CI. Grey / missing cells are intentional: absence of proof must stay visible. See TESTING.md (Nightly SLA, floors ratchet, confidence map) and issue #496.</p>
+  <h2>Slots</h2>
+  <ul>
+    <li><code>main</code> — last green merge on main (CI verify report)</li>
+    <li><code>nightly</code> — full product lanes (desktop/web/mobile/pairing + perf/scale)</li>
+  </ul>
   <h2>Latest</h2>
   <ul>
 ${items || '    <li><em>No reports published yet.</em></li>'}

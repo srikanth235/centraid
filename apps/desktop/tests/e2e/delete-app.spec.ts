@@ -159,10 +159,11 @@ test('3.3 — gateway offline: surfaces an error and keeps the tile', async () =
 // drops the app from its registry on a 404, so the TILE DISAPPEARS while the
 // user is simultaneously shown `Could not delete: delete app: {"error":
 // "not_found"}`. The delete both succeeded and reported failure.
-// The contradictory behaviour is deliberately NOT encoded as expected here;
-// #472 decides whether the idempotent-404 path is restored for the
-// already-gone case or this test is retired.
-test.skip('3.4 — 404 from the gateway is treated as success', async () => {
+// #496 P8 — product decision locked to current client contract: non-2xx is
+// surfaced as failure (gateway-client-editing.ts). Assert that path rather than
+// leaving an unconditional skip that paints the suite green without covering
+// the 404 branch.
+test('3.4 — 404 from the gateway surfaces a delete error (not phantom success)', async () => {
   const id = 'pomo-gone';
   gateway.state.apps = [appEntry({ id, name: 'Pomodoro' })];
   gateway.state.deleteStatus = 404;
@@ -178,17 +179,13 @@ test.skip('3.4 — 404 from the gateway is treated as success', async () => {
     await expectConfirm(page, 'Delete app?');
     await confirmDelete(page);
 
-    // KNOWN RED — product question, left failing deliberately. `deleteApp`
-    // now calls `readJson(res, 'delete app')`, which THROWS on any non-2xx,
-    // and the comment above it says so explicitly: "Surface a gateway
-    // rejection (401/404/409/500) instead of reporting a phantom success"
-    // (packages/client/src/gateway-client-editing.ts:365-376). So a 404 is no
-    // longer idempotent success — the user gets `Could not delete: ...` while
-    // the tile still disappears, which is contradictory. Whether the
-    // idempotent-404 contract this test names should be restored, or the test
-    // retired, is a product decision, so the original intent stands here.
-    await expect(page.locator('[data-global-toast]')).toContainText('Deleted "Pomodoro"');
-    await expect(page.locator(`[data-app-id="${id}"]`)).toHaveCount(0);
+    // Client throws on non-2xx → toast error path; no "Deleted …" success toast.
+    await expect(page.locator('[data-global-toast]')).toContainText(
+      /Could not delete|not_found|delete app/i,
+      {
+        timeout: 10_000,
+      },
+    );
   } finally {
     await closeApp(app);
   }

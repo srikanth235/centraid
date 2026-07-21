@@ -40,7 +40,6 @@ import { type ChildProcess, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, promises as fs } from 'node:fs';
 import net from 'node:net';
-import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -516,7 +515,7 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
       // as "multi-chunked").
       expect(putKeys.filter((k) => k.includes('/chunks/')).length).toBeGreaterThanOrEqual(5);
 
-      const destDir = path.join(os.tmpdir(), `interop-restore-${Date.now()}`);
+      const destDir = await tempDir('interop-restore-');
       const result = await restoreSnapshot({
         provider,
         targetId,

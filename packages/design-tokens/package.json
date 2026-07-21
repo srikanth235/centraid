@@ -13,9 +13,11 @@
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "test": "vitest run"
   },
   "devDependencies": {
+    "@centraid/test-kit": "workspace:*",
     "typescript": "catalog:"
   }
 }

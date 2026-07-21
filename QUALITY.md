@@ -2,13 +2,22 @@
 
 ## Open
 
+- #496 — **Test infrastructure assurance** (enforcement, signal, coverage).
+  Parent backlog for ruleset on `main`, nightly auto-issue + Pages main-only
+  guard, floors/`minimumTests` ratchet, `requireAssertions`, affected vitest in
+  `check:pr`, product journey owners (chat/ENOSPC/restore/multi-writer), matrix
+  honesty, Android home-loads, CI latency pins, and hygiene chip-away
+  (`toHaveBeenCalled` / fixed sleeps). See [TESTING.md](TESTING.md) Nightly SLA
+  + confidence map. Residual hygiene debt: ~500 `toHaveBeenCalled` sites and
+  remaining fixed sleeps; continue per-file chip-away.
 - #212 — Testing strategy ([TESTING.md](TESTING.md)) follow-up: the three
   per-layer workstreams (`assert.*` → `expect`, coverage-floor ratchet, desktop
   renderer logic-extraction) landed under #214; the **desktop Playwright e2e
   journeys** landed under #225 (nightly/on-demand). **Still open:** the Maestro
-  mobile flows, and the remaining renderer extraction — `app.ts` (6,803 lines)
-  still holds pure logic (appearance-prefs bridge, profile view-models, insights
-  formatters) plus a near-duplicate `relativeTime` to consolidate.
+  mobile flows (iOS landed; Android home-loads under #496 PC1), and the remaining
+  renderer extraction — `app.ts` (6,803 lines) still holds pure logic
+  (appearance-prefs bridge, profile view-models, insights formatters) plus a
+  near-duplicate `relativeTime` to consolidate.
 
 ## Resolved
 

@@ -200,6 +200,10 @@ describe('full conformance run against RemoteBackupProvider + fake gateway', () 
   }
 
   for (const testCase of providerConformanceCases(makeHarness)) {
-    test(testCase.name, testCase.run);
+    test(testCase.name, async () => {
+      await testCase.run();
+      // Conformance kit uses node:assert (framework-agnostic); pin a vitest expect for requireAssertions (#496 E5).
+      expect(true).toBe(true);
+    });
   }
 });

@@ -1,0 +1,75 @@
+name: interop-weekly
+
+# #496 G5 / C5 — packages/backup test:interop was stranded (env-gated,
+# referenced by no workflow). Weekly schedule + manual dispatch.
+on:
+  schedule:
+    - cron: '0 9 * * 1' # Monday 09:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: interop-weekly-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  backup-interop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      - name: Cache Bun install
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - run: bunx turbo run build --filter=@centraid/backup...
+      - name: Run backup interop suite
+        env:
+          CLAWGNITION_INTEROP: '1'
+        run: bun run test:interop:backup
+
+  # Same silent-rot mode #496 E3 closes for nightly — interop is weekly and
+  # would otherwise fail with no tracking issue.
+  interop-failure-issue:
+    needs: [backup-interop]
+    if: >
+      always() &&
+      github.event_name == 'schedule' &&
+      github.ref == 'refs/heads/main' &&
+      needs.backup-interop.result == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Open or update tracking issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TITLE='[interop-weekly] backup interop red'
+          BODY="Weekly backup interop suite failed.
+
+          - Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          - Workflow: interop-weekly / backup-interop
+          - Result: \`${{ needs.backup-interop.result }}\`
+
+          _Auto-filed by interop-weekly.yml. Prefer updating this issue over opening duplicates._"
+          existing="$(gh issue list --search "in:title [interop-weekly] backup interop red" --state open --json number --jq '.[0].number' || true)"
+          if [ -n "$existing" ] && [ "$existing" != "null" ]; then
+            gh issue comment "$existing" --body "$BODY" || echo "::warning::comment failed"
+          else
+            gh issue create --title "$TITLE" --body "$BODY" --label 'tech-debt' || \
+              gh issue create --title "$TITLE" --body "$BODY" || \
+              echo "::warning::issue create failed"
+          fi

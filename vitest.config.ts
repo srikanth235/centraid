@@ -12,8 +12,10 @@ export default defineConfig({
       'packages/app-engine',
       'packages/automation',
       'packages/backup',
+      'packages/blob-format',
       'packages/blueprints',
       'packages/client',
+      'packages/design-tokens',
       'packages/gateway',
       'packages/tunnel',
       'packages/test-kit',
@@ -27,14 +29,7 @@ export default defineConfig({
       reporter: ['text', 'json-summary', 'html'],
       reportsDirectory: './coverage',
       include: ['packages/*/src/**', 'apps/*/src/**'],
-      exclude: [
-        '**/*.test.ts',
-        '**/*.test.tsx',
-        '**/*.d.ts',
-        '**/dist/**',
-        '**/index.ts',
-        'packages/design-tokens/**',
-      ],
+      exclude: ['**/*.test.ts', '**/*.test.tsx', '**/*.d.ts', '**/dist/**', '**/index.ts'],
       // Engine packages are where the meaningful coverage lives (TESTING.md).
       // These are the *seeded* regression floors — set a conservative margin
       // below the measured baseline so they catch backsliding without flaking,
