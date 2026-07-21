@@ -60,6 +60,16 @@ jobs:
       - run: bun run format:check
       # `--format github` emits inline PR annotations on the offending lines.
       - run: bunx oxlint --format github .
+      # Monorepo package.json hygiene: unused/undeclared deps, version drift
+      # across workspaces, misplaced @types (sherif). Fast, offline.
+      - run: bun run lint:packages
+      # GitHub Actions workflow linter. Pinned container bundles shellcheck +
+      # pyflakes; we gate shellcheck at error severity so pre-existing style /
+      # info nits in run: blocks don't fail the build while real shell bugs do.
+      - name: Lint workflows (actionlint)
+        uses: docker://rhysd/actionlint:1.7.12
+        env:
+          SHELLCHECK_OPTS: --severity=error
 
       # Per-package lint scripts (mobile import boundaries, blueprint app
       # no-undef, data-plane cargo fmt/clippy) only exist under turbo.

@@ -1,26 +1,53 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
+  "ignore": ["tests/**"],
+  "ignoreBinaries": ["actionlint", "python3"],
+  "ignoreDependencies": ["@centraid/test-kit"],
+  "ignoreWorkspaces": ["packages/data-plane", "packages/tsconfig"],
+  "exclude": ["exports", "nsExports", "types", "nsTypes", "enumMembers", "classMembers"],
   "workspaces": {
     ".": {
       "entry": ["scripts/**/*.{js,mjs,ts}", ".github/workflows/*.{yml,yaml}"],
-      "project": ["packages/*/src/**/*.{ts,tsx}", "apps/*/src/**/*.{ts,tsx}"]
+      "project": ["scripts/**/*.{js,mjs,ts}"]
     },
     "packages/*": {
-      "entry": ["src/index.ts", "src/**/*.ts", "src/**/*.tsx"],
+      "entry": ["src/index.ts"],
       "project": ["src/**/*.{ts,tsx}"]
     },
-    "apps/*": {
-      "entry": ["src/**/*.{ts,tsx}", "index.ts", "App.tsx"],
-      "project": ["src/**/*.{ts,tsx}", "App.tsx", "index.ts"]
+    "packages/agent-runtime": {
+      "entry": ["src/index.ts", "src/cli/centraid-cli.ts"],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
+    "packages/gateway": {
+      "entry": ["src/index.ts", "src/cli/cli.ts"],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
+    "packages/app-engine": {
+      "entry": ["src/index.ts", "src/worker/runner.ts", "src/worker/ts-loader-hooks.ts"],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
+    "packages/automation": {
+      "entry": ["src/index.ts", "src/worker/runner.ts"],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
+    "packages/client": {
+      "entry": ["src/index.ts", "src/replica/index.ts", "src/replica/sqlite-worker.ts"],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
+    "packages/test-kit": {
+      "entry": ["src/*.ts"],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
+    "apps/desktop": {
+      "entry": ["src/main.ts", "src/preload.ts"],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
+    "apps/web": {
+      "project": ["src/**/*.{ts,tsx}"]
+    },
+    "apps/mobile": {
+      "entry": ["index.ts", "App.tsx"],
+      "project": ["src/**/*.{ts,tsx}"]
     }
-  },
-  "ignore": [
-    "**/dist/**",
-    "**/node_modules/**",
-    "**/generated/**",
-    "receipts/**",
-    ".governance/**",
-    "tests/**"
-  ],
-  "ignoreDependencies": ["typescript"]
+  }
 }
