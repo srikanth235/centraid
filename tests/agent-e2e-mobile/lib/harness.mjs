@@ -326,6 +326,8 @@ export async function runFlow(slug, fn) {
     // relative anchor the way the URL field does.
     const tokenSteps = gatewayToken
       ? `- tapOn: "paste token here"
+# e2e-lint-allow: unasserted-input — a bearer token is a secret; the field masks
+# it and it is never rendered back, so there is no value to assertVisible on.
 - inputText: ${JSON.stringify(gatewayToken)}
 ${DISMISS_KEYBOARD_ONBOARDING}`
       : '';
@@ -392,6 +394,8 @@ ${DISMISS_KEYBOARD_ONBOARDING}`
 # throwaway keystroke, dismiss it, then erase and type into a settled keyboard.
 # If the sheet never appears (a sim that was already onboarded), the dismiss is a
 # no-op and the erase clears the throwaway — so this is safe either way.
+# e2e-lint-allow: unasserted-input — a throwaway keystroke to provoke the sheet;
+# it is erased immediately below, so there is deliberately nothing to assert.
 - inputText: "x"
 ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
 - inputText: ${JSON.stringify(gatewayUrl)}
