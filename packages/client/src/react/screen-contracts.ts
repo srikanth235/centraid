@@ -616,19 +616,44 @@ export interface SettingsLayoutBridgeProps {
 }
 
 // ── Settings: providers (agents console) ────────────────────────────────────
-export type AgentRunnerKind = 'codex' | 'claude-code';
+/**
+ * A runner kind as it arrives on the wire. Deliberately an OPEN string rather
+ * than a closed union: the gateway derives the list from its own runner
+ * registry, and a gateway newer than this client will name kinds this build
+ * has never heard of. Narrowing here would make those unparseable — the exact
+ * failure docs/protocol.md C1a forbids. The client renders whatever the
+ * gateway lists, using the wire `label`, and only consults `AGENT_RUNNER_KINDS`
+ * for cosmetic polish it happens to have on hand.
+ */
+export type AgentRunnerKind = string;
+/**
+ * Kinds this build knows by name — used ONLY to look up a nicer accent colour
+ * and to seed a sane default. Never to filter or validate the gateway's list:
+ * an unknown kind is a newer gateway, not a broken one.
+ */
+export const AGENT_RUNNER_KINDS = [
+  'codex',
+  'claude-code',
+  'gemini',
+  'qwen',
+  'opencode',
+  'grok',
+  'kimi',
+  'copilot',
+  'cursor',
+  'kilo',
+  'cline',
+  'goose',
+  'auggie',
+  'vibe',
+  'droid',
+  'acp',
+] as const;
 export interface AgentModelDTO {
   id: string;
   name?: string;
   default?: boolean;
   tier?: 'smart' | 'balanced' | 'fast';
-}
-export interface AgentToolDTO {
-  name: string;
-  source: 'native' | 'mcp';
-  server?: string;
-  description?: string;
-  hasArgs: boolean;
 }
 export interface AgentCardDTO {
   kind: AgentRunnerKind;
@@ -637,9 +662,7 @@ export interface AgentCardDTO {
   subtitle: string;
   connected: boolean;
   models: AgentModelDTO[];
-  tools: AgentToolDTO[];
   modelsLoading: boolean;
-  toolsLoading: boolean;
 }
 /**
  * The chat/agent subsystems that can each pin their own model, independent
@@ -666,7 +689,6 @@ export interface AgentsStatusDTO {
 export interface SettingsProvidersBridgeProps {
   loadStatus: () => Promise<AgentsStatusDTO>;
   refreshModels: () => Promise<AgentsStatusDTO>;
-  refreshTools: () => Promise<AgentsStatusDTO>;
   /** Switch the DEFAULT agent — the fallback every unpinned subsystem
    *  inherits; resolves true on success. */
   activateRunner: (kind: AgentRunnerKind) => Promise<boolean>;

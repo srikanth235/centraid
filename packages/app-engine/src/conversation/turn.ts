@@ -14,7 +14,45 @@
 import type { TurnStreamEvent } from './runner.js';
 import type { Dispatcher } from '../handlers/dispatcher.js';
 
-export type RunnerKind = 'codex' | 'claude-code';
+/**
+ * Every runner kind the runtime knows how to drive — the single
+ * source of truth. Since issue #479 they all share one transport, the
+ * generic ACP (Agent Client Protocol) harness: `gemini`, `qwen`,
+ * `opencode`, `grok` and `kimi` speak ACP natively, while `codex` and
+ * `claude-code` reach it through their first-party adapters. `acp` is
+ * the escape hatch for any other ACP-speaking CLI, configured entirely
+ * through `RunnerPrefs` (`binPath` + `extraArgs` supply the binary and
+ * its ACP flag).
+ *
+ * agent-runtime owns a `RunnerBackend` registry keyed on these values;
+ * add a kind here and register its backend there — nothing switches on
+ * a hardcoded per-kind literal anymore.
+ */
+export const RUNNER_KINDS = [
+  'codex',
+  'claude-code',
+  'gemini',
+  'qwen',
+  'opencode',
+  'grok',
+  'kimi',
+  'copilot',
+  'cursor',
+  'kilo',
+  'cline',
+  'goose',
+  'auggie',
+  'vibe',
+  'droid',
+  'acp',
+] as const;
+
+export type RunnerKind = (typeof RUNNER_KINDS)[number];
+
+/** Validation guard for persisted/wire strings that claim to be a runner kind. */
+export function isRunnerKind(value: unknown): value is RunnerKind {
+  return typeof value === 'string' && (RUNNER_KINDS as readonly string[]).includes(value);
+}
 
 /**
  * Per-user settings for the coding agent. Persisted by the desktop's

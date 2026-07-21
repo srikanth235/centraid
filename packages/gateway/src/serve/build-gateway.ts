@@ -41,10 +41,12 @@ import {
   ConversationStore,
   InsightsStore,
   PrefsStore,
+  RUNNER_KINDS,
   Runtime,
   changesSubscriberCount,
   cleanupDeregisteredApp,
   deriveTitle,
+  isRunnerKind,
   generateConversationTitle,
   makeConversationRouteHandler,
   makeJournalDbProvider,
@@ -72,7 +74,6 @@ import {
   CatalogWarmer,
   deriveStatus,
   readRunnerModels,
-  readRunnerTools,
   enumerateRunnerModels,
   enumerateHostTools,
   probeCliAvailability,
@@ -1039,10 +1040,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     const kindRaw = subsystem
       ? resolveSubsystemRunner(allPrefs, subsystem)
       : allPrefs['agent.runner.kind'];
-    // Codex is the default when the user hasn't picked — matches the
-    // settings panel's "Codex preferred when both present" copy.
-    const kind: RunnerPrefs['kind'] =
-      kindRaw === 'codex' || kindRaw === 'claude-code' ? kindRaw : 'codex';
+    // Codex is the default when the user hasn't picked (or persisted junk /
+    // a kind this build no longer registers). Validated against the runner
+    // registry rather than a literal pair, so a newly registered kind is
+    // honoured here the moment it exists.
+    const kind: RunnerPrefs['kind'] = isRunnerKind(kindRaw) ? kindRaw : 'codex';
     const binPath =
       typeof allPrefs['agent.runner.binPath'] === 'string'
         ? (allPrefs['agent.runner.binPath'] as string)
@@ -1133,10 +1135,18 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     ? (kind: RunnerKind, refresh: boolean) =>
         resolveCatalogSurface('models', kind, refresh, readRunnerModels)
     : undefined;
-  const resolveCatalogTools = catalogPath
-    ? (kind: RunnerKind, refresh: boolean) =>
-        resolveCatalogSurface('tools', kind, refresh, readRunnerTools)
-    : undefined;
+  // The binary the agents route should probe for a kind. Only the kind the
+  // owner actually configured carries an override (`agent.runner.binPath` is
+  // one global slot, not a per-kind map) — the same "is this the active
+  // runner" rule the catalog warmer applies. This is what makes the custom
+  // `acp` kind reportable: it ships no default binary, so it stays
+  // unavailable until its path is configured and selected.
+  const binPathForKind = (kind: RunnerKind): string | undefined => {
+    const allPrefs = prefs.getAllPrefs();
+    if (allPrefs['agent.runner.kind'] !== kind) return undefined;
+    const binPath = allPrefs['agent.runner.binPath'];
+    return typeof binPath === 'string' && binPath.length > 0 ? binPath : undefined;
+  };
 
   // Ask-model picker (kit Ask panel, subsystem `ask`) — GET/PUT
   // `/centraid/<appId>/_turn/model`. Reads/writes the SAME
@@ -2491,14 +2501,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Coding-agent detection (codex/claude credentials on the gateway host).
     forRoutePrefixes(
       '/centraid/_agents',
-      makeAgentsRouteHandler(
-        catalogPath
-          ? {
-              ...(resolveCatalogModels ? { resolveModels: resolveCatalogModels } : {}),
-              ...(resolveCatalogTools ? { resolveTools: resolveCatalogTools } : {}),
-            }
-          : {},
-      ),
+      makeAgentsRouteHandler({
+        ...(resolveCatalogModels ? { resolveModels: resolveCatalogModels } : {}),
+        binPathFor: binPathForKind,
+      }),
     ),
     // The request vault's store-backed handlers (apps-store / lifecycle /
     // automations), resolved per request off the ambient vault scope.
@@ -2669,12 +2675,15 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     if (warmer) {
       const activeWarmer = warmer;
       void (async () => {
-        const kinds: RunnerKind[] = ['codex', 'claude-code'];
+        // Every registered runner kind, not a hardcoded pair. The probe is a
+        // single `<bin> --version` per kind (concurrent, and a kind with no
+        // configured binary short-circuits without spawning), and only the
+        // kinds that actually resolve go on to the far more expensive warm.
         const surfaces: CatalogSurface[] = ['models', 'tools'];
         const checks = await Promise.all(
-          kinds.map(async (kind) => ({
+          RUNNER_KINDS.map(async (kind) => ({
             kind,
-            present: (await probeCliAvailability(kind)).available,
+            present: (await probeCliAvailability(kind, binPathForKind(kind))).available,
           })),
         );
         await Promise.all(

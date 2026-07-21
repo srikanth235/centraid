@@ -312,7 +312,6 @@ export default function SettingsRoute({
               <SettingsProvidersScreen
                 loadStatus={() => loadProviders()}
                 refreshModels={() => loadProviders({ refresh: true })}
-                refreshTools={() => loadProviders({ refreshTools: true })}
                 activateRunner={activateRunner}
                 setAgentModel={setAgentModel}
                 setSubsystemModel={setSubsystemModel}

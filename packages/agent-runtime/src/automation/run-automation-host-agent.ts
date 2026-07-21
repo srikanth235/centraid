@@ -6,9 +6,14 @@
  * inject their own backend via the `runHostAgent` option and never hit this
  * file.
  *
- * Both runners are pointed at the per-fire mock-LLM URL + bearer token so
- * tool dispatch round-trips through the mock server, but they reach it
- * differently:
+ * Only the two kinds whose CLI consumes an HTTP LLM endpoint can host a
+ * mock-driven `ctx.tool` batch: claude speaks the Anthropic Messages API and
+ * codex the Responses API, so each can be pointed at the per-fire mock-LLM URL
+ * + bearer token. `MOCK_HOST_AGENTS` below is the dispatch table; a kind that
+ * is not in it fails the batch loudly rather than silently running a different
+ * agent than the one the owner pinned (see `unsupportedMockHost`).
+ *
+ * Both mock-hostable runners reach the mock differently:
  *   - claude: the Agent SDK's `query()` runs in-process — the same backend
  *     chat and `ctx.agent` already use — with `ANTHROPIC_BASE_URL` /
  *     `ANTHROPIC_API_KEY` pointed at the mock via `options.env`, instead of a
@@ -70,8 +75,42 @@ export interface RunHostAgentResult {
 
 export type RunHostAgent = (input: RunHostAgentInput) => Promise<RunHostAgentResult>;
 
-export const defaultRunHostAgent: RunHostAgent = async (input) =>
-  input.kind === 'claude-code' ? runClaudeAgentSdk(input) : spawnCodexExec(input);
+/**
+ * Mock-hostable runners, keyed by kind. Kinds absent from this table own
+ * their whole model loop behind a stdio JSON-RPC transport (ACP: gemini,
+ * qwen, the custom `acp` escape hatch) and expose no LLM base URL to
+ * redirect — there is nothing for the per-fire mock to dictate.
+ *
+ * Before the runner union widened (issue #479) this was a two-arm ternary
+ * whose `else` was codex, so any newly registered kind silently ran codex.
+ */
+const MOCK_HOST_AGENTS: Partial<Record<RunnerKind, RunHostAgent>> = {
+  'claude-code': runClaudeAgentSdk,
+  codex: spawnCodexExec,
+};
+
+export const defaultRunHostAgent: RunHostAgent = async (input) => {
+  const host = MOCK_HOST_AGENTS[input.kind];
+  return host ? host(input) : unsupportedMockHost(input.kind);
+};
+
+/**
+ * A `ctx.tool` batch on a runner that can't be pointed at the mock. Reported
+ * as an ordinary host-agent failure — `startLiveDispatch`'s `driveAgent` turns
+ * it into the awaiting batch's error, so the run record carries an actionable
+ * message instead of the fire quietly executing on the wrong agent.
+ */
+function unsupportedMockHost(kind: RunnerKind): RunHostAgentResult {
+  return {
+    exitCode: null,
+    ok: false,
+    stderr:
+      `runner "${kind}" cannot host automation ctx.tool batches: tool dispatch ` +
+      `works by pointing a CLI at a per-fire mock LLM endpoint, and this runner ` +
+      `speaks ACP (it drives its own model loop). Pin runner.automations to ` +
+      `codex or claude-code, or use ctx.agent only.`,
+  };
+}
 
 /**
  * Drive one claude turn against the mock with the Agent SDK's in-process

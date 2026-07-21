@@ -45,7 +45,7 @@ The same journalled command path backs **Vault Atlas** (#441), the Operations sc
 │   ├── data-plane/                # Shared Rust byte-plane core + direct-HTTP sidecar
 │   ├── vault/                     # @centraid/vault — the ontology: vault.db+journal.db DDL, consent gateway, typed commands
 │   ├── app-engine/                # @centraid/app-engine — handler loader, dispatcher, /centraid HTTP surface, stores
-│   ├── agent-runtime/             # @centraid/agent-runtime — codex/Claude SDK turn driver; centraid CLI bin
+│   ├── agent-runtime/             # @centraid/agent-runtime — ACP turn driver for every runner kind (docs/runners.md); centraid CLI bin
 │   ├── automation/                # @centraid/automation — manifest, fire spine, scheduler, webhook ingress
 │   ├── blueprints/                # @centraid/blueprints — scaffolders + bundled template gallery
 │   ├── skills/                    # @centraid/skills — SKILL.md grounding + dynamic renderers

@@ -20,27 +20,24 @@
  */
 
 import type { RunnerKind, RunnerModel } from '@centraid/app-engine';
-import { enumerateCodexModels } from '../backends/codex/model-list.js';
-import { enumerateClaudeModels } from '../backends/claude/model-list.js';
+import { RUNNER_BACKENDS } from '../registry.js';
 
 /**
- * Enumerate the models the active runner can serve. Returns `[]` on any
- * failure — never throws.
+ * Enumerate the models the active runner can serve, via the runner-backend
+ * registry's per-kind `enumerateModels` hook (codex → app-server
+ * `model/list`; claude → SDK `supportedModels()`; ACP kinds → empty, since
+ * ACP has no model catalog). Returns `[]` on any failure or unknown kind —
+ * never throws.
  */
 export function enumerateRunnerModels(prefs: {
   kind: RunnerKind;
   binPath?: string;
   extraArgs?: string[];
 }): Promise<RunnerModel[]> {
-  switch (prefs.kind) {
-    case 'claude-code':
-      // The claude SDK turn path ignores extraArgs, so enumeration does too.
-      return enumerateClaudeModels(prefs.binPath);
-    case 'codex':
-      // Mirror the runner's `codex app-server` args so we enumerate the same
-      // catalog the real runner serves (e.g. a `-c`/profile override).
-      return enumerateCodexModels(prefs.binPath, prefs.extraArgs);
-    default:
-      return Promise.resolve([]);
-  }
+  const backend = RUNNER_BACKENDS[prefs.kind];
+  if (!backend) return Promise.resolve([]);
+  return backend.enumerateModels({
+    ...(prefs.binPath ? { binPath: prefs.binPath } : {}),
+    ...(prefs.extraArgs ? { extraArgs: prefs.extraArgs } : {}),
+  });
 }
