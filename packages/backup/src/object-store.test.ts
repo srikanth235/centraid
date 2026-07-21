@@ -1,20 +1,8 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { assertSafeKey, FsObjectStore } from './object-store.js';
-
-const cleanups: Array<() => Promise<void>> = [];
-afterEach(async () => {
-  while (cleanups.length > 0) await cleanups.pop()?.();
-});
-
-async function tempDir(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'backup-objstore-'));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 describe('assertSafeKey', () => {
   test('accepts nested relative keys', () => {
     expect(() => assertSafeKey('chunks/ab/cdef')).not.toThrow();

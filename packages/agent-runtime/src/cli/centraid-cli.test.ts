@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * End-to-end smoke test for the centraid CLI bin, invoked as a subprocess
  * (using the built dist/cli/centraid-cli.js). The `sql` subcommands died
@@ -12,7 +13,6 @@ import { afterAll, beforeAll, expect, test } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 // This test lives at src/cli/; the built CLI is at <pkg>/dist/cli/ (rootDir
@@ -29,7 +29,7 @@ const CLI_PATH = path.join(
 let workspace: string;
 
 beforeAll(async () => {
-  workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-cli-test-'));
+  workspace = await tempDir('centraid-cli-test-');
 });
 
 afterAll(async () => {

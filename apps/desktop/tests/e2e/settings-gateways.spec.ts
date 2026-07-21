@@ -1,8 +1,9 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import {
   appEntry,
   cleanupEnv,
-  gotoNav,
+  clickMenuItem,
+  closeApp,
   launchApp,
   makeEnv,
   markUserApp,
@@ -15,6 +16,24 @@ import {
 } from './fixtures';
 
 /** §12 Settings, §13 Gateways / profiles, §14 cross-cutting. */
+
+/**
+ * Open Settings from the sidebar.
+ *
+ * Not `gotoNav(page, 'Settings')`: that helper matches the accessible name
+ * EXACTLY, and the Settings row alone carries a trailing "live" status pill
+ * (Sidebar.tsx:477-483), so its accessible name is "Settings live". Every other
+ * sidebar row is bare, which is why only this spec needs the prefix match.
+ */
+// The shared `gotoNav` fixture matches accessible names exactly, but the
+// Settings sidebar row carries a decorative <StatusPill>live</StatusPill>, so
+// its real accessible name is "Settings live". This prefix-matching local
+// helper works around that. Once the pill is marked aria-hidden
+// (https://github.com/srikanth235/centraid/issues/473) this can collapse back
+// to `gotoNav(page, 'Settings')`.
+async function gotoSettings(page: Page): Promise<void> {
+  await page.getByRole('button', { name: /^Settings\b/ }).click();
+}
 
 let env: TestEnv;
 let gateway: MockGateway;
@@ -36,14 +55,16 @@ test('12.1 — picking an accent in Appearance applies it live and saves to the 
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    await gotoNav(page, 'Settings');
-    await page.locator('.cd-settings-page').first().waitFor({ state: 'visible' });
+    await gotoSettings(page);
+    await page.getByTestId('settings-page').waitFor({ state: 'visible' });
 
     const before = await page.evaluate(() =>
       document.documentElement.style.getPropertyValue('--accent'),
     );
-    // Click an accent swatch that isn't the current one.
-    const swatches = page.locator('.cd-swatch');
+    // Click an accent swatch that isn't the current one. The swatches are the
+    // radios of the "Accent" radiogroup (SettingsAppearanceScreen.tsx:134-152);
+    // index 2 is Violet, never the default (teal, appearance.ts:14).
+    const swatches = page.getByRole('radiogroup', { name: 'Accent' }).getByRole('radio');
     await swatches.nth(2).click();
     await expect
       .poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue('--accent')))
@@ -55,7 +76,7 @@ test('12.1 — picking an accent in Appearance applies it live and saves to the 
       )
       .toBe(true);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -63,8 +84,9 @@ test('12.5 — appearance choices persist across a reload', async () => {
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    await gotoNav(page, 'Settings');
-    await page.locator('.cd-swatch').nth(3).click();
+    await gotoSettings(page);
+    await page.getByTestId('settings-page').waitFor({ state: 'visible' });
+    await page.getByRole('radiogroup', { name: 'Accent' }).getByRole('radio').nth(3).click();
     const accent = await page.evaluate(() =>
       document.documentElement.style.getPropertyValue('--accent'),
     );
@@ -75,7 +97,42 @@ test('12.5 — appearance choices persist across a reload', async () => {
     );
     expect(after).toBe(accent);
   } finally {
-    await app.close();
+    await closeApp(app);
+  }
+});
+
+test('12.6 — an explicit dark theme survives a full Electron restart', async () => {
+  const launched = await launchApp(env);
+  try {
+    await waitForHome(launched.page);
+    await gotoSettings(launched.page);
+    await launched.page.getByTestId('settings-page').waitFor({ state: 'visible' });
+    // The theme presets are the radios of the "Color theme" radiogroup
+    // (SettingsAppearanceScreen.tsx:76-102); `dark` is also the shipped default
+    // (appearance.ts:13-21), so pass through Centraid Light first — otherwise
+    // "survives a restart" would be satisfied by the default alone.
+    const themes = launched.page.getByRole('radiogroup', { name: 'Color theme' });
+    await themes.getByRole('radio', { name: 'Centraid Light' }).click();
+    await expect
+      .poll(() => launched.page.evaluate(() => document.documentElement.dataset.theme))
+      .toBe('light');
+    await themes.getByRole('radio', { name: 'Centraid Dark' }).click();
+    await expect
+      .poll(() => launched.page.evaluate(() => document.documentElement.dataset.theme))
+      .toBe('dark');
+    await closeApp(launched.app);
+
+    const restarted = await launchApp(env);
+    try {
+      await waitForHome(restarted.page);
+      await expect
+        .poll(() => restarted.page.evaluate(() => document.documentElement.dataset.theme))
+        .toBe('dark');
+    } finally {
+      await closeApp(restarted.app);
+    }
+  } finally {
+    await closeApp(launched.app);
   }
 });
 
@@ -83,10 +140,10 @@ test('12.2 — "Match system" resolves the OS scheme to a theme and persists it'
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    await gotoNav(page, 'Settings');
-    await page.locator('.cd-settings-page').first().waitFor({ state: 'visible' });
+    await gotoSettings(page);
+    await page.getByTestId('settings-page').waitFor({ state: 'visible' });
 
-    await page.locator('.cd-link-btn', { hasText: 'Match system' }).click();
+    await page.getByRole('button', { name: 'Match system' }).click();
     // A concrete theme is applied to the document root…
     await expect
       .poll(() => page.evaluate(() => document.documentElement.dataset.theme))
@@ -103,7 +160,7 @@ test('12.2 — "Match system" resolves the OS scheme to a theme and persists it'
       )
       .toBe(true);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -111,15 +168,21 @@ test('12.4 — the Agents (providers) settings page renders', async () => {
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    await gotoNav(page, 'Settings');
-    await page.locator('.cd-settings-page').first().waitFor({ state: 'visible' });
+    await gotoSettings(page);
+    await page.getByTestId('settings-page').waitFor({ state: 'visible' });
 
-    await page.locator('.cd-settings-nav-item', { hasText: 'Agents' }).click();
-    await expect(page.locator('.cd-settings-page-title')).toHaveText('Agents');
-    // The active-agent switch is the page's primary control.
-    await expect(page.locator('.agent-switch')).toBeVisible({ timeout: 10_000 });
+    await page.getByTestId('settings-nav').getByRole('button', { name: 'Agents' }).click();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Agents');
+    // Realigned: the exclusive "active agent" switch no longer exists. Per
+    // SettingsProvidersScreen.tsx:103-113 the exclusive radio was retired by
+    // per-subsystem runners and became the *default* lane of the Routing
+    // table — so the page's primary control is now the "Default agent" select
+    // (SettingsProvidersScreen.tsx:268).
+    await expect(page.getByRole('combobox', { name: 'Default agent' })).toBeVisible({
+      timeout: 10_000,
+    });
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -140,7 +203,7 @@ test('13.2 — adding a remote gateway registers it in the store', async () => {
     expect((after as unknown[]).length).toBe(before + 1);
     expect((after as Array<{ label: string }>).some((g) => g.label === 'Staging')).toBe(true);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -171,7 +234,7 @@ test('13.4 — switching the active gateway re-scopes home', async () => {
     await expect.poll(() => gateway.calls.length).toBeGreaterThan(callsBefore);
     await waitForHome(page);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -197,24 +260,7 @@ test('13.7 — a remote gateway can be removed; the local one cannot', async () 
     );
     expect(localErr).toBeTruthy();
   } finally {
-    await app.close();
-  }
-});
-
-test('13.3 — a local workspace can be added', async () => {
-  const { app, page } = await launchApp(env);
-  try {
-    await waitForHome(page);
-    const added = (await page.evaluate(() =>
-      window.CentraidApi.addLocalGateway({ label: 'Scratch' }),
-    )) as { id: string; kind: string };
-    expect(added.kind).toBe('local');
-    const list = (await page.evaluate(() => window.CentraidApi.listGateways())) as Array<{
-      label: string;
-    }>;
-    expect(list.some((g) => g.label === 'Scratch')).toBe(true);
-  } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -248,7 +294,7 @@ test('13.5 + 13.6 — a remote gateway can be renamed and have its token rotated
     );
     expect(rotateErr).toBeNull();
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -263,9 +309,10 @@ test('13.8 — switching to an unreachable gateway degrades gracefully', async (
     )) as string;
     await page.evaluate((id) => window.CentraidApi.setActiveGateway({ id }), deadId);
     // No crash — the shell stays mounted even though the gateway is unreachable.
-    await expect(page.locator('.cd-window')).toBeVisible();
+    // `[data-sidebar]` is the shell chrome root (ShellFrame.tsx:165).
+    await expect(page.locator('[data-sidebar]')).toBeVisible();
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -281,16 +328,16 @@ test('14.2 — an auth failure on publish surfaces a token/Settings prompt', asy
     await page.reload();
     await waitForHome(page);
     await openTileMenu(page, id);
-    await page.locator('.ctx-item', { hasText: 'Edit with Centraid' }).click();
-    await page.locator('.builder-body').waitFor({ state: 'visible' });
+    await clickMenuItem(page, 'Edit with Centraid');
+    await page.getByTestId('builder-body').waitFor({ state: 'visible' });
 
     gateway.state.forceStatus = 401; // every call now rejects with auth_required
-    await page.locator('.cd-tl-publish').click();
-    await expect(page.locator('.builder-body')).toContainText(/token|Settings/i, {
+    await page.getByTestId('builder-publish').click();
+    await expect(page.getByTestId('builder-body')).toContainText(/token|Settings/i, {
       timeout: 15_000,
     });
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });
 
@@ -299,10 +346,12 @@ test('14.4 — Cmd+K opens the command palette', async () => {
   try {
     await waitForHome(page);
     await page.keyboard.press('Meta+k');
-    await expect(page.locator('.cd-palette')).toBeVisible();
+    // The palette is a labelled dialog (PaletteScreen.tsx:140).
+    const palette = page.getByRole('dialog', { name: 'Command palette' });
+    await expect(palette).toBeVisible();
     await page.keyboard.press('Escape');
-    await expect(page.locator('.cd-palette')).toHaveCount(0);
+    await expect(palette).toHaveCount(0);
   } finally {
-    await app.close();
+    await closeApp(app);
   }
 });

@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Unified chat runner (issue #141, Phase 3). One chat surface, both jobs:
  * a turn runs in the app's draft session worktree (native file edits stage
@@ -8,14 +9,12 @@
  *
  * The real turn would spawn codex / claude, so we inject a fake `runTurn`
  * that records what it was handed and simulates the agent authoring an
- * automation with a pending webhook trigger. Tools enumeration is injected
- * empty to stay hermetic (no CLI on the box).
+ * automation with a pending webhook trigger.
  */
 
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import { WorktreeStore } from '../worktree-store/index.js';
 import type { Dispatcher, ConversationTurnInput, TurnStreamEvent } from '@centraid/app-engine';
@@ -45,7 +44,7 @@ function baseInput(
 }
 
 beforeEach(async () => {
-  root = await fs.mkdtemp(path.join(os.tmpdir(), `gw-unified-${crypto.randomUUID()}-`));
+  root = await tempDir(`gw-unified-${crypto.randomUUID()}-`);
   store = new WorktreeStore({ root: path.join(root, 'code') });
   await store.init();
 });
@@ -63,7 +62,6 @@ test('runs the turn in the draft worktree with the union of tools + builder prom
     prefsLoader: async () => ({ kind: 'codex' }),
     getDispatcher: () => dispatcher,
     publicBaseUrl: () => 'http://127.0.0.1:9999',
-    resolveTools: async () => [],
     runTurn: async (input, config): Promise<TurnResult> => {
       captured = { input, config };
       input.onEvent({ type: 'assistant.delta', delta: 'ok' });
@@ -106,7 +104,6 @@ test('uses a one-shot draft session when the turn supplies one', async () => {
     prefsLoader: async () => ({ kind: 'codex' }),
     getDispatcher: () => dispatcher,
     publicBaseUrl: () => 'http://127.0.0.1:9999',
-    resolveTools: async () => [],
     runTurn: async (input): Promise<TurnResult> => {
       cwd = input.cwd;
       return { adapterKind: 'codex' };
@@ -129,7 +126,6 @@ test('mints a pending webhook authored during the turn and surfaces it once', as
     prefsLoader: async () => ({ kind: 'codex' }),
     getDispatcher: () => dispatcher,
     publicBaseUrl: () => 'http://127.0.0.1:9999',
-    resolveTools: async () => [],
     runTurn: async (input): Promise<TurnResult> => {
       // The agent authors an automation with a PENDING webhook trigger —
       // it can't mint crypto-random credentials itself.
@@ -196,7 +192,6 @@ test('errors when no coding agent is configured', async () => {
     prefsLoader: async () => undefined,
     getDispatcher: () => dispatcher,
     publicBaseUrl: () => 'http://127.0.0.1:9999',
-    resolveTools: async () => [],
     runTurn: async (): Promise<TurnResult> => {
       throw new Error('should not be called');
     },

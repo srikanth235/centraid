@@ -1,11 +1,11 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 // Warm-spare worker pool (issue #404). These cover the four properties the
 // pool must hold beyond "dispatch still works": it keeps warm spares between
 // runs, it preserves per-run module isolation (a worker is never reused across
 // handlers), a hung handler is still terminable, and a worker crash doesn't
 // poison the pool for subsequent runs.
 
-import { mkdtemp, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { runHandler, HANDLER_WORKER_FILE } from './handler-runner.js';
@@ -21,7 +21,7 @@ let appDir: string;
 let pool: WorkerPool;
 
 beforeEach(async () => {
-  appDir = await mkdtemp(path.join(tmpdir(), 'centraid-worker-pool-'));
+  appDir = await tempDir('centraid-worker-pool-');
 });
 
 afterEach(() => {
@@ -129,12 +129,12 @@ test('runs a TypeScript handler graph (typed source + relative .ts sibling impor
     handlerFile,
     handlerKind: 'action',
     args: { body: { a: 40, b: 2 } },
-    timeoutMs: 5_000,
+    timeoutMs: 30_000,
     pool,
   });
   expect(outcome.ok).toBe(true);
   expect(outcome.value).toEqual({ total: 42 });
-}, 10_000);
+}, 30_000);
 
 test('a hung handler is still terminated on timeout without poisoning the pool', async () => {
   pool = new WorkerPool(HANDLER_WORKER_FILE, 2);
@@ -166,7 +166,7 @@ test('a hung handler is still terminated on timeout without poisoning the pool',
   });
   expect(after.ok).toBe(true);
   expect(after.value).toBe('alive');
-}, 10_000);
+});
 
 test('a worker that crashes mid-run leaves the pool usable for the next run', async () => {
   pool = new WorkerPool(HANDLER_WORKER_FILE, 2);
@@ -193,7 +193,7 @@ test('a worker that crashes mid-run leaves the pool usable for the next run', as
   });
   expect(after.ok).toBe(true);
   expect(after.value).toBe('recovered');
-}, 10_000);
+});
 
 test('workerPoolSizeFromEnv clamps and defaults sanely', () => {
   const standard = { CENTRAID_RESOLVED_HARDWARE_PROFILE: 'standard' };

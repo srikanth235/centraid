@@ -1,29 +1,56 @@
 #!/usr/bin/env bash
+# Rebuild the browser Iroh WASM binding (issue #468 K15).
+# Portable: works on macOS (Homebrew LLVM) and Linux CI (system clang).
+# Under `set -e`, never call bare `brew` when it may be missing — that used to
+# exit 127 on Ubuntu and fail verify / client-e2e before any cargo step ran.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REPO_ROOT="$(cd "$ROOT/../.." && pwd)"
 CRATE="$ROOT/iroh-wasm"
 OUT="$ROOT/src/generated"
+
+find_wasm_clang() {
+  # Prefer Homebrew LLVM on macOS (Xcode clang lacks the wasm backend).
+  if command -v brew >/dev/null 2>&1; then
+    local brew_llvm
+    brew_llvm="$(brew --prefix llvm 2>/dev/null || true)"
+    if [[ -n "${brew_llvm}" && -x "${brew_llvm}/bin/clang" ]]; then
+      echo "${brew_llvm}/bin/clang"
+      return 0
+    fi
+  fi
+  # Linux CI / generic: system clang usually ships with wasm32 support.
+  local candidate
+  for candidate in clang-20 clang-19 clang-18 clang-17 clang; do
+    if command -v "${candidate}" >/dev/null 2>&1; then
+      command -v "${candidate}"
+      return 0
+    fi
+  done
+  return 1
+}
+
 LLVM_CLANG="${CC_wasm32_unknown_unknown:-}"
-
-if [[ -z "$LLVM_CLANG" ]] && [[ -x /opt/homebrew/opt/llvm/bin/clang ]]; then
-  LLVM_CLANG=/opt/homebrew/opt/llvm/bin/clang
+if [[ -z "${LLVM_CLANG}" ]]; then
+  LLVM_CLANG="$(find_wasm_clang || true)"
 fi
-if [[ -z "$LLVM_CLANG" ]] && [[ -x /usr/local/opt/llvm/bin/clang ]]; then
-  LLVM_CLANG=/usr/local/opt/llvm/bin/clang
-fi
-if [[ -z "$LLVM_CLANG" ]] && command -v clang >/dev/null 2>&1; then
-  LLVM_CLANG="$(command -v clang)"
-fi
-
-if [[ -z "$LLVM_CLANG" || ! -x "$LLVM_CLANG" ]]; then
-  echo "Iroh WASM requires LLVM clang with the WebAssembly backend." >&2
-  echo "Set CC_wasm32_unknown_unknown or install LLVM with your platform package manager." >&2
+if [[ -z "${LLVM_CLANG}" || ! -x "${LLVM_CLANG}" ]]; then
+  echo "Iroh WASM requires a clang with the WebAssembly backend." >&2
+  echo "  macOS: brew install llvm" >&2
+  echo "  Ubuntu: sudo apt-get install -y clang lld" >&2
+  echo "  Or set CC_wasm32_unknown_unknown to a wasm-capable clang." >&2
   exit 1
 fi
+
 if ! command -v wasm-bindgen >/dev/null 2>&1; then
   echo "Install wasm-bindgen-cli 0.2.108 before rebuilding the browser transport." >&2
+  echo "  cargo install wasm-bindgen-cli --version 0.2.108 --locked" >&2
+  exit 1
+fi
+
+if ! command -v rustup >/dev/null 2>&1; then
+  echo "rustup is required to add the wasm32-unknown-unknown target." >&2
   exit 1
 fi
 
@@ -44,7 +71,7 @@ if command -v wasm-opt >/dev/null 2>&1; then
   # reference types); without this wasm-opt rejects the module outright.
   wasm-opt -Oz --all-features "$OUT/centraid_web_iroh_bg.wasm" -o "$OUT/centraid_web_iroh_bg.wasm"
 else
-  echo "wasm-opt not found; skipping -Oz size pass (brew install binaryen to enable)." >&2
+  echo "wasm-opt not found; skipping -Oz size pass (optional: install binaryen)." >&2
 fi
 
 # wasm-bindgen emits blanket ESLint directives and an unowned follow-up marker. Preserve the

@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * The admin plane (issue #289): `centraid-gateway vault|devices|pair` +
  * the daemon device plane. These are landlord acts guarded by shell
@@ -9,8 +10,6 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs, readFileSync } from 'node:fs';
 import http from 'node:http';
-import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import { commandVault } from './vault-admin.ts';
 import { commandDevices, commandPair } from './device-admin.ts';
@@ -27,12 +26,16 @@ import { DeviceTokenStore } from '../serve/device-token-store.ts';
 import { PairingTicketStore } from '../serve/pairing-store.ts';
 
 const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
-
-// These filesystem-heavy CLI cases create several complete vaults. Installing
-// the issue #406 all-entity trigger catalog is real bootstrap work, and the
-// package suite runs many other SQLite/WAL fixtures in parallel; retain a
-// bounded timeout without making correctness depend on shared-runner load.
-vi.setConfig({ testTimeout: 15_000 });
+// The slowest file in the suite: every test bootstraps a real vault/daemon
+// layout on disk, so it is the most fsync-bound thing we run. It needs an
+// escalation ABOVE the 30s node-project default in @centraid/test-kit/vitest
+// (see the measurements there). Sizing: the slowest single test here measured
+// ~5.6s on a fast host; at the ~10x worst observed hosted-runner disk penalty
+// that is ~56s, so 60s. The earlier 15s budget blamed v8 coverage
+// instrumentation, which was the wrong variable — coverage runs in the ci lane
+// too and passes there — and 15s was duly still too small: this file timed out
+// twice in nightly run 29733737906 (102s wall for 13 tests vs 20s in ci).
+vi.setConfig({ testTimeout: 60_000 });
 
 let dataDir: string;
 let out: string[];
@@ -70,7 +73,7 @@ async function capture(fn: () => Promise<void> | void): Promise<string> {
 }
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `admin-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`admin-${crypto.randomUUID()}-`);
   out = [];
 });
 
@@ -210,6 +213,11 @@ test('devices add / list / revoke, scoped by vault', async () => {
   ).rejects.toThrow(/no enrollment/);
 });
 
+// Bootstraps two full vaults then polls up to 10s (vi.waitFor below) for the
+// revoked device key to drop its HTTP token — the slowest case in the file.
+// Inherits the file-level 60s budget above; it previously carried its own 15s
+// override, which capped it BELOW what a slow-disk runner needs and was one of
+// the two timeouts in nightly run 29733737906.
 test("devices revoke cascades into that device key's HTTP token (issue #376)", async () => {
   await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
   await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Other'], fail));
@@ -391,6 +399,9 @@ test('device plane: deviceKeyFor trusts only the in-process proof header', async
   registry.stop();
 });
 
+// Bootstraps a registry + watches revocations; fsync-bound like the
+// vault/device admin tests above, so it inherits the file-level 60s budget
+// rather than carrying a smaller override of its own.
 test('device plane: SSH CLI revocation closes the native relay endpoint', async () => {
   const layout = daemonLayoutFor(dataDir);
   await fs.mkdir(dataDir, { recursive: true });

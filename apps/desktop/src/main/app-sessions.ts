@@ -22,7 +22,7 @@
 
 import path from 'node:path';
 import { mkdir, stat } from 'node:fs/promises';
-import { openSession, closeSession } from './apps-store-client.js';
+import { openSession } from './apps-store-client.js';
 import { activeVaultCodeStoreDir } from './gateway-paths.js';
 import { loadSettings } from './settings.js';
 
@@ -77,24 +77,6 @@ export async function ensureAppSession(appId: string): Promise<string> {
   });
   sessions.set(appId, p);
   return p;
-}
-
-/**
- * Close + forget an app's session (e.g. on app delete). Idempotent;
- * swallows errors so a delete flow never wedges on a stale session.
- */
-export async function dropAppSession(appId: string): Promise<void> {
-  const existing = sessions.get(appId);
-  sessions.delete(appId);
-  let sessionId = desktopSessionIdFor(appId);
-  if (existing) {
-    try {
-      sessionId = await existing;
-    } catch {
-      return; // never opened; nothing to close
-    }
-  }
-  await closeSession(sessionId).catch(() => undefined);
 }
 
 /**

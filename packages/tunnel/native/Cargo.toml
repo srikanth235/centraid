@@ -10,7 +10,7 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-centraid-data-plane = { path = "../../data-plane" }
+centraid-data-plane = { path = "../data-plane" }
 hex = "0.4"
 napi = { version = "3.9.2", features = ["napi8", "tokio_rt"] }
 napi-derive = "3.5.6"

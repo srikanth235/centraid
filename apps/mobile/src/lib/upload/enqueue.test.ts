@@ -1,10 +1,10 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // Enqueue: addressing bytes and the structural maths the gateway is told at
 // `begin`. Sizes here are exact, not approximate — `sealedSize` is a promise
 // the client makes before uploading and `verifyRemoteSealedObject` checks it.
 
 import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -22,7 +22,7 @@ const BYTES = new Uint8Array(5_000).map((_, index) => (index * 13) & 0xff);
 const openFile = async () => bytesFileSource(BYTES);
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'centraid-enqueue-'));
+  dir = tempDirSync('centraid-enqueue-');
   driver = new NodeSqliteFileDriver(join(dir, 'uploads.db'));
   store = UploadQueueStore.create(driver);
 });

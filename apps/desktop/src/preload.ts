@@ -66,6 +66,8 @@ const Channel = {
   // Relaunch to update (dist watcher in main/update-watcher.ts)
   UPDATE_STATUS: 'centraid:update:status',
   UPDATE_RELAUNCH: 'centraid:update:relaunch',
+  GATEWAY_SERVICE_INSTALL: 'centraid:gateway:service-install',
+
   UPDATE_AVAILABLE: 'centraid:update:available',
 
   // "What's new" changelog (main/changelog.ts) — GitHub Releases fetch, cached.
@@ -339,6 +341,9 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // subscribes to the broadcast, and triggers the relaunch.
   getUpdateStatus: () => ipcRenderer.invoke(Channel.UPDATE_STATUS),
   relaunchToUpdate: () => ipcRenderer.invoke(Channel.UPDATE_RELAUNCH),
+  installGatewayService: (): Promise<{ ok: true } | { ok: false; error: string }> =>
+    ipcRenderer.invoke(Channel.GATEWAY_SERVICE_INSTALL),
+
   onUpdateAvailable: (cb: (msg: { available: boolean; version: string }) => void) => {
     const handler = (_e: IpcRendererEvent, msg: unknown): void =>
       cb(msg as { available: boolean; version: string });

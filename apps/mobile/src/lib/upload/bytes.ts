@@ -34,12 +34,6 @@ export function utf8(value: string): Uint8Array {
   return new TextEncoder().encode(value);
 }
 
-export function bytesToHex(bytes: Uint8Array): string {
-  let hex = '';
-  for (const byte of bytes) hex += byte.toString(16).padStart(2, '0');
-  return hex;
-}
-
 export function hexToBytes(hex: string): Uint8Array {
   if (!/^[0-9a-f]+$/.test(hex) || hex.length % 2 !== 0) throw new Error('invalid hex');
   return Uint8Array.from({ length: hex.length / 2 }, (_, index) =>

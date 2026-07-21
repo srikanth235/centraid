@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Issue #439 R2 — lazy-by-default restore, `--full` override, and the
  * metered-egress cost estimate, exercised at the SERVICE layer (where the
@@ -9,9 +10,7 @@
 
 import { afterEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { openLocalBackupProvider, WAL_DB_FILES, type BackupProvider } from '@centraid/backup';
 import { updateBlobStoreSettings, type BlobStore, type RemoteTier } from '@centraid/vault';
 import { openVaultRegistry, type VaultRegistry } from '../serve/vault-registry.js';
@@ -25,13 +24,6 @@ const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.();
 });
-
-async function tempDir(prefix: string): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `${prefix}-${crypto.randomUUID()}-`));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 interface Harness {
   service: BackupService;
   registry: VaultRegistry;

@@ -6,7 +6,7 @@
   // shared ambient declarations under `types/`. Apps import each other by their
   // REAL served extension (`./logic.ts`, `./Board.tsx`), hence
   // `allowImportingTsExtensions` (requires `noEmit`).
-  "extends": "@centraid/tsconfig/base.json",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "module": "ESNext",
     "moduleResolution": "Bundler",

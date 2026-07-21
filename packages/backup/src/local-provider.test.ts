@@ -1,24 +1,12 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { providerConformanceCases, type ConformanceHarness } from './conformance.js';
 import { LocalBackupProvider } from './local-provider.js';
 import { BackupProviderError } from './provider.js';
-
-const cleanups: Array<() => Promise<void>> = [];
-afterEach(async () => {
-  while (cleanups.length > 0) await cleanups.pop()?.();
-});
-
-async function tempDir(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'backup-local-provider-'));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 async function makeHarness(): Promise<ConformanceHarness> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'backup-local-conf-'));
+  const dir = await tempDir('backup-local-conf-');
   return {
     provider: new LocalBackupProvider({ rootDir: dir }),
     cleanup: () => fs.rm(dir, { recursive: true, force: true }),

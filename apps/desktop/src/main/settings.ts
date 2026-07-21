@@ -30,6 +30,8 @@ import { mergePersistedSettings } from './settings-merge.js';
 export interface PersistedSettings {
   /** Active gateway id. Defaults to `'local'` on a fresh install. */
   activeGatewayId: string;
+  /** Developer-only gate for the conversational app builder. Absent → hidden. */
+  builderEnabled?: boolean;
   /** Optional URL the home shelf hits for remote-template updates. */
   remoteTemplatesUrl?: string;
   /**
@@ -72,15 +74,23 @@ export interface PersistedSettings {
   changelogSeenVersion?: string;
   /**
    * Launch Centraid automatically at OS login (issue #351, tier 4 — the
-   * cheap 80% fix for "always-on": the desktop-hosted gateway still dies
-   * when the app quits, and there's deliberately no OS scheduler, but the
-   * app can at least come back up after a reboot/login without the user
-   * remembering to open it). Applied via `app.setLoginItemSettings` — see
-   * `login-item.ts`. Absent → disabled (opt-in; a fresh install never
-   * silently adds itself to login items). No-op on Linux — Electron
-   * doesn't implement `setLoginItemSettings` there.
+   * cheap 80% fix for "always-on": with the detached gateway (#468 H1)
+   * the child can outlive a single session, and launch-at-login still
+   * brings the app UI back after reboot). Applied via
+   * `app.setLoginItemSettings` — see `login-item.ts`. Absent → disabled
+   * (opt-in; a fresh install never silently adds itself to login items).
+   * No-op on Linux — Electron doesn't implement `setLoginItemSettings`
+   * there.
    */
   launchAtLogin?: boolean;
+  /**
+   * H5 / issue #468 — offer OS service install (`centraid-gateway service
+   * install`, label `dev.centraid.gateway`) during onboarding so the
+   * gateway survives logout/reboot. **Default off**; silent install is
+   * forbidden. Wiring the onboarding UI is a follow-up; this flag is the
+   * settings key. See `shouldOfferServiceInstall` in detached-gateway-core.
+   */
+  offerGatewayService?: boolean;
 }
 
 export interface DesktopSettings {
@@ -96,6 +106,8 @@ export interface DesktopSettings {
   gatewayToken?: string;
   /** Persisted — the gateway the renderer is currently pointing at. */
   activeGatewayId: string;
+  /** Developer-only gate for the conversational app builder. */
+  builderEnabled?: boolean;
   /**
    * The vault the renderer is addressing on the active gateway (issue
    * #289), or `undefined` to let the gateway pick. Sent as the
@@ -140,6 +152,11 @@ export interface DesktopSettings {
   changelogSeenVersion?: string;
   /** Launch Centraid at OS login (absent → disabled). See `PersistedSettings.launchAtLogin`. */
   launchAtLogin?: boolean;
+  /**
+   * Offer OS service install for the detached gateway (H5). Absent → false.
+   * See `PersistedSettings.offerGatewayService`.
+   */
+  offerGatewayService?: boolean;
 }
 
 const FILE_NAME = 'centraid-settings.json';
@@ -166,6 +183,7 @@ function narrow(raw: Record<string, unknown>): PersistedSettings {
   return {
     activeGatewayId:
       typeof activeRaw === 'string' && activeRaw.length > 0 ? activeRaw : base.activeGatewayId,
+    ...(typeof raw.builderEnabled === 'boolean' ? { builderEnabled: raw.builderEnabled } : {}),
     ...(typeof raw.remoteTemplatesUrl === 'string'
       ? { remoteTemplatesUrl: raw.remoteTemplatesUrl }
       : {}),
@@ -184,6 +202,9 @@ function narrow(raw: Record<string, unknown>): PersistedSettings {
       ? { changelogSeenVersion: raw.changelogSeenVersion }
       : {}),
     ...(typeof raw.launchAtLogin === 'boolean' ? { launchAtLogin: raw.launchAtLogin } : {}),
+    ...(typeof raw.offerGatewayService === 'boolean'
+      ? { offerGatewayService: raw.offerGatewayService }
+      : {}),
   };
 }
 
@@ -267,6 +288,7 @@ async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> 
     activeProfileAvatarColor: resolved.profile.avatarColor ?? '#5B8DEF',
     gatewayUrl: resolved.url,
     gatewayToken: resolved.token,
+    ...(p.builderEnabled !== undefined ? { builderEnabled: p.builderEnabled } : {}),
     ...(activeVaultId !== undefined ? { activeVaultId } : {}),
     ...(p.remoteTemplatesUrl !== undefined ? { remoteTemplatesUrl: p.remoteTemplatesUrl } : {}),
     ...(p.onboardingCompletedAt !== undefined
@@ -280,6 +302,7 @@ async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> 
       ? { changelogSeenVersion: p.changelogSeenVersion }
       : {}),
     ...(p.launchAtLogin !== undefined ? { launchAtLogin: p.launchAtLogin } : {}),
+    ...(p.offerGatewayService !== undefined ? { offerGatewayService: p.offerGatewayService } : {}),
   };
 }
 

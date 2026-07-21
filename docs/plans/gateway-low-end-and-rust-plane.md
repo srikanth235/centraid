@@ -215,7 +215,7 @@ background valve is active.
 
 ## Rust byte-plane strangler
 
-`packages/data-plane` owns dumb byte movement and bounded native transforms.
+`packages/tunnel/data-plane` owns dumb byte movement and bounded native transforms.
 Its trust boundary is intentionally narrow:
 
 1. TypeScript authenticates a user/device and decides the permitted object,

@@ -9,6 +9,7 @@
 import { apps as BUILTIN_APPS, icons, palette } from '@centraid/design-tokens';
 import type { AppMetaResolved, ColorKey, IconName } from '@centraid/design-tokens';
 import { ensureTunnelStarted } from './phone-link';
+import { getSecure, hydrateSecure, setSecure } from './secure-storage';
 import { Store } from '../storage';
 
 export const SETTINGS_KEY = 'settings.gatewayUrl';
@@ -57,10 +58,6 @@ function normalizeBase(raw: string): string {
   return raw.replace(/\/+$/, '');
 }
 
-export function getGatewayUrl(): string {
-  return Store.get<string>(SETTINGS_KEY, '');
-}
-
 export async function hydrateGatewayUrl(): Promise<string> {
   return Store.hydrate<string>(SETTINGS_KEY, '');
 }
@@ -70,15 +67,15 @@ export function setGatewayUrl(value: string): void {
 }
 
 export function getGatewayToken(): string {
-  return Store.get<string>(SETTINGS_TOKEN_KEY, '');
+  return getSecure(SETTINGS_TOKEN_KEY, '');
 }
 
 export async function hydrateGatewayToken(): Promise<string> {
-  return Store.hydrate<string>(SETTINGS_TOKEN_KEY, '');
+  return hydrateSecure(SETTINGS_TOKEN_KEY, '');
 }
 
 export function setGatewayToken(value: string): void {
-  Store.set<string>(SETTINGS_TOKEN_KEY, value.trim());
+  void setSecure(SETTINGS_TOKEN_KEY, value.trim());
 }
 
 /**

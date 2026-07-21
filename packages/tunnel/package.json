@@ -18,6 +18,14 @@
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run",
     "test:native": "CENTRAID_RUN_NATIVE_TUNNEL=1 vitest run src/native-relay.test.ts",
+    "build:data-plane": "cargo build --locked --manifest-path data-plane/Cargo.toml",
+    "test:data-plane": "cargo test --locked --manifest-path data-plane/Cargo.toml && bun run test:data-plane:contract",
+    "test:data-plane:contract": "bun run test:data-plane:contract:typescript && bun run test:data-plane:contract:rust",
+    "test:data-plane:contract:typescript": "cd ../.. && CENTRAID_RUN_BYTE_PLANE_CONTRACT=1 CENTRAID_BYTE_PLANE_IMPLEMENTATION=typescript ./node_modules/.bin/vitest run packages/gateway/src/lifecycle/byte-plane-over-http.test.ts --maxWorkers=1",
+    "test:data-plane:contract:rust": "cargo build --locked --manifest-path data-plane/Cargo.toml && cd ../.. && CENTRAID_RUN_BYTE_PLANE_CONTRACT=1 CENTRAID_BYTE_PLANE_IMPLEMENTATION=rust CENTRAID_BYTE_PLANE_BIN=packages/tunnel/data-plane/target/debug/centraid-data-plane ./node_modules/.bin/vitest run packages/gateway/src/lifecycle/byte-plane-over-http.test.ts --maxWorkers=1",
+    "lint": "bun run lint:data-plane",
+    "lint:data-plane": "cargo fmt --manifest-path data-plane/Cargo.toml --check && cargo clippy --locked --manifest-path data-plane/Cargo.toml --all-targets -- -D warnings",
+    "format:data-plane": "cargo fmt --manifest-path data-plane/Cargo.toml",
     "perf:binding-probe": "node scripts/probe-typed-array.mjs",
     "prepack": "bun run build",
     "clean": "rm -rf dist native/*.node"
@@ -26,7 +34,7 @@
     "@number0/iroh": "1.0.0"
   },
   "devDependencies": {
-    "@centraid/tsconfig": "workspace:*",
+    "@centraid/test-kit": "workspace:*",
     "@types/node": "^22.0.0",
     "typescript": "catalog:"
   },

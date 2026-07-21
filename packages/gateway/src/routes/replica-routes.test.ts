@@ -1,8 +1,8 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 // governance: allow-repo-hygiene file-size-limit (#419) one route suite shares the real vault-plane fixture across bootstrap, windowed pagination, delta, SSE, row, checkpoint, and intent surfaces
 import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { currentReplicaLogState, recordReplicaIntentOutcome } from '@centraid/vault';
@@ -27,7 +27,7 @@ async function fixture(
   enrollments: EnrollmentStore;
   handler: ReturnType<typeof makeReplicaRouteHandler>;
 }> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `replica-routes-${crypto.randomUUID()}-`));
+  const dir = await tempDir(`replica-routes-${crypto.randomUUID()}-`);
   const plane = openVaultPlane({ dir, logger, enableWalShipper: false });
   const enrollments = EnrollmentStore.open(path.join(dir, 'devices.json'));
   const vaults = { current: () => plane } as unknown as VaultRegistry;

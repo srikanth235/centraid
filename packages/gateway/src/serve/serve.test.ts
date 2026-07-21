@@ -1,7 +1,7 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import { serve, type GatewayServeHandle } from './serve.ts';
 import type { GatewayPaths } from '../paths.ts';
@@ -17,7 +17,7 @@ function pathsUnder(dir: string): GatewayPaths {
 }
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `gateway-runtime-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`gateway-runtime-${crypto.randomUUID()}-`);
   handle = await serve({ paths: pathsUnder(dataDir) });
 });
 
@@ -96,20 +96,25 @@ test('runnerStatus is reachable and returns a RunnerStatus body', async () => {
   expect(typeof body.ok).toBe('boolean');
 });
 
-test('agents status is reachable and returns CLI availability booleans', async () => {
+test('agents status is reachable and lists every registered runner', async () => {
   const res = await fetch(`${handle.url}/centraid/_agents/status`, {
     headers: { Authorization: `Bearer ${handle.token}` },
   });
-  // Which CLIs show available depends on whether codex / claude are on the
-  // test host's PATH — we only assert the route is mounted and returns a
-  // well-shaped snapshot (the gateway probes its own host).
+  // Which CLIs show available depends on what's on the test host's PATH — we
+  // only assert the route is mounted and returns a well-shaped snapshot (the
+  // gateway probes its own host).
   expect(res.status).toBe(200);
   const body = (await res.json()) as {
-    codexAvailable: boolean;
-    claudeAvailable: boolean;
+    agents: Array<{ kind: string; label: string; available: boolean; minVersion: string }>;
   };
-  expect(typeof body.codexAvailable).toBe('boolean');
-  expect(typeof body.claudeAvailable).toBe('boolean');
+  expect(Array.isArray(body.agents)).toBe(true);
+  expect(body.agents.length).toBeGreaterThan(0);
+  for (const agent of body.agents) {
+    expect(typeof agent.kind).toBe('string');
+    expect(typeof agent.label).toBe('string');
+    expect(typeof agent.available).toBe('boolean');
+    expect(typeof agent.minVersion).toBe('string');
+  }
 });
 
 test('rejects /centraid/_agents/status without the bearer token', async () => {
@@ -210,7 +215,7 @@ test('POST /centraid/_gateway/backup/run refuses with a clear body when not conf
 
 test('backup status/run round-trip when backup IS configured', async () => {
   await handle.close();
-  const providerDir = await fs.mkdtemp(path.join(dataDir, 'backup-provider-'));
+  const providerDir = await tempDir('backup-provider-');
   handle = await serve({
     paths: pathsUnder(dataDir),
     backup: {
@@ -260,7 +265,7 @@ test('recoveryKit confirmation survives a restart (issue #351 wave 4)', async ()
   // as close to "the gateway process restarted" as a unit test gets short
   // of actually spawning a second process.
   await handle.close();
-  const providerDir = await fs.mkdtemp(path.join(dataDir, 'backup-provider-'));
+  const providerDir = await tempDir('backup-provider-');
   const backupConfig = {
     enabled: true as const,
     provider: { kind: 'local' as const, dir: providerDir },

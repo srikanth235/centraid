@@ -21,9 +21,8 @@
     "esbuild": "^0.28.1"
   },
   "devDependencies": {
-    "@centraid/tsconfig": "workspace:*",
+    "@centraid/test-kit": "workspace:*",
     "@types/node": "^22.0.0",
-    "@types/tar": "^6.1.13",
     "typescript": "catalog:"
   },
   "engines": {

@@ -7,11 +7,11 @@
 
 import { palette } from '../palette';
 import {
-  ACCENT,
   ACCENT_DEEP,
   ACCENT_LIGHT,
   ACCENT_MIDNIGHT,
   ACCENT_VIOLET,
+  BRAND,
   DANGER,
   SUCCESS,
   type Theme,
@@ -19,7 +19,7 @@ import {
 
 export const lightTheme: Theme = {
   kind: 'light',
-  accent: ACCENT,
+  accent: BRAND,
   accentDeep: ACCENT_DEEP,
   accentLight: ACCENT_LIGHT,
   accentMidnight: ACCENT_MIDNIGHT,
@@ -55,7 +55,7 @@ export const lightTheme: Theme = {
 
 export const darkTheme: Theme = {
   kind: 'dark',
-  accent: ACCENT,
+  accent: BRAND,
   accentDeep: ACCENT_DEEP,
   accentLight: ACCENT_LIGHT,
   accentMidnight: ACCENT_MIDNIGHT,

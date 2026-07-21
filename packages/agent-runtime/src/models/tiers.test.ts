@@ -1,6 +1,5 @@
 import { expect, test } from 'vitest';
-import { RUNNER_TIERS } from './tiers.js';
-import { resolveClaudeModel } from '../backends/claude/backend.js';
+import { RUNNER_TIERS, resolveClaudeModel } from './tiers.js';
 
 test('claude-code offers capability tiers with exactly one default', () => {
   const tiers = RUNNER_TIERS['claude-code'];

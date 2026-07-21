@@ -140,9 +140,6 @@ export {
   runHandler,
   type RunHandlerOptions,
   type HandlerOutcome,
-  type ToolCall,
-  type ToolResult,
-  type ToolDispatcher,
   type AgentCall,
   type AgentDispatcher,
   type DispatchContext,
@@ -151,26 +148,6 @@ export {
 // Shared `ctx.agent` answer coercion — every host ends an agent turn with a
 // blob of text and must turn it into the value the handler awaits the same way.
 export { coerceAgentAnswer } from './handler/agent-answer.js';
-// Mock-LLM server + host-agnostic persistent session (issue #166): the
-// token-free `ctx.tool` rail. One long-lived agent session per fire, puppeted
-// by the mock, executes every tool batch; the per-host `driveAgent` is the
-// only thing that varies (in-process Claude SDK / `codex exec` subprocess vs.
-// embedded agent).
-export {
-  startMockLlmServer,
-  type MockLlmServerHandle,
-  type MockLlmServerOptions,
-  type StagedTurn,
-  type CapturedToolResult,
-} from './mock-llm/mock-llm-server.js';
-export {
-  startPersistentMockSession,
-  type AgentDriver,
-  type AgentDriveInput,
-  type AgentDriveResult,
-  type PersistentMockSession,
-  type PersistentMockSessionOptions,
-} from './mock-llm/persistent-mock-session.js';
 // Authoring-time handler lint (issue #167): a static scan that flags ambient
 // I/O and nondeterminism (`Date.now`, `Math.random`, raw `fetch`/`fs`, …) in a
 // handler — effects that bypass the audited `ctx.*` rails or make a re-run

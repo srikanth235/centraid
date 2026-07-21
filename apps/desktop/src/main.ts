@@ -1,6 +1,12 @@
 import { app, BrowserWindow, dialog, nativeImage, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  installApplicationMenu,
+  installDeepLinkProtocol,
+  installTray,
+  setTrayGatewayRunning,
+} from './main/app-chrome.js';
 import { installAuthInjector } from './main/auth-injector.js';
 import { installCrashHandlers } from './main/crash-log.js';
 import { startGatewayMonitor, stopGatewayMonitor } from './main/gateway-monitor.js';
@@ -11,6 +17,7 @@ import { ensurePhoneLink, shutdownPhoneLink } from './main/phone-link.js';
 import { startReminderMonitor, stopReminderMonitor } from './main/reminder-monitor.js';
 import { loadSettings } from './main/settings.js';
 import { startUpdateWatcher } from './main/update-watcher.js';
+import { loadWindowState, trackWindowState } from './main/window-state.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -36,6 +43,8 @@ const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();
 } else {
+  // Deep-link second-instance handler is also registered in app-chrome;
+  // this block focuses the window when the user re-launches without a URL.
   app.on('second-instance', () => {
     const [win] = BrowserWindow.getAllWindows();
     if (!win) return;
@@ -48,10 +57,12 @@ if (!gotSingleInstanceLock) {
   // init, a settings read that runs ahead of the window) gets captured.
   // Deliberate log-and-continue posture — see crash-log.ts's doc comment.
   installCrashHandlers();
+  installDeepLinkProtocol();
 
   // Icon lives at the package root (../../icon.png from dist/main.js); used
   // for the BrowserWindow on Windows/Linux and the macOS dock during dev.
-  // Packaged builds will pick up the .icns via electron-builder config.
+  // Packaged builds will pick up the .icns via electron-builder config
+  // (appId: dev.centraid.desktop — electron-builder/app-id.json).
   const ICON_PATH = path.join(__dirname, '..', 'icon.png');
 
   // The builder preview iframe is served by the gateway itself (issue #141,
@@ -59,6 +70,8 @@ if (!gotSingleInstanceLock) {
   // origin the main-process auth-injector authenticates. No custom local
   // scheme is needed anymore — the old `centraid-preview://` path-mode
   // protocol was retired so local == remote serving.
+
+  let flushWindowState: (() => void) | undefined;
 
   const canOpenExternal = (url: string): boolean => {
     try {
@@ -69,9 +82,13 @@ if (!gotSingleInstanceLock) {
   };
 
   const createWindow = (): void => {
+    const state = loadWindowState();
     const win = new BrowserWindow({
       backgroundColor: '#e8e9ec',
-      height: 900,
+      height: state.height,
+      width: state.width,
+      x: state.x,
+      y: state.y,
       icon: ICON_PATH,
       minHeight: 720,
       minWidth: 1100,
@@ -83,8 +100,9 @@ if (!gotSingleInstanceLock) {
         preload: path.join(__dirname, 'preload.cjs'),
         sandbox: true,
       },
-      width: 1400,
     });
+    if (state.isMaximized) win.maximize();
+    flushWindowState = trackWindowState(win);
 
     void win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
@@ -105,6 +123,8 @@ if (!gotSingleInstanceLock) {
     if (process.platform === 'darwin' && app.dock) {
       app.dock.setIcon(nativeImage.createFromPath(ICON_PATH));
     }
+    installApplicationMenu();
+    installTray(ICON_PATH);
     void installAuthInjector();
     registerIpcHandlers();
     // Boot the active gateway before showing the window (issue #351). Before
@@ -122,7 +142,9 @@ if (!gotSingleInstanceLock) {
       // just when the setting changes, so an OS-level login-item reset (or
       // a settings.json hand-edit) reconciles instead of drifting silently.
       applyLaunchAtLogin(settings.launchAtLogin);
+      setTrayGatewayRunning(true);
     } catch (err) {
+      setTrayGatewayRunning(false);
       dialog.showErrorBox(
         'Centraid gateway failed to start',
         `The embedded gateway could not start:\n\n${err instanceof Error ? err.message : String(err)}\n\n` +
@@ -169,11 +191,11 @@ if (!gotSingleInstanceLock) {
   });
 
   /**
-   * Graceful quit (issue #351). Before this, quitting the app never closed
-   * the embedded gateway's SQLite handles — `gateway.stop()` (WAL checkpoint
-   * + `db.close()`, wired through `GatewayServeHandle.close()`) only ran on
-   * an explicit gateway *switch*. Every normal quit was, from SQLite's
-   * perspective, a crash.
+   * Graceful quit (issue #351 / #468 H1). Embedded (in-process) gateways
+   * get a WAL checkpoint + close so SQLite doesn't see a crash. Detached
+   * gateway children intentionally outlive the UI — `shutdownAllLocalGatewaysExcept`
+   * skips `mode: 'detached'` handles so pairing, the browser extension,
+   * and mobile keep a reachable vault after the window closes.
    *
    * `before-quit` is cancelable, so we intercept the first one, run the
    * async teardown, then call `app.quit()` ourselves — which re-fires
@@ -188,26 +210,35 @@ if (!gotSingleInstanceLock) {
     if (quitting) return;
     quitting = true;
     event.preventDefault();
+    // Flush window bounds before async teardown (issue #468 K13).
+    flushWindowState?.();
 
     // Stop taking on new supervised-restart work first — a scheduled
     // auto-retry firing mid-teardown would otherwise resurrect a gateway we
-    // just told to close.
+    // just told to close. Detached children keep running; only the
+    // supervisor timers + embedded servers are torn down.
     markLocalGatewaysDisposed();
     stopGatewayMonitor();
     stopReminderMonitor();
 
     const teardown = Promise.allSettled([
-      // Every local gateway — WAL checkpoint + close (issue #1 above).
+      // Embedded local gateways only — detached outlive the UI (#468 H1).
       shutdownAllLocalGatewaysExcept(),
       // The iroh phone tunnel holds its own endpoint + device store.
       shutdownPhoneLink(),
     ]);
+    // Deliberately NOT unref'd. This timer is the hard cap that guarantees
+    // `app.quit()` is reached even when teardown wedges — an unref'd timer
+    // does not hold the loop open, so it is precisely the wrong primitive for
+    // a deadline you are relying on to fire. It is cleared implicitly by the
+    // process exiting, and the race below always settles.
+    let cap: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<void>((resolve) => {
-      const t = setTimeout(resolve, QUIT_TEARDOWN_TIMEOUT_MS);
-      t.unref?.();
+      cap = setTimeout(resolve, QUIT_TEARDOWN_TIMEOUT_MS);
     });
 
     void Promise.race([teardown, timeout]).finally(() => {
+      if (cap) clearTimeout(cap);
       app.quit();
     });
   });

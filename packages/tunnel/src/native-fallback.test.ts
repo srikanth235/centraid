@@ -1,8 +1,7 @@
 import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { DeviceStore } from './device-store.js';
 import { startPreferredDesktopTunnel } from './desktop-tunnel.js';
 import { startGatewayEndpoint } from './gateway-endpoint.js';
@@ -41,8 +40,7 @@ test('gateway falls back to the JS relay when the native artifact cannot load', 
 });
 
 test('desktop falls back to the JS relay when the native artifact cannot load', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-native-fallback-'));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
+  const dir = await tempDir('centraid-native-fallback-');
   const desktop = await startPreferredDesktopTunnel({
     secretKey: crypto.randomBytes(32),
     upstream: () => ({ baseUrl: 'http://127.0.0.1:9', token: 'owner-token' }),

@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 // Issue #167: the gateway publish gate (`validateManifestAt`) lints an
 // automation app's handler.js for replay-unsafe patterns, so a
 // nondeterministic handler is rejected at publish time rather than silently
@@ -6,13 +7,12 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { validateManifestAt } from './validate-manifest.ts';
 
 let dir: string;
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-validate-handler-'));
+  dir = await tempDir('centraid-validate-handler-');
 });
 afterEach(async () => {
   await fs.rm(dir, { recursive: true, force: true });
@@ -39,8 +39,9 @@ async function writeAutomationApp(handler: string): Promise<void> {
 test('passes a replay-safe automation handler', async () => {
   await writeAutomationApp(
     `export default async ({ ctx }) => {
-       const items = await ctx.tool('x.list', {});
-       return { summary: 'ok', output: { n: items.length } };
+       const found = await ctx.vault.search({ entity: 'core.thread', text: '' });
+       const rows = Array.isArray(found?.rows) ? found.rows : [];
+       return { summary: 'ok', output: { n: rows.length } };
      };`,
   );
   expect(await validateManifestAt(dir)).toBe(undefined);

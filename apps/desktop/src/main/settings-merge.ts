@@ -18,6 +18,8 @@ import type { PersistedSettings } from './settings.js';
 /** The persistable subset of a settings patch. */
 export interface PersistedSettingsPatch {
   activeGatewayId?: string;
+  /** Developer-only builder gate. Preserve when omitted. */
+  builderEnabled?: boolean;
   remoteTemplatesUrl?: string;
   /**
    * Client-owned active vault per gateway (issue #289). Set as a whole map
@@ -35,6 +37,11 @@ export interface PersistedSettingsPatch {
   changelogSeenVersion?: string;
   /** Launch Centraid at OS login (issue #351). Preserve-or-set boolean. */
   launchAtLogin?: boolean;
+  /**
+   * Offer OS service install for the detached gateway (issue #468 H5).
+   * Preserve-or-set boolean; default off when never set.
+   */
+  offerGatewayService?: boolean;
 }
 
 /** Preserve-or-set for a plain optional string field (`undefined` = preserve). */
@@ -58,6 +65,11 @@ export function mergePersistedSettings(
   const activeVaultByGateway = patch.activeVaultByGateway ?? current.activeVaultByGateway;
   return {
     activeGatewayId: patch.activeGatewayId?.trim() || current.activeGatewayId,
+    ...(patch.builderEnabled !== undefined
+      ? { builderEnabled: patch.builderEnabled }
+      : current.builderEnabled !== undefined
+        ? { builderEnabled: current.builderEnabled }
+        : {}),
     ...preserveOrSet('remoteTemplatesUrl', patch.remoteTemplatesUrl, current.remoteTemplatesUrl),
     ...(activeVaultByGateway !== undefined && Object.keys(activeVaultByGateway).length
       ? { activeVaultByGateway }
@@ -87,6 +99,11 @@ export function mergePersistedSettings(
       ? { launchAtLogin: patch.launchAtLogin }
       : current.launchAtLogin !== undefined
         ? { launchAtLogin: current.launchAtLogin }
+        : {}),
+    ...(patch.offerGatewayService !== undefined
+      ? { offerGatewayService: patch.offerGatewayService }
+      : current.offerGatewayService !== undefined
+        ? { offerGatewayService: current.offerGatewayService }
         : {}),
   };
 }

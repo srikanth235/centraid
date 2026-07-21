@@ -1,6 +1,6 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { commandService } from './service-admin.ts';
@@ -23,8 +23,8 @@ function stubPlatform(platform: NodeJS.Platform): void {
 }
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `centraid-svc-data-${crypto.randomUUID()}-`));
-  fakeHome = await fs.mkdtemp(path.join(os.tmpdir(), `centraid-svc-home-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`centraid-svc-data-${crypto.randomUUID()}-`);
+  fakeHome = await tempDir(`centraid-svc-home-${crypto.randomUUID()}-`);
   originalHome = process.env.HOME;
   process.env.HOME = fakeHome;
   originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');

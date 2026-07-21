@@ -1,5 +1,5 @@
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import { rmSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, test } from 'vitest';
@@ -67,7 +67,7 @@ function recordCommit(
 }
 
 function tempVaultDir(): string {
-  return mkdtempSync(path.join(tmpdir(), 'replica-invocation-repair-'));
+  return tempDirSync('replica-invocation-repair-');
 }
 
 describe('replica invocation commit receipt', () => {

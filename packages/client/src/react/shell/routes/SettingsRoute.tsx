@@ -234,7 +234,7 @@ export default function SettingsRoute({
   return (
     <>
       <div className={styles.settingsMain}>
-        <aside className={styles.settingsNav}>
+        <aside className={styles.settingsNav} data-testid="settings-nav">
           <div className={styles.settingsNavHead}>
             <div className={styles.settingsNavEyebrow}>Settings</div>
             <div className={styles.settingsNavTitle}>Personal</div>
@@ -280,7 +280,7 @@ export default function SettingsRoute({
             {def ? <p className={styles.settingsPageSub}>{def.subtitle}</p> : null}
           </header>
 
-          <div className={styles.settingsPage}>
+          <div className={styles.settingsPage} data-testid="settings-page">
             {page === 'appearance' ? (
               <SettingsAppearanceScreen
                 accent={prefs.accent}
@@ -312,7 +312,6 @@ export default function SettingsRoute({
               <SettingsProvidersScreen
                 loadStatus={() => loadProviders()}
                 refreshModels={() => loadProviders({ refresh: true })}
-                refreshTools={() => loadProviders({ refreshTools: true })}
                 activateRunner={activateRunner}
                 setAgentModel={setAgentModel}
                 setSubsystemModel={setSubsystemModel}

@@ -308,11 +308,7 @@ function ConnectorsPanel({
   const c = connectors;
   const hasAny =
     !!c &&
-    (c.mcps.length > 0 ||
-      c.tools.length > 0 ||
-      c.secrets.length > 0 ||
-      c.connector !== null ||
-      c.vaultScopes.length > 0);
+    (c.mcps.length > 0 || c.secrets.length > 0 || c.connector !== null || c.vaultScopes.length > 0);
   if (!c || !hasAny) {
     return (
       <div className={inlineEmptyCss.inlineEmpty}>
@@ -324,7 +320,6 @@ function ConnectorsPanel({
     <div className={styles.connectorsPanel}>
       <ChipGroup label="Connector" items={c.connector ? [c.connector] : []} />
       <ChipGroup label="MCPs" items={c.mcps} mono />
-      <ChipGroup label="Tools" items={c.tools} mono />
       <ChipGroup label="Secrets" items={c.secrets} mono />
       {c.vaultScopes.length > 0 ? (
         <div className={styles.connGroup}>
@@ -854,7 +849,7 @@ export default function AutomationEditorScreen({
   };
 
   return (
-    <div className={styles.page}>
+    <div className={styles.page} data-testid="automation-editor">
       {d.mode === 'edit' ? (
         <div className={styles.head} data-hue={hue}>
           <div className={styles.headIdentity}>

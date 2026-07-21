@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Seal-key restore-verify (issue #439 R5) — the scheduled `runRestoreVerify`
  * now proves what FORMAT.md warns about: a restore whose sealed columns cannot
@@ -12,10 +13,6 @@
  */
 
 import { afterEach, expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import crypto from 'node:crypto';
 import { startFakeProviderServer } from '@centraid/backup/dist/testing/fake-provider-server.js';
 import { openVaultRegistry } from '../serve/vault-registry.js';
 import type { VaultPlane } from '../serve/vault-plane.js';
@@ -28,13 +25,6 @@ const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.();
 });
-
-async function tempDir(prefix: string): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `${prefix}-${crypto.randomUUID()}-`));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 function invoke(plane: VaultPlane, command: string, input: Record<string, unknown>): void {
   const out = plane.gateway.invoke(plane.ownerCredential, { command, input });
   if (out.status !== 'executed') throw new Error(`${command} failed: ${JSON.stringify(out)}`);

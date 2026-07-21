@@ -27,6 +27,7 @@ import { buildSettingsInject } from './settings/settings-merge.js';
 import { handleTurnRoute, parseTurnSubRoute, type AskModelPrefs } from './http/turn-routes.js';
 import type { TurnLimiter } from './http/turn-limiter.js';
 import type { ConversationRunner } from './conversation/runner.js';
+import type { RunnerKind } from './conversation/turn.js';
 import type { VaultBridge } from './handlers/vault-bridge.js';
 import type { AppRef, RegistryEntry } from './types.js';
 import { COMPANION_GRANTS_HEADER, companionToolAllowed } from './http/internal-headers.js';
@@ -203,7 +204,7 @@ export interface RunnerStatusOptions {
  * the schema, reporting the configured CLI adapter.
  */
 export interface RunnerStatus {
-  kind: 'codex' | 'claude-code' | 'none';
+  kind: RunnerKind | 'none';
   ok: boolean;
   /** Adapter version string when detectable (e.g. "codex 0.20.4"). */
   version?: string;

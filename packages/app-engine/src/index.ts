@@ -76,6 +76,7 @@ export type {
   VaultSqlRunner,
   VaultSqlToolResult,
 } from './conversation/turn.js';
+export { RUNNER_KINDS, isRunnerKind } from './conversation/turn.js';
 
 export {
   startRuntimeHttpServer,
@@ -91,6 +92,7 @@ export {
   GATEWAY_HEADERS_TIMEOUT_MS,
   GATEWAY_REQUEST_TIMEOUT_MS,
   GATEWAY_MAX_CONNECTIONS,
+  GATEWAY_SHUTDOWN_GRACE_MS,
 } from './http/server-tuning.js';
 export { prewarmAppAssets } from './http/app-bundle.js';
 export { negotiateEncoding, type Encoding } from './http/compression.js';

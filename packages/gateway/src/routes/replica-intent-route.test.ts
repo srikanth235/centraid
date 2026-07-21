@@ -1,9 +1,9 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 // governance: allow-repo-hygiene file-size-limit pre-existing cohesive route regression suite; decomposition is outside issue #417
 import { afterEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { Readable } from 'node:stream';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { Dispatcher, Registry, type ToolResult } from '@centraid/app-engine';
@@ -20,7 +20,7 @@ afterEach(async () => {
 });
 
 async function plane(): Promise<VaultPlane> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `replica-intent-${crypto.randomUUID()}-`));
+  const dir = await tempDir(`replica-intent-${crypto.randomUUID()}-`);
   const opened = openVaultPlane({ dir, logger, enableWalShipper: false });
   cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
   cleanups.push(() => opened.stop());
@@ -235,12 +235,8 @@ test('a blueprint-caught post-canonical bridge error stays retryable and replays
     scopes: [{ schema: 'schedule', verbs: 'act' }],
   });
 
-  const registryDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), `replica-intent-registry-${crypto.randomUUID()}-`),
-  );
-  const codeDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), `replica-intent-code-${crypto.randomUUID()}-`),
-  );
+  const registryDir = await tempDir(`replica-intent-registry-${crypto.randomUUID()}-`);
+  const codeDir = await tempDir(`replica-intent-code-${crypto.randomUUID()}-`);
   cleanups.push(() => fs.rm(registryDir, { recursive: true, force: true }));
   cleanups.push(() => fs.rm(codeDir, { recursive: true, force: true }));
   await fs.mkdir(path.join(codeDir, 'actions'), { recursive: true });

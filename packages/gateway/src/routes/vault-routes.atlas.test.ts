@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 // The Vault Atlas owner routes (issue #441 Part B): stats / graph / pulse.
 // These assert the gateway wires the vault-package builders to owner-gated
 // GET routes and returns the census/graph/pulse payloads. The ghost-semantics
@@ -5,10 +6,6 @@
 // route surface and that numbers are computed from the live schema.
 
 import { afterEach, expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import crypto from 'node:crypto';
 import http from 'node:http';
 import { openVaultRegistry } from '../serve/vault-registry.js';
 import type { VaultPlane } from '../serve/vault-plane.js';
@@ -20,13 +17,6 @@ const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.();
 });
-
-async function tempDir(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `vault-atlas-${crypto.randomUUID()}-`));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 async function startHandlerServer(
   handler: (req: http.IncomingMessage, res: http.ServerResponse) => Promise<boolean>,
 ): Promise<string> {

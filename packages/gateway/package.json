@@ -8,13 +8,14 @@
   },
   "files": [
     "dist",
+    "skills",
     "README.md"
   ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.json && rm -rf dist/web && cp -R ../../apps/web/dist dist/web",
+    "build": "tsc -p tsconfig.json && node scripts/embed-web.mjs",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run",
     "perf:low-end": "node scripts/bench-low-end.mjs --check",
@@ -27,7 +28,7 @@
     "@centraid/automation": "workspace:*",
     "@centraid/backup": "workspace:*",
     "@centraid/blueprints": "workspace:*",
-    "@centraid/skills": "workspace:*",
+    "@centraid/design-tokens": "workspace:*",
     "@centraid/tunnel": "workspace:*",
     "@centraid/vault": "workspace:*",
     "jpeg-js": "^0.4.4",
@@ -36,7 +37,7 @@
     "wasm-vips": "^0.0.18"
   },
   "devDependencies": {
-    "@centraid/tsconfig": "workspace:*",
+    "@centraid/test-kit": "workspace:*",
     "@centraid/web": "workspace:*",
     "@types/node": "^22.0.0",
     "@types/pngjs": "^6.0.5",

@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 // Publish-time `automation.json` validation gap: `validateManifestAt` parsed
 // `app.json` and linted `handler.js` for replay safety, but never ran
 // `@centraid/automation`'s `parseManifest` over `automations/<id>/automation.json`
@@ -12,13 +13,12 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { validateManifestAt } from './validate-manifest.ts';
 
 let dir: string;
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-validate-manifest-'));
+  dir = await tempDir('centraid-validate-manifest-');
 });
 afterEach(async () => {
   await fs.rm(dir, { recursive: true, force: true });

@@ -20,8 +20,6 @@ import {
 import { getGatewayRuntimeSnapshot, nudgeGatewayMonitor } from './gateway-monitor.js';
 import { applyLaunchAtLogin } from './login-item.js';
 import { refreshAuthInjector } from './auth-injector.js';
-import { resetConversationHistoryAuthCache } from './conversation-history-client.js';
-import { resetUserPrefsAuthCache } from './user-prefs-client.js';
 import { resetAppsStoreAuthCache } from './apps-store-client.js';
 import { resolveAppRevealDir, resetAppSessions } from './app-sessions.js';
 import {
@@ -184,6 +182,8 @@ export const Channel = {
   // relaunch through these two.
   UPDATE_STATUS: 'centraid:update:status',
   UPDATE_RELAUNCH: 'centraid:update:relaunch',
+  /** H5 — opt-in OS service install for the detached local gateway. */
+  GATEWAY_SERVICE_INSTALL: 'centraid:gateway:service-install',
 
   // "What's new" changelog: main fetches the project's GitHub Releases (there
   // is no bundled CHANGELOG — each release's notes are the changelog) and
@@ -236,8 +236,6 @@ export function registerIpcHandlers(): void {
   // header per origin; the user-prefs / chat-history clients cache
   // their bearer too. All three need to drop their caches together.
   const invalidateGatewayCaches = async (): Promise<void> => {
-    resetConversationHistoryAuthCache();
-    resetUserPrefsAuthCache();
     resetAppsStoreAuthCache();
     // Per-app editing sessions are per-gateway (the worktrees live in
     // the previous gateway's git store); forget them so the next edit
@@ -254,8 +252,6 @@ export function registerIpcHandlers(): void {
   // vault flip untouched; that's the keyed-state invariant the switch
   // preserves.
   const invalidateVaultCaches = async (): Promise<void> => {
-    resetConversationHistoryAuthCache();
-    resetUserPrefsAuthCache();
     resetAppsStoreAuthCache();
     await refreshAuthInjector();
   };
@@ -833,6 +829,14 @@ export function registerIpcHandlers(): void {
   // Status snapshot for windows that mount after the UPDATE_AVAILABLE
   // broadcast; relaunch restarts the process so it loads the new dist.
   ipcMain.handle(Channel.UPDATE_STATUS, async () => getUpdateStatus());
+  ipcMain.handle(
+    Channel.GATEWAY_SERVICE_INSTALL,
+    async (): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const { installGatewayOsService } = await import('./detached-gateway.js');
+      const { gatewayDir, LOCAL_GATEWAY_ID } = await import('./gateway-paths.js');
+      return installGatewayOsService(gatewayDir(LOCAL_GATEWAY_ID));
+    },
+  );
   ipcMain.handle(Channel.UPDATE_RELAUNCH, async () => {
     relaunchToUpdate();
     return { ok: true as const };

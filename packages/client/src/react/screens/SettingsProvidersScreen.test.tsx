@@ -19,14 +19,9 @@ function makeStatus(over: Partial<AgentsStatusDTO> = {}): AgentsStatusDTO {
         subtitle: 'codex 1.2.3',
         connected: true,
         modelsLoading: false,
-        toolsLoading: false,
         models: [
           { id: 'gpt-5', name: 'GPT-5', tier: 'smart', default: true },
           { id: 'gpt-5-mini', name: 'GPT-5 mini', tier: 'fast' },
-        ],
-        tools: [
-          { name: 'shell', source: 'native', hasArgs: true, description: 'run a command' },
-          { name: 'search', source: 'mcp', server: 'web', hasArgs: false },
         ],
       },
       {
@@ -36,9 +31,7 @@ function makeStatus(over: Partial<AgentsStatusDTO> = {}): AgentsStatusDTO {
         subtitle: 'claude CLI not found on PATH',
         connected: false,
         modelsLoading: false,
-        toolsLoading: false,
         models: [],
-        tools: [],
       },
     ],
     ...over,
@@ -68,7 +61,6 @@ function makeProps(over: Partial<SettingsProvidersBridgeProps> = {}): SettingsPr
   return {
     loadStatus: vi.fn().mockResolvedValue(makeStatus()),
     refreshModels: vi.fn().mockResolvedValue(makeStatus()),
-    refreshTools: vi.fn().mockResolvedValue(makeStatus()),
     activateRunner: vi.fn().mockResolvedValue(true),
     setAgentModel: vi.fn(),
     setSubsystemModel: vi.fn(),
@@ -127,7 +119,7 @@ describe('SettingsProvidersScreen', () => {
     for (const label of ['Assistant', 'In-app Ask', 'Builder', 'Automations']) {
       expect(el.textContent).toContain(label);
     }
-    // Inventory still lists every detected agent with its tools + default model.
+    // Inventory still lists every detected agent with its default model.
     expect(el.querySelectorAll('.entry').length).toBe(2);
     expect(sel(el, 'Default model for Codex').value).toBe('gpt-5');
     expect(el.querySelectorAll('optgroup').length).toBeGreaterThan(0);
@@ -247,25 +239,95 @@ describe('SettingsProvidersScreen', () => {
     expect(claude.querySelector('.usedByNone')?.textContent).toBe('Unused');
   });
 
-  it('expands an agent tool list and saves its default model', async () => {
+  it('saves an agent default model from the inventory', async () => {
     const props = makeProps();
     const el = await mount(props);
-    const toggle = el.querySelector('.toolsToggle') as HTMLButtonElement;
-    await act(async () => toggle.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(el.querySelector('.groups')).toBeTruthy();
-    expect(el.textContent).toContain('shell');
-
     await pick(sel(el, 'Default model for Codex'), 'gpt-5-mini');
     expect(props.setAgentModel).toHaveBeenCalledWith('codex', 'gpt-5-mini');
   });
 
-  it('fires the two refreshes', async () => {
+  it('no longer exposes a per-agent tool listing — Connections owns that', async () => {
+    const el = await mount(makeProps());
+    expect(el.querySelector('.toolsToggle')).toBeNull();
+    expect(el.querySelector('.groups')).toBeNull();
+    expect(el.textContent).not.toContain('Refresh tools');
+  });
+
+  it('fires the model refresh', async () => {
     const props = makeProps();
     const el = await mount(props);
-    const [models, tools] = [...el.querySelectorAll('.actionsRow .btn')] as HTMLButtonElement[];
-    await act(async () => models?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    await act(async () => tools?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const buttons = [...el.querySelectorAll('.actionsRow .btn')] as HTMLButtonElement[];
+    expect(buttons.length).toBe(1);
+    await act(async () => buttons[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.refreshModels).toHaveBeenCalledTimes(1);
-    expect(props.refreshTools).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders each agent card with its identity glyph tile', async () => {
+    const el = await mount(makeProps());
+    const tiles = el.querySelectorAll('.glyphTile');
+    // One tile per inventory entry, each holding a vendored glyph svg.
+    expect(tiles.length).toBe(2);
+    for (const tile of tiles) {
+      expect(tile.querySelector('svg')).toBeTruthy();
+    }
+    // The unavailable agent's tile is muted rather than dropped.
+    const [, claude] = [...el.querySelectorAll('.entry')] as HTMLElement[];
+    expect(claude?.querySelector('.glyphTile[data-unavail="true"]')).toBeTruthy();
+  });
+
+  it('falls back to a generic glyph for a kind this build has no artwork for', async () => {
+    const base = makeStatus();
+    // A kind with no entry in AGENT_GLYPHS must still render an svg, not throw.
+    const el = await mount(
+      makeProps({
+        loadStatus: vi.fn().mockResolvedValue({
+          ...base,
+          cards: [
+            {
+              kind: 'some-future-agent',
+              title: 'Some Future Agent',
+              accent: '#64748b',
+              subtitle: 'detected',
+              connected: true,
+              modelsLoading: false,
+              models: [],
+            },
+          ],
+        }),
+      }),
+    );
+    const tile = el.querySelector('.entry .glyphTile');
+    expect(tile).toBeTruthy();
+    expect(tile?.querySelector('svg')).toBeTruthy();
+  });
+
+  it('lists a runner kind this build predates, disabled until it is available', async () => {
+    const base = makeStatus();
+    const el = await mount(
+      makeProps({
+        loadStatus: vi.fn().mockResolvedValue({
+          ...base,
+          cards: [
+            ...base.cards,
+            {
+              kind: 'some-future-agent',
+              title: 'Some Future Agent',
+              accent: '#64748b',
+              subtitle: 'Install it and run it once.',
+              connected: false,
+              modelsLoading: false,
+              models: [],
+            },
+          ],
+        }),
+      }),
+    );
+    // It reaches the pickers rather than being filtered out as unrecognised…
+    const opts = [...sel(el, 'Agent for Builder').querySelectorAll('option')];
+    const future = opts.find((o) => o.value === 'some-future-agent');
+    expect(future).toBeTruthy();
+    // …and an unavailable agent is offered disabled, not silently missing.
+    expect(future?.disabled).toBe(true);
+    expect(future?.textContent).toContain('unavailable');
   });
 });

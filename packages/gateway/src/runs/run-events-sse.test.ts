@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * SSE streaming for automation runs (issue #158): the
  * `GET /centraid/_automations/run/events?runId=` endpoint. Drives
@@ -8,7 +9,6 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
@@ -41,7 +41,7 @@ function seedTurn(store: ConversationStore, ref: string, turnId: string, started
 }
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), `run-sse-${crypto.randomUUID()}-`));
+  dir = await tempDir(`run-sse-${crypto.randomUUID()}-`);
   await fs.mkdir(path.join(dir, 'apps', APP), { recursive: true });
   const journalDbFile = path.join(dir, 'journal.db');
   const provider = makeJournalDbProvider(journalDbFile);

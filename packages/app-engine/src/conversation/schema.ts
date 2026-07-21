@@ -64,7 +64,7 @@ export interface Conversation {
   /** The automation ref (`<appId>/<id>`) — set for `kind: 'automation'`. */
   readonly automationId?: string;
   readonly title: string;
-  /** Runner kind that owns `adapterSessionId` (codex | claude-code). */
+  /** Runner kind that owns `adapterSessionId` — any ACP runner kind (#479). */
   readonly adapterKind?: string;
   /** Opaque per-runner resume handle; absent until the first turn lands. */
   readonly adapterSessionId?: string;

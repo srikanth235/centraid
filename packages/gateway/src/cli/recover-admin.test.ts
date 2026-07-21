@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * `centraid-gateway recover` (issue #439 R6) — the CLI shell over `recover()`.
  * Exercised against the real in-process fake provider server (real HTTP, real
@@ -8,10 +9,8 @@
  */
 
 import { afterEach, expect, test } from 'vitest';
-import { existsSync, promises as fs } from 'node:fs';
-import os from 'node:os';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { startFakeProviderServer } from '@centraid/backup/dist/testing/fake-provider-server.js';
 import { openVaultRegistry } from '../serve/vault-registry.js';
 import { HealthRegistry } from '../serve/health-registry.js';
@@ -37,15 +36,7 @@ const fail = (message: string, code = 1): never => {
 const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.();
-});
-
-async function tempDir(prefix: string): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `${prefix}-${crypto.randomUUID()}-`));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
-/** Capture stdout + stderr around one call. */
+}); /** Capture stdout + stderr around one call. */
 async function capture(fn: () => Promise<void> | void): Promise<{ out: string; err: string }> {
   const originalOut = process.stdout.write.bind(process.stdout);
   const originalErr = process.stderr.write.bind(process.stderr);

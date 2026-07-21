@@ -1,8 +1,8 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import url from 'node:url';
 import { validateConfig, DaemonConfigError } from './config.ts';
@@ -18,7 +18,7 @@ const TSX_BIN = path.resolve(here, '..', '..', '..', 'node_modules', '.bin', 'ts
 let dataDir: string;
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `centraid-gateway-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`centraid-gateway-${crypto.randomUUID()}-`);
 });
 
 afterEach(async () => {

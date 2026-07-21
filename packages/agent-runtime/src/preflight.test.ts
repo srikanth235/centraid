@@ -1,6 +1,6 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import {
   compareSemver,
@@ -82,7 +82,7 @@ test('attaches an empty model list when no catalog path is set (no seed)', async
 
 test('reads the model list from the catalog without enumerating', async () => {
   invalidatePreflightCache();
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-preflight-'));
+  const dir = await tempDir('centraid-preflight-');
   const catalogPath = path.join(dir, 'model-catalog.json');
 
   // Cold catalog → empty list (a loading/empty state, no seed). The read must
@@ -100,6 +100,142 @@ test('reads the model list from the catalog without enumerating', async () => {
   invalidatePreflightCache();
   const warm = await runPreflight({ kind: 'codex', binPath: 'true' }, { catalogPath });
   expect(warm.models?.map((m) => m.id)).toEqual(['gpt-x']);
+});
+
+// ---- pluggable runner kinds (gemini / qwen / custom acp) ----------------
+
+test('gemini/qwen preflight probe their bin and carry the registry min version', async () => {
+  invalidatePreflightCache();
+  const gemini = await runPreflight({ kind: 'gemini', binPath: 'true' });
+  expect(gemini.kind).toBe('gemini');
+  expect(gemini.ok).toBe(true);
+  expect(gemini.minVersion).toBe(minVersionString('gemini'));
+
+  invalidatePreflightCache();
+  const qwen = await runPreflight({ kind: 'qwen', binPath: 'true' });
+  expect(qwen.ok).toBe(true);
+  expect(qwen.minVersion).toBe(minVersionString('qwen'));
+});
+
+test('opencode/grok/kimi preflight probe their bin and carry the registry min version', async () => {
+  for (const kind of ['opencode', 'grok', 'kimi'] as const) {
+    invalidatePreflightCache();
+    const status = await runPreflight({ kind, binPath: 'true' });
+    expect(status.kind).toBe(kind);
+    expect(status.ok).toBe(true);
+    expect(status.minVersion).toBe(minVersionString(kind));
+  }
+});
+
+test('a missing opencode/grok/kimi binary reports unavailable with the install hint', async () => {
+  // The hint IS the "why not" the providers console shows, so an unavailable
+  // runner must never come back hintless.
+  const expected = {
+    opencode: /opencode-ai/,
+    grok: /SuperGrok|X Premium/,
+    kimi: /uv tool install kimi-cli/,
+  } as const;
+  for (const [kind, pattern] of Object.entries(expected)) {
+    invalidatePreflightCache();
+    const status = await runPreflight({
+      kind: kind as 'opencode' | 'grok' | 'kimi',
+      binPath: `/no/such/${kind}`,
+    });
+    expect(status.ok, kind).toBe(false);
+    expect(status.hint ?? '', kind).toMatch(pattern);
+  }
+});
+
+// ---- wave 7: eight more ACP-native kinds ---------------------------------
+
+const WAVE_7_KINDS = [
+  'copilot',
+  'cursor',
+  'kilo',
+  'cline',
+  'goose',
+  'auggie',
+  'vibe',
+  'droid',
+] as const;
+
+test('every added kind preflights its bin and carries the registry min version', async () => {
+  for (const kind of WAVE_7_KINDS) {
+    invalidatePreflightCache();
+    const status = await runPreflight({ kind, binPath: 'true' });
+    expect(status.kind, kind).toBe(kind);
+    expect(status.ok, kind).toBe(true);
+    expect(status.minVersion, kind).toBe(minVersionString(kind));
+  }
+});
+
+test("cursor's CalVer floor survives the semver-shaped minVersion string", () => {
+  // 2026.07.16 is year.month.day, not semver — but it renders and compares
+  // through the same numeric path, so the reported floor is exactly the date.
+  expect(minVersionString('cursor')).toBe('2026.7.16');
+});
+
+test('a missing binary for any added kind reports unavailable with its install hint', async () => {
+  // The hint IS the "why not" the providers console shows, so an unavailable
+  // runner must never come back hintless — and for these kinds it is often
+  // the only place the paid-plan / provider-config requirement appears.
+  const expected = {
+    copilot: /gh\.io\/copilot-install|copilot-cli/,
+    cursor: /cursor-agent login/,
+    kilo: /@kilocode\/cli/,
+    cline: /npm i -g cline/,
+    goose: /goose configure/,
+    auggie: /@augmentcode\/auggie/,
+    vibe: /uv tool install mistral-vibe/,
+    droid: /app\.factory\.ai\/cli|brew install --cask droid/,
+  } as const;
+  for (const [kind, pattern] of Object.entries(expected)) {
+    invalidatePreflightCache();
+    const status = await runPreflight({
+      kind: kind as (typeof WAVE_7_KINDS)[number],
+      binPath: `/no/such/${kind}`,
+    });
+    expect(status.ok, kind).toBe(false);
+    expect(status.reason ?? '', kind).toMatch(/not found|ENOENT|spawn|--version/);
+    expect(status.hint ?? '', kind).toMatch(pattern);
+  }
+});
+
+test('probeCliAvailability defaults each added kind to its own binary', async () => {
+  // `vibe-acp` (not `vibe`) and `cursor-agent` (not `agent`) are the ones a
+  // regression would most plausibly get wrong, so probe with no binPath and
+  // confirm the default bin is the one that gets looked up and missed.
+  for (const kind of WAVE_7_KINDS) {
+    const status = await probeCliAvailability(kind, `/no/such/${kind}`);
+    expect(status.available, kind).toBe(false);
+  }
+});
+
+test('gemini install hint points at the Gemini CLI', async () => {
+  invalidatePreflightCache();
+  const status = await runPreflight({ kind: 'gemini', binPath: '/no/such/gemini' });
+  expect(status.ok).toBe(false);
+  expect(status.hint ?? '').toMatch(/Gemini CLI/);
+});
+
+test('custom acp kind is unavailable until a binPath is configured', async () => {
+  invalidatePreflightCache();
+  const status = await runPreflight({ kind: 'acp' });
+  expect(status.kind).toBe('acp');
+  expect(status.ok).toBe(false);
+  expect(status.reason ?? '').toMatch(/no binary configured/);
+  expect(status.hint ?? '').toMatch(/Settings/);
+});
+
+test('custom acp kind probes a configured binPath like any other runner', async () => {
+  invalidatePreflightCache();
+  const status = await runPreflight({ kind: 'acp', binPath: 'true' });
+  expect(status.ok).toBe(true);
+});
+
+test('probeCliAvailability reports unavailable for custom acp with no binPath', async () => {
+  const status = await probeCliAvailability('acp');
+  expect(status.available).toBe(false);
 });
 
 // ---- probeCliAvailability tests -----------------------------------------
@@ -212,7 +348,7 @@ afterEach(() => {
 });
 
 test('probeCliAvailability resolves the real install past a node_modules/.bin shim on PATH', async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-preflight-pathfix-'));
+  const root = await tempDir('centraid-preflight-pathfix-');
   const shimDir = path.join(root, 'node_modules', '.bin'); // e.g. a stray ~/node_modules/.bin
   const realDir = path.join(root, 'real-bin'); // e.g. ~/.local/bin
   await writeFakeBin(shimDir, 'codex', '1.0.128');
@@ -229,7 +365,7 @@ test('probeCliAvailability resolves the real install past a node_modules/.bin sh
 });
 
 test('probeCliAvailability still finds the shim if it is the only thing on PATH (sanitization is not overzealous)', async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-preflight-pathfix-'));
+  const root = await tempDir('centraid-preflight-pathfix-');
   const shimDir = path.join(root, 'node_modules', '.bin');
   await writeFakeBin(shimDir, 'codex', '1.0.128');
 
@@ -241,7 +377,7 @@ test('probeCliAvailability still finds the shim if it is the only thing on PATH 
 });
 
 test('probeCliAvailability with an explicit binPath ignores PATH sanitization entirely', async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-preflight-pathfix-'));
+  const root = await tempDir('centraid-preflight-pathfix-');
   const explicitDir = path.join(root, 'node_modules', '.bin'); // even if it LOOKS like a shim dir
   const explicitBin = await writeFakeBin(explicitDir, 'codex', '3.3.3');
 

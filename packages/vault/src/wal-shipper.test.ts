@@ -1,3 +1,4 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // governance: allow-repo-hygiene file-size-limit (#408) one real-vault capture suite — every case drives the same openVaultDb + bootstrapVault + real-WAL fixture through a different guarantee; sharding it would clone that fixture per file and let the copies drift
 // WAL shipper capture correctness (issue #408): G1/G2/G3 capture, G4
 // backpressure, rollover + closers, and the end-to-end capture→seal→replay
@@ -11,12 +12,10 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   rmSync,
   statSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, expect, test } from 'vitest';
@@ -40,7 +39,7 @@ let clock: number;
 const now = () => clock;
 
 beforeEach(() => {
-  root = mkdtempSync(path.join(tmpdir(), 'wal-ship-'));
+  root = tempDirSync('wal-ship-');
   vaultDir = path.join(root, 'vault-a');
   db = openVaultDb({ dir: vaultDir });
   bootstrapVault(db, { ownerName: 'Priya' });

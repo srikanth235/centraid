@@ -1,3 +1,4 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // governance: allow-repo-hygiene file-size-limit one suite per concern of the
 // whole-app bundling seam (issue #404): HTML rewrite, bundle serving/ETag/304,
 // draft exemption, invalidation, shared-asset precedence, JSX runtime, CSS
@@ -5,8 +6,7 @@
 // one fixture builder.
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, utimesSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdirSync, utimesSync, writeFileSync } from 'node:fs';
 import path, { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { serveStatic, type ServeStaticOptions } from './static-server.js';
@@ -54,7 +54,7 @@ function writeTree(dir: string, files: Record<string, string>): void {
 }
 
 function newDir(files: Record<string, string>): string {
-  const dir = mkdtempSync(join(tmpdir(), 'centraid-app-bundle-'));
+  const dir = tempDirSync('centraid-app-bundle-');
   writeTree(dir, files);
   return dir;
 }

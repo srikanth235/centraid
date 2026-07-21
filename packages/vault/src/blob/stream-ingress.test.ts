@@ -1,6 +1,6 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { rmSync } from 'node:fs';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { afterEach, expect, test } from 'vitest';
@@ -117,7 +117,7 @@ function fakeRemote(keys: BlobContentKeyRegistry): FakeRemote {
 }
 
 async function harness(options: { budgetBytes: number; freeBytes?: number }) {
-  const dir = mkdtempSync(path.join(tmpdir(), 'blob-stream-ingress-'));
+  const dir = tempDirSync('blob-stream-ingress-');
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
   const db: VaultDb = openVaultDb({ dir });
   await db.blobTransfers.close();
@@ -412,4 +412,15 @@ test('stream-through resumes open and committing sessions without retransmitting
   expect(committed).toMatchObject({ sha256: sha, custody: 'remote-only' });
   expect(h.fake.partUploads).toEqual([1, 2]);
   expect(unsealBlob(h.keys.getOrCreate(sha), sha, h.fake.objects.get(sha)!)).toEqual(plain);
-}, 15_000);
+  // Raised, not removed. This is the test whose 15s cap surfaced the whole
+  // sweep: written as a RAISE against the old 5s default, it silently became a
+  // CAP when the default moved to 30s, and it timed out at exactly 15000ms in
+  // ci run 29755774783 while passing locally with zero assertion failures.
+  // Dropping to the 30s default is still not enough headroom — it seals, hashes
+  // and writes two full 1 MiB chunks through the real multipart path, ~4.6s
+  // locally, and the ~10x worst-case hosted-runner disk penalty documented in
+  // packages/test-kit/src/vitest.ts puts that near 46s. The payload is left
+  // alone deliberately: `streamChunkBytes` is injectable, but 1 MiB is what
+  // makes this a genuine multi-part resume, so shrinking it to buy time would
+  // quietly narrow what the test covers.
+}, 60_000);

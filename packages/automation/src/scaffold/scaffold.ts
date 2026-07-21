@@ -113,26 +113,29 @@ const DEFAULT_HANDLER = `/**
  *
  * DETERMINISM & THE AUDITED ctx.* RAILS (read before editing)
  * All side effects and I/O MUST go through ctx.* — those calls are recorded in
- * the run ledger and gated by requires.tools, so a raw fetch()/fs call is both
- * invisible to the run history and outside the allowlist. Keep the handler
- * deterministic too: a crashed fire re-runs from the top (there is no resume
- * journal), so nondeterminism makes the re-run diverge and re-fire effects. So:
+ * the run ledger, so a raw fetch()/fs call is invisible to the run history.
+ * Keep the handler deterministic too: a crashed fire re-runs from the top
+ * (there is no resume journal), so nondeterminism makes the re-run diverge and
+ * re-fire effects. So:
  *   • No ambient nondeterminism: no Date.now(), no new Date(), no Math.random(),
  *     no randomUUID(), no reading env/clock/filesystem/network directly.
- *   • All side effects + I/O go through ctx.tool — never a raw fetch()/fs call.
+ *   • All side effects + I/O go through ctx.* — never a raw fetch()/fs call.
  *   • Pure JS between ctx.* calls (loops, conditionals, transforms) is free.
  *   • Need "now" or a watermark? Derive it from ctx.runs.last() / ctx.state, or
- *     read a timestamp off a ctx.tool result — not the wall clock.
+ *     read a timestamp off a ctx.vault result — not the wall clock.
  *
- * TWO COST RAILS
- *   • ctx.tool(name, args)  — ~0 model tokens (mock-puppeted; runs the agent's
- *     native tool). Prefer it for anything a tool or plain JS can do.
- *   • ctx.agent({ prompt }) — the ONLY billed path. Use it only for genuine
+ * DETERMINISTIC WORK vs JUDGEMENT
+ *   • ctx.vault · ctx.fetch · ctx.state · ctx.runs — deterministic, in-process
+ *     work. Zero model tokens, zero processes spawned. Prefer these for
+ *     anything code or a vault read/write can do.
+ *   • ctx.agent({ prompt }) — the ONLY billed path: one bounded model turn
+ *     through the configured agent CLI (over ACP). Use it only for genuine
  *     inference (summarize / classify / extract / draft). Declare the model
  *     tier in automation.json#requires.model.
  *
- * \`ctx\` surface: ctx.tool · ctx.agent · ctx.state.get/set/del · ctx.runs.last/list
- * · ctx.input. Return \`{ summary?, output? }\` — \`summary\` shows in the run list.
+ * \`ctx\` surface: ctx.vault · ctx.fetch · ctx.agent · ctx.state.get/set/delete
+ * · ctx.runs.last/list · ctx.input. Return \`{ summary?, output? }\` —
+ * \`summary\` shows in the run list.
  *
  * @type {import('@centraid/automation').AutomationHandler}
  */
@@ -144,18 +147,19 @@ export default async ({ ctx, log }) => {
   const last = await ctx.runs.last({ status: 'ok' });
   const since = last?.startedAt ?? 0;
 
-  // FREE rail: fetch via a host/MCP tool. Declare its name in requires.tools.
-  // (Replace the placeholder tool + args with the real one for your task.)
-  const items = await ctx.tool('example.list_items', { since });
+  // DETERMINISTIC rail (zero tokens, zero processes): read what you need from
+  // the vault. Replace this placeholder query with the real one for your task.
+  const recent = await ctx.vault.search({ entity: 'core.thread', text: '', limit: 20 });
+  const rows = Array.isArray(recent?.rows) ? recent.rows : [];
 
-  // Deterministic, token-free JS — filter/shape the data yourself.
-  const fresh = (Array.isArray(items) ? items : []).filter((it) => !it.seen);
+  // Pure JS between ctx.* calls — filter/shape the data yourself.
+  const fresh = rows.filter((r) => (r.updated_at ?? 0) > since);
   if (fresh.length === 0) return { summary: 'nothing new' };
 
   // BILLED rail: one constrained model turn for the part that needs judgement.
   // Pass \`json\` so the result is parsed and a model failure is detected.
   const result = await ctx.agent({
-    prompt: \`Summarize these items in one line:\\n\${JSON.stringify(fresh)}\`,
+    prompt: \`Summarize these in one line:\\n\${JSON.stringify(fresh)}\`,
     json: { type: 'object', properties: { summary: { type: 'string' } }, required: ['summary'] },
   });
 
@@ -168,13 +172,12 @@ function starterManifest(name: string, opts: ScaffoldOptions): Manifest {
     opts.triggers !== undefined
       ? opts.triggers
       : [{ kind: 'cron', expr: opts.cronExpr?.trim() || '0 9 * * *' }];
-  // Emit the `requires` slots the builder must fill (issue #167): `tools` is
-  // the ctx.tool allowlist (every fully-qualified name the handler calls);
-  // `model` is the ctx.agent capability tier (`provider/model-id`) — picked for
-  // the cheapest tier that does the inference (e.g. a small/cheap tier for
-  // summarization). Tools default to `[]` (a visible slot the builder grows);
-  // model is left out until chosen so it is never a misleading default.
-  const requires: Record<string, unknown> = { tools: [] };
+  // Emit the `requires` slots the builder may fill (issue #167): `model` is the
+  // ctx.agent capability tier (`provider/model-id`) — picked for the cheapest
+  // tier that does the inference (e.g. a small/cheap tier for summarization).
+  // It is left out until chosen so it is never a misleading default; a handler
+  // that never calls ctx.agent needs no `requires` at all.
+  const requires: Record<string, unknown> = {};
   if (opts.model?.trim()) requires.model = opts.model.trim();
   const raw: Record<string, unknown> = {
     name,

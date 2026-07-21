@@ -24,6 +24,11 @@ const APP_ID = 'web-e2e';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const REPORT_PATH = path.resolve(here, '../../test-results/perf-waterfall-report.json');
+const QUALITY_REPORT_PATH = path.resolve(
+  here,
+  '../../../..',
+  'artifacts/perf-input/pwa-waterfall-report.json',
+);
 
 interface ResourceRow {
   name: string;
@@ -133,6 +138,11 @@ async function establishSession(page: Page): Promise<void> {
 
   await page.evaluate(
     ({ apiUrl, vault }) => {
+      // See web-pwa.spec.ts: sessionStorage wins in `loadConnection`, so the
+      // boot-time bootstrap record must go. Setting rememberDevice keeps this
+      // record durable — matching what `saveConnection` would itself write —
+      // so the reload we measure never re-fetches /web-config.json.
+      sessionStorage.removeItem('centraid.web.v1.connection');
       localStorage.setItem(
         'centraid.web.v1.connection',
         JSON.stringify({
@@ -142,11 +152,20 @@ async function establishSession(page: Page): Promise<void> {
           avatarColor: '#6f5bf6',
           vaultId: vault,
           control: true,
+          rememberDevice: true,
         }),
       );
+      // The fixture app is published to the app store but never *installed*
+      // (no Home pin), so the shell classifies it as a DRAFT — and drafts,
+      // the builder preview, and Publish are all gated behind the
+      // `builderEnabled` dev flag (issue #434, default false). ensureInstalled()
+      // below drives exactly those builder surfaces, so opt the harness in.
       localStorage.setItem(
         'centraid.web.v1.settings',
-        JSON.stringify({ onboardingCompletedAt: new Date().toISOString() }),
+        JSON.stringify({
+          onboardingCompletedAt: new Date().toISOString(),
+          builderEnabled: true,
+        }),
       );
     },
     { apiUrl: API_URL, vault: vaultId },
@@ -263,7 +282,12 @@ test('app-open waterfall — shell + iframe, cold vs warm (real installed app)',
     },
   };
   await fs.mkdir(path.dirname(REPORT_PATH), { recursive: true });
-  await fs.writeFile(REPORT_PATH, JSON.stringify(report, null, 2));
+  await fs.mkdir(path.dirname(QUALITY_REPORT_PATH), { recursive: true });
+  await Promise.all(
+    [REPORT_PATH, QUALITY_REPORT_PATH].map((file) =>
+      fs.writeFile(file, JSON.stringify(report, null, 2)),
+    ),
+  );
 
   // Human-readable summary — the baseline the bundling workstream diffs against.
   console.log('\n================ PWA WATERFALL SUMMARY ================');

@@ -1,8 +1,10 @@
-# Agent-driven e2e — mobile
+# Agent-driven exploratory QA — mobile
 
-Mobile counterpart to [`tests/agent-e2e/`](../agent-e2e/README.md). That
-layer drives Electron over CDP via Playwright; this one drives the Expo
-app on an iOS Simulator **or Android emulator** via [Maestro](https://docs.maestro.dev/).
+This is the committed manual-QA adapter for the Expo app on an iOS Simulator
+or Android emulator. Desktop regression ownership lives in Playwright; this
+directory is mobile-only and drives the native surface via
+[Maestro](https://docs.maestro.dev/). The three stable journeys are also run
+nightly, while ad-hoc agent exploration remains its primary authoring loop.
 
 The structural payoff matches the desktop layer: the device (sim,
 emulator, or real) outlives the runner, so an agent (Claude Code) can
@@ -102,15 +104,15 @@ flows/
 Skeleton:
 
 ```js
-import { runFlow, APP_ID } from '../lib/harness.mjs';
+import { runFlow, APP_ID, FIRST_LAUNCH_TIMEOUT_MS } from '../lib/harness.mjs';
 
 await runFlow('my-flow', async (ctx) => {
   await ctx.run(`appId: ${APP_ID}
 ---
 - launchApp: { clearState: true }
 - extendedWaitUntil:
-    visible: { text: "Open Settings" }
-    timeout: 30000
+    visible: { text: "Everything you build, in one place." }
+    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 - takeScreenshot: home
 `, 'home');
 
@@ -132,6 +134,10 @@ ctx surface:
 - `ctx.restart()` — `stopApp` + `launchApp { clearState: false }` with
   a 300ms pre-stop delay (analogous to the desktop harness's flushMs
   before SIGTERM, gives AsyncStorage time to flush).
+- `ctx.configureGateway(url?, token?)` — clear app state, then save the
+  declared gateway through the real Settings → Advanced UI. Journeys that
+  need a gateway call this themselves so their prerequisites do not depend on
+  execution order.
 - `ctx.note(msg)` — record an observation; surfaces under `## Notes`
   in `verdict.md`.
 
@@ -141,7 +147,7 @@ Authoring rules of thumb (carried over from desktop):
   the harness write the FAIL verdict — don't swallow with try/catch.
 - **Verify the actual unit of truth.** For persistence claims, read
   the AsyncStorage manifest directly via
-  `xcrun simctl get_app_container <udid> com.centraid.mobile data`
+  `xcrun simctl get_app_container <udid> dev.centraid.mobile data`
   rather than only trusting Maestro's text matcher (see "Known
   caveats" below).
 - **Slug = filename = `runFlow()` first arg.** Keeps verdicts and run
@@ -232,12 +238,53 @@ reaches Metro on the host. No manual port forwarding needed.
   `text=` and `value=`), but `assertVisible: "<substring>"` against
   it doesn't match. Read AsyncStorage from disk (see "Authoring
   rules of thumb") rather than relying on UI assertions for state.
+- **A passing step is not a working step.** Every one of these was
+  green in CI while doing nothing, and all of them came from writing
+  selectors out of the React source instead of off a running app.
+  Drive the simulator and read `inspect_view_hierarchy` before you
+  trust a selector:
+  - *Matching is substring-based.* `tapOn: "http://127.0.0.1:18789"`
+    matched the help paragraph that mentions the URL, not the input
+    below it. The tap "COMPLETED", the `inputText` went nowhere, and
+    Save persisted an empty string. Disambiguate with a relative
+    anchor (`below: "Dev fallback for simulators.*"`).
+  - *An off-screen element still matches.* Maestro matches elements
+    hidden behind the tab bar. Home's "Pair desktop" button is one, so
+    tapping it is a silent no-op. `scrollUntilVisible` with
+    `visibilityPercentage: 100` before asserting or tapping.
+  - *Prefer a string unique to the target screen.* `assertVisible:
+    "Settings"` passes on Home — the header gear, the tab, and the
+    screen title are all "Settings". Assert "Desktop link" instead.
+    Same trap for every tab label, which is on screen everywhere.
+  - *Route names are not labels.* Settings calls
+    `navigation.navigate('Apps', …)`, so `visible: "Apps"` looks right
+    in the source — but the tab renders as "Home" and no "Apps" string
+    exists in the app at all.
+  - *The keyboard covers the bottom of the screen.* `hideKeyboard`
+    before tapping anything below an input (e.g. Save).
+  - *The first `inputText` on a clean simulator raises iOS's keyboard
+    onboarding sheet* ("Type English and Dutch … Continue"), which
+    covers the tab bar and swallows later taps. CI boots a fresh
+    simulator every run, so it hits this every time — use
+    `DISMISS_KEYBOARD_ONBOARDING` from the harness after typing.
+- **`RN accessibilityLabel` on `TextInput` does not reach the iOS a11y
+  tree** — the node keeps the placeholder as its `hintText` and gains no
+  `accessibilityText`. Adding one to make a field selectable does not
+  work; use a relative anchor instead.
+- **Budget for a cold JS bundle.** `clearState: true` drops the dev
+  build's cached bundle, so the first launch refetches it from Metro. On
+  a cold transform cache that dominates the flow: `home-loads` measured
+  ~19s end-to-end against a warm Metro and ~43s against a cold one on an
+  M-series Mac, and the nightly runner is slower still. `setup()`
+  prewarms the bundle, and flows use `FIRST_LAUNCH_TIMEOUT_MS` rather
+  than a hand-picked 30s. A 30s budget here is what broke the nightly
+  `mobile-e2e` lane against copy that was entirely correct.
 - **`launchApp: { clearState: true }`** wipes the Expo dev client's
   cached Metro URL. The very first relaunch after clearState may
   show a red "No script URL provided" screen. The harness's Metro
   reachability check catches the obvious failure mode; if the
   redbox still appears, deep-link the dev client once with
-  `xcrun simctl openurl <udid> "com.centraid.mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"`
+  `xcrun simctl openurl <udid> "dev.centraid.mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"`
   to re-inject the URL.
 - **Metro starts from `apps/mobile/` cwd.** Running it from the repo
   root resolves to an empty project root and fails with

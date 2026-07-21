@@ -1,22 +1,27 @@
 // Typography — font families + a small semantic type scale.
 // Two weights only across the chrome (400 + 500/600). No bold. Generous
 // line-height in body for AI prose readability.
+//
+// Primary stacks are system UI fonts only (issue #468 K11). No webfont
+// family names (Geist / Space Grotesk) as the first entry — clients that
+// still load optional branded faces can layer them locally without
+// forcing a network fetch for the chrome.
 
 export const fonts = {
-  display: 'Space Grotesk',
-  mono: 'JetBrains Mono',
-  sans: 'Geist',
+  display: 'system-ui',
+  mono: 'ui-monospace',
+  sans: 'system-ui',
 } as const;
 
 export type FontFamily = keyof typeof fonts;
 
 // Web fallback chains — emitted by `toCss()` as `--font-sans` /
-// `--font-display` / `--font-mono`. Mobile ignores these (RN resolves the
-// bare family names in `fonts` against bundled font assets).
+// `--font-display` / `--font-mono`.
 export const fontStacks = {
-  display: `'${fonts.display}', '${fonts.sans}', ui-sans-serif, system-ui, sans-serif`,
-  mono: `'${fonts.mono}', ui-monospace, SFMono-Regular, monospace`,
-  sans: `'${fonts.sans}', ui-sans-serif, system-ui, -apple-system, sans-serif`,
+  display:
+    'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  mono: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+  sans: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
 } as const satisfies Record<FontFamily, string>;
 
 export interface TypeStyle {

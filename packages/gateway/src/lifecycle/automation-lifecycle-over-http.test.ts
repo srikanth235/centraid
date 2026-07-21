@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Automation CRUD over HTTP (issue #141, C7). The desktop no longer
  * mutates an automation in a local worktree — it reads the app's draft
@@ -14,7 +15,6 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import { scaffoldAppFiles, type ScaffoldFile } from '@centraid/blueprints';
 import * as automation from '@centraid/automation';
@@ -108,7 +108,7 @@ async function readDraft(appId: string, sessionId: string): Promise<ScaffoldFile
 }
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `gw-autocrud-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`gw-autocrud-${crypto.randomUUID()}-`);
   handle = await serve({
     paths: pathsUnder(dataDir),
   });

@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Lifecycle-shared publish/delete helpers (issue #147, Concern 3).
  *
@@ -10,7 +11,6 @@
 
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import * as automation from '@centraid/automation';
@@ -62,7 +62,7 @@ function makeOpts(): LifecycleRouteOptions {
 }
 
 beforeEach(async () => {
-  appDir = await fs.mkdtemp(path.join(os.tmpdir(), `gw-lifecycle-${crypto.randomUUID()}-`));
+  appDir = await tempDir(`gw-lifecycle-${crypto.randomUUID()}-`);
   calls = [];
 });
 

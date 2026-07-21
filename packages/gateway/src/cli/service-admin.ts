@@ -135,6 +135,14 @@ async function buildSpec(parsed: ServiceArgs, fail: Fail): Promise<ServiceUnitSp
     stdoutLog: path.join(logsDir, 'service-stdout.log'),
     stderrLog: path.join(logsDir, 'service-stderr.log'),
     workingDirectory: path.resolve(config.dataDir),
+    // When the desktop app runs `service install`, it spawns its own
+    // `process.execPath` — which is the ELECTRON binary, not node — so that
+    // path lands in `nodeBin`. Baking `ELECTRON_RUN_AS_NODE=1` into the unit
+    // makes launchd/systemd run the Electron binary as plain node (executing
+    // cli.js) instead of launching the full desktop app on every KeepAlive
+    // respawn. Real-node installs never set electron in `process.versions`,
+    // so the flag is omitted and the unit env stays empty.
+    ...(process.versions.electron ? { env: { ELECTRON_RUN_AS_NODE: '1' } } : {}),
   };
 }
 

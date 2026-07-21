@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * The vault assistant's shell-level surface: `_turn` drives the runner over
  * SSE with the assistant preamble (register + live vault map) and records
@@ -10,7 +11,6 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { afterEach, expect, test } from 'vitest';
@@ -68,7 +68,7 @@ async function bootstrap(
   runner: ConversationRunner,
   extra?: Partial<AssistantRouteOptions>,
 ): Promise<string> {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), `assistant-routes-${crypto.randomUUID()}-`));
+  dir = await tempDir(`assistant-routes-${crypto.randomUUID()}-`);
   const registry = fakeRegistry();
   store = new ConversationHistoryStore(() => registry.currentWorkspace());
   const handler = makeAssistantRouteHandler({

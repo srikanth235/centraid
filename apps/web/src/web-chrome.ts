@@ -3,6 +3,10 @@ interface InstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
+const DISMISS_KEY = 'centraid.web.v1.install-dismissed-at';
+/** Re-offer the install banner this many days after "Not now". */
+const REOFFER_DAYS = 14;
+
 function notice(kind: 'install' | 'offline', text: string): HTMLDivElement {
   const element = document.createElement('div');
   element.className = `web-notice web-notice-${kind}`;
@@ -12,6 +16,57 @@ function notice(kind: 'install' | 'offline', text: string): HTMLDivElement {
   element.append(label);
   document.body.append(element);
   return element;
+}
+
+function dismissedRecently(): boolean {
+  try {
+    const raw = localStorage.getItem(DISMISS_KEY);
+    if (!raw) return false;
+    const at = Number(raw);
+    if (!Number.isFinite(at)) return false;
+    const ageMs = Date.now() - at;
+    return ageMs < REOFFER_DAYS * 24 * 60 * 60 * 1000;
+  } catch {
+    return false;
+  }
+}
+
+function markDismissed(): void {
+  try {
+    localStorage.setItem(DISMISS_KEY, String(Date.now()));
+  } catch {
+    /* private mode */
+  }
+}
+
+let bannerEl: HTMLDivElement | null = null;
+
+function showInstallBanner(event: InstallPromptEvent): void {
+  if (bannerEl || dismissedRecently()) return;
+  const banner = notice('install', 'Install Centraid for a focused, app-like workspace.');
+  bannerEl = banner;
+  const install = document.createElement('button');
+  install.type = 'button';
+  install.textContent = 'Install';
+  const dismiss = document.createElement('button');
+  dismiss.type = 'button';
+  dismiss.textContent = 'Not now';
+  dismiss.className = 'web-notice-quiet';
+  install.addEventListener('click', () => {
+    void event
+      .prompt()
+      .then(() => event.userChoice)
+      .finally(() => {
+        banner.remove();
+        bannerEl = null;
+      });
+  });
+  dismiss.addEventListener('click', () => {
+    markDismissed();
+    banner.remove();
+    bannerEl = null;
+  });
+  banner.append(install, dismiss);
 }
 
 export function installWebChrome(): void {
@@ -26,28 +81,11 @@ export function installWebChrome(): void {
   window.addEventListener('offline', syncOnline);
   syncOnline();
 
-  window.addEventListener(
-    'beforeinstallprompt',
-    (raw) => {
-      raw.preventDefault();
-      const event = raw as InstallPromptEvent;
-      const banner = notice('install', 'Install Centraid for a focused, app-like workspace.');
-      const install = document.createElement('button');
-      install.type = 'button';
-      install.textContent = 'Install';
-      const dismiss = document.createElement('button');
-      dismiss.type = 'button';
-      dismiss.textContent = 'Not now';
-      dismiss.className = 'web-notice-quiet';
-      install.addEventListener('click', () => {
-        void event
-          .prompt()
-          .then(() => event.userChoice)
-          .finally(() => banner.remove());
-      });
-      dismiss.addEventListener('click', () => banner.remove());
-      banner.append(install, dismiss);
-    },
-    { once: true },
-  );
+  // Keep listening across the session (not `{ once: true }`) so a later
+  // re-offer after days, or a menu action, can still use the event.
+  window.addEventListener('beforeinstallprompt', (raw) => {
+    raw.preventDefault();
+    const event = raw as InstallPromptEvent;
+    if (!dismissedRecently()) showInstallBanner(event);
+  });
 }

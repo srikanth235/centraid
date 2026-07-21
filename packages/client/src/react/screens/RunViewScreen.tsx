@@ -72,13 +72,17 @@ function TimelineNode({ node }: { node: RunNodeDTO }): JSX.Element {
           {node.input ? (
             <>
               <div className={styles.stepLabel}>Input</div>
-              <pre className={styles.stepPre}>{node.input}</pre>
+              <pre className={styles.stepPre} data-testid="run-step-payload">
+                {node.input}
+              </pre>
             </>
           ) : null}
           {node.output ? (
             <>
               <div className={styles.stepLabel}>Output</div>
-              <pre className={styles.stepPre}>{node.output}</pre>
+              <pre className={styles.stepPre} data-testid="run-step-payload">
+                {node.output}
+              </pre>
             </>
           ) : null}
           {!node.error && !node.response && !node.input && !node.output ? (
@@ -323,7 +327,7 @@ export default function RunViewScreen({
 
   if (mode === 'log') {
     return (
-      <div className={styles.rv}>
+      <div className={styles.rv} data-testid="run-view">
         {header}
         <div className={styles.log}>
           <div className={styles.logStats}>
@@ -368,7 +372,7 @@ export default function RunViewScreen({
   }
 
   return (
-    <div className={styles.rv}>
+    <div className={styles.rv} data-testid="run-view">
       {header}
       <div className={detailsHidden ? cx(styles.rvGrid, styles.rvGridNarrow) : styles.rvGrid}>
         {/* Unclassed: this is .rvGrid's first grid item — the track sizing and
@@ -460,7 +464,9 @@ export default function RunViewScreen({
                         {snap.final.output ? (
                           <>
                             <div className={styles.stepLabel}>Output</div>
-                            <pre className={styles.stepPre}>{snap.final.output}</pre>
+                            <pre className={styles.stepPre} data-testid="run-step-payload">
+                              {snap.final.output}
+                            </pre>
                           </>
                         ) : null}
                       </>

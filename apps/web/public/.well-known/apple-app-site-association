@@ -1,0 +1,14 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "TEAMID.dev.centraid.mobile",
+        "paths": [ "/pair/*", "/open/*", "/link/*" ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [ "TEAMID.dev.centraid.mobile" ]
+  }
+}

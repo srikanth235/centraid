@@ -104,6 +104,11 @@ export interface CentraidSettings {
    */
   launchAtLogin?: boolean;
   /**
+   * H5 — OS service install for the detached gateway. Absent = not asked yet
+   * (onboarding will offer). Explicit false = declined; true = opted in.
+   */
+  offerGatewayService?: boolean;
+  /**
    * DEV FLAG (issue #434, Phase 3) — reveal the in-app builder and every
    * surface that reaches it: the Home composer, "Build new", the ⌘K "Build a
    * new app…" row, draft apps + their menus, "Edit with Centraid", and the
@@ -372,31 +377,36 @@ export type CentraidSshConnectResult =
  * agent authenticates — this reflects CLI presence only. A remote gateway
  * reports its own host's CLIs, not the desktop's.
  */
+export interface CentraidAgentStatusEntry {
+  /**
+   * The runner kind (`codex`, `claude-code`, `gemini`, `qwen`, `acp`). An OPEN
+   * string, deliberately: a newer gateway may register kinds this build has
+   * never heard of, and they must still parse and render (docs/protocol.md
+   * C1a). Compare against `AGENT_RUNNER_KINDS` only to decide whether extra
+   * client-side polish (an accent colour) applies — never to filter the list.
+   */
+  kind: string;
+  /** Human label for pickers and cards, supplied by the gateway. */
+  label: string;
+  /** The CLI is runnable on the gateway host. */
+  available: boolean;
+  /** `<bin> --version` output when available. */
+  version?: string;
+  /** Minimum CLI version whose protocol the gateway verified, e.g. `"0.128.0"`. */
+  minVersion: string;
+  /** Install/setup hint — present only when the CLI is NOT available. */
+  hint?: string;
+  /** Models this runner can serve, from the gateway catalog (issue #188). */
+  models: CentraidRunnerModel[];
+  /** Load state of `models` — loading vs ready vs empty. */
+  modelsStatus: CentraidSurfaceStatus;
+  /** The model this runner defaults to, when its catalog names one. */
+  defaultModel?: string;
+}
+
 export interface CentraidAgentsStatus {
-  /** The `codex` CLI is runnable on the gateway host. */
-  codexAvailable: boolean;
-  /** The `claude` CLI is runnable on the gateway host. */
-  claudeAvailable: boolean;
-  /** `codex --version` output when available. */
-  codexVersion?: string;
-  /** `claude --version` output when available. */
-  claudeVersion?: string;
-  /** Models codex can serve, from the gateway catalog (issue #188). */
-  codexModels?: CentraidRunnerModel[];
-  /** Load state of `codexModels` — loading vs ready vs empty. */
-  codexModelsStatus?: CentraidSurfaceStatus;
-  /** Models Claude Code can serve, from the gateway catalog. */
-  claudeModels?: CentraidRunnerModel[];
-  /** Load state of `claudeModels`. */
-  claudeModelsStatus?: CentraidSurfaceStatus;
-  /** Tools codex exposes (builtins + MCP), from the gateway catalog. */
-  codexTools?: CentraidHostTool[];
-  /** Load state of `codexTools`. */
-  codexToolsStatus?: CentraidSurfaceStatus;
-  /** Tools Claude Code exposes (builtins + MCP), from the gateway catalog. */
-  claudeTools?: CentraidHostTool[];
-  /** Load state of `claudeTools`. */
-  claudeToolsStatus?: CentraidSurfaceStatus;
+  /** One entry per runner kind the gateway registers. */
+  agents: CentraidAgentStatusEntry[];
 }
 
 // The renderer-side chat event union is the gateway's native `TurnStreamEvent`
@@ -905,6 +915,11 @@ interface CentraidApi {
   relaunchToUpdate?(): Promise<{ ok: true }>;
   /** Subscribe to "a new build landed on disk". Returns the unsubscribe. */
   onUpdateAvailable?(cb: (msg: { available: boolean; version: string }) => void): () => void;
+  /**
+   * H5 — opt-in OS service install for the detached local gateway
+   * (`centraid-gateway service install`). Never silent; onboarding offers it.
+   */
+  installGatewayService?(): Promise<{ ok: true } | { ok: false; error: string }>;
 
   // ----- "What's new" changelog -----
   /**
@@ -1135,7 +1150,7 @@ export interface CentraidAutomationManifest {
     | { kind: 'data'; entities: readonly string[]; every?: string }
     | { kind: 'condition'; entity: string; where?: unknown; every?: string }
   >;
-  requires: { mcps?: readonly string[]; tools?: readonly string[]; model?: string };
+  requires: { mcps?: readonly string[]; model?: string };
   /** App ids this automation is associated with. */
   apps?: readonly string[];
   costEstimate?: { model: string; tokensPerFire: number };
@@ -1208,27 +1223,19 @@ export interface CentraidRunnerModel {
  */
 export type CentraidSurfaceStatus = 'loading' | 'ready' | 'empty';
 
-/**
- * One host tool a runner exposes — a native builtin (`Read`) or an MCP tool
- * (`github.list_pull_requests`). Enumerated gateway-side and surfaced in
- * Settings → Agents so the user can see what the builder can reach.
- */
-export interface CentraidHostTool {
-  /** Callable name as the agent sees it. */
-  name: string;
-  /** `native` builtin or `mcp`-backed — the panel groups by this. */
-  source: 'native' | 'mcp';
-  /** MCP server id, when `source === 'mcp'`. */
-  server?: string;
-  /** One-line description, when the runtime reports one. */
-  description?: string;
-  /** The tool's JSON args schema, when it takes caller-supplied arguments. */
-  inputSchema?: unknown;
-}
+// The per-agent host-tool listing (`CentraidHostTool`) retired with the
+// Settings → Agents tools drawer — Connections is where the user reasons about
+// what an agent can reach. Host tools are still enumerated gateway-side; they
+// just feed the builder's grounding block now, never a client surface.
 
 /** Preflight snapshot returned by `getRunnerStatus`. */
 export interface CentraidRunnerStatus {
-  kind: 'codex' | 'claude-code' | 'none';
+  /**
+   * The configured runner kind, or `'none'` when none is. Open string for the
+   * same reason as `CentraidAgentStatusEntry.kind` — a newer gateway can name
+   * a kind this build doesn't know, and the status must still parse.
+   */
+  kind: string;
   ok: boolean;
   version?: string;
   minVersion?: string;
@@ -1377,7 +1384,7 @@ declare global {
       | { kind: 'data'; entities: readonly string[]; every?: string }
       | { kind: 'condition'; entity: string; where?: unknown; every?: string }
     >;
-    requires: { mcps?: readonly string[]; tools?: readonly string[]; model?: string };
+    requires: { mcps?: readonly string[]; model?: string };
     apps?: readonly string[];
     costEstimate?: { model: string; tokensPerFire: number };
     onFailure?: string;

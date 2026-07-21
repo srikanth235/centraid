@@ -1,11 +1,10 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // The owner's whole-model SQL surface: read-only by construction (lexical
 // gate + query_only execution on disk vaults), owner-only at identity, row
 // capped, receipted. The queries in here look like what the vault
 // assistant actually writes — joins, CTEs, window functions.
 
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
+import { rmSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { registerKnowledgeCommands } from '../commands/knowledge.js';
 import { registerLinkCommands } from '../commands/links.js';
@@ -119,7 +118,7 @@ describe('on a disk vault (dedicated query_only connection)', () => {
   let dir: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(path.join(tmpdir(), 'vault-sql-'));
+    dir = tempDirSync('vault-sql-');
     setup(dir);
   });
 

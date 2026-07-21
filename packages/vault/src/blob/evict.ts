@@ -1,8 +1,8 @@
 // Eviction categorization queries (issue #405 §3) — the pure SQL that tells
 // the cache coordinator (blob/cache.ts) which local shas are PINNED (never
 // evict), which are MEDIUM previews (evict first), and which are still in
-// staging (never evict). Split out so cache.ts stays the policy loop and this
-// stays the model read.
+// staging or have a pending offsite obligation (never evict). Split out so
+// cache.ts stays the policy loop and this stays the model read.
 
 import type { DatabaseSync } from 'node:sqlite';
 import { BINARY_DERIVATIVE_SQL } from './derivatives.js';
@@ -53,4 +53,15 @@ export function stagingShas(vault: DatabaseSync): Set<string> {
     )
     .all() as { sha256: string }[];
   return new Set(rows.map((r) => r.sha256));
+}
+
+/**
+ * Promoted bytes with an outstanding offsite upload remain the only durable
+ * local copy even when a stale/healed replica row exists. Promotion consumes
+ * `blob_staging`, so the outbox itself must remain an explicit eviction guard
+ * until the transfer runner deletes the obligation after remote verification.
+ */
+export function pendingOutboxShas(vault: DatabaseSync): Set<string> {
+  const rows = vault.prepare('SELECT sha256 FROM blob_outbox').all() as { sha256: string }[];
+  return new Set(rows.map((row) => row.sha256));
 }

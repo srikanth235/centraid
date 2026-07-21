@@ -1,6 +1,6 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { list, readAppOwned, readAppAt } from './app.js';
 import type { Manifest } from '../manifest/manifest.js';
@@ -38,7 +38,7 @@ describe('automation-app', () => {
   let appsDir: string;
 
   beforeEach(async () => {
-    appsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-apps-'));
+    appsDir = await tempDir('centraid-apps-');
   });
   afterEach(async () => {
     await fs.rm(appsDir, { recursive: true, force: true });

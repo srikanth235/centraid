@@ -1,15 +1,14 @@
-// governance: allow-repo-hygiene file-size-limit one suite over the whole connector contract — manifest, tool allowlist, secret injection (#293) and connection-credential injection (#304) share the runFire fixture
+import { tempDir } from '@centraid/test-kit/temp-dir';
+// governance: allow-repo-hygiene file-size-limit one suite over the whole connector contract — manifest, secret injection (#293) and connection-credential injection (#304) share the runFire fixture
 /*
  * Connector broker invariants (issue #290 phase 4): manifest contract
- * (connector needs a resolved requires.tools allowlist + a vault block),
- * requires-as-allowlist at the tool chokepoint, ctx.agent forbidden in
- * connector handlers, and the honest-liveness fire gate (paused/needs-auth
- * connections never run their connector).
+ * (connector needs a vault block), ctx.agent forbidden in connector handlers,
+ * and the honest-liveness fire gate (paused/needs-auth connections never run
+ * their connector).
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import type { VaultBridge } from '@centraid/app-engine';
 import { runFire, type DispatchSurface, type OpenDispatchArgs } from './fire.js';
@@ -28,7 +27,7 @@ function rawManifest(over: Record<string, unknown> = {}): Record<string, unknown
     enabled: true,
     prompt: 'sync mail',
     triggers: [{ kind: 'cron', expr: '*/30 * * * *' }],
-    requires: { tools: ['gmail.search', 'gmail.get_message'] },
+    requires: {},
     connector: { kind: 'mcp.gmail', label: 'personal', principal: 'me@example.com' },
     vault: VAULT_BLOCK,
     history: { keep: { count: 100 } },
@@ -47,10 +46,6 @@ describe('connector manifest contract', () => {
     });
   });
 
-  it('refuses a connector with no requires.tools allowlist (resolved, not hinted)', () => {
-    expect(() => validateManifest(rawManifest({ requires: {} }))).toThrow(/requires\.tools/);
-  });
-
   it('refuses a connector without a vault block', () => {
     const raw = rawManifest();
     delete raw.vault;
@@ -63,7 +58,7 @@ describe('connector runtime gates', () => {
   let journalDbFile: string;
 
   beforeEach(async () => {
-    appsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-connector-'));
+    appsDir = await tempDir('centraid-connector-');
     journalDbFile = path.join(appsDir, 'journal.db');
   });
   afterEach(async () => {
@@ -81,40 +76,11 @@ describe('connector runtime gates', () => {
     await fs.writeFile(path.join(dir, 'handler.js'), handler);
   }
 
-  const openDispatch = (calls: { name: string }[]) => (_args: OpenDispatchArgs) =>
+  const openDispatch = () => (_args: OpenDispatchArgs) =>
     Promise.resolve({
-      toolDispatcher: async (batch: readonly { name: string; args: unknown }[]) => {
-        calls.push(...batch.map((c) => ({ name: c.name })));
-        return batch.map(() => ({ ok: true, result: 'dispatched' }));
-      },
       agentDispatcher: async () => 'should never run',
       close: async () => undefined,
     } satisfies DispatchSurface);
-
-  it('blocks tools outside requires.tools; allowed calls in the same batch still run', async () => {
-    await writeConnector(
-      `export default async ({ ctx }) => {
-         const [ok, blocked] = await Promise.allSettled([
-           ctx.tool('gmail.search', { q: 'newer_than:1d' }),
-           ctx.tool('gmail.send_message', { to: 'x' }),
-         ]);
-         return { ok: ok.status, blocked: blocked.status, reason: blocked.reason?.message };
-       };`,
-    );
-    const dispatched: { name: string }[] = [];
-    const { outcome } = await runFire(
-      { automationRef: 'mail/pull', appsDir, journalDbFile },
-      { openDispatch: openDispatch(dispatched) },
-    );
-    expect(outcome.ok).toBe(true);
-    expect(outcome.value).toMatchObject({
-      ok: 'fulfilled',
-      blocked: 'rejected',
-      reason: expect.stringContaining('allowlist'),
-    });
-    // The disallowed call never reached the dispatcher.
-    expect(dispatched.map((c) => c.name)).toEqual(['gmail.search']);
-  });
 
   it('forbids ctx.agent in connector handlers', async () => {
     await writeConnector(
@@ -129,7 +95,7 @@ describe('connector runtime gates', () => {
     );
     const { outcome } = await runFire(
       { automationRef: 'mail/pull', appsDir, journalDbFile },
-      { openDispatch: openDispatch([]) },
+      { openDispatch: openDispatch() },
     );
     expect(outcome.ok).toBe(true);
     expect(outcome.value).toMatchObject({
@@ -148,7 +114,7 @@ describe('connector runtime gates', () => {
     };
     const { outcome, record } = await runFire(
       { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => paused },
-      { openDispatch: openDispatch([]) },
+      { openDispatch: openDispatch() },
     );
     expect(outcome.ok).toBe(false);
     expect(outcome.error).toMatch(/paused/);
@@ -165,7 +131,7 @@ describe('connector runtime gates', () => {
     });
     const { outcome } = await runFire(
       { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => deny },
-      { openDispatch: openDispatch([]) },
+      { openDispatch: openDispatch() },
     );
     expect(outcome.ok).toBe(true);
     expect(outcome.value).toMatchObject({ ran: true });
@@ -177,7 +143,7 @@ describe('connector secrets (issue #293)', () => {
   let journalDbFile: string;
 
   beforeEach(async () => {
-    appsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-secrets-'));
+    appsDir = await tempDir('centraid-secrets-');
     journalDbFile = path.join(appsDir, 'journal.db');
   });
   afterEach(async () => {
@@ -197,8 +163,6 @@ describe('connector secrets (issue #293)', () => {
 
   const noDispatch = () =>
     Promise.resolve({
-      toolDispatcher: async (batch: readonly { name: string; args: unknown }[]) =>
-        batch.map(() => ({ ok: true, result: 'dispatched' })),
       agentDispatcher: async () => 'never',
       close: async () => undefined,
     } satisfies DispatchSurface);
@@ -206,15 +170,13 @@ describe('connector secrets (issue #293)', () => {
   it('manifest: requires.secrets must be locker refs, and connector-only', () => {
     const m = validateManifest(
       rawManifest({
-        requires: { tools: ['gmail.search'], secrets: ['locker:item-1:password'] },
+        requires: { secrets: ['locker:item-1:password'] },
       }),
     );
     expect(m.requires.secrets).toEqual(['locker:item-1:password']);
-    expect(() =>
-      validateManifest(
-        rawManifest({ requires: { tools: ['gmail.search'], secrets: ['not-a-ref'] } }),
-      ),
-    ).toThrow(/locker:<item_id>:<column>/);
+    expect(() => validateManifest(rawManifest({ requires: { secrets: ['not-a-ref'] } }))).toThrow(
+      /locker:<item_id>:<column>/,
+    );
     const nonConnector = rawManifest({
       requires: { secrets: ['locker:item-1:password'] },
     });
@@ -244,7 +206,7 @@ describe('connector secrets (issue #293)', () => {
            log.info('fetched ' + res.status);
            return { status: res.status, body: res.text };
          };`,
-        { requires: { tools: ['gmail.search'], secrets: ['locker:item-1:password'] } },
+        { requires: { secrets: ['locker:item-1:password'] } },
       );
       const reveals: string[] = [];
       const bridge: VaultBridge = async (call) => {
@@ -281,7 +243,7 @@ describe('connector secrets (issue #293)', () => {
          }).catch(() => ({ status: 0, text: '' }));
          return { status: res.status };
        };`,
-      { requires: { tools: ['gmail.search'], secrets: ['locker:@github-token:password'] } },
+      { requires: { secrets: ['locker:@github-token:password'] } },
     );
     const aliases: Array<string | undefined> = [];
     const bridge: VaultBridge = async (call) => {
@@ -312,7 +274,7 @@ describe('connector secrets (issue #293)', () => {
            return { reached: false, reason: err.message };
          }
        };`,
-      { requires: { tools: ['gmail.search'], secrets: ['locker:item-1:password'] } },
+      { requires: { secrets: ['locker:item-1:password'] } },
     );
     const bridge: VaultBridge = async (call) => {
       if (call.op === 'reveal') return { ok: true, result: { values: { password: 'x' } } };
@@ -358,7 +320,7 @@ describe('connector secrets (issue #293)', () => {
 
   it('a missing secret item flips the connection to needs-auth and skips the run', async () => {
     await writeAutomation(`export default async () => ({ ranAnyway: true });`, {
-      requires: { tools: ['gmail.search'], secrets: ['locker:item-gone:password'] },
+      requires: { secrets: ['locker:item-gone:password'] },
     });
     const invoked: { command: string; input: Record<string, unknown> }[] = [];
     const bridge: VaultBridge = async (call) => {
@@ -399,7 +361,7 @@ describe('broker-injected connection credentials (issue #304)', () => {
   let journalDbFile: string;
 
   beforeEach(async () => {
-    appsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-connauth-'));
+    appsDir = await tempDir('centraid-connauth-');
     journalDbFile = path.join(appsDir, 'journal.db');
   });
   afterEach(async () => {
@@ -412,17 +374,13 @@ describe('broker-injected connection credentials (issue #304)', () => {
   ): Promise<void> {
     const dir = path.join(appsDir, 'mail', 'automations', 'pull');
     await fs.mkdir(dir, { recursive: true });
-    const manifest = validateManifest(
-      rawManifest({ requires: { tools: [] }, ...over }),
-    ) as Manifest;
+    const manifest = validateManifest(rawManifest({ requires: {}, ...over })) as Manifest;
     await fs.writeFile(path.join(dir, 'automation.json'), JSON.stringify(manifest, null, 2));
     await fs.writeFile(path.join(dir, 'handler.js'), handler);
   }
 
   const noDispatch = () =>
     Promise.resolve({
-      toolDispatcher: async (batch: readonly { name: string; args: unknown }[]) =>
-        batch.map(() => ({ ok: true, result: 'dispatched' })),
       agentDispatcher: async () => 'never',
       close: async () => undefined,
     } satisfies DispatchSurface);
@@ -449,14 +407,6 @@ describe('broker-injected connection credentials (issue #304)', () => {
       server.close();
     }
   }
-
-  it('a fetch-only connector may declare an explicit empty requires.tools (issue #304)', () => {
-    const m = validateManifest(rawManifest({ requires: { tools: [] } }));
-    expect(m.requires.tools).toEqual([]);
-    const raw = rawManifest();
-    delete (raw.requires as Record<string, unknown>).tools;
-    expect(() => validateManifest(raw)).toThrow(/requires\.tools/);
-  });
 
   it('injects {{connection:access_token}} toward a pinned host and scrubs everything recorded', async () => {
     const seen: string[] = [];
@@ -731,7 +681,7 @@ describe('read-only ceiling on injected fetches (issue #304 phase 5)', () => {
   let journalDbFile: string;
 
   beforeEach(async () => {
-    appsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-ro-'));
+    appsDir = await tempDir('centraid-ro-');
     journalDbFile = path.join(appsDir, 'journal.db');
   });
   afterEach(async () => {
@@ -741,15 +691,13 @@ describe('read-only ceiling on injected fetches (issue #304 phase 5)', () => {
   async function writeAutomation(handler: string): Promise<void> {
     const dir = path.join(appsDir, 'mail', 'automations', 'pull');
     await fs.mkdir(dir, { recursive: true });
-    const manifest = validateManifest(rawManifest({ requires: { tools: [] } })) as Manifest;
+    const manifest = validateManifest(rawManifest({ requires: {} })) as Manifest;
     await fs.writeFile(path.join(dir, 'automation.json'), JSON.stringify(manifest, null, 2));
     await fs.writeFile(path.join(dir, 'handler.js'), handler);
   }
 
   const noDispatch = () =>
     Promise.resolve({
-      toolDispatcher: async (batch: readonly { name: string; args: unknown }[]) =>
-        batch.map(() => ({ ok: true, result: 'dispatched' })),
       agentDispatcher: async () => 'never',
       close: async () => undefined,
     } satisfies DispatchSurface);

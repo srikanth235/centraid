@@ -7,6 +7,19 @@ export const GATEWAY_HEADERS_TIMEOUT_MS = 65_000;
 // while still bounding abandoned request residency.
 export const GATEWAY_REQUEST_TIMEOUT_MS = 30 * 60_000;
 export const GATEWAY_MAX_CONNECTIONS = 256;
+/**
+ * How long `close()` lets in-flight requests finish before it destroys the
+ * remaining sockets.
+ *
+ * `http.Server.close()` resolves only once every connection is gone. Node
+ * reaps *idle* keep-alive sockets for us, but an **active** request never
+ * ends on its own — and this gateway serves several endless `text/event-stream`
+ * responses (logs, turn, change feed, run events). One subscribed client is
+ * therefore enough to make a bare `server.close()` hang forever, which is
+ * exactly what wedged the desktop app's `before-quit` teardown. So: ask
+ * politely, then force.
+ */
+export const GATEWAY_SHUTDOWN_GRACE_MS = 2_000;
 
 /** Shared low-RAM listener policy for the API and dedicated PWA origins (#456 R3). */
 export function tuneGatewayHttpServer(server: http.Server): void {

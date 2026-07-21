@@ -35,8 +35,6 @@ export const MANIFEST_FILE = 'automation.json';
 export interface ManifestRequires {
   /** MCP server ids the handler requires (`["github", "linear"]`). */
   readonly mcps?: readonly string[];
-  /** Fully-qualified tool names the handler calls (`["github.list_pull_requests"]`). */
-  readonly tools?: readonly string[];
   /**
    * Model the `ctx.agent` calls should route through. Format: `provider/model-id`
    * (`"anthropic/claude-3-5-sonnet"`, `"openai/gpt-4o"`). Must not target the
@@ -266,10 +264,10 @@ export interface HistoryConfig {
  * Connector declaration (issue #290 phase 4): this automation is a PUBLISHED
  * CONNECTOR — deterministic code syncing one external source into the vault.
  * The broker invariants hang off this block:
- *   - `requires.tools` becomes a HARD allowlist (a calendar importer
- *     physically cannot call gmail.send — the confused-deputy defense);
  *   - `ctx.agent` is forbidden at runtime (agents write code, not data —
  *     an LLM turn inside a sync loop breaks determinism, cost and audit);
+ *   - external reads ride `ctx.fetch` (broker-injected, host-pinned,
+ *     read-only) and external writes are STAGED through the outbox;
  *   - `principal`, when set, pins the external account: `sync.begin_run`
  *     refuses a mismatched observed principal and flips the connection to
  *     `needs-auth` (liveness is honest, never silent).
@@ -572,7 +570,6 @@ function validateRequires(raw: unknown): ManifestRequires {
   }
   const req = (raw ?? {}) as Record<string, unknown>;
   const mcps = optionalStringArray(req.mcps, 'requires.mcps');
-  const tools = optionalStringArray(req.tools, 'requires.tools');
   let model: string | undefined;
   if (req.model !== undefined) {
     if (typeof req.model !== 'string' || req.model.length === 0) {
@@ -608,13 +605,12 @@ function validateRequires(raw: unknown): ManifestRequires {
   }
   const requires: ManifestRequires = {};
   if (mcps) (requires as { mcps: readonly string[] }).mcps = mcps;
-  if (tools) (requires as { tools: readonly string[] }).tools = tools;
   if (model !== undefined) (requires as { model: string }).model = model;
   if (secrets) (requires as { secrets: readonly string[] }).secrets = secrets;
   return requires;
 }
 
-function validateConnector(value: unknown, requires: ManifestRequires): ConnectorSpec | undefined {
+function validateConnector(value: unknown): ConnectorSpec | undefined {
   if (value === undefined) return undefined;
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new ManifestError('invalid_field', 'manifest.connector must be an object', 'connector');
@@ -625,18 +621,6 @@ function validateConnector(value: unknown, requires: ManifestRequires): Connecto
   let principal: string | undefined;
   if (c.principal !== undefined) {
     principal = requireString(c.principal, 'connector.principal');
-  }
-  // Resolved, not hinted (issue #290 decision 4): a connector's tool needs
-  // are a CONTRACT — the allowlist must be DECLARED, never implied. An
-  // explicit `[]` is legal since issue #304: a broker-credential connector
-  // reaches its source through `ctx.fetch` alone, and the empty allowlist
-  // states "no harness tools" out loud (every ctx.tool call errors).
-  if (!requires.tools) {
-    throw new ManifestError(
-      'invalid_field',
-      'manifest.connector requires a requires.tools allowlist — name the harness tools it calls, or [] for a fetch-only connector (issues #290, #304)',
-      'requires.tools',
-    );
   }
   return { kind, label, ...(principal !== undefined ? { principal } : {}) };
 }
@@ -769,7 +753,7 @@ export function validateManifest(raw: unknown): Manifest {
   const prompt = requireString(r.prompt, 'prompt');
   const triggers = resolveTriggers(r);
   const requires = validateRequires(r.requires);
-  const connector = validateConnector(r.connector, requires);
+  const connector = validateConnector(r.connector);
   const vault = validateVault(r.vault);
   // A connector's whole job is writing staged rows into the vault — a
   // connector manifest without a vault block can never do anything.

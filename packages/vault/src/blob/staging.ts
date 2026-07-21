@@ -21,7 +21,7 @@ import {
 } from './derivatives.js';
 import { extractBlobMeta, sniffMediaType } from './pipeline.js';
 import { upsertContentEmbedding } from './semantic-contributions.js';
-import { blobUriFor, sha256OfBytes } from './store.js';
+import { sha256OfBytes } from './store.js';
 
 /** Staged bytes linger this long before the sweep reclaims them. */
 export const STAGING_TTL_HOURS = 24;
@@ -263,20 +263,6 @@ export function stagedInfoTx(vault: DatabaseSync, sha256: string): StagedRow | n
     )
     .get(sha256) as StagedRow | undefined;
   return row ?? null;
-}
-
-/**
- * Claim staged bytes inside a command's transaction: the staging row goes,
- * the caller writes the content item. blob_staging lives in vault.db, so a
- * rolled-back command leaves the stage intact.
- */
-export function claimStagedTx(vault: DatabaseSync, sha256: string): void {
-  vault.prepare('DELETE FROM blob_staging WHERE sha256 = ? AND variant IS NULL').run(sha256);
-}
-
-/** `content_uri` a claimed sha gets — exported for the command handlers. */
-export function stagedContentUri(sha256: string): string {
-  return blobUriFor(sha256);
 }
 
 export interface StagingSweepResult {

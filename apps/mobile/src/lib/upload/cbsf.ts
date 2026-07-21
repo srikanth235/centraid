@@ -49,9 +49,6 @@ const ALGO_STORE = 0x00;
 export const FRAME_BYTES = 4 * 1024 * 1024;
 /** Frames per multipart part, giving the repo's fixed 16 MiB plaintext part. */
 export const FRAMES_PER_PART = 4;
-/** Plaintext bytes per multipart part. */
-export const PART_PLAINTEXT_BYTES = FRAME_BYTES * FRAMES_PER_PART;
-
 export function frameCountFor(plaintextSize: number): number {
   return plaintextSize === 0 ? 0 : Math.ceil(plaintextSize / FRAME_BYTES);
 }

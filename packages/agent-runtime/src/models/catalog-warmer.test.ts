@@ -1,19 +1,16 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import type { RunnerModel } from '@centraid/app-engine';
-import type { HostTool } from '../host-tools.ts';
 import { readCatalog } from './catalog.ts';
 import { CatalogWarmer, deriveStatus } from './catalog-warmer.ts';
 
 let counter = 0;
 async function tmpCatalogPath(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-warmer-'));
+  const dir = await tempDir('centraid-warmer-');
   return path.join(dir, `model-catalog-${counter++}.json`);
 }
 
-const noTools = async (): Promise<HostTool[]> => [];
 const noModels = async (): Promise<RunnerModel[]> => [];
 
 test('warm writes a non-empty model enumeration to the catalog', async () => {
@@ -21,7 +18,6 @@ test('warm writes a non-empty model enumeration to the catalog', async () => {
   const warmer = new CatalogWarmer({
     catalogPath,
     enumerateModels: async () => [{ id: 'sonnet' }, { id: 'haiku' }],
-    enumerateTools: noTools,
   });
   await warmer.warm('claude-code', 'models');
   const entry = (await readCatalog(catalogPath))?.runners['claude-code'];
@@ -40,7 +36,6 @@ test('concurrent warms for the same surface dedupe to one enumeration', async ()
       await new Promise((resolve) => setTimeout(resolve, 20));
       return [{ id: 'sonnet' }];
     },
-    enumerateTools: noTools,
   });
   const a = warmer.warm('claude-code', 'models');
   expect(warmer.isWarming('claude-code', 'models')).toBe(true);
@@ -55,13 +50,11 @@ test('an empty enumeration writes nothing and never clobbers a prior entry', asy
   const good = new CatalogWarmer({
     catalogPath,
     enumerateModels: async () => [{ id: 'sonnet' }],
-    enumerateTools: noTools,
   });
   await good.warm('claude-code', 'models');
   const bad = new CatalogWarmer({
     catalogPath,
     enumerateModels: noModels, // transient failure → []
-    enumerateTools: noTools,
   });
   await bad.warm('claude-code', 'models');
   expect(
@@ -76,24 +69,9 @@ test('a throwing enumerator is swallowed and writes nothing', async () => {
     enumerateModels: async () => {
       throw new Error('boom');
     },
-    enumerateTools: noTools,
   });
   await warmer.warm('claude-code', 'models'); // must not reject
   expect(await readCatalog(catalogPath)).toBe(undefined);
-});
-
-test('models warm and tools warm merge into one runner entry', async () => {
-  const catalogPath = await tmpCatalogPath();
-  const warmer = new CatalogWarmer({
-    catalogPath,
-    enumerateModels: async () => [{ id: 'sonnet' }],
-    enumerateTools: async () => [{ name: 'Read', source: 'native' }],
-  });
-  await warmer.warm('claude-code', 'models');
-  await warmer.warm('claude-code', 'tools');
-  const entry = (await readCatalog(catalogPath))?.runners['claude-code'];
-  expect(entry?.models?.map((m) => m.id)).toEqual(['sonnet']);
-  expect(entry?.tools?.map((t) => t.name)).toEqual(['Read']);
 });
 
 test('deriveStatus: loading wins over a cache, then ready, else empty', () => {

@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * HTTP-level coverage for the paired-device routes (issue #376): list +
  * revoke against REAL `EnrollmentStore` / `DeviceTokenStore` JSON files on
@@ -5,12 +6,9 @@
  * its vaults) and the revoke → token cascade that mirrors device-admin.ts.
  */
 
-import { afterEach, expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import http from 'node:http';
-import crypto from 'node:crypto';
-import os from 'node:os';
 import path from 'node:path';
-import { promises as fs } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { AUTHED_DEVICE_HEADER } from '@centraid/app-engine';
 import type { RouteHandler } from '../serve/build-gateway.js';
@@ -20,13 +18,6 @@ import { PairingTicketStore, parsePairingTicket } from '../serve/pairing-store.j
 import { makeDevicesRouteHandler } from './devices-routes.js';
 
 const servers: http.Server[] = [];
-const cleanups: Array<() => Promise<void> | void> = [];
-
-afterEach(async () => {
-  for (const server of servers.splice(0)) server.close();
-  while (cleanups.length > 0) await cleanups.pop()?.();
-});
-
 function startHandlerServer(handler: RouteHandler): Promise<string> {
   const server = http.createServer((req, res) => {
     void handler(req, res).then((owned) => {
@@ -44,13 +35,6 @@ function startHandlerServer(handler: RouteHandler): Promise<string> {
     });
   });
 }
-
-async function tempDir(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `devices-routes-${crypto.randomUUID()}-`));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 const VAULT_NAMES: Record<string, string> = { 'vault-a': 'Alpha', 'vault-b': 'Beta' };
 const vaultName = (id: string): string | undefined => VAULT_NAMES[id];
 

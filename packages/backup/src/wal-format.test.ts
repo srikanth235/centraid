@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 // governance: allow-repo-hygiene file-size-limit (#408) the wal-format behavior suite — key codecs, sealing, frame math against real WALs, and the replay planner share one fixture vocabulary; sharding would duplicate it per file
 /*
  * WAL segment format tests (FORMAT.md § WAL segments, § Encryption — /1,
@@ -9,8 +10,7 @@
  * verbatim: silent drift there would strand every already-shipped stream.
  */
 
-import fss, { promises as fs } from 'node:fs';
-import os from 'node:os';
+import fss from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, test } from 'vitest';
@@ -53,13 +53,6 @@ const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.();
 });
-
-async function tempDir(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'backup-wal-format-'));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 const GEN = 'ab12'.repeat(8); // 32 hex chars
 const GEN2 = 'cd34'.repeat(8);
 const VAULT_ID = 'vault-1';

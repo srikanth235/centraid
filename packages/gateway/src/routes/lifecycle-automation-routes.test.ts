@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * `POST /centraid/_automations/update?ref=` — the instructions-first
  * editor's save path (automations UI revamp). Boots a real gateway and
@@ -9,7 +10,6 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import { serve, type GatewayServeHandle } from '../serve/serve.ts';
 import type { GatewayPaths } from '../paths.ts';
@@ -70,7 +70,7 @@ async function update(
 }
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `gw-autoupdate-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`gw-autoupdate-${crypto.randomUUID()}-`);
   handle = await serve({ paths: pathsUnder(dataDir) });
 });
 
@@ -214,18 +214,29 @@ test('headless compile returns a run id and records failure in the automation th
   const { runId } = (await res.json()) as { runId: string };
   expect(runId).toContain(':compile:');
 
+  // Wait on a wall-clock deadline, not an iteration count. A compile spawns a
+  // real app-server subprocess; the old 20x25ms budget was 500ms, which a
+  // loaded CI runner blows through routinely. When it expired the loop simply
+  // fell through and the assertions below still passed against a run row that
+  // had not ended yet — so the test proved nothing it claimed, and afterEach
+  // then deleted the data dir while the compile was still writing objects into
+  // code/apps.git, surfacing as ENOTEMPTY from an unrelated-looking rm.
+  // Asserting endedAt is what makes the wait real: the run must be over before
+  // this test returns, which is also what makes teardown safe.
+  const deadline = Date.now() + 20_000;
   let runs: Array<{ runId: string; triggerKind: string; endedAt?: number; ok: boolean }> = [];
-  for (let attempt = 0; attempt < 20; attempt++) {
+  let run: (typeof runs)[number] | undefined;
+  do {
     const feed = await fetch(
       `${handle.url}/centraid/_automations/runs?ref=${encodeURIComponent(created.row.ref)}`,
       { headers: auth() },
     );
     runs = ((await feed.json()) as { runs: typeof runs }).runs;
-    if (runs.find((run) => run.runId === runId)?.endedAt !== undefined) break;
+    run = runs.find((candidate) => candidate.runId === runId);
+    if (run?.endedAt !== undefined) break;
     await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  expect(runs.find((run) => run.runId === runId)).toMatchObject({
-    triggerKind: 'compile',
-    ok: false,
-  });
+  } while (Date.now() < deadline);
+
+  expect(run).toMatchObject({ triggerKind: 'compile', ok: false });
+  expect(run?.endedAt).toBeTypeOf('number');
 });

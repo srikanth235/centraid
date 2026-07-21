@@ -641,22 +641,6 @@ export function assertExtSchemaOwnership(appId: string, schema: string): void {
   }
 }
 
-/** The live DDL of the (any-status) live band — for the assistant's map. */
-export function extBandDdl(db: VaultDb): string {
-  try {
-    const rows = db.vault
-      .prepare(
-        `SELECT e.app_id, e.physical, m.sql FROM consent_app_ext e
-           JOIN sqlite_master m ON m.name = e.physical AND m.type = 'table'
-          WHERE e.band = 'live' ORDER BY e.physical`,
-      )
-      .all() as { app_id: string; physical: string; sql: string }[];
-    return rows.map((r) => `${r.sql};`).join('\n');
-  } catch {
-    return '';
-  }
-}
-
 /**
  * Recreate missing ext physical tables from registry rows — the import path:
  * a fresh vault receives `consent_app_ext` rows from the artifact first,

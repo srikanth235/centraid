@@ -1,5 +1,5 @@
 {
-  "extends": "@centraid/tsconfig/expo.json",
+  "extends": "../../tsconfig.expo.json",
   "compilerOptions": {
     "jsx": "react-native",
     "types": ["react", "react-native"]

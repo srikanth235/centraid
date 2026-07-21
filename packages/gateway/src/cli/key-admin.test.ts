@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Seal-key custody CLI (issue #298 items 1+2+8): `centraid-gateway key
  * status|export|restore|rotate`. The DECIDED recovery story — the key
@@ -6,16 +7,21 @@
  * restore must work on exactly the vault the registry refuses to open.
  */
 
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+
 import { promises as fs, existsSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { sealKeyFileFor } from '@centraid/vault';
 import { commandVault } from './vault-admin.ts';
 import { commandKey } from './key-admin.ts';
 import { daemonLayoutFor } from './paths.ts';
+
+// See admin.test.ts: real vault/daemon bootstrap per test, so this file is
+// fsync-bound and needs an escalation above the 30s node-project default.
+// Same 60s budget as its sibling CLI suites.
+vi.setConfig({ testTimeout: 60_000 });
 
 class CliFailError extends Error {
   constructor(
@@ -48,7 +54,7 @@ async function capture(fn: () => Promise<void> | void): Promise<string> {
 }
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `key-admin-${crypto.randomUUID()}-`));
+  dataDir = await tempDir(`key-admin-${crypto.randomUUID()}-`);
 });
 
 afterEach(() => {

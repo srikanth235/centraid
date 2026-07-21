@@ -1,14 +1,12 @@
 /*
  * @centraid/agent-runtime
  *
- * Engine layer for centraid's agent surfaces. Two coding-agent backends,
- * one normalized event stream:
- *
- *   - `codex app-server` — spawned as a subprocess; JSON-RPC 2.0 stdio
- *   - `@anthropic-ai/claude-agent-sdk` — imported in-process; async generator
- *
- * Both emit the same `TurnStreamEvent` shape, so downstream surfaces
- * don't need to know which one ran a given turn.
+ * Engine layer for centraid's agent surfaces. Every coding-agent kind runs
+ * through ONE integration path — the Agent Client Protocol (ACP): JSON-RPC
+ * 2.0 over stdio, spoken natively by most kinds and via a first-party adapter
+ * for claude-code and codex (issue #479). A single backend normalizes every
+ * kind's stream into the same `TurnStreamEvent` shape, so downstream surfaces
+ * don't need to know which agent ran a given turn.
  *
  * Where this package fits in the bigger picture:
  *
@@ -57,19 +55,26 @@ export {
 // inputSchema). Both coding-agent backends declare their tools from these.
 export { VAULT_SQL_TOOL, VAULT_INVOKE_TOOL, VAULT_CONTENT_TOOL } from './vault-sql-tool.js';
 
+// The single turn-driving path (issue #479). codex and claude-code no longer
+// have bespoke backends — they are ACP entries whose adapter is launched by
+// `AcpAdapterSpec`, same as every other kind.
 export {
-  runCodexTurn,
-  type CodexTurnInput,
-  type CodexTurnConfig,
-  type CodexTurnResult,
-} from './backends/codex/backend.js';
+  runAcpTurn,
+  type AcpAdapterSpec,
+  type AcpTurnInput,
+  type AcpTurnConfig,
+  type AcpTurnResult,
+} from './backends/acp/backend.js';
 
+// Runner-backend registry — the single dispatch table every runner kind
+// registers with. `runTurn`, preflight, and model enumeration all read from
+// it; the gateway can enumerate `RUNNER_BACKENDS` for labels / defaults.
 export {
-  runClaudeTurn,
-  type ClaudeTurnInput,
-  type ClaudeTurnConfig,
-  type ClaudeTurnResult,
-} from './backends/claude/backend.js';
+  RUNNER_BACKENDS,
+  getRunnerBackend,
+  type RunnerBackend,
+  type RunnerVersion,
+} from './registry.js';
 
 export {
   runPreflight,
@@ -81,12 +86,12 @@ export {
   compareSemver,
 } from './preflight.js';
 
-// Per-runner model/tool catalog (issue #188). Pure reads (`readRunner*`) are
-// exposed so the gateway can surface each agent's models/tools for the
-// per-agent picker in Settings → Agents and the active runner via runner-status;
-// the `CatalogWarmer` owns enumeration (boot + Refresh) and `deriveStatus` turns
+// Per-runner model catalog (issue #188). The pure read (`readRunnerModels`) is
+// exposed so the gateway can surface each agent's models for the per-agent
+// picker in Settings → Agents and the active runner via runner-status; the
+// `CatalogWarmer` owns enumeration (boot + Refresh) and `deriveStatus` turns
 // the cache into the picker's loading/ready/empty tri-state.
-export { readRunnerModels, readRunnerTools } from './models/catalog.js';
+export { readRunnerModels } from './models/catalog.js';
 export {
   CatalogWarmer,
   deriveStatus,
@@ -96,33 +101,12 @@ export {
 } from './models/catalog-warmer.js';
 export { enumerateRunnerModels } from './models/enumerators.js';
 
-// Host tool enumeration — feeds the builder's available-tools grounding
-// block so the agent declares `ctx.tool` calls + `requires` against the
-// tools the host runtime actually exposes (issue #80 follow-up).
-export { enumerateHostTools, type HostTool } from './host-tools.js';
-
-// Mock-LLM server (issue #70) now lives in `@centraid/automation`
-// (issue #166). Re-exported here for back-compat.
-export {
-  startMockLlmServer,
-  type MockLlmServerHandle,
-  type MockLlmServerOptions,
-  type StagedTurn,
-  type CapturedToolResult,
-} from '@centraid/automation';
-
 // Local-side per-fire orchestrator for automations (issue #90 model-B).
 // Looks up the user-owned automation and runs its handler against a live
-// dispatch surface, driving the host agent in-process (Claude Agent SDK) or
-// as a `codex exec` subprocess.
-export {
-  runAutomation,
-  defaultRunHostAgent,
-  type RunAutomationOptions,
-  type RunHostAgent,
-  type RunHostAgentInput,
-  type RunHostAgentResult,
-} from './automation/run-automation.js';
+// dispatch surface. The only billed rail is `ctx.agent` — a bounded model
+// turn routed through the runner registry (issue #479); the deterministic
+// rails (`ctx.vault` / `ctx.fetch` / `ctx.state` / `ctx.runs`) run in-process.
+export { runAutomation, type RunAutomationOptions } from './automation/run-automation.js';
 
 // Scheduling lives in `@centraid/automation` now (issue #149): the gateway
 // owns an in-process cron `InProcessScheduler` and fires automations while it

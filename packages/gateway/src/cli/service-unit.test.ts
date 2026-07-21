@@ -83,6 +83,39 @@ test('buildLaunchdPlist escapes XML-significant characters in paths', () => {
   assertWellFormedXml(xml);
 });
 
+test('buildLaunchdPlist omits EnvironmentVariables when spec.env is empty/absent', () => {
+  const xml = buildLaunchdPlist(DEFAULT_LAUNCHD_LABEL, spec);
+  expect(xml).not.toContain('<key>EnvironmentVariables</key>');
+});
+
+test('buildLaunchdPlist emits EnvironmentVariables so an Electron nodeBin runs as node', () => {
+  // When the desktop app installs the service, nodeBin is the Electron binary;
+  // ELECTRON_RUN_AS_NODE=1 in the unit env is what stops launchd's KeepAlive
+  // from relaunching the full desktop app in a flash-open/shut respawn loop.
+  const withEnv: ServiceUnitSpec = { ...spec, env: { ELECTRON_RUN_AS_NODE: '1' } };
+  const xml = buildLaunchdPlist(DEFAULT_LAUNCHD_LABEL, withEnv);
+  expect(xml).toMatch(
+    /<key>EnvironmentVariables<\/key>\s*<dict>\s*<key>ELECTRON_RUN_AS_NODE<\/key>\s*<string>1<\/string>\s*<\/dict>/,
+  );
+  assertWellFormedXml(xml);
+});
+
+test('buildSystemdUnit omits Environment when spec.env is empty/absent', () => {
+  const unit = buildSystemdUnit(spec);
+  expect(unit).not.toContain('Environment=');
+});
+
+test('buildSystemdUnit emits Environment lines before ExecStart', () => {
+  const withEnv: ServiceUnitSpec = { ...spec, env: { ELECTRON_RUN_AS_NODE: '1' } };
+  const unit = buildSystemdUnit(withEnv);
+  expect(unit).toContain('Environment=ELECTRON_RUN_AS_NODE=1');
+  const lines = unit.split('\n');
+  const envIdx = lines.findIndex((l) => l.startsWith('Environment='));
+  const execIdx = lines.findIndex((l) => l.startsWith('ExecStart='));
+  expect(envIdx).toBeGreaterThanOrEqual(0);
+  expect(envIdx).toBeLessThan(execIdx);
+});
+
 test('buildSystemdUnit carries Restart=on-failure, RestartSec, and WantedBy=default.target', () => {
   const unit = buildSystemdUnit(spec);
   expect(unit).toMatch(/^\[Unit\]/m);

@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 // The outbox executor (issue #306): the only path from an approved artifact
 // to the network. Scenarios: an approved item drains with the credential
 // injected toward the pinned host; a pending item never drains; a host
@@ -6,10 +7,6 @@
 // it; and the blocking/review split surfaces what each side owns.
 
 import { afterEach, expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import crypto from 'node:crypto';
 import http from 'node:http';
 import { openVaultPlane, type VaultPlane } from './vault-plane.js';
 import { ConnectionBroker } from './connection-broker.js';
@@ -21,13 +18,6 @@ const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.();
 });
-
-async function tempDir(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `outbox-exec-${crypto.randomUUID()}-`));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 function openPlane(dir: string): VaultPlane {
   const plane = openVaultPlane({ dir, logger: silentLogger, ownerName: 'Priya' });
   cleanups.push(() => plane.stop());
@@ -278,7 +268,7 @@ test('a hung external write times out; deferred per the existing network-failure
   // the item stays approved for a later pass, nothing terminal happens.
   expect(report).toMatchObject({ approved: 1, sent: 0, failed: 0, deferred: 1 });
   expect(itemRow(plane, itemId).status).toBe('approved');
-}, 10_000);
+});
 
 test('a credential-less connection defers the item — it survives for the reconnect', async () => {
   const plane = openPlane(await tempDir());

@@ -10,9 +10,7 @@
       "expr": "40 * * * *"
     }
   ],
-  "requires": {
-    "tools": []
-  },
+  "requires": {},
   "connector": {
     "kind": "pull.github",
     "label": "personal"

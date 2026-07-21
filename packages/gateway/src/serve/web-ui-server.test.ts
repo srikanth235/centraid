@@ -1,8 +1,8 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import http from 'node:http';
 import { promises as fs } from 'node:fs';
 import { AddressInfo } from 'node:net';
-import os from 'node:os';
 import path from 'node:path';
 import { brotliCompressSync } from 'node:zlib';
 import { startWebUiServer, type WebUiServerHandle } from './web-ui-server.js';
@@ -11,7 +11,7 @@ let root: string;
 let server: WebUiServerHandle;
 
 beforeEach(async () => {
-  root = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-web-ui-'));
+  root = await tempDir('centraid-web-ui-');
   await fs.mkdir(path.join(root, 'assets'));
   await fs.writeFile(
     path.join(root, 'index.html'),

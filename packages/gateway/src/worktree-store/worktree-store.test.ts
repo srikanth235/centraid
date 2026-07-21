@@ -1,7 +1,7 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 // governance: allow-repo-hygiene file-size-limit unit tests for one module — splitting by topic would scatter the shared helpers
 import { test, expect } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { WorktreeStore } from './worktree-store.js';
@@ -9,7 +9,7 @@ import { run } from './git.js';
 import { WorktreeStoreError } from './types.js';
 
 async function makeTempRoot(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'apps-store-'));
+  const dir = await tempDir('apps-store-');
   return dir;
 }
 

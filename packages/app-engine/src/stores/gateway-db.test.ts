@@ -1,12 +1,12 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { describe, expect, it } from 'vitest';
-import { existsSync, mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { openJournalDb, makeJournalDbProvider } from './gateway-db.js';
 
 function freshDbPath(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'centraid-db-'));
+  const dir = tempDirSync('centraid-db-');
   return join(dir, 'db.sqlite');
 }
 

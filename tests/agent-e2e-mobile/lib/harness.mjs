@@ -18,19 +18,50 @@
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { defaultRunId, writeFlowVerdict } from '../../agent-e2e-shared/harness.mjs';
+import { metroReachable, prewarmMetroBundle } from './metro.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const RUNS_DIR = path.join(__dirname, '..', 'runs');
 
-export const APP_ID = 'com.centraid.mobile';
+export const APP_ID = 'dev.centraid.mobile';
 
-function defaultRunId() {
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace(/Z$/, '');
-  return `${stamp}-${crypto.randomBytes(3).toString('hex')}`;
-}
+/**
+ * Budget for the first `assertVisible` after a `clearState: true` launch.
+ *
+ * `clearState` wipes the dev build's cached JS bundle, so that first launch has
+ * to refetch it from Metro. With a warm Metro transform cache that costs a few
+ * seconds; with a cold one it is the dominant cost of the whole flow. Measured
+ * on this repo: home-loads takes ~19s end-to-end against a warm Metro and ~43s
+ * against a cold one on an M-series Mac. The nightly macOS runner is slower
+ * still, which is exactly how the old 30s budget failed — CI's launch completed
+ * at 13:05:24 and the assertion gave up at 13:05:55, 30s later, on copy that was
+ * correct and did eventually render.
+ *
+ * `setup()` prewarms the bundle so this budget covers app start plus render
+ * rather than a cold Metro build, but keep it generous: it is a bundle-fetch
+ * wait, not a product-latency assertion, and nothing is proven by making it tight.
+ */
+export const FIRST_LAUNCH_TIMEOUT_MS = 120_000;
+
+/**
+ * The first keystroke on a freshly-booted simulator raises iOS's multilingual
+ * keyboard onboarding sheet ("Type English and Dutch … Continue"). It covers the
+ * bottom of the screen — including the tab bar — so every subsequent tap silently
+ * lands on the sheet instead, and any keystrokes typed while it animates in are
+ * swallowed (that is what corrupts text fields — see configureGateway). CI boots
+ * a clean simulator each run, so it hits this every time. Dismiss it if it showed
+ * up; do nothing if it didn't. Provoke it with a throwaway keystroke FIRST so its
+ * appearance is deterministic rather than racing the real input.
+ */
+export const DISMISS_KEYBOARD_ONBOARDING = `- runFlow:
+    when:
+      visible: "Continue"
+    commands:
+      - tapOn: "Continue"
+`;
 
 function spawnText(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
@@ -141,21 +172,6 @@ async function ensureMetroReverseForAndroid(udid) {
   await spawnText('adb', ['-s', udid, 'reverse', 'tcp:8081', 'tcp:8081']);
 }
 
-// The Expo dev build fetches its JS bundle from Metro at runtime. If
-// clearState wipes the cached bundle and Metro isn't reachable, the
-// app shows a redbox ("No script URL provided") and every `assertVisible`
-// times out cryptically. Fail loudly instead.
-async function metroReachable() {
-  try {
-    const res = await fetch('http://127.0.0.1:8081/status', {
-      signal: AbortSignal.timeout(1500),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
 export async function setup({ runId } = {}) {
   const device = await bootedDevice();
   if (!device) {
@@ -184,6 +200,7 @@ export async function setup({ runId } = {}) {
         'serve the JS bundle — start it with `cd apps/mobile && bun expo start --dev-client`.',
     );
   }
+  await prewarmMetroBundle(device.platform, APP_ID);
   const id = runId ?? defaultRunId();
   const runDir = path.join(RUNS_DIR, id);
   const screenshotsDir = path.join(runDir, 'screenshots');
@@ -212,41 +229,26 @@ export async function setup({ runId } = {}) {
 async function runMaestroChunk(yaml, { state, label }) {
   const flowFile = path.join(state.flowsDir, `${label}.yaml`);
   await fs.writeFile(flowFile, yaml);
-  await spawnLive('maestro', ['--udid', state.udid, 'test', flowFile], {
-    cwd: state.screenshotsDir,
-  });
-}
-
-function renderVerdict({ slug, pass, error, notes, result, elapsedMs, state }) {
-  const lines = [
-    `# ${slug}`,
-    '',
-    `**${pass ? 'PASS' : 'FAIL'}** — ${elapsedMs}ms`,
-    '',
-    `- run dir: \`${state.runDir}\``,
-    `- platform: \`${state.platform}\``,
-    `- udid: \`${state.udid}\``,
-    `- app: \`${state.appId}\``,
-    '',
-  ];
-  if (error) {
-    lines.push('## Error', '```', error.stack ?? String(error), '```', '');
-    lines.push(
-      '## Debug',
-      '',
-      'Maestro keeps its own debug artifacts (per-step screenshots + ai-report.html) under `~/.maestro/tests/<timestamp>/`. Sort by mtime — the latest one matches this run.',
-      '',
-    );
-  }
-  if (notes.length) {
-    lines.push('## Notes');
-    for (const n of notes) lines.push(`- ${n}`);
-    lines.push('');
-  }
-  if (result?.notes) {
-    lines.push('## Result', String(result.notes), '');
-  }
-  return lines.join('\n');
+  // `--debug-output` redirects Maestro's own per-step screenshots and view
+  // hierarchies into the run dir. Without it they land in `~/.maestro/tests/`,
+  // which the nightly workflow does not upload — so a CI failure arrived with
+  // literally no picture of the screen. A flow that fails *before* its first
+  // `takeScreenshot` (the 2026-07-20 home-loads failure did) then leaves
+  // nothing to diagnose at all. Keep this pointed inside `state.runDir`, which
+  // is already an uploaded artifact path.
+  await spawnLive(
+    'maestro',
+    [
+      '--udid',
+      state.udid,
+      'test',
+      '--debug-output',
+      path.join(state.runDir, 'maestro-debug', label),
+      '--flatten-debug-output',
+      flowFile,
+    ],
+    { cwd: state.screenshotsDir },
+  );
 }
 
 /**
@@ -258,10 +260,10 @@ function renderVerdict({ slug, pass, error, notes, result, elapsedMs, state }) {
  *   import { runFlow } from '../lib/harness.mjs';
  *   await runFlow('home-loads', async (ctx) => {
  *     await ctx.run(`
- *       appId: com.centraid.mobile
+ *       appId: dev.centraid.mobile
  *       ---
  *       - launchApp: { clearState: true }
- *       - extendedWaitUntil: { visible: { text: "Open Settings" }, timeout: 30000 }
+ *       - extendedWaitUntil: { visible: { text: "Connect your desktop" }, timeout: 30000 }
  *       - takeScreenshot: 01-home-fresh
  *     `);
  *     ctx.note('home rendered in no-gateway state');
@@ -272,6 +274,7 @@ function renderVerdict({ slug, pass, error, notes, result, elapsedMs, state }) {
  *   ctx.state               read-only snapshot of {runId, runDir, udid, appId, ...}
  *   ctx.run(yaml, label?)   execute a YAML chunk; screenshots land under runs/.../screenshots/
  *   ctx.restart()           stopApp + launchApp without clearing state — mirrors desktop's ctx.restart()
+ *   ctx.configureGateway()  clear state, then save the journey's gateway through the real Settings UI
  *   ctx.note(msg)           record an observation; surfaces in verdict.md
  *
  * Failure model: throw OR return { pass: false, ... }. Either writes a FAIL
@@ -312,6 +315,109 @@ export async function runFlow(slug, fn) {
     await runMaestroChunk(yaml, { state, label });
   };
 
+  ctx.configureGateway = async (
+    gatewayUrl = process.env.MAESTRO_GATEWAY_URL,
+    gatewayToken = process.env.MAESTRO_GATEWAY_TOKEN ?? '',
+  ) => {
+    if (!gatewayUrl) {
+      throw new Error('MAESTRO_GATEWAY_URL is required for this mobile journey');
+    }
+    // The token field's placeholder is unique on the screen, so it needs no
+    // relative anchor the way the URL field does.
+    const tokenSteps = gatewayToken
+      ? `- tapOn: "paste token here"
+# e2e-lint-allow: unasserted-input — a bearer token is a secret; the field masks
+# it and it is never rendered back, so there is no value to assertVisible on.
+- inputText: ${JSON.stringify(gatewayToken)}
+${DISMISS_KEYBOARD_ONBOARDING}`
+      : '';
+    // Every selector below was checked against a running build. The previous
+    // version of this helper was written from the source instead, and each of
+    // these lines is a place where that produced something that "passed" while
+    // doing nothing. Please don't shorten them back:
+    //
+    //   * Reaching Settings: Home's "Pair desktop" button sits *under* the tab
+    //     bar on a fresh launch, so tapping it is a silent no-op — Maestro still
+    //     reports COMPLETED. Use the header gear, which is always on screen.
+    //   * Confirming we arrived: `assertVisible: "Settings"` is vacuous — the
+    //     header gear, the tab, and the screen title are all "Settings", so it
+    //     passes on Home too. "Desktop link" is unique to the Settings screen.
+    //   * The URL field: Maestro matches text as a SUBSTRING, so a bare
+    //     `tapOn: "http://127.0.0.1:18789"` matched the help paragraph above the
+    //     field ("…e.g. http://127.0.0.1:18789. An authed gateway…") and focused
+    //     nothing; the URL was never typed and Save persisted an empty string.
+    //     The `below:` anchor is the paragraph itself, so only the input matches.
+    //     (An accessibilityLabel on the TextInput does not help — RN does not
+    //     surface it to the iOS a11y tree for text fields; it stays the placeholder.)
+    //   * `hideKeyboard` before Save: the software keyboard covers the Save
+    //     button, so tapping it lands on a key instead.
+    //   * After Save: Settings calls `navigation.navigate('Apps', …)`, so the
+    //     old `extendedWaitUntil: visible: "Apps"` looks right in the source —
+    //     but 'Apps' is the *route* name and the tab renders as "Home". Assert on
+    //     what a user sees, and prove the setting actually took by requiring the
+    //     no-gateway card to be gone.
+    await ctx.run(
+      `appId: ${APP_ID}
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      text: "Everything you build, in one place."
+    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+- tapOn: "Settings"
+- extendedWaitUntil:
+    visible: "Desktop link"
+    timeout: 15000
+- tapOn: "Advanced (developer)"
+- extendedWaitUntil:
+    visible: "Gateway URL"
+    timeout: 10000
+# This literal is the field's PLACEHOLDER, not the URL being configured — the
+# input is empty after clearState, and an empty TextInput exposes only its
+# placeholder as matchable text. It must therefore stay byte-equal to
+# placeholder="http://127.0.0.1:18789" in apps/mobile/src/screens/Settings.tsx,
+# even when this flow configures a DIFFERENT gateway (a port already in use
+# locally is the common case). The below: anchor is load-bearing too: the help
+# paragraph above quotes the same URL, and matching it instead used to type the
+# address into nothing. The durable fix is an accessibilityLabel on that
+# TextInput so this can select the field by name — see #482.
+- tapOn:
+    text: "http://127.0.0.1:18789"
+    below: "Dev fallback for simulators.*"
+# The multilingual-keyboard onboarding sheet is a one-time, per-boot modal that
+# iOS raises on the first keystroke and which silently swallows the ones after
+# it. Dismissing it AFTER typing the URL — as this flow used to — is a race: on
+# ci run 29773028739 it appeared mid-input and corrupted the gateway URL to
+# "h7.0.0.1:18789" (the app then redboxed on the malformed address and the Save
+# assertion below failed for an unrelated-looking reason). Force it up with one
+# throwaway keystroke, dismiss it, then erase and type into a settled keyboard.
+# If the sheet never appears (a sim that was already onboarded), the dismiss is a
+# no-op and the erase clears the throwaway — so this is safe either way.
+# e2e-lint-allow: unasserted-input — a throwaway keystroke to provoke the sheet;
+# it is erased immediately below, so there is deliberately nothing to assert.
+- inputText: "x"
+${DISMISS_KEYBOARD_ONBOARDING}- eraseText
+- inputText: ${JSON.stringify(gatewayUrl)}
+# Prove the field actually holds the URL before Save, anchored below the help
+# paragraph so it checks the INPUT, not the paragraph that quotes the same URL.
+# A dropped keystroke fails here, at the field, instead of as a redbox two steps
+# on.
+- assertVisible:
+    text: ${JSON.stringify(gatewayUrl)}
+    below: "Dev fallback for simulators.*"
+${tokenSteps}- hideKeyboard
+- tapOn: "Save"
+- extendedWaitUntil:
+    visible: "Everything you build, in one place."
+    timeout: 30000
+- assertNotVisible: "Connect your desktop"
+`,
+      'configure-gateway',
+    );
+    ctx.note(`configured the journey gateway at ${gatewayUrl}`);
+  };
+
   // Mirror desktop's ctx.restart(): kill the app process so AsyncStorage
   // flushes, then relaunch without clearing state. The 300ms delay before
   // stopApp gives RN's AsyncStorage time to enter its persistence pipeline
@@ -341,13 +447,20 @@ export async function runFlow(slug, fn) {
   const elapsedMs = Date.now() - t0;
   const pass = !error && result?.pass !== false;
 
-  await fs.writeFile(
-    path.join(state.runDir, 'verdict.md'),
-    renderVerdict({ slug, pass, error, notes, result, elapsedMs, state }),
-  );
+  await writeFlowVerdict({
+    repoRoot: REPO_ROOT,
+    slug,
+    runDir: state.runDir,
+    elapsedMs,
+    error,
+    notes,
+    result,
+    metadata: { platform: state.platform, udid: state.udid, app: state.appId },
+    debug:
+      'Maestro keeps per-step screenshots and ai-report.html under `~/.maestro/tests/<timestamp>/`; the newest directory belongs to this run.',
+    owner: `tests/agent-e2e-mobile/flows/${slug}.mjs`,
+  });
 
-  console.log(`[runFlow] ${slug} ${pass ? 'PASS' : 'FAIL'} in ${elapsedMs}ms`);
-  console.log(`  verdict : ${path.relative(REPO_ROOT, path.join(state.runDir, 'verdict.md'))}`);
   if (!pass) {
     if (error) console.error(error);
     process.exit(1);

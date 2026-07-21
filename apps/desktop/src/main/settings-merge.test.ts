@@ -110,3 +110,18 @@ test('launchAtLogin preserve-or-sets like a plain boolean field (issue #351)', (
     ).launchAtLogin,
   ).toBe(false);
 });
+
+test('builderEnabled survives unrelated settings saves and can be switched off', () => {
+  expect(
+    mergePersistedSettings(
+      { activeGatewayId: 'local', builderEnabled: true },
+      { remoteTemplatesUrl: 'https://example.test/feed.json' },
+    ).builderEnabled,
+  ).toBe(true);
+  expect(
+    mergePersistedSettings(
+      { activeGatewayId: 'local', builderEnabled: true },
+      { builderEnabled: false },
+    ).builderEnabled,
+  ).toBe(false);
+});

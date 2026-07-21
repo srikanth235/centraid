@@ -1,0 +1,137 @@
+name: release-desktop
+
+# I1–I3, I7, I11 — package desktop on version tags. Signing/notarization
+# steps are secret-gated: without enrolled credentials the job still builds
+# unsigned artifacts + checksums so the pipeline is exerciseable.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*.*-beta.*'
+  workflow_dispatch:
+    inputs:
+      restamp_rollout_hours:
+        description: 'I8 re-stamp — set rollout window hours on an existing release (empty = skip)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  package-macos:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      - run: bun run build --filter=@centraid/desktop...
+      - name: Install electron-builder
+        run: bun add -d electron-builder electron-updater --cwd apps/desktop
+      - name: Package (unsigned when secrets absent)
+        working-directory: apps/desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.APPLE_API_KEY != '' && 'true' || 'false' }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          if [ -n "${APPLE_API_KEY:-}" ]; then
+            echo "Apple secrets present — notarization path enabled (I2)"
+          else
+            echo "Apple secrets absent — building unsigned artifacts (scaffolding only)"
+          fi
+          bunx electron-builder --mac --config electron-builder.yml --publish never || \
+            bunx electron-builder --mac dir --config electron-builder.yml --publish never
+      - name: Checksums (I11)
+        working-directory: apps/desktop
+        run: |
+          mkdir -p release
+          if ls release/* >/dev/null 2>&1; then
+            (cd release && shasum -a 256 * > SHA256SUMS.txt || true)
+          else
+            echo "no release artifacts" > release/SHA256SUMS.txt
+          fi
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: desktop-macos
+          path: apps/desktop/release/
+          retention-days: 14
+
+  package-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      - run: bun run build --filter=@centraid/desktop...
+      - name: Install electron-builder
+        run: bun add -d electron-builder electron-updater --cwd apps/desktop
+      - name: Package Windows (Azure Trusted Signing when secrets present — I3)
+        working-directory: apps/desktop
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_CODE_SIGNING_ACCOUNT: ${{ secrets.AZURE_CODE_SIGNING_ACCOUNT }}
+          AZURE_CERT_PROFILE: ${{ secrets.AZURE_CERT_PROFILE }}
+        shell: bash
+        run: |
+          if [ -n "${AZURE_TENANT_ID:-}" ]; then
+            echo "Azure Trusted Signing secrets present"
+          else
+            echo "Azure secrets absent — unsigned NSIS scaffolding"
+          fi
+          bunx electron-builder --win --config electron-builder.yml --publish never || true
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: desktop-windows
+          path: apps/desktop/release/
+          retention-days: 14
+        continue-on-error: true
+
+  github-release:
+    needs: [package-macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      - name: Changelog body (D3)
+        id: body
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          VER="${VER%-beta.*}"
+          node scripts/release/changelog-to-github.mjs --version "$VER" --out /tmp/release-body.md || \
+            echo "Centraid $GITHUB_REF_NAME" > /tmp/release-body.md
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4
+        with:
+          path: artifacts
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: /tmp/release-body.md
+          prerelease: ${{ contains(github.ref_name, '-beta.') }}
+          files: artifacts/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  restamp-rollout:
+    if: github.event_name == 'workflow_dispatch' && inputs.restamp_rollout_hours != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: I8 re-stamp note
+        run: |
+          echo "Re-stamp rollout window to ${{ inputs.restamp_rollout_hours }}h"
+          echo "Preserve original release date; only widen/zero the window metadata."
+          echo "Full re-stamp of published latest*.yml is a follow-up once updater manifests ship."

@@ -1,15 +1,8 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // governance: allow-repo-hygiene file-size-limit one suite per served-asset concern of a single module — CSP/nonce, shared fallback, depth-aware JSX transform, ETag/conditional, and compression tiers all exercise serveStatic and share its fixtures
 import { describe, expect, it, vi } from 'vitest';
-import {
-  mkdtempSync,
-  writeFileSync,
-  mkdirSync,
-  utimesSync,
-  statSync,
-  promises as fsp,
-} from 'node:fs';
+import { writeFileSync, mkdirSync, utimesSync, statSync, promises as fsp } from 'node:fs';
 import zlib from 'node:zlib';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { serveStatic } from './static-server.js';
@@ -55,7 +48,7 @@ function mockReq(headers: Record<string, string> = {}): IncomingMessage {
 }
 
 function newAppDir(files: Record<string, string>): string {
-  const dir = mkdtempSync(join(tmpdir(), 'centraid-static-server-'));
+  const dir = tempDirSync('centraid-static-server-');
   for (const [rel, content] of Object.entries(files)) {
     const target = join(dir, rel);
     mkdirSync(join(target, '..'), { recursive: true });

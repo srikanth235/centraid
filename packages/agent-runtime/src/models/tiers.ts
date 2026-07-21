@@ -6,9 +6,10 @@
  * churn — see the `no-hardcoded-model-ids` governance directive). So instead
  * of a static model catalog, the picker offers capability TIERS (the same
  * indirection automations use via `requires.model`). The runner adapter
- * resolves a tier to the runtime's native model at turn time — e.g.
- * the claude backend maps these to the Claude CLI's built-in aliases — so no
- * concrete ids live here.
+ * resolves a tier to the runtime's native model at turn time — `resolveClaudeModel`
+ * below maps them to the Claude CLI's built-in aliases — so no concrete ids
+ * live here. The ACP backend feeds that alias into its match against the
+ * model options the agent advertises (`AcpTurnConfig.resolveModel`).
  *
  * `RunnerModel.id` carries the tier token (persisted as the chat model);
  * `name` is the human label.
@@ -31,3 +32,19 @@ export const RUNNER_TIERS: Partial<Record<RunnerKind, readonly RunnerModel[]>> =
     { id: 'fast', name: 'Fastest' },
   ],
 };
+
+/**
+ * Map a capability tier to the Claude CLI's built-in model aliases (it
+ * resolves these to the latest model in each tier). Any other value — a full
+ * model id or the gateway default — passes through unchanged, so concrete ids
+ * the caller supplies still work.
+ */
+const CLAUDE_TIER_ALIAS: Record<CapabilityTier, string> = {
+  smart: 'opus',
+  balanced: 'sonnet',
+  fast: 'haiku',
+};
+
+export function resolveClaudeModel(model: string): string {
+  return CLAUDE_TIER_ALIAS[model as CapabilityTier] ?? model;
+}

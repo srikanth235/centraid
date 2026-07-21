@@ -4,7 +4,18 @@
 
 Install an app and a local gateway runs it — on your desktop, browser, and phone — or add an agent that works your data in the background. Every app is a thin projection over one **vault** on your machine — a shared personal ontology where your people, money, documents and plans live once, borrowed through grants you sign. App code is a folder of HTML + JS handlers versioned in a local git store; apps serve from the shipped release and update with it, and are authored by agents (the builder that does that ships hidden for v1).
 
-[Docs](https://centraid.dev/docs/) · [Get started](https://centraid.dev/docs/start/) · [Architecture](ARCHITECTURE.md) · [Agents map](AGENTS.md)
+[Docs](https://centraid.dev/docs/) · [Get started](https://centraid.dev/docs/start/) · [Architecture](ARCHITECTURE.md) · [Agents map](AGENTS.md) · [Contributing](CONTRIBUTING.md)
+
+## Maintainer and support (F4)
+
+Centraid is **solo-maintained**. Coding agents do much of the implementation; review and release confidence are the scarce resources.
+
+| Expectation | Reality |
+| --- | --- |
+| Issue response | Best-effort; no SLA. Bugs with clear repro and security reports jump the queue. |
+| Feature requests | Prefer a focused [proposal](.github/ISSUE_TEMPLATE/proposal.yml); large unsolicited PRs may close. |
+| Fastest support | Search [docs](https://centraid.dev/docs/), then file a **bug** with logs from [docs/logs.md](docs/logs.md). Security: [SECURITY.md](SECURITY.md) only. |
+| Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) — one focused change, linked issue, test evidence. |
 
 ## What it does
 
@@ -27,9 +38,9 @@ Install an app and a local gateway runs it — on your desktop, browser, and pho
  │ desktop embed · centraid-gateway daemon           │
  │                                                   │
  │  app-engine        agent-runtime      automation  │
- │  declared-handler  codex subprocess   cron+webhook│
- │  dispatcher        or Claude SDK      fire spine  │
- │      │             (in-process)            │      │
+ │  declared-handler  ACP turn driver    cron+webhook│
+ │  dispatcher        (one path, every   fire spine  │
+ │      │             runner kind)            │      │
  │      ▼                                     ▼      │
  │  vault plane: vault.db + journal.db  scheduler    │
  │  (consent-checked commands, receipts)             │
@@ -83,26 +94,38 @@ Full tour: [Get started](https://centraid.dev/docs/start/) — install → vault
 | `packages/gateway` | Host-agnostic gateway: wires everything below against injected paths/secrets. Ships the `centraid-gateway` daemon. |
 | `packages/vault` | The personal ontology: `vault.db` + `journal.db` DDL, consent gateway, typed commands, sealed columns, sync/outbox spine. |
 | `packages/app-engine` | Runtime engine: handler loader, declared-handler dispatcher, conversation ledger, `/centraid` HTTP surface. |
-| `packages/agent-runtime` | Drives one turn through the codex app-server (JSON-RPC subprocess) or the Claude Agent SDK (in-process); ships the vault-register tools and the `centraid` CLI. |
+| `packages/agent-runtime` | Drives one turn through the Agent Client Protocol — the single path for every runner kind, with first-party adapters for CLIs that don't speak ACP ([docs/runners.md](docs/runners.md)); ships the vault-register tools and the `centraid` CLI. |
 | `packages/automation` | Manifest schema, fire spine, in-process scheduler, webhook ingress, worker-thread handler runner. |
 | `packages/tunnel` | iroh QUIC wire protocol — device tunnel + one-time pairing; the TS reference the Swift/Kotlin mobile ports mirror. |
 | `packages/blueprints` | Template gallery: 8 blueprint apps + 16 automation templates, plus blank-app scaffolders. |
-| `packages/skills` | Agent grounding: `SKILL.md` units + dynamic renderers (live design tokens, host-tool list). |
 | `packages/design-tokens` | Colors, type, spacing, app metadata, icons — shared across desktop and mobile. |
-| `packages/tsconfig` | Shared `base` / `electron` / `expo` tsconfigs. |
 
 ## Build / check
 
-Turborepo + Bun. What CI runs is `bun run ci`.
+Turborepo + Bun. **Before every push**, run the early PR gates locally so CI
+does not burn minutes on format/lint/type errors:
+
+```sh
+bun run check:pr       # REQUIRED before push (mirrors ci.yml early steps)
+```
+
+`check:pr` is: `format:check` → `oxlint` → turbo `lint` → `typecheck` →
+`lint:types` → `lint:css` → `test:matrix` (the GitHub `static` job). Vitest
+alone is not enough — package `typecheck` includes test files and catches TS
+errors tests still run under. GitHub `ci` runs `static` and `verify` in
+parallel (`verify` = build, native tunnel, data-plane, gateway perf,
+coverage), then a thin required `check` aggregator. On **main** only,
+`publish-report` deploys the public HTML test-health report:
+`https://srikanth235.github.io/centraid/test-report/main/`.
 
 ```sh
 bun run build          # all apps + packages
 bun run test           # per-package vitest (hundreds of test files)
 bun run coverage       # repo-wide v8 coverage
-bun run typecheck
-bun run check          # oxfmt --check + oxlint
-bun run lint:types     # type-aware lint
-bun run ci             # check + typecheck + lint:types
+bun run typecheck      # turbo typecheck + tests/ tsc (included in check:pr)
+bun run check          # format:check + oxlint + turbo lint only
+bun run lint:types     # type-aware lint (included in check:pr)
+bun run ci             # alias of check:pr
 ```
 
 Desktop e2e: Playwright tests across 14 scenario sections, driving the real Electron app against a mock gateway — see [apps/desktop/tests/e2e](apps/desktop/tests/e2e/README.md).

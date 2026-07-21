@@ -1,7 +1,6 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { describe, expect, test } from 'vitest';
 import { createKeyring } from './crypto.js';
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import {
   canonicalJson,
@@ -80,7 +79,7 @@ describe('isSafeEntryPath', () => {
 
 describe('sealManifest / openManifest', () => {
   async function keyringFixture() {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'backup-manifest-'));
+    const dir = await tempDir('backup-manifest-');
     const keyring = await createKeyring(path.join(dir, 'keyring.json'));
     return keyring;
   }

@@ -1,8 +1,9 @@
 // governance: allow-repo-hygiene file-size-limit — one cohesive e2e harness (mock
 // gateway + record builders + DOM helpers) shared by every spec; splitting it would
 // scatter the single source of fixture truth. See receipts/issue-225-desktop-e2e-suite.md.
-import { _electron, type ElectronApplication, type Page } from '@playwright/test';
+import { _electron, test, type ElectronApplication, type Page } from '@playwright/test';
 import { promises as fs } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import http from 'node:http';
 import path from 'node:path';
 import os from 'node:os';
@@ -126,6 +127,11 @@ export interface MockGateway {
   close(): Promise<void>;
 }
 
+interface MockGatewayOptions {
+  /** Optional on-disk git-store mirror used by persistence e2e assertions. */
+  appsDir?: string;
+}
+
 function defaultState(): MockState {
   return {
     apps: [],
@@ -181,8 +187,13 @@ async function writeSse(res: http.ServerResponse, frames: SseFrame[]): Promise<v
   res.end();
 }
 
-export async function startMockGateway(): Promise<MockGateway> {
+export async function startMockGateway(options: MockGatewayOptions = {}): Promise<MockGateway> {
   const state = defaultState();
+  if (options.appsDir) {
+    const persisted = await readMockApps(options.appsDir);
+    state.apps = persisted.apps;
+    state.automations = persisted.automations;
+  }
   const calls: MockGateway['calls'] = [];
   const token = crypto.randomBytes(16).toString('hex');
 
@@ -214,11 +225,9 @@ export async function startMockGateway(): Promise<MockGateway> {
         return;
       }
 
-      try {
-        route(method, p, url, body, res, state);
-      } catch (err) {
+      void route(method, p, url, body, res, state, options).catch((err: unknown) => {
         json(res, 500, { error: String(err) });
-      }
+      });
     });
   });
 
@@ -245,14 +254,15 @@ export async function startMockGateway(): Promise<MockGateway> {
   };
 }
 
-function route(
+async function route(
   method: string,
   p: string,
   url: URL,
   body: string,
   res: http.ServerResponse,
   s: MockState,
-): void {
+  options: MockGatewayOptions,
+): Promise<void> {
   const seg = p.split('/').filter(Boolean); // e.g. ['centraid','_apps','todo-abc']
 
   // ---- editing/session lifecycle (match specific before /:id) ----
@@ -270,7 +280,23 @@ function route(
     return json(res, 200, { ok: true });
   }
   if (p === '/centraid/_apps/_clone' && method === 'POST') {
-    return json(res, 200, s.cloneResult ?? defaultCloneResult(body));
+    const result = s.cloneResult ?? defaultCloneResult(body);
+    const app = result.app as Partial<AppMetaEntry> | undefined;
+    if (app?.id) {
+      if (app.kind === 'automation') {
+        s.automations = [
+          ...s.automations.filter((entry) => entry.id !== app.id),
+          automationRow({ id: app.id, name: app.name }),
+        ];
+      } else {
+        s.apps = [
+          ...s.apps.filter((entry) => entry.id !== app.id),
+          appEntry({ ...app, id: app.id, hasIndex: app.hasIndex ?? true }),
+        ];
+      }
+      if (options.appsDir) await writeMockApp(options.appsDir, app.id, app);
+    }
+    return json(res, 200, result);
   }
 
   // ---- draft preview probe ----
@@ -291,7 +317,18 @@ function route(
     if (method === 'POST') {
       const parsed = safeJson(body);
       const id = (parsed.id as string) ?? 'new-app';
-      return json(res, 200, s.createAppResult ?? { app: { id, name: parsed.name, kind: 'app' } });
+      const result = s.createAppResult ?? {
+        app: { id, name: parsed.name, kind: 'app', hasIndex: true },
+      };
+      const app = result.app as Partial<AppMetaEntry> | undefined;
+      if (app?.id) {
+        s.apps = [
+          ...s.apps.filter((entry) => entry.id !== app.id),
+          appEntry({ ...app, id: app.id, hasIndex: app.hasIndex ?? true }),
+        ];
+        if (options.appsDir) await writeMockApp(options.appsDir, app.id, app);
+      }
+      return json(res, 200, result);
     }
   }
 
@@ -307,6 +344,9 @@ function route(
         // server entirely, so this handler never runs in that case.)
         if (s.deleteStatus === 200 || s.deleteStatus === 404) {
           s.apps = s.apps.filter((a) => a.id !== id);
+          if (options.appsDir) {
+            await fs.rm(path.join(options.appsDir, id), { recursive: true, force: true });
+          }
         }
         if (s.deleteStatus === 200) return json(res, 200, { id });
         return json(res, s.deleteStatus, { error: s.deleteStatus === 404 ? 'not_found' : 'error' });
@@ -366,6 +406,12 @@ function route(
   }
   if (p === '/centraid/_automations/run-now' && method === 'POST') {
     if (s.runNowStatus !== 200) return json(res, s.runNowStatus, { error: 'run_failed' });
+    // Mirror the gateway: firing a run materialises its ledger row, so the
+    // automation thread's run feed shows the new run on its next poll. The
+    // thread is the only route to the run viewer now (Run now no longer
+    // navigates there itself), so without this the feed stays empty.
+    const fired = s.runsById[s.nextRunId];
+    if (fired && !s.runs.some((r) => r['runId'] === s.nextRunId)) s.runs = [fired, ...s.runs];
     return json(res, 200, { runId: s.nextRunId });
   }
   if (p === '/centraid/_automations/runs' && method === 'GET') {
@@ -389,6 +435,12 @@ function route(
     return json(res, 200, { ok: true });
   if (p === '/centraid/_automations/set-enabled' && method === 'POST') {
     if (s.setEnabledStatus !== 200) return json(res, s.setEnabledStatus, { error: 'failed' });
+    // Mirror the gateway: the toggle persists, so the thread's reload-after-
+    // toggle renders the new state instead of snapping back to the seeded one.
+    // `ref` travels in the query string; `enabled` in the body.
+    const ref = url.searchParams.get('ref');
+    const next = safeJson(body)['enabled'];
+    s.automations = s.automations.map((a) => (a['ref'] === ref ? { ...a, enabled: next } : a));
     return json(res, 200, { ok: true });
   }
 
@@ -399,6 +451,13 @@ function route(
   if (p === '/centraid/_turn/runner-status' && method === 'GET')
     return json(res, 200, s.runnerStatus);
   if (p === '/centraid/_agents/status' && method === 'GET') return json(res, 200, s.agentsStatus);
+
+  // ---- vault consent context used by the current automation fleet/thread ----
+  if (p === '/centraid/_vault/agents' && method === 'GET') return json(res, 200, { agents: [] });
+  if (p === '/centraid/_vault/blocking' && method === 'GET')
+    return json(res, 200, { outbox: [], needsAuth: [], parked: [], scopeRequests: [] });
+  if (p === '/centraid/_vault/outbox-grants' && method === 'GET')
+    return json(res, 200, { grants: [] });
 
   // ---- unified chat turn (SSE) ----
   if (seg[0] === 'centraid' && seg[2] === '_turn' && method === 'POST') {
@@ -413,7 +472,15 @@ function route(
       if (method === 'GET') return json(res, 200, { sessions: s.conversations });
       if (method === 'POST') {
         const title = (safeJson(body).title as string) ?? '';
-        const conv = { id: `conv-${s.conversations.length + 1}`, title, createdAt: 0 };
+        const now = Date.now();
+        const conv = {
+          id: `conv-${s.conversations.length + 1}`,
+          title,
+          createdAt: now,
+          updatedAt: now,
+          pinned: false,
+          archived: false,
+        };
         s.conversations.unshift(conv);
         return json(res, 200, conv);
       }
@@ -434,6 +501,45 @@ function route(
 
   // Absorb ambient/unknown calls so the renderer never blows up.
   json(res, 200, {});
+}
+
+async function writeMockApp(
+  appsDir: string,
+  id: string,
+  app: Partial<AppMetaEntry>,
+): Promise<void> {
+  const directory = path.join(appsDir, id);
+  await fs.mkdir(directory, { recursive: true });
+  await fs.writeFile(
+    path.join(directory, 'app.json'),
+    `${JSON.stringify({ id, name: app.name ?? id, kind: app.kind ?? 'app' }, null, 2)}\n`,
+  );
+}
+
+async function readMockApps(
+  appsDir: string,
+): Promise<{ apps: AppMetaEntry[]; automations: Array<Record<string, unknown>> }> {
+  const entries = await fs.readdir(appsDir, { withFileTypes: true }).catch(() => []);
+  const apps: AppMetaEntry[] = [];
+  const automations: Array<Record<string, unknown>> = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    try {
+      const manifest = JSON.parse(
+        await fs.readFile(path.join(appsDir, entry.name, 'app.json'), 'utf8'),
+      ) as Partial<AppMetaEntry>;
+      const id = manifest.id ?? entry.name;
+      if (manifest.kind === 'automation') {
+        automations.push(automationRow({ id, name: manifest.name }));
+      } else {
+        apps.push(appEntry({ ...manifest, id, hasIndex: manifest.hasIndex ?? true }));
+      }
+    } catch {
+      // A half-written directory is intentionally absent from the mock's
+      // restart inventory, matching the gateway's manifest boundary.
+    }
+  }
+  return { apps, automations };
 }
 
 function safeJson(body: string): Record<string, unknown> {
@@ -506,7 +612,96 @@ export async function makeEnv(): Promise<TestEnv> {
 }
 
 export async function cleanupEnv(env: TestEnv): Promise<void> {
+  // Detached gateway children OUTLIVE the Electron process on purpose (#468
+  // H1: quit skips them so pairing keeps working with the window closed).
+  // Under e2e that means `centraid-gateway serve --data-dir <userData>/...`
+  // is still running, reparented to init, renewing its instance lease every
+  // 60s INTO THE DIRECTORY WE ARE ABOUT TO DELETE. A renew that lands mid-`rm`
+  // recreates `gateways/<id>/vault/` under a directory the walk has already
+  // emptied, and the removal dies with ENOTEMPTY; a renew that lands just
+  // after leaves silent debris in $TMPDIR instead. Same race, two faces.
+  //
+  // So stop the child before removing its data dir. Not a workaround for the
+  // rm — the process really is still alive and really is still writing.
+  await stopDetachedGateways(env);
   await fs.rm(env.workspace, { recursive: true, force: true });
+}
+
+/** How long a detached gateway child gets to honour SIGTERM before SIGKILL. */
+const DETACHED_STOP_TIMEOUT_MS = 5_000;
+
+/**
+ * Stop every detached gateway child rooted in this test's workspace.
+ *
+ * The desktop records each spawned child in `<dataDir>/gateway.status.json`
+ * and the gateway itself writes `<dataDir>/vault/gateway.lease`; both carry a
+ * pid. We read both, then REFUSE to signal any pid whose live command line
+ * does not mention this workspace — pids are recycled, and a fixture that
+ * SIGKILLs a stranger is far worse than a leaked temp directory.
+ */
+async function stopDetachedGateways(env: TestEnv): Promise<void> {
+  const gatewaysDir = path.join(env.userData, 'gateways');
+  const entries = await fs.readdir(gatewaysDir, { withFileTypes: true }).catch(() => []);
+  const pids = new Set<number>();
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const dir = path.join(gatewaysDir, entry.name);
+    for (const file of [
+      path.join(dir, 'gateway.status.json'),
+      path.join(dir, 'vault', 'gateway.lease'),
+    ]) {
+      const pid = await readPid(file);
+      if (pid !== undefined) pids.add(pid);
+    }
+  }
+  // macOS hands tests `/var/folders/...` but `ps` reports the resolved
+  // `/private/var/folders/...`, so match on either spelling.
+  const real = await fs.realpath(env.workspace).catch(() => env.workspace);
+  const names = [...new Set([env.workspace, real])];
+  await Promise.all([...pids].map((pid) => stopIfOurs(pid, names)));
+}
+
+async function readPid(file: string): Promise<number | undefined> {
+  try {
+    const parsed = JSON.parse(await fs.readFile(file, 'utf8')) as { pid?: unknown };
+    return typeof parsed.pid === 'number' && parsed.pid > 0 ? parsed.pid : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** True only when `pid` is alive AND its command line names one of `names`. */
+function ownsWorkspace(pid: number, names: string[]): boolean {
+  const probe = spawnSync('ps', ['-p', String(pid), '-o', 'command='], { encoding: 'utf8' });
+  const command = probe.stdout ?? '';
+  return names.some((name) => command.includes(name));
+}
+
+async function stopIfOurs(pid: number, names: string[]): Promise<void> {
+  if (!ownsWorkspace(pid, names)) return;
+  try {
+    process.kill(pid, 'SIGTERM');
+  } catch {
+    return; // already gone
+  }
+  const deadline = Date.now() + DETACHED_STOP_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return; // exited
+    }
+  }
+  process.stderr.write(
+    `\n[desktop-e2e] detached gateway pid ${pid} ignored SIGTERM for ` +
+      `${DETACHED_STOP_TIMEOUT_MS}ms; escalating to SIGKILL.\n\n`,
+  );
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch {
+    // Raced us to exit.
+  }
 }
 
 /**
@@ -542,6 +737,8 @@ export async function seedRemoteGateway(
     JSON.stringify(
       {
         activeGatewayId: env.gatewayId,
+        builderEnabled: true,
+        changelogSeenVersion: '0.1.0',
         remoteTemplatesUrl: '',
         ...(opts.onboarding ? {} : { onboardingCompletedAt: '2024-01-01T00:00:00.000Z' }),
       },
@@ -571,6 +768,14 @@ export async function launchApp(env: TestEnv): Promise<{ app: ElectronApplicatio
     env: { ...process.env, NODE_ENV: 'test' },
   });
   const page = await app.firstWindow();
+  page.on('pageerror', (error) => {
+    process.stderr.write(`[desktop-e2e pageerror] ${error.stack ?? error.message}\n`);
+  });
+  page.on('console', (message) => {
+    if (message.type() === 'error') {
+      process.stderr.write(`[desktop-e2e console] ${message.text()}\n`);
+    }
+  });
   await page.waitForLoadState('domcontentloaded');
   return { app, page };
 }
@@ -579,7 +784,12 @@ export async function launchApp(env: TestEnv): Promise<{ app: ElectronApplicatio
 
 /** A published-app metadata row for the gateway's listApps response. */
 export function appEntry(over: Partial<AppMetaEntry> & { id: string }): AppMetaEntry {
-  return { name: over.id, kind: 'app', hasIndex: true, ...over };
+  return {
+    ...over,
+    name: over.name ?? over.id,
+    kind: over.kind ?? 'app',
+    hasIndex: over.hasIndex ?? true,
+  };
 }
 
 /** Build a CentraidAutomationRow for the listAutomations / read responses. */
@@ -703,13 +913,94 @@ export async function markUserApp(
 
 /** Wait for the home shell to be present. */
 export async function waitForHome(page: Page): Promise<void> {
-  await page.locator('.cd-window').first().waitFor({ state: 'attached' });
-  await page.locator('.cd-hero, .cd-apps-grid').first().waitFor({ state: 'visible' });
+  await page.locator('[data-sidebar]').waitFor({ state: 'visible' });
+  const library = page.locator('[role="tablist"][aria-label="Filter your library by kind"]');
+  try {
+    await library.waitFor({ state: 'visible', timeout: 10_000 });
+  } catch (error) {
+    const body = (await page.locator('body').textContent())?.replaceAll(/\s+/g, ' ').slice(0, 500);
+    throw new Error(`home library did not render at ${page.url()}; shell text: ${body ?? ''}`, {
+      cause: error,
+    });
+  }
+}
+
+/** How long a test waits for a well-behaved Electron shutdown before forcing it. */
+const CLOSE_TIMEOUT_MS = 8_000;
+
+/** Close Electron and wait until its OS process has exited.
+ *
+ * `ElectronApplication.close()` can resolve just before Chromium releases the
+ * app's single-instance lock. Tests that immediately relaunch must wait for the
+ * process boundary, otherwise the replacement process exits without a window.
+ *
+ * The close is BOUNDED. A hung teardown used to surface as "Test timeout of
+ * 60000ms exceeded" pointing at the test body, even though every assertion had
+ * already passed — the trace showed a `close()` with no matching `after`. That
+ * is maximally misleading: a shutdown bug gets reported as a product bug. So we
+ * cap the wait, SIGKILL the Electron process if it overruns, and shout about it
+ * on stderr. The test still passes (its assertions did pass), but the force-kill
+ * is loud enough to be findable in CI logs instead of silently absorbed.
+ */
+export async function closeApp(app: ElectronApplication): Promise<void> {
+  // Idempotent: the restart tests close mid-body and close again from their
+  // outer `finally` as a backstop. Playwright throws from `process()` once the
+  // application is gone, which for a teardown helper just means "already
+  // closed" — nothing left to do.
+  let child: ReturnType<ElectronApplication['process']>;
+  try {
+    child = app.process();
+  } catch {
+    return;
+  }
+  const exited =
+    child.exitCode === null
+      ? new Promise<void>((resolve) => child.once('exit', () => resolve()))
+      : Promise.resolve();
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<'timeout'>((resolve) => {
+    timer = setTimeout(() => resolve('timeout'), CLOSE_TIMEOUT_MS);
+  });
+
+  // Swallowed here, not at the race: if we end up force-killing, the pending
+  // `close()` rejects later with nobody awaiting it, and an unhandled rejection
+  // would fail an unrelated test further down the file.
+  const closed = app.close().catch(() => undefined);
+
+  try {
+    const outcome = await Promise.race([
+      Promise.all([closed, exited]).then(() => 'closed' as const),
+      deadline,
+    ]);
+    if (outcome === 'timeout') {
+      const where = testTitle();
+      process.stderr.write(
+        `\n[desktop-e2e] !! FORCE-KILL: electronApplication.close() did not return within ` +
+          `${CLOSE_TIMEOUT_MS}ms during "${where}". The test body is NOT at fault — this is a ` +
+          `main-process teardown hang. SIGKILLing pid ${child.pid ?? '?'} so the worker is not ` +
+          `wedged.\n\n`,
+      );
+      child.kill('SIGKILL');
+      await exited;
+    }
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/** Best-effort name of the running test, for the force-kill warning. */
+function testTitle(): string {
+  try {
+    return test.info().titlePath.slice(1).join(' › ') || 'unknown test';
+  } catch {
+    return 'unknown test (outside a test)';
+  }
 }
 
 /** Click a sidebar nav item by its visible label. */
 export async function gotoNav(page: Page, label: string): Promise<void> {
-  await page.locator('.cd-sb-item', { hasText: label }).first().click();
+  await page.getByRole('button', { name: label, exact: true }).click();
 }
 
 /** The grid item for an app, keyed by its stable data-app-id anchor. */
@@ -726,23 +1017,21 @@ export async function openTile(page: Page, appId: string): Promise<void> {
  * it survives card restyles — the class churn in #230 is exactly what broke
  * the old `.cd-card-more` selector. */
 export async function openTileMenu(page: Page, appId: string): Promise<void> {
-  await tile(page, appId).getByRole('button', { name: 'App actions' }).click();
-  await page.locator('.ctx-menu').waitFor({ state: 'visible' });
+  await tile(page, appId).getByRole('button', { name: 'More actions' }).click();
+  await page.getByRole('menu').waitFor({ state: 'visible' });
 }
 
 /** Click a context-menu item by text. */
 export async function clickMenuItem(page: Page, text: string): Promise<void> {
-  await page.locator('.ctx-item', { hasText: text }).first().click();
+  await page.getByRole('menuitem', { name: text, exact: true }).click();
 }
 
 /** Wait for the confirm modal with the given title. */
 export async function expectConfirm(page: Page, title: string): Promise<void> {
-  await page
-    .locator('.modal-card[role="dialog"]', { hasText: title })
-    .waitFor({ state: 'visible' });
+  await page.getByRole('dialog', { name: title, exact: true }).waitFor({ state: 'visible' });
 }
 
 /** Click the danger "Delete" button in the open confirm modal. */
 export async function confirmDelete(page: Page): Promise<void> {
-  await page.locator('.modal-card .btn-danger').first().click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
 }

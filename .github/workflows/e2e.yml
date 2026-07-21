@@ -1,8 +1,8 @@
 name: e2e
 
-# Desktop Playwright suite. It builds every package and launches the REAL
-# Electron app under a virtual framebuffer, so it's far heavier than the unit
-# `ci` job — we run it nightly and on-demand rather than on every PR.
+# Nightly product lanes: desktop/web Playwright, mobile agent-e2e, pairing
+# journeys (loopback + cross-network relay), plus the unified test-health
+# report. Heavier than per-PR `ci` — schedule and workflow_dispatch only.
 on:
   schedule:
     - cron: '0 6 * * *' # 06:00 UTC nightly
@@ -14,7 +14,12 @@ permissions:
 jobs:
   desktop-e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Outer backstop only — the suite's own `globalTimeout` (22m, see
+    # tests/e2e/playwright.config.ts) is what fails a runaway run, because it
+    # aborts while the reporter can still flush traces and the JSON report.
+    # This cap MUST stay above setup (~8m) + globalTimeout so it never fires
+    # first; when it does fire, the job is cancelled and all evidence is lost.
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
@@ -70,3 +75,535 @@ jobs:
           name: desktop-e2e-traces
           path: apps/desktop/test-results/
           retention-days: 7
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-evidence-desktop
+          path: artifacts/
+          retention-days: 7
+
+  web-e2e:
+    runs-on: ubuntu-latest
+    # Outer backstop only — see desktop-e2e. The suite's `globalTimeout` is
+    # 10m against ~1m of healthy tests; setup is ~7m.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      - run: bunx playwright install --with-deps chromium
+        working-directory: apps/web
+      - run: bun run build
+      - run: bun run e2e
+        working-directory: apps/web
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: failure()
+        with:
+          name: web-e2e-traces
+          path: apps/web/test-results/
+          retention-days: 7
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-evidence-web
+          path: artifacts/
+          retention-days: 7
+
+  mobile-e2e:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '22'
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      # Fingerprint of every input that can change the iOS *native* binary.
+      # Everything the app does in JS is served by Metro at runtime, so a
+      # JS-only commit must NOT invalidate the 32-minute native build — but a
+      # change to any of these must, or a stale .app would silently be tested.
+      #
+      # Inputs, and why each is in the hash:
+      #   apps/mobile/ios/**        — the Xcode project, Podfile(.lock),
+      #                               Info.plist, entitlements, assets.
+      #   apps/mobile/modules/**    — the local `centraid-tunnel` Expo module.
+      #                               NOTE: only its 17 TRACKED files. The
+      #                               vendored Iroh.xcframework and the generated
+      #                               IrohLib.swift are git-ignored and therefore
+      #                               NOT hashed directly — but the podspec that
+      #                               reconstructs them pins both an upstream tag
+      #                               and a SHA-256, and the podspec IS tracked,
+      #                               so a change to what gets fetched still moves
+      #                               the fingerprint.
+      #   apps/mobile/plugins/**    — config plugins that mutate the native project.
+      #   apps/mobile/app.config.ts + src/version-core.cjs
+      #                             — bundle identifier, buildNumber, infoPlist,
+      #                               the plugin list.
+      #   apps/mobile/package.json, package.json, bun.lock
+      #                             — the autolinked native pods come from
+      #                               node_modules, which the lockfile pins.
+      #   .github/workflows/e2e.yml — the build INVOCATION is an input too. Without
+      #                               this, changing `expo run:ios` flags (Release,
+      #                               a different device) would reuse a binary built
+      #                               the old way.
+      #   xcodebuild / iphonesimulator SDK version
+      #                             — the macos-15 image rolls Xcode forward;
+      #                               a binary built by another toolchain must
+      #                               not be reused.
+      # Deliberately NOT in the hash: babel.config.js, metro.config.js and
+      # everything under apps/mobile/src (except version-core.cjs). Those only
+      # affect the JS bundle Metro serves live, never the compiled binary.
+      #
+      # Hashing uses `git ls-files` (tracked files only) rather than
+      # `hashFiles('apps/mobile/ios/**')` on purpose: ios/Pods and ios/build are
+      # gitignored build products, so a glob-based key would depend on whatever
+      # a previous build left in the tree.
+      - name: Fingerprint the iOS native build inputs
+        id: native
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          sources="$(
+            git ls-files -z -- \
+              'apps/mobile/ios' \
+              'apps/mobile/modules' \
+              'apps/mobile/plugins' \
+              'apps/mobile/app.config.ts' \
+              'apps/mobile/package.json' \
+              'apps/mobile/src/version-core.cjs' \
+              'package.json' \
+              'bun.lock' \
+              '.github/workflows/e2e.yml' \
+            | xargs -0 shasum -a 256
+          )"
+          # Fail loudly rather than hashing an empty set — an empty digest would
+          # be a constant key, i.e. a permanent false cache hit.
+          test -n "$sources" || { echo "::error::no native sources matched"; exit 1; }
+          # Captured separately: `a="$(cmd1; cmd2)"` takes only cmd2's exit
+          # status, so a broken xcodebuild would silently yield a shorter
+          # toolchain string and a weaker key instead of failing the step.
+          xcode="$(xcodebuild -version)"
+          sdk="$(xcrun --show-sdk-version --sdk iphonesimulator)"
+          toolchain="$(printf '%s\n%s\n%s\n' "$xcode" "$sdk" "${ImageOS:-unknown}")"
+          digest="$(printf '%s\n%s\n' "$sources" "$toolchain" | shasum -a 256 | cut -d' ' -f1)"
+          echo "hash=$digest" >> "$GITHUB_OUTPUT"
+          echo "iOS native fingerprint: $digest"
+          echo "$toolchain"
+      # Deliberately NOT caching turbo here. A per-sha key never hits, so every
+      # run would SAVE a fresh multi-hundred-MB blob; against GitHub's 10 GB
+      # per-repo budget with LRU eviction, the natural victim is the .app entry
+      # below — which is only ever read, never re-saved on a hit. Trading the
+      # 32-minute win for a few minutes of build replay is a bad deal, and it
+      # would evict other workflows' caches besides.
+      - run: bun install --frozen-lockfile
+      - name: Build and start the tokenless mobile test gateway
+        # Scoped to the gateway's dependency subgraph instead of a full
+        # `bun run build`. tests/agent-e2e-mobile/lib/ci-gateway.mjs imports only
+        # packages/gateway/dist, and turbo pulls every workspace dependency
+        # (vault, app-engine, agent-runtime, automation, backup, blueprints,
+        # tunnel, client, web, design-tokens) in transitively — nothing
+        # the mobile job needs is dropped. The saving is narrow but real, and
+        # comes almost entirely from dropping @centraid/desktop (skills and
+        # data-plane folded into gateway/tunnel in #495).
+        run: |
+          bunx turbo run build --filter=@centraid/gateway
+          gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          echo "CENTRAID_MOBILE_GATEWAY_PID=$!" >> "$GITHUB_ENV"
+          echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
+          for attempt in {1..90}; do
+            if curl -fsS http://127.0.0.1:18789/centraid/_apps; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/centraid-mobile-gateway.log
+          exit 1
+      - name: Install Maestro CLI
+        # The mobile agent-e2e flows drive the installed app through Maestro
+        # (tests/agent-e2e-mobile/lib/harness.mjs → `maestro --udid … test`).
+        # Pin the CLI: the install script honors MAESTRO_VERSION and otherwise
+        # pulls whatever is at `releases/latest`, so an upstream release could
+        # silently change device-driving behavior mid-nightly. cli-2.6.1 is the
+        # current stable release (github.com/mobile-dev-inc/maestro/releases).
+        env:
+          MAESTRO_VERSION: 2.6.1
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      - name: Boot an iOS simulator
+        run: |
+          udid="$(xcrun simctl list devices available --json | node -e '
+            let input="";
+            process.stdin.on("data", chunk => input += chunk);
+            process.stdin.on("end", () => {
+              const devices = Object.values(JSON.parse(input).devices).flat();
+              const phone = devices.find(device => device.isAvailable && /iPhone/.test(device.name));
+              if (!phone) process.exit(1);
+              process.stdout.write(phone.udid);
+            });
+          ')"
+          echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
+          xcrun simctl boot "$udid" || true
+          xcrun simctl bootstatus "$udid" -b
+      # The built .app for the simulator. This is the single biggest win in the
+      # job (~32m of the 51m). Keyed on the native fingerprint above, so a commit
+      # that touches only JS reuses the binary while ANY native-input or Xcode
+      # change forces a rebuild. No `restore-keys`: a partial-match fallback is
+      # exactly the stale-binary false-pass this must never allow — the key is
+      # all-or-nothing.
+      #
+      # restore + save are SPLIT rather than the one-step `actions/cache`, because
+      # that action declares `post-if: success()` — it saves only when the whole
+      # job succeeded. On a lane that is currently red that means the cache never
+      # populates, so the 32-minute build is paid on every run and the warm path
+      # is unreachable until the very greenness the cache is meant to help
+      # deliver. Observed exactly that in runs 29762312605 and 29765712825: the
+      # post step reported `skipped` and the native build ran full-length both
+      # times. The save below runs `if: always()`, so a red run still banks the
+      # binary it built. That is safe because the key is content-addressed: the
+      # artifact is the product of those inputs whether or not a later Maestro
+      # flow passed.
+      - name: Restore the built iOS app
+        id: ios_app
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/centraid-mobile-e2e
+          key: ios-app-${{ runner.os }}-${{ steps.native.outputs.hash }}
+      # Deliberately NOT caching CocoaPods. A Pods cache hit leaves
+      # ios/Pods/Manifest.lock matching Podfile.lock, so Expo CLI skips
+      # `pod install` entirely — and `pod install` is the ONLY thing that runs
+      # the centraid-tunnel podspec's prepare_command, which downloads the
+      # git-ignored Iroh.xcframework and IrohLib.swift. Those are a vendored
+      # framework and a compiled source of that pod, so skipping the fetch breaks
+      # the native build outright. It would not even fail on the first run: the
+      # cache is empty then. It would fail on the second native change, which is
+      # exactly the path a pods cache exists to serve.
+      - name: Build and install the mobile development app
+        id: ios_build
+        if: steps.ios_app.outputs.cache-hit != 'true'
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          bunx expo run:ios --device "$SIMULATOR_UDID" --no-bundler
+          # Copy the product out of derived data into the cached location. Fail
+          # hard if it cannot be found: caching an empty directory would turn
+          # every later run into a silent no-install.
+          app="$(find ios/build ~/Library/Developer/Xcode/DerivedData \
+            -maxdepth 8 -type d -name 'Centraid.app' -path '*-iphonesimulator*' -print -quit 2>/dev/null || true)"
+          test -n "$app" || { echo "::error::built Centraid.app not found"; exit 1; }
+          rm -rf ~/.cache/centraid-mobile-e2e
+          mkdir -p ~/.cache/centraid-mobile-e2e
+          # -R preserves the bundle's symlinks/permissions.
+          cp -R "$app" ~/.cache/centraid-mobile-e2e/Centraid.app
+          # Signals the save step below that there is a real bundle to bank.
+          echo 'built=true' >> "$GITHUB_OUTPUT"
+      # Banked even when a later step fails — see the note on the restore step.
+      # Guarded on the build having actually run and produced a bundle, so a
+      # cache-hit run does not re-save what it just restored, and a run that
+      # died before the build cannot cache an empty directory.
+      - name: Save the built iOS app
+        if: always() && steps.ios_build.outputs.built == 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/centraid-mobile-e2e
+          key: ios-app-${{ runner.os }}-${{ steps.native.outputs.hash }}
+      - name: Install the cached mobile development app
+        if: steps.ios_app.outputs.cache-hit == 'true'
+        run: |
+          set -euo pipefail
+          app="$HOME/.cache/centraid-mobile-e2e/Centraid.app"
+          test -d "$app" || { echo "::error::cached Centraid.app missing"; exit 1; }
+          # Prove the cached bundle is the app the flows actually drive. The
+          # Maestro harness launches by bundle id, so a mismatch here would fail
+          # obscurely at flow time instead of loudly right now.
+          bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
+          test "$bundle_id" = 'dev.centraid.mobile' \
+            || { echo "::error::cached app bundle id is '$bundle_id', expected dev.centraid.mobile"; exit 1; }
+          test -x "$app/Centraid" || { echo "::error::cached app has no executable"; exit 1; }
+          xcrun simctl install "$SIMULATOR_UDID" "$app"
+          # Confirm the simulator agrees the app is installed and resolvable.
+          xcrun simctl get_app_container "$SIMULATOR_UDID" dev.centraid.mobile
+      - name: Start Metro
+        run: |
+          CI=1 nohup bunx expo start --dev-client > /tmp/centraid-metro.log 2>&1 &
+          for attempt in {1..90}; do
+            if curl -fsS http://127.0.0.1:8081/status; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/centraid-metro.log
+          exit 1
+        working-directory: apps/mobile
+      - run: node scripts/test-report/prepare.mjs
+      - name: Run all committed mobile journeys
+        env:
+          MAESTRO_PLATFORM: ios
+        run: |
+          node tests/agent-e2e-mobile/flows/home-loads.mjs
+          node tests/agent-e2e-mobile/flows/template-gate.mjs
+          node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-evidence-mobile
+          path: |
+            artifacts/
+            tests/agent-e2e-mobile/runs/
+          retention-days: 7
+
+  # Pairing journeys (issue #289 / matrix tunnel-pairing). Independent jobs so
+  # one failure still leaves evidence from the others for the health report.
+  pairing-lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '22'
+      - run: bun install --frozen-lockfile
+      - run: bunx turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
+      - run: node scripts/test-report/prepare.mjs
+      - run: node tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-evidence-pairing-lifecycle
+          path: |
+            artifacts/
+            tests/agent-e2e-pairing/runs/
+          retention-days: 7
+
+  pairing-ticket-hygiene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '22'
+      - run: bun install --frozen-lockfile
+      - run: bunx turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
+      - run: node scripts/test-report/prepare.mjs
+      - run: node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-evidence-pairing-ticket-hygiene
+          path: |
+            artifacts/
+            tests/agent-e2e-pairing/runs/
+          retention-days: 7
+
+  pairing-cross-network-relay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '22'
+      - run: bun install --frozen-lockfile
+      - run: docker info
+      - run: bunx turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
+      - run: node scripts/test-report/prepare.mjs
+      # Production must never silently fall back to the JS byte pump.
+      - run: test -f packages/tunnel/native/centraid-tunnel-native.linux-x64.node
+      - run: node tests/agent-e2e-pairing/flows/cross-network-relay.mjs
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-evidence-pairing-cross-network-relay
+          path: |
+            artifacts/
+            tests/agent-e2e-pairing/runs/
+          retention-days: 7
+
+  test-health-report:
+    needs:
+      [
+        desktop-e2e,
+        web-e2e,
+        mobile-e2e,
+        pairing-lifecycle,
+        pairing-ticket-hygiene,
+        pairing-cross-network-relay,
+      ]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '22'
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      # Same-run evidence only (desktop/web/mobile/pairing). Pairing no longer
+      # pulls artifacts from a separate scheduled workflow run.
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          pattern: nightly-evidence-*
+          path: artifacts
+          merge-multiple: true
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            artifacts/perf
+            artifacts/scale
+          key: quality-history-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: quality-history-${{ runner.os }}-
+      - run: sudo apt-get update && sudo apt-get install -y strace
+      - run: bun run build
+      - id: coverage
+        continue-on-error: true
+        run: bun run coverage
+      - id: perf
+        continue-on-error: true
+        run: bun run test:perf
+      - id: scale
+        continue-on-error: true
+        run: bun run test:scale
+      # Durable trend source: the append-only summary series committed to
+      # gh-pages. Unlike the quality-history cache above it is never evicted.
+      - name: Restore durable report history (gh-pages)
+        if: always()
+        continue-on-error: true
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: gh-pages
+          path: .gh-pages-history
+      - name: Stage durable report history
+        if: always()
+        run: |
+          mkdir -p artifacts/report-history
+          if [ -d .gh-pages-history/test-report/history ]; then
+            cp .gh-pages-history/test-report/history/*.json artifacts/report-history/ || true
+          fi
+          rm -rf .gh-pages-history
+      - name: Generate full nightly report
+        if: always()
+        run: bun run test:report
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-test-health-report
+          path: dist/test-report/
+          retention-days: 30
+      - name: Write Job Summary
+        if: always()
+        env:
+          TEST_REPORT_PUBLIC_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/test-report/nightly/
+        run: node scripts/test-report/write-job-summary.mjs --report-url "$TEST_REPORT_PUBLIC_URL" --title "Nightly test health"
+      - name: Preserve lane failures after publishing the report
+        if: steps.coverage.outcome == 'failure' || steps.perf.outcome == 'failure' || steps.scale.outcome == 'failure'
+        run: exit 1
+
+  # Public nightly HTML (same Pages tree as main; no per-PR slots).
+  publish-nightly-report:
+    needs: [test-health-report]
+    if: always() && needs.test-health-report.result != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: github-pages-test-report
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.slot.outputs.url }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Download nightly report
+        id: download_report
+        continue-on-error: true
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: nightly-test-health-report
+          path: dist/test-report
+      - name: Require report HTML
+        id: has_report
+        run: |
+          if [ -f dist/test-report/index.html ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::nightly-test-health-report missing; skip Pages publish"
+          fi
+      - name: Restore previous Pages tree (gh-pages)
+        if: steps.has_report.outputs.ok == 'true'
+        continue-on-error: true
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: gh-pages
+          path: site
+      - name: Seed site if gh-pages missing
+        if: steps.has_report.outputs.ok == 'true'
+        run: |
+          mkdir -p site
+          rm -rf site/.git
+      - name: Resolve report slot
+        if: steps.has_report.outputs.ok == 'true'
+        id: slot
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SLOT="nightly"
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
+          # Authoritative run timestamp (not `date` at publish time, so a
+          # re-publish of the same run lands in the same dated slot).
+          RUN_DATE="$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --jq '.created_at' 2>/dev/null | cut -c1-10 || true)"
+          case "$RUN_DATE" in
+            [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
+            *) RUN_DATE="$(date -u +%F)" ;;
+          esac
+          echo "slot=${SLOT}" >> "$GITHUB_OUTPUT"
+          echo "date=${RUN_DATE}" >> "$GITHUB_OUTPUT"
+          echo "url=https://${OWNER}.github.io/${REPO}/test-report/${SLOT}/" >> "$GITHUB_OUTPUT"
+      - name: Merge report into site tree
+        if: steps.has_report.outputs.ok == 'true'
+        run: |
+          node scripts/test-report/prepare-pages-site.mjs \
+            --report dist/test-report \
+            --site site \
+            --slot "${{ steps.slot.outputs.slot }}" \
+            --date "${{ steps.slot.outputs.date }}" \
+            --run-id "${{ github.run_id }}" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --keep 30
+      - name: Persist site on gh-pages
+        if: steps.has_report.outputs.ok == 'true'
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          force_orphan: false
+          enable_jekyll: false
+          user_name: github-actions[bot]
+          user_email: 41898282+github-actions[bot]@users.noreply.github.com
+      - name: Upload Pages artifact
+        if: steps.has_report.outputs.ok == 'true'
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
+        with:
+          path: site
+      - name: Deploy to GitHub Pages
+        if: steps.has_report.outputs.ok == 'true'
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5

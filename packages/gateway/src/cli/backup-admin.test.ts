@@ -1,3 +1,4 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * `centraid-gateway backup …` (PROTOCOL.md/FORMAT.md CLI surface): status,
  * run, list, verify, restore, kit — constructed from the same `--config`
@@ -7,15 +8,21 @@
  * than the unit-level `backup-service.test.ts`.
  */
 
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+
 import { promises as fs, existsSync } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { SNAPSHOT_FORMAT, openLocalBackupProvider, type BackupProvider } from '@centraid/backup';
+import { SNAPSHOT_FORMAT_V2, openLocalBackupProvider, type BackupProvider } from '@centraid/backup';
 import { openVaultRegistry } from '../serve/vault-registry.js';
 import { commandBackup } from './backup-admin.js';
 import { daemonLayoutFor } from './paths.js';
+
+// See admin.test.ts: real vault/daemon bootstrap per test, so this file is
+// fsync-bound and needs an escalation above the 30s node-project default.
+// It did not fail in nightly run 29733737906 but was the next closest thing
+// (11.0s in ci vs 65.8s in nightly, 6.0x), so it gets the same 60s budget.
+vi.setConfig({ testTimeout: 60_000 });
 
 class CliFailError extends Error {
   constructor(
@@ -60,10 +67,8 @@ function lines(out: string): unknown[] {
 }
 
 beforeEach(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `backup-admin-${crypto.randomUUID()}-`));
-  providerDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), `backup-admin-provider-${crypto.randomUUID()}-`),
-  );
+  dataDir = await tempDir(`backup-admin-${crypto.randomUUID()}-`);
+  providerDir = await tempDir(`backup-admin-provider-${crypto.randomUUID()}-`);
   configPath = path.join(dataDir, 'config.json');
   await fs.writeFile(
     configPath,
@@ -106,7 +111,7 @@ test('run backs up every vault, status reports it, list shows the registry row',
   const [row] = lines(listOut) as [Record<string, unknown>];
   expect(row['vaultId']).toBe(vaultId);
   expect(row['seq']).toBe(1);
-  expect(row['format']).toBe(SNAPSHOT_FORMAT);
+  expect(row['format']).toBe(SNAPSHOT_FORMAT_V2);
 });
 
 test('verify reports a clean snapshot', async () => {

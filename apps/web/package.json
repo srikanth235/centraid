@@ -4,10 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build && node scripts/precompress.mjs",
+    "build": "node scripts/stamp-sw-version.mjs && node scripts/ensure-iroh-wasm.mjs && vite build && node scripts/precompress.mjs",
     "build:iroh": "bash scripts/build-iroh-wasm.sh",
+    "build:iroh:force": "FORCE_IROH_WASM=1 node scripts/ensure-iroh-wasm.mjs",
     "dev": "vite --host 127.0.0.1",
-    "e2e": "bun run --cwd ../../packages/app-engine build && bun run --cwd ../../packages/gateway build && playwright test -c tests/e2e/playwright.config.ts",
+    "e2e": "node ../../scripts/test-report/prepare.mjs --lane web-playwright && bun run --cwd ../../packages/app-engine build && bun run --cwd ../../packages/gateway build && playwright test -c tests/e2e/playwright.config.ts",
     "preview": "vite preview --host 127.0.0.1",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
@@ -19,7 +20,7 @@
     "react-dom": "19.1.0"
   },
   "devDependencies": {
-    "@centraid/tsconfig": "workspace:*",
+    "@centraid/test-kit": "workspace:*",
     "@playwright/test": "^1.60.0",
     "@types/react": "~19.1.0",
     "@types/react-dom": "~19.1.0",

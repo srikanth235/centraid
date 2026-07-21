@@ -1,7 +1,7 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import {
   activeMasterKey,
   chunkId,
@@ -18,18 +18,6 @@ import {
   saveKeyring,
   type Keyring,
 } from './crypto.js';
-
-const cleanups: Array<() => Promise<void>> = [];
-afterEach(async () => {
-  while (cleanups.length > 0) await cleanups.pop()?.();
-});
-
-async function tempDir(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'backup-crypto-'));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 describe('encrypt/decrypt', () => {
   test('roundtrips', () => {
     const key = new Uint8Array(32).fill(7);

@@ -1,10 +1,10 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 // governance: allow-repo-hygiene file-size-limit (#408) the engine's behavior suite — snapshot/restore/verify roundtrips plus the /1 WAL+PITR+determinism cases all share the same provider/keyring/tempdir fixtures; splitting by topic would duplicate the fixture plumbing in every shard
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { ALGO_STORE, ALGO_ZSTD, unframeChunkPayload } from './compress.js';
 import {
   activeMasterKey,
@@ -17,21 +17,10 @@ import {
 } from './crypto.js';
 import { createSnapshot, restoreSnapshot, verifySnapshot, type SourceEntry } from './engine.js';
 import { LocalBackupProvider } from './local-provider.js';
-import { openManifest, READABLE_SNAPSHOT_FORMATS, SNAPSHOT_FORMAT } from './manifest.js';
+import { openManifest, READABLE_SNAPSHOT_FORMATS, SNAPSHOT_FORMAT_V2 } from './manifest.js';
 import { partBuffer } from './parts.js';
 import type { ObjectStore } from './object-store.js';
 import type { BackupProvider, StoreClass } from './provider.js';
-
-const cleanups: Array<() => Promise<void>> = [];
-afterEach(async () => {
-  while (cleanups.length > 0) await cleanups.pop()?.();
-});
-
-async function tempDir(prefix = 'backup-engine-'): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
 
 const CURRENT = { gatewayVersion: '0.1.0', vaultUserVersion: '1', ontologyVersion: '1.2' };
 const APP_META = {
@@ -610,7 +599,7 @@ describe('/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs', (
     });
     expect(row).not.toBeNull();
     expect(row!.format).toBe('centraid-snapshot/2');
-    expect(row!.format).toBe(SNAPSHOT_FORMAT);
+    expect(row!.format).toBe(SNAPSHOT_FORMAT_V2);
 
     const destDir = await tempDir('backup-engine-v2-restore-');
     await fs.rm(destDir, { recursive: true, force: true });
@@ -885,7 +874,7 @@ describe('/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs', (
 describe('snapshot format gate', () => {
   test('v0 reads and writes only the current compressed snapshot format', () => {
     expect(READABLE_SNAPSHOT_FORMATS).toEqual(['centraid-snapshot/2']);
-    expect(SNAPSHOT_FORMAT).toBe('centraid-snapshot/2');
+    expect(SNAPSHOT_FORMAT_V2).toBe('centraid-snapshot/2');
   });
 
   test('restore refuses a row whose format is outside the reader guarantee', async () => {

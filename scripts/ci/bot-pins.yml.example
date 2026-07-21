@@ -1,0 +1,14 @@
+# E6 — bot-maintained generated pins (scaffold).
+# Promote to .github/workflows/bot-pins.yml once a pin regenerator exists.
+# schedule: weekly; steps: recompute catalog hashes / pricing snapshot with --check on PR.
+name: bot-pins
+on:
+  schedule:
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+jobs:
+  recompute:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "wire regenerate scripts with --check mode here"

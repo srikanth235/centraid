@@ -1,12 +1,12 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import { readCatalog, readRunnerModels, readRunnerTools, writeCatalogEntry } from './catalog.ts';
+import { readCatalog, readRunnerModels, writeCatalogEntry } from './catalog.ts';
 
 let counter = 0;
 async function tmpCatalogPath(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-catalog-'));
+  const dir = await tempDir('centraid-catalog-');
   return path.join(dir, `model-catalog-${counter++}.json`);
 }
 
@@ -37,17 +37,7 @@ test('readRunnerModels treats a corrupt catalog as empty', async () => {
   expect(await readRunnerModels(catalogPath, 'claude-code')).toEqual([]);
 });
 
-test('readRunnerTools returns [] cold and the cached list when present', async () => {
-  const catalogPath = await tmpCatalogPath();
-  expect(await readRunnerTools(catalogPath, 'claude-code')).toEqual([]);
-  await writeCatalogEntry(catalogPath, 'claude-code', {
-    tools: [{ name: 'Read', source: 'native' }],
-    toolsEnumeratedAt: '2026-01-01T00:00:00.000Z',
-  });
-  expect((await readRunnerTools(catalogPath, 'claude-code')).map((t) => t.name)).toEqual(['Read']);
-});
-
-// ---- merge-write (models and tools never clobber each other) ----
+// ---- merge-write (a partial write never clobbers other fields) ----
 
 test('writeCatalogEntry preserves other runners', async () => {
   const catalogPath = await tmpCatalogPath();
@@ -66,19 +56,18 @@ test('writeCatalogEntry preserves other runners', async () => {
   expect(file?.runners['codex']?.models?.[0]?.id).toBe('gpt-5-codex');
 });
 
-test('a models write and a tools write merge into one runner entry', async () => {
+test('a later partial write merges into the runner entry without clobbering', async () => {
   const catalogPath = await tmpCatalogPath();
   await writeCatalogEntry(catalogPath, 'claude-code', {
     hash: 'h',
     models: [{ id: 'sonnet' }],
     enumeratedAt: '2026-01-01T00:00:00.000Z',
   });
-  // A later tools write must NOT clobber the models field, and vice versa.
+  // A later write of just the timestamp must NOT clobber the models field.
   await writeCatalogEntry(catalogPath, 'claude-code', {
-    tools: [{ name: 'Read', source: 'native' }],
-    toolsEnumeratedAt: '2026-01-01T00:00:00.000Z',
+    enumeratedAt: '2026-02-02T00:00:00.000Z',
   });
   const entry = (await readCatalog(catalogPath))?.runners['claude-code'];
   expect(entry?.models?.map((m) => m.id)).toEqual(['sonnet']);
-  expect(entry?.tools?.map((t) => t.name)).toEqual(['Read']);
+  expect(entry?.enumeratedAt).toBe('2026-02-02T00:00:00.000Z');
 });

@@ -1,13 +1,10 @@
+import { tempDir } from '@centraid/test-kit/temp-dir';
 // Sweep wiring for the conversation-ledger archival engine (issue #438
 // decision 7): the daily archival block in `runSweep` must invoke conversation
 // archival alongside journal archival and roll ONE shared journal generation
 // when either engine wrote or pruned rows.
 
 import { afterEach, expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import crypto from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { ensureConversationLedger } from '@centraid/app-engine';
 import { openVaultPlane } from './vault-plane.js';
@@ -19,13 +16,6 @@ const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.();
 });
-
-async function tempDir(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `vault-plane-conv-${crypto.randomUUID()}-`));
-  cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  return dir;
-}
-
 function seedAgedAutomation(journal: DatabaseSync, now: number): void {
   const daysAgo = (d: number): number => now - d * DAY_MS;
   journal

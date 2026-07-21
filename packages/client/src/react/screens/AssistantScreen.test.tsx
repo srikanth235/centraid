@@ -58,15 +58,20 @@ afterEach(() => {
   update = null;
   vi.clearAllMocks();
 });
-function mount(props: AssistantBridgeProps): HTMLDivElement {
+async function mount(props: AssistantBridgeProps): Promise<HTMLDivElement> {
   container = document.createElement('div');
   document.body.appendChild(container);
   const onReady = (u: (s: AssistantSnapshot) => void): void => {
     update = u;
   };
-  act(() => {
+  // Awaited so the model-picker fetch this mount kicks off settles INSIDE
+  // act. Left dangling it lands as an un-acted update after the test body has
+  // moved on — which is what every "not wrapped in act" warning in this file
+  // was reporting.
+  await act(async () => {
     root = createRoot(container as HTMLDivElement);
     root.render(<AssistantScreen {...props} onReady={onReady} />);
+    await Promise.resolve();
   });
   return container;
 }
@@ -86,9 +91,9 @@ async function flush(): Promise<void> {
 }
 
 describe('AssistantScreen', () => {
-  it('shows the empty state with clickable suggestions', () => {
+  it('shows the empty state with clickable suggestions', async () => {
     const props = makeProps();
-    const el = mount(props);
+    const el = await mount(props);
     push(emptySnap());
     expect(el.querySelector('.empty')).toBeTruthy();
     const chips = [...el.querySelectorAll<HTMLButtonElement>('.suggestChip')];
@@ -98,8 +103,8 @@ describe('AssistantScreen', () => {
     expect((el.querySelector('.input') as HTMLTextAreaElement).value).toContain('spend');
   });
 
-  it('renders user, tools, and streaming/final AI messages', () => {
-    const el = mount(makeProps());
+  it('renders user, tools, and streaming/final AI messages', async () => {
+    const el = await mount(makeProps());
     push(
       emptySnap({
         empty: false,
@@ -127,8 +132,8 @@ describe('AssistantScreen', () => {
     expect(el.querySelector('.msgAi strong')?.textContent).toBe('$412');
   });
 
-  it('renders attachment chips on a user message', () => {
-    const el = mount(makeProps());
+  it('renders attachment chips on a user message', async () => {
+    const el = await mount(makeProps());
     push(
       emptySnap({
         empty: false,
@@ -147,9 +152,9 @@ describe('AssistantScreen', () => {
     expect(chip?.textContent).toContain('notes.pdf');
   });
 
-  it('re-hydrates refs inside an injected final answer', () => {
+  it('re-hydrates refs inside an injected final answer', async () => {
     const props = makeProps();
-    mount(props);
+    await mount(props);
     push(
       emptySnap({
         empty: false,
@@ -169,8 +174,8 @@ describe('AssistantScreen', () => {
     expect(node.querySelector('.cd-asst-ref')).toBeTruthy();
   });
 
-  it('shows a live streaming bubble with a cursor', () => {
-    const el = mount(makeProps());
+  it('shows a live streaming bubble with a cursor', async () => {
+    const el = await mount(makeProps());
     push(
       emptySnap({
         empty: false,
@@ -182,9 +187,9 @@ describe('AssistantScreen', () => {
     expect(el.querySelector('.cursor')).toBeTruthy();
   });
 
-  it('sends the composed draft on Enter and clears it', () => {
+  it('sends the composed draft on Enter and clears it', async () => {
     const props = makeProps();
-    const el = mount(props);
+    const el = await mount(props);
     push(emptySnap());
     const input = el.querySelector('.input') as HTMLTextAreaElement;
     setValue(input, 'When is my next event?');
@@ -195,9 +200,9 @@ describe('AssistantScreen', () => {
     expect(input.value).toBe('');
   });
 
-  it('the send button acts as Stop while busy', () => {
+  it('the send button acts as Stop while busy', async () => {
     const props = makeProps();
-    const el = mount(props);
+    const el = await mount(props);
     push(emptySnap({ busy: true }));
     const send = el.querySelector('.send') as HTMLButtonElement;
     expect(send.getAttribute('aria-label')).toBe('Stop');
@@ -206,9 +211,9 @@ describe('AssistantScreen', () => {
     expect(props.onSend).not.toHaveBeenCalled();
   });
 
-  it('does not send while busy or when the draft is blank and nothing is attached', () => {
+  it('does not send while busy or when the draft is blank and nothing is attached', async () => {
     const props = makeProps();
-    const el = mount(props);
+    const el = await mount(props);
     push(emptySnap());
     const input = el.querySelector('.input') as HTMLTextAreaElement;
     setValue(input, '   ');
@@ -218,9 +223,9 @@ describe('AssistantScreen', () => {
     expect(props.onSend).not.toHaveBeenCalled();
   });
 
-  it('sends a blank draft when a ready attachment is staged', () => {
+  it('sends a blank draft when a ready attachment is staged', async () => {
     const props = makeProps();
-    const el = mount(props);
+    const el = await mount(props);
     push(
       emptySnap({
         pendingAttachments: [{ id: 'a1', filename: 'photo.png', sizeBytes: 1024, state: 'ready' }],
@@ -231,9 +236,9 @@ describe('AssistantScreen', () => {
     expect(props.onSend).toHaveBeenCalledWith('');
   });
 
-  it('renders staged attachment chips and removes one', () => {
+  it('renders staged attachment chips and removes one', async () => {
     const props = makeProps();
-    const el = mount(props);
+    const el = await mount(props);
     push(
       emptySnap({
         pendingAttachments: [
@@ -249,9 +254,9 @@ describe('AssistantScreen', () => {
     expect(props.onRemovePendingAttachment).toHaveBeenCalledWith('a1');
   });
 
-  it('forwards dropped files to onAttachFiles', () => {
+  it('forwards dropped files to onAttachFiles', async () => {
     const props = makeProps();
-    const el = mount(props);
+    const el = await mount(props);
     push(emptySnap());
     const row = el.querySelector('.composerRow') as HTMLDivElement;
     const file = new File(['hello'], 'hello.txt', { type: 'text/plain' });
@@ -282,17 +287,17 @@ describe('AssistantScreen', () => {
       void act(() => btn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     };
 
-    it('copies an answer via the copy button', () => {
+    it('copies an answer via the copy button', async () => {
       const props = makeProps();
-      const el = mount(props);
+      const el = await mount(props);
       push(emptySnap({ empty: false, messages: [finalAi()] }));
       clickLabel(el, 'Copy message');
       expect(props.onCopyMessage).toHaveBeenCalledWith('Answer');
     });
 
-    it('sends thumbs feedback with the answer turn id', () => {
+    it('sends thumbs feedback with the answer turn id', async () => {
       const props = makeProps();
-      const el = mount(props);
+      const el = await mount(props);
       push(emptySnap({ empty: false, messages: [finalAi()] }));
       clickLabel(el, 'Good response');
       expect(props.onFeedback).toHaveBeenCalledWith('t1', 'up');
@@ -300,26 +305,26 @@ describe('AssistantScreen', () => {
       expect(props.onFeedback).toHaveBeenCalledWith('t1', 'down');
     });
 
-    it('regenerates the last answer', () => {
+    it('regenerates the last answer', async () => {
       const props = makeProps();
-      const el = mount(props);
+      const el = await mount(props);
       push(emptySnap({ empty: false, messages: [finalAi({ canRegenerate: true })] }));
       clickLabel(el, 'Regenerate response');
       expect(props.onRegenerate).toHaveBeenCalled();
     });
 
-    it('flips the retry pager', () => {
+    it('flips the retry pager', async () => {
       const props = makeProps();
-      const el = mount(props);
+      const el = await mount(props);
       push(emptySnap({ empty: false, messages: [finalAi({ retry: { index: 2, count: 2 } })] }));
       expect(el.querySelector('.pagerLabel')?.textContent).toBe('2/2');
       clickLabel(el, 'Previous attempt');
       expect(props.onPagerNav).toHaveBeenCalledWith(0, -1);
     });
 
-    it('retries a failed message from its error bubble', () => {
+    it('retries a failed message from its error bubble', async () => {
       const props = makeProps();
-      const el = mount(props);
+      const el = await mount(props);
       push(
         emptySnap({
           empty: false,
@@ -346,7 +351,7 @@ describe('AssistantScreen', () => {
   describe('model picker', () => {
     it('shows "Default · <model>" when the subsystem has no override, with an accessible name', async () => {
       const props = makeProps();
-      const el = mount(props);
+      const el = await mount(props);
       push(emptySnap());
       await flush();
       const btn = el.querySelector('.modelBtn') as HTMLButtonElement;
@@ -359,7 +364,7 @@ describe('AssistantScreen', () => {
       const props = makeProps({
         loadModelPicker: vi.fn().mockResolvedValue(modelPickerDTO({ selectedModelId: 'opus-5' })),
       });
-      const el = mount(props);
+      const el = await mount(props);
       push(emptySnap());
       await flush();
       const btn = el.querySelector('.modelBtn') as HTMLButtonElement;
@@ -369,7 +374,7 @@ describe('AssistantScreen', () => {
 
     it('opens a menu on click with menu/menuitemradio semantics, closes on Escape', async () => {
       const props = makeProps();
-      const el = mount(props);
+      const el = await mount(props);
       push(emptySnap());
       await flush();
       const btn = el.querySelector('.modelBtn') as HTMLButtonElement;
@@ -390,7 +395,7 @@ describe('AssistantScreen', () => {
 
     it('closes on an outside click', async () => {
       const props = makeProps();
-      const el = mount(props);
+      const el = await mount(props);
       push(emptySnap());
       await flush();
       const btn = el.querySelector('.modelBtn') as HTMLButtonElement;
@@ -402,7 +407,7 @@ describe('AssistantScreen', () => {
 
     it('picking a catalog model persists the pref and updates the label immediately', async () => {
       const props = makeProps();
-      const el = mount(props);
+      const el = await mount(props);
       push(emptySnap());
       await flush();
       const btn = el.querySelector('.modelBtn') as HTMLButtonElement;
@@ -420,7 +425,7 @@ describe('AssistantScreen', () => {
       const props = makeProps({
         loadModelPicker: vi.fn().mockResolvedValue(modelPickerDTO({ selectedModelId: 'opus-5' })),
       });
-      const el = mount(props);
+      const el = await mount(props);
       push(emptySnap());
       await flush();
       const btn = el.querySelector('.modelBtn') as HTMLButtonElement;

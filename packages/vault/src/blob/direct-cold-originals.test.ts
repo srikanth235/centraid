@@ -1,3 +1,4 @@
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // Direct-to-IA storage class for large media originals (issue #425 Wave 3
 // Part B). The pure eligibility resolver + the local-first replication doors it
 // wires into, which resolve the class from the sha's already-written
@@ -10,8 +11,7 @@
 // gateway-mediated multipart stream-through — live in direct-cold-doors.test.ts.
 
 import { randomBytes } from 'node:crypto';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { rmSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 import { DEFAULT_BACKUP_POLICY, resolveBackupPolicy, type BackupPolicy } from '../backup-policy.js';
@@ -168,7 +168,7 @@ interface DrainHarness {
 }
 
 function openDrainHarness(): DrainHarness {
-  const dir = mkdtempSync(path.join(tmpdir(), 'blob-cold-'));
+  const dir = tempDirSync('blob-cold-');
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
   const db = openVaultDb({ dir });
   cleanups.push(() => db.close());
