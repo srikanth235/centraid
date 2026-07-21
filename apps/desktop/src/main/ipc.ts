@@ -20,8 +20,6 @@ import {
 import { getGatewayRuntimeSnapshot, nudgeGatewayMonitor } from './gateway-monitor.js';
 import { applyLaunchAtLogin } from './login-item.js';
 import { refreshAuthInjector } from './auth-injector.js';
-import { resetConversationHistoryAuthCache } from './conversation-history-client.js';
-import { resetUserPrefsAuthCache } from './user-prefs-client.js';
 import { resetAppsStoreAuthCache } from './apps-store-client.js';
 import { resolveAppRevealDir, resetAppSessions } from './app-sessions.js';
 import {
@@ -238,8 +236,6 @@ export function registerIpcHandlers(): void {
   // header per origin; the user-prefs / chat-history clients cache
   // their bearer too. All three need to drop their caches together.
   const invalidateGatewayCaches = async (): Promise<void> => {
-    resetConversationHistoryAuthCache();
-    resetUserPrefsAuthCache();
     resetAppsStoreAuthCache();
     // Per-app editing sessions are per-gateway (the worktrees live in
     // the previous gateway's git store); forget them so the next edit
@@ -256,8 +252,6 @@ export function registerIpcHandlers(): void {
   // vault flip untouched; that's the keyed-state invariant the switch
   // preserves.
   const invalidateVaultCaches = async (): Promise<void> => {
-    resetConversationHistoryAuthCache();
-    resetUserPrefsAuthCache();
     resetAppsStoreAuthCache();
     await refreshAuthInjector();
   };

@@ -19,9 +19,6 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@centraid/agent-runtime": "workspace:*",
-    "@centraid/app-engine": "workspace:*",
-    "@centraid/automation": "workspace:*",
     "@centraid/client": "workspace:*",
     "@centraid/design-tokens": "workspace:*",
     "@centraid/gateway": "workspace:*",

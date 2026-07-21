@@ -23,7 +23,6 @@
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
-    "@types/tar": "^6.1.13",
     "typescript": "catalog:"
   },
   "engines": {

@@ -140,7 +140,6 @@ export {
   READABLE_SNAPSHOT_FORMATS,
   sealManifest,
   sha256Hex,
-  SNAPSHOT_FORMAT,
   SNAPSHOT_FORMAT_V1,
   SNAPSHOT_FORMAT_V2,
   verifyManifest,

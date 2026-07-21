@@ -45,8 +45,3 @@ export function lookupEntry(model: string | undefined): PricingEntry | undefined
   if (!model) return undefined;
   return matchEntry(catalog, model);
 }
-
-/** Number of models in the active table (diagnostics/tests). */
-export function pricingCatalogSize(): number {
-  return Object.keys(catalog).length;
-}

@@ -80,6 +80,12 @@ jobs:
       # Type-aware pass (oxlint --type-aware); deps' dist is built by the
       # typecheck step's upstream `^build`.
       - run: bun run lint:types
+      # Dead-code / unused-dependency scan (knip). Tuned as a files + dependency
+      # hygiene gate: unused files, unused deps, undeclared (unlisted) deps.
+      # Export/type dimensions are excluded (public-API monorepo makes them
+      # ~90% false positives); run `bunx knip --include exports,types` on-demand
+      # for a deep export sweep. Offline and fast, so it gates on the per-PR loop.
+      - run: bun run knip
       # Product-flow catalog anti-rot (issue #458 Phase 4): fail if any
       # matrix.json cell names an owning test file that no longer exists, or a
       # named contract suite shrinks below its recorded floor. Offline and fast,

@@ -58,10 +58,6 @@ function normalizeBase(raw: string): string {
   return raw.replace(/\/+$/, '');
 }
 
-export function getGatewayUrl(): string {
-  return Store.get<string>(SETTINGS_KEY, '');
-}
-
 export async function hydrateGatewayUrl(): Promise<string> {
   return Store.hydrate<string>(SETTINGS_KEY, '');
 }

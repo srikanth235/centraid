@@ -118,10 +118,9 @@ export const SNAPSHOT_FORMAT_V1 = 'centraid-snapshot/1';
  * the bump plus FORMAT.md IS the whole migration story.
  */
 export const SNAPSHOT_FORMAT_V2 = 'centraid-snapshot/2';
-/** The format new snapshots are written as. */
-export const SNAPSHOT_FORMAT = SNAPSHOT_FORMAT_V2;
-/** v0 has one readable format at a time: a reader MUST reject every other string. */
-export const READABLE_SNAPSHOT_FORMATS: readonly string[] = [SNAPSHOT_FORMAT];
+/** The format new snapshots are written as; v0 has one readable format at a
+ * time: a reader MUST reject every other string. */
+export const READABLE_SNAPSHOT_FORMATS: readonly string[] = [SNAPSHOT_FORMAT_V2];
 
 export interface SnapshotRegistryIdentity {
   format: string;
@@ -194,7 +193,7 @@ export function sealManifest(opts: {
   const payload: SealedPayload = { entries: opts.entries };
   const payloadBytes = new TextEncoder().encode(canonicalJson(payload));
   const publicEnvelope: ManifestPublic = {
-    format: SNAPSHOT_FORMAT,
+    format: SNAPSHOT_FORMAT_V2,
     keyEpoch: opts.keyEpoch,
     createdAt: opts.createdAt ?? new Date().toISOString(),
     generation: opts.generation,

@@ -15,7 +15,7 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, expect, test } from 'vitest';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { openRemoteBackupProvider, SNAPSHOT_FORMAT } from '@centraid/backup';
+import { openRemoteBackupProvider, SNAPSHOT_FORMAT_V2 } from '@centraid/backup';
 import { startFakeProviderServer } from '@centraid/backup/dist/testing/fake-provider-server.js';
 import { AUTHED_DEVICE_HEADER } from '@centraid/app-engine';
 import type { RouteHandler } from '../serve/build-gateway.js';
@@ -216,7 +216,7 @@ test('POST /recover/discover: found / wrong-key / incompatible', async () => {
       totalBytes: 0,
       objectCount: 0,
       generation: a.oldGeneration,
-      format: SNAPSHOT_FORMAT,
+      format: SNAPSHOT_FORMAT_V2,
       appMeta: { vaultUserVersion: '9999', ontologyVersion: '1.0' },
     },
   );

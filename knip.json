@@ -1,10 +1,11 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
-  "ignore": ["tests/**"],
+  "ignore": ["tests/**", "apps/mobile/src/kit/theme/tokens.generated.ts"],
   "ignoreBinaries": ["actionlint", "python3"],
-  "ignoreDependencies": ["@centraid/test-kit"],
+  "ignoreDependencies": ["@centraid/test-kit", "pagefind"],
   "ignoreWorkspaces": ["packages/data-plane", "packages/tsconfig"],
-  "exclude": ["exports", "nsExports", "types", "nsTypes", "enumMembers", "classMembers"],
+  "ignoreExportsUsedInFile": true,
+  "exclude": ["enumMembers", "classMembers"],
   "workspaces": {
     ".": {
       "entry": ["scripts/**/*.{js,mjs,ts}", ".github/workflows/*.{yml,yaml}"],
@@ -16,11 +17,16 @@
     },
     "packages/agent-runtime": {
       "entry": ["src/index.ts", "src/cli/centraid-cli.ts"],
-      "project": ["src/**/*.{ts,tsx}"]
+      "project": ["src/**/*.{ts,tsx}"],
+      "ignoreDependencies": [
+        "@agentclientprotocol/claude-agent-acp",
+        "@agentclientprotocol/codex-acp"
+      ]
     },
     "packages/gateway": {
       "entry": ["src/index.ts", "src/cli/cli.ts"],
-      "project": ["src/**/*.{ts,tsx}"]
+      "project": ["src/**/*.{ts,tsx}"],
+      "ignoreDependencies": ["@centraid/web"]
     },
     "packages/app-engine": {
       "entry": ["src/index.ts", "src/worker/runner.ts", "src/worker/ts-loader-hooks.ts"],
@@ -32,7 +38,13 @@
     },
     "packages/client": {
       "entry": ["src/index.ts", "src/replica/index.ts", "src/replica/sqlite-worker.ts"],
-      "project": ["src/**/*.{ts,tsx}"]
+      "project": ["src/**/*.{ts,tsx}"],
+      "ignoreDependencies": ["@centraid/blueprints"]
+    },
+    "packages/blueprints": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.{ts,tsx}"],
+      "ignoreDependencies": ["@centraid/blob-format", "esbuild", "pdfjs-dist", "react", "react-dom"]
     },
     "packages/test-kit": {
       "entry": ["src/*.ts"],
@@ -40,14 +52,17 @@
     },
     "apps/desktop": {
       "entry": ["src/main.ts", "src/preload.ts"],
-      "project": ["src/**/*.{ts,tsx}"]
+      "project": ["src/**/*.{ts,tsx}"],
+      "ignoreDependencies": ["react", "react-dom", "@types/react", "@types/react-dom"]
     },
     "apps/web": {
-      "project": ["src/**/*.{ts,tsx}"]
+      "project": ["src/**/*.{ts,tsx}"],
+      "ignoreDependencies": ["react", "react-dom", "@types/react", "@types/react-dom"]
     },
     "apps/mobile": {
       "entry": ["index.ts", "App.tsx"],
-      "project": ["src/**/*.{ts,tsx}"]
+      "project": ["src/**/*.{ts,tsx}"],
+      "ignoreDependencies": ["@babel/core", "expo-system-ui"]
     }
   }
 }

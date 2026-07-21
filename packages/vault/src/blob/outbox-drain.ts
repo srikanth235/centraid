@@ -1,4 +1,3 @@
-import { Readable } from 'node:stream';
 import type { BlobCache } from './cache.js';
 import type { LocalBlobStore } from './local.js';
 import { remoteEncryptionKey, type RemoteTier } from './custody-types.js';
@@ -273,9 +272,4 @@ export async function drainOutboxRow(deps: OutboxDrainDeps, row: OutboxRow): Pro
   } else {
     await uploadViaCasStore(deps, remote, row, store, storeClass, storageClass);
   }
-}
-
-/** Convenience used by stream-through for small in-memory fakes. */
-export function readableOf(bytes: Buffer): NodeJS.ReadableStream {
-  return Readable.from([bytes]);
 }

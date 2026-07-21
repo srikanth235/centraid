@@ -625,30 +625,6 @@ export interface SettingsLayoutBridgeProps {
  * for cosmetic polish it happens to have on hand.
  */
 export type AgentRunnerKind = string;
-/**
- * Kinds this build knows by name — used ONLY to look up a nicer accent colour
- * and to seed a sane default. Never to filter or validate the gateway's list:
- * an unknown kind is a newer gateway, not a broken one.
- */
-export const AGENT_RUNNER_KINDS = [
-  'codex',
-  'claude-code',
-  'gemini',
-  'qwen',
-  'opencode',
-  'grok',
-  'kimi',
-  'copilot',
-  'cursor',
-  'kilo',
-  'cline',
-  'goose',
-  'auggie',
-  'vibe',
-  'droid',
-  'pi',
-  'acp',
-] as const;
 export interface AgentModelDTO {
   id: string;
   name?: string;

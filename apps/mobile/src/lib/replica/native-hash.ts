@@ -14,5 +14,12 @@ import type { ReplicaDigest, ReplicaIdFactory } from '@centraid/client/replica/n
 export const nativeReplicaDigest: ReplicaDigest = (input) =>
   Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, input);
 
-/** Hermes has no `crypto.randomUUID`; expo-crypto provides a v4 UUID. */
+/**
+ * Hermes has no `crypto.randomUUID`; expo-crypto provides a v4 UUID.
+ *
+ * Consumed via the conditional `await import('./native-hash')` in
+ * native-session.ts, which knip's export tracing misses — hence `@public`.
+ *
+ * @public
+ */
 export const nativeReplicaIdFactory: ReplicaIdFactory = () => Crypto.randomUUID();

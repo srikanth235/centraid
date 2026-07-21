@@ -32,7 +32,7 @@ import {
   openManifest,
   READABLE_SNAPSHOT_FORMATS,
   sealManifest,
-  SNAPSHOT_FORMAT,
+  SNAPSHOT_FORMAT_V2,
   validateSnapshotBasePair,
 } from './manifest.js';
 import { partStream } from './parts.js';
@@ -361,7 +361,7 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
     totalBytes,
     objectCount: chunkIndex.length,
     generation: opts.generation,
-    format: SNAPSHOT_FORMAT,
+    format: SNAPSHOT_FORMAT_V2,
     appMeta: opts.appMeta,
   });
   log.info(

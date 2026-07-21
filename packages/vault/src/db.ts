@@ -18,7 +18,11 @@ import { BlobCustody, type RemoteTier } from './blob/custody.js';
 import { BlobCache, readBlobCacheSettings } from './blob/cache.js';
 import { BlobContentKeyRegistry } from './blob/content-keys.js';
 import { FsBlobStore, MemoryBlobStore, type LocalBlobStore } from './blob/local.js';
-import type { PreviewCodec } from './blob/preview.js';
+import {
+  contributeIngressPreviews,
+  type IngressPreviewInput,
+  type PreviewCodec,
+} from './blob/preview.js';
 import { S3BlobStore, type S3BlobStoreOptions, type S3Credentials } from './blob/s3.js';
 import { S3TransferStore } from './blob/s3-transfer.js';
 import { desiredStoreForSha, storageClassForShaWrite } from './blob/store-routing.js';
@@ -433,6 +437,13 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     remoteConfigured: () => readBlobStoreSettings(vault).kind === 's3',
     policy: () => readBackupPolicy(vault),
     contentKeys: blobContentKeys,
+    // Capture-time previews (issue #405 §2): rungs + dHash while the plaintext
+    // is in hand, instead of the next sweep's backfill backstop. Fire-and-
+    // forget best-effort; closes over `api` (below) — only fires post-open.
+    ...(options.previewCodec && {
+      contributePreview: (input: IngressPreviewInput) =>
+        void contributeIngressPreviews(api, options.previewCodec!, input).catch(() => {}),
+    }),
     ...(options.shouldDeferBackgroundWork
       ? { shouldDeferBackgroundWork: options.shouldDeferBackgroundWork }
       : {}),
