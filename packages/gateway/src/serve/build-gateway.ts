@@ -41,10 +41,12 @@ import {
   ConversationStore,
   InsightsStore,
   PrefsStore,
+  RUNNER_KINDS,
   Runtime,
   changesSubscriberCount,
   cleanupDeregisteredApp,
   deriveTitle,
+  isRunnerKind,
   generateConversationTitle,
   makeConversationRouteHandler,
   makeJournalDbProvider,
@@ -72,9 +74,7 @@ import {
   CatalogWarmer,
   deriveStatus,
   readRunnerModels,
-  readRunnerTools,
   enumerateRunnerModels,
-  enumerateHostTools,
   probeCliAvailability,
   type CatalogSurface,
   type RunnerKind,
@@ -1039,10 +1039,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     const kindRaw = subsystem
       ? resolveSubsystemRunner(allPrefs, subsystem)
       : allPrefs['agent.runner.kind'];
-    // Codex is the default when the user hasn't picked — matches the
-    // settings panel's "Codex preferred when both present" copy.
-    const kind: RunnerPrefs['kind'] =
-      kindRaw === 'codex' || kindRaw === 'claude-code' ? kindRaw : 'codex';
+    // Codex is the default when the user hasn't picked (or persisted junk /
+    // a kind this build no longer registers). Validated against the runner
+    // registry rather than a literal pair, so a newly registered kind is
+    // honoured here the moment it exists.
+    const kind: RunnerPrefs['kind'] = isRunnerKind(kindRaw) ? kindRaw : 'codex';
     const binPath =
       typeof allPrefs['agent.runner.binPath'] === 'string'
         ? (allPrefs['agent.runner.binPath'] as string)
@@ -1077,15 +1078,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     return resolveSubsystemModel(prefs.getAllPrefs(), runnerPrefs.kind, subsystem, explicit);
   };
 
-  // One warmer owns ALL host-capability enumeration — models + tools, both
-  // runners — shared by the boot probe and the status routes so concurrent
-  // warms dedupe (a client Refresh mid-boot joins the boot warm). Enumerators
-  // honor the active runner's binPath/extraArgs; inactive runners enumerate
-  // with defaults. Tools are captured by spawning the CLI against a mock-LLM
-  // server (`enumerateHostTools`) from a stable cwd (the gateway's own working
-  // dir, NOT a draft worktree — a worktree cwd makes the claude SDK report 0
-  // tools).
-  const toolProbeCwd = process.cwd();
+  // One warmer owns host-capability enumeration — the model list, for every
+  // runner — shared by the boot probe and the status routes so concurrent
+  // warms dedupe (a client Refresh mid-boot joins the boot warm). The
+  // enumerator honors the active runner's binPath/extraArgs; inactive runners
+  // enumerate with defaults. (The tool surface this warmer once also tracked
+  // went away with the `ctx.tool` rail — issue #484.)
   const catalogPath = paths.modelCatalogFile;
   // Catalog warms are best-effort; failures record as tagged warn events
   // (visible in `_gateway/health`) without flipping any component red.
@@ -1100,14 +1098,6 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             kind,
             ...(isActive && runnerPrefs?.binPath ? { binPath: runnerPrefs.binPath } : {}),
             ...(isActive && runnerPrefs?.extraArgs ? { extraArgs: runnerPrefs.extraArgs } : {}),
-          });
-        },
-        enumerateTools: async (kind) => {
-          const runnerPrefs = await prefsLoader();
-          const isActive = runnerPrefs?.kind === kind;
-          return enumerateHostTools(kind, {
-            cwd: toolProbeCwd,
-            ...(isActive && runnerPrefs?.binPath ? { binPath: runnerPrefs.binPath } : {}),
           });
         },
       })
@@ -1133,10 +1123,18 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     ? (kind: RunnerKind, refresh: boolean) =>
         resolveCatalogSurface('models', kind, refresh, readRunnerModels)
     : undefined;
-  const resolveCatalogTools = catalogPath
-    ? (kind: RunnerKind, refresh: boolean) =>
-        resolveCatalogSurface('tools', kind, refresh, readRunnerTools)
-    : undefined;
+  // The binary the agents route should probe for a kind. Only the kind the
+  // owner actually configured carries an override (`agent.runner.binPath` is
+  // one global slot, not a per-kind map) — the same "is this the active
+  // runner" rule the catalog warmer applies. This is what makes the custom
+  // `acp` kind reportable: it ships no default binary, so it stays
+  // unavailable until its path is configured and selected.
+  const binPathForKind = (kind: RunnerKind): string | undefined => {
+    const allPrefs = prefs.getAllPrefs();
+    if (allPrefs['agent.runner.kind'] !== kind) return undefined;
+    const binPath = allPrefs['agent.runner.binPath'];
+    return typeof binPath === 'string' && binPath.length > 0 ? binPath : undefined;
+  };
 
   // Ask-model picker (kit Ask panel, subsystem `ask`) — GET/PUT
   // `/centraid/<appId>/_turn/model`. Reads/writes the SAME
@@ -1174,24 +1172,6 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         [`model.${runnerPrefs.kind}.ask`]: model && model.length > 0 ? model : null,
       });
     },
-  };
-
-  // Catalog invalidation (issue #308 B4): the warmer used to run at boot /
-  // manual Refresh only, so a published app, an install, or a new
-  // connection could leave both model surfaces blind to new host tools
-  // until someone clicked Refresh. Lifecycle events kick a re-warm of the
-  // active runner's tools surface — fire-and-forget, deduped by the warmer.
-  const invalidateToolCatalog = (): void => {
-    if (!warmer) return;
-    void (async () => {
-      const runnerPrefs = await prefsLoader();
-      if (!runnerPrefs) return;
-      await warmer.warm(runnerPrefs.kind, 'tools');
-    })().catch((err: unknown) => {
-      catalogLogger.warn(
-        `tool-catalog invalidation failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    });
   };
 
   // Cycle break: the chat runner needs the Runtime's dispatcher, but
@@ -1504,7 +1484,6 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       publicBaseUrl: () => serverUrl,
       ext,
       ...makeVaultToolRunners(vaultRegistry),
-      ...(paths.modelCatalogFile ? { catalogPath: paths.modelCatalogFile } : {}),
       ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
     });
     const lifecycleOpts: LifecycleRouteOptions = {
@@ -1515,7 +1494,6 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         await requireRuntime().registry.ensureUploaded(appId);
         vaultRegistry.enrollApp(appId);
         await grantDeclaredAppScopes(plane, store, appId);
-        invalidateToolCatalog();
       },
       preparePublishedApp: prewarmApp,
       deregister: deregisterAndCleanup,
@@ -1541,7 +1519,6 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         await requireRuntime().registry.ensureUploaded(templateId);
         await grantDeclaredBundledScopes(plane, templateId);
         await prewarmApp(templateId, bundledAppDir(templateId));
-        invalidateToolCatalog();
         return {
           id: templateId,
           ...(meta.name !== undefined ? { name: meta.name } : {}),
@@ -1558,7 +1535,6 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       renameBundledApp: (appId, name) => {
         if (!plane.installedAppIds().has(appId)) return false;
         plane.setAppLabel(appId, name);
-        invalidateToolCatalog();
         return true;
       },
       ext,
@@ -1653,12 +1629,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           // A publish/rollback may have added/removed/toggled an
           // automation — resync THIS vault's cron scheduler off the new `main`.
           await reconcileScheduler(vaultId);
-          invalidateToolCatalog();
         },
         onAppDeleted: async (appId) => {
           await deregisterAndCleanup(appId);
           await reconcileScheduler(vaultId);
-          invalidateToolCatalog();
         },
         // The listing union half (issue #434): installed bundled apps, with
         // their metadata read from the shipped blueprint dir + the per-vault
@@ -2416,9 +2390,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // BEFORE the generic `_vault` handler (same prefix family).
     forRoutePrefixes(
       ['/centraid/_vault/connections', '/centraid/_vault/oauth/callback'],
-      makeConnectionsRouteHandler(vaultRegistry, connectionBroker, {
-        onConnectionChanged: invalidateToolCatalog,
-      }),
+      makeConnectionsRouteHandler(vaultRegistry, connectionBroker),
     ),
     // Consent-derived offline replica protocol (#406). Mounted before the
     // generic owner `_vault` handler because both share that prefix. The
@@ -2491,14 +2463,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Coding-agent detection (codex/claude credentials on the gateway host).
     forRoutePrefixes(
       '/centraid/_agents',
-      makeAgentsRouteHandler(
-        catalogPath
-          ? {
-              ...(resolveCatalogModels ? { resolveModels: resolveCatalogModels } : {}),
-              ...(resolveCatalogTools ? { resolveTools: resolveCatalogTools } : {}),
-            }
-          : {},
-      ),
+      makeAgentsRouteHandler({
+        ...(resolveCatalogModels ? { resolveModels: resolveCatalogModels } : {}),
+        binPathFor: binPathForKind,
+      }),
     ),
     // The request vault's store-backed handlers (apps-store / lifecycle /
     // automations), resolved per request off the ambient vault scope.
@@ -2662,35 +2630,36 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // follows the hardware profile's idle cadence, and errors back off.
     scheduleOutboxSweep(hardwareProfile.outboxIdleIntervalMs);
 
-    // Warm the host-capability catalog — BOTH models and tools — for each
-    // detected runner on EVERY gateway start, in the background so it never
-    // delays readiness. Best-effort; the warmer dedupes, so a client Refresh
-    // mid-boot joins this run.
+    // Warm the host-capability catalog — the model list — for each detected
+    // runner on EVERY gateway start, in the background so it never delays
+    // readiness. Best-effort; the warmer dedupes, so a client Refresh mid-boot
+    // joins this run.
     if (warmer) {
       const activeWarmer = warmer;
       void (async () => {
-        const kinds: RunnerKind[] = ['codex', 'claude-code'];
-        const surfaces: CatalogSurface[] = ['models', 'tools'];
+        // Every registered runner kind, not a hardcoded pair. The probe is a
+        // single `<bin> --version` per kind (concurrent, and a kind with no
+        // configured binary short-circuits without spawning), and only the
+        // kinds that actually resolve go on to the far more expensive warm.
+        const surface: CatalogSurface = 'models';
         const checks = await Promise.all(
-          kinds.map(async (kind) => ({
+          RUNNER_KINDS.map(async (kind) => ({
             kind,
-            present: (await probeCliAvailability(kind)).available,
+            present: (await probeCliAvailability(kind, binPathForKind(kind))).available,
           })),
         );
         await Promise.all(
           checks
             .filter((c) => c.present)
-            .flatMap((c) =>
-              surfaces.map((surface) =>
-                activeWarmer
-                  .warm(c.kind, surface)
-                  .catch((err) =>
-                    catalogLogger.warn(
-                      `catalog warm (${c.kind}/${surface}) failed: ` +
-                        (err instanceof Error ? err.message : String(err)),
-                    ),
+            .map((c) =>
+              activeWarmer
+                .warm(c.kind, surface)
+                .catch((err) =>
+                  catalogLogger.warn(
+                    `catalog warm (${c.kind}/${surface}) failed: ` +
+                      (err instanceof Error ? err.message : String(err)),
                   ),
-              ),
+                ),
             ),
         );
       })();

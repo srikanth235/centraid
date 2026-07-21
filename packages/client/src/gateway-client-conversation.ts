@@ -65,17 +65,12 @@ export async function getRunnerStatus(
  * rather than whatever is installed on the desktop.
  */
 export async function getAgentsStatus(
-  opts: { refresh?: boolean; refreshTools?: boolean } = {},
+  opts: { refresh?: boolean } = {},
 ): Promise<CentraidAgentsStatus> {
   const { baseUrl, token } = await auth();
-  // `?refresh=1` re-enumerates each agent's models (issue #188);
-  // `?refreshTools=1` re-probes each agent's tools (slower — spawns a CLI), so
-  // it's a separate flag/button. A plain load returns the catalog cache.
-  const params = new URLSearchParams();
-  if (opts.refresh) params.set('refresh', '1');
-  if (opts.refreshTools) params.set('refreshTools', '1');
-  const qs = params.toString();
-  const path = qs ? `/centraid/_agents/status?${qs}` : '/centraid/_agents/status';
+  // `?refresh=1` re-enumerates each agent's models (issue #188). A plain load
+  // returns the catalog cache.
+  const path = opts.refresh ? '/centraid/_agents/status?refresh=1' : '/centraid/_agents/status';
   const res = await doFetch(baseUrl, path, {
     method: 'GET',
     headers: authHeaders(token),

@@ -14,6 +14,7 @@
 import { spawn } from 'node:child_process';
 import type { RunnerStatus } from '@centraid/app-engine';
 import type { RunnerKind, RunnerPrefs } from './types.js';
+import { getRunnerBackend } from './registry.js';
 import { readRunnerModels } from './models/catalog.js';
 import { agentSpawnEnv } from './spawn-env.js';
 import { lowPriorityCommand } from './low-priority.js';
@@ -27,25 +28,14 @@ interface SemVer {
 }
 
 /**
- * Minimum CLI versions whose event/flag schemas we've verified. Older
- * versions may still work — the adapter is defensive — but we surface
- * the mismatch in the preflight so users know whether they're on
- * tested ground.
- *
- *  - codex: 0.128.0 (empirically captured `thread.started`,
- *    `item.completed[agent_message]`, `turn.completed`, `--json`,
- *    `exec resume <id>` subcommand, `-c mcp_servers.<name>.url=…`).
- *  - claude-code: 2.1.126 (empirically captured `system/init`,
- *    `assistant`, `user[tool_result]`, `result` events under
- *    `--output-format stream-json --verbose`).
+ * Minimum CLI versions whose event/flag schemas we've verified live in the
+ * runner-backend registry (`registry.ts`), alongside each kind's default
+ * binary and install hint. codex/claude-code are empirically captured; the
+ * ACP-native kinds are pinned to the oldest release whose ACP surface we
+ * rely on (see each entry's comment in `registry.ts`).
  */
-const MIN_VERSIONS: Record<RunnerKind, SemVer> = {
-  codex: { major: 0, minor: 128, patch: 0 },
-  'claude-code': { major: 2, minor: 1, patch: 126 },
-};
-
 export function minVersionString(kind: RunnerKind): string {
-  const v = MIN_VERSIONS[kind];
+  const v = getRunnerBackend(kind).minVersion;
   return `${v.major}.${v.minor}.${v.patch}`;
 }
 
@@ -82,7 +72,9 @@ export async function probeCliAvailability(
   kind: RunnerKind,
   binPath?: string,
 ): Promise<CliAvailability> {
-  const bin = binPath ?? defaultBinFor(kind);
+  const bin = binPath ?? getRunnerBackend(kind).defaultBin;
+  // The custom `acp` kind has no default binary — unavailable until configured.
+  if (!bin) return { available: false };
   try {
     const raw = await execVersion(bin, agentSpawnEnv({ binPath }));
     return { available: true, version: raw.trim().slice(0, 200) };
@@ -116,12 +108,24 @@ export async function runPreflight(
 }
 
 async function probe(prefs: RunnerPrefs): Promise<RunnerStatus> {
-  const bin = prefs.binPath ?? defaultBinFor(prefs.kind);
+  const backend = getRunnerBackend(prefs.kind);
+  const bin = prefs.binPath ?? backend.defaultBin;
+  // The custom `acp` kind has no default binary: report unavailable (with the
+  // configuration hint) rather than spawning `undefined --version`.
+  if (!bin) {
+    return {
+      kind: prefs.kind,
+      ok: false,
+      reason: 'no binary configured for this runner — set its path in Settings → Agents',
+      hint: backend.installHint,
+      minVersion: minVersionString(prefs.kind),
+    };
+  }
   try {
     const raw = await execVersion(bin, agentSpawnEnv({ binPath: prefs.binPath }));
     const trimmed = raw.trim().slice(0, 200);
     const parsed = parseSemver(trimmed);
-    const minV = MIN_VERSIONS[prefs.kind];
+    const minV = backend.minVersion;
     const versionAtLeast = parsed ? compareSemver(parsed, minV) >= 0 : undefined;
     const status: RunnerStatus = {
       kind: prefs.kind,
@@ -142,7 +146,7 @@ async function probe(prefs: RunnerPrefs): Promise<RunnerStatus> {
         kind: prefs.kind,
         ok: false,
         reason: `${bin} not found on PATH`,
-        hint: hintFor(prefs.kind),
+        hint: backend.installHint,
         minVersion: minVersionString(prefs.kind),
       };
     }
@@ -151,21 +155,10 @@ async function probe(prefs: RunnerPrefs): Promise<RunnerStatus> {
       kind: prefs.kind,
       ok: false,
       reason: message,
-      hint: hintFor(prefs.kind),
+      hint: backend.installHint,
       minVersion: minVersionString(prefs.kind),
     };
   }
-}
-
-function defaultBinFor(kind: RunnerKind): string {
-  return kind === 'codex' ? 'codex' : 'claude';
-}
-
-function hintFor(kind: RunnerKind): string {
-  if (kind === 'codex') {
-    return 'Install Codex CLI (https://platform.openai.com/docs/codex) and run `codex login`.';
-  }
-  return 'Install Claude Code (https://claude.com/code) and run `claude login`.';
 }
 
 /**

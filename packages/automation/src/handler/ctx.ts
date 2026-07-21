@@ -7,13 +7,7 @@
  * matches the worker's expected wire shape.
  */
 
-import type {
-  AgentAttachment,
-  AgentDispatcher,
-  DispatchContext,
-  ToolDispatcher,
-  ToolResult,
-} from './runner.js';
+import type { AgentAttachment, AgentDispatcher, DispatchContext } from './runner.js';
 import type {
   ConversationStore,
   TurnStreamEvent,
@@ -28,112 +22,17 @@ import {
   type RunEventSink,
 } from './audit.js';
 
-export interface ToolCallWire {
-  name: string;
-  args: unknown;
-}
-
 export interface AuditState {
   store: ConversationStore;
   runId: string;
   automationId: string;
   ordinal: number;
-  nextBatchId: number;
   /** Live run-stream sink. No-op until the host wires its bus (issue #158). */
   emit: RunEventSink;
 }
 
 export function nextOrdinal(audit: AuditState): number {
   return audit.ordinal++;
-}
-
-export function nextBatchIdFor(audit: AuditState, n: number): number | undefined {
-  if (n <= 1) return undefined;
-  return audit.nextBatchId++;
-}
-
-export interface DispatchBatchArgs {
-  audit: AuditState;
-  toolDispatcher: ToolDispatcher;
-  dispatchCtx: DispatchContext;
-  calls: ToolCallWire[];
-}
-
-/**
- * Dispatch one batch of `ctx.tool` calls and record each as a
- * `run_nodes` row. There is no runtime retry — a failed `ctx.tool`
- * rejects the handler's Promise, and the handler (which is plain JS)
- * owns retry/backoff/error-classification via `try/catch`. See the
- * "Run audit & state" block of the builder system prompt.
- */
-export async function dispatchToolBatch(args: DispatchBatchArgs): Promise<ToolResult[]> {
-  const { audit, calls, toolDispatcher, dispatchCtx } = args;
-  const ordinals = calls.map(() => nextOrdinal(audit));
-  const batchId = nextBatchIdFor(audit, calls.length);
-  const started = Date.now();
-
-  // Open every node (durable "running" row + `node.start`) BEFORE the batch
-  // dispatches, so the parallel lane shows all calls in flight at once.
-  const nodeIds = calls.map((call, i) =>
-    openRunNode({
-      store: audit.store,
-      emit: audit.emit,
-      runId: audit.runId,
-      ordinal: ordinals[i]!,
-      ...(batchId !== undefined ? { batchId } : {}),
-      kind: 'tool',
-      name: call.name,
-      args: call.args,
-      started,
-    }),
-  );
-  let results: ToolResult[];
-  try {
-    results = await toolDispatcher(
-      calls.map((c) => ({ name: c.name, args: c.args })),
-      dispatchCtx,
-    );
-  } catch (err) {
-    // The dispatcher rejected wholesale (e.g. CLI spawn blew up). The runner's
-    // catch turns this into failed tool replies and the run keeps going — so if
-    // we don't settle the nodes here they'd stay `ended_at = NULL` forever and
-    // the live stream would never see them terminate. Close every opened node
-    // as failed (durable close + `node.end`), then rethrow so the runner still
-    // sends its per-call failure replies to the worker.
-    const ended = Date.now();
-    const error = err instanceof Error ? err.message : String(err);
-    for (let i = 0; i < nodeIds.length; i++) {
-      closeRunNode({
-        store: audit.store,
-        emit: audit.emit,
-        nodeId: nodeIds[i]!,
-        ordinal: ordinals[i]!,
-        ok: false,
-        error,
-        started,
-        ended,
-      });
-    }
-    throw err;
-  }
-  const ended = Date.now();
-  return calls.map((_call, i) => {
-    const result = results[i] ?? { ok: false, error: 'no result returned by dispatcher' };
-    // Phase 3 (issue #158): prefer the dispatcher's real per-tool window when
-    // it reported one (mock onToolStart/onToolResults); else the batch span.
-    closeRunNode({
-      store: audit.store,
-      emit: audit.emit,
-      nodeId: nodeIds[i]!,
-      ordinal: ordinals[i]!,
-      ok: result.ok,
-      ...(result.result !== undefined ? { result: result.result } : {}),
-      ...(result.error !== undefined ? { error: result.error } : {}),
-      started: result.startedAt ?? started,
-      ended: result.endedAt ?? ended,
-    });
-    return result;
-  });
 }
 
 export interface CtxReply {

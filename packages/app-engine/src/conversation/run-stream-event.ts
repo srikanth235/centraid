@@ -28,7 +28,11 @@ export type RunStreamEvent =
   | {
       type: 'node.start';
       ordinal: number;
-      /** Set when the node is part of a parallel batch (≥2 `ctx.tool` calls). */
+      /**
+       * Set when the node is part of a parallel batch. Retained for wire
+       * compatibility but no longer populated: the `ctx.tool` rail that
+       * emitted parallel batches was removed (#484).
+       */
       batchId?: number;
       kind: ItemKind;
       /** Tool name or `'agent'`. */

@@ -1,41 +1,41 @@
 /*
  * Catalog warmer — the single owner of host-capability enumeration.
  *
- * Both surfaces (models, tools) for both runners are enumerated through one
- * shared `CatalogWarmer` instance, on two triggers:
+ * The model surface for every runner is enumerated through one shared
+ * `CatalogWarmer` instance, on two triggers:
  *
- *  - **Boot**: the gateway warms every detected runner × surface in the
- *    background so the catalog is fresh before anyone opens the picker.
+ *  - **Boot**: the gateway warms every detected runner in the background so
+ *    the catalog is fresh before anyone opens the picker.
  *  - **Refresh / cold read**: the status routes kick a warm fire-and-forget;
  *    the client polls the surface's `SurfaceStatus` until it leaves `loading`.
  *
  * `warm(kind, surface)` dedupes concurrent calls (boot + an immediate Refresh
  * join one enumeration), runs the injected enumerator best-effort, and on a
  * NON-EMPTY result merge-writes the catalog via `writeCatalogEntry` (an empty
- * result never clobbers a prior good entry). The enumerators are injected so
- * this stays free of gateway-only concerns (`enumerateHostTools` needs a cwd +
- * mock-LLM; model/tool prefs come from the gateway's prefs loader).
+ * result never clobbers a prior good entry). The enumerator is injected so
+ * this stays free of gateway-only concerns (model prefs come from the
+ * gateway's prefs loader).
  *
- * Reads stay in `./catalog.ts` (`readRunnerModels` / `readRunnerTools`); this
- * module only writes. `deriveStatus` turns (cached length, isWarming) into the
- * tri-state the UI renders.
+ * (The tool surface this warmer once also tracked went away with the
+ * `ctx.tool` rail — issue #484.)
+ *
+ * Reads stay in `./catalog.ts` (`readRunnerModels`); this module only writes.
+ * `deriveStatus` turns (cached length, isWarming) into the tri-state the UI
+ * renders.
  */
 
 import type { RunnerKind, RunnerModel, SurfaceStatus } from '@centraid/app-engine';
-import type { HostTool } from '../host-tools.js';
 import { writeCatalogEntry, hashModelIds } from './catalog.js';
 
 export type { SurfaceStatus } from '@centraid/app-engine';
 
-/** The two host-capability surfaces the catalog tracks per runner. */
-export type CatalogSurface = 'models' | 'tools';
+/** The host-capability surfaces the catalog tracks per runner. */
+export type CatalogSurface = 'models';
 
 export interface CatalogWarmerOptions {
   catalogPath: string;
   /** Live model self-report for a kind. Best-effort; should resolve `[]` on failure. */
   enumerateModels: (kind: RunnerKind) => Promise<RunnerModel[]>;
-  /** Live tool probe for a kind. Best-effort; should resolve `[]` on failure. */
-  enumerateTools: (kind: RunnerKind) => Promise<HostTool[]>;
 }
 
 export class CatalogWarmer {
@@ -65,35 +65,19 @@ export class CatalogWarmer {
     return run;
   }
 
-  private async run(kind: RunnerKind, surface: CatalogSurface): Promise<void> {
-    if (surface === 'models') {
-      let models: RunnerModel[] = [];
-      try {
-        models = await this.opts.enumerateModels(kind);
-      } catch {
-        models = [];
-      }
-      // Empty result → never clobber a prior good entry (no write).
-      if (models.length) {
-        await writeCatalogEntry(this.opts.catalogPath, kind, {
-          hash: hashModelIds(models),
-          models,
-          enumeratedAt: new Date().toISOString(),
-        });
-      }
-      return;
-    }
-
-    let tools: HostTool[] = [];
+  private async run(kind: RunnerKind, _surface: CatalogSurface): Promise<void> {
+    let models: RunnerModel[] = [];
     try {
-      tools = await this.opts.enumerateTools(kind);
+      models = await this.opts.enumerateModels(kind);
     } catch {
-      tools = [];
+      models = [];
     }
-    if (tools.length) {
+    // Empty result → never clobber a prior good entry (no write).
+    if (models.length) {
       await writeCatalogEntry(this.opts.catalogPath, kind, {
-        tools,
-        toolsEnumeratedAt: new Date().toISOString(),
+        hash: hashModelIds(models),
+        models,
+        enumeratedAt: new Date().toISOString(),
       });
     }
   }

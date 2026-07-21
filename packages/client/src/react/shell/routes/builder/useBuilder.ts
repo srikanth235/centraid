@@ -426,7 +426,6 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       model: m.requires.model ?? null,
       keep: m.history.keep,
       onFailure: m.onFailure ?? null,
-      tools: m.requires.tools ?? [],
     }),
     apps: JSON.stringify(m.apps ?? []),
   });

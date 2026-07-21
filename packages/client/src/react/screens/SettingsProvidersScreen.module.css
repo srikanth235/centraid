@@ -1,14 +1,3 @@
-@keyframes tools-group-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 /* ── Shared card shell — the routing table and the agent inventory are the
    same object visually, so they share one row idiom. ───────────────────── */
 .panel {
@@ -87,12 +76,30 @@
 .row[data-unavail='true'] {
   opacity: 0.55;
 }
-.rowDot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
+/* Identity chip: a rounded square tinted by the agent's accent, holding the
+   vendored `currentColor` glyph. Replaces the old bare accent dot — same
+   `--row-accent` mechanism, more identity. The glyph itself inherits the tint
+   from `AgentGlyph`'s inline `color`; here we only tint the tile's fill/ring. */
+.glyphTile {
   flex: none;
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--row-accent, var(--accent)) 16%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-md);
+  background: color-mix(in oklab, var(--row-accent, var(--accent)) 12%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--row-accent, var(--accent)) 30%, transparent);
+}
+.glyphTile svg {
+  width: 18px;
+  height: 18px;
+}
+/* Muted when the agent is unavailable: fall off the accent onto neutral ink,
+   matching the row's own dimmed state. */
+.glyphTile[data-unavail='true'] {
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--ink) 12%, transparent);
 }
 .rowMeta {
   flex: 1;
@@ -150,138 +157,7 @@
   font-family: var(--font-mono);
   color: var(--ink-4);
 }
-.rowTools {
-  flex: none;
-}
-.toolsToggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--bg-sunken);
-  color: var(--ink-3);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1;
-  cursor: pointer;
-  transition:
-    border-color 0.15s ease,
-    color 0.15s ease,
-    background 0.15s ease;
-}
-.toolsToggle:hover {
-  border-color: var(--ink-4);
-  color: var(--ink);
-}
-.toolsToggle svg {
-  display: block;
-}
-.toolsCount {
-  font-family: var(--font-mono);
-}
-.toolsChev {
-  display: inline-flex;
-  transition: transform 0.22s ease;
-}
-.entry[data-tools-open='true'] .toolsChev {
-  transform: rotate(180deg);
-}
-.entry[data-tools-open='true'] .toolsToggle {
-  border-color: color-mix(in oklab, var(--row-accent, var(--accent)) 45%, var(--line));
-  color: var(--ink);
-}
-.tools {
-  padding: 4px 16px 16px 32px;
-  background: color-mix(in oklab, var(--bg-sunken) 50%, transparent);
-  border-top: 1px solid var(--line);
-}
-.tools[hidden] {
-  display: none;
-}
-.groups {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.group {
-  animation: tools-group-in 0.26s ease both;
-}
-.group:nth-child(2) {
-  animation-delay: 0.04s;
-}
-.group:nth-child(3) {
-  animation-delay: 0.08s;
-}
-.group:nth-child(4) {
-  animation-delay: 0.12s;
-}
-.group:nth-child(n + 5) {
-  animation-delay: 0.16s;
-}
-.groupHead {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 10px 0 6px;
-}
-.groupLabel {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--row-accent, var(--accent));
-  font-family: var(--font-mono);
-}
-.groupCount {
-  font-size: 9px;
-  font-weight: 600;
-  color: var(--ink-4);
-  background: color-mix(in oklab, var(--ink-3) 12%, transparent);
-  border-radius: 999px;
-  padding: 1px 7px;
-  font-family: var(--font-mono);
-}
-.list {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-.item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.itemHead {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.name {
-  font: var(--t-mono);
-  color: var(--ink);
-  word-break: break-word;
-}
-.args {
-  flex: none;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--row-accent, var(--accent));
-  background: color-mix(in oklab, var(--row-accent, var(--accent)) 14%, transparent);
-  border-radius: var(--r-sm);
-  padding: 1px 5px;
-}
-.desc {
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--ink-3);
-}
-
-/* Action row under the agent inventory — Refresh models / tools. */
+/* Action row under the agent inventory — Refresh models. */
 .actionsRow {
   display: flex;
   align-items: center;

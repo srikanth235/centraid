@@ -5,11 +5,17 @@
  * The per-fire orchestration (resolve the automation, open its ledger, run
  * `handler.js`, cascade `onFailure`) lives in `@centraid/automation`'s `runFire`
  * — it only touches app-engine primitives. The one thing it needs from
- * agent-runtime is the live `ctx.tool` / `ctx.agent` dispatch surface: an
- * ephemeral mock-LLM server plus a per-fire host agent session (an in-process
- * Claude SDK turn, or a `codex exec` subprocess). This file
- * builds that surface (capturing the runner kind + spawn fn) and injects it as
- * `openDispatch`, leaving the spine — and the onFailure cascade — to app-engine.
+ * agent-runtime is the `ctx.agent` dispatch surface: a bounded model turn
+ * against the user's real provider. This file builds that surface (capturing
+ * the runner kind) and injects it as `openDispatch`, leaving the spine — and
+ * the onFailure cascade — to app-engine.
+ *
+ * The captured kind is any registered `RunnerKind`: `startLiveDispatch` routes
+ * `ctx.agent` through the `RunnerBackend` registry (issue #479). `'codex'`
+ * remains the default only because a caller that names no runner gets the
+ * historical one. Issue #484 removed the `ctx.tool` rail (and the eager
+ * mock-LLM server it spawned per fire), so a fire whose handler never calls
+ * `ctx.agent` starts zero child processes and zero HTTP servers.
  */
 
 import {
@@ -20,15 +26,7 @@ import {
 } from '@centraid/app-engine';
 import * as automation from '@centraid/automation';
 import type { RunnerKind } from '../types.js';
-import {
-  defaultRunHostAgent,
-  type RunHostAgent,
-  type RunHostAgentInput,
-  type RunHostAgentResult,
-} from './run-automation-host-agent.js';
 import { startLiveDispatch } from './run-automation-live-dispatch.js';
-
-export { defaultRunHostAgent, type RunHostAgent, type RunHostAgentInput, type RunHostAgentResult };
 
 export interface RunAutomationOptions {
   /** `<appId>/<automationId>` handle of the automation to fire. */
@@ -72,8 +70,6 @@ export interface RunAutomationOptions {
   model?: string;
   /** Hard timeout. Defaults to 5 minutes. */
   timeoutMs?: number;
-  /** Override spawn for tests. */
-  runHostAgent?: RunHostAgent;
   /** Optional logger. */
   onLog?: (level: 'info' | 'warn' | 'error', msg: string) => void;
   /** Live run-stream sink (issue #158); forwarded to the fire spine. */
@@ -113,20 +109,16 @@ export async function runAutomation(
   opts: RunAutomationOptions,
 ): Promise<{ outcome: automation.HandlerOutcome; record: automation.RunRecord }> {
   const runner: RunnerKind = opts.runner ?? 'codex';
-  const runHostAgent = opts.runHostAgent ?? defaultRunHostAgent;
 
-  // The injected dispatch surface: a fresh mock-LLM server + CLI spawn per
-  // fire. The runner kind + spawn fn are captured here, so onFailure cascades
-  // (which app-engine drives by recursing with the same `openDispatch`) reuse
-  // the same runner without re-threading config.
+  // The injected dispatch surface: the `ctx.agent` rail routes through the
+  // runner registry (issue #479). The runner kind is captured here, so
+  // onFailure cascades (which app-engine drives by recursing with the same
+  // `openDispatch`) reuse the same runner without re-threading config.
   const openDispatch: automation.OpenDispatch = (args) =>
     startLiveDispatch({
       workdir: args.workdir,
-      automationId: args.automationRef,
       runId: args.runId,
       runner,
-      runHostAgent,
-      toolsAllow: args.toolsAllow,
       // The manifest's `requires.model` (already folded into `args.model` by
       // `runFire`) always wins; `opts.model` is the caller's prefs-resolved
       // fallback for when the manifest doesn't specify one.

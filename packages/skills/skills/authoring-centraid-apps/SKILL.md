@@ -317,7 +317,7 @@ When one automation references another — e.g. `onFailure` — use the sibling'
 - `triggers` is an array. A cron trigger is `{ "kind": "cron", "expr": "<5-field UTC cron>" }`. Translate the user's schedule into a cron expression yourself: "every evening at 8" → `0 20 * * *`, "every 30 minutes" → `*/30 * * * *`, "weekdays at 9" → `0 9 * * MON-FRI`. `"triggers": []` is a legal manual-only automation.
 - `enabled` — set `true`. An automation authored because the user asked for that behaviour is part of the app and runs once the app is published.
 - **Webhook triggers.** When the app needs to react to an inbound HTTP POST, declare the trigger as `{ "kind": "webhook", "pending": true }` — nothing else. You cannot mint the route `id` or `secretHash`; that is a privileged server step, so never invent them. After your turn the builder provisions the webhook (mints the id + secret, rewrites the trigger to its final form) and shows the user the endpoint URL + secret once. An automation may carry at most one webhook trigger.
-- `requires.tools` must list every fully-qualified tool the handler calls via `ctx.tool(...)`; `requires.mcps` lists the MCP servers they belong to. `requires.model` is the model `ctx.agent` routes through — never `centraid-mock/...`.
+- `requires.model` is the model `ctx.agent` routes through — the one billed rail. Deterministic work (`ctx.vault` / `ctx.fetch` / `ctx.state`) needs no tool declaration; there is no `requires.tools` field.
 - The runtime validates the manifest on every read; keep the shape exactly as shown.
 
 #### handler.js
@@ -327,8 +327,9 @@ A plain `.js` ES module — same JS-only discipline as `queries/` and `actions/`
 ```js
 /** @type {import('@centraid/automation').AutomationHandler} */
 export default async ({ ctx, log }) => {
-  // ctx.tool(name, args)         — one host / MCP tool call; Promise.all batches independents
-  // ctx.agent({ prompt, json })  — one constrained model turn (pass json when consumed structurally)
+  // ctx.vault                    — consented vault reads/writes, deterministic + unbilled
+  // ctx.fetch(url, init)         — external HTTP, deterministic + unbilled
+  // ctx.agent({ prompt, json })  — one constrained, billed model turn (pass json when consumed structurally)
   // ctx.state.get/set/del(key)   — cross-run KV scoped to this automation (cursors, watermarks)
   // ctx.runs.last/list(...)      — this automation's prior run records
   log.info('automation fired');
@@ -336,7 +337,7 @@ export default async ({ ctx, log }) => {
 };
 ```
 
-Return `{ summary?, output? }` — `summary` shows in the run list. There is no runtime retry on `ctx.tool`; classify the error and write your own `try/catch` backoff when warranted.
+Return `{ summary?, output? }` — `summary` shows in the run list. There is no runtime retry on `ctx.fetch` / `ctx.agent`; classify the error and write your own `try/catch` backoff when warranted.
 
 #### Authoring flow
 

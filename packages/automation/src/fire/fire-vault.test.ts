@@ -49,7 +49,6 @@ async function writeAutomation(
 
 const stubDispatch = (): Promise<DispatchSurface> =>
   Promise.resolve({
-    toolDispatcher: async () => [],
     agentDispatcher: async () => '',
     close: async () => undefined,
   });

@@ -7,16 +7,17 @@
  * `handler.js`, and cascading `onFailure` only ever touch app-engine
  * primitives (`parseRef`, `AgentRunsStore`,
  * `runHandler`). That spine used to live in
- * `agent-runtime/run-automation.ts`; the only thing it genuinely
- * needed from agent-runtime was the live `ctx.tool` / `ctx.agent` dispatch
- * surface (the mock-LLM server + CLI spawn). So the spine moves down and the
- * dispatch surface is injected via `openDispatch` — the same dependency
- * inversion the `Host` / `ConversationRunner` seams already use.
+ * `agent-runtime/run-automation.ts`; the only thing it genuinely needed from
+ * agent-runtime was the `ctx.agent` dispatch surface (a bounded model turn
+ * through the runner registry). So the spine moves down and the dispatch
+ * surface is injected via `openDispatch` — the same dependency inversion the
+ * `Host` / `ConversationRunner` seams already use.
  *
  * agent-runtime's `runAutomation` is now a thin wrapper that builds the
- * `openDispatch` closure (capturing the runner kind + CLI spawn) and calls
- * `runFire`. A future host can inject its own dispatch surface instead of
- * reimplementing the spine.
+ * `openDispatch` closure (capturing the runner kind) and calls `runFire`. A
+ * future host can inject its own dispatch surface instead of reimplementing
+ * the spine. A fire whose handler never calls `ctx.agent` starts zero child
+ * processes and zero HTTP servers.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -31,12 +32,7 @@ import {
 import { parseRef } from '../manifest/ref.js';
 import { handlerPath, readAppOwned } from '../scaffold/app.js';
 import { runHandler } from '../handler/runner.js';
-import type {
-  AgentDispatcher,
-  ConnectionAuth,
-  HandlerOutcome,
-  ToolDispatcher,
-} from '../handler/runner.js';
+import type { AgentDispatcher, ConnectionAuth, HandlerOutcome } from '../handler/runner.js';
 
 /**
  * The gateway broker's per-fire seam (issue #304). Resolves the connector's
@@ -57,20 +53,17 @@ export type ResolveConnection = (connector: {
  * down whatever the host allocated and is always called once, even on throw.
  */
 export interface DispatchSurface {
-  toolDispatcher: ToolDispatcher;
   agentDispatcher: AgentDispatcher;
   close(): Promise<void>;
 }
 
 /** Args app-engine hands the host when it needs a dispatch surface for a fire. */
 export interface OpenDispatchArgs {
-  /** The automation app directory — the host's CLI cwd. */
+  /** The automation app directory — the host's agent cwd. */
   workdir: string;
   /** `<appId>/<automationId>` handle being fired. */
   automationRef: string;
   runId: string;
-  /** Manifest `requires.tools` allowlist to scope the host's tool surface. */
-  toolsAllow: readonly string[];
   /**
    * Manifest `requires.model` — the capability tier `ctx.agent` should route
    * to (issue #166). The host's `agentDispatcher` picks the matching provider
@@ -210,7 +203,6 @@ export async function runFire(
     workdir: row.dir,
     automationRef: opts.automationRef,
     runId,
-    toolsAllow: row.manifest.requires.tools ?? [],
     ...(row.manifest.requires.model ? { model: row.manifest.requires.model } : {}),
     onLog,
   });
@@ -328,7 +320,6 @@ export async function runFire(
       handlerFile: handlerPath(row.dir),
       runId,
       now: new Date(startedAt).toISOString(),
-      toolDispatcher: dispatch.toolDispatcher,
       agentDispatcher: dispatch.agentDispatcher,
       runsStore,
       ...(vaultBridge ? { vault: vaultBridge } : {}),
@@ -341,12 +332,7 @@ export async function runFire(
       history: row.manifest.history,
       ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
       ...(row.manifest.connector
-        ? {
-            connector: {
-              tools: row.manifest.requires.tools ?? [],
-              ...(secretRefs.length > 0 ? { secrets: secretRefs } : {}),
-            },
-          }
+        ? { connector: secretRefs.length > 0 ? { secrets: secretRefs } : {} }
         : {}),
       ...(secretCache.size > 0
         ? {

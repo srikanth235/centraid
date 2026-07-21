@@ -49,6 +49,7 @@ The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageM
 | [docs/enrollment.md](docs/enrollment.md) | Human checklist: Apple / Azure / Play signing |
 | [docs/config-ownership.md](docs/config-ownership.md) | Which writer wins for dual-write config surfaces |
 | [docs/logs.md](docs/logs.md) | **Canonical log locations** (start every debug session here) |
+| [docs/runners.md](docs/runners.md) | Coding-agent harnesses: ACP is the single path, adapters, adding a runner |
 | [docs/dev-environment.md](docs/dev-environment.md) | Worktrees, ports, named services, launch.json |
 | [docs/multi-agent.md](docs/multi-agent.md) | Parallel-agent norms + supervision caps |
 | [docs/refactors/](docs/refactors/) | Multi-session plan format + progress logs |

@@ -38,9 +38,9 @@ Centraid is **solo-maintained**. Coding agents do much of the implementation; re
  │ desktop embed · centraid-gateway daemon           │
  │                                                   │
  │  app-engine        agent-runtime      automation  │
- │  declared-handler  codex subprocess   cron+webhook│
- │  dispatcher        or Claude SDK      fire spine  │
- │      │             (in-process)            │      │
+ │  declared-handler  ACP turn driver    cron+webhook│
+ │  dispatcher        (one path, every   fire spine  │
+ │      │             runner kind)            │      │
  │      ▼                                     ▼      │
  │  vault plane: vault.db + journal.db  scheduler    │
  │  (consent-checked commands, receipts)             │
@@ -93,7 +93,7 @@ Full tour: [Get started](https://centraid.dev/docs/start/) — install → vault
 | `packages/gateway` | Host-agnostic gateway: wires everything below against injected paths/secrets. Ships the `centraid-gateway` daemon. |
 | `packages/vault` | The personal ontology: `vault.db` + `journal.db` DDL, consent gateway, typed commands, sealed columns, sync/outbox spine. |
 | `packages/app-engine` | Runtime engine: handler loader, declared-handler dispatcher, conversation ledger, `/centraid` HTTP surface. |
-| `packages/agent-runtime` | Drives one turn through the codex app-server (JSON-RPC subprocess) or the Claude Agent SDK (in-process); ships the vault-register tools and the `centraid` CLI. |
+| `packages/agent-runtime` | Drives one turn through the Agent Client Protocol — the single path for every runner kind, with first-party adapters for CLIs that don't speak ACP ([docs/runners.md](docs/runners.md)); ships the vault-register tools and the `centraid` CLI. |
 | `packages/automation` | Manifest schema, fire spine, in-process scheduler, webhook ingress, worker-thread handler runner. |
 | `packages/tunnel` | iroh QUIC wire protocol — device tunnel + one-time pairing; the TS reference the Swift/Kotlin mobile ports mirror. |
 | `packages/blueprints` | Template gallery: 8 blueprint apps + 16 automation templates, plus blank-app scaffolders. |

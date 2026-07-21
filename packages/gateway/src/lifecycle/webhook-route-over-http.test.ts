@@ -68,18 +68,18 @@ async function publish(appId: string, sessionId: string, message: string): Promi
 /**
  * Create + publish a webhook-triggered automation over the real lifecycle
  * API (`POST /centraid/_automations`), then swap the scaffolded DRAFT
- * handler for a trivial one with no `ctx.tool` / `ctx.agent` calls.
+ * handler for a trivial one with no `ctx.agent` call.
  *
- * WHY: `runFire` opens the CLI dispatch surface unconditionally per fire
- * (`packages/automation/src/fire/fire.ts`), but the underlying agent
- * SESSION only spawns lazily on the first `ctx.tool` batch (see
- * `startLiveDispatch`'s doc comment) — "an automation that never calls a
- * tool never opens one." The scaffolded DEFAULT_HANDLER calls both, which
- * would make this test's outcome depend on whatever codex/claude CLI
- * happens to be on the test runner's PATH (or hang). Swapping in a
- * no-`ctx.*` handler keeps the fire hermetic while still exercising the
- * REAL webhook auth + cross-vault resolution + blocking-fire path end to
- * end — only the handler body is a stand-in.
+ * WHY: `runFire` opens the dispatch surface per fire
+ * (`packages/automation/src/fire/fire.ts`), but that surface is inert until a
+ * `ctx.agent` call routes a real model turn through the configured agent CLI
+ * — "a fire whose handler never calls ctx.agent starts zero child processes."
+ * The scaffolded DEFAULT_HANDLER calls ctx.agent, which would make this test's
+ * outcome depend on whatever codex/claude CLI happens to be on the test
+ * runner's PATH (or hang). Swapping in a handler with no `ctx.agent` keeps the
+ * fire hermetic while still exercising the REAL webhook auth + cross-vault
+ * resolution + blocking-fire path end to end — only the handler body is a
+ * stand-in.
  */
 async function createWebhookAutomation(appId: string): Promise<{ id: string; secret: string }> {
   const res = await fetch(`${handle.url}/centraid/_automations`, {
