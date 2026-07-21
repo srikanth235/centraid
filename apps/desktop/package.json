@@ -28,7 +28,7 @@
     "react-dom": "19.1.0"
   },
   "devDependencies": {
-    "@centraid/tsconfig": "workspace:*",
+    "@centraid/test-kit": "workspace:*",
     "@playwright/test": "^1.60.0",
     "@types/node": "^22.0.0",
     "@types/qrcode": "^1.5.5",

@@ -50,8 +50,8 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-            packages/data-plane/target
-          key: cargo-dataplane-${{ runner.os }}-${{ hashFiles('packages/data-plane/Cargo.lock') }}
+            packages/tunnel/data-plane/target
+          key: cargo-dataplane-${{ runner.os }}-${{ hashFiles('packages/tunnel/data-plane/Cargo.lock') }}
           restore-keys: |
             cargo-dataplane-${{ runner.os }}-
       - run: bun install --frozen-lockfile
@@ -128,9 +128,9 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             ~/.cargo/bin
-            packages/data-plane/target
+            packages/tunnel/data-plane/target
             apps/web/iroh-wasm/target
-          key: cargo-verify-${{ runner.os }}-${{ hashFiles('packages/data-plane/Cargo.lock', 'apps/web/iroh-wasm/Cargo.lock') }}
+          key: cargo-verify-${{ runner.os }}-${{ hashFiles('packages/tunnel/data-plane/Cargo.lock', 'apps/web/iroh-wasm/Cargo.lock') }}
           restore-keys: |
             cargo-verify-${{ runner.os }}-
             cargo-dataplane-${{ runner.os }}-
@@ -151,7 +151,7 @@ jobs:
       - run: bun run --cwd packages/tunnel test:native
       # Rust format compatibility and the language-independent byte-plane
       # lifecycle contract are non-negotiable rollout gates (N0a/N0b).
-      - run: bun run --cwd packages/data-plane test
+      - run: bun run --cwd packages/tunnel test:data-plane
       # Issue #456's real-gateway budget gate. Linux strace supplies an exact
       # fsync/write count; losing that signal is itself a benchmark failure.
       - run: sudo apt-get update && sudo apt-get install --yes strace

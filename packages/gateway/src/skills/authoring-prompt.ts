@@ -1,6 +1,6 @@
 /*
  * Authoring system-prompt composition — the builder chat's grounding, owned
- * here in `@centraid/skills` rather than at the call site (issue #147,
+ * here in the gateway's `src/skills/` rather than at the call site (issue #147,
  * Concern 1).
  *
  * A builder turn's extra-system-prompt is: the route's app-context preamble

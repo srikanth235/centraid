@@ -2,14 +2,13 @@
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "ignore": ["tests/**"],
   "ignoreBinaries": ["actionlint", "python3"],
-  "ignoreDependencies": ["@centraid/test-kit", "pagefind"],
-  "ignoreWorkspaces": ["packages/data-plane", "packages/tsconfig"],
   "ignoreExportsUsedInFile": true,
   "exclude": ["enumMembers", "classMembers"],
   "workspaces": {
     ".": {
       "entry": ["scripts/**/*.{js,mjs,ts}", ".github/workflows/*.{yml,yaml}"],
-      "project": ["scripts/**/*.{js,mjs,ts}"]
+      "project": ["scripts/**/*.{js,mjs,ts}"],
+      "ignoreUnresolved": ["react", "react-native"]
     },
     "packages/*": {
       "entry": ["src/index.ts"],

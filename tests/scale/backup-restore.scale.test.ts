@@ -9,7 +9,7 @@ import {
   restoreSnapshot,
   type SourceEntry,
 } from '@centraid/backup';
-import { createTestVault } from '@centraid/test-kit/factories';
+import { createTestVault } from '../helpers/factories.js';
 import { generateVolumeFixture } from '@centraid/test-kit/volume-fixture';
 import { recordQualityResult } from '@centraid/test-kit/quality-result';
 import { tempDir } from '@centraid/test-kit/temp-dir';

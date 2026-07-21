@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { onTestFinished } from 'vitest';
 import type { BuildGatewayOptions, BuiltGateway, GatewayPaths } from '@centraid/gateway';
 import type { OpenVaultOptions, VaultDb } from '@centraid/vault';
-import { tempDir } from './temp-dir.js';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 
 export interface CreateTestVaultOptions extends OpenVaultOptions {
   /** Defaults to an on-disk pair so tests exercise the production SQLite posture. */

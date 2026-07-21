@@ -28,7 +28,7 @@
     "react-dom": "19.1.0"
   },
   "devDependencies": {
-    "@centraid/tsconfig": "workspace:*",
+    "@centraid/test-kit": "workspace:*",
     "@types/react": "~19.1.0",
     "@types/react-dom": "~19.1.0",
     "fake-indexeddb": "^6.2.5",

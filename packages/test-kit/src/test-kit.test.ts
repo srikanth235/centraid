@@ -1,7 +1,6 @@
 import { accessSync } from 'node:fs';
 import { access } from 'node:fs/promises';
 import { expect, test } from 'vitest';
-import { createTestVault } from './factories.js';
 import { useFakeClock } from './fake-clock.js';
 import { tempDir, tempDirSync } from './temp-dir.js';
 import { generateVolumeFixture } from './volume-fixture.js';
@@ -20,14 +19,6 @@ test('fake clock advances deterministically', async () => {
   const before = clock.now();
   await clock.advance(2_500);
   expect(clock.now()).toBe(before + 2_500);
-});
-
-// Bootstraps a real on-disk vault — under the 5s default bare, above it when
-// v8 coverage instrumentation slows the migration sweep.
-test('createTestVault opens a migrated production-shape vault', { timeout: 15_000 }, async () => {
-  const db = await createTestVault();
-  const row = db.vault.prepare('SELECT count(*) AS n FROM core_vault').get() as { n: number };
-  expect(row.n).toBe(1);
 });
 
 test('volume fixtures are deterministic and preserve requested cardinality', () => {

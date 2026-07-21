@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { createTestVault } from '@centraid/test-kit/factories';
+import { createTestVault } from '../helpers/factories.js';
 import { recordQualityResult } from '@centraid/test-kit/quality-result';
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { expect, test } from 'vitest';

@@ -1,4 +1,4 @@
-import { createTestVault } from '@centraid/test-kit/factories';
+import { createTestVault } from '../helpers/factories.js';
 import { recordQualityResult } from '@centraid/test-kit/quality-result';
 import { browseRows } from '../../packages/vault/src/schema/atlas-browse.js';
 import { expect, test } from 'vitest';

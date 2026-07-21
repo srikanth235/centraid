@@ -33,7 +33,7 @@
   },
   "devDependencies": {
     "@centraid/app-engine": "workspace:*",
-    "@centraid/tsconfig": "workspace:*",
+    "@centraid/test-kit": "workspace:*",
     "@types/node": "^22.0.0",
     "esbuild": "^0.28.1",
     "pdfjs-dist": "5.7.284",

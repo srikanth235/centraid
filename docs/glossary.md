@@ -39,9 +39,9 @@ There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automa
 | **journal** | `journal.db` — audit/receipt stream **and** conversation ledger bands. | vault package + app-engine `gateway-db.ts` |
 | **replica** | Consent-scoped, read-mostly device copy; intents for offline writes; gateway is sole canonical writer. | `packages/vault` replica schema; `packages/client/src/replica/` |
 | **pairing** | One-time ticket ceremony that enrolls a device key to a vault over the tunnel. | `packages/gateway` pairing/enrollment stores; `packages/tunnel` |
-| **tunnel / relay** | Iroh QUIC device path; browsers are relay-only (no UDP). | `packages/tunnel`, `packages/data-plane` |
+| **tunnel / relay** | Iroh QUIC device path; browsers are relay-only (no UDP). | `packages/tunnel`, `packages/tunnel/data-plane` |
 | **CAS / custody** | Content-addressed blob store; local-only vs remote-primary lifecycle. | `packages/vault` blob; backup package |
-| **skill** | Agent grounding unit (`SKILL.md`) loaded by the agent runtime. | `packages/skills` |
+| **skill** | Agent grounding unit (`SKILL.md`) loaded by the agent runtime. | `packages/gateway/src/skills` |
 | **design tokens** | Shared colors, type, spacing, icons across desktop/web/mobile. | `packages/design-tokens` |
 | **receipt** | (1) Vault write receipt id from consent pipeline; (2) repo `receipts/issue-N-*.md` for issue work. | context-dependent |
 | **prefs** | Device-level gateway prefs (`prefs.json`) — runner, theme, etc. Not the vault owner identity. | `GatewayPaths.prefsFile` |

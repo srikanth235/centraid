@@ -33,7 +33,7 @@
         "react-dom": "19.1.0",
       },
       "devDependencies": {
-        "@centraid/tsconfig": "workspace:*",
+        "@centraid/test-kit": "workspace:*",
         "@playwright/test": "^1.60.0",
         "@types/node": "^22.0.0",
         "@types/qrcode": "^1.5.5",
@@ -100,7 +100,7 @@
       },
       "devDependencies": {
         "@babel/core": "^7.24.0",
-        "@centraid/tsconfig": "workspace:*",
+        "@centraid/test-kit": "workspace:*",
         "@types/jpeg-js": "^0.3.7",
         "@types/react": "~19.1.0",
         "babel-preset-expo": "^55.0.21",
@@ -117,7 +117,7 @@
         "react-dom": "19.1.0",
       },
       "devDependencies": {
-        "@centraid/tsconfig": "workspace:*",
+        "@centraid/test-kit": "workspace:*",
         "@playwright/test": "^1.60.0",
         "@types/react": "~19.1.0",
         "@types/react-dom": "~19.1.0",
@@ -139,7 +139,7 @@
         "@centraid/automation": "workspace:*",
       },
       "devDependencies": {
-        "@centraid/tsconfig": "workspace:*",
+        "@centraid/test-kit": "workspace:*",
         "@types/node": "^22.0.0",
         "typescript": "catalog:",
       },
@@ -152,7 +152,7 @@
         "esbuild": "^0.28.1",
       },
       "devDependencies": {
-        "@centraid/tsconfig": "workspace:*",
+        "@centraid/test-kit": "workspace:*",
         "@types/node": "^22.0.0",
         "typescript": "catalog:",
       },
@@ -165,7 +165,7 @@
         "@centraid/blueprints": "workspace:*",
       },
       "devDependencies": {
-        "@centraid/tsconfig": "workspace:*",
+        "@centraid/test-kit": "workspace:*",
         "@types/node": "^22.0.0",
         "typescript": "catalog:",
       },
@@ -174,7 +174,7 @@
       "name": "@centraid/backup",
       "version": "0.1.0",
       "devDependencies": {
-        "@centraid/tsconfig": "workspace:*",
+        "@centraid/test-kit": "workspace:*",
         "@types/node": "^22.0.0",
         "typescript": "catalog:",
       },
@@ -183,7 +183,6 @@
       "name": "@centraid/blob-format",
       "version": "0.1.0",
       "devDependencies": {
-        "@centraid/tsconfig": "workspace:*",
         "typescript": "catalog:",
       },
     },
@@ -196,7 +195,7 @@
       },
       "devDependencies": {
         "@centraid/app-engine": "workspace:*",
-        "@centraid/tsconfig": "workspace:*",
+        "@centraid/test-kit": "workspace:*",
         "@types/node": "^22.0.0",
         "esbuild": "^0.28.1",
         "pdfjs-dist": "5.7.284",
@@ -218,22 +217,17 @@
         "react-dom": "19.1.0",
       },
       "devDependencies": {
-        "@centraid/tsconfig": "workspace:*",
+        "@centraid/test-kit": "workspace:*",
         "@types/react": "~19.1.0",
         "@types/react-dom": "~19.1.0",
         "fake-indexeddb": "^6.2.5",
         "typescript": "catalog:",
       },
     },
-    "packages/data-plane": {
-      "name": "@centraid/data-plane",
-      "version": "0.1.0",
-    },
     "packages/design-tokens": {
       "name": "@centraid/design-tokens",
       "version": "0.1.0",
       "devDependencies": {
-        "@centraid/tsconfig": "workspace:*",
         "typescript": "catalog:",
       },
     },
@@ -249,7 +243,7 @@
         "@centraid/automation": "workspace:*",
         "@centraid/backup": "workspace:*",
         "@centraid/blueprints": "workspace:*",
-        "@centraid/skills": "workspace:*",
+        "@centraid/design-tokens": "workspace:*",
         "@centraid/tunnel": "workspace:*",
         "@centraid/vault": "workspace:*",
         "jpeg-js": "^0.4.4",
@@ -258,41 +252,20 @@
         "wasm-vips": "^0.0.18",
       },
       "devDependencies": {
-        "@centraid/tsconfig": "workspace:*",
+        "@centraid/test-kit": "workspace:*",
         "@centraid/web": "workspace:*",
         "@types/node": "^22.0.0",
         "@types/pngjs": "^6.0.5",
         "typescript": "catalog:",
       },
     },
-    "packages/skills": {
-      "name": "@centraid/skills",
-      "version": "0.1.0",
-      "dependencies": {
-        "@centraid/design-tokens": "workspace:*",
-      },
-      "devDependencies": {
-        "@centraid/tsconfig": "workspace:*",
-        "@types/node": "^22.0.0",
-        "typescript": "catalog:",
-      },
-    },
     "packages/test-kit": {
       "name": "@centraid/test-kit",
       "version": "0.1.0",
-      "dependencies": {
-        "@centraid/gateway": "workspace:*",
-        "@centraid/vault": "workspace:*",
-      },
       "devDependencies": {
-        "@centraid/tsconfig": "workspace:*",
         "@types/node": "^22.0.0",
         "typescript": "catalog:",
       },
-    },
-    "packages/tsconfig": {
-      "name": "@centraid/tsconfig",
-      "version": "0.0.0",
     },
     "packages/tunnel": {
       "name": "@centraid/tunnel",
@@ -301,7 +274,7 @@
         "@number0/iroh": "1.0.0",
       },
       "devDependencies": {
-        "@centraid/tsconfig": "workspace:*",
+        "@centraid/test-kit": "workspace:*",
         "@types/node": "^22.0.0",
         "typescript": "catalog:",
       },
@@ -316,7 +289,7 @@
         "uuid": "^14.0.0",
       },
       "devDependencies": {
-        "@centraid/tsconfig": "workspace:*",
+        "@centraid/test-kit": "workspace:*",
         "@types/node": "^22.0.0",
         "typescript": "catalog:",
       },
@@ -612,8 +585,6 @@
 
     "@centraid/client": ["@centraid/client@workspace:packages/client"],
 
-    "@centraid/data-plane": ["@centraid/data-plane@workspace:packages/data-plane"],
-
     "@centraid/design-tokens": ["@centraid/design-tokens@workspace:packages/design-tokens"],
 
     "@centraid/desktop": ["@centraid/desktop@workspace:apps/desktop"],
@@ -622,11 +593,7 @@
 
     "@centraid/mobile": ["@centraid/mobile@workspace:apps/mobile"],
 
-    "@centraid/skills": ["@centraid/skills@workspace:packages/skills"],
-
     "@centraid/test-kit": ["@centraid/test-kit@workspace:packages/test-kit"],
-
-    "@centraid/tsconfig": ["@centraid/tsconfig@workspace:packages/tsconfig"],
 
     "@centraid/tunnel": ["@centraid/tunnel@workspace:packages/tunnel"],
 

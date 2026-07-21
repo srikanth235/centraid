@@ -5,7 +5,6 @@
   "description": "Shared, dev-only test infrastructure for Centraid packages and quality lanes.",
   "type": "module",
   "exports": {
-    "./factories": "./src/factories.ts",
     "./fake-clock": "./src/fake-clock.ts",
     "./vitest": "./src/vitest.ts",
     "./quality-result": "./src/quality-result.ts",
@@ -16,12 +15,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node ../../node_modules/vitest/vitest.mjs run"
   },
-  "dependencies": {
-    "@centraid/gateway": "workspace:*",
-    "@centraid/vault": "workspace:*"
-  },
   "devDependencies": {
-    "@centraid/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
     "typescript": "catalog:"
   },

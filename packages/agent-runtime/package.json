@@ -26,7 +26,7 @@
     "@centraid/automation": "workspace:*"
   },
   "devDependencies": {
-    "@centraid/tsconfig": "workspace:*",
+    "@centraid/test-kit": "workspace:*",
     "@types/node": "^22.0.0",
     "typescript": "catalog:"
   },
