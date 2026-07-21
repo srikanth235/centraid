@@ -142,6 +142,7 @@ jobs:
             cargo-dataplane-${{ runner.os }}-
       - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
         with:
+          toolchain: stable
           targets: wasm32-unknown-unknown
       # K15 — wasm is gitignored; clean CI must rebuild via ensure-iroh-wasm.
       - name: Ensure Iroh WASM toolchain

@@ -201,6 +201,18 @@ bun run check:pr
 
 Evidence also under implementer scratch: `e1-ruleset.json`, `test-matrix.log`, `ratchet.log`, `product-journeys.log`, `check-pr-or-test.log`.
 
+
+### Follow-up fix (CI pin + E3 Android)
+
+- `.github/workflows/ci.yml` / `client-e2e-pr.yml`: every pinned `dtolnay/rust-toolchain@2c7215f…` now sets `toolchain: stable` (required input when not using the floating `@stable` ref).
+- `.github/workflows/e2e.yml`: `nightly-failure-issue` needs + failure predicates + Job results list include `mobile-e2e-android` so a sole Android red still files the E3 tracking issue.
+
+```sh
+# Structural proof of the follow-up
+rg -n "toolchain: stable" .github/workflows/ci.yml .github/workflows/client-e2e-pr.yml
+rg -n "mobile-e2e-android" .github/workflows/e2e.yml
+```
+
 ## Steering
 
 Verdict: PASS

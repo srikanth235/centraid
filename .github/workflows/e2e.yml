@@ -744,6 +744,7 @@ jobs:
         desktop-e2e,
         web-e2e,
         mobile-e2e,
+        mobile-e2e-android,
         pairing-lifecycle,
         pairing-ticket-hygiene,
         pairing-cross-network-relay,
@@ -757,6 +758,7 @@ jobs:
         needs.desktop-e2e.result == 'failure' ||
         needs.web-e2e.result == 'failure' ||
         needs.mobile-e2e.result == 'failure' ||
+        needs.mobile-e2e-android.result == 'failure' ||
         needs.pairing-lifecycle.result == 'failure' ||
         needs.pairing-ticket-hygiene.result == 'failure' ||
         needs.pairing-cross-network-relay.result == 'failure' ||
@@ -792,6 +794,7 @@ jobs:
           - desktop-e2e: \`${{ needs.desktop-e2e.result }}\`
           - web-e2e: \`${{ needs.web-e2e.result }}\`
           - mobile-e2e: \`${{ needs.mobile-e2e.result }}\`
+          - mobile-e2e-android: \`${{ needs.mobile-e2e-android.result }}\`
           - pairing-lifecycle: \`${{ needs.pairing-lifecycle.result }}\`
           - pairing-ticket-hygiene: \`${{ needs.pairing-ticket-hygiene.result }}\`
           - pairing-cross-network-relay: \`${{ needs.pairing-cross-network-relay.result }}\`
