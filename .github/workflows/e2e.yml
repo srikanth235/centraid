@@ -122,10 +122,97 @@ jobs:
       - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
         with:
           bun-version: 1.3.13
+      # Fingerprint of every input that can change the iOS *native* binary.
+      # Everything the app does in JS is served by Metro at runtime, so a
+      # JS-only commit must NOT invalidate the 32-minute native build — but a
+      # change to any of these must, or a stale .app would silently be tested.
+      #
+      # Inputs, and why each is in the hash:
+      #   apps/mobile/ios/**        — the Xcode project, Podfile(.lock),
+      #                               Info.plist, entitlements, assets.
+      #   apps/mobile/modules/**    — the local `centraid-tunnel` Expo module.
+      #                               NOTE: only its 17 TRACKED files. The
+      #                               vendored Iroh.xcframework and the generated
+      #                               IrohLib.swift are git-ignored and therefore
+      #                               NOT hashed directly — but the podspec that
+      #                               reconstructs them pins both an upstream tag
+      #                               and a SHA-256, and the podspec IS tracked,
+      #                               so a change to what gets fetched still moves
+      #                               the fingerprint.
+      #   apps/mobile/plugins/**    — config plugins that mutate the native project.
+      #   apps/mobile/app.config.ts + src/version-core.cjs
+      #                             — bundle identifier, buildNumber, infoPlist,
+      #                               the plugin list.
+      #   apps/mobile/package.json, package.json, bun.lock
+      #                             — the autolinked native pods come from
+      #                               node_modules, which the lockfile pins.
+      #   .github/workflows/e2e.yml — the build INVOCATION is an input too. Without
+      #                               this, changing `expo run:ios` flags (Release,
+      #                               a different device) would reuse a binary built
+      #                               the old way.
+      #   xcodebuild / iphonesimulator SDK version
+      #                             — the macos-15 image rolls Xcode forward;
+      #                               a binary built by another toolchain must
+      #                               not be reused.
+      # Deliberately NOT in the hash: babel.config.js, metro.config.js and
+      # everything under apps/mobile/src (except version-core.cjs). Those only
+      # affect the JS bundle Metro serves live, never the compiled binary.
+      #
+      # Hashing uses `git ls-files` (tracked files only) rather than
+      # `hashFiles('apps/mobile/ios/**')` on purpose: ios/Pods and ios/build are
+      # gitignored build products, so a glob-based key would depend on whatever
+      # a previous build left in the tree.
+      - name: Fingerprint the iOS native build inputs
+        id: native
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          sources="$(
+            git ls-files -z -- \
+              'apps/mobile/ios' \
+              'apps/mobile/modules' \
+              'apps/mobile/plugins' \
+              'apps/mobile/app.config.ts' \
+              'apps/mobile/package.json' \
+              'apps/mobile/src/version-core.cjs' \
+              'package.json' \
+              'bun.lock' \
+              '.github/workflows/e2e.yml' \
+            | xargs -0 shasum -a 256
+          )"
+          # Fail loudly rather than hashing an empty set — an empty digest would
+          # be a constant key, i.e. a permanent false cache hit.
+          test -n "$sources" || { echo "::error::no native sources matched"; exit 1; }
+          # Captured separately: `a="$(cmd1; cmd2)"` takes only cmd2's exit
+          # status, so a broken xcodebuild would silently yield a shorter
+          # toolchain string and a weaker key instead of failing the step.
+          xcode="$(xcodebuild -version)"
+          sdk="$(xcrun --show-sdk-version --sdk iphonesimulator)"
+          toolchain="$(printf '%s\n%s\n%s\n' "$xcode" "$sdk" "${ImageOS:-unknown}")"
+          digest="$(printf '%s\n%s\n' "$sources" "$toolchain" | shasum -a 256 | cut -d' ' -f1)"
+          echo "hash=$digest" >> "$GITHUB_OUTPUT"
+          echo "iOS native fingerprint: $digest"
+          echo "$toolchain"
+      # Deliberately NOT caching turbo here. A per-sha key never hits, so every
+      # run would SAVE a fresh multi-hundred-MB blob; against GitHub's 10 GB
+      # per-repo budget with LRU eviction, the natural victim is the .app entry
+      # below — which is only ever read, never re-saved on a hit. Trading the
+      # 32-minute win for a few minutes of build replay is a bad deal, and it
+      # would evict other workflows' caches besides.
       - run: bun install --frozen-lockfile
       - name: Build and start the tokenless mobile test gateway
+        # Scoped to the gateway's dependency subgraph instead of a full
+        # `bun run build`. tests/agent-e2e-mobile/lib/ci-gateway.mjs imports only
+        # packages/gateway/dist, and turbo pulls every workspace dependency
+        # (vault, app-engine, agent-runtime, automation, backup, blueprints,
+        # skills, tunnel, client, web, design-tokens) in transitively — nothing
+        # the mobile job needs is dropped.
+        # Measured with `turbo run build --dry=json`: this schedules 15 of 19
+        # build tasks. The saving is narrow but real, and comes almost entirely
+        # from dropping @centraid/data-plane (a `cargo build --locked`) and
+        # @centraid/desktop.
         run: |
-          bun run build
+          bunx turbo run build --filter=@centraid/gateway
           gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
           nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
           echo "CENTRAID_MOBILE_GATEWAY_PID=$!" >> "$GITHUB_ENV"
@@ -163,9 +250,84 @@ jobs:
           echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
           xcrun simctl boot "$udid" || true
           xcrun simctl bootstatus "$udid" -b
+      # The built .app for the simulator. This is the single biggest win in the
+      # job (~32m of the 51m). Keyed on the native fingerprint above, so a commit
+      # that touches only JS reuses the binary while ANY native-input or Xcode
+      # change forces a rebuild. No `restore-keys`: a partial-match fallback is
+      # exactly the stale-binary false-pass this must never allow — the key is
+      # all-or-nothing.
+      #
+      # restore + save are SPLIT rather than the one-step `actions/cache`, because
+      # that action declares `post-if: success()` — it saves only when the whole
+      # job succeeded. On a lane that is currently red that means the cache never
+      # populates, so the 32-minute build is paid on every run and the warm path
+      # is unreachable until the very greenness the cache is meant to help
+      # deliver. Observed exactly that in runs 29762312605 and 29765712825: the
+      # post step reported `skipped` and the native build ran full-length both
+      # times. The save below runs `if: always()`, so a red run still banks the
+      # binary it built. That is safe because the key is content-addressed: the
+      # artifact is the product of those inputs whether or not a later Maestro
+      # flow passed.
+      - name: Restore the built iOS app
+        id: ios_app
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/centraid-mobile-e2e
+          key: ios-app-${{ runner.os }}-${{ steps.native.outputs.hash }}
+      # Deliberately NOT caching CocoaPods. A Pods cache hit leaves
+      # ios/Pods/Manifest.lock matching Podfile.lock, so Expo CLI skips
+      # `pod install` entirely — and `pod install` is the ONLY thing that runs
+      # the centraid-tunnel podspec's prepare_command, which downloads the
+      # git-ignored Iroh.xcframework and IrohLib.swift. Those are a vendored
+      # framework and a compiled source of that pod, so skipping the fetch breaks
+      # the native build outright. It would not even fail on the first run: the
+      # cache is empty then. It would fail on the second native change, which is
+      # exactly the path a pods cache exists to serve.
       - name: Build and install the mobile development app
-        run: bunx expo run:ios --device "$SIMULATOR_UDID" --no-bundler
+        id: ios_build
+        if: steps.ios_app.outputs.cache-hit != 'true'
         working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          bunx expo run:ios --device "$SIMULATOR_UDID" --no-bundler
+          # Copy the product out of derived data into the cached location. Fail
+          # hard if it cannot be found: caching an empty directory would turn
+          # every later run into a silent no-install.
+          app="$(find ios/build ~/Library/Developer/Xcode/DerivedData \
+            -maxdepth 8 -type d -name 'Centraid.app' -path '*-iphonesimulator*' -print -quit 2>/dev/null || true)"
+          test -n "$app" || { echo "::error::built Centraid.app not found"; exit 1; }
+          rm -rf ~/.cache/centraid-mobile-e2e
+          mkdir -p ~/.cache/centraid-mobile-e2e
+          # -R preserves the bundle's symlinks/permissions.
+          cp -R "$app" ~/.cache/centraid-mobile-e2e/Centraid.app
+          # Signals the save step below that there is a real bundle to bank.
+          echo 'built=true' >> "$GITHUB_OUTPUT"
+      # Banked even when a later step fails — see the note on the restore step.
+      # Guarded on the build having actually run and produced a bundle, so a
+      # cache-hit run does not re-save what it just restored, and a run that
+      # died before the build cannot cache an empty directory.
+      - name: Save the built iOS app
+        if: always() && steps.ios_build.outputs.built == 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/centraid-mobile-e2e
+          key: ios-app-${{ runner.os }}-${{ steps.native.outputs.hash }}
+      - name: Install the cached mobile development app
+        if: steps.ios_app.outputs.cache-hit == 'true'
+        run: |
+          set -euo pipefail
+          app="$HOME/.cache/centraid-mobile-e2e/Centraid.app"
+          test -d "$app" || { echo "::error::cached Centraid.app missing"; exit 1; }
+          # Prove the cached bundle is the app the flows actually drive. The
+          # Maestro harness launches by bundle id, so a mismatch here would fail
+          # obscurely at flow time instead of loudly right now.
+          bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
+          test "$bundle_id" = 'dev.centraid.mobile' \
+            || { echo "::error::cached app bundle id is '$bundle_id', expected dev.centraid.mobile"; exit 1; }
+          test -x "$app/Centraid" || { echo "::error::cached app has no executable"; exit 1; }
+          xcrun simctl install "$SIMULATOR_UDID" "$app"
+          # Confirm the simulator agrees the app is installed and resolvable.
+          xcrun simctl get_app_container "$SIMULATOR_UDID" dev.centraid.mobile
       - name: Start Metro
         run: |
           CI=1 nohup bunx expo start --dev-client > /tmp/centraid-metro.log 2>&1 &

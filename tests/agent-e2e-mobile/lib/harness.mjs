@@ -20,6 +20,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultRunId, writeFlowVerdict } from '../../agent-e2e-shared/harness.mjs';
+import { metroReachable, prewarmMetroBundle } from './metro.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
@@ -46,11 +47,14 @@ export const APP_ID = 'dev.centraid.mobile';
 export const FIRST_LAUNCH_TIMEOUT_MS = 120_000;
 
 /**
- * The first `inputText` on a freshly-booted simulator raises iOS's multilingual
+ * The first keystroke on a freshly-booted simulator raises iOS's multilingual
  * keyboard onboarding sheet ("Type English and Dutch … Continue"). It covers the
  * bottom of the screen — including the tab bar — so every subsequent tap silently
- * lands on the sheet instead. CI boots a clean simulator each run, so it hits
- * this every time. Dismiss it if it showed up; do nothing if it didn't.
+ * lands on the sheet instead, and any keystrokes typed while it animates in are
+ * swallowed (that is what corrupts text fields — see configureGateway). CI boots
+ * a clean simulator each run, so it hits this every time. Dismiss it if it showed
+ * up; do nothing if it didn't. Provoke it with a throwaway keystroke FIRST so its
+ * appearance is deterministic rather than racing the real input.
  */
 export const DISMISS_KEYBOARD_ONBOARDING = `- runFlow:
     when:
@@ -168,60 +172,6 @@ async function ensureMetroReverseForAndroid(udid) {
   await spawnText('adb', ['-s', udid, 'reverse', 'tcp:8081', 'tcp:8081']);
 }
 
-// The Expo dev build fetches its JS bundle from Metro at runtime. If
-// clearState wipes the cached bundle and Metro isn't reachable, the
-// app shows a redbox ("No script URL provided") and every `assertVisible`
-// times out cryptically. Fail loudly instead.
-async function metroReachable() {
-  try {
-    const res = await fetch('http://127.0.0.1:8081/status', {
-      signal: AbortSignal.timeout(1500),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-// Build the JS bundle once, before any flow starts its clock.
-//
-// Every flow opens with `launchApp: { clearState: true }`, which drops the dev
-// build's cached bundle, so the app refetches it from Metro on that first launch.
-// If Metro's transform cache is also cold — as it is on a fresh CI runner — that
-// build lands *inside* the flow's first `extendedWaitUntil` and eats the whole
-// budget. Paying it here keeps flow timeouts about the app, not about bundling.
-//
-// Best-effort by design: a failure here is not a flow failure. If the bundle is
-// genuinely broken the flow's own assertions will say so, with a screenshot.
-async function prewarmMetroBundle(platform) {
-  // Metro's project root is the monorepo root (Expo runs from the workspace
-  // bin), so the app's entry is served at `apps/mobile/index.ts` — plain
-  // `/index.bundle` 404s here. `/.expo/.virtual-metro-entry.bundle` answers 200
-  // but builds a 1-module stub, which is why the size floor below matters: a
-  // 200 alone does not mean the real graph was built.
-  const query = `platform=${platform}&dev=true&minify=false`;
-  const candidates = [
-    `http://127.0.0.1:8081/apps/mobile/index.bundle?${query}`,
-    `http://127.0.0.1:8081/index.bundle?${query}`,
-  ];
-  const MIN_REAL_BUNDLE_BYTES = 1_000_000;
-  for (const url of candidates) {
-    const t0 = Date.now();
-    try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(300_000) });
-      // Drain the body: Metro streams the bundle and isn't done building until
-      // the last byte is out.
-      const bytes = (await res.arrayBuffer()).byteLength;
-      if (!res.ok || bytes < MIN_REAL_BUNDLE_BYTES) continue;
-      console.log(`  prewarm : bundle ready in ${Date.now() - t0}ms (${bytes} bytes)`);
-      return;
-    } catch (err) {
-      console.log(`  prewarm : ${url.split('?')[0]} failed (${err.message ?? err})`);
-    }
-  }
-  console.log('  prewarm : no bundle endpoint matched — flows will pay the cold build');
-}
-
 export async function setup({ runId } = {}) {
   const device = await bootedDevice();
   if (!device) {
@@ -250,7 +200,7 @@ export async function setup({ runId } = {}) {
         'serve the JS bundle — start it with `cd apps/mobile && bun expo start --dev-client`.',
     );
   }
-  await prewarmMetroBundle(device.platform);
+  await prewarmMetroBundle(device.platform, APP_ID);
   const id = runId ?? defaultRunId();
   const runDir = path.join(RUNS_DIR, id);
   const screenshotsDir = path.join(runDir, 'screenshots');
@@ -279,9 +229,26 @@ export async function setup({ runId } = {}) {
 async function runMaestroChunk(yaml, { state, label }) {
   const flowFile = path.join(state.flowsDir, `${label}.yaml`);
   await fs.writeFile(flowFile, yaml);
-  await spawnLive('maestro', ['--udid', state.udid, 'test', flowFile], {
-    cwd: state.screenshotsDir,
-  });
+  // `--debug-output` redirects Maestro's own per-step screenshots and view
+  // hierarchies into the run dir. Without it they land in `~/.maestro/tests/`,
+  // which the nightly workflow does not upload — so a CI failure arrived with
+  // literally no picture of the screen. A flow that fails *before* its first
+  // `takeScreenshot` (the 2026-07-20 home-loads failure did) then leaves
+  // nothing to diagnose at all. Keep this pointed inside `state.runDir`, which
+  // is already an uploaded artifact path.
+  await spawnLive(
+    'maestro',
+    [
+      '--udid',
+      state.udid,
+      'test',
+      '--debug-output',
+      path.join(state.runDir, 'maestro-debug', label),
+      '--flatten-debug-output',
+      flowFile,
+    ],
+    { cwd: state.screenshotsDir },
+  );
 }
 
 /**
@@ -359,6 +326,8 @@ export async function runFlow(slug, fn) {
     // relative anchor the way the URL field does.
     const tokenSteps = gatewayToken
       ? `- tapOn: "paste token here"
+# e2e-lint-allow: unasserted-input — a bearer token is a secret; the field masks
+# it and it is never rendered back, so there is no value to assertVisible on.
 - inputText: ${JSON.stringify(gatewayToken)}
 ${DISMISS_KEYBOARD_ONBOARDING}`
       : '';
@@ -404,11 +373,40 @@ ${DISMISS_KEYBOARD_ONBOARDING}`
 - extendedWaitUntil:
     visible: "Gateway URL"
     timeout: 10000
+# This literal is the field's PLACEHOLDER, not the URL being configured — the
+# input is empty after clearState, and an empty TextInput exposes only its
+# placeholder as matchable text. It must therefore stay byte-equal to
+# placeholder="http://127.0.0.1:18789" in apps/mobile/src/screens/Settings.tsx,
+# even when this flow configures a DIFFERENT gateway (a port already in use
+# locally is the common case). The below: anchor is load-bearing too: the help
+# paragraph above quotes the same URL, and matching it instead used to type the
+# address into nothing. The durable fix is an accessibilityLabel on that
+# TextInput so this can select the field by name — see #482.
 - tapOn:
     text: "http://127.0.0.1:18789"
     below: "Dev fallback for simulators.*"
+# The multilingual-keyboard onboarding sheet is a one-time, per-boot modal that
+# iOS raises on the first keystroke and which silently swallows the ones after
+# it. Dismissing it AFTER typing the URL — as this flow used to — is a race: on
+# ci run 29773028739 it appeared mid-input and corrupted the gateway URL to
+# "h7.0.0.1:18789" (the app then redboxed on the malformed address and the Save
+# assertion below failed for an unrelated-looking reason). Force it up with one
+# throwaway keystroke, dismiss it, then erase and type into a settled keyboard.
+# If the sheet never appears (a sim that was already onboarded), the dismiss is a
+# no-op and the erase clears the throwaway — so this is safe either way.
+# e2e-lint-allow: unasserted-input — a throwaway keystroke to provoke the sheet;
+# it is erased immediately below, so there is deliberately nothing to assert.
+- inputText: "x"
+${DISMISS_KEYBOARD_ONBOARDING}- eraseText
 - inputText: ${JSON.stringify(gatewayUrl)}
-${DISMISS_KEYBOARD_ONBOARDING}${tokenSteps}- hideKeyboard
+# Prove the field actually holds the URL before Save, anchored below the help
+# paragraph so it checks the INPUT, not the paragraph that quotes the same URL.
+# A dropped keystroke fails here, at the field, instead of as a redbox two steps
+# on.
+- assertVisible:
+    text: ${JSON.stringify(gatewayUrl)}
+    below: "Dev fallback for simulators.*"
+${tokenSteps}- hideKeyboard
 - tapOn: "Save"
 - extendedWaitUntil:
     visible: "Everything you build, in one place."

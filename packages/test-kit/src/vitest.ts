@@ -32,6 +32,14 @@ const nodePreset = {
     // well below a real-hang signal — a deadlock never completes at any budget,
     // it just takes 30s instead of 5s to report. jsdom projects deliberately
     // keep Vitest's tight 5s default: they do no disk I/O.
+    //
+    // Do NOT add a per-test `}, N)` override below this number. Eight tests
+    // carried 10s/15s/20s overrides written against the old 5s default, where
+    // they were RAISES; raising the default silently turned them into CAPS on
+    // exactly the slow I/O-bound tests that needed the headroom most, and
+    // stream-ingress.test.ts then timed out at its own 15s in ci run
+    // 29755774783 while everything around it had 30s. They are gone. A test
+    // genuinely slower than 30s should say so with an override ABOVE it.
     testTimeout: 30_000,
   },
 } satisfies ProjectConfig;

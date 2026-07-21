@@ -75,6 +75,11 @@ jobs:
       # named contract suite shrinks below its recorded floor. Offline and fast,
       # so it belongs on the per-PR loop next to lint/typecheck.
       - run: bun run test:matrix
+      # Mobile agent-e2e flow anti-rot (issue #483): fail if a Maestro flow
+      # asserts on a tab/route label that is drawn on every screen, or types
+      # input it never verifies. The flows themselves run nightly, but linting
+      # their source is offline and fast, so it gates on the per-PR loop.
+      - run: bun run lint:e2e-flows
 
   verify:
     runs-on: ubuntu-latest

@@ -89,6 +89,36 @@ workspaces like desktop's `userData`.
 - **`takeScreenshot: <descriptive-name>`** in YAML, not `step1.png`.
   Screenshots are part of the audit trail.
 
+## Flow authoring rules
+
+Getting `mobile-e2e` green (#474/#478) surfaced six flows that were green while
+observing nothing, or red for a reason unrelated to their claim. These rules
+prevent the recurrence (issue #483). The first two are **mechanically enforced**
+by `scripts/lint-e2e-flows.mjs` (runs in `bun run check:pr` and CI `static`); the
+rest are review judgment.
+
+1. **Every `inputText` must be observed before it can be wiped.** _(enforced)_
+   Follow it with an `assertVisible`/`extendedWaitUntil` on the value typed, so a
+   dropped or corrupted keystroke fails AT the field — not as an unrelated redbox
+   two steps later. A value that genuinely cannot be read back (a masked secret, a
+   throwaway keystroke that is erased) is exempt with a reason:
+   `# e2e-lint-allow: unasserted-input — <why>` on the step or the comment above it.
+2. **Never assert on a tab-bar label or route name.** _(enforced)_
+   `Home/Photos/Docs/Agenda/Settings/Apps` render in the tab bar on every screen
+   (and `Apps` is a route name, never visible text), so `tapOn "Docs.*"` +
+   `assertVisible "Docs"` passes even when the tap did nothing. Assert a string the
+   target screen alone publishes — a heading or a Pressable `accessibilityLabel`
+   (e.g. Photos → "Search photos"). `tapOn` on a label is fine; asserting one is not.
+   Exempt a deliberate case with `# e2e-lint-allow: route-name — <why>`.
+3. **Anchor every `tapOn` so it cannot match help copy.** _(review)_
+   Maestro matches text as a substring; a bare `tapOn "http://127.0.0.1:18789"`
+   matched the help paragraph that quotes the URL and focused nothing. Use a
+   `below:`/`above:` anchor or `^exact$` regex.
+4. **Assert on strings the product deliberately publishes.** _(review)_
+   Prefer a testID or `accessibilityLabel` over incidental copy. Where a flow has
+   to fall back to incidental text, the product is missing an accessible name —
+   file it (see #482) rather than cementing the fragile selector.
+
 ## Conventions specific to this layer
 
 - **Never write a selector from the React source.** Boot the simulator,
