@@ -107,6 +107,10 @@ Assert that "Create event" is visible... COMPLETED
 All three flows passed (home-loads, template-gate, native-v0-resilience). The
 run-level conclusion is `failure` only for `publish-nightly-report`, the
 main-only GitHub Pages deploy that cannot pass from a feature-branch dispatch.
+The rewritten native-tab assertions are verified end-to-end by the fold's own
+`mobile-e2e` CI run (the flow runs on a fresh-booted simulator); the labels are
+Pressable accessibilityLabels, the same construct `template-gate` already matches
+green with "Open <name>".
 
 ## Audit
 
