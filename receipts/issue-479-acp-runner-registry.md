@@ -29,6 +29,7 @@ gone.
 | claude-code-5e7d278e-75e-1784572126-1 | claude-code | 5e7d278e-75e6-4ac4-a4a5-1cba173c5d98 | #479 | claude-opus-4-8 | 6 | 31710 | 988503 | 1362 | 33078 | 0.7265 | 526 | 1200654 | 48424966 | 320457 | wip (#479) |
 | claude-code-5e7d278e-75e-1784572209-1 | claude-code | 5e7d278e-75e6-4ac4-a4a5-1cba173c5d98 | #479 | claude-opus-4-8 | 14 | 7523 | 2393351 | 7105 | 14642 | 1.4214 | 540 | 1208177 | 50818317 | 327562 | feat(agent-runtime): make ACP the single runner integration path (#479) -m The r |
 | claude-code-5e7d278e-75e-1784573146-1 | claude-code | 5e7d278e-75e6-4ac4-a4a5-1cba173c5d98 | #479 | claude-opus-4-8 | 34 | 45293 | 6051378 | 30427 | 75754 | 4.0696 | 574 | 1253470 | 56869695 | 357989 | feat(agent-runtime): add eight recognized ACP agent kinds (#479) -m copilot, cur |
+| claude-code-5e7d278e-75e-1784611542-1 | claude-code | 5e7d278e-75e6-4ac4-a4a5-1cba173c5d98 | #479 | claude-opus-4-8 | 1124 | 2014487 | 104894444 | 684069 | 2699680 | 82.1451 | 1698 | 3267957 | 161764139 | 1042058 | test(agent-runtime): cover ACP helper branch paths to hold the 84 percent floor  |
 
 ### Steering
 
@@ -210,6 +211,18 @@ bin from its installed package). Tests:
 lives in `packages/agent-runtime/src/multimodal.ts` and
 `packages/agent-runtime/src/multimodal.test.ts`.
 
+**ACP branch-coverage backfill** — the new adapter tree landed several helpers
+below the seeded `packages/agent-runtime/src/**` 84% branch floor (79.06% in CI),
+so the following unit/integration suites cover their branch paths directly:
+`packages/agent-runtime/src/backends/acp/permissions.test.ts`,
+`packages/agent-runtime/src/backends/acp/content.test.ts`,
+`packages/agent-runtime/src/backends/acp/adapter-bin.test.ts`,
+`packages/agent-runtime/src/backends/acp/stream-events.test.ts`,
+`packages/agent-runtime/src/backends/acp/launch.test.ts`, and
+`packages/agent-runtime/src/backends/acp/vault-mcp-server.test.ts` (drives the
+real loopback listener: bearer gate, JSON-RPC error codes, idempotent close).
+This lifts the glob to 87% branches — no source file changed.
+
 **Deleted with the fold** — `packages/agent-runtime/src/backends/claude/backend.ts`,
 `packages/agent-runtime/src/backends/claude/host-tools.ts`,
 `packages/agent-runtime/src/backends/codex/backend.ts`,
@@ -352,7 +365,7 @@ validators.
 Per-package suites, run sequentially:
 
 ```
-agent-runtime  Tests  152 passed (152)
+agent-runtime  Tests  212 passed (212)
 app-engine     Tests  490 passed (490)
 automation     Tests  219 passed (219)
 gateway        Tests  799 passed | 6 skipped (805)
@@ -367,6 +380,13 @@ least-destructive option is chosen, resume via `session/load` with replayed
 history swallowed, cancellation (abort mid-stream → agent observes
 `session/cancel` → `aborted` emitted, no `final`), and spawn/exit failures
 surfaced as actionable errors.
+
+**Branch-coverage floor held (not lowered)**: the new adapter helpers had
+dropped `packages/agent-runtime/src/**` branch coverage to 79.06% (CI floor 84%).
+Rather than relax the seeded floor, direct suites now cover `permissions.ts`,
+`content.ts`, `stream-events.ts` (all to 100% branches), `launch.ts` (93%),
+`adapter-bin.ts` (92%), and `vault-mcp-server.ts` (88%), lifting the glob to
+**87.19%** with no source change.
 
 **Vault tools restored over a loopback MCP server** is covered end-to-end: the
 fake agent receives the `mcpServers` entry, calls back with the bearer, invokes a
