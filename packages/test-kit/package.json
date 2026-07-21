@@ -8,7 +8,6 @@
     "./factories": "./src/factories.ts",
     "./fake-clock": "./src/fake-clock.ts",
     "./vitest": "./src/vitest.ts",
-    "./mock-llm": "./src/mock-llm.ts",
     "./quality-result": "./src/quality-result.ts",
     "./temp-dir": "./src/temp-dir.ts",
     "./volume-fixture": "./src/volume-fixture.ts"
@@ -19,7 +18,6 @@
   },
   "dependencies": {
     "@centraid/gateway": "workspace:*",
-    "@centraid/mock-llm": "workspace:*",
     "@centraid/vault": "workspace:*"
   },
   "devDependencies": {

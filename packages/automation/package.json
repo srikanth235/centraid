@@ -18,8 +18,7 @@
   },
   "dependencies": {
     "@centraid/app-engine": "workspace:*",
-    "@centraid/blueprints": "workspace:*",
-    "@centraid/mock-llm": "workspace:*"
+    "@centraid/blueprints": "workspace:*"
   },
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",

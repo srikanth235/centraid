@@ -34,6 +34,7 @@
  *   --config-marker=<path>  write `<configId>=<value>` on session/set_config_option
  *   --mode-marker=<path>    write the modeId on session/set_mode
  *   --no-model-option       advertise NO model selector (config-option-less agent)
+ *   --pid-marker=<path>     write this process's pid at startup (liveness probe)
  *   --cost=<amount>         emit a usage_update carrying this cumulative cost
  *   --currency=<code>       ISO 4217 code for --cost (default USD)
  *   --env-marker=<path>     write selected env vars as JSON at startup
@@ -66,6 +67,7 @@ const promptMarker = flag('prompt-marker');
 const vaultMarker = flag('vault-marker');
 const mcpAnnounce = has('mcp-announce');
 const mcpHttp = has('mcp-http');
+const pidMarker = flag('pid-marker');
 const promptCaps = Object.fromEntries(
   (flag('prompt-caps') ?? '')
     .split(',')
@@ -84,6 +86,8 @@ if (envMarker) {
     }),
   );
 }
+
+if (pidMarker) writeFileSync(pidMarker, String(process.pid));
 
 if (mode === 'exit') process.exit(1);
 

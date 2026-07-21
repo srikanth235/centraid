@@ -340,10 +340,11 @@ handler on schedule while it is running.
   manual-fire-only automation. A webhook trigger is declared as
   \`{ "kind": "webhook", "pending": true }\` — the route id + secret are
   minted server-side, never hand-written.
-- \`requires.mcps\` / \`requires.tools\` declare the host tools the handler
-  calls via \`ctx.tool(name, args)\`. \`requires.model\` is the model
-  \`ctx.agent({ prompt, json? })\` routes through. **Never set this to
-  \`centraid-mock/*\`** — that would recurse into the runner.
+- \`requires.model\` is the model \`ctx.agent({ prompt, json? })\` routes
+  through — the ONE billed rail. **Never set it to \`centraid-mock/*\`** —
+  that would recurse into the runner. Deterministic work needs no \`requires\`
+  at all: read/write through \`ctx.vault\`, HTTP through \`ctx.fetch\`, cursors
+  through \`ctx.state\` — zero tokens, zero processes.
 - The runtime validates the manifest on every read; keep the shape exactly.
 
 ## handler.js

@@ -1150,7 +1150,7 @@ export interface CentraidAutomationManifest {
     | { kind: 'data'; entities: readonly string[]; every?: string }
     | { kind: 'condition'; entity: string; where?: unknown; every?: string }
   >;
-  requires: { mcps?: readonly string[]; tools?: readonly string[]; model?: string };
+  requires: { mcps?: readonly string[]; model?: string };
   /** App ids this automation is associated with. */
   apps?: readonly string[];
   costEstimate?: { model: string; tokensPerFire: number };
@@ -1384,7 +1384,7 @@ declare global {
       | { kind: 'data'; entities: readonly string[]; every?: string }
       | { kind: 'condition'; entity: string; where?: unknown; every?: string }
     >;
-    requires: { mcps?: readonly string[]; tools?: readonly string[]; model?: string };
+    requires: { mcps?: readonly string[]; model?: string };
     apps?: readonly string[];
     costEstimate?: { model: string; tokensPerFire: number };
     onFailure?: string;

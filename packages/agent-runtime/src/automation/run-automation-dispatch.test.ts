@@ -2,11 +2,12 @@
  * Runner-kind routing for the automation dispatch path (issue #479).
  *
  * A fire has its OWN dispatch surface, separate from the conversation
- * `runTurn`: `ctx.tool` batches are executed by a CLI puppeted against a
- * per-fire mock LLM, and `ctx.agent` is a one-shot against the user's real
- * provider. Both seams branched claude-vs-codex by hand, so once the runner
- * union widened, an automation pinned to gemini / qwen / a custom ACP agent
- * silently ran codex. These tests pin the routing at both seams.
+ * `runTurn`: `ctx.agent` is a one-shot against the user's real provider,
+ * routed through the runner registry. Issue #484 removed the `ctx.tool` rail
+ * (and the mock-LLM session it puppeted), so the dispatch surface no longer
+ * accepts a tool dispatcher — a fire whose handler only touches ctx.vault /
+ * ctx.state constructs nothing and spawns nothing. These tests pin the
+ * `ctx.agent` routing at the one surviving seam.
  */
 
 import { afterEach, expect, test } from 'vitest';
@@ -14,7 +15,6 @@ import type { TurnConfig, TurnInput, TurnStreamEvent } from '@centraid/app-engin
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import type { RunnerKind } from '../types.ts';
 import { RUNNER_BACKENDS } from '../registry.ts';
-import { defaultRunHostAgent } from './run-automation-host-agent.ts';
 import { startLiveDispatch, type LiveDispatch } from './run-automation-live-dispatch.ts';
 
 const ACP_KINDS = ['gemini', 'qwen', 'acp'] as const satisfies readonly RunnerKind[];
@@ -56,11 +56,8 @@ async function openDispatch(runner: RunnerKind, model?: string): Promise<LiveDis
   const workdir = await tempDir('centraid-automation-dispatch-');
   const dispatch = await startLiveDispatch({
     workdir,
-    automationId: 'demo/nightly',
     runId: 'run-1',
     runner,
-    runHostAgent: async () => ({ exitCode: 0, ok: true, stderr: '' }),
-    toolsAllow: [],
     ...(model ? { model } : {}),
     onLog: () => undefined,
   });
@@ -74,30 +71,17 @@ const dispatchCtx = {
   abortSignal: new AbortController().signal,
 };
 
-// ---- ctx.tool host agent -------------------------------------------------
+// ---- zero-spawn seam ------------------------------------------------------
 
-test.each(ACP_KINDS)(
-  'ctx.tool batches on %s fail loudly instead of silently hosting on codex',
-  async (kind) => {
-    const result = await defaultRunHostAgent({
-      kind,
-      mockBaseUrl: 'http://127.0.0.1:1/v1',
-      mockBearerToken: 'centraid-mock-test',
-      prompt: 'dispatch sentinel',
-      toolsAllow: [],
-      cwd: await tempDir('centraid-automation-host-'),
-      scratchDir: await tempDir('centraid-automation-scratch-'),
-      abortSignal: new AbortController().signal,
-    });
-
-    expect(result.ok).toBe(false);
-    expect(result.exitCode).toBeNull();
-    expect(result.stderr).toContain(`runner "${kind}"`);
-    // Names the constraint AND the way out, so the run record is actionable.
-    expect(result.stderr).toContain('ctx.tool');
-    expect(result.stderr).toContain('codex or claude-code');
-  },
-);
+test('the dispatch surface exposes only ctx.agent — no tool dispatcher, nothing eager', async () => {
+  // The seam itself is the assertion: a vault-/state-only fire never touches
+  // this surface, and there is no `toolDispatcher` for it to reach. Opening
+  // the surface must be inert — no persistent mock session, no HTTP server.
+  const dispatch = await openDispatch('codex');
+  expect(dispatch).not.toHaveProperty('toolDispatcher');
+  expect(typeof dispatch.agentDispatcher).toBe('function');
+  expect(typeof dispatch.close).toBe('function');
+});
 
 // ---- ctx.agent -----------------------------------------------------------
 
@@ -120,7 +104,7 @@ test.each(ACP_KINDS)('ctx.agent on %s drives the registered backend', async (kin
   expect(call?.input.message).toBe('summarise the inbox');
   expect(call?.input.model).toBe('some-model');
   expect(call?.config.prefs.kind).toBe(kind);
-  // The normalized stream reaches the run bus, same as the claude arm.
+  // The normalized stream reaches the run bus.
   expect(forwarded.map((e) => e.type)).toEqual(['assistant.start', 'final']);
 });
 

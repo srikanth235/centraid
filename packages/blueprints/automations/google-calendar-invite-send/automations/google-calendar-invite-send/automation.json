@@ -12,9 +12,7 @@
       "every": "*/5 * * * *"
     }
   ],
-  "requires": {
-    "tools": []
-  },
+  "requires": {},
   "connector": {
     "kind": "pull.gmail",
     "label": "personal"

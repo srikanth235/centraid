@@ -1,20 +1,23 @@
 /*
  * Per-runner model enumeration.
  *
- * Each CLI-backed runner reports the models it can actually run via a
- * control-plane call — we never hardcode a catalog or fetch an external one:
+ * There is no per-kind enumeration strategy any more (issue #484). A runner
+ * reports its models the same way it reports anything else — over ACP: an
+ * agent advertises its model selector as a `configOptions` entry on the
+ * `session/new` result. So enumeration is one generic ACP probe (launch →
+ * initialize → session/new → read the model option; see `backends/acp/
+ * enumerate-models.ts`), and it only echoes what the agent itself offers — we
+ * never hardcode a catalog or fetch an external one.
  *
- *  - claude-code: the Agent SDK's `query().supportedModels()` control method.
- *    The CLI reports its built-in model list (aliases like `default`/`sonnet`/
- *    `haiku`, each with a display name) over the control channel — no model
- *    turn, no tokens.
- *  - codex: the app-server `model/list` JSON-RPC method (see codex/model-list.ts).
+ * The probe is opt-in per kind (`AcpBackendSpec.probeModels`): the two
+ * adapter-backed kinds that once had bespoke enumerators — codex (was
+ * `codex app-server model/list`) and claude-code (was the Agent SDK's
+ * `supportedModels()`) — opt in. Native ACP kinds stay on "Gateway default"
+ * and pin a model per-session at turn time instead.
  *
- * Each backend's enumerator lives beside its adapter in `backends/<kind>/
- * model-list.ts`; this file is just the per-runner switchboard.
- *
- * Everything is best-effort: any failure (binary missing, SDK load error,
- * timeout) resolves to `[]`, so the `CatalogWarmer` simply skips the write and
+ * This file is just the switchboard onto the registry hook. Everything is
+ * best-effort: any failure (binary missing, adapter not installed, timeout,
+ * AUTH_REQUIRED) resolves to `[]`, so the `CatalogWarmer` skips the write and
  * the cached entry (if any) is preserved. Enumeration runs only through the
  * warmer (boot + Refresh), never on a normal runner-status read.
  */
@@ -24,10 +27,10 @@ import { RUNNER_BACKENDS } from '../registry.js';
 
 /**
  * Enumerate the models the active runner can serve, via the runner-backend
- * registry's per-kind `enumerateModels` hook (codex → app-server
- * `model/list`; claude → SDK `supportedModels()`; ACP kinds → empty, since
- * ACP has no model catalog). Returns `[]` on any failure or unknown kind —
- * never throws.
+ * registry's per-kind `enumerateModels` hook (codex / claude-code → the
+ * generic ACP model probe; every other kind → empty, since it pins its model
+ * per-session rather than exposing a catalog). Returns `[]` on any failure or
+ * unknown kind — never throws.
  */
 export function enumerateRunnerModels(prefs: {
   kind: RunnerKind;

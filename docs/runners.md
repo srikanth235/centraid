@@ -163,8 +163,11 @@ Recorded honestly so nobody rediscovers them as bugs:
 - **`ctx.agent` structured output.** The retired codex arm handed `call.json` to `codex exec --output-schema`. ACP has no equivalent, so `call.json` is now enforced by `coerceAgentAnswer` alone for every kind — which is what the claude arm always did.
 - **Codex `localImage` paths.** The retired codex arm passed image attachments by path and let codex read them; ACP has no path-based image block, so images are base64-inlined into the prompt for every kind. Functionally equivalent, marginally more bytes on the wire.
 
-## The one thing that is deliberately NOT ACP
+## Automations ride the same single ACP path
 
-Automation `ctx.tool` dispatch ([`run-automation-host-agent.ts`](../packages/agent-runtime/src/automation/run-automation-host-agent.ts)) still invokes the claude and codex CLIs **natively**. It is not a user-facing runner: it works by pointing a CLI at a per-fire mock LLM endpoint so the deterministic handler dictates every turn at ~0 real model tokens. An ACP agent drives its own model loop and exposes no base URL to redirect, so the mechanism cannot move to ACP — a fire pinned to any other kind fails loudly instead of silently running a different agent.
+The bespoke automation `ctx.tool` rail — a per-fire mock-LLM endpoint that pointed a native claude/codex CLI at a deterministic handler — was **removed** (#484). There is no automation-only agent path left; automations use the same transport as chat.
 
-`ctx.agent`, by contrast, is a real billed turn and goes through the registry like everything else.
+An automation fire now has exactly two cost profiles:
+
+- **Deterministic rails** — `ctx.vault` (SQL + invoke + content), `ctx.state`, `ctx.runs`, `ctx.fetch`, `ctx.input` — run **parent-side, in-process** in the gateway. Zero model tokens, zero child processes, zero HTTP servers, on every runner kind. A fire whose handler never calls `ctx.agent` cannot spawn anything or bill anything.
+- **Billed rail** — `ctx.agent(prompt, { json, model })` — a bounded one-shot turn against the user's real provider, routed through the **same single ACP backend as chat** (`getRunnerBackend(kind).runTurn`), so it works on all runner kinds like everything else.
