@@ -52,6 +52,8 @@ test('every kind keeps the USER-FACING CLI as its default bin; custom acp has no
   expect(RUNNER_BACKENDS.cursor.defaultBin).not.toBe('agent');
   // vibe: `vibe-acp` is a SEPARATE binary from `vibe`, not a mode of it.
   expect(RUNNER_BACKENDS.vibe.defaultBin).toBe('vibe-acp');
+  // pi: same shape as vibe — `pi-acp` is a standalone ACP server binary.
+  expect(RUNNER_BACKENDS.pi.defaultBin).toBe('pi-acp');
   expect(RUNNER_BACKENDS.acp.defaultBin).toBeUndefined();
 });
 
@@ -70,6 +72,7 @@ test('natively ACP-speaking kinds enumerate no models (no hardcoded provider ids
     'auggie',
     'vibe',
     'droid',
+    'pi',
     'acp',
   ] as const) {
     expect(await RUNNER_BACKENDS[kind].enumerateModels({})).toEqual([]);
@@ -206,6 +209,19 @@ test('cursor pins a CalVer floor, which still compares numerically', () => {
   expect(RUNNER_BACKENDS.auggie.minVersion).toEqual({ major: 0, minor: 33, patch: 0 });
   expect(RUNNER_BACKENDS.vibe.minVersion).toEqual({ major: 2, minor: 21, patch: 0 });
   expect(RUNNER_BACKENDS.droid.minVersion).toEqual({ major: 0, minor: 175, patch: 1 });
+});
+
+test('pi launches ACP natively through its own dedicated binary, like vibe', () => {
+  // `pi-acp` is the ACP server's own entrypoint, so `acpArgs` is EMPTY (no mode
+  // flag to add) and there is no adapter — binPath is the spawn target.
+  expect(acpConfigFor('pi', {}).acpArgs).toEqual([]);
+  expect(RUNNER_BACKENDS.pi.minVersion).toEqual({ major: 0, minor: 0, patch: 31 });
+  const config = acpConfigFor('pi', { binPath: '/opt/bin/pi-acp' });
+  expect(config.adapter).toBeUndefined();
+  expect(config.binPath).toBe('/opt/bin/pi-acp');
+  // Claude tier vocabulary must not leak onto a non-Claude runner.
+  expect(config.resolveModel).toBeUndefined();
+  expect(RUNNER_BACKENDS.pi.installHint).toMatch(/pi-acp/);
 });
 
 test('paid-plan and out-of-band-setup requirements stay in the install hints', () => {

@@ -1,5 +1,6 @@
 import type { CSSProperties, JSX } from 'react';
 import type { AgentCardDTO } from '../screen-contracts.js';
+import { AgentGlyph } from './agentGlyphs.js';
 import { ModelSelect } from './SettingsProvidersSelects.js';
 import styles from './SettingsProvidersScreen.module.css';
 
@@ -36,10 +37,9 @@ export default function AgentEntry({
   return (
     <div className={styles.entry} style={{ '--row-accent': card.accent } as CSSProperties}>
       <div className={styles.row} data-unavail={card.connected ? '' : 'true'}>
-        <span
-          className={styles.rowDot}
-          style={{ background: card.connected ? card.accent : 'var(--ink-4)' }}
-        />
+        <span className={styles.glyphTile} data-unavail={card.connected ? '' : 'true'}>
+          <AgentGlyph kind={card.kind} accent={card.accent} connected={card.connected} />
+        </span>
         <div className={styles.rowMeta}>
           <div className={styles.rowName}>{card.title}</div>
           <span className={styles.rowSub}>{card.subtitle}</span>

@@ -646,6 +646,7 @@ export const AGENT_RUNNER_KINDS = [
   'auggie',
   'vibe',
   'droid',
+  'pi',
   'acp',
 ] as const;
 export interface AgentModelDTO {
