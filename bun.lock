@@ -24,8 +24,6 @@
       "name": "@centraid/desktop",
       "version": "0.1.0",
       "dependencies": {
-        "@centraid/agent-runtime": "workspace:*",
-        "@centraid/automation": "workspace:*",
         "@centraid/client": "workspace:*",
         "@centraid/design-tokens": "workspace:*",
         "@centraid/gateway": "workspace:*",
@@ -198,7 +196,6 @@
       },
       "devDependencies": {
         "@centraid/app-engine": "workspace:*",
-        "@centraid/client": "workspace:*",
         "@centraid/tsconfig": "workspace:*",
         "@types/node": "^22.0.0",
         "esbuild": "^0.28.1",
@@ -213,6 +210,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@centraid/blob-format": "workspace:*",
+        "@centraid/blueprints": "workspace:*",
         "@centraid/design-tokens": "workspace:*",
         "@sqlite.org/sqlite-wasm": "3.53.0-build1",
         "pdfjs-dist": "5.7.284",

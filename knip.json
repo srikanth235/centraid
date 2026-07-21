@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
-  "ignore": ["tests/**", "apps/mobile/src/kit/theme/tokens.generated.ts"],
+  "ignore": ["tests/**"],
   "ignoreBinaries": ["actionlint", "python3"],
   "ignoreDependencies": ["@centraid/test-kit", "pagefind"],
   "ignoreWorkspaces": ["packages/data-plane", "packages/tsconfig"],
@@ -37,8 +37,7 @@
     },
     "packages/client": {
       "entry": ["src/index.ts", "src/replica/index.ts", "src/replica/sqlite-worker.ts"],
-      "project": ["src/**/*.{ts,tsx}"],
-      "ignoreDependencies": ["@centraid/blueprints"]
+      "project": ["src/**/*.{ts,tsx}"]
     },
     "packages/blueprints": {
       "entry": ["src/index.ts"],

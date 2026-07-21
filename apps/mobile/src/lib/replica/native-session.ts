@@ -505,11 +505,14 @@ export async function createNativeReplicaSession(
   const feed = options.changeFeed;
   // Loaded only when the caller supplies neither, so `node:test` runs (which
   // inject both) never resolve expo-crypto's native module.
-  const crypto = options.digest && options.idFactory ? undefined : await import('./native-hash');
-  const intents = new IntentQueue(intentStore, {
-    digest: options.digest ?? crypto!.nativeReplicaDigest,
-    idFactory: options.idFactory ?? crypto!.nativeReplicaIdFactory,
-  });
+  let digest = options.digest;
+  let idFactory = options.idFactory;
+  if (!digest || !idFactory) {
+    const { nativeReplicaDigest, nativeReplicaIdFactory } = await import('./native-hash');
+    digest ??= nativeReplicaDigest;
+    idFactory ??= nativeReplicaIdFactory;
+  }
+  const intents = new IntentQueue(intentStore, { digest, idFactory });
   let session: NativeReplicaSession | undefined;
   const coordinator = new ReplicaCoordinator(store, intents, {
     changeFeed: feed,

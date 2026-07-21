@@ -73,4 +73,3 @@ export { useTheme } from './useTheme';
 export { resolveTheme, navThemes, navThemeFor } from './resolve';
 export type { ThemeValue, ThemeColors, Scheme } from './resolve';
 export { lightPalette, darkPalette } from './tokens.generated';
-export type { PaletteKey } from './tokens.generated';

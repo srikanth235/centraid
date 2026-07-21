@@ -21,6 +21,7 @@ files + dependency hygiene tool and adds two fast monorepo gates: **sherif**
 | claude-code-5ac9baf3-ae7-1784644941-1 | claude-code | 5ac9baf3-ae74-4663-8f3f-7858b340fc66 | #494 | claude-fable-5 | 2 | 1043 | 154532 | 263 | 1308 | 0.1807 | 1073 | 3933625 | 108050922 | 698846 | chore(tooling): tune knip; add sherif + actionlint gates (#494)x |
 | claude-code-5ac9baf3-ae7-1784645120-1 | claude-code | 5ac9baf3-ae74-4663-8f3f-7858b340fc66 | #494 | claude-fable-5 | 29 | 25737 | 2430967 | 9257 | 35023 | 3.2158 | 1102 | 3959362 | 110481889 | 708103 | chore(cleanup): burn down all knip findings and gate knip in check:pr + CI (#494 |
 | claude-code-5ac9baf3-ae7-1784645429-1 | claude-code | 5ac9baf3-ae74-4663-8f3f-7858b340fc66 | #494 | claude-fable-5 | 58 | 30148 | 5342079 | 19583 | 49789 | 6.6987 | 1160 | 3989510 | 115823968 | 727686 | chore(gateway): consume @centraid/web via module resolution, drop the knip ignor |
+| claude-code-5ac9baf3-ae7-1784646230-1 | claude-code | 5ac9baf3-ae74-4663-8f3f-7858b340fc66 | #494 | claude-fable-5 | 104 | 64299 | 11167819 | 40278 | 104681 | 13.9865 | 1264 | 4053809 | 126991787 | 767964 | chore(cleanup): eliminate the last three knip suppressions at their root (#494)B |
 
 ### Steering
 
@@ -94,11 +95,25 @@ suppressed with a stated reason. Concretely:
 - **Duplicate exports resolved, not excluded** — `SNAPSHOT_FORMAT` alias
   deleted in favour of `SNAPSHOT_FORMAT_V2` (backup + gateway tests), and the
   `ACCENT = BRAND` alias deleted in favour of `BRAND` (design-tokens).
-- **False positives suppressed with a reason** — `@centraid/blueprints` in
-  client is consumed as static `kit/` assets (declaring it would create a
-  turbo build cycle with blueprints → client); `nativeReplicaIdFactory`
-  tagged `@public` (used via a conditional dynamic import knip cannot trace);
-  `tokens.generated.ts` ignored (generated file mirroring design-tokens).
+- **Every per-workspace suppression eliminated by fixing the cause** —
+  (1) The blueprints↔client cycle is broken: `replicaIntentInvalidations`
+  moved to `packages/blueprints/kit/intent-invalidations.js` (+ hand-authored
+  `intent-invalidations.d.ts`, the #420 single-source pattern);
+  `packages/client/src/replica/intent-invalidations.ts` is now a thin typed
+  re-export, `packages/blueprints/src/app-boot-harness.ts` imports the kit
+  copy relatively, blueprints drops its `@centraid/client` devDependency, and
+  client **declares** `@centraid/blueprints` as a real dependency — no ignore.
+  (2) `apps/mobile/src/lib/replica/native-session.ts` destructures from the
+  awaited `import('./native-hash')` instead of namespace property access, so
+  knip traces `nativeReplicaIdFactory` — the `@public` tag is deleted from
+  `apps/mobile/src/lib/replica/native-hash.ts`. (3) The theme generator
+  (`apps/mobile/src/kit/theme/generate.ts`) no longer emits the consumerless
+  `Palette`/`PaletteKey`/`RadiusKey`/`SpacingKey` types;
+  `apps/mobile/src/kit/theme/tokens.generated.ts` was regenerated via
+  `bun run generate:theme` and `apps/mobile/src/kit/theme/index.ts` dropped
+  the dead re-export — the generated-file ignore is deleted. Only the two
+  root-level structural entries remain (`@centraid/test-kit`, internal test
+  util; `pagefind`, invoked as `bun x pagefind` in the docs-site build).
 - **`@centraid/web` made a provably-consumed dependency instead of an
   ignore** — `packages/gateway/scripts/embed-web.mjs` replaces the build
   script's `cp -R ../../apps/web/dist dist/web` shell copy: it locates
@@ -178,6 +193,15 @@ db.ts wiring):
 - `packages/vault/src/gateway/ext.ts`
 - `packages/gateway/package.json`
 - `packages/gateway/scripts/embed-web.mjs`
+- `packages/blueprints/kit/intent-invalidations.js`
+- `packages/blueprints/kit/intent-invalidations.d.ts`
+- `packages/blueprints/package.json`
+- `packages/blueprints/src/app-boot-harness.ts`
+- `packages/client/package.json`
+- `packages/client/src/replica/intent-invalidations.ts`
+- `apps/mobile/src/lib/replica/native-session.ts`
+- `apps/mobile/src/kit/theme/generate.ts`
+- `apps/mobile/src/kit/theme/tokens.generated.ts`
 
 ## Decisions
 
