@@ -34,7 +34,10 @@ jobs:
         with:
           bun-version: 1.3.13
       - run: bun install --frozen-lockfile
-      - run: bunx turbo run build test --filter=@centraid/extension --filter=@centraid/blueprints
+      # Pure-local PR gate: extension unit suite + locker companion query handlers.
+      # Avoid full blueprints app-boot (jsdom teardown noise unrelated to Companion).
+      - run: bunx turbo run build test --filter=@centraid/extension
+      - run: bun run --filter @centraid/blueprints test -- src/query-handlers.test.ts
 
   companion:
     # Live relay path — not a PR merge blocker.

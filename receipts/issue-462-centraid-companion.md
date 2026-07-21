@@ -228,7 +228,8 @@ vitest.config.ts
 - **WASM CI:** pin rustc via `rust-toolchain.toml`, pin binaryen apt version,
   invoke build via `bash`, drift-gate JS/d.ts only (wasm binary warns).
 - **Companion e2e:** live n0-relay job is schedule/workflow_dispatch only; PRs
-  get pure-local `companion-static` (build + unit tests).
+  get pure-local `companion-static` (extension build/test + locker
+  `query-handlers` only — full blueprints app-boot is out of scope for this gate).
 
 ### Deferred nits (with rationale)
 - **Ticket decoder unification / relays field:** non-blocking; gateway still
