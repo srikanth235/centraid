@@ -92,10 +92,21 @@ node --check tests/agent-e2e-mobile/flows/native-v0-resilience.mjs
 node --check tests/agent-e2e-mobile/lib/harness.mjs
 ```
 
-The rewritten native-tab assertions are verified end-to-end by the fold's own
-`mobile-e2e` CI run (the flow runs on a fresh-booted simulator); the labels are
-Pressable accessibilityLabels, the same construct `template-gate` already matches
-green with "Open <name>".
+The rewritten native-tab assertions were verified end-to-end by a dispatched
+`mobile-e2e` run on this branch — [run 29797949507](https://github.com/srikanth235/centraid/actions/runs/29797949507),
+`mobile-e2e` → **success** with a full native rebuild (root `package.json`
+changed, busting the build-fingerprint cache) on a factory-fresh simulator:
+
+```
+Assert that "Search photos" is visible... COMPLETED
+Assert that "Add document or folder" is visible... COMPLETED
+Assert that "Create event" is visible... COMPLETED
+[runFlow] native-v0-resilience PASS in 291832ms
+```
+
+All three flows passed (home-loads, template-gate, native-v0-resilience). The
+run-level conclusion is `failure` only for `publish-nightly-report`, the
+main-only GitHub Pages deploy that cannot pass from a feature-branch dispatch.
 
 ## Audit
 
@@ -132,3 +143,4 @@ Verdict: **PASS**
 | claude-code-caa407fd-499-1784603324-1 | claude-code | caa407fd-4992-4b19-9083-0461b452f3bb | #483 | claude-opus-4-8 | 206 | 300835 | 12887288 | 137900 | 438941 | 11.7724 | 1061 | 1775120 | 111197564 | 505540 |  |
 | claude-code-caa407fd-499-1784603452-1 | claude-code | caa407fd-4992-4b19-9083-0461b452f3bb | #483 | claude-opus-4-8 | 14 | 26536 | 1098626 | 17424 | 43974 | 1.1508 | 1075 | 1801656 | 112296190 | 522964 |  |
 | claude-code-caa407fd-499-1784603509-1 | claude-code | caa407fd-4992-4b19-9083-0461b452f3bb | #483 | claude-opus-4-8 | 3 | 19020 | 489879 | 3564 | 22587 | 0.4529 | 1078 | 1820676 | 112786069 | 526528 |  |
+| claude-code-caa407fd-499-1784607016-1 | claude-code | caa407fd-4992-4b19-9083-0461b452f3bb | #483 | claude-opus-4-8 | 62 | 41954 | 6018398 | 26260 | 68276 | 3.9282 | 1140 | 1862630 | 118804467 | 552788 |  |
