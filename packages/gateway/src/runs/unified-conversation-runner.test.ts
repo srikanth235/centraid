@@ -9,8 +9,7 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  *
  * The real turn would spawn codex / claude, so we inject a fake `runTurn`
  * that records what it was handed and simulates the agent authoring an
- * automation with a pending webhook trigger. Tools enumeration is injected
- * empty to stay hermetic (no CLI on the box).
+ * automation with a pending webhook trigger.
  */
 
 import { afterEach, beforeEach, expect, test } from 'vitest';
@@ -63,7 +62,6 @@ test('runs the turn in the draft worktree with the union of tools + builder prom
     prefsLoader: async () => ({ kind: 'codex' }),
     getDispatcher: () => dispatcher,
     publicBaseUrl: () => 'http://127.0.0.1:9999',
-    resolveTools: async () => [],
     runTurn: async (input, config): Promise<TurnResult> => {
       captured = { input, config };
       input.onEvent({ type: 'assistant.delta', delta: 'ok' });
@@ -106,7 +104,6 @@ test('uses a one-shot draft session when the turn supplies one', async () => {
     prefsLoader: async () => ({ kind: 'codex' }),
     getDispatcher: () => dispatcher,
     publicBaseUrl: () => 'http://127.0.0.1:9999',
-    resolveTools: async () => [],
     runTurn: async (input): Promise<TurnResult> => {
       cwd = input.cwd;
       return { adapterKind: 'codex' };
@@ -129,7 +126,6 @@ test('mints a pending webhook authored during the turn and surfaces it once', as
     prefsLoader: async () => ({ kind: 'codex' }),
     getDispatcher: () => dispatcher,
     publicBaseUrl: () => 'http://127.0.0.1:9999',
-    resolveTools: async () => [],
     runTurn: async (input): Promise<TurnResult> => {
       // The agent authors an automation with a PENDING webhook trigger —
       // it can't mint crypto-random credentials itself.
@@ -196,7 +192,6 @@ test('errors when no coding agent is configured', async () => {
     prefsLoader: async () => undefined,
     getDispatcher: () => dispatcher,
     publicBaseUrl: () => 'http://127.0.0.1:9999',
-    resolveTools: async () => [],
     runTurn: async (): Promise<TurnResult> => {
       throw new Error('should not be called');
     },

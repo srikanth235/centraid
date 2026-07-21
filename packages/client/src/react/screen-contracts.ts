@@ -437,7 +437,6 @@ export type AuEditorTriggerInput =
  *  explainer. Names only — no secret values cross this DTO. */
 export interface AuEditorConnectorsDTO {
   mcps: string[];
-  tools: string[];
   secrets: string[];
   connector: string | null;
   vaultPurpose: string | null;

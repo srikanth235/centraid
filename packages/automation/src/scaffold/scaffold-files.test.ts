@@ -61,14 +61,15 @@ describe('scaffoldAppFiles', () => {
     ).toThrow(/manifest\.vault block/);
   });
 
-  it('emits the requires.tools allowlist slot (and model when given)', () => {
+  it('emits an empty requires slot (model only when given, no tools rail)', () => {
     const plain = byPath(scaffoldAppFiles('briefing'));
     const reqs = (
       JSON.parse(plain.get('automations/briefing/automation.json')!) as {
         requires: { tools?: unknown; model?: unknown };
       }
     ).requires;
-    expect(reqs.tools).toEqual([]);
+    // ctx.tool was removed (issue #484) — no tools allowlist is scaffolded.
+    expect(reqs.tools).toBe(undefined);
     expect(reqs.model).toBe(undefined);
 
     const withModel = byPath(scaffoldAppFiles('briefing', { model: 'anthropic/x' }));

@@ -10,9 +10,7 @@
       "expr": "10 * * * *"
     }
   ],
-  "requires": {
-    "tools": []
-  },
+  "requires": {},
   "connector": {
     "kind": "pull.gcal",
     "label": "personal"

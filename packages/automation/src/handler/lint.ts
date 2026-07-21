@@ -2,25 +2,25 @@
  * Static handler lint for automation `handler.js` (issue #167).
  *
  * An automation fire is a chat whose brain is `handler.js`. Its outside effects
- * must go through the `ctx.*` surface (`ctx.tool` / `ctx.agent` / `ctx.state` /
- * `ctx.runs`): those calls are recorded in the run ledger (`run_nodes`) and
- * gated by the manifest's `requires.tools` allowlist. A raw `fetch`/`fs` call is
- * both invisible to the run history and outside the allowlist. The handler
- * should also be deterministic: a crashed fire simply re-runs from the top
- * (there is no resume journal), so a wall-clock read or a random value makes the
- * re-run diverge and re-fire effects with different ids.
+ * must go through the `ctx.*` surface (`ctx.vault` / `ctx.fetch` / `ctx.agent` /
+ * `ctx.state` / `ctx.runs`): those calls are recorded in the run ledger
+ * (`run_nodes`). A raw `fetch`/`fs` call is invisible to the run history. The
+ * handler should also be deterministic: a crashed fire simply re-runs from the
+ * top (there is no resume journal), so a wall-clock read or a random value
+ * makes the re-run diverge and re-fire effects with different ids.
  *
  * This module is the *authoring-time* guard: a lexical scan that flags the
  * common offenders (`Date.now()`, `Math.random()`, `randomUUID()`, raw
- * `fetch`/`fs`, ambient `process.*`, …) so the builder sees an authoring error
- * at publish time rather than a surprise at fire time. It is a lint, not a
- * sandbox — it cannot catch every escape (an aliased global, an `eval`), but it
- * catches what a generated/edited handler realistically emits.
+ * `fetch`/`fs`, ambient `process.*`, the removed `ctx.tool`, …) so the builder
+ * sees an authoring error at publish time rather than a surprise at fire time.
+ * It is a lint, not a sandbox — it cannot catch every escape (an aliased
+ * global, an `eval`), but it catches what a generated/edited handler
+ * realistically emits.
  *
  * The deterministic alternatives are watermarks via `ctx.runs.last()` /
- * `ctx.state`, ids derived from the run's inputs, and timestamps returned by a
- * `ctx.tool` call. The rules below only ever match raw globals, so anything on
- * the `ctx.` surface passes untouched.
+ * `ctx.state`, ids derived from the run's inputs, and values read off a
+ * `ctx.vault` result. The rules below only ever match raw globals (or the
+ * retired `ctx.tool`), so anything else on the `ctx.` surface passes untouched.
  */
 
 /** One flagged pattern found in a handler. */
@@ -60,10 +60,20 @@ interface LintRule {
  */
 const RULES: readonly LintRule[] = [
   {
+    id: 'no-ctx-tool',
+    // `ctx.tool` (dot form, with optional whitespace before `(`) and the
+    // bracket forms `ctx['tool'](` / `ctx["tool"](`. Uses the string-keeping
+    // view so the bracketed string key isn't masked away.
+    re: /\bctx\s*(?:\.\s*tool|\[\s*['"]tool['"]\s*\])\s*\(/g,
+    message:
+      'ctx.tool was removed: handlers do deterministic work with ctx.vault / ctx.fetch / ctx.state, and delegate judgment to ctx.agent.',
+    target: 'withStrings',
+  },
+  {
     id: 'no-date-now',
     re: /\bDate\.now\s*\(/g,
     message:
-      'Date.now() reads the wall clock, so a re-run produces a different value. Use the fixed ctx.now fire instant, derive time windows from ctx.runs.last() / ctx.state, or read a timestamp from a ctx.tool result.',
+      'Date.now() reads the wall clock, so a re-run produces a different value. Use the fixed ctx.now fire instant, derive time windows from ctx.runs.last() / ctx.state, or read a timestamp off a ctx.vault result.',
   },
   {
     id: 'no-new-date',
@@ -75,13 +85,13 @@ const RULES: readonly LintRule[] = [
     id: 'no-math-random',
     re: /\bMath\.random\s*\(/g,
     message:
-      'Math.random() is nondeterministic — each run produces a different value. Derive any needed variation from the run inputs (ctx.input, ctx.state, a ctx.tool result).',
+      'Math.random() is nondeterministic — each run produces a different value. Derive any needed variation from the run inputs (ctx.input, ctx.state, a ctx.vault result).',
   },
   {
     id: 'no-random-uuid',
     re: /\brandomUUID\s*\(/g,
     message:
-      'randomUUID() mints a fresh id on every run, so a re-run after a crash duplicates work under a new id. Derive ids deterministically from the run inputs, or have a ctx.tool mint and return the id.',
+      'randomUUID() mints a fresh id on every run, so a re-run after a crash duplicates work under a new id. Derive ids deterministically from the run inputs, or have a ctx.vault write mint and return the id.',
   },
   {
     id: 'no-random-bytes',
@@ -102,13 +112,13 @@ const RULES: readonly LintRule[] = [
     // steers toward. Everything else spelling `fetch(` is ambient I/O.
     re: /(?<!ctx\.)\bfetch\s*\(/g,
     message:
-      'A raw fetch() is network I/O that bypasses the run ledger and the requires.tools allowlist. READS ride ctx.fetch (connector fires, broker-injected and host-pinned) or a declared ctx.tool(...); an external WRITE (send an email, call a mutating API) is staged, never sent: ctx.vault.invoke({ command: "outbox.stage", … }) parks it for the owner and the gateway executor performs the send (issue #306).',
+      'A raw fetch() is network I/O that bypasses the run ledger. READS ride ctx.fetch (connector fires, broker-injected and host-pinned) or a ctx.vault read; an external WRITE (send an email, call a mutating API) is staged, never sent: ctx.vault.invoke({ command: "outbox.stage", … }) parks it for the owner and the gateway executor performs the send (issue #306).',
   },
   {
     id: 'no-node-io-import',
     re: /\b(?:from|require\s*\(\s*)\s*['"](?:node:)?(?:fs(?:\/promises)?|child_process|net|http|https|dns|dgram|tls|cluster)['"]/g,
     message:
-      'Direct node I/O modules (fs, child_process, net, http, …) bypass the run ledger and the requires.tools allowlist — their effects are unrecorded and undeclared. All I/O must go through ctx.tool(...).',
+      'Direct node I/O modules (fs, child_process, net, http, …) bypass the run ledger — their effects are unrecorded. All I/O must go through the ctx.* rails (ctx.fetch / ctx.vault).',
     target: 'withStrings',
   },
   {

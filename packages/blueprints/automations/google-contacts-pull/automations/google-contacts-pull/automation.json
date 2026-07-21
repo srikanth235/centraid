@@ -10,9 +10,7 @@
       "expr": "20 */6 * * *"
     }
   ],
-  "requires": {
-    "tools": []
-  },
+  "requires": {},
   "connector": {
     "kind": "pull.gcontacts",
     "label": "personal"

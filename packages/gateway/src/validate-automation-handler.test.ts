@@ -39,8 +39,9 @@ async function writeAutomationApp(handler: string): Promise<void> {
 test('passes a replay-safe automation handler', async () => {
   await writeAutomationApp(
     `export default async ({ ctx }) => {
-       const items = await ctx.tool('x.list', {});
-       return { summary: 'ok', output: { n: items.length } };
+       const found = await ctx.vault.search({ entity: 'core.thread', text: '' });
+       const rows = Array.isArray(found?.rows) ? found.rows : [];
+       return { summary: 'ok', output: { n: rows.length } };
      };`,
   );
   expect(await validateManifestAt(dir)).toBe(undefined);

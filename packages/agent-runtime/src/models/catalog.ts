@@ -1,19 +1,16 @@
 /*
  * Gateway-owned host-capability catalog store.
  *
- * Persists, per runner, the two things a host runtime can self-report — its
- * model list (the chat picker) and its tool surface (builtins + MCP, the
- * builder's grounding and the Settings → Agents tools view) — at a
- * host-supplied `<dir>/model-catalog.json`. Models and tools refresh on
- * INDEPENDENT triggers, so each is read-modify-write merged into the shared
- * per-runner entry; one never clobbers the other.
+ * Persists, per runner, the host runtime's self-reported model list (the chat
+ * picker) at a host-supplied `<dir>/model-catalog.json`. (The tool surface it
+ * once also tracked went away with the `ctx.tool` rail — issue #484.)
  *
  * This module is pure storage: read + merge-write. It NEVER enumerates, so
- * reads are instant (no CLI spawn, no SDK call) — the `readRunner*` helpers
- * just return the cached field or `[]`. Enumeration (and the write-back) is
- * owned by the `CatalogWarmer` (./catalog-warmer.ts), which boot and Refresh
- * both drive; there is no hardcoded seed (a cold catalog yields `[]`, and the
- * UI shows a loading/empty state until the warmer fills it in).
+ * reads are instant (no CLI spawn, no SDK call) — `readRunnerModels` just
+ * returns the cached field or `[]`. Enumeration (and the write-back) is owned
+ * by the `CatalogWarmer` (./catalog-warmer.ts), which boot and Refresh both
+ * drive; there is no hardcoded seed (a cold catalog yields `[]`, and the UI
+ * shows a loading/empty state until the warmer fills it in).
  *
  * Everything is best-effort: read/write failures degrade silently so callers
  * never throw.
@@ -23,7 +20,6 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import type { RunnerKind, RunnerModel } from '@centraid/app-engine';
-import type { HostTool } from '../host-tools.js';
 
 const CATALOG_VERSION = 2 as const;
 
@@ -33,10 +29,6 @@ interface CatalogEntry {
   models?: RunnerModel[];
   /** ISO timestamp the model list was enumerated. */
   enumeratedAt?: string;
-  /** Host tools (builtins + MCP) — absent until the first tool enumeration. */
-  tools?: HostTool[];
-  /** ISO timestamp the tool list was enumerated. */
-  toolsEnumeratedAt?: string;
 }
 
 interface ModelCatalogFile {
@@ -64,9 +56,9 @@ export async function readCatalog(catalogPath: string): Promise<ModelCatalogFile
 }
 
 /**
- * Merge a partial patch into a single runner's entry (read-modify-write).
- * Models and tools refresh independently, so each writes only its own fields;
- * the merge preserves the other's. Best-effort.
+ * Merge a partial patch into a single runner's entry (read-modify-write): the
+ * patch writes only its own fields and the merge preserves the rest of the
+ * entry. Best-effort.
  */
 export async function writeCatalogEntry(
   catalogPath: string,
@@ -98,13 +90,4 @@ export async function readRunnerModels(
   kind: RunnerKind,
 ): Promise<RunnerModel[]> {
   return (await readCatalog(catalogPath))?.runners[kind]?.models ?? [];
-}
-
-/**
- * Read a runner's cached host tools straight from the catalog — no enumeration,
- * no fallback. The builder's grounding reads this on every turn (instant), so it
- * never spawns a CLI; the boot probe / explicit refresh is what populates it.
- */
-export async function readRunnerTools(catalogPath: string, kind: RunnerKind): Promise<HostTool[]> {
-  return (await readCatalog(catalogPath))?.runners[kind]?.tools ?? [];
 }

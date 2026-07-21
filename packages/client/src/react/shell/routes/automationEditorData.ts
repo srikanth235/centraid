@@ -73,7 +73,6 @@ function deriveConnectors(row: CentraidAutomationRow): AuEditorConnectorsDTO {
     connector: manifest.connector?.label ?? null,
     mcps: [...(manifest.requires.mcps ?? [])],
     secrets: [...(manifest.requires.secrets ?? [])],
-    tools: [...(manifest.requires.tools ?? [])],
     vaultPurpose: vault?.purpose ?? null,
     vaultScopes: vault ? vault.scopes.map(vaultScopeLabel) : [],
   };

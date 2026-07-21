@@ -381,7 +381,6 @@ export default function ConfigView({
     </div>
   );
 
-  const tools = m.requires.tools ?? [];
   const apps = m.apps ?? [];
 
   const cfgRow = (label: string, value: string): JSX.Element => (
@@ -396,7 +395,6 @@ export default function ConfigView({
       {cfgRow('Model', m.requires.model || 'Workspace default')}
       {cfgRow('Run history', fmtRetention(m.history.keep))}
       {m.onFailure ? cfgRow('On failure', `Run "${m.onFailure}"`) : null}
-      {tools.length > 0 ? cfgRow('Tools', tools.join(', ')) : null}
     </div>
   );
 

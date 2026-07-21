@@ -5,7 +5,7 @@ const CLEAN_HANDLER = `
 /** @type {import('@centraid/automation').AutomationHandler} */
 export default async ({ ctx, log }) => {
   const since = await ctx.runs.last({ status: 'ok' });
-  const prs = await ctx.tool('github.list_pull_requests', { repo: 'foo/bar' });
+  const prs = await ctx.vault.search({ entity: 'core.thread', text: 'foo/bar' });
   const fresh = prs.filter((p) => p.createdAt > (since?.startedAt ?? 0));
   const digest = await ctx.agent({
     prompt: 'Summarize: ' + JSON.stringify(fresh),
@@ -98,10 +98,23 @@ describe('lintHandlerSource', () => {
 
   it('handles nested braces inside interpolation without desyncing', () => {
     // eslint-disable-next-line no-template-curly-in-string -- this string IS handler source under test (#247)
-    const src = 'const s = `${ { a: 1 }.a + Date.now() }`; const ok = ctx.tool("x", {});';
+    const src = 'const s = `${ { a: 1 }.a + Date.now() }`; const ok = ctx.state.get("x");';
     const findings = lintHandlerSource(src);
     expect(findings.length).toBe(1);
     expect(findings[0]!.rule).toBe('no-date-now');
+  });
+
+  it('flags the removed ctx.tool rail (dot and bracket forms)', () => {
+    expect(lintHandlerSource('await ctx.tool("x.list", {});')[0]!.rule).toBe('no-ctx-tool');
+    // Optional whitespace before the call parens.
+    expect(lintHandlerSource('await ctx.tool ("x", {});')[0]!.rule).toBe('no-ctx-tool');
+    // Bracket-access forms.
+    expect(lintHandlerSource("await ctx['tool']('x', {});")[0]!.rule).toBe('no-ctx-tool');
+    expect(lintHandlerSource('await ctx["tool"]("x", {});')[0]!.rule).toBe('no-ctx-tool');
+    // The message steers to the surviving rails.
+    const msg = lintHandlerSource('ctx.tool("x", {});')[0]!.message;
+    expect(msg).toContain('ctx.tool was removed');
+    expect(msg).toContain('ctx.agent');
   });
 
   it('reports accurate line/column and sorts by position', () => {

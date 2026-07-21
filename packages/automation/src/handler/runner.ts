@@ -1,21 +1,21 @@
-// governance: allow-repo-hygiene file-size-limit the parent-side handler orchestrator is one message-pump — tool/agent/fetch/state/vault dispatch plus the #293 secret and #304 connection injection all share the one worker-boundary protocol, so splitting scatters the wire contract
+// governance: allow-repo-hygiene file-size-limit the parent-side handler orchestrator is one message-pump — agent/fetch/state/vault dispatch plus the #293 secret and #304 connection injection all share the one worker-boundary protocol, so splitting scatters the wire contract
 /**
  * Parent-side orchestrator for automation handlers.
  *
  * Issue #98: an automation is a self-contained unit that lives inside an
  * app folder (`<appCodeDir>/automations/<id>/`). The generated handler is a
  * single `handler.js` in that directory, executed in a worker thread
- * that exposes `ctx.tool` / `ctx.agent` / `ctx.state` / `ctx.runs`.
- * Cross-run persistence is `ctx.state` (the `automation_state` KV keyed
- * by the automation id).
+ * that exposes `ctx.agent` / `ctx.fetch` / `ctx.vault` / `ctx.state` /
+ * `ctx.runs`. Cross-run persistence is `ctx.state` (the `automation_state`
+ * KV keyed by the automation id).
  *
  *   - Worker entry is `worker/runner.js`.
- *   - The parent supplies `toolDispatcher` and `agentDispatcher`.
- *   - Tool calls arrive in batches; each call becomes one `run_nodes`
- *     audit row. There is no runtime retry — a failed `ctx.tool`
- *     rejects the handler Promise (see `ctx.ts`).
- *   - Every ctx surface call lands in the activity DB's run-audit
- *     tables. Retention runs at end-of-run per `manifest.history.keep`.
+ *   - The parent supplies `agentDispatcher` (the one billed rail — a bounded
+ *     model turn); `ctx.vault` / `ctx.fetch` / `ctx.state` / `ctx.runs` are
+ *     serviced here, in-process, against the vault bridge and SQLite.
+ *   - Every ctx surface call becomes one `run_nodes` audit row. There is no
+ *     runtime retry — a failed call rejects the handler Promise.
+ *   - Retention runs at end-of-run per `manifest.history.keep`.
  */
 
 import path from 'node:path';
@@ -45,13 +45,11 @@ import {
   type HandlerReturnEnvelope,
 } from './audit.js';
 import {
-  dispatchToolBatch,
   handleAgentMessage,
   handleRunsMessage,
   handleStateMessage,
   handleVaultMessage,
   type AuditState,
-  type ToolCallWire,
 } from './ctx.js';
 
 function resolveWorkerFile(): string {
@@ -81,30 +79,6 @@ function automationWorkerPool(): WorkerPool {
   }
   return automationWorkerPoolInstance;
 }
-
-export interface ToolCall {
-  readonly name: string;
-  readonly args: unknown;
-}
-
-export interface ToolResult {
-  ok: boolean;
-  result?: unknown;
-  error?: string;
-  /**
-   * Real per-tool start/finish epoch-ms, when the dispatcher can observe them
-   * (issue #158, Phase 3 — from the mock server's onToolStart/onToolResults).
-   * When present, the audit node uses these instead of the batch-wide window,
-   * so a tool's recorded duration excludes CLI spawn/teardown overhead.
-   */
-  startedAt?: number;
-  endedAt?: number;
-}
-
-export type ToolDispatcher = (
-  calls: readonly ToolCall[],
-  ctx: DispatchContext,
-) => Promise<ToolResult[]>;
 
 /**
  * One resolved vault derivative riding beside a `ctx.agent` prompt (issue
@@ -156,7 +130,6 @@ export interface RunHandlerOptions {
   runId: string;
   /** ISO fire-start instant fixed by the caller; defaults to handler admission time. */
   now?: string;
-  toolDispatcher: ToolDispatcher;
   agentDispatcher: AgentDispatcher;
   /** Per-app conversation-ledger store for audit + ctx.state + ctx.runs. */
   runsStore: ConversationStore;
@@ -183,17 +156,14 @@ export interface RunHandlerOptions {
   timeoutMs?: number;
   /**
    * Connector confinement (issue #290 phase 4). When present, this run is a
-   * published connector: `tools` is a HARD per-call allowlist over ctx.tool
-   * (requires-as-allowlist — the confused-deputy defense: connector code
-   * holds broad ambient harness tokens AND vault access, so confinement
-   * happens at the one chokepoint the vault side owns), and `ctx.agent` is
-   * forbidden entirely (agents write code, not data — the LLM appears at
-   * authoring/repair time, never in the per-sync loop).
+   * published connector: `ctx.agent` is forbidden entirely (agents write
+   * code, not data — the LLM appears at authoring/repair time, never in the
+   * per-sync loop), and `ctx.fetch` is the connector's only external rail.
    *
    * `secrets` (issue #293) is the allowlist for `{{secret:…}}` placeholders
    * in `ctx.fetch` — `locker:<item_id>:<column>` refs the manifest declared.
    */
-  connector?: { readonly tools: readonly string[]; readonly secrets?: readonly string[] };
+  connector?: { readonly secrets?: readonly string[] };
   /**
    * Host-injected secret resolution for connector `ctx.fetch` (issue #293):
    * ref → plaintext, backed by the automation agent's `reveal` grant. The
@@ -281,7 +251,6 @@ interface FetchSpecWire {
 }
 
 type WorkerToParentMessage =
-  | { type: 'tool-batch'; id: number; calls: ToolCallWire[] }
   | {
       type: 'agent';
       id: number;
@@ -317,7 +286,9 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     abortSignal: abortController.signal,
   };
 
-  let toolBatches = 0;
+  // No tool rail exists any more — the field stays for the run record shape,
+  // pinned at 0 (a fire never dispatches a tool batch).
+  const toolBatches = 0;
   let agentCalls = 0;
 
   // Secret values resolved for ctx.fetch this run (issue #293). Substitution
@@ -544,7 +515,6 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     runId: opts.runId,
     automationId: opts.automationId,
     ordinal: 0,
-    nextBatchId: 1,
     emit,
   };
 
@@ -664,68 +634,6 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     };
 
     worker.on('message', (msg: WorkerToParentMessage) => {
-      if (msg.type === 'tool-batch') {
-        toolBatches++;
-        // Requires-as-allowlist (issue #290): a connector's disallowed call
-        // errors WITHOUT reaching the dispatcher — allowed calls in the same
-        // batch still run, so one stray call degrades, never widens.
-        if (opts.connector) {
-          const allow = new Set(opts.connector.tools);
-          const blocked = msg.calls.filter((c) => !allow.has(c.name));
-          if (blocked.length > 0) {
-            const allowed = msg.calls.filter((c) => allow.has(c.name));
-            void (
-              allowed.length > 0
-                ? dispatchToolBatch({
-                    audit,
-                    toolDispatcher: opts.toolDispatcher,
-                    dispatchCtx,
-                    calls: allowed,
-                  })
-                : Promise.resolve([] as Awaited<ReturnType<typeof dispatchToolBatch>>)
-            )
-              .then((allowedResults) => {
-                let i = 0;
-                const results = msg.calls.map((c) =>
-                  allow.has(c.name)
-                    ? allowedResults[i++]
-                    : {
-                        ok: false,
-                        error: `tool "${c.name}" is outside this connector's requires.tools allowlist (issue #290)`,
-                      },
-                );
-                send({ type: 'tool-reply', id: msg.id, results });
-              })
-              .catch((err: unknown) => {
-                const errorMsg = err instanceof Error ? err.message : String(err);
-                send({
-                  type: 'tool-reply',
-                  id: msg.id,
-                  results: msg.calls.map(() => ({ ok: false, error: errorMsg })),
-                });
-              });
-            return;
-          }
-        }
-        void dispatchToolBatch({
-          audit,
-          toolDispatcher: opts.toolDispatcher,
-          dispatchCtx,
-          calls: msg.calls,
-        })
-          .then((results) => {
-            send({ type: 'tool-reply', id: msg.id, results });
-          })
-          .catch((err: unknown) => {
-            const errorMsg = err instanceof Error ? err.message : String(err);
-            send({
-              type: 'tool-reply',
-              id: msg.id,
-              results: msg.calls.map(() => ({ ok: false, error: errorMsg })),
-            });
-          });
-        return;
-      }
       if (msg.type === 'agent') {
         // Connectors are deterministic code — no LLM turn ever runs inside
         // a sync loop (issue #290: agents write code, not data).

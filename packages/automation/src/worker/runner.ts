@@ -3,29 +3,21 @@
  *
  * Issue #91: an automation is a standalone app, so the handler arg
  * is `{ automation, log, ctx }` — there is no app `db`. `ctx` exposes
- * `tool` / `agent` / `state` / `runs`. The runner forwards
- * `tool` and `agent` calls back to the parent via message-passing, with
- * per-microtask **batching** for `ctx.tool`.
+ * `agent` / `fetch` / `state` / `runs` / `vault`. The runner forwards each
+ * call back to the parent via message-passing and awaits the matching reply.
  *
- * Why batching: each batch dispatches to one host agent turn (a mock
- * round-trip through the persistent session — an in-process Claude SDK turn
- * or a `codex exec` subprocess on local). Each turn carries latency; if a
- * handler did `for (const x of xs) await ctx.tool(...)`, 50 sequential calls
- * = 50 turns = 50 round-trips of overhead.
+ * Two rails, one honest cost story:
+ *   - `ctx.agent` is the ONLY billed path — a bounded model turn against the
+ *     user's real provider, driven through the runner registry (ACP).
+ *   - everything else (`ctx.vault`, `ctx.fetch`, `ctx.state`, `ctx.runs`) is
+ *     deterministic, in-process work the parent services directly against
+ *     SQLite / the vault bridge. A fire whose handler never calls `ctx.agent`
+ *     starts zero child processes and zero HTTP servers.
  *
- * Mitigation: when the handler does `Promise.all([ctx.tool(a),
- * ctx.tool(b), ctx.tool(c)])`, we collect all three queued tool calls
- * inside the same microtask checkpoint and dispatch them as ONE batch
- * to the parent.
- *
- * There is no runtime retry: a failed `ctx.tool` rejects the handler's
+ * There is no runtime retry: a failed `ctx.*` call rejects the handler's
  * Promise, and the handler (plain JS) owns retry / backoff / error
- * classification via `try/catch`.
- *
- * `ctx.agent`, `ctx.state.*`, and `ctx.runs.*` are fundamentally
- * different turn shapes so they never batch with `ctx.tool` — each
- * flushes any pending tool batch first, then runs as its own one-shot
- * turn.
+ * classification via `try/catch`. Each call is an ordering barrier — it
+ * flushes to the parent and awaits its reply before the next line runs.
  *
  * Trust model: same as `runner.ts`. App code is trusted; the worker is
  * for crash + timeout isolation, not security sandboxing.
@@ -43,17 +35,7 @@ interface WorkerRequest {
   input?: unknown;
 }
 
-interface ToolCallWire {
-  name: string;
-  args: unknown;
-}
-
 type ParentMessage =
-  | {
-      type: 'tool-reply';
-      id: number;
-      results: Array<{ ok: boolean; result?: unknown; error?: string }>;
-    }
   | { type: 'agent-reply'; id: number; ok: boolean; result?: unknown; error?: string }
   | { type: 'state-reply'; id: number; ok: boolean; result?: unknown; error?: string }
   | { type: 'runs-reply'; id: number; ok: boolean; result?: unknown; error?: string }
@@ -83,7 +65,6 @@ export interface FetchSpec {
 }
 
 type WorkerMessage =
-  | { type: 'tool-batch'; id: number; calls: ToolCallWire[] }
   | {
       type: 'agent';
       id: number;
@@ -126,9 +107,8 @@ const boot = workerData as { pooled?: boolean } & Partial<WorkerRequest>;
 let req = boot as WorkerRequest;
 
 let nextCallId = 1;
-// One id space, one pending map for every request/reply lane except tool
-// batches (which settle per-call, below). The reply type discriminates on
-// the wire; the promise doesn't care which lane it rode.
+// One id space, one pending map for every request/reply lane. The reply type
+// discriminates on the wire; the promise doesn't care which lane it rode.
 const pendingCalls = new Map<
   number,
   { resolve: (v: unknown) => void; reject: (e: Error) => void }
@@ -137,47 +117,18 @@ const pendingCalls = new Map<
 /** Omit that distributes over a union instead of collapsing it to common keys. */
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 type RpcRequest = DistributiveOmit<
-  Exclude<WorkerMessage, { type: 'tool-batch' } | { type: 'log' } | { type: 'result' }>,
+  Exclude<WorkerMessage, { type: 'log' } | { type: 'result' }>,
   'id'
 >;
 
-/** Post one request message and await its `*-reply`. Flushes tools first —
- *  agent/state/runs/vault calls are ordering barriers for the tool batch. */
+/** Post one request message and await its `*-reply`. Each ctx.* call is an
+ *  ordering barrier — the handler awaits the reply before its next line. */
 function rpcCall(msg: RpcRequest): Promise<unknown> {
-  flushPendingToolBatchIfAny();
   return new Promise((resolve, reject) => {
     const id = nextCallId++;
     pendingCalls.set(id, { resolve, reject });
     port.postMessage({ ...msg, id } as WorkerMessage);
   });
-}
-
-interface PendingToolCall {
-  name: string;
-  args: unknown;
-  resolve: (v: unknown) => void;
-  reject: (e: Error) => void;
-}
-
-let pendingToolBatch: PendingToolCall[] = [];
-const pendingToolBatchById = new Map<number, { calls: PendingToolCall[] }>();
-let batchScheduled = false;
-
-function flushBatch(): void {
-  batchScheduled = false;
-  if (pendingToolBatch.length === 0) return;
-  const id = nextCallId++;
-  const calls = pendingToolBatch;
-  pendingToolBatch = [];
-  pendingToolBatchById.set(id, { calls });
-  const wire: ToolCallWire[] = calls.map((c) => ({ name: c.name, args: c.args }));
-  port.postMessage({ type: 'tool-batch', id, calls: wire } satisfies WorkerMessage);
-}
-
-function scheduleBatchFlush(): void {
-  if (batchScheduled) return;
-  batchScheduled = true;
-  queueMicrotask(flushBatch);
 }
 
 const abortController = new AbortController();
@@ -186,33 +137,11 @@ function rejectAllPending(reason: string): void {
   const err = new Error(reason);
   for (const [, p] of pendingCalls) p.reject(err);
   pendingCalls.clear();
-  for (const call of pendingToolBatch) call.reject(err);
-  pendingToolBatch = [];
-  for (const [, batch] of pendingToolBatchById) {
-    for (const c of batch.calls) c.reject(err);
-  }
-  pendingToolBatchById.clear();
 }
 
 port.on('message', (msg: ParentMessage) => {
   if (msg.type === 'run') {
     execute(msg.request);
-    return;
-  }
-  if (msg.type === 'tool-reply') {
-    const batch = pendingToolBatchById.get(msg.id);
-    if (!batch) return;
-    pendingToolBatchById.delete(msg.id);
-    if (batch.calls.length !== msg.results.length) {
-      for (const c of batch.calls) c.reject(new Error('tool-reply length mismatch'));
-      return;
-    }
-    for (let i = 0; i < batch.calls.length; i++) {
-      const result = msg.results[i]!;
-      const call = batch.calls[i]!;
-      if (result.ok) call.resolve(result.result);
-      else call.reject(new Error(result.error ?? `tool ${call.name} failed`));
-    }
     return;
   }
   if (
@@ -251,10 +180,6 @@ const log = {
   error: (msg: string) =>
     port.postMessage({ type: 'log', level: 'error', msg } satisfies WorkerMessage),
 };
-
-function flushPendingToolBatchIfAny(): void {
-  if (pendingToolBatch.length > 0) flushBatch();
-}
 
 const state = {
   get<T = unknown>(key: string): Promise<T | undefined> {
@@ -351,12 +276,6 @@ const vault = {
 const ctx = {
   /** ISO fire-start instant: current enough for leases, deterministic on replay. */
   now: req.now,
-  tool(name: string, args: unknown): Promise<unknown> {
-    return new Promise<unknown>((resolve, reject) => {
-      pendingToolBatch.push({ name, args, resolve, reject });
-      scheduleBatchFlush();
-    });
-  },
   /**
    * Transport-level HTTP for connectors (issue #293): strings may reference
    * declared secrets as `{{secret:locker:<item_id>:<column>}}` — the host
@@ -373,11 +292,11 @@ const ctx = {
     }>;
   },
   /**
-   * One bounded model turn. `content` names vault derivatives (thumb /
-   * preview / text of a content item) to hand the model alongside the
-   * prompt — the HOST resolves them under this automation's grant, receipts
-   * each fetch, and stages the bytes for the provider; the worker never
-   * holds them (issue #299 §2).
+   * One bounded model turn — the ONLY billed rail. `content` names vault
+   * derivatives (thumb / preview / text of a content item) to hand the model
+   * alongside the prompt — the HOST resolves them under this automation's
+   * grant, receipts each fetch, and stages the bytes for the provider; the
+   * worker never holds them (issue #299 §2).
    */
   agent(args: {
     prompt: string;

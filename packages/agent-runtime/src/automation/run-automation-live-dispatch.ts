@@ -1,43 +1,27 @@
 /*
- * Live `ctx.tool` / `ctx.agent` dispatch for the local automation
- * runner.
+ * Live `ctx.agent` dispatch for the local automation runner.
  *
- * Split out of `run-automation.ts` so that file can stay focused
- * on the per-fire lifecycle (manifest load, audit store, onFailure
- * cascade). This module owns the "live" side: the persistent mock-LLM
- * session, the single long-lived agent turn that executes every
- * `ctx.tool` batch (an in-process Claude SDK `query()` for claude, a
- * `codex exec` subprocess for codex — see `run-automation-host-agent.ts`
- * for why only those two can host it), and the `ctx.agent` one-shot
+ * Split out of `run-automation.ts` so that file can stay focused on the
+ * per-fire lifecycle (manifest load, audit store, onFailure cascade). This
+ * module owns the one billed rail — `ctx.agent`, a bounded one-shot turn
  * against the user's real provider.
  *
  * Issue #479 — `ctx.agent` honours every registered runner kind through ONE
- * path: `getRunnerBackend(kind).runTurn`, the same seam chat uses. The
- * bespoke codex (`codex exec`) and claude (SDK `query()`) arms are gone
- * along with the bespoke turn backends they belonged to, so pinning
+ * path: `getRunnerBackend(kind).runTurn`, the same seam chat uses. Pinning
  * `runner.automations` to any kind actually drives that agent.
  *
- * Note the asymmetry with `ctx.tool` below, and that it is deliberate:
- * tool dispatch still invokes the claude/codex CLIs NATIVELY (see
- * `run-automation-host-agent.ts`) because it works by pointing a CLI at a
- * per-fire mock LLM endpoint — a deterministic test/dispatch harness, not a
- * user-facing runner. ACP agents drive their own model loop and expose no
- * base URL to redirect, so that mechanism cannot move to ACP.
+ * Issue #484 — the `ctx.tool` rail was removed. It used to dispatch tool
+ * batches to a persistent mock-LLM session that puppeted the claude/codex
+ * CLIs; that mock HTTP server started eagerly per fire even when unused. It
+ * is gone. A fire whose handler never calls `ctx.agent` now starts ZERO child
+ * processes and ZERO HTTP servers: the deterministic rails (`ctx.vault`,
+ * `ctx.fetch`, `ctx.state`, `ctx.runs`) are serviced in-process, parent-side.
+ * The only thing this surface allocates lazily is a scratch dir — and only
+ * when a `ctx.agent` call actually carries vault-derivative attachments.
  *
- * Issue #166 — persistent session: a fire opens ONE agent session pointed
- * at the mock and keeps it alive across the whole handler run. The
- * deterministic handler drives; each `ctx.tool` batch is staged into the
- * live session (the CLI executes the tools natively through its MCP/auth
- * machinery and returns `tool_result` blocks), and the session only exits
- * when the fire ends and the driver stages a final `end_turn`. This
- * replaces the previous per-batch cold-start spawn: one session, ~0 real
- * model tokens (the mock dictates every turn), a structurally single and
- * controlled session. `ctx.agent` is the only billed path — a separate
- * bounded turn against the user's real provider.
- *
- * Issue #91: an automation is a standalone app — the CLI runs with
- * the app directory as cwd, and the dispatch context carries the
- * automation id (no owning app).
+ * Issue #91: an automation is a standalone app — the agent runs with the app
+ * directory as cwd, and the dispatch context carries the automation id (no
+ * owning app).
  */
 
 import { promises as fs } from 'node:fs';
@@ -46,85 +30,51 @@ import path from 'node:path';
 import * as automation from '@centraid/automation';
 import type { RunnerKind } from '../types.js';
 import { getRunnerBackend } from '../registry.js';
-import { defaultRunHostAgent, type RunHostAgent } from './run-automation-host-agent.js';
 
 export interface LiveDispatchOptions {
-  /** The automation app directory — also the CLI's cwd. */
+  /** The automation app directory — also the agent's cwd. */
   workdir: string;
-  /** Id of the automation being fired. */
-  automationId: string;
   runId: string;
   runner: RunnerKind;
-  runHostAgent: RunHostAgent;
-  /** Manifest `requires.tools` allowlist forwarded to the CLI. */
-  toolsAllow: readonly string[];
   /**
    * Model id/alias for `ctx.agent` calls (manifest `requires.model`, or the
    * caller's prefs-resolved fallback — see `RunAutomationOptions.model`).
    * Undefined means "no override" — the backend's own default applies.
-   * Only `ctx.agent` (the billed, real-provider path) reads this; the
-   * persistent tool-dispatch session always talks to the mock, which
-   * ignores the model field entirely.
    */
   model?: string;
   onLog: (level: 'info' | 'warn' | 'error', msg: string) => void;
 }
 
 export interface LiveDispatch {
-  toolDispatcher: automation.ToolDispatcher;
   agentDispatcher: automation.AgentDispatcher;
-  /** Tear down the mock server + scratch dir. Safe to call once. */
+  /** Tear down the scratch dir (only ever created if an attachment was
+   *  staged). Safe to call once. */
   close(): Promise<void>;
 }
 
 /**
- * Stand up the live dispatch surface for the CLI runner: the shared persistent
- * mock session (issue #166) plus a scratch dir. The agent session is started
- * lazily on the first `ctx.tool` batch (an automation that never calls a tool
- * never opens one). The only runner-specific piece is the `driveAgent` adapter,
- * which runs the Claude SDK `query()` / `codex exec` against the mock;
- * everything else (the mock, batch staging/correlation, timing) is shared.
+ * Stand up the live dispatch surface for the CLI runner. `ctx.agent` routes to
+ * the user's REAL provider through the runner registry; everything else on the
+ * `ctx.*` surface is deterministic and serviced parent-side, so this allocates
+ * nothing eagerly. The scratch dir is created lazily, only when a `ctx.agent`
+ * call carries vault derivatives to stage.
  */
 export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<LiveDispatch> {
   const scratchDir = path.join(opts.workdir, '.automation-scratch', opts.runId);
-  await fs.mkdir(scratchDir, { recursive: true });
-
-  // The host agent adapter: point an in-process Claude SDK `query()` / a
-  // `codex exec` subprocess at the mock for the lifetime of the fire. Resolves
-  // when the agent turn ends (`close()` stages the final `end_turn`).
-  const driveAgent: automation.AgentDriver = async (input) => {
-    const outcome = await opts.runHostAgent({
-      kind: opts.runner,
-      mockBaseUrl: input.mockBaseUrl,
-      mockBearerToken: input.mockBearerToken,
-      prompt: input.prompt,
-      toolsAllow: opts.toolsAllow,
-      cwd: input.cwd,
-      scratchDir,
-      abortSignal: input.abortSignal,
-    });
-    return outcome.ok
-      ? { ok: true }
-      : {
-          ok: false,
-          error: `CLI exited code=${outcome.exitCode ?? '?'}\n${outcome.stderr.slice(0, 2000)}`,
-        };
+  let scratchReady = false;
+  const ensureScratch = async (): Promise<void> => {
+    if (scratchReady) return;
+    await fs.mkdir(scratchDir, { recursive: true });
+    scratchReady = true;
   };
 
-  const session = await automation.startPersistentMockSession({
-    workdir: opts.workdir,
-    automationId: opts.automationId,
-    driveAgent,
-    onLog: opts.onLog,
-  });
-  const toolDispatcher: automation.ToolDispatcher = session.toolDispatcher;
-
   // Vault-derivative attachments (issue #299): the runner already resolved
-  // and receipted them; here they become scratch files the CLI's native
-  // multimodal Read path picks up — one mechanism for both runners, no
-  // per-backend wire format.
+  // and receipted them; here they become scratch files the agent's native
+  // multimodal Read path picks up — one mechanism for every runner, no
+  // per-backend wire format. The scratch dir materializes only on first use.
   const stageAttachments = async (call: automation.AgentCall): Promise<string> => {
     if (!call.attachments?.length) return call.prompt;
+    await ensureScratch();
     const lines: string[] = [];
     for (const att of call.attachments) {
       const file = path.join(scratchDir, `attach-${randomUUID().slice(0, 8)}-${att.name}`);
@@ -145,12 +95,11 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
   // format anywhere in this file.
   //
   // Two deliberate limits. (1) ACP has no `--output-schema` equivalent, so
-  // `call.json` is enforced by `coerceAgentAnswer` alone — this is what the
-  // claude arm always did, and codex now matches it (it previously had the
-  // schema handed to `codex exec`). (2) A fire carries only the runner KIND
-  // (the gateway drops binPath / extraArgs for every kind), so the backend
-  // resolves its default binary off PATH. The custom `acp` kind has no
-  // default binary and therefore surfaces a clear `error` event, raised below.
+  // `call.json` is enforced by `coerceAgentAnswer` alone. (2) A fire carries
+  // only the runner KIND (the gateway drops binPath / extraArgs for every
+  // kind), so the backend resolves its default binary off PATH. The custom
+  // `acp` kind has no default binary and therefore surfaces a clear `error`
+  // event, raised below.
   const agentDispatcher: automation.AgentDispatcher = async (call, ctx): Promise<unknown> => {
     const effectivePrompt = await stageAttachments(call);
     let finalText = '';
@@ -178,17 +127,15 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
 
   let closed = false;
   return {
-    toolDispatcher,
     agentDispatcher,
     async close(): Promise<void> {
       if (closed) return;
       closed = true;
-      // End the shared session (final `end_turn` + drain + mock stop), then
-      // remove the CLI scratch dir this host owns.
-      await session.close().catch(() => undefined);
-      await fs.rm(scratchDir, { recursive: true, force: true }).catch(() => undefined);
+      // Only ever created if an attachment was staged — the rm is a no-op
+      // otherwise, so a tool-free / attachment-free fire touches no disk here.
+      if (scratchReady) {
+        await fs.rm(scratchDir, { recursive: true, force: true }).catch(() => undefined);
+      }
     },
   };
 }
-
-export { defaultRunHostAgent };

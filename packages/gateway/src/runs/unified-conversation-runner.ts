@@ -17,7 +17,7 @@
  *     same turn can author code and look at the real data it projects;
  *   - the unified system prompt: the data/schema preamble the chat route
  *     builds (`input.extraSystemPrompt`) followed by the builder authoring
- *     prompt + UI/tools grounding (composed by `@centraid/skills`).
+ *     prompt + UI grounding (composed by `@centraid/skills`).
  *
  * Code edits STAGE in the draft worktree; ext-table schema changes are
  * DECLARED there (`app.json#ext.tables`) and mirrored into the vault's
@@ -42,19 +42,13 @@
 
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import {
-  readRunnerTools,
-  defaultCentraidCliDir,
-  runTurn,
-  type HostTool,
-} from '@centraid/agent-runtime';
+import { defaultCentraidCliDir, runTurn } from '@centraid/agent-runtime';
 import {
   makeConversationRunnerCore,
   type ConversationRunner,
   type TurnStreamEvent,
   type Dispatcher,
   type ModelSubsystem,
-  type RunnerKind,
   type RunnerPrefs,
   type RunTurnFn,
   type VaultInvokeRunner,
@@ -109,12 +103,6 @@ export interface UnifiedConversationRunnerOptions {
   sessionIdFor?: (appId: string) => string;
   /** Turn driver — defaults to `runTurn`; injected in tests. */
   runTurn?: RunTurnFn;
-  /** Gateway-owned catalog path — the builder reads cached host tools from it
-   *  for the grounding block (no per-turn CLI spawn). Omitted → no grounding. */
-  catalogPath?: string;
-  /** Host-tool resolver for the grounding block — defaults to a cached read of
-   *  `catalogPath`; injected in tests to stay hermetic. */
-  resolveTools?: (kind: RunnerKind) => Promise<readonly HostTool[]>;
 }
 
 function defaultSessionIdFor(appId: string): string {
@@ -172,14 +160,6 @@ export function makeUnifiedConversationRunner(
   opts: UnifiedConversationRunnerOptions,
 ): ConversationRunner {
   const sessionIdFor = opts.sessionIdFor ?? defaultSessionIdFor;
-  // Builder grounding reads cached tools from the catalog — never probes a CLI
-  // on the turn path. The boot probe / explicit refresh keeps the catalog warm.
-  const resolveTools =
-    opts.resolveTools ??
-    (opts.catalogPath
-      ? (kind: RunnerKind): Promise<readonly HostTool[]> =>
-          readRunnerTools(opts.catalogPath as string, kind)
-      : async (): Promise<readonly HostTool[]> => []);
   const extraPath = defaultCentraidCliDir();
 
   // Builder chat is the data-chat spine plus three seams: cwd = the app's
@@ -223,11 +203,10 @@ export function makeUnifiedConversationRunner(
 
     // Unified prompt: the route's data/schema preamble + the builder
     // authoring grounding for the app kind.
-    buildExtraSystemPrompt: async ({ input, prefs, cwd }) =>
+    buildExtraSystemPrompt: async ({ input, cwd }) =>
       buildAuthoringExtraPrompt({
         baseExtra: input.extraSystemPrompt,
         appKind: await readAppKind(cwd),
-        tools: await resolveTools(prefs.kind),
       }),
 
     onTurnComplete: ({ input, cwd }) => mintPendingWebhooks(cwd, opts.publicBaseUrl, input.onEvent),
