@@ -1,9 +1,10 @@
 # @centraid/automation
 
 The backend-agnostic **automation engine** — the automation domain that
-surrounds the fire spine. An automation fire is a script-driven fan-out of
-many tool batches and model turns over the shared conversation ledger; the
-live `ctx.tool` / `ctx.agent` dispatch surface is always injected via
+surrounds the fire spine. An automation fire runs a deterministic `handler.js`
+over the shared conversation ledger; the deterministic rails (`ctx.vault`,
+`ctx.fetch`, `ctx.state`, `ctx.runs`, `ctx.input`) are serviced parent-side
+in-process, and the one billed rail, `ctx.agent`, is injected via
 `openDispatch`, never imported. (Its sibling, the single-turn chat-runner
 core, lives in `@centraid/app-engine` next to the `ConversationRunner`
 interface.)
@@ -17,9 +18,10 @@ It owns:
 
 - **Fire spine** — `runFire` plus the `OpenDispatch` (`openDispatch`) seam:
   resolve the automation, open its execution conversation + turn in the
-  ledger, run `handler.js` in a worker thread against a host-injected dispatch
-  surface, cascade `onFailure`. Includes the mock-LLM server + persistent
-  session that make `ctx.tool` token-free.
+  ledger, run `handler.js` in a worker thread against the host-injected
+  dispatch surface, cascade `onFailure`. The dispatch surface injects only
+  `ctx.agent` (a bounded one-shot billed turn routed through the ACP backend);
+  the deterministic rails are parent-side in-process and spend no tokens.
 - **Manifest** (`automation.json`) — `Manifest` schema, validator, cron/webhook
   trigger helpers, output-schema validation.
 - **On-disk model** — the `<appCodeDir>/automations/<id>/` layout, the

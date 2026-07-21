@@ -122,8 +122,9 @@ after package tests so the local loop never hides the CI contract;
 `packages/agent-runtime` intentionally sits on a **low line floor (~27%)** and a
 **high branch floor (~84%)**. Most line mass is the Codex/Claude backend
 adapters and CLI spawn paths that need a real binary or long integration; those
-are covered by contract/unit tests on pure surfaces (host-tools, multimodal,
-catalog, safe stdin write) rather than a line-percentage campaign to 70%+.
+are covered by contract/unit tests on pure surfaces (model-enumeration,
+multimodal, catalog, safe stdin write) rather than a line-percentage campaign
+to 70%+.
 
 Do **not** raise the agent-runtime line floor without a dedicated coverage
 campaign. Do **not** lower any engine floor in this table without an explicit
@@ -165,17 +166,20 @@ for:
 - `tempDir()` / `tempDirSync()` with automatic test-file cleanup;
 - `useFakeClock()` with automatic real-timer restoration;
 - bootstrapped `createTestVault()` and listener-free `buildTestGateway()`;
-- the shared mock-LLM test entry point;
 - node and jsdom+JSX+CSS-module Vitest presets;
 - deterministic parties, photos, conversations, turns, and blob custody
   volume fixtures;
 - perf/scale JSON result emission.
 
 Do not add another local helper when the shared package already owns the seam.
-The mock LLM implementation lives in the dependency-neutral
-`@centraid/mock-llm` package. Automation keeps a compatibility re-export for
-its development path, while tests consume the same implementation through
-test-kit's stable facade.
+
+Deterministic automation fires need no mock: their handlers run in-process
+against the parent-side `ctx.vault` / `ctx.fetch` / `ctx.state` rails, and only
+`ctx.agent` reaches a provider. In tests that provider turn is faked through
+the ACP fake-agent fixture
+(`packages/agent-runtime/src/backends/acp/fake-acp-agent.mjs`), the same seam
+chat turns use — there is no automation-specific mock LLM (the
+`@centraid/mock-llm` package was removed with the `ctx.tool` rail).
 
 ## Lane schedule and commands
 
