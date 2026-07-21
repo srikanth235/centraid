@@ -13,6 +13,12 @@ directories:
 files:
   - dist/**/*
   - package.json
+  # Tray assets live at the package root and are loaded at runtime via
+  # `../icon.png` from dist/main.js — they must be packed or the menu-bar icon
+  # is empty in a built app. iconTemplate.png (+ @2x) is the macOS template.
+  - icon.png
+  - iconTemplate.png
+  - iconTemplate@2x.png
   - '!dist/**/*.map'
 
 extraMetadata:
