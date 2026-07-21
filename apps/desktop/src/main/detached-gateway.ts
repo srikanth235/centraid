@@ -584,7 +584,10 @@ export function installGatewayOsService(
         '--port',
         String(port),
       ],
-      { encoding: 'utf8', timeout: 30_000 },
+      // `nodeBin` here is `process.execPath` = the Electron binary. Run it in
+      // node mode so this one-shot install doesn't flash the full desktop app
+      // (and so the child's own `process.execPath`-derived unit stays sane).
+      { encoding: 'utf8', timeout: 30_000, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } },
     );
     if (result.status === 0) return { ok: true };
     const err = (result.stderr || result.stdout || `exit ${result.status}`).trim();

@@ -31,6 +31,15 @@ export interface ServiceUnitSpec {
   stderrLog: string;
   /** cwd the service runs with. */
   workingDirectory: string;
+  /**
+   * Extra environment variables baked into the generated unit. Critically
+   * carries `ELECTRON_RUN_AS_NODE=1` when `nodeBin` is the Electron binary
+   * (see `service-admin.ts`'s `buildSpec`): without it, a unit whose
+   * `nodeBin` is Electron would launch the FULL desktop app on every
+   * launchd `KeepAlive` / systemd `Restart` — a respawn loop that flashes a
+   * window open and shut. Empty/omitted → no environment block is emitted.
+   */
+  env?: Record<string, string>;
 }
 
 export function launchAgentPlistPath(
@@ -64,6 +73,7 @@ function xmlEscape(value: string): string {
  */
 export function buildLaunchdPlist(label: string, spec: ServiceUnitSpec): string {
   const programArgs = [spec.nodeBin, spec.cliEntry, ...spec.args];
+  const envEntries = Object.entries(spec.env ?? {});
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
@@ -75,6 +85,17 @@ export function buildLaunchdPlist(label: string, spec: ServiceUnitSpec): string 
     '\t<array>',
     ...programArgs.map((arg) => `\t\t<string>${xmlEscape(arg)}</string>`),
     '\t</array>',
+    ...(envEntries.length > 0
+      ? [
+          '\t<key>EnvironmentVariables</key>',
+          '\t<dict>',
+          ...envEntries.flatMap(([key, value]) => [
+            `\t\t<key>${xmlEscape(key)}</key>`,
+            `\t\t<string>${xmlEscape(value)}</string>`,
+          ]),
+          '\t</dict>',
+        ]
+      : []),
     '\t<key>WorkingDirectory</key>',
     `\t<string>${xmlEscape(spec.workingDirectory)}</string>`,
     '\t<key>RunAtLoad</key>',
@@ -111,6 +132,9 @@ export function buildSystemdUnit(
   restartSec: number = DEFAULT_SYSTEMD_RESTART_SEC,
 ): string {
   const execStart = [spec.nodeBin, spec.cliEntry, ...spec.args].map(systemdQuote).join(' ');
+  const envLines = Object.entries(spec.env ?? {}).map(
+    ([key, value]) => `Environment=${systemdQuote(`${key}=${value}`)}`,
+  );
   return [
     '[Unit]',
     'Description=Centraid gateway daemon',
@@ -118,6 +142,7 @@ export function buildSystemdUnit(
     '',
     '[Service]',
     'Type=simple',
+    ...envLines,
     `ExecStart=${execStart}`,
     `WorkingDirectory=${spec.workingDirectory}`,
     'Restart=on-failure',
