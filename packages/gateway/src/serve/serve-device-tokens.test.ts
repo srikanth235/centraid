@@ -69,7 +69,7 @@ afterEach(async () => {
   await fs.rm(dataDir, { recursive: true, force: true });
 });
 
-function mintTicket(vaultId: string, trust: 'full' | 'readonly' = 'full'): string {
+function mintTicket(vaultId: string, trust: 'owner' | 'full' | 'readonly' = 'full'): string {
   const minted = tickets.mint(vaultId, undefined, trust);
   return encodePairingTicket({
     v: 1,
@@ -277,6 +277,29 @@ test('ticket trust is server-bound: a read-only redemption cannot self-upgrade o
   });
   expect(mutation.status).toBe(403);
   expect(await mutation.json()).toMatchObject({ error: 'readonly_device' });
+});
+
+test('owner-trust device is the landlord tier: it acts like full and may mutate its vault', async () => {
+  // Issue #505 phase 7: the `owner` tier is the per-device, revocable
+  // replacement for the retired shared admin token. It is a superset of
+  // `full` — where a read-only device is refused a mutation, an owner passes.
+  const ticket = mintTicket(vaultA, 'owner');
+  const paired = await redeem(ticket, 'Owner laptop');
+  expect(paired.status).toBe(200);
+  const body = (await paired.json()) as { deviceToken: string; deviceKey: string; trust: string };
+  expect(body.trust).toBe('owner');
+  expect(enrollments.get(body.deviceKey, vaultA)?.trust).toBe('owner');
+
+  const mutation = await fetch(`${handle.url}/centraid/_vault/vaults/${vaultA}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${body.deviceToken}`,
+      'content-type': 'application/json',
+      'x-centraid-vault': vaultA,
+    },
+    body: JSON.stringify({ name: 'Owned' }),
+  });
+  expect(mutation.status).toBe(200);
 });
 
 test('(c) GET /_vault/vaults is filtered to the device-token caller enrollments', async () => {

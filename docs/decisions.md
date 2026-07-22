@@ -19,6 +19,11 @@ Full issue: [#468](https://github.com/srikanth235/centraid/issues/468).
 | --- | --- |
 | **D4** | Patch = fixes only. If every changelog entry sits under *Fixed*, it is a patch; anything added, changed, or removed is a minor. No major before 1.0, and agents never propose one. See [release.md](release.md). |
 | **D5** | Beta channel is desktop-only. TestFlight and the Play internal track already are the mobile beta channel; web continuous host is **`app.centraid.dev`** (gateway-embedded PWA remains LAN fallback). Tags: `v0.x.y-beta.n` as GitHub pre-releases on a separate updater channel — never move the stable download target or `latest` **image** tag (GHCR `centraid-gateway`). |
+| **R1** | **One product version** stamps the monorepo. Surfaces may skip *shipping* a version; they never keep a divergent package version in git. |
+| **R2** | **Build numbers** are script-derived from product semver (`major*1e6+minor*1e3+patch`). Never hand-set. Store resubmit without product change is not supported — cut a patch. |
+| **R3** | **Protocol version** is the only runtime connect comparator; product version is display-only. Capability flags gate features (C1). See [protocol.md](protocol.md) / #512. |
+| **R4** | **Default ship set** on product tag: desktop, gateway-image, gateway-npm. Mobile is dispatch-opt-in. Web/docs are continuous on main. |
+| **R5** | **Never bump product version only to fix a failed build.** Rebuild / re-run workflows / surface retry; reserve semver for real product change. |
 | **F1** | **1.0 is defined as** the first release after which every schema change ships a migration. Before it: epoch bumps may require vault re-creation and the version handshake refuses mismatches. Pre-1.0 stores rely on optional-fields-with-defaults for forward compatibility. |
 | **H5** | OS service install is **opt-in**, offered during onboarding, **default off**. Silent service installation is the one thing that makes users distrust a local-first app. LaunchAgent label `dev.centraid.gateway` (see [identifiers.md](identifiers.md)). |
 | **J1** | Upload key in GitHub Actions secrets; release key held by Play App Signing. An upload key is recoverable if lost; a self-managed release key is not. |
@@ -29,6 +34,7 @@ Full issue: [#468](https://github.com/srikanth235/centraid/issues/468).
 | **L1 / E2** | PR-time: unit, integration, the boot-the-artifact smoke unconditionally, plus **path-filtered** client e2e. Nightly: full cross-client suites, perf budgets, mobile. Promotion rule: if a nightly-only area burns us twice, it moves to PR-time. See [TESTING.md](../TESTING.md). |
 | **L3** | `TESTING.md` wins; any suite README that contradicts it is stale and gets corrected. |
 | **L4** | Triage orphaned desktop e2e flows against the [#458](https://github.com/srikanth235/centraid/issues/458) flow inventory; adopt what covers a real gap; delete the rest in one commit. |
+| **T1** ([#505](https://github.com/srikanth235/centraid/issues/505)) | **The `direct` transport tier stays, on per-device tokens only.** A self-fronted https URL (Tailscale / Caddy / Cloudflare Tunnel) is a v0-supported remote topology alongside iroh — so the per-device HTTP token store and the HTTP pairing twin (`POST /centraid/_gateway/pair`, issue #376) survive. What dies with phase 7 is the **shared gateway-wide admin token** (`token.bin` / `print-token` / the desktop URL+token paste form): there is no durable bearer that grants every vault. A `direct`-tier gateway is added the same way as an iroh one — by redeeming a pairing ticket (over its URL, `mode:'http'`), which mints a per-device token confined to that device's enrollments. Admin capability is the per-device, revocable `owner` enrollment trust tier; the CLI-admin loopback mechanism (open question 6) is a per-launch/ephemeral loopback secret handed to the daemon in-process (the CLI itself needs no HTTP auth — it operates on `--data-dir` files directly). |
 
 ## Defaults (so nobody has to ask)
 

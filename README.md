@@ -65,8 +65,10 @@ Headless / always-on instead:
 
 ```sh
 bun run build
+# Pair a device from the box that owns the data dir (the first pairing gets the
+# revocable `owner` admin tier — there is no shared admin token, issue #505):
 centraid-gateway serve --data-dir ./gw-data --host 127.0.0.1 --port 8765
-centraid-gateway print-token --data-dir ./gw-data   # Bearer token for clients
+centraid-gateway pair --data-dir ./gw-data          # one-time ticket for a client
 ```
 
 For Pi-class always-on hosts, prefer f2fs/btrfs or a USB SSD and mount the data volume with

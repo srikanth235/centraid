@@ -6,10 +6,12 @@
  *   - `local`  — the embedded gateway on this Mac. Nothing to configure or
  *     test (it's always reachable); the flow skips straight to picking or
  *     creating a vault on it.
- *   - `gateway` — an existing gateway elsewhere. Absorbs GatewayPairingForm's
- *     field model 1:1: a pairing ticket by default (iroh discovery), or the
- *     "Connect by URL" advanced panel (an explicit URL + either the same
- *     ticket redeemed over HTTP, or a bearer token).
+ *   - `gateway` — an existing gateway elsewhere, reached ONLY by a pairing
+ *     ticket (iroh discovery by default, or the "Connect by URL" advanced
+ *     panel redeeming the same ticket over HTTP for the `direct` transport
+ *     tier). The manual URL + admin-token paste was retired in issue #505
+ *     phase 7 together with the shared gateway-wide bearer — every gateway is
+ *     added through the pairing ceremony, which mints a per-device token.
  *   - `ssh`    — drive a remote `centraid-gateway` CLI over SSH (issue #382
  *     design doc "SSH support (v0 scope = admin channel)").
  *
@@ -25,7 +27,6 @@
 
 export type ConnectMethod = 'local' | 'gateway' | 'ssh';
 export type ConnectStep = 'method' | 'details' | 'test' | 'vault' | 'committing' | 'done' | 'error';
-export type GatewayCredMode = 'ticket' | 'token';
 
 /** One stage of the "handshake ladder" — mirrors the design doc's
  *  `ConnectivityReport.stages[]` contract (GATEWAY_TEST_CONNECTION output). */
@@ -56,7 +57,6 @@ export interface ConnectivityReport {
 
 /** The input union GATEWAY_TEST_CONNECTION accepts (design doc). */
 export type ConnectTestInput =
-  | { kind: 'url'; url: string; token?: string }
   | { kind: 'ticket'; ticket: string }
   | { kind: 'ssh'; destination: string; dataDir?: string }
   | { kind: 'gateway'; gatewayId: string };
@@ -73,13 +73,12 @@ export interface ConnectFlowState {
   step: ConnectStep;
   method: ConnectMethod | null;
 
-  // "gateway" method details — 1:1 with the retired GatewayPairingForm.
+  // "gateway" method details — a pairing ticket, optionally redeemed over an
+  // explicit URL (the `direct` transport tier) via the advanced panel.
   ticket: string;
   label: string;
   advancedOpen: boolean;
-  credMode: GatewayCredMode;
   url: string;
-  token: string;
   /** Explicit consent for a durable replica, intent queue, and media cache. */
   rememberDevice: boolean;
 
@@ -107,7 +106,6 @@ export function createInitialConnectFlowState(): ConnectFlowState {
     advancedOpen: false,
     commitError: null,
     committing: false,
-    credMode: 'ticket',
     label: '',
     method: null,
     newVaultName: '',
@@ -120,7 +118,6 @@ export function createInitialConnectFlowState(): ConnectFlowState {
     testError: null,
     testing: false,
     ticket: '',
-    token: '',
     url: '',
     vaultChoice: null,
   };
@@ -130,7 +127,6 @@ export type ConnectFlowTextField =
   | 'ticket'
   | 'label'
   | 'url'
-  | 'token'
   | 'sshDestination'
   | 'sshDataDir'
   | 'newVaultName';
@@ -140,7 +136,6 @@ export type ConnectFlowEvent =
   | { type: 'back' }
   | { type: 'setField'; field: ConnectFlowTextField; value: string }
   | { type: 'setAdvancedOpen'; open: boolean }
-  | { type: 'setCredMode'; mode: GatewayCredMode }
   | { type: 'setRememberDevice'; value: boolean }
   | { type: 'startTest' }
   | { type: 'testSettled'; report: ConnectivityReport }
@@ -153,12 +148,6 @@ export type ConnectFlowEvent =
   | { type: 'reset' };
 
 const STEP_ORDER: readonly ConnectStep[] = ['method', 'details', 'test', 'vault'];
-
-/** True for the "Existing gateway" bearer-token sub-mode (no ticket at all —
- *  the URL + admin-issued token path). */
-export function isTokenMode(state: ConnectFlowState): boolean {
-  return state.method === 'gateway' && state.advancedOpen && state.credMode === 'token';
-}
 
 export function connectFlowReducer(
   state: ConnectFlowState,
@@ -195,8 +184,6 @@ export function connectFlowReducer(
       return { ...state, [event.field]: event.value };
     case 'setAdvancedOpen':
       return { ...state, advancedOpen: event.open };
-    case 'setCredMode':
-      return { ...state, credMode: event.mode };
     case 'setRememberDevice':
       return { ...state, rememberDevice: event.value };
     case 'startTest':
@@ -237,10 +224,6 @@ export function connectFlowReducer(
  *  when nothing testable has been supplied yet (`local` never has one). */
 export function buildTestInput(state: ConnectFlowState): ConnectTestInput | null {
   if (state.method === 'gateway') {
-    if (isTokenMode(state)) {
-      if (!state.url.trim() || !state.token.trim()) return null;
-      return { kind: 'url', token: state.token.trim(), url: state.url.trim() };
-    }
     if (!state.ticket.trim()) return null;
     return { kind: 'ticket', ticket: state.ticket.trim() };
   }
@@ -261,8 +244,7 @@ export function canStartTest(state: ConnectFlowState): boolean {
 
 /** Whether the current method can create a brand-new vault as part of this
  *  flow (design doc step C): local and SSH admin the vault lifecycle
- *  directly; a ticket's vault is fixed by the ticket; a URL+token gateway's
- *  admin plane can only browse (create needs the host CLI/SSH). */
+ *  directly; a ticket's vault is fixed by the ticket payload. */
 export function canCreateVaultFor(state: ConnectFlowState): boolean {
   return state.method === 'local' || state.method === 'ssh';
 }
@@ -276,7 +258,7 @@ export interface ConnectVaultCapability {
 }
 
 export function vaultCapability(state: ConnectFlowState): ConnectVaultCapability {
-  if (state.method === 'gateway' && !isTokenMode(state)) {
+  if (state.method === 'gateway') {
     return {
       canCreate: false,
       locked: state.report?.ticket ? { vaultName: state.report.ticket.vaultName } : null,
@@ -296,7 +278,6 @@ export function canCommitConnectFlow(state: ConnectFlowState): boolean {
     return state.vaultChoice.kind === 'existing' || state.newVaultName.trim().length > 0;
   }
   if (state.method === 'gateway') {
-    if (isTokenMode(state)) return state.url.trim().length > 0 && state.token.trim().length > 0;
     return state.ticket.trim().length > 0;
   }
   if (state.method === 'ssh') {

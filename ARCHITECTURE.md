@@ -15,17 +15,20 @@ The browser extension (`apps/extension`) is a narrower paired-device client over
 
 The monorepo is orchestrated by [Turborepo](https://turbo.build) and run on [Bun](https://bun.sh) (`packageManager` pinned at the root). Linting and formatting use [oxlint](https://oxc.rs/docs/guide/usage/linter) and [oxfmt](https://github.com/oxc-project/oxfmt); type checking is TypeScript per workspace; tests run on [vitest](https://vitest.dev) with v8 coverage.
 
-### Deploy surfaces (issue #501)
+### Deploy surfaces (issue #501 / #512)
+
+One **product version** stamps the monorepo; surfaces may skip *ship* but not diverge stamps. Connect uses **protocol version**, not product string. Catalog: `bun run release:matrix`.
 
 | Surface | How it ships |
 | --- | --- |
 | **Desktop** | Tag `v*` → `release-desktop.yml` (macOS / Windows / Linux). Installers attach to the GitHub Release when signing secrets are enrolled; electron-updater uses `latest*.yml` / beta channel. |
-| **Mobile** | `release-mobile.yml` (dispatch) → EAS Build/Submit when enrolled. J8 path-filtered `assembleDebug` CI deferred (too slow for PR gate). Store-only routine path (J7). |
+| **Mobile** | Same product stamp; **ship** via `release-mobile.yml` dispatch only (not every tag). EAS when enrolled. Store-only routine path (J7). Build numbers derived from product semver. |
 | **Web PWA** | Continuous host scaffold `app.centraid.dev` (`apps/web` + `web.yml`). Gateway also embeds the built PWA for LAN/ticket clients. |
 | **Docs/home** | Cloudflare static assets (`docs:bundle` → `dist/site`); GHA is gate-only. |
-| **Gateway daemon** | Primary: monorepo build + `centraid-gateway` + optional H5 OS service. Optional: GHCR image on tags (monorepo-root `Dockerfile`; see #504 packaging). |
+| **Gateway daemon** | Primary: monorepo / npm `@centraid/gateway` + optional H5 OS service. Optional: GHCR image on tags (monorepo-root `Dockerfile`; #504). npm multi-OS tunnel natives (#511). |
+| **Companion extension** | Same product version; package via `extension-release.yml` (not a second product-version line). |
 
-Signing residual: [docs/enrollment.md](docs/enrollment.md). Release ritual: [docs/release.md](docs/release.md).
+Signing residual: [docs/enrollment.md](docs/enrollment.md). Release ritual: [docs/release.md](docs/release.md). Versioning policy: [docs/decisions.md](docs/decisions.md) R1–R5.
 
 ## Runtime model: `conversation ⊃ turn ⊃ item`
 
@@ -86,7 +89,7 @@ An app UI reaches the screen one of two ways, and which one is a property of the
 Each gateway host derives its own paths and passes absolute slots to the gateway (it never derives them itself — see `packages/gateway/src/paths.ts`):
 
 - **Desktop embed**: every gateway gets a subtree at `<userData>/gateways/<id>/` (the local gateway has the fixed id `local`). Issue #280 made the **vault the unit**: everything personal lives inside `vault/<vaultId>/` — the sovereign pair (`vault.db` + `journal.db`, the journal carrying both the audit stream and the conversation ledger + run rollup), per-app workspace dirs (`apps/`), the app **code** store (`code/` — a bare git repo + worktrees, issue #137), and chat-runner scratch (`runner-sessions/`). What remains at the gateway level is plumbing: `prefs.json` (the old `identity.sqlite` is gone — the vault owner *is* the user), the model catalog, and the template cache. The vault's sealing key lives in a `keys/` sibling, deliberately outside backup scope.
-- **Daemon**: the same tree under the config `dataDir` — `vault/`, `prefs.json`, `model-catalog.json` — plus daemon-only plumbing: a persistent `token.bin` (mode 0600) and the device-pairing files (`devices.json`, `pairing-tickets.json`, `endpoint-key.bin`, `endpoint.json`; issue #289). See `packages/gateway/src/cli/paths.ts`.
+- **Daemon**: the same tree under the config `dataDir` — `vault/`, `prefs.json`, `model-catalog.json` — plus daemon-only plumbing: the device-pairing files (`devices.json`, `pairing-tickets.json`, `device-tokens.json`, `endpoint-key.bin`, `endpoint.json`; issues #289/#376). There is **no** persistent shared admin token: issue #505 phase 7 retired `token.bin` / `print-token`, so admin capability is the per-device, revocable `owner` enrollment trust tier and the daemon's loopback bearer is an ephemeral per-boot secret (never persisted). See `packages/gateway/src/cli/paths.ts`.
 
 App-engine owns the conversation-ledger band of the per-vault `journal.db` (`packages/app-engine/src/stores/gateway-db.ts`): conversations, turns, items, attachments, automation KV, and the `run_summary` VIEW that feeds Insights — derived from the ledger tables, no write-through (the old per-app `runtime.sqlite` and central `analytics.sqlite` became a standalone `transcripts.db` in #280, then folded into `journal.db`). The band is ensured idempotently on open and never touches `PRAGMA user_version`. So the ledger does not grow without bound, the vault-plane daily block runs a **digest → archive → prune** pass (#438): idle conversations and aged turn-ranges of eternal automation threads serialize to gzip(JSON) segments through the vault's local CAS (indexed in `conversation_archive`, rolled into `conversation_digest`), raw rows delete only behind a custody latch with `auto_vacuum=INCREMENTAL` reclaiming the pages, and archive-segment shas join the CAS GC roots so a pruned segment is pinned as the only durable copy. Insights unions live `run_summary` with the digests, so pruning stays invisible; reopening a pruned conversation lazily rehydrates the sealed segments read-only. The vault package owns its own files' DDL: `vault.db` (all ontology schemas, one ACID boundary) and `journal.db`'s audit band (the append-only receipt/provenance stream, versioned by the vault's ladder).
 

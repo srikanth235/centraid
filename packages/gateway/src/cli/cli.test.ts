@@ -9,7 +9,6 @@ import { validateConfig, DaemonConfigError } from './config.ts';
 import { buildPrefsPatch, seedRunnerPrefs } from './runner-prefs.ts';
 import type { PrefsStore } from '@centraid/app-engine';
 import { daemonLayoutFor } from './paths.ts';
-import { readOrMintToken, readPersistedToken } from './token.ts';
 
 const here = path.dirname(url.fileURLToPath(import.meta.url));
 const CLI_TS = path.resolve(here, 'cli.ts');
@@ -91,21 +90,14 @@ test('daemonLayoutFor mounts the vault plane at <dataDir>/vault', () => {
   expect(layout.vaultDir.endsWith(path.join('relative', 'vault'))).toBeTruthy();
 });
 
-test('readOrMintToken creates a 64-hex token on first call and re-reads it on the second', async () => {
-  const tokenFile = path.join(dataDir, 'token.bin');
-  const a = await readOrMintToken(tokenFile);
-  expect(a).toMatch(/^[0-9a-f]{64}$/);
-  const b = await readOrMintToken(tokenFile);
-  expect(a).toBe(b);
-  const persisted = await readPersistedToken(tokenFile);
-  expect(persisted).toBe(a);
-});
-
-// End-to-end: spawn the CLI via tsx, parse "listening on …" + "token: …"
-// out of stdout, hit /centraid/_apps with the token, assert 200, send
-// SIGTERM, confirm clean exit. This proves the binary boots, listens,
-// honors the bearer, and shuts down cleanly — the v0 PoC contract.
-test('serve subcommand boots, accepts the printed bearer, and exits cleanly on SIGTERM', async (t) => {
+// End-to-end: spawn the CLI via tsx, parse "listening on …" out of stdout,
+// hit /centraid/_apps with the loopback secret, assert 200, send SIGTERM,
+// confirm clean exit. Issue #505 phase 7 retired the persistent `token.bin`
+// and stopped PRINTING any bearer — the daemon mints an ephemeral per-boot
+// loopback secret instead. A parent (here the test, mirroring the desktop's
+// detached-gateway spawn) pins a known value via `CENTRAID_GATEWAY_TOKEN` so
+// it can reach the loopback listener; the secret is never written to disk.
+test('serve subcommand boots, accepts the parent-supplied loopback secret, and exits cleanly on SIGTERM', async (t) => {
   // Skip if tsx isn't installed locally — the gate is `bun install` having
   // run at the monorepo root, not on every developer's machine.
   try {
@@ -114,10 +106,11 @@ test('serve subcommand boots, accepts the printed bearer, and exits cleanly on S
     t.skip(`tsx not found at ${TSX_BIN} — run "bun install" at the monorepo root`);
     return;
   }
+  const token = crypto.randomBytes(32).toString('hex');
   const child = spawn(
     TSX_BIN,
     [CLI_TS, 'serve', '--data-dir', dataDir, '--host', '127.0.0.1', '--port', '0'],
-    { stdio: ['ignore', 'pipe', 'pipe'] },
+    { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, CENTRAID_GATEWAY_TOKEN: token } },
   );
   let stdout = '';
   let stderr = '';
@@ -128,20 +121,24 @@ test('serve subcommand boots, accepts the printed bearer, and exits cleanly on S
     stderr += b.toString();
   });
 
-  // Wait until the listening + token lines have been printed.
-  const { url, token } = await new Promise<{ url: string; token: string }>((resolve, reject) => {
+  // Wait until the listening line has been printed. The bearer is NOT printed
+  // (phase 7) — the parent already knows it (it supplied CENTRAID_GATEWAY_TOKEN).
+  const url = await new Promise<string>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`startup timeout; stderr=${stderr}`)), 15_000);
     const check = (): void => {
       const urlMatch = stdout.match(/listening on (http:\/\/[^\s]+)/);
-      const tokenMatch = stdout.match(/token:\s+([0-9a-f]{64})/);
-      if (urlMatch && tokenMatch) {
+      if (urlMatch) {
         clearTimeout(timer);
-        resolve({ url: urlMatch[1]!, token: tokenMatch[1]! });
+        resolve(urlMatch[1]!);
       }
     };
     child.stdout.on('data', check);
     check();
   });
+
+  // The ephemeral secret must never leak to stdout.
+  expect(stdout).not.toContain(token);
+  expect(stdout).not.toMatch(/token:/);
 
   try {
     const ok = await fetch(`${url}/centraid/_apps`, {

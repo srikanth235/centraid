@@ -3,8 +3,9 @@
  *
  * Replaces bearer-token pairing at the transport: a device is authorized by
  * its iroh EndpointId (ed25519 public key), named, and revocable. Persisted
- * as a small JSON file (mode 0600, atomic rename on write) — same v0
- * posture as the daemon's token.bin.
+ * as a small JSON file (mode 0600, atomic rename on write) — the same v0
+ * on-disk posture (mode 0600, atomic replace) the gateway uses for its other
+ * small control files (e.g. `devices.json`).
  */
 
 import crypto from 'node:crypto';

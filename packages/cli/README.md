@@ -6,14 +6,14 @@ Thin client over the **same** gateway wire protocol as desktop/web/mobile (issue
 
 | Source | When |
 | --- | --- |
-| `--token <hex>` | Explicit admin or device token |
+| `--token <hex>` | Explicit per-device token, or the daemon's loopback secret |
 | `CENTRAID_TOKEN` | Env override |
-| `--data-dir <path>` / `CENTRAID_DATA_DIR` | Reads `<dataDir>/token.bin` (local daemon) |
+| `CENTRAID_GATEWAY_TOKEN` | The loopback secret the daemon was started with (issue #505 phase 7 retired the on-disk `token.bin`, so there is no data-dir token to auto-read) |
 
 ## Commands
 
 ```
-centraid status --url http://127.0.0.1:8787 [--token … | --data-dir …]
+centraid status --url http://127.0.0.1:8787 [--token …]
 centraid health --url …
 centraid list   --url …          # GET /centraid/_apps
 centraid info   --url …          # handshake + capabilities

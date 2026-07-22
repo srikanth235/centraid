@@ -37,16 +37,19 @@ that affect process lifetime: [docs/decisions.md](docs/decisions.md) (H1).
 | Anchor | What it is | Compromise means |
 | --- | --- | --- |
 | **Vault owner / sealing material** | Owner holds vault sealing keys (on-disk `keys/` outside backup) and recovery kit | Attacker can decrypt backups and read vault plaintext offline |
-| **Gateway device identity** | `endpoint-key.bin` (iroh) + local bearer `token.bin` / device tokens | Attacker can impersonate the gateway on the tunnel plane and/or call authenticated HTTP as that gateway |
-| **Paired device key** | Device enrollment in `devices.json` + client private key | Attacker acts as that device within its consent/trust tier until revoked |
+| **Gateway device identity** | `endpoint-key.bin` (iroh) | Attacker can impersonate the gateway on the tunnel plane |
+| **Filesystem access to `--data-dir`** | Shell/OS access to the gateway's data directory | The landlord anchor: whoever can read/write `--data-dir` runs the admin CLI (`vault`/`pair`/`devices`/`key`), which operates on those files directly and never over HTTP (issue #505) |
+| **Paired device key + trust tier** | Device enrollment in `devices.json` + client private key; the `owner` tier is the per-device, revocable admin capability (issue #505 phase 7 — no shared admin token exists) | Attacker acts as that device within its consent/trust tier until the enrollment is revoked |
 | **Pairing ticket secret** | One-time redeem secret (hashed at rest on gateway) | Single enrollment if redeemed before burn/expiry; wrong guess burns ticket |
 | **Backup provider credentials** | Object-store grants / API keys | Provider traffic + ability to delete/orphan remote objects — **not** vault plaintext (E2E encrypted) |
 
 There is **no multi-tenant server** and no Centraid-operated cloud that can read vault contents. Hosted storage is ciphertext + metadata shape (see below).
 
+**Credential issuance is pairing-only (issue #505 phase 7).** The retired shared gateway-wide admin token (`token.bin` / `print-token`) is gone: there is no durable bearer any device could hold that grants every vault forever. Admin capability is the per-device, revocable `owner` enrollment trust tier, granted through the same pairing ceremony as every other device — the first device paired from the local console gets `owner`. Every issued credential is therefore enrollment-bound and severable by `devices revoke` (which cuts the iroh transport, the web control/app cookies, and any per-device HTTP token in one action).
+
 ### Local-socket / loopback boundary
 
-- Desktop and daemon gateways bind **loopback HTTP** with **Bearer** auth for the control plane. Anyone who can read the bearer token file (mode `0600`) or inject into the local user session can call gateway APIs as that gateway.
+- Desktop and daemon gateways bind **loopback HTTP** with **Bearer** auth for the control plane. The daemon's loopback bearer is an **ephemeral per-boot secret** (issue #505 phase 7) — minted fresh each boot, never written to disk, never printed; it is used only by the in-process iroh endpoint host to forward proved requests to the loopback listener (those forwards also carry the per-boot device proof header, so real per-device identity is what scopes them). The desktop embed uses a per-launch loopback token in the same spirit. Anyone who can inject into the local user session, or read that ephemeral secret out of the process, can call gateway APIs as that gateway — the **OS user boundary** is the primary local boundary.
 - The renderer is a **thin client**: Electron IPC is for native operations (keychain, window, lifecycle), not a second authorization system for vault data.
 - **OS user boundary** is the primary local boundary. Centraid does not claim protection against malware running as the same user.
 - Until detached gateway work (H1–H7) fully lands, quitting the desktop may take the gateway down — availability, not a different trust model.
@@ -61,7 +64,7 @@ Posture after issue **#504 batch 0** (fixed; do not document the old reflective-
 | **CORS — Bearer** | Authorization is carried in the `Authorization` header (or preflight lists `authorization`). Reflecting Origin with credentials is allowed for Bearer intent because the token is not ambient. `Origin: null` / missing Origin still use `*` (desktop `file://`). |
 | **CORS — cookie / PWA** | Credentialed CORS (`Access-Control-Allow-Credentials: true` + reflected Origin) is limited to **session-bound shell origins** (`credentialedCorsOrigins` from control/app sessions). Foreign origins never get reflective credentialed CORS; they may see `*` without credentials so `credentials: 'include'` cannot read the body. |
 | **Preflight vs auth** | `OPTIONS` still answers **before** Bearer/cookie auth (browsers omit Authorization on preflight). CORS headers on the preflight already encode the credentialed-vs-not decision; the real request is still auth-gated. |
-| **Auth transport** | Desktop/daemon: Bearer (`token.bin` / device tokens). PWA shell: Origin-bound HttpOnly control cookie + app cookies; `authorizeRequest` enforces origin bind in addition to CORS defense-in-depth. |
+| **Auth transport** | Desktop/daemon loopback: an ephemeral per-boot/per-launch Bearer (no persisted shared token, issue #505). Remote `direct` tier: per-device HTTP tokens minted by pairing. PWA shell: Origin-bound HttpOnly control cookie + app cookies; `authorizeRequest` enforces origin bind in addition to CORS defense-in-depth. |
 | **WS / tunnel** | Device plane auth is enrollment/token based on the tunnel; not cookie ambient. |
 
 **Non-loopback / Docker operators (packaging 5C):**

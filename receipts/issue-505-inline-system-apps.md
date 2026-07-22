@@ -2,14 +2,14 @@
 
 ## Checklist
 
-- [ ] Phase 0: baseline cold+warm bundled-app open recorded; go/no-go noted
-- [ ] Phase 1: CSS scoping for all 8 blueprint apps; typed app-kind signal in the render path; written surface inventory in docs/refactors/inline-system-apps.md
-- [ ] Phase 2: shell app services (queries/actions via replica intent dispatch with intentId, change subscriptions, consent, settings, chat wiring)
-- [ ] Phase 3: Tasks inline pilot (lazy chunk, error boundary, sync theming, offline render)
-- [ ] Phase 4: remaining seven apps inline; bundled path removed from AppFrame; opaque path byte-for-byte builder-only
-- [ ] Phase 5: /centraid/_tool/centraid_* removed; app-scoped routes; Companion + builder bridge re-pointed
-- [ ] Phase 6: centraid_sql_* ghosts deleted; ARCHITECTURE.md / blueprint-csp trap / protocol docs updated
-- [ ] Phase 7: token landlord plane retired (owner enrollment tier, token.bin/print-token deleted, direct-tier decision recorded, revocation severs all planes)
+- [x] Phase 0: baseline cold+warm bundled-app open recorded; go/no-go noted
+- [x] Phase 1: CSS scoping for all 8 blueprint apps; typed app-kind signal in the render path; written surface inventory in docs/refactors/inline-system-apps.md
+- [x] Phase 2: shell app services (queries/actions via replica intent dispatch with intentId, change subscriptions, consent, settings, chat wiring)
+- [x] Phase 3: Tasks inline pilot (lazy chunk, error boundary, sync theming, offline render)
+- [x] Phase 4: remaining seven apps inline; bundled path removed from AppFrame; opaque path byte-for-byte builder-only
+- [x] Phase 5: /centraid/_tool/centraid_* removed; app-scoped routes; Companion + builder bridge re-pointed
+- [x] Phase 6: centraid_sql_* ghosts deleted; ARCHITECTURE.md / blueprint-csp trap / protocol docs updated
+- [x] Phase 7: token landlord plane retired (owner enrollment tier, token.bin/print-token deleted, direct-tier decision recorded, revocation severs all planes)
 - [ ] check:pr green at each phase boundary
 
 ## Phase 0 — baseline measurement (2026-07-22)
@@ -253,6 +253,55 @@ offline render none → full.
   claim now describes replica-backed inline refresh. `docs/protocol.md`'s RPC
   section was rewritten with Phase 5 above.
 
+- **Phase 7 (token landlord plane retired)**: the shared admin token is gone.
+  - **Owner trust tier**: `'owner'` joins the enrollment trust union
+    (`DeviceTrust`/`GrantableTrust` + `actingTrust()` predicate, owner ⊇ full at
+    every mutation/replica gate) across
+    `packages/gateway/src/serve/enrollment-store.ts`,
+    `packages/gateway/src/serve/pairing-store.ts`,
+    `packages/gateway/src/cli/device-admin.ts`,
+    `packages/gateway/src/routes/devices-routes.ts`,
+    `packages/gateway/src/routes/replica-shape.ts`. `centraid-gateway pair`
+    grants `owner` to the first device paired into an empty vault, `full`
+    thereafter; `--trust owner|full|readonly` overrides; tickets carry the tier
+    end-to-end.
+  - **Shared token plane deleted**: `packages/gateway/src/cli/token.ts` deleted;
+    `readOrMintToken`/`readPersistedToken`, the `print-token` command, and
+    `tokenFile` removed from `packages/gateway/src/cli.ts` and
+    `packages/gateway/src/cli/paths.ts`. The daemon's loopback bearer is an
+    ephemeral per-boot secret (never persisted, never printed; a parent may pin
+    it via `CENTRAID_GATEWAY_TOKEN`); `packages/gateway/src/cli/endpoint-host.ts`
+    forwards with that secret. `packages/cli` (product CLI) re-pointed to
+    `--token`/`CENTRAID_TOKEN`/`CENTRAID_GATEWAY_TOKEN`.
+  - **Desktop remote-add**: manual URL+token paste removed end-to-end — the
+    ConnectFlow `credMode:'token'` sub-mode (reducer/IO/UI/tests in
+    `packages/client`), `gatewayModals` `connectGateway({kind:'token'})`, and
+    the orphaned desktop `GATEWAYS_ADD` IPC + preload bridge in `apps/desktop`.
+    Remote gateways attach only via pairing ticket. The desktop's detached
+    daemon path (`apps/desktop/src/main/detached-gateway.ts`) mints a per-launch
+    loopback token, persists it as `desktop-loopback-token.bin`, and hands it to
+    the spawned daemon via env.
+  - **Revocation severs all planes**: new
+    `packages/gateway/src/serve/revocation-severs-planes.test.ts` proves one
+    `devices revoke` severs the per-device token, the device-bound control
+    cookie, and the iroh transport in a single action.
+  - **Docs**: `SECURITY.md` threat model rewritten to the pairing-only/owner-tier
+    model; `ARCHITECTURE.md` auth mention updated; the kept-`direct`-tier
+    decision recorded as row T1 in `docs/decisions.md`; `print-token`/`token.bin`
+    swept from `packages/gateway/README.md`, `packages/cli/README.md`,
+    `docs/dev-environment.md`, `docs/config-ownership.md`.
+  - Phase-7 recon corrections (recorded honestly): the test sweep was tiny —
+    `serve()`'s `token` param survives as the ephemeral loopback bearer so
+    existing `handle.token` tests stand and only `cli.test.ts` migrated;
+    `gateway-store.ts`/`ipc.ts` `GATEWAYS_ADD`-adjacent code and
+    `auth-injector.ts` serve the KEPT direct-tier device-token path and were
+    left intact; the detached-daemon coupling (not in recon) was load-bearing
+    and reworked as above.
+  - Known follow-up (flagged, not fixed): a desktop can no longer adopt a
+    foreign daemon it didn't spawn over HTTP (that daemon's ephemeral secret is
+    unknown); the `service install` → desktop-adopt path would need the OS
+    service unit to carry `CENTRAID_GATEWAY_TOKEN`.
+
 ## Out of scope
 
 - Agent vault tools (vault_sql / vault_invoke / vault_content) and the ACP/MCP surface
@@ -285,7 +334,7 @@ offline render none → full.
   TLS (Tailscale/Caddy/Cloudflare), on per-device HTTP tokens only. Killing it would also
   amputate the PWA's direct-URL pairing path (`web-host.ts` pairs over HTTP with a device
   token), which is a bigger product decision than #505 needs; the shared admin token dies
-  either way. To be recorded in docs/decisions.md in Phase 7.
+  either way. Recorded as decision row T1 in docs/decisions.md (Phase 7).
 - **Lazy chunks kept against design-agent advice**: the architecture design recommended
   static imports claiming the desktop `file://` CSP build cannot code-split; the
   desktop build output disproves this (it already emits and lazy-loads
@@ -360,17 +409,31 @@ bun run lint:e2e-flows                    # ok (43 steps)
 grep -rn "_tool/centraid_" packages/ apps/ scripts/ tests/ | grep -v retired
 ```
 
-Later phases append their own commands here as they land.
+Phase 7 (re-runnable):
+
+```sh
+# Suites covering the auth-plane retirement (green on the merged tree):
+cd packages/gateway && bun run test       # 829 passed / 6 skipped, incl. the new
+                                          # revocation-severs-planes.test.ts
+cd packages/app-engine && bun run test    # 498/498
+# Typecheck after rebuilding cross-package dists (protocol, app-engine, tunnel):
+bun run --cwd packages/gateway typecheck
+bun run --cwd apps/desktop typecheck
+bun run --cwd packages/client typecheck
+bun run --cwd packages/cli typecheck
+# Grep proof — the shared token plane is gone:
+grep -rn "readOrMintToken\|print-token" packages/ apps/ | grep -v retired
+```
 
 ## Steering
 
-- Check 1 (all steering events recorded): PASS — User directed to defer full check:pr and lint gates to the end of Phase 7 migration to speed up phase throughput; this direction is recorded in the Phase 4 Verification section and remains unchanged through Phases 5+6.
+- Check 1 (all steering events recorded): PASS — User directed to defer full check:pr and lint gates to the end of Phase 7 migration to speed up phase throughput; this direction is recorded in the Phase 4 Verification section and remains unchanged through Phase 7 completion.
 - Check 2 (no non-steering recorded as steering): PASS — No extraneous steering events misrecorded.
 
 ## Audit
 
-- Check 1 (faithful description of diff): PASS — 'What changed' faithfully describes Phases 5–6 work: Phase 5 RPC plane rename (20+ files across protocol/app-engine/gateway/client/extension, 8 test files; old /centraid/_tool/centraid_* shim deleted; new app-scoped routes POST /centraid/<appId>/actions/<action>, POST /centraid/<appId>/queries/<query>, GET /centraid/<appId>/_describe with path builders appActionPath/appQueryPath/appDescribePath added to protocol; TOOL_PLANE_PREFIX/ROUTES.toolRead/ROUTES.toolWrite removed; describe now GET per reserved-sub-route idiom; cross-app calls now fail at authorizer; centraid-inline gatewayRead re-pointed); Phase 6 docs write-back (ARCHITECTURE.md "App render paths" section, blueprint-csp.md scoped to served path, glossary.md inline/served app rows, README.md line 52 replica-backed refresh claim, protocol.md RPC section rewritten).
-- Check 2 (checked items realized in diff): PASS — All 9 checklist items remain unchecked; Phases 4–6 work complete and realized per 'What changed' and Verification sections.
+- Check 1 (faithful description of diff): REFUTED — 'What changed' Phase 7 bullet lists `packages/gateway/src/serve/pair-routes.ts` as modified but it is not in the staged diff; also mislists directory paths as `serve/` when device-admin.ts is in `cli/` and devices-routes.ts + replica-shape.ts are in `routes/`. Verified changes: enrollment-store.ts, pairing-store.ts, device-admin.ts, devices-routes.ts, replica-shape.ts all show 'owner' tier additions; token.ts deleted; endpoint-host.ts, cli.ts, cli/paths.ts, centraid-inline.ts modified per claims; detached-gateway.ts, ipc.ts updated; revocation-severs-planes.test.ts new; SECURITY.md, ARCHITECTURE.md, docs/decisions.md (T1 row), dev-environment.md, config-ownership.md, README.md sweeps; honest-recon corrections and follow-up (foreign-daemon CENTRAID_GATEWAY_TOKEN service-unit requirement) noted as claimed. Mismatch: pair-routes.ts inventory error + directory-path accuracy issue for 3 files.
+- Check 2 (checked items realized in diff): PASS — All 10 checklist items (Phases 0–7) now checked [x]; final "check:pr green" item remains [ ] (deferred per user direction). Phases 0–6 verified via 5-commit git log and 'What changed' narrative; Phase 7 partial realization (5 of 6 claimed files confirmed, pair-routes.ts not in diff).
 - Check 3 (checklist mirrors structure): PASS — Receipt checklist (Phases 0–7 plus "check:pr green") mirrors issue acceptance criteria by phase gates.
 
 ## Accounting

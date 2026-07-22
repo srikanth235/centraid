@@ -15,7 +15,6 @@
  *     prefs.json            — device prefs (runner choice, binPath, …)
  *     model-catalog.json    — chat picker's per-runner model catalog
  *     model-pricing.json    — disk-cached LiteLLM price table (#445 warmer)
- *     token.bin             — persistent bearer token (mode 0o600)
  *     vault/                — vault registry root (one dir per vault)
  *     backup/               — offsite backup engine state (keyring, per-vault
  *                              targets, staging) — kept OUTSIDE vault/ so a
@@ -35,8 +34,6 @@ import path from 'node:path';
 import type { GatewayPaths } from '../paths.js';
 
 export interface DaemonLayout extends GatewayPaths {
-  /** Persistent shared-bearer token file (`<dataDir>/token.bin`). */
-  tokenFile: string;
   /** Device enrollment registry — device key ↔ vault rows (issue #289). */
   devicesFile: string;
   /** One-time pairing tickets (secret hashes + TTLs, issue #289). */
@@ -65,7 +62,6 @@ export function daemonLayoutFor(dataDir: string): DaemonLayout {
     prefsFile: path.join(abs, 'prefs.json'),
     modelCatalogFile: path.join(abs, 'model-catalog.json'),
     modelPricingFile: path.join(abs, 'model-pricing.json'),
-    tokenFile: path.join(abs, 'token.bin'),
     // Mounting the vault registry (duaility §12): the daemon hosts one
     // gateway holding N sovereign vaults, one subdirectory each — and,
     // post-#280, each vault's whole app world.

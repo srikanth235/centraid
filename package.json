@@ -57,6 +57,8 @@
     "release:classify": "node scripts/release/classify.mjs",
     "release:sync-versions": "node scripts/release/sync-versions.mjs",
     "release:verify-secrets": "node scripts/release/verify-secrets.mjs",
+    "release:matrix": "node scripts/release/matrix.mjs",
+    "release:surfaces:test": "node --test scripts/release/surfaces.test.mjs",
     "release:restamp": "node scripts/release/restamp-rollout.mjs",
     "boot:smoke": "node scripts/release/boot-smoke.mjs",
     "web:build": "turbo run build --filter=@centraid/web",

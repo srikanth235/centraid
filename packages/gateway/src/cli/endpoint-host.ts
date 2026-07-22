@@ -17,10 +17,12 @@
  *     can trust `x-centraid-device` came from the QUIC handshake and not
  *     from a client header.
  *
- * The proof matters because the HTTP listener still accepts the shared
- * bearer directly (loopback / `direct` transports): without it, any
- * bearer-holder could stamp an arbitrary device key and dodge the
- * per-vault enrollment check.
+ * The proof matters because the HTTP listener still accepts the ephemeral
+ * per-boot loopback secret directly (issue #505 phase 7): without it, a
+ * holder of that secret could stamp an arbitrary device key and dodge the
+ * per-vault enrollment check. The forwarder is the only in-process holder of
+ * both the secret and the proof, so a proved iroh request is the only way a
+ * device key ever reaches `composedHandler`.
  *
  * Issue #376 extends the same ACL to the HTTP surface itself: this module
  * also opens a `DeviceTokenStore` and exposes it (alongside the
@@ -48,7 +50,12 @@ import type { RuntimeLogger } from '@centraid/app-engine';
 import { EnrollmentStore } from '../serve/enrollment-store.js';
 import { PairingTicketStore } from '../serve/pairing-store.js';
 import { DeviceTokenStore } from '../serve/device-token-store.js';
-import { GATEWAY_SCHEMA_EPOCH, GATEWAY_VERSION } from '../version.js';
+import {
+  GATEWAY_MIN_PROTOCOL_VERSION,
+  GATEWAY_PROTOCOL_VERSION,
+  GATEWAY_SCHEMA_EPOCH,
+  GATEWAY_VERSION,
+} from '../version.js';
 import type { DataPlaneControlOptions } from '../routes/data-plane-control.js';
 import type { DaemonLayout } from './paths.js';
 
@@ -258,6 +265,8 @@ export function makeDaemonDevicePlane(input: {
       vaultId: redeemed.vaultId,
       vaultName: plane.name,
       version: GATEWAY_VERSION,
+      protocolVersion: GATEWAY_PROTOCOL_VERSION,
+      minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
       schemaEpoch: GATEWAY_SCHEMA_EPOCH,
     };
   };

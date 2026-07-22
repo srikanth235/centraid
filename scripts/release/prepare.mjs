@@ -6,7 +6,7 @@
  *   1. assert working tree clean (optional --allow-dirty)
  *   2. run `bun run check:pr` unless --skip-check
  *   3. classify bump from CHANGELOG Unreleased (D4)
- *   4. print next version + commands the maintainer will authorize for publish
+ *   4. print next version + surface matrix + publish command
  *
  * Authorization boundary: running this script is intent, not permission to
  * tag or push. Publish is scripts/release/publish.mjs after maintainer "go".
@@ -16,6 +16,7 @@ import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildSurfaceMatrix, defaultShipSurfaceIds } from './surfaces.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const args = new Set(process.argv.slice(2));
@@ -68,13 +69,35 @@ function bumpSemver(v, kind) {
 }
 
 const next = bumpSemver(current, classOut.bump);
+const defaultShip = defaultShipSurfaceIds();
+const surfaces = buildSurfaceMatrix({ shipIds: defaultShip });
+
+let secretsProbe = null;
+try {
+  secretsProbe = JSON.parse(sh('node scripts/release/verify-secrets.mjs'));
+} catch {
+  secretsProbe = { note: 'verify-secrets failed to run', groups: {} };
+}
+
 const report = {
   current,
   next,
   bump: classOut.bump,
   rationale: classOut.rationale,
-  publishCommand: `node scripts/release/publish.mjs --version ${next}`,
-  note: 'Maintainer must explicitly authorize publish. Prepare ≠ publish (D1).',
+  versioning: {
+    product: 'One monorepo semver; stamp all packages; surfaces may skip ship not stamps.',
+    buildNumber: 'Script-derived major*1e6+minor*1e3+patch; resubmit needs a new patch.',
+    protocol: 'Connect gate only; see GATEWAY_PROTOCOL_VERSION in @centraid/protocol.',
+  },
+  surfaces: {
+    defaultShip,
+    continuous: surfaces.surfaces.filter((s) => s.cadence === 'continuous').map((s) => s.id),
+    storeOptIn: surfaces.surfaces.filter((s) => s.cadence === 'store').map((s) => s.id),
+    matrix: surfaces,
+  },
+  secrets: secretsProbe.groups,
+  publishCommand: `node scripts/release/publish.mjs --version ${next} --issue N --surfaces ${defaultShip.join(',')}`,
+  note: 'Maintainer must explicitly authorize publish. Prepare ≠ publish (D1). Never bump version only to fix a failed build (retry same tag / surface rebuild).',
 };
 
 try {

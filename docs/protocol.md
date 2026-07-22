@@ -66,12 +66,36 @@ Keeps generated clients, docs, and human readers aligned; prevents "schema that 
 
 Land C1–C3 (this doc + code that honors it on the handshake and any new cross-client fields) **before** extension pairing (#462). The extension is the first long-lived client that will lag the gateway in the wild.
 
+## Three numbers on the wire (issue #512)
+
+| Field | Role |
+| --- | --- |
+| `version` | **Product** semver — display / about only. Clients **must not** refuse connect because product strings differ. |
+| `protocolVersion` | Wire protocol integer (CapVer-style). Mutual support window with `minSupportedProtocol`. |
+| `minSupportedProtocol` | Oldest protocol this peer still speaks. |
+| `schemaEpoch` | Historical alias still emitted (= protocol until vault epoch splits). Fallback if `protocolVersion` absent. |
+| `capabilities` | Feature flags (C1) — not product version. |
+
+Handshake (`judgeGatewayInfo`):
+
+```
+ok iff peer.protocolVersion >= local.minSupported
+     && local.protocolVersion >= peer.minSupported
+```
+
+Product skew (desktop 0.6 talking to gateway labeled 0.4) is **allowed** when protocol matches. Surfaces may skip shipping a product version without breaking connect.
+
+Constants live in `@centraid/protocol` (`GATEWAY_VERSION`, `GATEWAY_PROTOCOL_VERSION`, `GATEWAY_MIN_PROTOCOL_VERSION`).
+
+`COMPAT(name)` cleanup floors should cite **protocol** (or capability name), not product semver, when possible.
+
 ## Pre-1.0 schema stance (F1)
 
 Until 1.0:
 
 - Prefer optional fields with defaults for forward compatibility.
-- Schema **epoch** bumps may require vault re-creation; the version handshake **refuses mismatches** rather than migrating.
+- **Protocol** floor bumps refuse incompatible peers (update wall), not product string equality.
+- Vault DDL / storage **schemaEpoch** in replica code is a storage cursor concept; it may later diverge from wire protocol.
 - **1.0** = first release after which every schema change ships a migration ([decisions.md](decisions.md)).
 
 ## RPC / API naming (`/centraid/_*` planes)

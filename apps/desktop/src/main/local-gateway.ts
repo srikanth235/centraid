@@ -38,7 +38,8 @@ import { canControl, DEFAULT_GATEWAY_PORT } from './detached-gateway-core.js';
  *
  * Electron-only layer on top of `@centraid/gateway`:
  *   - per-gateway lifecycle (`handles` map + `starting` dedupe)
- *   - safeStorage-backed secrets (remote profiles; local uses daemon token.bin)
+ *   - safeStorage-backed secrets (remote profiles; a local detached daemon
+ *     uses the desktop-minted per-launch loopback token, issue #505 phase 7)
  *   - Electron-derived paths (via `gateway-paths.ts`)
  *   - supervision (H7): `gateway-supervisor-core` crash-loop / backoff on
  *     both embed and detached spawn failures

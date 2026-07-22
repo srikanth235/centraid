@@ -49,6 +49,8 @@ describe('foldUrlIdentityStages', () => {
       ok: true,
       info: {
         version: EXPECTED_GATEWAY_VERSION,
+        protocolVersion: EXPECTED_SCHEMA_EPOCH,
+        minSupportedProtocol: EXPECTED_SCHEMA_EPOCH,
         schemaEpoch: EXPECTED_SCHEMA_EPOCH,
         instanceId: 'inst-1',
       },
@@ -61,6 +63,8 @@ describe('foldUrlIdentityStages', () => {
     expect(result.gateway).toEqual({
       version: EXPECTED_GATEWAY_VERSION,
       schemaEpoch: EXPECTED_SCHEMA_EPOCH,
+      protocolVersion: EXPECTED_SCHEMA_EPOCH,
+      minSupportedProtocol: EXPECTED_SCHEMA_EPOCH,
       instanceId: 'inst-1',
       compatible: true,
     });
@@ -97,18 +101,18 @@ describe('foldUrlIdentityStages', () => {
     expect(forbidden.stages.find((s) => s.id === 'auth')?.status).toBe('fail');
   });
 
-  it('fails identify (reach + auth pass) on a version mismatch', () => {
+  it('fails identify (reach + auth pass) on a protocol mismatch', () => {
     const result = foldUrlIdentityStages({
       ok: false,
-      reason: 'version_mismatch',
-      detail: 'gateway is v9.9.9; this app expects v0.1.0',
+      reason: 'protocol_mismatch',
+      detail: 'protocol incompatible: gateway protocol 99; this client is protocol 2',
     });
     expect(result.stages.map((s) => [s.id, s.status])).toEqual([
       ['reach', 'pass'],
       ['identify', 'fail'],
       ['auth', 'pass'],
     ]);
-    expect(result.errorCode).toBe('version_mismatch');
+    expect(result.errorCode).toBe('protocol_mismatch');
   });
 
   it('fails identify on a non-401/403 HTTP error status (e.g. 500)', () => {

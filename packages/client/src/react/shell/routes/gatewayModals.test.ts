@@ -2,15 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { connectGateway, friendlyGatewayError } from './gatewayModals.js';
 
 const redeemGatewayPairing = vi.fn();
-const addGateway = vi.fn();
 const setActiveGateway = vi.fn(() => Promise.resolve());
 
 beforeEach(() => {
   redeemGatewayPairing.mockReset();
-  addGateway.mockReset();
   setActiveGateway.mockClear();
   (globalThis as unknown as { CentraidApi: unknown }).CentraidApi = {
-    addGateway,
     redeemGatewayPairing,
     setActiveGateway,
   };
@@ -85,29 +82,5 @@ describe('connectGateway', () => {
       message: 'This ticket has expired — ask for a new one.',
       ok: false,
     });
-  });
-
-  it('token: adds the gateway then switches active, label from the profile', async () => {
-    addGateway.mockResolvedValue({ displayName: 'Landlord box', id: 'gw2', label: 'Landlord box' });
-    const result = await connectGateway({
-      kind: 'token',
-      label: 'Landlord box',
-      token: 'sekret',
-      url: 'https://landlord.example',
-    });
-    expect(addGateway).toHaveBeenCalledWith({
-      label: 'Landlord box',
-      token: 'sekret',
-      url: 'https://landlord.example',
-    });
-    expect(setActiveGateway).toHaveBeenCalledWith({ id: 'gw2' });
-    expect(result).toEqual({ gatewayId: 'gw2', label: 'Landlord box', ok: true });
-  });
-
-  it('token: a thrown addGateway error becomes ok:false with the error message', async () => {
-    addGateway.mockRejectedValue(new Error('Gateway label cannot be empty.'));
-    const result = await connectGateway({ kind: 'token', label: '', token: 't', url: 'https://x' });
-    expect(setActiveGateway).not.toHaveBeenCalled();
-    expect(result).toEqual({ message: 'Gateway label cannot be empty.', ok: false });
   });
 });

@@ -34,6 +34,7 @@ import type { RouteHandler } from '../serve/build-gateway.js';
 import type {
   DeviceComputeCapabilities,
   DeviceComputeProfile,
+  DeviceTrust,
   EnrollmentStore,
   DeviceEnrollment,
 } from '../serve/enrollment-store.js';
@@ -63,7 +64,7 @@ interface DeviceDTO {
   addedAt?: string;
   lastUsedAt?: string;
   current?: boolean;
-  trust: 'full' | 'readonly' | 'revoked';
+  trust: DeviceTrust;
   rememberDevice: boolean;
   grantProfile?: string[];
   compute?: DeviceComputeProfile;

@@ -26,7 +26,6 @@ const Channel = {
 
   // Gateways (issue #109)
   GATEWAYS_LIST: 'centraid:gateways:list',
-  GATEWAYS_ADD: 'centraid:gateways:add',
   GATEWAYS_REMOVE: 'centraid:gateways:remove',
   GATEWAYS_RENAME: 'centraid:gateways:rename',
   GATEWAYS_UPDATE_METADATA: 'centraid:gateways:update-metadata',
@@ -162,22 +161,10 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   },
 
   // Gateways (issue #109) — multi-gateway lifecycle. Local gateway is
-  // always present; remote gateways have UUID ids. Tokens never cross
-  // the bridge back — they're set when adding a gateway and live in
-  // keychain thereafter.
+  // always present; remote gateways have UUID ids. Issue #505 phase 7 removed
+  // the manual "add by URL + token" bridge — gateways are added through the
+  // pairing ceremony (`redeemGatewayPairing`), which adds the profile itself.
   listGateways: () => ipcRenderer.invoke(Channel.GATEWAYS_LIST),
-  addGateway: (input: {
-    label: string;
-    /** `direct` transport: an https/http URL (plain http to a public host is refused). */
-    url?: string;
-    /** `iroh` transport: an EndpointTicket redeemed from a pairing ticket. */
-    endpointTicket?: string;
-    endpointId?: string;
-    token: string;
-    displayName?: string;
-    avatarColor?: string;
-    rememberDevice?: boolean;
-  }) => ipcRenderer.invoke(Channel.GATEWAYS_ADD, input),
   removeGateway: (input: { id: string }) => ipcRenderer.invoke(Channel.GATEWAYS_REMOVE, input),
   renameGateway: (input: { id: string; label: string }) =>
     ipcRenderer.invoke(Channel.GATEWAYS_RENAME, input),

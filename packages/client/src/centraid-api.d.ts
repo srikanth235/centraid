@@ -232,21 +232,18 @@ export interface CentraidGatewayRuntime {
   /** True when recent probe latency has sustained above the degraded-latency threshold (~2s). */
   latencyDegraded?: boolean;
   /**
-   * Version-handshake verdict (issue #351, wave 2) — REMOTE gateways only.
-   * A local gateway is embedded in this same build and can never skew, so
-   * this stays absent for it. Absent for a remote gateway too until the
-   * first probe carrying `version`/`schemaEpoch` lands; persists at its
-   * last value while unreachable. `skewed: true` means the gateway's
-   * reported version/schemaEpoch doesn't match what this app was built
-   * against — v0 policy surfaces this loudly (this field + a de-duped OS
-   * notification) rather than refusing requests.
+   * Protocol-handshake verdict (issue #351 wave 2 / #512) — REMOTE only.
+   * `skewed: true` means the protocol support window failed — product version
+   * strings may differ without setting skewed.
    */
   versionSkew?: {
     skewed: boolean;
     gatewayVersion: string;
     gatewaySchemaEpoch: number;
+    gatewayProtocolVersion?: number;
     clientVersion: string;
     clientSchemaEpoch: number;
+    clientProtocolVersion?: number;
   };
 }
 
@@ -358,7 +355,14 @@ export interface CentraidConnectivityStage {
 export interface CentraidConnectivityReport {
   ok: boolean;
   stages: CentraidConnectivityStage[];
-  gateway?: { version: string; schemaEpoch: number; instanceId: string; compatible: boolean };
+  gateway?: {
+    version: string;
+    schemaEpoch: number;
+    protocolVersion?: number;
+    minSupportedProtocol?: number;
+    instanceId: string;
+    compatible: boolean;
+  };
   vaults?: Array<{ vaultId: string; name: string; color?: string; icon?: string }>;
   ticket?: { vaultName: string; expiresAt: string; gatewayEndpointId: string };
   /** Stable code for the FIRST failing stage — absent when `ok`. */
@@ -723,15 +727,18 @@ interface CentraidApi {
   /** List every gateway profile (local + remote). Sorted local-first. */
   listGateways(): Promise<CentraidGatewayProfile[]>;
   /**
-   * Add a remote gateway. UUID id is minted server-side; the token is
-   * stored in keychain and is NOT echoed back. The plaintext crosses
-   * the bridge exactly once on this call.
+   * Register a `direct`-tier remote gateway from a URL + per-device token
+   * (the PWA web-host path, issue #505 phase 7). The token is the per-device
+   * token minted by the pairing ceremony — NOT a shared admin token (retired).
+   * The Electron desktop no longer exposes this bridge: it adds gateways only
+   * through the pairing ceremony (`redeemGatewayPairing`), which registers the
+   * profile in-process.
    */
   addGateway(input: {
     label: string;
     /**
-     * `direct` transport — an https/http URL + token. Plain http:// to a
-     * public host is refused (issue #289): the bearer would travel in
+     * `direct` transport — an https/http URL + per-device token. Plain http://
+     * to a public host is refused (issue #289): the bearer would travel in
      * cleartext. Omit when adding an `iroh` gateway.
      */
     url?: string;

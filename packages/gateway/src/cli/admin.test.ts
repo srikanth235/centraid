@@ -347,6 +347,42 @@ test('pair --json emits one JSON line instead of the pasteable text block (issue
   expect(payload).toMatchObject({ kind: 'centraid-gw-pair', vaultName: 'Family' });
 });
 
+test('pair grants owner to the first device in a vault and full thereafter (issue #505)', async () => {
+  const layout = daemonLayoutFor(dataDir);
+  await fs.mkdir(dataDir, { recursive: true });
+  await fs.writeFile(
+    layout.endpointStateFile,
+    JSON.stringify({ endpointId: 'gw-endpoint', ticket: 'gw-ticket-base32' }),
+  );
+  await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
+
+  // No enrollments yet → the first pairing is the landlord device (owner) —
+  // the per-device, revocable replacement for the retired shared admin token.
+  const first = lastJson(
+    await capture(() => commandPair(['--data-dir', dataDir, '--vault', 'Family', '--json'], fail)),
+  );
+  expect(first.trust).toBe('owner');
+
+  // Enroll a device so the vault is no longer empty.
+  await capture(() =>
+    commandDevices(['add', '--data-dir', dataDir, 'ep-first', '--vault', 'Family'], fail),
+  );
+
+  // A later pairing defaults to full, not owner.
+  const second = lastJson(
+    await capture(() => commandPair(['--data-dir', dataDir, '--vault', 'Family', '--json'], fail)),
+  );
+  expect(second.trust).toBe('full');
+
+  // `--trust owner` still overrides explicitly.
+  const explicit = lastJson(
+    await capture(() =>
+      commandPair(['--data-dir', dataDir, '--vault', 'Family', '--trust', 'owner', '--json'], fail),
+    ),
+  );
+  expect(explicit.trust).toBe('owner');
+});
+
 test('pair --json failure emits {ok:false,error,message} on stdout, then still fails the process', async () => {
   let captured = '';
   const original = process.stdout.write.bind(process.stdout);

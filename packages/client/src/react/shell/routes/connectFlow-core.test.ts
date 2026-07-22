@@ -182,16 +182,11 @@ describe('buildTestInput / canStartTest', () => {
     expect(buildTestInput(s)).toEqual({ kind: 'ticket', ticket: 't.icket' });
   });
 
-  it('gateway/token mode requires both url and token', () => {
-    const partial = at({
-      advancedOpen: true,
-      credMode: 'token',
-      method: 'gateway',
-      url: 'https://x',
-    });
-    expect(buildTestInput(partial)).toBeNull();
-    const full = at({ ...partial, token: 'sekret' });
-    expect(buildTestInput(full)).toEqual({ kind: 'url', token: 'sekret', url: 'https://x' });
+  it('gateway advanced URL panel still tests via the ticket (issue #505: no admin-token paste)', () => {
+    // The advanced "Connect by URL" panel redeems the SAME ticket over HTTP —
+    // it never accepts a bare bearer token, so the test input stays the ticket.
+    const s = at({ advancedOpen: true, method: 'gateway', ticket: 't.icket', url: 'https://x' });
+    expect(buildTestInput(s)).toEqual({ kind: 'ticket', ticket: 't.icket' });
   });
 
   it('ssh: destination required, dataDir optional', () => {
@@ -240,16 +235,19 @@ describe('vaultCapability', () => {
     expect(cap).toEqual({ canCreate: false, locked: { vaultName: 'Office' }, options: [] });
   });
 
-  it('gateway/token: pick-only from report.vaults, not create-capable', () => {
+  it('gateway advanced URL panel is still ticket-locked, not create-capable', () => {
     const cap = vaultCapability(
       at({
         advancedOpen: true,
-        credMode: 'token',
         method: 'gateway',
-        report: { ok: true, stages: [], vaults: [{ name: 'A', vaultId: 'a' }] },
+        report: {
+          ok: true,
+          stages: [],
+          ticket: { expiresAt: '', gatewayEndpointId: '', vaultName: 'Office' },
+        },
       }),
     );
-    expect(cap).toEqual({ canCreate: false, locked: null, options: [{ name: 'A', vaultId: 'a' }] });
+    expect(cap).toEqual({ canCreate: false, locked: { vaultName: 'Office' }, options: [] });
   });
 });
 
@@ -276,10 +274,10 @@ describe('canCommitConnectFlow', () => {
     expect(canCommitConnectFlow(at({ method: 'gateway', ticket: 't' }))).toBe(true);
   });
 
-  it('gateway/token requires both url and token', () => {
-    const s = at({ advancedOpen: true, credMode: 'token', method: 'gateway' });
+  it('gateway advanced URL panel still only requires the ticket', () => {
+    const s = at({ advancedOpen: true, method: 'gateway', url: 'https://x' });
     expect(canCommitConnectFlow(s)).toBe(false);
-    expect(canCommitConnectFlow({ ...s, token: 't', url: 'https://x' })).toBe(true);
+    expect(canCommitConnectFlow({ ...s, ticket: 't' })).toBe(true);
   });
 
   it('ssh requires a destination and a resolved vault choice', () => {
