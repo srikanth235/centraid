@@ -204,13 +204,17 @@ export const CONVERSATION_LEDGER_DDL = `
       cache_read_tokens  INTEGER,
       cache_write_tokens INTEGER,
       cost_usd           REAL,
+      -- Provenance for cost_usd (issue #514): 'agent' = runner/ACP reported USD;
+      -- 'estimated' = catalog (model-pricing). NULL = legacy or unpriced.
+      cost_source        TEXT,
       app_id             TEXT,
       ok                 INTEGER NOT NULL DEFAULT 1,
       error              TEXT,
       started_at         INTEGER NOT NULL,
       ended_at           INTEGER,
       duration_ms        INTEGER,
-      CHECK (kind IN ('message_in','step','tool','agent'))
+      CHECK (kind IN ('message_in','step','tool','agent')),
+      CHECK (cost_source IS NULL OR cost_source IN ('agent','estimated'))
     ) STRICT;
     CREATE INDEX IF NOT EXISTS idx_items_by_turn
       ON items(turn_id, ordinal);
@@ -324,9 +328,11 @@ export const CONVERSATION_LEDGER_DDL = `
     -- #280); with the ledger and the rollup in ONE file there is no boundary
     -- left to denormalize across, so the ledger tables above are simply THE
     -- source and the view is the lens (no write path, no drift).
-    -- automation_ref/app_id derivation and the dominant-model pick
-    -- mirror the old write-through exactly.
-    CREATE VIEW IF NOT EXISTS run_summary AS
+    -- automation_ref/app_id derivation and the dominant-model / dominant-
+    -- provider picks mirror the old write-through exactly. DROP+CREATE so
+    -- view shape can evolve on existing vaults (IF NOT EXISTS would stick).
+    DROP VIEW IF EXISTS run_summary;
+    CREATE VIEW run_summary AS
       SELECT
         t.id             AS run_id,
         c.kind           AS kind,
@@ -354,6 +360,13 @@ export const CONVERSATION_LEDGER_DDL = `
           GROUP BY i.model
           ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
           LIMIT 1)       AS model,
+        -- Dominant runner kind (ACP stamps provider = RunnerKind) for Insights
+        -- by-runner breakdown (issue #514).
+        (SELECT i.provider FROM items i
+          WHERE i.turn_id = t.id AND i.provider IS NOT NULL AND i.kind IN ('step','agent')
+          GROUP BY i.provider
+          ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
+          LIMIT 1)       AS provider,
         t.started_at               AS started_at,
         t.ended_at                 AS ended_at,
         t.total_input_tokens       AS total_input_tokens,
@@ -465,10 +478,10 @@ const CONVERSATION_ITEM_COUNT_DDL = `
  */
 export function ensureConversationLedger(db: DatabaseSync): void {
   db.exec(CONVERSATION_LEDGER_DDL);
-  const hasItemCount = (
+  const conversationCols = (
     db.prepare(`PRAGMA table_info(conversations)`).all() as { name: string }[]
-  ).some((column) => column.name === 'item_count');
-  if (!hasItemCount) {
+  ).map((c) => c.name);
+  if (!conversationCols.includes('item_count')) {
     db.exec(`ALTER TABLE conversations ADD COLUMN item_count INTEGER NOT NULL DEFAULT 0`);
     db.exec(`
       UPDATE conversations
@@ -479,6 +492,13 @@ export function ensureConversationLedger(db: DatabaseSync): void {
             WHERE t.conversation_id = conversations.id
          )
     `);
+  }
+  // Issue #514: cost provenance on existing vaults created before cost_source.
+  const itemCols = (db.prepare(`PRAGMA table_info(items)`).all() as { name: string }[]).map(
+    (c) => c.name,
+  );
+  if (!itemCols.includes('cost_source')) {
+    db.exec(`ALTER TABLE items ADD COLUMN cost_source TEXT`);
   }
   db.exec(CONVERSATION_ITEM_COUNT_DDL);
   db.exec(CONVERSATION_FTS_DDL);

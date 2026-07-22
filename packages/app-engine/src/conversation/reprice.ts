@@ -13,6 +13,9 @@
  * rows (issue #438 archived rollups) are frozen copies and out of scope — this
  * only sees live `items`/`turns`.
  *
+ * Agent-reported costs (`cost_source = 'agent'`, issue #514) are never rewritten
+ * — only catalog estimates and NULL unknowns are revisited.
+ *
  * Bounded and resumable: one pass scans at most `maxScan` items from a caller-
  * held rowid cursor and writes at most `maxWrites` differing rows, returning
  * the cursor to resume from. Steady state is ~free — a clean row recomputes to
@@ -52,6 +55,7 @@ interface ItemRow {
   cache_read_tokens: number | null;
   cache_write_tokens: number | null;
   cost_usd: number | null;
+  cost_source: string | null;
 }
 
 // Below this the two costs are the same money — keeps float noise from forcing
@@ -75,15 +79,18 @@ export function repriceLedger(db: DatabaseSync, opts: RepriceOptions = {}): Repr
   const rows = db
     .prepare(
       `SELECT rowid, turn_id, model, input_tokens, output_tokens,
-              cache_read_tokens, cache_write_tokens, cost_usd
+              cache_read_tokens, cache_write_tokens, cost_usd, cost_source
          FROM items
         WHERE rowid > ? AND kind IN ('step','agent') AND model IS NOT NULL
+          AND (cost_source IS NULL OR cost_source = 'estimated')
         ORDER BY rowid ASC
         LIMIT ?`,
     )
     .all(cursor, maxScan) as unknown as ItemRow[];
 
-  const updateItem = db.prepare(`UPDATE items SET cost_usd = ? WHERE rowid = ?`);
+  const updateItem = db.prepare(
+    `UPDATE items SET cost_usd = ?, cost_source = CASE WHEN ? IS NULL THEN NULL ELSE 'estimated' END WHERE rowid = ?`,
+  );
   // Same SUM shape as finishTurn — NULL when every child cost is NULL.
   const rederiveTurn = db.prepare(
     `UPDATE turns SET total_cost_usd = (
@@ -102,6 +109,8 @@ export function repriceLedger(db: DatabaseSync, opts: RepriceOptions = {}): Repr
   try {
     for (const row of rows) {
       lastRowid = row.rowid;
+      // Never clobber agent-reported costs (also filtered in SQL).
+      if (row.cost_source === 'agent') continue;
       const recomputed =
         costForUsage(row.model ?? undefined, {
           ...(row.input_tokens !== null ? { inputTokens: row.input_tokens } : {}),
@@ -110,7 +119,7 @@ export function repriceLedger(db: DatabaseSync, opts: RepriceOptions = {}): Repr
           ...(row.cache_write_tokens !== null ? { cacheWriteTokens: row.cache_write_tokens } : {}),
         }) ?? null;
       if (!differs(recomputed, row.cost_usd)) continue;
-      updateItem.run(recomputed, row.rowid);
+      updateItem.run(recomputed, recomputed, row.rowid);
       affectedTurns.add(row.turn_id);
       itemsRepriced += 1;
       if (itemsRepriced >= maxWrites) break;

@@ -5,8 +5,8 @@ import { insK, insKindLabel, insUsd, relativeTime } from '../format.js';
 import styles from './InsightsScreen.module.css';
 import { cx } from '../ui/cx.js';
 
-// Daily-consumption line chart — a React port of `insLineChart`
-// (app-insights.ts): same 760×200 viewBox, area gradient, peak marker.
+const WINDOW_OPTIONS = [7, 30, 90] as const;
+
 function LineChart({ values }: { values: readonly number[] }): JSX.Element {
   const W = 760;
   const H = 200;
@@ -59,29 +59,6 @@ function LineChart({ values }: { values: readonly number[] }): JSX.Element {
   );
 }
 
-function StatCard({
-  icon,
-  label,
-  value,
-  foot,
-}: {
-  icon: JSX.Element;
-  label: string;
-  value: string;
-  foot?: ReactNode;
-}): JSX.Element {
-  return (
-    <div className={styles.kpi}>
-      <div className={styles.kpiLabel}>
-        <span className={styles.kpiIcon}>{icon}</span>
-        {label}
-      </div>
-      <div className={styles.kpiValue}>{value}</div>
-      {foot ? <div className={styles.kpiFoot}>{foot}</div> : null}
-    </div>
-  );
-}
-
 function Panel({
   title,
   meta,
@@ -102,42 +79,10 @@ function Panel({
   );
 }
 
-function ChartStat({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-}): JSX.Element {
-  return (
-    <div>
-      <div className={styles.chartStatLabel}>{label}</div>
-      <div className={styles.chartStatValue}>{value}</div>
-      {sub ? <div className={styles.chartStatSub}>{sub}</div> : null}
-    </div>
-  );
-}
-
-// A panel among several on an otherwise-populated page being empty isn't
-// page-level news — no icon, no dashed frame (that treatment is reserved
-// for the whole route being empty, e.g. ApprovalsScreen's inbox). A quiet
-// single line matches this app's existing in-panel empty idiom (see
-// ApprovalsScreen's `.grantsEmpty`).
-// `compact` — for a panel that already carries its own structure above the
-// message (the By-source table header), so it needs no reserved height. The
-// non-compact form gives the bare right-column panels enough presence to land
-// level with the taller left column.
 function PanelEmpty({ message, compact }: { message: string; compact?: boolean }): JSX.Element {
   return <div className={compact ? styles.panelEmptyCompact : styles.panelEmpty}>{message}</div>;
 }
 
-// The daily-consumption panel reserves a chart-sized footprint so the layout
-// doesn't jump when the first data lands. Filling that footprint with a lone
-// centered sentence reads as dead space; a faint gridded baseline turns it
-// into a legible "chart awaiting data" scaffold, and the note sits on a chip
-// so a gridline never strikes through it.
 function ChartEmpty({ message }: { message: string }): JSX.Element {
   return (
     <div className={styles.chartEmpty} aria-hidden={false}>
@@ -147,34 +92,58 @@ function ChartEmpty({ message }: { message: string }): JSX.Element {
   );
 }
 
+function MixBar({ pct }: { pct: number }): JSX.Element {
+  return (
+    <span className={styles.mixbar}>
+      <span
+        className={styles.mixbarFill}
+        style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
+      />
+    </span>
+  );
+}
+
 /**
- * Insights — the usage-analytics dashboard (issue #325). Read-only: its route
- * (InsightsRoute) fetches the summary and renders this with the resolved data.
- * Styles are co-located in `InsightsScreen.module.css` (scoped CSS Modules —
- * issue #325 Phase 4); the shared `cd-page-empty*` empty-state classes stay
- * global (also used by the vanilla shell + Discover).
+ * Insights v0 (#514) — transparency + control over agent usage.
+ * Narrative hero (honest spend), breakdowns sorted by $, working window chips.
  */
-export default function InsightsScreen({ summary }: InsightsBridgeProps): JSX.Element {
+export default function InsightsScreen({
+  summary,
+  windowDays,
+  onWindowDays,
+  onOpenRun,
+}: InsightsBridgeProps): JSX.Element {
   const { kpis } = summary;
-  const quotaPct =
-    kpis.quotaTokens > 0
-      ? Math.min(100, Math.round((kpis.totalTokens / kpis.quotaTokens) * 100))
-      : 0;
+  const incomplete = kpis.unpricedRuns > 0 || kpis.unreportedRuns > 0;
+  const hasSpend = kpis.totalCostUsd > 0 || incomplete;
 
   const series = summary.daily.map((d) => d.tokens);
   const hasDaily = series.length > 0;
-  const dailyTotal = series.reduce((s, v) => s + v, 0);
-  const avg = hasDaily ? Math.round(dailyTotal / series.length) : 0;
-  const peak = hasDaily ? Math.max(...series) : 0;
-  const peakDay = hasDaily ? summary.daily[series.indexOf(peak)]?.date : undefined;
-  const sorted = [...series].sort((a, b) => a - b);
-  const median = hasDaily ? (sorted[Math.floor(sorted.length / 2)] ?? 0) : 0;
-
-  const autoMax = Math.max(1, ...summary.byAutomation.map((r) => r.tokens));
+  const sourceMax = Math.max(1, ...summary.bySource.map((r) => r.costUsd || r.tokens));
+  const runnerMax = Math.max(1, ...summary.byRunner.map((r) => r.costUsd || r.tokens));
   const modelTotal = Math.max(
     1,
-    summary.byModel.reduce((s, m) => s + m.tokens, 0),
+    summary.byModel.reduce((s, m) => s + (m.costUsd || m.tokens), 0),
   );
+
+  const honestyParts: string[] = [];
+  if (kpis.agentReportedCostUsd > 0) {
+    honestyParts.push(`${insUsd(kpis.agentReportedCostUsd)} agent-reported`);
+  }
+  if (kpis.estimatedCostUsd > 0) {
+    honestyParts.push(`${insUsd(kpis.estimatedCostUsd)} estimated`);
+  }
+  if (kpis.unpricedRuns > 0) {
+    honestyParts.push(`${kpis.unpricedRuns} unpriced`);
+  }
+  if (kpis.unreportedRuns > 0) {
+    honestyParts.push(`${kpis.unreportedRuns} no usage reported`);
+  }
+  if (honestyParts.length === 0 && kpis.generations === 0) {
+    honestyParts.push('no completed runs in this window');
+  } else if (honestyParts.length === 0) {
+    honestyParts.push('all priced runs included');
+  }
 
   return (
     <div className={styles.page}>
@@ -185,161 +154,194 @@ export default function InsightsScreen({ summary }: InsightsBridgeProps): JSX.El
           </span>
           <h1>Insights</h1>
         </div>
-        <div className={styles.filters}>
-          <span className={styles.filter}>
-            <span className={styles.filterIcon}>
-              <Icon name="History" size={13} />
-            </span>
-            <span>Last 30 days</span>
-          </span>
+        <div className={styles.filters} role="group" aria-label="Time window">
+          {WINDOW_OPTIONS.map((d) => (
+            <button
+              key={d}
+              type="button"
+              className={cx(styles.filter, windowDays === d && styles.filterActive)}
+              onClick={() => onWindowDays(d)}
+              aria-pressed={windowDays === d}
+            >
+              {d}d
+            </button>
+          ))}
         </div>
       </div>
 
-      <div>
-        <div className={styles.kpis} data-testid="insights-kpis">
-          <StatCard
-            icon={<Icon name="Activity" size={12} />}
-            label="Tokens · 30 days"
-            value={insK(kpis.totalTokens)}
-            foot={
-              <div className={styles.meter}>
-                <div className={styles.bar}>
-                  <div className={styles.barFill} style={{ width: `${quotaPct}%` }} />
+      <div className={styles.hero} data-testid="insights-hero">
+        <div className={styles.heroSpend}>
+          <div className={styles.heroLabel}>
+            {incomplete ? 'At least' : 'Spend'} · {windowDays} days
+          </div>
+          <div className={styles.heroValue}>{insUsd(kpis.totalCostUsd)}</div>
+          <div className={styles.heroHonesty}>{honestyParts.join(' · ')}</div>
+        </div>
+        <div className={styles.heroMeta}>
+          <div className={styles.heroStat}>
+            <span className={styles.heroStatLabel}>Tokens</span>
+            <span className={styles.heroStatValue}>{insK(kpis.totalTokens)}</span>
+          </div>
+          <div className={styles.heroStat}>
+            <span className={styles.heroStatLabel}>Runs</span>
+            <span className={styles.heroStatValue}>{kpis.generations}</span>
+            {kpis.retries > 0 ? (
+              <span className={styles.heroStatSub}>{kpis.retries} retries</span>
+            ) : null}
+          </div>
+          <div className={styles.heroStat}>
+            <span className={styles.heroStatLabel}>Forecast</span>
+            <span className={styles.heroStatValue}>{insUsd(kpis.forecastCostUsd)}</span>
+            <span className={styles.heroStatSub}>30-day run rate</span>
+          </div>
+          {kpis.failedRuns > 0 ? (
+            <div className={styles.heroStat}>
+              <span className={styles.heroStatLabel}>Failed</span>
+              <span className={styles.heroStatValue}>{kpis.failedRuns}</span>
+              <span className={styles.heroStatSub}>{insUsd(kpis.failedCostUsd)} spent</span>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {summary.attention ? (
+        <div className={styles.attention} data-testid="insights-attention">
+          <Icon name="Sparkle" size={14} />
+          <span>
+            <strong>{summary.attention.label}</strong> ({summary.attention.kindLabel}) is{' '}
+            {Math.round(summary.attention.share * 100)}% of spend (
+            {insUsd(summary.attention.costUsd)})
+          </span>
+        </div>
+      ) : null}
+
+      {!hasSpend && kpis.generations === 0 ? (
+        <div className={styles.firstUse}>
+          Run a chat, build, or automation — usage shows up here. Costs are agent-reported when the
+          runner provides them, otherwise estimated from public rates.
+        </div>
+      ) : null}
+
+      {kpis.generations > 0 && kpis.unreportedRuns === kpis.generations ? (
+        <div className={styles.firstUse}>
+          Agents ran, but none reported token usage yet. Cost may be incomplete.
+        </div>
+      ) : null}
+
+      <div className={styles.grid}>
+        <div className={styles.col}>
+          <Panel title="Where it went" meta={`${summary.bySource.length} · sorted by $`}>
+            <div className={styles.table}>
+              <div className={cx(styles.tr, styles.trHead)}>
+                <span className={cx(styles.th, styles.cApp)}>Source</span>
+                <span className={cx(styles.th, styles.cNum)}>USD</span>
+                <span className={cx(styles.th, styles.cNum)}>Tokens</span>
+                <span className={styles.th}>Mix</span>
+                <span className={cx(styles.th, styles.cRuns)}>Runs</span>
+              </div>
+              {summary.bySource.map((r) => (
+                <div key={`${r.kind}:${r.key}`} className={styles.tr}>
+                  <span className={cx(styles.td, styles.cApp)}>
+                    <span className={styles.tag}>{insKindLabel(r.kind)}</span>
+                    <span className={styles.appName}>{r.label}</span>
+                  </span>
+                  <span className={cx(styles.td, styles.cNum, styles.mono)}>
+                    {insUsd(r.costUsd)}
+                  </span>
+                  <span className={cx(styles.td, styles.cNum, styles.mono)}>{insK(r.tokens)}</span>
+                  <span className={styles.td}>
+                    <MixBar pct={Math.round(((r.costUsd || r.tokens) / sourceMax) * 100)} />
+                  </span>
+                  <span className={cx(styles.td, styles.cRuns, styles.mono)}>{String(r.runs)}</span>
                 </div>
-                <div className={styles.meterFoot}>
-                  <span>{`${insK(kpis.totalTokens)} of ${insK(kpis.quotaTokens)} included`}</span>
-                  <span>{`${quotaPct}%`}</span>
+              ))}
+              {summary.bySource.length === 0 ? <PanelEmpty compact message="No runs yet." /> : null}
+            </div>
+          </Panel>
+
+          <Panel title="Daily activity" meta={`${summary.windowDays} days · tokens`}>
+            {hasDaily ? (
+              <div className={styles.chart}>
+                {summary.peakDay ? (
+                  <div className={styles.peakNote}>
+                    Peak {summary.peakDay.date}: {insUsd(summary.peakDay.costUsd)} ·{' '}
+                    {insK(summary.peakDay.tokens)} tokens
+                    {summary.peakDay.topSources[0]
+                      ? ` · top: ${summary.peakDay.topSources[0].label}`
+                      : ''}
+                  </div>
+                ) : null}
+                <LineChart
+                  values={series.length === 1 ? [series[0] ?? 0, series[0] ?? 0] : series}
+                />
+                <div className={styles.chartAxis}>
+                  <span>{summary.daily[0]?.date}</span>
+                  <span>{summary.daily[summary.daily.length - 1]?.date}</span>
                 </div>
               </div>
-            }
-          />
-          <StatCard
-            icon={<Icon name="Coin" size={12} />}
-            label="Spent · USD"
-            value={insUsd(kpis.totalCostUsd)}
-            foot={
-              // Honest unknowns (#445): a NULL-cost run is unpriced, not free —
-              // flag it near the cost so the total reads as a floor, not truth.
-              <span className={styles.kpiSub}>
-                {kpis.unpricedRuns > 0
-                  ? `last 30 days · ${kpis.unpricedRuns} unpriced`
-                  : 'last 30 days'}
-              </span>
-            }
-          />
-          <StatCard
-            icon={<Icon name="History" size={12} />}
-            label="Forecast · USD"
-            value={insUsd(kpis.forecastCostUsd)}
-            foot={<span className={styles.kpiSub}>30-day run rate</span>}
-          />
-          <StatCard
-            icon={<Icon name="Folder" size={12} />}
-            label="Apps touched"
-            value={String(kpis.appsTouched)}
-            foot={<span className={styles.kpiSub}>last 30 days</span>}
-          />
-          <StatCard
-            icon={<Icon name="Sparkle" size={12} />}
-            label="Generations"
-            value={String(kpis.generations)}
-            foot={<span className={styles.kpiSub}>{`${kpis.retries} retries`}</span>}
-          />
+            ) : (
+              <ChartEmpty message="No activity in this window yet." />
+            )}
+          </Panel>
         </div>
 
-        <div className={styles.grid}>
-          <div className={styles.col}>
-            <Panel title="Daily consumption" meta={`${summary.windowDays} days · tokens`}>
-              {hasDaily ? (
-                <div className={styles.chart}>
-                  <div className={styles.chartStats}>
-                    <ChartStat label="Daily avg" value={insK(avg)} />
-                    <ChartStat label="Peak" value={insK(peak)} sub={peakDay} />
-                    <ChartStat label="Median" value={insK(median)} />
-                    <ChartStat label="Days" value={String(series.length)} />
-                  </div>
-                  <LineChart
-                    values={series.length === 1 ? [series[0] ?? 0, series[0] ?? 0] : series}
-                  />
-                  <div className={styles.chartAxis}>
-                    <span>{summary.daily[0]?.date}</span>
-                    <span>{summary.daily[summary.daily.length - 1]?.date}</span>
-                  </div>
-                </div>
-              ) : (
-                <ChartEmpty message="No activity in this window yet." />
-              )}
-            </Panel>
-
-            <Panel title="By source" meta={`${summary.byAutomation.length} · sorted by tokens`}>
-              <div className={styles.table}>
-                <div className={cx(styles.tr, styles.trHead)}>
-                  <span className={cx(styles.th, styles.cApp)}>Source</span>
-                  <span className={cx(styles.th, styles.cNum)}>Tokens</span>
-                  <span className={cx(styles.th, styles.cNum)}>USD</span>
-                  <span className={styles.th}>Mix</span>
-                  <span className={cx(styles.th, styles.cRuns)}>Runs</span>
-                </div>
-                {summary.byAutomation.map((r) => (
-                  <div key={r.key} className={styles.tr}>
-                    <span className={cx(styles.td, styles.cApp)}>
-                      <span className={styles.tag}>{insKindLabel(r.kind)}</span>
-                      <span className={styles.appName}>{r.label}</span>
-                    </span>
-                    <span className={cx(styles.td, styles.cNum, styles.mono)}>
-                      {insK(r.tokens)}
-                    </span>
-                    <span className={cx(styles.td, styles.cNum, styles.mono)}>
-                      {insUsd(r.costUsd)}
-                    </span>
-                    <span className={styles.td}>
-                      <span className={styles.mixbar}>
-                        <span
-                          className={styles.mixbarFill}
-                          style={{ width: `${Math.round((r.tokens / autoMax) * 100)}%` }}
-                        />
-                      </span>
-                    </span>
-                    <span className={cx(styles.td, styles.cRuns, styles.mono)}>
-                      {String(r.runs)}
-                    </span>
-                  </div>
-                ))}
-                {summary.byAutomation.length === 0 ? (
-                  <PanelEmpty compact message="No runs yet." />
-                ) : null}
-              </div>
-            </Panel>
-          </div>
-
-          <div className={styles.col}>
-            <Panel title="By model" meta="last 30 days">
-              <div className={styles.models}>
-                {summary.byModel.map((m) => {
-                  const pct = Math.round((m.tokens / modelTotal) * 100);
-                  return (
-                    <div key={m.model} className={styles.model}>
-                      <div className={styles.modelName}>{m.model}</div>
-                      <div className={styles.bar}>
-                        <div className={styles.barFill} style={{ width: `${pct}%` }} />
-                      </div>
-                      <div className={styles.modelFoot}>
-                        <span className={styles.mono}>{`${pct}%  ${insK(m.tokens)}`}</span>
-                        <span className={styles.mono}>{insUsd(m.costUsd)}</span>
-                      </div>
+        <div className={styles.col}>
+          <Panel title="By agent" meta="runner · sorted by $">
+            <div className={styles.models}>
+              {summary.byRunner.map((r) => {
+                const pct = Math.round(((r.costUsd || r.tokens) / runnerMax) * 100);
+                return (
+                  <div key={r.provider} className={styles.model}>
+                    <div className={styles.modelName}>{r.provider}</div>
+                    <div className={styles.bar}>
+                      <div className={styles.barFill} style={{ width: `${pct}%` }} />
                     </div>
-                  );
-                })}
-                {summary.byModel.length === 0 ? (
-                  <PanelEmpty message="No model usage recorded yet." />
-                ) : null}
-              </div>
-            </Panel>
+                    <div className={styles.modelFoot}>
+                      <span className={styles.mono}>
+                        {insUsd(r.costUsd)} · {insK(r.tokens)}
+                      </span>
+                      <span className={styles.mono}>{r.runs} runs</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {summary.byRunner.length === 0 ? (
+                <PanelEmpty message="No agent usage recorded yet." />
+              ) : null}
+            </div>
+          </Panel>
 
-            <Panel title="Recent activity" meta={`${summary.kpis.generations} generations`}>
-              <div className={styles.activity}>
-                {summary.recent.map((a) => (
-                  <div key={a.runId} className={styles.act}>
+          <Panel title="By model" meta="last window">
+            <div className={styles.models}>
+              {summary.byModel.map((m) => {
+                const pct = Math.round(((m.costUsd || m.tokens) / modelTotal) * 100);
+                return (
+                  <div key={m.model} className={styles.model}>
+                    <div className={styles.modelName}>{m.model}</div>
+                    <div className={styles.bar}>
+                      <div className={styles.barFill} style={{ width: `${pct}%` }} />
+                    </div>
+                    <div className={styles.modelFoot}>
+                      <span className={styles.mono}>
+                        {pct}% · {insK(m.tokens)}
+                      </span>
+                      <span className={styles.mono}>{insUsd(m.costUsd)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {summary.byModel.length === 0 ? (
+                <PanelEmpty message="No model usage recorded yet." />
+              ) : null}
+            </div>
+          </Panel>
+
+          <Panel title="Needs attention" meta={`${summary.recent.length} runs`}>
+            <div className={styles.activity}>
+              {summary.recent.map((a) => {
+                const clickable = Boolean(a.automationRef && onOpenRun);
+                const body = (
+                  <>
                     <span className={cx(styles.actAgo, styles.mono)}>
                       {relativeTime(new Date(a.startedAt).toISOString())}
                     </span>
@@ -347,21 +349,43 @@ export default function InsightsScreen({ summary }: InsightsBridgeProps): JSX.El
                       <div className={styles.actApp}>
                         <span className={styles.tag}>{insKindLabel(a.kind)}</span>
                         <span>{a.ok ? '' : ' · failed'}</span>
+                        {a.provider ? (
+                          <span className={styles.actProv}> · {a.provider}</span>
+                        ) : null}
                       </div>
                       <div className={styles.actNote}>{a.label}</div>
                     </div>
                     <div className={styles.actCost}>
-                      <span className={styles.mono}>{insK(a.tokens)}</span>
-                      <span className={cx(styles.mono, styles.actUsd)}>{insUsd(a.costUsd)}</span>
+                      <span className={styles.mono}>{insUsd(a.costUsd)}</span>
+                      <span className={cx(styles.mono, styles.actUsd)}>{insK(a.tokens)}</span>
                     </div>
+                  </>
+                );
+                return clickable ? (
+                  <button
+                    key={a.runId}
+                    type="button"
+                    className={cx(styles.act, styles.actBtn)}
+                    onClick={() => onOpenRun!(a.automationRef!, a.runId)}
+                  >
+                    {body}
+                  </button>
+                ) : (
+                  <div key={a.runId} className={styles.act}>
+                    {body}
                   </div>
-                ))}
-                {summary.recent.length === 0 ? <PanelEmpty message="No activity yet." /> : null}
-              </div>
-            </Panel>
-          </div>
+                );
+              })}
+              {summary.recent.length === 0 ? <PanelEmpty message="No activity yet." /> : null}
+            </div>
+          </Panel>
         </div>
       </div>
+
+      <p className={styles.footnote}>
+        Completed runs in this vault only. Agent-reported costs come from the runner; estimates use
+        public model rates. Incomplete data is never treated as free.
+      </p>
     </div>
   );
 }

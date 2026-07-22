@@ -9,22 +9,27 @@ const summary: InsightsSummary = {
   kpis: {
     totalTokens: 128_000,
     totalCostUsd: 3.4,
+    agentReportedCostUsd: 2.1,
+    estimatedCostUsd: 1.3,
     forecastCostUsd: 5.1,
     generations: 42,
     retries: 3,
+    failedRuns: 2,
+    failedCostUsd: 0.4,
     appsTouched: 7,
-    quotaTokens: 256_000,
-    unpricedRuns: 0,
+    unpricedRuns: 1,
+    unreportedRuns: 0,
   },
   daily: [
     { date: '2026-06-08', tokens: 1000, costUsd: 0.1, runs: 2 },
     { date: '2026-06-09', tokens: 4000, costUsd: 0.4, runs: 5 },
     { date: '2026-06-10', tokens: 2000, costUsd: 0.2, runs: 3 },
   ],
-  byAutomation: [
-    { key: 'a1', label: 'Daily Digest', kind: 'automation', runs: 5, tokens: 8000, costUsd: 0.8 },
-    { key: 'c1', label: 'Builder', kind: 'build', runs: 2, tokens: 3000, costUsd: 0.3 },
+  bySource: [
+    { key: 'a1', label: 'Daily Digest', kind: 'automation', runs: 5, tokens: 8000, costUsd: 2.0 },
+    { key: 'c1', label: 'Chat', kind: 'chat', runs: 2, tokens: 3000, costUsd: 0.3 },
   ],
+  byRunner: [{ provider: 'claude-code', runs: 7, tokens: 11_000, costUsd: 2.5 }],
   byModel: [{ model: 'claude-opus-4-8', runs: 7, tokens: 11_000, costUsd: 1.1 }],
   recent: [
     {
@@ -35,63 +40,102 @@ const summary: InsightsSummary = {
       startedAt: 0,
       tokens: 500,
       costUsd: 0.05,
+      provider: 'claude-code',
     },
     {
       runId: 'r2',
       kind: 'automation',
       label: 'A failed run',
+      automationRef: 'app/x',
       ok: false,
       startedAt: 0,
       tokens: 200,
       costUsd: 0.02,
     },
   ],
+  peakDay: {
+    date: '2026-06-09',
+    tokens: 4000,
+    costUsd: 0.4,
+    topSources: [
+      { key: 'a1', label: 'Daily Digest', kind: 'automation', tokens: 3000, costUsd: 0.3 },
+    ],
+  },
+  attention: {
+    kind: 'top_source',
+    key: 'a1',
+    label: 'Daily Digest',
+    kindLabel: 'Automation',
+    share: 0.59,
+    costUsd: 2.0,
+  },
 };
 
 const empty: InsightsSummary = {
   ...summary,
+  kpis: {
+    ...summary.kpis,
+    totalTokens: 0,
+    totalCostUsd: 0,
+    agentReportedCostUsd: 0,
+    estimatedCostUsd: 0,
+    generations: 0,
+    unpricedRuns: 0,
+    unreportedRuns: 0,
+    failedRuns: 0,
+    failedCostUsd: 0,
+  },
   daily: [],
-  byAutomation: [],
+  bySource: [],
+  byRunner: [],
   byModel: [],
   recent: [],
+  peakDay: undefined,
+  attention: undefined,
 };
 
-const count = (html: string, needle: string): number => html.split(needle).length - 1;
-
-describe('InsightsScreen', () => {
-  it('renders the header and the five KPI cards', () => {
-    const html = renderToStaticMarkup(<InsightsScreen summary={summary} />);
+describe('InsightsScreen (#514)', () => {
+  it('renders the hero spend narrative and honesty line', () => {
+    const html = renderToStaticMarkup(
+      <InsightsScreen summary={summary} windowDays={30} onWindowDays={() => undefined} />,
+    );
     expect(html).toContain('<h1>Insights</h1>');
-    expect(html).toContain('Last 30 days');
-    expect(count(html, 'kpi"')).toBe(5);
-    expect(html).toContain('128k'); // insK(128_000)
-    expect(html).toContain('$3.40'); // insUsd
+    expect(html).toContain('$3.40');
+    expect(html).toContain('agent-reported');
+    expect(html).toContain('estimated');
+    expect(html).toContain('1 unpriced');
+    expect(html).toContain('At least');
+    expect(html).not.toContain('included');
   });
 
-  it('draws the daily line chart with computed stats', () => {
-    const html = renderToStaticMarkup(<InsightsScreen summary={summary} />);
-    expect(html).toContain('chartSvg');
-    expect(html).toContain('Daily avg');
-    expect(html).toContain('Peak');
-    // peak day label present
-    expect(html).toContain('2026-06-09');
-  });
-
-  it('renders the by-source table rows and by-model bars', () => {
-    const html = renderToStaticMarkup(<InsightsScreen summary={summary} />);
+  it('renders window chips and attention callout', () => {
+    const html = renderToStaticMarkup(
+      <InsightsScreen summary={summary} windowDays={30} onWindowDays={() => undefined} />,
+    );
+    expect(html).toContain('7d');
+    expect(html).toContain('30d');
+    expect(html).toContain('90d');
     expect(html).toContain('Daily Digest');
-    expect(html).toContain('Builder');
-    expect(html).toContain('claude-opus-4-8');
-    // kind labels mapped
-    expect(html).toContain('>Automation<');
-    expect(html).toContain('>Build<');
+    expect(html).toContain('% of spend');
   });
 
-  it('shows empty states across panels when there is no data', () => {
-    const html = renderToStaticMarkup(<InsightsScreen summary={empty} />);
-    expect(html).toContain('No activity in this window yet.');
-    expect(html).toContain('No runs yet.');
-    expect(html).toContain('No model usage recorded yet.');
-    expect(html).toContain('No activity yet.');
+  it('renders by-source, by-agent, by-model, and needs-attention', () => {
+    const html = renderToStaticMarkup(
+      <InsightsScreen summary={summary} windowDays={30} onWindowDays={() => undefined} />,
+    );
+    expect(html).toContain('Where it went');
+    expect(html).toContain('By agent');
+    expect(html).toContain('claude-code');
+    expect(html).toContain('By model');
+    expect(html).toContain('claude-opus-4-8');
+    expect(html).toContain('Needs attention');
+    expect(html).toContain('failed');
+  });
+
+  it('shows first-use copy when empty', () => {
+    const html = renderToStaticMarkup(
+      <InsightsScreen summary={empty} windowDays={30} onWindowDays={() => undefined} />,
+    );
+    expect(html).toContain('Run a chat, build, or automation');
   });
 });

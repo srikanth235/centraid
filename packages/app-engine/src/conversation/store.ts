@@ -132,6 +132,8 @@ export interface InsertItemInput {
   readonly model?: string;
   readonly provider?: string;
   readonly costUsd?: number;
+  /** Issue #514 — `agent` (ACP) or `estimated` (catalog). */
+  readonly costSource?: 'agent' | 'estimated';
   readonly appId?: string;
 }
 
@@ -163,6 +165,8 @@ export interface CloseItemInput {
   readonly model?: string;
   readonly provider?: string;
   readonly costUsd?: number;
+  /** Issue #514 — `agent` (ACP) or `estimated` (catalog). */
+  readonly costSource?: 'agent' | 'estimated';
 }
 
 export interface InsertAttachmentInput {
@@ -611,6 +615,7 @@ export class ConversationStore {
       input.cacheReadTokens ?? null,
       input.cacheWriteTokens ?? null,
       input.costUsd ?? null,
+      input.costSource ?? null,
       input.appId ?? null,
       input.name ?? null,
       input.argsJson ?? null,
@@ -653,6 +658,7 @@ export class ConversationStore {
       model: input.model ?? null,
       provider: input.provider ?? null,
       costUsd: input.costUsd ?? null,
+      costSource: input.costSource ?? null,
       endedAt: input.endedAt,
       durationMs: input.durationMs,
       itemId: input.itemId,

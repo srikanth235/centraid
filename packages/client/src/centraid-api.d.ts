@@ -1038,20 +1038,21 @@ interface CentraidApi {
   // publish (`POST /centraid/_automations`, `…/set-enabled`, `DELETE …`).
 }
 
-/** KPI tiles for the Insights screen. */
+/** KPI tiles for the Insights screen (issue #514). */
 export interface CentraidInsightsKpis {
-  /** input + output + cache tokens summed over the window. */
   totalTokens: number;
+  /** Known spend floor when unpriced/unreported runs exist. */
   totalCostUsd: number;
-  /** Window run-rate projected to a 30-day month. */
+  agentReportedCostUsd: number;
+  estimatedCostUsd: number;
   forecastCostUsd: number;
   generations: number;
   retries: number;
+  failedRuns: number;
+  failedCostUsd: number;
   appsTouched: number;
-  /** Placeholder monthly token allowance — no billing model exists yet. */
-  quotaTokens: number;
-  /** Finished runs left unpriced by a then-unknown model (#445). */
   unpricedRuns: number;
+  unreportedRuns: number;
 }
 
 /** One day of the consumption chart. `date` is `YYYY-MM-DD` (UTC). */
@@ -1062,18 +1063,25 @@ export interface CentraidInsightsDailyPoint {
   runs: number;
 }
 
-/** One row of the "by automation" breakdown. Chat / build runs collapse
- *  into synthetic buckets keyed by `kind`. */
-export interface CentraidInsightsAutomationRow {
+/** One row of the "by source" breakdown. Chat / build collapse to kind keys. */
+export interface CentraidInsightsSourceRow {
   key: string;
   label: string;
   kind: 'automation' | 'chat' | 'build' | string;
   runs: number;
   tokens: number;
   costUsd: number;
-  /** Last-known display name recorded on the automation's runs — set even
-   *  after the automation itself is deleted. */
   automationName?: string;
+}
+
+/** @deprecated Prefer CentraidInsightsSourceRow (#514). */
+export type CentraidInsightsAutomationRow = CentraidInsightsSourceRow;
+
+export interface CentraidInsightsRunnerRow {
+  provider: string;
+  runs: number;
+  tokens: number;
+  costUsd: number;
 }
 
 /** One row of the "by model" breakdown. */
@@ -1089,14 +1097,35 @@ export interface CentraidInsightsActivityRow {
   runId: string;
   kind: 'automation' | 'chat' | 'build' | string;
   label: string;
-  /** `<appId>/<id>` handle for automation runs — the desktop resolves the
-   *  display name from the automation list. */
   automationRef?: string;
-  /** Last-known display name recorded on the run — see `CentraidInsightsAutomationRow.automationName`. */
   automationName?: string;
   ok: boolean;
   startedAt: number;
   tokens: number;
+  costUsd: number;
+  provider?: string;
+  model?: string;
+}
+
+export interface CentraidInsightsPeakDay {
+  date: string;
+  tokens: number;
+  costUsd: number;
+  topSources: Array<{
+    key: string;
+    label: string;
+    kind: string;
+    tokens: number;
+    costUsd: number;
+  }>;
+}
+
+export interface CentraidInsightsAttention {
+  kind: 'top_source';
+  key: string;
+  label: string;
+  kindLabel: string;
+  share: number;
   costUsd: number;
 }
 
@@ -1106,9 +1135,12 @@ export interface CentraidInsightsSummary {
   generatedAt: number;
   kpis: CentraidInsightsKpis;
   daily: CentraidInsightsDailyPoint[];
-  byAutomation: CentraidInsightsAutomationRow[];
+  bySource: CentraidInsightsSourceRow[];
+  byRunner: CentraidInsightsRunnerRow[];
   byModel: CentraidInsightsModelRow[];
   recent: CentraidInsightsActivityRow[];
+  peakDay?: CentraidInsightsPeakDay;
+  attention?: CentraidInsightsAttention;
 }
 
 /** A single run record from the unified `runs` ledger. */
@@ -1498,17 +1530,20 @@ declare global {
     costUsd?: number;
     childRunId?: string;
   }
-  // Mirror of the module-level Insights types so the Insights screen can
-  // reference them by bare name without imports (issue #90).
+  // Mirror of the module-level Insights types (issue #514).
   interface CentraidInsightsKpis {
     totalTokens: number;
     totalCostUsd: number;
+    agentReportedCostUsd: number;
+    estimatedCostUsd: number;
     forecastCostUsd: number;
     generations: number;
     retries: number;
+    failedRuns: number;
+    failedCostUsd: number;
     appsTouched: number;
-    quotaTokens: number;
     unpricedRuns: number;
+    unreportedRuns: number;
   }
   interface CentraidInsightsDailyPoint {
     date: string;
@@ -1516,7 +1551,7 @@ declare global {
     costUsd: number;
     runs: number;
   }
-  interface CentraidInsightsAutomationRow {
+  interface CentraidInsightsSourceRow {
     key: string;
     label: string;
     kind: string;
@@ -1524,6 +1559,13 @@ declare global {
     tokens: number;
     costUsd: number;
     automationName?: string;
+  }
+  type CentraidInsightsAutomationRow = CentraidInsightsSourceRow;
+  interface CentraidInsightsRunnerRow {
+    provider: string;
+    runs: number;
+    tokens: number;
+    costUsd: number;
   }
   interface CentraidInsightsModelRow {
     model: string;
@@ -1541,15 +1583,40 @@ declare global {
     startedAt: number;
     tokens: number;
     costUsd: number;
+    provider?: string;
+    model?: string;
+  }
+  interface CentraidInsightsPeakDay {
+    date: string;
+    tokens: number;
+    costUsd: number;
+    topSources: Array<{
+      key: string;
+      label: string;
+      kind: string;
+      tokens: number;
+      costUsd: number;
+    }>;
+  }
+  interface CentraidInsightsAttention {
+    kind: 'top_source';
+    key: string;
+    label: string;
+    kindLabel: string;
+    share: number;
+    costUsd: number;
   }
   interface CentraidInsightsSummary {
     windowDays: number;
     generatedAt: number;
     kpis: CentraidInsightsKpis;
     daily: CentraidInsightsDailyPoint[];
-    byAutomation: CentraidInsightsAutomationRow[];
+    bySource: CentraidInsightsSourceRow[];
+    byRunner: CentraidInsightsRunnerRow[];
     byModel: CentraidInsightsModelRow[];
     recent: CentraidInsightsActivityRow[];
+    peakDay?: CentraidInsightsPeakDay;
+    attention?: CentraidInsightsAttention;
   }
   interface CentraidHealthComponent {
     component: string;

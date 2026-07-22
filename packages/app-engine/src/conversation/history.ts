@@ -27,7 +27,7 @@ import type { WorkspaceProvider } from '../stores/vault-workspace.js';
 import { ConversationStore, type ConversationMeta } from './store.js';
 import type { Item, RunKind, Turn } from './schema.js';
 import { ASSISTANT_APP_ID, isValidAppOrAssistantId } from '../registry/app-paths.js';
-import { costForUsage } from '../model-pricing.js';
+import { resolveItemCost } from '../model-pricing.js';
 import {
   groupRetryFamilies,
   parseStepOutput,
@@ -155,6 +155,9 @@ export type TurnNode =
       outputTokens?: number;
       cacheReadTokens?: number;
       cacheWriteTokens?: number;
+      /** Agent/ACP-reported USD when present (issue #514). */
+      costUsd?: number;
+      costSource?: 'agent' | 'estimated';
       startedAt: number;
       endedAt: number;
     }
@@ -722,13 +725,23 @@ function recordNode(
   node: TurnNode,
 ): void {
   if (node.kind === 'step') {
-    // Freeze the per-call cost at write time — NULL when the model is unknown.
-    const cost = costForUsage(node.model, {
+    // Prefer agent/ACP cost; else catalog estimate; else NULL (issue #514).
+    const usage = {
       ...(node.inputTokens !== undefined ? { inputTokens: node.inputTokens } : {}),
       ...(node.outputTokens !== undefined ? { outputTokens: node.outputTokens } : {}),
       ...(node.cacheReadTokens !== undefined ? { cacheReadTokens: node.cacheReadTokens } : {}),
       ...(node.cacheWriteTokens !== undefined ? { cacheWriteTokens: node.cacheWriteTokens } : {}),
-    });
+    };
+    const resolved =
+      node.costSource === 'agent' && node.costUsd !== undefined
+        ? { costUsd: node.costUsd, costSource: 'agent' as const }
+        : node.costSource === 'estimated' && node.costUsd !== undefined
+          ? { costUsd: node.costUsd, costSource: 'estimated' as const }
+          : resolveItemCost({
+              ...(node.costUsd !== undefined ? { agentCostUsd: node.costUsd } : {}),
+              model: node.model,
+              usage,
+            });
     store.insertItem({
       itemId: randomUUID(),
       turnId,
@@ -742,7 +755,8 @@ function recordNode(
       ...(node.outputTokens !== undefined ? { outputTokens: node.outputTokens } : {}),
       ...(node.cacheReadTokens !== undefined ? { cacheReadTokens: node.cacheReadTokens } : {}),
       ...(node.cacheWriteTokens !== undefined ? { cacheWriteTokens: node.cacheWriteTokens } : {}),
-      ...(cost !== undefined ? { costUsd: cost } : {}),
+      ...(resolved.costUsd !== undefined ? { costUsd: resolved.costUsd } : {}),
+      ...(resolved.costSource !== undefined ? { costSource: resolved.costSource } : {}),
       startedAt: node.startedAt,
       endedAt: node.endedAt,
       durationMs: Math.max(0, node.endedAt - node.startedAt),

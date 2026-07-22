@@ -4,9 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getInsightsSummary = vi.fn();
 const listAutomations = vi.fn();
+const navigate = vi.fn();
 vi.mock('../../../gateway-client.js', () => ({
-  getInsightsSummary: () => getInsightsSummary(),
+  getInsightsSummary: (input?: { windowDays?: number }) => getInsightsSummary(input),
   listAutomations: () => listAutomations(),
+}));
+vi.mock('../actions.js', () => ({
+  useShellActions: () => ({ navigate }),
 }));
 
 let InsightsRoute: typeof import('./InsightsRoute.js').default;
@@ -17,6 +21,7 @@ beforeEach(async () => {
   ({ default: InsightsRoute } = await import('./InsightsRoute.js'));
   getInsightsSummary.mockReset();
   listAutomations.mockReset();
+  navigate.mockReset();
   listAutomations.mockResolvedValue([]);
 });
 
@@ -43,18 +48,41 @@ const summary = {
   kpis: {
     totalTokens: 128_000,
     totalCostUsd: 3.4,
+    agentReportedCostUsd: 2.0,
+    estimatedCostUsd: 1.4,
     forecastCostUsd: 5.1,
     generations: 42,
     retries: 3,
+    failedRuns: 0,
+    failedCostUsd: 0,
     appsTouched: 7,
-    quotaTokens: 256_000,
     unpricedRuns: 0,
+    unreportedRuns: 0,
   },
   daily: [{ date: '2026-06-08', tokens: 1000, costUsd: 0.1, runs: 2 }],
-  byAutomation: [],
+  bySource: [] as Array<{
+    key: string;
+    label: string;
+    kind: string;
+    runs: number;
+    tokens: number;
+    costUsd: number;
+    automationName?: string;
+  }>,
+  byRunner: [],
   byModel: [],
-  recent: [],
-} as unknown as Awaited<ReturnType<typeof getInsightsSummary>>;
+  recent: [] as Array<{
+    runId: string;
+    kind: string;
+    label: string;
+    automationRef?: string;
+    automationName?: string;
+    ok: boolean;
+    startedAt: number;
+    tokens: number;
+    costUsd: number;
+  }>,
+};
 
 describe('InsightsRoute', () => {
   it('shows a loading line, then the dashboard once the summary resolves', async () => {
@@ -67,6 +95,7 @@ describe('InsightsRoute', () => {
     });
     expect(el.querySelector('.cd-au-loading')).toBeNull();
     expect(el.querySelector('.mainScroll')).not.toBeNull();
+    expect(el.textContent).toContain('$3.40');
   });
 
   it('renders an error line when the fetch rejects', async () => {
@@ -75,13 +104,13 @@ describe('InsightsRoute', () => {
     expect(el.querySelector('.pageEmpty')?.textContent).toContain('offline');
   });
 
-  it('resolves automation display names for the by-source + recent rows', async () => {
+  it('resolves automation display names for by-source + recent rows', async () => {
     listAutomations.mockResolvedValue([
       { ref: 'system-health-check/system-health-check', name: 'System health check' },
     ]);
     getInsightsSummary.mockResolvedValue({
-      ...(summary as object),
-      byAutomation: [
+      ...summary,
+      bySource: [
         {
           key: 'system-health-check/system-health-check',
           label: 'Automation',
@@ -105,17 +134,15 @@ describe('InsightsRoute', () => {
       ],
     });
     const el = await render();
-    // Both the "By source" row and the "Recent activity" row show the real
-    // name, not the generic bucket label / raw handler summary.
     const hits = el.textContent?.match(/System health check/g) ?? [];
     expect(hits.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('falls back to the run-recorded automation name for a deleted automation, ahead of the raw ref', async () => {
+  it('falls back to the run-recorded automation name for a deleted automation', async () => {
     listAutomations.mockResolvedValue([]);
     getInsightsSummary.mockResolvedValue({
-      ...(summary as object),
-      byAutomation: [
+      ...summary,
+      bySource: [
         {
           key: 'gone-app/gone-auto',
           label: 'Automation',
@@ -146,35 +173,9 @@ describe('InsightsRoute', () => {
     expect(el.textContent).not.toContain('gone-app/gone-auto');
   });
 
-  it('falls back to the raw ref for deleted automations, matching the overview', async () => {
-    listAutomations.mockResolvedValue([]);
-    getInsightsSummary.mockResolvedValue({
-      ...(summary as object),
-      byAutomation: [
-        {
-          key: 'gone-app/gone-auto',
-          label: 'Automation',
-          kind: 'automation',
-          runs: 1,
-          tokens: 0,
-          costUsd: 0,
-        },
-      ],
-      recent: [
-        {
-          runId: 'r1',
-          kind: 'automation',
-          label: 'ok',
-          automationRef: 'gone-app/gone-auto',
-          ok: true,
-          startedAt: 1750000000000,
-          tokens: 0,
-          costUsd: 0,
-        },
-      ],
-    });
-    const el = await render();
-    const hits = el.textContent?.match(/gone-app\/gone-auto/g) ?? [];
-    expect(hits.length).toBeGreaterThanOrEqual(2);
+  it('requests the default 30-day window', async () => {
+    getInsightsSummary.mockResolvedValue(summary);
+    await render();
+    expect(getInsightsSummary).toHaveBeenCalledWith({ windowDays: 30 });
   });
 });

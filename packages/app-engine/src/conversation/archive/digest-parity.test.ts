@@ -3,7 +3,7 @@ import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // identical before archive (all live run_summary rows) and after archive+prune
 // (live rows + conversation_digest rollups), driven through the REAL
 // InsightsStore over the same journal handle. `recent` is live-only by design,
-// so this compares the aggregate surfaces the issue names: kpis, byAutomation,
+// so this compares the aggregate surfaces the issue names: kpis, bySource,
 // byModel.
 
 import { createHash } from 'node:crypto';
@@ -86,7 +86,7 @@ function seedFinishedTurn(
 }
 
 describe('digest parity with pre-archive rollups', () => {
-  it('kpis / byAutomation / byModel are identical before archive and after prune', () => {
+  it('kpis / bySource / byModel are identical before archive and after prune', () => {
     const dir = tempDirSync('centraid-digest-parity-');
     const dbPath = path.join(dir, 'journal.db');
     const journal = openJournalDb(dbPath);
@@ -240,7 +240,7 @@ describe('digest parity with pre-archive rollups', () => {
 
     const norm = <T extends { key?: string; model?: string }>(rows: T[]): T[] =>
       [...rows].sort((a, b) => `${a.key ?? a.model}`.localeCompare(`${b.key ?? b.model}`));
-    expect(norm(after.byAutomation)).toEqual(norm(before.byAutomation));
+    expect(norm(after.bySource)).toEqual(norm(before.bySource));
     expect(norm(after.byModel)).toEqual(norm(before.byModel));
     journal.close();
   });

@@ -57,20 +57,22 @@ export interface DiscoverBridgeProps {
   onTemplateContext: (t: DiscoverTemplate, anchor: DiscoverMenuAnchor) => void;
 }
 
-// ── Insights ────────────────────────────────────────────────────────────────
-// DTOs mirror CentraidInsightsSummary & friends (centraid-api.d.ts) field for
-// field, so the vanilla side's fetched summary passes through unchanged without
-// the island tsconfig needing the ambient global types.
+// ── Insights (#514 transparency rewrite) ────────────────────────────────────
+// DTOs mirror CentraidInsightsSummary & friends (centraid-api.d.ts).
 export interface InsightsKpis {
   totalTokens: number;
+  /** Known spend floor when unpriced/unreported runs exist. */
   totalCostUsd: number;
+  agentReportedCostUsd: number;
+  estimatedCostUsd: number;
   forecastCostUsd: number;
   generations: number;
   retries: number;
+  failedRuns: number;
+  failedCostUsd: number;
   appsTouched: number;
-  quotaTokens: number;
-  /** Finished runs left unpriced by a then-unknown model (#445). */
   unpricedRuns: number;
+  unreportedRuns: number;
 }
 export interface InsightsDailyPoint {
   date: string;
@@ -78,10 +80,17 @@ export interface InsightsDailyPoint {
   costUsd: number;
   runs: number;
 }
-export interface InsightsAutomationRow {
+export interface InsightsSourceRow {
   key: string;
   label: string;
   kind: string;
+  runs: number;
+  tokens: number;
+  costUsd: number;
+  automationName?: string;
+}
+export interface InsightsRunnerRow {
+  provider: string;
   runs: number;
   tokens: number;
   costUsd: number;
@@ -96,9 +105,33 @@ export interface InsightsActivityRow {
   runId: string;
   kind: string;
   label: string;
+  automationRef?: string;
+  automationName?: string;
   ok: boolean;
   startedAt: number;
   tokens: number;
+  costUsd: number;
+  provider?: string;
+  model?: string;
+}
+export interface InsightsPeakDay {
+  date: string;
+  tokens: number;
+  costUsd: number;
+  topSources: Array<{
+    key: string;
+    label: string;
+    kind: string;
+    tokens: number;
+    costUsd: number;
+  }>;
+}
+export interface InsightsAttention {
+  kind: 'top_source';
+  key: string;
+  label: string;
+  kindLabel: string;
+  share: number;
   costUsd: number;
 }
 export interface InsightsSummary {
@@ -106,12 +139,18 @@ export interface InsightsSummary {
   generatedAt: number;
   kpis: InsightsKpis;
   daily: InsightsDailyPoint[];
-  byAutomation: InsightsAutomationRow[];
+  bySource: InsightsSourceRow[];
+  byRunner: InsightsRunnerRow[];
   byModel: InsightsModelRow[];
   recent: InsightsActivityRow[];
+  peakDay?: InsightsPeakDay;
+  attention?: InsightsAttention;
 }
 export interface InsightsBridgeProps {
   summary: InsightsSummary;
+  windowDays: number;
+  onWindowDays: (days: number) => void;
+  onOpenRun?: (automationId: string, runId: string) => void;
 }
 
 // ── Vault pane ────────────────────────────────────────────────────────────

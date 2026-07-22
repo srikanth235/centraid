@@ -2,9 +2,10 @@
  * Per-model token pricing (issue #90 open question 4; live catalog #445).
  *
  * `items.cost_usd` is frozen at write time — prices drift, so a run recorded
- * today keeps the cost it was billed at. This module is the price seam that
- * conversion goes through; the repricing backfill (#445) is the ONLY sanctioned
- * rewriter of already-frozen costs.
+ * today keeps the cost it was billed at. Prefer agent/ACP-reported USD when
+ * present (`resolveItemCost`, issue #514); otherwise this module's catalog
+ * estimate. The repricing backfill (#445) is the ONLY sanctioned rewriter of
+ * already-frozen *estimated* costs (never `cost_source = 'agent'`).
  *
  * A missing price returns `undefined`, NOT 0 — the ledger stores NULL so
  * "no price known for this model" stays distinguishable from a genuine
@@ -61,4 +62,31 @@ export function priceForModel(model: string | undefined): ModelPrice | undefined
 export function costForUsage(model: string | undefined, usage: TokenUsage): number | undefined {
   const entry = lookupEntry(model);
   return entry ? costFromEntry(entry, usage) : undefined;
+}
+
+/** Where a frozen `cost_usd` came from (issue #514). */
+export type CostSource = 'agent' | 'estimated';
+
+export interface ResolvedItemCost {
+  readonly costUsd?: number;
+  readonly costSource?: CostSource;
+}
+
+/**
+ * Prefer agent/ACP-reported USD; fall back to the catalog estimate. Marks
+ * provenance so Insights can be honest and reprice never clobbers agent costs.
+ */
+export function resolveItemCost(opts: {
+  agentCostUsd?: number;
+  model?: string;
+  usage: TokenUsage;
+}): ResolvedItemCost {
+  if (opts.agentCostUsd !== undefined && Number.isFinite(opts.agentCostUsd)) {
+    return { costUsd: opts.agentCostUsd, costSource: 'agent' };
+  }
+  const estimated = costForUsage(opts.model, opts.usage);
+  if (estimated !== undefined) {
+    return { costUsd: estimated, costSource: 'estimated' };
+  }
+  return {};
 }

@@ -233,6 +233,8 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
           outputTokens?: number;
           cacheReadTokens?: number;
           cacheWriteTokens?: number;
+          costUsd?: number;
+          costSource?: 'agent' | 'estimated';
         }
       | undefined,
   };
@@ -270,6 +272,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
         acc.finalText = acc.aiText || event.text;
         return;
       case 'usage':
+        // Keep cost + provenance for the ledger (issue #514) — do not strip.
         acc.usage = {
           ...(event.model !== undefined ? { model: event.model } : {}),
           ...(event.provider !== undefined ? { provider: event.provider } : {}),
@@ -281,6 +284,8 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
           ...(event.cacheWriteTokens !== undefined
             ? { cacheWriteTokens: event.cacheWriteTokens }
             : {}),
+          ...(event.costUsd !== undefined ? { costUsd: event.costUsd } : {}),
+          ...(event.costSource !== undefined ? { costSource: event.costSource } : {}),
         };
         return;
       case 'error':
@@ -299,12 +304,17 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
     }
   };
   const onEvent = (event: TurnStreamEvent): void => {
-    // Price the usage event at the one allowlisted seam (model-pricing.ts) so
-    // clients can show a live cost without mirroring model rate tables.
+    // Prefer agent/ACP cost; fill catalog estimate only when missing (#514).
     let priced = event;
-    if (priced.type === 'usage' && priced.costUsd === undefined) {
-      const costUsd = costForUsage(priced.model, priced);
-      if (costUsd !== undefined) priced = { ...priced, costUsd };
+    if (priced.type === 'usage') {
+      if (priced.costUsd !== undefined && priced.costSource === undefined) {
+        priced = { ...priced, costSource: 'agent' };
+      } else if (priced.costUsd === undefined) {
+        const costUsd = costForUsage(priced.model, priced);
+        if (costUsd !== undefined) {
+          priced = { ...priced, costUsd, costSource: 'estimated' };
+        }
+      }
     }
     accumulate(priced);
     writeEvent(priced);

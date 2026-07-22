@@ -90,6 +90,7 @@ export interface RawItem {
   cache_read_tokens: number | null;
   cache_write_tokens: number | null;
   cost_usd: number | null;
+  cost_source: string | null;
   app_id: string | null;
   ok: number;
   error: string | null;
@@ -193,6 +194,9 @@ export function itemFromRaw(raw: RawItem): Item {
     ...(raw.model !== null ? { model: raw.model } : {}),
     ...(raw.provider !== null ? { provider: raw.provider } : {}),
     ...(raw.cost_usd !== null ? { costUsd: raw.cost_usd } : {}),
+    ...(raw.cost_source === 'agent' || raw.cost_source === 'estimated'
+      ? { costSource: raw.cost_source }
+      : {}),
     ...(raw.app_id !== null ? { appId: raw.app_id } : {}),
     ...(raw.child_turn_id !== null ? { childTurnId: raw.child_turn_id } : {}),
   };
@@ -455,9 +459,10 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       INSERT INTO items (
         id, turn_id, ordinal, batch_id, kind, role, text, model, provider,
         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd,
+        cost_source,
         app_id, name, args_json, output_json, child_turn_id,
         ok, error, started_at, ended_at, duration_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     // The inbound message (issue #190) — ordinal 0 of the turn. Attachments
     // hang off the returned item id.
@@ -478,6 +483,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
         input_tokens = $inputTokens, output_tokens = $outputTokens,
         cache_read_tokens = $cacheReadTokens, cache_write_tokens = $cacheWriteTokens,
         model = $model, provider = $provider, cost_usd = $costUsd,
+        cost_source = $costSource,
         ended_at = $endedAt, duration_ms = $durationMs
       WHERE id = $itemId
     `),
