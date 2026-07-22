@@ -1,13 +1,9 @@
 #!/usr/bin/env node
 /**
  * Report which release secret *names* are present in the environment.
- * Never prints secret values (issue #501 / docs/enrollment.md).
+ * Never prints secret values (issue #501 / #512 / docs/enrollment.md).
  *
  *   node scripts/release/verify-secrets.mjs [--strict]
- *
- * Exit 0 always unless --strict and a required name is missing.
- * In CI, secrets are injected as env vars by Actions — locally this reports
- * whatever is exported in the shell (usually all absent).
  */
 
 const DESKTOP_APPLE = ['APPLE_API_KEY', 'APPLE_API_KEY_ID', 'APPLE_API_ISSUER'];
@@ -27,12 +23,17 @@ const MOBILE = [
   'CENTRAID_UPLOAD_KEY_PASSWORD',
 ];
 const WEB = ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'];
+const GATEWAY_NPM = ['NPM_TOKEN'];
+/** GHCR uses GITHUB_TOKEN + packages:write in Actions; local probe is informational. */
+const GATEWAY_IMAGE = ['GITHUB_TOKEN'];
 
 const groups = {
   'desktop-apple': DESKTOP_APPLE,
   'desktop-azure': DESKTOP_AZURE,
   mobile: MOBILE,
   web: WEB,
+  'gateway-npm': GATEWAY_NPM,
+  'gateway-image': GATEWAY_IMAGE,
 };
 
 const strict = process.argv.includes('--strict');
@@ -58,8 +59,6 @@ for (const [group, names] of Object.entries(groups)) {
 console.log(JSON.stringify({ note: 'values never printed', groups: report }, null, 2));
 
 if (strict) {
-  // Strict only fails when nothing at all is enrolled for desktop (optional
-  // until maintainer opts in). Use --strict-desktop-apple etc. later.
   for (const g of Object.values(report)) {
     if (!g.ready) missingRequired++;
   }

@@ -45,11 +45,25 @@ When a release prepare/publish attempt strands halfway. Policy: [release.md](../
 1. Leave the prepare PR open or merge version bump only if maintainer wants versions on main without artifacts.
 2. Do not run publish skills.
 
+### F — Wrong surface shipped / mobile accidentally skipped
+
+1. Product version stamps are still correct if `sync-versions` ran — do **not** invent a surface-local version.
+2. Dispatch the missing surface (`gh workflow run release-mobile.yml …` or re-run the tag workflow).
+3. Update `artifacts/release-ship.json` / release notes only if maintainers care about the audit trail.
+
+### G — Tempted to bump version because CI failed
+
+1. **Stop.** R5: never bump product version only to fix a build.
+2. Fix code or workflow; rebuild same tag or surface retry path.
+3. Only cut a new patch when there is a real product fix to ship.
+
 ## Checklist before retry
 
-- [ ] Single shared version everywhere
+- [ ] Single shared product version everywhere (no surface forks)
+- [ ] Protocol constants consistent if handshake changed
 - [ ] Changelog matches intent (patch vs minor per D4)
 - [ ] No extra feature commits on the release tag
+- [ ] Ship set still correct (`bun run release:matrix`)
 - [ ] Maintainer re-approved if anything changed
 
 ## Related

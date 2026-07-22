@@ -46,7 +46,7 @@ The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageM
 | [docs/protocol.md](docs/protocol.md) | C1 two-contract, COMPAT tags, wire-schema purity, RPC plane naming |
 | [docs/platform-gating.md](docs/platform-gating.md) | `isWeb` / `isNative` / Electron / compact form-factor |
 | [docs/client-keying.md](docs/client-keying.md) | Cache/UI key axes (vault path, gateway, conversation) |
-| [docs/release.md](docs/release.md) | Prepare vs publish, patch/minor, beta, skills |
+| [docs/release.md](docs/release.md) | Three numbers, surfaces matrix, prepare vs publish, patch/minor, beta |
 | [docs/identifiers.md](docs/identifiers.md) | `dev.centraid.*` table (J5) |
 | [docs/enrollment.md](docs/enrollment.md) | Human checklist: Apple / Azure / Play signing |
 | [docs/config-ownership.md](docs/config-ownership.md) | Which writer wins for dual-write config surfaces |

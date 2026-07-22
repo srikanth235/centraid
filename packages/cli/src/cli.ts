@@ -93,6 +93,8 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
         {
           ok: true,
           version: result.info.version,
+          protocolVersion: result.info.protocolVersion,
+          minSupportedProtocol: result.info.minSupportedProtocol,
           schemaEpoch: result.info.schemaEpoch,
           instanceId: result.info.instanceId,
           capabilities: result.info.capabilities,
