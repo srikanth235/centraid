@@ -9,7 +9,8 @@
 
 import type { TurnStreamEvent } from '@centraid/app-engine';
 
-export type AcpStopReason =
+/** Wire stopReason values we map explicitly (plus open-ended future values). */
+type AcpStopReason =
   | 'end_turn'
   | 'max_tokens'
   | 'max_turn_requests'
@@ -31,7 +32,7 @@ export interface StopReasonOutcome {
  * when the local abort signal fired (that path emits `aborted` instead).
  */
 export function outcomeForStopReason(stopReason: unknown): StopReasonOutcome {
-  const reason = typeof stopReason === 'string' ? stopReason : 'end_turn';
+  const reason: AcpStopReason = typeof stopReason === 'string' ? stopReason : 'end_turn';
 
   if (reason === 'end_turn') {
     return { emitFinal: true };

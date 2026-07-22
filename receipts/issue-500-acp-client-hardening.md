@@ -95,7 +95,7 @@ bunx oxlint --format github .
 bun run coverage
 ```
 
-CI green-up notes (PR #502): fixed `no-useless-spread` in `capabilities-cache.ts`; added unit tests for `session-config`, `session-warm`, `capabilities-cache`/`probeAcpCapabilities`, and extra `agent-errors` branches so `packages/agent-runtime/src/**` branch coverage clears the 84% floor.
+CI green-up notes (PR #502): fixed `no-useless-spread` in `capabilities-cache.ts`; added unit tests for `session-config`, `session-warm`, `capabilities-cache`/`probeAcpCapabilities`, and extra `agent-errors` branches so `packages/agent-runtime/src/**` branch coverage clears the 84% floor; unexported unused `AcpStopReason` type for knip.
 
 ## Accounting
 
