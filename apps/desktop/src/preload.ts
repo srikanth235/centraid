@@ -65,6 +65,7 @@ const Channel = {
 
   // Relaunch to update (dist watcher in main/update-watcher.ts)
   UPDATE_STATUS: 'centraid:update:status',
+  UPDATE_CHECK: 'centraid:update:check',
   UPDATE_RELAUNCH: 'centraid:update:relaunch',
   GATEWAY_SERVICE_INSTALL: 'centraid:gateway:service-install',
 
@@ -340,6 +341,7 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // build landing while the app runs; the sidebar pill snapshots the status,
   // subscribes to the broadcast, and triggers the relaunch.
   getUpdateStatus: () => ipcRenderer.invoke(Channel.UPDATE_STATUS),
+  checkForUpdates: () => ipcRenderer.invoke(Channel.UPDATE_CHECK),
   relaunchToUpdate: () => ipcRenderer.invoke(Channel.UPDATE_RELAUNCH),
   installGatewayService: (): Promise<{ ok: true } | { ok: false; error: string }> =>
     ipcRenderer.invoke(Channel.GATEWAY_SERVICE_INSTALL),

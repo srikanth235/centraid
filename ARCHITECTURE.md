@@ -15,6 +15,18 @@ The browser extension (`apps/extension`) is a narrower paired-device client over
 
 The monorepo is orchestrated by [Turborepo](https://turbo.build) and run on [Bun](https://bun.sh) (`packageManager` pinned at the root). Linting and formatting use [oxlint](https://oxc.rs/docs/guide/usage/linter) and [oxfmt](https://github.com/oxc-project/oxfmt); type checking is TypeScript per workspace; tests run on [vitest](https://vitest.dev) with v8 coverage.
 
+### Deploy surfaces (issue #501)
+
+| Surface | How it ships |
+| --- | --- |
+| **Desktop** | Tag `v*` → `release-desktop.yml` (macOS / Windows / Linux). Installers attach to the GitHub Release when signing secrets are enrolled; electron-updater uses `latest*.yml` / beta channel. |
+| **Mobile** | `release-mobile.yml` (dispatch) → EAS Build/Submit when enrolled. J8 path-filtered `assembleDebug` CI deferred (too slow for PR gate). Store-only routine path (J7). |
+| **Web PWA** | Continuous host scaffold `app.centraid.dev` (`apps/web` + `web.yml`). Gateway also embeds the built PWA for LAN/ticket clients. |
+| **Docs/home** | Cloudflare static assets (`docs:bundle` → `dist/site`); GHA is gate-only. |
+| **Gateway daemon** | Primary: monorepo build + `centraid-gateway` + optional H5 OS service. Optional: GHCR image on tags (`packages/gateway/Dockerfile`). |
+
+Signing residual: [docs/enrollment.md](docs/enrollment.md). Release ritual: [docs/release.md](docs/release.md).
+
 ## Runtime model: `conversation ⊃ turn ⊃ item`
 
 Centraid's first principle is that **everything is agentic chat** — automation is a conversation whose other side is a deterministic script instead of a person, and whose transcript is durable. A chat window, an automation, and a builder session are each a single-kind conversation, recorded in one ledger (the conversation-ledger band of the per-vault `journal.db` — the old per-app `runtime.sqlite` and central `analytics.sqlite` became a per-vault `transcripts.db` in #280, then folded into `journal.db` as a second band beside its audit stream). The vocabulary, per `packages/app-engine/src/conversation/schema.ts` and `packages/app-engine/src/stores/gateway-db.ts`:

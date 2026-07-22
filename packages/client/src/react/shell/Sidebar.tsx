@@ -113,6 +113,10 @@ export interface SidebarProps {
    */
   updateVersion?: string;
   onRelaunchToUpdate?: () => void;
+  /** Pill label override (download in flight vs ready to install — #501). */
+  updatePillTitle?: string;
+  /** When false, pill is shown but disabled (download still running). */
+  updateReadyToInstall?: boolean;
   /** Open the "What's new" changelog modal. Omitted = the item is hidden. */
   onWhatsNew?: () => void;
 }
@@ -465,10 +469,17 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         />
       ) : null}
       {props.updateVersion !== undefined && props.onRelaunchToUpdate ? (
-        <button className={chrome.sbUpdate} type="button" onClick={props.onRelaunchToUpdate}>
+        <button
+          className={chrome.sbUpdate}
+          type="button"
+          onClick={props.onRelaunchToUpdate}
+          disabled={props.updateReadyToInstall === false}
+        >
           <Logo size={26} />
           <span className={chrome.sbUpdateBody}>
-            <span className={chrome.sbUpdateTitle}>Relaunch to update</span>
+            <span className={chrome.sbUpdateTitle}>
+              {props.updatePillTitle ?? 'Relaunch to update'}
+            </span>
             <span className={chrome.sbUpdateVersion}>v{props.updateVersion}</span>
           </span>
           <ArrowRightGlyph />

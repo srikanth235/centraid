@@ -45,7 +45,38 @@ if (existsSync(builderYml)) {
   ok(yml.includes('target: dmg') || yml.includes('dmg'), 'macOS DMG target (I10)');
   ok(yml.includes('zip') || yml.includes('target: zip'), 'macOS ZIP target for updater (I10)');
   ok(yml.includes('perMachine: false') || yml.includes('nsis'), 'Windows NSIS per-user (I10)');
+  ok(yml.includes('AppImage') || yml.includes('linux:'), 'Linux AppImage target (#501)');
 }
+
+const desktopPkg = path.join(desktop, 'package.json');
+if (existsSync(desktopPkg)) {
+  const pkg = JSON.parse(readFileSync(desktopPkg, 'utf8'));
+  ok(
+    Boolean(pkg.devDependencies?.['electron-builder']),
+    'electron-builder pinned in desktop package.json',
+  );
+  // Runtime dep (packaged app loads it) — not a build-only devDependency.
+  ok(
+    Boolean(pkg.dependencies?.['electron-updater'] || pkg.devDependencies?.['electron-updater']),
+    'electron-updater pinned in desktop package.json',
+  );
+  ok(Boolean(pkg.scripts?.dist), 'desktop dist script present');
+}
+
+ok(
+  existsSync(path.join(root, 'scripts/release/sync-versions.mjs')),
+  'sync-versions.mjs present (#501)',
+);
+ok(
+  existsSync(path.join(root, 'scripts/release/restamp-rollout.mjs')),
+  'restamp-rollout.mjs present (I8)',
+);
+ok(existsSync(path.join(root, 'apps/mobile/eas.json')), 'mobile eas.json present');
+ok(
+  existsSync(path.join(root, 'apps/web/wrangler.json')),
+  'web wrangler.json present (app.centraid.dev)',
+);
+ok(existsSync(path.join(root, 'packages/gateway/Dockerfile')), 'gateway Dockerfile present');
 
 if (existsSync(preloadSrc)) {
   const src = readFileSync(preloadSrc, 'utf8');

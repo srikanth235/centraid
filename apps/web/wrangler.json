@@ -1,0 +1,17 @@
+{
+  // Continuous public PWA host scaffold (issue #501).
+  // Origin target: https://app.centraid.dev (K5: first public install origin sticks).
+  // Gateway-embedded PWA remains the LAN / always-on fallback (ARCHITECTURE.md).
+  // Deploy when CLOUDFLARE_* secrets present; otherwise CI is build+smoke only.
+  "name": "centraid-web",
+  "compatibility_date": "2024-11-01",
+  "compatibility_flags": [],
+  "assets": {
+    "directory": "./dist"
+  },
+  // Bind once DNS is in the Cloudflare account:
+  // "routes": [{ "pattern": "app.centraid.dev", "custom_domain": true }],
+  "observability": {
+    "enabled": true
+  }
+}
