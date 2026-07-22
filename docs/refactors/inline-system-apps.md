@@ -51,12 +51,31 @@ per-device revocable `owner` enrollment trust tier.
 
 ## Surface inventory (Phase 1 deliverable)
 
-_To be filled by Phase 1 — every router surface bundled apps consume, mapped to its
-shell-native replacement._
+Every router surface bundled apps consume today, with the serving code, the in-app
+consumer, and the shell-native replacement inline apps bind to. Router parse:
+`packages/app-engine/src/http/router.ts` (one `Route` kind per row). The served
+(iframe/WebView) path keeps all of these — mobile WebViews and the builder preview
+still consume them; the rows describe what the **inline** path replaces them with.
 
-| Surface | Serving code | Consumers | Shell-native replacement |
+| Surface | Serving code | App-side consumer | Shell-native replacement |
 | --- | --- | --- | --- |
-| _pending_ | | | |
+| `POST /centraid/_tool/<name>` (`centraid_read`/`_write`/`_describe`, kit.query/kit.act) | `router.ts` `tool-invoke`; bridge injected by `static-server.ts` → `bridge-script.ts` | `window.centraid.read/write/describe` via `kit.js` | `ReplicaShellSession.read/search` for reads; `ReplicaShellSession.write(appId, { action, input, optimistic, intentId })` → replica intent dispatch (`replica-intent-route.ts`) for writes. `describe` is not needed inline (manifests ship in `@centraid/blueprints`) |
+| `GET /centraid/<app>/_changes` SSE | `router.ts` `app-changes` → `changes-sse.ts` | bridge legacy `EventSource` fallback; managed shells fan out a parent tail | `ReplicaShellSession.subscribe(appId, deps, listener)` — replica invalidations, no per-app SSE |
+| `GET /centraid/<app>/_query/<name>.mjs` | `router.ts` `app-query-bundle` → `query-bundle.ts` (esbuild, imports confined to `queries/`) | `bridge-script.ts` `loadQueryModule`/`runLocalQuery` (local replica read, tool fallback) | direct import of `queries/<name>.ts` from `@centraid/blueprints`, executed against the shell replica coordinator (no network bundle) |
+| `POST /centraid/<app>/_turn` (+ `GET/PUT /_turn/model`) SSE chat | `router.ts` `app-chat` → `turn-routes.ts` | **all 8 apps**: `window.KIT_ASK` + `[data-ask-mount]`; `kit.js` ask panel + `kit/conversation-client.js`/`turn-stream.js`/`consent-cards.js` | shell conversation surface (`gateway-client-conversation.ts` / `useAssistantConversations`) scoped to the app, including parked-write consent cards |
+| `GET/PUT /centraid/_apps/<id>/settings` | `router.ts` `app-settings-read/-write` | server-side bake (theme/knobs) + settings postMessage | shell already owns `AppSettingsController.tsx` / `appSettingsData.ts`; inline apps read knobs through the same client data module — no bake, no postMessage |
+| App static assets (HTML, `_bundle.<hash>.js`, serve-time `.tsx`/`.module.css` transpile) | `router.ts` `app-static` → `static-server.ts`, `app-bundle.ts`, `asset-variants.ts` | browser document/module loads | none — code ships in the shell bundle as a per-app lazy chunk; served path remains for WebView/builder |
+| Consent surface `/centraid/_vault/parked` (+ `/parked/<id>`) | gateway vault plane | `kit.js` ask panel consent cards | shell-native consent flow (same Approvals surface the shell already renders) |
+| Blobs `/centraid/_vault/blobs` (CAS) | gateway `blob-routes.ts` | `kit.js` attachments (`renderAttachments`, `wireAttachInput`, 256 KB inline cap) | shell gateway client blob routes (unchanged HTTP surface, called from shell code with shell auth — no bridge `centraid:resource` hop) |
+| Theme/settings postMessage channels (`centraid:theme`, `centraid:settings`) + URL `?theme=&bgL=` bake | `AppFrame.tsx` postMessage + `static-server.ts` bake | inline `<script>` in each `index.html` | none — inline apps live in the shell document and inherit design tokens synchronously |
+
+Notes settled by this inventory (issue open questions 2 and 3):
+
+- **Embedded chat is universal** — all 8 apps mount the kit ask panel, not a subset.
+  The inline equivalent is one shared shell service, priced once, not per app.
+- **`/_query/<name>.mjs` bundles are redundant inline** — query modules are
+  relative-import-only and confined to `queries/`, so the shell imports them
+  directly; the network bundle survives only for the served path.
 
 ## Progress log
 
@@ -64,6 +83,8 @@ shell-native replacement._
 | --- | --- | --- | --- |
 | 2026-07-22 | Kickoff; recon + Phase 0 baseline started | — | Orchestrated session; baseline uses the #404 PWA waterfall harness (loopback) with modeled remote RTT |
 | 2026-07-22 | Phase 0 complete — GO | — | Real Tasks open = 2 req / 572 KB; app document is `no-store` (109 KB re-fetched every open, warm/cold ratio 1.0 measured); offline renders nothing. Full numbers in receipts/issue-505-inline-system-apps.md |
+| 2026-07-22 | Phase 1 surface inventory written | — | Open questions 2 (chat universal, 8/8) and 3 (query bundles redundant inline) settled; inventory table above |
+| 2026-07-22 | Phase 6 ghost cleanup landed early | — | Zero `centraid_sql_*` refs left in `packages/` sources; independent slice, no conflicts with render phases |
 
 ## Rejected alternatives
 

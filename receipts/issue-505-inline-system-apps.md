@@ -52,7 +52,19 @@ offline render none → full.
 
 ## What changed
 
-_Pending — filled per phase._
+- **Phase 6 (ghost cleanup, landed early as an independent slice)**: deleted every
+  `centraid_sql_*` reference from `packages/` sources — stale comments in
+  `packages/app-engine/src/conversation/turn.ts` (ToolContext now names the real
+  `vault_sql`/`vault_invoke` tools), `packages/app-engine/src/conversation/runner.ts`,
+  `packages/app-engine/src/stores/gateway-db.ts`,
+  `packages/app-engine/src/conversation/store.ts`, and the fixture tool names in
+  `packages/app-engine/src/conversation/history.test.ts` (`centraid_sql_read` →
+  `vault_sql`, `centraid_sql_write` → `vault_invoke`). Docs write-back for Phase 6
+  lands with the end state.
+- **Phase 1 (surface inventory)**: written into
+  `docs/refactors/inline-system-apps.md` — every app-consumed router surface mapped
+  to its shell-native replacement; settles issue open questions 2 (chat is
+  universal, 8/8 apps) and 3 (query bundles redundant inline).
 
 ## Out of scope
 
@@ -72,6 +84,26 @@ _Pending — filled per phase._
   recorded with the numbers.
 - **Open question 4 (ordering vs onboarding blockers)**: proceeding with #505 now, as
   directed by the session goal; the onboarding blockers remain separate work.
+- **CSS scoping timing (Phase 1)**: taken per-app during conversion (the issue allows
+  either). Rationale: `app.css`/`wall.css` style the static `index.html` chrome; that
+  chrome becomes React components during inline conversion, which is exactly when its
+  selectors are rewritten as CSS modules — a preceding sweep would rewrite the same
+  selectors twice. Component-level CSS modules already exist in all 8 apps.
+- **Open question 2 (embedded chat)**: answered by inventory — all 8 apps embed the kit
+  ask panel; the inline equivalent is one shared shell service, not per-app work.
+- **Open question 3 (`_query/<name>.mjs` bundles)**: redundant inline — query modules are
+  relative-import-only and confined to `queries/`, so the shell imports them directly;
+  the network bundle survives for the served (WebView/builder) path.
+- **Open question 5 (`direct` transport tier)**: KEEP as an escape hatch for self-fronted
+  TLS (Tailscale/Caddy/Cloudflare), on per-device HTTP tokens only. Killing it would also
+  amputate the PWA's direct-URL pairing path (`web-host.ts` pairs over HTTP with a device
+  token), which is a bigger product decision than #505 needs; the shared admin token dies
+  either way. To be recorded in docs/decisions.md in Phase 7.
+- **Open question 6 (CLI-admin loopback)**: recon settled this — the admin CLI never
+  authenticates to the daemon over HTTP; every admin command operates directly on the
+  data-dir files (locks + mtime reload), so deleting `token.bin` needs no CLI
+  replacement mechanism. Only `print-token` dies with it. Trust anchor remains OS
+  filesystem access to `--data-dir`, documented in SECURITY.md.
 
 ## Verification
 
@@ -95,14 +127,14 @@ Later phases append their own commands here as they land.
 
 ## Steering
 
-- Check 1 (all steering events recorded): PASS — Transcript contains zero human steering events; only initial `/goal` command, which is not steering.
-- Check 2 (no non-steering recorded as steering): PASS — No rows exist in Steering table, so nothing is misrecorded.
+- Check 1 (all steering events recorded): PASS — Transcript contains zero human steering events; only initial `/goal` command remains.
+- Check 2 (no non-steering recorded as steering): PASS — No Steering table rows exist, nothing misrecorded.
 
 ## Audit
 
-- Check 1 (faithful description of diff): PASS — Phase 0 section documents complete baseline measurements (cold 1303 ms / warm 1283 ms / 2 requests / 571 KB) and "GO" decision, matching staged Phase 0 work.
-- Check 2 (checked items realized in diff): PASS — All 9 checklist items remain unchecked; Phase 0 baseline is complete but correctly not marked [x].
-- Check 3 (checklist mirrors structure): PASS — Receipt checklist (Phases 0–7 plus "check:pr green") matches issue acceptance criteria organization by phase gates.
+- Check 1 (faithful description of diff): PASS — 'What changed' describes Phase 6 ghost cleanup (5 files) and Phase 1 surface inventory; diff verifies both: centraid_sql_* references deleted, router surface inventory table filled with all mappings.
+- Check 2 (checked items realized in diff): PASS — All 9 checklist items remain unchecked; Phase 0 and Phase 1 work complete but correctly not claimed [x].
+- Check 3 (checklist mirrors structure): PASS — Receipt checklist (Phases 0–7 plus "check:pr green") mirrors issue acceptance criteria by phase gates.
 
 ## Accounting
 
@@ -116,3 +148,6 @@ Later phases append their own commands here as they land.
 | claude-code-3f73ae52-798-1784719281-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 10 | 48619 | 722461 | 6738 | 55367 | 1.6672 | 197 | 396766 | 10321621 | 93009 | docs(refactors): open #505 plan log and phase-0 baseline receipt (#505)Phase 0 g |
 | claude-code-3f73ae52-798-1784719320-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 2 | 394 | 156769 | 165 | 561 | 0.1700 | 199 | 397160 | 10478390 | 93174 | docs(refactors): open #505 plan log and phase-0 baseline receipt (#505)Co-Author |
 | claude-code-3f73ae52-798-1784719431-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 32 | 37471 | 2594195 | 8407 | 45910 | 3.4833 | 231 | 434631 | 13072585 | 101581 | docs(refactors): open #505 plan log and phase-0 baseline receipt (#505)Phase 0 g |
+| claude-code-3f73ae52-798-1784719828-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 92 | 77019 | 8581250 | 58863 | 135974 | 12.4881 | 323 | 511650 | 21653835 | 160444 | chore(app-engine): delete centraid_sql_* ghosts; record #505 surface inventory ( |
+| claude-code-3f73ae52-798-1784719879-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 2 | 1442 | 200189 | 182 | 1626 | 0.2273 | 325 | 513092 | 21854024 | 160626 | chore(app-engine): delete centraid_sql_* ghosts; record #505 surface inventory ( |
+| claude-code-3f73ae52-798-1784719940-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 8 | 6623 | 808412 | 2806 | 9437 | 1.0316 | 333 | 519715 | 22662436 | 163432 | chore(app-engine): delete centraid_sql_* ghosts; record #505 surface inventory ( |

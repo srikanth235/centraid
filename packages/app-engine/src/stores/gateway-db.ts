@@ -72,7 +72,7 @@
  *     turns, items, and attachment rows. `turns.parent_turn_id` stays a
  *     plain column (a sub-run's parent may be recorded before this row in
  *     the same transaction batch). Runtime-owned; never reachable from
- *     handler `db` or the `centraid_sql_*` agent tools.
+ *     handler `db` or the `vault_sql` agent tool.
  *
  * Versioning: the file's `PRAGMA user_version` belongs to the vault package's
  * audit-band ladder — this module must never stamp it. The ledger band is
