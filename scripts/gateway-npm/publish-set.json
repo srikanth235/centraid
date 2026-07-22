@@ -1,0 +1,19 @@
+{
+  "description": "Packages published for curl|bash centraid-gateway install (#509). Topological order (deps first).",
+  "npmScope": "@centraid",
+  "gatewayPackage": "@centraid/gateway",
+  "gatewayBin": "centraid-gateway",
+  "packages": [
+    "protocol",
+    "design-tokens",
+    "blob-format",
+    "app-engine",
+    "backup",
+    "tunnel",
+    "vault",
+    "blueprints",
+    "automation",
+    "agent-runtime",
+    "gateway"
+  ]
+}

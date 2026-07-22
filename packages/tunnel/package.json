@@ -1,8 +1,9 @@
 {
   "name": "@centraid/tunnel",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "description": "Phone ↔ desktop transport: HTTP tunneled over iroh p2p QUIC (dumbpipe pattern). The desktop accepts connections from a device-key allowlist and forwards tunneled requests to its loopback gateway; the phone runs a localhost proxy so WebView subresources, ES-module imports, and EventSource all ride the pipe with zero gateway HTTP changes (issue #263).",
+  "license": "SEE LICENSE IN REPOSITORY",
   "files": [
     "dist",
     "native/*.node",
@@ -11,6 +12,9 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/build-native.mjs --release",
     "build:native": "node scripts/build-native.mjs --release",

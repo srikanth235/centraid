@@ -97,7 +97,7 @@ Supporting scripts:
 - [ ] GitHub Release body matches changelog
 - [ ] **Desktop** (if shipped): multi-OS package jobs green; installers attached **only when signing enrolled**
 - [ ] **Gateway image** (if shipped): GHCR job green; `latest` only if non-beta
-- [ ] **Gateway npm** (if shipped): pack/publish when `NPM_TOKEN` enrolled
+- [ ] **Gateway npm** (if shipped): `npm-gateway-publish` multi-OS native matrix + pack; publish when `NPM_TOKEN` enrolled. Required natives: linux-x64, darwin-arm64, win32-x64 (#511). Install: `scripts/install-gateway.sh` (Unix) or `npm i -g @centraid/gateway` (Windows). Does **not** replace H5 `service install`.
 - [ ] **Mobile** (if shipped): `release-mobile` dispatched; store tracks checked
 - [ ] **Web** continuous host deploys from `main` when CF secrets present (not a tag checklist item)
 
@@ -115,7 +115,7 @@ The release agent **asserts** classification from the changelog headings; it doe
 
 - **Desktop beta:** tags `v0.x.y-beta.n` → GitHub **pre-release**, electron-updater channel `beta`. Never move the stable download target.
 - **Gateway image:** `ghcr.io/<owner>/centraid-gateway:<tag>`; **`latest` only for non-beta tags**.
-- **Gateway npm:** `@centraid/gateway` (+ publish-set) when `NPM_TOKEN` set; multi-OS natives on pack (#511).
+- **Gateway npm:** `@centraid/gateway` (+ publish-set) when `NPM_TOKEN` set; curl|bash via `scripts/install-gateway.sh` (Unix). Multi-platform tunnel NAPI matrix: `scripts/gateway-npm/native-platforms.mjs` + `npm-gateway-publish` job `build-native` (#511).
 - **Mobile beta:** TestFlight / Play internal track (workflow `release-mobile`, EAS profiles `preview` / `production`). **No** `eas update` in CI (J7).
 - **Web:** continuously deployed public origin **`https://app.centraid.dev`** (scaffold; CF secrets required). Gateway-embedded PWA remains LAN / always-on fallback. No beta tag ritual.
 

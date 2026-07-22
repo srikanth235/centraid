@@ -30,6 +30,8 @@ struct TunnelStream {
 enum TunnelWire {
   static let tunnelAlpn = "centraid/tunnel/1"
   static let pairAlpn = "centraid/pair/1"
+  /// Headless gateway ticket redemption (VPS / `centraid-gateway pair`).
+  static let gwPairAlpn = "centraid/gw-pair/1"
   static let maxHeaderFrameBytes = 256 * 1024
   static let maxRequestBodyBytes = 32 * 1024 * 1024
   static let readChunkBytes = 64 * 1024
@@ -158,13 +160,47 @@ actor TunnelTransport {
     deviceName: String,
     platform: String
   ) async throws -> [String: Any] {
+    try await oneShotPair(
+      secretKey: secretKey,
+      ticket: ticket,
+      alpn: TunnelWire.pairAlpn,
+      body: ["code": code, "deviceName": deviceName, "platform": platform]
+    )
+  }
+
+  /// Redeem a `centraid-gw-pair` ticket against a headless gateway (VPS).
+  static func pairGateway(
+    secretKey: Data,
+    ticket: String,
+    ticketId: String,
+    secret: String,
+    deviceName: String,
+    platform: String
+  ) async throws -> [String: Any] {
+    try await oneShotPair(
+      secretKey: secretKey,
+      ticket: ticket,
+      alpn: TunnelWire.gwPairAlpn,
+      body: [
+        "ticketId": ticketId,
+        "secret": secret,
+        "deviceName": deviceName,
+        "platform": platform,
+      ]
+    )
+  }
+
+  private static func oneShotPair(
+    secretKey: Data,
+    ticket: String,
+    alpn: String,
+    body: [String: Any]
+  ) async throws -> [String: Any] {
     let endpoint = try await IrohAdapter.bindEndpoint(secretKey: secretKey)
     do {
-      let connection = try await IrohAdapter.dial(endpoint, ticket: ticket, alpn: TunnelWire.pairAlpn)
+      let connection = try await IrohAdapter.dial(endpoint, ticket: ticket, alpn: alpn)
       let stream = try await IrohAdapter.openBi(connection)
-      let frame = try TunnelWire.encodeHeaderFrame([
-        "code": code, "deviceName": deviceName, "platform": platform,
-      ])
+      let frame = try TunnelWire.encodeHeaderFrame(body)
       try await TunnelWire.writeAll(stream, frame)
       try await TunnelWire.finish(stream)
       let response = try await TunnelWire.readHeaderFrame(stream)

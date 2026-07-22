@@ -302,10 +302,13 @@ test('pair needs the daemon endpoint identity, then mints a pasteable ticket', a
     ),
   );
   expect(text).toMatch(/Pairing ticket for vault "Family"/);
-  // The pasteable token decodes to a gw-pair payload naming the vault.
-  const tokenLines = text.trim().split('\n').filter(Boolean);
-  const token = tokenLines[tokenLines.length - 1]!;
-  const payload = JSON.parse(Buffer.from(token, 'base64url').toString('utf8')) as {
+  // The pasteable token is the sole base64url line in the human block.
+  const token = text
+    .split('\n')
+    .map((l) => l.trim())
+    .find((l) => /^[A-Za-z0-9_-]{40,}$/.test(l));
+  expect(token).toBeTruthy();
+  const payload = JSON.parse(Buffer.from(token!, 'base64url').toString('utf8')) as {
     kind: string;
     gw: string;
     vaultName: string;
@@ -320,6 +323,35 @@ test('pair needs the daemon endpoint identity, then mints a pasteable ticket', a
   expect(
     PairingTicketStore.open(layout.pairingTicketsFile).redeem(payload.t, payload.s),
   ).toMatchObject({ trust: 'readonly' });
+});
+
+test('pair --qr prints a terminal QR of the same pasteable ticket', async () => {
+  const layout = daemonLayoutFor(dataDir);
+  await fs.mkdir(dataDir, { recursive: true });
+  await fs.writeFile(
+    layout.endpointStateFile,
+    JSON.stringify({ endpointId: 'gw-endpoint', ticket: 'gw-ticket-base32' }),
+  );
+  await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
+
+  const text = await capture(() =>
+    commandPair(['--data-dir', dataDir, '--vault', 'Family', '--qr'], fail),
+  );
+  expect(text).toMatch(/Pairing ticket for vault "Family"/);
+  expect(text).toMatch(/Phone: scan this QR/);
+  // Token still present and decodable.
+  const token = text
+    .split('\n')
+    .map((l) => l.trim())
+    .find((l) => /^[A-Za-z0-9_-]{40,}$/.test(l));
+  expect(token).toBeTruthy();
+  const payload = JSON.parse(Buffer.from(token!, 'base64url').toString('utf8')) as {
+    kind: string;
+  };
+  expect(payload.kind).toBe('centraid-gw-pair');
+  // Terminal QR is multi-line block art.
+  expect(text.split('\n').length).toBeGreaterThan(12);
+  expect(text).toMatch(/[█▄▀ ]/);
 });
 
 test('pair --json emits one JSON line instead of the pasteable text block (issue #382)', async () => {

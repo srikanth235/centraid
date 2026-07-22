@@ -15,6 +15,7 @@ artifacts
 output/playwright/
 target
 packages/tunnel/native/*.node
+packages/tunnel/native/native-platforms.manifest.json
 .wrangler
 .claude
 # Python bytecode created by .governance/ hook scripts (not source).

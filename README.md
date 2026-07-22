@@ -100,6 +100,72 @@ Full tour: [Get started](https://centraid.dev/docs/start/) — install → vault
 | `packages/blueprints` | Template gallery: 8 blueprint apps + 16 automation templates, plus blank-app scaffolders. |
 | `packages/design-tokens` | Colors, type, spacing, app metadata, icons — shared across desktop and mobile. |
 
+## Gateway install (npm / curl|bash)
+
+Host **gateway only** (not desktop/mobile). OpenClaw-style stages: Node ≥ 22 → npm install `@centraid/gateway` → `centraid-gateway` on PATH. **No silent OS service** — use `centraid-gateway service install` when you want H5.
+
+### Platforms
+
+| OS | Arch | Install | First-party tunnel NAPI |
+| --- | --- | --- | --- |
+| **Linux** | x64 | curl\|bash or `npm i -g @centraid/gateway` | **Required** in published packs |
+| **Linux** | arm64 | same | Best-effort CI (`ubuntu-24.04-arm`) |
+| **macOS** | arm64 (Apple Silicon) | curl\|bash or npm | **Required** |
+| **macOS** | x64 (Intel) | curl\|bash or npm | Best-effort CI (`macos-15-intel`); preferred over `@number0/iroh` (no darwin-x64 iroh package) |
+| **Windows** | x64 | **npm** (see below) | **Required** |
+| **Windows** | arm64 | npm | Optional / not in default matrix |
+
+Runtime loads `packages/tunnel/native/centraid-tunnel-native.<platform>-<arch>.node`. If missing, falls back to `@number0/iroh` when that platform package exists. Publish CI merges multi-OS natives into one `@centraid/tunnel` tarball (#511).
+
+### Unix (macOS / Linux)
+
+```sh
+# After packages are on npm (secret-gated publish on tags / workflow_dispatch):
+curl -fsSL --proto '=https' --tlsv1.2 \
+  https://raw.githubusercontent.com/srikanth235/centraid/main/scripts/install-gateway.sh \
+  | bash -s -- --no-global
+# Or from a clone:
+bash scripts/install-gateway.sh --help
+bash scripts/install-gateway.sh --prefix "$HOME/.centraid" --version latest
+# Offline / CI smoke from local packs:
+bun run gateway:npm:pack
+bash scripts/install-gateway.sh --prefix /tmp/centraid-gw --from-pack-dir artifacts/npm-packs
+```
+
+### Windows
+
+Use Node 22+ and npm (PowerShell or cmd). The curl\|bash installer is Unix-oriented.
+
+```powershell
+npm install -g @centraid/gateway
+centraid-gateway --help
+# Prefix install (no global):
+npm install --prefix $env:USERPROFILE\.centraid @centraid/gateway
+```
+
+- **Publish set:** `scripts/gateway-npm/publish-set.json` (gateway + workspace deps). Pack: `bun run gateway:npm:pack`. Publish: `bun run gateway:npm:publish` (requires `NPM_TOKEN`; dry-runs without it).
+- **CI:** `.github/workflows/npm-gateway-publish.yml` builds native on Linux/macOS/Windows, merges into pack; publishes only when `NPM_TOKEN` is set.
+- **Service:** opt-in only (`--with-service` prints the command; never auto-writes unit files outside `centraid-gateway service install`).
+
+### Pair clients after install (VPS / headless)
+
+Gateway must be serving so `endpoint.json` exists, then mint a one-time ticket:
+
+```sh
+# Create a vault if needed, then mint a ticket (desktop paste):
+centraid-gateway vault create --data-dir "$DATA_DIR" --name Family
+centraid-gateway pair --data-dir "$DATA_DIR" --vault Family
+# Phone-friendly: same ticket + UTF-8 block QR over SSH:
+centraid-gateway pair --data-dir "$DATA_DIR" --vault Family --qr
+```
+
+| Client | How to enroll |
+| --- | --- |
+| **Desktop / PWA** | Paste the one-line ticket into **Add gateway** |
+| **Phone** | Scan the `--qr` terminal QR, **or** paste the same ticket under Settings → Gateway link |
+
+Tickets burn on first successful redeem (or wrong secret). See [docs/recovery/pairing.md](docs/recovery/pairing.md).
+
 ## Gateway Docker (standalone)
 
 Gateway-only image (control-plane HTTP). Build from the monorepo root:

@@ -43,6 +43,21 @@ class TunnelRuntime(private val emitStatus: (Map<String, Any?>) -> Unit) {
       mapOf("ok" to false, "error" to describe(err))
     }
 
+  suspend fun pairGateway(args: GatewayPairArgs): Map<String, Any?> =
+    try {
+      val key = decodeSecretKey(args.secretKeyB64)
+      TunnelTransport.pairGateway(
+        key,
+        args.ticket,
+        args.ticketId,
+        args.secret,
+        args.deviceName,
+        args.platform,
+      )
+    } catch (err: Throwable) {
+      mapOf("ok" to false, "error" to describe(err))
+    }
+
   /** Idempotent while running: returns the already-bound proxy port. */
   suspend fun start(ticket: String, secretKeyB64: String): Int = mutex.withLock {
     if (state == State.RUNNING) {

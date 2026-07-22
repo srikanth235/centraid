@@ -24,11 +24,11 @@ import {
 } from '../lib/phone-link';
 import type { SettingsScreenProps } from '../navigation';
 
-// Mobile-only settings. The primary path is the desktop link: scan the
-// "Connect phone" QR on your desktop once, and everything loads through an
-// encrypted tunnel — no URLs, no tokens. The manual URL/token fields under
-// "Advanced (developer)" remain as a dev fallback for simulators pointing
-// at a token-less local gateway.
+// Mobile-only settings. Primary path: scan or paste a pairing ticket, then
+// everything loads through an encrypted tunnel — no URLs, no tokens.
+// Sources: desktop "Connect phone" QR, or headless `centraid-gateway pair`
+// / `pair --qr` on a VPS. Advanced URL/token remains a dev fallback for
+// simulators pointing at a token-less local gateway.
 
 function defaultDeviceName(): string {
   return Platform.OS === 'ios' ? 'iPhone' : 'Android phone';
@@ -59,6 +59,7 @@ export default function SettingsScreen({
   const [scanning, setScanning] = useState(false);
   const [pairing, setPairing] = useState(false);
   const [pairError, setPairError] = useState<string | undefined>(undefined);
+  const [pasteTicket, setPasteTicket] = useState('');
 
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [urlValue, setUrlValue] = useState('');
@@ -86,20 +87,32 @@ export default function SettingsScreen({
     return () => sub.remove();
   }, [tunnelAvailable]);
 
-  const onScanned = useCallback((payload: string): void => {
-    setScanning(false);
+  const runPair = useCallback((payload: string): void => {
     setPairing(true);
     setPairError(undefined);
     pair(payload, defaultDeviceName())
       .then(({ desktopName: name }) => {
         setPaired(true);
         setDesktopName(name);
+        setPasteTicket('');
       })
       .catch((err: unknown) => {
         setPairError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => setPairing(false));
   }, []);
+
+  const onScanned = useCallback(
+    (payload: string): void => {
+      setScanning(false);
+      runPair(payload);
+    },
+    [runPair],
+  );
+
+  const onPastePair = useCallback((): void => {
+    runPair(pasteTicket);
+  }, [pasteTicket, runPair]);
 
   const onUnpair = useCallback((): void => {
     void unpair().then(() => {
@@ -132,10 +145,10 @@ export default function SettingsScreen({
       </View>
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-        <Text style={styles.sectionLabel}>Desktop link</Text>
+        <Text style={styles.sectionLabel}>Gateway link</Text>
         {paired ? (
           <View style={styles.linkCard}>
-            <Text style={styles.linkName}>{desktopName || 'Your desktop'}</Text>
+            <Text style={styles.linkName}>{desktopName || 'Your gateway'}</Text>
             <Text style={styles.linkStatus}>{tunnelStatusLabel(tunnelStatus)}</Text>
             <View style={styles.linkAction}>
               <Button label="Unpair" icon="X" variant="soft" onPress={onUnpair} />
@@ -144,16 +157,41 @@ export default function SettingsScreen({
         ) : (
           <View>
             <Text style={styles.help}>
-              Scan the QR code under "Connect phone" in Centraid on your desktop. Apps then load
-              over an encrypted tunnel — no URLs or tokens needed.
+              Scan a desktop "Connect phone" QR, or a terminal QR from{' '}
+              <Text style={styles.helpMono}>centraid-gateway pair --qr</Text> on a VPS. You can also
+              paste the one-line ticket. Apps then load over an encrypted tunnel.
             </Text>
             {tunnelAvailable ? (
-              <Button
-                label={pairing ? 'Pairing…' : 'Pair with desktop'}
-                icon="Camera"
-                onPress={() => setScanning(true)}
-                disabled={pairing}
-              />
+              <>
+                <Button
+                  label={pairing ? 'Pairing…' : 'Scan QR code'}
+                  icon="Camera"
+                  onPress={() => setScanning(true)}
+                  disabled={pairing}
+                />
+                <View style={styles.spacer} />
+                <Text style={styles.sectionLabel}>Or paste ticket</Text>
+                <TextInput
+                  value={pasteTicket}
+                  onChangeText={setPasteTicket}
+                  placeholder="one-line pairing ticket"
+                  placeholderTextColor={colors.ink3}
+                  style={styles.input}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  multiline
+                  editable={!pairing}
+                  accessibilityLabel="Paste pairing ticket"
+                />
+                <View style={styles.actions}>
+                  <Button
+                    label={pairing ? 'Pairing…' : 'Pair with ticket'}
+                    icon="Key"
+                    onPress={onPastePair}
+                    disabled={pairing || pasteTicket.trim().length === 0}
+                  />
+                </View>
+              </>
             ) : (
               <Text style={styles.unavailable}>
                 Pairing needs a development build — the tunnel module isn't available in Expo Go.
@@ -283,7 +321,7 @@ function PairScanner({
             }}
           />
           <Text style={styles.scanHint}>
-            Point the camera at the "Connect phone" QR on your desktop.
+            Point the camera at a desktop "Connect phone" QR or a gateway `pair --qr` terminal QR.
           </Text>
         </View>
       ) : (
@@ -321,6 +359,7 @@ const makeStyles = (colors: ThemeColors) =>
     camera: { borderRadius: radii.md, flex: 1, overflow: 'hidden' },
     emptyTitle: { ...t('title'), color: colors.ink, marginBottom: spacing[2] },
     help: { ...t('small'), color: colors.ink3, marginBottom: spacing[3] },
+    helpMono: { fontFamily: 'JetBrainsMono_400Regular', color: colors.ink2 },
     input: {
       ...t('body'),
       backgroundColor: colors.bgElev,

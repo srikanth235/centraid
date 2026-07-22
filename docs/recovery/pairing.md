@@ -9,6 +9,15 @@ When device pairing strands mid-ceremony. Ground truth for e2e: `tests/agent-e2e
 3. Device redeems ticket (secret + endpoint); enrollment written to `devices.json`.
 4. Ticket burned; device uses durable enrollment / device token thereafter.
 
+### Headless VPS — form-factor map
+
+| Client | Mint | Redeem |
+| --- | --- | --- |
+| **Desktop / PWA** | `centraid-gateway pair --data-dir … [--vault …]` | Paste one-line ticket into **Add gateway** |
+| **Phone** | Same command with **`--qr`** (UTF-8 terminal QR of the same token) | Scan QR **or** paste ticket under mobile **Settings → Gateway link** |
+
+`pair --json` is for automation (no QR on stdout). Desktop "Connect phone" QR remains a separate `centraid-pair` shape for phone↔desktop hub; VPS tickets are always `centraid-gw-pair`.
+
 ## Files (daemon `dataDir` or gateway dir)
 
 | File | Role |

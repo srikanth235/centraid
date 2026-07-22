@@ -1,8 +1,9 @@
 {
   "name": "@centraid/app-engine",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "description": "Centraid runtime engine — handler loader, sqlite-backed apps, versioned uploads, and the /centraid HTTP surface. Transport-agnostic; consumed by the standalone daemon and the desktop in-process runtime.",
+  "license": "SEE LICENSE IN REPOSITORY",
   "files": [
     "dist",
     "README.md"
@@ -10,6 +11,9 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json && cp src/pricing/litellm-snapshot.json dist/pricing/litellm-snapshot.json",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
