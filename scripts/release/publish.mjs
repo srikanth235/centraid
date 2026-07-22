@@ -2,10 +2,10 @@
 /**
  * D2 publish half — only after maintainer authorization (docs/release.md D1).
  *
- *   node scripts/release/publish.mjs --version 0.2.1 [--dry-run] [--beta]
+ *   node scripts/release/publish.mjs --version 0.2.1 --issue 501 [--dry-run] [--beta] [--push]
  *
- * - Bumps the single shared monorepo version across package.json workspaces
- *   that currently match the previous root version
+ * - Requires --issue N (governance commit suffix; refuse #0)
+ * - Bumps monorepo + mobile native numbers via sync-versions.mjs
  * - Moves CHANGELOG Unreleased into the versioned section
  * - Creates annotated tag vX.Y.Z (or vX.Y.Z-beta.N with --beta)
  * - Does NOT push unless --push is passed
@@ -14,19 +14,22 @@
  */
 
 import { execSync } from 'node:child_process';
-import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runSyncVersions } from './sync-versions.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const args = process.argv.slice(2);
 let version = null;
+let issue = null;
 let dryRun = false;
 let beta = false;
 let doPush = false;
 let betaN = 1;
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--version') version = args[++i];
+  else if (args[i] === '--issue') issue = args[++i];
   else if (args[i] === '--dry-run') dryRun = true;
   else if (args[i] === '--beta') beta = true;
   else if (args[i] === '--beta-n') betaN = Number(args[++i]);
@@ -35,8 +38,12 @@ for (let i = 0; i < args.length; i++) {
 
 if (!version || !/^\d+\.\d+\.\d+$/.test(version)) {
   console.error(
-    'usage: node scripts/release/publish.mjs --version X.Y.Z [--beta] [--dry-run] [--push]',
+    'usage: node scripts/release/publish.mjs --version X.Y.Z --issue N [--beta] [--dry-run] [--push]',
   );
+  process.exit(2);
+}
+if (!issue || !/^\d+$/.test(issue) || issue === '0') {
+  console.error('publish requires --issue N (real GitHub issue; #0 is forbidden)');
   process.exit(2);
 }
 
@@ -44,29 +51,6 @@ const rootPkgPath = path.join(root, 'package.json');
 const rootPkg = JSON.parse(readFileSync(rootPkgPath, 'utf8'));
 const prev = rootPkg.version;
 const tag = beta ? `v${version}-beta.${betaN}` : `v${version}`;
-
-function collectPackageJsons() {
-  const out = [rootPkgPath];
-  for (const dir of ['packages', 'apps']) {
-    const base = path.join(root, dir);
-    if (!existsSync(base)) continue;
-    for (const name of readdirSync(base)) {
-      const p = path.join(base, name, 'package.json');
-      if (existsSync(p)) out.push(p);
-    }
-  }
-  return out;
-}
-
-function bumpPackages() {
-  for (const p of collectPackageJsons()) {
-    const j = JSON.parse(readFileSync(p, 'utf8'));
-    if (j.version === prev || p === rootPkgPath) {
-      j.version = version;
-      if (!dryRun) writeFileSync(p, JSON.stringify(j, null, 2) + '\n');
-    }
-  }
-}
 
 function foldChangelog() {
   const clPath = path.join(root, 'CHANGELOG.md');
@@ -90,13 +74,15 @@ function extractReleaseBody() {
   return (m?.[1] ?? '').trim() || `Centraid ${version}`;
 }
 
-console.error(`publish ${prev} → ${version} tag ${tag}${dryRun ? ' (dry-run)' : ''}`);
-bumpPackages();
+console.error(`publish ${prev} → ${version} tag ${tag} (#${issue})${dryRun ? ' (dry-run)' : ''}`);
+
+const syncReport = runSyncVersions({ rootDir: root, version, dryRun });
 foldChangelog();
 const body = extractReleaseBody();
 const bodyPath = path.join(root, 'artifacts', 'release-body.md');
 if (!dryRun) {
   try {
+    mkdirSync(path.dirname(bodyPath), { recursive: true });
     writeFileSync(bodyPath, body + '\n');
   } catch {
     /* optional */
@@ -105,19 +91,33 @@ if (!dryRun) {
 
 if (dryRun) {
   console.log(
-    JSON.stringify({ version, tag, prev, bodyPath, bodyPreview: body.slice(0, 200) }, null, 2),
+    JSON.stringify(
+      {
+        version,
+        tag,
+        prev,
+        issue,
+        syncReport,
+        bodyPath,
+        bodyPreview: body.slice(0, 200),
+      },
+      null,
+      2,
+    ),
   );
   process.exit(0);
 }
 
-execSync('git add package.json packages/*/package.json apps/*/package.json CHANGELOG.md', {
-  cwd: root,
-  stdio: 'inherit',
-  shell: true,
-});
-execSync(`git commit -m "chore(release): ${version} (#0)"`, { cwd: root, stdio: 'inherit' });
-// Note: real releases should use the issue number; #0 is a placeholder for dry tooling.
-// Prefer: chore(release): 0.2.1 (#468) when shipping from a tracked issue.
+const commitMsg = `chore(release): ${version} (#${issue})`;
+execSync(
+  'git add package.json packages/*/package.json apps/*/package.json CHANGELOG.md ' +
+    'apps/mobile/android/app/build.gradle ' +
+    'apps/mobile/ios/Centraid.xcodeproj/project.pbxproj ' +
+    'apps/mobile/ios/Centraid/Info.plist ' +
+    'apps/mobile/ios/ShareExtension/ShareExtension-Info.plist 2>/dev/null || true',
+  { cwd: root, stdio: 'inherit', shell: true },
+);
+execSync(`git commit -m ${JSON.stringify(commitMsg)}`, { cwd: root, stdio: 'inherit' });
 execSync(`git tag -a ${tag} -m "Centraid ${tag}"`, { cwd: root, stdio: 'inherit' });
 
 if (doPush) {
@@ -129,4 +129,4 @@ if (doPush) {
   );
 }
 
-console.log(JSON.stringify({ version, tag, bodyPath }, null, 2));
+console.log(JSON.stringify({ version, tag, issue, bodyPath, build: syncReport.build }, null, 2));

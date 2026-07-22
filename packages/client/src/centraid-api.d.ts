@@ -910,11 +910,18 @@ interface CentraidApi {
    * one is on disk, and the version a relaunch would load. Optional so
    * test harnesses can mock a partial bridge.
    */
-  getUpdateStatus?(): Promise<{ available: boolean; version: string }>;
+  getUpdateStatus?(): Promise<{
+    available: boolean;
+    version: string;
+    /** Packaged: true only after download finished (#501). */
+    readyToInstall?: boolean;
+  }>;
   /** Restart the app so it loads the new build (app.relaunch + exit). */
   relaunchToUpdate?(): Promise<{ ok: true }>;
   /** Subscribe to "a new build landed on disk". Returns the unsubscribe. */
-  onUpdateAvailable?(cb: (msg: { available: boolean; version: string }) => void): () => void;
+  onUpdateAvailable?(
+    cb: (msg: { available: boolean; version: string; readyToInstall?: boolean }) => void,
+  ): () => void;
   /**
    * H5 — opt-in OS service install for the detached local gateway
    * (`centraid-gateway service install`). Never silent; onboarding offers it.

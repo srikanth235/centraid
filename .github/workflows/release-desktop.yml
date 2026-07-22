@@ -1,8 +1,11 @@
 name: release-desktop
 
-# I1–I3, I7, I11 — package desktop on version tags. Signing/notarization
-# steps are secret-gated: without enrolled credentials the job still builds
-# unsigned artifacts + checksums so the pipeline is exerciseable.
+# I1–I3, I7, I11 / #501 — package desktop on version tags.
+# Signing/notarization is secret-gated. Without enrolled credentials:
+#   - jobs still build installers (unsigned scaffolding)
+#   - workflow artifacts upload always
+#   - GH Release attaches installers only when at least one signing group is present
+#     (avoids publishing Gatekeeper/SmartScreen-blocked "official" stable builds)
 
 on:
   push:
@@ -15,6 +18,10 @@ on:
         description: 'I8 re-stamp — set rollout window hours on an existing release (empty = skip)'
         required: false
         default: ''
+      restamp_tag:
+        description: 'Tag to restamp (e.g. v0.2.0); required when restamp_rollout_hours is set'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -22,7 +29,8 @@ permissions:
 jobs:
   package-macos:
     runs-on: macos-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
+    environment: release
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
@@ -30,9 +38,7 @@ jobs:
           bun-version: 1.3.13
       - run: bun install --frozen-lockfile
       - run: bun run build --filter=@centraid/desktop...
-      - name: Install electron-builder
-        run: bun add -d electron-builder electron-updater --cwd apps/desktop
-      - name: Package (unsigned when secrets absent)
+      - name: Package macOS (unsigned when Apple secrets absent)
         working-directory: apps/desktop
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.APPLE_API_KEY != '' && 'true' || 'false' }}
@@ -42,20 +48,28 @@ jobs:
         run: |
           if [ -n "${APPLE_API_KEY:-}" ]; then
             echo "Apple secrets present — notarization path enabled (I2)"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
           else
             echo "Apple secrets absent — building unsigned artifacts (scaffolding only)"
+            echo "signed=false" >> "$GITHUB_OUTPUT"
           fi
-          bunx electron-builder --mac --config electron-builder.yml --publish never || \
-            bunx electron-builder --mac dir --config electron-builder.yml --publish never
-      - name: Checksums (I11)
+          bun run dist -- --mac
+      - name: Assert shippable mac artifacts
         working-directory: apps/desktop
         run: |
+          set -euo pipefail
           mkdir -p release
-          if ls release/* >/dev/null 2>&1; then
-            (cd release && shasum -a 256 * > SHA256SUMS.txt || true)
-          else
-            echo "no release artifacts" > release/SHA256SUMS.txt
-          fi
+          ls -la release || true
+          # Require at least one dmg and one zip for updater humans path
+          test -n "$(find release -maxdepth 1 -name '*.dmg' 2>/dev/null | head -1)" || {
+            echo "missing .dmg in release/"
+            exit 1
+          }
+          test -n "$(find release -maxdepth 1 -name '*.zip' 2>/dev/null | head -1)" || {
+            echo "missing .zip in release/"
+            exit 1
+          }
+          (cd release && shasum -a 256 * > SHA256SUMS.txt)
       - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: desktop-macos
@@ -64,7 +78,8 @@ jobs:
 
   package-windows:
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
+    environment: release
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
@@ -72,8 +87,6 @@ jobs:
           bun-version: 1.3.13
       - run: bun install --frozen-lockfile
       - run: bun run build --filter=@centraid/desktop...
-      - name: Install electron-builder
-        run: bun add -d electron-builder electron-updater --cwd apps/desktop
       - name: Package Windows (Azure Trusted Signing when secrets present — I3)
         working-directory: apps/desktop
         env:
@@ -89,23 +102,77 @@ jobs:
           else
             echo "Azure secrets absent — unsigned NSIS scaffolding"
           fi
-          bunx electron-builder --win --config electron-builder.yml --publish never || true
+          bun run dist -- --win
+      - name: Assert shippable Windows artifacts
+        working-directory: apps/desktop
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          ls -la release || true
+          test -n "$(find release -maxdepth 1 \( -name '*.exe' -o -name '*.nsis.*' \) 2>/dev/null | head -1)" || {
+            echo "missing Windows installer in release/"
+            exit 1
+          }
+          (cd release && sha256sum * > SHA256SUMS.txt || shasum -a 256 * > SHA256SUMS.txt)
       - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: desktop-windows
           path: apps/desktop/release/
           retention-days: 14
-        continue-on-error: true
 
-  github-release:
-    needs: [package-macos]
+  package-linux:
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    timeout-minutes: 60
+    environment: release
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
         with:
           bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      - run: bun run build --filter=@centraid/desktop...
+      - name: Package Linux AppImage
+        working-directory: apps/desktop
+        run: bun run dist -- --linux
+      - name: Assert shippable Linux artifacts
+        working-directory: apps/desktop
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          ls -la release || true
+          test -n "$(find release -maxdepth 1 -name '*.AppImage' 2>/dev/null | head -1)" || {
+            echo "missing .AppImage in release/"
+            exit 1
+          }
+          (cd release && sha256sum * > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: desktop-linux
+          path: apps/desktop/release/
+          retention-days: 14
+
+  github-release:
+    needs: [package-macos, package-windows, package-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment: release
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      - name: Detect signing enrollment
+        id: sign
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        run: |
+          if [ -n "${APPLE_API_KEY:-}" ] || [ -n "${AZURE_TENANT_ID:-}" ]; then
+            echo "enrolled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enrolled=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Changelog body (D3)
         id: body
         run: |
@@ -113,25 +180,57 @@ jobs:
           VER="${VER%-beta.*}"
           node scripts/release/changelog-to-github.mjs --version "$VER" --out /tmp/release-body.md || \
             echo "Centraid $GITHUB_REF_NAME" > /tmp/release-body.md
+          if [ "${{ steps.sign.outputs.enrolled }}" != "true" ]; then
+            {
+              echo ""
+              echo "> **Unsigned scaffolding build** — signing secrets not enrolled."
+              echo "> Installers are CI artifacts only until Apple/Azure enrollment completes"
+              echo "> (\`docs/enrollment.md\`). Not a Gatekeeper/SmartScreen-trustable release."
+            } >> /tmp/release-body.md
+          fi
       - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4
         with:
           path: artifacts
-      - name: Publish GitHub release
+      - name: Publish GitHub release (installers only when enrolled)
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           body_path: /tmp/release-body.md
-          prerelease: ${{ contains(github.ref_name, '-beta.') }}
-          files: artifacts/**/*
+          prerelease: ${{ contains(github.ref_name, '-beta.') || steps.sign.outputs.enrolled != 'true' }}
+          files: ${{ steps.sign.outputs.enrolled == 'true' && 'artifacts/**/*' || '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   restamp-rollout:
     if: github.event_name == 'workflow_dispatch' && inputs.restamp_rollout_hours != ''
     runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: I8 re-stamp note
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      - name: I8 re-stamp latest*.yml on release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOURS: ${{ inputs.restamp_rollout_hours }}
+          TAG: ${{ inputs.restamp_tag || github.ref_name }}
         run: |
-          echo "Re-stamp rollout window to ${{ inputs.restamp_rollout_hours }}h"
-          echo "Preserve original release date; only widen/zero the window metadata."
-          echo "Full re-stamp of published latest*.yml is a follow-up once updater manifests ship."
+          set -euo pipefail
+          if [ -z "${TAG}" ] || [ "${TAG}" = "" ]; then
+            echo "restamp_tag required when restamping"
+            exit 1
+          fi
+          mkdir -p /tmp/restamp
+          # Download updater manifests from the release (stable names only — never beta→latest)
+          gh release download "$TAG" -D /tmp/restamp -p 'latest*.yml' || {
+            echo "No latest*.yml on release $TAG — nothing to restamp (I8 follow-up after first signed publish)"
+            exit 0
+          }
+          for f in /tmp/restamp/latest*.yml; do
+            [ -f "$f" ] || continue
+            node scripts/release/restamp-rollout.mjs --hours "$HOURS" --yml "$f"
+            gh release upload "$TAG" "$f" --clobber
+          done
+          echo "Re-stamped rollout window to ${HOURS}h on $TAG (releaseDate adjusted; D5 stable names preserved)"

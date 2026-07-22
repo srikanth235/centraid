@@ -42,7 +42,8 @@ import { useBlockingCount } from './useBlockingCount.js';
 import { useGatewayRuntime } from './useGatewayRuntime.js';
 import { useShellApps } from './useShellApps.js';
 import { useStarred } from './useStarred.js';
-import { relaunchToUpdate, useUpdateStatus } from './useUpdateStatus.js';
+import WhatsNewModal from '../screens/WhatsNewModal.js';
+import { relaunchToUpdate, updatePillTitle, useUpdateStatus } from './useUpdateStatus.js';
 import { applySelection, resolveSelection, type PairRow } from './flatVaultSwitcher-core.js';
 import { getCachedGroupedRows, openGroupedVaultRegistry } from './flatVaultSwitcherRegistry.js';
 import { closeVaultSwitcher, openVaultSwitcher, updateVaultSwitcherRows } from './vaultSwitcher.js';
@@ -169,6 +170,54 @@ export default function App(): JSX.Element {
   const activeVault = useActiveVault();
   const blockingCount = useBlockingCount();
   const updateStatus = useUpdateStatus();
+  // I12 / #501 — What's new re-wired to GitHub release notes (main changelog.ts).
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+  const [whatsNewAutoChecked, setWhatsNewAutoChecked] = useState(false);
+
+  // I12: auto-open What's new once per installed version after a successful
+  // changelog fetch (changelogSeenVersion in desktop settings).
+  useEffect(() => {
+    if (whatsNewAutoChecked) return;
+    let alive = true;
+    void (async () => {
+      try {
+        const get = window.CentraidApi.getChangelog;
+        const getSettings = window.CentraidApi.getSettings;
+        if (!get || !getSettings) {
+          if (alive) setWhatsNewAutoChecked(true);
+          return;
+        }
+        const [changelog, settings] = await Promise.all([get(), getSettings()]);
+        if (!alive) return;
+        setWhatsNewAutoChecked(true);
+        const current = changelog.currentVersion?.replace(/^v/i, '') ?? '';
+        const seen = (settings.changelogSeenVersion ?? '').replace(/^v/i, '');
+        if (current && current !== seen && changelog.releases.length > 0) {
+          setWhatsNewOpen(true);
+        }
+      } catch {
+        if (alive) setWhatsNewAutoChecked(true);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [whatsNewAutoChecked]);
+
+  const closeWhatsNew = useCallback(() => {
+    setWhatsNewOpen(false);
+    void (async () => {
+      try {
+        const changelog = await window.CentraidApi.getChangelog?.();
+        const ver = changelog?.currentVersion;
+        if (ver) {
+          await window.CentraidApi.saveSettings?.({ changelogSeenVersion: ver });
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, []);
   const gatewayStatus = useGatewayRuntime()?.status;
   // Dev flag (issue #434, Phase 3): the builder + every entry point into it are
   // hidden from the first release unless this is set. Threaded into ShellActions
@@ -189,8 +238,6 @@ export default function App(): JSX.Element {
     [],
   );
   const [vaultSwitcherOpen, setVaultSwitcherOpen] = useState(false);
-  // What's new modal is parked (issue #468 I12) — keep changelog-core for a
-  // future D3 re-wire; do not auto-open or expose UI until then.
   // The switcher's per-gateway actions (issue #382) — "New space…", "Test
   // connection…", "Rename…" and the footer "Add gateway…" all open one of
   // these small modals; the switcher popover itself already closed by the
@@ -533,8 +580,14 @@ export default function App(): JSX.Element {
           onSelectConversation={(id) => nav.navigate({ kind: 'assistant', conversationId: id })}
           onDeleteConversation={deleteAssistantConversation}
           onConversationMenu={conversationMenu}
+          onWhatsNew={() => setWhatsNewOpen(true)}
           {...(updateStatus?.available
-            ? { updateVersion: updateStatus.version, onRelaunchToUpdate: relaunchToUpdate }
+            ? {
+                updateVersion: updateStatus.version,
+                onRelaunchToUpdate: relaunchToUpdate,
+                updatePillTitle: updatePillTitle(updateStatus),
+                updateReadyToInstall: updateStatus.readyToInstall !== false,
+              }
             : {})}
         />
       );
@@ -704,6 +757,7 @@ export default function App(): JSX.Element {
           ? { onNewApp: () => navRef.current?.navigate({ kind: 'builder' }) }
           : {})}
       />
+      {whatsNewOpen ? <WhatsNewModal onClose={closeWhatsNew} /> : null}
       {paletteOpen ? (
         <PaletteScreen
           onClose={closePalette}

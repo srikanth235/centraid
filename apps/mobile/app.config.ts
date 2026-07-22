@@ -3,13 +3,21 @@
  * Build numbers come from {@link nativeBuildNumber} so app.json hardcodes cannot drift.
  */
 import type { ExpoConfig, ConfigContext } from 'expo/config';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 // Expo evaluates app.config via Node CJS resolve (require-from-string). An
 // extensionless TS import of `./src/version-core` fails with MODULE_NOT_FOUND
 // on CI; the .cjs twin is the same formula and resolves under plain require.
 import { nativeBuildNumber } from './src/version-core.cjs';
 
-// Keep in lockstep with monorepo root / package.json workspaces (0.1.0).
-const VERSION = '0.1.0';
+// Single-source: apps/mobile/package.json version (synced from monorepo root
+// by scripts/release/sync-versions.mjs / publish.mjs — issue #501 / J6).
+const mobileRoot = dirname(fileURLToPath(import.meta.url));
+const VERSION = String(
+  (JSON.parse(readFileSync(join(mobileRoot, 'package.json'), 'utf8')) as { version: string })
+    .version,
+);
 const BUILD = nativeBuildNumber(VERSION);
 
 export default function createExpoConfig({ config }: ConfigContext): ExpoConfig {
@@ -51,9 +59,19 @@ export default function createExpoConfig({ config }: ConfigContext): ExpoConfig 
     runtimeVersion: {
       policy: 'appVersion',
     },
+    // J7 / #501 — dormant OTA hotfix lane only. No eas update in CI.
+    // Replace placeholder when Expo project is enrolled (EAS_PROJECT_ID secret).
     updates: {
       checkAutomatically: 'ON_ERROR_RECOVERY',
-      url: 'https://u.expo.dev/placeholder-centraid-mobile',
+      url:
+        process.env.EAS_PROJECT_ID && process.env.EAS_PROJECT_ID !== ''
+          ? `https://u.expo.dev/${process.env.EAS_PROJECT_ID}`
+          : 'https://u.expo.dev/placeholder-centraid-mobile',
+    },
+    extra: {
+      eas: {
+        projectId: process.env.EAS_PROJECT_ID || 'placeholder-centraid-mobile',
+      },
     },
     assetBundlePatterns: ['**/*'],
     plugins: [
