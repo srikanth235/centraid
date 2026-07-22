@@ -1,4 +1,8 @@
-import initWasm, { BrowserEndpoint, type BrowserResponse } from './generated/centraid_web_iroh.js';
+import initWasm, {
+  BrowserEndpoint,
+  connect_failure_marker,
+  type BrowserResponse,
+} from './generated/centraid_web_iroh.js';
 import { SERVICE_WORKER_VERSION } from './sw-version.js';
 import { loadConnection, webGatewayId } from './web-state.js';
 
@@ -109,7 +113,7 @@ async function endpoint(
       const connectStart = markConnectStart();
       await initWasm();
       const storage = rememberDevice ? localStorage : sessionStorage;
-      const node = await BrowserEndpoint.spawn(stored ? decodeBytes(stored) : undefined);
+      const node = await BrowserEndpoint.spawn(stored ? decodeBytes(stored) : undefined, undefined);
       if (!stored) storage.setItem(KEY_STORAGE, encodeBytes(node.secret_key()));
       measureConnect(connectStart);
       return node;
@@ -177,7 +181,7 @@ export async function pairGatewayOverIroh(
 // only failure we can prove happened BEFORE the request body went on the wire.
 function isConnectFailure(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return message.includes('could not connect to gateway tunnel');
+  return message.includes(connect_failure_marker());
 }
 
 function jitteredBackoff(base: number): number {

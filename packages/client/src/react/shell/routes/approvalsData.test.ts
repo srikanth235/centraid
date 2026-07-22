@@ -4,10 +4,12 @@ import type {
   OutboxItem,
   OutboxNeedsAuth,
   OutboxScopeRequest,
+  ReviewEntry,
 } from '../../../gateway-client-outbox.js';
 import type { VaultParkedEntry } from '../../../gateway-client-vault.js';
 import {
   buildGrantRow,
+  buildActivityRow,
   buildNeedsAuthRow,
   buildOutboxRow,
   buildParkedRow,
@@ -162,5 +164,65 @@ describe('buildGrantRow', () => {
       revokedAt: null,
     };
     expect(buildGrantRow(row).actorLabel).toBe('app-42');
+  });
+});
+
+describe('buildActivityRow', () => {
+  it('turns a Locker reveal into an origin-bearing fill activity row', () => {
+    const row: ReviewEntry = {
+      receiptId: 'receipt-fill',
+      action: 'reveal',
+      objectType: 'locker.item',
+      objectId: 'login-1',
+      decision: 'allow',
+      occurredAt: new Date().toISOString(),
+      risk: null,
+      invocationId: null,
+      actorId: null,
+      context: { kind: 'fill', origin: 'https://example.test' },
+    };
+    expect(buildActivityRow(row)).toMatchObject({
+      label: 'Locker filled a login',
+      detail: 'https://example.test',
+      decision: 'allow',
+    });
+  });
+
+  it('does not mislabel a manual Locker reveal as an autofill', () => {
+    const row: ReviewEntry = {
+      receiptId: 'receipt-manual',
+      action: 'reveal',
+      objectType: 'locker.item',
+      objectId: 'login-1',
+      decision: 'allow',
+      occurredAt: new Date().toISOString(),
+      risk: null,
+      invocationId: null,
+      actorId: null,
+      context: null,
+    };
+    expect(buildActivityRow(row)).toMatchObject({
+      label: 'Locker login revealed',
+      detail: 'locker.item',
+    });
+  });
+
+  it('labels a denied fill without claiming a credential was filled', () => {
+    const row: ReviewEntry = {
+      receiptId: 'receipt-denied',
+      action: 'reveal',
+      objectType: 'locker.item',
+      objectId: 'login-1',
+      decision: 'deny',
+      occurredAt: new Date().toISOString(),
+      risk: null,
+      invocationId: null,
+      actorId: null,
+      context: { kind: 'fill', origin: 'https://example.test' },
+    };
+    expect(buildActivityRow(row)).toMatchObject({
+      label: 'Locker fill denied',
+      detail: 'https://example.test',
+    });
   });
 });

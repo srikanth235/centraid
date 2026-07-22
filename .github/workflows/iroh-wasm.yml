@@ -1,0 +1,51 @@
+name: Iroh WASM binding
+
+on:
+  pull_request:
+    paths:
+      - 'apps/web/iroh-wasm/**'
+      - 'apps/web/scripts/build-iroh-wasm.sh'
+      - 'apps/web/src/generated/**'
+      - '.github/workflows/iroh-wasm.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generated-binding:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      - name: Install pinned binding tools
+        run: |
+          # apps/web/iroh-wasm/rust-toolchain.toml pins rustc + wasm target.
+          rustup show
+          cargo install wasm-bindgen-cli --version 0.2.108 --locked
+          # binaryen 108 matches Ubuntu 24.04 apt; pin so wasm-opt does not float.
+          sudo apt-get update
+          sudo apt-get install --yes binaryen=108-1 clang
+      - name: Rebuild browser binding
+        env:
+          CC_wasm32_unknown_unknown: /usr/bin/clang
+        # Invoke via bash so a missing +x bit cannot fail the job with exit 126.
+        # Working-directory ensures the crate-local rust-toolchain.toml applies.
+        working-directory: apps/web
+        run: bash scripts/build-iroh-wasm.sh
+      - name: Report generated binding drift (non-blocking)
+        # Full byte-exact rebuild is not yet hermetic across rustc/wasm-bindgen
+        # intrinsic comment renumbering. Rebuild success is the required gate;
+        # drift is reported so owners can refresh committed artifacts deliberately.
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- apps/web/src/generated; then
+            echo "Generated Iroh bindings match the committed tree."
+          else
+            echo "::warning::Generated Iroh binding drift after rebuild (refresh committed artifacts when intentional)."
+            git diff --stat -- apps/web/src/generated || true
+          fi

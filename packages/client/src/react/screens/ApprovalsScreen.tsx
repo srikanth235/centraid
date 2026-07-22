@@ -95,12 +95,21 @@ export interface ApprovalsGrantRowDTO {
   createdAgo: string;
 }
 
+export interface ApprovalsActivityRowDTO {
+  receiptId: string;
+  label: string;
+  detail: string;
+  occurredAgo: string;
+  decision: string;
+}
+
 export interface ApprovalsScreenProps {
   outbox: readonly ApprovalsOutboxRowDTO[];
   needsAuth: readonly ApprovalsNeedsAuthRowDTO[];
   parked: readonly ApprovalsParkedRowDTO[];
   scopeRequests: readonly ApprovalsScopeRequestRowDTO[];
   grants: readonly ApprovalsGrantRowDTO[];
+  activity: readonly ApprovalsActivityRowDTO[];
   /** The itemId/invocationId/requestId/grantId currently mid-flight — disables its row's actions. */
   busyId: string | null;
   /**
@@ -505,6 +514,7 @@ export default function ApprovalsScreen(props: ApprovalsScreenProps): JSX.Elemen
     parked,
     scopeRequests,
     grants,
+    activity,
     busyId,
     onApproveOutbox,
     onDenyOutbox,
@@ -658,6 +668,32 @@ export default function ApprovalsScreen(props: ApprovalsScreenProps): JSX.Elemen
           </p>
         )}
       </section>
+
+      {activity.length > 0 ? (
+        <section className={styles.grantsSection}>
+          <GroupHead
+            icon={<Icon name="History" size={13} />}
+            label="Recent activity"
+            count={activity.length}
+          />
+          <div className={styles.grantsList}>
+            {activity.map((row) => (
+              <div className={styles.row} key={row.receiptId}>
+                <div className={styles.rowMain}>
+                  <span className={styles.rowIcon}>
+                    <Icon name="Eye" size={14} />
+                  </span>
+                  <span className={styles.rowBody}>
+                    <span className={styles.rowTitle}>{row.label}</span>
+                    <span className={styles.rowSub}>{row.detail}</span>
+                  </span>
+                  <span className={styles.rowMeta}>{row.occurredAgo}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

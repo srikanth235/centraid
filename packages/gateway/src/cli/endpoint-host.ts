@@ -54,6 +54,16 @@ import type { DaemonLayout } from './paths.js';
 
 export const DEVICE_HEADER = 'x-centraid-device';
 export const DEVICE_PROOF_HEADER = 'x-centraid-device-proof';
+const COMPANION_MODULES = new Set(['locker', 'tasks', 'notes', 'docs', 'agenda', 'people']);
+
+function companionGrantProfile(value: unknown): string[] | undefined | null {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) return null;
+  if (!value.every((module) => typeof module === 'string' && COMPANION_MODULES.has(module))) {
+    return null;
+  }
+  return [...new Set(value as string[])];
+}
 
 export interface DaemonDevicePlane {
   /** Wire into `serve()` so requests resolve their vault by enrollment. */
@@ -207,6 +217,13 @@ export function makeDaemonDevicePlane(input: {
     ) {
       return { ok: false, error: 'bad_request' };
     }
+    const grantProfile = companionGrantProfile(request.grantProfile);
+    if (request.platform === 'extension' && grantProfile === undefined) {
+      return { ok: false, error: 'missing_grant_profile' };
+    }
+    if (grantProfile === null) {
+      return { ok: false, error: 'bad_grant_profile' };
+    }
     const registry = input.vaults();
     if (!registry) return { ok: false, error: 'gateway_not_ready' };
     const redeemed = tickets.redeem(request.ticketId, request.secret);
@@ -220,6 +237,7 @@ export function makeDaemonDevicePlane(input: {
       platform: request.platform,
       ...(request.rememberDevice !== undefined ? { rememberDevice: request.rememberDevice } : {}),
       trust: redeemed.trust,
+      ...(grantProfile !== undefined ? { grantProfile } : {}),
     });
     knownEndpointIds.add(endpointId);
     plane.db.blobTransfers.enrollPairedDevice({
@@ -234,6 +252,7 @@ export function makeDaemonDevicePlane(input: {
     );
     return {
       ok: true,
+      enrollmentId: enrollment.enrollmentId,
       gatewayId: liveEndpointId,
       gatewayName: os.hostname().replace(/\.local$/, ''),
       vaultId: redeemed.vaultId,

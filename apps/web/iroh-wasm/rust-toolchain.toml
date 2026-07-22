@@ -1,0 +1,5 @@
+# Pin the Rust channel used when rebuilding the browser Iroh WASM binding.
+# Scoped to this crate so the monorepo data-plane toolchain is unaffected.
+[toolchain]
+channel = "1.91.0"
+targets = ["wasm32-unknown-unknown"]

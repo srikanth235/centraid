@@ -4,6 +4,7 @@ import type {
   OutboxItem,
   OutboxNeedsAuth,
   OutboxScopeRequest,
+  ReviewEntry,
 } from '../../../gateway-client-outbox.js';
 import type { VaultParkedEntry } from '../../../gateway-client-vault.js';
 import type {
@@ -12,6 +13,7 @@ import type {
   ApprovalsOutboxRowDTO,
   ApprovalsParkedRowDTO,
   ApprovalsScopeRequestRowDTO,
+  ApprovalsActivityRowDTO,
 } from '../../screens/ApprovalsScreen.js';
 
 /** Titlecase a snake/dot-separated key for the detail panel's field labels. */
@@ -104,5 +106,27 @@ export function buildGrantRow(row: OutboxGrant): ApprovalsGrantRowDTO {
     verb: row.verb,
     target: row.target,
     createdAgo: relativeTime(row.createdAt),
+  };
+}
+
+export function buildActivityRow(row: ReviewEntry): ApprovalsActivityRowDTO {
+  const isLockerReveal = row.action === 'reveal' && row.objectType === 'locker.item';
+  const fillContext = row.context?.kind === 'fill' ? row.context : undefined;
+  const isFill = isLockerReveal && fillContext !== undefined;
+  const label = isFill
+    ? row.decision === 'allow'
+      ? 'Locker filled a login'
+      : 'Locker fill denied'
+    : isLockerReveal
+      ? row.decision === 'allow'
+        ? 'Locker login revealed'
+        : 'Locker reveal denied'
+      : row.action;
+  return {
+    receiptId: row.receiptId,
+    label,
+    detail: isFill ? fillContext.origin : row.objectType,
+    occurredAgo: relativeTime(row.occurredAt),
+    decision: row.decision,
   };
 }

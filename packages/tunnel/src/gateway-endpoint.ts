@@ -53,11 +53,15 @@ export interface GatewayPairRequest {
   platform: string;
   rememberDevice?: boolean;
   trust?: 'full' | 'readonly';
+  /** Optional module capability profile for a constrained companion device. */
+  grantProfile?: string[];
 }
 
 export interface GatewayPairResponse {
   ok: boolean;
   error?: string;
+  /** Enrollment row the newly paired device may delete to unpair itself. */
+  enrollmentId?: string;
   /** Stable sovereign gateway EndpointId; relay-bearing tickets may rotate. */
   gatewayId?: string;
   /** Owner-facing gateway name. */

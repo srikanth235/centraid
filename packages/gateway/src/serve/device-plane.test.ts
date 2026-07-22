@@ -165,7 +165,7 @@ test('enrollment: a live writer lock fails fast instead of blocking the daemon t
   await fs.rm(`${file}.lock`, { recursive: true, force: true });
 });
 
-test('enrollment: remember and trust choices persist across re-pair', async () => {
+test('enrollment: remember, trust, and Companion grants persist across re-pair', async () => {
   const file = await tempFile('devices.json');
   const store = EnrollmentStore.open(file);
   store.enroll({
@@ -174,14 +174,33 @@ test('enrollment: remember and trust choices persist across re-pair', async () =
     label: 'borrowed tablet',
     trust: 'readonly',
     rememberDevice: false,
+    grantProfile: ['locker', 'notes'],
   });
   expect(EnrollmentStore.open(file).get('ep-session', 'v1')).toMatchObject({
     trust: 'readonly',
     rememberDevice: false,
+    grantProfile: ['locker', 'notes'],
   });
+  store.enroll({
+    endpointId: 'ep-session',
+    vaultId: 'v1',
+    label: 'borrowed tablet',
+    grantProfile: ['tasks'],
+  });
+  expect(EnrollmentStore.open(file).get('ep-session', 'v1')?.grantProfile).toEqual(['tasks']);
   expect(
     store.enroll({ endpointId: 'ep-default', vaultId: 'v1', label: 'default device' }),
   ).toMatchObject({ rememberDevice: false });
+
+  // Re-pairing the same endpoint as a non-extension full client clears a sticky
+  // companion allow-list (omit grantProfile must not leave the old clamp).
+  store.enroll({
+    endpointId: 'ep-session',
+    vaultId: 'v1',
+    label: 'full desktop',
+    platform: 'desktop',
+  });
+  expect(EnrollmentStore.open(file).get('ep-session', 'v1')?.grantProfile).toBeUndefined();
 });
 
 test('enrollment: pre-trust registry rows retain their historical full access', async () => {

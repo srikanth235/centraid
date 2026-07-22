@@ -65,6 +65,7 @@ interface DeviceDTO {
   current?: boolean;
   trust: 'full' | 'readonly' | 'revoked';
   rememberDevice: boolean;
+  grantProfile?: string[];
   compute?: DeviceComputeProfile;
   checkpoint?: {
     epoch: string;
@@ -259,11 +260,21 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
     const deadKeys = new Set(
       removed.map((r) => r.endpointId).filter((key) => !deps.enrollments.isEnrolled(key)),
     );
+    const selfKey = callerKey && deadKeys.has(callerKey) ? callerKey : undefined;
     for (const key of deadKeys) {
       deps.deviceTokens.revokeForDeviceKey(key);
+      if (key === selfKey) continue;
       await deps.onEndpointRevoked?.(key);
     }
-    return sendJson(res, 200, { removed: true });
+    const sent = sendJson(res, 200, { removed: true });
+    if (selfKey && deps.onEndpointRevoked) {
+      // Let a self-unpair response finish traversing the current QUIC stream.
+      // The enrollment is already absent, so the per-stream authorize guard
+      // rejects any second request during this short close grace.
+      const timer = setTimeout(() => void deps.onEndpointRevoked?.(selfKey), 1_000);
+      timer.unref();
+    }
+    return sent;
   };
 }
 
@@ -287,6 +298,7 @@ function toDto(
     current: callerKey !== undefined && row.endpointId === callerKey,
     trust: row.trust,
     rememberDevice: row.rememberDevice,
+    ...(row.grantProfile !== undefined ? { grantProfile: [...row.grantProfile] } : {}),
     ...(row.compute ? { compute: row.compute } : {}),
     ...(row.checkpoint ? { checkpoint: row.checkpoint } : {}),
   };

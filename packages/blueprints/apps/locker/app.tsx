@@ -102,7 +102,15 @@ const logic = createLogic({ state, data, render, refresh });
 // ---------- Edit / new plumbing ----------
 
 function openNew() {
-  state.edit = { mode: 'new', type: 'login', title: '', fields: {}, tags: '', alias: '' };
+  state.edit = {
+    mode: 'new',
+    type: 'login',
+    title: '',
+    fields: {},
+    tags: '',
+    alias: '',
+    urlMatchPolicy: 'registrable-domain',
+  };
   state.sideOpen = false;
   render();
 }
@@ -142,6 +150,7 @@ function openEdit(sel: DetailItem) {
     fields,
     tags: (sel.tags || []).join(', '),
     alias: sel.alias || '',
+    urlMatchPolicy: sel.url_match_policy === 'exact-host' ? 'exact-host' : 'registrable-domain',
   };
   render();
 }

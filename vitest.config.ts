@@ -21,6 +21,7 @@ export default defineConfig({
       'packages/test-kit',
       'packages/vault',
       'apps/desktop',
+      'apps/extension',
       'apps/mobile',
       'apps/web',
     ],

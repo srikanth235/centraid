@@ -85,6 +85,7 @@ export {
   type RuntimeHttpServerHandle,
   type BearerAuthorization,
 } from './http/http-server.js';
+export { COMPANION_GRANTS_HEADER } from './http/internal-headers.js';
 export {
   tuneGatewayHttpServer,
   GATEWAY_KEEP_ALIVE_TIMEOUT_MS,

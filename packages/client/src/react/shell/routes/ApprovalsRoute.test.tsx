@@ -5,10 +5,12 @@ import type { ShellActions } from '../actions.js';
 
 const getBlocking = vi.fn();
 const listOutboxGrants = vi.fn();
+const getReview = vi.fn();
 const decideOutboxItem = vi.fn();
 vi.mock('../../../gateway-client-outbox.js', () => ({
   getBlocking: () => getBlocking(),
   listOutboxGrants: () => listOutboxGrants(),
+  getReview: () => getReview(),
   decideOutboxItem: (input: unknown) => decideOutboxItem(input),
   decideScopeRequest: vi.fn(),
   revokeOutboxGrant: vi.fn(),
@@ -49,6 +51,7 @@ beforeEach(async () => {
     scopeRequests: [],
   });
   listOutboxGrants.mockReset().mockResolvedValue([]);
+  getReview.mockReset().mockResolvedValue([]);
   decideOutboxItem.mockReset();
   confirm.mockClear().mockResolvedValue(true);
   showToast.mockClear();

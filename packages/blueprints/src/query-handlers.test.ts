@@ -8,7 +8,7 @@
 // changes (issue #404) that only manifest with content: notes shipping a
 // preview + checklist tally instead of full bodies, the on-open body pull, and
 // agenda bounding recurring expansion to the visible range.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 /** A mock ctx.vault that returns fixture rows keyed by entity name. */
 function ctxOf(rowsByEntity: Record<string, unknown[]>) {
@@ -28,6 +28,151 @@ const dataUri = (text: string) => `data:text/markdown,${encodeURIComponent(text)
 // the real module at runtime. oxlint's type-aware host otherwise tries to emit
 // imported JavaScript beside the source despite this test config using noEmit.
 const importQuery = (relativePath: string) => import(relativePath);
+
+describe('Locker Companion queries (#462)', () => {
+  it('reduces sealed login rows to secret-free candidates', async () => {
+    const { default: candidates } = await importQuery(
+      '../apps/locker/queries/autofill-candidates.ts',
+    );
+    const ctx = ctxOf({
+      'locker.item': [
+        {
+          item_id: 'login-1',
+          type: 'login',
+          title: 'Example',
+          username: 'priya',
+          password: '«sealed»',
+          otp_seed: '«sealed»',
+          url: 'https://example.com/login',
+          url_match_policy: 'exact-host',
+        },
+      ],
+    });
+    const result = await candidates({ ctx });
+    expect(result.candidates).toEqual([
+      {
+        item_id: 'login-1',
+        title: 'Example',
+        username: 'priya',
+        url: 'https://example.com/login',
+        url_match_policy: 'exact-host',
+        has_totp: true,
+        compromised: false,
+        warning: false,
+      },
+    ]);
+    expect(JSON.stringify(result)).not.toContain('password');
+    expect(JSON.stringify(result)).not.toContain('«sealed»');
+  });
+
+  it('reveals password with page context and asks only for a TOTP derivative', async () => {
+    const { default: fill } = await importQuery('../apps/locker/queries/autofill-item.ts');
+    const reveal = vi.fn().mockResolvedValue({
+      values: { password: 'live-password' },
+      receiptId: 'receipt-fill',
+    });
+    const invoke = vi.fn().mockResolvedValue({
+      status: 'executed',
+      output: { code: '123456', remaining: 12 },
+    });
+    const ctx = {
+      vault: {
+        read: vi.fn().mockResolvedValue({
+          rows: [
+            {
+              item_id: 'login-1',
+              type: 'login',
+              username: 'priya',
+              otp_seed: '«sealed»',
+              url: 'https://example.com/login',
+              url_match_policy: 'registrable-domain',
+            },
+          ],
+        }),
+        reveal,
+        invoke,
+      },
+    };
+    const result = await fill({
+      input: { item_id: 'login-1', page_origin: 'https://example.com' },
+      ctx,
+    });
+    expect(result.fill).toEqual({
+      username: 'priya',
+      password: 'live-password',
+      totp: '123456',
+      receipt_id: 'receipt-fill',
+    });
+    expect(reveal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        columns: ['password'],
+        context: { kind: 'fill', origin: 'https://example.com' },
+      }),
+    );
+    expect(invoke).toHaveBeenCalledWith(
+      expect.objectContaining({ command: 'locker.totp_code', input: { item_id: 'login-1' } }),
+    );
+    expect(JSON.stringify(result)).not.toContain('otp_seed');
+  });
+
+  it('refuses reveal when page origin does not match the stored login URL', async () => {
+    const { default: fill } = await importQuery('../apps/locker/queries/autofill-item.ts');
+    const reveal = vi.fn();
+    const ctx = {
+      vault: {
+        read: vi.fn().mockResolvedValue({
+          rows: [
+            {
+              item_id: 'login-1',
+              type: 'login',
+              username: 'priya',
+              url: 'https://example.com/login',
+              url_match_policy: 'exact-host',
+            },
+          ],
+        }),
+        reveal,
+        invoke: vi.fn(),
+      },
+    };
+    const result = await fill({
+      input: { item_id: 'login-1', page_origin: 'https://evil.example' },
+      ctx,
+    });
+    expect(result.fill).toBeNull();
+    expect(result.reason).toMatch(/does not match/i);
+    expect(reveal).not.toHaveBeenCalled();
+  });
+
+  it('refuses forged evil 127 hostnames that are not true loopback', async () => {
+    const { default: fill } = await importQuery('../apps/locker/queries/autofill-item.ts');
+    const reveal = vi.fn();
+    const ctx = {
+      vault: {
+        read: vi.fn().mockResolvedValue({
+          rows: [
+            {
+              item_id: 'login-1',
+              type: 'login',
+              username: 'priya',
+              url: 'http://127.0.0.1:3000',
+              url_match_policy: 'exact-host',
+            },
+          ],
+        }),
+        reveal,
+        invoke: vi.fn(),
+      },
+    };
+    // pageOrigin requires origin === raw; evil hostname fails match even if stored is loopback.
+    const result = await fill({
+      input: { item_id: 'login-1', page_origin: 'https://example.com' },
+      ctx,
+    });
+    expect(result.fill).toBeNull();
+    expect(reveal).not.toHaveBeenCalled();
+  });
+});
 
 describe('notes library query (issue #404)', () => {
   const body = ['- [ ] buy milk', '- [x] call bob', '# A heading', 'x'.repeat(250)].join('\n');

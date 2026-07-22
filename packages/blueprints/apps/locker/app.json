@@ -113,6 +113,10 @@
           "url": {
             "type": "string"
           },
+          "url_match_policy": {
+            "type": "string",
+            "enum": ["registrable-domain", "exact-host"]
+          },
           "otp_seed": {
             "type": "string"
           },
@@ -201,6 +205,10 @@
           },
           "url": {
             "type": "string"
+          },
+          "url_match_policy": {
+            "type": "string",
+            "enum": ["registrable-domain", "exact-host"]
           },
           "otp_seed": {
             "type": "string"
@@ -418,6 +426,35 @@
     }
   ],
   "queries": [
+    {
+      "name": "autofill-candidates",
+      "description": "Secret-free live login metadata for Companion origin matching. OTP presence is a boolean; no password or OTP seed is returned.",
+      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output": {
+        "type": "object",
+        "properties": { "candidates": { "type": "array" }, "vaultDenied": { "type": "object" } }
+      }
+    },
+    {
+      "name": "autofill-item",
+      "description": "Explicit-gesture, origin-context fill for one login. Reveals password only and returns TOTP as a derivative; the seed never crosses the vault boundary.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": { "type": "string", "minLength": 1 },
+          "page_origin": { "type": "string", "minLength": 8 }
+        },
+        "required": ["item_id", "page_origin"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "fill": { "type": ["object", "null"] },
+          "vaultDenied": { "type": "object" }
+        }
+      }
+    },
     {
       "name": "items",
       "description": "A bounded window of non-trashed items (caller-sized via limit, default 300), newest-updated first, each decorated with its favorite star, free-form tags, a safe subtitle and derived Watchtower status (weak / reused / compromised). Secrets are NEVER in this payload — passwords, card numbers, CVVs, OTP seeds and note bodies stay out; open a single item to read them. truncated=true means older items exist beyond the window.",

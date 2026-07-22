@@ -45,19 +45,30 @@ interface PairRequestBody {
   platform?: string;
   /** Persist the replica/intent queue on this device. Omission is an explicit opt-out. */
   rememberDevice?: boolean;
+  grantProfile?: string[];
 }
 
+const COMPANION_MODULES = new Set(['locker', 'tasks', 'notes', 'docs', 'agenda', 'people']);
+
 function parseBody(body: Record<string, unknown>): PairRequestBody | undefined {
-  const { ticket, deviceLabel, platform, rememberDevice } = body;
+  const { ticket, deviceLabel, platform, rememberDevice, grantProfile } = body;
   if (typeof ticket !== 'string' || ticket.length === 0) return undefined;
   if (typeof deviceLabel !== 'string' || deviceLabel.trim().length === 0) return undefined;
   if (platform !== undefined && typeof platform !== 'string') return undefined;
   if (rememberDevice !== undefined && typeof rememberDevice !== 'boolean') return undefined;
+  if (
+    grantProfile !== undefined &&
+    (!Array.isArray(grantProfile) ||
+      !grantProfile.every((module) => typeof module === 'string' && COMPANION_MODULES.has(module)))
+  )
+    return undefined;
+  if (platform === 'extension' && grantProfile === undefined) return undefined;
   return {
     ticket,
     deviceLabel,
     ...(platform !== undefined ? { platform } : {}),
     ...(rememberDevice !== undefined ? { rememberDevice } : {}),
+    ...(grantProfile !== undefined ? { grantProfile: [...new Set(grantProfile)] } : {}),
   };
 }
 
@@ -113,6 +124,7 @@ export function makePairRouteHandler(deps: PairRouteDeps): RouteHandler {
       ...(body.platform !== undefined ? { platform: body.platform } : {}),
       ...(body.rememberDevice !== undefined ? { rememberDevice: body.rememberDevice } : {}),
       trust: redeemed.trust,
+      ...(body.grantProfile !== undefined ? { grantProfile: body.grantProfile } : {}),
     });
     plane.db.blobTransfers.enrollPairedDevice({
       identity: deviceKey,
@@ -125,6 +137,7 @@ export function makePairRouteHandler(deps: PairRouteDeps): RouteHandler {
 
     sendJson(res, 200, {
       ok: true,
+      enrollmentId: enrollment.enrollmentId,
       deviceToken: minted.token,
       deviceKey,
       vaultId: redeemed.vaultId,

@@ -1,0 +1,20 @@
+{
+  "name": "@centraid/extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun run scripts/build.mjs",
+    "package": "bun run build && bun run scripts/package.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "tldts": "6.1.86"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "sharp": "^0.35.3",
+    "typescript": "catalog:"
+  }
+}

@@ -29,7 +29,8 @@
   },
   "dependencies": {
     "@centraid/blob-format": "workspace:*",
-    "@centraid/design-tokens": "workspace:*"
+    "@centraid/design-tokens": "workspace:*",
+    "tldts": "6.1.86"
   },
   "devDependencies": {
     "@centraid/app-engine": "workspace:*",

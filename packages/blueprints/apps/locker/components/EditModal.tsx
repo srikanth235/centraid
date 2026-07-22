@@ -117,6 +117,7 @@ export function EditModal({
   const [title, setTitle] = useState(edit.title);
   const [tags, setTags] = useState(edit.tags);
   const [alias, setAlias] = useState(edit.alias || '');
+  const [urlMatchPolicy, setUrlMatchPolicy] = useState(edit.urlMatchPolicy);
   const [fields, setFields] = useState<Record<string, string>>(edit.fields);
 
   const fieldDefs = editFieldsFor(type);
@@ -132,6 +133,7 @@ export function EditModal({
       title,
       tags,
       alias,
+      urlMatchPolicy,
       fields,
       allowedKeys: fieldDefs.map((f) => f.key),
     });
@@ -188,6 +190,22 @@ export function EditModal({
             onGenerate={generate}
           />
         ))}
+
+        {type === 'login' ? (
+          <label className={styles.matchPolicy}>
+            <input
+              type="checkbox"
+              checked={urlMatchPolicy === 'exact-host'}
+              onChange={(event) =>
+                setUrlMatchPolicy(event.target.checked ? 'exact-host' : 'registrable-domain')
+              }
+            />
+            <span>
+              <strong>Match only this exact host</strong>
+              <small>Otherwise Companion matches the site's registrable domain.</small>
+            </span>
+          </label>
+        ) : null}
 
         <div className={shared.fieldLg}>
           <div className={shared.flabel}>Tags (comma-separated)</div>

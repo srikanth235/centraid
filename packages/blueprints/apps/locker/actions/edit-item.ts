@@ -28,6 +28,7 @@ export default async ({ body, ctx }: HandlerArgs) => {
   const cmdInput: Record<string, unknown> = { item_id: String(input.item_id ?? '') };
   if (input.title != null) cmdInput.title = String(input.title);
   if (Array.isArray(input.tags)) cmdInput.tags = input.tags.map(String);
+  if (input.url_match_policy != null) cmdInput.url_match_policy = String(input.url_match_policy);
   for (const f of FIELDS) if (input[f] != null) cmdInput[f] = String(input[f]);
   try {
     const outcome = await ctx.vault.invoke({

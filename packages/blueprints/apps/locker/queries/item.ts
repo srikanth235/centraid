@@ -18,6 +18,7 @@ interface FullRow {
   username?: string | null;
   password?: string | null;
   url?: string | null;
+  url_match_policy?: 'registrable-domain' | 'exact-host' | null;
   otp_seed?: string | null;
   notes?: string | null;
   cardholder?: string | null;
@@ -76,6 +77,7 @@ export default async ({ input, ctx }: { input?: Record<string, unknown>; ctx: Ha
       username: row.username ?? null,
       password: row.password ?? null,
       url: row.url ?? null,
+      url_match_policy: row.url_match_policy ?? 'registrable-domain',
       otp_seed: row.otp_seed ?? null,
       notes: row.notes ?? null,
       cardholder: row.cardholder ?? null,

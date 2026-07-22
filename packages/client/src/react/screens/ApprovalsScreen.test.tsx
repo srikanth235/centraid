@@ -75,6 +75,14 @@ const grantRow: ApprovalsGrantRowDTO = {
   createdAgo: '3d ago',
 };
 
+const fillActivity = {
+  receiptId: 'receipt-fill',
+  label: 'Locker filled a login',
+  detail: 'https://example.test',
+  occurredAgo: '1m ago',
+  decision: 'allow',
+};
+
 function makeProps(over: Partial<ApprovalsScreenProps> = {}): ApprovalsScreenProps {
   return {
     outbox: [],
@@ -82,6 +90,7 @@ function makeProps(over: Partial<ApprovalsScreenProps> = {}): ApprovalsScreenPro
     parked: [],
     scopeRequests: [],
     grants: [],
+    activity: [],
     busyId: null,
     onApproveOutbox: vi.fn(),
     onDenyOutbox: vi.fn(),
@@ -272,6 +281,13 @@ describe('ApprovalsScreen', () => {
       findButton(el, 'Revoke').click();
     });
     expect(onRevokeGrant).toHaveBeenCalledWith('g1');
+  });
+
+  it('shows the origin of a recent Locker fill in review activity', () => {
+    const el = mount(makeProps({ activity: [fillActivity] }));
+    expect(el.textContent).toContain('Recent activity');
+    expect(el.textContent).toContain('Locker filled a login');
+    expect(el.textContent).toContain('https://example.test');
   });
 
   it('shows an Edit affordance only when canEdit is true, and keeps the honest copy otherwise', () => {

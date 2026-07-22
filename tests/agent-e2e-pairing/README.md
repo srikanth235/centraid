@@ -20,6 +20,7 @@ exercised the way an owner actually performs the ceremony.
 node tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs
 node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs
 node tests/agent-e2e-pairing/flows/cross-network-relay.mjs      # needs Docker — see below
+node tests/agent-e2e-pairing/flows/extension-companion.mjs      # needs Playwright Chromium + display
 ```
 
 The first two run gateway + device as plain processes on the same host with
@@ -117,6 +118,7 @@ tests/agent-e2e-pairing/
 | `packages/tunnel/src/gateway-endpoint.test.ts` | iroh ALPN protocol against FAKE stores |
 | `device-pairing-lifecycle` / `pairing-ticket-hygiene` | the real ceremony across real processes, loopback transport |
 | `cross-network-relay` | the same ceremony over the real n0 relay/hole-punch transport |
+| `extension-companion` | the real MV3 worker + browser WASM, explicit Locker fill, receipt, and remote revocation |
 
 When a flow here stabilizes into a pure invariant, port it down into one of
 the vitest layers and keep this tier for the journey.

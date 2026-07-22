@@ -41,7 +41,14 @@
     "packages/blueprints": {
       "entry": ["src/index.ts"],
       "project": ["src/**/*.{ts,tsx}"],
-      "ignoreDependencies": ["@centraid/blob-format", "esbuild", "pdfjs-dist", "react", "react-dom"]
+      "ignoreDependencies": [
+        "@centraid/blob-format",
+        "esbuild",
+        "pdfjs-dist",
+        "react",
+        "react-dom",
+        "tldts"
+      ]
     },
     "packages/test-kit": {
       "entry": ["src/*.ts"],
@@ -60,6 +67,16 @@
       "entry": ["index.ts", "App.tsx"],
       "project": ["src/**/*.{ts,tsx}"],
       "ignoreDependencies": ["@babel/core", "expo-system-ui"]
+    },
+    "apps/extension": {
+      "entry": [
+        "src/worker.ts",
+        "src/content.ts",
+        "src/popup.ts",
+        "src/pair.ts",
+        "scripts/*.{js,mjs}"
+      ],
+      "project": ["src/**/*.{ts,tsx}", "scripts/*.{js,mjs}"]
     }
   }
 }

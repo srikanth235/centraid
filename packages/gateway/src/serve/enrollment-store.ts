@@ -44,6 +44,8 @@ export interface DeviceEnrollment {
    * decide between OPFS/IndexedDB and session-memory state.
    */
   rememberDevice: boolean;
+  /** Companion modules this constrained device may invoke; absent means legacy full access. */
+  grantProfile?: string[];
   /** Owner opt-in plus the compute this device most recently advertised. */
   compute?: DeviceComputeProfile;
   /** Last replica cursor the authenticated device explicitly acknowledged. */
@@ -200,6 +202,7 @@ export class EnrollmentStore {
     platform?: string;
     trust?: 'full' | 'readonly';
     rememberDevice?: boolean;
+    grantProfile?: string[];
   }): DeviceEnrollment {
     return this.mutate(() => {
       const existing = this.enrollments.find(
@@ -210,6 +213,13 @@ export class EnrollmentStore {
         if (input.platform !== undefined) existing.platform = input.platform;
         if (input.trust !== undefined) existing.trust = input.trust;
         if (input.rememberDevice !== undefined) existing.rememberDevice = input.rememberDevice;
+        if (input.grantProfile !== undefined) {
+          existing.grantProfile = [...input.grantProfile];
+        } else if (input.platform !== undefined && input.platform !== 'extension') {
+          // Re-pairing the same endpoint as a full/non-extension client must
+          // drop a sticky companion allow-list so the device is not surface-clamped.
+          delete existing.grantProfile;
+        }
         return { ...existing };
       }
       const row: DeviceEnrollment = {
@@ -220,6 +230,7 @@ export class EnrollmentStore {
         ...(input.platform !== undefined ? { platform: input.platform } : {}),
         trust: input.trust ?? 'full',
         rememberDevice: input.rememberDevice === true,
+        ...(input.grantProfile !== undefined ? { grantProfile: [...input.grantProfile] } : {}),
         addedAt: new Date().toISOString(),
       };
       this.enrollments.push(row);
@@ -406,6 +417,9 @@ function normalizeEnrollment(value: unknown): DeviceEnrollment | undefined {
       enrollment.trust === 'readonly' ||
       enrollment.trust === 'revoked') &&
     (enrollment.rememberDevice === undefined || typeof enrollment.rememberDevice === 'boolean') &&
+    (enrollment.grantProfile === undefined ||
+      (Array.isArray(enrollment.grantProfile) &&
+        enrollment.grantProfile.every((module) => typeof module === 'string'))) &&
     (enrollment.compute === undefined || validComputeProfile(enrollment.compute)) &&
     (enrollment.checkpoint === undefined || validCheckpoint(enrollment.checkpoint));
   if (!valid) return undefined;

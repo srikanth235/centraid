@@ -377,6 +377,37 @@ test('blocking lists what waits on the owner; the review feed ranks receipts by 
   expect(feed.length).toBeGreaterThan(0);
   expect(feed.every((e) => e.action.startsWith('act '))).toBe(true);
   expect(feed.some((e) => e.risk !== null)).toBe(true);
+
+  // Explicit Locker fills join the same review-after-the-fact surface with
+  // the normalized origin, but never the revealed secret.
+  const added = plane.gateway.invoke(plane.ownerCredential, {
+    command: 'locker.add_item',
+    input: {
+      type: 'login',
+      title: 'Example',
+      username: 'owner@example.test',
+      password: 'not-in-the-review-feed',
+      url: 'https://example.test',
+    },
+  });
+  expect(added.status).toBe('executed');
+  const itemId = (added as { output: { item_id: string } }).output.item_id;
+  plane.gateway.reveal(plane.ownerCredential, {
+    entity: 'locker.item',
+    entityId: itemId,
+    columns: ['password'],
+    context: { kind: 'fill', origin: 'https://example.test' },
+  });
+  const fills = plane.reviewFeed(20).filter((entry) => entry.action === 'reveal');
+  expect(fills).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        objectType: 'locker.item',
+        context: { kind: 'fill', origin: 'https://example.test' },
+      }),
+    ]),
+  );
+  expect(JSON.stringify(fills)).not.toContain('not-in-the-review-feed');
 });
 
 function blockingConnectionId(plane: VaultPlane): string {

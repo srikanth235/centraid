@@ -6,6 +6,7 @@ import { makeConversationRouteHandler } from './conversation-routes.js';
 import { makeUserStoreRouteHandler } from '../stores/prefs-store.js';
 import type { Runtime } from '../runtime.js';
 import { GATEWAY_SHUTDOWN_GRACE_MS, tuneGatewayHttpServer } from './server-tuning.js';
+import { COMPANION_GRANTS_HEADER } from './internal-headers.js';
 
 export interface RuntimeHttpServerOptions {
   runtime: Runtime;
@@ -216,6 +217,7 @@ export async function startRuntimeHttpServer(
     // before auth runs; only the `authorizeBearer` branch below re-sets it,
     // and only after verifying the bearer names a device token (#376).
     delete req.headers[AUTHED_DEVICE_HEADER];
+    delete req.headers[COMPANION_GRANTS_HEADER];
     delete req.headers[WEB_APP_HEADER];
     delete req.headers[WEB_SHELL_ORIGIN_HEADER];
     const raw = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
