@@ -55,8 +55,9 @@ if (existsSync(desktopPkg)) {
     Boolean(pkg.devDependencies?.['electron-builder']),
     'electron-builder pinned in desktop package.json',
   );
+  // Runtime dep (packaged app loads it) — not a build-only devDependency.
   ok(
-    Boolean(pkg.devDependencies?.['electron-updater']),
+    Boolean(pkg.dependencies?.['electron-updater'] || pkg.devDependencies?.['electron-updater']),
     'electron-updater pinned in desktop package.json',
   );
   ok(Boolean(pkg.scripts?.dist), 'desktop dist script present');
