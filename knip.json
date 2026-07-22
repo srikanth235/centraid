@@ -51,6 +51,7 @@
       "project": ["src/**/*.{ts,tsx}"],
       "ignoreDependencies": [
         "@centraid/blob-format",
+        "@types/react",
         "esbuild",
         "pdfjs-dist",
         "react",

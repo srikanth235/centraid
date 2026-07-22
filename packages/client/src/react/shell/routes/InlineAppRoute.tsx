@@ -135,7 +135,7 @@ function InlineAppMount({
   }, []);
 
   const Root = descriptor.Root;
-  return <Root rootRef={(el) => onRootReady(el, descriptor)} />;
+  return <Root rootRef={(el: HTMLElement | null) => onRootReady(el, descriptor)} />;
 }
 
 export default function InlineAppRoute({

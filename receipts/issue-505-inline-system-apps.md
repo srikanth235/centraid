@@ -302,6 +302,49 @@ offline render none → full.
     unknown); the `service install` → desktop-adopt path would need the OS
     service unit to carry `CENTRAID_GATEWAY_TOKEN`.
 
+- **CI follow-up**: repaired the three failures found by PR #516.
+  `packages/blueprints/package.json` now declares `@types/react` and `bun.lock`
+  records it, so the isolated gateway Docker build can type-check
+  `packages/blueprints/apps/inline-types.ts`; `knip.json` documents that ambient
+  type-only dependency because knip cannot observe TypeScript's automatic
+  `@types` resolution. The callback in
+  `packages/client/src/react/shell/routes/InlineAppRoute.tsx` is explicitly
+  typed. Desktop coverage in `apps/desktop/tests/e2e/settings-gateways.spec.ts`
+  now asserts pairing-only enrollment and uses paired profiles seeded by
+  `apps/desktop/tests/e2e/fixtures.ts`, instead of calling the deliberately
+  removed `CentraidApi.addGateway`. The over-limit
+  `packages/gateway/src/cli/admin.test.ts` was split without changing behavior:
+  independent vault cases moved to
+  `packages/gateway/src/cli/vault-admin.test.ts` while endpoint tests retain
+  their shared-file sequencing.
+- **Governance file-coverage crosswalk**: the Phase 7 inventory also includes
+  `apps/desktop/src/main/detached-gateway-core.test.ts`,
+  `apps/desktop/src/main/ipc.ts`, `apps/desktop/src/main/local-gateway.ts`,
+  `apps/desktop/src/preload.ts`, `packages/cli/src/auth.test.ts`,
+  `packages/cli/src/auth.ts`,
+  `packages/client/src/react/shell/routes/ConnectFlow.module.css`,
+  `packages/client/src/react/shell/routes/ConnectFlowDetailsStep.tsx`,
+  `packages/client/src/react/shell/routes/connectFlow-core.test.ts`,
+  `packages/client/src/react/shell/routes/connectFlow-core.ts`,
+  `packages/client/src/react/shell/routes/connectFlowIO.ts`,
+  `packages/client/src/react/shell/routes/gatewayModals.test.ts`,
+  `packages/client/src/react/shell/routes/gatewayModals.ts`,
+  `packages/gateway/src/cli/cli.test.ts`, `packages/gateway/src/cli/cli.ts`, and
+  `packages/tunnel/src/device-store.ts`.
+
+### Checklist evidence crosswalk
+
+- Phase 0: baseline cold+warm bundled-app open recorded; go/no-go noted — the
+  measured waterfall, modeled RTT cost, offline result, and GO decision are in
+  the Phase 0 baseline section above.
+- Phase 1: CSS scoping for all 8 blueprint apps; typed app-kind signal in the render path; written surface inventory in docs/refactors/inline-system-apps.md — the Phase 1 inventory and Phase 4 per-app CSS-module rollout above provide the implementation evidence.
+- Phase 2: shell app services (queries/actions via replica intent dispatch with intentId, change subscriptions, consent, settings, chat wiring) — the Phases 2+3 service inventory and browser verification above provide the implementation evidence.
+- Phase 3: Tasks inline pilot (lazy chunk, error boundary, sync theming, offline render) — the Tasks pilot files and offline browser verification above provide the implementation evidence.
+- Phase 4: remaining seven apps inline; bundled path removed from AppFrame; opaque path byte-for-byte builder-only — the Phase 4 file inventory and eight-app browser verification above provide the implementation evidence.
+- Phase 5: /centraid/_tool/centraid_* removed; app-scoped routes; Companion + builder bridge re-pointed — the Phase 5 route contract and consumer inventory above provide the implementation evidence.
+- Phase 6: centraid_sql_* ghosts deleted; ARCHITECTURE.md / blueprint-csp trap / protocol docs updated — the Phase 6 source and documentation inventory above provides the implementation evidence.
+- Phase 7: token landlord plane retired (owner enrollment tier, token.bin/print-token deleted, direct-tier decision recorded, revocation severs all planes) — the Phase 7 code, documentation, and revocation-test inventory above provides the implementation evidence.
+
 ## Out of scope
 
 - Agent vault tools (vault_sql / vault_invoke / vault_content) and the ACP/MCP surface
@@ -425,6 +468,31 @@ bun run --cwd packages/cli typecheck
 grep -rn "readOrMintToken\|print-token" packages/ apps/ | grep -v retired
 ```
 
+PR #516 CI repair (2026-07-22):
+
+```sh
+# Reproduces the gateway-package workflow's isolated dependency graph: PASS.
+docker build --build-arg VERSION=0.1.0 \
+  --build-arg REVISION=d63ab7d5d48a63163ebfc277bd4f149eb8d04b37 \
+  -t centraid-gateway:pr516-fix .
+
+# All five changed §13 desktop gateway/profile scenarios: PASS.
+bun run --cwd apps/desktop test:e2e -- -g '13\.'
+
+# All format, lint, package hygiene, typecheck, knip, protocol, matrix, and
+# ratchet stages: PASS. The final parallel test:affected stage was run twice;
+# each run exposed a different pre-existing app-engine timing flake while the
+# prior failed test passed (handler timeout, then changes-SSE delivery).
+bun run check:pr
+
+# Both timing-sensitive tests and the complete package pass without cross-package
+# contention: 40 files, 498 tests.
+bun run --cwd packages/app-engine test
+
+# Governance, including receipt coverage and the split-file size limit: PASS.
+bash .governance/run.sh
+```
+
 ## Steering
 
 - Check 1 (all steering events recorded): PASS — User directed to defer full check:pr and lint gates to the end of Phase 7 migration to speed up phase throughput; this direction is recorded in the Phase 4 Verification section and remains unchanged through Phase 7 completion.
@@ -432,9 +500,30 @@ grep -rn "readOrMintToken\|print-token" packages/ apps/ | grep -v retired
 
 ## Audit
 
-- Check 1 (faithful description of diff): REFUTED — 'What changed' Phase 7 bullet lists `packages/gateway/src/serve/pair-routes.ts` as modified but it is not in the staged diff; also mislists directory paths as `serve/` when device-admin.ts is in `cli/` and devices-routes.ts + replica-shape.ts are in `routes/`. Verified changes: enrollment-store.ts, pairing-store.ts, device-admin.ts, devices-routes.ts, replica-shape.ts all show 'owner' tier additions; token.ts deleted; endpoint-host.ts, cli.ts, cli/paths.ts, centraid-inline.ts modified per claims; detached-gateway.ts, ipc.ts updated; revocation-severs-planes.test.ts new; SECURITY.md, ARCHITECTURE.md, docs/decisions.md (T1 row), dev-environment.md, config-ownership.md, README.md sweeps; honest-recon corrections and follow-up (foreign-daemon CENTRAID_GATEWAY_TOKEN service-unit requirement) noted as claimed. Mismatch: pair-routes.ts inventory error + directory-path accuracy issue for 3 files.
-- Check 2 (checked items realized in diff): PASS — All 10 checklist items (Phases 0–7) now checked [x]; final "check:pr green" item remains [ ] (deferred per user direction). Phases 0–6 verified via 5-commit git log and 'What changed' narrative; Phase 7 partial realization (5 of 6 claimed files confirmed, pair-routes.ts not in diff).
-- Check 3 (checklist mirrors structure): PASS — Receipt checklist (Phases 0–7 plus "check:pr green") mirrors issue acceptance criteria by phase gates.
+- Check 1 (faithful description of diff): REFUTED — Fresh audit against the
+  branch merge-base (`bcf750f7`) found that Phase 4 calls the opaque path
+  byte-for-byte untouched even though `opaqueAppDocument.ts` changes its route
+  allowlist/comments from the retired `_tool` plane to app-owned RPC routes.
+  The claimed typed bundled-vs-code-store signal is also not first-class:
+  `inlineApps.ts` is a `Record<string, InlineAppLoader>` selected only by app id.
+  The remaining major inventories, including the current CI repairs, match the
+  136-file base diff. The final full `check:pr` gate remains honestly unchecked:
+  static stages pass, but its parallel affected-test stage exposed two different
+  pre-existing timing flakes across two runs.
+- Check 2 (checked items realized in diff): REFUTED — Phase 0 required real
+  remote-tunnel measurements but records loopback measurements plus modeled RTT;
+  Phase 1's typed app-kind signal is not realized as specified; and Phase 4's
+  byte-for-byte opaque-path claim is contradicted by the diff. The other checked
+  phase claims have substantial implementation and test evidence: eight inline
+  app CSS/lazy entries, shell intent services, app-scoped routes, ghost cleanup,
+  and owner/token-plane retirement with revocation coverage.
+- Check 3 (checklist mirrors structure): REFUTED — Eight broad phase boxes compress
+  the issue's independently verifiable acceptance gates and omit explicit boxes
+  for the real-remote baseline, #406 multi-tab double-write coverage, zero tunnel
+  UI round-trips, offline/live replica behavior, iframe absence, retry/theme/lazy
+  behavior, desktop parity, builder/Companion flows, dependency-cycle check,
+  pairing-only/no-durable-bearer security claims, and final performance/manual
+  validation. That compression allowed the three gaps above to be marked complete.
 
 ## Accounting
 
@@ -459,3 +548,5 @@ grep -rn "readOrMintToken\|print-token" packages/ apps/ | grep -v retired
 | claude-code-3f73ae52-798-1784738608-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 18 | 8713 | 975599 | 4334 | 13065 | 1.3014 | 1215 | 1365777 | 158498060 | 480399 | feat(client): inline remaining seven apps — Phase 4 rollout (#505)All 8 bundled  |
 | claude-code-3f73ae52-798-1784741090-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 72 | 84352 | 4550536 | 39827 | 124251 | 7.5970 | 1287 | 1450129 | 163048596 | 520226 | feat(app-engine): app-scoped RPC routes replace the _tool plane (#505)Phase 5: / |
 | claude-code-3f73ae52-798-1784741222-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 4 | 1105 | 296526 | 669 | 1778 | 0.3438 | 1291 | 1451234 | 163345122 | 520895 | feat(app-engine): app-scoped RPC routes replace the _tool plane (#505)Phase 5: / |
+| codex-019f8b0c-c31-1784746693-1 | codex | 019f8b0c-c314-7ac0-bc80-6ccbdb4efa31 | #505 | gpt-5.6-sol | 397895 | 0 | 20473344 | 32711 | 430606 | 6.6037 | 397895 | 0 | 20473344 | 32711 | fix(ci): repair PR build failures (#505) -m Align isolated blueprint React typin |
+| codex-019f8b0c-c31-1784746742-1 | codex | 019f8b0c-c314-7ac0-bc80-6ccbdb4efa31 | #505 | gpt-5.6-sol | 3215 | 0 | 377856 | 345 | 3560 | 0.1077 | 401110 | 0 | 20851200 | 33056 | fix(ci): repair PR build failures (#505) -m Align isolated blueprint React typin |
