@@ -19,10 +19,16 @@
  *                   `mcpServers` — unauthenticated probe, initialize,
  *                   tools/list, tools/call — and report what happened
  *   --mode=auth     reject session/new with ACP's AUTH_REQUIRED (-32000)
+ *   --mode=refusal  complete session/prompt with stopReason=refusal
+ *   --mode=max_tokens complete with stopReason=max_tokens after some text
+ *   --mode=resume-cap  like resume but via session/resume (no history replay)
  *
  *   --prompt-caps=a,b       advertise these promptCapabilities (image/audio/
  *                           embeddedContext); default is none
  *   --mcp-http              advertise mcpCapabilities.http
+ *   --session-resume        advertise sessionCapabilities.resume
+ *   --session-close         advertise sessionCapabilities.close
+ *   --session-addl-dirs     advertise sessionCapabilities.additionalDirectories
  *   --mcp-marker=<path>     write the `mcpServers` array seen at session/new
  *   --prompt-marker=<path>  write the `session/prompt` content blocks
  *   --vault-marker=<path>   write the --mode=vault findings as JSON
@@ -67,6 +73,9 @@ const promptMarker = flag('prompt-marker');
 const vaultMarker = flag('vault-marker');
 const mcpAnnounce = has('mcp-announce');
 const mcpHttp = has('mcp-http');
+const sessionResume = has('session-resume') || mode === 'resume-cap';
+const sessionClose = has('session-close');
+const sessionAddlDirs = has('session-addl-dirs');
 const pidMarker = flag('pid-marker');
 const promptCaps = Object.fromEntries(
   (flag('prompt-caps') ?? '')
@@ -74,6 +83,11 @@ const promptCaps = Object.fromEntries(
     .filter(Boolean)
     .map((c) => [c, true]),
 );
+
+function pickMcpServer(list) {
+  const arr = list ?? [];
+  return arr.find((s) => s && s.type === 'http') ?? arr.find((s) => s && !s.type && s.command);
+}
 
 if (envMarker) {
   writeFileSync(
@@ -236,9 +250,37 @@ async function runPrompt(reqId, sessionId) {
     return;
   }
 
+  if (mode === 'refusal') {
+    update(sessionId, {
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'text', text: 'I cannot help with that.' },
+    });
+    respond(reqId, { stopReason: 'refusal' });
+    return;
+  }
+
+  if (mode === 'max_tokens') {
+    update(sessionId, {
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'text', text: 'truncated reply' },
+    });
+    respond(reqId, {
+      stopReason: 'max_tokens',
+      usage: { totalTokens: 10, inputTokens: 5, outputTokens: 5 },
+    });
+    return;
+  }
+
   update(sessionId, {
     sessionUpdate: 'agent_thought_chunk',
     content: { type: 'text', text: 'thinking' },
+  });
+  update(sessionId, {
+    sessionUpdate: 'plan',
+    entries: [
+      { content: 'Read notes', status: 'completed', priority: 'high' },
+      { content: 'Reply', status: 'pending' },
+    ],
   });
   update(sessionId, {
     sessionUpdate: 'agent_message_chunk',
@@ -262,6 +304,14 @@ async function runPrompt(reqId, sessionId) {
     sessionUpdate: 'tool_call_update',
     toolCallId: 't1',
     status: 'completed',
+    content: [
+      {
+        type: 'diff',
+        path: 'notes.txt',
+        oldText: 'a',
+        newText: 'b',
+      },
+    ],
     rawOutput: { ok: true },
   });
   update(sessionId, {
@@ -307,12 +357,17 @@ function handle(msg) {
 
   const { id, method, params } = msg;
   if (method === 'initialize') {
+    const sessionCapabilities = {};
+    if (sessionResume) sessionCapabilities.resume = {};
+    if (sessionClose) sessionCapabilities.close = {};
+    if (sessionAddlDirs) sessionCapabilities.additionalDirectories = {};
     respond(id, {
       protocolVersion: 1,
       agentCapabilities: {
-        loadSession: mode === 'resume',
+        loadSession: mode === 'resume' || mode === 'resume-cap',
         promptCapabilities: promptCaps,
         mcpCapabilities: { http: mcpHttp, sse: false, acp: false },
+        ...(Object.keys(sessionCapabilities).length ? { sessionCapabilities } : {}),
       },
       agentInfo: { name: 'fake-acp', title: 'Fake ACP', version: '0.0.1' },
       authMethods: [],
@@ -321,7 +376,7 @@ function handle(msg) {
   }
   if (method === 'session/new') {
     if (mcpMarker) writeFileSync(mcpMarker, JSON.stringify(params?.mcpServers ?? null));
-    mcpServer = (params?.mcpServers ?? []).find((s) => s.type === 'http');
+    mcpServer = pickMcpServer(params?.mcpServers);
     if (mode === 'auth') {
       // ACP's AUTH_REQUIRED — what 18 of the 31 registry agents answer until
       // their CLI has been signed in.
@@ -345,9 +400,20 @@ function handle(msg) {
     respond(id, {});
     return;
   }
+  if (method === 'session/resume') {
+    if (mcpMarker) writeFileSync(mcpMarker, JSON.stringify(params?.mcpServers ?? null));
+    mcpServer = pickMcpServer(params?.mcpServers);
+    // No history replay — that is the whole point of resume vs load.
+    respond(id, { configOptions: configOptions(), modes: sessionModes() });
+    return;
+  }
+  if (method === 'session/close') {
+    respond(id, {});
+    return;
+  }
   if (method === 'session/load') {
     if (mcpMarker) writeFileSync(mcpMarker, JSON.stringify(params?.mcpServers ?? null));
-    mcpServer = (params?.mcpServers ?? []).find((s) => s.type === 'http');
+    mcpServer = pickMcpServer(params?.mcpServers);
     const sid = params?.sessionId ?? 'sess-1';
     // Replay history the client MUST swallow (promptStarted gate).
     update(sid, {

@@ -66,6 +66,12 @@ export {
   type AcpTurnResult,
 } from './backends/acp/backend.js';
 
+export {
+  resolveAcpCapabilities,
+  clearCapabilitiesCache,
+  type AcpAgentCapabilities,
+} from './backends/acp/capabilities-cache.js';
+
 // Runner-backend registry — the single dispatch table every runner kind
 // registers with. `runTurn`, preflight, and model enumeration all read from
 // it; the gateway can enumerate `RUNNER_BACKENDS` for labels / defaults.

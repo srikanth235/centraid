@@ -158,7 +158,33 @@ Note the field names are ACP's, not Anthropic's: `ImageContent { data, mimeType 
 
 An agent that hasn't been signed in answers session creation with ACP's `AUTH_REQUIRED` — JSON-RPC code **-32000** (`RequestError.authRequired` in the SDK). This is the single most common first-run failure: 18 of the 31 agents in the ACP registry's daily probe return it. The backend detects the code and emits an error built from the registry's own `label` + `installHint`, so the per-kind "how do I log in" string lives in `registry.ts` with the kind's other metadata and never becomes a branch inside the ACP client.
 
-## What ACP does not carry (known gaps)
+## ACP client surface (what Centraid implements)
+
+Centraid is a **headless turn driver + vault MCP host**, not a full IDE ACP client. Current behaviour:
+
+| Area | Behaviour |
+| --- | --- |
+| Core turn | `initialize` → `session/resume` (preferred) → `session/load` → `session/new` → `session/prompt` → optional `session/close` |
+| `stopReason` | Mapped: `refusal` → error (no success final); `max_tokens` / `max_turn_requests` → warn + final; `cancelled` → notice |
+| System / policy prompt | Prepended on **every** turn (including load/resume), not only fresh sessions |
+| Permissions | Auto-allow least-destructive option **and** emit `permission_auto_allowed` audit notice |
+| Model pin | `session/set_config_option` each turn; failed pins are **warn** notices |
+| Vault MCP | HTTP when agent advertises it; otherwise **stdio bridge** (`vault-mcp-stdio-proxy.mjs`) to the same loopback HTTP endpoint |
+| Session continuity | Resume/load notices; short warm process pool (same kind+cwd+session, ~2 min idle) |
+| Capabilities | Settings **Refresh models & capabilities** probes ACP `initialize` and shows chips (vault / resume / models / sign-in) |
+| Plans / diffs | `phase: plan` with normalized `plan[]`; tool results may carry `diffs[]` + `phase: diff` |
+| `additionalDirectories` | Passed on session lifecycle when the agent advertises the capability and the turn supplies paths |
+
+Still **not** product features (intentional):
+
+- Agent **slash commands** (`available_commands_update`) — Centraid owns `/` UX
+- Interactive permission UI, client `fs/*` / `terminal/*`
+- Protocol `authenticate` / `logout` (CLI login + install hints instead)
+- `session/list` / `session/delete` (Centraid ledger is source of truth)
+- Arbitrary user MCP servers beyond vault
+- ACP v2 draft
+
+## What ACP does not carry (protocol gaps)
 
 Recorded honestly so nobody rediscovers them as bugs:
 

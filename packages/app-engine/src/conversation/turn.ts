@@ -181,6 +181,11 @@ export interface TurnInput {
   /** Resume id from a prior turn (codex thread id / claude session id). */
   prevSessionId?: string;
   /**
+   * Extra absolute workspace roots for ACP agents that advertise
+   * `sessionCapabilities.additionalDirectories` (monorepo / skills dirs).
+   */
+  additionalDirectories?: string[];
+  /**
    * Directories to prepend to PATH for any subprocess the agent spawns
    * (codex's shell tool, claude's Bash tool). Path-delimited string —
    * `path.delimiter` between entries. Used to expose the `centraid` CLI

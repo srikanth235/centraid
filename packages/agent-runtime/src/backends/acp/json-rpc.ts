@@ -78,6 +78,12 @@ export interface AcpConnection {
   respond: (id: number | string, result: unknown) => void;
   /** Decline a server→client request we have no capability for. */
   respondMethodNotFound: (id: number | string, method: string) => void;
+  /**
+   * Rebind server→client handlers for the next turn on a warm-reused process.
+   * Handlers close over turn-local emit/stream state, so a parked connection
+   * must rebind before the next `session/prompt`.
+   */
+  setHandlers: (next: AcpConnectionHandlers) => void;
   /** Resolves once the child has exited or failed to spawn. */
   readonly exited: Promise<void>;
   /** True once the child is gone — pending requests have already been rejected. */
@@ -102,6 +108,7 @@ export function createAcpConnection(
   let stderrBuf = '';
   let processExited = false;
   let exitError: Error | undefined;
+  let activeHandlers = handlers;
 
   const send = (msg: object): void => {
     safeStdinWrite(child.stdin, JSON.stringify(msg) + '\n');
@@ -137,10 +144,10 @@ export function createAcpConnection(
       return;
     }
     if (msg.id !== undefined && msg.method) {
-      handlers.onServerRequest(msg.id, msg.method, msg.params);
+      activeHandlers.onServerRequest(msg.id, msg.method, msg.params);
       return;
     }
-    if (msg.method) handlers.onNotification(msg.method, msg.params);
+    if (msg.method) activeHandlers.onNotification(msg.method, msg.params);
   };
 
   child.stdout.setEncoding('utf8');
@@ -188,6 +195,9 @@ export function createAcpConnection(
     request,
     respond,
     respondMethodNotFound,
+    setHandlers: (next) => {
+      activeHandlers = next;
+    },
     exited,
     hasExited: () => processExited,
     spawnError: () => exitError,

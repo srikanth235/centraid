@@ -122,8 +122,24 @@ function readModelPrefs(
  * (`label`, `version`, `hint`), so a runner kind this build has never heard of
  * still renders a complete, honest card — only the accent falls back.
  */
+function capabilityChips(caps: CentraidAgentStatusEntry['capabilities']): string[] {
+  if (!caps?.reachable) {
+    return caps?.reason ? [`probe failed`] : [];
+  }
+  const chips: string[] = [];
+  if (caps.mcpHttp) chips.push('vault');
+  else chips.push('no vault HTTP');
+  if (caps.resume || caps.loadSession) chips.push(caps.resume ? 'resume' : 'load');
+  if (caps.modelConfigurable) chips.push('models');
+  if (caps.authRequired) chips.push('sign-in needed');
+  if (caps.promptImage) chips.push('images');
+  return chips;
+}
+
 function toCard(entry: CentraidAgentStatusEntry): AgentsStatusDTO['cards'][number] {
   const models = entry.models ?? [];
+  const caps = entry.capabilities;
+  const chips = capabilityChips(caps);
   return {
     accent: ACCENT_BY_KIND[entry.kind] ?? DEFAULT_ACCENT,
     connected: entry.available,
@@ -137,6 +153,9 @@ function toCard(entry: CentraidAgentStatusEntry): AgentsStatusDTO['cards'][numbe
       ? (entry.version ?? `${entry.label} · detected`)
       : (entry.hint ?? `${entry.label} CLI not found`),
     title: entry.label,
+    ...(chips.length ? { capabilityChips: chips } : {}),
+    ...(caps && !caps.mcpHttp && caps.reachable ? { vaultUnavailable: true } : {}),
+    ...(caps?.authRequired ? { authRequired: true } : {}),
   };
 }
 

@@ -38,15 +38,20 @@ export interface AcpTurnInput {
    */
   toolContext?: ToolContext;
   /**
-   * Prepended as a leading text block on a FRESH session only (mirrors
-   * codex's thread-scoped `developerInstructions`). ACP has no separate
-   * system-prompt channel, and re-sending it every turn would pollute the
-   * transcript, so a resumed session doesn't repeat it.
+   * Prepended as a leading text block on EVERY turn (fresh, loaded, or
+   * resumed). ACP has no separate system-prompt channel; re-sending keeps
+   * Centraid vault/skills policy in force even when agent session history
+   * is restored without our instructions. Callers keep this short.
    */
   extraSystemPrompt: string;
   model?: string;
-  /** Session id from a prior turn; triggers `session/load` when supported. */
+  /** Session id from a prior turn; triggers resume/load when supported. */
   prevSessionId?: string;
+  /**
+   * Extra absolute workspace roots for agents that advertise
+   * `sessionCapabilities.additionalDirectories`. Omitted when empty.
+   */
+  additionalDirectories?: string[];
   /** Path-delimited dirs prepended to the child's PATH (centraid CLI etc.). */
   extraPath?: string;
   abortSignal: AbortSignal;

@@ -9,7 +9,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { TurnStreamEvent } from '@centraid/app-engine';
 import { runAcpTurn } from './backend.ts';
-import { deltas, runFake, types } from './test-fixtures.js';
+import { deltas, notices, runFake, types } from './test-fixtures.js';
 
 test('normal turn: handshake → stream → tool call → permission → final', async () => {
   const dir = await tempDir('acp-perm-');
@@ -21,13 +21,16 @@ test('normal turn: handshake → stream → tool call → permission → final',
   // Session id from session/new is returned for resume.
   expect(result.sessionId).toBe('sess-1');
 
-  // Event sequence: start, reasoning, assistant text, tool lifecycle, final.
+  // Continuity / permission notices may precede stream events; assistant
+  // text still starts exactly once and final is last.
   const t = types(events);
-  expect(t[0]).toBe('assistant.start');
+  expect(t).toContain('assistant.start');
   expect(t).toContain('reasoning.delta');
   expect(t).toContain('tool.start');
   expect(t).toContain('tool.result');
   expect(t.at(-1)).toBe('final');
+  expect(notices(events)).toContain('session_continuity');
+  expect(notices(events)).toContain('permission_auto_allowed');
 
   // Streamed assistant text accumulates across chunks.
   expect(deltas(events)).toBe('Hello world');
@@ -115,4 +118,59 @@ test('AUTH_REQUIRED becomes an actionable message, not a raw RPC error', async (
   // The raw JSON-RPC wording never reaches the transcript.
   expect(message).not.toContain('acp rpc');
   expect(message).not.toContain('-32000');
+});
+
+// ---- stopReason / continuity / policy / permissions -----------------------
+
+test('refusal stopReason is an error without final', async () => {
+  const { events } = await runFake({ extraArgs: ['--mode=refusal'] });
+  expect(types(events)).toContain('error');
+  expect(types(events)).not.toContain('final');
+  const err = events.find((e) => e.type === 'error');
+  expect(err && err.type === 'error' && err.message).toMatch(/refused/i);
+});
+
+test('max_tokens stopReason warns then still emits final', async () => {
+  const { events } = await runFake({ extraArgs: ['--mode=max_tokens'] });
+  expect(notices(events)).toContain('stop_truncated');
+  expect(types(events).at(-1)).toBe('final');
+});
+
+test('system policy is prepended on every turn including resumed sessions', async () => {
+  const dir = await tempDir('acp-sys-');
+  const promptMarker = path.join(dir, 'prompt');
+  await runFake({
+    extraArgs: ['--mode=resume', `--prompt-marker=${promptMarker}`],
+    prevSessionId: 'prev-1',
+  });
+  const blocks = JSON.parse(await fs.readFile(promptMarker, 'utf8')) as Array<{
+    type: string;
+    text?: string;
+  }>;
+  expect(blocks[0]).toEqual({ type: 'text', text: 'SYSTEM_CONTEXT' });
+  expect(blocks.some((b) => b.text === 'hello agent')).toBe(true);
+});
+
+test('session/resume is preferred over session/load when advertised', async () => {
+  const { events, result } = await runFake({
+    extraArgs: ['--mode=resume-cap', '--session-resume'],
+    prevSessionId: 'prev-resume-1',
+  });
+  expect(result.sessionId).toBe('prev-resume-1');
+  expect(notices(events)).toContain('session_continuity');
+  // Resume must not leak load-style history replay.
+  const allText = JSON.stringify(events);
+  expect(allText).not.toContain('HISTORY_USER');
+});
+
+test('permission auto-allow emits an audit notice', async () => {
+  const { events } = await runFake({ extraArgs: ['--mode=normal'] });
+  expect(notices(events)).toContain('permission_auto_allowed');
+  expect(notices(events)).toContain('session_continuity');
+  const plan = events.find((e) => e.type === 'phase' && e.phase === 'plan');
+  expect(plan && plan.type === 'phase' && plan.plan?.length).toBe(2);
+  const toolResult = events.find((e) => e.type === 'tool.result');
+  expect(toolResult && toolResult.type === 'tool.result' && toolResult.diffs?.[0]?.path).toBe(
+    'notes.txt',
+  );
 });
