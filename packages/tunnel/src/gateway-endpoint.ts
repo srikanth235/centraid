@@ -69,8 +69,10 @@ export interface GatewayPairResponse {
   /** The vault the redeemed ticket enrolled the device into. */
   vaultId?: string;
   vaultName?: string;
-  /** Version handshake material (issue #289): exact-match or refuse in v0. */
+  /** Product version (display). Protocol fields gate connect (#512). */
   version?: string;
+  protocolVersion?: number;
+  minSupportedProtocol?: number;
   schemaEpoch?: number;
 }
 

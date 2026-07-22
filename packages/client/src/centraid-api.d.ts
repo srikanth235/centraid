@@ -232,21 +232,18 @@ export interface CentraidGatewayRuntime {
   /** True when recent probe latency has sustained above the degraded-latency threshold (~2s). */
   latencyDegraded?: boolean;
   /**
-   * Version-handshake verdict (issue #351, wave 2) — REMOTE gateways only.
-   * A local gateway is embedded in this same build and can never skew, so
-   * this stays absent for it. Absent for a remote gateway too until the
-   * first probe carrying `version`/`schemaEpoch` lands; persists at its
-   * last value while unreachable. `skewed: true` means the gateway's
-   * reported version/schemaEpoch doesn't match what this app was built
-   * against — v0 policy surfaces this loudly (this field + a de-duped OS
-   * notification) rather than refusing requests.
+   * Protocol-handshake verdict (issue #351 wave 2 / #512) — REMOTE only.
+   * `skewed: true` means the protocol support window failed — product version
+   * strings may differ without setting skewed.
    */
   versionSkew?: {
     skewed: boolean;
     gatewayVersion: string;
     gatewaySchemaEpoch: number;
+    gatewayProtocolVersion?: number;
     clientVersion: string;
     clientSchemaEpoch: number;
+    clientProtocolVersion?: number;
   };
 }
 
@@ -358,7 +355,14 @@ export interface CentraidConnectivityStage {
 export interface CentraidConnectivityReport {
   ok: boolean;
   stages: CentraidConnectivityStage[];
-  gateway?: { version: string; schemaEpoch: number; instanceId: string; compatible: boolean };
+  gateway?: {
+    version: string;
+    schemaEpoch: number;
+    protocolVersion?: number;
+    minSupportedProtocol?: number;
+    instanceId: string;
+    compatible: boolean;
+  };
   vaults?: Array<{ vaultId: string; name: string; color?: string; icon?: string }>;
   ticket?: { vaultName: string; expiresAt: string; gatewayEndpointId: string };
   /** Stable code for the FIRST failing stage — absent when `ok`. */

@@ -1,26 +1,30 @@
 import { expect, test } from 'vitest';
 import {
   EXPECTED_GATEWAY_VERSION,
+  EXPECTED_PROTOCOL_VERSION,
   EXPECTED_SCHEMA_EPOCH,
   handshakeGateway,
   judgeGatewayInfo,
-} from './version-handshake.ts';
+} from './version-handshake.js';
 
-test('judgeGatewayInfo: exact-match passes, any skew is a version_mismatch', () => {
+test('judgeGatewayInfo: protocol match allows product skew', () => {
   const ok = judgeGatewayInfo({
     version: EXPECTED_GATEWAY_VERSION,
     schemaEpoch: EXPECTED_SCHEMA_EPOCH,
   });
   expect(ok.ok).toBe(true);
 
-  const badVersion = judgeGatewayInfo({ version: '9.9.9', schemaEpoch: EXPECTED_SCHEMA_EPOCH });
-  expect(badVersion).toMatchObject({ ok: false, reason: 'version_mismatch' });
+  const productSkew = judgeGatewayInfo({
+    version: '9.9.9',
+    schemaEpoch: EXPECTED_SCHEMA_EPOCH,
+  });
+  expect(productSkew.ok).toBe(true);
 
-  const badEpoch = judgeGatewayInfo({
+  const badProtocol = judgeGatewayInfo({
     version: EXPECTED_GATEWAY_VERSION,
     schemaEpoch: EXPECTED_SCHEMA_EPOCH + 1,
   });
-  expect(badEpoch).toMatchObject({ ok: false, reason: 'version_mismatch' });
+  expect(badProtocol).toMatchObject({ ok: false, reason: 'protocol_mismatch' });
 });
 
 test('judgeGatewayInfo: malformed payloads are rejected, not guessed', () => {
@@ -40,7 +44,11 @@ test('handshakeGateway: network failure → unreachable; 200 payload is judged',
     'tok',
     async () =>
       new Response(
-        JSON.stringify({ version: EXPECTED_GATEWAY_VERSION, schemaEpoch: EXPECTED_SCHEMA_EPOCH }),
+        JSON.stringify({
+          version: EXPECTED_GATEWAY_VERSION,
+          protocolVersion: EXPECTED_PROTOCOL_VERSION,
+          schemaEpoch: EXPECTED_SCHEMA_EPOCH,
+        }),
         { status: 200 },
       ),
   );

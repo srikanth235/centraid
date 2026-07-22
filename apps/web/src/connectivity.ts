@@ -35,7 +35,7 @@ function stagesFromHandshake(handshake: HandshakeResult): CentraidConnectivityRe
     };
   }
 
-  if (handshake.reason === 'version_mismatch' || handshake.reason === 'malformed') {
+  if (handshake.reason === 'protocol_mismatch' || handshake.reason === 'malformed') {
     return {
       ok: false,
       error: handshake.reason,

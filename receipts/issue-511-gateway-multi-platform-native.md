@@ -46,6 +46,7 @@ Also:
 
 - Single `@centraid/tunnel` package carries all `native/*.node` files (matches existing loader; no optionalDeps platform packages yet).
 - Optional runners (`linux-arm64`, `darwin-x64`) use `continue-on-error` so publish is not blocked if GitHub retires a runner image.
+- darwin-x64 best-effort runner is `macos-15-intel` (actionlint rejects retired `macos-13`).
 - Local monorepo build still builds **host-only** native; multi-arch is a publish/CI concern.
 
 ## Out of scope

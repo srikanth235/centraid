@@ -16,4 +16,9 @@ with the release rules in [docs/release.md](docs/release.md) (issue #468 **D3** 
 
 ### Added
 
+- Three-number versioning and multi-surface release synthesis ([#512](https://github.com/srikanth235/centraid/issues/512)): product / build / protocol separation; handshake connects on protocol only; release surface matrix (`bun run release:matrix`); prepare/publish ship set
 - Agent self-serve documentation set for solo-maintainer leverage ([#468](https://github.com/srikanth235/centraid/issues/468)): decisions, glossary, coding standards, protocol, release, recovery, traps, enrollment, identifiers, and related root docs.
+
+### Changed
+
+- Gateway info handshake no longer refuses clients solely because product version strings differ; capability flags still gate features ([#512](https://github.com/srikanth235/centraid/issues/512))

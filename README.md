@@ -111,7 +111,7 @@ Host **gateway only** (not desktop/mobile). OpenClaw-style stages: Node â‰¥ 22 â
 | **Linux** | x64 | curl\|bash or `npm i -g @centraid/gateway` | **Required** in published packs |
 | **Linux** | arm64 | same | Best-effort CI (`ubuntu-24.04-arm`) |
 | **macOS** | arm64 (Apple Silicon) | curl\|bash or npm | **Required** |
-| **macOS** | x64 (Intel) | curl\|bash or npm | Best-effort CI (`macos-13`); preferred over `@number0/iroh` (no darwin-x64 iroh package) |
+| **macOS** | x64 (Intel) | curl\|bash or npm | Best-effort CI (`macos-15-intel`); preferred over `@number0/iroh` (no darwin-x64 iroh package) |
 | **Windows** | x64 | **npm** (see below) | **Required** |
 | **Windows** | arm64 | npm | Optional / not in default matrix |
 

@@ -40,7 +40,7 @@ export const NATIVE_PLATFORMS = [
     platform: 'darwin',
     arch: 'x64',
     required: false,
-    runnerHint: 'macos-13',
+    runnerHint: 'macos-15-intel',
   },
   {
     id: 'win32-x64',

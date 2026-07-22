@@ -39,7 +39,7 @@ jobs:
             os: macos-latest
             required: true
           - id: darwin-x64
-            os: macos-13
+            os: macos-15-intel
             required: false
           - id: win32-x64
             os: windows-latest
