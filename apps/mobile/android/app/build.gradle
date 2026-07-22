@@ -107,6 +107,18 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        // J1 / #501 — Play upload key from env (never commit). Secrets:
+        // CENTRAID_UPLOAD_STORE_FILE, CENTRAID_UPLOAD_STORE_PASSWORD,
+        // CENTRAID_UPLOAD_KEY_ALIAS, CENTRAID_UPLOAD_KEY_PASSWORD
+        release {
+            def storePath = System.getenv("CENTRAID_UPLOAD_STORE_FILE")
+            if (storePath != null && !storePath.isEmpty()) {
+                storeFile file(storePath)
+                storePassword System.getenv("CENTRAID_UPLOAD_STORE_PASSWORD")
+                keyAlias System.getenv("CENTRAID_UPLOAD_KEY_ALIAS")
+                keyPassword System.getenv("CENTRAID_UPLOAD_KEY_PASSWORD")
+            }
+        }
     }
     buildTypes {
         debug {
@@ -114,9 +126,22 @@ android {
             applicationIdSuffix '.debug'
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // J1 / #501 — upload key from env when present. Opt-in refuse debug:
+            // set CENTRAID_REQUIRE_RELEASE_SIGNING=1 on store lanes (not plain CI=true —
+            // EAS/assembleDebug must keep working without the upload keystore).
+            def uploadStore = System.getenv("CENTRAID_UPLOAD_STORE_FILE")
+            def requireRelease = System.getenv("CENTRAID_REQUIRE_RELEASE_SIGNING") == "1"
+            if (uploadStore != null && !uploadStore.isEmpty()) {
+                signingConfig signingConfigs.release
+            } else if (requireRelease) {
+                throw new GradleException(
+                    "Refusing debug-signed release. Set CENTRAID_UPLOAD_* secrets " +
+                    "(Play App Signing upload key — J1) or unset CENTRAID_REQUIRE_RELEASE_SIGNING."
+                )
+            } else {
+                // Local / EAS-managed credentials path — not a store-lane default.
+                signingConfig signingConfigs.debug
+            }
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
             shrinkResources enableShrinkResources.toBoolean()
             minifyEnabled enableMinifyInReleaseBuilds

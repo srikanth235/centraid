@@ -1,6 +1,8 @@
-# I1 / I10 — electron-builder packaging (issue #468)
+# I1 / I10 — electron-builder packaging (issue #468 / #501)
 # appId uses the decided reverse-DNS root dev.centraid (J5).
-# Signing/notarization jobs are secret-gated in CI; this file is scaffolding.
+# Signing/notarization is secret-gated in CI (release-desktop.yml).
+# Workflows use --publish never; softprops attaches artifacts to the GH Release.
+# electron-builder still emits latest*.yml + blockmaps into release/ for the updater.
 
 appId: dev.centraid.desktop
 productName: Centraid
@@ -36,15 +38,14 @@ mac:
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.inherit.plist
-  # I2: notarization when APPLE_* secrets present (see workflow)
+  # I2: set CSC_LINK / APPLE_API_* in CI when enrolled; identity null = unsigned scaffold
   identity: null
 
 win:
   target:
     - target: nsis
       arch: [x64, arm64]
-  # I3: Azure Trusted Signing when secrets present
-  azureSignOptions: null
+  # I3: Azure Trusted Signing via env in CI when enrolled (AZURE_* secrets)
 
 nsis:
   oneClick: true
@@ -58,8 +59,11 @@ linux:
   # I10: version-less filename so self-update overwrites in place
   artifactName: Centraid-${arch}.${ext}
 
+# Metadata only — CI never --publish; GH Release is softprops (single publisher).
 publish:
   provider: github
   releaseType: release
+  owner: srikanth235
+  repo: centraid
 
 # electron-updater channel: stable by default; beta tags use channel beta (D5)

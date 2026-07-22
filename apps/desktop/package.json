@@ -13,6 +13,8 @@
     "build:react": "vite build",
     "dev": "bun run build && electron .",
     "start": "electron .",
+    "dist": "electron-builder --config electron-builder.yml --publish never",
+    "dist:dir": "electron-builder --config electron-builder.yml --dir --publish never",
     "typecheck": "tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.react.json --noEmit",
     "test": "vitest run",
     "test:e2e": "node ../../scripts/test-report/prepare.mjs --lane desktop-playwright && bun run build && playwright test -c tests/e2e/playwright.config.ts",
@@ -23,6 +25,7 @@
     "@centraid/design-tokens": "workspace:*",
     "@centraid/gateway": "workspace:*",
     "@centraid/tunnel": "workspace:*",
+    "electron-updater": "^6.6.2",
     "qrcode": "^1.5.4",
     "react": "19.1.0",
     "react-dom": "19.1.0"
@@ -36,6 +39,7 @@
     "@types/react-dom": "~19.1.0",
     "@vitejs/plugin-react": "^5.0.0",
     "electron": "^37.0.0",
+    "electron-builder": "^26.0.12",
     "typescript": "catalog:",
     "vite": "^7.0.0"
   }

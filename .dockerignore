@@ -1,4 +1,5 @@
 # Build context for gateway Dockerfile (issue #504 packaging).
+# Also covers #501 release image context; keep package.json for lockfile workspaces.
 
 .git
 .githooks
@@ -11,11 +12,13 @@
 .turbo
 .cache
 coverage
+**/coverage
 artifacts
 receipts
 docs
 tests
 scripts/docs-site
+.tmp*
 
 # Desktop / mobile / extension: keep package.json only (workspace lock integrity)
 apps/desktop/**
@@ -36,13 +39,18 @@ packages/tunnel/native/*.node
 # Host-side noise
 **/.DS_Store
 **/node_modules
+node_modules
 **/dist
+dist
 **/.turbo
 **/*.log
 **/.env
 **/.env.*
+*.png
 
 # Large / non-runtime docs and ledgers
+*.md
+!packages/gateway/README.md
 COSTS.md
 STEERING.md
 QUALITY.md

@@ -1,0 +1,62 @@
+name: release-gateway-image
+
+# #501 / #504 — optional GHCR image for centraid-gateway (D5: never move latest on beta).
+# Build uses monorepo-root Dockerfile (native tunnel + operator-safe defaults).
+# Primary install path remains monorepo source + H5 service install.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*.*-beta.*'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref to build (default: current)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - name: Image metadata
+        id: meta
+        run: |
+          REF="${GITHUB_REF_NAME}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.ref }}" ]; then
+            REF="${{ inputs.ref }}"
+          fi
+          # Normalize refs/tags/vX → vX
+          REF="${REF#refs/tags/}"
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER}/centraid-gateway"
+          echo "tag=${REF}" >> "$GITHUB_OUTPUT"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          TAGS="${IMAGE}:${REF}"
+          if [[ "$REF" != *beta* ]]; then
+            TAGS="${TAGS},${IMAGE}:latest"
+          fi
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

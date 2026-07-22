@@ -11,7 +11,11 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "bun scripts/check-import-boundaries.ts",
-    "generate:theme": "bun scripts/generate-theme.ts"
+    "generate:theme": "bun scripts/generate-theme.ts",
+    "eas:build:ios": "eas build --platform ios --profile preview --non-interactive",
+    "eas:build:android": "eas build --platform android --profile preview --non-interactive",
+    "eas:submit:ios": "eas submit --platform ios --profile preview --non-interactive --latest",
+    "eas:submit:android": "eas submit --platform android --profile preview --non-interactive --latest"
   },
   "dependencies": {
     "@babel/runtime": "^7.29.2",
