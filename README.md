@@ -106,15 +106,20 @@ Gateway-only image (control-plane HTTP). Build from the monorepo root:
 
 ```sh
 docker build -t centraid-gateway .
-# Durable vault/data — required for real use (bare runs lose /data with the container):
+# Durable vault/data — required for real use (bare runs lose /data with the container).
+# Named volume (recommended; works with non-root uid 10001):
+docker volume create centraid-data
 docker run --rm -p 8787:8787 \
-  -v "$HOME/centraid-data:/data" \
+  -v centraid-data:/data \
   -e CENTRAID_ALLOWED_HOSTS=gateway.example \
   centraid-gateway
+# Host bind-mount: chown for uid 10001 (or chmod a+rwx for local smoke only):
+#   mkdir -p "$HOME/centraid-data" && chown 10001:10001 "$HOME/centraid-data"
+#   docker run ... -v "$HOME/centraid-data:/data" ...
 ```
 
-- **Data durability:** always bind-mount a host path (or a named volume) at `/data`. The image declares `VOLUME /data` but anonymous volumes are easy to lose on recreate.
-- **User:** process runs as UID/GID `10001`; chown the host directory accordingly (or make it world-writable only for local smoke).
+- **Data durability:** always use a **named volume** or bind-mount at `/data`. The image declares `VOLUME /data` but anonymous volumes are easy to lose on recreate.
+- **User:** process runs as UID/GID `10001`. Named volumes are created with compatible ownership; host bind-mounts need `chown 10001:10001` (or world-writable only for local smoke).
 - **Host allowlist:** loopback `Host` values always work. For a public hostname in `Host`, set `CENTRAID_ALLOWED_HOSTS` or pass `--allowed-host` via a custom entrypoint. See [SECURITY.md](SECURITY.md) (control-plane subsection).
 - **Smoke:** path-filtered CI builds the image and probes it with a mounted `/data` (`scripts/gateway-package/smoke.mjs --base-url …`). Host-side: `bun run gateway:package:smoke`.
 

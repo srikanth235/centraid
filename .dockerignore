@@ -1,6 +1,4 @@
 # Build context for gateway Dockerfile (issue #504 packaging).
-# Workspace package.json files for all apps must remain so bun install
-# --frozen-lockfile can resolve the monorepo graph; strip app sources.
 
 .git
 .githooks
@@ -26,6 +24,12 @@ apps/mobile/**
 !apps/mobile/package.json
 apps/extension/**
 !apps/extension/package.json
+
+# Rust / cargo build caches (gigabytes; not needed to copy in)
+**/target/
+packages/data-plane/target
+packages/tunnel/native/target
+packages/tunnel/data-plane/target
 
 # Host-side noise
 **/.DS_Store

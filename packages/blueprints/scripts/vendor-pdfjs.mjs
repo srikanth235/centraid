@@ -9,14 +9,48 @@
 
 // `build`, `build:manifest`, and `test` invoke this automatically.
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const PACKAGE_ROOT = path.resolve(fileURLToPath(import.meta.url), '../..');
-const WORKSPACE_ROOT = path.resolve(PACKAGE_ROOT, '../..');
-const PDFJS_ROOT = path.join(WORKSPACE_ROOT, 'node_modules/pdfjs-dist');
+const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const KIT_ROOT = path.join(PACKAGE_ROOT, 'kit');
+const OUT_FILES = ['pdf.min.mjs', 'pdf.worker.min.mjs'];
+
+function resolvePdfjsRoot() {
+  // Prefer Node/bun module resolution (hoisted or package-local) over a fixed
+  // monorepo-root path — Docker/workspace layouts differ.
+  const require = createRequire(import.meta.url);
+  try {
+    return path.dirname(require.resolve('pdfjs-dist/package.json'));
+  } catch {
+    // fall through
+  }
+  const candidates = [
+    path.join(PACKAGE_ROOT, 'node_modules/pdfjs-dist'),
+    path.join(PACKAGE_ROOT, '../../node_modules/pdfjs-dist'),
+  ];
+  for (const c of candidates) {
+    if (existsSync(path.join(c, 'package.json'))) return c;
+  }
+  return null;
+}
+
+const PDFJS_ROOT = resolvePdfjsRoot();
+const kitPresent = OUT_FILES.every((f) => existsSync(path.join(KIT_ROOT, f)));
+
+if (!PDFJS_ROOT) {
+  if (kitPresent) {
+    // Host already vendored kit (gitignored but present in Docker context).
+    console.log(`pdfjs-dist not installed; reusing existing kit files in ${KIT_ROOT}`);
+    process.exit(0);
+  }
+  throw new Error(
+    'pdfjs-dist not found (devDependency of @centraid/blueprints). Run bun install at the monorepo root.',
+  );
+}
+
 const version = JSON.parse(readFileSync(path.join(PDFJS_ROOT, 'package.json'), 'utf8')).version;
 
 // PDF.js 5 uses the new Uint8Array base64/hex helpers and Promise.try. Current
@@ -32,7 +66,7 @@ if(!Promise.try)Object.defineProperty(Promise,"try",{configurable:true,writable:
 })();\n`;
 const banner = `// Generated from pdfjs-dist@${version} by scripts/vendor-pdfjs.mjs; do not edit.\n`;
 
-for (const file of ['pdf.min.mjs', 'pdf.worker.min.mjs']) {
+for (const file of OUT_FILES) {
   const source = readFileSync(path.join(PDFJS_ROOT, 'build', file), 'utf8');
   writeFileSync(path.join(KIT_ROOT, file), banner + compatibilityBridge + source);
 }

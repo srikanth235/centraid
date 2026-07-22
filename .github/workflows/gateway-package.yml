@@ -98,29 +98,33 @@ jobs:
       - name: Container install smoke (volume at /data)
         run: |
           set -euo pipefail
-          DATA="$(mktemp -d)"
-          # Image runs as uid 10001 — host dir must be writable by that user.
-          chmod 777 "$DATA"
+          # Named volume: non-root uid 10001 can write without host bind ownership games.
+          VOL="centraid-gw-smoke-${{ github.run_id }}"
           NAME="centraid-gw-smoke-${{ github.run_id }}"
           PORT=18788
+          docker volume rm "$VOL" 2>/dev/null || true
+          docker volume create "$VOL"
           docker rm -f "$NAME" 2>/dev/null || true
           docker run -d --name "$NAME" \
             -p "127.0.0.1:${PORT}:8787" \
-            -v "${DATA}:/data" \
+            -v "${VOL}:/data" \
             "centraid-gateway:ci-${{ github.sha }}"
           cleanup() {
             docker logs "$NAME" 2>&1 || true
             docker rm -f "$NAME" 2>/dev/null || true
+            docker volume rm "$VOL" 2>/dev/null || true
           }
           trap cleanup EXIT
           node scripts/gateway-package/smoke.mjs --base-url "http://127.0.0.1:${PORT}"
-          # Prove durable mount: data dir on host is non-empty after boot.
-          if [ -z "$(ls -A "$DATA" 2>/dev/null || true)" ]; then
+          # Second probe for consistency (external observer).
+          node scripts/gateway-package/smoke.mjs --base-url "http://127.0.0.1:${PORT}"
+          # Prove durable mount: volume has content after boot.
+          FILES="$(docker run --rm -v "${VOL}:/data" busybox ls -A /data 2>/dev/null || true)"
+          if [ -z "$FILES" ]; then
             echo "expected gateway to write under mounted /data" >&2
             exit 1
           fi
-          echo "container data mount OK: $(ls -la "$DATA" | head -20)"
-
+          echo "container data mount OK: $FILES"
       - name: Upload trace
         if: always()
         uses: actions/upload-artifact@v4

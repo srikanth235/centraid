@@ -91,8 +91,10 @@ Packaging harden follow-up:
 - `bun run --cwd packages/gateway test -- src/cli/allowed-hosts.test.ts`
 - `bun run gateway:package:trace` / `bun run gateway:package:smoke`
 - CI: `docker build` + `smoke.mjs --base-url` with volume at `/data`
-- Symlink rewrite: `assemble-runtime.mjs` rewrites `@centraid/*` to relative `../../packages/*` after Node `cpSync` absolute-ifies them; ships package.json `files` assets (blueprints manifest/apps, skills, …)
-- `node --test scripts/gateway-package/assemble-runtime.test.mjs` + isolated-tree smoke (out under tmp; monorepo packages not on resolve path)
+- Symlink rewrite + packages-only assemble: Docker uses `--packages-only` + fresh `bun install --production` (bun `.bun` store is not relocatable by symlink rewrite); host tests still copy+rewrite
+- `node --test scripts/gateway-package/assemble-runtime.test.mjs` + isolated-tree smoke
+- Local Docker: `docker build -t centraid-gateway:local-smoke .` then named-volume smoke ×2 (`gateway smoke OK` 401 on info); image ~1.7GB, non-root, HEALTHCHECK, git present
+- Residual: native tunnel skipped without cargo (JS iroh fallback); host bind-mount needs uid 10001 chown — prefer named volume
 
 ## Steering
 

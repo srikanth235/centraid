@@ -75,8 +75,13 @@ test('assembleRuntime rewrites @centraid links and resolves under out only', (t)
       `resolved into monorepo packages: ${resolved}`,
     );
 
+    // Runtime deps (e.g. esbuild) must survive bun's .bun store remap.
+    const reqFromEngine = createRequire(path.join(out, 'packages/app-engine/dist/index.js'));
+    assert.doesNotThrow(() => reqFromEngine.resolve('esbuild'));
+    assert.ok(underOut(reqFromEngine.resolve('esbuild'), out));
+
     // Idempotent rewrite.
-    rewriteRuntimeSymlinks(out);
+    rewriteRuntimeSymlinks(out, root);
     assert.equal(path.isAbsolute(readlinkSync(path.join(scope, 'gateway'))), false);
   } finally {
     rmSync(out, { recursive: true, force: true });
