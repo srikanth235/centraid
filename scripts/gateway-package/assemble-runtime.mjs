@@ -20,6 +20,9 @@ import {
   writeFileSync,
   readFileSync,
   lstatSync,
+  readlinkSync,
+  symlinkSync,
+  realpathSync,
 } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -83,6 +86,120 @@ function walkRm(dir, pred) {
   }
 }
 
+/**
+ * Node's cpSync({dereference:false}) rewrites relative symlinks as absolute
+ * paths into the *source* tree. In a multi-stage Docker copy that means
+ * node_modules/@centraid/* → /src/packages/* which is missing at runtime.
+ * Recreate kept workspace links as relative paths into out/packages/*.
+ *
+ * Also walk node_modules: drop absolute links that resolve outside `out`
+ * (leftover monorepo apps/* etc.), and leave relative links that already
+ * resolve under `out` alone.
+ */
+export function rewriteRuntimeSymlinks(out) {
+  // Resolve once — macOS /var vs /private/var breaks naive path.relative checks.
+  const outAbs = realpathSync(path.resolve(out));
+  const nmDest = path.join(outAbs, 'node_modules');
+  const scope = path.join(nmDest, '@centraid');
+  mkdirSync(scope, { recursive: true });
+
+  // Drop non-closure workspace names first.
+  if (existsSync(scope)) {
+    for (const name of readdirSync(scope)) {
+      if (!KEEP_CENTRAID_NAMES.has(name)) {
+        rmSync(path.join(scope, name), { recursive: true, force: true });
+      }
+    }
+  }
+
+  // Force relative workspace links into the lean packages/ we assembled.
+  for (const name of KEEP_CENTRAID_NAMES) {
+    const pkgDir = path.join(outAbs, 'packages', name);
+    if (!existsSync(pkgDir)) {
+      throw new Error(`rewriteRuntimeSymlinks: missing ${pkgDir}`);
+    }
+    const linkPath = path.join(scope, name);
+    rmSync(linkPath, { recursive: true, force: true });
+    // From node_modules/@centraid/<name> → ../../packages/<name>
+    const rel = path.relative(scope, pkgDir);
+    symlinkSync(rel, linkPath);
+  }
+
+  // Fix absolute symlinks that cpSync rewrote under top-level node_modules
+  // and .bin only — do not deep-walk Electron.app bundles (rmSync landmines
+  // and irrelevant to the gateway image after production prune).
+  const fixLink = (full) => {
+    let st;
+    try {
+      st = lstatSync(full);
+    } catch {
+      return;
+    }
+    if (!st.isSymbolicLink()) return;
+    let target;
+    try {
+      target = readlinkSync(full);
+    } catch {
+      rmSync(full, { recursive: true, force: true });
+      return;
+    }
+    let resolved = path.isAbsolute(target)
+      ? path.normalize(target)
+      : path.resolve(path.dirname(full), target);
+    try {
+      if (existsSync(resolved)) resolved = realpathSync(resolved);
+    } catch {
+      // dangling
+    }
+    const relToOut = path.relative(outAbs, resolved);
+    if (relToOut.startsWith('..') || path.isAbsolute(relToOut)) {
+      // Points outside the runtime (host monorepo path). Drop it.
+      rmSync(full, { recursive: true, force: true });
+      return;
+    }
+    if (path.isAbsolute(target)) {
+      const rel = path.relative(path.dirname(full), resolved);
+      rmSync(full, { recursive: true, force: true });
+      symlinkSync(rel, full);
+    }
+  };
+
+  // Top-level entries + one level under @scopes + .bin
+  for (const name of readdirSync(nmDest)) {
+    const full = path.join(nmDest, name);
+    fixLink(full);
+    if (name === '.bin' || name.startsWith('@')) {
+      let st;
+      try {
+        st = lstatSync(full);
+      } catch {
+        continue;
+      }
+      if (!st.isDirectory() || st.isSymbolicLink()) continue;
+      for (const child of readdirSync(full)) {
+        fixLink(path.join(full, child));
+      }
+    }
+  }
+
+  // Sanity: every kept @centraid name must resolve under out/packages.
+  for (const name of KEEP_CENTRAID_NAMES) {
+    const linkPath = path.join(scope, name);
+    const target = readlinkSync(linkPath);
+    if (path.isAbsolute(target)) {
+      throw new Error(`@centraid/${name} still absolute after rewrite: ${target}`);
+    }
+    const resolved = realpathSync(linkPath);
+    const rel = path.relative(outAbs, resolved);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+      throw new Error(`@centraid/${name} resolves outside runtime: ${resolved} (out=${outAbs})`);
+    }
+    if (!resolved.includes(`${path.sep}packages${path.sep}${name}`)) {
+      throw new Error(`@centraid/${name} expected under packages/${name}, got ${resolved}`);
+    }
+  }
+}
+
 export function assembleRuntime({ root, out }) {
   if (!root || !out) throw new Error('--root and --out are required');
   if (existsSync(out)) rmSync(out, { recursive: true, force: true });
@@ -116,14 +233,54 @@ export function assembleRuntime({ root, out }) {
       throw new Error(`missing package ${pkg} under ${root}`);
     }
     mkdirSync(dest, { recursive: true });
-    cpSync(path.join(src, 'package.json'), path.join(dest, 'package.json'));
+    const pkgJsonPath = path.join(src, 'package.json');
+    cpSync(pkgJsonPath, path.join(dest, 'package.json'));
     if (!copyIfExists(path.join(src, 'dist'), path.join(dest, 'dist'))) {
       throw new Error(`${pkg}/dist missing — build gateway closure first`);
     }
-    copyIfExists(path.join(src, 'skills'), path.join(dest, 'skills'));
+    // Ship package.json "files" assets (blueprints manifest/apps, gateway skills,
+    // tunnel native/*.node, …). Skip README and other markdown docs.
+    let filesField;
+    try {
+      filesField = JSON.parse(readFileSync(pkgJsonPath, 'utf8')).files;
+    } catch {
+      filesField = undefined;
+    }
+    if (Array.isArray(filesField)) {
+      for (const entry of filesField) {
+        if (typeof entry !== 'string') continue;
+        if (entry === 'dist' || entry === 'README.md' || entry.endsWith('.md')) continue;
+        if (entry.includes('*')) {
+          // e.g. tunnel "native/*.node" — copy matching files only.
+          const slash = entry.lastIndexOf('/');
+          const dirRel = slash === -1 ? '.' : entry.slice(0, slash);
+          const pattern = slash === -1 ? entry : entry.slice(slash + 1);
+          const dirSrc = path.join(src, dirRel);
+          if (!existsSync(dirSrc)) continue;
+          const dirDest = path.join(dest, dirRel);
+          mkdirSync(dirDest, { recursive: true });
+          const suffix = pattern.startsWith('*') ? pattern.slice(1) : null;
+          for (const name of readdirSync(dirSrc)) {
+            if (suffix !== null) {
+              if (!name.endsWith(suffix)) continue;
+            } else if (name !== pattern) continue;
+            cpSync(path.join(dirSrc, name), path.join(dirDest, name), {
+              recursive: true,
+              force: true,
+            });
+          }
+          continue;
+        }
+        copyIfExists(path.join(src, entry), path.join(dest, entry));
+      }
+    } else {
+      // Fallback when package.json has no "files" field.
+      copyIfExists(path.join(src, 'skills'), path.join(dest, 'skills'));
+    }
   }
 
-  // Hoisted deps: preserve workspace symlinks into packages/* we just wrote.
+  // Hoisted deps. Node rewrites relative workspace links to absolute paths
+  // into `root` — rewriteRuntimeSymlinks fixes that for relocatable trees.
   const nmSrc = path.join(root, 'node_modules');
   const nmDest = path.join(out, 'node_modules');
   if (!existsSync(nmSrc)) {
@@ -131,15 +288,7 @@ export function assembleRuntime({ root, out }) {
   }
   cpSync(nmSrc, nmDest, { recursive: true, dereference: false, force: true });
 
-  // Keep only gateway-closure workspace links under @centraid.
-  const scope = path.join(nmDest, '@centraid');
-  if (existsSync(scope)) {
-    for (const name of readdirSync(scope)) {
-      if (!KEEP_CENTRAID_NAMES.has(name)) {
-        rmSync(path.join(scope, name), { recursive: true, force: true });
-      }
-    }
-  }
+  rewriteRuntimeSymlinks(out);
 
   // Drop obvious non-runtime weight (dev tooling left after --production is best-effort).
   const dropTop = [

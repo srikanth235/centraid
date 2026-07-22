@@ -91,6 +91,8 @@ Packaging harden follow-up:
 - `bun run --cwd packages/gateway test -- src/cli/allowed-hosts.test.ts`
 - `bun run gateway:package:trace` / `bun run gateway:package:smoke`
 - CI: `docker build` + `smoke.mjs --base-url` with volume at `/data`
+- Symlink rewrite: `assemble-runtime.mjs` rewrites `@centraid/*` to relative `../../packages/*` after Node `cpSync` absolute-ifies them; ships package.json `files` assets (blueprints manifest/apps, skills, …)
+- `node --test scripts/gateway-package/assemble-runtime.test.mjs` + isolated-tree smoke (out under tmp; monorepo packages not on resolve path)
 
 ## Steering
 

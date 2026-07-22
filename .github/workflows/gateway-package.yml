@@ -75,6 +75,10 @@ jobs:
       - name: Probe unit tests
         run: node --test scripts/gateway-package/probe.test.mjs
 
+      - name: Assemble symlink unit tests
+        # Runs after turbo build so packages/*/dist exist for assembleRuntime.
+        run: node --test scripts/gateway-package/assemble-runtime.test.mjs
+
       - name: Trace install set
         run: |
           mkdir -p artifacts

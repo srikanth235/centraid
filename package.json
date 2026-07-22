@@ -44,6 +44,7 @@
     "gateway:package:smoke": "node scripts/gateway-package/smoke.mjs",
     "gateway:package:probe:test": "node --test scripts/gateway-package/probe.test.mjs",
     "gateway:package:assemble": "node scripts/gateway-package/assemble-runtime.mjs",
+    "gateway:package:assemble:test": "node --test scripts/gateway-package/assemble-runtime.test.mjs",
     "check:pr": "bun run format:check && bunx oxlint . && bun run lint:packages && bunx turbo run lint && bun run typecheck && bun run lint:types && bun run knip && bun run lint:css && bun run lint:e2e-flows && bun run lint:protocol-routes && bun run lint:acp-min-versions && bun run test:matrix && bun run test:ratchet && bun run test:ratchet:unit && bun run test:affected",
     "ci": "bun run check:pr",
     "knip": "knip",
