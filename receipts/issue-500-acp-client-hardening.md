@@ -36,12 +36,15 @@ packages/agent-runtime/src/backends/acp/agent-errors.ts
 packages/agent-runtime/src/backends/acp/backend.test.ts
 packages/agent-runtime/src/backends/acp/backend.ts
 packages/agent-runtime/src/backends/acp/backend.vault-tools.test.ts
+packages/agent-runtime/src/backends/acp/capabilities-cache.test.ts
 packages/agent-runtime/src/backends/acp/capabilities-cache.ts
 packages/agent-runtime/src/backends/acp/fake-acp-agent.mjs
 packages/agent-runtime/src/backends/acp/json-rpc.ts
 packages/agent-runtime/src/backends/acp/permissions.ts
 packages/agent-runtime/src/backends/acp/probe-capabilities.ts
+packages/agent-runtime/src/backends/acp/session-config.test.ts
 packages/agent-runtime/src/backends/acp/session-config.ts
+packages/agent-runtime/src/backends/acp/session-warm.test.ts
 packages/agent-runtime/src/backends/acp/session-warm.ts
 packages/agent-runtime/src/backends/acp/stop-reason.test.ts
 packages/agent-runtime/src/backends/acp/stop-reason.ts
@@ -65,6 +68,7 @@ packages/gateway/src/serve/build-gateway.ts
 receipts/issue-500-acp-client-hardening.md
 ```
 
+
 ## Decisions
 
 None — implementation followed the product-shaped ACP hardening plan settled before coding (headless turn driver, not full IDE client).
@@ -86,7 +90,12 @@ bun run --filter @centraid/agent-runtime typecheck
 bun run --filter @centraid/app-engine typecheck
 bun run --filter @centraid/gateway typecheck
 bun run --filter @centraid/client typecheck
+bunx oxlint --format github .
+# PR #502 CI green-up: agent-runtime branch coverage ≥ 84% floor
+bun run coverage
 ```
+
+CI green-up notes (PR #502): fixed `no-useless-spread` in `capabilities-cache.ts`; added unit tests for `session-config`, `session-warm`, `capabilities-cache`/`probeAcpCapabilities`, and extra `agent-errors` branches so `packages/agent-runtime/src/**` branch coverage clears the 84% floor.
 
 ## Accounting
 

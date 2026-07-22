@@ -37,9 +37,7 @@ export async function resolveAcpCapabilities(
 
   const run = (async (): Promise<AcpAgentCapabilities> => {
     try {
-      const config = acpConfigFor(kind, {
-        ...(opts?.binPath ? { binPath: opts.binPath } : {}),
-      });
+      const config = acpConfigFor(kind, opts?.binPath ? { binPath: opts.binPath } : {});
       const caps = await probeAcpCapabilities(config, { timeoutMs: 10_000 });
       cache.set(k, caps);
       return caps;
