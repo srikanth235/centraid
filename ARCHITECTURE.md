@@ -15,17 +15,20 @@ The browser extension (`apps/extension`) is a narrower paired-device client over
 
 The monorepo is orchestrated by [Turborepo](https://turbo.build) and run on [Bun](https://bun.sh) (`packageManager` pinned at the root). Linting and formatting use [oxlint](https://oxc.rs/docs/guide/usage/linter) and [oxfmt](https://github.com/oxc-project/oxfmt); type checking is TypeScript per workspace; tests run on [vitest](https://vitest.dev) with v8 coverage.
 
-### Deploy surfaces (issue #501)
+### Deploy surfaces (issue #501 / #512)
+
+One **product version** stamps the monorepo; surfaces may skip *ship* but not diverge stamps. Connect uses **protocol version**, not product string. Catalog: `bun run release:matrix`.
 
 | Surface | How it ships |
 | --- | --- |
 | **Desktop** | Tag `v*` → `release-desktop.yml` (macOS / Windows / Linux). Installers attach to the GitHub Release when signing secrets are enrolled; electron-updater uses `latest*.yml` / beta channel. |
-| **Mobile** | `release-mobile.yml` (dispatch) → EAS Build/Submit when enrolled. J8 path-filtered `assembleDebug` CI deferred (too slow for PR gate). Store-only routine path (J7). |
+| **Mobile** | Same product stamp; **ship** via `release-mobile.yml` dispatch only (not every tag). EAS when enrolled. Store-only routine path (J7). Build numbers derived from product semver. |
 | **Web PWA** | Continuous host scaffold `app.centraid.dev` (`apps/web` + `web.yml`). Gateway also embeds the built PWA for LAN/ticket clients. |
 | **Docs/home** | Cloudflare static assets (`docs:bundle` → `dist/site`); GHA is gate-only. |
-| **Gateway daemon** | Primary: monorepo build + `centraid-gateway` + optional H5 OS service. Optional: GHCR image on tags (monorepo-root `Dockerfile`; see #504 packaging). |
+| **Gateway daemon** | Primary: monorepo / npm `@centraid/gateway` + optional H5 OS service. Optional: GHCR image on tags (monorepo-root `Dockerfile`; #504). npm multi-OS tunnel natives (#511). |
+| **Companion extension** | Same product version; package via `extension-release.yml` (not a second product-version line). |
 
-Signing residual: [docs/enrollment.md](docs/enrollment.md). Release ritual: [docs/release.md](docs/release.md).
+Signing residual: [docs/enrollment.md](docs/enrollment.md). Release ritual: [docs/release.md](docs/release.md). Versioning policy: [docs/decisions.md](docs/decisions.md) R1–R5.
 
 ## Runtime model: `conversation ⊃ turn ⊃ item`
 

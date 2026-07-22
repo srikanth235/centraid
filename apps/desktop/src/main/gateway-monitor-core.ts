@@ -24,18 +24,21 @@
  *
  * Wave 2 of #351 wires up the version handshake (version-handshake.ts) that
  * previously had zero runtime callers: `applyProbe` judges a REMOTE
- * gateway's reported `version`/`schemaEpoch` against this build's pinned
- * expectations and records the verdict as `versionSkew`. A local gateway is
- * embedded — always built from the same tree as the app — so it's never
- * judged; `versionSkew` stays permanently undefined for it. This is v0's
- * "surface loudly" posture, NOT the hard-refuse policy `judgeGatewayInfo`'s
- * doc comment describes — {@link applyVersionSkewAlert} just fires a
- * de-duped OS notification. Hard refusal (blocking requests to a skewed
- * remote gateway) is the documented escalation path, deliberately not
- * implemented yet.
+ * gateway's **protocol** floor against this build (product version is display
+ * only — issue #512) and records the verdict as `versionSkew`. A local
+ * gateway is embedded — always built from the same tree as the app — so it's
+ * never judged; `versionSkew` stays permanently undefined for it. This is
+ * v0's "surface loudly" posture for protocol skew; hard refuse remains the
+ * path taken by full `judgeGatewayInfo` / client connect.
  */
 
-import { EXPECTED_GATEWAY_VERSION, EXPECTED_SCHEMA_EPOCH } from './version-handshake.js';
+import {
+  EXPECTED_GATEWAY_VERSION,
+  EXPECTED_PROTOCOL_VERSION,
+  EXPECTED_SCHEMA_EPOCH,
+  GATEWAY_MIN_PROTOCOL_VERSION,
+  protocolsCompatible,
+} from './version-handshake.js';
 
 /** Result of one heartbeat probe (`/centraid/_gateway/health`, or `/info` on a fallback). */
 export interface GatewayProbe {
@@ -69,19 +72,18 @@ export interface GatewayComponentIssue {
 }
 
 /**
- * Version-handshake verdict for the active (REMOTE only, see file header)
- * gateway, folded from the probe's `version`/`schemaEpoch` against this
- * build's pinned expectations ({@link EXPECTED_GATEWAY_VERSION} /
- * {@link EXPECTED_SCHEMA_EPOCH}, imported from version-handshake.ts so both
- * call sites — the switcher's one-shot handshake and this continuous
- * heartbeat — judge against the same pinned pair).
+ * Protocol-handshake verdict for the active (REMOTE only, see file header)
+ * gateway. Product `version` strings are informational; `skewed` means the
+ * protocol support window failed (issue #512).
  */
 export interface GatewayVersionSkew {
   skewed: boolean;
   gatewayVersion: string;
   gatewaySchemaEpoch: number;
+  gatewayProtocolVersion: number;
   clientVersion: string;
   clientSchemaEpoch: number;
+  clientProtocolVersion: number;
 }
 
 /** Action returned by {@link applyVersionSkewAlert} when a skew notification is due. */
@@ -318,13 +320,18 @@ export function applyProbe(state: GatewayRuntimeState, probe: GatewayProbe): Gat
           probe.schemaEpoch !== undefined
             ? {
                 versionSkew: {
-                  skewed:
-                    probe.version !== EXPECTED_GATEWAY_VERSION ||
-                    probe.schemaEpoch !== EXPECTED_SCHEMA_EPOCH,
+                  skewed: !protocolsCompatible({
+                    localProtocol: EXPECTED_PROTOCOL_VERSION,
+                    localMin: GATEWAY_MIN_PROTOCOL_VERSION,
+                    peerProtocol: probe.schemaEpoch,
+                    peerMin: probe.schemaEpoch,
+                  }),
                   gatewayVersion: probe.version,
                   gatewaySchemaEpoch: probe.schemaEpoch,
+                  gatewayProtocolVersion: probe.schemaEpoch,
                   clientVersion: EXPECTED_GATEWAY_VERSION,
                   clientSchemaEpoch: EXPECTED_SCHEMA_EPOCH,
+                  clientProtocolVersion: EXPECTED_PROTOCOL_VERSION,
                 } satisfies GatewayVersionSkew,
               }
             : {}),

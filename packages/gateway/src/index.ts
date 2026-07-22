@@ -91,4 +91,9 @@ export {
 // server-ingested images.
 export { createImagePreviewCodec } from './preview/codec.js';
 export { createWasmImagePreviewCodec } from './preview/wasm-codec.js';
-export { GATEWAY_VERSION, GATEWAY_SCHEMA_EPOCH } from './version.js';
+export {
+  GATEWAY_VERSION,
+  GATEWAY_PROTOCOL_VERSION,
+  GATEWAY_MIN_PROTOCOL_VERSION,
+  GATEWAY_SCHEMA_EPOCH,
+} from './version.js';

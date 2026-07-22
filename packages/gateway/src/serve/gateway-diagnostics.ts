@@ -39,7 +39,12 @@ import {
 import type { GatewayLogEntry, GatewayLogStore } from './gateway-log-store.js';
 import type { HealthRegistry, HealthSnapshot } from './health-registry.js';
 import type { VaultRegistry } from './vault-registry.js';
-import { GATEWAY_SCHEMA_EPOCH, GATEWAY_VERSION } from '../version.js';
+import {
+  GATEWAY_MIN_PROTOCOL_VERSION,
+  GATEWAY_PROTOCOL_VERSION,
+  GATEWAY_SCHEMA_EPOCH,
+  GATEWAY_VERSION,
+} from '../version.js';
 
 /** Default + max entry counts for the embedded log tail. */
 export const DEFAULT_DIAGNOSTICS_LOG_LIMIT = 500;
@@ -72,6 +77,8 @@ export interface DiagnosticsBundle {
   generatedAt: string;
   gateway: {
     version: string;
+    protocolVersion: number;
+    minSupportedProtocol: number;
     schemaEpoch: number;
   };
   runtime: {
@@ -190,7 +197,12 @@ export async function buildDiagnosticsBundle(
 
   return {
     generatedAt: new Date().toISOString(),
-    gateway: { version: GATEWAY_VERSION, schemaEpoch: GATEWAY_SCHEMA_EPOCH },
+    gateway: {
+      version: GATEWAY_VERSION,
+      protocolVersion: GATEWAY_PROTOCOL_VERSION,
+      minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
+      schemaEpoch: GATEWAY_SCHEMA_EPOCH,
+    },
     runtime: { platform: os.platform(), arch: os.arch(), nodeVersion: process.version },
     health,
     logs,

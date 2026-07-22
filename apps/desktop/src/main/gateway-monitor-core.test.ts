@@ -361,16 +361,18 @@ describe('applyProbe: version handshake (issue #351, wave 2)', () => {
       skewed: false,
       gatewayVersion: EXPECTED_GATEWAY_VERSION,
       gatewaySchemaEpoch: EXPECTED_SCHEMA_EPOCH,
+      gatewayProtocolVersion: EXPECTED_SCHEMA_EPOCH,
       clientVersion: EXPECTED_GATEWAY_VERSION,
       clientSchemaEpoch: EXPECTED_SCHEMA_EPOCH,
+      clientProtocolVersion: EXPECTED_SCHEMA_EPOCH,
     });
   });
 
-  it('a mismatched version or schema epoch reads as skewed', () => {
-    const badVersion = runRemote([
+  it('product version skew is not protocol skew; bad protocol is', () => {
+    const productOnly = runRemote([
       ok(T0, { version: '9.9.9', schemaEpoch: EXPECTED_SCHEMA_EPOCH }),
     ]);
-    expect(badVersion.versionSkew).toMatchObject({ skewed: true, gatewayVersion: '9.9.9' });
+    expect(productOnly.versionSkew).toMatchObject({ skewed: false, gatewayVersion: '9.9.9' });
 
     const badEpoch = runRemote([
       ok(T0, { version: EXPECTED_GATEWAY_VERSION, schemaEpoch: EXPECTED_SCHEMA_EPOCH + 1 }),
@@ -382,15 +384,23 @@ describe('applyProbe: version handshake (issue #351, wave 2)', () => {
   });
 
   it('keeps the last-known verdict across a failed probe or an /info-fallback probe', () => {
-    const skewed = runRemote([ok(T0, { version: '9.9.9', schemaEpoch: EXPECTED_SCHEMA_EPOCH })]);
+    const skewed = runRemote([
+      ok(T0, { version: EXPECTED_GATEWAY_VERSION, schemaEpoch: EXPECTED_SCHEMA_EPOCH + 1 }),
+    ]);
     const stillSkewed = applyProbe(skewed, fail(T0 + 5000));
-    expect(stillSkewed.versionSkew).toMatchObject({ skewed: true, gatewayVersion: '9.9.9' });
+    expect(stillSkewed.versionSkew).toMatchObject({
+      skewed: true,
+      gatewaySchemaEpoch: EXPECTED_SCHEMA_EPOCH + 1,
+    });
 
     const fallback = applyProbe(
       skewed,
       ok(T0 + 10_000, { version: undefined, schemaEpoch: undefined }),
     );
-    expect(fallback.versionSkew).toMatchObject({ skewed: true, gatewayVersion: '9.9.9' });
+    expect(fallback.versionSkew).toMatchObject({
+      skewed: true,
+      gatewaySchemaEpoch: EXPECTED_SCHEMA_EPOCH + 1,
+    });
   });
 });
 
@@ -399,21 +409,30 @@ describe('applyVersionSkewAlert', () => {
   const runRemote = (probes: GatewayProbe[]): GatewayRuntimeState =>
     probes.reduce(applyProbe, initialRuntimeState(REMOTE_GW, T0));
 
-  it('fires immediately on a skewed remote gateway — no threshold wait', () => {
-    const state = runRemote([ok(T0, { version: '9.9.9', schemaEpoch: EXPECTED_SCHEMA_EPOCH })]);
+  it('fires immediately on a protocol-skewed remote gateway — no threshold wait', () => {
+    const state = runRemote([
+      ok(T0, { version: EXPECTED_GATEWAY_VERSION, schemaEpoch: EXPECTED_SCHEMA_EPOCH + 1 }),
+    ]);
     const { action } = applyVersionSkewAlert(state, config, T0);
-    expect(action).toEqual({ gatewayVersion: '9.9.9', gatewaySchemaEpoch: EXPECTED_SCHEMA_EPOCH });
+    expect(action).toEqual({
+      gatewayVersion: EXPECTED_GATEWAY_VERSION,
+      gatewaySchemaEpoch: EXPECTED_SCHEMA_EPOCH + 1,
+    });
   });
 
   it('de-dupes — does not refire on a later tick while still skewed', () => {
-    let state = runRemote([ok(T0, { version: '9.9.9', schemaEpoch: EXPECTED_SCHEMA_EPOCH })]);
+    let state = runRemote([
+      ok(T0, { version: EXPECTED_GATEWAY_VERSION, schemaEpoch: EXPECTED_SCHEMA_EPOCH + 1 }),
+    ]);
     ({ state } = applyVersionSkewAlert(state, config, T0));
     const second = applyVersionSkewAlert(state, config, T0 + 60_000);
     expect(second.action).toBeUndefined();
   });
 
   it('does not fire when alerts are disabled', () => {
-    const state = runRemote([ok(T0, { version: '9.9.9', schemaEpoch: EXPECTED_SCHEMA_EPOCH })]);
+    const state = runRemote([
+      ok(T0, { version: EXPECTED_GATEWAY_VERSION, schemaEpoch: EXPECTED_SCHEMA_EPOCH + 1 }),
+    ]);
     const { action } = applyVersionSkewAlert(state, { ...config, enabled: false }, T0);
     expect(action).toBeUndefined();
   });
@@ -431,7 +450,9 @@ describe('applyVersionSkewAlert', () => {
   });
 
   it('re-arms once the gateway stops reporting skew, then re-fires on a later mismatch', () => {
-    let state = runRemote([ok(T0, { version: '9.9.9', schemaEpoch: EXPECTED_SCHEMA_EPOCH })]);
+    let state = runRemote([
+      ok(T0, { version: EXPECTED_GATEWAY_VERSION, schemaEpoch: EXPECTED_SCHEMA_EPOCH + 1 }),
+    ]);
     ({ state } = applyVersionSkewAlert(state, config, T0));
     expect(state.versionSkewAlertedAt).toBe(T0);
 
@@ -443,15 +464,18 @@ describe('applyVersionSkewAlert', () => {
     ({ state } = applyVersionSkewAlert(state, config, T0 + 10_000));
     expect(state.versionSkewAlertedAt).toBeUndefined();
 
-    // A later re-skew fires again.
+    // A later re-skew fires again (protocol only — product string is ignored).
     state = applyProbe(
       state,
-      ok(T0 + 20_000, { version: '10.0.0', schemaEpoch: EXPECTED_SCHEMA_EPOCH }),
+      ok(T0 + 20_000, {
+        version: EXPECTED_GATEWAY_VERSION,
+        schemaEpoch: EXPECTED_SCHEMA_EPOCH + 1,
+      }),
     );
     const refired = applyVersionSkewAlert(state, config, T0 + 20_000);
     expect(refired.action).toEqual({
-      gatewayVersion: '10.0.0',
-      gatewaySchemaEpoch: EXPECTED_SCHEMA_EPOCH,
+      gatewayVersion: EXPECTED_GATEWAY_VERSION,
+      gatewaySchemaEpoch: EXPECTED_SCHEMA_EPOCH + 1,
     });
   });
 });

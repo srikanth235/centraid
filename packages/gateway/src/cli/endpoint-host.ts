@@ -48,7 +48,12 @@ import type { RuntimeLogger } from '@centraid/app-engine';
 import { EnrollmentStore } from '../serve/enrollment-store.js';
 import { PairingTicketStore } from '../serve/pairing-store.js';
 import { DeviceTokenStore } from '../serve/device-token-store.js';
-import { GATEWAY_SCHEMA_EPOCH, GATEWAY_VERSION } from '../version.js';
+import {
+  GATEWAY_MIN_PROTOCOL_VERSION,
+  GATEWAY_PROTOCOL_VERSION,
+  GATEWAY_SCHEMA_EPOCH,
+  GATEWAY_VERSION,
+} from '../version.js';
 import type { DataPlaneControlOptions } from '../routes/data-plane-control.js';
 import type { DaemonLayout } from './paths.js';
 
@@ -258,6 +263,8 @@ export function makeDaemonDevicePlane(input: {
       vaultId: redeemed.vaultId,
       vaultName: plane.name,
       version: GATEWAY_VERSION,
+      protocolVersion: GATEWAY_PROTOCOL_VERSION,
+      minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
       schemaEpoch: GATEWAY_SCHEMA_EPOCH,
     };
   };
