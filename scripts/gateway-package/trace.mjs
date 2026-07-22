@@ -13,23 +13,9 @@
 import { existsSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { GATEWAY_WORKSPACE_PACKAGES } from './assemble-runtime.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-
-/** Packages required to run `centraid-gateway serve` after build. */
-const GATEWAY_WORKSPACE_PACKAGES = [
-  'packages/gateway',
-  'packages/app-engine',
-  'packages/agent-runtime',
-  'packages/automation',
-  'packages/backup',
-  'packages/blueprints',
-  'packages/design-tokens',
-  'packages/protocol',
-  'packages/tunnel',
-  'packages/vault',
-  'packages/blob-format',
-];
 
 /** Native / special binary surface (Phase A decision record). */
 const NATIVE_MODULE_DECISION = {
@@ -85,9 +71,10 @@ const report = {
   installSetSample: entries.slice(0, 200),
   installSetCount: entries.length,
   notes: [
-    'Docker (Phase C) copies built dist/ + package.json + production node_modules for these packages.',
-    'Nix flake (Phase D) should consume the same package list; do not replace Bun day-to-day with a fat devShell.',
+    'Docker (Phase C): multi-stage image runs assemble-runtime.mjs (dist + package.json + production node_modules) for these packages; bind-mount /data for vault durability.',
+    'Nix flake (Phase D) is a STUB (docs text only); same package list when FOD lands. Do not replace Bun day-to-day with a fat devShell.',
     'Host unit files: single writer is centraid-gateway service install (see docs/config-ownership.md).',
+    'CI: gateway-package.yml host smoke + docker build + container smoke --base-url.',
   ],
 };
 

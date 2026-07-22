@@ -11,6 +11,7 @@ Issue #504 is a phased backlog. This receipt covers **all batches shipped in one
 - [x] Batch 3: product CLI `centraid` (status/info/health/list); auth story documented; streaming explicitly deferred
 - [x] Batch 4: tool catalog named in runners.md; MCP remains the adapter; native injection gated
 - [x] Batch 5: package tracer, install smoke, Dockerfile, flake.nix notes, single unit-file writer docs, path-filtered workflow
+- [x] Batch 5 follow-on: Docker harden (non-root, HEALTHCHECK, OCI labels, lean assemble, `.dockerignore`), container smoke in CI, Host allowlist CLI/env, operator docs
 - [x] Batch 6: TESTING.md smoke schedule; ACP min-version drift script in `check:pr`
 
 ## What changed
@@ -37,9 +38,12 @@ Issue #504 is a phased backlog. This receipt covers **all batches shipped in one
 
 ### Batch 4–6 + packaging + docs
 - `docs/runners.md` — tool catalog registration surface
-- `docs/platform-gating.md`, `docs/client-keying.md`, `docs/glossary.md`, `docs/coding-standards.md`, `docs/protocol.md`, `docs/config-ownership.md`, `AGENTS.md`, `SECURITY.md`, `TESTING.md`
-- `scripts/gateway-package/trace.mjs`, `scripts/gateway-package/smoke.mjs`
-- `Dockerfile`, `flake.nix`, `.github/workflows/gateway-package.yml`
+- `docs/platform-gating.md`, `docs/client-keying.md`, `docs/glossary.md`, `docs/coding-standards.md`, `docs/protocol.md`, `docs/config-ownership.md`, `AGENTS.md`, `SECURITY.md`, `TESTING.md`, `README.md` (Docker operator section)
+- `scripts/gateway-package/trace.mjs`, `smoke.mjs`, `probe.mjs`, `probe.test.mjs`, `assemble-runtime.mjs`
+- `Dockerfile` (non-root 10001, HEALTHCHECK, OCI labels, multi-stage assemble), `.dockerignore`
+- `flake.nix` (explicit STUB — docs text only)
+- `.github/workflows/gateway-package.yml` — Bun cache, path-filter PR/`main` parity, host smoke + `docker build` + container smoke with `/data` volume
+- `packages/gateway/src/cli/allowed-hosts.ts` (+ tests); `serve` + CLI `--allowed-host` / `CENTRAID_ALLOWED_HOSTS`
 - `scripts/lint-acp-min-versions.mjs`
 - `bun.lock`
 
@@ -49,16 +53,19 @@ Issue #504 is a phased backlog. This receipt covers **all batches shipped in one
 - Protocol package is types + constants only (no runtime schema validation).
 - Product CLI streaming deferred (documented in CLI help/README).
 - Route-literal lint scopes extension + CLI first (historical gateway literals migrate gradually).
-- Nix flake documents packaging path; not a full FOD/bun2nix translation yet.
+- Nix flake is an explicit **stub** (docs text only); not a full FOD/bun2nix translation yet.
 - Credentialed CORS allowlist from live session shell origins + Bearer intent (not ambient cookies alone).
+- Docker image: non-root, HEALTHCHECK, OCI labels, lean runtime assemble; CI builds and smokes the **image** (not only host binary). GHCR publish / multi-arch / Cosign deferred.
 
 ## Out of scope
 
 - Pairing-as-a-device CLI auth; extension pairing product surface (#462 C4 beyond consuming protocol routes)
 - Runtime schema validation / AOT validators
-- Full Nix FOD / bun2nix translation
+- Full Nix FOD / bun2nix translation; real `centraid-gateway` Nix derivation
+- GHCR publish, multi-arch Buildx, Cosign, SBOM attach
 - Desktop packaging parity; PR-template process; tunnel envelope types in protocol
 - Product CLI streaming verbs (named defer under this issue)
+- Making packaging workflow a branch-protection required check
 
 ## Verification
 
@@ -78,6 +85,12 @@ Follow-up commit (green `check:pr`):
 - `gateway-package.yml` uses `turbo run build --filter=@centraid/gateway` full dependency graph
 - `packages/cli/src/cli.integration.test.ts` drives `main()` status/health/list
 - Real bin: `node packages/cli/dist/cli.js status|health|list` against `centraid-gateway serve` (captured under implementer `cli.log`)
+
+Packaging harden follow-up:
+- `node --test scripts/gateway-package/probe.test.mjs`
+- `bun run --cwd packages/gateway test -- src/cli/allowed-hosts.test.ts`
+- `bun run gateway:package:trace` / `bun run gateway:package:smoke`
+- CI: `docker build` + `smoke.mjs --base-url` with volume at `/data`
 
 ## Steering
 

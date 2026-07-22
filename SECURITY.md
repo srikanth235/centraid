@@ -64,11 +64,17 @@ Posture after issue **#504 batch 0** (fixed; do not document the old reflective-
 | **Auth transport** | Desktop/daemon: Bearer (`token.bin` / device tokens). PWA shell: Origin-bound HttpOnly control cookie + app cookies; `authorizeRequest` enforces origin bind in addition to CORS defense-in-depth. |
 | **WS / tunnel** | Device plane auth is enrollment/token based on the tunnel; not cookie ambient. |
 
+**Non-loopback / Docker operators (packaging 5C):**
+
+- Binding `0.0.0.0` (the gateway Docker image default) does **not** open Host or CORS. Loopback Host names remain allowed; any other `Host` clients send must be listed via `--allowed-host <name>` (repeatable) and/or `CENTRAID_ALLOWED_HOSTS=host1,host2`.
+- Vault and ledger data live under the process `--data-dir` (image: `/data`). **Bind-mount a host directory or use a named volume** at `/data`. A bare `docker run` without a durable mount loses data when the container is removed — the image `VOLUME` alone is not a backup strategy.
+- Image process runs as non-root UID/GID `10001` (`centraid`); ensure the mounted volume is writable by that user.
+
 **Honest not-yet (control plane):**
 
-- Non-loopback bind productization (packaging 5C) must carry the same Host allowlist + operator-configured hostnames — not "open CORS" when binding `0.0.0.0`.
 - Formal third-party review of the PWA cookie + CORS combination.
 - Full detached gateway supervision (H2–H7) remains open.
+- GHCR publish / multi-arch / signed images (release path).
 
 ### Pairing and transport
 

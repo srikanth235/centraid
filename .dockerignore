@@ -1,0 +1,58 @@
+# Build context for gateway Dockerfile (issue #504 packaging).
+# Workspace package.json files for all apps must remain so bun install
+# --frozen-lockfile can resolve the monorepo graph; strip app sources.
+
+.git
+.githooks
+.github
+.governance
+.claude
+.agents
+.vscode
+.idea
+.turbo
+.cache
+coverage
+artifacts
+receipts
+docs
+tests
+scripts/docs-site
+
+# Desktop / mobile / extension: keep package.json only (workspace lock integrity)
+apps/desktop/**
+!apps/desktop/package.json
+apps/mobile/**
+!apps/mobile/package.json
+apps/extension/**
+!apps/extension/package.json
+
+# Host-side noise
+**/.DS_Store
+**/node_modules
+**/dist
+**/.turbo
+**/*.log
+**/.env
+**/.env.*
+
+# Large / non-runtime docs and ledgers
+COSTS.md
+STEERING.md
+QUALITY.md
+CHANGELOG.md
+CONSTITUTION.md
+ARCHITECTURE.md
+CONTRIBUTING.md
+AGENTS.md
+CLAUDE.md
+
+# Test / tool configs that bloat context
+**/*.test.ts
+**/*.test.tsx
+**/*.integration.test.ts
+**/*.contract.test.ts
+**/*.perf.test.ts
+**/*.scale.test.ts
+**/vitest.config.ts
+**/playwright.config.ts

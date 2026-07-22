@@ -1,5 +1,6 @@
-# Path-filtered packaging CI (issue #504 Phase G).
-# External observer smoke — no product-main "is smoke" branches.
+# Path-filtered packaging CI (issue #504 Phase G + Docker artifact smoke).
+# External observer: host binary smoke + docker build/run with durable /data volume.
+# No product-main "is smoke" branches.
 name: gateway-package
 
 on:
@@ -18,6 +19,7 @@ on:
       - 'packages/design-tokens/**'
       - 'packages/blob-format/**'
       - 'Dockerfile'
+      - '.dockerignore'
       - 'flake.nix'
       - 'scripts/gateway-package/**'
   push:
@@ -26,30 +28,95 @@ on:
       - 'packages/gateway/**'
       - 'packages/app-engine/**'
       - 'packages/protocol/**'
+      - 'packages/cli/**'
+      - 'packages/agent-runtime/**'
+      - 'packages/automation/**'
+      - 'packages/vault/**'
+      - 'packages/backup/**'
+      - 'packages/blueprints/**'
+      - 'packages/tunnel/**'
+      - 'packages/design-tokens/**'
+      - 'packages/blob-format/**'
       - 'Dockerfile'
+      - '.dockerignore'
+      - 'flake.nix'
       - 'scripts/gateway-package/**'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   trace-and-smoke:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.13
+
+      - name: Bun install cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install
         run: bun install --frozen-lockfile
+
       - name: Build gateway dependency closure
         # turbo honors package.json dependsOn so protocol → vault → app-engine →
         # agent-runtime → automation → gateway build in order (full graph).
         run: bunx turbo run build --filter=@centraid/gateway
+
+      - name: Probe unit tests
+        run: node --test scripts/gateway-package/probe.test.mjs
+
       - name: Trace install set
         run: |
           mkdir -p artifacts
           node scripts/gateway-package/trace.mjs --out=artifacts/gateway-package-trace.json
-      - name: Install smoke
+
+      - name: Host install smoke
         run: node scripts/gateway-package/smoke.mjs --gateway-bin packages/gateway/dist/cli/cli.js --port 18787
+
+      - name: Docker build gateway image
+        run: |
+          docker build \
+            --build-arg VERSION=0.1.0 \
+            --build-arg REVISION="${{ github.sha }}" \
+            -t "centraid-gateway:ci-${{ github.sha }}" \
+            .
+
+      - name: Container install smoke (volume at /data)
+        run: |
+          set -euo pipefail
+          DATA="$(mktemp -d)"
+          # Image runs as uid 10001 — host dir must be writable by that user.
+          chmod 777 "$DATA"
+          NAME="centraid-gw-smoke-${{ github.run_id }}"
+          PORT=18788
+          docker rm -f "$NAME" 2>/dev/null || true
+          docker run -d --name "$NAME" \
+            -p "127.0.0.1:${PORT}:8787" \
+            -v "${DATA}:/data" \
+            "centraid-gateway:ci-${{ github.sha }}"
+          cleanup() {
+            docker logs "$NAME" 2>&1 || true
+            docker rm -f "$NAME" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          node scripts/gateway-package/smoke.mjs --base-url "http://127.0.0.1:${PORT}"
+          # Prove durable mount: data dir on host is non-empty after boot.
+          if [ -z "$(ls -A "$DATA" 2>/dev/null || true)" ]; then
+            echo "expected gateway to write under mounted /data" >&2
+            exit 1
+          fi
+          echo "container data mount OK: $(ls -la "$DATA" | head -20)"
+
       - name: Upload trace
         if: always()
         uses: actions/upload-artifact@v4

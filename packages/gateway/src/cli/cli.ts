@@ -52,6 +52,7 @@ import { commandRecover } from './recover-admin.js';
 import { commandService } from './service-admin.js';
 import { commandStatus } from './status-admin.js';
 import { makeDaemonDevicePlane } from './endpoint-host.js';
+import { mergeAllowedHosts } from './allowed-hosts.js';
 
 const PKG_VERSION = '0.1.0';
 
@@ -60,6 +61,8 @@ interface ParsedServe {
   dataDir?: string;
   host?: string;
   port?: number;
+  /** Extra Hostnames from repeated `--allowed-host` (issue #504 packaging). */
+  allowedHosts?: string[];
 }
 
 async function bundledWebRoot(): Promise<string | undefined> {
@@ -94,7 +97,7 @@ function usage(): never {
   process.stderr.write(
     [
       'Usage:',
-      '  centraid-gateway serve [--config <path>] [--data-dir <path>] [--host <h>] [--port <p>]',
+      '  centraid-gateway serve [--config <path>] [--data-dir <path>] [--host <h>] [--port <p>] [--allowed-host <name>]…',
       '  centraid-gateway print-token --data-dir <path>',
       '  centraid-gateway vault list --data-dir <path> [--json]',
       '  centraid-gateway vault create --data-dir <path> [--name <name>] [--json]',
@@ -167,8 +170,10 @@ function usage(): never {
       'host:port it bound to, so there is nothing on disk to dial.',
       '',
       'Bind defaults to 127.0.0.1:0 (loopback, OS-assigned port). Pass',
-      '--host 0.0.0.0 to bind LAN-reachable interfaces. There is no TLS',
-      'terminator in v0; front with Caddy / Tailscale Funnel / Cloudflare',
+      '--host 0.0.0.0 to bind LAN-reachable interfaces. Host header allowlist',
+      'still accepts only loopback names unless you pass --allowed-host <name>',
+      '(repeatable) and/or CENTRAID_ALLOWED_HOSTS=comma,separated. There is no',
+      'TLS terminator in v0; front with Caddy / Tailscale Funnel / Cloudflare',
       'Tunnel if exposing beyond a trusted LAN.',
       '',
     ].join('\n'),
@@ -202,6 +207,12 @@ function parseServeArgs(args: string[]): ParsedServe {
           fail(`--port must be an integer in [0, 65535], got "${args[i]}"`, 2);
         }
         out.port = n;
+        break;
+      }
+      case '--allowed-host': {
+        const name = next().trim();
+        if (!name) fail('--allowed-host requires a hostname', 2);
+        out.allowedHosts = [...(out.allowedHosts ?? []), name];
         break;
       }
       case '--help':
@@ -263,10 +274,12 @@ async function commandServe(args: string[]): Promise<void> {
   };
   const webRoot = await bundledWebRoot();
   let endpoint: GatewayEndpointHandle | undefined;
+  const allowedHosts = mergeAllowedHosts(parsed.allowedHosts);
   const handle = await serve({
     paths: layout,
     ...(config.host !== undefined ? { host: config.host } : {}),
     ...(config.port !== undefined ? { port: config.port } : {}),
+    ...(allowedHosts.length > 0 ? { allowedHosts } : {}),
     ...(config.backup ? { backup: config.backup } : {}),
     token,
     logTag: 'centraid-gateway',
