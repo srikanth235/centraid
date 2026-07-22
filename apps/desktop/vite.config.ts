@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
+import { inlineBlueprintAliases } from '../../packages/client/src/react/blueprints/inline-vite-aliases.ts';
 
 // Builds the React coexistence island (issue #325, Phase 0) into the same
 // dist/renderer directory the vanilla tsc output lands in, as a single ES
@@ -24,9 +25,16 @@ export default defineConfig({
   // depending on the package being built first. (The former desktop-ui/ui-core
   // packages now live locally under src/renderer/react/ui — no alias needed.)
   resolve: {
-    alias: {
-      '@centraid/design-tokens': fromHere('../../packages/design-tokens/src/index.ts'),
-    },
+    // Array form so the inline-app regex aliases (blueprint `./kit.js` /
+    // `./react-core.min.js` → shell shims, issue #505) sit alongside the
+    // design-tokens source alias.
+    alias: [
+      ...inlineBlueprintAliases(),
+      {
+        find: '@centraid/design-tokens',
+        replacement: fromHere('../../packages/design-tokens/src/index.ts'),
+      },
+    ],
   },
   css: {
     // CSS Modules for co-located `*.module.css` (issue #325, Phase 4 — CSS

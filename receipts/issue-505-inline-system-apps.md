@@ -65,6 +65,77 @@ offline render none → full.
   `docs/refactors/inline-system-apps.md` — every app-consumed router surface mapped
   to its shell-native replacement; settles issue open questions 2 (chat is
   universal, 8/8 apps) and 3 (query bundles redundant inline).
+- **Phases 2+3 (shell services + Tasks inline pilot, one wave — knip would flag
+  Phase-2 exports with no consumer)**:
+  - Shell services in `packages/client/src/react/blueprints/`:
+    `react-core-shim.ts` (single React runtime behind the vendored
+    `./react-core.min.js` specifier), `kit-inline.ts` (kit API mirror — pure surface
+    re-exported verbatim, data/gateway seams overridden), `centraid-inline.ts`
+    (`window.centraid` on `ReplicaShellSession`; `intentId` rides writes verbatim),
+    `inlineQueryCtx.ts` (bridge `runLocalQuery` reproduced; `ctx.vault.resolve` →
+    `{cards:[]}`, never rejects), `kit-ask-inline.ts` (lazy online-only ask panel →
+    gateway `_turn` + parked consent), `suppress-served-ask.ts`,
+    `inline-vite-aliases.ts`, plus tsc stubs `inline-app-module-stub.d.ts` /
+    `inline-query-stub.d.ts` and tests (`react-core-shim.test.ts`,
+    `kit-inline.test.ts`, `centraid-inline.test.ts`, `inlineQueryCtx.test.ts`).
+  - Tasks pilot in `packages/blueprints/apps/tasks/`: `app-inline.tsx`,
+    `Chrome.tsx`, `Chrome.module.css` (served entry byte-for-byte untouched);
+    shared contract `packages/blueprints/apps/inline-types.ts`;
+    `packages/blueprints/manifest.json` regenerated for the three new files.
+  - Route host: `packages/client/src/react/shell/routes/InlineAppRoute.tsx` +
+    `InlineAppRoute.module.css` + `InlineAppRoute.test.tsx`, registry
+    `packages/client/src/react/shell/routes/inlineApps.ts` (per-app `React.lazy`
+    chunk), branch in `packages/client/src/react/shell/App.tsx` (+
+    `App.inline-branch.test.tsx`), `packages/client/src/react/shell/ErrorBoundary.tsx`
+    gains `onReset`, knob push branch in
+    `packages/client/src/react/shell/routes/AppSettingsController.tsx` and
+    `packages/client/src/react/shell/routes/appSettingsData.ts`.
+  - Build wiring: `apps/web/vite.config.ts`, `apps/desktop/vite.config.ts`,
+    `packages/client/vitest.config.ts`, `packages/client/tsconfig.json`,
+    `apps/web/tsconfig.json`, `apps/desktop/tsconfig.react.json` (alias + stub
+    paths), `apps/web/public/sw.js` (transitive lazy-chunk precache crawl so a
+    never-opened app still opens offline).
+  - Full file manifest of this wave:
+    `packages/client/src/react/blueprints/react-core-shim.ts`,
+    `packages/client/src/react/blueprints/react-core-shim.test.ts`,
+    `packages/client/src/react/blueprints/kit-inline.ts`,
+    `packages/client/src/react/blueprints/kit-inline.test.ts`,
+    `packages/client/src/react/blueprints/centraid-inline.ts`,
+    `packages/client/src/react/blueprints/centraid-inline.test.ts`,
+    `packages/client/src/react/blueprints/inlineQueryCtx.ts`,
+    `packages/client/src/react/blueprints/inlineQueryCtx.test.ts`,
+    `packages/client/src/react/blueprints/kit-ask-inline.ts`,
+    `packages/client/src/react/blueprints/suppress-served-ask.ts`,
+    `packages/client/src/react/blueprints/inline-vite-aliases.ts`,
+    `packages/client/src/react/blueprints/inline-app-module-stub.d.ts`,
+    `packages/client/src/react/blueprints/inline-query-stub.d.ts`,
+    `packages/blueprints/apps/inline-types.ts`,
+    `packages/blueprints/apps/tasks/app-inline.tsx`,
+    `packages/blueprints/apps/tasks/Chrome.tsx`,
+    `packages/blueprints/apps/tasks/Chrome.module.css`,
+    `packages/blueprints/manifest.json`,
+    `packages/client/src/react/shell/routes/InlineAppRoute.tsx`,
+    `packages/client/src/react/shell/routes/InlineAppRoute.module.css`,
+    `packages/client/src/react/shell/routes/InlineAppRoute.test.tsx`,
+    `packages/client/src/react/shell/routes/inlineApps.ts`,
+    `packages/client/src/react/shell/App.tsx`,
+    `packages/client/src/react/shell/App.inline-branch.test.tsx`,
+    `packages/client/src/react/shell/ErrorBoundary.tsx`,
+    `packages/client/src/react/shell/routes/AppSettingsController.tsx`,
+    `packages/client/src/react/shell/routes/appSettingsData.ts`,
+    `apps/web/vite.config.ts`, `apps/desktop/vite.config.ts`,
+    `packages/client/vitest.config.ts`, `packages/client/tsconfig.json`,
+    `apps/web/tsconfig.json`, `apps/desktop/tsconfig.react.json`,
+    `apps/web/public/sw.js`.
+  - Browser-verified in real Chromium against the harness gateway: zero iframes;
+    app code served only from PWA-origin chunks (no `/centraid/tasks/*`, `_tool`,
+    `_changes`, `_query` requests); capture write landed through the replica intent
+    dispatch; gateway killed → Tasks still opens and renders live replica data.
+    Three visual defects found in the first smoke (app sidebar overlaying shell
+    sidebar from a collapsed flex root + phone-drawer fallback; blank white
+    chips/buttons from a missing global `kit.css` import; Enter-submit appearing
+    broken as a side effect) were fixed and re-verified with programmatic
+    assertions.
 
 ## Out of scope
 
@@ -99,6 +170,12 @@ offline render none → full.
   amputate the PWA's direct-URL pairing path (`web-host.ts` pairs over HTTP with a device
   token), which is a bigger product decision than #505 needs; the shared admin token dies
   either way. To be recorded in docs/decisions.md in Phase 7.
+- **Lazy chunks kept against design-agent advice**: the architecture design recommended
+  static imports claiming the desktop `file://` CSP build cannot code-split; the
+  desktop build output disproves this (it already emits and lazy-loads
+  `react-pdf-*.js` chunks), and the issue's acceptance criteria explicitly require
+  per-app lazy chunks. Decision: `React.lazy` per app everywhere; the PWA service
+  worker's coverage of lazy chunks is verified as part of the pilot.
 - **Open question 6 (CLI-admin loopback)**: recon settled this — the admin CLI never
   authenticates to the daemon over HTTP; every admin command operates directly on the
   data-dir files (locks + mtime reload), so deleting `token.bin` needs no CLI
@@ -123,6 +200,20 @@ bun run build
 cd apps/web && npx playwright test -c tests/e2e/playwright.config.ts -g "app-open waterfall"
 ```
 
+Phases 2+3 (re-runnable):
+
+```sh
+bun run check:pr
+# Browser smoke: boot the harness, install tasks (twice: default vault + the
+# control session's vaultId via x-centraid-vault), mint a control session as in
+# apps/web/tests/e2e/perf-waterfall.spec.ts establishSession(), pin tasks in
+# localStorage (centraid.v1.home.userApps), open the Tasks tile:
+node --experimental-strip-types apps/web/tests/e2e/server.ts &
+# assert: zero <iframe>, app code only from /assets/app-inline-*.js,
+# no /centraid/tasks/* requests; kill the server, reload, reopen Tasks:
+# the board still renders live replica data.
+```
+
 Later phases append their own commands here as they land.
 
 ## Steering
@@ -132,8 +223,8 @@ Later phases append their own commands here as they land.
 
 ## Audit
 
-- Check 1 (faithful description of diff): PASS — 'What changed' describes Phase 6 ghost cleanup (5 files) and Phase 1 surface inventory; diff verifies both: centraid_sql_* references deleted, router surface inventory table filled with all mappings.
-- Check 2 (checked items realized in diff): PASS — All 9 checklist items remain unchecked; Phase 0 and Phase 1 work complete but correctly not claimed [x].
+- Check 1 (faithful description of diff): PASS — 'What changed' comprehensively describes Phase 2+3 work: 13 blueprint services, Tasks Chrome UI, route host/registry, shell mods, 8 build configs, and browser verification (zero iframes, PWA chunks only, offline render confirmed).
+- Check 2 (checked items realized in diff): PASS — All 9 checklist items remain unchecked; Phases 0–3 work complete and realized per 'What changed' and progress log.
 - Check 3 (checklist mirrors structure): PASS — Receipt checklist (Phases 0–7 plus "check:pr green") mirrors issue acceptance criteria by phase gates.
 
 ## Accounting
@@ -151,3 +242,7 @@ Later phases append their own commands here as they land.
 | claude-code-3f73ae52-798-1784719828-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 92 | 77019 | 8581250 | 58863 | 135974 | 12.4881 | 323 | 511650 | 21653835 | 160444 | chore(app-engine): delete centraid_sql_* ghosts; record #505 surface inventory ( |
 | claude-code-3f73ae52-798-1784719879-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 2 | 1442 | 200189 | 182 | 1626 | 0.2273 | 325 | 513092 | 21854024 | 160626 | chore(app-engine): delete centraid_sql_* ghosts; record #505 surface inventory ( |
 | claude-code-3f73ae52-798-1784719940-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 8 | 6623 | 808412 | 2806 | 9437 | 1.0316 | 333 | 519715 | 22662436 | 163432 | chore(app-engine): delete centraid_sql_* ghosts; record #505 surface inventory ( |
+| claude-code-3f73ae52-798-1784728261-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 334 | 273144 | 44646993 | 106337 | 379815 | 53.3815 | 667 | 792859 | 67309429 | 269769 | feat(client): inline system apps — shell services + Tasks pilot (#505)Phases 2+3 |
+| claude-code-3f73ae52-798-1784728303-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 2 | 407 | 322015 | 182 | 591 | 0.3362 | 669 | 793266 | 67631444 | 269951 | feat(client): inline system apps — shell services + Tasks pilot (#505)Co-Authore |
+| claude-code-3f73ae52-798-1784728480-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 52 | 24844 | 8506617 | 18673 | 43569 | 9.7513 | 721 | 818110 | 76138061 | 288624 | feat(client): inline system apps — shell services + Tasks pilot (#505)Phases 2+3 |
+| claude-code-3f73ae52-798-1784728534-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 6 | 13728 | 1001823 | 1674 | 15408 | 1.2572 | 727 | 831838 | 77139884 | 290298 | feat(client): inline system apps — shell services + Tasks pilot (#505)Phases 2+3 |

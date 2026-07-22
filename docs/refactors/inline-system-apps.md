@@ -77,6 +77,48 @@ Notes settled by this inventory (issue open questions 2 and 3):
   relative-import-only and confined to `queries/`, so the shell imports them
   directly; the network bundle survives only for the served path.
 
+## Settled architecture (Phases 2–4)
+
+- **Dual consumption**: the served entry (`app.tsx`, `index.html`, `chrome.ts`,
+  `app.css`, `wall.css`) stays byte-for-byte — mobile WebViews and the visual harness
+  keep loading it. Inline consumption adds a co-located sibling entry per app:
+  `app-inline.tsx` (default-exports an `InlineAppModule` descriptor: appId,
+  changeTables, query modules, kitAsk config, React Root), `Chrome.tsx` (the
+  `index.html` chrome markup as JSX), `Chrome.module.css` (the `app.css` chrome rules
+  as a CSS module). `logic.ts`, `format.ts`, `components/*` are reused verbatim by
+  both entries.
+- **Specifier aliasing, not source forking**: blueprint code keeps importing
+  `./react-core.min.js` and `./kit.js`; the client builds (web + desktop Vite, vitest
+  preset) alias those specifiers to `packages/client/src/react/blueprints/`
+  `react-core-shim.ts` (the shell's single React runtime) and `kit-inline.ts` (kit API
+  mirror: pure DOM/format surface re-exported verbatim; data/gateway seams overridden
+  onto `ReplicaShellSession` and gateway-client). Blueprints still never imports
+  client — the alias boundary lives entirely in client/build config.
+- **Data plane**: `centraid-inline.ts` installs `window.centraid` backed by
+  `ReplicaShellSession.read/search/write/subscribe`; writes carry `intentId` through
+  the replica intent dispatch (the #406 dedupe lives there, not duplicated). Query
+  modules (`queries/<name>.ts`) are imported directly and run via `inlineQueryCtx.ts`,
+  which reproduces the bridge's `runLocalQuery` ctx exactly — including
+  `ctx.vault.resolve` degrading to `{cards:[]}` offline (a rejection would blank the
+  board).
+- **Chat**: the kit ask panel is reused (all 8 apps embed it); `kit-ask-inline.ts`
+  points its `_turn` SSE + parked-consent calls at the gateway via gateway-client.
+  Online-only, lazy, never on the render path.
+- **Render decision**: `inlineApps.ts` registry (append-only, one line per converted
+  app) is the typed signal — membership = bundled-and-inlined; anything else falls to
+  the unchanged `AppFrame` path, so rollout is safe mid-flight. `InlineAppRoute.tsx`
+  hosts: Suspense + error boundary with retry, `window.centraid` install/teardown,
+  best-effort non-blocking knob fetch.
+- **Lazy chunks stay** (orchestrator overrule of the design agent's static-import
+  recommendation): the desktop `file://` build already emits and loads split chunks
+  (`react-pdf-*.js`), so dynamic import works there, and the issue's acceptance
+  criteria require per-app lazy chunks so PWA initial-load JS does not regress. PWA
+  offline coverage of lazy chunks is verified/extended in the service worker.
+- **CSS**: `tokens.css`/`wall.css` are not loaded inline (shell design tokens already
+  define the vars — this is also what makes theming synchronous); `kit.css` loads once
+  globally from the route host; component `*.module.css` files are used as-is
+  (authored camelCase keys are identical under both pipelines).
+
 ## Progress log
 
 | Date | Step | PR/commit | Notes |
@@ -85,6 +127,7 @@ Notes settled by this inventory (issue open questions 2 and 3):
 | 2026-07-22 | Phase 0 complete — GO | — | Real Tasks open = 2 req / 572 KB; app document is `no-store` (109 KB re-fetched every open, warm/cold ratio 1.0 measured); offline renders nothing. Full numbers in receipts/issue-505-inline-system-apps.md |
 | 2026-07-22 | Phase 1 surface inventory written | — | Open questions 2 (chat universal, 8/8) and 3 (query bundles redundant inline) settled; inventory table above |
 | 2026-07-22 | Phase 6 ghost cleanup landed early | — | Zero `centraid_sql_*` refs left in `packages/` sources; independent slice, no conflicts with render phases |
+| 2026-07-22 | Phases 2+3 landed: shell services + Tasks inline pilot | — | One wave (knip). Browser-verified: zero iframes, PWA-origin chunks only, write via replica intent dispatch, full offline render with gateway down. check:pr green |
 
 ## Rejected alternatives
 

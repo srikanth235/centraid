@@ -144,6 +144,8 @@
       "version": "0.3.1",
       "kind": "app",
       "files": [
+        "Chrome.module.css",
+        "Chrome.tsx",
         "actions/add-tag.ts",
         "actions/add.ts",
         "actions/attach.ts",
@@ -151,6 +153,7 @@
         "actions/edit.ts",
         "actions/remove-tag.ts",
         "actions/set-status.ts",
+        "app-inline.tsx",
         "app.css",
         "app.json",
         "app.tsx",

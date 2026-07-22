@@ -51,12 +51,48 @@ async function assetUrlsFromIndex() {
   }
 }
 
+// Lazy per-app chunks (issue #505 inline apps) are `import()`ed from the entry
+// JS, not referenced in index.html — so index parsing alone never precaches
+// them and the FIRST offline app-open after a normal visit would fail. Crawl the
+// entry/vendor JS transitively for further `/assets/*.js` references (Vite emits
+// the dynamic-import chunk name as a string literal) and cache them too, so an
+// app opens offline even if it was never opened online first. Bounded by a seen
+// set + a hard ceiling; best-effort per entry so one 404 never aborts install.
+const CHUNK_CRAWL_CEILING = 400;
+async function crawlAssetChunks(seeds, cache) {
+  const seen = new Set(seeds);
+  const queue = seeds.filter((url) => url.endsWith('.js'));
+  const chunkRe = /\/assets\/[A-Za-z0-9_.-]+\.js/g;
+  while (queue.length > 0 && seen.size < CHUNK_CRAWL_CEILING) {
+    const url = queue.shift();
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const body = await res.clone().text();
+      await cache.put(url, res);
+      let match;
+      while ((match = chunkRe.exec(body))) {
+        const next = match[0];
+        if (!seen.has(next)) {
+          seen.add(next);
+          queue.push(next);
+        }
+      }
+    } catch {
+      /* a missing/opaque chunk is skipped — never abort the whole install */
+    }
+  }
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(SHELL_CACHE);
       const assets = await assetUrlsFromIndex();
       await cache.addAll([...SHELL, ...assets]);
+      // After the required shell is cached, best-effort precache the lazy chunk
+      // graph (inline app chunks + their deps).
+      await crawlAssetChunks(assets, cache).catch(() => undefined);
     })(),
   );
   self.skipWaiting();

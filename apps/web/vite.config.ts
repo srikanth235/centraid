@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
+import { inlineBlueprintAliases } from '../../packages/client/src/react/blueprints/inline-vite-aliases.ts';
 
 const fromHere = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
 
@@ -9,10 +10,17 @@ const appVersion = JSON.parse(readFileSync(fromHere('./package.json'), 'utf8')).
 
 export default defineConfig({
   resolve: {
-    alias: {
-      '@centraid/client': fromHere('../../packages/client/src'),
-      '@centraid/design-tokens': fromHere('../../packages/design-tokens/src/index.ts'),
-    },
+    // Array form so the inline-app regex aliases (blueprint `./kit.js` /
+    // `./react-core.min.js` → shell shims, issue #505) sit alongside the
+    // package aliases.
+    alias: [
+      ...inlineBlueprintAliases(),
+      { find: '@centraid/client', replacement: fromHere('../../packages/client/src') },
+      {
+        find: '@centraid/design-tokens',
+        replacement: fromHere('../../packages/design-tokens/src/index.ts'),
+      },
+    ],
   },
   define: {
     // Real package version for the web shell (issue #468 K9).

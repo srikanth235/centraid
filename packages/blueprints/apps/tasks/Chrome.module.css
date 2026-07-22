@@ -1,0 +1,211 @@
+/* Inline chrome for Tasks (issue #505). The static #shell/sidebar/topbar/scroll
+   markup from index.html + the narrow-layout rules from app.css, converted to a
+   CSS module scoped to the inline route. Design tokens (--ink, --accent,
+   --bg-elev, --line, --r-md, --t-title, …) are supplied by the shell document
+   (the scoped blueprint-token block InlineAppRoute injects), so this file
+   references them directly and never loads tokens.css/wall.css. The served path
+   (index.html + app.css) is untouched — this is the inline sibling. */
+
+.shell {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  /* Positioning context for the narrow (phone) sidebar drawer, so it overlays
+     the app pane inline — never the shell's own sidebar at the viewport edge. */
+  position: relative;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font: var(--t-body);
+}
+
+.side {
+  width: 250px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 14px;
+  background: var(--bg-elev);
+  border-right: 1px solid var(--line);
+  overflow: auto;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 6px 14px;
+}
+.brandMark {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--accent-deep);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.brandText {
+  min-width: 0;
+  flex: 1;
+}
+.brandName {
+  font: var(--t-body-strong);
+  letter-spacing: -0.01em;
+}
+.brandTag {
+  font: var(--t-mono);
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.sideClose {
+  margin-left: auto;
+  display: none;
+}
+.new {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 11px 14px;
+  margin-bottom: 16px;
+  border: none;
+  border-radius: var(--r-md);
+  background: var(--accent-deep);
+  color: #fff;
+  font: var(--t-body-strong);
+  box-shadow: var(--shadow-sm);
+  transition: filter 0.14s var(--ease);
+}
+.new:hover {
+  filter: brightness(1.07);
+}
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sideFoot {
+  margin-top: auto;
+  padding-top: 16px;
+}
+.scrim {
+  display: none;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 26px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.hamburger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  flex-shrink: 0;
+}
+.heading {
+  min-width: 0;
+}
+.title {
+  font: var(--t-title);
+  letter-spacing: var(--tracking-h);
+}
+.sub {
+  font: var(--t-small);
+  color: var(--ink-2);
+  margin-top: 1px;
+}
+.topbarTools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.search {
+  width: 180px;
+}
+.askMount {
+  display: flex;
+  align-items: center;
+}
+.banner {
+  margin: 14px 26px 0;
+}
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px 26px 48px;
+}
+
+/* ---------- Narrow (phone) — driven by .isNarrow / .sideOpen on .shell ---------- */
+/* Inline the drawer is absolutely positioned within .shell (the app pane), not
+   fixed to the viewport as the served full-screen app does. */
+.shell.isNarrow .side {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 270px;
+  z-index: 46;
+  box-shadow: var(--shadow-lg);
+  transform: translateX(-110%);
+  transition: transform 0.26s var(--ease);
+}
+.shell.isNarrow.sideOpen .side {
+  transform: translateX(0);
+}
+.shell.isNarrow .sideClose {
+  display: flex;
+}
+.shell.isNarrow .hamburger {
+  display: flex;
+}
+.shell.isNarrow.sideOpen .scrim {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  background: rgba(15, 18, 26, 0.4);
+}
+.shell.isNarrow .topbar,
+.shell.isNarrow .scroll {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+.shell.isNarrow .banner {
+  margin-left: 16px;
+  margin-right: 16px;
+}
+.shell.isNarrow .topbar {
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+.shell.isNarrow .topbarTools {
+  flex: 1 0 100%;
+  margin-left: 0;
+}
+.shell.isNarrow .search {
+  width: auto;
+  flex: 1;
+}

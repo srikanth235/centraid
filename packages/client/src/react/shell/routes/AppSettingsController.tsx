@@ -19,6 +19,7 @@ import {
   knobsManifestFrom,
   manifestVaultBlock,
   pushKnobToAppFrame,
+  pushKnobToInlineRoot,
   reloadAppFrame,
   waitForAutomationRun,
   writeAppKnobValue,
@@ -41,6 +42,9 @@ export interface AppSettingsControllerProps {
   onDelete: () => void;
   /** Bundled install serving in place (issue #434) — danger action is Uninstall. */
   bundled?: boolean;
+  /** Inline route (issue #505): the app's root element, so knob edits push
+   *  straight to it instead of the (absent) iframe. */
+  inlineRoot?: HTMLElement | null;
   showToast: (message: string) => void;
 }
 
@@ -63,6 +67,7 @@ export default function AppSettingsController({
   onReveal,
   onDelete,
   bundled,
+  inlineRoot,
   showToast,
 }: AppSettingsControllerProps): JSX.Element {
   // Mutable snapshot inputs — refs so the async fetches + run streams mutate in
@@ -165,8 +170,13 @@ export default function AppSettingsController({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- (#325) re-run only on appId, not on the mutable ref reads
   }, [appId]);
 
+  const pushKnob = (key: string, value: string): void => {
+    if (inlineRoot) pushKnobToInlineRoot(inlineRoot, key, value);
+    else pushKnobToAppFrame(key, value);
+  };
+
   const commitKnob = (key: string, value: string): void => {
-    pushKnobToAppFrame(key, value);
+    pushKnob(key, value);
     const def = knobs.current?.find((k) => k.key === key)?.default ?? '';
     const prior = knobValues.current[key] ?? def;
     knobValues.current[key] = value;
@@ -174,7 +184,7 @@ export default function AppSettingsController({
       showToast(`Saving ${key} failed: ${String(err)}`);
       if (alive.current) {
         knobValues.current[key] = prior;
-        pushKnobToAppFrame(key, prior);
+        pushKnob(key, prior);
         push();
       }
     });

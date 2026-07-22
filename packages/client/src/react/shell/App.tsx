@@ -49,6 +49,8 @@ import { getCachedGroupedRows, openGroupedVaultRegistry } from './flatVaultSwitc
 import { closeVaultSwitcher, openVaultSwitcher, updateVaultSwitcherRows } from './vaultSwitcher.js';
 import ApprovalsRoute from './routes/ApprovalsRoute.js';
 import AppViewRoute from './routes/AppViewRoute.js';
+import InlineAppRoute from './routes/InlineAppRoute.js';
+import { inlineAppLoader } from './routes/inlineApps.js';
 import AtlasRoute from './routes/AtlasRoute.js';
 import AssistantRoute from './routes/AssistantRoute.js';
 import AutomationEditorRoute from './routes/AutomationEditorRoute.js';
@@ -666,6 +668,23 @@ export default function App(): JSX.Element {
           if (!app) return <PageEmpty message="App not found." />;
           const ua = userApps.find((a) => a.id === id);
           const appId = ua?.centraidAppId ?? app.id;
+          // Bundled apps converted to an inline route render in-shell (no
+          // iframe); the builder still needs the served/opaque document, so
+          // keep the AppFrame path whenever the builder is on (issue #505).
+          const inlineLoader = builderEnabled ? undefined : inlineAppLoader(appId);
+          if (inlineLoader) {
+            return (
+              <InlineAppRoute
+                app={app}
+                appId={appId}
+                loader={inlineLoader}
+                nav={nav}
+                renderSidebar={renderSidebar}
+                prefs={prefs}
+                onToggleSidebar={() => setPrefs({ sidebarOpen: !prefs.sidebarOpen })}
+              />
+            );
+          }
           return (
             <AppViewRoute
               app={app}
