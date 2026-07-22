@@ -8,9 +8,10 @@ export const INFO_PATH = '/centraid/_gateway/info';
 
 /**
  * Probe a running gateway base URL.
- * @param {string} baseUrl e.g. http://127.0.0.1:8787
- * @param {{ timeoutMs?: number }} [opts]
- * @returns {Promise<{ ok: boolean; status?: number; detail: string }>}
+ * @param {string} baseUrl Base URL of the gateway (e.g. http://127.0.0.1:8787).
+ * @param {{ timeoutMs?: number }} [opts] Optional fetch timeout override.
+ * @returns {Promise<{ ok: boolean; status?: number; detail: string }>} Whether
+ *   the listener answered (200/401) and a status/body detail string.
  */
 export async function probeGatewayInfo(baseUrl, opts = {}) {
   const timeoutMs = opts.timeoutMs ?? 5_000;
@@ -40,8 +41,8 @@ export async function probeGatewayInfo(baseUrl, opts = {}) {
 
 /**
  * Poll until the gateway answers or deadline.
- * @param {string} baseUrl
- * @param {{ deadlineMs?: number; intervalMs?: number }} [opts]
+ * @param {string} baseUrl Base URL of the gateway to poll.
+ * @param {{ deadlineMs?: number; intervalMs?: number }} [opts] Poll deadline and interval.
  */
 export async function waitForGatewayInfo(baseUrl, opts = {}) {
   const deadlineMs = opts.deadlineMs ?? 30_000;
@@ -51,7 +52,7 @@ export async function waitForGatewayInfo(baseUrl, opts = {}) {
   while (Date.now() < deadline) {
     last = await probeGatewayInfo(baseUrl, { timeoutMs: 2_000 });
     if (last.ok) return last;
-    await new Promise((r) => setTimeout(r, intervalMs));
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
   return last;
 }

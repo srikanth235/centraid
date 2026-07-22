@@ -95,6 +95,7 @@ Packaging harden follow-up:
 - `node --test scripts/gateway-package/assemble-runtime.test.mjs` + isolated-tree smoke
 - Local Docker: `docker build -t centraid-gateway:local-smoke .` then named-volume smoke ×2 (`gateway smoke OK` 401 on info); image ~1.7GB, non-root, HEALTHCHECK, git present
 - Native tunnel **required** in Docker (`CENTRAID_REQUIRE_NATIVE_TUNNEL=1` + rustc 1.91 in build stage); host bind-mount needs uid 10001 chown — prefer named volume
+- Oxlint green: JSDoc `@param`/`@returns` descriptions + Promise `resolve` param names in `scripts/gateway-package/probe.mjs` and `probe.test.mjs`
 
 ## Steering
 
