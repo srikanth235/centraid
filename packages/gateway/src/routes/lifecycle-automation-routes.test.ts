@@ -71,7 +71,15 @@ async function update(
 
 beforeEach(async () => {
   dataDir = await tempDir(`gw-autoupdate-${crypto.randomUUID()}-`);
-  handle = await serve({ paths: pathsUnder(dataDir) });
+  // Headless compile (and any builder turn) would spawn a real coding agent
+  // and hang on agentless CI/local hosts. Inject a failing runTurn so the
+  // compile path still exercises ledger finish + HTTP 202 without ACP.
+  handle = await serve({
+    paths: pathsUnder(dataDir),
+    runTurn: async () => {
+      throw new Error('compiler unavailable');
+    },
+  });
 });
 
 afterEach(async () => {

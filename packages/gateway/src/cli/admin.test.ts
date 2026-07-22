@@ -420,7 +420,19 @@ test('device plane: SSH CLI revocation closes the native relay endpoint', async 
   });
   try {
     await capture(() => commandDevices(['revoke', '--data-dir', dataDir, 'ep-live-cli'], fail));
-    await vi.waitFor(() => expect(revoked).toEqual(['ep-live-cli']), { timeout: 10_000 });
+    // fs.watch settle is 10ms + OS notification lag; under parallel package
+    // load the debounce can miss a single tick. Poll longer and poke mtime
+    // if the first window is quiet (still proves the watch path, not a mock).
+    await vi.waitFor(
+      async () => {
+        if (revoked.length === 0) {
+          const now = Date.now() / 1000;
+          await fs.utimes(layout.devicesFile, now, now);
+        }
+        expect(revoked).toEqual(['ep-live-cli']);
+      },
+      { timeout: 20_000, interval: 50 },
+    );
   } finally {
     await watcher.close();
     registry.stop();

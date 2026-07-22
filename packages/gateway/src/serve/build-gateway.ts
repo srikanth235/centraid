@@ -60,6 +60,7 @@ import {
   type ConversationRunner,
   type ModelSubsystem,
   type RuntimeLogger,
+  type RunTurnFn,
   type ToolResult,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
@@ -253,6 +254,13 @@ export interface BuildGatewayOptions {
     controlsFile?: string;
     isDeviceValid?: (deviceKey: string) => boolean;
   };
+  /**
+   * Turn driver for the unified builder/chat runner. Defaults to real
+   * `runTurn` (ACP agents). Tests inject a stub so HTTP lifecycle paths
+   * (e.g. headless automation compile) finish without spawning a coding
+   * agent — issue #504 check:pr green on agentless CI/local hosts.
+   */
+  runTurn?: RunTurnFn;
   /**
    * Offsite backup engine (PROTOCOL.md/FORMAT.md), off by default. When
    * `enabled`, `buildGateway` constructs a `BackupService` (component
@@ -1488,6 +1496,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       ext,
       ...makeVaultToolRunners(vaultRegistry),
       ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
+      // Test inject: finish headless compile without spawning a coding agent.
+      ...(options.runTurn ? { runTurn: options.runTurn } : {}),
     });
     const lifecycleOpts: LifecycleRouteOptions = {
       store,

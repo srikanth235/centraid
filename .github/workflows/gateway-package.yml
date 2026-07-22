@@ -9,6 +9,14 @@ on:
       - 'packages/app-engine/**'
       - 'packages/protocol/**'
       - 'packages/cli/**'
+      - 'packages/agent-runtime/**'
+      - 'packages/automation/**'
+      - 'packages/vault/**'
+      - 'packages/backup/**'
+      - 'packages/blueprints/**'
+      - 'packages/tunnel/**'
+      - 'packages/design-tokens/**'
+      - 'packages/blob-format/**'
       - 'Dockerfile'
       - 'flake.nix'
       - 'scripts/gateway-package/**'
@@ -32,14 +40,14 @@ jobs:
           bun-version: 1.3.13
       - name: Install
         run: bun install --frozen-lockfile
-      - name: Build protocol + gateway (minimal)
-        run: |
-          bun run --cwd packages/protocol build
-          bun run --cwd packages/blob-format build
-          bun run --cwd packages/app-engine build
-          bun run --cwd packages/gateway build
+      - name: Build gateway dependency closure
+        # turbo honors package.json dependsOn so protocol → vault → app-engine →
+        # agent-runtime → automation → gateway build in order (full graph).
+        run: bunx turbo run build --filter=@centraid/gateway
       - name: Trace install set
-        run: node scripts/gateway-package/trace.mjs --out=artifacts/gateway-package-trace.json
+        run: |
+          mkdir -p artifacts
+          node scripts/gateway-package/trace.mjs --out=artifacts/gateway-package-trace.json
       - name: Install smoke
         run: node scripts/gateway-package/smoke.mjs --gateway-bin packages/gateway/dist/cli/cli.js --port 18787
       - name: Upload trace

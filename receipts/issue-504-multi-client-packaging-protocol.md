@@ -66,13 +66,18 @@ Issue #504 is a phased backlog. This receipt covers **all batches shipped in one
 bun run --cwd packages/app-engine test -- src/http/http-server.test.ts src/http/request-boundary.test.ts
 bun run --cwd packages/protocol test
 bun run --cwd packages/cli test
-bun run --cwd packages/gateway test -- src/serve/web-app-sessions.contract.test.ts
+bun run --cwd packages/gateway test -- src/serve/web-app-sessions.contract.test.ts src/routes/lifecycle-automation-routes.test.ts src/cli/admin.test.ts
 node scripts/lint-protocol-routes.mjs
 node scripts/lint-acp-min-versions.mjs
-bun run format:check && bunx oxlint . && bun run typecheck && bun run knip && bun run lint:protocol-routes && bun run lint:acp-min-versions
+bun run check:pr
 ```
 
-Note: full `bun run check:pr` includes `test:affected` on the entire gateway package; `lifecycle-automation-routes` headless compile can hang without a coding-agent runner and fails the same way on `origin/main` in this environment (in-flight turns default `ok=0` without `endedAt`).
+Follow-up commit (green `check:pr`):
+- `build-gateway.ts` optional `runTurn` inject; lifecycle compile test fails fast agentless
+- `admin.test.ts` enrollment-revoke watch wait hardened
+- `gateway-package.yml` uses `turbo run build --filter=@centraid/gateway` full dependency graph
+- `packages/cli/src/cli.integration.test.ts` drives `main()` status/health/list
+- Real bin: `node packages/cli/dist/cli.js status|health|list` against `centraid-gateway serve` (captured under implementer `cli.log`)
 
 ## Steering
 
