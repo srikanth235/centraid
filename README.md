@@ -147,6 +147,25 @@ npm install --prefix $env:USERPROFILE\.centraid @centraid/gateway
 - **CI:** `.github/workflows/npm-gateway-publish.yml` builds native on Linux/macOS/Windows, merges into pack; publishes only when `NPM_TOKEN` is set.
 - **Service:** opt-in only (`--with-service` prints the command; never auto-writes unit files outside `centraid-gateway service install`).
 
+### Pair clients after install (VPS / headless)
+
+Gateway must be serving so `endpoint.json` exists, then mint a one-time ticket:
+
+```sh
+# Create a vault if needed, then mint a ticket (desktop paste):
+centraid-gateway vault create --data-dir "$DATA_DIR" --name Family
+centraid-gateway pair --data-dir "$DATA_DIR" --vault Family
+# Phone-friendly: same ticket + UTF-8 block QR over SSH:
+centraid-gateway pair --data-dir "$DATA_DIR" --vault Family --qr
+```
+
+| Client | How to enroll |
+| --- | --- |
+| **Desktop / PWA** | Paste the one-line ticket into **Add gateway** |
+| **Phone** | Scan the `--qr` terminal QR, **or** paste the same ticket under Settings → Gateway link |
+
+Tickets burn on first successful redeem (or wrong secret). See [docs/recovery/pairing.md](docs/recovery/pairing.md).
+
 ## Gateway Docker (standalone)
 
 Gateway-only image (control-plane HTTP). Build from the monorepo root:

@@ -1,9 +1,10 @@
 // JS surface for the CentraidTunnel Expo local module (issue #263).
 //
 // The native side owns an iroh endpoint (device identity = an ed25519 secret
-// key supplied from JS as base64), handles one-time pairing with the desktop,
-// and runs a localhost HTTP proxy that forwards every WebView request over
-// the tunnel. Wire protocol reference: packages/tunnel/src/protocol.ts —
+// key supplied from JS as base64), handles one-time pairing with the desktop
+// (`centraid/pair/1`) or a headless gateway (`centraid/gw-pair/1`), and runs a
+// localhost HTTP proxy that forwards every WebView request over the tunnel.
+// Wire protocol reference: packages/tunnel/src/protocol.ts —
 // the native implementations stay byte-for-byte in lockstep with it.
 //
 // When the native module is absent (Expo Go, web) this degrades gracefully:
@@ -24,6 +25,12 @@ export interface TunnelPairResult {
   ok: boolean;
   deviceId?: string;
   desktopName?: string;
+  /** Gateway enrollment fields (gw-pair path). */
+  enrollmentId?: string;
+  gatewayId?: string;
+  gatewayName?: string;
+  vaultId?: string;
+  vaultName?: string;
   error?: string;
 }
 
@@ -35,6 +42,16 @@ export interface TunnelPairArgs {
   deviceName: string;
   platform: string;
   /** Base64 of the device's 32-byte ed25519 secret key. */
+  secretKeyB64: string;
+}
+
+export interface TunnelGatewayPairArgs {
+  /** Gateway iroh EndpointTicket (`gw` field of a `centraid-gw-pair` token). */
+  ticket: string;
+  ticketId: string;
+  secret: string;
+  deviceName: string;
+  platform: string;
   secretKeyB64: string;
 }
 
@@ -50,6 +67,7 @@ type CentraidTunnelEvents = {
 declare class CentraidTunnelNativeModule extends NativeModule<CentraidTunnelEvents> {
   generateSecretKey(): Promise<string>;
   pairWithDesktop(args: TunnelPairArgs): Promise<TunnelPairResult>;
+  pairWithGateway(args: TunnelGatewayPairArgs): Promise<TunnelPairResult>;
   startTunnel(args: TunnelStartArgs): Promise<{ port: number }>;
   stopTunnel(): Promise<void>;
   getTunnelStatus(): Promise<TunnelStatus>;
@@ -84,6 +102,14 @@ export async function generateSecretKey(): Promise<string> {
  */
 export async function pairWithDesktop(args: TunnelPairArgs): Promise<TunnelPairResult> {
   return requireTunnel().pairWithDesktop(args);
+}
+
+/**
+ * Redeem a headless gateway pairing ticket on `centraid/gw-pair/1`
+ * (VPS / `centraid-gateway pair --qr`).
+ */
+export async function pairWithGateway(args: TunnelGatewayPairArgs): Promise<TunnelPairResult> {
+  return requireTunnel().pairWithGateway(args);
 }
 
 /**

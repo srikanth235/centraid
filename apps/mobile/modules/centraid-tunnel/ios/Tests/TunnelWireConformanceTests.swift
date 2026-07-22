@@ -67,11 +67,13 @@ final class TunnelWireConformanceTests: XCTestCase {
   }
 
   func testAlpnsMatchFixture() {
-    // The phone module speaks pair + tunnel; gw-pair is the gateway/web side.
+    // Phone speaks desktop pair, headless gw-pair, and tunnel.
     XCTAssertEqual(fixture.alpns["pair"], TunnelWire.pairAlpn)
     XCTAssertEqual(fixture.alpns["tunnel"], TunnelWire.tunnelAlpn)
+    XCTAssertEqual(fixture.alpns["gwPair"], TunnelWire.gwPairAlpn)
     XCTAssertEqual(TunnelWire.pairAlpn, "centraid/pair/1")
     XCTAssertEqual(TunnelWire.tunnelAlpn, "centraid/tunnel/1")
+    XCTAssertEqual(TunnelWire.gwPairAlpn, "centraid/gw-pair/1")
   }
 
   func testHopByHopMatchesFixture() {

@@ -5,7 +5,9 @@
  * SSH is the bootstrap channel for headless gateways: the landlord runs
  * `pair --vault <name>` on the box, gets a one-line ticket (gateway
  * identity pin + relay hint + one-time secret, short TTL), and hands it to
- * the device being enrolled. `devices add` is the direct shortcut when the
+ * the device being enrolled. Desktop / PWA paste the token into "Add
+ * gateway"; phones scan `pair --qr` (terminal block QR of the same token)
+ * or paste it in Settings. `devices add` is the direct shortcut when the
  * admin already knows a device's EndpointId (the desktop shows its own in
  * Settings). Both write files the daemon re-reads live — no restart.
  *
@@ -34,6 +36,7 @@ import {
 import { DeviceTokenStore } from '../serve/device-token-store.js';
 import { daemonLayoutFor, type DaemonLayout } from './paths.js';
 import { jsonFail, runJson, type Fail } from './json-cli.js';
+import { renderTerminalQr } from './pair-qr.js';
 
 const quietLogger = {
   info: () => undefined,
@@ -49,6 +52,12 @@ interface DeviceArgs {
   trust?: 'full' | 'readonly';
   /** Emit machine-readable JSON instead of human text (issue #382, `pair` only). */
   json?: boolean;
+  /**
+   * Human mode: also print a terminal QR of the one-line ticket so a phone
+   * can scan it from an SSH session (VPS headless bootstrap). Ignored with
+   * `--json` (JSON consumers already get `ticket`).
+   */
+  qr?: boolean;
   positional: string[];
 }
 
@@ -88,6 +97,9 @@ function parseDeviceArgs(args: string[], fail: (msg: string, code?: number) => n
       }
       case '--json':
         out.json = true;
+        break;
+      case '--qr':
+        out.qr = true;
         break;
       default:
         if (flag.startsWith('--')) fail(`unknown flag "${flag}"`, 2);
@@ -186,18 +198,42 @@ export async function commandPair(
         );
         return;
       }
-      process.stdout.write(
-        [
-          `Pairing ticket for vault "${vault.name}" (${vault.vaultId})`,
-          `Trust: ${trust}`,
-          `Expires: ${new Date(minted.expiresAt).toISOString()}`,
+      const lines = [
+        `Pairing ticket for vault "${vault.name}" (${vault.vaultId})`,
+        `Trust: ${trust}`,
+        `Expires: ${new Date(minted.expiresAt).toISOString()}`,
+        '',
+        'Desktop / PWA: paste this one-line ticket into "Add gateway":',
+        '',
+        token,
+        '',
+      ];
+      if (parsed.qr) {
+        try {
+          const qr = await renderTerminalQr(token);
+          lines.push(
+            'Phone: scan this QR in Centraid Mobile (Settings → Gateway link), or paste',
+            'the same one-line ticket if the camera is unavailable:',
+            '',
+            qr.trimEnd(),
+            '',
+          );
+        } catch (err) {
+          lines.push(
+            'Phone: ticket is too long for a terminal QR (relay-heavy EndpointTicket).',
+            'Paste the one-line ticket under Settings → Gateway link on the phone instead.',
+            `QR encode error: ${err instanceof Error ? err.message : String(err)}`,
+            '',
+          );
+        }
+      } else {
+        lines.push(
+          'Phone on a headless box: re-run with --qr for a terminal QR, or paste',
+          'the ticket under Settings → Gateway link on the phone.',
           '',
-          'Paste this one-line ticket into the client\'s "Add gateway" dialog:',
-          '',
-          token,
-          '',
-        ].join('\n'),
-      );
+        );
+      }
+      process.stdout.write(lines.join('\n'));
     } finally {
       registry.stop();
     }

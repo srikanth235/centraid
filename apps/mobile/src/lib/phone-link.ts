@@ -1,11 +1,15 @@
-// Pairing state + tunnel lifecycle for the phone ↔ desktop link (issue #263).
+// Pairing state + tunnel lifecycle for the phone ↔ gateway link (issue #263).
 //
-// The phone never holds a gateway bearer. Pairing scans the desktop's
-// "Connect phone" QR ({v:1, kind:'centraid-pair', ticket, code}), dials the
-// pair ALPN through the native tunnel module, and stores the ticket + this
-// device's secret key. From then on `ensureTunnelStarted()` runs a localhost
-// HTTP proxy — everything (documents, module imports, SSE) rides the iroh
-// tunnel to the desktop, which attaches the bearer on its side.
+// Two ticket shapes, one Settings entry point:
+//
+// 1. Desktop "Connect phone" QR — JSON `{v:1, kind:'centraid-pair', ticket, code}`
+//    redeemed over `centraid/pair/1` (pairWithDesktop).
+// 2. Headless VPS ticket — base64url JSON `{v:1, kind:'centraid-gw-pair', gw, t, s, …}`
+//    from `centraid-gateway pair` / `pair --qr`, redeemed over `centraid/gw-pair/1`
+//    (pairWithGateway). The stored tunnel ticket is `gw` (gateway EndpointTicket).
+//
+// From then on `ensureTunnelStarted()` runs a localhost HTTP proxy — everything
+// rides the iroh tunnel; the gateway/desktop attaches auth on its side.
 
 import { Platform } from 'react-native';
 import {
@@ -14,12 +18,17 @@ import {
   getTunnelStatus,
   isTunnelAvailable,
   pairWithDesktop,
+  pairWithGateway,
   startTunnel,
   stopTunnel,
 } from '../../modules/centraid-tunnel';
 import type { TunnelStatus } from '../../modules/centraid-tunnel';
 import { getSecure, hydrateSecure, setSecure } from './secure-storage';
 import { Store } from '../storage';
+import { parsePairingInput } from './phone-link-parse';
+
+export { parsePairingInput, parsePairQr } from './phone-link-parse';
+export type { DesktopPairPayload, GatewayPairPayload, PairingInput } from './phone-link-parse';
 
 export const LINK_TICKET_KEY = 'phoneLink.ticket';
 export const LINK_DESKTOP_NAME_KEY = 'phoneLink.desktopName';
@@ -33,28 +42,6 @@ export class PhoneLinkError extends Error {
   ) {
     super(message);
     this.name = 'PhoneLinkError';
-  }
-}
-
-/**
- * Parse the desktop's pairing QR payload. Local mirror of
- * `parsePairQrPayload` in packages/tunnel/src/protocol.ts — the tunnel
- * package is Node-flavored, so mobile carries its own copy of this one
- * pure function rather than importing the package.
- */
-export function parsePairQr(raw: string): { ticket: string; code: string } | undefined {
-  try {
-    const obj = JSON.parse(raw) as Partial<{
-      v: number;
-      kind: string;
-      ticket: string;
-      code: string;
-    }>;
-    if (obj.v !== 1 || obj.kind !== 'centraid-pair') return undefined;
-    if (typeof obj.ticket !== 'string' || typeof obj.code !== 'string') return undefined;
-    return { code: obj.code, ticket: obj.ticket };
-  } catch {
-    return undefined;
   }
 }
 
@@ -77,19 +64,25 @@ export function getDesktopName(): string {
 }
 
 /**
- * Pair with the desktop from a scanned QR payload. Parses + validates the
- * payload, dials the pair ALPN, and persists the link on success. The
- * one-time code is consumed by the desktop and never stored on the phone.
- * The device secret key is generated once on first pair and reused across
- * re-pairs so this phone keeps a stable EndpointId.
+ * Pair from a scanned QR payload or a pasted ticket. Accepts desktop
+ * `centraid-pair` JSON and headless `centraid-gw-pair` one-liners.
  */
 export async function pair(
   qrPayloadString: string,
   deviceName: string,
 ): Promise<{ desktopName: string; deviceId: string }> {
-  const parsed = parsePairQr(qrPayloadString);
+  const parsed = parsePairingInput(qrPayloadString);
   if (!parsed) {
-    throw new PhoneLinkError('invalid_qr', 'That QR code is not a Centraid pairing code.');
+    throw new PhoneLinkError(
+      'invalid_qr',
+      'That is not a Centraid pairing code. Scan the desktop QR, or paste a ticket from `centraid-gateway pair`.',
+    );
+  }
+  if (parsed.kind === 'centraid-gw-pair' && parsed.exp <= Date.now()) {
+    throw new PhoneLinkError(
+      'invalid_qr',
+      'This pairing ticket has expired — mint a new one on the gateway.',
+    );
   }
   if (!isTunnelAvailable()) {
     throw new PhoneLinkError(
@@ -103,25 +96,52 @@ export async function pair(
     secretKeyB64 = await generateSecretKey();
     await setSecure(LINK_SECRET_KEY, secretKeyB64);
   }
-  const result = await pairWithDesktop({
-    code: parsed.code,
+
+  if (parsed.kind === 'centraid-pair') {
+    const result = await pairWithDesktop({
+      code: parsed.code,
+      deviceName,
+      platform: Platform.OS,
+      secretKeyB64,
+      ticket: parsed.ticket,
+    });
+    if (!result.ok || !result.deviceId) {
+      throw new PhoneLinkError(
+        'pair_failed',
+        result.error ?? 'Pairing was refused by the desktop.',
+      );
+    }
+    await setSecure(LINK_TICKET_KEY, parsed.ticket);
+    const desktopName = result.desktopName ?? '';
+    Store.set<string>(LINK_DESKTOP_NAME_KEY, desktopName);
+    Store.set<string>(LINK_DEVICE_ID_KEY, result.deviceId);
+    return { desktopName, deviceId: result.deviceId };
+  }
+
+  // Headless gateway ticket.
+  const result = await pairWithGateway({
+    ticket: parsed.gw,
+    ticketId: parsed.t,
+    secret: parsed.s,
     deviceName,
     platform: Platform.OS,
     secretKeyB64,
-    ticket: parsed.ticket,
   });
-  if (!result.ok || !result.deviceId) {
-    throw new PhoneLinkError('pair_failed', result.error ?? 'Pairing was refused by the desktop.');
+  if (!result.ok) {
+    throw new PhoneLinkError('pair_failed', result.error ?? 'Pairing was refused by the gateway.');
   }
-  await setSecure(LINK_TICKET_KEY, parsed.ticket);
-  Store.set<string>(LINK_DESKTOP_NAME_KEY, result.desktopName ?? '');
-  Store.set<string>(LINK_DEVICE_ID_KEY, result.deviceId);
-  return { desktopName: result.desktopName ?? '', deviceId: result.deviceId };
+  // Tunnel dials the gateway EndpointTicket embedded in the pairing token.
+  await setSecure(LINK_TICKET_KEY, parsed.gw);
+  const desktopName = result.vaultName || result.gatewayName || parsed.vaultName || 'Gateway';
+  const deviceId = result.enrollmentId || result.gatewayId || result.deviceId || 'gateway';
+  Store.set<string>(LINK_DESKTOP_NAME_KEY, desktopName);
+  Store.set<string>(LINK_DEVICE_ID_KEY, deviceId);
+  return { desktopName, deviceId };
 }
 
 /**
- * Forget the desktop link. Keeps the device secret key so a future re-pair
- * presents the same EndpointId (the desktop can also revoke it by name).
+ * Forget the desktop/gateway link. Keeps the device secret key so a future re-pair
+ * presents the same EndpointId (the peer can also revoke it by name).
  */
 export async function unpair(): Promise<void> {
   if (isTunnelAvailable()) {
@@ -138,7 +158,7 @@ export async function unpair(): Promise<void> {
 let startInFlight: Promise<{ baseUrl: string } | undefined> | undefined;
 
 /**
- * Start (or reuse) the localhost tunnel proxy for the paired desktop.
+ * Start (or reuse) the localhost tunnel proxy for the paired peer.
  * Resolves the base URL every WebView + RN fetch should use. Returns
  * `undefined` when unpaired or when the native module is unavailable
  * (Expo Go); throws PhoneLinkError when a start attempt fails.
@@ -161,7 +181,7 @@ export async function ensureTunnelStarted(): Promise<{ baseUrl: string } | undef
     } catch (err) {
       throw new PhoneLinkError(
         'tunnel_failed',
-        `Could not reach your desktop: ${err instanceof Error ? err.message : String(err)}`,
+        `Could not reach your gateway: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   })();

@@ -57,11 +57,54 @@ Unit tests for pack/install helpers; local install-from-packs smoke:
 - Live `npm publish` not required for this PR; infra + dry-run + pack smoke prove readiness.
 - Piped curl without checkout cannot use `--from-pack-dir` (needs mjs); after npm publish, piped path uses `npm install @centraid/gateway@…`.
 
+## Follow-up folded into PR #510 (pairing gaps)
+
+Headless VPS → clients after install:
+
+- [x] `centraid-gateway pair --qr` — terminal QR of the same one-line ticket
+- [x] Mobile Settings: scan **or paste** ticket (`centraid-pair` QR JSON **or** `centraid-gw-pair` token)
+- [x] Native `pairWithGateway` on iOS/Android (`centraid/gw-pair/1`)
+- [x] README + `docs/recovery/pairing.md` form-factor map
+
+### What changed (pairing bridge)
+
+CLI / gateway:
+
+- `packages/gateway/src/cli/pair-qr.ts` — terminal QR renderer (`qrcode`, ECC L)
+- `packages/gateway/src/cli/device-admin.ts` — `--qr` flag + desktop/phone help text
+- `packages/gateway/src/cli/cli.ts` — usage line for `--qr`
+- `packages/gateway/src/cli/admin.test.ts` — `pair --qr` coverage
+- `packages/gateway/package.json` + root `bun.lock` — `qrcode` / `@types/qrcode`
+
+Mobile native tunnel:
+
+- `apps/mobile/modules/centraid-tunnel/index.ts` — `pairWithGateway` JS surface
+- `apps/mobile/modules/centraid-tunnel/ios/TunnelWire.swift` — `gwPairAlpn` + one-shot pair
+- `apps/mobile/modules/centraid-tunnel/ios/CentraidTunnelModule.swift` — `GatewayPairArgs` / `pairWithGateway`
+- `apps/mobile/modules/centraid-tunnel/ios/Tests/TunnelWireConformanceTests.swift` — ALPN lockstep
+- `apps/mobile/modules/centraid-tunnel/android/src/main/java/expo/modules/centraidtunnel/TunnelWire.kt` — `GW_PAIR_ALPN` + `pairGateway`
+- `apps/mobile/modules/centraid-tunnel/android/src/main/java/expo/modules/centraidtunnel/CentraidTunnelModule.kt` — Expo async
+- `apps/mobile/modules/centraid-tunnel/android/src/main/java/expo/modules/centraidtunnel/TunnelRuntime.kt` — runtime path
+- `apps/mobile/modules/centraid-tunnel/android/src/test/java/expo/modules/centraidtunnel/TunnelWireConformanceTest.kt` — ALPN lockstep
+
+Mobile app:
+
+- `apps/mobile/src/lib/phone-link-parse.ts` — pure dual-format ticket parser
+- `apps/mobile/src/lib/phone-link.ts` — redeem desktop vs gateway; store `gw` for tunnel
+- `apps/mobile/src/lib/phone-link.test.ts` — parse unit tests
+- `apps/mobile/src/screens/Settings.tsx` — scan + paste under Gateway link
+
+Docs:
+
+- `README.md` — “Pair clients after install” section
+- `docs/recovery/pairing.md` — form-factor map
+
 ## Out of scope
 
 - First live public npm publish (maintainer `NPM_TOKEN`)
 - Desktop/mobile/PWA installers
 - Hosting script on centraid.dev CDN (raw GitHub URL is enough for v0)
+- Live on-device VPS pairing e2e (needs hardware + public relay)
 
 ## Verification
 
