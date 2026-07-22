@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@centraid/protocol": "workspace:*",
     "tldts": "6.1.86"
   },
   "devDependencies": {

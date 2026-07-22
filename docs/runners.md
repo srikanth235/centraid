@@ -191,6 +191,27 @@ Recorded honestly so nobody rediscovers them as bugs:
 - **`ctx.agent` structured output.** The retired codex arm handed `call.json` to `codex exec --output-schema`. ACP has no equivalent, so `call.json` is now enforced by `coerceAgentAnswer` alone for every kind — which is what the claude arm always did.
 - **Codex `localImage` paths.** The retired codex arm passed image attachments by path and let codex read them; ACP has no path-based image block, so images are base64-inlined into the prompt for every kind. Functionally equivalent, marginally more bytes on the wire.
 
+## Tool catalog (transport-neutral registration)
+
+Issue #504 batch 4. The **single registration surface** for vault tools is the backend-neutral constants in [`packages/agent-runtime/src/vault-sql-tool.ts`](../packages/agent-runtime/src/vault-sql-tool.ts):
+
+| Export | Role |
+| --- | --- |
+| `VAULT_SQL_TOOL` | Read-only SQL |
+| `VAULT_INVOKE_TOOL` | Typed vault commands |
+| `VAULT_CONTENT_TOOL` | Document text by content id |
+
+**MCP is one adapter**, not the catalog itself — [`vault-mcp-server.ts`](../packages/agent-runtime/src/backends/acp/vault-mcp-server.ts) wraps those constants for ACP agents. Do **not** add a second per-runner tool adapter matrix (#479 killed that path).
+
+### Add a tool
+
+1. Declare `{ name, description, inputSchema }` next to the existing constants (same module or a sibling catalog module re-exported from agent-runtime).
+2. Implement dispatch once (shared runner on `ToolContext`).
+3. Expose through the MCP adapter if agents should see it over ACP.
+4. **Native tool injection** stays **gated** on an ACP capability that **both** first-party adapters implement — do not prefer native injection or fork per runner.
+
+**Mechanical vs judgment:** judgment + review; no second adapter without an ACP standard both adapters implement.
+
 ## Automations ride the same single ACP path
 
 The bespoke automation `ctx.tool` rail — a per-fire mock-LLM endpoint that pointed a native claude/codex CLI at a deterministic handler — was **removed** (#484). There is no automation-only agent path left; automations use the same transport as chat.

@@ -1,0 +1,134 @@
+# Path-filtered packaging CI (issue #504 Phase G + Docker artifact smoke).
+# External observer: host binary smoke + docker build/run with durable /data volume.
+# No product-main "is smoke" branches.
+name: gateway-package
+
+on:
+  pull_request:
+    paths:
+      - 'packages/gateway/**'
+      - 'packages/app-engine/**'
+      - 'packages/protocol/**'
+      - 'packages/cli/**'
+      - 'packages/agent-runtime/**'
+      - 'packages/automation/**'
+      - 'packages/vault/**'
+      - 'packages/backup/**'
+      - 'packages/blueprints/**'
+      - 'packages/tunnel/**'
+      - 'packages/design-tokens/**'
+      - 'packages/blob-format/**'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'flake.nix'
+      - 'scripts/gateway-package/**'
+  push:
+    branches: [main]
+    paths:
+      - 'packages/gateway/**'
+      - 'packages/app-engine/**'
+      - 'packages/protocol/**'
+      - 'packages/cli/**'
+      - 'packages/agent-runtime/**'
+      - 'packages/automation/**'
+      - 'packages/vault/**'
+      - 'packages/backup/**'
+      - 'packages/blueprints/**'
+      - 'packages/tunnel/**'
+      - 'packages/design-tokens/**'
+      - 'packages/blob-format/**'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'flake.nix'
+      - 'scripts/gateway-package/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trace-and-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+
+      - name: Bun install cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Build gateway dependency closure
+        # turbo honors package.json dependsOn so protocol → vault → app-engine →
+        # agent-runtime → automation → gateway build in order (full graph).
+        run: bunx turbo run build --filter=@centraid/gateway
+
+      - name: Probe unit tests
+        run: node --test scripts/gateway-package/probe.test.mjs
+
+      - name: Assemble symlink unit tests
+        # Runs after turbo build so packages/*/dist exist for assembleRuntime.
+        run: node --test scripts/gateway-package/assemble-runtime.test.mjs
+
+      - name: Trace install set
+        run: |
+          mkdir -p artifacts
+          node scripts/gateway-package/trace.mjs --out=artifacts/gateway-package-trace.json
+
+      - name: Host install smoke
+        run: node scripts/gateway-package/smoke.mjs --gateway-bin packages/gateway/dist/cli/cli.js --port 18787
+
+      - name: Docker build gateway image
+        run: |
+          docker build \
+            --build-arg VERSION=0.1.0 \
+            --build-arg REVISION="${{ github.sha }}" \
+            -t "centraid-gateway:ci-${{ github.sha }}" \
+            .
+
+      - name: Container install smoke (volume at /data)
+        run: |
+          set -euo pipefail
+          # Named volume: non-root uid 10001 can write without host bind ownership games.
+          VOL="centraid-gw-smoke-${{ github.run_id }}"
+          NAME="centraid-gw-smoke-${{ github.run_id }}"
+          PORT=18788
+          docker volume rm "$VOL" 2>/dev/null || true
+          docker volume create "$VOL"
+          docker rm -f "$NAME" 2>/dev/null || true
+          docker run -d --name "$NAME" \
+            -p "127.0.0.1:${PORT}:8787" \
+            -v "${VOL}:/data" \
+            "centraid-gateway:ci-${{ github.sha }}"
+          cleanup() {
+            docker logs "$NAME" 2>&1 || true
+            docker rm -f "$NAME" 2>/dev/null || true
+            docker volume rm "$VOL" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          node scripts/gateway-package/smoke.mjs --base-url "http://127.0.0.1:${PORT}"
+          # Second probe for consistency (external observer).
+          node scripts/gateway-package/smoke.mjs --base-url "http://127.0.0.1:${PORT}"
+          # Prove durable mount: volume has content after boot.
+          FILES="$(docker run --rm -v "${VOL}:/data" busybox ls -A /data 2>/dev/null || true)"
+          if [ -z "$FILES" ]; then
+            echo "expected gateway to write under mounted /data" >&2
+            exit 1
+          fi
+          echo "container data mount OK: $FILES"
+      - name: Upload trace
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gateway-package-trace
+          path: artifacts/gateway-package-trace.json
+          if-no-files-found: ignore

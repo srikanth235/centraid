@@ -23,7 +23,7 @@ The monorepo is orchestrated by [Turborepo](https://turbo.build) and run on [Bun
 | **Mobile** | `release-mobile.yml` (dispatch) → EAS Build/Submit when enrolled. J8 path-filtered `assembleDebug` CI deferred (too slow for PR gate). Store-only routine path (J7). |
 | **Web PWA** | Continuous host scaffold `app.centraid.dev` (`apps/web` + `web.yml`). Gateway also embeds the built PWA for LAN/ticket clients. |
 | **Docs/home** | Cloudflare static assets (`docs:bundle` → `dist/site`); GHA is gate-only. |
-| **Gateway daemon** | Primary: monorepo build + `centraid-gateway` + optional H5 OS service. Optional: GHCR image on tags (`packages/gateway/Dockerfile`). |
+| **Gateway daemon** | Primary: monorepo build + `centraid-gateway` + optional H5 OS service. Optional: GHCR image on tags (monorepo-root `Dockerfile`; see #504 packaging). |
 
 Signing residual: [docs/enrollment.md](docs/enrollment.md). Release ritual: [docs/release.md](docs/release.md).
 

@@ -1,33 +1,30 @@
 /*
  * `GET /centraid/_gateway/info` — gateway identity + version handshake
- * (issue #289).
+ * (issue #289 / #504).
  *
  * The one route a client reads BEFORE trusting anything else about a
- * gateway: software version + schema epoch (exact-match or refuse in v0)
- * and, for device-scoped transports, which vaults the calling device may
- * address (the composed handler already resolved that; this route is behind
- * it). Health polling hits it every few seconds, so it also carries the
- * server-reported runtime clock (`startedAt` / `uptimeMs`) — the desktop's
- * gateway-runtime page trusts the gateway's own account of how long it has
- * been up rather than inferring it from probe history.
+ * gateway: software version + schema epoch (exact-match or refuse in v0),
+ * capability map (C1), and for device-scoped transports, which vaults the
+ * calling device may address. Health polling hits it every few seconds, so
+ * it also carries the server-reported runtime clock (`startedAt` /
+ * `uptimeMs`).
  *
  * `instanceId` (issue #351) is the per-PROCESS uuid `GatewayInstanceLease`
- * mints at construction — additive, existing consumers (`version-handshake.ts`
- * only reads `version`/`schemaEpoch`) are unaffected. It lets a client notice
- * a gateway swap-under-it (restart, or a second instance winning a lease
- * fight) even when version/schemaEpoch stay identical across the swap.
+ * mints at construction.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { ROUTES, buildGatewayInfoPayload, type GatewayCapabilities } from '@centraid/protocol';
 import type { RouteHandler } from '../serve/build-gateway.js';
-import { GATEWAY_SCHEMA_EPOCH, GATEWAY_VERSION } from '../version.js';
 import { sendJson } from './route-helpers.js';
 
-const INFO_PATH = '/centraid/_gateway/info';
+const INFO_PATH = ROUTES.gatewayInfo;
 
 export interface GatewayInfoRouteOptions {
   /** This process's `GatewayInstanceLease.instanceId` (issue #351). */
   instanceId: string;
+  /** Optional capability overrides (tests / reduced surfaces). */
+  capabilities?: GatewayCapabilities;
 }
 
 export function makeGatewayInfoRouteHandler(options: GatewayInfoRouteOptions): RouteHandler {
@@ -40,12 +37,15 @@ export function makeGatewayInfoRouteHandler(options: GatewayInfoRouteOptions): R
     if ((req.method ?? 'GET') !== 'GET') {
       return sendJson(res, 405, { error: 'method_not_allowed', message: 'GET only' });
     }
-    return sendJson(res, 200, {
-      version: GATEWAY_VERSION,
-      schemaEpoch: GATEWAY_SCHEMA_EPOCH,
-      startedAt,
-      uptimeMs: Date.now() - startedAt,
-      instanceId: options.instanceId,
-    });
+    return sendJson(
+      res,
+      200,
+      buildGatewayInfoPayload({
+        instanceId: options.instanceId,
+        startedAt,
+        uptimeMs: Date.now() - startedAt,
+        ...(options.capabilities ? { capabilities: options.capabilities } : {}),
+      }),
+    );
   };
 }

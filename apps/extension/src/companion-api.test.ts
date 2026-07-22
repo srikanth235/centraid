@@ -43,7 +43,7 @@ describe('Companion unpair', () => {
     transport.companionJson.mockResolvedValueOnce({ removed: true });
     await expect(handleCompanionRequest({ type: 'unpair' }, {})).resolves.toEqual({ ok: true });
     expect(transport.companionJson).toHaveBeenCalledWith(
-      '/centraid/_gateway/devices/enrollment-1',
+      '/centraid/_gateway/devices/enrollment-1', // ROUTES.gatewayDevices + id
       { method: 'DELETE' },
     );
     expect(transport.closeTransport).toHaveBeenCalledOnce();

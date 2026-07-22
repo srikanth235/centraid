@@ -66,6 +66,8 @@ Omit file → enumerate without persistence. File is rewritten on refresh.
 
 Hand-edited units may be replaced on reinstall. Service install is **opt-in, default off** ([decisions.md](decisions.md) H5).
 
+**Packaging / declarative modules (issue #504):** Docker, Nix flakes, and future NixOS modules must **not** become a second independent writer of the same unit files. Canonical writer remains `centraid-gateway service install` (use `--dry-run` as the template source). A NixOS module, if added later, must call or bit-for-bit replicate that generator's output. Declarative host config (bind, dataDir, tunnel knobs) may feed **into** the generator or `serve` flags; runtime mutation of prefs stays on the gateway prefs API.
+
 ### Pairing / enrollment files — runtime only
 
 | Path | Owner |

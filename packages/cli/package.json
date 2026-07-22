@@ -1,0 +1,32 @@
+{
+  "name": "@centraid/cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Product CLI that speaks the same gateway wire protocol as UI clients (issue #504 batch 3).",
+  "bin": {
+    "centraid": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "type": "module",
+  "main": "./dist/cli.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@centraid/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@centraid/test-kit": "workspace:*",
+    "@types/node": "^22.0.0",
+    "typescript": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.5"
+  }
+}

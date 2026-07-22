@@ -28,6 +28,12 @@ export interface ServeOptions extends BuildGatewayOptions {
   /** HTTP port. `0` (default) asks the OS for an ephemeral port. */
   port?: number;
   /**
+   * Extra Host header names accepted beyond loopback forms (issue #504).
+   * Required for non-loopback operator hostnames when clients send a
+   * non-loopback `Host` (Docker / reverse-proxy). Loopback is always allowed.
+   */
+  allowedHosts?: readonly string[];
+  /**
    * Pre-shared bearer token. When omitted, `startRuntimeHttpServer` mints
    * a random 32-byte hex token. The Electron embed lets this be random
    * per-launch; the daemon persists one across restarts.
@@ -104,10 +110,16 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
   };
   if (options.host !== undefined) serverOptions.host = options.host;
   if (options.port !== undefined) serverOptions.port = options.port;
+  if (options.allowedHosts !== undefined && options.allowedHosts.length > 0) {
+    serverOptions.allowedHosts = options.allowedHosts;
+  }
   if (options.token !== undefined) serverOptions.token = options.token;
   if (options.authorizeBearer !== undefined)
     serverOptions.authorizeBearer = options.authorizeBearer;
   serverOptions.authorizeRequest = (req) => gateway.webAppSessions.authorize(req);
+  // Session-bound shell origins for credentialed CORS (#504). Bearer-only
+  // desktop embeds leave this empty and still get non-credentialed `*`.
+  serverOptions.credentialedCorsOrigins = () => gateway.webAppSessions.knownShellOrigins();
   const server = await startRuntimeHttpServer(serverOptions);
   await gateway.start(server.url);
   const web = options.web

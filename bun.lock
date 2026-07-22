@@ -51,6 +51,7 @@
       "name": "@centraid/extension",
       "version": "0.1.0",
       "dependencies": {
+        "@centraid/protocol": "workspace:*",
         "tldts": "6.1.86",
       },
       "devDependencies": {
@@ -220,6 +221,21 @@
         "typescript": "catalog:",
       },
     },
+    "packages/cli": {
+      "name": "@centraid/cli",
+      "version": "0.1.0",
+      "bin": {
+        "centraid": "./dist/cli.js",
+      },
+      "dependencies": {
+        "@centraid/protocol": "workspace:*",
+      },
+      "devDependencies": {
+        "@centraid/test-kit": "workspace:*",
+        "@types/node": "^22.0.0",
+        "typescript": "catalog:",
+      },
+    },
     "packages/client": {
       "name": "@centraid/client",
       "version": "0.1.0",
@@ -227,6 +243,7 @@
         "@centraid/blob-format": "workspace:*",
         "@centraid/blueprints": "workspace:*",
         "@centraid/design-tokens": "workspace:*",
+        "@centraid/protocol": "workspace:*",
         "@sqlite.org/sqlite-wasm": "3.53.0-build1",
         "pdfjs-dist": "5.7.284",
         "qrcode": "^1.5.4",
@@ -263,6 +280,7 @@
         "@centraid/backup": "workspace:*",
         "@centraid/blueprints": "workspace:*",
         "@centraid/design-tokens": "workspace:*",
+        "@centraid/protocol": "workspace:*",
         "@centraid/tunnel": "workspace:*",
         "@centraid/vault": "workspace:*",
         "jpeg-js": "^0.4.4",
@@ -275,6 +293,15 @@
         "@centraid/web": "workspace:*",
         "@types/node": "^22.0.0",
         "@types/pngjs": "^6.0.5",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/protocol": {
+      "name": "@centraid/protocol",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@centraid/test-kit": "workspace:*",
+        "@types/node": "^22.0.0",
         "typescript": "catalog:",
       },
     },
@@ -602,6 +629,8 @@
 
     "@centraid/blueprints": ["@centraid/blueprints@workspace:packages/blueprints"],
 
+    "@centraid/cli": ["@centraid/cli@workspace:packages/cli"],
+
     "@centraid/client": ["@centraid/client@workspace:packages/client"],
 
     "@centraid/design-tokens": ["@centraid/design-tokens@workspace:packages/design-tokens"],
@@ -613,6 +642,8 @@
     "@centraid/gateway": ["@centraid/gateway@workspace:packages/gateway"],
 
     "@centraid/mobile": ["@centraid/mobile@workspace:apps/mobile"],
+
+    "@centraid/protocol": ["@centraid/protocol@workspace:packages/protocol"],
 
     "@centraid/test-kit": ["@centraid/test-kit@workspace:packages/test-kit"],
 

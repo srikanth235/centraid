@@ -51,6 +51,31 @@ There is **no multi-tenant server** and no Centraid-operated cloud that can read
 - **OS user boundary** is the primary local boundary. Centraid does not claim protection against malware running as the same user.
 - Until detached gateway work (H1–H7) fully lands, quitting the desktop may take the gateway down — availability, not a different trust model.
 
+### Loopback / browser control-plane (Host, CORS, auth placement)
+
+Posture after issue **#504 batch 0** (fixed; do not document the old reflective-CORS hole as current).
+
+| Control | Behavior |
+| --- | --- |
+| **Host allowlist** | Loopback HTTP rejects requests whose `Host` is outside `localhost` / `127.0.0.1` / IPv6 loopback / configured hostnames **before** auth and handlers (DNS rebinding). |
+| **CORS — Bearer** | Authorization is carried in the `Authorization` header (or preflight lists `authorization`). Reflecting Origin with credentials is allowed for Bearer intent because the token is not ambient. `Origin: null` / missing Origin still use `*` (desktop `file://`). |
+| **CORS — cookie / PWA** | Credentialed CORS (`Access-Control-Allow-Credentials: true` + reflected Origin) is limited to **session-bound shell origins** (`credentialedCorsOrigins` from control/app sessions). Foreign origins never get reflective credentialed CORS; they may see `*` without credentials so `credentials: 'include'` cannot read the body. |
+| **Preflight vs auth** | `OPTIONS` still answers **before** Bearer/cookie auth (browsers omit Authorization on preflight). CORS headers on the preflight already encode the credentialed-vs-not decision; the real request is still auth-gated. |
+| **Auth transport** | Desktop/daemon: Bearer (`token.bin` / device tokens). PWA shell: Origin-bound HttpOnly control cookie + app cookies; `authorizeRequest` enforces origin bind in addition to CORS defense-in-depth. |
+| **WS / tunnel** | Device plane auth is enrollment/token based on the tunnel; not cookie ambient. |
+
+**Non-loopback / Docker operators (packaging 5C):**
+
+- Binding `0.0.0.0` (the gateway Docker image default) does **not** open Host or CORS. Loopback Host names remain allowed; any other `Host` clients send must be listed via `--allowed-host <name>` (repeatable) and/or `CENTRAID_ALLOWED_HOSTS=host1,host2`.
+- Vault and ledger data live under the process `--data-dir` (image: `/data`). **Bind-mount a host directory or use a named volume** at `/data`. A bare `docker run` without a durable mount loses data when the container is removed — the image `VOLUME` alone is not a backup strategy.
+- Image process runs as non-root UID/GID `10001` (`centraid`); ensure the mounted volume is writable by that user.
+
+**Honest not-yet (control plane):**
+
+- Formal third-party review of the PWA cookie + CORS combination.
+- Full detached gateway supervision (H2–H7) remains open.
+- GHCR publish / multi-arch / signed images (release path).
+
 ### Pairing and transport
 
 | Property | Reality |

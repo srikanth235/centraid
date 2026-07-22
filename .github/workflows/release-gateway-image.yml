@@ -1,6 +1,7 @@
 name: release-gateway-image
 
-# #501 — optional GHCR image for centraid-gateway (D5: never move latest on beta).
+# #501 / #504 — optional GHCR image for centraid-gateway (D5: never move latest on beta).
+# Build uses monorepo-root Dockerfile (native tunnel + operator-safe defaults).
 # Primary install path remains monorepo source + H5 service install.
 
 on:
@@ -54,7 +55,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: packages/gateway/Dockerfile
+          file: Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha

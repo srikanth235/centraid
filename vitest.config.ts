@@ -17,6 +17,8 @@ export default defineConfig({
       'packages/client',
       'packages/design-tokens',
       'packages/gateway',
+      'packages/protocol',
+      'packages/cli',
       'packages/tunnel',
       'packages/test-kit',
       'packages/vault',

@@ -71,6 +71,17 @@ User-visible or IPC/HTTP-facing work that can fail must expose failure to the UI
 - Import package **barrels**, not deep internals (governance `no-deep-imports`).
 - Tools and checks: **repo scripts only** — `bun run …` / workspace scripts, never raw `npx <tool>` so the pinned toolchain always applies (issue #468 B2).
 
+## Store atomicity
+
+**Store APIs own atomicity.** Callers do not orchestrate read → merge → write against prefs, device tokens, enrollment, or session files.
+
+| Bad | Good |
+| --- | --- |
+| `const j = read(); j.x = 1; write(j)` in a route | `store.setX(1)` / `store.update(…)` that locks and writes |
+| Two handlers each rewriting the same JSON | One store method with a single persist path |
+
+**Mechanical vs judgment:** judgment-only in review; prefer existing store methods in `packages/gateway/src/serve/*-store.ts`.
+
 ## Small invariants
 
 - Behaviour-preserving refactors keep tests green without rewriting assertions to match new private helpers ([TESTING.md](../TESTING.md)).

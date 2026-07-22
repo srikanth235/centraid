@@ -100,6 +100,30 @@ Full tour: [Get started](https://centraid.dev/docs/start/) — install → vault
 | `packages/blueprints` | Template gallery: 8 blueprint apps + 16 automation templates, plus blank-app scaffolders. |
 | `packages/design-tokens` | Colors, type, spacing, app metadata, icons — shared across desktop and mobile. |
 
+## Gateway Docker (standalone)
+
+Gateway-only image (control-plane HTTP). Build from the monorepo root:
+
+```sh
+docker build -t centraid-gateway .
+# Durable vault/data — required for real use (bare runs lose /data with the container).
+# Named volume (recommended; works with non-root uid 10001):
+docker volume create centraid-data
+docker run --rm -p 8787:8787 \
+  -v centraid-data:/data \
+  -e CENTRAID_ALLOWED_HOSTS=gateway.example \
+  centraid-gateway
+# Host bind-mount: chown for uid 10001 (or chmod a+rwx for local smoke only):
+#   mkdir -p "$HOME/centraid-data" && chown 10001:10001 "$HOME/centraid-data"
+#   docker run ... -v "$HOME/centraid-data:/data" ...
+```
+
+- **Data durability:** always use a **named volume** or bind-mount at `/data`. The image declares `VOLUME /data` but anonymous volumes are easy to lose on recreate.
+- **User:** process runs as UID/GID `10001`. Named volumes are created with compatible ownership; host bind-mounts need `chown 10001:10001` (or world-writable only for local smoke).
+- **Host allowlist:** loopback `Host` values always work. For a public hostname in `Host`, set `CENTRAID_ALLOWED_HOSTS` or pass `--allowed-host` via a custom entrypoint. See [SECURITY.md](SECURITY.md) (control-plane subsection).
+- **Tunnel:** the image **builds the native iroh relay** (`packages/tunnel/native`) into `centraid-tunnel-native.<platform>-<arch>.node`. Remote devices dial over QUIC; Docker sets `CENTRAID_REQUIRE_NATIVE_TUNNEL=1` so a missing cargo toolchain fails the image build.
+- **Smoke:** path-filtered CI builds the image and probes it with a mounted `/data` (`scripts/gateway-package/smoke.mjs --base-url …`). Host-side: `bun run gateway:package:smoke`.
+
 ## Build / check
 
 Turborepo + Bun. **Before every push**, run the early PR gates locally so CI

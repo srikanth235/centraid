@@ -1,21 +1,72 @@
-node_modules
+# Build context for gateway Dockerfile (issue #504 packaging).
+# Also covers #501 release image context; keep package.json for lockfile workspaces.
+
 .git
+.githooks
 .github
-dist
-artifacts
-apps/desktop/dist
-apps/desktop/release
-apps/web/dist
-apps/mobile/ios
-apps/mobile/android/.gradle
-apps/mobile/android/app/build
-**/node_modules
-**/.turbo
+.governance
+.claude
+.agents
+.vscode
+.idea
+.turbo
+.cache
+coverage
 **/coverage
-.tmp*
+artifacts
 receipts
 docs
 tests
+scripts/docs-site
+.tmp*
+
+# Desktop / mobile / extension: keep package.json only (workspace lock integrity)
+apps/desktop/**
+!apps/desktop/package.json
+apps/mobile/**
+!apps/mobile/package.json
+apps/extension/**
+!apps/extension/package.json
+
+# Rust / cargo build caches (gigabytes; not needed to copy in)
+**/target/
+packages/data-plane/target
+packages/tunnel/native/target
+packages/tunnel/data-plane/target
+# Host-built napi artifacts (darwin/win) must not shadow linux image builds
+packages/tunnel/native/*.node
+
+# Host-side noise
+**/.DS_Store
+**/node_modules
+node_modules
+**/dist
+dist
+**/.turbo
+**/*.log
+**/.env
+**/.env.*
 *.png
+
+# Large / non-runtime docs and ledgers
 *.md
 !packages/gateway/README.md
+COSTS.md
+STEERING.md
+QUALITY.md
+CHANGELOG.md
+CONSTITUTION.md
+ARCHITECTURE.md
+CONTRIBUTING.md
+AGENTS.md
+CLAUDE.md
+
+# Test / tool configs that bloat context
+**/*.test.ts
+**/*.test.tsx
+**/*.integration.test.ts
+**/*.contract.test.ts
+**/*.perf.test.ts
+**/*.scale.test.ts
+**/vitest.config.ts
+**/playwright.config.ts
