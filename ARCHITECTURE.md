@@ -20,7 +20,7 @@ The monorepo is orchestrated by [Turborepo](https://turbo.build) and run on [Bun
 | Surface | How it ships |
 | --- | --- |
 | **Desktop** | Tag `v*` → `release-desktop.yml` (macOS / Windows / Linux). Installers attach to the GitHub Release when signing secrets are enrolled; electron-updater uses `latest*.yml` / beta channel. |
-| **Mobile** | `release-mobile.yml` (dispatch) → EAS Build/Submit when enrolled; J8 `mobile-android.yml` is `assembleDebug` only. Store-only routine path (J7). |
+| **Mobile** | `release-mobile.yml` (dispatch) → EAS Build/Submit when enrolled. J8 path-filtered `assembleDebug` CI deferred (too slow for PR gate). Store-only routine path (J7). |
 | **Web PWA** | Continuous host scaffold `app.centraid.dev` (`apps/web` + `web.yml`). Gateway also embeds the built PWA for LAN/ticket clients. |
 | **Docs/home** | Cloudflare static assets (`docs:bundle` → `dist/site`); GHA is gate-only. |
 | **Gateway daemon** | Primary: monorepo build + `centraid-gateway` + optional H5 OS service. Optional: GHCR image on tags (`packages/gateway/Dockerfile`). |

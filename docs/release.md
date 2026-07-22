@@ -92,7 +92,6 @@ Do not fork process text into skills.
 | --- | --- | --- |
 | `release-desktop.yml` | `v*` tags | macOS + Windows + Linux; Environment `release`; hard-fail missing artifacts; GH attach when signed |
 | `release-mobile.yml` | `workflow_dispatch` | Environment `mobile-release`; EAS when `EXPO_TOKEN`; else assembleDebug scaffold |
-| `mobile-android.yml` | path-filtered PR | J8 `assembleDebug` only |
 | `web.yml` | path-filtered main/PR | build+smoke; CF deploy when token present |
 | `release-gateway-image.yml` | `v*` tags | GHCR optional image |
 | `docs.yml` | docs paths | build+smoke; CF Git deploys marketing+docs |

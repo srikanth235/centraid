@@ -7,7 +7,7 @@
 - [x] §3 Packaged auto-update download → install + I8 restamp script/workflow
 - [x] §4 I12 What's new re-wire (sidebar + auto-open)
 - [x] §5 Mobile EAS scaffold + `release-mobile.yml` (no eas update)
-- [x] §6 J8 `mobile-android.yml` assembleDebug
+- [x] §6 J8 `mobile-android.yml` assembleDebug — **removed** (user: too slow for PR gate; re-add when reliable/fast enough)
 - [x] §7 Web continuous host scaffold (`app.centraid.dev` wrangler + workflow)
 - [x] §8 Gateway Dockerfile + GHCR workflow
 - [x] §9 Docs write-back + human residual matrix
@@ -20,7 +20,7 @@
 - §3 Packaged auto-update download → install + I8 restamp script/workflow — `apps/desktop/src/main/update-watcher.ts` download→install; `scripts/release/restamp-rollout.mjs` + `scripts/release/restamp-rollout.test.mjs`; restamp job in `release-desktop.yml`.
 - §4 I12 What's new re-wire (sidebar + auto-open) — `packages/client/src/react/shell/App.tsx`, `packages/client/src/react/shell/Sidebar.tsx`, `packages/client/src/react/shell/useUpdateStatus.ts`, `packages/client/src/centraid-api.d.ts`.
 - §5 Mobile EAS scaffold + `release-mobile.yml` (no eas update) — `apps/mobile/eas.json`, `apps/mobile/app.config.ts`, `apps/mobile/android/app/build.gradle`, `apps/mobile/package.json`, `apps/mobile/src/version-core.test.ts`, `.github/workflows/release-mobile.yml`.
-- §6 J8 `mobile-android.yml` assembleDebug — `.github/workflows/mobile-android.yml`.
+- §6 J8 `mobile-android.yml` assembleDebug — **removed** (user: too slow for PR gate; re-add when reliable/fast enough). Landed then dropped: workflow ~30m blocked PR green; nightlies still cover mobile via `e2e.yml` suite options. Docs: `docs/release.md`, `ARCHITECTURE.md`.
 - §7 Web continuous host scaffold (`app.centraid.dev` wrangler + workflow) — `apps/web/wrangler.json`, `apps/web/public/_headers`, `scripts/web/smoke.mjs`, `.github/workflows/web.yml`.
 - §8 Gateway Dockerfile + GHCR workflow — `packages/gateway/Dockerfile`, `.dockerignore`, `.github/workflows/release-gateway-image.yml`.
 - §9 Docs write-back + human residual matrix — `docs/release.md`, `docs/enrollment.md`, `docs/decisions.md`, `ARCHITECTURE.md`, `scripts/release/boot-smoke.mjs`, `scripts/release/vitest.config.ts`, `bun.lock`, this receipt.
@@ -32,6 +32,7 @@
 - knip green for #503: wire `checkForUpdatesManual` via `UPDATE_CHECK` in `apps/desktop/src/main/ipc.ts` + `apps/desktop/src/preload.ts` + `packages/client/src/centraid-api.d.ts`, `eas` in `knip.json` `ignoreBinaries` (CI installs EAS via expo-github-action), `apps/desktop/src/main/update-watcher-wiring.test.ts` + `bun.lock`.
 - `scripts/release/boot-smoke.mjs` accepts electron-updater under `dependencies` or `devDependencies` (runtime pin for packaging).
 - desktop-e2e unblock: restore deferred `createRequire('electron-updater')` on packaged path only — static named ESM `import { autoUpdater }` is invalid for that CJS package and crashed main before firstWindow. Knip: `electron-updater` in `apps/desktop` `ignoreDependencies` (createRequire is invisible to knip; runtime dep remains in package.json).
+- Remove `.github/workflows/mobile-android.yml` (J8 assemble-debug PR gate) — user request: too slow; cancels long-running CI.
 
 ## Out of scope
 
@@ -73,7 +74,7 @@ Fresh-context governance auditor for issue #501. Inputs: receipt, workspace tree
    - Release: `scripts/release/sync-versions.mjs` (+ tests), `verify-secrets.mjs`, `restamp-rollout.mjs` (+ tests), `vitest.config.ts`; `publish.mjs` requires `--issue N` and imports `runSyncVersions`; root scripts `release:sync-versions` / `release:verify-secrets` / `release:restamp` / `web:build` / `web:smoke`; `boot-smoke.mjs` asserts new paths.
    - Desktop: pinned `electron-builder`/`electron-updater` in `apps/desktop/package.json`; `electron-builder.yml`; `release-desktop.yml` mac/win/linux jobs with hard-fail artifact checks + `environment: release` + I8 restamp job; `update-watcher.ts` download→`readyToInstall`→`quitAndInstall` + channel.
    - Client I12: `App.tsx` WhatsNew auto-open, `Sidebar.tsx` entry, `useUpdateStatus.ts` titles, `centraid-api.d.ts` `readyToInstall`.
-   - Mobile: `eas.json`, `app.config.ts` version from package.json, Android release signing env + `CENTRAID_REQUIRE_RELEASE_SIGNING`, `release-mobile.yml` (no `eas update`), `mobile-android.yml` assembleDebug.
+   - Mobile: `eas.json`, `app.config.ts` version from package.json, Android release signing env + `CENTRAID_REQUIRE_RELEASE_SIGNING`, `release-mobile.yml` (no `eas update`); `mobile-android.yml` assembleDebug removed (too slow for PR).
    - Web: `apps/web/wrangler.json` (`app.centraid.dev`), `public/_headers`, `scripts/web/smoke.mjs`, `web.yml` scaffold deploy.
    - Gateway: `packages/gateway/Dockerfile`, root `.dockerignore` (build context `.`), `release-gateway-image.yml` GHCR (no `latest` on beta).
    - Docs: `docs/release.md`, `docs/enrollment.md` secret names, `docs/decisions.md` D5/I12, `ARCHITECTURE.md` deploy table.
@@ -84,7 +85,7 @@ Fresh-context governance auditor for issue #501. Inputs: receipt, workspace tree
    - §3: packaged download→install path + restamp script + workflow restamp job.
    - §4: sidebar What's new + auto-open once per version.
    - §5: EAS scaffold + `release-mobile.yml` without eas update.
-   - §6: `mobile-android.yml` assembleDebug (J8).
+   - §6: J8 assembleDebug workflow removed (too slow for PR gate; user request).
    - §7: wrangler + `web.yml` for `app.centraid.dev`.
    - §8: Dockerfile + GHCR workflow.
    - §9: release/enrollment/decisions/architecture write-back; human residual unchecked (correct).
