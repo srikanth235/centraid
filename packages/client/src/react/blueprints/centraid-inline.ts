@@ -9,6 +9,7 @@
 // Only one inline app is mounted at a time, so the client is a single
 // module-level install: `installInlineCentraid` publishes `window.centraid` and
 // returns a teardown that restores whatever was there before.
+import { appQueryPath } from '@centraid/protocol';
 import { auth, authHeaders, doFetch, readJson } from '../../gateway-client-core.js';
 import type { ReplicaShellSession } from '../../replica/shell-session.js';
 import type { ReplicaInvalidation } from '../../replica/types.js';
@@ -60,10 +61,10 @@ async function gatewayRead(
   input: Record<string, unknown> | undefined,
 ): Promise<unknown> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_tool/centraid_read', {
+  const res = await doFetch(baseUrl, appQueryPath(appId, query), {
     method: 'POST',
     headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({ app: appId, query, input }),
+    body: JSON.stringify({ input }),
   });
   return readJson<unknown>(res, `read ${query}`);
 }

@@ -14,13 +14,14 @@
  * abort independently. `write()` remains non-deduped and both helpers retain
  * their original Promise return values.
  */
-export function changeBridgeScript(draft?: { appId: string; toolUrl: string }): string {
-  // Live mode sniffs the app id from `/centraid/<id>/…` and posts tools at
-  // `/centraid/_tool/`. Draft mode pins both because its first path segment is
-  // `_draft` and its handlers run through the draft session shim.
+export function changeBridgeScript(draft?: { appId: string; basePath: string }): string {
+  // Live mode sniffs the app id from `/centraid/<id>/…` and addresses the app
+  // RPC routes under `/centraid/<id>/` (issue #505). Draft mode pins both
+  // because its first path segment is `_draft` and its handlers run through the
+  // draft session worktree at `/centraid/_draft/<sessionId>/<id>/`.
   const idAndTool = draft
-    ? `var appId=${JSON.stringify(draft.appId)};w.centraid.appId=appId;var toolUrl=${JSON.stringify(draft.toolUrl)};`
-    : `var locationPath=w.location.pathname;try{if(opaqueBaseUrl)locationPath=new URL(opaqueBaseUrl).pathname;}catch(_){}var m=/(?:^|\\/)centraid\\/([^/]+)\\//.exec(locationPath);var appId=w.centraid.appId||(m?decodeURIComponent(m[1]):null);w.centraid.appId=appId;var toolUrl='/centraid/_tool/';`;
+    ? `var appId=${JSON.stringify(draft.appId)};w.centraid.appId=appId;var baseUrl=${JSON.stringify(draft.basePath)};`
+    : `var locationPath=w.location.pathname;try{if(opaqueBaseUrl)locationPath=new URL(opaqueBaseUrl).pathname;}catch(_){}var m=/(?:^|\\/)centraid\\/([^/]+)\\//.exec(locationPath);var appId=w.centraid.appId||(m?decodeURIComponent(m[1]):null);w.centraid.appId=appId;var baseUrl=appId?('/centraid/'+encodeURIComponent(appId)+'/'):null;`;
 
   return `<script>(function(){var w=window;w.centraid=w.centraid||{};
 var opaqueBaseUrl=typeof w.centraid.opaqueBaseUrl==='string'?w.centraid.opaqueBaseUrl:null;
@@ -32,21 +33,27 @@ w.centraid.onChange=function(cb){
   return function(){listeners.delete(cb);};
 };
 ${idAndTool}
-function callTool(name,body,signal){
-  var init={method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)};
+function rpcRequest(url,method,body,signal){
+  var init={method:method,headers:{'content-type':'application/json'}};
+  if(body!==undefined)init.body=JSON.stringify(body);
   if(signal)init.signal=signal;
-  return (opaqueBaseUrl?opaqueFetch:fetch)(toolUrl+name,init).then(function(r){
+  if(!baseUrl)return Promise.reject(new Error('app id is unknown'));
+  return (opaqueBaseUrl?opaqueFetch:fetch)(url,init).then(function(r){
     return r.text().then(function(t){
       var j=null;
       try{j=t?JSON.parse(t):null;}catch(_){}
       if(!r.ok){
-        var err=j&&j.message?j.message:('tool '+name+' failed: '+r.status);
+        var err=j&&j.message?j.message:('request failed: '+r.status);
         var e=new Error(err);e.code=j&&j.code;e.status=r.status;throw e;
       }
       return j;
     });
   });
 }
+function actionUrl(name){return baseUrl+'actions/'+encodeURIComponent(name);}
+function queryUrl(name){return baseUrl+'queries/'+encodeURIComponent(name);}
+function callAction(name,input,intentId,signal){var body={input:input};if(intentId!==undefined)body.intentId=intentId;return rpcRequest(actionUrl(name),'POST',body,signal);}
+function callQuery(name,input,signal){return rpcRequest(queryUrl(name),'POST',{input:input},signal);}
 var replicaManaged=false,replicaPort=null,replicaSeq=1,replicaPending={},liveSeq=1,liveEntries={};
 var documentNonce=typeof w.centraid.documentNonce==='string'?w.centraid.documentNonce:null;
 try{var nonceMatch=/(?:^|&)bridge=([^&]*)/.exec((w.location.hash||'').replace(/^#/,''));if(nonceMatch)documentNonce=decodeURIComponent(nonceMatch[1]);}catch(_){}
@@ -280,13 +287,13 @@ function canFallbackOnline(error){
 function executeRead(opts,entry,signal){
   if(!replicaManaged){
     entry.server=true;
-    return callTool('centraid_read',{app:appId,query:opts.query,input:opts.input},signal).then(function(value){syncParentSubscription(entry);return value;});
+    return callQuery(opts.query,opts.input,signal).then(function(value){syncParentSubscription(entry);return value;});
   }
   return runLocalQuery(opts,entry,signal).catch(function(error){
     if(signal&&signal.aborted)throw mkAbortErr();
     if(!canFallbackOnline(error))throw error;
     entry.server=true;entry.dependencies={};
-    return callTool('centraid_read',{app:appId,query:opts.query,input:opts.input},signal);
+    return callQuery(opts.query,opts.input,signal);
   }).then(function(value){syncParentSubscription(entry);return value;});
 }
 function rerunLive(entry){
@@ -307,7 +314,7 @@ w.centraid.write=function(opts){
   // in-memory intent queue. (Opaque online transport may still use the
   // capability MessagePort.) Network failures must never fall back to queuing.
   if(opts.onlineOnly===true){
-    return callTool('centraid_write',{app:appId,action:opts.action,input:opts.input},opts.signal);
+    return callAction(opts.action,opts.input,undefined,opts.signal);
   }
   if(replicaManaged){
     return replicaCall('centraid:replica-write',{
@@ -316,10 +323,10 @@ w.centraid.write=function(opts){
       intentId:opts.intentId
     },opts.signal).catch(function(error){
       if(error&&error.code!=='REPLICA_UNAVAILABLE'&&error.code!=='REPLICA_NOT_READY')throw error;
-      return callTool('centraid_write',{app:appId,action:opts.action,input:opts.input,intentId:opts.intentId},opts.signal);
+      return callAction(opts.action,opts.input,opts.intentId,opts.signal);
     });
   }
-  return callTool('centraid_write',{app:appId,action:opts.action,input:opts.input},opts.signal);
+  return callAction(opts.action,opts.input,undefined,opts.signal);
 };
 var inflight={};
 function readKey(q,i){try{return JSON.stringify([q,i===undefined?null:i]);}catch(_){return null;}}
@@ -373,9 +380,11 @@ w.centraid.read=function(opts){
   return ret;
 };
 w.centraid.describe=function(filter){
-  var body=Object.assign({},filter||{});
-  if(!body.app&&appId)body.app=appId;
-  return callTool('centraid_describe',body);
+  var parts=[];
+  if(filter&&typeof filter.action==='string')parts.push('action='+encodeURIComponent(filter.action));
+  if(filter&&typeof filter.query==='string')parts.push('query='+encodeURIComponent(filter.query));
+  var qs=parts.length?('?'+parts.join('&')):'';
+  return rpcRequest(baseUrl+'_describe'+qs,'GET',undefined);
 };
 
 function legacyDetail(change){
@@ -498,7 +507,7 @@ if(hasParent){
 
 export function injectChangeBridge(
   html: string,
-  draft?: { appId: string; toolUrl: string },
+  draft?: { appId: string; basePath: string },
 ): string {
   // Inject right after the opening <head>. If the document has no <head>
   // (rare in practice but legal HTML) the script falls through unchanged.

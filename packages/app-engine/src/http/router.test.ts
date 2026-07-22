@@ -1,46 +1,53 @@
 import { describe, expect, it } from 'vitest';
 import { parseRoute, parseWithDraft } from './router.js';
 
-describe('parseRoute — tool-invoke shim (issue #107)', () => {
-  it('parses POST /centraid/_tool/centraid_write', () => {
-    const r = parseRoute('POST', '/centraid/_tool/centraid_write');
-    expect(r.kind).toBe('tool-invoke');
-    if (r.kind === 'tool-invoke') expect(r.toolName).toBe('centraid_write');
+describe('parseRoute — app RPC routes (issue #505)', () => {
+  it('parses POST /centraid/<id>/actions/<action>', () => {
+    const r = parseRoute('POST', '/centraid/todos/actions/add');
+    expect(r.kind).toBe('app-action');
+    if (r.kind === 'app-action') {
+      expect(r.appId).toBe('todos');
+      expect(r.action).toBe('add');
+    }
   });
 
-  it('parses POST /centraid/_tool/centraid_read', () => {
-    const r = parseRoute('POST', '/centraid/_tool/centraid_read');
-    expect(r.kind).toBe('tool-invoke');
-    if (r.kind === 'tool-invoke') expect(r.toolName).toBe('centraid_read');
+  it('parses POST /centraid/<id>/queries/<query>', () => {
+    const r = parseRoute('POST', '/centraid/todos/queries/upcoming');
+    expect(r.kind).toBe('app-query');
+    if (r.kind === 'app-query') {
+      expect(r.appId).toBe('todos');
+      expect(r.query).toBe('upcoming');
+    }
   });
 
-  it('parses POST /centraid/_tool/centraid_describe', () => {
-    const r = parseRoute('POST', '/centraid/_tool/centraid_describe');
-    expect(r.kind).toBe('tool-invoke');
-    if (r.kind === 'tool-invoke') expect(r.toolName).toBe('centraid_describe');
+  it('decodes percent-encoded handler names', () => {
+    const r = parseRoute('POST', '/centraid/todos/actions/add%2Ditem');
+    expect(r.kind).toBe('app-action');
+    if (r.kind === 'app-action') expect(r.action).toBe('add-item');
   });
 
-  it('does not require centraid_ prefix at the router level (validation happens in dispatcher)', () => {
-    // The router accepts any non-empty tool name; the dispatcher's
-    // isToolName guard catches unknown tools and returns 404. Keeps the
-    // router's grammar trivial.
-    const r = parseRoute('POST', '/centraid/_tool/anything');
-    expect(r.kind).toBe('tool-invoke');
-    if (r.kind === 'tool-invoke') expect(r.toolName).toBe('anything');
+  it('parses GET /centraid/<id>/_describe with an optional filter', () => {
+    const bare = parseRoute('GET', '/centraid/todos/_describe');
+    expect(bare.kind).toBe('app-describe');
+    if (bare.kind === 'app-describe') expect(bare.query).toEqual({});
+    const filtered = parseRoute('GET', '/centraid/todos/_describe?action=add');
+    expect(filtered.kind).toBe('app-describe');
+    if (filtered.kind === 'app-describe') expect(filtered.query).toEqual({ action: 'add' });
   });
 
-  it('rejects non-POST /centraid/_tool/<name>', () => {
-    expect(parseRoute('GET', '/centraid/_tool/centraid_read').kind).toBe('not-found');
-    expect(parseRoute('PUT', '/centraid/_tool/centraid_write').kind).toBe('not-found');
+  it('rejects non-POST action/query invocation', () => {
+    // A GET under actions/queries falls through to static serving, not RPC.
+    expect(parseRoute('GET', '/centraid/todos/queries/upcoming').kind).toBe('app-static');
+    expect(parseRoute('PUT', '/centraid/todos/actions/add').kind).toBe('not-found');
   });
 
-  it('rejects bare /centraid/_tool', () => {
-    expect(parseRoute('POST', '/centraid/_tool').kind).toBe('not-found');
-    expect(parseRoute('POST', '/centraid/_tool/').kind).toBe('not-found');
+  it('rejects a bare or over-deep action/query path', () => {
+    expect(parseRoute('POST', '/centraid/todos/actions').kind).toBe('not-found');
+    expect(parseRoute('POST', '/centraid/todos/actions/add/extra').kind).toBe('not-found');
   });
 
-  it('rejects extra path segments', () => {
-    expect(parseRoute('POST', '/centraid/_tool/centraid_read/extra').kind).toBe('not-found');
+  it('rejects non-GET /_describe', () => {
+    expect(parseRoute('POST', '/centraid/todos/_describe').kind).toBe('not-found');
   });
 });
 
@@ -132,13 +139,15 @@ describe('parseWithDraft — draft-preview prefix (issue #141)', () => {
     });
   });
 
-  it('peels the draft prefix off a tool-invoke and preserves the inner shape', () => {
+  it('peels the draft prefix off an app query invocation and preserves the inner shape', () => {
     const { route, draftSessionId } = parseWithDraft(
       'POST',
-      '/centraid/_draft/s1/_tool/centraid_read',
+      '/centraid/_draft/s1/todos/queries/upcoming',
     );
     expect(draftSessionId).toBe('s1');
-    expect(route.kind).toBe('tool-invoke');
+    expect(route.kind).toBe('app-query');
+    expect((route as { appId: string }).appId).toBe('todos');
+    expect((route as { query: string }).query).toBe('upcoming');
   });
 
   it('preserves the query string when rewriting', () => {

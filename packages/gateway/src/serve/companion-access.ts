@@ -7,9 +7,15 @@ export function companionRequestAllowed(
   enrollmentId: string,
 ): boolean {
   const pathname = new URL(req.url ?? '/', 'http://gateway.local').pathname;
+  const method = (req.method ?? 'GET').toUpperCase();
   const selfRevokePath = `/centraid/_gateway/devices/${encodeURIComponent(enrollmentId)}`;
+  // The pinned app RPC surface: an action or query invocation on a granted
+  // module (issue #505). The per-operation allowlist is enforced separately
+  // by the runtime's `companionHandlerAllowed` gate.
+  const appRpc =
+    method === 'POST' && /^\/centraid\/[^_/][^/]*\/(?:actions|queries)\/[^/]+$/.test(pathname);
   return (
-    pathname.startsWith('/centraid/_tool/centraid_') ||
+    appRpc ||
     pathname === '/centraid/_vault/status' ||
     pathname === '/centraid/_vault/apps' ||
     pathname === '/centraid/_vault/blocking' ||

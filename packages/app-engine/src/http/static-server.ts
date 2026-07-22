@@ -231,9 +231,9 @@ export interface ServeStaticOptions {
    * session worktree draft mounted under `/centraid/_draft/<sessionId>/
    * <appId>/`, NOT the live `/centraid/<appId>/`. The injected bridge then
    * pins `appId` explicitly (the path's first segment is `_draft`, so the
-   * usual `location.pathname` sniff would mis-read it) and routes its tool
-   * calls at `/centraid/_draft/<sessionId>/_tool/` so the draft's handlers
-   * run. The `_changes` subscription stays relative — it resolves to the
+   * usual `location.pathname` sniff would mis-read it) and routes its app
+   * RPC calls under `/centraid/_draft/<sessionId>/<appId>/` so the draft's
+   * handlers run. The `_changes` subscription stays relative — it resolves to the
    * draft route's app-changes, which proxies the same live change bus.
    */
   draft?: { appId: string; sessionId: string };
@@ -344,7 +344,7 @@ export async function serveStatic(
       opts.draft
         ? {
             appId: opts.draft.appId,
-            toolUrl: `/centraid/_draft/${encodeURIComponent(opts.draft.sessionId)}/_tool/`,
+            basePath: `/centraid/_draft/${encodeURIComponent(opts.draft.sessionId)}/${encodeURIComponent(opts.draft.appId)}/`,
           }
         : undefined,
     );

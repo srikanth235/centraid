@@ -45,6 +45,13 @@ An app declares **queries** (bounded reads) and **actions** (typed writes) in it
 
 The same journalled command path backs **Vault Atlas** (#441), the Operations screen that renders the model as **Kinds / Relations / Browse** (`packages/client/src/react/screens/AtlasScreen.tsx`): the Browse table editor dispatches `atlas.insert_row|update_row|delete_row` — never raw SQL, sealed columns refuse writes — and its dependent-aware deletes consult the **polymorphic-reference registry** (`packages/vault/src/schema/poly-refs.ts`), the one enumeration of every polymorphic `(type, id)` pointer with a cleanup policy, swept on purge and Browse-delete so orphaned `consent_share`/`enrich_embedding`/`sync_external_entity` rows (previously never cleaned) can no longer survive a hard delete.
 
+## App render paths
+
+An app UI reaches the screen one of two ways, and which one is a property of the app, not the host (#505):
+
+- **Inline** — the default for the 8 bundled system apps (Tasks, Agenda, Tally, People, Notes, Docs, Locker, Photos). The app mounts as a **React route inside the shared shell** (`packages/client/src/react/shell/routes/InlineAppRoute.tsx`), lazy-loading the co-located `packages/blueprints/apps/<app>/app-inline.tsx` chunk. There is no iframe, no opaque document, no postMessage bridge, and no second React runtime — the app is shell code with the shell's principal, inheriting design tokens synchronously. Data flows through the device **replica** (`ReplicaShellSession`): reads/subscriptions hit replica invalidations and writes ride the replica intent dispatch carrying `intentId` (the #406 idempotency contract), so a bundled app renders **fully offline from the local replica** with the gateway unreachable. Membership in `packages/client/src/react/shell/routes/inlineApps.ts` is the typed render-path signal; anything not listed falls to the served path.
+- **Served (iframe)** — the builder preview of edited/code-store apps and mobile WebViews. The gateway bakes an HTML document and serves it plus a prebuilt `_bundle.<hash>.js` (`packages/app-engine/src/http/static-server.ts`), injects `bridge-script.ts` for `window.centraid`, and isolates the app as an **opaque, same-origin document** under the blueprint CSP; theme/settings cross the frame by postMessage. This is the untrusted-code boundary and is left byte-for-byte by the inline work — only the render-path *decision* moved bundled apps off it. See [docs/traps/blueprint-csp.md](docs/traps/blueprint-csp.md).
+
 ## Workspace layout
 
 ```

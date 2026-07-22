@@ -1,4 +1,4 @@
-import { ROUTES } from '@centraid/protocol';
+import { appActionPath, appQueryPath } from '@centraid/protocol';
 import initWasm, {
   BrowserEndpoint,
   connect_failure_marker,
@@ -166,17 +166,17 @@ export async function companionJson<T>(path: string, init: RequestInit = {}): Pr
 }
 
 export async function appRead<T>(app: string, query: string, input: unknown = {}): Promise<T> {
-  return companionJson<T>(ROUTES.toolRead, {
+  return companionJson<T>(appQueryPath(app, query), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ app, query, input }),
+    body: JSON.stringify({ input }),
   });
 }
 
 export async function appWrite<T>(app: string, action: string, input: unknown): Promise<T> {
-  return companionJson<T>(ROUTES.toolWrite, {
+  return companionJson<T>(appActionPath(app, action), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ app, action, input, intentId: crypto.randomUUID() }),
+    body: JSON.stringify({ input, intentId: crypto.randomUUID() }),
   });
 }

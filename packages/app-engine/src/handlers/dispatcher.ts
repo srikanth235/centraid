@@ -297,7 +297,7 @@ export class Dispatcher {
   async write(input: CentraidWriteInput, overrideCodeDir?: string): Promise<ToolResult> {
     const { app: appId, action: actionName, input: handlerInput, intentId } = input;
     if (!appId || !actionName) {
-      return errorResult('INVALID_INPUT', 'centraid_write requires { app, action }');
+      return errorResult('INVALID_INPUT', 'an action invocation requires { app, action }');
     }
     const entry = this.registry.get(appId);
     if (!entry) {
@@ -321,7 +321,7 @@ export class Dispatcher {
     if (findQuery(manifest, actionName) && !findAction(manifest, actionName)) {
       return errorResult(
         'WRONG_KIND',
-        `"${actionName}" is a query on app "${appId}" — use centraid_read`,
+        `"${actionName}" is a query on app "${appId}" — use the queries route`,
       );
     }
     const entryDef = findAction(manifest, actionName);
@@ -377,7 +377,7 @@ export class Dispatcher {
   async read(input: CentraidReadInput, overrideCodeDir?: string): Promise<ToolResult> {
     const { app: appId, query: queryName, input: handlerInput } = input;
     if (!appId || !queryName) {
-      return errorResult('INVALID_INPUT', 'centraid_read requires { app, query }');
+      return errorResult('INVALID_INPUT', 'a query invocation requires { app, query }');
     }
     const entry = this.registry.get(appId);
     if (!entry) {
@@ -397,7 +397,7 @@ export class Dispatcher {
     if (findAction(manifest, queryName) && !findQuery(manifest, queryName)) {
       return errorResult(
         'WRONG_KIND',
-        `"${queryName}" is an action on app "${appId}" — use centraid_write`,
+        `"${queryName}" is an action on app "${appId}" — use the actions route`,
       );
     }
     const entryDef = findQuery(manifest, queryName);
@@ -533,10 +533,10 @@ function manifestErrorToResult(appId: string, err: unknown): ToolErrorResult {
 }
 
 // ----------------------------------------------------------------------------
-// HTTP-status mapping for the `POST /tool/:name` shim.
+// HTTP-status mapping for the app RPC routes (issue #505).
 // ----------------------------------------------------------------------------
 
-/** Map a `ToolErrorCode` to an HTTP status code for the shim. */
+/** Map a `ToolErrorCode` to an HTTP status code for the app RPC routes. */
 export function statusForToolError(code: ToolErrorCode): number {
   switch (code) {
     case 'UNKNOWN_APP':
@@ -555,12 +555,4 @@ export function statusForToolError(code: ToolErrorCode): number {
     case 'GATEWAY_BUSY':
       return 503;
   }
-}
-
-/** Names of the three tools the dispatcher exposes. */
-export const TOOL_NAMES = ['centraid_write', 'centraid_read', 'centraid_describe'] as const;
-export type ToolName = (typeof TOOL_NAMES)[number];
-
-export function isToolName(name: string): name is ToolName {
-  return TOOL_NAMES.includes(name as ToolName);
 }

@@ -200,6 +200,59 @@ offline render none → full.
     `appFrameReplicaBridge.ts`, `bridge-script.ts`, and `static-server.ts` are
     byte-for-byte untouched.
 
+- **Phase 5 (app-scoped RPC rename)**: the `/centraid/_tool/centraid_*` shim is
+  deleted outright (no dual-route compat window — v0 pre-release policy) and
+  replaced with app-scoped routes: `POST /centraid/<appId>/actions/<action>`
+  (body `{ input?, intentId? }`), `POST /centraid/<appId>/queries/<query>`
+  (body `{ input? }`), and `GET /centraid/<appId>/_describe`
+  (`?action=`/`?query=` narrows to one declared handler). Auth, consent,
+  vault scoping (`x-centraid-vault`), Companion grants, declared-handler
+  dispatch, and draft preview are behavior-identical — only the routing keys
+  moved from the body into the URL path. Path builders
+  `appActionPath`/`appQueryPath`/`appDescribePath` join `@centraid/protocol`;
+  `TOOL_PLANE_PREFIX`/`ROUTES.toolRead`/`ROUTES.toolWrite` are gone.
+  Notable deltas: describe became GET (pure read, auto-allowed by the
+  read-only device-tier gate, follows the `_`-prefixed reserved-sub-route
+  idiom); cross-app web-session calls now fail at the authorizer (401,
+  previously 403 at the runtime header check, which is retained as
+  defense-in-depth); Companion still cannot describe (companion-access lists
+  only `actions`/`queries`); the inline online-fallback `gatewayRead` in
+  `packages/client/src/react/blueprints/centraid-inline.ts` was re-pointed
+  (recon had claimed the inline path had no HTTP caller — it had one).
+  Files: `packages/protocol/src/routes.ts`, `packages/protocol/src/index.ts`,
+  `packages/app-engine/src/http/router.ts`, `packages/app-engine/src/runtime.ts`,
+  `packages/app-engine/src/http/internal-headers.ts`,
+  `packages/app-engine/src/http/bridge-script.ts`,
+  `packages/app-engine/src/http/static-server.ts`,
+  `packages/app-engine/src/handlers/dispatcher.ts`,
+  `packages/app-engine/src/handlers/worker-pool.ts`,
+  `packages/app-engine/src/index.ts`,
+  `packages/gateway/src/serve/build-gateway.ts`,
+  `packages/gateway/src/serve/companion-access.ts`,
+  `packages/gateway/src/serve/web-app-sessions.ts`,
+  `packages/client/src/react/blueprints/centraid-inline.ts`,
+  `packages/client/src/react/shell/routes/opaqueAppDocument.ts`,
+  `apps/extension/src/transport.ts`, `scripts/lint-protocol-routes.mjs`,
+  `packages/app-engine/src/http/router.test.ts`,
+  `packages/app-engine/src/http/bridge-script.test.ts`,
+  `packages/app-engine/src/http/internal-headers.test.ts`,
+  `packages/gateway/src/lifecycle/draft-preview-over-http.test.ts`,
+  `packages/gateway/src/serve/serve-device-tokens.test.ts`,
+  `packages/gateway/src/serve/web-app-sessions.contract.test.ts`,
+  `packages/gateway/src/serve/serve-git-store.test.ts`,
+  `packages/client/src/react/blueprints/centraid-inline.test.ts`,
+  `docs/protocol.md`, `packages/app-engine/README.md`,
+  `packages/blueprints/visual-harness/mock-centraid.js`,
+  `tests/agent-e2e-pairing/flows/extension-companion.mjs`.
+- **Phase 6 (docs write-back, completing the early ghost cleanup)**:
+  `ARCHITECTURE.md` gains an "App render paths" section (inline default for the
+  8 bundled apps vs served/iframe for builder preview + mobile WebViews, with
+  the registry as the typed render-path signal); `docs/traps/blueprint-csp.md`
+  is scoped to the served path only; `docs/glossary.md` gains **inline app** /
+  **served app** rows; `README.md`'s falsified "subscribed iframes re-fetch"
+  claim now describes replica-backed inline refresh. `docs/protocol.md`'s RPC
+  section was rewritten with Phase 5 above.
+
 ## Out of scope
 
 - Agent vault tools (vault_sql / vault_invoke / vault_content) and the ACP/MCP surface
@@ -293,17 +346,31 @@ cd packages/client && bun run test       # 1073/1073
 node --experimental-strip-types apps/web/tests/e2e/server.ts &
 ```
 
+Phases 5+6 (re-runnable):
+
+```sh
+# Suites covering the RPC rename (all green at commit time):
+cd packages/app-engine && bun run test    # 498/498
+cd packages/gateway && bun run test       # 827 passed / 6 skipped
+cd packages/client && bun run test        # 1073/1073
+cd apps/extension && bun run test         # 44/44
+bun run lint:protocol-routes              # ok (11 paths)
+bun run lint:e2e-flows                    # ok (43 steps)
+# Grep proof — zero functional references to the old plane:
+grep -rn "_tool/centraid_" packages/ apps/ scripts/ tests/ | grep -v retired
+```
+
 Later phases append their own commands here as they land.
 
 ## Steering
 
-- Check 1 (all steering events recorded): PASS — User directed to defer full check:pr and lint gates to the end of Phase 7 migration to speed up phase throughput; this direction is recorded in the Phase 4 Verification section.
+- Check 1 (all steering events recorded): PASS — User directed to defer full check:pr and lint gates to the end of Phase 7 migration to speed up phase throughput; this direction is recorded in the Phase 4 Verification section and remains unchanged through Phases 5+6.
 - Check 2 (no non-steering recorded as steering): PASS — No extraneous steering events misrecorded.
 
 ## Audit
 
-- Check 1 (faithful description of diff): PASS — 'What changed' faithfully describes Phase 4 work: 21 new app files (7 apps × 3 files: agenda, tally, people, notes, docs, locker, photos each with app-inline.tsx, Chrome.tsx, Chrome.module.css), inline-blob-images service + test, kit-inline-vault.test.ts, inlineApps registry updated to list all 8 apps, kit-inline extended with authorizeBlobUrl, InlineAppRoute wired for blob-image authorization, 3 tsconfig type stubs added, manifest.json regenerated; browser verification confirms zero iframes, app code only from PWA-origin lazy chunks, writes through replica intent dispatch, and full offline render after gateway shutdown.
-- Check 2 (checked items realized in diff): PASS — All 9 checklist items remain unchecked; Phase 4 work complete and realized per 'What changed' and Verification section.
+- Check 1 (faithful description of diff): PASS — 'What changed' faithfully describes Phases 5–6 work: Phase 5 RPC plane rename (20+ files across protocol/app-engine/gateway/client/extension, 8 test files; old /centraid/_tool/centraid_* shim deleted; new app-scoped routes POST /centraid/<appId>/actions/<action>, POST /centraid/<appId>/queries/<query>, GET /centraid/<appId>/_describe with path builders appActionPath/appQueryPath/appDescribePath added to protocol; TOOL_PLANE_PREFIX/ROUTES.toolRead/ROUTES.toolWrite removed; describe now GET per reserved-sub-route idiom; cross-app calls now fail at authorizer; centraid-inline gatewayRead re-pointed); Phase 6 docs write-back (ARCHITECTURE.md "App render paths" section, blueprint-csp.md scoped to served path, glossary.md inline/served app rows, README.md line 52 replica-backed refresh claim, protocol.md RPC section rewritten).
+- Check 2 (checked items realized in diff): PASS — All 9 checklist items remain unchecked; Phases 4–6 work complete and realized per 'What changed' and Verification sections.
 - Check 3 (checklist mirrors structure): PASS — Receipt checklist (Phases 0–7 plus "check:pr green") mirrors issue acceptance criteria by phase gates.
 
 ## Accounting
@@ -327,3 +394,5 @@ Later phases append their own commands here as they land.
 | claude-code-3f73ae52-798-1784728534-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 6 | 13728 | 1001823 | 1674 | 15408 | 1.2572 | 727 | 831838 | 77139884 | 290298 | feat(client): inline system apps — shell services + Tasks pilot (#505)Phases 2+3 |
 | claude-code-3f73ae52-798-1784738411-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 470 | 525226 | 80382577 | 185767 | 711463 | 96.2410 | 1197 | 1357064 | 157522461 | 476065 | feat(client): inline remaining seven apps — Phase 4 rollout (#505)All 8 bundled  |
 | claude-code-3f73ae52-798-1784738608-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 18 | 8713 | 975599 | 4334 | 13065 | 1.3014 | 1215 | 1365777 | 158498060 | 480399 | feat(client): inline remaining seven apps — Phase 4 rollout (#505)All 8 bundled  |
+| claude-code-3f73ae52-798-1784741090-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 72 | 84352 | 4550536 | 39827 | 124251 | 7.5970 | 1287 | 1450129 | 163048596 | 520226 | feat(app-engine): app-scoped RPC routes replace the _tool plane (#505)Phase 5: / |
+| claude-code-3f73ae52-798-1784741222-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 4 | 1105 | 296526 | 669 | 1778 | 0.3438 | 1291 | 1451234 | 163345122 | 520895 | feat(app-engine): app-scoped RPC routes replace the _tool plane (#505)Phase 5: / |

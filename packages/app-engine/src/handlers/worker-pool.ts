@@ -1,6 +1,6 @@
 /*
  * Warm-spare worker pool for app-handler dispatch (issue #404 mobile fast
- * path). Every `centraid_read` / `centraid_write` used to pay the full cost of
+ * path). Every query / action invocation used to pay the full cost of
  * spinning up a fresh `node:worker_threads` Worker — thread creation plus this
  * repo's worker-runner module evaluation (and, under the tsx test loader, the
  * loader re-registration) — on the request's critical path, ~10-30ms+ each.

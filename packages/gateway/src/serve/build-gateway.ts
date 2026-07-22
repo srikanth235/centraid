@@ -428,10 +428,13 @@ function readonlyRequestAllowed(req: IncomingMessage): boolean {
   }
   if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return true;
   if (method !== 'POST') return false;
+  // A query invocation is a read; an action invocation is a write. The
+  // app-scoped RPC routes carry the kind in the path (issue #505), so a
+  // read-only device may POST to `queries/<name>` but not `actions/<name>`.
+  // `_describe` moved to GET and is covered by the read-method branch above.
   if (
-    url.pathname === '/centraid/_tool/centraid_read' ||
-    url.pathname === '/centraid/_tool/centraid_describe' ||
-    /^\/centraid\/_draft\/[^/]+\/_tool\/centraid_(?:read|describe)$/.test(url.pathname)
+    /^\/centraid\/[^_/][^/]*\/queries\/[^/]+$/.test(url.pathname) ||
+    /^\/centraid\/_draft\/[^/]+\/[^_/][^/]*\/queries\/[^/]+$/.test(url.pathname)
   ) {
     return true;
   }

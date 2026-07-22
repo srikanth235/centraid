@@ -49,7 +49,7 @@ Centraid is **solo-maintained**. Coding agents do much of the implementation; re
 
 - **Apps are folders**: `index.html` + `queries/*.js` + `actions/*.js` + `automations/<id>/` + `app.json`. No migrations and no private database — handlers reach the vault through `ctx.vault` under granted scopes (a declared **ext band** inside `vault.db` covers genuinely app-local tables). Code lives in a per-vault git store; drafts are session branches; Publish fast-forwards `main`.
 - **One agent tool family** — the vault register: `vault_sql` (read-only SQL over the whole vault), `vault_invoke` (typed commands, including every app's declared handlers), `vault_content` (document text). UI buttons dispatch to the same handlers `vault_invoke` does — one calling convention.
-- **Live data, no plumbing**: every action invalidates the tables it touched and pushes SSE on `/centraid/<id>/_changes`; subscribed iframes re-fetch.
+- **Live data, no plumbing**: every action invalidates the tables it touched and subscribers re-read — bundled apps render inline in the shell and refresh off the device replica; served apps (builder preview, mobile WebViews) tail SSE on `/centraid/<id>/_changes`.
 
 ## Get started (60 seconds)
 

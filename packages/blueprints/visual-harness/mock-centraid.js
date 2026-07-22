@@ -2,7 +2,7 @@
 // MOCK window.centraid — visual-verification harness only, never shipped.
 //
 // Replaces the runtime's real change-bridge `window.centraid.read/write` (which
-// POST to /centraid/_tool/* against a live vault) with an in-page fixture
+// POST to /centraid/<appId>/{queries,actions}/* against a live vault) with an in-page fixture
 // store, so the docs/photos blueprint apps render real-looking data with zero
 // gateway/vault behind them. Every query/action name below is taken verbatim
 // from the app's own app.json manifest and from grepping the app source for

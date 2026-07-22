@@ -110,7 +110,7 @@ describe('installInlineCentraid', () => {
     expect(doFetch).not.toHaveBeenCalled();
   });
 
-  it('falls back to the gateway tool route only on ONLINE_ONLY', async () => {
+  it('falls back to the gateway query route only on ONLINE_ONLY', async () => {
     doFetch.mockResolvedValue(new Response('{}'));
     readJson.mockResolvedValue({ open: ['from-gateway'] });
     const session = fakeSession();
@@ -128,7 +128,7 @@ describe('installInlineCentraid', () => {
     expect(res.open).toEqual(['from-gateway']);
     expect(doFetch).toHaveBeenCalledWith(
       'https://gw.test',
-      '/centraid/_tool/centraid_read',
+      '/centraid/tasks/queries/board',
       expect.objectContaining({ method: 'POST' }),
     );
   });

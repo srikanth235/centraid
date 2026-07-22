@@ -198,24 +198,24 @@ test('Companion pairing requires and server-enforces the selected module grants'
   expect(docsBlob.status).toBe(200);
   expect(await docsBlob.json()).toMatchObject({ sha256: expect.stringMatching(/^[a-f0-9]{64}$/) });
 
-  const notesTool = await fetch(`${handle.url}/centraid/_tool/centraid_read`, {
+  const notesTool = await fetch(`${handle.url}/centraid/notes/queries/list`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${body.deviceToken}`,
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ app: 'notes', query: 'list' }),
+    body: JSON.stringify({ input: {} }),
   });
   expect(notesTool.status).toBe(403);
   expect(await notesTool.json()).toMatchObject({ error: 'app_session_scope' });
 
-  const unbundledLockerAction = await fetch(`${handle.url}/centraid/_tool/centraid_write`, {
+  const unbundledLockerAction = await fetch(`${handle.url}/centraid/locker/actions/trash-item`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${body.deviceToken}`,
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ app: 'locker', action: 'trash-item', input: { item_id: 'item-1' } }),
+    body: JSON.stringify({ input: { item_id: 'item-1' } }),
   });
   expect(unbundledLockerAction.status).toBe(403);
   expect(await unbundledLockerAction.json()).toMatchObject({ error: 'app_session_scope' });

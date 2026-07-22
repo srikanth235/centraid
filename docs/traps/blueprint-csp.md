@@ -1,8 +1,12 @@
 # Trap: blueprint app CSP
 
+## Scope: served (iframe) path only
+
+This trap applies to the **served** app path — the opaque, same-origin app document the gateway bakes and serves (builder preview of edited apps + mobile WebViews). Since #505 the 8 bundled system apps render **inline** in the shell instead (see [App render paths](../../ARCHITECTURE.md#app-render-paths)): inline apps run in the shell document under the **shell's own CSP**, not the per-app blueprint CSP, so the symptoms below (blank iframed previews, blocked inline scripts, denied `frame-src`) now surface **only in builder/mobile-WebView contexts**. If a bundled system app misbehaves inline, the blueprint CSP is not the layer — look at the shell.
+
 ## What goes wrong
 
-Blueprint apps work when opened as loose files or with a relaxed harness, then **fail in the real gateway** under Content-Security-Policy: blocked scripts, styles, images, or `fetch` to `data:` / remote URLs. Pairing QR images and inline editors are frequent casualties.
+Served blueprint apps work when opened as loose files or with a relaxed harness, then **fail in the real gateway** under Content-Security-Policy: blocked scripts, styles, images, or `fetch` to `data:` / remote URLs. Pairing QR images and inline editors are frequent casualties.
 
 ## How CSP is applied
 

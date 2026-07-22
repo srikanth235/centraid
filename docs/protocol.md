@@ -85,15 +85,28 @@ Issue #504 batch 1. **Mechanical:** route constants live in `@centraid/protocol`
 | `/centraid/_gateway/*` | Shell / control | Info, health, devices, pair, logs, … |
 | `/centraid/_vault/*` | Vault | Status, blobs, replica, consent, … |
 | `/centraid/_apps/*` | Apps store | List, publish, web-session mint, … |
-| `/centraid/_tool/*` | Tools | `centraid_read` / `centraid_write`, … |
 | `/centraid/_web/*` | Browser sessions | Control cookie proxy, redeem |
 | `/centraid/_agents/*`, `/centraid/_automations/*`, … | Feature planes | Same underscore-plane pattern |
 
+The underscore planes above are gateway-wide surfaces. A running **app** owns its own surface under `/centraid/<appId>/*` (static assets, `_changes`, `_query`, `_turn`, and the app RPC routes below); the reserved `_`-prefixed segments inside an app prefix are the app's control sub-routes.
+
+### App RPC (per-app, issue #505)
+
+Handler invocation is **not** a plane — it is addressed under the invoking app's own prefix. The app id and handler name ride in the path; the JSON body carries only the arguments.
+
+| Method + path | Replaces | Body | Notes |
+| --- | --- | --- | --- |
+| `POST /centraid/<appId>/actions/<action>` | `centraid_write` | `{ input?, intentId? }` | Runs a declared action; a write. |
+| `POST /centraid/<appId>/queries/<query>` | `centraid_read` | `{ input? }` | Runs a declared query; a read (allowed for read-only devices). |
+| `GET /centraid/<appId>/_describe` | `centraid_describe` | — | Returns the app's manifest; `?action=<name>`/`?query=<name>` narrows to one handler. |
+
+The `/centraid/_tool/centraid_*` shim these replaced was deleted outright — v0 ships no dual-route compat window ([decisions.md](decisions.md)). Path builders `appActionPath` / `appQueryPath` / `appDescribePath` live in `@centraid/protocol`. Auth, consent, vault scoping (`x-centraid-vault`), Companion grants, and browser-session scoping are unchanged — the reshape moved routing keys from the body into the path but kept every gate.
+
 ### Rules
 
-1. **No new flat names** under `/centraid/<word>` without a plane underscore segment and a migration plan.
+1. **No new flat names** under `/centraid/<word>` without a plane underscore segment and a migration plan. (`<appId>` is a path parameter, not a reserved word — it addresses the app's own surface.)
 2. Request/response pairs stay under one plane; do not invent parallel `/v2` trees without epoch bump.
-3. Clients import `ROUTES` from `@centraid/protocol` rather than string-copying paths.
+3. Clients import `ROUTES` (and the app-path builders) from `@centraid/protocol` rather than string-copying paths.
 4. Wire schemas stay structural (C3); normalization is a named post-pass.
 
 ## Stream authority

@@ -104,11 +104,14 @@ function requestPath(req: IncomingMessage): string {
 
 function permits(scope: SessionScope, pathname: string): boolean {
   const app = encodeURIComponent(scope.appId);
+  // The app's own prefix covers its static assets, `_changes`, `_query`, and
+  // the app RPC routes (`actions/`, `queries/`, `_describe`) — issue #505
+  // moved handler invocation under this prefix, so no separate `_tool` grant
+  // is needed.
   if (pathname.startsWith(`/centraid/${app}/`)) return true;
   if (scope.draftSessionId) {
     const draft = encodeURIComponent(scope.draftSessionId);
     if (pathname.startsWith(`/centraid/_draft/${draft}/${app}/`)) return true;
-    if (pathname.startsWith(`/centraid/_draft/${draft}/_tool/`)) return true;
   }
   // Generated apps stage uploads and serve their already-authorized media
   // through the blob custody door. Keep this separate from the rest of the
@@ -120,8 +123,7 @@ function permits(scope: SessionScope, pathname: string): boolean {
   // authorizer stamps x-centraid-web-app after the cookie/origin checks;
   // replica routes derive their shape and intent app from that trusted
   // header, so this does not open the rest of the owner `_vault` surface.
-  if (REPLICA_APP_PATHS.has(pathname)) return true;
-  return pathname.startsWith('/centraid/_tool/');
+  return REPLICA_APP_PATHS.has(pathname);
 }
 
 export class WebAppSessions {

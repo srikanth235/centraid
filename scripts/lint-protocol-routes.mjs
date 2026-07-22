@@ -25,8 +25,6 @@ const ROUTE_PATHS = [
   '/centraid/_vault/blobs',
   '/centraid/_vault/apps',
   '/centraid/_apps',
-  '/centraid/_tool/centraid_read',
-  '/centraid/_tool/centraid_write',
   '/centraid/_web/session',
   '/centraid/_web/control',
 ];
