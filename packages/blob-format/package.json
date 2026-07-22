@@ -1,11 +1,19 @@
 {
   "name": "@centraid/blob-format",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "description": "Dependency-free CBSF wire-format constants and codecs.",
+  "license": "SEE LICENSE IN REPOSITORY",
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",

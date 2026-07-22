@@ -59,6 +59,7 @@ Supporting scripts:
 - [ ] Mobile: run `release-mobile` workflow when this release includes mobile (TestFlight / Play internal)
 - [ ] Web continuous host deploys from `main` when CF secrets present (`app.centraid.dev`)
 - [ ] Optional gateway image on tag (`release-gateway-image` → GHCR; `latest` only if non-beta)
+- [ ] Optional gateway **npm** graph on tag (`npm-gateway-publish` → pack always; publish when `NPM_TOKEN` enrolled). Install: `scripts/install-gateway.sh` (see README). Does **not** replace H5 `service install`.
 
 ## D4 — Patch vs minor
 
@@ -74,6 +75,7 @@ The release agent **asserts** classification from the changelog headings; it doe
 
 - **Desktop beta:** tags `v0.x.y-beta.n` → GitHub **pre-release**, electron-updater channel `beta`. Never move the stable download target.
 - **Gateway image:** `ghcr.io/<owner>/centraid-gateway:<tag>`; **`latest` only for non-beta tags**.
+- **Gateway npm:** `@centraid/gateway` (+ publish-set deps) on npm when `NPM_TOKEN` is set; curl|bash via `scripts/install-gateway.sh`.
 - **Mobile beta:** TestFlight / Play internal track (workflow `release-mobile`, EAS profiles `preview` / `production`). **No** `eas update` in CI (J7).
 - **Web:** continuously deployed public origin **`https://app.centraid.dev`** (scaffold; CF secrets required). Gateway-embedded PWA remains LAN / always-on fallback. No beta tag ritual.
 

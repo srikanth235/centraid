@@ -66,7 +66,12 @@
     "test:ratchet": "node scripts/test-report/ratchet-floors.mjs",
     "test:ratchet:unit": "node node_modules/vitest/vitest.mjs run --config scripts/test-report/vitest.config.ts",
     "test:affected": "turbo run test --filter='[origin/main]' --concurrency=6",
-    "test:interop:backup": "bun run --cwd packages/backup test:interop"
+    "test:interop:backup": "bun run --cwd packages/backup test:interop",
+    "gateway:npm:pack": "node scripts/gateway-npm/pack.mjs",
+    "gateway:npm:pack:dry": "node scripts/gateway-npm/pack.mjs --dry-run",
+    "gateway:npm:publish": "node scripts/gateway-npm/publish.mjs",
+    "gateway:npm:helpers:test": "node --test scripts/gateway-npm/pack-helpers.test.mjs",
+    "gateway:install": "bash scripts/install-gateway.sh"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "3.2.4",

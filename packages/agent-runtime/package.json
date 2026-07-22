@@ -1,8 +1,9 @@
 {
   "name": "@centraid/agent-runtime",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "description": "Unified local agent runtime for centraid: drives one turn over the Agent Client Protocol for every runner kind, launching first-party ACP adapters for CLIs that lack an ACP mode. Used by both the per-app data chat and the builder. Ships a tiny `centraid` CLI bin agents shell out to.",
+  "license": "SEE LICENSE IN REPOSITORY",
   "bin": {
     "centraid": "./dist/cli/centraid-cli.js"
   },
@@ -13,6 +14,9 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json && mkdir -p dist/backends/acp && cp src/backends/acp/vault-mcp-stdio-proxy.mjs dist/backends/acp/",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",

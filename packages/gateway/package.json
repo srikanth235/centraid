@@ -1,8 +1,9 @@
 {
   "name": "@centraid/gateway",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "description": "Host-agnostic centraid gateway: wires app-engine + agent-runtime + stores + chat runner against injected paths and secrets. Consumed by the Electron desktop's in-process embed and the standalone `centraid-gateway` daemon.",
+  "license": "SEE LICENSE IN REPOSITORY",
   "bin": {
     "centraid-gateway": "./dist/cli/cli.js"
   },
@@ -14,6 +15,9 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/embed-web.mjs",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",

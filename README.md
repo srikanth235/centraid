@@ -100,6 +100,27 @@ Full tour: [Get started](https://centraid.dev/docs/start/) — install → vault
 | `packages/blueprints` | Template gallery: 8 blueprint apps + 16 automation templates, plus blank-app scaffolders. |
 | `packages/design-tokens` | Colors, type, spacing, app metadata, icons — shared across desktop and mobile. |
 
+## Gateway install (npm / curl|bash)
+
+Host **gateway only** (not desktop/mobile). OpenClaw-style stages: Node ≥ 22 → npm install `@centraid/gateway` → `centraid-gateway` on PATH. **No silent OS service** — use `centraid-gateway service install` when you want H5.
+
+```sh
+# After packages are on npm (secret-gated publish on tags / workflow_dispatch):
+curl -fsSL --proto '=https' --tlsv1.2 \
+  https://raw.githubusercontent.com/srikanth235/centraid/main/scripts/install-gateway.sh \
+  | bash -s -- --no-global
+# Or from a clone:
+bash scripts/install-gateway.sh --help
+bash scripts/install-gateway.sh --prefix "$HOME/.centraid" --version latest
+# Offline / CI smoke from local packs:
+bun run gateway:npm:pack
+bash scripts/install-gateway.sh --prefix /tmp/centraid-gw --from-pack-dir artifacts/npm-packs
+```
+
+- **Publish set:** `scripts/gateway-npm/publish-set.json` (gateway + workspace deps). Pack: `bun run gateway:npm:pack`. Publish: `bun run gateway:npm:publish` (requires `NPM_TOKEN`; dry-runs without it).
+- **CI:** `.github/workflows/npm-gateway-publish.yml` packs always; publishes only when `NPM_TOKEN` is set.
+- **Service:** opt-in only (`--with-service` prints the command; never auto-writes unit files outside `centraid-gateway service install`).
+
 ## Gateway Docker (standalone)
 
 Gateway-only image (control-plane HTTP). Build from the monorepo root:
