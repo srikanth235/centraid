@@ -94,7 +94,7 @@ Packaging harden follow-up:
 - Symlink rewrite + packages-only assemble: Docker uses `--packages-only` + fresh `bun install --production` (bun `.bun` store is not relocatable by symlink rewrite); host tests still copy+rewrite
 - `node --test scripts/gateway-package/assemble-runtime.test.mjs` + isolated-tree smoke
 - Local Docker: `docker build -t centraid-gateway:local-smoke .` then named-volume smoke ×2 (`gateway smoke OK` 401 on info); image ~1.7GB, non-root, HEALTHCHECK, git present
-- Residual: native tunnel skipped without cargo (JS iroh fallback); host bind-mount needs uid 10001 chown — prefer named volume
+- Native tunnel **required** in Docker (`CENTRAID_REQUIRE_NATIVE_TUNNEL=1` + rustc 1.91 in build stage); host bind-mount needs uid 10001 chown — prefer named volume
 
 ## Steering
 

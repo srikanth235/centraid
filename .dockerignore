@@ -30,6 +30,8 @@ apps/extension/**
 packages/data-plane/target
 packages/tunnel/native/target
 packages/tunnel/data-plane/target
+# Host-built napi artifacts (darwin/win) must not shadow linux image builds
+packages/tunnel/native/*.node
 
 # Host-side noise
 **/.DS_Store

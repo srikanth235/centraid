@@ -6,16 +6,28 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-// Gateway Docker / CI packaging builds TypeScript only (HTTP control plane).
-// Native iroh relay is optional at runtime (JS fallback). Set explicitly or
-// when cargo is missing so `turbo build --filter=@centraid/gateway` works
-// without a Rust toolchain in the image.
+// Packaging / Docker set CENTRAID_REQUIRE_NATIVE_TUNNEL=1 — tunnel is product-
+// critical for remote devices; fail the build if cargo or the artifact is missing.
+// CENTRAID_SKIP_NATIVE_TUNNEL=1 remains for local TS-only loops (not Docker).
+const requireNative = process.env.CENTRAID_REQUIRE_NATIVE_TUNNEL === '1';
 if (process.env.CENTRAID_SKIP_NATIVE_TUNNEL === '1') {
+  if (requireNative) {
+    process.stderr.write(
+      'centraid-tunnel: CENTRAID_REQUIRE_NATIVE_TUNNEL=1 and CENTRAID_SKIP_NATIVE_TUNNEL=1 conflict\n',
+    );
+    process.exit(1);
+  }
   process.stdout.write('centraid-tunnel: skipping native build (CENTRAID_SKIP_NATIVE_TUNNEL=1)\n');
   process.exit(0);
 }
 const cargoProbe = spawnSync('cargo', ['--version'], { encoding: 'utf8' });
 if (cargoProbe.status !== 0) {
+  if (requireNative) {
+    process.stderr.write(
+      'centraid-tunnel: cargo required (CENTRAID_REQUIRE_NATIVE_TUNNEL=1) but not on PATH\n',
+    );
+    process.exit(1);
+  }
   process.stdout.write(
     'centraid-tunnel: skipping native build (cargo not available; JS relay fallback)\n',
   );

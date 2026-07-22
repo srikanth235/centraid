@@ -4,9 +4,27 @@
 # lose state when the container is removed (anonymous VOLUME is not durable).
 # Non-loopback: set CENTRAID_ALLOWED_HOSTS=hostname1,hostname2 for public Host
 # headers (loopback Host always allowed). See SECURITY.md + README.
+#
+# Tunneling is required: this image builds the native iroh napi relay
+# (packages/tunnel/native) so remote devices can dial the gateway over QUIC.
 
 FROM oven/bun:1.3.13-slim AS build
 WORKDIR /src
+
+# Native tunnel (napi + data-plane): rustc 1.91 matches packages/tunnel/*/Cargo.toml.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    build-essential \
+    ca-certificates \
+    clang \
+    curl \
+    git \
+    pkg-config \
+    python3 \
+  && rm -rf /var/lib/apt/lists/* \
+  && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+    | sh -s -- -y --default-toolchain 1.91.0 --profile minimal
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 COPY package.json bun.lock turbo.json tsconfig.base.json ./
 COPY packages ./packages
@@ -15,10 +33,10 @@ COPY apps ./apps
 COPY scripts/gateway-package ./scripts/gateway-package
 
 RUN bun install --frozen-lockfile
-# Full dependency graph for gateway (protocol → … → gateway + embed web).
-# Skip tunnel native (cargo) — JS iroh relay still starts; native is optional.
-ENV CENTRAID_SKIP_NATIVE_TUNNEL=1
-RUN bunx turbo run build --filter=@centraid/gateway
+# Full dependency graph for gateway. Native tunnel is mandatory for this image.
+ENV CENTRAID_REQUIRE_NATIVE_TUNNEL=1
+RUN bunx turbo run build --filter=@centraid/gateway \
+  && node -e "const fs=require('fs');const p=require('path');const dir='packages/tunnel/native';const need=\`centraid-tunnel-native.\${process.platform}-\${process.arch}.node\`;const full=p.join(dir,need);if(!fs.existsSync(full)){console.error('missing required native tunnel artifact',full,'have',fs.readdirSync(dir).filter(n=>n.endsWith('.node')));process.exit(1)};console.log('native tunnel artifact:',full);"
 # Packages + assets only — bun's .bun store is re-installed for production below.
 RUN node scripts/gateway-package/assemble-runtime.mjs --root=/src --out=/runtime --packages-only
 
@@ -35,7 +53,7 @@ FROM node:22-bookworm-slim AS runtime
 ARG VERSION=0.1.0
 ARG REVISION=unknown
 LABEL org.opencontainers.image.title="centraid-gateway" \
-  org.opencontainers.image.description="Centraid gateway HTTP control plane" \
+  org.opencontainers.image.description="Centraid gateway HTTP control plane + native iroh tunnel" \
   org.opencontainers.image.source="https://github.com/srikanth235/centraid" \
   org.opencontainers.image.url="https://github.com/srikanth235/centraid" \
   org.opencontainers.image.version="${VERSION}" \
