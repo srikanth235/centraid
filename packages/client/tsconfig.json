@@ -15,7 +15,26 @@
       "@centraid/blueprints/apps/*/app-inline": [
         "./src/react/blueprints/inline-app-module-stub.d.ts"
       ],
-      "@centraid/blueprints/apps/tasks/queries/*": ["./src/react/blueprints/inline-query-stub.d.ts"]
+      "@centraid/blueprints/apps/tasks/queries/*": [
+        "./src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/agenda/queries/*": [
+        "./src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/docs/queries/*": ["./src/react/blueprints/inline-query-stub.d.ts"],
+      "@centraid/blueprints/apps/locker/queries/*": [
+        "./src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/notes/queries/*": [
+        "./src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/people/queries/*": [
+        "./src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/photos/queries/*": [
+        "./src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/tally/queries/*": ["./src/react/blueprints/inline-query-stub.d.ts"]
     },
     "noUncheckedIndexedAccess": false,
     "noEmit": true

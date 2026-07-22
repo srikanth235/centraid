@@ -9,6 +9,12 @@
 //
 //   - `wireThemeToggle`  → drives the shell theme (not the served data-theme flip)
 //   - `renderAttachments`→ authorises `/_vault/blobs` bytes through the gateway
+//   - `stageFileBytes` / `stageDerivative`
+//                        → blob-CAS uploads through the authed gateway (relative
+//                          `fetch` to `/_vault/blobs` does not resolve inline)
+//   - `wireAttachInput`  → the attach flow's >256 KiB branch stages through the
+//                          authed `stageFileBytes` above (small files still ride
+//                          inline as data: URIs through `window.centraid.write`)
 //   - `createReference` / `removeReference` / `reanchorReference`
 //                        → owner-plane link writes through the authed gateway
 //
@@ -21,12 +27,19 @@
 // panel at module-eval time, and the sentinel it sets suppresses that before the
 // kit module below is evaluated (see suppress-served-ask.ts).
 import './suppress-served-ask.js';
-import { renderAttachments as baseRenderAttachments } from '@centraid/blueprints/kit/kit.js';
+import {
+  fileToDataUri,
+  INLINE_ATTACH_BYTES,
+  isPendingOffsite,
+  renderAttachments as baseRenderAttachments,
+  sha256File,
+} from '@centraid/blueprints/kit/kit.js';
 import { auth, authHeaders, doFetch } from '../../gateway-client-core.js';
 
 export * from '@centraid/blueprints/kit/kit.js';
 
 const BLOB_PREFIX = '/centraid/_vault/blobs';
+const LINKS_ROUTE = '/centraid/_vault/links';
 const SUN_SVG =
   '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
 const MOON_SVG =
@@ -77,7 +90,16 @@ interface AttachmentLike {
 
 const stripObjectUrls = new WeakMap<HTMLElement, string[]>();
 
-async function authorizeBlobUrl(pathname: string): Promise<string | null> {
+/**
+ * Fetch a `/_vault/blobs/…` pathname through the authed gateway client and hand
+ * back a `blob:` object URL for it (or null if the fetch is refused). The caller
+ * OWNS the returned URL's lifecycle and must `URL.revokeObjectURL` it. Shared by
+ * `renderAttachments` (attachment strips) and `inline-blob-images` (the generic
+ * grid/lightbox/cover authorizer), so both reach vault bytes the same way.
+ * Consumed by the sibling inline-blob-images module (issue #505).
+ * @public
+ */
+export async function authorizeBlobUrl(pathname: string): Promise<string | null> {
   try {
     const { baseUrl, token } = await auth();
     const res = await doFetch(baseUrl, pathname, { headers: authHeaders(token) });
@@ -131,9 +153,239 @@ export function renderAttachments(
   }
 }
 
-// NOTE (issue #505 Phase 4): the owner-plane reference writes kit.js exports —
-// createReference / removeReference / reanchorReference — flow through the
-// `export *` above as their served (relative-`fetch`) implementations, which do
-// NOT resolve inline. Tasks (the pilot) uses none of them; when an app that does
-// (notes/docs) is converted, override them here to post through the authed
-// gateway client (`doFetch` + `authHeaders`), mirroring renderAttachments.
+// ---------- Blob CAS uploads (issue #505 Phase 4) ----------
+// kit.js's `stageFileBytes` / `stageDerivative` POST to `/_vault/blobs` with a
+// relative `fetch`, which resolves against the served app origin — inline the
+// app runs in the shell document (and desktop from `file://`), so those bytes
+// must travel through the authed gateway client instead. The wire shape mirrors
+// kit.js exactly (query params, sha-preflight HEAD, `x-content-sha256` header,
+// the returned staging receipt). The one deliberate simplification: kit.js also
+// probes optional `session`/`direct` edge-upload routes before the authoritative
+// POST; inline we go straight to the authoritative POST (kit.js documents it as
+// "the permanent authoritative POST … the compatibility and backpressure
+// fallback"), so dedupe + authoritative hashing semantics are preserved.
+
+/** kit.js `StagedBlob` — the staging receipt the blob door returns. */
+interface StagedBlob {
+  sha256: string;
+  mediaType?: string | null;
+  byteSize?: number;
+  existingContentId?: string | null;
+  casAck?: string | null;
+  custody?: string | null;
+  alreadyPresent?: boolean;
+  [k: string]: unknown;
+}
+
+/**
+ * Stream a File to the vault blob-staging route through the authed gateway.
+ * Drop-in for kit.js `stageFileBytes`: same signature, same `sha256`-preflight
+ * dedupe (HEAD `…/_sha/<sha>`), same authoritative POST + returned receipt.
+ *
+ * Consumed by blueprint apps through the `./kit.js` → kit-inline Vite alias
+ * (invisible to knip's client-only export graph).
+ * @public
+ */
+export async function stageFileBytes(
+  file: File,
+  extra = '',
+  { hash = true }: { hash?: boolean } = {},
+): Promise<StagedBlob> {
+  const { baseUrl, token } = await auth();
+  const q = new URLSearchParams();
+  if (file.name) q.set('filename', file.name);
+  if (file.type) q.set('media_type', file.type);
+  let declaredSha: string | null = null;
+  if (hash) {
+    try {
+      declaredSha = await sha256File(file);
+    } catch {
+      declaredSha = null; // hashing is an optimization, never an upload gate
+    }
+  }
+  if (declaredSha) {
+    q.set('sha256', declaredSha);
+    try {
+      const preflight = new URLSearchParams({ byte_size: String(file.size) });
+      if (file.type) preflight.set('media_type', file.type);
+      if (file.name) preflight.set('filename', file.name);
+      const have = await doFetch(baseUrl, `${BLOB_PREFIX}/_sha/${declaredSha}?${preflight}`, {
+        method: 'HEAD',
+        headers: authHeaders(token),
+      });
+      if (have.ok) {
+        return {
+          sha256: declaredSha,
+          mediaType: have.headers.get('x-centraid-media-type') ?? file.type ?? null,
+          byteSize: Number(have.headers.get('content-length')) || file.size || 0,
+          existingContentId: have.headers.get('x-centraid-content-id'),
+          casAck: have.headers.get('x-centraid-cas-ack'),
+          custody: have.headers.get('x-centraid-custody'),
+          alreadyPresent: true,
+        };
+      }
+    } catch {
+      // Older/offline gateways simply take the authoritative POST below.
+    }
+  }
+  const res = await doFetch(baseUrl, `${BLOB_PREFIX}?${q}${extra}`, {
+    method: 'POST',
+    headers: {
+      ...authHeaders(token),
+      'content-type': file.type || 'application/octet-stream',
+      ...(declaredSha ? { 'x-content-sha256': declaredSha } : {}),
+    },
+    body: file,
+  });
+  if (!res.ok) throw new Error(`upload refused (${res.status})`);
+  return (await res.json()) as StagedBlob;
+}
+
+/**
+ * Submit a typed derivative contribution (issue #299 enrichers) through the
+ * authed blob door. Drop-in for kit.js `stageDerivative`.
+ * @public
+ */
+export async function stageDerivative(
+  parentSha: string,
+  variant: string,
+  body: BodyInit,
+  mediaType = 'application/octet-stream',
+): Promise<StagedBlob> {
+  const { baseUrl, token } = await auth();
+  const q = new URLSearchParams({ variant, variant_of: parentSha, media_type: mediaType });
+  const res = await doFetch(baseUrl, `${BLOB_PREFIX}?${q}`, {
+    method: 'POST',
+    headers: { ...authHeaders(token), 'content-type': mediaType },
+    body,
+  });
+  if (!res.ok) throw new Error(`${variant} contribution refused (${res.status})`);
+  return (await res.json()) as StagedBlob;
+}
+
+interface AttachOutcome {
+  status?: string;
+  [k: string]: unknown;
+}
+
+interface AttachHandlers {
+  act: (action: string, input: Record<string, unknown>) => Promise<AttachOutcome | undefined>;
+  narrate: (outcome: AttachOutcome | undefined) => boolean;
+  notice?: (text: string) => void;
+  refresh?: () => void | Promise<void>;
+}
+
+/**
+ * Wire a hidden `<input type=file>` to the attach flow. Drop-in for kit.js
+ * `wireAttachInput`: files over `INLINE_ATTACH_BYTES` stage through the authed
+ * `stageFileBytes` above (kit.js's relative POST breaks inline); smaller files
+ * still travel inline as data: URIs through the app's `attach` action (which
+ * rides `window.centraid.write` — no network fetch, so it already worked).
+ * @public
+ */
+export function wireAttachInput(
+  inputEl: HTMLInputElement,
+  getSubjectId: () => string | null | undefined,
+  { act, narrate, notice, refresh }: AttachHandlers,
+): void {
+  inputEl.addEventListener('change', async () => {
+    const subjectId = getSubjectId();
+    if (!subjectId) return;
+    for (const file of inputEl.files ?? []) {
+      let input: Record<string, unknown>;
+      let custodyReceipt: StagedBlob | undefined;
+      try {
+        if (file.size > INLINE_ATTACH_BYTES) {
+          const staged = await stageFileBytes(file);
+          custodyReceipt = staged;
+          input = { subject_id: subjectId, staged_sha: staged.sha256, title: file.name };
+        } else {
+          const dataUri = await fileToDataUri(file);
+          input = { subject_id: subjectId, data_uri: dataUri, title: file.name };
+        }
+      } catch {
+        notice?.('Could not read that file.');
+        continue;
+      }
+      const outcome = await act('attach', input);
+      if (outcome?.status === 'executed' && isPendingOffsite(custodyReceipt)) {
+        notice?.('Attached locally · waiting for offsite custody.');
+      }
+      if (!narrate(outcome)) break;
+    }
+    inputEl.value = '';
+    await refresh?.();
+  });
+}
+
+// ---------- Owner-plane reference writes (issues #272 + #282) ----------
+// kit.js's createReference / removeReference / reanchorReference POST/DELETE/
+// PATCH `/_vault/links` with a relative `fetch` at owner trust; inline they must
+// carry the gateway bearer credential. Wire shape mirrors kit.js exactly,
+// including returning the parsed body verbatim (a `VaultOutcome`) without an
+// `ok` gate — the vault answers link judgments as `{status}` JSON, so an app's
+// narrate/consent path sees the same outcome it did served.
+
+/**
+ * Assert a cross-reference link as the owner. Drop-in for kit.js
+ * `createReference`.
+ * @public
+ */
+export async function createReference(
+  from: { type: string; id: string },
+  to: { type: string; id: string },
+  relation: string,
+  selector?: unknown,
+): Promise<unknown> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, LINKS_ROUTE, {
+    method: 'POST',
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify({
+      from_type: from.type,
+      from_id: from.id,
+      to_type: to.type,
+      to_id: to.id,
+      relation: relation || 'references',
+      ...(selector ? { selector } : {}),
+    }),
+  });
+  return res.json();
+}
+
+/** End a link (temporal — the row survives with valid_to set). Drop-in. @public */
+export async function removeReference(linkId: string): Promise<unknown> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `${LINKS_ROUTE}/${encodeURIComponent(linkId)}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+  return res.json();
+}
+
+/**
+ * Move (selector object) or clear (selector null) a live link's standoff
+ * anchor. Drop-in for kit.js `reanchorReference`.
+ * @public
+ */
+export async function reanchorReference(linkId: string, selector: unknown): Promise<unknown> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `${LINKS_ROUTE}/${encodeURIComponent(linkId)}`, {
+    method: 'PATCH',
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify({ selector: selector ?? null }),
+  });
+  return res.json();
+}
+
+// RESIDUAL (issue #505 Phase 4): the @-mention picker READ — kit.js's
+// `attachMentionPopover` fetches `/_vault/picker` relatively, and
+// `attachMentionField` calls that popover (and the reference writes above)
+// through kit.js's OWN module-local bindings, which the `export *` re-export
+// cannot rebind. Overriding the picker therefore means re-implementing the whole
+// popover/field UI here, not swapping one fetch. No converted app (tasks/notes/
+// docs/locker/photos) wires inline mention AUTHORING today — they only read
+// reference cards via their `library`/query modules — so this is deferred. When
+// an app does wire inline `@`-mention authoring, port `attachMentionPopover`
+// (authed `/_vault/picker` GET) and `attachMentionField` (calling the authed
+// reference writes above) into a sibling module and re-export them here.

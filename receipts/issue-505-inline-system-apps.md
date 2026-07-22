@@ -137,6 +137,69 @@ offline render none → full.
     broken as a side effect) were fixed and re-verified with programmatic
     assertions.
 
+- **Phase 4 (remaining seven apps inline)**: agenda, tally, people, notes, docs,
+  locker, and photos each gained the co-located inline triple —
+  `packages/blueprints/apps/agenda/app-inline.tsx`,
+  `packages/blueprints/apps/agenda/Chrome.tsx`,
+  `packages/blueprints/apps/agenda/Chrome.module.css`,
+  `packages/blueprints/apps/tally/app-inline.tsx`,
+  `packages/blueprints/apps/tally/Chrome.tsx`,
+  `packages/blueprints/apps/tally/Chrome.module.css`,
+  `packages/blueprints/apps/people/app-inline.tsx`,
+  `packages/blueprints/apps/people/Chrome.tsx`,
+  `packages/blueprints/apps/people/Chrome.module.css`,
+  `packages/blueprints/apps/notes/app-inline.tsx`,
+  `packages/blueprints/apps/notes/Chrome.tsx`,
+  `packages/blueprints/apps/notes/Chrome.module.css`,
+  `packages/blueprints/apps/docs/app-inline.tsx`,
+  `packages/blueprints/apps/docs/Chrome.tsx`,
+  `packages/blueprints/apps/docs/Chrome.module.css`,
+  `packages/blueprints/apps/locker/app-inline.tsx`,
+  `packages/blueprints/apps/locker/Chrome.tsx`,
+  `packages/blueprints/apps/locker/Chrome.module.css`,
+  `packages/blueprints/apps/photos/app-inline.tsx`,
+  `packages/blueprints/apps/photos/Chrome.tsx`,
+  `packages/blueprints/apps/photos/Chrome.module.css` — each a React chrome
+  reproducing the app's static `index.html` shell as a CSS module (app-specific
+  tokens folded onto the module root; shared token layer comes from the scoped
+  block InlineAppRoute injects), with the served entry byte-for-byte untouched.
+  Registry `packages/client/src/react/shell/routes/inlineApps.ts` now lists all
+  8 apps as lazy chunks.
+  - Shared service extensions this wave:
+    `packages/client/src/react/blueprints/inline-blob-images.ts` (+
+    `packages/client/src/react/blueprints/inline-blob-images.test.ts`) — a
+    per-mount MutationObserver that swaps relative `/centraid/_vault/blobs/…`
+    references (`src`, media-observer's staged `data-prefetch-src`, inline
+    `background-image`) to authed `blob:` object URLs through kit-inline's
+    `authorizeBlobUrl`, tracking and revoking every URL on teardown; wired for
+    every inline app from
+    `packages/client/src/react/shell/routes/InlineAppRoute.tsx`.
+    `packages/client/src/react/blueprints/kit-inline.ts` exports
+    `authorizeBlobUrl` and its vault-blob seam grew
+    `packages/client/src/react/blueprints/kit-inline-vault.test.ts`.
+    `packages/client/src/react/blueprints/inline-vite-aliases.ts` gained a third
+    alias (`./video-frame.js` → `packages/client/src/video-frame.ts`) for
+    photos.
+  - Type stubs for the 7 new apps' `app-inline` entries and `queries/*` modules
+    added to `packages/client/tsconfig.json`, `apps/web/tsconfig.json`,
+    `apps/desktop/tsconfig.react.json`; `packages/blueprints/manifest.json`
+    regenerated for the 21 new co-located files.
+  - Defects found by sequential browser smoke of each app and fixed in-wave:
+    notes/docs/locker narrow-drawer flash on mount (fixed by seeding the narrow
+    state from the mounted root's width in `useLayoutEffect` before first paint
+    and gating drawer transitions behind a post-paint `ready` class), photos
+    remount crash (`removeEventListener` on nulls — cleanup now captures element
+    refs at wire-time instead of re-resolving by id after React removed them),
+    and photos vault images never painting inline (closed by the
+    `inline-blob-images` authorizer above).
+  - All 8 apps browser-verified in real Chromium against the harness gateway:
+    zero iframes, app code only from PWA-origin lazy chunks, writes through the
+    replica intent dispatch (receipt toast/Undo intact), and full offline render
+    with the gateway process killed. The bundled iframe path remains only behind
+    the builder toggle (`AppViewRoute`); `AppFrame.tsx`, `opaqueAppDocument.ts`,
+    `appFrameReplicaBridge.ts`, `bridge-script.ts`, and `static-server.ts` are
+    byte-for-byte untouched.
+
 ## Out of scope
 
 - Agent vault tools (vault_sql / vault_invoke / vault_content) and the ACP/MCP surface
@@ -214,17 +277,33 @@ node --experimental-strip-types apps/web/tests/e2e/server.ts &
 # the board still renders live replica data.
 ```
 
+Phase 4 (re-runnable):
+
+```sh
+# Per-package suites (green in isolation; full check:pr deferred to end of
+# migration by user direction — timeouts under full-parallel turbo load are
+# contention, not regressions):
+cd packages/blueprints && bun run test   # 235/235
+cd packages/client && bun run test       # 1073/1073
+# Browser smoke, per app (agenda tally people notes docs locker photos): boot the
+# harness as in Phases 2+3, install the app into the control session's vault,
+# pin it, open its tile; assert zero <iframe>, code only from
+# /assets/app-inline-*.js chunks, a real write lands via replica intent
+# dispatch, then kill the server and re-open: full offline render.
+node --experimental-strip-types apps/web/tests/e2e/server.ts &
+```
+
 Later phases append their own commands here as they land.
 
 ## Steering
 
-- Check 1 (all steering events recorded): PASS — Transcript contains zero human steering events; only initial `/goal` command remains.
-- Check 2 (no non-steering recorded as steering): PASS — No Steering table rows exist, nothing misrecorded.
+- Check 1 (all steering events recorded): PASS — User directed to defer full check:pr and lint gates to the end of Phase 7 migration to speed up phase throughput; this direction is recorded in the Phase 4 Verification section.
+- Check 2 (no non-steering recorded as steering): PASS — No extraneous steering events misrecorded.
 
 ## Audit
 
-- Check 1 (faithful description of diff): PASS — 'What changed' comprehensively describes Phase 2+3 work: 13 blueprint services, Tasks Chrome UI, route host/registry, shell mods, 8 build configs, and browser verification (zero iframes, PWA chunks only, offline render confirmed).
-- Check 2 (checked items realized in diff): PASS — All 9 checklist items remain unchecked; Phases 0–3 work complete and realized per 'What changed' and progress log.
+- Check 1 (faithful description of diff): PASS — 'What changed' faithfully describes Phase 4 work: 21 new app files (7 apps × 3 files: agenda, tally, people, notes, docs, locker, photos each with app-inline.tsx, Chrome.tsx, Chrome.module.css), inline-blob-images service + test, kit-inline-vault.test.ts, inlineApps registry updated to list all 8 apps, kit-inline extended with authorizeBlobUrl, InlineAppRoute wired for blob-image authorization, 3 tsconfig type stubs added, manifest.json regenerated; browser verification confirms zero iframes, app code only from PWA-origin lazy chunks, writes through replica intent dispatch, and full offline render after gateway shutdown.
+- Check 2 (checked items realized in diff): PASS — All 9 checklist items remain unchecked; Phase 4 work complete and realized per 'What changed' and Verification section.
 - Check 3 (checklist mirrors structure): PASS — Receipt checklist (Phases 0–7 plus "check:pr green") mirrors issue acceptance criteria by phase gates.
 
 ## Accounting
@@ -246,3 +325,5 @@ Later phases append their own commands here as they land.
 | claude-code-3f73ae52-798-1784728303-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 2 | 407 | 322015 | 182 | 591 | 0.3362 | 669 | 793266 | 67631444 | 269951 | feat(client): inline system apps — shell services + Tasks pilot (#505)Co-Authore |
 | claude-code-3f73ae52-798-1784728480-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 52 | 24844 | 8506617 | 18673 | 43569 | 9.7513 | 721 | 818110 | 76138061 | 288624 | feat(client): inline system apps — shell services + Tasks pilot (#505)Phases 2+3 |
 | claude-code-3f73ae52-798-1784728534-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 6 | 13728 | 1001823 | 1674 | 15408 | 1.2572 | 727 | 831838 | 77139884 | 290298 | feat(client): inline system apps — shell services + Tasks pilot (#505)Phases 2+3 |
+| claude-code-3f73ae52-798-1784738411-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 470 | 525226 | 80382577 | 185767 | 711463 | 96.2410 | 1197 | 1357064 | 157522461 | 476065 | feat(client): inline remaining seven apps — Phase 4 rollout (#505)All 8 bundled  |
+| claude-code-3f73ae52-798-1784738608-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 18 | 8713 | 975599 | 4334 | 13065 | 1.3014 | 1215 | 1365777 | 158498060 | 480399 | feat(client): inline remaining seven apps — Phase 4 rollout (#505)All 8 bundled  |

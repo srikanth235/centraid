@@ -1,0 +1,408 @@
+/* Inline chrome for Tally (issue #505). The static #root/sidebar/topbar/scroll
+   markup from index.html + the narrow-layout rules from app.css, converted to a
+   CSS module scoped to the inline route. The shared design-token layer
+   (--ink/--bg/--line/--accent-deep, shadows, type scale …) is supplied by the
+   shell (the scoped blueprint-token block InlineAppRoute injects under
+   .centraid-inline-scope), so this file references those directly and never
+   loads tokens.css/wall.css. The tally-SPECIFIC tokens that app.css's :root
+   added on top of that layer (money colours --pos/--neg, the accent-derived
+   --accs/--accd/--accd-fg, and the --t-strong/--tk-* aliases the reused
+   component CSS modules read) are NOT in the shared layer, so they are folded
+   in here on .shell (trap #3). The served path (index.html + app.css) is
+   untouched — this is the inline sibling. */
+
+.shell {
+  /* Tally-specific tokens folded from app.css :root (light). The shared
+     blueprint layer supplies everything else; these are the app's own palette
+     add-ons the reused components/*.module.css reference. */
+  --pos: #0fa678;
+  --neg: #e2603a;
+  --accs: color-mix(in oklab, var(--_accent) 13%, transparent);
+  --accd: color-mix(in oklab, var(--_accent) 90%, #04150f);
+  --accd-fg: var(--accd);
+  --t-strong: 600 0.855rem/1.4 var(--font-sans);
+  --tk-h: -0.01em;
+  --tk-eye: 0.09em;
+
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  /* Positioning context for the narrow (phone) sidebar drawer, so it overlays
+     the app pane inline — never the shell's own sidebar at the viewport edge. */
+  position: relative;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font: var(--t-body);
+}
+
+/* Dark overrides for the folded tally tokens — mirrors app.css's dark block.
+   Emitted for both the explicit [data-theme='dark'] and the standalone
+   prefers-color-scheme fallback, the same two-selector shape the token layer
+   uses. */
+:global(:root[data-theme='dark']) .shell {
+  --accd: color-mix(in oklab, var(--_accent) 78%, hsl(185 40% 8%));
+  --accd-fg: color-mix(in oklab, var(--_accent) 65%, white);
+  --neg: #f0805a;
+}
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-theme])) .shell {
+    --accd: color-mix(in oklab, var(--_accent) 78%, hsl(185 40% 8%));
+    --accd-fg: color-mix(in oklab, var(--_accent) 65%, white);
+    --neg: #f0805a;
+  }
+}
+
+/* Knob: appFont swaps the body/UI face between sans and mono. The host sets
+   data-app-font on the inline scope wrapper (pushKnobToInlineRoot); app.css's
+   :root[data-app-font] rule isn't loaded inline, so re-express it here keyed on
+   that wrapper. */
+:global(.centraid-inline-scope[data-app-font='mono']) {
+  --font-sans: var(--mono);
+}
+
+/* ---------- Sidebar shell ---------- */
+.side {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 12px;
+  background: var(--bg-elev);
+  border-right: 1px solid var(--line);
+  overflow: auto;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 6px 12px;
+}
+.brandMark {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: linear-gradient(160deg, color-mix(in oklab, var(--_accent) 78%, #fff), var(--accd));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.brandName {
+  font: var(--t-strong);
+  letter-spacing: -0.01em;
+}
+.brandTag {
+  font: var(--t-mono);
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.sideClose {
+  margin-left: auto;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  color: var(--ink-3);
+}
+.add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  padding: 11px 14px;
+  border: none;
+  border-radius: var(--r-md);
+  background: var(--accd);
+  color: #fff;
+  font: var(--t-strong);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 14px;
+}
+.add:hover {
+  filter: brightness(1.06);
+}
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.seclabel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 8px 8px;
+}
+.seclabel span {
+  font: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: var(--tk-eye);
+  color: var(--ink-3);
+}
+.seclabel button {
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  color: var(--ink-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.seclabel button:hover {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+.sideFoot {
+  margin-top: auto;
+  padding-top: 14px;
+}
+.consent {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 4px 2px;
+  color: var(--ink-3);
+}
+.consent svg {
+  color: var(--accd-fg);
+  flex-shrink: 0;
+}
+.consent span {
+  font: var(--t-small);
+  font-size: 11px;
+}
+.scrim {
+  display: none;
+}
+
+/* ---------- Main frame ---------- */
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 22px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.hamburger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  flex-shrink: 0;
+}
+.head {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.headAv {
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  color: #fff;
+}
+.title {
+  font: var(--t-title);
+  font-size: 20px;
+  letter-spacing: var(--tk-h);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sub {
+  font: var(--t-small);
+  color: var(--ink-2);
+  margin-top: 1px;
+}
+.tools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.search {
+  position: relative;
+  width: 190px;
+}
+.search svg {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink-3);
+  pointer-events: none;
+}
+.search input {
+  width: 100%;
+  font: var(--t-body);
+  color: var(--ink);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  padding: 8px 14px 8px 34px;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.search input::placeholder {
+  color: var(--ink-3);
+}
+.search input:focus {
+  border-color: var(--selb);
+  box-shadow: var(--kit-focus-ring);
+}
+.iconbtn {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.iconbtn:hover {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+.askMount {
+  display: flex;
+  align-items: center;
+}
+
+/* Trust / notice banners */
+.banner {
+  position: relative;
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  border-radius: var(--r-md);
+  padding: 12px 16px 12px 34px;
+  margin: 14px 22px 0;
+  font: var(--t-small);
+  color: var(--ink-2);
+  box-shadow: var(--shadow-sm);
+}
+.banner::before {
+  content: '';
+  position: absolute;
+  left: 14px;
+  top: 15px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--_accent);
+  box-shadow: 0 0 0 3px var(--accs);
+}
+.banner strong {
+  display: block;
+  color: var(--ink);
+  font-weight: 600;
+  margin-bottom: 1px;
+}
+.banner.notice::before {
+  background: var(--ink-3);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink-3) 16%, transparent);
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 22px;
+}
+.wrap {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+/* The kit modal heading cap (app.css kept this global, keyed on the kit class);
+   modals render inside .shell, so re-express it here as a scoped global rule. */
+:global(.kit-modal) h2 {
+  margin: 0 0 16px;
+  font: var(--t-title);
+  font-size: 20px;
+}
+/* The title face on kit avatars — the one Tally touch app.css kept global. */
+:global(.kit-avatar) {
+  font-family: var(--font-title);
+}
+
+/* ---------- Narrow (phone) — driven by .isNarrow / .sideOpen on .shell.
+   Inline the drawer is absolutely positioned within .shell (the app pane), not
+   fixed to the viewport as the served full-screen app does (trap #1). The
+   global `tally is-narrow` classes Chrome also stamps on .shell drive the
+   reused Dashboard.module.css `:global(.tally.is-narrow)` summary/cols rules. */
+.shell.isNarrow .side {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 280px;
+  z-index: 46;
+  box-shadow: var(--shadow-lg);
+  transform: translateX(-110%);
+  transition: transform 0.26s var(--ease);
+}
+.shell.isNarrow.sideOpen .side {
+  transform: translateX(0);
+}
+.shell.isNarrow .sideClose {
+  display: flex;
+}
+.shell.isNarrow .hamburger {
+  display: flex;
+}
+.shell.isNarrow.sideOpen .scrim {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  background: rgba(14, 30, 26, 0.4);
+}
+.shell.isNarrow .topbar {
+  padding: 12px 14px;
+}
+.shell.isNarrow .scroll {
+  padding: 16px 14px;
+}
+.shell.isNarrow .search {
+  display: none;
+}
+.shell.isNarrow .title {
+  font-size: 17px;
+}
+.shell.isNarrow .headAv {
+  width: 36px;
+  height: 36px;
+  font-size: 17px;
+}

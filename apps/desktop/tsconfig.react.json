@@ -18,6 +18,27 @@
       ],
       "@centraid/blueprints/apps/tasks/queries/*": [
         "../../packages/client/src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/agenda/queries/*": [
+        "../../packages/client/src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/docs/queries/*": [
+        "../../packages/client/src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/locker/queries/*": [
+        "../../packages/client/src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/notes/queries/*": [
+        "../../packages/client/src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/people/queries/*": [
+        "../../packages/client/src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/photos/queries/*": [
+        "../../packages/client/src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/tally/queries/*": [
+        "../../packages/client/src/react/blueprints/inline-query-stub.d.ts"
       ]
     }
   },

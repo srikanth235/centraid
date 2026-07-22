@@ -128,6 +128,7 @@ Notes settled by this inventory (issue open questions 2 and 3):
 | 2026-07-22 | Phase 1 surface inventory written | — | Open questions 2 (chat universal, 8/8) and 3 (query bundles redundant inline) settled; inventory table above |
 | 2026-07-22 | Phase 6 ghost cleanup landed early | — | Zero `centraid_sql_*` refs left in `packages/` sources; independent slice, no conflicts with render phases |
 | 2026-07-22 | Phases 2+3 landed: shell services + Tasks inline pilot | — | One wave (knip). Browser-verified: zero iframes, PWA-origin chunks only, write via replica intent dispatch, full offline render with gateway down. check:pr green |
+| 2026-07-22 | Phase 4 landed: all 8 apps inline | — | 7 parallel Opus conversions (agenda tally people notes docs locker photos), each browser-smoked sequentially. New shared service: `inline-blob-images` authorizer (vault media inline). Defects fixed in-wave: narrow-drawer mount flash (notes/docs/locker), photos remount crash + blob paint. Iframe path now builder-only. Per-package suites green in isolation; full check:pr deferred to end of migration (user direction) |
 
 ## Rejected alternatives
 

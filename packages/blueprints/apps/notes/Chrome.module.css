@@ -1,0 +1,303 @@
+/* Inline chrome for Notes (issue #505). The static #shell/sidebar/topbar/scroll
+   markup from index.html + the narrow-layout rules from app.css, converted to a
+   CSS module scoped to the inline route. The shared design-token layer
+   (--ink, --bg, --line, --accent, --accent-deep, --shadow-sm/md/lg, the type
+   scale, --sel, --r-card …) is supplied by the shell (the scoped token block
+   InlineAppRoute
+   injects under .centraid-inline-scope), so this file references those directly
+   and never loads tokens.css/wall.css. The one notes-SPECIFIC token app.css's
+   :root added on top of that layer — --accent-deep-fg, which the reused
+   components/*.module.css read — is NOT in the shared layer, so it is folded in
+   here on .shell (trap #3). The served path (index.html + app.css) is untouched
+   — this is the inline sibling. */
+
+.shell {
+  /* Notes-specific token folded from app.css :root (light). The shared blueprint
+     layer supplies everything else; this alias is the app's own — nav-active
+     labels/chips show accent-deep AS foreground on --accent-soft. */
+  --accent-deep-fg: var(--accent-deep);
+
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  /* Positioning context for the narrow (phone) sidebar drawer, so it overlays
+     the app pane inline — never the shell's own sidebar at the viewport edge. */
+  position: relative;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font: var(--t-body);
+}
+
+/* Dark override for the folded token — mirrors app.css's dark block, emitted for
+   both the explicit [data-theme='dark'] and the standalone prefers-color-scheme
+   fallback (the same two-selector shape the token layer uses). */
+:global(:root[data-theme='dark']) .shell {
+  --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
+}
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-theme])) .shell {
+    --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
+  }
+}
+
+/* Knob: appFont swaps the body/UI sans face. The host sets data-app-font on the
+   inline scope wrapper (pushKnobToInlineRoot); app.css's :root[data-app-font]
+   rules aren't loaded inline, so re-express them here keyed on that wrapper. */
+:global(.centraid-inline-scope[data-app-font='sans']) {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+:global(.centraid-inline-scope[data-app-font='serif']) {
+  --font-sans: 'New York', 'Iowan Old Style', Georgia, Cambria, serif;
+}
+:global(.centraid-inline-scope[data-app-font='mono']) {
+  --font-sans: var(--mono);
+}
+
+/* ---------- Sidebar (static chrome; nav/notebooks/summary → Sidebar.module.css) ---------- */
+
+.side {
+  width: 250px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 14px;
+  background: var(--bg-elev);
+  border-right: 1px solid var(--line);
+  overflow: auto;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 6px 14px;
+}
+.brandMark {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--accent-deep);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.brandText {
+  min-width: 0;
+  flex: 1;
+}
+.brandName {
+  font: var(--t-body-strong);
+  letter-spacing: -0.01em;
+}
+.brandTag {
+  font: var(--t-mono);
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.sideClose {
+  margin-left: auto;
+  display: none;
+}
+.new {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 11px 14px;
+  margin-bottom: 14px;
+  border: none;
+  border-radius: var(--r-md);
+  background: var(--accent-deep);
+  color: #fff;
+  font: var(--t-body-strong);
+  box-shadow: var(--shadow-sm);
+  transition: filter 0.14s var(--ease);
+}
+.new:hover {
+  filter: brightness(1.07);
+}
+.new:active {
+  transform: scale(0.99);
+}
+.sideFoot {
+  margin-top: auto;
+  padding-top: 16px;
+}
+.scrim {
+  display: none;
+}
+
+/* ---------- Main ---------- */
+
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.hamburger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  flex-shrink: 0;
+}
+.search {
+  flex: 1;
+  max-width: 480px;
+  position: relative;
+}
+.searchClear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  border-radius: 999px;
+  color: var(--ink-3);
+}
+.searchClear:hover {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+/* Show the clear affordance only while the field carries text — a JS-free
+   equivalent of the served chrome.ts `hidden` toggle. */
+.search input:placeholder-shown ~ .searchClear {
+  display: none;
+}
+.topbarTools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.viewToggle {
+  display: flex;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-elev);
+}
+.viewToggle button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 30px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: var(--ink-3);
+}
+.viewToggle button[aria-pressed='true'] {
+  background: var(--accent-deep);
+  color: #fff;
+}
+.askMount {
+  display: flex;
+  align-items: center;
+}
+.banner {
+  margin: 14px 22px 0;
+}
+
+/* ---------- Scroll region (wall/eyebrows/quick-add/cards → *.module.css) ---------- */
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 22px 48px;
+}
+
+/* Shared fade-in keyframe — the reused Editor (backdrop) and QuickAdd (reveal)
+   modules reference `nt-fade` by name (app.css owns it served, but app.css is
+   not loaded inline), and the narrow scrim below uses it too. Declared GLOBAL so
+   those unhashed references resolve (trap #3). */
+@keyframes :global(nt-fade) {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ---------- Narrow (phone) — driven by .isNarrow / .sideOpen on .shell ---------- */
+/* Inline the drawer is absolutely positioned within .shell (the app pane), not
+   fixed to the viewport as the served full-screen app does. The reused component
+   narrow rules key on the GLOBAL `.nt-shell.is-narrow` state class Chrome.tsx
+   also stamps on this same element, so they keep working. */
+
+.shell.isNarrow .side {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 270px;
+  z-index: 46;
+  box-shadow: var(--shadow-lg);
+  transform: translateX(-110%);
+  transition: transform 0.26s var(--ease);
+}
+.shell.isNarrow.sideOpen .side {
+  transform: translateX(0);
+}
+.shell.isNarrow .sideClose {
+  display: flex;
+}
+.shell.isNarrow .hamburger {
+  display: flex;
+}
+.shell.isNarrow.sideOpen .scrim {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  background: rgba(15, 18, 26, 0.4);
+  animation: nt-fade 0.2s ease;
+}
+.shell.isNarrow .topbar,
+.shell.isNarrow .scroll {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+.shell.isNarrow .banner {
+  margin-left: 16px;
+  margin-right: 16px;
+}
+.shell.isNarrow .topbar {
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+.shell.isNarrow .topbarTools {
+  flex: 1 0 100%;
+  margin-left: 0;
+}
+.shell.isNarrow .search {
+  max-width: none;
+}

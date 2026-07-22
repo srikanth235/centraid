@@ -23,6 +23,7 @@ import {
 } from '../../../replica/shell-session.js';
 import { installInlineCentraid } from '../../blueprints/centraid-inline.js';
 import { installInlineAsk } from '../../blueprints/kit-ask-inline.js';
+import { installInlineBlobImages } from '../../blueprints/inline-blob-images.js';
 import { useShellActions } from '../actions.js';
 import ErrorBoundary from '../ErrorBoundary.js';
 import { iconSvg } from '../iconSvg.js';
@@ -151,6 +152,7 @@ export default function InlineAppRoute({
   const [attempt, setAttempt] = useState(0);
   const appRootRef = useRef<HTMLElement | null>(null);
   const askTeardown = useRef<(() => void) | null>(null);
+  const blobTeardown = useRef<(() => void) | null>(null);
   const knobValues = useRef<Record<string, string>>({});
 
   ensureInlineScopeTokens();
@@ -178,11 +180,18 @@ export default function InlineAppRoute({
         askTeardown.current();
         askTeardown.current = null;
       }
+      if (blobTeardown.current) {
+        blobTeardown.current();
+        blobTeardown.current = null;
+      }
       appRootRef.current = el;
       if (!el) return;
       el.classList.add(INLINE_SCOPE_CLASS);
       el.style.setProperty('--accent', 'var(--c-teal)');
       for (const [k, v] of Object.entries(knobValues.current)) pushKnobToInlineRoot(el, k, v);
+      // Authorize blob-backed <img>/background-image refs (grids, lightbox,
+      // covers) through the gateway — every inline app, not just photos (#505).
+      blobTeardown.current = installInlineBlobImages(el);
       // Lazy, best-effort, no network on this path (kit-ask-inline mounts DOM
       // only; gateway calls happen on user interaction).
       if (descriptor.kitAsk) {
@@ -200,6 +209,8 @@ export default function InlineAppRoute({
     () => () => {
       askTeardown.current?.();
       askTeardown.current = null;
+      blobTeardown.current?.();
+      blobTeardown.current = null;
     },
     [],
   );

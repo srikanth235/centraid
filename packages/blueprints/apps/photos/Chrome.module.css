@@ -1,0 +1,462 @@
+/* Inline chrome for Photos (issue #505). The static index.html shell (the
+   ph-app / ph-main / ph-header / ph-scroll chrome, the selection-bar, lightbox,
+   slideshow and picker containers) plus app.css's global remainder, converted to
+   a CSS module scoped to the inline route. The served path (index.html + app.css)
+   is untouched — this is the inline sibling.
+
+   Token layer: the shell injects the GENERIC blueprint token layer onto this
+   same element via `.centraid-inline-scope` (hue 222, teal `--accent`). Photos'
+   identity is violet (--app-hue 255) with a handful of app-specific tokens the
+   generic layer lacks (--ph-sidebar-w, --ph-tile-r*, --accent-deep-fg,
+   --custody-warn). Overriding just `--app-hue` retunes every generic neutral to
+   violet (they all read `hsl(var(--app-hue) …)`); `--_accent` is re-pinned to a
+   LITERAL violet fallback so the host's inline `--accent: var(--c-teal)` is
+   bypassed while the `--app-color` swatch knob still wins. The fold doubles the
+   class (`.appRoot.appRoot` → 0,2,0) to beat the injected layer's `.centraid-
+   inline-scope` (0,1,0); dark/media variants add the theme ancestor.
+
+   Positioning: the served component modules (Sidebar.module.css, the .selection-
+   bar/.lightbox/.slideshow containers) position against the VIEWPORT (100vh,
+   position:fixed, viewport `@media` widths) because the served app is full-
+   screen. Inline the app is one pane inside the shell, so those are re-scoped
+   here to `position:absolute` against `.shell` and to a component-width
+   `.isNarrow` class (app-inline's `observeWidth`), never the viewport (#505
+   traps 1 + 7). The sidebar <aside>'s own positioning (a served hashed class we
+   cannot edit) is neutralised structurally via `.sideHost > aside`. */
+
+/* ---------- Token layer (Photos identity, folded from app.css) ---------- */
+
+.appRoot.appRoot {
+  color-scheme: light dark;
+  /* Violet identity — retunes every generic neutral (they read --app-hue). */
+  --app-hue: 255;
+  /* Bypass the host's inline `--accent: teal` while keeping the swatch knob. */
+  --_accent: var(--app-color, var(--c-violet));
+  --ph-sidebar-w: 250px;
+  --ph-tile-r: 3px;
+  --ph-tile-r-sel: 13px;
+  /* accent-deep tuned as background+white-text; the fg escape hatch shows
+     accent-deep AS foreground on accent-soft (dark mode needs the brighter
+     tint below). */
+  --accent-deep-fg: var(--accent-deep);
+  --custody-warn: #9a6b1f;
+}
+
+:global(:root[data-theme='dark']) .appRoot.appRoot {
+  --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
+  --custody-warn: #e0a94a;
+  /* The generic dark layer sets `--bg: var(--bg-wall)`; wall.css (which would
+     define it) never loads inline, so pin a violet-dark backdrop here. */
+  --bg-wall: hsl(var(--app-hue) 16% calc(var(--bg-l) + 1%));
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-theme])) .appRoot.appRoot {
+    --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
+    --custody-warn: #e0a94a;
+    --bg-wall: hsl(var(--app-hue) 16% calc(var(--bg-l) + 1%));
+  }
+}
+
+/* ---------- Base reset (app.css global remainder), scoped ---------- */
+
+.appRoot,
+.appRoot * {
+  box-sizing: border-box;
+}
+.appRoot [hidden] {
+  display: none !important;
+}
+.appRoot button {
+  font: inherit;
+  cursor: pointer;
+}
+.appRoot button[disabled] {
+  opacity: 0.5;
+  cursor: default;
+  pointer-events: none;
+}
+.appRoot button:focus-visible {
+  outline: none;
+  box-shadow: var(--kit-focus-ring);
+}
+
+/* App-level knobs — read off the app ROOT element (the host stamps data-app-*
+   there inline, not on <html>), #505 trap 6. */
+.appRoot[data-app-font='sans'] {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+.appRoot[data-app-font='serif'] {
+  font-family: 'New York', 'Iowan Old Style', Georgia, Cambria, serif;
+}
+.appRoot[data-app-font='mono'] {
+  font-family: var(--mono);
+}
+.appRoot[data-app-width='narrow'] .scroll {
+  max-width: 68rem;
+  margin: 0 auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .appRoot *,
+  .appRoot *::before,
+  .appRoot *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* ---------- Shell (the .ph-app flex row) ---------- */
+
+.shell {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  /* Positioning context for the drawer + the lightbox/slideshow/selection-bar
+     overlays, so they overlay the app pane inline — never the shell chrome. */
+  position: relative;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font: var(--t-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The SidebarView Fragment (scrim + <aside>) renders into this host; contents so
+   the <aside> is a real flex child of `.shell` while `#sidebarMount` survives for
+   `$('sidebarMount').hidden`. */
+.sideHost {
+  display: contents;
+}
+/* Neutralise the served aside's viewport positioning (Sidebar.module.css
+   `height:100vh; position:sticky`, a hashed class we cannot edit) — inline it
+   fills the pane height and flows normally. */
+.sideHost > aside {
+  height: 100%;
+  position: relative;
+  top: auto;
+  z-index: 1;
+}
+
+/* ---------- Main / header ---------- */
+
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.search {
+  flex: 1;
+  min-width: 9rem;
+  max-width: 30rem;
+}
+.headerActions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.zoom {
+  display: flex;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+}
+.zoom :global(.ph-header-icon-btn) {
+  width: 32px;
+  height: 30px;
+  border: none;
+  background: none;
+  border-radius: 7px;
+}
+.zoom :global(.ph-header-icon-btn):disabled {
+  opacity: 0.35;
+}
+.askMount {
+  display: flex;
+  align-items: center;
+}
+
+/* #live wraps the toolbar + scroll pane; it must be a bounded flex column so
+   `.scroll` (flex:1) scrolls inside the pane. */
+.live {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 2px 20px 48px;
+}
+.content {
+  position: relative;
+}
+.content :global(.kit-skeleton) {
+  height: 6rem;
+  margin: 0.75rem 0;
+}
+
+/* ---------- Overlays — re-scoped from viewport-fixed to app-pane-absolute ---------- */
+
+.selectionBar {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: calc(100% - 1.5rem);
+  background: var(--bg-elev);
+  border: 1px solid var(--selb);
+  background-color: var(--sel);
+  border-radius: 999px;
+  padding: 0.4rem 0.5rem 0.4rem 1rem;
+  box-shadow: var(--shadow-lg);
+}
+.selectionBar[hidden] {
+  display: none;
+}
+.lightbox {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+}
+.lightbox[hidden] {
+  display: none;
+}
+.slideshow {
+  position: absolute;
+  inset: 0;
+  z-index: 65; /* above the lightbox (60) — never both open together */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  background: hsl(var(--app-hue) 25% 4% / 0.97);
+  cursor: pointer;
+}
+.slideshow[hidden] {
+  display: none;
+}
+/* kit-modal-back / kit-drop are global kit overlays (position:fixed); double the
+   class to beat kit.css and re-scope to the pane. */
+.picker.picker {
+  position: absolute;
+  inset: 0;
+}
+.dropOverlay.dropOverlay {
+  position: absolute;
+  inset: 0;
+}
+
+/* ---------- Global remainder OTHER code writes as plain strings ---------- */
+/* Header icon buttons — static (hamburger/zoom/slideshow) AND Enrichment.tsx's
+   face-proposer toggle (rendered as a literal string), so this vocabulary stays
+   global exactly as app.css keeps it. */
+:global(.ph-header-icon-btn) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  flex-shrink: 0;
+}
+:global(.ph-header-icon-btn):hover {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+:global(.ph-header-icon-btn)[data-active='true'] {
+  border-color: color-mix(in oklab, var(--_accent) 40%, var(--line));
+  color: var(--accent-deep-fg);
+  background: var(--accent-soft);
+}
+:global(.ph-hamburger) {
+  display: none;
+}
+:global(.slideshow-toolbar-btn) {
+  display: none;
+}
+.shell:not(.isNarrow) :global(.slideshow-toolbar-btn) {
+  display: flex;
+}
+
+/* Tile media guts injected by media.ts as plain strings (React never renders
+   these) — the placeholder shimmer + its keyframe, which Timeline.module.css /
+   Lightbox.module.css also reference by name, so BOTH must live global here. */
+:global(.ph-tile-ph) {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    var(--bg-sunken) 30%,
+    color-mix(in srgb, var(--bg-sunken) 82%, var(--ink-3)) 50%,
+    var(--bg-sunken) 70%
+  );
+  background-size: 220% 100%;
+  animation: ph-shimmer 1.4s var(--ease) infinite;
+}
+@keyframes :global(ph-shimmer) {
+  from {
+    background-position: 180% 0;
+  }
+  to {
+    background-position: -60% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :global(.ph-tile-ph) {
+    animation: none;
+  }
+}
+:global(.ph-tile-video-badge) {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  color: #fff;
+}
+:global(.ph-tile-video-badge) svg {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 12px;
+  box-sizing: border-box;
+}
+:global(.ph-tile-audio-badge) {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  color: color-mix(in oklab, var(--ink-2) 82%, var(--_accent));
+}
+:global(.ph-tile-audio-badge) svg {
+  width: 54px;
+  height: 54px;
+  border-radius: 999px;
+  padding: 13px;
+  background: color-mix(in oklab, var(--bg-elev) 82%, transparent);
+  box-shadow: var(--shadow-sm);
+}
+:global(.ph-tile-duration) {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  z-index: 2;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.66);
+  color: #fff;
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.25;
+  pointer-events: none;
+}
+
+/* Faces host + rows faces.ts appends as plain strings (app.css keeps them
+   global together). */
+:global(.ph-faces):empty {
+  display: none;
+}
+:global(.lightbox-faces-title) {
+  margin: 0 0 8px;
+  color: var(--ink-3);
+  font: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+}
+:global(.lightbox-face) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  font-size: 0.85rem;
+  margin-bottom: 8px;
+}
+:global(.lightbox-face) select {
+  flex: 1 1 8rem;
+  min-width: 0;
+  font: inherit;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: transparent;
+  color: inherit;
+}
+
+/* The selection bar's "Add to album ▾" menu wrapper — app.tsx queries it by this
+   literal class name for the away-click hit test. */
+:global(.bar-menu-wrap) {
+  position: relative;
+  display: flex;
+}
+/* Nudge the kit toasts above the floating selection bar (body gets
+   `has-selection` from app.tsx). */
+:global(body.has-selection .kit-toasts) {
+  bottom: 4.75rem;
+}
+
+/* ---------- Narrow (phone) — driven by `.isNarrow` on `.shell` ---------- */
+/* Inline the sidebar drawer is absolute within `.shell` (the app pane), not
+   fixed to the viewport as the served @media rules do. These out-specify the
+   served hashed `.sidebar`/`.scrim` rules (0,1,0) so they win at any viewport
+   width, and add the scrim (SidebarView renders it as the first child when the
+   drawer is open). */
+.shell.isNarrow :global(.ph-hamburger) {
+  display: flex;
+}
+.shell.isNarrow .sideHost > aside {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 274px;
+  z-index: 46;
+  box-shadow: var(--shadow-lg);
+  transform: translateX(-110%);
+}
+/* Enable the slide only after the first painted frame (`.ready`), so the
+   mount-time narrow snap above is instant and only user-driven open/close
+   animates — the drawer-flash gate (#505). */
+.shell.ready.isNarrow .sideHost > aside {
+  transition: transform 0.26s var(--ease);
+}
+.shell.isNarrow .sideHost > aside[data-open='true'] {
+  transform: translateX(0);
+}
+.shell.isNarrow .sideHost > div {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  background: hsl(var(--app-hue) 25% 8% / 0.4);
+}
+.shell.isNarrow .header,
+.shell.isNarrow .scroll {
+  padding-left: 16px;
+  padding-right: 16px;
+}

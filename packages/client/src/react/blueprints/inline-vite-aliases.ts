@@ -29,5 +29,12 @@ export function inlineBlueprintAliases(): InlineAliasEntry[] {
       find: /^\.\.?\/(?:.*\/)?kit\.js$/,
       replacement: here('./kit-inline.ts'),
     },
+    {
+      // `./video-frame.js` is served verbatim from @centraid/client's own
+      // video-frame.ts (a shared asset, see types/kit.d.ts); inline it IS that
+      // module.
+      find: /^\.\.?\/(?:.*\/)?video-frame\.js$/,
+      replacement: here('../../video-frame.ts'),
+    },
   ];
 }

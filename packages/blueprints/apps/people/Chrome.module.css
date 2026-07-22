@@ -1,0 +1,639 @@
+/* Inline chrome for People (issue #505). The static #root/sidebar/topbar/toolbar/
+   scroll markup from index.html + the narrow-layout rules from app.css, converted
+   to a CSS module scoped to the inline route. The served path (index.html +
+   wall.css + app.css) is untouched — this is the inline sibling.
+
+   Unlike Tasks (which rides the shell-injected generic blueprint token layer as-is),
+   People ships a full rose / warm-blush identity that DIFFERS from that generic
+   layer (rose accent, warm-blush surfaces, a bespoke type scale + radii, list
+   hues, and --ok / --accd / --tk-* / --t-strong tokens the generic layer lacks).
+   So People's own :root token block from app.css — plus wall.css's warm-blush
+   --bg-wall — is folded here, scoped to the app-root element under `.appRoot`.
+
+   Two precedence notes:
+   1. The shell injects the generic blueprint tokens onto this SAME element via
+      `.centraid-inline-scope` (specificity 0,1,0), appended to <head> at runtime
+      (after bundled CSS). To win with equal-or-later source order, the People
+      token rules double the class (`.appRoot.appRoot` → 0,2,0; the dark/media
+      variants add the theme ancestor for 0,4,0 vs the injected 0,3,0).
+   2. The host also sets an inline `--accent: var(--c-teal)` on the app root. Rose
+      is therefore re-established via `--_accent` with a LITERAL fallback (not
+      `var(--accent)`), so the host's teal `--accent` is bypassed while the
+      per-app `--app-color` swatch knob still wins. */
+
+/* ---------- Token layer (People identity, folded from app.css + wall.css) ---------- */
+
+.appRoot.appRoot {
+  color-scheme: light dark;
+
+  /* Faces — Geist/Space Grotesk/JetBrains Mono aren't loadable inside a
+     sandboxed app, so map to the system stack (same as served app.css). */
+  --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-title: 'Space Grotesk', 'Geist', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* People identity accent — rose. `--accent` is kept for parity but the host
+     forces it to teal via an inline style; `--_accent` therefore falls back to
+     the rose LITERAL, not `var(--accent)`, so the identity survives while the
+     `--app-color` swatch knob still overrides it (#505). */
+  --accent: #dd4f6b;
+  --_accent: var(--app-color, #dd4f6b);
+  --on-accent: #fff;
+  --accs: color-mix(in oklab, var(--_accent) 12%, transparent);
+  --accd: color-mix(in oklab, var(--_accent) 86%, #2a0b12);
+  --sel: color-mix(in oklab, var(--_accent) 11%, transparent);
+  --selb: color-mix(in oklab, var(--_accent) 34%, var(--line-strong));
+
+  --ink: hsl(345 12% 15%);
+  --ink-2: hsl(345 7% 40%);
+  --ink-3: hsl(345 6% 56%);
+
+  --bg: hsl(18 40% 98%);
+  --bg-elev: #fff;
+  --bg-sunken: hsl(18 26% 95%);
+  /* wall.css warm-blush backdrop, folded (#505). People sets --bg directly, so
+     --bg-wall is only a fallback for any generic rule that references it. */
+  --bg-wall: hsl(18 40% 98%);
+
+  --line: rgba(40, 26, 30, 0.1);
+  --line-strong: rgba(40, 26, 30, 0.17);
+  --danger: #c8382f;
+  --ok: #3f9e6b;
+
+  --r-card: 14px;
+  --r-btn: 6px;
+  --r-md: 10px;
+  --r-pill: 999px;
+
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --shadow-sm: 0 0 0 0.5px var(--line-strong);
+  --shadow-md: 0 10px 26px -14px rgba(50, 20, 28, 0.24), 0 2px 6px -3px rgba(50, 20, 28, 0.1);
+  --shadow-lg: 0 26px 60px -24px rgba(50, 20, 28, 0.36);
+
+  --tk-h: -0.01em;
+  --tk-eye: 0.09em;
+  --t-title: 600 1.15rem/1.2 var(--font-title);
+  --t-body: 400 0.855rem/1.5 var(--font-sans);
+  --t-strong: 600 0.855rem/1.4 var(--font-sans);
+  --t-body-strong: 600 0.855rem/1.4 var(--font-sans);
+  --t-small: 400 0.8rem/1.45 var(--font-sans);
+  --t-tiny: 600 0.6rem/1.4 var(--mono);
+  --t-mono: 500 0.72rem/1.4 var(--mono);
+
+  /* List / status hues (status dots + list chrome dots). */
+  --c-close: #7c5bd9;
+  --c-family: #c9803a;
+  --c-friends: #2ea098;
+  --c-work: #4e68dd;
+  --c-network: #e0567a;
+
+  /* Kit contract bridge (toast / skeleton / ask render on-brand). */
+  --surface: var(--bg-elev);
+  --surface-2: var(--bg-sunken);
+  --text: var(--ink);
+  --muted: var(--ink-2);
+  --ink-faint: var(--ink-3);
+  --radius: 0.75rem;
+  --accent-soft: var(--accs);
+  --accent-deep: var(--accd);
+  --accd-fg: var(--accd);
+}
+
+:global(:root[data-theme='dark']) .appRoot.appRoot {
+  --bg-l: 10%;
+  --ink: hsl(20 14% 92%);
+  --ink-2: hsl(20 8% 64%);
+  --ink-3: hsl(20 8% 48%);
+  --bg: hsl(345 10% 10%);
+  --bg-elev: hsl(345 9% 15%);
+  --bg-sunken: hsl(345 8% 19%);
+  --bg-wall: linear-gradient(
+    180deg,
+    hsl(222 13% calc(var(--bg-l) + 2%)) 0%,
+    hsl(222 14% calc(var(--bg-l) - 2%)) 100%
+  );
+  --line: hsla(20 26% 80% / 0.11);
+  --line-strong: hsla(20 26% 82% / 0.2);
+  --danger: #f0645b;
+  --ok: #5fbd88;
+  --accd: color-mix(in oklab, var(--_accent) 84%, hsl(345 40% 12%));
+  --accd-fg: color-mix(in oklab, var(--_accent) 65%, white);
+  --shadow-md: 0 12px 30px -14px rgba(0, 0, 0, 0.6), 0 2px 8px -3px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 30px 70px -24px rgba(0, 0, 0, 0.7);
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-theme])) .appRoot.appRoot {
+    --bg-l: 10%;
+    --ink: hsl(20 14% 92%);
+    --ink-2: hsl(20 8% 64%);
+    --ink-3: hsl(20 8% 48%);
+    --bg: hsl(345 10% 10%);
+    --bg-elev: hsl(345 9% 15%);
+    --bg-sunken: hsl(345 8% 19%);
+    --bg-wall: linear-gradient(
+      180deg,
+      hsl(222 13% calc(var(--bg-l) + 2%)) 0%,
+      hsl(222 14% calc(var(--bg-l) - 2%)) 100%
+    );
+    --line: hsla(20 26% 80% / 0.11);
+    --line-strong: hsla(20 26% 82% / 0.2);
+    --danger: #f0645b;
+    --ok: #5fbd88;
+    --accd: color-mix(in oklab, var(--_accent) 84%, hsl(345 40% 12%));
+    --accd-fg: color-mix(in oklab, var(--_accent) 65%, white);
+    --shadow-md: 0 12px 30px -14px rgba(0, 0, 0, 0.6), 0 2px 8px -3px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 30px 70px -24px rgba(0, 0, 0, 0.7);
+  }
+}
+
+/* Base reset (app.css global remainder), scoped to the app subtree. */
+.appRoot,
+.appRoot * {
+  box-sizing: border-box;
+}
+.appRoot [hidden] {
+  display: none !important;
+}
+.appRoot :focus-visible {
+  outline: 2px solid var(--_accent);
+  outline-offset: 2px;
+}
+/* Avatars are <kit-avatar>; the title face is People's one kit override. */
+.appRoot :global(.kit-avatar) {
+  font-family: var(--font-title);
+}
+/* Add-person modal typography (app.css .kit-modal voice). */
+.appRoot :global(.kit-modal) h2 {
+  margin: 0 0 4px;
+  font: var(--t-title);
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+.appRoot :global(.kit-modal) p.hint {
+  margin: 0 0 16px;
+  font: var(--t-small);
+  color: var(--ink-2);
+}
+
+/* ---------- Shell ---------- */
+
+.shell {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  /* Positioning context for the narrow (phone) sidebar drawer, so it overlays
+     the app pane inline — never the shell's own sidebar at the viewport edge. */
+  position: relative;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font: var(--t-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- Sidebar ---------- */
+
+.side {
+  width: 250px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 14px;
+  background: var(--bg-elev);
+  border-right: 1px solid var(--line);
+  overflow: auto;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 6px 14px;
+}
+.brandMark {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: linear-gradient(160deg, color-mix(in oklab, var(--_accent) 78%, #fff), var(--accd));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.brandText {
+  min-width: 0;
+}
+.brandName {
+  font: var(--t-strong);
+  letter-spacing: -0.01em;
+}
+.brandTag {
+  font: var(--t-mono);
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.sideClose {
+  margin-left: auto;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  color: var(--ink-3);
+}
+.sideClose:hover {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+.newWrap {
+  position: relative;
+  margin-bottom: 14px;
+}
+.new {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 11px 14px;
+  border: none;
+  border-radius: var(--r-md);
+  background: var(--accd);
+  color: #fff;
+  font: var(--t-strong);
+  box-shadow: var(--shadow-sm);
+  transition: filter 0.14s var(--ease);
+}
+.new span {
+  text-align: left;
+}
+.new .newChev {
+  margin-left: auto;
+  opacity: 0.85;
+}
+.new:hover {
+  filter: brightness(1.07);
+}
+.newMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  padding: 5px;
+  animation: dRise 0.16s var(--ease);
+}
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sectionLabel {
+  font: var(--t-tiny);
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: var(--tk-eye);
+  padding: 16px 10px 8px;
+}
+.folders {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sideFoot {
+  margin-top: auto;
+  padding-top: 16px;
+}
+.storage {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 13px;
+  background: var(--bg-elev);
+}
+.consentLine {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 4px 2px;
+  color: var(--ink-3);
+}
+.consentLine svg {
+  color: var(--accd-fg);
+  flex-shrink: 0;
+}
+.consentLine span {
+  font: var(--t-small);
+  font-size: 11.5px;
+}
+.scrim {
+  display: none;
+}
+
+/* ---------- Main ---------- */
+
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.hamburger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  flex-shrink: 0;
+}
+.search {
+  position: relative;
+  flex: 1;
+  max-width: 460px;
+}
+.searchIcon {
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink-3);
+  pointer-events: none;
+}
+.search input {
+  width: 100%;
+  font: var(--t-body);
+  color: var(--ink);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  padding: 10px 16px 10px 38px;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.search input::placeholder {
+  color: var(--ink-3);
+}
+.search input:focus {
+  border-color: var(--selb);
+  box-shadow: var(--kit-focus-ring);
+}
+.topbarTools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.viewtoggle > .viewbtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  padding: 0;
+}
+.themebtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+  color: var(--ink-2);
+}
+.themebtn:hover {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+.askMount {
+  display: flex;
+  align-items: center;
+}
+.banner {
+  margin: 14px 22px 0;
+}
+
+/* Toolbar */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 22px 12px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.toolbarTitle {
+  min-width: 0;
+}
+.title {
+  font: var(--t-title);
+  letter-spacing: var(--tk-h);
+}
+.sub {
+  font: var(--t-small);
+  color: var(--ink-2);
+  margin-top: 1px;
+}
+.toolbarTools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.toolbarDiv {
+  width: 1px;
+  height: 22px;
+  background: var(--line);
+  margin: 0 2px;
+}
+.sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  font: var(--t-small);
+}
+.sort:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+.bulk {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 22px 10px;
+  padding: 8px 10px 8px 16px;
+  border: 1px solid var(--selb);
+  border-radius: var(--r-pill);
+  background: var(--sel);
+  animation: dRise 0.18s var(--ease);
+}
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 2px 22px 40px;
+}
+
+/* ---------- Grid ---------- */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+/* ---------- List ---------- */
+.listwrap {
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  overflow: hidden;
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-sm);
+}
+.listHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-sunken);
+}
+
+/* Window footer (bounded browse) */
+.windowFoot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px 0 4px;
+  font: var(--t-small);
+  color: var(--ink-3);
+  flex-wrap: wrap;
+  text-align: center;
+}
+.windowFoot button {
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  font: var(--t-small);
+  padding: 5px 12px;
+}
+.windowFoot button:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+/* ---------- Keyframes ---------- */
+@keyframes dRise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes dFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ---------- Narrow (phone) — driven by .isNarrow / .sideOpen on .shell ---------- */
+/* Inline the drawer is absolutely positioned within .shell (the app pane), not
+   fixed to the viewport as the served full-screen app does (#505 trap). */
+.shell.isNarrow .side {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 274px;
+  z-index: 46;
+  box-shadow: var(--shadow-lg);
+  transform: translateX(-110%);
+  transition: transform 0.26s var(--ease);
+}
+.shell.isNarrow.sideOpen .side {
+  transform: translateX(0);
+}
+.shell.isNarrow .sideClose {
+  display: flex;
+}
+.shell.isNarrow .hamburger {
+  display: flex;
+}
+.shell.isNarrow.sideOpen .scrim {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  background: rgba(30, 15, 20, 0.4);
+  animation: dFade 0.2s ease;
+}
+.shell.isNarrow .topbar,
+.shell.isNarrow .toolbar {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+.shell.isNarrow .banner {
+  margin-left: 16px;
+  margin-right: 16px;
+}
+.shell.isNarrow .bulk {
+  margin-left: 16px;
+  margin-right: 16px;
+}
+.shell.isNarrow .scroll {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+.shell.isNarrow .grid {
+  grid-template-columns: repeat(2, 1fr);
+}
+.shell.isNarrow .topbar {
+  flex-wrap: wrap;
+}
+.shell.isNarrow .search {
+  max-width: none;
+  min-width: 160px;
+}
+.shell.isNarrow .toolbarDiv {
+  display: none;
+}
