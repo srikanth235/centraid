@@ -916,6 +916,12 @@ interface CentraidApi {
     /** Packaged: true only after download finished (#501). */
     readyToInstall?: boolean;
   }>;
+  /** Manual "check for updates" (I6 — always admits when a feed candidate exists). */
+  checkForUpdates?(): Promise<{
+    available: boolean;
+    version: string;
+    readyToInstall?: boolean;
+  }>;
   /** Restart the app so it loads the new build (app.relaunch + exit). */
   relaunchToUpdate?(): Promise<{ ok: true }>;
   /** Subscribe to "a new build landed on disk". Returns the unsubscribe. */

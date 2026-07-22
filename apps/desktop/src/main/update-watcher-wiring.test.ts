@@ -20,10 +20,20 @@ describe('update-watcher rollout wiring (I4)', () => {
     expect(src).toContain('downloadUpdate');
     expect(src).toContain('quitAndInstall');
     expect(src).toContain('updaterChannelForVersion');
+    // Pinned dep — static import so knip sees electron-updater (not createRequire).
+    expect(src).toMatch(/from ['"]electron-updater['"]/);
+    expect(src).toContain('export async function checkForUpdatesManual');
     // Dev mtime path still exists but must announce via admit gate.
     expect(src).toContain(
       'announceUpdateIfAdmitted({ version, releasedAtMs, readyToInstall: true })',
     );
+  });
+
+  it('IPC registers UPDATE_CHECK to the manual path (I6)', () => {
+    const ipc = readFileSync(path.join(here, 'ipc.ts'), 'utf8');
+    expect(ipc).toContain('checkForUpdatesManual');
+    expect(ipc).toContain("UPDATE_CHECK: 'centraid:update:check'");
+    expect(ipc).toContain('Channel.UPDATE_CHECK');
   });
 
   it('maps beta versions to the beta updater channel (D5) — structural', () => {

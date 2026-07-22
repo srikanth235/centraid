@@ -14,7 +14,7 @@
  */
 
 import { app, BrowserWindow } from 'electron';
-import { createRequire } from 'node:module';
+import { autoUpdater as electronAutoUpdater } from 'electron-updater';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import {
@@ -55,7 +55,7 @@ let autoUpdaterRef: {
   downloadUpdate: () => Promise<unknown>;
   quitAndInstall: (isSilent?: boolean, isForceRunAfter?: boolean) => void;
   checkForUpdates: () => Promise<unknown>;
-  channel: string;
+  channel: string | null;
 } | null = null;
 
 /** Renderer-facing snapshot, for windows that mount after the broadcast. */
@@ -169,26 +169,13 @@ export function startUpdateWatcher(): void {
 }
 
 /**
- * Packaged-app update path (I4 / #501). Loads electron-updater; after admit
- * downloads the update; only then shows ready-to-install. No-ops when the
- * dependency is missing (unsigned scaffolding without enrolled secrets).
+ * Packaged-app update path (I4 / #501). Uses pinned electron-updater; after
+ * admit downloads the update; only then shows ready-to-install.
  */
 export function startPackagedUpdateChecker(): void {
   void (async () => {
     try {
-      const req = createRequire(import.meta.url);
-      const { autoUpdater } = req('electron-updater') as {
-        autoUpdater: {
-          autoDownload: boolean;
-          autoInstallOnAppQuit: boolean;
-          channel: string;
-          allowPrerelease: boolean;
-          checkForUpdates: () => Promise<unknown>;
-          downloadUpdate: () => Promise<unknown>;
-          quitAndInstall: (isSilent?: boolean, isForceRunAfter?: boolean) => void;
-          on: (event: string, cb: (info: unknown) => void) => void;
-        };
-      };
+      const autoUpdater = electronAutoUpdater;
       // I9: never install-on-quit a stale download; re-check before install.
       autoUpdater.autoDownload = false;
       autoUpdater.autoInstallOnAppQuit = false;
@@ -241,7 +228,7 @@ export function startPackagedUpdateChecker(): void {
       }, PACKAGED_CHECK_MS);
       timer.unref();
     } catch {
-      // Packaged without updater lib — silent.
+      // Updater init failed (no feed / offline) — silent.
     }
   })();
 }

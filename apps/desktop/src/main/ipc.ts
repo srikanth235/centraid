@@ -28,7 +28,7 @@ import {
   phoneLinkStatus,
   revokePhoneDevice,
 } from './phone-link.js';
-import { getUpdateStatus, relaunchToUpdate } from './update-watcher.js';
+import { checkForUpdatesManual, getUpdateStatus, relaunchToUpdate } from './update-watcher.js';
 import { getChangelog } from './changelog.js';
 import {
   redeemGatewayPairing,
@@ -181,6 +181,7 @@ export const Channel = {
   // by that module); the sidebar pill reads the snapshot and triggers the
   // relaunch through these two.
   UPDATE_STATUS: 'centraid:update:status',
+  UPDATE_CHECK: 'centraid:update:check',
   UPDATE_RELAUNCH: 'centraid:update:relaunch',
   /** H5 — opt-in OS service install for the detached local gateway. */
   GATEWAY_SERVICE_INSTALL: 'centraid:gateway:service-install',
@@ -829,6 +830,8 @@ export function registerIpcHandlers(): void {
   // Status snapshot for windows that mount after the UPDATE_AVAILABLE
   // broadcast; relaunch restarts the process so it loads the new dist.
   ipcMain.handle(Channel.UPDATE_STATUS, async () => getUpdateStatus());
+  // I6 manual check — always admits candidates when feed reports one.
+  ipcMain.handle(Channel.UPDATE_CHECK, async () => checkForUpdatesManual());
   ipcMain.handle(
     Channel.GATEWAY_SERVICE_INSTALL,
     async (): Promise<{ ok: true } | { ok: false; error: string }> => {

@@ -1,7 +1,7 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "ignore": ["tests/**"],
-  "ignoreBinaries": ["actionlint", "python3"],
+  "ignoreBinaries": ["actionlint", "python3", "eas"],
   "ignoreExportsUsedInFile": true,
   "exclude": ["enumMembers", "classMembers"],
   "workspaces": {
