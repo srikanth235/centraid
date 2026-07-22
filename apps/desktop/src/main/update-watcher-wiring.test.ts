@@ -20,8 +20,11 @@ describe('update-watcher rollout wiring (I4)', () => {
     expect(src).toContain('downloadUpdate');
     expect(src).toContain('quitAndInstall');
     expect(src).toContain('updaterChannelForVersion');
-    // Pinned dep — static import so knip sees electron-updater (not createRequire).
-    expect(src).toMatch(/from ['"]electron-updater['"]/);
+    // CJS-safe deferred load only on packaged path — static named ESM import of
+    // autoUpdater crashes Electron ("Named export 'autoUpdater' not found").
+    expect(src).toContain('createRequire');
+    expect(src).toMatch(/req\(['"]electron-updater['"]\)/);
+    expect(src).not.toMatch(/import\s*\{[^}]*autoUpdater[^}]*\}\s*from\s*['"]electron-updater['"]/);
     expect(src).toContain('export async function checkForUpdatesManual');
     // Dev mtime path still exists but must announce via admit gate.
     expect(src).toContain(

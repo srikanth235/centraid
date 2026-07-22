@@ -29,8 +29,9 @@
 
 - `apps/mobile/app.config.ts` — CJS-safe `readMobilePackageVersion()` (no `import.meta`/`fileURLToPath`); merge duplicate `extra` keys. Fixes J8 `mobile-android` assembleDebug Expo config eval on CI.
 - `apps/mobile/src/version-core.test.ts` — asserts `readMobilePackageVersion` + package name walk.
-- knip green for #503: static `import` of `electron-updater` in `apps/desktop/src/main/update-watcher.ts` (runtime dep in `apps/desktop/package.json`), wire `checkForUpdatesManual` via `UPDATE_CHECK` in `apps/desktop/src/main/ipc.ts` + `apps/desktop/src/preload.ts` + `packages/client/src/centraid-api.d.ts`, `eas` in `knip.json` `ignoreBinaries` (CI installs EAS via expo-github-action), `apps/desktop/src/main/update-watcher-wiring.test.ts` + `bun.lock`.
+- knip green for #503: wire `checkForUpdatesManual` via `UPDATE_CHECK` in `apps/desktop/src/main/ipc.ts` + `apps/desktop/src/preload.ts` + `packages/client/src/centraid-api.d.ts`, `eas` in `knip.json` `ignoreBinaries` (CI installs EAS via expo-github-action), `apps/desktop/src/main/update-watcher-wiring.test.ts` + `bun.lock`.
 - `scripts/release/boot-smoke.mjs` accepts electron-updater under `dependencies` or `devDependencies` (runtime pin for packaging).
+- desktop-e2e unblock: restore deferred `createRequire('electron-updater')` on packaged path only — static named ESM `import { autoUpdater }` is invalid for that CJS package and crashed main before firstWindow. Knip: `electron-updater` in `apps/desktop` `ignoreDependencies` (createRequire is invisible to knip; runtime dep remains in package.json).
 
 ## Out of scope
 

@@ -14,7 +14,7 @@
  */
 
 import { app, BrowserWindow } from 'electron';
-import { autoUpdater as electronAutoUpdater } from 'electron-updater';
+import { createRequire } from 'node:module';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import {
@@ -169,13 +169,31 @@ export function startUpdateWatcher(): void {
 }
 
 /**
- * Packaged-app update path (I4 / #501). Uses pinned electron-updater; after
- * admit downloads the update; only then shows ready-to-install.
+ * Packaged-app update path (I4 / #501). Loads electron-updater via createRequire
+ * only here (not at main-module import time): the package is CJS and a static
+ * named ESM import of `autoUpdater` crashes Electron under `"type":"module"`.
+ * After admit, downloads the update; only then shows ready-to-install.
+ * Accessing the autoUpdater getter needs a real Electron `app` — never call
+ * outside this packaged path after ready.
  */
 export function startPackagedUpdateChecker(): void {
   void (async () => {
     try {
-      const autoUpdater = electronAutoUpdater;
+      // Deferred CJS load — knip cannot see createRequire; dep is intentionally
+      // runtime + ignoreDependencies in knip.json (apps/desktop).
+      const req = createRequire(import.meta.url);
+      const { autoUpdater } = req('electron-updater') as {
+        autoUpdater: {
+          autoDownload: boolean;
+          autoInstallOnAppQuit: boolean;
+          channel: string | null;
+          allowPrerelease: boolean;
+          checkForUpdates: () => Promise<unknown>;
+          downloadUpdate: () => Promise<unknown>;
+          quitAndInstall: (isSilent?: boolean, isForceRunAfter?: boolean) => void;
+          on: (event: string, cb: (info: unknown) => void) => void;
+        };
+      };
       // I9: never install-on-quit a stale download; re-check before install.
       autoUpdater.autoDownload = false;
       autoUpdater.autoInstallOnAppQuit = false;
@@ -228,7 +246,7 @@ export function startPackagedUpdateChecker(): void {
       }, PACKAGED_CHECK_MS);
       timer.unref();
     } catch {
-      // Updater init failed (no feed / offline) — silent.
+      // Packaged without updater lib / no feed / offline — silent.
     }
   })();
 }

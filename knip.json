@@ -57,7 +57,13 @@
     "apps/desktop": {
       "entry": ["src/main.ts", "src/preload.ts"],
       "project": ["src/**/*.{ts,tsx}"],
-      "ignoreDependencies": ["react", "react-dom", "@types/react", "@types/react-dom"]
+      "ignoreDependencies": [
+        "react",
+        "react-dom",
+        "@types/react",
+        "@types/react-dom",
+        "electron-updater"
+      ]
     },
     "apps/web": {
       "project": ["src/**/*.{ts,tsx}"],
