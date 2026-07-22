@@ -15,7 +15,11 @@ implemented by the napi-rs module in `native/`: Rust owns both pairing modes
 and streams request/response bodies directly between iroh and loopback HTTP.
 JavaScript sees only small authorization, dynamic-upstream, and pairing JSON
 through a per-boot authenticated loopback control route. The normal package
-build creates the target-specific addon; exercise it with:
+build creates the **host** target-specific addon
+(`centraid-tunnel-native.<platform>-<arch>.node`). Gateway **npm publish**
+merges multi-OS artifacts (linux / darwin / win32) into one
+`@centraid/tunnel` tarball — see `scripts/gateway-npm/native-platforms.mjs`
+and issue #511. Exercise the host addon with:
 
 ```sh
 bun run --cwd packages/tunnel build

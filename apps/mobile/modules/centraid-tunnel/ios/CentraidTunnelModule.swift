@@ -16,6 +16,16 @@ struct PairArgs: Record {
   @Field var secretKeyB64: String = ""
 }
 
+/// Headless gateway ticket redemption (`centraid/gw-pair/1`).
+struct GatewayPairArgs: Record {
+  @Field var ticket: String = ""
+  @Field var ticketId: String = ""
+  @Field var secret: String = ""
+  @Field var deviceName: String = ""
+  @Field var platform: String = ""
+  @Field var secretKeyB64: String = ""
+}
+
 struct StartArgs: Record {
   @Field var ticket: String = ""
   @Field var secretKeyB64: String = ""
@@ -46,6 +56,10 @@ public class CentraidTunnelModule: Module {
 
     AsyncFunction("pairWithDesktop") { (args: PairArgs) async -> [String: Any] in
       await self.runtime.pair(args)
+    }
+
+    AsyncFunction("pairWithGateway") { (args: GatewayPairArgs) async -> [String: Any] in
+      await self.runtime.pairGateway(args)
     }
 
     AsyncFunction("startTunnel") { (args: StartArgs) async throws -> [String: Any] in
@@ -104,6 +118,22 @@ actor TunnelRuntime {
         secretKey: key,
         ticket: args.ticket,
         code: args.code,
+        deviceName: args.deviceName,
+        platform: args.platform
+      )
+    } catch {
+      return ["ok": false, "error": Self.describe(error)]
+    }
+  }
+
+  func pairGateway(_ args: GatewayPairArgs) async -> [String: Any] {
+    do {
+      let key = try Self.decodeSecretKey(args.secretKeyB64)
+      return try await TunnelTransport.pairGateway(
+        secretKey: key,
+        ticket: args.ticket,
+        ticketId: args.ticketId,
+        secret: args.secret,
         deviceName: args.deviceName,
         platform: args.platform
       )

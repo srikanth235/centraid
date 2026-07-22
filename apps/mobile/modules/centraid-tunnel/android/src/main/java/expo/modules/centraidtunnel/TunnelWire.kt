@@ -29,6 +29,8 @@ data class TunnelStream(val send: SendStream, val recv: RecvStream)
 object TunnelWire {
   const val TUNNEL_ALPN = "centraid/tunnel/1"
   const val PAIR_ALPN = "centraid/pair/1"
+  /** Headless gateway ticket redemption (VPS / `centraid-gateway pair`). */
+  const val GW_PAIR_ALPN = "centraid/gw-pair/1"
   const val MAX_HEADER_FRAME_BYTES = 256 * 1024
   const val MAX_REQUEST_BODY_BYTES = 32 * 1024 * 1024
   const val READ_CHUNK_BYTES = 64 * 1024
@@ -155,17 +157,49 @@ class TunnelTransport private constructor(
       code: String,
       deviceName: String,
       platform: String,
+    ): Map<String, Any?> =
+      oneShotPair(
+        secretKey,
+        ticket,
+        TunnelWire.PAIR_ALPN,
+        JSONObject()
+          .put("code", code)
+          .put("deviceName", deviceName)
+          .put("platform", platform),
+      )
+
+    /** Redeem a `centraid-gw-pair` ticket against a headless gateway (VPS). */
+    suspend fun pairGateway(
+      secretKey: ByteArray,
+      ticket: String,
+      ticketId: String,
+      secret: String,
+      deviceName: String,
+      platform: String,
+    ): Map<String, Any?> =
+      oneShotPair(
+        secretKey,
+        ticket,
+        TunnelWire.GW_PAIR_ALPN,
+        JSONObject()
+          .put("ticketId", ticketId)
+          .put("secret", secret)
+          .put("deviceName", deviceName)
+          .put("platform", platform),
+      )
+
+    private suspend fun oneShotPair(
+      secretKey: ByteArray,
+      ticket: String,
+      alpn: String,
+      body: JSONObject,
     ): Map<String, Any?> {
       val endpoint = IrohAdapter.bindEndpoint(secretKey)
       try {
-        val connection = IrohAdapter.dial(endpoint, ticket, TunnelWire.PAIR_ALPN)
+        val connection = IrohAdapter.dial(endpoint, ticket, alpn)
         try {
           val stream = IrohAdapter.openBi(connection)
-          val frame = JSONObject()
-            .put("code", code)
-            .put("deviceName", deviceName)
-            .put("platform", platform)
-          TunnelWire.writeAll(stream, TunnelWire.encodeHeaderFrame(frame))
+          TunnelWire.writeAll(stream, TunnelWire.encodeHeaderFrame(body))
           TunnelWire.finish(stream)
           val response = TunnelWire.readHeaderFrame(stream)
           return buildMap { for (key in response.keys()) put(key, response.get(key)) }

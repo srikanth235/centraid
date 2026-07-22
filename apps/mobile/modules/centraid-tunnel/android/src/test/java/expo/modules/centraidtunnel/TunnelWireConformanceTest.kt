@@ -57,12 +57,14 @@ class TunnelWireConformanceTest {
 
   @Test
   fun alpnsMatchFixture() {
-    // The phone module speaks pair + tunnel; gw-pair is the gateway/web side.
+    // Phone speaks desktop pair, headless gw-pair, and tunnel.
     val alpns = fixture.getJSONObject("alpns")
     assertEquals(alpns.getString("pair"), TunnelWire.PAIR_ALPN)
     assertEquals(alpns.getString("tunnel"), TunnelWire.TUNNEL_ALPN)
+    assertEquals(alpns.getString("gwPair"), TunnelWire.GW_PAIR_ALPN)
     assertEquals("centraid/pair/1", TunnelWire.PAIR_ALPN)
     assertEquals("centraid/tunnel/1", TunnelWire.TUNNEL_ALPN)
+    assertEquals("centraid/gw-pair/1", TunnelWire.GW_PAIR_ALPN)
   }
 
   @Test

@@ -1,8 +1,9 @@
 {
   "name": "@centraid/protocol",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "description": "Dependency-free gateway wire types, route constants, version/handshake, and capability map (issue #504).",
+  "license": "SEE LICENSE IN REPOSITORY",
   "files": [
     "dist",
     "README.md"
@@ -16,6 +17,9 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

@@ -22,6 +22,16 @@ class PairArgs : Record {
   @Field val secretKeyB64: String = ""
 }
 
+/** Headless gateway ticket redemption (`centraid/gw-pair/1`). */
+class GatewayPairArgs : Record {
+  @Field val ticket: String = ""
+  @Field val ticketId: String = ""
+  @Field val secret: String = ""
+  @Field val deviceName: String = ""
+  @Field val platform: String = ""
+  @Field val secretKeyB64: String = ""
+}
+
 class StartArgs : Record {
   @Field val ticket: String = ""
   @Field val secretKeyB64: String = ""
@@ -51,6 +61,10 @@ class CentraidTunnelModule : Module() {
 
     AsyncFunction("pairWithDesktop") Coroutine { args: PairArgs ->
       runtime.pair(args)
+    }
+
+    AsyncFunction("pairWithGateway") Coroutine { args: GatewayPairArgs ->
+      runtime.pairGateway(args)
     }
 
     AsyncFunction("startTunnel") Coroutine { args: StartArgs ->

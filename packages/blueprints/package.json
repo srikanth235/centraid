@@ -1,8 +1,9 @@
 {
   "name": "@centraid/blueprints",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "description": "How a new centraid app comes into being: blank-app scaffolders, template clone, and the bundled template gallery (pre-built apps + remote-fetch resolver) the desktop offers as clone-and-deploy starting points.",
+  "license": "SEE LICENSE IN REPOSITORY",
   "files": [
     "dist",
     "apps",
@@ -15,6 +16,9 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "vendor:browser-shared": "node scripts/vendor-browser-shared.mjs",
     "vendor:pdfjs": "node scripts/vendor-pdfjs.mjs",
