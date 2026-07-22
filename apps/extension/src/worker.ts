@@ -1,3 +1,4 @@
+import { ROUTES } from '@centraid/protocol';
 import { handleCompanionRequest } from './companion-api.js';
 import { companionJson } from './transport.js';
 import { isLocked, loadPairing } from './storage.js';
@@ -44,7 +45,7 @@ async function updateApprovalBadge(): Promise<void> {
     return;
   }
   try {
-    const { count } = await companionJson<{ count: number }>('/centraid/_vault/blocking');
+    const { count } = await companionJson<{ count: number }>(ROUTES.vaultBlocking);
     await chrome.action.setBadgeBackgroundColor({ color: '#315cf5' });
     await chrome.action.setBadgeText({ text: count ? String(Math.min(count, 99)) : '' });
   } catch {

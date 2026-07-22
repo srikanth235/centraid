@@ -41,7 +41,7 @@ v8 coverage result.
 | Unit / logic | `*.test.ts[x]` | one module's observable behaviour | per PR |
 | Integration | `*.integration.test.ts` | real SQLite, sockets, processes, or cross-component behaviour | per PR |
 | Contract | `*.contract.test.ts` | named product law that refactors must preserve | per PR |
-| Boot-the-artifact smoke | packaged gateway/desktop health (E3 / L2) | "builds but doesn't start" | per PR (when packaging lands; until then track as gap) |
+| Boot-the-artifact smoke | `scripts/gateway-package/smoke.mjs` + path-filtered `gateway-package` workflow | "builds but doesn't start" | **PR path-filtered** (gateway/protocol/Dockerfile) + manual `bun run gateway:package:smoke` |
 | Desktop journey | `apps/desktop/tests/e2e/*.spec.ts` | real Electron-only assertions | **PR path-filtered** + full nightly |
 | Web journey | `apps/web/tests/e2e/*.spec.ts` | real Chromium/PWA/network assertions | **PR path-filtered** + full nightly |
 | Mobile journey | `tests/agent-e2e-mobile/flows/*.mjs` | native installed-app assertions | nightly + exploratory |

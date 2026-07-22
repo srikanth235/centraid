@@ -29,6 +29,7 @@
     "@centraid/backup": "workspace:*",
     "@centraid/blueprints": "workspace:*",
     "@centraid/design-tokens": "workspace:*",
+    "@centraid/protocol": "workspace:*",
     "@centraid/tunnel": "workspace:*",
     "@centraid/vault": "workspace:*",
     "jpeg-js": "^0.4.4",

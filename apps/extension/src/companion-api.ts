@@ -1,3 +1,4 @@
+import { ROUTES } from '@centraid/protocol';
 import { isEligiblePageUrl, matchesOrigin } from './origin-matching.js';
 import { closeTransport, appRead, appWrite, companionJson, pairOverIroh } from './transport.js';
 import { decodePairingTicket } from './ticket.js';
@@ -92,7 +93,7 @@ async function pair(
 
 export async function moduleStatuses(): Promise<ModuleStatus[]> {
   await requireReady();
-  const response = await companionJson<CompanionModulesResponse>('/centraid/_vault/apps');
+  const response = await companionJson<CompanionModulesResponse>(ROUTES.vaultApps);
   const byId = new Map((response.modules ?? []).map((module) => [module.id, module.state]));
   return COMPANION_MODULE_CATALOG.map((module) => ({
     ...module,
@@ -147,7 +148,7 @@ export async function handleCompanionRequest(
       if (!pairing) return { ok: true };
       try {
         await companionJson(
-          `/centraid/_gateway/devices/${encodeURIComponent(pairing.enrollmentId)}`,
+          `${ROUTES.gatewayDevices}/${encodeURIComponent(pairing.enrollmentId)}`,
           { method: 'DELETE' },
         );
       } catch (error) {
@@ -170,13 +171,13 @@ export async function handleCompanionRequest(
       return { ok: true };
     case 'warm':
       await requireReady();
-      await companionJson('/centraid/_vault/status');
+      await companionJson(ROUTES.vaultStatus);
       return { ok: true };
     case 'modules':
       return moduleStatuses();
     case 'blocking-count':
       await requireReady();
-      return companionJson<{ count: number }>('/centraid/_vault/blocking');
+      return companionJson<{ count: number }>(ROUTES.vaultBlocking);
     case 'locker:candidates': {
       const result = await candidates(message.pageUrl);
       if (sender.tab?.id) {
@@ -218,7 +219,7 @@ export async function handleCompanionRequest(
     case 'capture:document': {
       await requireReady();
       const staged = await companionJson<{ sha256?: string }>(
-        '/centraid/_vault/blobs?filename=web-capture.png&media_type=image%2Fpng',
+        `${ROUTES.vaultBlobs}?filename=web-capture.png&media_type=image%2Fpng`,
         {
           method: 'POST',
           headers: { 'content-type': 'image/png' },

@@ -74,8 +74,40 @@ Until 1.0:
 - Schema **epoch** bumps may require vault re-creation; the version handshake **refuses mismatches** rather than migrating.
 - **1.0** = first release after which every schema change ships a migration ([decisions.md](decisions.md)).
 
+## RPC / API naming (`/centraid/_*` planes)
+
+Issue #504 batch 1. **Mechanical:** route constants live in `@centraid/protocol`; `scripts/lint-protocol-routes.mjs` (via `check:pr`) flags hard-coded known paths in extension + product CLI.
+
+### Plane scheme (de-facto, freeze carefully)
+
+| Prefix | Plane | Role |
+| --- | --- | --- |
+| `/centraid/_gateway/*` | Shell / control | Info, health, devices, pair, logs, … |
+| `/centraid/_vault/*` | Vault | Status, blobs, replica, consent, … |
+| `/centraid/_apps/*` | Apps store | List, publish, web-session mint, … |
+| `/centraid/_tool/*` | Tools | `centraid_read` / `centraid_write`, … |
+| `/centraid/_web/*` | Browser sessions | Control cookie proxy, redeem |
+| `/centraid/_agents/*`, `/centraid/_automations/*`, … | Feature planes | Same underscore-plane pattern |
+
+### Rules
+
+1. **No new flat names** under `/centraid/<word>` without a plane underscore segment and a migration plan.
+2. Request/response pairs stay under one plane; do not invent parallel `/v2` trees without epoch bump.
+3. Clients import `ROUTES` from `@centraid/protocol` rather than string-copying paths.
+4. Wire schemas stay structural (C3); normalization is a named post-pass.
+
+## Stream authority
+
+| Channel | Authority | Use |
+| --- | --- | --- |
+| **Live stream** (SSE / turn stream) | Immediacy | Show tokens and run progress as they happen |
+| **Paged / authoritative fetch** | Correctness + catch-up | Conversation history, missed events after reconnect |
+
+Do not treat the live stream as the sole source of truth after a gap — re-fetch authoritative pages. Product CLI streaming is deferred (#504 batch 3 follow-up).
+
 ## Related
 
 - [decisions.md](decisions.md) — C1, F1
 - [SECURITY.md](../SECURITY.md) — transport trust boundaries
 - [ARCHITECTURE.md](../ARCHITECTURE.md) — gateway HTTP surface
+- `@centraid/protocol` — version, capabilities, route constants

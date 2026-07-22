@@ -215,6 +215,19 @@ export class WebAppSessions {
     return true;
   };
 
+  /**
+   * Origins bound on live control + app sessions — credentialed CORS allowlist
+   * for the loopback HTTP server (issue #504). Pure data for the host; does not
+   * authorize a request by itself.
+   */
+  knownShellOrigins(): string[] {
+    this.sweep();
+    const origins = new Set<string>();
+    for (const row of this.controlStore.list()) origins.add(row.shellOrigin);
+    for (const session of this.active.values()) origins.add(session.shellOrigin);
+    return [...origins];
+  }
+
   authorize(req: IncomingMessage): BearerAuthorization | undefined {
     this.sweep();
     const pathname = requestPath(req);
@@ -273,16 +286,16 @@ export class WebAppSessions {
       this.activeByCookieName.delete(session.cookieName);
       return undefined;
     }
-    // Origin-bind active app sessions. CORS is now credentialed and reflects
-    // the request Origin, and `SameSite=Strict` isolates by site — NOT by port
-    // — so a page on another port of the same host could otherwise ride the
-    // `__centraid_app_*` cookie and read our responses. When an Origin header
-    // is present, require it to match either the session's shellOrigin (the
-    // PWA shell) or the gateway's own origin (same-origin app-iframe / API
-    // requests, whose Origin host equals `req.headers.host`). We do NOT require
-    // an Origin: same-origin GET subresources (direct-HTTP iframe mode) and
-    // Iroh-bridge requests legitimately omit it, and must still pass on
-    // cookie + path alone.
+    // Origin-bind active app sessions. Credentialed CORS only reflects
+    // session-bound shell origins (or Bearer intent) — see app-engine
+    // `decideCors` / issue #504. `SameSite=Strict` isolates by site — NOT by
+    // port — so a page on another port of the same host could otherwise ride
+    // the `__centraid_app_*` cookie. When an Origin header is present, require
+    // it to match either the session's shellOrigin (the PWA shell) or the
+    // gateway's own origin (same-origin app-iframe / API requests, whose Origin
+    // host equals `req.headers.host`). We do NOT require an Origin: same-origin
+    // GET subresources (direct-HTTP iframe mode) and Iroh-bridge requests
+    // legitimately omit it, and must still pass on cookie + path alone.
     const origin = safeOrigin(req.headers.origin);
     if (origin !== undefined) {
       const host = Array.isArray(req.headers.host) ? undefined : req.headers.host;

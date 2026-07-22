@@ -7,6 +7,12 @@ import { makeUserStoreRouteHandler } from '../stores/prefs-store.js';
 import type { Runtime } from '../runtime.js';
 import { GATEWAY_SHUTDOWN_GRACE_MS, tuneGatewayHttpServer } from './server-tuning.js';
 import { COMPANION_GRANTS_HEADER } from './internal-headers.js';
+import {
+  decideCors,
+  hasBearerAuthIntent,
+  hostnameFromHostHeader,
+  isAllowedHostHeader,
+} from './request-boundary.js';
 
 export interface RuntimeHttpServerOptions {
   runtime: Runtime;
@@ -19,6 +25,22 @@ export interface RuntimeHttpServerOptions {
    * If omitted, a 32-byte random hex token is generated.
    */
   token?: string;
+  /**
+   * Extra hostnames accepted in the Host header beyond the built-in
+   * loopback set (localhost / 127.0.0.1 / ::1). The bind `host` is added
+   * automatically. Used when a deployment configures non-loopback names
+   * (issue #504); defaults leave only loopback forms allowed.
+   */
+  allowedHosts?: readonly string[];
+  /**
+   * Origins allowed for credentialed CORS (`Access-Control-Allow-Credentials`).
+   * Typically the PWA shell origins bound on control/app sessions. May be a
+   * getter so the host can reflect live session state without app-engine
+   * knowing about sessions. Bearer-intent requests may also receive
+   * credentialed CORS for their Origin (token is not ambient). See
+   * `decideCors` / SECURITY.md control-plane subsection.
+   */
+  credentialedCorsOrigins?: readonly string[] | (() => readonly string[]);
   /**
    * Whether to mount `/_centraid-user/*` against `runtime.userStore`.
    * Defaults to true when `runtime.userStore` is set; explicit `false`
@@ -113,26 +135,48 @@ const WEB_SHELL_ORIGIN_HEADER = 'x-centraid-web-shell-origin';
 export type BearerAuthorization = { plane: 'admin' } | { plane: 'device'; deviceKey: string };
 
 /**
- * Permissive CORS for the desktop renderer (issue: thin-client). The
- * renderer calls the gateway HTTP API directly with `Authorization:
- * Bearer <token>`; because auth is a Bearer header (never a cookie) it
- * is safe to allow any origin — there are no ambient credentials to
- * leak, and `*` also covers the `Origin: null` a `file://` renderer
- * sends. Set on EVERY response (including the 401 and the SSE streams):
- * we call this at the top of `route()` before any handler runs, and
- * Node merges `setHeader` values into a later `writeHead`, so the SSE
- * writers in chat-routes/changes-sse inherit these without change.
+ * CORS for the loopback control plane (issue #504 batch 0).
  *
- * Remote gateways must emit their own CORS — this only governs the local
- * embedded server.
+ * Bearer-only clients (desktop thin client, device tokens) have no ambient
+ * credentials: reflecting their Origin with credentials is fine when the
+ * request signals Bearer intent, and `Origin: null` / missing Origin still
+ * get `*` for `file://` renderers.
+ *
+ * Cookie/session clients (PWA) must never receive
+ * `Access-Control-Allow-Origin: <attacker>` paired with
+ * `Access-Control-Allow-Credentials: true`. Credentialed CORS is limited to
+ * `credentialedCorsOrigins` (session-bound shell origins) or Bearer intent.
+ * Foreign cookie-only origins get `*` without credentials so the browser
+ * cannot expose the body under `credentials: 'include'`.
+ *
+ * Set on EVERY response (including 401 and SSE): called at the top of
+ * `route()` before handlers; Node merges `setHeader` into later `writeHead`.
+ *
+ * Preflight (OPTIONS) stays before auth: browsers omit Authorization on the
+ * preflight itself; we detect Bearer intent via
+ * Access-Control-Request-Headers. Auth still gates the real request.
  */
-function setCorsHeaders(req: IncomingMessage, res: ServerResponse): void {
-  const origin = req.headers.origin;
-  res.setHeader(
-    'Access-Control-Allow-Origin',
-    typeof origin === 'string' && origin !== 'null' ? origin : '*',
-  );
-  if (typeof origin === 'string' && origin !== 'null') {
+function setCorsHeaders(
+  req: IncomingMessage,
+  res: ServerResponse,
+  credentialedCorsOrigins: readonly string[] | (() => readonly string[]) | undefined,
+): void {
+  const origins =
+    typeof credentialedCorsOrigins === 'function'
+      ? credentialedCorsOrigins()
+      : (credentialedCorsOrigins ?? []);
+  const decision = decideCors({
+    origin: req.headers.origin,
+    credentialedOrigins: origins,
+    bearerAuthIntent: hasBearerAuthIntent(
+      req.headers.authorization,
+      req.headers['access-control-request-headers'],
+    ),
+  });
+  if (decision.allowOrigin !== null) {
+    res.setHeader('Access-Control-Allow-Origin', decision.allowOrigin);
+  }
+  if (decision.credentials) {
     res.setHeader('Access-Control-Allow-Credentials', 'true');
   }
   res.setHeader('Vary', 'Origin');
@@ -141,13 +185,27 @@ function setCorsHeaders(req: IncomingMessage, res: ServerResponse): void {
   res.setHeader('Access-Control-Max-Age', '86400');
 }
 
+function resolveAllowedHosts(opts: RuntimeHttpServerOptions, bindHost: string): string[] {
+  const extra: string[] = [];
+  const bindHostname = hostnameFromHostHeader(bindHost) ?? bindHost.trim().toLowerCase();
+  if (bindHostname) extra.push(bindHostname);
+  for (const h of opts.allowedHosts ?? []) {
+    const normalized = h.trim().toLowerCase();
+    if (normalized) extra.push(normalized);
+  }
+  return extra;
+}
+
 /**
  * Spawn an HTTP server in front of a `Runtime`, suitable for use as the
  * in-process embedded runtime inside the Electron desktop app.
  *
  * Auth model:
  *   - Loopback bind by default (`127.0.0.1`).
- *   - All requests require `Authorization: Bearer <token>`.
+ *   - Host header allowlisted (loopback forms + configured names) — DNS
+ *     rebinding is refused before auth/handlers (issue #504).
+ *   - All requests require `Authorization: Bearer <token>` (or a host-supplied
+ *     cookie authorizer via `authorizeRequest`).
  *   - The token is randomly minted on `start()` unless one is provided.
  *
  * When `conversationDbPath` is provided, the server also serves the
@@ -160,6 +218,7 @@ export async function startRuntimeHttpServer(
   const host = opts.host ?? '127.0.0.1';
   const port = opts.port ?? 0;
   const token = opts.token ?? crypto.randomBytes(32).toString('hex');
+  const allowedHosts = resolveAllowedHosts(opts, host);
 
   // Both stores are owned by the caller (a single shared gateway DB
   // provider underneath). We mount the routes only if the corresponding
@@ -201,9 +260,20 @@ export async function startRuntimeHttpServer(
   tuneGatewayHttpServer(server);
 
   async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    setCorsHeaders(req, res);
+    // Host check first — refuse DNS-rebinding before CORS, auth, or handlers.
+    if (!isAllowedHostHeader(req.headers.host, allowedHosts)) {
+      res.statusCode = 400;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Connection', 'close');
+      res.end(JSON.stringify({ error: 'invalid_host', message: 'Host header is not allowed.' }));
+      return;
+    }
+
+    setCorsHeaders(req, res, opts.credentialedCorsOrigins);
     // Preflight carries no Authorization header — answer it before the
-    // Bearer check, or the browser never sends the real request.
+    // Bearer check, or the browser never sends the real request. CORS
+    // headers above already distinguish credentialed allowlist / Bearer
+    // intent from foreign cookie-only origins (#504).
     if ((req.method ?? '').toUpperCase() === 'OPTIONS') {
       res.statusCode = 204;
       res.end();

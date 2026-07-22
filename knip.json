@@ -26,6 +26,14 @@
       "entry": ["src/index.ts", "src/cli/cli.ts", "scripts/*.mjs"],
       "project": ["src/**/*.{ts,tsx}", "scripts/*.mjs"]
     },
+    "packages/protocol": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
+    "packages/cli": {
+      "entry": ["src/cli.ts"],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
     "packages/app-engine": {
       "entry": ["src/index.ts", "src/worker/runner.ts", "src/worker/ts-loader-hooks.ts"],
       "project": ["src/**/*.{ts,tsx}"]

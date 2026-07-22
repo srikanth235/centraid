@@ -36,6 +36,7 @@ bun run build && centraid-gateway serve --data-dir ./gw-data --host 127.0.0.1 --
 | **web** | `bun run dev:web` | Vite default (see `apps/web`) | Needs a reachable gateway or ticket path |
 | **mobile** | `bun run dev:mobile` | Metro **8081** | Pair via desktop Settings → Phone |
 | **gateway-daemon** | `centraid-gateway serve --data-dir <dir> --host 127.0.0.1 --port 8765` | **8765** (example) | Print token: `centraid-gateway print-token --data-dir <dir>` |
+| **product CLI** | `centraid status --url http://127.0.0.1:8765 --data-dir <dir>` | (client) | Wire client (`@centraid/cli`); auth via `--token` / `CENTRAID_TOKEN` / `token.bin` |
 | **docs site** | `bun run docs:serve` | **4173** on 127.0.0.1 | After `docs:build` / `docs:bundle` |
 
 Parameterize ports via CLI flags / env documented on each package; do not hardcode foreign ports into other apps without a single config owner.

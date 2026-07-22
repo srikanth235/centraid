@@ -108,6 +108,9 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
   if (options.authorizeBearer !== undefined)
     serverOptions.authorizeBearer = options.authorizeBearer;
   serverOptions.authorizeRequest = (req) => gateway.webAppSessions.authorize(req);
+  // Session-bound shell origins for credentialed CORS (#504). Bearer-only
+  // desktop embeds leave this empty and still get non-credentialed `*`.
+  serverOptions.credentialedCorsOrigins = () => gateway.webAppSessions.knownShellOrigins();
   const server = await startRuntimeHttpServer(serverOptions);
   await gateway.start(server.url);
   const web = options.web

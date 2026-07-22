@@ -43,14 +43,16 @@ The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageM
 | [docs/decisions.md](docs/decisions.md) | Settled #468 decisions (H1, C1, D4, F1, J5, signing, …) |
 | [docs/glossary.md](docs/glossary.md) | Vocabulary + forbidden synonyms + code pointers |
 | [docs/coding-standards.md](docs/coding-standards.md) | Agent failure modes (try/catch, `?.`, refactors, fallible actions) |
-| [docs/protocol.md](docs/protocol.md) | C1 two-contract, COMPAT tags, wire-schema purity |
+| [docs/protocol.md](docs/protocol.md) | C1 two-contract, COMPAT tags, wire-schema purity, RPC plane naming |
+| [docs/platform-gating.md](docs/platform-gating.md) | `isWeb` / `isNative` / Electron / compact form-factor |
+| [docs/client-keying.md](docs/client-keying.md) | Cache/UI key axes (vault path, gateway, conversation) |
 | [docs/release.md](docs/release.md) | Prepare vs publish, patch/minor, beta, skills |
 | [docs/identifiers.md](docs/identifiers.md) | `dev.centraid.*` table (J5) |
 | [docs/enrollment.md](docs/enrollment.md) | Human checklist: Apple / Azure / Play signing |
 | [docs/config-ownership.md](docs/config-ownership.md) | Which writer wins for dual-write config surfaces |
 | [docs/logs.md](docs/logs.md) | **Canonical log locations** (start every debug session here) |
-| [docs/runners.md](docs/runners.md) | Coding-agent harnesses: ACP is the single path, adapters, adding a runner |
-| [docs/dev-environment.md](docs/dev-environment.md) | Worktrees, ports, named services, launch.json |
+| [docs/runners.md](docs/runners.md) | Coding-agent harnesses: ACP is the single path, adapters, tool catalog |
+| [docs/dev-environment.md](docs/dev-environment.md) | Worktrees, ports, named services, launch.json, product CLI |
 | [docs/multi-agent.md](docs/multi-agent.md) | Parallel-agent norms + supervision caps |
 | [docs/refactors/](docs/refactors/) | Multi-session plan format + progress logs |
 | [docs/traps/](docs/traps/) | One doc per known footgun |

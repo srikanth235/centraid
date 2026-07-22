@@ -67,6 +67,20 @@ There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automa
 | "identity.sqlite" / multi-user gateway identity | vault owner *is* the user (#280) |
 | `com.centraid.*` identifiers | **`dev.centraid.*`** ([identifiers.md](identifiers.md)) |
 
+## Inconsistencies (known dual vocabulary)
+
+These pairs appear in code and docs for historical reasons. Prefer the **canonical** term in new writing; the other is tolerated in existing APIs until renamed with a migration.
+
+| Dual | Prefer | Tolerate | Notes |
+| --- | --- | --- | --- |
+| host / gateway | **gateway** for the product process | "host" in host-agnostic package comments | Desktop "hosts" the embed; the product backend is the gateway |
+| profile / gateway id | **gateway id** in multi-gateway switcher | "profile" in older settings paths | Same durable folder under `gateways/<id>/` |
+| chat / conversation | **conversation ⊃ turn ⊃ item** | "chat" only in UI copy | Ledger model forbids "chat" as the technical term |
+| template / blueprint | **blueprint** for shipped source | "template" in gallery UI | After install it is an **app** |
+| server / gateway | **gateway** | HTTP "server" for the listener socket | |
+
+**Mechanical vs judgment:** judgment-only (no synonym linter yet).
+
 ## Related
 
 - Runtime model detail: [ARCHITECTURE.md](../ARCHITECTURE.md)

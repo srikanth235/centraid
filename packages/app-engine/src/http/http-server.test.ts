@@ -2,12 +2,56 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import crypto from 'node:crypto';
+import http from 'node:http';
 import { Runtime } from '../runtime.ts';
 import {
   startRuntimeHttpServer,
   AUTHED_DEVICE_HEADER,
   type RuntimeHttpServerHandle,
 } from './http-server.ts';
+
+/** Raw HTTP so tests can set a custom Host header (undici forbids it). */
+function rawRequest(
+  baseUrl: string,
+  path: string,
+  opts: {
+    method?: string;
+    host?: string;
+    headers?: Record<string, string>;
+  } = {},
+): Promise<{ status: number; headers: http.IncomingHttpHeaders; body: string }> {
+  const u = new URL(path, baseUrl);
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      {
+        hostname: u.hostname,
+        port: u.port,
+        path: `${u.pathname}${u.search}`,
+        method: opts.method ?? 'GET',
+        // Preserve a custom Host (DNS-rebinding tests); Node defaults to
+        // rewriting Host to the connection target when setHost is true.
+        setHost: opts.host === undefined,
+        headers: {
+          ...opts.headers,
+          ...(opts.host !== undefined ? { host: opts.host } : {}),
+        },
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => {
+          resolve({
+            status: res.statusCode ?? 0,
+            headers: res.headers,
+            body: Buffer.concat(chunks).toString('utf8'),
+          });
+        });
+      },
+    );
+    req.on('error', reject);
+    req.end();
+  });
+}
 
 let workspace: string;
 let server: RuntimeHttpServerHandle;
@@ -77,6 +121,71 @@ test('sets CORS headers on a successful authed response', async () => {
   });
   expect(res.status).toBe(200);
   expect(res.headers.get('access-control-allow-origin')).toBe('*');
+});
+
+test('refuses a non-allowlisted Host header before handlers (#504)', async () => {
+  const bad = await rawRequest(server.url, '/centraid/_apps', {
+    host: 'evil.example:9999',
+    headers: { Authorization: `Bearer ${server.token}` },
+  });
+  expect(bad.status).toBe(400);
+  expect(JSON.parse(bad.body)).toMatchObject({ error: 'invalid_host' });
+
+  // Loopback Host still reaches auth/handlers.
+  const port = new URL(server.url).port;
+  const ok = await rawRequest(server.url, '/centraid/_apps', {
+    host: `127.0.0.1:${port}`,
+    headers: { Authorization: `Bearer ${server.token}` },
+  });
+  expect(ok.status).toBe(200);
+});
+
+test('does not reflect foreign Origin with credentials for cookie-only requests (#504)', async () => {
+  const runtime = new Runtime({ appsDir: workspace });
+  const shell = 'http://127.0.0.1:4173';
+  const hardened = await startRuntimeHttpServer({
+    runtime,
+    credentialedCorsOrigins: [shell],
+    authorizeRequest: (req) => {
+      // Simulate cookie session: ambient cookie, no Bearer.
+      if ((req.headers.cookie ?? '').includes('session=ok')) return { plane: 'admin' };
+      return undefined;
+    },
+  });
+  try {
+    const foreign = await fetch(`${hardened.url}/centraid/_apps`, {
+      headers: {
+        Origin: 'http://127.0.0.1:9999',
+        Cookie: 'session=ok',
+      },
+    });
+    // Authorizer may accept the cookie, but CORS must not enable the attacker
+    // origin to read the body under credentials mode.
+    expect(foreign.headers.get('access-control-allow-origin')).toBe('*');
+    expect(foreign.headers.get('access-control-allow-credentials')).toBeNull();
+
+    const bound = await fetch(`${hardened.url}/centraid/_apps`, {
+      headers: {
+        Origin: shell,
+        Cookie: 'session=ok',
+      },
+    });
+    expect(bound.headers.get('access-control-allow-origin')).toBe(shell);
+    expect(bound.headers.get('access-control-allow-credentials')).toBe('true');
+
+    // Bearer intent still gets reflective credentialed CORS (not ambient).
+    const bearer = await fetch(`${hardened.url}/centraid/_apps`, {
+      headers: {
+        Origin: 'http://127.0.0.1:9999',
+        Authorization: `Bearer ${hardened.token}`,
+      },
+    });
+    expect(bearer.status).toBe(200);
+    expect(bearer.headers.get('access-control-allow-origin')).toBe('http://127.0.0.1:9999');
+    expect(bearer.headers.get('access-control-allow-credentials')).toBe('true');
+  } finally {
+    await hardened.close();
+  }
 });
 
 test('contains rejected handlers at the HTTP boundary before and after headers', async () => {
