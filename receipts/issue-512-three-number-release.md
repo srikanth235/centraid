@@ -57,7 +57,7 @@ Unit/integration tests updated for protocol_mismatch:
 - Splitting vault storage schemaEpoch from wire protocol into separate migration system
 - Changing extension-release.yml triggers
 - Live npm publish / first multi-OS CI pack (depends on #510 merge)
-- Paseo-style automatic EAS on every tag
+- Automatic EAS store submit on every product tag
 
 ## Verification
 
@@ -85,7 +85,7 @@ bun run check:pr
 No mid-task human-steering interrupts or corrections during implementation of #512.
 
 1. **Every human-steering event is recorded as a row:** None — table headers only.
-2. **No non-steering message is recorded as steering:** Prior session messages were Q&A on versioning and Paseo research; “go ahead with synthesis and implement it entirely!” is the **task start** for this implementation.
+2. **No non-steering message is recorded as steering:** Prior session messages were Q&A on versioning and multi-surface release research; “go ahead with synthesis and implement it entirely!” is the **task start** for this implementation.
 
 ## Audit
 

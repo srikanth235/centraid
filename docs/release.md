@@ -17,7 +17,7 @@ How Centraid ships. One home for the ritual; skills are thin shims that point he
 3. Build numbers are script-derived, monotonic, meaningless.
 4. Protocol bumps are explicit, reviewed, and rare; support window is CI-tested.
 5. Runtime compatibility logic reads **protocol** (+ capability flags for features). Branching on product version for connect is a bug.
-6. **Never bump product version only to fix a failed build** (Paseo rule). Rebuild the same tag / surface retry path, or cut a real patch with a product change.
+6. **Never bump product version only to fix a failed build.** Rebuild the same tag / surface retry path, or cut a real patch with a product change.
 
 Feature gates remain **capability flags** (C1) — not “bump protocol for every feature.”
 
@@ -37,7 +37,7 @@ Machine catalog: `scripts/release/surfaces.mjs`. Print: `bun run release:matrix`
 
 **Stamp vs ship:** every package.json gets the product version. Which artifacts leave the building is the **ship set** (`--surfaces` on publish). Continuous surfaces deploy from `main`, not from the tag ritual.
 
-**Surface rebuilds (not new product versions):** prefer workflow re-run or force-moved rebuild tags in the Paseo style (`desktop-vX.Y.Z`) when workflows support them — do not invent `companion-v*` as a second product line. Prefer packaging the companion at the same product version.
+**Surface rebuilds (not new product versions):** prefer workflow re-run or force-moved rebuild tags (`desktop-vX.Y.Z` when supported) — do not invent `companion-v*` as a second product line. Prefer packaging the companion at the same product version.
 
 ## D1 — Authorization boundary
 

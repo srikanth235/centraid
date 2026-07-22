@@ -53,7 +53,7 @@ When a release prepare/publish attempt strands halfway. Policy: [release.md](../
 
 ### G — Tempted to bump version because CI failed
 
-1. **Stop.** R5 / Paseo rule: never bump product version only to fix a build.
+1. **Stop.** R5: never bump product version only to fix a build.
 2. Fix code or workflow; rebuild same tag or surface retry path.
 3. Only cut a new patch when there is a real product fix to ship.
 

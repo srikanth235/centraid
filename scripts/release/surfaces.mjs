@@ -87,7 +87,7 @@ export const RELEASE_SURFACES = [
     tagPattern: 'companion-v* | product v* (prefer product stamp)',
     secretGroups: [],
     notes:
-      'Stamps the same product version. Prefer packaging from product tag; companion-v* is rebuild-only (Paseo-style surface retry), not a second product line.',
+      'Stamps the same product version. Prefer packaging from product tag; companion-v* is rebuild-only (surface retry), not a second product line.',
   },
 ];
 
