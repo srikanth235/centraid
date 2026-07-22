@@ -48,7 +48,7 @@ const summary = {
   kpis: {
     totalTokens: 128_000,
     totalCostUsd: 3.4,
-    agentReportedCostUsd: 2.0,
+    agentReportedCostUsd: 2,
     estimatedCostUsd: 1.4,
     forecastCostUsd: 5.1,
     generations: 42,

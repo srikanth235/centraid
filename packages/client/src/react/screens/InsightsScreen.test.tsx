@@ -26,7 +26,7 @@ const summary: InsightsSummary = {
     { date: '2026-06-10', tokens: 2000, costUsd: 0.2, runs: 3 },
   ],
   bySource: [
-    { key: 'a1', label: 'Daily Digest', kind: 'automation', runs: 5, tokens: 8000, costUsd: 2.0 },
+    { key: 'a1', label: 'Daily Digest', kind: 'automation', runs: 5, tokens: 8000, costUsd: 2 },
     { key: 'c1', label: 'Chat', kind: 'chat', runs: 2, tokens: 3000, costUsd: 0.3 },
   ],
   byRunner: [{ provider: 'claude-code', runs: 7, tokens: 11_000, costUsd: 2.5 }],
@@ -67,7 +67,7 @@ const summary: InsightsSummary = {
     label: 'Daily Digest',
     kindLabel: 'Automation',
     share: 0.59,
-    costUsd: 2.0,
+    costUsd: 2,
   },
 };
 

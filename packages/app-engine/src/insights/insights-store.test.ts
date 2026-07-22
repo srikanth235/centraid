@@ -165,7 +165,7 @@ describe('InsightsStore (#514)', () => {
       provider: 'claude-code',
       model: 'm',
       inputTokens: 100,
-      costUsd: 1.0,
+      costUsd: 1,
       costSource: 'agent',
     });
     seedRun(runs, {
@@ -178,7 +178,7 @@ describe('InsightsStore (#514)', () => {
     });
     const s = insights.summary();
     expect(s.bySource[0]?.key).toBe('app/big');
-    expect(s.bySource[0]?.costUsd).toBeCloseTo(1.0, 4);
+    expect(s.bySource[0]?.costUsd).toBeCloseTo(1, 4);
     expect(s.byRunner[0]?.provider).toBe('claude-code');
     expect(s.attention?.key).toBe('app/big');
     expect(s.attention!.share).toBeGreaterThanOrEqual(0.4);

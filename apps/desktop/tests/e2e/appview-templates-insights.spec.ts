@@ -382,7 +382,7 @@ test('11.1 — Insights renders the spend hero', async () => {
       unpricedRuns: 0,
       unreportedRuns: 0,
       totalCostUsd: 1.23,
-      agentReportedCostUsd: 1.0,
+      agentReportedCostUsd: 1,
       estimatedCostUsd: 0.23,
       forecastCostUsd: 4.56,
       appsTouched: 3,

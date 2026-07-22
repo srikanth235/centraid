@@ -62,6 +62,14 @@ Contracts + e2e fixture + tests:
 - `packages/client/src/react/shell/App.test.tsx`
 - `apps/desktop/tests/e2e/appview-templates-insights.spec.ts`
 
+CI follow-up (oxlint `no-zero-fractions` on PR static):
+
+- Replace `N.0` with `N` in Insights unit/e2e fixtures:
+  - `packages/client/src/react/shell/routes/InsightsRoute.test.tsx`
+  - `packages/client/src/react/screens/InsightsScreen.test.tsx`
+  - `packages/app-engine/src/insights/insights-store.test.ts`
+  - `apps/desktop/tests/e2e/appview-templates-insights.spec.ts`
+
 ## Out of scope
 
 - Provider invoice import, multi-currency, real billing quotas
@@ -82,6 +90,8 @@ bun run --filter @centraid/client test -- src/react/screens/InsightsScreen.test.
 bun run --filter @centraid/app-engine typecheck
 bun run --filter @centraid/client typecheck
 bun run --filter @centraid/automation typecheck
+bunx oxlint .
+bun run check:pr
 ```
 
 ## Audit
