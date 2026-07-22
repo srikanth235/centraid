@@ -25,9 +25,12 @@ function usage() {
   console.log(`Centraid gateway installer (npm path)
 
 Usage:
-  bash scripts/install-gateway.sh [options]
+  bash scripts/install-gateway.sh [options]     # macOS / Linux
   curl -fsSL …/install-gateway.sh | bash -s -- [options]
   node scripts/install-gateway.mjs [options]
+
+  Windows (PowerShell): npm install -g @centraid/gateway
+  (multi-OS tunnel NAPI ships in the package — see README / #511)
 
 Options:
   --prefix <dir>          npm --prefix (implies non-global)

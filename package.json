@@ -70,7 +70,8 @@
     "gateway:npm:pack": "node scripts/gateway-npm/pack.mjs",
     "gateway:npm:pack:dry": "node scripts/gateway-npm/pack.mjs --dry-run",
     "gateway:npm:publish": "node scripts/gateway-npm/publish.mjs",
-    "gateway:npm:helpers:test": "node --test scripts/gateway-npm/pack-helpers.test.mjs",
+    "gateway:npm:helpers:test": "node --test scripts/gateway-npm/pack-helpers.test.mjs scripts/gateway-npm/native-platforms.test.mjs",
+    "gateway:npm:merge-native": "node scripts/gateway-npm/merge-native-artifacts.mjs",
     "gateway:install": "bash scripts/install-gateway.sh"
   },
   "devDependencies": {

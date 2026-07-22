@@ -1,6 +1,6 @@
 name: npm-gateway-publish
 
-# #509 — pack (always) + publish (secret-gated) for the gateway npm graph.
+# #509 / #511 — multi-platform native tunnel build, pack (always), publish (secret-gated).
 # Does not install OS services. Live publish only when NPM_TOKEN is present.
 
 on:
@@ -23,7 +23,66 @@ permissions:
   contents: read
 
 jobs:
+  # Build first-party tunnel NAPI on each OS/arch we ship (#511).
+  build-native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: linux-x64
+            os: ubuntu-latest
+            required: true
+          - id: linux-arm64
+            os: ubuntu-24.04-arm
+            required: false
+          - id: darwin-arm64
+            os: macos-latest
+            required: true
+          - id: darwin-x64
+            os: macos-13
+            required: false
+          - id: win32-x64
+            os: windows-latest
+            required: true
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    continue-on-error: ${{ matrix.required == false }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install JS deps
+        run: bun install --frozen-lockfile
+      - name: Build tunnel native (+ TS dist)
+        shell: bash
+        env:
+          CENTRAID_REQUIRE_NATIVE_TUNNEL: '1'
+        run: bunx turbo run build --filter=@centraid/tunnel
+      - name: Assert expected artifact for this host
+        shell: bash
+        run: |
+          set -euo pipefail
+          ART="packages/tunnel/native/centraid-tunnel-native.${{ matrix.id }}.node"
+          # matrix.id is platform-arch (linux-x64); Node uses same for process.platform-arch
+          # except we must expand: id already is "linux-x64" matching filename segment.
+          test -f "$ART"
+          ls -la packages/tunnel/native/*.node
+      - name: Upload native artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tunnel-native-${{ matrix.id }}
+          path: packages/tunnel/native/centraid-tunnel-native.${{ matrix.id }}.node
+          if-no-files-found: ${{ matrix.required && 'error' || 'warn' }}
+          retention-days: 7
+
   pack-and-maybe-publish:
+    needs: [build-native]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -36,14 +95,39 @@ jobs:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
       - run: bun install --frozen-lockfile
-      - name: Build gateway publish graph
+      - name: Build gateway publish graph (TS; host native optional here)
         run: bunx turbo run build --filter=@centraid/gateway...
         env:
+          # Host build may produce linux-x64; multi-arch comes from merge step.
           CENTRAID_REQUIRE_NATIVE_TUNNEL: '1'
-      - name: Unit-test pack/install helpers
+      - name: Download multi-platform native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: tunnel-native-*
+          path: artifacts/tunnel-native
+          merge-multiple: true
+      - name: Merge natives into packages/tunnel/native
+        env:
+          CENTRAID_REQUIRE_MULTI_NATIVE: '1'
+        run: |
+          # download-artifact may nest per artifact name; merge walks recursively
+          find artifacts/tunnel-native -name 'centraid-tunnel-native.*.node' -ls || true
+          node scripts/gateway-npm/merge-native-artifacts.mjs --from artifacts/tunnel-native --require
+          ls -la packages/tunnel/native/*.node
+      - name: Unit-test pack/install/platform helpers
         run: bun run gateway:npm:helpers:test
       - name: Pack publish set
         run: bun run gateway:npm:pack
+      - name: Assert pack includes multi-platform natives (tarball listing)
+        run: |
+          set -euo pipefail
+          TGZ=$(ls artifacts/npm-packs/centraid-tunnel-*.tgz | head -1)
+          test -n "$TGZ"
+          # npm pack names may be centraid-tunnel-0.1.0.tgz
+          LIST=$(tar -tzf "$TGZ")
+          echo "$LIST" | grep -E 'native/centraid-tunnel-native\.linux-x64\.node'
+          echo "$LIST" | grep -E 'native/centraid-tunnel-native\.darwin-arm64\.node'
+          echo "$LIST" | grep -E 'native/centraid-tunnel-native\.win32-x64\.node'
       - name: Upload pack artifacts
         uses: actions/upload-artifact@v4
         with:

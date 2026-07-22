@@ -11,8 +11,11 @@ import { expect, test } from 'vitest';
 const OWNER = 'tests/perf/tunnel-native.perf.test.ts';
 const nativeCandidates = [
   'packages/tunnel/native/centraid-tunnel-native.linux-x64.node',
+  'packages/tunnel/native/centraid-tunnel-native.linux-arm64.node',
   'packages/tunnel/native/centraid-tunnel-native.darwin-arm64.node',
   'packages/tunnel/native/centraid-tunnel-native.darwin-x64.node',
+  'packages/tunnel/native/centraid-tunnel-native.win32-x64.node',
+  'packages/tunnel/native/centraid-tunnel-native.win32-arm64.node',
 ];
 const nativePath = nativeCandidates.find((p) => existsSync(path.resolve(p)));
 const hasNative = Boolean(nativePath);
