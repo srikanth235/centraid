@@ -78,7 +78,8 @@ describe('nativeBuildNumber (J6)', () => {
     const configSrc = readFileSync(path.join(mobileRoot, 'app.config.ts'), 'utf8');
     expect(configSrc).toContain('nativeBuildNumber(VERSION)');
     // Version is single-sourced from package.json (issue #501), not hardcoded.
-    expect(configSrc).toContain("join(mobileRoot, 'package.json')");
+    expect(configSrc).toContain('readMobilePackageVersion');
+    expect(configSrc).toContain('@centraid/mobile');
     const pkgVersion = JSON.parse(readFileSync(path.join(mobileRoot, 'package.json'), 'utf8'))
       .version as string;
     expect(pkgVersion).toBe('0.1.0');

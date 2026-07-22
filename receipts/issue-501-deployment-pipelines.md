@@ -25,6 +25,11 @@
 - §8 Gateway Dockerfile + GHCR workflow — `packages/gateway/Dockerfile`, `.dockerignore`, `.github/workflows/release-gateway-image.yml`.
 - §9 Docs write-back + human residual matrix — `docs/release.md`, `docs/enrollment.md`, `docs/decisions.md`, `ARCHITECTURE.md`, `scripts/release/boot-smoke.mjs`, `scripts/release/vitest.config.ts`, `bun.lock`, this receipt.
 
+## Follow-up fix
+
+- `apps/mobile/app.config.ts` — CJS-safe `readMobilePackageVersion()` (no `import.meta`/`fileURLToPath`); merge duplicate `extra` keys. Fixes J8 `mobile-android` assembleDebug Expo config eval on CI.
+- `apps/mobile/src/version-core.test.ts` — asserts `readMobilePackageVersion` + package name walk.
+
 ## Out of scope
 
 - Live Apple / Azure / Play / Expo enrollment and secret values
