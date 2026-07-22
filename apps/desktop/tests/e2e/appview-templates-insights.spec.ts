@@ -373,33 +373,48 @@ test('10.4 — empty Discover renders without cards', async () => {
 
 // ─────────────────────────── §11 Insights ───────────────────────────
 
-test('11.1 — Insights renders the KPI cards', async () => {
+test('11.1 — Insights renders the spend hero', async () => {
   gateway.state.insights = {
     windowDays: 30,
+    generatedAt: Date.now(),
     kpis: {
       totalTokens: 12345,
-      quotaTokens: 100000,
       unpricedRuns: 0,
+      unreportedRuns: 0,
       totalCostUsd: 1.23,
+      agentReportedCostUsd: 1,
+      estimatedCostUsd: 0.23,
       forecastCostUsd: 4.56,
       appsTouched: 3,
       generations: 7,
       retries: 1,
+      failedRuns: 0,
+      failedCostUsd: 0,
     },
     daily: [
-      { date: '2024-05-01', tokens: 5000 },
-      { date: '2024-05-02', tokens: 7345 },
+      { date: '2024-05-01', tokens: 5000, costUsd: 0.5, runs: 2 },
+      { date: '2024-05-02', tokens: 7345, costUsd: 0.73, runs: 5 },
     ],
-    byAutomation: [{ name: 'Digest', tokens: 8000, costUsd: 0.8 }],
-    byModel: [{ model: 'tier-deep', tokens: 12345, costUsd: 1.23 }],
+    bySource: [
+      {
+        key: 'app/digest',
+        label: 'Digest',
+        kind: 'automation',
+        runs: 3,
+        tokens: 8000,
+        costUsd: 0.8,
+      },
+    ],
+    byRunner: [{ provider: 'claude-code', runs: 7, tokens: 12345, costUsd: 1.23 }],
+    byModel: [{ model: 'tier-deep', runs: 7, tokens: 12345, costUsd: 1.23 }],
     recent: [],
   };
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
     await gotoNav(page, 'Insights');
-    await expect(page.getByTestId('insights-kpis')).toBeVisible();
-    await expect(page.getByTestId('insights-kpis')).toContainText('Generations');
+    await expect(page.getByTestId('insights-hero')).toBeVisible();
+    await expect(page.getByTestId('insights-hero')).toContainText('$1.23');
   } finally {
     await closeApp(app);
   }

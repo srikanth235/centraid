@@ -1,9 +1,45 @@
 import { describe, expect, it } from 'vitest';
-import { priceForModel, costForUsage, setPricingCatalog, filterLiteLLM } from './model-pricing.js';
+import {
+  priceForModel,
+  costForUsage,
+  resolveItemCost,
+  setPricingCatalog,
+  filterLiteLLM,
+} from './model-pricing.js';
 
 // costForUsage prices PER TOKEN, so a call of 1,000,000 tokens costs exactly the
 // per-MTok anchor. Expected USD are hand-computed from the Anthropic anchors in
 // the #445 brief (input / 5m-write / 1h-write / read / output, per MTok).
+describe('resolveItemCost (#514)', () => {
+  it('prefers agent-reported USD over catalog', () => {
+    const r = resolveItemCost({
+      agentCostUsd: 0.42,
+      model: 'claude-haiku-4-5',
+      usage: { inputTokens: 1_000_000 },
+    });
+    expect(r.costUsd).toBe(0.42);
+    expect(r.costSource).toBe('agent');
+  });
+
+  it('falls back to catalog estimate when agent cost is absent', () => {
+    const r = resolveItemCost({
+      model: 'claude-haiku-4-5',
+      usage: { inputTokens: 1_000_000 },
+    });
+    expect(r.costUsd).toBeCloseTo(1, 9);
+    expect(r.costSource).toBe('estimated');
+  });
+
+  it('returns empty when unknown model and no agent cost', () => {
+    const r = resolveItemCost({
+      model: 'totally-unknown-model-xyz',
+      usage: { inputTokens: 100 },
+    });
+    expect(r.costUsd).toBeUndefined();
+    expect(r.costSource).toBeUndefined();
+  });
+});
+
 describe('costForUsage — Anthropic price anchors (live LiteLLM catalog)', () => {
   it('fable-5: 10 in / 50 out / 12.50 cache-write / 1 cache-read', () => {
     expect(costForUsage('claude-fable-5', { inputTokens: 1_000_000 })).toBeCloseTo(10, 9);

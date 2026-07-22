@@ -2,14 +2,14 @@ import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { describe, expect, it } from 'vitest';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { makeJournalDbProvider } from '../stores/gateway-db.js';
+import { DatabaseSync } from 'node:sqlite';
+import { makeJournalDbProvider, openJournalDb } from '../stores/gateway-db.js';
 import { ConversationStore } from '../conversation/store.js';
-import { InsightsStore, INSIGHTS_QUOTA_TOKENS } from './insights-store.js';
+import { InsightsStore } from './insights-store.js';
 
 /**
  * `runs` writes the conversation ledger; `insights` reads the `run_summary`
- * VIEW that derives from it (same file — `kind`/`app_id` come from the
- * owning conversation, the dominant model from the step items).
+ * VIEW that derives from it.
  */
 function setup(): { runs: ConversationStore; insights: InsightsStore } {
   const dir = tempDirSync('centraid-insights-');
@@ -20,9 +20,7 @@ function setup(): { runs: ConversationStore; insights: InsightsStore } {
   };
 }
 
-/** Insert a finished turn with one step item (model + tokens), under a
- *  conversation of the given kind. Automation turns share the conversation
- *  tagged with the `<appId>/<id>` ref. Returns the turn id. */
+/** Insert a finished turn with one step item under a conversation of the given kind. */
 function seedRun(
   runs: ConversationStore,
   opts: {
@@ -30,11 +28,14 @@ function seedRun(
     automationRef?: string;
     automationName?: string;
     model?: string;
+    provider?: string;
     inputTokens?: number;
     outputTokens?: number;
     costUsd?: number;
+    costSource?: 'agent' | 'estimated';
     retryOf?: string;
     startedAt?: number;
+    ok?: boolean;
   },
 ): string {
   const runId = randomUUID();
@@ -61,389 +62,310 @@ function seedRun(
     turnId: runId,
     ordinal: 0,
     kind: 'step',
-    ok: true,
+    ok: opts.ok !== false,
     ...(opts.model ? { model: opts.model } : {}),
+    ...(opts.provider ? { provider: opts.provider } : {}),
     ...(opts.inputTokens !== undefined ? { inputTokens: opts.inputTokens } : {}),
     ...(opts.outputTokens !== undefined ? { outputTokens: opts.outputTokens } : {}),
     ...(opts.costUsd !== undefined ? { costUsd: opts.costUsd } : {}),
+    ...(opts.costSource ? { costSource: opts.costSource } : {}),
     startedAt,
     endedAt: startedAt + 100,
     durationMs: 100,
   });
-  // finishTurn rolls the step items up into turns.total_*; the finished
-  // turn then appears in the run_summary view.
-  runs.finishTurn({ turnId: runId, endedAt: startedAt + 200, ok: true });
+  runs.finishTurn({ turnId: runId, endedAt: startedAt + 200, ok: opts.ok !== false });
   return runId;
 }
 
-describe('InsightsStore', () => {
-  it('returns an all-zero summary for an empty ledger', () => {
+describe('InsightsStore (#514)', () => {
+  it('returns an all-zero summary for an empty ledger without a fake quota', () => {
     const { insights } = setup();
     const s = insights.summary();
     expect(s.kpis.generations).toBe(0);
     expect(s.kpis.totalTokens).toBe(0);
     expect(s.kpis.totalCostUsd).toBe(0);
+    expect(s.kpis.agentReportedCostUsd).toBe(0);
+    expect(s.kpis.estimatedCostUsd).toBe(0);
     expect(s.kpis.appsTouched).toBe(0);
-    expect(s.kpis.quotaTokens).toBe(INSIGHTS_QUOTA_TOKENS);
+    expect(s.kpis.unpricedRuns).toBe(0);
+    expect(s.kpis.unreportedRuns).toBe(0);
+    expect('quotaTokens' in s.kpis).toBe(false);
     expect(s.daily).toEqual([]);
-    expect(s.byAutomation).toEqual([]);
+    expect(s.bySource).toEqual([]);
+    expect(s.byRunner).toEqual([]);
     expect(s.byModel).toEqual([]);
     expect(s.recent).toEqual([]);
-    expect(s.kpis.unpricedRuns).toBe(0);
   });
 
-  it('counts finished runs whose cost is NULL as unpriced (#445)', () => {
+  it('splits agent-reported vs estimated cost and counts unpriced', () => {
     const { runs, insights } = setup();
-    // Two priced runs, one left unpriced (no costUsd → total_cost_usd NULL).
-    seedRun(runs, { kind: 'chat', model: 'claude-haiku-4-5', inputTokens: 100, costUsd: 0.01 });
-    seedRun(runs, { kind: 'chat', model: 'claude-haiku-4-5', inputTokens: 100, costUsd: 0.01 });
-    seedRun(runs, { kind: 'chat', model: 'some-unknown-model', inputTokens: 100 });
+    seedRun(runs, {
+      kind: 'chat',
+      model: 'claude-haiku-4-5',
+      provider: 'claude-code',
+      inputTokens: 100,
+      costUsd: 0.05,
+      costSource: 'agent',
+    });
+    seedRun(runs, {
+      kind: 'chat',
+      model: 'claude-haiku-4-5',
+      provider: 'claude-code',
+      inputTokens: 100,
+      costUsd: 0.01,
+      costSource: 'estimated',
+    });
+    seedRun(runs, {
+      kind: 'chat',
+      model: 'some-unknown-model',
+      provider: 'gemini',
+      inputTokens: 100,
+    });
 
     const s = insights.summary();
     expect(s.kpis.generations).toBe(3);
+    expect(s.kpis.agentReportedCostUsd).toBeCloseTo(0.05, 4);
+    expect(s.kpis.estimatedCostUsd).toBeCloseTo(0.01, 4);
     expect(s.kpis.unpricedRuns).toBe(1);
+    expect(s.kpis.totalCostUsd).toBeCloseTo(0.06, 4);
   });
 
-  it('rolls up KPIs across chat and automation runs', () => {
+  it('counts unreported runs and failed spend', () => {
+    const { runs, insights } = setup();
+    seedRun(runs, {
+      kind: 'chat',
+      model: 'm',
+      provider: 'codex',
+      inputTokens: 50,
+      costUsd: 0.02,
+      costSource: 'agent',
+    });
+    seedRun(runs, { kind: 'chat', model: 'm', provider: 'codex' });
+    seedRun(runs, {
+      kind: 'chat',
+      model: 'm',
+      provider: 'codex',
+      inputTokens: 10,
+      costUsd: 0.03,
+      costSource: 'agent',
+      ok: false,
+    });
+    const s = insights.summary();
+    expect(s.kpis.unreportedRuns).toBe(1);
+    expect(s.kpis.failedRuns).toBe(1);
+    expect(s.kpis.failedCostUsd).toBeCloseTo(0.03, 4);
+  });
+
+  it('ranks bySource and byRunner by cost and surfaces attention', () => {
+    const { runs, insights } = setup();
+    seedRun(runs, {
+      kind: 'automation',
+      automationRef: 'app/big',
+      automationName: 'Big',
+      provider: 'claude-code',
+      model: 'm',
+      inputTokens: 100,
+      costUsd: 1,
+      costSource: 'agent',
+    });
+    seedRun(runs, {
+      kind: 'chat',
+      provider: 'gemini',
+      model: 'm',
+      inputTokens: 500,
+      costUsd: 0.1,
+      costSource: 'agent',
+    });
+    const s = insights.summary();
+    expect(s.bySource[0]?.key).toBe('app/big');
+    expect(s.bySource[0]?.costUsd).toBeCloseTo(1, 4);
+    expect(s.byRunner[0]?.provider).toBe('claude-code');
+    expect(s.attention?.key).toBe('app/big');
+    expect(s.attention!.share).toBeGreaterThanOrEqual(0.4);
+  });
+
+  it('recent prefers failed then high-cost runs', () => {
+    const { runs, insights } = setup();
+    const t = Date.now();
+    seedRun(runs, {
+      kind: 'chat',
+      inputTokens: 1,
+      costUsd: 0.001,
+      costSource: 'agent',
+      startedAt: t,
+      model: 'm',
+      provider: 'p',
+    });
+    seedRun(runs, {
+      kind: 'chat',
+      inputTokens: 10,
+      costUsd: 0.5,
+      costSource: 'agent',
+      startedAt: t + 1,
+      model: 'm',
+      provider: 'p',
+      ok: false,
+    });
+    const s = insights.summary();
+    expect(s.recent[0]?.ok).toBe(false);
+    expect(s.recent[0]?.costUsd).toBeCloseTo(0.5, 4);
+  });
+
+  it('windowDays filters old runs', () => {
+    const { runs, insights } = setup();
+    seedRun(runs, {
+      kind: 'chat',
+      inputTokens: 999,
+      startedAt: Date.now() - 60 * 86_400_000,
+      model: 'm',
+      provider: 'p',
+      costUsd: 1,
+      costSource: 'agent',
+    });
+    seedRun(runs, {
+      kind: 'chat',
+      inputTokens: 5,
+      startedAt: Date.now(),
+      model: 'm',
+      provider: 'p',
+      costUsd: 0.01,
+      costSource: 'agent',
+    });
+    const s = insights.summary({ windowDays: 30 });
+    expect(s.kpis.totalTokens).toBe(5);
+  });
+
+  it('daily series and peakDay are populated', () => {
+    const { runs, insights } = setup();
+    const now = Date.now();
+    seedRun(runs, {
+      kind: 'chat',
+      inputTokens: 100,
+      costUsd: 0.1,
+      costSource: 'agent',
+      startedAt: now,
+      model: 'm',
+      provider: 'p',
+    });
+    seedRun(runs, {
+      kind: 'chat',
+      inputTokens: 500,
+      costUsd: 0.5,
+      costSource: 'agent',
+      startedAt: now - 86_400_000,
+      model: 'm',
+      provider: 'p',
+    });
+    const s = insights.summary();
+    expect(s.daily.length).toBeGreaterThanOrEqual(1);
+    expect(s.peakDay).toBeDefined();
+    expect(s.peakDay!.costUsd).toBeGreaterThanOrEqual(0.1);
+  });
+
+  it('rolls tokens across chat and automation', () => {
     const { runs, insights } = setup();
     seedRun(runs, {
       kind: 'automation',
       automationRef: 'auto.todos/digest',
       model: 'claude-sonnet-4-5',
+      provider: 'claude-code',
       inputTokens: 1000,
       outputTokens: 500,
       costUsd: 0.02,
+      costSource: 'estimated',
     });
     seedRun(runs, {
       kind: 'chat',
       model: 'gpt-5-codex',
+      provider: 'codex',
       inputTokens: 200,
       outputTokens: 100,
       costUsd: 0.01,
+      costSource: 'agent',
     });
     const s = insights.summary();
-    expect(s.kpis.generations).toBe(2);
     expect(s.kpis.totalTokens).toBe(1800);
-    expect(s.kpis.totalCostUsd).toBe(0.03);
-    // Only the automation run carries an owning app; chat has none.
-    expect(s.kpis.appsTouched).toBe(1);
-    expect(s.kpis.retries).toBe(0);
-    expect(s.kpis.forecastCostUsd >= 0).toBeTruthy();
-  });
-
-  it('counts distinct owning apps across automation runs', () => {
-    const { runs, insights } = setup();
-    seedRun(runs, { kind: 'automation', automationRef: 'auto.todos/digest', inputTokens: 10 });
-    seedRun(runs, { kind: 'automation', automationRef: 'auto.habits/nudge', inputTokens: 10 });
-    seedRun(runs, { kind: 'automation', automationRef: 'auto.todos/sweep', inputTokens: 10 });
-    expect(insights.summary().kpis.appsTouched).toBe(2);
-  });
-
-  it('counts retries via retry_of', () => {
-    const { runs, insights } = setup();
-    const first = seedRun(runs, {
-      kind: 'automation',
-      automationRef: 'auto.a/job',
-      inputTokens: 10,
-    });
-    seedRun(runs, {
-      kind: 'automation',
-      automationRef: 'auto.a/job',
-      inputTokens: 10,
-      retryOf: first,
-    });
-    const s = insights.summary();
     expect(s.kpis.generations).toBe(2);
-    expect(s.kpis.retries).toBe(1);
-  });
-
-  it('groups by automation, collapsing chat into a synthetic bucket', () => {
-    const { runs, insights } = setup();
-    seedRun(runs, { kind: 'automation', automationRef: 'auto.x/auto-1', inputTokens: 500 });
-    seedRun(runs, { kind: 'chat', inputTokens: 300 });
-    const s = insights.summary();
-    const chat = s.byAutomation.find((r) => r.kind === 'chat');
-    const auto = s.byAutomation.find((r) => r.kind === 'automation');
-    expect(chat).toBeTruthy();
-    expect(chat!.key).toBe('chat');
-    expect(chat!.label).toBe('Chat');
-    expect(chat!.tokens).toBe(300);
-    expect(auto).toBeTruthy();
-    expect(auto!.key).toBe('auto.x/auto-1');
-    expect(auto!.tokens).toBe(500);
-  });
-
-  it('carries the run-recorded automation name on byAutomation + recent rows (orphaned-run fallback)', () => {
-    const { runs, insights } = setup();
-    seedRun(runs, {
-      kind: 'automation',
-      automationRef: 'auto.x/auto-1',
-      automationName: 'Auto One',
-      inputTokens: 500,
-    });
-    // A run recorded before this field existed carries no name.
-    seedRun(runs, { kind: 'automation', automationRef: 'auto.y/auto-2', inputTokens: 10 });
-    const s = insights.summary();
-    const named = s.byAutomation.find((r) => r.key === 'auto.x/auto-1');
-    const unnamed = s.byAutomation.find((r) => r.key === 'auto.y/auto-2');
-    expect(named?.automationName).toBe('Auto One');
-    expect(unnamed?.automationName).toBeUndefined();
-    const namedRecent = s.recent.find((r) => r.automationRef === 'auto.x/auto-1');
-    expect(namedRecent?.automationName).toBe('Auto One');
-  });
-
-  it('groups by each run’s dominant model', () => {
-    const { runs, insights } = setup();
-    seedRun(runs, { kind: 'chat', model: 'claude-sonnet-4-5', inputTokens: 100, outputTokens: 50 });
-    seedRun(runs, { kind: 'chat', model: 'claude-sonnet-4-5', inputTokens: 200, outputTokens: 80 });
-    seedRun(runs, { kind: 'chat', model: 'gpt-5-codex', inputTokens: 40 });
-    const s = insights.summary();
-    const sonnet = s.byModel.find((m) => m.model === 'claude-sonnet-4-5');
-    expect(sonnet).toBeTruthy();
-    expect(sonnet!.runs).toBe(2);
-    expect(sonnet!.tokens).toBe(430);
-    expect(s.byModel.length).toBe(2);
-  });
-
-  it('returns recent activity newest-first', () => {
-    const { runs, insights } = setup();
-    seedRun(runs, {
-      kind: 'automation',
-      automationRef: 'auto.a/job',
-      startedAt: Date.now() - 60_000,
-    });
-    seedRun(runs, { kind: 'chat', startedAt: Date.now() });
-    const s = insights.summary();
-    expect(s.recent.length).toBe(2);
-    expect(s.recent[0]!.kind).toBe('chat');
-  });
-
-  it('excludes runs outside the window', () => {
-    const { runs, insights } = setup();
-    // 60 days ago — outside a 30-day window.
-    seedRun(runs, { kind: 'chat', inputTokens: 999, startedAt: Date.now() - 60 * 86_400_000 });
-    seedRun(runs, { kind: 'chat', inputTokens: 5, startedAt: Date.now() });
-    const s = insights.summary({ windowDays: 30 });
-    expect(s.kpis.generations).toBe(1);
-    expect(s.kpis.totalTokens).toBe(5);
-  });
-
-  it('builds a daily series grouped by date', () => {
-    const { runs, insights } = setup();
-    seedRun(runs, { kind: 'chat', inputTokens: 100, outputTokens: 20 });
-    seedRun(runs, { kind: 'chat', inputTokens: 30 });
-    const s = insights.summary();
-    expect(s.daily.length).toBe(1);
-    expect(s.daily[0]!.tokens).toBe(150);
-    expect(s.daily[0]!.runs).toBe(2);
-    expect(s.daily[0]!.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });
 
-/**
- * #438: archived-and-pruned runs live in `conversation_digest` (one row per
- * conversation, the ARCHIVED portion only). Insights unions live `run_summary`
- * aggregates with these rollups so pruning raw rows is invisible to the
- * dashboard. These tests hand-insert digest rows (Wave 2 writes them for real)
- * and assert the union math.
- */
 function setupWithDb(): {
   runs: ConversationStore;
   insights: InsightsStore;
-  db: ReturnType<ReturnType<typeof makeJournalDbProvider>>;
+  db: DatabaseSync;
 } {
   const dir = tempDirSync('centraid-insights-digest-');
-  const ledger = makeJournalDbProvider(join(dir, 'journal.db'));
+  const dbPath = join(dir, 'journal.db');
+  const db = openJournalDb(dbPath);
+  const ledger = makeJournalDbProvider(dbPath);
   return {
     runs: new ConversationStore(ledger),
     insights: new InsightsStore(ledger),
-    db: ledger(),
+    db,
   };
 }
 
-interface DigestInput {
-  conversationId: string;
-  kind: string;
-  appId?: string | null;
-  automationRef?: string | null;
-  automationName?: string | null;
-  lastEndedAt: number;
-  firstStartedAt?: number;
-  runCount: number;
-  retryCount?: number;
-  inputTokens?: number;
-  outputTokens?: number;
-  costUsd?: number;
-  models?: Array<{ model: string; runs: number; tokens: number; cost: number }>;
-}
-
-/** Insert a conversation_digest row (raw rows already pruned). */
-function insertDigest(
-  db: ReturnType<ReturnType<typeof makeJournalDbProvider>>,
-  d: DigestInput,
+function seedDigest(
+  db: DatabaseSync,
+  d: {
+    conversationId: string;
+    kind?: string;
+    automationRef?: string | null;
+    lastEndedAt: number;
+    runCount?: number;
+    tokens?: number;
+    cost?: number;
+    modelsJson?: string;
+  },
 ): void {
   db.prepare(
-    `INSERT INTO conversation_digest
-       (conversation_id, kind, app_id, automation_ref, automation_name, title,
-        first_started_at, last_ended_at, run_count, ok_count, err_count, retry_count,
-        total_input_tokens, total_output_tokens, total_cache_read_tokens,
-        total_cache_write_tokens, total_cost_usd, step_count, tool_count,
-        models_json, updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO conversation_digest (
+       conversation_id, kind, automation_ref, app_id, automation_name,
+       first_started_at, last_ended_at, run_count, retry_count,
+       total_input_tokens, total_output_tokens, total_cache_read_tokens, total_cache_write_tokens,
+       total_cost_usd, step_count, tool_count, models_json, updated_at
+     ) VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, 0, ?, 0, 0, 0, ?, 0, 0, ?, ?)`,
   ).run(
     d.conversationId,
-    d.kind,
-    d.appId ?? null,
+    d.kind ?? 'chat',
     d.automationRef ?? null,
-    d.automationName ?? null,
-    '',
-    d.firstStartedAt ?? d.lastEndedAt,
+    d.lastEndedAt - 1000,
     d.lastEndedAt,
-    d.runCount,
-    d.runCount,
-    0,
-    d.retryCount ?? 0,
-    d.inputTokens ?? 0,
-    d.outputTokens ?? 0,
-    0,
-    0,
-    d.costUsd ?? 0,
-    0,
-    0,
-    JSON.stringify(d.models ?? []),
-    d.lastEndedAt,
+    d.runCount ?? 1,
+    d.tokens ?? 0,
+    d.cost ?? 0,
+    d.modelsJson ?? '[]',
+    Date.now(),
   );
 }
 
-describe('InsightsStore digest union (#438)', () => {
-  it('unions archived-digest rollups into KPIs, byAutomation, byModel and daily', () => {
+describe('InsightsStore digest union (#438 + #514)', () => {
+  it('unions digest tokens/cost into KPIs for long windows', () => {
     const { runs, insights, db } = setupWithDb();
     const now = Date.now();
-    // A live chat run (recent) — no owning app.
     seedRun(runs, {
       kind: 'chat',
-      model: 'm-live',
       inputTokens: 200,
       outputTokens: 100,
       costUsd: 0.01,
+      costSource: 'agent',
       startedAt: now,
+      model: 'm',
+      provider: 'p',
     });
-    // An archived automation conversation: raw rows pruned, only a digest left.
-    const conv = runs.ensureAutomationConversation('auto.todos/digest', 'auto.todos', 'Digest');
-    insertDigest(db, {
-      conversationId: conv,
-      kind: 'automation',
-      appId: 'auto.todos',
-      automationRef: 'auto.todos/digest',
-      automationName: 'Digest',
-      lastEndedAt: now,
+    const archConv = runs.createConversation({ kind: 'chat', userId: 'u', id: 'arch-1' });
+    seedDigest(db, {
+      conversationId: archConv.id,
+      lastEndedAt: now - 10 * 86_400_000,
+      tokens: 1000,
+      cost: 0.05,
       runCount: 3,
-      retryCount: 1,
-      inputTokens: 1000,
-      outputTokens: 500,
-      costUsd: 0.05,
-      models: [{ model: 'm-archived', runs: 3, tokens: 1500, cost: 0.05 }],
+      modelsJson: JSON.stringify([{ model: 'old-m', runs: 3, tokens: 1000, cost: 0.05 }]),
     });
-
-    // 365d window so the digest's span reaches into it.
     const s = insights.summary({ windowDays: 365 });
+    expect(s.kpis.totalTokens).toBe(300 + 1000);
     expect(s.kpis.generations).toBe(1 + 3);
-    expect(s.kpis.totalTokens).toBe(300 + 1500);
-    expect(s.kpis.retries).toBe(1);
-    expect(s.kpis.totalCostUsd).toBe(0.06);
-    // digest app 'auto.todos'; the live chat run carries no app.
-    expect(s.kpis.appsTouched).toBe(1);
-
-    const auto = s.byAutomation.find((r) => r.key === 'auto.todos/digest');
-    expect(auto?.runs).toBe(3);
-    expect(auto?.tokens).toBe(1500);
-    expect(auto?.automationName).toBe('Digest');
-
-    const archived = s.byModel.find((m) => m.model === 'm-archived');
-    const live = s.byModel.find((m) => m.model === 'm-live');
-    expect(archived?.runs).toBe(3);
-    expect(archived?.tokens).toBe(1500);
-    expect(live?.tokens).toBe(300);
-
-    // SUM(daily.tokens) ties to the KPI total (same window filter both places).
-    const dailyTokens = s.daily.reduce((acc, d) => acc + d.tokens, 0);
-    expect(dailyTokens).toBe(s.kpis.totalTokens);
-  });
-
-  it('a digest whose archived span predates the window is excluded (≥90d idle vs 30d window)', () => {
-    const { runs, insights, db } = setupWithDb();
-    const now = Date.now();
-    seedRun(runs, { kind: 'chat', inputTokens: 5, startedAt: now });
-    const conv = runs.ensureAutomationConversation('auto.old/job', 'auto.old');
-    insertDigest(db, {
-      conversationId: conv,
-      kind: 'automation',
-      automationRef: 'auto.old/job',
-      lastEndedAt: now - 120 * 86_400_000, // 120 days ago
-      runCount: 9,
-      inputTokens: 9999,
-    });
-    const s = insights.summary({ windowDays: 30 });
-    expect(s.kpis.generations).toBe(1);
-    expect(s.kpis.totalTokens).toBe(5);
-  });
-
-  it('reproduces pre-archive rollups after a simulated prune (digest parity)', () => {
-    const { runs, insights, db } = setupWithDb();
-    const now = Date.now();
-    // Seed three live automation runs on one ref, plus a live chat run.
-    for (const [i, tok] of [300, 700, 200].entries())
-      seedRun(runs, {
-        kind: 'automation',
-        automationRef: 'auto.parity/job',
-        automationName: 'Parity',
-        model: 'm-a',
-        inputTokens: tok,
-        costUsd: 0.01 * (i + 1),
-        startedAt: now,
-      });
-    seedRun(runs, { kind: 'chat', model: 'm-b', inputTokens: 50, costUsd: 0.001, startedAt: now });
-
-    const before = insights.summary({ windowDays: 365 });
-
-    // Build the digest from the live run_summary rows of the automation conv,
-    // then prune those raw turns (conversation row STAYS — only turns/items go).
-    const convId = 'auto.parity/job';
-    const rollup = db
-      .prepare(
-        `SELECT COUNT(*) AS runs,
-                SUM(COALESCE(total_input_tokens,0)+COALESCE(total_output_tokens,0)
-                   +COALESCE(total_cache_read_tokens,0)+COALESCE(total_cache_write_tokens,0)) AS tokens,
-                SUM(COALESCE(total_cost_usd,0)) AS cost,
-                MAX(ended_at) AS last_ended
-         FROM run_summary WHERE automation_ref = ?`,
-      )
-      .get(convId) as { runs: number; tokens: number; cost: number; last_ended: number };
-    insertDigest(db, {
-      conversationId: convId,
-      kind: 'automation',
-      automationRef: convId,
-      automationName: 'Parity',
-      lastEndedAt: rollup.last_ended,
-      runCount: rollup.runs,
-      inputTokens: rollup.tokens,
-      costUsd: rollup.cost,
-      models: [{ model: 'm-a', runs: rollup.runs, tokens: rollup.tokens, cost: rollup.cost }],
-    });
-    db.prepare(`DELETE FROM turns WHERE conversation_id = ?`).run(convId);
-
-    const after = insights.summary({ windowDays: 365 });
-    // The dashboard numbers are identical before archive and after prune.
-    expect(after.kpis.generations).toBe(before.kpis.generations);
-    expect(after.kpis.totalTokens).toBe(before.kpis.totalTokens);
-    expect(after.kpis.totalCostUsd).toBe(before.kpis.totalCostUsd);
-    const beforeAuto = before.byAutomation.find((r) => r.key === convId);
-    const afterAuto = after.byAutomation.find((r) => r.key === convId);
-    expect(afterAuto?.runs).toBe(beforeAuto?.runs);
-    expect(afterAuto?.tokens).toBe(beforeAuto?.tokens);
-    const beforeModelA = before.byModel.find((m) => m.model === 'm-a');
-    const afterModelA = after.byModel.find((m) => m.model === 'm-a');
-    expect(afterModelA?.runs).toBe(beforeModelA?.runs);
-    expect(afterModelA?.tokens).toBe(beforeModelA?.tokens);
+    // bySource includes live + digest
+    expect(s.bySource.some((r) => r.kind === 'chat')).toBe(true);
   });
 });

@@ -16,6 +16,7 @@ import type {
   TurnStreamEvent,
   RunStreamEvent,
 } from '@centraid/app-engine';
+import { resolveItemCost } from '@centraid/app-engine';
 import type { HistoryConfig } from '../manifest/manifest.js';
 
 /**
@@ -201,6 +202,10 @@ export function usageCloseFields(
   usage: Extract<TurnStreamEvent, { type: 'usage' }> | undefined,
 ): Partial<CloseRunNodeArgs> {
   if (!usage) return {};
+  // Prefer agent cost when present; catalog fill happens in closeRunNode when
+  // tokens exist but cost does not (issue #514).
+  const costSource =
+    usage.costSource ?? (usage.costUsd !== undefined ? ('agent' as const) : undefined);
   return {
     ...(usage.model !== undefined ? { model: usage.model } : {}),
     ...(usage.provider !== undefined ? { provider: usage.provider } : {}),
@@ -208,6 +213,8 @@ export function usageCloseFields(
     ...(usage.outputTokens !== undefined ? { outputTokens: usage.outputTokens } : {}),
     ...(usage.cacheReadTokens !== undefined ? { cacheReadTokens: usage.cacheReadTokens } : {}),
     ...(usage.cacheWriteTokens !== undefined ? { cacheWriteTokens: usage.cacheWriteTokens } : {}),
+    ...(usage.costUsd !== undefined ? { costUsd: usage.costUsd } : {}),
+    ...(costSource !== undefined ? { costSource } : {}),
   };
 }
 
@@ -233,6 +240,8 @@ export interface CloseRunNodeArgs {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  costUsd?: number;
+  costSource?: 'agent' | 'estimated';
 }
 
 /**
@@ -245,6 +254,22 @@ export function closeRunNode(args: CloseRunNodeArgs): void {
   const durationMs = args.ended - args.started;
   const outputJson =
     args.ok && args.result !== undefined ? (truncateForAudit(args.result) ?? '') : undefined;
+  const usage = {
+    ...(args.inputTokens !== undefined ? { inputTokens: args.inputTokens } : {}),
+    ...(args.outputTokens !== undefined ? { outputTokens: args.outputTokens } : {}),
+    ...(args.cacheReadTokens !== undefined ? { cacheReadTokens: args.cacheReadTokens } : {}),
+    ...(args.cacheWriteTokens !== undefined ? { cacheWriteTokens: args.cacheWriteTokens } : {}),
+  };
+  const priced =
+    args.costSource === 'agent' && args.costUsd !== undefined
+      ? { costUsd: args.costUsd, costSource: 'agent' as const }
+      : args.costSource === 'estimated' && args.costUsd !== undefined
+        ? { costUsd: args.costUsd, costSource: 'estimated' as const }
+        : resolveItemCost({
+            ...(args.costUsd !== undefined ? { agentCostUsd: args.costUsd } : {}),
+            model: args.model,
+            usage,
+          });
   try {
     args.store.closeItem({
       itemId: args.nodeId,
@@ -260,6 +285,8 @@ export function closeRunNode(args: CloseRunNodeArgs): void {
       ...(args.outputTokens !== undefined ? { outputTokens: args.outputTokens } : {}),
       ...(args.cacheReadTokens !== undefined ? { cacheReadTokens: args.cacheReadTokens } : {}),
       ...(args.cacheWriteTokens !== undefined ? { cacheWriteTokens: args.cacheWriteTokens } : {}),
+      ...(priced.costUsd !== undefined ? { costUsd: priced.costUsd } : {}),
+      ...(priced.costSource !== undefined ? { costSource: priced.costSource } : {}),
     });
   } catch {
     /* swallow */

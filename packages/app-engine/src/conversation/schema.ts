@@ -169,8 +169,10 @@ export interface Item {
   /** `step` / `agent` — the model + provider that served the call. */
   readonly model?: string;
   readonly provider?: string;
-  /** Frozen at write time from the per-model price table; absent = no price known. */
+  /** Frozen at write time; absent = no price known. Prefer agent-reported USD. */
   readonly costUsd?: number;
+  /** Issue #514 — where `costUsd` came from. */
+  readonly costSource?: 'agent' | 'estimated';
   /** `tool` / `agent` — the app whose data the call touched. */
   readonly appId?: string;
   /** `agent` — the turn id of a child turn this item spawned (sub-agent). */

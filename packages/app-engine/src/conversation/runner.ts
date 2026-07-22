@@ -107,8 +107,13 @@ export type TurnStreamEvent =
       outputTokens?: number;
       cacheReadTokens?: number;
       cacheWriteTokens?: number;
-      /** USD estimate, priced server-side (model-pricing.ts) at the SSE seam. */
+      /**
+       * USD cost: agent/ACP-reported when present; otherwise filled at the SSE
+       * seam from the catalog (issue #514). See `costSource`.
+       */
       costUsd?: number;
+      /** Where `costUsd` came from — agent report vs catalog estimate. */
+      costSource?: 'agent' | 'estimated';
     };
 
 export interface ConversationTurnInput {

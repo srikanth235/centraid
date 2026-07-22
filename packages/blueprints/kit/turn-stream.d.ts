@@ -36,8 +36,9 @@ export type TurnStreamEvent =
       outputTokens?: number;
       cacheReadTokens?: number;
       cacheWriteTokens?: number;
-      /** USD estimate, priced server-side (model-pricing.ts) at the SSE seam. */
+      /** Agent-reported or catalog-estimated USD (see costSource). */
       costUsd?: number;
+      costSource?: 'agent' | 'estimated';
     }
   | {
       type: 'webhooks';
