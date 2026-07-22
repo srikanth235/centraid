@@ -182,6 +182,9 @@ function makeAcpBackend(spec: AcpBackendSpec): RunnerBackend {
           extraSystemPrompt: input.extraSystemPrompt,
           ...(input.model ? { model: input.model } : {}),
           ...(input.prevSessionId ? { prevSessionId: input.prevSessionId } : {}),
+          ...(input.additionalDirectories?.length
+            ? { additionalDirectories: input.additionalDirectories }
+            : {}),
           ...(input.extraPath ? { extraPath: input.extraPath } : {}),
           abortSignal: input.abortSignal,
           onEvent: input.onEvent,

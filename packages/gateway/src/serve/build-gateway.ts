@@ -77,6 +77,7 @@ import {
   readRunnerModels,
   enumerateRunnerModels,
   probeCliAvailability,
+  resolveAcpCapabilities,
   type CatalogSurface,
   type RunnerKind,
   type RunnerPrefs,
@@ -149,7 +150,7 @@ import {
 import { buildAssistantPrompt } from '../runs/assistant-prompt.js';
 import { makeAssistantRouteHandler } from '../routes/assistant-routes.js';
 import { makeTemplatesRouteHandler } from '../routes/templates-routes.js';
-import { makeAgentsRouteHandler } from '../routes/agents-routes.js';
+import { makeAgentsRouteHandler, type AgentAcpCapabilities } from '../routes/agents-routes.js';
 import { makeGatewayInfoRouteHandler } from '../routes/gateway-info-routes.js';
 import { makeHealthRouteHandler } from '../routes/health-routes.js';
 import { makeRemindersRouteHandler } from '../routes/reminders-routes.js';
@@ -2467,6 +2468,29 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       '/centraid/_agents',
       makeAgentsRouteHandler({
         ...(resolveCatalogModels ? { resolveModels: resolveCatalogModels } : {}),
+        resolveCapabilities: async (kind, refresh) => {
+          const caps = await resolveAcpCapabilities(kind, {
+            binPath: binPathForKind(kind),
+            // Only force a spawn on explicit refresh; otherwise serve cache
+            // (and probe once on first read when cold).
+            refresh,
+          });
+          if (!caps) return undefined;
+          const out: AgentAcpCapabilities = {
+            reachable: caps.reachable,
+            loadSession: caps.loadSession,
+            resume: caps.resume,
+            close: caps.close,
+            additionalDirectories: caps.additionalDirectories,
+            mcpHttp: caps.mcpHttp,
+            mcpSse: caps.mcpSse,
+            modelConfigurable: caps.modelConfigurable,
+            authRequired: caps.authRequired,
+            promptImage: caps.promptImage,
+            ...(caps.reason ? { reason: caps.reason } : {}),
+          };
+          return out;
+        },
         binPathFor: binPathForKind,
       }),
     ),

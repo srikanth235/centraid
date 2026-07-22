@@ -37,6 +37,8 @@ export type TurnStreamEvent =
       args?: unknown;
       /** When the tool is a centraid_sql_* tool, the SQL is surfaced separately for the UI. */
       sql?: string;
+      /** ACP tool kind when the agent supplied one (read/edit/delete/move/…​). */
+      kind?: string;
     }
   | {
       type: 'tool.result';
@@ -46,8 +48,19 @@ export type TurnStreamEvent =
       result?: unknown;
       /** Plain-text error message when `ok === false`. */
       errorText?: string;
+      /**
+       * Structured file diffs extracted from ACP tool content blocks
+       * (`type: "diff"`), when the agent reported them.
+       */
+      diffs?: Array<{ path?: string; oldText?: string; newText?: string }>;
     }
-  | { type: 'phase'; phase: string; detail?: unknown }
+  | {
+      type: 'phase';
+      phase: string;
+      detail?: unknown;
+      /** Normalized plan entries when `phase === 'plan'`. */
+      plan?: Array<{ content: string; status?: string; priority?: string }>;
+    }
   | { type: 'final'; text: string }
   | { type: 'error'; message: string }
   | { type: 'aborted' }

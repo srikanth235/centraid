@@ -57,6 +57,19 @@ export default function AgentEntry({
             {!isDefault && usedBy.length === 0 ? (
               <span className={styles.usedByNone}>Unused</span>
             ) : null}
+            {card.capabilityChips?.map((c) => (
+              <span
+                key={c}
+                className={styles.usedByChip}
+                data-warn={
+                  c === 'no vault HTTP' || c === 'sign-in needed' || c === 'probe failed'
+                    ? 'true'
+                    : undefined
+                }
+              >
+                {c}
+              </span>
+            ))}
           </div>
         </div>
         <ModelSelect

@@ -639,6 +639,15 @@ export interface AgentCardDTO {
   connected: boolean;
   models: AgentModelDTO[];
   modelsLoading: boolean;
+  /**
+   * Short capability chips for Settings (vault, resume, model pin, sign-in).
+   * Empty when the gateway has not probed this agent yet.
+   */
+  capabilityChips?: string[];
+  /** True when vault tools need HTTP MCP and the agent does not offer it. */
+  vaultUnavailable?: boolean;
+  /** True when the agent answered AUTH_REQUIRED on the last probe. */
+  authRequired?: boolean;
 }
 /**
  * The chat/agent subsystems that can each pin their own model, independent

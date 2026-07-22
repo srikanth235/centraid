@@ -114,15 +114,24 @@ test('an agent that streams the MCP call itself is not double-rendered', async (
   expect(start && start.type === 'tool.start' && start.toolName).toBe('mcp__centraid__vault_sql');
 });
 
-test('an agent with no HTTP MCP support says so instead of losing the vault silently', async () => {
+test('an agent with no HTTP MCP support gets a stdio vault bridge instead of silence', async () => {
   const dir = await tempDir('acp-vault-');
   const mcpMarker = path.join(dir, 'mcp');
   const { events } = await runFake({
     extraArgs: ['--mode=normal', `--mcp-marker=${mcpMarker}`],
     toolContext: vaultToolContext(),
   });
-  expect(JSON.parse(await fs.readFile(mcpMarker, 'utf8'))).toEqual([]);
-  expect(notices(events)).toContain('vault_tools_unavailable');
+  const advertised = JSON.parse(await fs.readFile(mcpMarker, 'utf8')) as Array<{
+    name?: string;
+    command?: string;
+    type?: string;
+  }>;
+  expect(advertised).toHaveLength(1);
+  expect(advertised[0]?.name).toBe('centraid');
+  expect(advertised[0]?.type).toBeUndefined();
+  expect(advertised[0]?.command).toBeTruthy();
+  expect(notices(events)).toContain('vault_tools_stdio');
+  expect(notices(events)).not.toContain('vault_tools_unavailable');
 });
 
 test('a turn with no toolContext advertises no MCP server at all', async () => {

@@ -41,6 +41,67 @@ export interface SessionUpdateMapper {
   usage: () => { tokens: TokenUsage; cost: UsageCost | undefined };
 }
 
+type ToolDiff = { path?: string; oldText?: string; newText?: string };
+type PlanEntry = { content: string; status?: string; priority?: string };
+
+/** Pull `type: "diff"` content blocks out of ACP tool content arrays. */
+export function extractToolDiffs(content: unknown): ToolDiff[] {
+  if (!Array.isArray(content)) {
+    // Some agents put a single block or nest under { content: [...] }.
+    if (
+      content &&
+      typeof content === 'object' &&
+      Array.isArray((content as { content?: unknown }).content)
+    ) {
+      return extractToolDiffs((content as { content: unknown }).content);
+    }
+    return [];
+  }
+  const out: ToolDiff[] = [];
+  for (const block of content) {
+    if (!block || typeof block !== 'object') continue;
+    const rec = block as Record<string, unknown>;
+    if (rec.type !== 'diff') continue;
+    const path =
+      typeof rec.path === 'string'
+        ? rec.path
+        : typeof rec.filePath === 'string'
+          ? rec.filePath
+          : undefined;
+    out.push({
+      ...(path ? { path } : {}),
+      ...(typeof rec.oldText === 'string' ? { oldText: rec.oldText } : {}),
+      ...(typeof rec.newText === 'string' ? { newText: rec.newText } : {}),
+    });
+  }
+  return out;
+}
+
+/** Normalize plan entries from ACP `sessionUpdate: "plan"`. */
+export function normalizePlanEntries(entries: unknown): PlanEntry[] {
+  if (!Array.isArray(entries)) return [];
+  const out: PlanEntry[] = [];
+  for (const e of entries) {
+    if (!e || typeof e !== 'object') continue;
+    const rec = e as Record<string, unknown>;
+    const content =
+      typeof rec.content === 'string'
+        ? rec.content
+        : typeof rec.text === 'string'
+          ? rec.text
+          : typeof rec.title === 'string'
+            ? rec.title
+            : undefined;
+    if (!content) continue;
+    out.push({
+      content,
+      ...(typeof rec.status === 'string' ? { status: rec.status } : {}),
+      ...(typeof rec.priority === 'string' ? { priority: rec.priority } : {}),
+    });
+  }
+  return out;
+}
+
 export function createSessionUpdateMapper(
   emit: (event: TurnStreamEvent) => void,
 ): SessionUpdateMapper {
@@ -75,6 +136,11 @@ export function createSessionUpdateMapper(
     const ok = status === 'completed';
     const result = update.rawOutput ?? update.content ?? null;
     const errorText = ok ? undefined : textOf(update.content) || 'tool call failed';
+    let diffs = extractToolDiffs(update.content);
+    // Also scan rawOutput for nested content blocks.
+    if (diffs.length === 0 && update.rawOutput !== undefined) {
+      diffs = extractToolDiffs(update.rawOutput);
+    }
     emit({
       type: 'tool.result',
       toolCallId: id,
@@ -82,7 +148,13 @@ export function createSessionUpdateMapper(
       ok,
       result,
       ...(errorText ? { errorText } : {}),
+      ...(diffs.length ? { diffs } : {}),
     });
+    // Builder-friendly parallel signal: each file change as a phase so UIs
+    // that only listen for `phase` still see diffs.
+    for (const d of diffs) {
+      emit({ type: 'phase', phase: 'diff', detail: d });
+    }
   };
 
   const handleSessionUpdate = (params: unknown): void => {
@@ -119,6 +191,7 @@ export function createSessionUpdateMapper(
         toolCallId: id,
         toolName: title,
         ...(update.rawInput !== undefined ? { args: update.rawInput } : {}),
+        ...(typeof update.kind === 'string' ? { kind: update.kind } : {}),
       });
       maybeEmitToolResult(id, update);
       return;
@@ -130,7 +203,13 @@ export function createSessionUpdateMapper(
       return;
     }
     if (kind === 'plan') {
-      emit({ type: 'phase', phase: 'plan', ...(update.entries ? { detail: update.entries } : {}) });
+      const plan = normalizePlanEntries(update.entries);
+      emit({
+        type: 'phase',
+        phase: 'plan',
+        ...(update.entries !== undefined ? { detail: update.entries } : {}),
+        ...(plan.length ? { plan } : {}),
+      });
       return;
     }
     if (kind === 'usage_update') {
@@ -142,7 +221,7 @@ export function createSessionUpdateMapper(
       if (cost) usageCost = cost;
     }
     // user_message_chunk / available_commands_update / current_mode_update:
-    // nothing the transcript needs mid-turn.
+    // product owns slash commands; agent command lists are ignored for now.
   };
 
   return {

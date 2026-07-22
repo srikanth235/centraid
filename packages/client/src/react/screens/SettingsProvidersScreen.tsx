@@ -316,7 +316,7 @@ export default function SettingsProvidersScreen({
             size="sm"
             icon="Reset"
             disabled={busyModels}
-            label="Refresh models"
+            label="Refresh models & capabilities"
             onClick={() => doRefresh(refreshModels, setBusyModels)}
           />
         </div>

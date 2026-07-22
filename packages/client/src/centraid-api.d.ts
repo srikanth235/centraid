@@ -402,6 +402,24 @@ export interface CentraidAgentStatusEntry {
   modelsStatus: CentraidSurfaceStatus;
   /** The model this runner defaults to, when its catalog names one. */
   defaultModel?: string;
+  /**
+   * Live ACP capability strip (vault HTTP MCP, session resume/load, model
+   * pin, auth). Present after Settings Refresh probes the agent; absent
+   * until then so a cold status poll stays cheap.
+   */
+  capabilities?: {
+    reachable: boolean;
+    loadSession: boolean;
+    resume: boolean;
+    close: boolean;
+    additionalDirectories: boolean;
+    mcpHttp: boolean;
+    mcpSse: boolean;
+    modelConfigurable: boolean;
+    authRequired: boolean;
+    promptImage: boolean;
+    reason?: string;
+  };
 }
 
 export interface CentraidAgentsStatus {

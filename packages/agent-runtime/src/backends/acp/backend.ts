@@ -2,41 +2,10 @@
  * Generic ACP (Agent Client Protocol) backend — the ONE integration path
  * for every runner kind (issue #479).
  *
- * This module is the turn orchestrator: it plans the launch, spawns the
- * agent, drives one turn over JSON-RPC on stdio, and tears everything down.
- * The pieces it composes each own one concern and carry the protocol facts
- * they depend on:
+ * Turn flow: launch (or warm reuse) → initialize → session resume|load|new →
+ * pin mode/model → session/prompt → stopReason handling → warm park or kill.
  *
- *   - `./types.ts`          — the public turn contract + adapter spec
- *   - `./launch.ts`         — what process to spawn, with what env
- *   - `./json-rpc.ts`       — newline-framed JSON-RPC 2.0 over stdio
- *   - `./session-config.ts` — handshake, session/new vs load, model pinning
- *   - `./stream-events.ts`  — session/update → `TurnStreamEvent`
- *   - `./permissions.ts`    — session/request_permission auto-allow
- *   - `./turn-vault-tools.ts` — the per-turn loopback MCP endpoint
- *   - `./usage.ts`          — one usage event per turn
- *
- * Turn wire shapes this module owns (verified against the public ACP spec at
- * https://agentclientprotocol.com):
- *
- *   - turn: `session/prompt` { sessionId, prompt: ContentBlock[] } →
- *     { stopReason: end_turn|max_tokens|max_turn_requests|refusal|cancelled }.
- *   - cancel: `session/cancel` { sessionId } notification; the pending
- *     `session/prompt` then resolves with stopReason 'cancelled'.
- *
- * We advertise NO client fs/terminal capabilities, so `fs/read_text_file`,
- * `fs/write_text_file`, and `terminal/*` server requests are answered with
- * a polite JSON-RPC method-not-found error.
- *
- * Attachments: mapped to ACP content blocks by `../../multimodal.ts`, gated
- * on the `promptCapabilities` the agent advertised. Only what it genuinely
- * can't take produces a notice, and the notice names it.
- *
- * Auth: an agent that hasn't been signed in answers session creation with
- * `AUTH_REQUIRED` (-32000). We keep the JSON-RPC error code (see
- * `AcpRpcError`) so that case can be answered with the registry's own
- * install hint instead of a raw RPC string — the per-kind text stays in
- * `registry.ts`, never in here.
+ * See ./stop-reason.ts, ./agent-errors.ts, ./session-warm.ts, ./turn-vault-tools.ts.
  */
 
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
@@ -49,16 +18,23 @@ import {
   type ContentBlock,
   type PromptCapabilities,
 } from '../../multimodal.js';
+import { classifyAgentFailure } from './agent-errors.js';
 import { isObject } from './content.js';
 import {
   ACP_PROTOCOL_VERSION,
-  AUTH_REQUIRED_CODE,
-  AcpRpcError,
   createAcpConnection,
+  type AcpConnection,
+  type AcpConnectionHandlers,
 } from './json-rpc.js';
 import { planLaunch } from './launch.js';
-import { pickPermissionOption, readPermissionOptions } from './permissions.js';
 import {
+  permissionAutoAllowNotice,
+  pickPermissionOption,
+  readPermissionOptions,
+  readPermissionToolTitle,
+} from './permissions.js';
+import {
+  hasSessionCapability,
   modeAvailable,
   pinModel,
   readConfigOptions,
@@ -68,20 +44,21 @@ import {
   type SessionModes,
   type SessionSetupResult,
 } from './session-config.js';
+import { putWarmSlot, takeWarmSlot } from './session-warm.js';
 import { createSessionUpdateMapper } from './stream-events.js';
+import { outcomeForStopReason } from './stop-reason.js';
 import { startTurnVaultTools } from './turn-vault-tools.js';
 import { buildUsageEvent } from './usage.js';
 import type { AcpTurnConfig, AcpTurnInput, AcpTurnResult } from './types.js';
 
 export type { AcpAdapterSpec, AcpTurnConfig, AcpTurnInput, AcpTurnResult } from './types.js';
 
+type Continuity = 'fresh' | 'resumed' | 'loaded' | 'warm';
+
 export async function runAcpTurn(
   input: AcpTurnInput,
   config: AcpTurnConfig,
 ): Promise<AcpTurnResult> {
-  // Launch plan differs by flavour but nothing downstream cares which we used.
-  // `pendingNotices` are queued here and flushed once the session exists, so
-  // launch-time findings still reach the transcript in turn order.
   const pendingNotices: TurnStreamEvent[] = [];
   let launch: { bin: string; args: string[]; env: NodeJS.ProcessEnv };
   try {
@@ -93,20 +70,25 @@ export async function runAcpTurn(
 
   await fs.mkdir(input.cwd, { recursive: true });
 
-  const command = lowPriorityCommand(launch.bin, launch.args);
-  const child = spawn(command.bin, command.args, {
-    cwd: input.cwd,
-    env: launch.env,
-    stdio: ['pipe', 'pipe', 'pipe'],
-  }) as ChildProcessByStdio<Writable, Readable, Readable>;
-
   let sessionId: string | undefined;
-  // Turn state.
-  let promptStarted = false; // gate: swallow session/load replay updates
-  /** Per-turn vault MCP endpoint; torn down with the child in `finally`. */
+  let promptStarted = false;
   let vaultMcp: Awaited<ReturnType<typeof startTurnVaultTools>>['handle'];
-  /** The model actually in effect — pinned by us, or the agent's current value. */
   let activeModel: string | undefined;
+  // Assigned on warm take or fresh spawn before any use; definite assignment
+  // assertion keeps the dual-path structure readable for tsc.
+  let child!: ChildProcessByStdio<Writable, Readable, Readable>;
+  let conn!: AcpConnection;
+  let canClose = false;
+  let canResume = false;
+  let canLoad = false;
+  let canAdditional = false;
+  let httpMcp = false;
+  let promptCaps: PromptCapabilities = {};
+  let continuity: Continuity = 'fresh';
+  let parkWarm = false;
+  let reusedWarm = false;
+  let configOptions: SessionConfigOption[] = [];
+  let modes: SessionModes | undefined;
 
   const emit = (event: TurnStreamEvent): void => {
     if (input.abortSignal.aborted) return;
@@ -115,36 +97,68 @@ export async function runAcpTurn(
 
   const stream = createSessionUpdateMapper(emit);
 
-  const conn = createAcpConnection(child, {
+  const makeHandlers = (): AcpConnectionHandlers => ({
     onServerRequest: (id, method, params) => {
       if (method === 'session/request_permission') {
-        // Headless policy parity with codex/claude: auto-allow the least
-        // destructive option. If the turn was cancelled, decline per spec.
         if (input.abortSignal.aborted) {
           conn.respond(id, { outcome: { outcome: 'cancelled' } });
           return;
         }
-        const optionId = pickPermissionOption(readPermissionOptions(params));
-        if (optionId) conn.respond(id, { outcome: { outcome: 'selected', optionId } });
-        else conn.respond(id, { outcome: { outcome: 'cancelled' } });
+        const options = readPermissionOptions(params);
+        const optionId = pickPermissionOption(options);
+        const toolTitle = readPermissionToolTitle(params);
+        if (optionId) {
+          emit(permissionAutoAllowNotice(optionId, options, toolTitle));
+          conn.respond(id, { outcome: { outcome: 'selected', optionId } });
+        } else {
+          conn.respond(id, { outcome: { outcome: 'cancelled' } });
+        }
         return;
       }
-      // We advertised no fs/terminal client capabilities — decline politely.
       conn.respondMethodNotFound(id, method);
     },
     onNotification: (method, params) => {
       if (method !== 'session/update') return;
-      if (!promptStarted) return; // session/load history replay — not this turn
+      if (!promptStarted) return;
       stream.handleSessionUpdate(params);
     },
   });
 
+  // ---- Warm reuse ---------------------------------------------------------
+  if (input.prevSessionId) {
+    const warm = takeWarmSlot(config.kind, input.cwd, input.prevSessionId);
+    if (warm) {
+      reusedWarm = true;
+      child = warm.child;
+      conn = warm.conn;
+      sessionId = warm.sessionId;
+      canClose = warm.canClose;
+      canResume = warm.canResume;
+      canLoad = warm.canLoad;
+      httpMcp = warm.httpMcp;
+      promptCaps = warm.promptCaps as PromptCapabilities;
+      continuity = 'warm';
+      conn.setHandlers(makeHandlers());
+    }
+  }
+
+  if (!reusedWarm) {
+    const command = lowPriorityCommand(launch.bin, launch.args);
+    child = spawn(command.bin, command.args, {
+      cwd: input.cwd,
+      env: launch.env,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }) as ChildProcessByStdio<Writable, Readable, Readable>;
+    conn = createAcpConnection(child, makeHandlers());
+  }
+
   const abortHandler = (): void => {
+    parkWarm = false;
     if (sessionId && !conn.hasExited()) {
       try {
         conn.send({ jsonrpc: '2.0', method: 'session/cancel', params: { sessionId } });
       } catch {
-        // ignore — we kill the process below
+        // ignore
       }
     }
     if (!child.killed) child.kill('SIGTERM');
@@ -152,69 +166,143 @@ export async function runAcpTurn(
   if (input.abortSignal.aborted) abortHandler();
   else input.abortSignal.addEventListener('abort', abortHandler, { once: true });
 
-  try {
-    const init = await conn.request<InitializeResult>('initialize', {
-      protocolVersion: ACP_PROTOCOL_VERSION,
-      clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-      clientInfo: { name: 'centraid-local-runner', title: 'Centraid', version: '0.1.0' },
-    });
-    const canLoad = init?.agentCapabilities?.loadSession === true;
-    const promptCaps: PromptCapabilities = isObject(init?.agentCapabilities?.promptCapabilities)
-      ? (init.agentCapabilities.promptCapabilities as PromptCapabilities)
-      : {};
-    const httpMcp = init?.agentCapabilities?.mcpCapabilities?.http === true;
-
-    // Launch-time findings (adapter env caveats) reach the transcript now
-    // that the handshake proved the agent is alive.
-    for (const notice of pendingNotices) emit(notice);
-
-    const vaultTools = await startTurnVaultTools({
-      toolContext: input.toolContext,
-      httpMcp,
-      emit,
-      agentStreamsTool: stream.agentStreamsTool,
-    });
-    vaultMcp = vaultTools.handle;
-    const mcpServers = vaultTools.mcpServers;
-
-    let configOptions: SessionConfigOption[] = [];
-    let modes: SessionModes | undefined;
-    let freshSession = true;
-    if (input.prevSessionId && canLoad) {
-      try {
-        const loaded = await conn.request<SessionSetupResult>('session/load', {
-          sessionId: input.prevSessionId,
-          cwd: input.cwd,
-          mcpServers,
-        });
-        configOptions = readConfigOptions(loaded);
-        modes = loaded?.modes ?? undefined;
-        sessionId = input.prevSessionId;
-        freshSession = false;
-      } catch {
-        // Resume rejected — fall back to a fresh session (mirrors how
-        // runner-core degrades when resume is unavailable).
-        sessionId = undefined;
-      }
+  const sessionParams = (sid?: string): Record<string, unknown> => {
+    const base: Record<string, unknown> = {
+      cwd: input.cwd,
+      ...(sid ? { sessionId: sid } : {}),
+    };
+    if (canAdditional && input.additionalDirectories?.length) {
+      base.additionalDirectories = input.additionalDirectories;
     }
-    if (!sessionId) {
-      const created = await conn.request<SessionSetupResult>('session/new', {
-        cwd: input.cwd,
+    return base;
+  };
+
+  try {
+    if (!reusedWarm) {
+      const init = await conn.request<InitializeResult>('initialize', {
+        protocolVersion: ACP_PROTOCOL_VERSION,
+        clientCapabilities: {
+          fs: { readTextFile: false, writeTextFile: false },
+          terminal: false,
+        },
+        clientInfo: { name: 'centraid-local-runner', title: 'Centraid', version: '0.1.0' },
+      });
+      canLoad = init?.agentCapabilities?.loadSession === true;
+      const sc = init?.agentCapabilities?.sessionCapabilities;
+      canResume = hasSessionCapability(sc, 'resume');
+      canClose = hasSessionCapability(sc, 'close');
+      canAdditional = hasSessionCapability(sc, 'additionalDirectories');
+      promptCaps = isObject(init?.agentCapabilities?.promptCapabilities)
+        ? (init.agentCapabilities.promptCapabilities as PromptCapabilities)
+        : {};
+      httpMcp = init?.agentCapabilities?.mcpCapabilities?.http === true;
+
+      for (const notice of pendingNotices) emit(notice);
+
+      const vaultTools = await startTurnVaultTools({
+        toolContext: input.toolContext,
+        httpMcp,
+        emit,
+        agentStreamsTool: stream.agentStreamsTool,
+      });
+      vaultMcp = vaultTools.handle;
+      const mcpServers = vaultTools.mcpServers;
+
+      const withMcp = (sid?: string): Record<string, unknown> => ({
+        ...sessionParams(sid),
         mcpServers,
       });
-      const id = typeof created?.sessionId === 'string' ? created.sessionId : undefined;
-      if (!id) throw new Error('acp agent did not return a sessionId');
-      configOptions = readConfigOptions(created);
-      modes = created?.modes ?? undefined;
-      sessionId = id;
-      freshSession = true;
+
+      if (input.prevSessionId && canResume) {
+        try {
+          const resumed = await conn.request<SessionSetupResult>(
+            'session/resume',
+            withMcp(input.prevSessionId),
+          );
+          configOptions = readConfigOptions(resumed);
+          modes = resumed?.modes ?? undefined;
+          sessionId = input.prevSessionId;
+          continuity = 'resumed';
+        } catch {
+          sessionId = undefined;
+        }
+      }
+      if (!sessionId && input.prevSessionId && canLoad) {
+        try {
+          const loaded = await conn.request<SessionSetupResult>(
+            'session/load',
+            withMcp(input.prevSessionId),
+          );
+          configOptions = readConfigOptions(loaded);
+          modes = loaded?.modes ?? undefined;
+          sessionId = input.prevSessionId;
+          continuity = 'loaded';
+        } catch {
+          sessionId = undefined;
+        }
+      }
+      if (!sessionId) {
+        const created = await conn.request<SessionSetupResult>('session/new', withMcp());
+        const id = typeof created?.sessionId === 'string' ? created.sessionId : undefined;
+        if (!id) throw new Error('acp agent did not return a sessionId');
+        configOptions = readConfigOptions(created);
+        modes = created?.modes ?? undefined;
+        sessionId = id;
+        continuity = 'fresh';
+      }
+    } else {
+      for (const notice of pendingNotices) emit(notice);
+      const vaultTools = await startTurnVaultTools({
+        toolContext: input.toolContext,
+        httpMcp,
+        emit,
+        agentStreamsTool: stream.agentStreamsTool,
+      });
+      vaultMcp = vaultTools.handle;
+      const mcpServers = vaultTools.mcpServers;
+      const sid = sessionId!;
+      try {
+        if (canResume) {
+          const resumed = await conn.request<SessionSetupResult>('session/resume', {
+            ...sessionParams(sid),
+            mcpServers,
+          });
+          configOptions = readConfigOptions(resumed);
+          modes = resumed?.modes ?? undefined;
+        } else if (canLoad) {
+          const loaded = await conn.request<SessionSetupResult>('session/load', {
+            ...sessionParams(sid),
+            mcpServers,
+          });
+          configOptions = readConfigOptions(loaded);
+          modes = loaded?.modes ?? undefined;
+        }
+      } catch {
+        emit({
+          type: 'notice',
+          level: 'warn',
+          code: 'session_warm_reattach_failed',
+          message: 'Could not reattach the warm agent session; continuing with the existing id.',
+        });
+      }
     }
 
-    // Headless policy for adapter-backed kinds that express it as a session
-    // mode (claude: `bypassPermissions`). Codex's equivalent rides in as a
-    // launch env var, so it never reaches this branch.
+    emit({
+      type: 'notice',
+      level: 'info',
+      code: 'session_continuity',
+      message:
+        continuity === 'fresh'
+          ? 'Started a new agent session for this turn.'
+          : continuity === 'resumed'
+            ? 'Resumed the prior agent session (no history replay).'
+            : continuity === 'loaded'
+              ? 'Loaded the prior agent session.'
+              : 'Reused a warm agent process for this turn.',
+    });
+
     const wantMode = config.adapter?.sessionModeId;
-    if (wantMode) {
+    if (wantMode && sessionId) {
       if (modeAvailable(modes, wantMode)) {
         await conn.request(SET_MODE, { sessionId, modeId: wantMode }).catch(() => undefined);
       } else {
@@ -232,22 +320,18 @@ export async function runAcpTurn(
     activeModel = await pinModel({
       request: conn.request,
       emit,
-      sessionId,
+      sessionId: sessionId!,
       configOptions,
       requested: input.model,
       resolveModel: config.resolveModel,
     });
 
     const prompt: ContentBlock[] = [];
-    if (freshSession && input.extraSystemPrompt) {
+    if (input.extraSystemPrompt) {
       prompt.push({ type: 'text', text: input.extraSystemPrompt });
     }
     prompt.push({ type: 'text', text: input.message });
 
-    // Attachments ride the prompt as real content blocks, gated on what the
-    // agent advertised. Only what it genuinely can't take gets a notice —
-    // and the notice names it, so "my screenshot vanished" is never a
-    // mystery.
     if (input.attachments?.length) {
       const mapped = acpAttachmentBlocks(input.attachments, promptCaps);
       prompt.push(...mapped.blocks);
@@ -264,70 +348,77 @@ export async function runAcpTurn(
     }
 
     promptStarted = true;
-    const promptResult = await conn.request<{ usage?: unknown }>('session/prompt', {
-      sessionId,
-      prompt,
-    });
+    const promptResult = await conn.request<{ usage?: unknown; stopReason?: unknown }>(
+      'session/prompt',
+      { sessionId, prompt },
+    );
 
-    // `PromptResponse.usage` is the authoritative token breakdown; anything
-    // scraped off `usage_update` is a fallback for agents that predate it.
     if (isObject(promptResult?.usage)) stream.foldTokenUsage(promptResult.usage);
     const folded = stream.usage();
     const usageEvent = buildUsageEvent(config.kind, activeModel, folded.tokens, folded.cost);
     if (usageEvent) emit(usageEvent);
 
-    if (!input.abortSignal.aborted) emit({ type: 'final', text: stream.finalText() });
-  } catch (err) {
     if (!input.abortSignal.aborted) {
-      if (err instanceof AcpRpcError && err.code === AUTH_REQUIRED_CODE) {
-        // The single most common first-run failure. A raw
-        // "acp rpc 1: Authentication required" tells the owner nothing they
-        // can act on; the registry's own install hint does.
-        emit({ type: 'error', message: authRequiredMessage(config) });
-      } else {
-        const msg = err instanceof Error ? err.message : String(err);
-        const stderr = conn.stderrTail();
-        emit({
-          type: 'error',
-          message: `${msg}${stderr ? `\n${stderr.trim().slice(-2000)}` : ''}`,
-        });
-      }
+      const stop = outcomeForStopReason(promptResult?.stopReason);
+      if (stop.notice) emit(stop.notice);
+      if (stop.error) emit(stop.error);
+      else if (stop.emitFinal) emit({ type: 'final', text: stream.finalText() });
+      parkWarm =
+        Boolean(sessionId) &&
+        (canResume || canLoad) &&
+        !stop.error &&
+        (promptResult?.stopReason === 'end_turn' ||
+          promptResult?.stopReason === undefined ||
+          promptResult?.stopReason === 'max_tokens' ||
+          promptResult?.stopReason === 'max_turn_requests');
+    }
+  } catch (err) {
+    parkWarm = false;
+    if (!input.abortSignal.aborted) {
+      emit({
+        type: 'error',
+        message: classifyAgentFailure(err, conn.stderrTail(), config),
+      });
     }
   } finally {
-    // The vault endpoint dies with the turn that opened it — before the
-    // child, so a still-running agent can't dial it during teardown. This
-    // runs on every exit path, abort included.
     await vaultMcp?.close();
-    // Always end stdin: a graceful EOF lets a well-behaved agent shut down
-    // even when it ignores SIGTERM, and is a no-op once the stream is gone.
-    try {
-      child.stdin.end();
-    } catch {
-      // ignore — stream already destroyed
+
+    if (parkWarm && sessionId && !input.abortSignal.aborted && !conn.hasExited()) {
+      putWarmSlot({
+        kind: config.kind,
+        cwd: input.cwd,
+        sessionId,
+        child,
+        conn,
+        canResume,
+        canLoad,
+        canClose,
+        httpMcp,
+        promptCaps: promptCaps as Record<string, unknown>,
+      });
+    } else {
+      if (canClose && sessionId && !conn.hasExited()) {
+        try {
+          await conn.request('session/close', { sessionId });
+        } catch {
+          // ignore
+        }
+      }
+      try {
+        child.stdin.end();
+      } catch {
+        // ignore
+      }
+      if (!child.killed) child.kill('SIGTERM');
+      await conn.exited;
     }
-    if (!child.killed) child.kill('SIGTERM');
-    await conn.exited;
+
     input.abortSignal.removeEventListener('abort', abortHandler);
   }
 
-  // Terminal events bypass the abort-gated `emit` — the whole point of
-  // `aborted` is to fire *because* the signal aborted.
   const spawnError = conn.spawnError();
   if (input.abortSignal.aborted) input.onEvent({ type: 'aborted' });
   else if (spawnError) input.onEvent({ type: 'error', message: spawnError.message });
 
   return sessionId ? { sessionId } : {};
-}
-
-/**
- * Turn an `AUTH_REQUIRED` into something the owner can act on.
- *
- * The per-kind "how to sign in" string is the registry's `installHint`, not
- * a table in here: this client must stay kind-agnostic, and the hint already
- * exists next to the kind's other metadata.
- */
-function authRequiredMessage(config: AcpTurnConfig): string {
-  const label = config.label ?? config.kind;
-  const hint = config.installHint ? ` ${config.installHint}` : '';
-  return `${label} isn’t signed in, so it refused to start a session.${hint}`;
 }

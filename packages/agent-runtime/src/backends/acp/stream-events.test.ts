@@ -140,16 +140,38 @@ test('tool_call_update without an id, or with a non-terminal status, emits nothi
 test('plan emits a phase event, with detail only when entries are present', () => {
   const { mapper, events } = harness();
   mapper.handleSessionUpdate({
-    update: { sessionUpdate: 'plan', entries: [{ content: 'step 1' }] },
+    update: { sessionUpdate: 'plan', entries: [{ content: 'step 1', status: 'pending' }] },
   });
   mapper.handleSessionUpdate({ update: { sessionUpdate: 'plan' } });
   const phases = events.filter((e) => e.type === 'phase');
   expect(phases).toHaveLength(2);
   const [withEntries, without] = phases;
   expect(withEntries && withEntries.type === 'phase' && withEntries.detail).toEqual([
-    { content: 'step 1' },
+    { content: 'step 1', status: 'pending' },
+  ]);
+  expect(withEntries && withEntries.type === 'phase' && withEntries.plan).toEqual([
+    { content: 'step 1', status: 'pending' },
   ]);
   expect(without && without.type === 'phase' && 'detail' in without).toBe(false);
+});
+
+test('tool result extracts diff content blocks', () => {
+  const { mapper, events } = harness();
+  mapper.handleSessionUpdate({
+    update: {
+      sessionUpdate: 'tool_call',
+      toolCallId: 'd1',
+      title: 'edit',
+      kind: 'edit',
+      status: 'completed',
+      content: [{ type: 'diff', path: 'a.ts', oldText: 'x', newText: 'y' }],
+    },
+  });
+  const result = events.find((e) => e.type === 'tool.result');
+  expect(result && result.type === 'tool.result' && result.diffs).toEqual([
+    { path: 'a.ts', oldText: 'x', newText: 'y' },
+  ]);
+  expect(events.some((e) => e.type === 'phase' && e.phase === 'diff')).toBe(true);
 });
 
 test('usage_update folds tokens and cost, surfaced via usage()', () => {

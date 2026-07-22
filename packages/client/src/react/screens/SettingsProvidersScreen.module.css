@@ -149,6 +149,10 @@
   color: var(--ink-2);
   background: color-mix(in oklab, var(--ink) 10%, transparent);
 }
+.usedByChip[data-warn='true'] {
+  color: var(--warn, #b45309);
+  background: color-mix(in oklab, var(--warn, #b45309) 16%, transparent);
+}
 .usedByNone {
   font-size: 9px;
   font-weight: 600;

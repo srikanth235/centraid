@@ -33,13 +33,34 @@ export const SET_CONFIG_OPTION = 'session/set_config_option';
 /** Wire method for selecting a session mode (e.g. claude's `bypassPermissions`). */
 export const SET_MODE = 'session/set_mode';
 
+/** Session lifecycle capabilities from `initialize` (ACP v1 stable extensions). */
+export interface SessionCapabilities {
+  resume?: unknown;
+  close?: unknown;
+  additionalDirectories?: unknown;
+}
+
 /** The slice of the `initialize` result this client reads. */
 export interface InitializeResult {
   agentCapabilities?: {
     loadSession?: unknown;
     promptCapabilities?: unknown;
     mcpCapabilities?: { http?: unknown; sse?: unknown; acp?: unknown };
+    sessionCapabilities?: SessionCapabilities;
+    auth?: { logout?: unknown };
   };
+  authMethods?: unknown;
+}
+
+/** True when the agent advertises a structured session capability object. */
+export function hasSessionCapability(
+  caps: SessionCapabilities | undefined,
+  key: keyof SessionCapabilities,
+): boolean {
+  if (!caps) return false;
+  const v = caps[key];
+  // Spec: `{}` means supported; omit/null means not.
+  return v !== undefined && v !== null && v !== false;
 }
 
 export interface SessionConfigOption {
@@ -173,9 +194,11 @@ export async function pinModel(args: {
   if (!args.requested) return current;
 
   if (!option) {
+    // User explicitly picked a model — surface as warn so the composer notice
+    // is hard to miss (model switch reliability).
     args.emit({
       type: 'notice',
-      level: 'info',
+      level: 'warn',
       code: 'model_unsupported',
       message: `This runner picks its own model — the selected model (${args.requested}) was ignored.`,
     });

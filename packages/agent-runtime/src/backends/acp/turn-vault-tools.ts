@@ -1,31 +1,41 @@
 /*
  * Standing the turn's vault tools up as an MCP server the agent can dial.
  *
- * When the turn carries a `ToolContext` and the agent advertises
- * `mcpCapabilities.http`, we stand up a per-turn loopback MCP endpoint
- * (`./vault-mcp-server.ts`) and name it in `mcpServers`. That is the ONE way
- * `vault_sql` / `vault_invoke` / `vault_content` reach any runner kind — see
- * that module for the security posture and why the experimental
- * `type: "acp"` transport isn't an option.
- *
- * Only stand the endpoint up when this turn actually carries vault runners; a
- * builder turn (no vault mounted) advertises no MCP server at all rather than
- * an empty one. An agent that can't take an HTTP MCP server is told so — the
- * vault is never lost silently.
+ * Prefer HTTP MCP when the agent advertises `mcpCapabilities.http` (the path
+ * first-party adapters support). When it does not, still stand up the
+ * loopback HTTP endpoint and advertise a **stdio MCP** entry that runs
+ * `vault-mcp-stdio-proxy.mjs` — agents MUST support stdio MCP per ACP, so
+ * vault tools reach them without silent loss.
  */
 
+import { fileURLToPath } from 'node:url';
 import type { ToolContext, TurnStreamEvent } from '@centraid/app-engine';
 import {
   startVaultMcpServer,
   type AcpHttpMcpServer,
   type VaultMcpHandle,
+  VAULT_MCP_SERVER_NAME,
 } from './vault-mcp-server.js';
 
+const STDIO_PROXY = fileURLToPath(new URL('vault-mcp-stdio-proxy.mjs', import.meta.url));
+
+/** ACP default (stdio) MCP server shape — no `type` field. */
+export interface AcpStdioMcpServer {
+  name: string;
+  command: string;
+  args: string[];
+  env: Array<{ name: string; value: string }>;
+}
+
+export type AcpMcpServer = AcpHttpMcpServer | AcpStdioMcpServer;
+
 export interface TurnVaultTools {
-  /** What to name in `session/new` / `session/load`'s `mcpServers`. */
-  mcpServers: AcpHttpMcpServer[];
-  /** The live endpoint, to be closed with the turn. Absent when none was started. */
+  /** What to name in `session/new` / `session/load` / `session/resume`'s `mcpServers`. */
+  mcpServers: AcpMcpServer[];
+  /** The live HTTP endpoint, to be closed with the turn. Absent when none was started. */
   handle?: VaultMcpHandle;
+  /** How the agent was told to reach the vault (for capability notices). */
+  transport?: 'http' | 'stdio';
 }
 
 export async function startTurnVaultTools(args: {
@@ -38,18 +48,6 @@ export async function startTurnVaultTools(args: {
 }): Promise<TurnVaultTools> {
   const toolCtx = args.toolContext;
   if (!toolCtx?.vaultSql) return { mcpServers: [] };
-
-  if (!args.httpMcp) {
-    args.emit({
-      type: 'notice',
-      level: 'warn',
-      code: 'vault_tools_unavailable',
-      message:
-        'This runner doesn’t support HTTP MCP servers, so it can’t reach your vault data ' +
-        '(vault_sql / vault_invoke) on this turn.',
-    });
-    return { mcpServers: [] };
-  }
 
   const suppressed = new Set<string>();
   try {
@@ -68,8 +66,6 @@ export async function startTurnVaultTools(args: {
         });
       },
       onResult: (call) => {
-        // Mirror the start decision — never emit a result for a start
-        // we suppressed, or the transcript gets an orphan.
         if (suppressed.has(call.toolCallId)) return;
         args.emit({
           type: 'tool.result',
@@ -81,9 +77,33 @@ export async function startTurnVaultTools(args: {
         });
       },
     });
-    return { mcpServers: [handle.server], handle };
+
+    if (args.httpMcp) {
+      return { mcpServers: [handle.server], handle, transport: 'http' };
+    }
+
+    // Stdio bridge: agent spawns proxy; proxy dials our loopback HTTP.
+    const bearer =
+      handle.server.headers.find((h) => h.name.toLowerCase() === 'authorization')?.value ?? '';
+    const token = bearer.replace(/^Bearer\s+/i, '');
+    const stdio: AcpStdioMcpServer = {
+      name: VAULT_MCP_SERVER_NAME,
+      command: process.execPath,
+      args: [STDIO_PROXY],
+      env: [
+        { name: 'CENTRAID_VAULT_MCP_URL', value: handle.server.url },
+        { name: 'CENTRAID_VAULT_MCP_TOKEN', value: token },
+      ],
+    };
+    args.emit({
+      type: 'notice',
+      level: 'info',
+      code: 'vault_tools_stdio',
+      message:
+        'This runner doesn’t support HTTP MCP — vault tools are bridged over stdio MCP instead.',
+    });
+    return { mcpServers: [stdio], handle, transport: 'stdio' };
   } catch (err) {
-    // Losing the vault endpoint degrades the turn; it must not fail it.
     args.emit({
       type: 'notice',
       level: 'warn',

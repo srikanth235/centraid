@@ -68,6 +68,35 @@ export type ResolveAgentModels = (
  */
 export type BinPathForKind = (kind: RunnerKind) => string | undefined;
 
+/**
+ * Optional ACP capability probe (spawn + initialize). Supplied by the gateway
+ * so Settings can show vault/resume/auth honesty without the route owning
+ * agent-runtime spawn details.
+ */
+export type ResolveAgentCapabilities = (
+  kind: RunnerKind,
+  refresh: boolean,
+) => Promise<AgentAcpCapabilities | undefined>;
+
+/**
+ * ACP capability strip from a real `initialize` probe (optional; filled when
+ * the host probes available agents — typically on `?refresh=1`).
+ */
+export interface AgentAcpCapabilities {
+  reachable: boolean;
+  loadSession: boolean;
+  resume: boolean;
+  close: boolean;
+  additionalDirectories: boolean;
+  mcpHttp: boolean;
+  mcpSse: boolean;
+  modelConfigurable: boolean;
+  authRequired: boolean;
+  promptImage: boolean;
+  /** Human reason when the probe could not reach the agent. */
+  reason?: string;
+}
+
 /** One registered runner kind's state on this gateway host. */
 export interface AgentStatusEntry {
   /**
@@ -93,6 +122,11 @@ export interface AgentStatusEntry {
   modelsStatus: SurfaceStatus;
   /** The model this runner defaults to, when its catalog names one. */
   defaultModel?: string;
+  /**
+   * Live ACP capabilities (vault HTTP, session resume, model pin, auth).
+   * Absent until the host has probed this kind at least once.
+   */
+  capabilities?: AgentAcpCapabilities;
 }
 
 export interface AgentsStatus {
@@ -112,10 +146,12 @@ export interface AgentsStatus {
  */
 export async function readAgentsStatus(opts?: {
   resolveModels?: ResolveAgentModels;
+  resolveCapabilities?: ResolveAgentCapabilities;
   binPathFor?: BinPathForKind;
   refresh?: boolean;
 }): Promise<AgentsStatus> {
   const resolveModels = opts?.resolveModels;
+  const resolveCapabilities = opts?.resolveCapabilities;
   const binPathFor = opts?.binPathFor;
   const refresh = opts?.refresh ?? false;
   const emptyModels: ResolvedSurface<RunnerModel> = { list: [], status: 'empty' };
@@ -130,6 +166,10 @@ export async function readAgentsStatus(opts?: {
           : Promise.resolve(emptyModels),
       ]);
       const defaultModel = models.list.find((m) => m.default)?.id;
+      const capabilities =
+        availability.available && resolveCapabilities
+          ? await resolveCapabilities(backend.kind, refresh).catch(() => undefined)
+          : undefined;
       return {
         kind: backend.kind,
         label: backend.label,
@@ -142,6 +182,7 @@ export async function readAgentsStatus(opts?: {
         models: models.list,
         modelsStatus: models.status,
         ...(defaultModel ? { defaultModel } : {}),
+        ...(capabilities ? { capabilities } : {}),
       };
     }),
   );
@@ -158,6 +199,7 @@ export async function readAgentsStatus(opts?: {
  */
 export function makeAgentsRouteHandler(opts?: {
   resolveModels?: ResolveAgentModels;
+  resolveCapabilities?: ResolveAgentCapabilities;
   binPathFor?: BinPathForKind;
 }): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
   return async (req, res) => {
@@ -171,6 +213,7 @@ export function makeAgentsRouteHandler(opts?: {
       200,
       await readAgentsStatus({
         ...(opts?.resolveModels ? { resolveModels: opts.resolveModels } : {}),
+        ...(opts?.resolveCapabilities ? { resolveCapabilities: opts.resolveCapabilities } : {}),
         ...(opts?.binPathFor ? { binPathFor: opts.binPathFor } : {}),
         refresh,
       }),
