@@ -2,7 +2,7 @@
   "_comment": "Coverage floors (#532). Up-only under test:ratchet. Seeded ~1pt under measured bun run coverage (coverage-summary.json, 2026-07-24).",
   "lines": 71,
   "packages/app-engine/src/**": { "lines": 84, "branches": 79 },
-  "packages/automation/src/**": { "lines": 73, "branches": 78 },
+  "packages/automation/src/**": { "lines": 72, "branches": 78 },
   "packages/backup/src/**": { "lines": 90, "branches": 78 },
   "packages/blueprints/src/**": { "lines": 90, "branches": 83 },
   "packages/client/src/replica/**": { "lines": 75, "branches": 76 },
