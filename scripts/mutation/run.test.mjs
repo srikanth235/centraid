@@ -21,10 +21,15 @@ describe('mutationScoreFromReport', () => {
 });
 
 describe('MUTATION_SEEDS', () => {
-  test('covers the three #532 seed packages', () => {
+  test('covers the three #532 seed packages with package-local configs', () => {
     expect(MUTATION_SEEDS.map((s) => s.id).sort()).toEqual(
       ['packages/automation', 'packages/client/src/replica', 'packages/vault'].sort(),
     );
+    for (const seed of MUTATION_SEEDS) {
+      expect(seed.config).toBe('stryker.config.mjs');
+      expect(seed.cwd.startsWith('packages/')).toBe(true);
+      expect(seed.report.startsWith('artifacts/mutation/')).toBe(true);
+    }
   });
 });
 

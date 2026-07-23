@@ -1,9 +1,9 @@
 /**
  * Nightly mutation lane runner (#532).
  *
- * Runs StrykerJS (vitest runner) on the three seed packages and writes a
- * normalized scores JSON under artifacts/mutation/ for the test-health report
- * and for operators to raise tests/mutation-floors.json.
+ * Runs StrykerJS from each seed package directory (package-local
+ * `stryker.config.mjs` + `vitest.mutation.config.ts`) and writes a normalized
+ * scores JSON under artifacts/mutation/ for the test-health report.
  *
  * Usage:
  *   node scripts/mutation/run.mjs
@@ -17,39 +17,41 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
-/** @typedef {{ id: string; label: string; config: string; report: string }} MutationSeed */
+/** @typedef {{ id: string; label: string; cwd: string; config: string; report: string }} MutationSeed */
 
 /** @type {MutationSeed[]} */
 export const MUTATION_SEEDS = [
   {
     id: 'packages/vault',
     label: 'vault',
-    config: 'tests/mutation/stryker.vault.mjs',
+    cwd: 'packages/vault',
+    config: 'stryker.config.mjs',
     report: 'artifacts/mutation/vault-report.json',
   },
   {
     id: 'packages/client/src/replica',
     label: 'client-replica',
-    config: 'tests/mutation/stryker.client-replica.mjs',
+    cwd: 'packages/client',
+    config: 'stryker.config.mjs',
     report: 'artifacts/mutation/client-replica-report.json',
   },
   {
     id: 'packages/automation',
     label: 'automation',
-    config: 'tests/mutation/stryker.automation.mjs',
+    cwd: 'packages/automation',
+    config: 'stryker.config.mjs',
     report: 'artifacts/mutation/automation-report.json',
   },
 ];
 
 /**
  * Normalize a Stryker JSON report into a score percentage.
- * @param {unknown} report report parameter.
- * @returns {number | null} Return value.
+ * @param {unknown} report Stryker JSON report object.
+ * @returns {number | null} Mutation score 0–100, or null if missing.
  */
 export function mutationScoreFromReport(report) {
   if (!report || typeof report !== 'object') return null;
   const r = /** @type {Record<string, unknown>} */ (report);
-  // Stryker 8+ mutationScore is under files / totals depending on version.
   if (typeof r.mutationScore === 'number') return r.mutationScore;
   const metrics = r.metrics ?? r.totals;
   if (metrics && typeof metrics === 'object') {
@@ -67,13 +69,24 @@ export function mutationScoreFromReport(report) {
       if (denom > 0) return (m.killed / denom) * 100;
     }
   }
+  // Stryker 9 files map: average file scores if present
+  if (r.files && typeof r.files === 'object') {
+    const scores = Object.values(
+      /** @type {Record<string, { mutationScore?: number }> } */ (r.files),
+    )
+      .map((f) => f?.mutationScore)
+      .filter((n) => typeof n === 'number');
+    if (scores.length) {
+      return scores.reduce((a, b) => a + b, 0) / scores.length;
+    }
+  }
   return null;
 }
 
 /**
  * Build the scores.json artifact consumed by the test-health report.
- * @param {Array<{ id: string; label: string; score: number | null; status: string; reportPath?: string; error?: string }>} rows Package score rows.
- * @returns {object} Return value.
+ * @param {Array<{ id: string; label: string; score: number | null; status: string; reportPath?: string; error?: string }>} rows Package rows.
+ * @returns {object} Artifact payload.
  */
 export function buildScoresArtifact(rows) {
   return {
@@ -131,10 +144,9 @@ function main() {
       status: 'dry-run',
       reportPath: s.report,
     }));
-    const artifact = buildScoresArtifact(rows);
     writeFileSync(
       path.join(root, 'artifacts/mutation/scores.json'),
-      JSON.stringify(artifact, null, 2),
+      JSON.stringify(buildScoresArtifact(rows), null, 2),
     );
     console.log('mutation: dry-run wrote artifacts/mutation/scores.json');
     return;
@@ -163,9 +175,21 @@ function main() {
   /** @type {Array<{ id: string; label: string; score: number | null; status: string; reportPath?: string; error?: string }>} */
   const rows = [];
   for (const seed of seeds) {
-    console.log(`mutation: running Stryker for ${seed.id}…`);
-    const result = spawnSync(process.execPath, [stryker, 'run', '--configFile', seed.config], {
-      cwd: root,
+    const pkgDir = path.join(root, seed.cwd);
+    const configAbs = path.join(pkgDir, seed.config);
+    if (!existsSync(configAbs)) {
+      rows.push({
+        id: seed.id,
+        label: seed.label,
+        score: null,
+        status: 'failed',
+        error: `missing ${seed.cwd}/${seed.config}`,
+      });
+      continue;
+    }
+    console.log(`mutation: running Stryker for ${seed.id} (cwd ${seed.cwd})…`);
+    const result = spawnSync(process.execPath, [stryker, 'run', seed.config], {
+      cwd: pkgDir,
       encoding: 'utf8',
       env: { ...process.env, FORCE_COLOR: '0' },
       maxBuffer: 64 * 1024 * 1024,
@@ -175,18 +199,18 @@ function main() {
 
     let score = null;
     let status = result.status === 0 ? 'ok' : 'failed';
-    if (existsSync(path.join(root, seed.report))) {
+    const reportAbs = path.join(root, seed.report);
+    if (existsSync(reportAbs)) {
       try {
-        const report = JSON.parse(readFileSync(path.join(root, seed.report), 'utf8'));
+        const report = JSON.parse(readFileSync(reportAbs, 'utf8'));
         score = mutationScoreFromReport(report);
         if (score !== null) status = 'ok';
       } catch (err) {
-        status = 'failed';
         rows.push({
           id: seed.id,
           label: seed.label,
           score: null,
-          status,
+          status: 'failed',
           reportPath: seed.report,
           error: String(err),
         });
@@ -203,10 +227,9 @@ function main() {
     });
   }
 
-  const artifact = buildScoresArtifact(rows);
   writeFileSync(
     path.join(root, 'artifacts/mutation/scores.json'),
-    JSON.stringify(artifact, null, 2),
+    JSON.stringify(buildScoresArtifact(rows), null, 2),
   );
   console.log('mutation: wrote artifacts/mutation/scores.json');
   for (const row of rows) {

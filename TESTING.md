@@ -351,11 +351,12 @@ Nightly StrykerJS (`@stryker-mutator/vitest-runner`) on:
 - `packages/client/src/replica`
 - `packages/automation`
 
-Configs live under `tests/mutation/`; `bun run test:mutation` writes
+Package-local Stryker configs (`packages/{vault,client,automation}/stryker.config.mjs`
++ `vitest.mutation.config.ts`) mutate the property-defended modules; root
+pointers live under `tests/mutation/`. `bun run test:mutation` writes
 `artifacts/mutation/scores.json` for the test-health report. Floors live in
-`tests/mutation-floors.json` and ratchet up-only. Per-PR mutation is out of
-scope (too slow). Seed floors start at 0 until the first measured nightly
-scores land; then raise floors a tight margin below measured.
+`tests/mutation-floors.json` and ratchet up-only (seeded 2026-07-23: vault **97**,
+client replica **67**, automation **80**). Per-PR mutation is out of scope.
 
 ### Property contracts (fast-check, #532)
 
@@ -366,7 +367,13 @@ contracts use model-based / property tests:
 - replica intent idempotency — `packages/client/src/replica/intent-idempotency-properties.test.ts`
 - scheduler no-backfill — `packages/automation/src/fire/scheduler-ledger.contract.test.ts`
 
-`minimumTests` on the matching matrix flows still protect them from shrinking.
+Matrix `minimumTests` protect them from shrinking (2026-07-23 backfill):
+
+| Flow | Owner | `minimumTests` |
+| --- | --- | ---: |
+| `blob-custody-properties` | vault custody-properties | **12** |
+| `replica-intent-properties` | client intent-idempotency-properties | **10** |
+| `scheduler-no-backfill` | automation scheduler-ledger.contract | **23** |
 
 ### Coverage-scope reachability (#532)
 

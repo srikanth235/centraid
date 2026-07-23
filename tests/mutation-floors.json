@@ -1,6 +1,6 @@
 {
-  "_comment": "Mutation-score floors (#532). Up-only under test:ratchet. Seeded provisionally at 0 until the first nightly Stryker measurement lands scores; then raise each package floor a tight margin below the measured score. Keys match scripts/mutation/run.mjs package ids.",
-  "packages/vault": 0,
-  "packages/client/src/replica": 0,
-  "packages/automation": 0
+  "_comment": "Mutation-score floors (#532). Up-only under test:ratchet. Seeded ~2–3pt below measured Stryker scores on the property-defended mutate sets (2026-07-23): vault custody-proven 100%, client intents+payload-hash 69.91%, automation scheduler-ledger 82.47%. Nightly uses package-local stryker.config.mjs + vitest.mutation.config.ts.",
+  "packages/vault": 97,
+  "packages/client/src/replica": 67,
+  "packages/automation": 80
 }

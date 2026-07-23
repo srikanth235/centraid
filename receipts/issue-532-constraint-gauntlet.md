@@ -95,6 +95,22 @@
 - `.governance/.../coverage-scope-reachability/allowlist.txt` — drop design-tokens,
   tunnel, protocol, cli (now floored).
 
+### Follow-up: raise fast-check minimumTests + mutation floors (2026-07-23)
+
+- Expanded property suites: vault custody **12** tests, client intents **10**,
+  automation scheduler **23**; matrix `minimumTests` set to match
+  (`blob-custody-properties` 12, `replica-intent-properties` 10,
+  `scheduler-no-backfill` 23).
+- Measured Stryker on property-defended modules → `tests/mutation-floors.json`:
+  vault **97** (measured 100%), client replica **67** (measured 69.91%),
+  automation **80** (measured 82.47%).
+- Package-local Stryker wiring:
+  - `packages/vault/stryker.config.mjs`, `packages/vault/vitest.mutation.config.ts`
+  - `packages/client/stryker.config.mjs`, `packages/client/vitest.mutation.config.ts`
+  - `packages/automation/stryker.config.mjs`, `packages/automation/vitest.mutation.config.ts`
+  - `scripts/mutation/run.mjs` runs from package cwd; root pointers under `tests/mutation/`
+  - `.gitignore` ignores `**/.stryker-tmp/`
+
 ## Out of scope
 
 - Mutation beyond the three seed packages
