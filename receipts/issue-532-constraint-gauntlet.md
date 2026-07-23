@@ -172,20 +172,46 @@ Leave no important pure core surface unowned by a property suite + mutation seed
 | tunnel | wire-properties | protocol pure helpers | **78** |
 | app-engine | cost-properties | pricing/cost.ts | **97** |
 
+### Follow-up: per-PR mutation/perf + coverage floor ratchet (2026-07-24)
+
+Addresses the three items previously deferred from the core expansion:
+
+1. **Mutation beyond three seeds** — already landed (eight packages); docs/CI
+   no longer treat it as deferred.
+2. **Per-PR mutation + perf gating**
+   - `scripts/mutation/seeds.mjs` — eight-seed catalog + watch paths + global watch
+   - `scripts/mutation/run.mjs` — `--affected`, `--enforce-floors`,
+     `selectAffectedSeeds` / `enforceMutationFloors`
+   - `scripts/mutation/run.test.mjs` — unit tests for affected + floors
+   - `package.json` — `test:mutation:pr`, `test:perf:pr`
+   - `.github/workflows/ci.yml` — job `mutation-pr` (required via `check`);
+     verify step renamed as Per-PR perf gate (`test:perf:pr` / gateway low-end)
+   - `.github/workflows/e2e.yml` — nightly comment updated
+3. **Coverage floors raised** from measured `coverage-summary.json` (~1pt under):
+   - `tests/coverage-floors.json` — repo **71**; vault **91**, backup **90**,
+     blueprints **90**, design-tokens **90/81**, app-engine **84/79**, gateway
+     **80/74**, client replica **75/76**, automation **73/78**, tunnel **73/80**,
+     agent-runtime **72/85**, cli **70/57**, protocol **67/70**
+   - `TESTING.md` measured/floor table refreshed
+
 ## Out of scope
 
 - UI / journey mutation (desktop, mobile, web React shells)
 - Mutating whole large modules (WAL seal/replay, tunnel stream I/O, keyring I/O)
   — those stay unit/contract owned; property mutate sets are the pure contracts
-- Per-PR mutation or perf gating
+- Per-PR UI / scale / full Playwright waterfall (nightly only)
 - Second property library / RN component toolchain / Gherkin
 - Making `check:pr` itself run dependents (only `check:pr:full`)
+- Adding mutation:pr into local `check:pr` (CI-only; agents can run
+  `bun run test:mutation:pr` when touching seed watch paths)
 
 ## Decisions
 
 - Diff-coverage threshold starts at **80%** (issue decision; waive via `tests/diff-coverage-deviation.json`).
-- Mutation floors provisional at **0** until first nightly measured scores; then raise a tight margin below measured.
+- Mutation floors measured and ratcheted (not provisional zeros).
 - Nightly mutation job uses 90m timeout + `continue-on-error` so a slow Stryker package does not block report assembly.
+- Per-PR mutation is **affected-only** + floor-enforcing so unrelated PRs stay cheap; full eight-package Stryker stays nightly.
+- Per-PR perf is the gateway low-end budget gate (already measured); budget *widens* still blocked by `test:ratchet`.
 - `check:pr` stays changed-packages-only; dependents live only on `check:pr:full`.
 
 ## Verification
@@ -213,6 +239,12 @@ bun run --cwd packages/tunnel test -- src/wire-properties.test.ts
 bun run --cwd packages/app-engine test -- src/pricing/cost-properties.test.ts
 bun run test:mutation -- --package blob-format
 # + other seeds as needed; full lane: bun run test:mutation
+bun run test:mutation:pr
+# affected seeds + floor enforce (skips when diff has no seed watch paths)
+bun run test:perf:pr
+# gateway low-end budgets
+bun run test:ratchet:unit
+# includes selectAffectedSeeds / enforceMutationFloors
 bun run --cwd packages/test-kit test
 
 bun run test:matrix

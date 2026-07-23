@@ -160,19 +160,19 @@ are consumed directly by the root Vitest config. Floors are a tight margin
 
 | Scope | Measured lines / branches | Floor lines / branches |
 | --- | --- | --- |
-| repo-wide (`lines`) | 71.89 / — | **70** / — |
-| `packages/vault/src/**` | 91.78 / 78.97 | 90 / 78 |
-| `packages/backup/src/**` | 90.79 / 79.18 | 89 / 78 |
-| `packages/blueprints/src/**` | 90.77 / 84.09 | 89 / 83 |
-| `packages/design-tokens/src/**` | 90.23 / 81.82 | 89 / 80 |
-| `packages/app-engine/src/**` | 85.64 / 79.86 | 84 / 78 |
-| `packages/gateway/src/**` | 80.55 / 74.67 | 79 / 73 |
-| `packages/client/src/replica/**` | 75.63 / 76.73 | 74 / 75 |
-| `packages/automation/src/**` | 73.80 / 78.94 | 72 / 77 |
-| `packages/tunnel/src/**` | 73.22 / 80.42 | 72 / 79 |
-| `packages/agent-runtime/src/**` | 72.89 / 85.88 | 71 / 84 |
-| `packages/cli/src/**` | 70.14 / 57.78 | 69 / 56 |
-| `packages/protocol/src/**` | 67.08 / 70.59 | 66 / 69 |
+| repo-wide (`lines`) | 71.89 / — | **71** / — |
+| `packages/vault/src/**` | 91.78 / 78.97 | **91** / 78 |
+| `packages/backup/src/**` | 90.79 / 79.18 | **90** / 78 |
+| `packages/blueprints/src/**` | 90.77 / 84.09 | **90** / 83 |
+| `packages/design-tokens/src/**` | 90.23 / 81.82 | **90** / **81** |
+| `packages/app-engine/src/**` | 85.64 / 79.86 | 84 / **79** |
+| `packages/gateway/src/**` | 80.55 / 74.67 | **80** / **74** |
+| `packages/client/src/replica/**` | 75.63 / 76.73 | **75** / **76** |
+| `packages/automation/src/**` | 73.80 / 78.94 | **73** / **78** |
+| `packages/tunnel/src/**` | 73.22 / 80.42 | **73** / **80** |
+| `packages/agent-runtime/src/**` | 72.89 / 85.88 | **72** / **85** |
+| `packages/cli/src/**` | 70.14 / 57.78 | **70** / **57** |
+| `packages/protocol/src/**` | 67.08 / 70.59 | **67** / **70** |
 
 `bun run test` prints the active floors after package tests so the local loop
 never hides the CI contract; `bun run coverage` measures and enforces them.
@@ -180,8 +180,8 @@ Floors move only upward (`bun run test:ratchet`).
 
 ### agent-runtime coverage strategy
 
-`packages/agent-runtime` keeps a **high branch floor (~84%)**. The line floor
-was ratcheted to **~71%** once measured coverage cleared the old deliberate 27%
+`packages/agent-runtime` keeps a **high branch floor (~85%)**. The line floor
+was ratcheted to **~72%** once measured coverage cleared the old deliberate 27%
 seed (spawn-heavy adapters remain covered by contracts + integration rather
 than a pure line chase).
 
@@ -252,7 +252,9 @@ chat turns use — there is no automation-specific mock LLM (the
 | `bun run test:ratchet` | coverage floors + `minimumTests` + mutation floors up-only, and perf budgets tighten-only, vs `origin/main` |
 | `bun run test:ratchet:unit` | Unit tests for the ratchet / diff-coverage pure functions (`scripts/test-report/vitest.config.ts`) |
 | `bun run test:diff-coverage` | changed instrumentable lines vs merge base must be ≥ **80%** covered (`coverage-final.json`); CI `verify` after `coverage` |
-| `bun run test:mutation` | StrykerJS on vault / client replica / automation (nightly); writes `artifacts/mutation/scores.json` |
+| `bun run test:mutation` | StrykerJS on all eight property-defended seeds (nightly); writes `artifacts/mutation/scores.json` |
+| `bun run test:mutation:pr` | Per-PR: Stryker on **affected** seeds only + enforce mutation floors |
+| `bun run test:perf:pr` | Per-PR: gateway low-end budget gate (also verify CI step) |
 | `bun run coverage` | unified per-PR suite, v8 report, floor enforcement, Vitest JSON (`ci.yml` **verify** job) |
 | `bun run test:matrix` | catalog/owner/contract validation (also inside `check:pr`) |
 | `bun run test:perf` | hot-path budget tests; nightly only |
@@ -361,8 +363,18 @@ Package-local Stryker configs (`stryker.config.mjs` + `vitest.mutation.config.ts
 mutate the property-defended modules; root pointers live under `tests/mutation/`.
 `bun run test:mutation` writes `artifacts/mutation/scores.json` for the
 test-health report. Floors live in `tests/mutation-floors.json` and ratchet
-up-only (measured 2026-07-23/24 — see file comment). Per-PR mutation is out of
-scope.
+up-only (measured 2026-07-23/24 — see file comment).
+
+**Per-PR mutation** (`bun run test:mutation:pr` / CI job `mutation-pr`): runs
+Stryker only for seeds whose `watch` paths intersect `git diff origin/main...HEAD`
+(or all seeds when mutation infra / floors change), then **enforces** floors on
+measured packages. Unrelated PRs skip Stryker in ~1s. Nightly still runs the
+full eight-package lane.
+
+**Per-PR perf** (`bun run test:perf:pr` / verify step): gateway low-end budget
+gate (`packages/gateway` `perf:low-end`, fsync-required on Linux). Perf budget
+*numbers* also tighten-only via `test:ratchet`. Full `test:perf` / Playwright
+waterfall remains nightly.
 
 ### Property contracts (fast-check, #532)
 
@@ -393,8 +405,10 @@ invisible to every floor.
 ## Deliberately deferred
 
 - A second React Native component-test toolchain.
-- Per-PR UI, performance, scale, or mutation gating.
+- Per-PR UI / scale / full Playwright perf waterfall (nightly only).
 - Chasing 100% or testing trivial getters.
+- Mutating whole large modules (WAL seal/replay, tunnel stream I/O, keyring I/O,
+  React shells) — pure property-defended mutate sets only.
 
 ## Related
 

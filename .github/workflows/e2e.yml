@@ -541,9 +541,9 @@ jobs:
             tests/agent-e2e-pairing/runs/
           retention-days: 7
 
-  # #532 — Stryker mutation lane (nightly). Scores land in artifacts/mutation/
-  # and the test-health report. Too slow for per-PR; floors ratcheted via
-  # tests/mutation-floors.json + test:ratchet.
+  # #532 — Stryker mutation lane (nightly, all seeds). Per-PR runs affected
+  # seeds only via ci.yml mutation-pr. Floors ratcheted via
+  # tests/mutation-floors.json + test:ratchet; per-PR enforces measured floors.
   mutation-testing:
     if: >
       github.event_name != 'workflow_dispatch' ||

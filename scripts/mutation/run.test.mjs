@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'vitest';
-import { buildScoresArtifact, mutationScoreFromReport, MUTATION_SEEDS } from './run.mjs';
+import {
+  buildScoresArtifact,
+  enforceMutationFloors,
+  mutationScoreFromReport,
+  MUTATION_GLOBAL_WATCH,
+  MUTATION_SEEDS,
+  selectAffectedSeeds,
+} from './run.mjs';
 
 describe('mutationScoreFromReport', () => {
   test('reads top-level mutationScore', () => {
@@ -68,5 +75,49 @@ describe('buildScoresArtifact', () => {
     expect(artifact.lane).toBe('mutation');
     expect(artifact.packages).toHaveLength(1);
     expect(artifact.generatedAt).toMatch(/^\d{4}-/);
+  });
+});
+
+describe('selectAffectedSeeds', () => {
+  test('returns only seeds whose watch paths appear in the diff', () => {
+    const hit = selectAffectedSeeds(['packages/protocol/src/handshake.ts']);
+    expect(hit.map((s) => s.label)).toEqual(['protocol']);
+  });
+
+  test('global watch forces every seed', () => {
+    expect(MUTATION_GLOBAL_WATCH).toContain('tests/mutation-floors.json');
+    const hit = selectAffectedSeeds(['tests/mutation-floors.json']);
+    expect(hit).toHaveLength(MUTATION_SEEDS.length);
+  });
+
+  test('unrelated paths select nothing', () => {
+    expect(selectAffectedSeeds(['README.md', 'apps/web/src/main.tsx'])).toEqual([]);
+  });
+});
+
+describe('enforceMutationFloors', () => {
+  test('fails when measured score is below floor', () => {
+    expect(
+      enforceMutationFloors(
+        {
+          packages: [{ id: 'packages/vault', score: 90 }],
+        },
+        { 'packages/vault': 97 },
+      ),
+    ).toEqual(['mutation floor "packages/vault" not met: measured 90.00 < floor 97']);
+  });
+
+  test('passes when score meets floor and skips missing scores', () => {
+    expect(
+      enforceMutationFloors(
+        {
+          packages: [
+            { id: 'packages/vault', score: 97 },
+            { id: 'packages/backup', score: null },
+          ],
+        },
+        { 'packages/vault': 97, 'packages/backup': 42 },
+      ),
+    ).toEqual([]);
   });
 });

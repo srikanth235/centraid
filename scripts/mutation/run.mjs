@@ -1,5 +1,5 @@
 /**
- * Nightly mutation lane runner (#532).
+ * Mutation lane runner (#532).
  *
  * Runs StrykerJS from each seed package directory (package-local
  * `stryker.config.mjs` + `vitest.mutation.config.ts`) and writes a normalized
@@ -8,76 +8,21 @@
  * Usage:
  *   node scripts/mutation/run.mjs
  *   node scripts/mutation/run.mjs --package vault
+ *   node scripts/mutation/run.mjs --affected [--base origin/main]
+ *   node scripts/mutation/run.mjs --enforce-floors
  *   node scripts/mutation/run.mjs --dry-run
+ *
+ * Per-PR lane (`bun run test:mutation:pr`) is `--affected --enforce-floors`.
  */
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { MUTATION_GLOBAL_WATCH, MUTATION_SEEDS } from './seeds.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
-/** @typedef {{ id: string; label: string; cwd: string; config: string; report: string }} MutationSeed */
-
-/** @type {MutationSeed[]} */
-export const MUTATION_SEEDS = [
-  {
-    id: 'packages/vault',
-    label: 'vault',
-    cwd: 'packages/vault',
-    config: 'stryker.config.mjs',
-    report: 'artifacts/mutation/vault-report.json',
-  },
-  {
-    id: 'packages/client/src/replica',
-    label: 'client-replica',
-    cwd: 'packages/client',
-    config: 'stryker.config.mjs',
-    report: 'artifacts/mutation/client-replica-report.json',
-  },
-  {
-    id: 'packages/automation',
-    label: 'automation',
-    cwd: 'packages/automation',
-    config: 'stryker.config.mjs',
-    report: 'artifacts/mutation/automation-report.json',
-  },
-  {
-    id: 'packages/backup',
-    label: 'backup',
-    cwd: 'packages/backup',
-    config: 'stryker.config.mjs',
-    report: 'artifacts/mutation/backup-report.json',
-  },
-  {
-    id: 'packages/blob-format',
-    label: 'blob-format',
-    cwd: 'packages/blob-format',
-    config: 'stryker.config.mjs',
-    report: 'artifacts/mutation/blob-format-report.json',
-  },
-  {
-    id: 'packages/protocol',
-    label: 'protocol',
-    cwd: 'packages/protocol',
-    config: 'stryker.config.mjs',
-    report: 'artifacts/mutation/protocol-report.json',
-  },
-  {
-    id: 'packages/tunnel',
-    label: 'tunnel',
-    cwd: 'packages/tunnel',
-    config: 'stryker.config.mjs',
-    report: 'artifacts/mutation/tunnel-report.json',
-  },
-  {
-    id: 'packages/app-engine',
-    label: 'app-engine',
-    cwd: 'packages/app-engine',
-    config: 'stryker.config.mjs',
-    report: 'artifacts/mutation/app-engine-report.json',
-  },
-];
+export { MUTATION_GLOBAL_WATCH, MUTATION_SEEDS };
 
 /**
  * Normalize a Stryker JSON report into a score percentage.
@@ -104,7 +49,6 @@ export function mutationScoreFromReport(report) {
       if (denom > 0) return (m.killed / denom) * 100;
     }
   }
-  // Stryker 9 files map: average file scores if present
   if (r.files && typeof r.files === 'object') {
     const fileEntries = Object.values(
       /** @type {Record<string, { mutationScore?: number; mutants?: Array<{ status?: string }> }> } */ (
@@ -115,7 +59,6 @@ export function mutationScoreFromReport(report) {
     if (scores.length) {
       return scores.reduce((a, b) => a + b, 0) / scores.length;
     }
-    // Stryker 9 JSON report: per-file mutants[] with status, no rollup metrics.
     let killed = 0;
     let valid = 0;
     for (const f of fileEntries) {
@@ -133,7 +76,6 @@ export function mutationScoreFromReport(report) {
         } else if (status === 'Survived' || status === 'NoCoverage') {
           valid += 1;
         }
-        // Ignored / Pending do not count toward the score denominator.
       }
     }
     if (valid > 0) return (killed / valid) * 100;
@@ -154,11 +96,107 @@ export function buildScoresArtifact(rows) {
   };
 }
 
+/**
+ * Compare measured scores against floors.
+ * @param {{ packages?: Array<{ id?: string; score?: number | null }> }} scores Artifact.
+ * @param {Record<string, unknown>} floors tests/mutation-floors.json shape.
+ * @returns {string[]} Human-readable errors (empty = pass).
+ */
+export function enforceMutationFloors(scores, floors) {
+  const errors = [];
+  if (!floors || typeof floors !== 'object') return errors;
+  const byId = new Map(
+    (scores?.packages ?? []).filter((p) => p?.id).map((p) => [/** @type {string} */ (p.id), p]),
+  );
+  for (const [id, floor] of Object.entries(floors)) {
+    if (id.startsWith('_') || id === 'approvedDeviation') continue;
+    if (typeof floor !== 'number') continue;
+    const row = byId.get(id);
+    if (!row || typeof row.score !== 'number') continue;
+    if (row.score + 1e-9 < floor) {
+      errors.push(
+        `mutation floor "${id}" not met: measured ${row.score.toFixed(2)} < floor ${floor}`,
+      );
+    }
+  }
+  return errors;
+}
+
+/**
+ * Select seeds whose watch paths intersect the changed file set.
+ * @param {string[]} changedFiles Paths relative to repo root.
+ * @param {import('./seeds.mjs').MutationSeed[]} [seeds]
+ * @param {string[]} [globalWatch]
+ * @returns {import('./seeds.mjs').MutationSeed[]}
+ */
+export function selectAffectedSeeds(
+  changedFiles,
+  seeds = MUTATION_SEEDS,
+  globalWatch = MUTATION_GLOBAL_WATCH,
+) {
+  const changed = new Set(changedFiles.map((f) => f.replace(/\\/g, '/')));
+  if (globalWatch.some((g) => changed.has(g))) return [...seeds];
+  return seeds.filter((seed) =>
+    seed.watch.some((w) => changed.has(w) || [...changed].some((c) => c.startsWith(`${w}/`))),
+  );
+}
+
+/**
+ * List files changed vs a git base ref (triple-dot: merge-base…HEAD).
+ * @param {string} base Git ref (e.g. origin/main).
+ * @param {string} [cwd] Repo root.
+ * @returns {string[]}
+ */
+export function listChangedFiles(base, cwd = root) {
+  try {
+    const out = execFileSync('git', ['diff', '--name-only', `${base}...HEAD`], {
+      cwd,
+      encoding: 'utf8',
+    });
+    return out
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+  } catch {
+    try {
+      const out = execFileSync('git', ['diff', '--name-only', base], {
+        cwd,
+        encoding: 'utf8',
+      });
+      return out
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean);
+    } catch {
+      return [];
+    }
+  }
+}
+
+/**
+ * @param {string} [floorsPath]
+ * @returns {Record<string, unknown>}
+ */
+export function loadMutationFloors(floorsPath = path.join(root, 'tests/mutation-floors.json')) {
+  if (!existsSync(floorsPath)) return {};
+  return JSON.parse(readFileSync(floorsPath, 'utf8'));
+}
+
 function parseArgs(argv) {
-  const out = { package: null, dryRun: false, help: false };
+  const out = {
+    package: null,
+    dryRun: false,
+    help: false,
+    affected: false,
+    enforceFloors: false,
+    base: 'origin/main',
+  };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--package' && argv[i + 1]) out.package = argv[++i];
     else if (argv[i] === '--dry-run') out.dryRun = true;
+    else if (argv[i] === '--affected') out.affected = true;
+    else if (argv[i] === '--enforce-floors') out.enforceFloors = true;
+    else if (argv[i] === '--base' && argv[i + 1]) out.base = argv[++i];
     else if (argv[i] === '--help' || argv[i] === '-h') out.help = true;
   }
   return out;
@@ -174,60 +212,22 @@ function findStrykerBin() {
   return null;
 }
 
-function main() {
-  const args = parseArgs(process.argv.slice(2));
-  if (args.help) {
-    console.log(
-      'Usage: node scripts/mutation/run.mjs [--package vault|client-replica|automation] [--dry-run]',
-    );
-    process.exit(0);
-  }
-
-  const seeds = args.package
-    ? MUTATION_SEEDS.filter((s) => s.label === args.package || s.id.includes(args.package))
-    : MUTATION_SEEDS;
-  if (!seeds.length) {
-    console.error(`mutation: unknown package filter ${args.package}`);
-    process.exitCode = 1;
-    return;
-  }
-
-  mkdirSync(path.join(root, 'artifacts/mutation'), { recursive: true });
-
-  if (args.dryRun) {
-    const rows = seeds.map((s) => ({
-      id: s.id,
-      label: s.label,
-      score: null,
-      status: 'dry-run',
-      reportPath: s.report,
-    }));
-    writeFileSync(
-      path.join(root, 'artifacts/mutation/scores.json'),
-      JSON.stringify(buildScoresArtifact(rows), null, 2),
-    );
-    console.log('mutation: dry-run wrote artifacts/mutation/scores.json');
-    return;
-  }
-
+/**
+ * @param {import('./seeds.mjs').MutationSeed[]} seeds
+ */
+function runSeeds(seeds) {
   const stryker = findStrykerBin();
   if (!stryker) {
     console.error(
       'mutation: @stryker-mutator/core not installed (devDependency). Nightly installs it via bun install.',
     );
-    const rows = seeds.map((s) => ({
+    return seeds.map((s) => ({
       id: s.id,
       label: s.label,
       score: null,
       status: 'unavailable',
       error: 'stryker binary missing',
     }));
-    writeFileSync(
-      path.join(root, 'artifacts/mutation/scores.json'),
-      JSON.stringify(buildScoresArtifact(rows), null, 2),
-    );
-    process.exitCode = 1;
-    return;
   }
 
   /** @type {Array<{ id: string; label: string; score: number | null; status: string; reportPath?: string; error?: string }>} */
@@ -284,10 +284,82 @@ function main() {
       error: result.status === 0 ? undefined : `stryker exit ${result.status}`,
     });
   }
+  return rows;
+}
 
+function main() {
+  const args = parseArgs(process.argv.slice(2));
+  if (args.help) {
+    console.log(
+      'Usage: node scripts/mutation/run.mjs [--package <label>] [--affected] [--base origin/main] [--enforce-floors] [--dry-run]',
+    );
+    process.exit(0);
+  }
+
+  /** @type {import('./seeds.mjs').MutationSeed[]} */
+  let seeds;
+  if (args.package) {
+    seeds = MUTATION_SEEDS.filter((s) => s.label === args.package || s.id.includes(args.package));
+    if (!seeds.length) {
+      console.error(`mutation: unknown package filter ${args.package}`);
+      process.exitCode = 1;
+      return;
+    }
+  } else if (args.affected) {
+    const changed = listChangedFiles(args.base);
+    seeds = selectAffectedSeeds(changed);
+    console.log(
+      `mutation: --affected vs ${args.base}: ${changed.length} changed file(s), ${seeds.length} seed(s)`,
+    );
+    if (!seeds.length) {
+      mkdirSync(path.join(root, 'artifacts/mutation'), { recursive: true });
+      writeFileSync(
+        path.join(root, 'artifacts/mutation/scores.json'),
+        JSON.stringify(
+          buildScoresArtifact([
+            {
+              id: '_none',
+              label: 'none',
+              score: null,
+              status: 'skipped',
+              error: 'no mutation seeds affected by diff',
+            },
+          ]),
+          null,
+          2,
+        ),
+      );
+      console.log('mutation: no seeds affected — skipping Stryker (ok)');
+      return;
+    }
+    for (const s of seeds) console.log(`  - ${s.id}`);
+  } else {
+    seeds = MUTATION_SEEDS;
+  }
+
+  mkdirSync(path.join(root, 'artifacts/mutation'), { recursive: true });
+
+  if (args.dryRun) {
+    const rows = seeds.map((s) => ({
+      id: s.id,
+      label: s.label,
+      score: null,
+      status: 'dry-run',
+      reportPath: s.report,
+    }));
+    writeFileSync(
+      path.join(root, 'artifacts/mutation/scores.json'),
+      JSON.stringify(buildScoresArtifact(rows), null, 2),
+    );
+    console.log('mutation: dry-run wrote artifacts/mutation/scores.json');
+    return;
+  }
+
+  const rows = runSeeds(seeds);
+  const artifact = buildScoresArtifact(rows);
   writeFileSync(
     path.join(root, 'artifacts/mutation/scores.json'),
-    JSON.stringify(buildScoresArtifact(rows), null, 2),
+    JSON.stringify(artifact, null, 2),
   );
   console.log('mutation: wrote artifacts/mutation/scores.json');
   for (const row of rows) {
@@ -295,9 +367,21 @@ function main() {
       `  - ${row.id}: ${row.score === null ? 'n/a' : `${row.score.toFixed(1)}%`} (${row.status})`,
     );
   }
-  if (rows.some((r) => r.status === 'failed' || r.status === 'unavailable')) {
-    process.exitCode = 1;
+
+  let failed = rows.some((r) => r.status === 'failed' || r.status === 'unavailable');
+
+  if (args.enforceFloors) {
+    const floors = loadMutationFloors();
+    const floorErrors = enforceMutationFloors(artifact, floors);
+    if (floorErrors.length) {
+      for (const e of floorErrors) console.error(`mutation: ${e}`);
+      failed = true;
+    } else {
+      console.log('mutation: floors met for measured packages');
+    }
   }
+
+  if (failed) process.exitCode = 1;
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);

@@ -70,6 +70,8 @@
     "test:ratchet:unit": "node node_modules/vitest/vitest.mjs run --config scripts/test-report/vitest.config.ts",
     "test:diff-coverage": "node scripts/test-report/diff-coverage.mjs",
     "test:mutation": "node scripts/mutation/run.mjs",
+    "test:mutation:pr": "node scripts/mutation/run.mjs --affected --enforce-floors",
+    "test:perf:pr": "bun run --cwd packages/gateway perf:low-end",
     "test:affected": "turbo run test --filter='[origin/main]' --concurrency=6",
     "test:affected:full": "turbo run test --filter='...[origin/main]' --concurrency=6",
     "test:interop:backup": "bun run --cwd packages/backup test:interop",
