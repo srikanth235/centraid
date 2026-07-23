@@ -2,7 +2,7 @@
 // Called directly by SelectionBar.tsx's SelectionBarView — `refresh`,
 // `setBarBusy` and `exitSelectMode` are the only app.tsx-owned pieces these
 // need, passed in per call the same way assets-actions.ts's helpers are.
-import { toast } from './kit.js';
+import { toast } from './kit.ts';
 import { act, narrate } from './outcomes.ts';
 import type { Album } from './types.ts';
 

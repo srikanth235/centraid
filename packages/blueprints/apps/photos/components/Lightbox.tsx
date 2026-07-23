@@ -7,7 +7,7 @@
 // EditorView), which only the shell here can do.
 // CSS split: React-owned classes in Lightbox.module.css; the imperatively
 // toggled `zoomable`/`zoomed`/`is-placeholder` markers stay global strings.
-import { toast } from '../kit.js';
+import { toast } from '../kit.ts';
 import { gridSrc } from '../media.ts';
 import { toggleFavorite } from '../assets-actions.ts';
 import { EditorView } from './Editor.tsx';
@@ -24,10 +24,10 @@ import {
   ShareIcon,
   TrashIcon,
 } from '../icons.tsx';
-import { fmtBytes } from '../kit.js';
+import { fmtBytes } from '../kit.ts';
 import { assetBytes, isAudioAsset, isRenderableUri, isVideoAsset } from '../format.ts';
 import { act, narrate } from '../outcomes.ts';
-import { useEffect, useState } from '../react-core.min.js';
+import { useEffect, useState } from 'react';
 import type { Album, Asset, Place } from '../types.ts';
 import styles from './Lightbox.module.css';
 

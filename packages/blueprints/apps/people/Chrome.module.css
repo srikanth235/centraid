@@ -1,7 +1,5 @@
-/* Inline chrome for People (issue #505). The static #root/sidebar/topbar/toolbar/
-   scroll markup from index.html + the narrow-layout rules from app.css, converted
-   to a CSS module scoped to the inline route. The served path (index.html +
-   wall.css + app.css) is untouched — this is the inline sibling.
+/* People chrome shared by the served and inline routes (issue #505). Common
+   shell/sidebar/topbar/drawer geometry composes the kit-app-* vocabulary.
 
    Unlike Tasks (which rides the shell-injected generic blueprint token layer as-is),
    People ships a full rose / warm-blush identity that DIFFERS from that generic
@@ -179,63 +177,41 @@
 /* ---------- Shell ---------- */
 
 .shell {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  /* Positioning context for the narrow (phone) sidebar drawer, so it overlays
-     the app pane inline — never the shell's own sidebar at the viewport edge. */
-  position: relative;
-  overflow: hidden;
-  background: var(--bg);
-  color: var(--ink);
-  font: var(--t-body);
+  composes: kit-app-shell from global;
+  --kit-app-drawer-width: 274px;
+  --kit-app-brand-radius: 9px;
+  --kit-app-brand-background: linear-gradient(
+    160deg,
+    color-mix(in oklab, var(--_accent) 78%, #fff),
+    var(--accd)
+  );
+  --kit-app-brand-font: var(--t-strong);
+  --kit-app-scrim-background: rgba(30, 15, 20, 0.4);
   -webkit-font-smoothing: antialiased;
 }
 
 /* ---------- Sidebar ---------- */
 
 .side {
-  width: 250px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  padding: 18px 14px;
-  background: var(--bg-elev);
-  border-right: 1px solid var(--line);
-  overflow: auto;
+  composes: kit-app-side from global;
 }
 .brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 2px 6px 14px;
+  composes: kit-app-brand from global;
 }
 .brandMark {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  background: linear-gradient(160deg, color-mix(in oklab, var(--_accent) 78%, #fff), var(--accd));
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  composes: kit-app-brand-mark from global;
 }
 .brandText {
   min-width: 0;
 }
 .brandName {
-  font: var(--t-strong);
-  letter-spacing: -0.01em;
+  composes: kit-app-brand-name from global;
 }
 .brandTag {
-  font: var(--t-mono);
-  font-size: 10px;
-  color: var(--ink-3);
+  composes: kit-app-brand-tag from global;
 }
 .sideClose {
-  margin-left: auto;
-  display: none;
+  composes: kit-app-side-close from global;
   align-items: center;
   justify-content: center;
   width: 32px;
@@ -308,8 +284,7 @@
   gap: 2px;
 }
 .sideFoot {
-  margin-top: auto;
-  padding-top: 16px;
+  composes: kit-app-side-foot from global;
 }
 .storage {
   border: 1px solid var(--line);
@@ -333,38 +308,19 @@
   font-size: 11.5px;
 }
 .scrim {
-  display: none;
+  composes: kit-app-scrim from global;
 }
 
 /* ---------- Main ---------- */
 
 .main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
+  composes: kit-app-main from global;
 }
 .topbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px 22px;
-  border-bottom: 1px solid var(--line);
-  flex-shrink: 0;
+  composes: kit-app-topbar from global;
 }
 .hamburger {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--bg-elev);
-  color: var(--ink-2);
-  flex-shrink: 0;
+  composes: kit-app-hamburger from global;
 }
 .search {
   position: relative;
@@ -399,11 +355,7 @@
   box-shadow: var(--kit-focus-ring);
 }
 .topbarTools {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
+  composes: kit-app-tools from global;
 }
 .viewtoggle > .viewbtn {
   display: flex;
@@ -428,8 +380,7 @@
   border-color: var(--line-strong);
 }
 .askMount {
-  display: flex;
-  align-items: center;
+  composes: kit-app-ask-mount from global;
 }
 .banner {
   margin: 14px 22px 0;
@@ -579,32 +530,13 @@
 /* ---------- Narrow (phone) — driven by .isNarrow / .sideOpen on .shell ---------- */
 /* Inline the drawer is absolutely positioned within .shell (the app pane), not
    fixed to the viewport as the served full-screen app does (#505 trap). */
-.shell.isNarrow .side {
-  position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 274px;
-  z-index: 46;
-  box-shadow: var(--shadow-lg);
-  transform: translateX(-110%);
-  transition: transform 0.26s var(--ease);
+.isNarrow {
+  composes: kit-app-narrow from global;
 }
-.shell.isNarrow.sideOpen .side {
-  transform: translateX(0);
-}
-.shell.isNarrow .sideClose {
-  display: flex;
-}
-.shell.isNarrow .hamburger {
-  display: flex;
+.sideOpen {
+  composes: kit-app-side-open from global;
 }
 .shell.isNarrow.sideOpen .scrim {
-  display: block;
-  position: absolute;
-  inset: 0;
-  z-index: 45;
-  background: rgba(30, 15, 20, 0.4);
   animation: dFade 0.2s ease;
 }
 .shell.isNarrow .topbar,

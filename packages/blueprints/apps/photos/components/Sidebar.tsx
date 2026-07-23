@@ -8,7 +8,7 @@
 // (sidebar.tsx, replacing toolbar.jsx).
 // CSS split: own classes in Sidebar.module.css; the `.sectionLabel` eyebrow is
 // shared (shared.module.css); `kit-*` classes stay global strings.
-import { armConfirm } from '../kit.js';
+import { armConfirm } from '../kit.ts';
 import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from '../constants.ts';
 import {
   AlbumsIcon,
@@ -22,8 +22,8 @@ import {
   ShieldIcon,
   TrashIcon,
 } from '../icons.tsx';
-import { Fragment } from '../react-core.min.js';
-import type { ReactNode } from '../react-core.min.js';
+import { Fragment } from 'react';
+import type { ReactNode } from 'react';
 import type { Album } from '../types.ts';
 import { InlineInput } from './InlineInput.tsx';
 import shared from './shared.module.css';

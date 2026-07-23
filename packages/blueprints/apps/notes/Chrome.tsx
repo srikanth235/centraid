@@ -6,7 +6,7 @@
 // one tree instead of five imperative roots. Classes come from Chrome.module.css
 // (scoped chrome) + the global kit-* vocabulary (kit.css, loaded once by the
 // route host).
-import type { KeyboardEvent, ReactNode } from './react-core.min.js';
+import type { KeyboardEvent, ReactNode } from 'react';
 import type { AppState } from './types.ts';
 import styles from './Chrome.module.css';
 

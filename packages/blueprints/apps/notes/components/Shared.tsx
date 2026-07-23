@@ -1,6 +1,6 @@
 // Small shared presentational bits used across Sidebar/Wall/Card/Editor.
 // Pure functions of props — no app state. Mirrors tasks/components/Shared.jsx.
-import type { ReactNode } from '../react-core.min.js';
+import type { ReactNode } from 'react';
 import { highlightSegments, snippetSegments } from '../format.ts';
 
 // A trusted static SVG string rendered inline, with no wrapper box in the

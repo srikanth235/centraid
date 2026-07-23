@@ -12,11 +12,6 @@ index.json  (+ template folders on disk)
     →  manifest.json  (checked in; also remote GitHub-raw surface)
 ```
 
-Also regenerated or vendored on build:
-
-- React / browser kit bundles (`vendor-react`, `vendor-browser-shared`, `vendor-pdfjs`, `vendor-tokens`, …)
-- Do **not** hand-edit generated kit outputs
-
 Commands (from `packages/blueprints` or via turbo build):
 
 ```sh
@@ -30,7 +25,7 @@ See `packages/blueprints/README.md`.
 1. **Editing only disk files** — `manifest.json` `files[]` never picks up new paths.
 2. **Editing only `manifest.json`** — next build overwrites from `index.json` + walk.
 3. **Bumping template `version` in one place** — keep index/manifest/app.json coherent per package conventions.
-4. **Committing app changes without regenerated vendored kit** when the change depended on token/react vendors.
+4. **Adding a new generated artifact without documenting its source and regeneration path.**
 5. **Assuming install-in-place apps pick up uncommitted folder state on a remote gateway** — remote uses published/bundled tree.
 
 ## Checklist

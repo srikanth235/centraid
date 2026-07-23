@@ -174,16 +174,16 @@ describe('serveStatic — CSP + nonce', () => {
 });
 
 describe('serveStatic — shared kit asset fallback', () => {
-  it('serves kit.js / kit.css from sharedAssetsDir when the app has no copy', async () => {
-    const appDir = newAppDir({ 'index.html': '<html></html>' }); // no kit.js
+  it('serves kit.ts / kit.css from sharedAssetsDir when the app has no copy', async () => {
+    const appDir = newAppDir({ 'index.html': '<html></html>' }); // no kit.ts
     const sharedAssetsDir = newAppDir({
-      'kit.js': 'export const KIT = 1;',
+      'kit.ts': 'export const KIT = 1;',
       'kit.css': '.kit{color:red}',
     });
     const js = mockRes();
-    await serveStatic(mockReq(), js.res, appDir, 'kit.js', { sharedAssetsDir });
+    await serveStatic(mockReq(), js.res, appDir, 'kit.ts', { sharedAssetsDir });
     expect(js.data.statusCode).toBe(200);
-    expect(js.data.body.toString('utf8')).toBe('export const KIT = 1;');
+    expect(js.data.body.toString('utf8')).toBe('export const KIT = 1;\n');
     expect(js.data.headers['Content-Type']).toMatch(/javascript/);
 
     const css = mockRes();
@@ -194,10 +194,10 @@ describe('serveStatic — shared kit asset fallback', () => {
   });
 
   it('serves the kit Web Component module (elements.js) from the shared dir', async () => {
-    // kit.js does `import './elements.js'` (issue #327's native custom
+    // kit.ts does `import './elements.js'` (issue #327's native custom
     // elements, dependency-free — no further runtime import of their own).
     // It's a same-origin relative ESM import that must fall back to the
-    // shared dir the same way kit.js does, or the import 404s.
+    // shared dir the same way kit.ts does, or the import 404s.
     const appDir = newAppDir({ 'index.html': '<html></html>' }); // no kit files
     const sharedAssetsDir = newAppDir({
       'elements.js': 'export const KitElement = class {};',
@@ -211,44 +211,41 @@ describe('serveStatic — shared kit asset fallback', () => {
   });
 
   it("prefers the app's own copy over the shared one", async () => {
-    const appDir = newAppDir({ 'kit.js': 'export const KIT = "app";' });
-    const sharedAssetsDir = newAppDir({ 'kit.js': 'export const KIT = "shared";' });
+    const appDir = newAppDir({ 'kit.ts': 'export const KIT = "app";' });
+    const sharedAssetsDir = newAppDir({ 'kit.ts': 'export const KIT = "shared";' });
     const { res, data } = mockRes();
-    await serveStatic(mockReq(), res, appDir, 'kit.js', { sharedAssetsDir });
-    expect(data.body.toString('utf8')).toBe('export const KIT = "app";');
+    await serveStatic(mockReq(), res, appDir, 'kit.ts', { sharedAssetsDir });
+    expect(data.body.toString('utf8')).toBe('export const KIT = "app";\n');
   });
 
   it('404s a missing kit asset when no sharedAssetsDir is configured', async () => {
     const appDir = newAppDir({ 'index.html': '<html></html>' });
     const { res, data } = mockRes();
-    await serveStatic(mockReq(), res, appDir, 'kit.js');
+    await serveStatic(mockReq(), res, appDir, 'kit.ts');
     expect(data.statusCode).toBe(404);
   });
 
   it('does not fall back for non-whitelisted files', async () => {
     const appDir = newAppDir({ 'index.html': '<html></html>' });
-    const sharedAssetsDir = newAppDir({ 'secret.js': 'nope', 'kit.js': 'ok' });
+    const sharedAssetsDir = newAppDir({ 'secret.js': 'nope', 'kit.ts': 'ok' });
     const { res, data } = mockRes();
     await serveStatic(mockReq(), res, appDir, 'secret.js', { sharedAssetsDir });
     expect(data.statusCode).toBe(404);
   });
 
-  it('serves react-core.min.js / jsx-runtime.js from sharedAssetsDir when the app has no copy', async () => {
-    // Mirrors the kit.js fallback test above — builder-generated `.jsx` apps
-    // (issue in progress: serve-time JSX transform) don't ship their own
-    // copies of the vendored React runtime or the automatic-JSX-runtime
-    // shim; both must fall back the same way `kit.js` does.
-    const appDir = newAppDir({ 'index.html': '<html></html>' });
+  it('does not expose a framework runtime through sharedAssetsDir', async () => {
+    const appDir = newAppDir({
+      'index.html': '<html></html>',
+      'jsx-runtime.js': 'export function jsx(){}',
+    });
     const sharedAssetsDir = newAppDir({
       'react-core.min.js': 'export const React = {};',
-      'jsx-runtime.js': 'export function jsx(){}',
+      'jsx-runtime.js': 'export function sharedJsx(){}',
     });
 
     const react = mockRes();
     await serveStatic(mockReq(), react.res, appDir, 'react-core.min.js', { sharedAssetsDir });
-    expect(react.data.statusCode).toBe(200);
-    expect(react.data.body.toString('utf8')).toBe('export const React = {};');
-    expect(react.data.headers['Content-Type']).toMatch(/javascript/);
+    expect(react.data.statusCode).toBe(404);
 
     const runtime = mockRes();
     await serveStatic(mockReq(), runtime.res, appDir, 'jsx-runtime.js', { sharedAssetsDir });
@@ -257,15 +254,13 @@ describe('serveStatic — shared kit asset fallback', () => {
     expect(runtime.data.headers['Content-Type']).toMatch(/javascript/);
   });
 
-  it('serves generated offline browser runtimes from the shared kit', async () => {
+  it('serves hand-authored browser helpers from the shared kit', async () => {
     const appDir = newAppDir({ 'index.html': '<html></html>' });
     const sharedAssetsDir = newAppDir({
-      'blob-format.js': 'export const CBSF_MAGIC = "CBSF";',
-      'video-frame.js': 'export const captureVideoFrames = () => {};',
-      'pdf.min.mjs': 'export const version = "test";',
-      'pdf.worker.min.mjs': 'export const WorkerMessageHandler = {};',
+      'edge-upload.js': 'export const stageDirectFile = () => {};',
+      'turn-stream.js': 'export const consumeTurnStream = () => {};',
     });
-    for (const name of ['blob-format.js', 'video-frame.js', 'pdf.min.mjs', 'pdf.worker.min.mjs']) {
+    for (const name of ['edge-upload.js', 'turn-stream.js']) {
       const served = mockRes();
       await serveStatic(mockReq(), served.res, appDir, name, { sharedAssetsDir });
       expect(served.data.statusCode).toBe(200);
@@ -274,37 +269,27 @@ describe('serveStatic — shared kit asset fallback', () => {
     }
   });
 
-  it('serves tokens.css / wall.css from sharedAssetsDir when the app has no copy', async () => {
-    // Generated by scripts/vendor-tokens.mjs — see packages/design-tokens's
-    // toBlueprintCss(). Apps that don't ship their own copy of either file
-    // must fall back to the kit's shared dir the same way kit.css does.
-    const appDir = newAppDir({ 'index.html': '<html></html>' }); // no tokens.css / wall.css
+  it('does not expose generated token styles through sharedAssetsDir', async () => {
+    const appDir = newAppDir({ 'index.html': '<html></html>' });
     const sharedAssetsDir = newAppDir({
       'tokens.css': ':root{--app-hue:222}',
-      'wall.css': ":root[data-theme='dark']{--bg-wall:#000}",
+      'wall.css': 'body{background:linen}',
     });
 
-    const tokens = mockRes();
-    await serveStatic(mockReq(), tokens.res, appDir, 'tokens.css', { sharedAssetsDir });
-    expect(tokens.data.statusCode).toBe(200);
-    expect(tokens.data.body.toString('utf8')).toBe(':root{--app-hue:222}');
-    expect(tokens.data.headers['Content-Type']).toMatch(/css/);
-
-    const wall = mockRes();
-    await serveStatic(mockReq(), wall.res, appDir, 'wall.css', { sharedAssetsDir });
-    expect(wall.data.statusCode).toBe(200);
-    expect(wall.data.body.toString('utf8')).toBe(":root[data-theme='dark']{--bg-wall:#000}");
-    expect(wall.data.headers['Content-Type']).toMatch(/css/);
+    for (const name of ['tokens.css', 'wall.css']) {
+      const served = mockRes();
+      await serveStatic(mockReq(), served.res, appDir, name, { sharedAssetsDir });
+      expect(served.data.statusCode).toBe(404);
+    }
   });
 
-  it("prefers the app's own wall.css over the shared one (pins people's light-mode override)", async () => {
-    const appDir = newAppDir({ 'wall.css': ":root[data-theme='light']{--bg-wall:#fff5f0}" });
-    const sharedAssetsDir = newAppDir({
-      'wall.css': ":root[data-theme='light']{--bg-wall:#fcfcfc}",
-    });
+  it('serves an app-owned stylesheet without consulting sharedAssetsDir', async () => {
+    const appDir = newAppDir({ 'wall.css': 'body{background:app}' });
+    const sharedAssetsDir = newAppDir({ 'wall.css': 'body{background:shared}' });
     const { res, data } = mockRes();
     await serveStatic(mockReq(), res, appDir, 'wall.css', { sharedAssetsDir });
-    expect(data.body.toString('utf8')).toBe(":root[data-theme='light']{--bg-wall:#fff5f0}");
+    expect(data.statusCode).toBe(200);
+    expect(data.body.toString('utf8')).toBe('body{background:app}');
   });
 });
 
@@ -472,22 +457,15 @@ describe('serveStatic — serve-time JSX transform', () => {
     // shared-asset name now has no legitimate source (see the doc comment on
     // SHARED_ASSET_FILES) and must 404 loudly rather than mask a future
     // depth-rewrite regression.
-    const dir = newAppDir({ 'components/Widget.jsx': VALID_JSX }); // no jsx-runtime.js anywhere
+    const dir = newAppDir({ 'components/Widget.jsx': VALID_JSX });
     const sharedAssetsDir = newAppDir({
-      'jsx-runtime.js': 'export const RT = 1;',
-      'react-core.min.js': 'export const RC = 1;',
+      'kit.ts': 'export const KIT = 1;',
     });
-    const runtime = mockRes();
-    await serveStatic(mockReq(), runtime.res, dir, 'components/jsx-runtime.js', {
+    const nested = mockRes();
+    await serveStatic(mockReq(), nested.res, dir, 'components/kit.ts', {
       sharedAssetsDir,
     });
-    expect(runtime.data.statusCode).toBe(404);
-
-    const react = mockRes();
-    await serveStatic(mockReq(), react.res, dir, 'components/react-core.min.js', {
-      sharedAssetsDir,
-    });
-    expect(react.data.statusCode).toBe(404);
+    expect(nested.data.statusCode).toBe(404);
   });
 });
 
@@ -676,9 +654,9 @@ describe('serveStatic — ETag / conditional revalidation (issue #356)', () => {
 
   it('shared-fallback assets also carry ETag + private,no-cache', async () => {
     const appDir = newAppDir({ 'index.html': '<html></html>' });
-    const sharedAssetsDir = newAppDir({ 'kit.js': 'export const KIT = 1;' });
+    const sharedAssetsDir = newAppDir({ 'kit.ts': 'export const KIT = 1;' });
     const { res, data } = mockRes();
-    await serveStatic(mockReq(), res, appDir, 'kit.js', { sharedAssetsDir });
+    await serveStatic(mockReq(), res, appDir, 'kit.ts', { sharedAssetsDir });
     expect(data.statusCode).toBe(200);
     expect(data.headers['ETag']).toBeTruthy();
     expect(data.headers['Cache-Control']).toBe('private, no-cache');

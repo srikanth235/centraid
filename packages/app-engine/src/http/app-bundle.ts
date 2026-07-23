@@ -25,8 +25,8 @@
  *     carries no copy of its own — per-app override wins, exactly as over
  *     HTTP. `.jsx`/`.tsx`/`.ts` sources go through the same `automatic` JSX
  *     runtime as the per-file transform (esbuild auto-detects the loader by
- *     extension); the emitted `./jsx-runtime` import resolves to the app's (or
- *     shared) `jsx-runtime.js`, so React identity is preserved. A
+ *     extension); an app using JSX owns the `jsx-runtime.js` module emitted by
+ *     that transform. Centraid does not provide a framework runtime. A
  *     `*.module.css` import is compiled to a JS module in an `onLoad` hook
  *     (css-module.ts, same helper the per-file server uses) so the graph stays
  *     JS-only and the single-output-file invariant holds.
@@ -171,8 +171,8 @@ async function computeManifest(appDir: string, sharedAssetsDir?: string): Promis
  *      HTTP, so a bare specifier has no meaning here and fails the build
  *      (which falls back to per-file serving, where it would fail in the
  *      browser too).
- *   2. A file imported FROM the shared dir (kit.js → `./elements.js`,
- *      jsx-runtime.js → `./react-core.min.js`) resolves as if the importer
+ *   2. A file imported FROM the shared dir (kit.ts → `./elements.js`) resolves
+ *      as if the importer
  *      lived at the app root — that's where its URL serves from, so the
  *      app's own copy must win exactly as it does over HTTP.
  *   3. In-app targets go through `resolveStaticPath` (escape, reserved
@@ -219,10 +219,6 @@ function appGraphPlugin(root: string, sharedRoot: string | null): esbuild.Plugin
         if (spec === './jsx-runtime' || spec.endsWith('/jsx-runtime')) {
           const own = path.join(root, 'jsx-runtime.js');
           if (await statOrNull(own)) return { path: own };
-          if (sharedRoot) {
-            const shared = path.join(sharedRoot, 'jsx-runtime.js');
-            if (await statOrNull(shared)) return { path: shared };
-          }
           return { errors: [{ text: `jsx-runtime.js not found for "${spec}"` }] };
         }
 
@@ -274,12 +270,11 @@ async function buildBundle(
       write: false,
       format: 'esm',
       platform: 'browser',
-      // Same JSX config as the per-file transformJsx — automatic runtime,
-      // resolved by the plugin above to the one shared React instance.
+      // Same JSX config as the per-file transformJsx. Apps that use JSX own
+      // their runtime; bundled system apps do not use this serving path.
       jsx: 'automatic',
       jsxImportSource: '.',
-      // Not minified: react-core.min.js (the bulk) is pre-minified, wire
-      // size is handled by the compression layer, and source maps are out
+      // Wire size is handled by the compression layer, and source maps are out
       // of scope — an unminified bundle stays debuggable without them.
       minify: false,
       // Keeps esbuild's per-module path comments app-relative instead of

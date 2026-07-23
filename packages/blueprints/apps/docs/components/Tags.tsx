@@ -4,7 +4,7 @@
 // retyping an existing label just no-ops rather than erroring. Mirrors the
 // photos app's Lightbox tag editor almost verbatim, adapted to docs' own
 // class names.
-import { useState } from '../react-core.min.js';
+import { useState } from 'react';
 import type { DriveDoc } from '../types.ts';
 import styles from './Tags.module.css';
 import shared from './shared.module.css';

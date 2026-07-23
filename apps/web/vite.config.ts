@@ -10,9 +10,8 @@ const appVersion = JSON.parse(readFileSync(fromHere('./package.json'), 'utf8')).
 
 export default defineConfig({
   resolve: {
-    // Array form so the inline-app regex aliases (blueprint `./kit.js` /
-    // `./react-core.min.js` → shell shims, issue #505) sit alongside the
-    // package aliases.
+    // Array form so the inline-app `./kit.ts` adapter alias sits alongside
+    // the package aliases (issue #505).
     alias: [
       ...inlineBlueprintAliases(),
       { find: '@centraid/client', replacement: fromHere('../../packages/client/src') },

@@ -4,7 +4,7 @@
 // modal (unmounting this component) and opens the new person's drawer, same
 // as the old version. On failure/park, the draft and open state stay put so
 // nothing typed is lost.
-import { useEffect, useRef, useState } from '../react-core.min.js';
+import { useEffect, useRef, useState } from 'react';
 import type { PersonList } from '../types.ts';
 import styles from './AddPersonModal.module.css';
 

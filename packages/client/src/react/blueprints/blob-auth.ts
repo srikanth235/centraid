@@ -1,7 +1,8 @@
 // Lightweight vault-blob authorizer (issue #505 Phase 4 / boot-size fix).
 //
 // `authorizeBlobUrl` used to live in `kit-inline.ts`, but that module is a
-// barrel (`export * from '@centraid/blueprints/kit/kit.js'`) — importing ONE
+// barrel (`export * from '@centraid/blueprints/kit/kit.js'`, resolved to the
+// TypeScript source by the toolchain) — importing ONE
 // symbol from it dragged the entire served kit into whatever chunk the importer
 // landed in. Because `inline-blob-images.ts` (eager via InlineAppRoute → App)
 // imports `authorizeBlobUrl`, the full kit was being pulled into the shell's

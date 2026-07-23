@@ -6,8 +6,8 @@
 // version's behavior: a successful write re-reads the person, which used to
 // recreate these DOM-imperative rows from scratch; a failed/parked one left
 // the typed draft in place so nothing the owner typed is lost).
-import { useState } from '../react-core.min.js';
-import type { ReactNode } from '../react-core.min.js';
+import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { dateInputToMonthDay } from '../format.ts';
 import { I } from '../icons.ts';
 import { Icon } from './Shared.tsx';

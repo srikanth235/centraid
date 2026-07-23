@@ -228,7 +228,7 @@
     var(--bg-sunken) 70%
   );
   background-size: 220% 100%;
-  animation: ph-shimmer 1.4s var(--ease) infinite;
+  animation: kit-shimmer 1.4s var(--ease) infinite;
 }
 @media (prefers-reduced-motion: reduce) {
   .frame:global(.is-placeholder)::after {

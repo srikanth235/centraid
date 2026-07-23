@@ -1,5 +1,5 @@
 // The inline "Ask your <app>" panel — the shell-side replacement for the served
-// kit.js ask IIFE (which is suppressed inline; see suppress-served-ask.ts). It
+// kit.ts ask IIFE (which is suppressed inline; see suppress-served-ask.ts). It
 // mounts against the gateway conversation surface: turns stream through
 // `streamTurn(appId, …, register:'ask')`, and any write the agent parks is
 // surfaced as an Approve/Discard consent card driven by the shell's

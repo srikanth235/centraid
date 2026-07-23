@@ -1,7 +1,7 @@
-// The inline kit — the shell-side module blueprint apps' `./kit.js` specifier
+// The inline kit — the shell-side module blueprint apps' `./kit.ts` specifier
 // resolves to when a bundled app runs INLINE (see inline-vite-aliases.ts).
 //
-// It mirrors kit.js's named-export API exactly so app code is unchanged. The
+// It mirrors kit.ts's named-export API exactly so app code is unchanged. The
 // large pure surface (DOM helpers, formatters, skeletons, popovers, charts,
 // mention UI, …) is re-exported verbatim from the real kit; only the handful of
 // exports that reach the network or the served document are overridden to use
@@ -23,7 +23,7 @@
 // with a replica-invalidation subscription — so the kit's debounce + table
 // filter semantics carry over with no override.
 //
-// The `./suppress-served-ask` import MUST stay first: kit.js auto-mounts its Ask
+// The `./suppress-served-ask` import MUST stay first: kit.ts auto-mounts its Ask
 // panel at module-eval time, and the sentinel it sets suppresses that before the
 // kit module below is evaluated (see suppress-served-ask.ts).
 import './suppress-served-ask.js';
@@ -33,6 +33,8 @@ import {
   isPendingOffsite,
   renderAttachments as baseRenderAttachments,
   sha256File,
+  type Attachment,
+  type VaultOutcome,
 } from '@centraid/blueprints/kit/kit.js';
 import { auth, authHeaders, doFetch } from '../../gateway-client-core.js';
 import { authorizeBlobUrl, BLOB_PREFIX } from './blob-auth.js';
@@ -40,7 +42,7 @@ import { authorizeBlobUrl, BLOB_PREFIX } from './blob-auth.js';
 export * from '@centraid/blueprints/kit/kit.js';
 // `authorizeBlobUrl` moved to the leaf `blob-auth.js` module so importing it
 // no longer pulls the full kit barrel into a caller's chunk (boot-size fix).
-// Re-exported here so served-kit consumers that reach it through the `./kit.js`
+// Re-exported here so served-kit consumers that reach it through the `./kit.ts`
 // → kit-inline alias are unchanged.
 export { authorizeBlobUrl } from './blob-auth.js';
 
@@ -85,13 +87,7 @@ export function wireThemeToggle(
   return setIcon;
 }
 
-interface AttachmentLike {
-  attachment_id?: string;
-  media_type?: string;
-  content_uri?: string;
-  byte_size?: number;
-  title?: string | null;
-}
+type AttachmentLike = Attachment;
 
 const stripObjectUrls = new WeakMap<HTMLElement, string[]>();
 
@@ -101,14 +97,14 @@ const stripObjectUrls = new WeakMap<HTMLElement, string[]>();
  * from `file://`), so each blob-backed `img`/`a` is refetched through the
  * authenticated gateway client and swapped to a `blob:` object URL.
  *
- * Consumed by blueprint apps through the `./kit.js` → kit-inline Vite alias
+ * Consumed by blueprint apps through the `./kit.ts` → kit-inline Vite alias
  * (invisible to knip's client-only export graph).
  * @public
  */
 export function renderAttachments(
   stripEl: HTMLElement,
   list: AttachmentLike[] | undefined,
-  onRemove: ((attachmentId: string) => Promise<unknown>) | null,
+  onRemove: ((attachmentId: string) => Promise<VaultOutcome | undefined>) | null,
   options: { onZoom?: (attachment: unknown) => void } = {},
 ): void {
   for (const url of stripObjectUrls.get(stripEl) ?? []) {
@@ -139,18 +135,18 @@ export function renderAttachments(
 }
 
 // ---------- Blob CAS uploads (issue #505 Phase 4) ----------
-// kit.js's `stageFileBytes` / `stageDerivative` POST to `/_vault/blobs` with a
+// kit.ts's `stageFileBytes` / `stageDerivative` POST to `/_vault/blobs` with a
 // relative `fetch`, which resolves against the served app origin — inline the
 // app runs in the shell document (and desktop from `file://`), so those bytes
 // must travel through the authed gateway client instead. The wire shape mirrors
-// kit.js exactly (query params, sha-preflight HEAD, `x-content-sha256` header,
-// the returned staging receipt). The one deliberate simplification: kit.js also
+// kit.ts exactly (query params, sha-preflight HEAD, `x-content-sha256` header,
+// the returned staging receipt). The one deliberate simplification: kit.ts also
 // probes optional `session`/`direct` edge-upload routes before the authoritative
-// POST; inline we go straight to the authoritative POST (kit.js documents it as
+// POST; inline we go straight to the authoritative POST (kit.ts documents it as
 // "the permanent authoritative POST … the compatibility and backpressure
 // fallback"), so dedupe + authoritative hashing semantics are preserved.
 
-/** kit.js `StagedBlob` — the staging receipt the blob door returns. */
+/** kit.ts `StagedBlob` — the staging receipt the blob door returns. */
 interface StagedBlob {
   sha256: string;
   mediaType?: string | null;
@@ -164,10 +160,10 @@ interface StagedBlob {
 
 /**
  * Stream a File to the vault blob-staging route through the authed gateway.
- * Drop-in for kit.js `stageFileBytes`: same signature, same `sha256`-preflight
+ * Drop-in for kit.ts `stageFileBytes`: same signature, same `sha256`-preflight
  * dedupe (HEAD `…/_sha/<sha>`), same authoritative POST + returned receipt.
  *
- * Consumed by blueprint apps through the `./kit.js` → kit-inline Vite alias
+ * Consumed by blueprint apps through the `./kit.ts` → kit-inline Vite alias
  * (invisible to knip's client-only export graph).
  * @public
  */
@@ -228,7 +224,7 @@ export async function stageFileBytes(
 
 /**
  * Submit a typed derivative contribution (issue #299 enrichers) through the
- * authed blob door. Drop-in for kit.js `stageDerivative`.
+ * authed blob door. Drop-in for kit.ts `stageDerivative`.
  * @public
  */
 export async function stageDerivative(
@@ -261,9 +257,9 @@ interface AttachHandlers {
 }
 
 /**
- * Wire a hidden `<input type=file>` to the attach flow. Drop-in for kit.js
+ * Wire a hidden `<input type=file>` to the attach flow. Drop-in for kit.ts
  * `wireAttachInput`: files over `INLINE_ATTACH_BYTES` stage through the authed
- * `stageFileBytes` above (kit.js's relative POST breaks inline); smaller files
+ * `stageFileBytes` above (kit.ts's relative POST breaks inline); smaller files
  * still travel inline as data: URIs through the app's `attach` action (which
  * rides `window.centraid.write` — no network fetch, so it already worked).
  * @public
@@ -304,15 +300,15 @@ export function wireAttachInput(
 }
 
 // ---------- Owner-plane reference writes (issues #272 + #282) ----------
-// kit.js's createReference / removeReference / reanchorReference POST/DELETE/
+// kit.ts's createReference / removeReference / reanchorReference POST/DELETE/
 // PATCH `/_vault/links` with a relative `fetch` at owner trust; inline they must
-// carry the gateway bearer credential. Wire shape mirrors kit.js exactly,
+// carry the gateway bearer credential. Wire shape mirrors kit.ts exactly,
 // including returning the parsed body verbatim (a `VaultOutcome`) without an
 // `ok` gate — the vault answers link judgments as `{status}` JSON, so an app's
 // narrate/consent path sees the same outcome it did served.
 
 /**
- * Assert a cross-reference link as the owner. Drop-in for kit.js
+ * Assert a cross-reference link as the owner. Drop-in for kit.ts
  * `createReference`.
  * @public
  */
@@ -350,7 +346,7 @@ export async function removeReference(linkId: string): Promise<unknown> {
 
 /**
  * Move (selector object) or clear (selector null) a live link's standoff
- * anchor. Drop-in for kit.js `reanchorReference`.
+ * anchor. Drop-in for kit.ts `reanchorReference`.
  * @public
  */
 export async function reanchorReference(linkId: string, selector: unknown): Promise<unknown> {
@@ -363,10 +359,10 @@ export async function reanchorReference(linkId: string, selector: unknown): Prom
   return res.json();
 }
 
-// RESIDUAL (issue #505 Phase 4): the @-mention picker READ — kit.js's
+// RESIDUAL (issue #505 Phase 4): the @-mention picker READ — kit.ts's
 // `attachMentionPopover` fetches `/_vault/picker` relatively, and
 // `attachMentionField` calls that popover (and the reference writes above)
-// through kit.js's OWN module-local bindings, which the `export *` re-export
+// through kit.ts's OWN module-local bindings, which the `export *` re-export
 // cannot rebind. Overriding the picker therefore means re-implementing the whole
 // popover/field UI here, not swapping one fetch. No converted app (tasks/notes/
 // docs/locker/photos) wires inline mention AUTHORING today — they only read

@@ -6,7 +6,7 @@
 // components/Slideshow.tsx (React state, not app.tsx module state).
 import { SlideshowView } from './components/Slideshow.tsx';
 import { $ } from './dom.ts';
-import type { ReactNode } from './react-core.min.js';
+import type { ReactNode } from 'react';
 import type { Asset } from './types.ts';
 
 type Root = { render: (node: ReactNode) => void };

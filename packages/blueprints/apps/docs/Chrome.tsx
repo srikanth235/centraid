@@ -14,7 +14,7 @@
 // #5). The app root deliberately does NOT carry `id="root"` — the host page's own
 // mount div owns that id, and the reused nav.ts only touches it as a harmless
 // no-op class toggle.
-import type { KeyboardEvent, ReactNode } from './react-core.min.js';
+import type { KeyboardEvent, ReactNode } from 'react';
 import type { AppState } from './types.ts';
 import styles from './Chrome.module.css';
 

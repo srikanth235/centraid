@@ -3,7 +3,7 @@
  * core of the shell assistant composer's @-mentions + slash-commands.
  *
  * Why shell-local React (not a shared kit sibling): the kit's
- * `attachMentionPopover` (kit.js) pokes an *uncontrolled* DOM textarea via a
+ * `attachMentionPopover` (kit.ts) pokes an *uncontrolled* DOM textarea via a
  * body-appended layer, hard-codes a cookie-auth `fetch('/centraid/_vault/picker')`
  * with no injectable search hook, and styles itself with global kit.css classes.
  * The shell composer is a *controlled* React textarea authed by a bearer token
@@ -11,7 +11,7 @@
  * a React reimplementation over the same endpoints is the right call — the only
  * genuinely shareable bits are these tiny pure functions (token detection + the
  * `@[label](ref:type/id)` splice), duplicated here rather than paying for a
- * new tri-allowlist kit sibling + a kit.js refactor. The emitted ref string
+ * new tri-allowlist kit sibling + a kit.ts refactor. The emitted ref string
  * exactly matches what the shared renderer parses (gfm.js's ref regex).
  */
 

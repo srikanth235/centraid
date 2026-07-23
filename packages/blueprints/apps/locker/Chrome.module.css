@@ -1,6 +1,6 @@
-/* Inline chrome for Locker (issue #505). Locker is the Lit-derived app: its
-   static index.html carries NO chrome markup — the whole surface (sidebar /
-   list / detail / overlays) is React-rendered into a single root, so this file
+/* Locker chrome shared by the served and inline routes (issue #505). The whole
+   surface (sidebar / list / detail / overlays) is React-rendered into a single
+   root, so this file
    is thinner than the topbar apps'. It supplies only the `.locker` FRAME
    (app.css's `.locker` + the consent/notice banners + the ask mount + the two
    narrow-viewport `#root` rules), rescoped to the inline route. The sidebar /
@@ -16,9 +16,10 @@
    --accs/--accd/--accd-fg, the sidebar surface --bg-side, and the
    --warn/--t-strong/--tk-eye aliases the reused component CSS modules read —
    are NOT in the shared layer, so they are folded in here on .appRoot (trap
-   #3). The served path (index.html + app.css + component modules) is untouched. */
+   #3). */
 
 .appRoot {
+  composes: kit-app-shell from global;
   /* Locker-specific tokens folded from app.css :root (light). The shared
      blueprint layer supplies everything else; these are the app's own palette
      add-ons the reused components/*.module.css reference. --app-hue/--_accent
@@ -38,16 +39,7 @@
      detail `position: fixed` overlays AND the kit modal/ask overlays, so they
      overlay THIS app pane inline instead of the whole shell viewport (trap #1
      — the served path can use fixed because the app IS the viewport). */
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  position: relative;
-  overflow: hidden;
   contain: layout;
-  background: var(--bg);
-  color: var(--ink);
-  font: var(--t-body);
 }
 
 /* Dark overrides for the folded locker tokens — mirrors app.css's dark block.
@@ -143,12 +135,11 @@
    floats in the corner of the pane (contained by .appRoot). Non-essential
    (kit-ask-inline mounts the button lazily; degrades to nothing if it fails). */
 .askMount {
+  composes: kit-app-ask-mount from global;
   position: absolute;
   right: 16px;
   bottom: 16px;
   z-index: 30;
-  display: flex;
-  align-items: center;
 }
 
 /* Narrow (phone) drawer scrim — app.css's `.locker.is-narrow.side-open::after`,

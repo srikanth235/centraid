@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 // The inline kit is imported FIRST so its `./suppress-served-ask` side effect
-// runs before the real kit module (it suppresses kit.js's auto-mounting Ask
+// runs before the real kit module (it suppresses kit.ts's auto-mounting Ask
 // IIFE). These suites exercise the authed vault overrides — blob staging, the
 // attach flow, and the owner-plane reference writes (issue #505 Phase 4).
 import {
@@ -40,7 +40,7 @@ function callArgs(index: number): [string, RequestInit] {
   return [call[1] as string, call[2] as RequestInit];
 }
 
-// jsdom's File does not implement `arrayBuffer()`, so kit.js's `sha256File`
+// jsdom's File does not implement `arrayBuffer()`, so kit.ts's `sha256File`
 // returns null for a plain `new File(...)` and the sha-preflight path is
 // skipped. This file-like carries `arrayBuffer` (and no `stream`) so the pure-JS
 // StreamingSha256 hashes it — exercising the dedupe branch the way a browser

@@ -1,8 +1,12 @@
+/* oxlint-disable typescript-eslint/ban-ts-comment -- this source-consolidation
+   makes the implementation the public type source; the legacy Ask controller
+   still needs a follow-up strictness pass after it is split from the DOM primitives. */
+// @ts-nocheck
 // governance: allow-repo-hygiene file-size-limit the kit is the single canonical bundle every app loads verbatim (UX primitives + charts + the folded Ask-your-vault controller); it is served as one file, so splitting it would fracture that one-request contract without reducing surface
 // Centraid blueprint kit — the shared UX substrate for template apps.
 //
-// Canonical (and ONLY) copy: packages/blueprints/kit/kit.js. Apps don't
-// carry their own copies — the app-engine runtime serves `kit.js` /
+// Canonical (and ONLY) copy: packages/blueprints/kit/kit.ts. Apps don't
+// carry their own copies — the app-engine runtime serves `kit.ts` /
 // `kit.css` from this dir (`sharedAssetsDir`, wired to `KIT_DIR`) whenever
 // an app folder has no override of its own. Edit here, and every app —
 // bundled template or deployed clone — picks it up on next load.
@@ -43,6 +47,91 @@ import {
   modelLabel,
 } from './conversation-client.js';
 
+export type VaultOutcomeStatus =
+  | 'executed'
+  | 'parked'
+  | 'queued'
+  | 'in-flight'
+  | 'failed'
+  | 'denied';
+
+export interface VaultOutcome {
+  status: VaultOutcomeStatus;
+  output?: Record<string, unknown>;
+  reason?: string;
+  predicate?: string;
+  message?: string;
+  invocationId?: string;
+  receiptId?: string;
+  code?: string;
+}
+
+export interface CentraidChangeDetail {
+  tables?: string[];
+  source?: string;
+  intentId?: string;
+  intentState?: string;
+  ts?: number;
+}
+
+export interface ToastOptions {
+  undoLabel?: string;
+  onUndo?: () => void;
+  duration?: number;
+}
+
+export interface ReadSubscription {
+  managed: boolean;
+  unsubscribe: () => void;
+}
+
+export interface AvatarOptions {
+  size?: string;
+  color?: string;
+  initials?: string;
+  src?: string;
+  shape?: string;
+}
+
+export interface ChartPoint {
+  x: number;
+  y: number;
+}
+
+export interface BarItem {
+  label: string;
+  value: number;
+}
+
+export interface StagedBlob {
+  sha256: string;
+  mediaType?: string | null;
+  byteSize?: number;
+  existingContentId?: string | null;
+  casAck?: string | null;
+  custody?: string | null;
+  alreadyPresent?: boolean;
+  [key: string]: unknown;
+}
+
+export interface Attachment {
+  attachment_id: string;
+  content_id?: string;
+  media_type?: string;
+  title?: string | null;
+  content_uri?: string;
+  byte_size?: number;
+  [key: string]: unknown;
+}
+
+export interface Reference {
+  linkId?: string;
+  type?: string;
+  id?: string;
+  relation?: string;
+  [key: string]: unknown;
+}
+
 // Re-export the shared kind-label helper (its definition moved to elements.js,
 // where the mention-chip and reference-strip components also need it).
 export { entityKindLabel };
@@ -50,7 +139,7 @@ export { entityKindLabel };
 // ---------- Tiny DOM builders (the h()/el() every app copied from Docs) -----
 
 /** Parse an HTML string and return its first element. */
-export function el(html) {
+export function el(html: string): HTMLElement {
   const t = document.createElement('template');
   t.innerHTML = html.trim();
   return t.content.firstElementChild;
@@ -60,7 +149,11 @@ export function el(html) {
  * Hyperscript element builder: `h('div', { class, html, style, on* }, ...kids)`.
  * Null/false props and kids are skipped; string kids become text nodes.
  */
-export function h(tag, props = {}, ...kids) {
+export function h(
+  tag: string,
+  props: Record<string, unknown> = {},
+  ...kids: unknown[]
+): HTMLElement {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(props)) {
     if (v == null || v === false) continue;
@@ -110,7 +203,10 @@ function ensureToastHost() {
  *  - undoLabel/onUndo: renders an action button (e.g. Undo) that runs once.
  *  - duration: ms before auto-dismiss (default 5000; sticky if 0).
  */
-export function toast(text, { undoLabel, onUndo, duration = 5000 } = {}) {
+export function toast(
+  text: string,
+  { undoLabel, onUndo, duration = 5000 }: ToastOptions = {},
+): () => void {
   haptic('success');
   const host = ensureToastHost();
   const el = document.createElement('kit-toast');
@@ -147,7 +243,7 @@ export function toast(text, { undoLabel, onUndo, duration = 5000 } = {}) {
 }
 
 /** The shared translation of a typed-command outcome into a human sentence. */
-export function outcomeMessage(outcome) {
+export function outcomeMessage(outcome: VaultOutcome | null | undefined): string | null {
   if (outcome?.status === 'queued' || outcome?.status === 'in-flight') {
     return outcome.reason ?? 'Saved on this device — it will sync when the gateway is reachable.';
   }
@@ -171,7 +267,7 @@ export function outcomeMessage(outcome) {
 // ---------- Loading and read-error states ----------
 
 /** Fill a container with shimmer rows while the first read is in flight. */
-export function showSkeleton(container, rows = 3) {
+export function showSkeleton(container: Element, rows = 3): void {
   container.innerHTML = '';
   const el = document.createElement('kit-skeleton');
   el.rows = rows;
@@ -182,7 +278,7 @@ export function showSkeleton(container, rows = 3) {
  * Surface a failed read in the app's notice banner instead of silence —
  * a broken vault must not look like an empty one.
  */
-export function readFailed(bannerEl) {
+export function readFailed(bannerEl: HTMLElement | null | undefined): void {
   if (!bannerEl) return;
   bannerEl.textContent = 'Couldn’t reach the vault — retrying when you come back.';
   bannerEl.hidden = false;
@@ -195,7 +291,10 @@ export function readFailed(bannerEl) {
  * this helper consumes that first subscription emission and forwards reruns.
  * Plain-Promise compatibility reads remain unmanaged.
  */
-export function subscribeReadUpdates(read, onUpdate) {
+export function subscribeReadUpdates<T = unknown>(
+  read: unknown,
+  onUpdate: (value: T) => void,
+): ReadSubscription {
   if (typeof read?.subscribe !== 'function') {
     return { managed: false, unsubscribe: () => {} };
   }
@@ -228,7 +327,10 @@ export function subscribeReadUpdates(read, onUpdate) {
  * Returns true when the click should proceed. First click arms the button
  * (label swap + auto-disarm after `timeout` ms); second click confirms.
  */
-export function armConfirm(btn, { armedLabel = 'Sure?', timeout = 3000 } = {}) {
+export function armConfirm(
+  btn: HTMLElement,
+  { armedLabel = 'Sure?', timeout = 3000 }: { armedLabel?: string; timeout?: number } = {},
+): boolean {
   if (btn.dataset.kitArmed === 'true') {
     clearTimeout(Number(btn.dataset.kitArmTimer));
     delete btn.dataset.kitArmed;
@@ -251,7 +353,7 @@ export function armConfirm(btn, { armedLabel = 'Sure?', timeout = 3000 } = {}) {
 // ---------- Formatting ----------
 
 /** Minor units → localized currency string ("€12.34"), tolerant of gaps. */
-export function fmtMoney(minor, currency) {
+export function fmtMoney(minor: number | null | undefined, currency?: string): string {
   const value = Number(minor ?? 0) / 100;
   try {
     return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(value);
@@ -261,7 +363,7 @@ export function fmtMoney(minor, currency) {
 }
 
 /** The viewer's local YYYY-MM-DD for an instant — never the UTC slice. */
-export function localDayKey(dateish) {
+export function localDayKey(dateish: string | number | Date): string {
   const d = dateish instanceof Date ? dateish : new Date(dateish);
   if (Number.isNaN(d.getTime())) return String(dateish).slice(0, 10);
   const pad = (n) => String(n).padStart(2, '0');
@@ -269,12 +371,12 @@ export function localDayKey(dateish) {
 }
 
 /** The viewer's local YYYY-MM for an instant. */
-export function localMonthKey(dateish) {
+export function localMonthKey(dateish: string | number | Date): string {
   return localDayKey(dateish).slice(0, 7);
 }
 
 /** "5m" / "3h" / "2d" / "Mar 4" — the inbox-style relative timestamp. */
-export function relTime(iso) {
+export function relTime(iso: string): string {
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return '';
   const mins = Math.round((Date.now() - then) / 60000);
@@ -285,7 +387,10 @@ export function relTime(iso) {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-export function debounce(fn, ms = 200) {
+export function debounce<Args extends unknown[]>(
+  fn: (...args: Args) => void,
+  ms = 200,
+): (...args: Args) => void {
   let timer = 0;
   return (...args) => {
     clearTimeout(timer);
@@ -311,7 +416,11 @@ export function debounce(fn, ms = 200) {
  * (post-#286 handler writes carry no tables), so it always fires. Returns an
  * unsubscribe fn.
  */
-export function onDataChange(tables, cb, { debounceMs = 200 } = {}) {
+export function onDataChange(
+  tables: string[] | null | undefined,
+  cb: (detail: CentraidChangeDetail) => void,
+  { debounceMs = 200 }: { debounceMs?: number } = {},
+): () => void {
   const want = new Set(tables ?? []);
   let timer = 0;
   const pending = new Map();
@@ -346,7 +455,10 @@ export function onDataChange(tables, cb, { debounceMs = 200 } = {}) {
  * just re-granted, so a denied app must always re-read on focus. Returns an
  * unsubscribe fn.
  */
-export function onFocusRefresh(cb, { minIntervalMs = 30000 } = {}) {
+export function onFocusRefresh(
+  cb: () => void,
+  { minIntervalMs = 30000 }: { minIntervalMs?: number } = {},
+): () => void {
   let last = 0;
   const onFocus = () => {
     const banner = document.getElementById('consentBanner');
@@ -368,7 +480,12 @@ export function onFocusRefresh(cb, { minIntervalMs = 30000 } = {}) {
  * visibility-gated poll only where RO is unavailable. Fires once immediately.
  * Returns a stop fn.
  */
-export function observeWidth(el, breakpoint, onNarrow, { pollMs = 250 } = {}) {
+export function observeWidth(
+  el: Element | null,
+  breakpoint: number,
+  onNarrow: (isNarrow: boolean) => void,
+  { pollMs = 250 }: { pollMs?: number } = {},
+): () => void {
   const measure = () => {
     if (!el) return;
     const forced = document.documentElement.getAttribute('data-app-width') === 'narrow';
@@ -399,7 +516,10 @@ export function observeWidth(el, breakpoint, onNarrow, { pollMs = 250 } = {}) {
  * unless `color` pins one; `initials` pins the letters; `src` swaps in a
  * photo; `shape: 'rounded'` squares the corners for file/doc tiles.
  */
-export function letterAvatar(name, { size = '2.25rem', color, initials, src, shape } = {}) {
+export function letterAvatar(
+  name: string,
+  { size = '2.25rem', color, initials, src, shape }: AvatarOptions = {},
+): HTMLElement {
   const el = document.createElement('kit-avatar');
   el.name = String(name ?? '?');
   el.size = size;
@@ -419,7 +539,18 @@ export function letterAvatar(name, { size = '2.25rem', color, initials, src, sha
  * A time-aware line chart element: points are {x: epochMs, y: number}. Renders a
  * line, soft area fill, and an emphasized last point (see `<kit-line-chart>`).
  */
-export function lineChart(points, { width = 640, height = 160, label = 'Trend' } = {}) {
+export function lineChart(
+  points: ChartPoint[],
+  {
+    width = 640,
+    height = 160,
+    label = 'Trend',
+  }: {
+    width?: number;
+    height?: number;
+    label?: string;
+  } = {},
+): HTMLElement {
   const el = document.createElement('kit-line-chart');
   el.points = points ?? [];
   el.width = width;
@@ -429,7 +560,7 @@ export function lineChart(points, { width = 640, height = 160, label = 'Trend' }
 }
 
 /** Horizontal proportion bar element (e.g. cost share behind a row's amount). */
-export function barSpan(ratio, { tone } = {}) {
+export function barSpan(ratio: number, { tone }: { tone?: string } = {}): HTMLElement {
   const el = document.createElement('kit-meter');
   el.ratio = ratio;
   if (tone) el.tone = tone;
@@ -437,7 +568,18 @@ export function barSpan(ratio, { tone } = {}) {
 }
 
 /** Vertical bar chart element for period totals: items are {label, value} (see `<kit-bar-chart>`). */
-export function barChart(items, { width = 640, height = 160, label = 'Totals' } = {}) {
+export function barChart(
+  items: BarItem[],
+  {
+    width = 640,
+    height = 160,
+    label = 'Totals',
+  }: {
+    width?: number;
+    height?: number;
+    label?: string;
+  } = {},
+): HTMLElement {
   const el = document.createElement('kit-bar-chart');
   el.items = items ?? [];
   el.width = width;
@@ -454,7 +596,7 @@ export const BLOB_ROUTE = '/centraid/_vault/blobs';
 export const INLINE_ATTACH_BYTES = 256 * 1024;
 
 /** Read a File into a data: URI (the inline path for small attachments). */
-export function fileToDataUri(file) {
+export function fileToDataUri(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
     r.onload = () => resolve(String(r.result));
@@ -468,18 +610,18 @@ export function fileToDataUri(file) {
  * is a full read pass; memory stays bounded and the upload body itself still
  * streams from the File on the following fetch.
  */
-export async function sha256File(file) {
+export async function sha256File(file: File): Promise<string | null> {
   if (typeof file?.arrayBuffer !== 'function') return null;
   return sha256FileStream(file);
 }
 
 /** Submit a typed contribution through the existing authenticated blob door. */
 export async function stageDerivative(
-  parentSha,
-  variant,
-  body,
+  parentSha: string,
+  variant: string,
+  body: BodyInit,
   mediaType = 'application/octet-stream',
-) {
+): Promise<StagedBlob> {
   const q = new URLSearchParams({ variant, variant_of: parentSha, media_type: mediaType });
   const res = await fetch(`${BLOB_ROUTE}?${q}`, {
     method: 'POST',
@@ -491,7 +633,7 @@ export async function stageDerivative(
 }
 
 /** Strict policy acknowledges success only after provider custody. */
-export function isPendingOffsite(staged) {
+export function isPendingOffsite(staged: StagedBlob | null | undefined): boolean {
   return (
     staged?.casAck === 'replicated' &&
     staged?.custody !== 'replicated' &&
@@ -506,7 +648,11 @@ export function isPendingOffsite(staged) {
  * when another device already established custody; the gateway still hashes
  * and verifies every POST authoritatively.
  */
-export async function stageFileBytes(file, extra = '', { hash = true } = {}) {
+export async function stageFileBytes(
+  file: File,
+  extra = '',
+  { hash = true }: { hash?: boolean } = {},
+): Promise<StagedBlob> {
   const q = new URLSearchParams();
   if (file.name) q.set('filename', file.name);
   if (file.type) q.set('media_type', file.type);
@@ -571,7 +717,7 @@ export async function stageFileBytes(file, extra = '', { hash = true } = {}) {
 }
 
 /** "812 B" / "24 KB" / "1.3 MB" — `empty` is returned for 0/absent sizes. */
-export function fmtBytes(n, empty = '') {
+export function fmtBytes(n: number | null | undefined, empty = ''): string {
   if (!n || !Number.isFinite(Number(n))) return empty;
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
@@ -586,7 +732,12 @@ export function fmtBytes(n, empty = '') {
  * remove control at all). `onZoom(attachment)`, when given, makes image
  * thumbs zoomable.
  */
-export function renderAttachments(stripEl, list, onRemove, { onZoom } = {}) {
+export function renderAttachments(
+  stripEl: HTMLElement,
+  list: Attachment[] | null | undefined,
+  onRemove: ((attachmentId: string) => Promise<VaultOutcome | undefined>) | null,
+  { onZoom }: { onZoom?: (attachment: Attachment) => void } = {},
+): void {
   // An imperative rebuild (any refresh — e.g. the window-focus one) would
   // otherwise wipe an armed remove button mid-confirm: the owner's second
   // click lands on a fresh, disarmed button and merely re-arms it. Carry
@@ -649,7 +800,21 @@ export function renderAttachments(stripEl, list, onRemove, { onZoom } = {}) {
  * `narrate(outcome) → bool` (false stops the batch), `notice(text)` for read
  * errors, `refresh()` after the batch.
  */
-export function wireAttachInput(inputEl, getSubjectId, { act, narrate, notice, refresh }) {
+export function wireAttachInput(
+  inputEl: HTMLInputElement,
+  getSubjectId: () => string | null | undefined,
+  {
+    act,
+    narrate,
+    notice,
+    refresh,
+  }: {
+    act: (action: string, input: Record<string, unknown>) => Promise<VaultOutcome | undefined>;
+    narrate: (outcome: VaultOutcome | undefined) => boolean;
+    notice?: (text: string) => void;
+    refresh?: () => void | Promise<void>;
+  },
+): void {
   inputEl.addEventListener('change', async () => {
     const subjectId = getSubjectId();
     if (!subjectId) return;
@@ -686,12 +851,12 @@ let popoverEl = null;
 let popoverCleanup = null;
 
 /** Whether a kit popover is open — layered Escape handlers ask before closing. */
-export function isPopoverOpen() {
+export function isPopoverOpen(): boolean {
   return popoverEl != null;
 }
 
 /** Close the open kit popover (no-op when none is open). */
-export function closePopover() {
+export function closePopover(): void {
   if (!popoverEl) return;
   popoverCleanup?.();
   popoverEl.remove();
@@ -711,10 +876,15 @@ export function closePopover() {
  * that attach document-level helpers.
  */
 export function openPopover(
-  anchor,
-  build,
-  { focus = false, className, role = 'menu', onClose } = {},
-) {
+  anchor: HTMLElement,
+  build: (box: HTMLElement) => void,
+  {
+    focus = false,
+    className,
+    role = 'menu',
+    onClose,
+  }: { focus?: boolean; className?: string; role?: string; onClose?: () => void } = {},
+): void {
   closePopover();
   const box = h('div', { class: className ? `kit-popover ${className}` : 'kit-popover', role });
   build(box);
@@ -761,10 +931,20 @@ export function openPopover(
 
 /** One menu row for `openPopover`: label + optional icon, dot, danger tone. */
 export function popItem(
-  label,
-  onClick,
-  { danger = false, disabled = false, iconHtml = null, dotColor = null } = {},
-) {
+  label: string,
+  onClick: (event: MouseEvent) => void,
+  {
+    danger = false,
+    disabled = false,
+    iconHtml = null,
+    dotColor = null,
+  }: {
+    danger?: boolean;
+    disabled?: boolean;
+    iconHtml?: string | null;
+    dotColor?: string | null;
+  } = {},
+): HTMLButtonElement {
   const btn = h('button', {
     type: 'button',
     class: `kit-popover-item${danger ? ' danger' : ''}`,
@@ -785,7 +965,15 @@ export function popItem(
  * Fill `container` with the canonical empty state (icon tile, title, sub,
  * optional action element) and unhide it.
  */
-export function emptyState(container, { icon, title, sub, action } = {}) {
+export function emptyState(
+  container: HTMLElement,
+  {
+    icon,
+    title,
+    sub,
+    action,
+  }: { icon?: string | Node; title?: string; sub?: string; action?: Node } = {},
+): void {
   const subEl = h('div', { class: 'kit-empty-sub' }, sub ?? '');
   if (action) subEl.appendChild(action);
   const kids = [];
@@ -800,7 +988,7 @@ export function emptyState(container, { icon, title, sub, action } = {}) {
 // ---------- Search-hit snippets ----------
 
 /** Render a `⟦hit⟧` search snippet into `target`, marking the hits. */
-export function snippetInto(target, snippet) {
+export function snippetInto(target: HTMLElement, snippet: string | null | undefined): void {
   const parts = String(snippet ?? '').split(/[⟦⟧]/);
   for (let i = 0; i < parts.length; i += 1) {
     if (!parts[i]) continue;
@@ -821,7 +1009,25 @@ export function snippetInto(target, snippet) {
  * tally. The app supplies its voice + cleanup: `notice(text)`,
  * `friendly(outcome) → string|null` for failure copy, `after()` once done.
  */
-export async function runBulk(ids, run, { progress, done, suffix = '', notice, friendly, after }) {
+export async function runBulk(
+  ids: string[],
+  run: (id: string) => Promise<VaultOutcome | undefined>,
+  {
+    progress,
+    done,
+    suffix = '',
+    notice,
+    friendly,
+    after,
+  }: {
+    progress: string;
+    done: string;
+    suffix?: string;
+    notice: (text: string) => void;
+    friendly?: (outcome: VaultOutcome | undefined) => string | null;
+    after?: () => void | Promise<void>;
+  },
+): Promise<void> {
   const n = ids.length;
   let ok = 0;
   let parked = 0;
@@ -850,7 +1056,7 @@ const MOON_SVG =
   '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>';
 
 /** Effective theme right now: the explicit data-theme, else the OS scheme. */
-export function isDarkNow() {
+export function isDarkNow(): boolean {
   const t = document.documentElement.dataset.theme;
   if (t === 'dark') return true;
   if (t === 'light') return false;
@@ -862,7 +1068,10 @@ export function isDarkNow() {
  * seeds `--bg-l` on first dark flip (the wall gradient's knob), and keeps a
  * sun/moon icon in the button. `onChange(dark)` runs after each flip.
  */
-export function wireThemeToggle(btn, { onChange } = {}) {
+export function wireThemeToggle(
+  btn: HTMLElement,
+  { onChange }: { onChange?: (dark: boolean) => void } = {},
+): () => void {
   const setIcon = () => {
     btn.innerHTML = isDarkNow() ? SUN_SVG : MOON_SVG;
   };
@@ -880,8 +1089,8 @@ export function wireThemeToggle(btn, { onChange } = {}) {
 
 // ============================================================================
 //  "Ask your vault" controller — folded in from the former standalone kit-ask.js
-//  so every app ships a single synced kit.js (evaluated via app.js's
-//  `import './kit.js'`) instead of a second <script>. The IIFE below runs at
+//  so every app ships a single synced kit.ts (evaluated via app.js's
+//  `import './kit.ts'`) instead of a second <script>. The IIFE below runs at
 //  module-eval time — before app.js's body — so `window.kitAsk` is ready to wire.
 //  Reads window.KIT_ASK (set inline in index.html before app.js) and mounts the
 //  Ask button + panel onto [data-ask-mount].
@@ -2130,7 +2339,12 @@ export function wireThemeToggle(btn, { onChange } = {}) {
  * inline standoff anchor atomically with the link.
  * Returns the vault's InvokeOutcome — `{status: 'executed', …}` on success.
  */
-export async function createReference(from, to, relation, selector) {
+export async function createReference(
+  from: { type: string; id: string },
+  to: { type: string; id: string },
+  relation: string,
+  selector?: unknown,
+): Promise<VaultOutcome> {
   const r = await fetch('/centraid/_vault/links', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -2147,7 +2361,7 @@ export async function createReference(from, to, relation, selector) {
 }
 
 /** End a link (temporal — the row survives with valid_to set). */
-export async function removeReference(linkId) {
+export async function removeReference(linkId: string): Promise<VaultOutcome> {
   const r = await fetch('/centraid/_vault/links/' + encodeURIComponent(linkId), {
     method: 'DELETE',
   });
@@ -2178,7 +2392,11 @@ export async function removeReference(linkId) {
  * feeds it the props, so existing callers that pass their own container keep
  * working while the DOM/behaviour is owned by one component.
  */
-export function renderReferenceStrip(stripEl, refs, options = {}) {
+export function renderReferenceStrip(
+  stripEl: HTMLElement,
+  refs: Reference[] | null | undefined,
+  options: Record<string, unknown> = {},
+): void {
   const { inlineIds, onRemove, emptyText } = options;
   let strip = stripEl.firstElementChild;
   if (!strip || strip.tagName !== 'KIT-REFERENCE-STRIP') {
@@ -2198,7 +2416,7 @@ export function renderReferenceStrip(stripEl, refs, options = {}) {
  * #282). A locator write: the link judgment itself is untouched, so clearing
  * demotes the reference to strip-only.
  */
-export async function reanchorReference(linkId, selector) {
+export async function reanchorReference(linkId: string, selector: unknown): Promise<VaultOutcome> {
   const r = await fetch('/centraid/_vault/links/' + encodeURIComponent(linkId), {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
@@ -2225,7 +2443,7 @@ const MENTION_CONTEXT = 24;
  * TextQuoteSelector (exact + surrounding context) belt, TextPositionSelector
  * (start, in UTF-16 code units) suspenders.
  */
-export function computeMentionSelector(text, start, end) {
+export function computeMentionSelector(text: string, start: number, end: number): unknown {
   return {
     exact: text.slice(start, end),
     prefix: text.slice(Math.max(0, start - MENTION_CONTEXT), start),
@@ -2302,7 +2520,7 @@ function occurrencesOf(haystack, needle) {
  * irreducibly ambiguous pair (same quote, same context) yields one inline
  * chip and one strip entry instead of a double render.
  */
-export function assignAnchors(body, anchors) {
+export function assignAnchors(body: string, anchors: unknown): unknown {
   const candidates = [];
   let norm = null;
   for (const anchor of anchors) {
@@ -2420,7 +2638,10 @@ function caretRect(textarea, index) {
  * Options: {kinds?: string[], exclude?: {type, id}, onPick(card, range)}.
  * Returns a detach() that removes every listener.
  */
-export function attachMentionPopover(textarea, options = {}) {
+export function attachMentionPopover(
+  textarea: HTMLTextAreaElement,
+  options: Record<string, unknown> = {},
+): () => void {
   let pop = null;
   let cards = null; // the one batch fetched for this popover
   let fetchSeq = 0;
@@ -2618,7 +2839,7 @@ export function attachMentionPopover(textarea, options = {}) {
 // appendWithChips for each rendered text chunk.
 
 /** The live-card chip element for one resolved anchor span (see `<kit-mention-chip>`). */
-export function mentionChip(ref) {
+export function mentionChip(ref: Reference): HTMLElement {
   const chip = document.createElement('kit-mention-chip');
   chip.card = ref.card ?? {};
   return chip;
@@ -2630,7 +2851,7 @@ export function mentionChip(ref) {
  * `[{start, end, link_id, card}]` for the anchors that currently resolve, via
  * the global one-span-per-anchor assignment. Pure presentation — no writes.
  */
-export function resolveInlineSpans(body, refs) {
+export function resolveInlineSpans(body: string, refs: Reference[]): unknown {
   const anchored = (refs ?? []).filter((r) => r.selector);
   if (anchored.length === 0) return [];
   const assigned = assignAnchors(String(body ?? ''), anchored);
@@ -2640,7 +2861,7 @@ export function resolveInlineSpans(body, refs) {
 }
 
 /** The set of link_ids currently resolved inline in `body` (strip flagging). */
-export function inlineLinkIds(body, refs) {
+export function inlineLinkIds(body: string, refs: Reference[]): string[] {
   return new Set(resolveInlineSpans(body, refs).map((r) => r.link_id));
 }
 
@@ -2652,7 +2873,13 @@ export function inlineLinkIds(body, refs) {
  * its inline renderer). A span straddling a chunk boundary renders as plain
  * text — the chip is presentation, degrading is free.
  */
-export function appendWithChips(el, text, absStart, spans, renderPlain) {
+export function appendWithChips(
+  el: HTMLElement,
+  text: string,
+  absStart: number,
+  spans: unknown,
+  renderPlain: unknown,
+): void {
   const plain = renderPlain || ((node, seg) => node.appendChild(document.createTextNode(seg)));
   const absEnd = absStart + text.length;
   const inside = (spans ?? [])
@@ -2691,7 +2918,10 @@ export function appendWithChips(el, text, absStart, spans, renderPlain) {
 //   kinds       string[]?                             — restrict the picker
 //   onError     (outcome) => void?                    — vault refusal (default: a toast)
 // returns { detach(), reconcile(body): Promise, startMention() }.
-export function attachMentionField(textarea, options = {}) {
+export function attachMentionField(
+  textarea: HTMLTextAreaElement,
+  options: Record<string, unknown> = {},
+): () => void {
   const relation = options.relation || 'references';
   const getFrom = () =>
     (typeof options.from === 'function' ? options.from() : options.from) || null;

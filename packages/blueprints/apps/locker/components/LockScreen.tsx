@@ -5,7 +5,7 @@
 // app.js's original: `unlock()` has no real passphrase check — clicking
 // Unlock (or pressing Enter) always unlocks. Ported behavior, not a
 // redesign.
-import { useEffect, useRef, useState } from '../react-core.min.js';
+import { useEffect, useRef, useState } from 'react';
 import { Icon } from './Shared.tsx';
 import styles from './LockScreen.module.css';
 

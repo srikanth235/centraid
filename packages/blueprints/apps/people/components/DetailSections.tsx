@@ -3,8 +3,8 @@
 // keep files small. Pure functions of props: `dp` is the freshly-read PERSON,
 // `adders` is which "+ add" affordances are open. Every write flows out
 // through the `on*` callback props; nothing here calls the vault itself.
-import type { ReactNode } from '../react-core.min.js';
-import { fmtMoney } from '../kit.js';
+import type { ReactNode } from 'react';
+import { fmtMoney } from '../kit.ts';
 import {
   cadence,
   daysSince,

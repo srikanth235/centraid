@@ -4,7 +4,7 @@
 // pattern as versions.ts): closes over data.folders (read-only) plus the
 // document-write functions logic.ts already owns, passed in rather than
 // re-implemented here.
-import { armConfirm, closePopover, h, openPopover, popItem } from './kit.js';
+import { armConfirm, closePopover, h, openPopover, popItem } from './kit.ts';
 import type { AppData, DriveDoc } from './types.ts';
 
 interface PopoverDeps {
@@ -24,7 +24,7 @@ export function createPopovers({
   toggleStar,
   trashDoc,
 }: PopoverDeps) {
-  // One "Move to…" target row. `popItem` (kit.js) builds the real button
+  // One "Move to…" target row. `popItem` (kit.ts) builds the real button
   // node; these popovers stay plain DOM (built with `h()`/`popItem()`),
   // exactly as before — the target list mixes a fixed depth-0 root with
   // depth-1 folders, same as the vanilla builder always did.

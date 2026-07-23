@@ -1,8 +1,6 @@
-/* Inline chrome for Photos (issue #505). The static index.html shell (the
-   ph-app / ph-main / ph-header / ph-scroll chrome, the selection-bar, lightbox,
-   slideshow and picker containers) plus app.css's global remainder, converted to
-   a CSS module scoped to the inline route. The served path (index.html + app.css)
-   is untouched — this is the inline sibling.
+/* Photos chrome shared by the served and inline routes (issue #505). Common
+   shell/main/header/tool geometry composes the kit-app-* vocabulary; Photos
+   keeps its media-specific selection, lightbox, slideshow, and picker rules.
 
    Token layer: the shell injects the GENERIC blueprint token layer onto this
    same element via `.centraid-inline-scope` (hue 222, teal `--accent`). Photos'
@@ -109,16 +107,11 @@
 /* ---------- Shell (the .ph-app flex row) ---------- */
 
 .shell {
-  display: flex;
-  flex: 1;
-  min-height: 0;
+  composes: kit-app-shell from global;
+  --kit-app-topbar-gap: 10px;
+  --kit-app-topbar-padding: 14px 20px;
   /* Positioning context for the drawer + the lightbox/slideshow/selection-bar
      overlays, so they overlay the app pane inline — never the shell chrome. */
-  position: relative;
-  overflow: hidden;
-  background: var(--bg);
-  color: var(--ink);
-  font: var(--t-body);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -141,20 +134,10 @@
 /* ---------- Main / header ---------- */
 
 .main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
+  composes: kit-app-main from global;
 }
 .header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--line);
-  flex-shrink: 0;
+  composes: kit-app-topbar from global;
 }
 .search {
   flex: 1;
@@ -162,11 +145,7 @@
   max-width: 30rem;
 }
 .headerActions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
+  composes: kit-app-tools from global;
 }
 .zoom {
   display: flex;
@@ -186,8 +165,7 @@
   opacity: 0.35;
 }
 .askMount {
-  display: flex;
-  align-items: center;
+  composes: kit-app-ask-mount from global;
 }
 
 /* #live wraps the toolbar + scroll pane; it must be a bounded flex column so
@@ -315,15 +293,7 @@
     var(--bg-sunken) 70%
   );
   background-size: 220% 100%;
-  animation: ph-shimmer 1.4s var(--ease) infinite;
-}
-@keyframes :global(ph-shimmer) {
-  from {
-    background-position: 180% 0;
-  }
-  to {
-    background-position: -60% 0;
-  }
+  animation: kit-shimmer 1.4s var(--ease) infinite;
 }
 @media (prefers-reduced-motion: reduce) {
   :global(.ph-tile-ph) {

@@ -2,7 +2,7 @@
  * UI/UX grounding blocks appended to the agent system prompt.
  *
  * These spliced sections give the model the same visual contract the
- * desktop and mobile shells follow: the design-tokens CSS variables, a
+ * desktop previews and compact layouts follow: the design-tokens CSS variables, a
  * curated icon set, copy-pasteable component primitives, and a short
  * checklist for the states/a11y floor every app should hit.
  *
@@ -37,10 +37,9 @@ export function buildUiGroundingBlocks(): string[] {
  * `var(--accent)`, `var(--ink)`, etc. — never hardcode colors, radii,
  * font sizes, or spacing values.
  *
- * The scaffolded `index.html` links the shared `tokens.css` (served from the
- * kit dir next to `kit.css`), so this block is for the *agent* (so it knows
- * what's available); the runtime contract comes from the shared sheet and the
- * theme bridge.
+ * The scaffold generator writes this baseline into `app.css`, so this block is
+ * for the *agent* (so it knows what's available); the runtime contract comes
+ * from that source-generated sheet and the theme bridge.
  */
 function renderDesignTokensBlock(): string {
   const css = toBlueprintCss();
@@ -48,8 +47,8 @@ function renderDesignTokensBlock(): string {
     '### Design tokens (use these — do not invent colors or sizes)',
     '',
     'Every centraid app inherits the blueprint design system via CSS variables',
-    'from the shared `tokens.css` linked in `index.html` (served next to',
-    '`kit.css` — no local copy). Your styles must reference them, never hardcode.',
+    'generated into the scaffolded `app.css`. `kit.css` remains the shared',
+    'component layer. Your styles must reference the variables, never hardcode.',
     '',
     '**Rules:**',
     '',
@@ -58,10 +57,10 @@ function renderDesignTokensBlock(): string {
     '- Accent indirection: paint with `var(--_accent)` (resolves the appColor knob over `--accent`) wherever the accent shows; `--sel`/`--selb` for selection tint/border.',
     '- Radii: `var(--r-sm)`, `var(--r-md)`, `var(--r-card)`, `var(--r-pill)` — do not pick px values by feel.',
     '- Type: `font: var(--t-title|--t-body|--t-body-strong|--t-small|--t-tiny|--t-mono)` shorthands; mono (`var(--mono)`) for counts, dates, metadata.',
-    '- Theme: light/dark flips by `data-theme` on `<html>` — `tokens.css` handles BOTH the explicit attribute and the `prefers-color-scheme` fallback; never write your own dark-theme token blocks. The inline live-settings bridge in the scaffolded `index.html` keeps theme in sync with the shell — do not delete it or move it after the stylesheets.',
+    '- Theme: light/dark flips by `data-theme` on `<html>` — the generated token baseline handles BOTH the explicit attribute and the `prefers-color-scheme` fallback; never write your own dark-theme token blocks. The inline live-settings bridge in the scaffolded `index.html` keeps theme in sync with the shell — do not delete it or move it after the stylesheets.',
     "- Fonts: inherit from `<body>` (`var(--font-sans)` system stack). Don't load web fonts.",
     '',
-    'Verbatim token CSS (light + dark) — this is what the shared `tokens.css` resolves to at runtime:',
+    'Verbatim token CSS (light + dark) — this is the baseline generated into `app.css`:',
     '',
     '```css',
     css.trimEnd(),
@@ -227,9 +226,9 @@ function renderUxRulesBlock(): string {
     '',
     '**Motion.** Honor `@media (prefers-reduced-motion: reduce)`. Default transitions ≤ 150ms; no auto-playing animations that loop.',
     '',
-    '**Phone-readiness.** The mobile shell is a thin viewer — on the phone the blueprint *is* the UI, so every app must stay fully usable at ~390px:',
+    '**Compact-width readiness.** Previews and portable layouts can be narrow, so every app must stay fully usable at ~390px:',
     '',
-    '- Keep the blueprint kit when the app ships one (`kit.js` / `kit.css` — template clones do): its toasts, confirm-to-act, states, and charts are the shared UX substrate on desktop *and* phone (including native haptics where the bridge exists). Never delete, fork, or stop importing these files.',
+    '- Keep the blueprint kit when the app ships one (`kit.js` / `kit.css` — template clones do): its toasts, confirm-to-act, states, and charts are the shared UX substrate. Never delete, fork, or stop importing these files.',
     '- Keep the scaffold\'s responsive conventions intact and build on them, never strip them: `viewport-fit=cover` in the `<meta name="viewport">`, the `env(safe-area-inset-*)` body padding, the single 720px breakpoint, the ≥ 44px hit targets, and the `prefers-reduced-motion` guard.',
     '',
     '**Forms.** Always `<label for="...">` (or `aria-label`); `autocomplete=`, `enterkeyhint=`, and `inputmode=` set appropriately. Disabled submit until the input has content.',
@@ -253,22 +252,24 @@ function renderUxRulesBlock(): string {
 }
 
 /**
- * `### Reference exemplars` — points the agent at the bundled
- * templates as canonical "this is what good looks like" examples.
+ * `### Reference implementation` — keeps authored-app guidance separate from
+ * the main client's internal system-app modules.
  */
 function renderExemplarsBlock(): string {
   return [
-    '### Reference exemplars',
+    '### Reference implementation',
     '',
-    'When unsure about a pattern, read the bundled blueprint apps — they are the',
-    'canonical references for what a well-grounded centraid app looks like.',
-    'They are written in **React** (`app.jsx` + `./react-core.min.js`):',
+    'Start from the files already present in the scaffold. They are the canonical',
+    'shape for a portable authored app: dependency-free `app.js`, `app.css`, the',
+    'shared kit, and `window.centraid` for data and change subscriptions.',
     '',
-    '- `@centraid/blueprints/apps/tasks/` — the tightest list/board example. Use this as the visual baseline for list-style apps. Notice the inline live-settings `<script>` at the top of `<head>`, the kit.css primitives (`.kit-btn`, `.kit-chip`, `.kit-banner`), the `#consentBanner` denied-state pattern, and how it never hardcodes a color.',
-    '- `@centraid/blueprints/apps/notes/` — a richer "compose + browse" surface (editor, list, autosave). Use for any app with that rhythm.',
+    'The eight bundled system apps are internal TypeScript/React modules of the',
+    'main client. They are useful visual references, but they are not authored-app',
+    'package examples and do not imply a separately served React runtime.',
     '',
-    "The scaffolded `app.jsx` a new app starts from is the canonical shape: createRoot at the bottom, one App component owning the loading/error/denied triad, `window.centraid.onChange(refresh)` in an effect, kit.css classes via `className=`. The kit's own custom elements (`kit-avatar`, etc., from `./elements.js`) are dependency-free vanilla Web Components and drop straight into JSX as lowercase tags.",
-    '',
-    "You can read the blueprints directly via the bash tool, e.g. `cat ../../packages/blueprints/apps/tasks/app.css` from an app root that lives under the same workspace. If you can't reach them (paths vary by environment), the component primitives block above captures the load-bearing pieces.",
+    'Keep the scaffold loading/error/denied states, subscribe with',
+    '`window.centraid.onChange(refresh)`, and use kit.css classes through normal',
+    '`class` attributes. The component-primitives block above captures the',
+    'load-bearing visual patterns.',
   ].join('\n');
 }

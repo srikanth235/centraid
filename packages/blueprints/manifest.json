@@ -20,9 +20,7 @@
         "actions/rsvp.ts",
         "app-inline.tsx",
         "app-root.tsx",
-        "app.css",
         "app.json",
-        "app.tsx",
         "components/CreateModal.module.css",
         "components/CreateModal.tsx",
         "components/EventDrawer.module.css",
@@ -48,8 +46,7 @@
         "queries/parties.ts",
         "queries/search.ts",
         "queries/upcoming.ts",
-        "types.ts",
-        "wall.css"
+        "types.ts"
       ],
       "appKnobs": [
         {
@@ -158,9 +155,7 @@
         "actions/set-status.ts",
         "app-inline.tsx",
         "app-root.tsx",
-        "app.css",
         "app.json",
-        "app.tsx",
         "components/Board.module.css",
         "components/Board.tsx",
         "components/Capture.module.css",
@@ -181,8 +176,7 @@
         "queries/board.ts",
         "queries/search.ts",
         "seed.js",
-        "types.ts",
-        "wall.css"
+        "types.ts"
       ],
       "appKnobs": [
         {
@@ -309,9 +303,7 @@
         "actions/unstar-person.ts",
         "app-inline.tsx",
         "app-root.tsx",
-        "app.css",
         "app.json",
-        "app.tsx",
         "components/Activity.tsx",
         "components/AddPersonModal.module.css",
         "components/AddPersonModal.tsx",
@@ -347,8 +339,7 @@
         "queries/person.ts",
         "queries/search.ts",
         "seed.js",
-        "types.ts",
-        "wall.css"
+        "types.ts"
       ],
       "appKnobs": [
         {
@@ -461,9 +452,7 @@
         "actions/rename-notebook.ts",
         "app-inline.tsx",
         "app-root.tsx",
-        "app.css",
         "app.json",
-        "app.tsx",
         "components/Card.module.css",
         "components/Card.tsx",
         "components/Editor.module.css",
@@ -487,8 +476,7 @@
         "queries/note.ts",
         "queries/search.ts",
         "seed.js",
-        "types.ts",
-        "wall.css"
+        "types.ts"
       ],
       "appKnobs": [
         {
@@ -608,9 +596,7 @@
         "albums-actions.ts",
         "app-inline.tsx",
         "app-root.tsx",
-        "app.css",
         "app.json",
-        "app.tsx",
         "assets-actions.ts",
         "components/AlbumGrid.module.css",
         "components/AlbumGrid.tsx",
@@ -782,9 +768,7 @@
         "actions/upload.ts",
         "app-inline.tsx",
         "app-root.tsx",
-        "app.css",
         "app.json",
-        "app.tsx",
         "components/Activity.module.css",
         "components/Activity.tsx",
         "components/BulkBar.module.css",
@@ -935,9 +919,7 @@
         "actions/unstar-item.ts",
         "app-inline.tsx",
         "app-root.tsx",
-        "app.css",
         "app.json",
-        "app.tsx",
         "components/Detail.module.css",
         "components/Detail.tsx",
         "components/EditModal.module.css",
@@ -968,8 +950,7 @@
         "queries/trash.ts",
         "queries/watchtower.ts",
         "totp.ts",
-        "types.ts",
-        "wall.css"
+        "types.ts"
       ],
       "appKnobs": [
         {
@@ -1042,9 +1023,7 @@
         "actions/settle-up.ts",
         "app-inline.tsx",
         "app-root.tsx",
-        "app.css",
         "app.json",
-        "app.tsx",
         "components/Activity.module.css",
         "components/Activity.tsx",
         "components/Dashboard.module.css",
@@ -1076,8 +1055,7 @@
         "queries/group.ts",
         "queries/search.ts",
         "seed.js",
-        "types.ts",
-        "wall.css"
+        "types.ts"
       ],
       "appKnobs": [
         {

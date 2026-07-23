@@ -4,7 +4,7 @@
 // snippet included) route here — same shape as the loaded window, so one
 // component renders either source.
 import { bucketByDay, segTimeText } from '../format.ts';
-import { localDayKey } from '../kit.js';
+import { localDayKey } from '../kit.ts';
 import { I } from '../icons.ts';
 import { Icon, Snippet } from './Shared.tsx';
 import type { AgEvent, DaySegment } from '../types.ts';

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 // The inline kit is imported FIRST so its `./suppress-served-ask` side effect
-// runs before the real kit module below (it suppresses kit.js's auto-mounting
+// runs before the real kit module below (it suppresses kit.ts's auto-mounting
 // Ask IIFE).
 import {
   fmtMoney as inlineFmtMoney,

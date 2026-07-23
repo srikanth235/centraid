@@ -45,8 +45,8 @@ export interface RuntimeOptions {
   appsDir: string | (() => string);
   /**
    * Optional canonical dir for assets shared verbatim by every app
-   * (`kit.js` / `kit.css`). Apps no longer ship their own copy; a request
-   * for `/centraid/<id>/kit.js` that the app folder can't satisfy is served
+   * (`kit.ts` / `kit.css`). Apps no longer ship their own copy; a request
+   * for `/centraid/<id>/kit.ts` that the app folder can't satisfy is served
    * from here. Hosts point this at `@centraid/blueprints`'s `KIT_DIR`.
    * Omit to disable the fallback.
    */
@@ -700,7 +700,7 @@ export class Runtime {
           const draftServe = draftSessionId
             ? { draft: { appId: entry.id, sessionId: draftSessionId } }
             : {};
-          // Kit assets (kit.js / kit.css) are served from the shared canonical
+          // Kit assets (kit.ts / kit.css) are served from the shared canonical
           // dir when the app folder doesn't ship its own copy.
           const sharedServe = this.sharedAssetsDir ? { sharedAssetsDir: this.sharedAssetsDir } : {};
           const rel = route.kind === 'app-index' ? 'index.html' : route.rel;

@@ -3,12 +3,14 @@
    no DOM lib (this "src" is node-side); this harness drives the browser apps
    under jsdom, so DOM globals are runtime-real but invisible to tsc. */
 // @ts-nocheck
-// Boots a blueprint app the way a browser does: its real `index.html` body,
-// its real `app.js`, the real kit, and a mocked `window.centraid` vault.
+// Boots a blueprint app the way the v0 client does: its query-free `Root`,
+// the real kit, the workspace React runtime, and a mocked `window.centraid`
+// vault. The retired served adapter and its vendored React copy are not part
+// of this path.
 //
-// Nothing else in CI executes these modules — they are browser ES modules that
-// `tsc` never sees and the root oxlint config ignores (see scripts/lint-apps.mjs
-// for the sibling gate). Without this, a rendering crash reaches a human first.
+// Typechecking and root lint cover these modules, but neither executes their
+// browser startup. Without this behavioral harness, a rendering crash reaches
+// a human first.
 //
 // THREE constraints, each verified empirically. Break one and the gate passes
 // while the app is broken:
@@ -45,20 +47,20 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { createElement } from 'react';
+import { createRoot, type Root as ReactRoot } from 'react-dom/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 // Resolved from this module's own path, not process.cwd(): cwd differs
 // between a root-run vitest (repo root) and a package-run vitest (this
 // package's dir), but the file's own location never does.
 const PKG = path.resolve(import.meta.dirname, '..');
-// Apps import these as siblings (`./kit.js`); at rest they live only in `kit/`,
+// Apps import these as siblings (`./kit.ts`); at rest they live only in `kit/`,
 // and the gateway serves them from a shared dir (SHARED_ASSET_FILES in
 // app-engine/src/http/static-server.ts). Symlinks reproduce that layout.
 const SHARED = [
-  'kit.js',
+  'kit.ts',
   'elements.js',
-  'blob-format.js',
-  'video-frame.js',
   'edge-upload.js',
   'turn-stream.js',
   'assistant-rich.js',
@@ -66,48 +68,28 @@ const SHARED = [
   'code-highlight.js',
   'consent-cards.js',
   'conversation-client.js',
-  'pdf.min.mjs',
-  'pdf.worker.min.mjs',
-  'react-core.min.js',
-  'jsx-runtime.js',
 ];
 
-// React-dialect apps ship app.jsx; the gateway transpiles it per-request. The
-// harness mirrors that with the same transform options + depth-aware
-// specifier rewrite as transformJsx()/jsxRuntimeClimb() in
-// app-engine/src/http/static-server.ts — via the esbuild CLI, because
-// esbuild's JS API refuses to load under the jsdom environment (realm-split
-// Uint8Array trips its TextEncoder startup invariant).
-//
-// `depth` is the number of directory segments in the file's app-relative
-// path (0 at the app root, 1 under `components/`, …) — esbuild's emitted
-// `./jsx-runtime` import is resolved relative to the importing file's own
-// directory, and `jsx-runtime.js` only ever lives at the app root, so a
-// nested file needs a specifier that climbs back up (`../jsx-runtime.js`,
-// `../../jsx-runtime.js`, …) rather than a bare `./jsx-runtime.js`.
+// The harness compiles the same TS/TSX source the client bundles, using the
+// normal React automatic runtime. The esbuild CLI is used because its JS API
+// refuses to load under the jsdom environment (realm-split Uint8Array trips
+// its TextEncoder startup invariant).
 const ESBUILD_BIN = path.resolve(PKG, '../..', 'node_modules/.bin/esbuild');
 
-// Loader by extension, mirroring loaderForExt() in app-engine's
-// static-server.ts: `.jsx`→jsx, `.tsx`→tsx, `.ts`→ts. TS-authored apps ship
-// `app.tsx`/`.ts` siblings the gateway strips/compiles at serve time; the
-// automatic-runtime JSX config and the depth-aware `./jsx-runtime` rewrite
-// apply to `.tsx` and are inert for `.ts`.
+// Loader by extension for the client-bundled source graph.
 function loaderForExt(rel: string): 'jsx' | 'tsx' | 'ts' {
   if (rel.endsWith('.tsx')) return 'tsx';
   if (rel.endsWith('.ts')) return 'ts';
   return 'jsx';
 }
 
-function transformJsxLikeTheGateway(source: string, depth: number, rel = 'app.jsx'): string {
-  const code = execFileSync(
-    ESBUILD_BIN,
-    [`--loader=${loaderForExt(rel)}`, '--jsx=automatic', '--jsx-import-source=.'],
-    { input: source, encoding: 'utf8' },
-  );
-  const prefix = depth === 0 ? './' : '../'.repeat(depth);
+function transformInlineSource(source: string, rel = 'app.tsx'): string {
+  const code = execFileSync(ESBUILD_BIN, [`--loader=${loaderForExt(rel)}`, '--jsx=automatic'], {
+    input: source,
+    encoding: 'utf8',
+  });
   return (
     code
-      .replace(/(["'])\.\/jsx-runtime\1/g, (_m, q: string) => `${q}${prefix}jsx-runtime.js${q}`)
       // The gateway serves a `*.module.css` request as JS at that same URL. Vite/
       // Vitest, however, owns the `.module.css` extension and would run its own
       // CSS-modules transform over the harness's compiled JS (see
@@ -117,8 +99,7 @@ function transformJsxLikeTheGateway(source: string, depth: number, rel = 'app.js
       // `*.module.css.js` file (written in beforeAll) and rewrites every relative
       // `*.module.css` import specifier to match — the `.js` tail is what keeps
       // Vite from hijacking it. Behaviour is identical to the gateway; only the
-      // scratch filename differs (a harness accommodation, like the jsx-runtime
-      // rewrite above).
+      // scratch filename differs from the app source.
       .replace(
         /(["'])((?:\.\.?\/)[^"']*\.module\.css)\1/g,
         (_m, q: string, spec: string) => `${q}${spec}.js${q}`,
@@ -129,7 +110,7 @@ function transformJsxLikeTheGateway(source: string, depth: number, rel = 'app.js
 // Compile a `*.module.css` to the same style-injecting, class-map-exporting JS
 // module the gateway serves (app-engine's css-module.ts). Mirrored minimally
 // via the esbuild CLI — esbuild's JS API refuses to load under jsdom (see the
-// note above transformJsxLikeTheGateway), but the CLI is a subprocess and is
+// note above transformInlineSource), but the CLI is a subprocess and is
 // unaffected. The CLI emits the JS class-map module and the compiled CSS as
 // two files into a temp outdir; we compose the served body from both.
 function compileModuleCssLikeTheGateway(absFile: string, appRoot: string, scratch: string): string {
@@ -264,10 +245,8 @@ function replicaFixture(app: string): unknown {
 
 // Handler dirs are node-side modules dispatched by the gateway, never imported
 // by the page — don't copy them into the boot scratch tree. `queries` stays
-// out too: the boot entry is the served shim → app-root.tsx (the query-free
-// Root), so the page graph never reaches a query module. Only the app-inline
-// descriptor imports queries, and that is the shell's client-bundled path, not
-// this served-fidelity harness (#505).
+// out too: the boot entry is app-root.tsx (the query-free Root), so the graph
+// never reaches a query module. Only the app-inline descriptor imports queries.
 const NON_UI_DIRS = new Set(['queries', 'actions', 'automations']);
 
 /** All browser-source files of an app, as relative posix paths: `.js`/`.jsx`
@@ -292,13 +271,6 @@ function collectSources(root: string, rel = ''): string[] {
   return out;
 }
 
-function bodyOf(app: string) {
-  const html = readFileSync(path.join(PKG, 'apps', app, 'index.html'), 'utf8');
-  const body = /<body[^>]*>([\s\S]*)<\/body>/.exec(html);
-  if (!body) throw new Error(`${app}/index.html has no <body>`);
-  return body[1];
-}
-
 /** Lets a test settle an app's un-awaited `refresh()` and its timers. Use this
  * only where the assertion needs a QUIET window (proving something did NOT
  * happen, or did not happen twice); for "X must appear", use waitFor. */
@@ -315,9 +287,9 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 80));
  * to 1ms reproduces that exact failure locally, confirming a race rather than a
  * budget. So poll for the precondition instead of guessing at it.
  *
- * 4s ceiling: an order of magnitude above any observed wait, and half the 8s
- * per-test budget so a genuine regression still fails with THIS message rather
- * than vitest's opaque test timeout.
+ * 4s ceiling: an order of magnitude above any observed individual wait and
+ * comfortably inside the per-test budget, so a genuine regression still fails
+ * with THIS message rather than vitest's opaque test timeout.
  */
 async function waitFor(predicate: () => boolean, what: string, timeoutMs = 4_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
@@ -330,12 +302,12 @@ async function waitFor(predicate: () => boolean, what: string, timeoutMs = 4_000
 
 // The single boot journey runs the app's real esbuild transform + jsdom render
 // plus the remaining fixed settle windows; the slowest app (agenda) lands ~1.5s
-// locally now that the appear-assertions poll (waitFor) instead of sleeping,
-// which can still exceed vitest's 5s default under CI load. Budget it
-// per-test (slowest observed ×5, well under 30s) rather than blanketing every
-// importer of this harness with a package-wide timeout. The `beforeAll` scratch
-// build tops out ~0.7s and stays on vitest's 10s default hookTimeout.
-const BOOT_TEST_TIMEOUT_MS = 8_000;
+// locally now that the appear-assertions poll (waitFor) instead of sleeping.
+// The affected-package gate runs every package at once; Photos has crossed 8s
+// under that CPU contention even though it remains sub-3s alone. Keep a
+// bounded 20s journey budget rather than turning scheduler load into a false
+// failure or blanketing every importer with a package-wide timeout.
+const BOOT_TEST_TIMEOUT_MS = 20_000;
 
 // The inline chrome (Chrome.tsx) mounts its consent notice — a `.kit-banner`
 // carrying `id="consentBanner"` — when the vault denies a read, and unmounts it
@@ -353,7 +325,7 @@ export function describeAppBoot(
 ) {
   describe(`${app} boots`, () => {
     let dir: string;
-    let entry: string;
+    let reactRoot: ReactRoot | undefined;
     let originalFetch: typeof fetch;
     const errors: unknown[] = [];
     const intervals: unknown[] = [];
@@ -372,55 +344,43 @@ export function describeAppBoot(
       rmSync(dir, { recursive: true, force: true });
       mkdirSync(dir, { recursive: true });
       const appDir = path.join(PKG, 'apps', app);
-      // React-dialect apps may span multiple source files (app.jsx entry +
-      // components/*.jsx). Mirror the whole source tree into the scratch dir,
-      // transforming each .jsx exactly like the gateway would per-request and
-      // copying plain .js helpers verbatim. Filenames keep their .jsx
-      // extension — that's what the browser requests and what inter-file
-      // imports name; vite loads the (already-transformed) content fine.
-      // Entry preference mirrors the gateway: a TS-authored app ships
-      // `app.tsx`, a React-dialect one `app.jsx`, a vanilla one `app.js`.
-      const tsxEntry = existsSync(path.join(appDir, 'app.tsx'));
-      const jsxEntry = existsSync(path.join(appDir, 'app.jsx'));
-      if (tsxEntry || jsxEntry) {
-        entry = tsxEntry ? 'app.tsx' : 'app.jsx';
-        for (const rel of collectSources(appDir)) {
-          const out = path.join(dir, rel);
-          mkdirSync(path.dirname(out), { recursive: true });
-          if (rel.endsWith('.jsx') || rel.endsWith('.tsx') || rel.endsWith('.ts')) {
-            const depth = rel.split('/').length - 1;
-            writeFileSync(
-              out,
-              transformJsxLikeTheGateway(readFileSync(path.join(appDir, rel), 'utf8'), depth, rel),
-            );
-          } else if (rel.endsWith('.module.css')) {
-            // Written to a `.js` sibling (imports were rewritten to match) so
-            // Vite serves the harness's gateway-faithful compile as JS instead
-            // of running its own CSS-modules transform over it. See
-            // transformJsxLikeTheGateway.
-            writeFileSync(
-              `${out}.js`,
-              compileModuleCssLikeTheGateway(path.join(appDir, rel), appDir, dir),
-            );
-          } else {
-            cpSync(path.join(appDir, rel), out);
-          }
+      // Mirror the client-bundled source graph into the scratch dir. TypeScript
+      // is stripped and CSS modules use the app-engine-equivalent compiler.
+      for (const rel of collectSources(appDir)) {
+        const out = path.join(dir, rel);
+        mkdirSync(path.dirname(out), { recursive: true });
+        if (rel.endsWith('.jsx') || rel.endsWith('.tsx') || rel.endsWith('.ts')) {
+          writeFileSync(
+            out,
+            transformInlineSource(readFileSync(path.join(appDir, rel), 'utf8'), rel),
+          );
+        } else if (rel.endsWith('.module.css')) {
+          writeFileSync(
+            `${out}.js`,
+            compileModuleCssLikeTheGateway(path.join(appDir, rel), appDir, dir),
+          );
+        } else {
+          cpSync(path.join(appDir, rel), out);
         }
-        // Shared assets (kit.js / react-core.min.js / jsx-runtime.js…) only
-        // ever live at the app root — mirrors the gateway's root-only
-        // SHARED_ASSET_FILES fallback (static-server.ts). A nested .jsx
-        // file's relative imports either climb back to the root themselves
-        // (`../kit.js`, `../react-core.min.js` — hand-written by the app) or,
-        // for the one specifier esbuild emits automatically, via the
-        // depth-aware rewrite above, so only the root needs the symlinks.
-        for (const f of SHARED) {
-          if (!existsSync(path.join(dir, f)))
-            symlinkSync(path.join(PKG, 'kit', f), path.join(dir, f));
+      }
+      for (const file of SHARED) {
+        if (!existsSync(path.join(dir, file))) {
+          symlinkSync(path.join(PKG, 'kit', file), path.join(dir, file));
         }
-      } else {
-        entry = 'app.js';
-        cpSync(path.join(appDir, 'app.js'), path.join(dir, 'app.js'));
-        for (const f of SHARED) symlinkSync(path.join(PKG, 'kit', f), path.join(dir, f));
+      }
+      if (app === 'photos') {
+        execFileSync(
+          ESBUILD_BIN,
+          [
+            path.resolve(PKG, '../client/src/video-frame.ts'),
+            '--bundle',
+            '--format=esm',
+            '--platform=browser',
+            '--log-level=silent',
+            `--outfile=${path.join(dir, 'video-frame.js')}`,
+          ],
+          { encoding: 'utf8' },
+        );
       }
 
       process.on('unhandledRejection', push);
@@ -443,6 +403,7 @@ export function describeAppBoot(
 
     afterAll(() => {
       globalThis.fetch = originalFetch;
+      reactRoot?.unmount();
       for (const id of intervals) clearInterval(id);
       process.off('unhandledRejection', push);
       process.off('uncaughtException', push);
@@ -453,7 +414,7 @@ export function describeAppBoot(
       'renders its replica while offline, survives revoke, and re-renders',
       { timeout: BOOT_TEST_TIMEOUT_MS },
       async () => {
-        document.body.innerHTML = bodyOf(app);
+        document.body.innerHTML = '<div id="appRoot"></div>';
         if (app === 'agenda') {
           // Schedule view renders the populated fixture independent of the
           // machine's current month, keeping this browser journey deterministic.
@@ -523,7 +484,9 @@ export function describeAppBoot(
           }
         };
 
-        await import(pathToFileURL(path.join(dir, entry)).href);
+        const module = await import(pathToFileURL(path.join(dir, 'app-root.tsx')).href);
+        reactRoot = createRoot(document.getElementById('appRoot')!);
+        reactRoot.render(createElement(module.Root, { rootRef: () => {} }));
         await settle();
         expectNoErrors('rendering its granted replica in airplane mode');
 
@@ -550,6 +513,7 @@ export function describeAppBoot(
         }
 
         if (options.expectLive) {
+          await waitFor(() => live.size > 0, `${app} to subscribe to its replica read`);
           const bootReads = readCalls;
           expect(bootReads, `${app} issued an unbounded initial read fanout`).toBeLessThanOrEqual(
             2,

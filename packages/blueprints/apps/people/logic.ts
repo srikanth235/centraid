@@ -18,7 +18,7 @@ import {
   popItem,
   runBulk as runBulkBase,
   toast,
-} from './kit.js';
+} from './kit.ts';
 import { PALETTE, listColor, daysSince, daysUntilAnnual, statusOf } from './format.ts';
 import type {
   DashboardData,

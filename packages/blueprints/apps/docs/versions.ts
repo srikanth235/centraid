@@ -3,7 +3,7 @@
 // purely to keep both files under the file-size cap — same factory pattern,
 // closing over app.tsx's own `data`/`refresh` plus logic.ts's own
 // `act`/`narrate`/`notice` (passed in, never re-implemented).
-import { isPendingOffsite, stageFileBytes, toast } from './kit.js';
+import { isPendingOffsite, stageFileBytes, toast } from './kit.ts';
 import { fmtBytes } from './format.ts';
 import type { AppData, DriveDoc, VersionEntry } from './types.ts';
 

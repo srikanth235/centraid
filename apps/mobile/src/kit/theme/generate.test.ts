@@ -7,7 +7,7 @@ import {
   renderTokensModule,
 } from './generate';
 
-// A trimmed stand-in for packages/blueprints/kit/tokens.css that exercises
+// A trimmed stand-in for toBlueprintCss() that exercises
 // every translation path: hsl+var, alpha, calc, var-with-fallback, aliases,
 // color-mix (skip), swatch (skip), internal var (skip), radii, and a dark
 // override that references the undefined --bg-wall.
@@ -157,9 +157,9 @@ describe('renderTokensModule', () => {
   });
 
   it('emits the generated header and font families', () => {
-    const out = renderTokensModule(theme, 'packages/blueprints/kit/tokens.css');
+    const out = renderTokensModule(theme, '@centraid/design-tokens#toBlueprintCss');
     expect(out).toContain('GENERATED — do not edit');
-    expect(out).toContain('packages/blueprints/kit/tokens.css');
+    expect(out).toContain('@centraid/design-tokens#toBlueprintCss');
     expect(out).toContain('export const lightPalette');
     expect(out).toContain('Geist_400Regular');
   });

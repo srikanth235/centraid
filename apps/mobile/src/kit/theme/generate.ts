@@ -1,7 +1,7 @@
-// Pure, dependency-free translation of the blueprint kit's `tokens.css`
-// (a flat set of CSS custom properties) into React-Native-shaped values.
+// Pure, dependency-free translation of `toBlueprintCss()` (a flat set of CSS
+// custom properties) into React-Native-shaped values.
 //
-// tokens.css is authored for the browser: colors are `hsl(var(--app-hue) …)`
+// The CSS is authored for the browser: colors are `hsl(var(--app-hue) …)`
 // with `calc()` and `color-mix()`, radii are `px`/`rem`, and fonts are system
 // stacks. RN needs concrete `#rrggbb`/`rgba()` colors, unit-less numbers, and
 // the loaded @expo-google-fonts family names. This module does that lowering:
@@ -12,13 +12,12 @@
 //   • skips anything that can't map cleanly (color-mix, gradients, box
 //     shadows, font shorthands, tracking) rather than emitting garbage.
 //
-// It is intentionally NOT a general CSS engine — tokens.css is flat custom
+// It is intentionally NOT a general CSS engine — the token CSS is flat custom
 // properties, so a handful of regexes cover it. `scripts/generate-theme.ts`
 // wraps these functions with file I/O; `generate.test.ts` exercises them.
 
 /** The three font roles the kit exposes, mapped to the loaded native families.
- *  tokens.css uses system stacks for these (it renders in a sandboxed iframe
- *  with no font loading); the native app DOES load Geist / Space Grotesk /
+ *  The portable CSS uses system stacks; the native app DOES load Geist / Space Grotesk /
  *  JetBrains Mono, so we map the same three roles onto those families. Keep
  *  in sync with the `useFonts(...)` call in App.tsx. */
 const FONT_ROLES = {
@@ -31,13 +30,13 @@ const FONT_ROLES = {
   },
 } as const;
 
-// tokens.css has no spacing scale — spacing is a mobile concern the kit never
+// The portable token CSS has no spacing scale — spacing is a mobile concern the kit never
 // defined. Use the design system's regular density scale (see
 // packages/design-tokens/src/density.ts) so mobile matches everything else.
 const SPACING = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 24, 6: 32, 7: 48 } as const;
 
 // Dark `--bg` is `var(--bg-wall)`, which the browser host supplies at runtime
-// and tokens.css never defines. Substitute a concrete dark wall derived from
+// and the portable CSS never defines. Substitute a concrete dark wall derived from
 // the same hue/lightness knobs so the native theme has a real background.
 const BG_WALL_FALLBACK = 'hsl(var(--app-hue) 12% var(--bg-l))';
 
@@ -129,7 +128,7 @@ function resolveVars(input: string, scope: Record<string, string>, seen: Set<str
 }
 
 /** Evaluate simple `calc(a ± b)` where a/b are numbers with a shared unit
- *  (only `%` appears in tokens.css). Repeats until no `calc(` remains. */
+ *  (only `%` appears in the token source). Repeats until no `calc(` remains. */
 function evalCalc(input: string): string {
   let s = input;
   const re = /calc\(\s*(-?[\d.]+)(%?)\s*([+-])\s*(-?[\d.]+)(%?)\s*\)/;
@@ -329,7 +328,7 @@ export function renderTokensModule(theme: GeneratedTheme, sourcePath: string): s
 // Source: ${sourcePath}
 // Regenerate: bun run generate:theme
 //
-// React-Native theme tokens lowered from the blueprint kit's tokens.css.
+// React-Native theme tokens lowered from the canonical blueprint token source.
 // See src/theme/generate.ts for the translation rules.
 
 export const lightPalette = {

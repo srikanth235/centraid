@@ -14,7 +14,25 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "noEmit": true,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "rootDirs": [
+      "apps/agenda",
+      "apps/docs",
+      "apps/locker",
+      "apps/notes",
+      "apps/people",
+      "apps/photos",
+      "apps/tally",
+      "apps/tasks",
+      "types/virtual-kit"
+    ]
   },
-  "include": ["apps/**/*.ts", "apps/**/*.tsx", "apps/**/*.d.ts", "types/**/*.d.ts"]
+  "include": [
+    "apps/**/*.ts",
+    "apps/**/*.tsx",
+    "apps/**/*.d.ts",
+    "kit/kit.ts",
+    "types/virtual-kit/**/*.ts",
+    "types/**/*.d.ts"
+  ]
 }

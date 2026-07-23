@@ -49,24 +49,29 @@ function openApp(id: string): void {
   (window as unknown as { Centraid: { openApp: (id: string) => void } }).Centraid.openApp(id);
 }
 
-beforeEach(async () => {
-  store.clear();
-  store.set('home.userApps', [
-    { id: 'tasks', name: 'Tasks', iconKey: 'Todo', color: '#123' },
-    { id: 'todos', name: 'Todos', iconKey: 'Todo', color: '#456' },
-  ]);
-  (globalThis as unknown as { Icon: unknown }).Icon = { Todo: () => '', Sparkle: () => '' };
-  (globalThis as unknown as { ICON_PALETTE: unknown }).ICON_PALETTE = { violet: '#7C5BD9' };
-  (globalThis as unknown as { CentraidApi: unknown }).CentraidApi = {
-    onGatewayChanged: () => {},
-    onVaultChanged: () => {},
-    getSettings: () => Promise.resolve({}),
-  };
-  (globalThis as unknown as { CentraidTokens: unknown }).CentraidTokens = {
-    tileFinish: () => ({ background: '#111', boxShadow: 'none', glyphColor: '#fff' }),
-  };
-  ({ default: App } = await import('./App.js'));
-});
+beforeEach(
+  async () => {
+    store.clear();
+    store.set('home.userApps', [
+      { id: 'tasks', name: 'Tasks', iconKey: 'Todo', color: '#123' },
+      { id: 'todos', name: 'Todos', iconKey: 'Todo', color: '#456' },
+    ]);
+    (globalThis as unknown as { Icon: unknown }).Icon = { Todo: () => '', Sparkle: () => '' };
+    (globalThis as unknown as { ICON_PALETTE: unknown }).ICON_PALETTE = { violet: '#7C5BD9' };
+    (globalThis as unknown as { CentraidApi: unknown }).CentraidApi = {
+      onGatewayChanged: () => {},
+      onVaultChanged: () => {},
+      getSettings: () => Promise.resolve({}),
+    };
+    (globalThis as unknown as { CentraidTokens: unknown }).CentraidTokens = {
+      tileFinish: () => ({ background: '#111', boxShadow: 'none', glyphColor: '#fff' }),
+    };
+    ({ default: App } = await import('./App.js'));
+  },
+  // The affected-package gate transforms six packages concurrently. Keep the
+  // first App graph import bounded without inheriting Vitest's 10s hook ceiling.
+  20_000,
+);
 
 afterEach(() => {
   act(() => root?.unmount());

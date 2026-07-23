@@ -1,6 +1,6 @@
 // Small shared presentational bits used across the Sidebar, Grid, List,
 // Details and QuickLook components. Pure functions of props — no app state.
-import type { MouseEvent } from '../react-core.min.js';
+import type { MouseEvent } from 'react';
 import { custodyMeta } from '../format.ts';
 import { I } from '../icons.ts';
 import type { CustodyTone } from '../types.ts';

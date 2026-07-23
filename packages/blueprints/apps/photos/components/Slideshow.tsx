@@ -9,8 +9,8 @@
 // CSS split: the fixed dark `.slideshow` container stays global (static
 // index.html element); this view's own bits live in Slideshow.module.css,
 // while `kit-viewer-nav`/`prev`/`next` are kit.css vocabulary (global).
-import { useEffect, useRef, useState } from '../react-core.min.js';
-import type { FC } from '../react-core.min.js';
+import { useEffect, useRef, useState } from 'react';
+import type { FC } from 'react';
 import { isRenderableUri, isVideoAsset } from '../format.ts';
 import { ChevronLeftIcon, ChevronRightIcon, CloseIcon, PauseIcon, PlayIcon } from '../icons.tsx';
 import type { Asset } from '../types.ts';

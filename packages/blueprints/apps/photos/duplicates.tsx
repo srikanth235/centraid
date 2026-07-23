@@ -8,7 +8,7 @@
 // refresh() the way the (bounded, cheap) library window does.
 import { DuplicatesView } from './components/Duplicates.tsx';
 import { trashDuplicateAssets } from './duplicates-actions.ts';
-import type { ReactNode } from './react-core.min.js';
+import type { ReactNode } from 'react';
 import type { DuplicateCluster } from './types.ts';
 
 type Root = { render: (node: ReactNode) => void };

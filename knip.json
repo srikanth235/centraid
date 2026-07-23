@@ -49,15 +49,7 @@
     "packages/blueprints": {
       "entry": ["src/index.ts"],
       "project": ["src/**/*.{ts,tsx}"],
-      "ignoreDependencies": [
-        "@centraid/blob-format",
-        "@types/react",
-        "esbuild",
-        "pdfjs-dist",
-        "react",
-        "react-dom",
-        "tldts"
-      ]
+      "ignoreDependencies": ["@centraid/blob-format", "esbuild", "pdfjs-dist", "tldts"]
     },
     "packages/test-kit": {
       "entry": ["src/*.ts"],

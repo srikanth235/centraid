@@ -9,9 +9,9 @@
 // an in-flight or pending save before it unmounts this component (closing
 // the overlay, switching notes) — the same registerFocus idiom
 // tasks/components/Capture.jsx uses, inverted for teardown instead of setup.
-import { useEffect, useRef, useState } from '../react-core.min.js';
-import type { ChangeEvent, FormEvent, KeyboardEvent, MouseEvent } from '../react-core.min.js';
-import { relTime, renderAttachments } from '../kit.js';
+import { useEffect, useRef, useState } from 'react';
+import type { ChangeEvent, FormEvent, KeyboardEvent, MouseEvent } from 'react';
+import { relTime, renderAttachments } from '../kit.ts';
 import { deriveTitle, parseBlocks, stripInline } from '../format.ts';
 import { I } from '../icons.ts';
 import { Icon } from './Shared.tsx';

@@ -53,9 +53,10 @@ per-device revocable `owner` enrollment trust tier.
 
 Every router surface bundled apps consume today, with the serving code, the in-app
 consumer, and the shell-native replacement inline apps bind to. Router parse:
-`packages/app-engine/src/http/router.ts` (one `Route` kind per row). The served
-(iframe/WebView) path keeps all of these — mobile WebViews and the builder preview
-still consume them; the rows describe what the **inline** path replaces them with.
+`packages/app-engine/src/http/router.ts` (one `Route` kind per row). The generic
+opaque-app server retains these seams for future app-owned documents, but no v0
+bundled system app consumes that path: desktop/web render inline and mobile is
+native Expo.
 
 | Surface | Serving code | App-side consumer | Shell-native replacement |
 | --- | --- | --- | --- |
@@ -64,7 +65,7 @@ still consume them; the rows describe what the **inline** path replaces them wit
 | `GET /centraid/<app>/_query/<name>.mjs` | `router.ts` `app-query-bundle` → `query-bundle.ts` (esbuild, imports confined to `queries/`) | `bridge-script.ts` `loadQueryModule`/`runLocalQuery` (local replica read, tool fallback) | direct import of `queries/<name>.ts` from `@centraid/blueprints`, executed against the shell replica coordinator (no network bundle) |
 | `POST /centraid/<app>/_turn` (+ `GET/PUT /_turn/model`) SSE chat | `router.ts` `app-chat` → `turn-routes.ts` | **all 8 apps**: `window.KIT_ASK` + `[data-ask-mount]`; `kit.js` ask panel + `kit/conversation-client.js`/`turn-stream.js`/`consent-cards.js` | shell conversation surface (`gateway-client-conversation.ts` / `useAssistantConversations`) scoped to the app, including parked-write consent cards |
 | `GET/PUT /centraid/_apps/<id>/settings` | `router.ts` `app-settings-read/-write` | server-side bake (theme/knobs) + settings postMessage | shell already owns `AppSettingsController.tsx` / `appSettingsData.ts`; inline apps read knobs through the same client data module — no bake, no postMessage |
-| App static assets (HTML, `_bundle.<hash>.js`, serve-time `.tsx`/`.module.css` transpile) | `router.ts` `app-static` → `static-server.ts`, `app-bundle.ts`, `asset-variants.ts` | browser document/module loads | none — code ships in the shell bundle as a per-app lazy chunk; served path remains for WebView/builder |
+| App static assets (HTML, `_bundle.<hash>.js`, serve-time `.tsx`/`.module.css` transpile) | `router.ts` `app-static` → `static-server.ts`, `app-bundle.ts`, `asset-variants.ts` | browser document/module loads | none — bundled system-app code ships in the shell bundle as a per-app lazy chunk; the generic server is not a v0 system-app transport |
 | Consent surface `/centraid/_vault/parked` (+ `/parked/<id>`) | gateway vault plane | `kit.js` ask panel consent cards | shell-native consent flow (same Approvals surface the shell already renders) |
 | Blobs `/centraid/_vault/blobs` (CAS) | gateway `blob-routes.ts` | `kit.js` attachments (`renderAttachments`, `wireAttachInput`, 256 KB inline cap) | shell gateway client blob routes (unchanged HTTP surface, called from shell code with shell auth — no bridge `centraid:resource` hop) |
 | Theme/settings postMessage channels (`centraid:theme`, `centraid:settings`) + URL `?theme=&bgL=` bake | `AppFrame.tsx` postMessage + `static-server.ts` bake | inline `<script>` in each `index.html` | none — inline apps live in the shell document and inherit design tokens synchronously |
@@ -75,25 +76,22 @@ Notes settled by this inventory (issue open questions 2 and 3):
   The inline equivalent is one shared shell service, priced once, not per app.
 - **`/_query/<name>.mjs` bundles are redundant inline** — query modules are
   relative-import-only and confined to `queries/`, so the shell imports them
-  directly; the network bundle survives only for the served path.
+  directly; bundled system apps have no network UI bundle.
 
 ## Settled architecture (Phases 2–4)
 
-- **Dual consumption**: the served entry (`app.tsx`, `index.html`, `chrome.ts`,
-  `app.css`, `wall.css`) stays byte-for-byte — mobile WebViews and the visual harness
-  keep loading it. Inline consumption adds a co-located sibling entry per app:
-  `app-inline.tsx` (default-exports an `InlineAppModule` descriptor: appId,
-  changeTables, query modules, kitAsk config, React Root), `Chrome.tsx` (the
-  `index.html` chrome markup as JSX), `Chrome.module.css` (the `app.css` chrome rules
-  as a CSS module). `logic.ts`, `format.ts`, `components/*` are reused verbatim by
-  both entries.
-- **Specifier aliasing, not source forking**: blueprint code keeps importing
-  `./react-core.min.js` and `./kit.js`; the client builds (web + desktop Vite, vitest
-  preset) alias those specifiers to `packages/client/src/react/blueprints/`
-  `react-core-shim.ts` (the shell's single React runtime) and `kit-inline.ts` (kit API
-  mirror: pure DOM/format surface re-exported verbatim; data/gateway seams overridden
-  onto `ReplicaShellSession` and gateway-client). Blueprints still never imports
-  client — the alias boundary lives entirely in client/build config.
+- **Single system-app consumption path**: each bundled app exposes
+  `app-inline.tsx` (an `InlineAppModule` descriptor with appId, changeTables,
+  query modules, kitAsk config, and React Root), `app-root.tsx`, `Chrome.tsx`,
+  and scoped CSS modules. The retired served `app.tsx` adapters and duplicated
+  app-local `app.css`/`wall.css` layers are absent. `index.html` remains only as
+  the current app-listing `hasIndex` marker and contains no scripts or styles.
+- **Normal React ownership**: blueprint components import from `react`, resolved
+  and bundled by the main client like every other React component. There is no
+  checked-in React bundle, JSX-runtime shim, vendor generator, ambient
+  declaration, or client React alias. Only the relative `./kit.ts` specifier is
+  adapted by client build config to `kit-inline.ts`, keeping shell-specific
+  data/gateway overrides at the build boundary without forking source.
 - **Data plane**: `centraid-inline.ts` installs `window.centraid` backed by
   `ReplicaShellSession.read/search/write/subscribe`; writes carry `intentId` through
   the replica intent dispatch (the #406 dedupe lives there, not duplicated). Query
@@ -114,10 +112,10 @@ Notes settled by this inventory (issue open questions 2 and 3):
   (`react-pdf-*.js`), so dynamic import works there, and the issue's acceptance
   criteria require per-app lazy chunks so PWA initial-load JS does not regress. PWA
   offline coverage of lazy chunks is verified/extended in the service worker.
-- **CSS**: `tokens.css`/`wall.css` are not loaded inline (shell design tokens already
-  define the vars — this is also what makes theming synchronous); `kit.css` loads once
-  globally from the route host; component `*.module.css` files are used as-is
-  (authored camelCase keys are identical under both pipelines).
+- **CSS**: `tokens.css`/`wall.css` are not loaded by bundled system apps (shell
+  design tokens already define the vars); common `.kit-app-*` structure and
+  `.kit-*` primitives load once from `kit.css`, while app identity and layout
+  remain scoped in `Chrome.module.css` and component modules.
 
 ## Progress log
 
@@ -144,6 +142,6 @@ Notes settled by this inventory (issue open questions 2 and 3):
 
 - Agent vault tools (`vault_sql`/`vault_invoke`/`vault_content`), ACP/MCP surface
 - Builder feature work; the opaque-document machinery itself
-- Gateway HTTP serving of apps (mobile WebViews + builder preview still consume it)
+- Generic opaque-app HTTP serving (not a v0 bundled-system-app or mobile transport)
 - Mobile client changes
 - 2026-07-18 out-of-box onboarding blockers (separate work)

@@ -25,9 +25,8 @@ export default defineConfig({
   // depending on the package being built first. (The former desktop-ui/ui-core
   // packages now live locally under src/renderer/react/ui — no alias needed.)
   resolve: {
-    // Array form so the inline-app regex aliases (blueprint `./kit.js` /
-    // `./react-core.min.js` → shell shims, issue #505) sit alongside the
-    // design-tokens source alias.
+    // Array form so the inline-app `./kit.ts` adapter alias sits alongside
+    // the design-tokens source alias (issue #505).
     alias: [
       ...inlineBlueprintAliases(),
       {

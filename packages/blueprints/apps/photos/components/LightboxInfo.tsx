@@ -8,13 +8,13 @@
 // 500-line cap), not a behavior change.
 // CSS split: own bits in LightboxInfo.module.css; `.ph-faces` (faces.ts's
 // imperative host) + `lightbox-note`/`kit-*` stay global strings.
-import { armConfirm, toast } from '../kit.js';
+import { armConfirm, toast } from '../kit.ts';
 import { restoreAsset } from '../assets-actions.ts';
 import { buildActivity } from '../activity.ts';
 import { renderFaces } from '../faces.ts';
 import { custodyMeta, exifRows, toLocalInputValue } from '../format.ts';
 import { act, narrate } from '../outcomes.ts';
-import { useEffect, useRef, useState } from '../react-core.min.js';
+import { useEffect, useRef, useState } from 'react';
 import type { Album, Asset, CustodyMeta, Place } from '../types.ts';
 import styles from './LightboxInfo.module.css';
 

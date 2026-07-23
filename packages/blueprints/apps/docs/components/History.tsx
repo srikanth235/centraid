@@ -9,7 +9,7 @@
 // content id, which remounts this component and re-triggers its fetch, so
 // the panel always reflects the freshly-recorded chain without any extra
 // wiring back to app.tsx's refresh().
-import { useEffect, useState } from '../react-core.min.js';
+import { useEffect, useState } from 'react';
 import { fmtBytes, fmtFull, loadable, typeMeta } from '../format.ts';
 import type { VersionEntry } from '../types.ts';
 import styles from './History.module.css';

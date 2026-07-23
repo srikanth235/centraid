@@ -29,40 +29,24 @@ import { injectChangeBridge } from './bridge-script.js';
 /**
  * Assets that are shared verbatim by every app and therefore served from a
  * single canonical dir (`sharedAssetsDir`) instead of a per-app copy. An app
- * folder no longer ships `kit.js` / `kit.css`; the request still comes in as
- * the app-relative `/centraid/<id>/kit.js` (index.html `<link>` and app.js's
- * `import './kit.js'` are unchanged), and `serveStatic` falls back to the
+ * folder no longer ships `kit.ts` / `kit.css`; the request still comes in as
+ * the app-relative `/centraid/<id>/kit.ts` (index.html `<link>` and app.js's
+ * `import './kit.ts'` are unchanged), and `serveStatic` falls back to the
  * shared dir when the app folder has no copy of its own. An app *may* still
  * ship its own file to override — the per-app copy wins.
  *
  * This fallback only ever applies to a **root-level** request (`rel` has no
  * directory component — see the guard in `serveStatic`). Every legitimate
  * reference to one of these files resolves to a root-level URL: `index.html`
- * links them relative to the app root, and a nested `components/*.jsx` file
- * either climbs back to the root itself (`import './kit.js'` from `app.jsx`,
- * `import '../kit.js'` from `components/X.jsx` — hand-written by the app) or,
- * for the one specifier esbuild emits automatically, via the depth-aware
- * `jsx-runtime` rewrite in {@link transformJsx}. A *nested* request for one of
- * these names (e.g. `components/react-core.min.js`) therefore has no
- * legitimate source and 404s instead of being silently served — a future
- * depth-rewrite bug should fail loudly, not get masked by this fallback.
+ * links them relative to the app root, and a nested source file climbs back to
+ * that root (`import './kit.ts'` from a root entry, `import '../kit.ts'` from
+ * `components/X.tsx`). A nested request for one of these names therefore has
+ * no legitimate source and 404s instead of being silently served.
  *
- * `kit.js` imports `elements.js` (the kit's native Web Components, issue #327
+ * `kit.ts` imports `elements.js` (the kit's native Web Components, issue #327
  * — dependency-free vanilla custom elements, no runtime import of their own).
- * It's a relative same-origin ESM import resolved the same way as `kit.js`,
+ * It's a relative same-origin ESM import resolved the same way as `kit.ts`,
  * so it must fall back to the shared dir too.
- *
- * `react-core.min.js` (vendored runtime-only React bundle) and
- * `jsx-runtime.js` (the `automatic` JSX runtime esbuild's transform imports,
- * see {@link transformJsx}) round out the set for builder-generated `.jsx`
- * apps that don't ship their own copies.
- *
- * `tokens.css` (the generated blueprint-app token layer, see
- * packages/blueprints/scripts/vendor-tokens.mjs) and `wall.css` (the shared
- * "wall" surface gradient, copied verbatim from packages/design-tokens) are
- * shared the same way — an app with its own `wall.css` (e.g. people, for its
- * warm-blush light-mode override) still wins via the per-app-copy precedence
- * above.
  *
  * The set itself is defined in security.ts (the leaf module) so the
  * whole-graph bundler (app-bundle.ts) resolves through the SAME list as this
@@ -119,8 +103,7 @@ const cssModuleCache = new Map<string, CssModuleCacheEntry>();
 // IMPORTING FILE's own directory, same as any other relative ESM specifier.
 // Browsers can't resolve it as-is (no bare-specifier/extension-less
 // resolution over HTTP), so it's rewritten below. `jsx-runtime.js` itself is
-// only ever served from the app root (or the shared dir standing in for it —
-// see {@link SHARED_ASSET_FILES}), so a file nested under subdirectories
+// is app-owned and served from the app root, so a file nested under subdirectories
 // needs a specifier that *climbs back up* to the root, not just `./` — a
 // bare `.js` suffix would make `components/Grid.jsx` request
 // `components/jsx-runtime.js`, one directory too deep. esbuild always emits
@@ -214,8 +197,7 @@ function errorShim(message: string): string {
  * Strong content etag for a response body — sha256 hex, quoted per RFC 7232.
  * Not `W/`-prefixed (weak): hashed over the exact bytes sent, so equal etags
  * mean byte-identical bodies. Cheap enough to hash per request for plain
- * files (react-core.min.js, the largest vendored asset at ~313KB, hashes in
- * well under a millisecond) — no separate content cache needed; `.jsx`
+ * files — no separate content cache needed; `.jsx`
  * responses get theirs memoized for free by riding along in {@link jsxCache}.
  */
 export interface SettingsInject {
@@ -239,7 +221,7 @@ export interface ServeStaticOptions {
   draft?: { appId: string; sessionId: string };
   /**
    * Canonical dir holding assets shared verbatim across every app
-   * (`kit.js` / `kit.css` — see {@link SHARED_ASSET_FILES}). When the app
+   * (`kit.ts` / `kit.css` — see {@link SHARED_ASSET_FILES}). When the app
    * folder has no copy of a requested shared asset, it is served from here.
    * Omit to disable the fallback (a missing file then 404s as usual).
    */
@@ -286,15 +268,14 @@ export async function serveStatic(
   let stat = await statOrNull(file);
   if (!stat) {
     // Fall back to the shared canonical copy for whitelisted assets an app
-    // folder doesn't carry itself (kit.js / kit.css). Resolved through
+    // folder doesn't carry itself (kit.ts / kit.css). Resolved through
     // `resolveStaticPath` so the same escape/allowlist guards apply.
     //
     // Root-level requests only (`rel` has no directory component) — see the
     // doc comment on `SHARED_ASSET_FILES`. Every legitimate request for one
-    // of these names is root-level; a nested one (e.g.
-    // `components/react-core.min.js`) means the depth-aware `jsx-runtime`
-    // rewrite (or a hand-written relative import) is wrong, and that must
-    // 404 loudly instead of silently resolving to the shared copy.
+    // of these names is root-level; a nested one (for example
+    // `components/kit.ts`) means a hand-written relative import is wrong and
+    // must 404 loudly instead of silently resolving to the shared copy.
     const isRootLevel = !rel.replace(/^\.?\/+/, '').includes('/');
     const base = path.basename(file);
     const shared =

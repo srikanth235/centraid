@@ -12,7 +12,7 @@
 //     (packages/app-engine/src/worker/runner.ts `ScopedVault`,
 //     packages/app-engine/src/types.ts `CommonHandlerArgs`/`ActionResult`).
 //   - `VaultOutcome` — the typed-command result the kit narrates
-//     (packages/blueprints/kit/kit.js `outcomeMessage`).
+//     (packages/blueprints/kit/kit.ts `outcomeMessage`).
 //
 // This is an ambient script (no imports/exports), so every top-level type and
 // interface below is a GLOBAL — visible unqualified from every app/handler,
@@ -20,7 +20,7 @@
 
 // ---------- Typed-command outcome ----------
 
-/** Terminal states a vault write settles into (kit.js `outcomeMessage`). */
+/** Terminal states a vault write settles into (kit.ts `outcomeMessage`). */
 type VaultOutcomeStatus = 'executed' | 'parked' | 'queued' | 'in-flight' | 'failed' | 'denied';
 
 /**
@@ -166,7 +166,7 @@ interface HandlerArgs {
 // ---------- window.centraid (page side) ----------
 
 /**
- * A change-feed event (kit.js `onDataChange`). A non-empty `tables` list must
+ * A change-feed event (kit.ts `onDataChange`). A non-empty `tables` list must
  * intersect an app's declared tables to fire; an empty list ("this app
  * acted") always fires. `intentId`/`intentState` mark optimistic overlay
  * updates.
@@ -209,6 +209,6 @@ interface Window {
   centraid: CentraidClient;
   /** Ask-panel config seeded inline by index.html before app code loads. */
   KIT_ASK?: Record<string, unknown>;
-  /** The kit's Ask controller, mounted at kit.js eval time. */
+  /** The kit's Ask controller, mounted at kit.ts eval time. */
   kitAsk?: Record<string, unknown>;
 }

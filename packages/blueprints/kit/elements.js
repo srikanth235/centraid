@@ -1,11 +1,11 @@
 // governance: allow-repo-hygiene file-size-limit the ported kit primitives are one
-// cohesive custom-element set that every app loads verbatim alongside kit.js;
+// cohesive custom-element set that every app loads verbatim alongside kit.ts;
 // splitting it would fracture the single-import contract the kit is built on
 // Centraid blueprint kit — native Web Components (issue #327; de-Lit pass).
 //
 // The kit's presentation primitives, ported from the hand-rolled vanilla DOM
-// builders (former `kit.js`) to plain `customElements.define()` classes. These
-// load with NO build step and NO runtime dependency: `kit.js` does
+// builders (former `kit.ts`) to plain `customElements.define()` classes. These
+// load with NO build step and NO runtime dependency: `kit.ts` does
 // `import './elements.js'`, and that's the whole of it — no vendored template
 // library underneath. Real custom elements is what lets claude.ai/design
 // ingest them directly, dropping the React-wrapper duplication the old
@@ -26,14 +26,14 @@
 // the *shape* callers already depend on — but `KitElement` below reads that
 // manifest itself and installs plain accessor properties + attribute
 // observation with `Object.defineProperty`/`attributeChangedCallback`. Setting
-// a JS property (`el.name = 'x'`, what every `kit.js` factory does) or an HTML
+// a JS property (`el.name = 'x'`, what every `kit.ts` factory does) or an HTML
 // attribute (what React does for a custom-element prop it does NOT find `in`
 // the instance, falling back to attribute reflection) both trigger a
 // synchronous re-render once the element is connected. There is no
 // microtask-batched update queue here — these are small, cheap components, and
 // synchronous keeps the base legible without an update scheduler.
 //
-// kit.js keeps thin factory functions (`letterAvatar`, `lineChart`, `toast`, …)
+// kit.ts keeps thin factory functions (`letterAvatar`, `lineChart`, `toast`, …)
 // that construct + configure these elements, so existing app code that calls
 // them is unchanged.
 
@@ -446,7 +446,7 @@ customElements.define('kit-skeleton', KitSkeleton);
 
 /**
  * `<kit-toast text tone undo-label>` — a single outcome toast bubble. In the app
- * the `toast()` helper (kit.js) hosts these in the fixed `.kit-toasts` stack and
+ * the `toast()` helper (kit.ts) hosts these in the fixed `.kit-toasts` stack and
  * wires timing; the element renders the bubble and fires `kit-undo` / `kit-dismiss`.
  */
 export class KitToast extends KitElement {

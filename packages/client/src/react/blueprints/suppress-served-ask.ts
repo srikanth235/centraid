@@ -1,7 +1,7 @@
-// Side-effect module: neutralise kit.js's auto-mounting "Ask" IIFE before the
+// Side-effect module: neutralise kit.ts's auto-mounting "Ask" IIFE before the
 // kit module is evaluated inline.
 //
-// packages/blueprints/kit/kit.js ends in an IIFE that, at module-eval time,
+// packages/blueprints/kit/kit.ts ends in an IIFE that, at module-eval time,
 // calls `init()` — which appends an "Ask" button + panel to `[data-ask-mount]`
 // or, failing that, to `document.body`, and drives itself with relative
 // `<app>/_turn` fetches that only resolve on the served (same-origin) path.

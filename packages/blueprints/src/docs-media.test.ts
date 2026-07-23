@@ -77,7 +77,7 @@ describe('Docs device-side PDF text', () => {
     ).resolves.toBeNull();
   });
 
-  test('loads the generated production runtime and extracts a real PDF offline', async () => {
+  test('loads the client-bundled production runtime and extracts a real PDF offline', async () => {
     // PDF.js' browser display module creates one identity DOMMatrix at import
     // time. jsdom lacks that browser API; extraction never renders, so this
     // narrow identity stand-in is sufficient for the production module path.
@@ -95,20 +95,15 @@ describe('Docs device-side PDF text', () => {
       );
     }
     // Node 24 already implements Promise.try; CI's Node 20 does not. Remove it
-    // here so this test proves the generated compatibility banner rather than
+    // here so this test proves the source-level compatibility bridge rather than
     // accidentally relying on the host runtime.
     const nativePromiseTry = Object.getOwnPropertyDescriptor(Promise, 'try');
     Reflect.deleteProperty(Promise, 'try');
     try {
-      const runtimeUrl = pathToFileURL(
-        path.resolve(import.meta.dirname, '../kit/pdf.min.mjs'),
-      ).href;
-      const pdfjs = await loadPdfJs(runtimeUrl);
+      const pdfjs = await loadPdfJs();
       expect(typeof Reflect.get(Promise, 'try')).toBe('function');
       expect(pdfjs.version).toBe('5.7.284');
-      expect(pdfjs.GlobalWorkerOptions.workerSrc).toBe(
-        new URL('pdf.worker.min.mjs', runtimeUrl).href,
-      );
+      expect(pdfjs.GlobalWorkerOptions.workerSrc).toContain('pdf.worker.min');
 
       const bytes = realPdf('Offline PDF.js narwhal');
       await expect(

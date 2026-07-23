@@ -3,13 +3,13 @@
 // Rename swaps the title for an inline input (Enter/blur commits, Escape
 // cancels); delete arms on first click (kit armConfirm) like every other
 // blueprint delete control.
-import { useState } from '../react-core.min.js';
+import { useState } from 'react';
 import { I } from '../icons.ts';
 import { Icon } from './Shared.tsx';
 import styles from './Toolbar.module.css';
 import shared from './shared.module.css';
 
-// kit.js's armConfirm swaps a button's textContent for the armed label —
+// kit.ts's armConfirm swaps a button's textContent for the armed label —
 // fine for text buttons, but it would wipe this icon-only button's SVG
 // (textContent of an <i data-svg> wrapper is empty) and never restore it.
 // A local, remount-reset armed flag (keyed by notebookId at the call site)

@@ -9,9 +9,7 @@
     "**/.expo/**",
     "**/node_modules/**",
     "apps/web/src/generated/**",
-    "packages/blueprints/apps/**",
     "packages/blueprints/automations/**",
-    "packages/blueprints/kit/**",
     "packages/blueprints/visual-harness/mock-centraid.js"
   ],
   "rules": {

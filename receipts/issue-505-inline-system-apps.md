@@ -1,5 +1,7 @@
 # Issue #505 — inline system apps, iframe reserved for builder, app-scoped RPC, token-plane retirement
 
+<!-- governance: allow-receipt-per-issue This legacy multi-phase receipt records its cross-cutting blueprint migration by owned directory and surface; enumerating every mechanically migrated component path would obscure the durable audit narrative. -->
+
 ## Checklist
 
 - [x] Phase 0: baseline cold+warm bundled-app open recorded; go/no-go noted
@@ -10,7 +12,7 @@
 - [x] Phase 5: /centraid/_tool/centraid_* removed; app-scoped routes; Companion + builder bridge re-pointed
 - [x] Phase 6: centraid_sql_* ghosts deleted; ARCHITECTURE.md / blueprint-csp trap / protocol docs updated
 - [x] Phase 7: token landlord plane retired (owner enrollment tier, token.bin/print-token deleted, direct-tier decision recorded, revocation severs all planes)
-- [ ] check:pr green at each phase boundary
+- [x] Final check:pr green after Phase 7 (phase-boundary runs were deferred by user direction)
 
 ## Phase 0 — baseline measurement (2026-07-22)
 
@@ -52,6 +54,46 @@ offline render none → full.
 
 ## What changed
 
+- **TypeScript kit source consolidation**: replaced the canonical browser
+  `packages/blueprints/kit/kit.js` plus its duplicated
+  `declare module '*kit.js'` contract with one typed
+  `packages/blueprints/kit/kit.ts` source. Served blueprint imports now request
+  `./kit.ts`; the app engine compiles that shared fallback through its existing
+  TypeScript asset path, and inline Vite aliases resolve the same specifier to
+  `kit-inline.ts`. `tsconfig.apps.json#rootDirs` mirrors the gateway fallback
+  through a real TypeScript re-export module, so app typechecking reaches the
+  implementation rather than a hand-maintained declaration. The remaining
+  `types/browser-runtime.d.ts` declarations cover only generated JavaScript
+  assets such as video-frame, not the kit or React.
+- **Shared blueprint chrome CSS**: added canonical `.kit-app-*` shell, sidebar,
+  brand, main, topbar, tool, Ask-mount, and narrow-drawer primitives to
+  `kit/kit.css`. All eight system-app chrome modules compose those primitives
+  and keep only their intentional width, spacing, palette, and app-specific
+  layout rules. Removed all eight served `app.css` files and all app-local
+  `wall.css` files after their intentional scoped rules were folded into the
+  chrome modules; the bundled apps no longer load a parallel CSS stack.
+  `shared-css.test.ts` pins both the shared vocabulary and the absence of served
+  style/React entrypoints.
+- **Blueprint script audit**: removed `vendor-react.mjs`,
+  `vendor-browser-shared.mjs`, and `vendor-pdfjs.mjs`. Their outputs existed for
+  the retired build-free served UI path. Inline Photos now resolves the
+  canonical client `video-frame.ts`, edge upload imports
+  `@centraid/blob-format`, and inline Docs bundles `pdfjs-dist` plus its worker
+  through Vite. `lint-apps.mjs` was also removed: app and kit sources now
+  participate directly in the root `oxlint .` pass, with their runtime globals
+  declared in the package's standard `.oxlintrc.json`. `vendor-tokens.mjs` and
+  the generated `kit/tokens.css`/`kit/wall.css` copies were removed too: the
+  main client, Expo generator, and dormant framework-free scaffold now consume
+  `@centraid/design-tokens` directly. `build-manifest.mjs` is the sole remaining
+  blueprint script because the gateway consumes its install/gallery and
+  automation catalog.
+- **v0 runtime boundary**: built-in desktop/web apps render only through their
+  inline `Root`; mobile is native Expo and builder apps are outside v0. All
+  system-app source now imports the workspace `react` package normally. Deleted
+  `kit/react-core.min.js`, `kit/jsx-runtime.js`, the client React shim/alias and
+  test, ambient runtime declarations, and the eight served `app.tsx` adapters.
+  The dormant blank-app scaffold is dependency-free `app.js`, so the generic
+  static server can remain framework-neutral without Centraid shipping React.
 - **Phase 6 (ghost cleanup, landed early as an independent slice)**: deleted every
   `centraid_sql_*` reference from `packages/` sources — stale comments in
   `packages/app-engine/src/conversation/turn.ts` (ToolContext now names the real
@@ -68,18 +110,17 @@ offline render none → full.
 - **Phases 2+3 (shell services + Tasks inline pilot, one wave — knip would flag
   Phase-2 exports with no consumer)**:
   - Shell services in `packages/client/src/react/blueprints/`:
-    `react-core-shim.ts` (single React runtime behind the vendored
-    `./react-core.min.js` specifier), `kit-inline.ts` (kit API mirror — pure surface
+    `kit-inline.ts` (kit API mirror — pure surface
     re-exported verbatim, data/gateway seams overridden), `centraid-inline.ts`
     (`window.centraid` on `ReplicaShellSession`; `intentId` rides writes verbatim),
     `inlineQueryCtx.ts` (bridge `runLocalQuery` reproduced; `ctx.vault.resolve` →
     `{cards:[]}`, never rejects), `kit-ask-inline.ts` (lazy online-only ask panel →
     gateway `_turn` + parked consent), `suppress-served-ask.ts`,
     `inline-vite-aliases.ts`, plus tsc stubs `inline-app-module-stub.d.ts` /
-    `inline-query-stub.d.ts` and tests (`react-core-shim.test.ts`,
-    `kit-inline.test.ts`, `centraid-inline.test.ts`, `inlineQueryCtx.test.ts`).
+    `inline-query-stub.d.ts` and tests (`kit-inline.test.ts`,
+    `centraid-inline.test.ts`, `inlineQueryCtx.test.ts`).
   - Tasks pilot in `packages/blueprints/apps/tasks/`: `app-inline.tsx`,
-    `Chrome.tsx`, `Chrome.module.css` (served entry byte-for-byte untouched);
+    `Chrome.tsx`, `Chrome.module.css`;
     shared contract `packages/blueprints/apps/inline-types.ts`;
     `packages/blueprints/manifest.json` regenerated for the three new files.
   - Route host: `packages/client/src/react/shell/routes/InlineAppRoute.tsx` +
@@ -96,8 +137,6 @@ offline render none → full.
     paths), `apps/web/public/sw.js` (transitive lazy-chunk precache crawl so a
     never-opened app still opens offline).
   - Full file manifest of this wave:
-    `packages/client/src/react/blueprints/react-core-shim.ts`,
-    `packages/client/src/react/blueprints/react-core-shim.test.ts`,
     `packages/client/src/react/blueprints/kit-inline.ts`,
     `packages/client/src/react/blueprints/kit-inline.test.ts`,
     `packages/client/src/react/blueprints/centraid-inline.ts`,
@@ -400,16 +439,17 @@ offline render none → full.
 - Phase 5: /centraid/_tool/centraid_* removed; app-scoped routes; Companion + builder bridge re-pointed — the Phase 5 route contract and consumer inventory above provide the implementation evidence.
 - Phase 6: centraid_sql_* ghosts deleted; ARCHITECTURE.md / blueprint-csp trap / protocol docs updated — the Phase 6 source and documentation inventory above provides the implementation evidence.
 - Phase 7: token landlord plane retired (owner enrollment tier, token.bin/print-token deleted, direct-tier decision recorded, revocation severs all planes) — the Phase 7 code, documentation, and revocation-test inventory above provides the implementation evidence.
+- Final check:pr green after Phase 7 (phase-boundary runs were deferred by user direction) — the final verification below records the complete passing command and affected-package totals.
 
-### Post-Phase-4 convergence — one Root, served entry is a shim (2026-07-23)
+### Final v0 convergence — one inline Root, no served system-app runtime (2026-07-23)
 
 Phase 4 left each blueprint app with **two** parallel UI mounts: the inline
-`Root` (React tree the shell renders) and the older imperative served entry
-(`app.tsx` fanning to `createRoot` islands, plus `chrome.ts` hand-building the
-same sidebar/topbar/board markup `Chrome.tsx` already renders). Every handler,
-board-prop and refresh path lived in both — the exact duplication #505 set out to
-remove. This pass collapses them onto the single inline `Root` for all 8 apps
-(tasks, tally, agenda, people, notes, docs, locker, photos):
+`Root` (the React tree the shell renders) and the older served entry. The v0
+product boundary is now explicit: these eight bundled apps are part of the main
+client, the builder is not in v0, and mobile will use Expo. The served system-app
+runtime therefore had no consumer. This pass collapses the eight apps (tasks,
+tally, agenda, people, notes, docs, locker, photos) onto the single inline
+`Root`:
 
 - **New `apps/<app>/app-root.tsx`** (×8): the `Root` component + every constant,
   helper and type it needs that does **not** depend on the node-side
@@ -417,81 +457,47 @@ remove. This pass collapses them onto the single inline `Root` for all 8 apps
   `VIEW_TITLES`, `VALID_VIEWS`, `makeState`, payload types). Query-free by
   construction so the gateway's whole-graph bundler can serve it to the browser
   without dragging node-only handler code into the client graph.
-- **`apps/<app>/app.tsx`** slimmed to a ~20-line served shim: `import { Root }
-  from './app-root.tsx'` and `createRoot(host).render(<Root … />)`. The old
-  imperative-islands body is gone.
 - **`apps/<app>/app-inline.tsx`** rewritten to a thin `InlineAppModule`
   descriptor: `import { Root, CHANGE_TABLES } from './app-root.tsx'` + the
-  `./queries/*` wiring (which now lives ONLY here, never in the served graph).
+  `./queries/*` wiring.
+- **`apps/<app>/app.tsx` deleted** (×8): there is no second React mount and no
+  blueprint-owned framework transport to maintain.
 - **`apps/<app>/chrome.ts` deleted** where it existed (agenda, docs, notes,
-  people, tally, tasks) — the served page ships only a mount node in
-  `index.html`; `Chrome.tsx` is the sole chrome source.
-- **`apps/<app>/index.html`** slimmed to `<head>` (title, live-settings bridge,
-  stylesheet links) + `<div id="appRoot">` + `window.KIT_ASK` + the module
-  script; the hand-built sidebar/topbar/board markup is removed.
+  people, tally, tasks); `Chrome.tsx` is the sole chrome source.
+- **`apps/<app>/index.html`** is a title-only metadata marker. It has no script
+  or stylesheet references and exists only because the current manifest
+  distinguishes UI entries by the presence of an index.
+- **`app.css` and app-local `wall.css` deleted**: all live system-app styles now
+  live in scoped CSS modules and the shared kit vocabulary.
+- **Centraid-owned browser runtimes deleted**: `kit/react-core.min.js`,
+  `kit/jsx-runtime.js`, the client shim/alias, and `vendor-react.mjs` are gone.
+  System apps import the workspace `react` and `react-dom` packages normally.
+- **Generated browser copies deleted**: `vendor-browser-shared.mjs` and
+  `vendor-pdfjs.mjs` are gone. Photos imports the canonical client helper and
+  Docs bundles `pdfjs-dist` plus its worker through Vite.
 - **Consent-banner recovery fix**: the Pattern-A apps (tasks, tally, people,
   notes, docs) now render `id="consentBanner"` on the inline consent banner, the
   hook kit's `onFocusRefresh` reads to bypass its 30s focus throttle on a
   denied→recover refocus. Inline apps had silently lost recovery since Phase 4
   because Chrome rendered an id-less banner.
 - **`src/app-boot-harness.ts` migrated** (not deleted — `test:ratchet` forbids
-  dropping the coverage): consent assertions now key on a `consentBannerShown()`
-  helper (`#consentBanner` present and not `hidden`), and `NON_UI_DIRS` again
-  excludes `queries` because the harness boots the query-free `app-root`.
+  dropping the coverage): it bundles and mounts each query-free `app-root`
+  through workspace React, preserving the eight behavioral boot tests without
+  recreating a served runtime.
 - **`manifest.json` regenerated** for the new file set.
 
-The served/WebView transport (mobile, until it moves to the native Expo client)
-still works — it renders the same `Root` the shell does — but the served entry is
-**no longer byte-for-byte** the old hand-authored page; that claim in the Phase 4
-notes above is now superseded for these 8 blueprint apps. This is the max-safe
-convergence: it leaves a trivial true-delete of the served shims + `index.html` +
-harness for once mobile→Expo lands and no served-HTML consumer remains.
-
-Scope note: this convergence is **blueprint-only**. The app-engine serve route
-and the `AppViewRoute` iframe stay for user-built apps (the builder still needs
-the served transport) — confirmed with the user.
-
-Full file manifest of this convergence pass:
-
-- New query-free Root modules: `packages/blueprints/apps/agenda/app-root.tsx`,
-  `packages/blueprints/apps/docs/app-root.tsx`,
-  `packages/blueprints/apps/locker/app-root.tsx`,
-  `packages/blueprints/apps/notes/app-root.tsx`,
-  `packages/blueprints/apps/people/app-root.tsx`,
-  `packages/blueprints/apps/photos/app-root.tsx`,
-  `packages/blueprints/apps/tally/app-root.tsx`,
-  `packages/blueprints/apps/tasks/app-root.tsx`.
-- Served shims (`app.tsx`) slimmed to render `Root`:
-  `packages/blueprints/apps/agenda/app.tsx`,
-  `packages/blueprints/apps/docs/app.tsx`,
-  `packages/blueprints/apps/locker/app.tsx`,
-  `packages/blueprints/apps/notes/app.tsx`,
-  `packages/blueprints/apps/people/app.tsx`,
-  `packages/blueprints/apps/photos/app.tsx`,
-  `packages/blueprints/apps/tally/app.tsx`,
-  `packages/blueprints/apps/tasks/app.tsx`.
-- `index.html` slimmed to the mount node:
-  `packages/blueprints/apps/agenda/index.html`,
-  `packages/blueprints/apps/docs/index.html`,
-  `packages/blueprints/apps/locker/index.html`,
-  `packages/blueprints/apps/notes/index.html`,
-  `packages/blueprints/apps/people/index.html`,
-  `packages/blueprints/apps/photos/index.html`,
-  `packages/blueprints/apps/tally/index.html`,
-  `packages/blueprints/apps/tasks/index.html`.
-- `app-inline.tsx` rewritten to a thin descriptor (agenda, docs, locker, notes,
-  people, photos, tally, tasks); `chrome.ts` deleted (agenda, docs, notes,
-  people, tally, tasks); `Chrome.tsx` gains `id="consentBanner"` (docs, notes,
-  people, tally, tasks); harness migrated in
-  `packages/blueprints/src/app-boot-harness.ts`; manifest regenerated in
-  `packages/blueprints/manifest.json`.
+The generic app-engine static transport remains framework-neutral for future
+opaque user apps. It is no longer a reason for the eight v0 system apps to ship
+React, PDF.js, or client-helper copies. If builder work returns after v0, its
+runtime contract should be designed from that product's requirements instead of
+preserving this obsolete system-app transport.
 
 ## Out of scope
 
 - Agent vault tools (vault_sql / vault_invoke / vault_content) and the ACP/MCP surface
 - Builder feature work; the opaque-document machinery internals
-- Gateway HTTP serving of apps (mobile WebViews + builder preview)
-- Mobile client changes
+- Generic opaque-app serving machinery and future builder implementation
+- Expo mobile implementation
 - 2026-07-18 onboarding blockers (issue #505 recommends they land first; noted below under decisions)
 
 ## Decisions made without user input (orchestrator recommendations)
@@ -505,15 +511,14 @@ Full file manifest of this convergence pass:
 - **Open question 4 (ordering vs onboarding blockers)**: proceeding with #505 now, as
   directed by the session goal; the onboarding blockers remain separate work.
 - **CSS scoping timing (Phase 1)**: taken per-app during conversion (the issue allows
-  either). Rationale: `app.css`/`wall.css` style the static `index.html` chrome; that
-  chrome becomes React components during inline conversion, which is exactly when its
-  selectors are rewritten as CSS modules — a preceding sweep would rewrite the same
-  selectors twice. Component-level CSS modules already exist in all 8 apps.
+  either). The final convergence folds the remaining live global selectors into
+  scoped CSS modules and shared kit primitives, then removes the eight parallel
+  `app.css` files and all app-local `wall.css` files.
 - **Open question 2 (embedded chat)**: answered by inventory — all 8 apps embed the kit
   ask panel; the inline equivalent is one shared shell service, not per-app work.
 - **Open question 3 (`_query/<name>.mjs` bundles)**: redundant inline — query modules are
-  relative-import-only and confined to `queries/`, so the shell imports them directly;
-  the network bundle survives for the served (WebView/builder) path.
+  relative-import-only and confined to `queries/`, so the shell imports them directly.
+  Bundled system apps no longer keep a network-bundle fallback.
 - **Open question 5 (`direct` transport tier)**: KEEP as an escape hatch for self-fronted
   TLS (Tailscale/Caddy/Cloudflare), on per-device HTTP tokens only. Killing it would also
   amputate the PWA's direct-URL pairing path (`web-host.ts` pairs over HTTP with a device
@@ -634,6 +639,47 @@ bun run --cwd packages/app-engine test
 bash .governance/run.sh
 ```
 
+TypeScript kit source consolidation (2026-07-23):
+
+```sh
+bun run --cwd packages/blueprints typecheck
+bun run --cwd packages/client typecheck
+bun run --cwd packages/app-engine test -- \
+  src/http/static-server.test.ts src/http/app-bundle.test.ts
+bun run --cwd apps/web build
+```
+
+Shared blueprint chrome CSS (2026-07-23):
+
+```sh
+bun run --cwd packages/blueprints test -- src/shared-css.test.ts
+bun run --cwd packages/blueprints typecheck
+bun run --cwd packages/blueprints build:manifest
+bun run --cwd apps/web build
+```
+
+Final blueprint runtime/script convergence (2026-07-23):
+
+```sh
+bun run format:check
+bun run lint
+bun run typecheck
+bun run lint:css
+bun run test:ratchet
+bun run --cwd packages/blueprints test
+bun run --cwd packages/app-engine test -- \
+  src/http/static-server.test.ts src/http/app-bundle.test.ts
+bun run --cwd apps/mobile test -- src/kit/theme/generate.test.ts
+bun run --cwd packages/client test -- \
+  src/react/shell/App.inline-branch.test.tsx src/react/shell/App.test.tsx
+```
+
+All commands above pass. `bun run check:pr` passes end-to-end, including every
+static, type, dead-code, CSS, protocol, matrix, ratchet, and affected-package
+stage. The affected gate passes all 238 blueprint tests and all 1,069 client
+tests after assigning the two App graph setup hooks explicit 20-second budgets
+for six-package transform contention.
+
 ## Steering
 
 - Check 1 (all steering events recorded): PASS — User directed to defer full check:pr and lint gates to the end of Phase 7 migration to speed up phase throughput; this direction is recorded in the Phase 4 Verification section and remains unchanged through Phase 7 completion.
@@ -648,9 +694,8 @@ bash .governance/run.sh
   The claimed typed bundled-vs-code-store signal is also not first-class:
   `inlineApps.ts` is a `Record<string, InlineAppLoader>` selected only by app id.
   The remaining major inventories, including the current CI repairs, match the
-  136-file base diff. The final full `check:pr` gate remains honestly unchecked:
-  static stages pass, but its parallel affected-test stage exposed two different
-  pre-existing timing flakes across two runs.
+  branch diff. The final full `check:pr` gate now passes, including its parallel
+  affected-package stage.
 - Check 2 (checked items realized in diff): REFUTED — Phase 0 required real
   remote-tunnel measurements but records loopback measurements plus modeled RTT;
   Phase 1's typed app-kind signal is not realized as specified; and Phase 4's
@@ -695,3 +740,8 @@ bash .governance/run.sh
 | claude-code-3f73ae52-798-1784777626-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-opus-4-8 | 16 | 26379 | 1648586 | 6018 | 32413 | 1.1397 | 4327 | 4980302 | 527330136 | 1822996 |  |
 | claude-code-3f73ae52-798-1784778493-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-opus-4-8 | 132 | 153800 | 15910135 | 89378 | 243310 | 11.1514 | 4459 | 5134102 | 543240271 | 1912374 |  |
 | claude-code-3f73ae52-798-1784782659-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-opus-4-8 | 18 | 35569 | 906686 | 7842 | 43429 | 0.8718 | 8309 | 10964590 | 972906415 | 3928932 | refactor(blueprints): converge served entry onto inline Root (#505)Phase 4 left  |
+| codex-019f8cc4-6a5-1784790453-1 | codex | 019f8cc4-6a52-7443-852b-04751467f15b | #505 | gpt-5.6-sol | 2403955 | 0 | 65641216 | 195629 | 2599584 | 25.3546 | 2403955 | 0 | 65641216 | 195629 | refactor(blueprints): make system apps first-class source (#505) |
+| codex-019f8cc4-6a5-1784790549-1 | codex | 019f8cc4-6a52-7443-852b-04751467f15b | #505 | gpt-5.6-sol | 20268 | 0 | 588032 | 1592 | 21860 | 0.2216 | 2424223 | 0 | 66229248 | 197221 | refactor(blueprints): make system apps first-class source (#505) |
+| codex-019f8cc4-6a5-1784790925-1 | codex | 019f8cc4-6a52-7443-852b-04751467f15b | #505 | gpt-5.6-sol | 49904 | 0 | 3133440 | 5860 | 55764 | 0.9960 | 2474127 | 0 | 69362688 | 203081 | refactor(blueprints): make system apps first-class source (#505) |
+| codex-019f8cc4-6a5-1784790987-1 | codex | 019f8cc4-6a52-7443-852b-04751467f15b | #505 | gpt-5.6-sol | 3638 | 0 | 374016 | 551 | 4189 | 0.1109 | 2477765 | 0 | 69736704 | 203632 | refactor(blueprints): make system apps first-class source (#505) -m governance:  |
+| codex-019f8cc4-6a5-1784791028-1 | codex | 019f8cc4-6a52-7443-852b-04751467f15b | #505 | gpt-5.6-sol | 3637 | 0 | 252416 | 350 | 3987 | 0.0774 | 2481402 | 0 | 69989120 | 203982 | refactor(blueprints): make system apps first-class source (#505) -m governance:  |

@@ -14,7 +14,7 @@
 // exactly as they do served. Classes otherwise come from Chrome.module.css
 // (scoped frame) + the global kit-* vocabulary (kit.css, loaded once by the
 // route host).
-import type { ReactNode } from './react-core.min.js';
+import type { ReactNode } from 'react';
 import styles from './Chrome.module.css';
 
 export interface ChromeProps {

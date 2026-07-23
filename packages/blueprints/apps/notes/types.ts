@@ -3,7 +3,7 @@
 // at serve time (a value import of this module would 404). Grounded in the
 // `library`/`search`/`note` query payloads and app.tsx's module-level
 // `state`/`data` bags. Mirrors the pilot's locker/types.ts model.
-import type { Attachment } from './kit.js';
+import type { Attachment } from './kit.ts';
 
 /** One free-form tag edge decorating a note (library projection). */
 export interface NoteTag {

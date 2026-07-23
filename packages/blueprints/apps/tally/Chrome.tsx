@@ -6,7 +6,7 @@
 // scroll host — but expressed as a React tree so app-inline.tsx renders one tree
 // instead of five imperative roots. Classes come from Chrome.module.css (scoped
 // chrome) + the global kit-* vocabulary (kit.css, loaded once by the route host).
-import type { KeyboardEvent, ReactNode } from './react-core.min.js';
+import type { KeyboardEvent, ReactNode } from 'react';
 import styles from './Chrome.module.css';
 
 export interface ChromeAvatar {

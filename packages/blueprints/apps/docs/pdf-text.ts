@@ -1,6 +1,8 @@
-// Browser-only PDF text extraction (issue #414). Kept independent of the
-// shared kit so it is testable as a pure adapter around PDF.js and remains
-// useful if document upload moves into a worker later.
+// Browser-only PDF text extraction (issue #414). PDF.js is a normal client
+// dependency: Vite emits its display chunk and worker asset with the inline
+// Docs app instead of relying on same-origin files in the shared kit.
+
+import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 
 const MAX_TEXT_CHARS = 1_000_000;
 const MAX_PDF_PAGES = 2_000;
@@ -38,27 +40,49 @@ interface PdfFileLike {
   arrayBuffer(): Promise<ArrayBuffer>;
 }
 
-const runtimeLoads = new Map<string, Promise<PdfJsModule>>();
+let runtimeLoad: Promise<PdfJsModule> | undefined;
 
-function defaultAssetUrl(name: string): string {
-  // Whole-app bundling moves this module into /_bundle/<hash>.js, so
-  // import.meta.url is not the app root. document.baseURI remains the
-  // installed app's index URL in both bundled and per-file modes.
-  return new URL(name, document.baseURI).href;
+function resolveWorkerUrl(url: string): string {
+  const processLike = Reflect.get(globalThis, 'process') as
+    | { versions?: { node?: unknown } }
+    | undefined;
+  if (processLike?.versions?.node && url.startsWith('/@fs/')) {
+    return new URL(`file://${url.slice(4)}`).href;
+  }
+  return url;
 }
 
-/** Load the generated, same-origin PDF.js display build exactly once. */
-export function loadPdfJs(runtimeUrl = defaultAssetUrl('pdf.min.mjs')): Promise<PdfJsModule> {
-  let load = runtimeLoads.get(runtimeUrl);
-  if (!load) {
-    load = import(/* @vite-ignore */ runtimeUrl).then((pdfjs: PdfJsModule) => {
-      const workerUrl = new URL('pdf.worker.min.mjs', runtimeUrl).href;
-      pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+function ensurePdfJsCompatibility(): void {
+  const promise = Promise as PromiseConstructor & {
+    try?: <T>(fn: (...args: unknown[]) => T, ...args: unknown[]) => Promise<Awaited<T>>;
+  };
+  if (!promise.try) {
+    Object.defineProperty(promise, 'try', {
+      configurable: true,
+      writable: true,
+      value<T>(
+        this: PromiseConstructor,
+        fn: (...args: unknown[]) => T,
+        ...args: unknown[]
+      ): Promise<Awaited<T>> {
+        return new this((resolve) => resolve(fn(...args) as Awaited<T> | PromiseLike<Awaited<T>>));
+      },
+    });
+  }
+}
+
+/** Load the client-bundled PDF.js display build exactly once. */
+export function loadPdfJs(): Promise<PdfJsModule> {
+  ensurePdfJsCompatibility();
+
+  if (!runtimeLoad) {
+    runtimeLoad = import('pdfjs-dist/legacy/build/pdf.mjs').then((module) => {
+      const pdfjs = module as unknown as PdfJsModule;
+      pdfjs.GlobalWorkerOptions.workerSrc = resolveWorkerUrl(pdfWorkerUrl);
       return pdfjs;
     });
-    runtimeLoads.set(runtimeUrl, load);
   }
-  return load;
+  return runtimeLoad;
 }
 
 export async function extractPdfTextWithPdfJs(

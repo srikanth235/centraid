@@ -9,7 +9,7 @@
 // (next to zoom) instead of the old text "✨ Faces" toolbar button.
 import { act, narrate } from '../outcomes.ts';
 import { SparkleIcon } from '../icons.tsx';
-import { useEffect, useRef, useState } from '../react-core.min.js';
+import { useEffect, useRef, useState } from 'react';
 import styles from './Enrichment.module.css';
 
 interface EnrichmentStatus {

@@ -1,7 +1,7 @@
 // Type stub for blueprint `…/app-inline` entries under the client tsconfig.
 //
 // Blueprint app sources are authored against the blueprints ambients
-// (window.centraid, HandlerArgs, `./kit.js`, allowImportingTsExtensions) and
+// (window.centraid, HandlerArgs, `./kit.ts`, allowImportingTsExtensions) and
 // must NOT be type-checked under the client program — the shell only touches
 // their default export through the InlineAppModule contract, and the bundler
 // code-splits the real import. A `paths` mapping in packages/client/tsconfig.json

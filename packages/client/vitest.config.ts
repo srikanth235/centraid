@@ -4,8 +4,8 @@ import { inlineBlueprintAliases } from './src/react/blueprints/inline-vite-alias
 
 export default jsdomProject({
   resolve: {
-    // Array form so the inline-app regex aliases (blueprint `./kit.js` /
-    // `./react-core.min.js` → shell shims, issue #505) apply under vitest too.
+    // Array form so the inline-app `./kit.ts` adapter alias applies under
+    // vitest too (issue #505).
     alias: [
       ...inlineBlueprintAliases(),
       {

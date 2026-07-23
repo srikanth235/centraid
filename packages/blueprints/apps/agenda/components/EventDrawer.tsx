@@ -5,12 +5,12 @@
 // list — upcoming.ts/search.ts join schedule_attendee → core_party per event
 // (issue #337); the "You" row (is_you) gets RSVP controls, other guests show
 // their PARTSTAT.
-import { useEffect, useRef, useState } from '../react-core.min.js';
-import { armConfirm, outcomeMessage, renderAttachments } from '../kit.js';
+import { useEffect, useRef, useState } from 'react';
+import { armConfirm, outcomeMessage, renderAttachments } from '../kit.ts';
 import { fmtRange, initials, toIsoUtc, toLocalInput } from '../format.ts';
 import { I } from '../icons.ts';
 import { CalDot, Icon } from './Shared.tsx';
-import type { ChangeEvent } from '../react-core.min.js';
+import type { ChangeEvent } from 'react';
 import type { ActivityEntry, AgEvent, Attendee } from '../types.ts';
 import styles from './EventDrawer.module.css';
 import shared from './shared.module.css';

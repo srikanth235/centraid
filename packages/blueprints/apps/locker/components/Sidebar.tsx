@@ -2,7 +2,7 @@
 // trash, lock + theme. A pure projection of props; clicks call straight back
 // into the callbacks app.tsx wired to logic.ts — the React port of app.js's
 // `LockerSidebar` Lit component.
-import type { ReactNode } from '../react-core.min.js';
+import type { ReactNode } from 'react';
 import { CAT_ORDER, CATS } from '../format.ts';
 import type { Nav } from '../types.ts';
 import { Icon, CatIcon } from './Shared.tsx';

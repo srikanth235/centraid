@@ -7,7 +7,7 @@
 // hygiene — versions.ts/popovers.ts's exact factory pattern: closes over
 // app.tsx's own `data`/`refresh` plus logic.ts's own `act`/`narrate`
 // (passed in, never re-implemented).
-import { toast } from './kit.js';
+import { toast } from './kit.ts';
 import type { ActivityEvent, DriveDoc } from './types.ts';
 
 interface ActivityResult {

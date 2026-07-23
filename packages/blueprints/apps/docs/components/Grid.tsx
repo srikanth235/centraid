@@ -1,5 +1,5 @@
 // Grid view row (#grid root's mapped children).
-import type { MouseEvent } from '../react-core.min.js';
+import type { MouseEvent } from 'react';
 import { fmtBytes, fmtDate, isImage, isVideo, tintBg, typeMeta } from '../format.ts';
 import type { DriveDoc } from '../types.ts';
 import { Checkbox, CustodyDot } from './Shared.tsx';

@@ -2,7 +2,7 @@
 // through the SAME media.delete_asset the grid/lightbox/selection-bar use
 // (selection-actions.ts's runBatchDelete) — a "duplicate" is not a distinct
 // kind of delete, just a different way of arriving at the asset id.
-import { toast } from './kit.js';
+import { toast } from './kit.ts';
 import { act, narrate } from './outcomes.ts';
 
 export async function trashDuplicateAssets(

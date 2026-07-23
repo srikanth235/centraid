@@ -1,12 +1,9 @@
 // governance: allow-repo-hygiene file-size-limit — this file holds the app's whole orchestration as one React tree by design (#505); it is smaller than the served app.tsx + app-inline.tsx it replaces. Splitting it belongs to the app's own code evolution, not this migration.
 // Photos — query-free React tree (issue #505). Holds the `Root` component and
 // every constant, helper and type it needs that does NOT depend on the
-// node-side `./queries/*` handler modules. Both the served shim (app.tsx, for
-// mobile WebViews) and the shell's inline route mount this `Root`; keeping it
-// free of `./queries/*` imports is what lets the gateway's whole-graph bundler
-// serve app.tsx to the browser without dragging node-only handler code into the
-// client graph. The InlineAppModule descriptor (app-inline.tsx) imports `Root`
-// and `PHOTOS_READ_TABLES_LIST` from here and adds the query wiring.
+// node-side `./queries/*` handler modules. The shell's InlineAppModule
+// descriptor imports `Root` and `PHOTOS_READ_TABLES_LIST` from here and adds
+// the query wiring; there is deliberately no parallel served-system-app entry.
 
 import {
   useCallback,
@@ -18,8 +15,8 @@ import {
   type FC,
   type ReactElement,
   type ReactNode,
-} from './react-core.min.js';
-import { debounce, observeWidth, readFailed, subscribeReadUpdates } from './kit.js';
+} from 'react';
+import { debounce, observeWidth, readFailed, subscribeReadUpdates } from './kit.ts';
 import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from './constants.ts';
 import { $ } from './dom.ts';
 import { createDuplicates } from './duplicates.tsx';
@@ -111,6 +108,8 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   // `let` state hoisted into this closure. Runs once, after Chrome has mounted
   // the static skeleton (so the `$('…')` nodes the factories read exist).
   useEffect(() => {
+    let disposed = false;
+
     // ---- slot roots ----
     const setSlot = (key: SlotKey, node: ReactNode): void => {
       slots.current[key] = node;
@@ -154,6 +153,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       data: LibraryData | undefined,
       { record = true }: { record?: boolean } = {},
     ): void {
+      if (disposed) return;
       if (readErrorShown) {
         notice('');
         readErrorShown = false;
@@ -224,7 +224,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         readErrorShown = true;
         return;
       }
-      if (seq !== libraryRefreshSeq) return;
+      if (disposed || seq !== libraryRefreshSeq) return;
       applyLibraryData(data, { record });
     }
 
@@ -735,6 +735,11 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     void refresh({ record: false });
 
     return () => {
+      // A read may resolve after React removes Chrome's DOM. Fence its
+      // continuation before removing listeners so it cannot mutate detached
+      // slots or call the id-based helpers against a now-empty document.
+      disposed = true;
+      libraryRefreshSeq += 1;
       searchInput.removeEventListener('input', onSearchInput);
       searchInput.removeEventListener('keydown', onSearchKeyDown);
       searchClearBtn.removeEventListener('click', onSearchClear);

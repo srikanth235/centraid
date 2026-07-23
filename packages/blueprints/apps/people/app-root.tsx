@@ -1,12 +1,9 @@
 // governance: allow-repo-hygiene file-size-limit — this file holds the app's whole orchestration as one React tree by design (#505); it is smaller than the served app.tsx + app-inline.tsx it replaces. Splitting it belongs to the app's own code evolution, not this migration.
 // People — query-free React tree (issue #505). Holds the `Root` component and
 // every constant, helper and type it needs that does NOT depend on the
-// node-side `./queries/*` handler modules. Both the served shim (app.tsx, for
-// mobile WebViews) and the shell's inline route mount this `Root`; keeping it
-// free of `./queries/*` imports is what lets the gateway's whole-graph bundler
-// serve app.tsx to the browser without dragging node-only handler code into the
-// client graph. The InlineAppModule descriptor (app-inline.tsx) imports `Root`
-// and `CHANGE_TABLES` from here and adds the query wiring.
+// node-side `./queries/*` handler modules. The shell's InlineAppModule
+// descriptor imports `Root` and `CHANGE_TABLES` from here and adds the query
+// wiring; there is deliberately no parallel served-system-app entry.
 
 import {
   useCallback,
@@ -17,7 +14,7 @@ import {
   useState,
   type KeyboardEvent,
   type ReactElement,
-} from './react-core.min.js';
+} from 'react';
 import {
   closePopover,
   debounce,
@@ -27,7 +24,7 @@ import {
   onFocusRefresh,
   readFailed,
   wireThemeToggle,
-} from './kit.js';
+} from './kit.ts';
 import { createLogic } from './logic.ts';
 import { avatarColor, hashInt, listName, PALETTE } from './format.ts';
 import { I } from './icons.ts';
