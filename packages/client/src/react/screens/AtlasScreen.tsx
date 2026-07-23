@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
-import type {
-  AtlasCensusPayload,
-  AtlasGraphPayload,
-  AtlasPulsePayload,
+import {
+  browseRows,
+  type AtlasCensusPayload,
+  type AtlasGraphPayload,
+  type AtlasPulsePayload,
 } from '../../gateway-client.js';
 import Icon from '../ui/Icon.js';
 import { cx } from '../ui/cx.js';
@@ -32,7 +33,7 @@ type TabId = 'kinds' | 'relations' | 'browse';
 
 const TABS: readonly { id: TabId; label: string }[] = [
   { id: 'kinds', label: 'Kinds' },
-  { id: 'relations', label: 'Relations' },
+  { id: 'relations', label: 'Map' },
   { id: 'browse', label: 'Browse' },
 ];
 
@@ -88,6 +89,13 @@ export default function AtlasScreen({
     setTab('browse');
   }, []);
 
+  // The Map tab's "A few of yours" fetcher — the Browse rows endpoint, capped at
+  // three, reusing the same journalled read path (zero new plumbing).
+  const fetchSampleRows = useCallback(
+    (logical: string) => browseRows({ table: logical, limit: 3 }).then((r) => r.rows),
+    [],
+  );
+
   return (
     <div className={styles.page}>
       <div className={styles.head}>
@@ -135,7 +143,9 @@ export default function AtlasScreen({
         )
       ) : null}
 
-      {tab === 'relations' ? <AtlasRelationsTab graph={graph} /> : null}
+      {tab === 'relations' ? (
+        <AtlasRelationsTab graph={graph} fetchSampleRows={fetchSampleRows} />
+      ) : null}
       {tab === 'browse' ? <AtlasBrowseTab initialTable={browseTable} /> : null}
     </div>
   );

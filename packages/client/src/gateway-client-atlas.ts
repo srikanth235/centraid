@@ -74,6 +74,19 @@ export interface AtlasGraphNode {
   pack: string;
   packKind: 'ontology' | 'machinery';
   packLabel: string;
+  /**
+   * Curated human-friendly display name — always present. The Relations page
+   * shows this instead of the SQL name (People, not core_party). Curated
+   * ontology kinds get their `ATLAS_KIND_FRIENDLY` name; everything else falls
+   * back to the humanized `label`.
+   */
+  friendly?: string;
+  /**
+   * Curated one-line plain-English description — emitted ONLY for kinds with a
+   * hand-written `ATLAS_KIND_FRIENDLY` entry (ontology). Absent otherwise; the
+   * server never fabricates a blurb.
+   */
+  blurb?: string;
   hopDistance: number | null;
   selfRef: boolean;
 }
