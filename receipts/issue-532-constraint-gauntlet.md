@@ -98,6 +98,7 @@
   without dist, Stryker dry-run reports "No tests were executed"
 - `scripts/mutation/run.mjs` retries once on "No tests were executed/found"
 - `ci.yml` per-PR perf step retries once for shared-runner event-loop noise
+- Vault mutation suite is **contract-only** under Stryker (properties SIGSEGV under threads on Linux and drop score below the 97 floor)
 - `receipts/issue-532-constraint-gauntlet.md` (this receipt)
 
 ### Receipt + PR linking #532

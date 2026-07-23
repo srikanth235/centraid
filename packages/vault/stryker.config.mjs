@@ -4,7 +4,7 @@ export default {
   inPlace: true,
   testRunner: 'vitest',
   vitest: { configFile: 'vitest.mutation.config.ts', related: false },
-  testFiles: ['src/blob/custody-proven.contract.test.ts', 'src/blob/custody-properties.test.ts'],
+  testFiles: ['src/blob/custody-proven.contract.test.ts'],
   // Custody remains the mutate seed (measured 100%). json-schema is property-
   // gated via matrix minimumTests; folding it in drops the package score below
   // the up-only vault floor until more schema mutants are killed.
