@@ -5,7 +5,11 @@ import { cx } from '../ui/cx.js';
 import styles from './SettingsDiagnosticsScreen.module.css';
 import buttonCss from '../ui/Button.module.css';
 import controlsCss from '../styles/controls.module.css';
-import type { BackgroundPauseDTO, ResourceProfileDTO } from './resource-summary.js';
+import type {
+  BackgroundPauseDTO,
+  PowerContextState,
+  ResourceProfileDTO,
+} from './resource-summary.js';
 
 // Gateway → Components: the owner surface over the gateway's
 // component-level health (`GET /centraid/_gateway/health`). Uptime says
@@ -59,6 +63,12 @@ export interface HealthMetricsDTO {
    * gateways only; absent hides the Resource card's pause control.
    */
   backgroundPause?: BackgroundPauseDTO;
+  /**
+   * Power-context posture (issue #528 Phase D) — the gateway host's battery /
+   * mains / server situation. Present on modern gateways only; drives the
+   * Resource card's posture note (battery/thermal chrome or a server fact).
+   */
+  powerContext?: PowerContextState;
   uptimeMs: number;
 }
 

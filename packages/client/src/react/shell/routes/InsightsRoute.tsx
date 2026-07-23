@@ -1,5 +1,5 @@
 import { useState, type JSX } from 'react';
-import { getInsightsSummary, listAutomations } from '../../../gateway-client.js';
+import { getGatewayHealth, getInsightsSummary, listAutomations } from '../../../gateway-client.js';
 import InsightsScreen from '../../screens/InsightsScreen.js';
 import { useShellActions } from '../actions.js';
 import PageScroll from '../PageScroll.js';
@@ -14,12 +14,16 @@ export default function InsightsRoute(): JSX.Element {
   const [windowDays, setWindowDays] = useState(30);
 
   const state = useAsyncData(async () => {
-    const [summary, automations] = await Promise.all([
+    // Health carries the optional resource receipt (#528 Phase C); its failure
+    // must never break Insights, so it resolves to null on any error.
+    const [summary, automations, health] = await Promise.all([
       getInsightsSummary({ windowDays }),
       listAutomations().catch(() => [] as CentraidAutomationRow[]),
+      getGatewayHealth().catch(() => null),
     ]);
     const nameByRef = new Map(automations.map((a) => [a.ref, a.name]));
     return {
+      resourceUsage: health?.metrics?.resourceUsage,
       ...summary,
       bySource: summary.bySource.map((row) =>
         row.kind === 'automation'
@@ -46,6 +50,7 @@ export default function InsightsRoute(): JSX.Element {
       ) : (
         <InsightsScreen
           summary={state.data}
+          resourceUsage={state.data.resourceUsage}
           windowDays={windowDays}
           onWindowDays={setWindowDays}
           onOpenRun={(automationId, runId) => navigate({ kind: 'run-view', automationId, runId })}

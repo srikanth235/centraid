@@ -11,6 +11,7 @@
 // import sites.
 
 import type { TileVariant } from '@centraid/design-tokens';
+import type { ResourceUsageDTO } from './screens/resource-summary.js';
 
 // The bridge is intentionally self-contained — it must not import the vanilla
 // shell modules, whose ambient globals aren't in the React island's tsconfig.
@@ -151,6 +152,9 @@ export interface InsightsBridgeProps {
   windowDays: number;
   onWindowDays: (days: number) => void;
   onOpenRun?: (automationId: string, runId: string) => void;
+  /** Measured resource actuals from `health.metrics.resourceUsage` (#528 Phase
+   *  C); absent on older gateways, which renders a quiet "not available" line. */
+  resourceUsage?: ResourceUsageDTO;
 }
 
 // ── Vault pane ────────────────────────────────────────────────────────────

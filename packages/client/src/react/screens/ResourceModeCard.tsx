@@ -4,13 +4,18 @@ import styles from './GatewayScreen.module.css';
 import buttonCss from '../ui/Button.module.css';
 import controlsCss from '../styles/controls.module.css';
 import ResourceCardDetails from './ResourceCardDetails.js';
+import ResourceAdvancedKnobs from './ResourceAdvancedKnobs.js';
+import PowerPostureNote from './PowerPostureNote.js';
 import {
   formatBudgetSummary,
   formatPauseUntil,
   msUntilTonight,
   PAUSE_ONE_HOUR_MS,
   type BackgroundPauseDTO,
+  type PowerContextState,
+  type ResourceKnobPrefs,
   type ResourceProfileDTO,
+  type TunableKnobKey,
 } from './resource-summary.js';
 
 // Owner Resource mode control (#521). Writes `gateway.resourceMode` through
@@ -69,10 +74,25 @@ export interface ResourceModeCardProps {
    * on every poll.
    */
   backgroundPause?: BackgroundPauseDTO;
+  /**
+   * Power-context posture from `health.metrics.powerContext` (issue #528 Phase
+   * D). Present on modern gateways only. Drives a compact posture note about
+   * the gateway HOST — battery/thermal chrome only when the host has a battery,
+   * a shared-server CPU-steal fact otherwise. Absent → no posture note.
+   */
+  powerContext?: PowerContextState;
   /** Hot-apply a background-work pause; absent ⇒ no pause control. */
   onPause?: (durationMs?: number) => Promise<{ paused: boolean; until: string | null }>;
   /** Lift a background-work pause; absent ⇒ no pause control. */
   onResume?: () => Promise<{ paused: boolean }>;
+  /**
+   * Load saved knob overrides for the L3 "Tune" rung (issue #528 Phase F).
+   * Absent (or a profile without `sources`/`bounds`) hides the Advanced
+   * section entirely.
+   */
+  loadKnobPrefs?: () => Promise<ResourceKnobPrefs>;
+  /** Persist a knob override; `null` clears it back to Linked. */
+  saveKnobPrefs?: (patch: Partial<Record<TunableKnobKey, number | null>>) => Promise<void>;
 }
 
 export function parseResourceModePref(prefs: Record<string, unknown>): ResourceMode {
@@ -90,8 +110,11 @@ export default function ResourceModeCard({
   activeMode,
   resourceProfile,
   backgroundPause,
+  powerContext,
   onPause,
   onResume,
+  loadKnobPrefs,
+  saveKnobPrefs,
 }: ResourceModeCardProps): JSX.Element {
   const [mode, setMode] = useState<ResourceMode>('auto');
   const [busy, setBusy] = useState(false);
@@ -286,10 +309,18 @@ export default function ResourceModeCard({
           <div className={styles.resourceSummaryAttr}>Sized for this gateway’s host</div>
         </div>
       ) : null}
+      {powerContext ? <PowerPostureNote power={powerContext} /> : null}
       {applied ? <div className={styles.resourceNote}>{applied}</div> : null}
       {savedNote ? <div className={styles.resourceNote}>{savedNote}</div> : null}
       {error ? <div className={styles.resourceError}>Couldn’t save: {error}</div> : null}
       {resourceProfile ? <ResourceCardDetails profile={resourceProfile} /> : null}
+      {resourceProfile?.sources && resourceProfile.bounds && loadKnobPrefs && saveKnobPrefs ? (
+        <ResourceAdvancedKnobs
+          profile={resourceProfile}
+          loadKnobPrefs={loadKnobPrefs}
+          saveKnobPrefs={saveKnobPrefs}
+        />
+      ) : null}
     </section>
   );
 }

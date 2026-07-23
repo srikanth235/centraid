@@ -84,10 +84,10 @@ Per-subsystem actuals (CPU-seconds, RSS, bytes replicated/uploaded, activity tim
 
 Resource receipt surfaced in Insights alongside cost; agent-run usage included and labeled even though unthrottled:
 
-- `packages/client/src/react/screens/ResourceReceiptPanel.tsx` + `ResourceReceiptPanel.module.css` — the receipt card: accounting window, process CPU/memory, per-subsystem rows; the agent-runs row is explicitly labeled "Measured, not limited by Conserve"
+- `packages/client/src/react/screens/ResourceReceiptPanel.tsx` + `packages/client/src/react/screens/ResourceReceiptPanel.module.css` — the receipt card: accounting window, process CPU/memory, per-subsystem rows; the agent-runs row is explicitly labeled "Measured, not limited by Conserve"
 - `packages/client/src/react/screens/ResourceReceiptPanel.test.tsx` — subsystem rows, formatting spot-checks, agent-run label, wakeups shown/omitted, absent-DTO graceful state
 - `packages/client/src/react/screens/InsightsScreen.tsx` — mounts the receipt panel beside cost transparency
-- `packages/client/src/react/shell/routes/InsightsRoute.tsx` / `InsightsRoute.test.tsx` — fetches gateway health as a tolerated third arm of the existing `Promise.all`; a health failure never breaks Insights
+- `packages/client/src/react/shell/routes/InsightsRoute.tsx` / `packages/client/src/react/shell/routes/InsightsRoute.test.tsx` — fetches gateway health as a tolerated third arm of the existing `Promise.all`; a health failure never breaks Insights
 - `packages/client/src/react/screen-contracts.ts` — `InsightsBridgeProps.resourceUsage?`
 - `packages/client/src/centraid-api.d.ts` — `CentraidResourceUsage` on both `CentraidHealthMetrics` declarations
 
@@ -104,7 +104,7 @@ Agent-run child processes run at background OS priority with a documented per-pl
 Idle wakeup target documented and measurable via the receipt; known offenders audited — gateway loops already adaptive, client 1s uptime ticker now visibility-gated:
 
 - `packages/gateway/src/serve/power-context.ts` — module doc records the idle target (≤ 120 background timer fires/hour, measured by `backgroundTimerFiresLastHour`) and the audited timer inventory (outbox 60s adaptive, lease 60s, backup 1h unref'd, sweeps 1–2h, SSE heartbeats per-open-stream unref'd — no standing sub-minute idle wakeup)
-- `packages/client/src/react/shell/routes/visibility-ticker.ts` + `visibility-ticker.test.ts` — SSR-safe ticker that pauses while `document.visibilityState === 'hidden'` and catches up on return
+- `packages/client/src/react/shell/routes/visibility-ticker.ts` + `packages/client/src/react/shell/routes/visibility-ticker.test.ts` — SSR-safe ticker that pauses while `document.visibilityState === 'hidden'` and catches up on return
 - `packages/client/src/react/shell/routes/GatewayRoute.tsx` — the 1s uptime ticker (the audit's client-side offender) now runs through the visibility ticker
 
 Host power context detected (battery / mains / headless server); battery and thermal UI render only when the host has a battery — never on a VPS:
@@ -114,7 +114,7 @@ Host power context detected (battery / mains / headless server); battery and the
 - `packages/gateway/src/routes/resource-routes.ts` / `resource-routes.test.ts` — `POST`/`DELETE /centraid/_gateway/resource/power-context` with strict validation (the desktop pushes battery/thermal state; Electron owns the battery signal)
 - `apps/desktop/src/main/power-context-push.ts` — push helper + `powerMonitor` listener registration (`isOnBatteryPower`, macOS thermal state; Electron exposes no battery percent, so `batteryPercent: null`)
 - `apps/desktop/src/main.ts` / `apps/desktop/src/main/gateway-monitor.ts` — push piggybacks on the existing 5s heartbeat tick; power transitions nudge an immediate tick
-- `packages/client/src/react/screens/PowerPostureNote.tsx` + `PowerPostureNote.test.tsx` — battery chrome strictly gated on `battery !== null`; host-attribution sub-line ("On this gateway's host")
+- `packages/client/src/react/screens/PowerPostureNote.tsx` + `packages/client/src/react/screens/PowerPostureNote.test.tsx` — battery chrome strictly gated on `battery !== null`; host-attribution sub-line ("On this gateway's host")
 
 On battery hosts: posture defers heavy background work, low-battery floor pauses it, thermal pressure backs off — visible on health, never a silent durable mode change:
 
@@ -253,3 +253,5 @@ PASS. Only the single mid-task scope-redirect above is recorded. No routine ackn
 | claude-code-aa0d5e54-559-1784810120-1 | claude-code | aa0d5e54-559c-44f9-a288-6184b51ff25b | #528 | claude-fable-5 | 6 | 3708 | 600837 | 1653 | 5367 | 0.7299 | 220 | 692973 | 13729642 | 205920 | feat(gateway): resource actuals, power posture, cgroup-aware budgets, knob prefs |
 | claude-code-aa0d5e54-559-1784810183-1 | claude-code | aa0d5e54-559c-44f9-a288-6184b51ff25b | #528 | claude-fable-5 | 12 | 9574 | 1214151 | 4026 | 13612 | 1.5352 | 232 | 702547 | 14943793 | 209946 | feat(gateway): resource actuals, power posture, cgroup-aware budgets, knob prefs |
 | claude-code-aa0d5e54-559-1784810233-1 | claude-code | aa0d5e54-559c-44f9-a288-6184b51ff25b | #528 | claude-fable-5 | 6 | 12033 | 615618 | 1428 | 13467 | 0.8375 | 238 | 714580 | 15559411 | 211374 | feat(desktop): push host power context to the gateway (#528)Electron owns the ba |
+| claude-code-aa0d5e54-559-1784810281-1 | claude-code | aa0d5e54-559c-44f9-a288-6184b51ff25b | #528 | claude-fable-5 | 2 | 539 | 209217 | 532 | 1073 | 0.2426 | 240 | 715119 | 15768628 | 211906 | feat(client): resource receipt, power posture note, advanced knobs (#528)Phases  |
+| claude-code-aa0d5e54-559-1784810348-1 | claude-code | aa0d5e54-559c-44f9-a288-6184b51ff25b | #528 | claude-fable-5 | 16 | 9929 | 1686034 | 9368 | 19313 | 2.2787 | 256 | 725048 | 17454662 | 221274 | feat(client): resource receipt, power posture note, advanced knobs (#528)Phases  |
