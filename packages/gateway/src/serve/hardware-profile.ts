@@ -1,9 +1,13 @@
 import { availableParallelism, totalmem } from 'node:os';
+import { parseResourceMode, resourceModeLabel, type ResourceMode } from './resource-mode.js';
 
 export type HardwareClass = 'constrained' | 'standard';
+export type { ResourceMode };
 
 export interface GatewayHardwareProfile {
   class: HardwareClass;
+  /** Owner/operator Resource mode that selected this profile. */
+  resourceMode: ResourceMode;
   cores: number;
   totalMemoryBytes: number;
   storageFsyncMs: number | null;
@@ -31,11 +35,45 @@ function integerOverride(
   return Number.isFinite(parsed) && parsed >= minimum ? Math.min(parsed, maximum) : fallback;
 }
 
+/**
+ * Map Resource mode onto a hardware class when the operator has not pinned
+ * `CENTRAID_HARDWARE_PROFILE`. Auto keeps detection; Conserve pins
+ * constrained; Balanced/Performance pin standard (Performance raises
+ * throughput knobs further below).
+ */
+export function hardwareClassForResourceMode(
+  mode: ResourceMode,
+  detected: HardwareClass,
+): HardwareClass {
+  switch (mode) {
+    case 'auto':
+      return detected;
+    case 'conserve':
+      return 'constrained';
+    case 'balanced':
+    case 'performance':
+      return 'standard';
+  }
+}
+
+export function formatHardwareProfileDetail(profile: GatewayHardwareProfile): string {
+  return (
+    `mode=${resourceModeLabel(profile.resourceMode)} (${profile.resourceMode}); ` +
+    `class=${profile.class}; sqlite=${profile.sqliteSynchronous}; ` +
+    `workers=${profile.workerMaxConcurrent}x${profile.workerMaxOldGenerationMb}MB; ` +
+    `pool=${profile.workerPoolSize}; replication=${profile.replicationConcurrency}; ` +
+    `compression=br${profile.staticBrotliQuality}/gz${profile.staticGzipQuality}; ` +
+    `mount=${profile.vaultMountStrategy}; sweep=${profile.vaultSweepIntervalMs}ms`
+  );
+}
+
 export function resolveGatewayHardwareProfile(
   input: {
     cores?: number;
     totalMemoryBytes?: number;
     storageFsyncMs?: number;
+    /** Durable/owner Resource mode (prefs or daemon config). */
+    resourceMode?: ResourceMode;
   } = {},
   env: NodeJS.ProcessEnv = process.env,
 ): GatewayHardwareProfile {
@@ -46,39 +84,62 @@ export function resolveGatewayHardwareProfile(
     cores <= 4 || totalMemoryBytes <= 4 * 1024 ** 3 || (storageFsyncMs ?? 0) >= 8
       ? 'constrained'
       : 'standard';
+
+  const resourceMode: ResourceMode =
+    input.resourceMode ?? parseResourceMode(env.CENTRAID_RESOURCE_MODE) ?? 'auto';
+
   const requested = env.CENTRAID_HARDWARE_PROFILE;
+  // Explicit env class still wins (operator override). Otherwise Resource
+  // mode selects; Auto falls through to detection.
   const hardwareClass: HardwareClass =
-    requested === 'constrained' || requested === 'standard' ? requested : detected;
+    requested === 'constrained' || requested === 'standard'
+      ? requested
+      : hardwareClassForResourceMode(resourceMode, detected);
+
+  // NORMAL durability only on an explicit constrained choice — either the
+  // classic env pin or owner Conserve mode — never on mere auto-detection
+  // of a small host (matches #456: only intentional low-end opts in).
   const syncOverride = env.CENTRAID_SQLITE_SYNCHRONOUS?.toUpperCase();
+  const explicitConstrained =
+    requested === 'constrained' || (requested === undefined && resourceMode === 'conserve');
   const sqliteSynchronous =
     syncOverride === 'FULL' || syncOverride === 'NORMAL'
       ? syncOverride
-      : requested === 'constrained'
+      : explicitConstrained
         ? 'NORMAL'
         : 'FULL';
+
   const constrained = hardwareClass === 'constrained';
+  const performance = !constrained && resourceMode === 'performance';
+
   return {
     class: hardwareClass,
+    resourceMode,
     cores,
     totalMemoryBytes,
     storageFsyncMs,
     sqliteSynchronous,
     workerMaxConcurrent: integerOverride(
       env.CENTRAID_WORKER_MAX_CONCURRENT,
-      constrained ? 2 : 8,
+      constrained ? 2 : performance ? 12 : 8,
       1,
       32,
     ),
     workerMaxOldGenerationMb: integerOverride(
       env.CENTRAID_WORKER_MAX_OLD_GENERATION_MB,
-      constrained ? 128 : 256,
+      constrained ? 128 : performance ? 384 : 256,
       8,
       1_024,
     ),
-    workerPoolSize: integerOverride(env.CENTRAID_WORKER_POOL_SIZE, constrained ? 0 : 2, 0, 8),
+    workerPoolSize: integerOverride(
+      env.CENTRAID_WORKER_POOL_SIZE,
+      constrained ? 0 : performance ? 4 : 2,
+      0,
+      8,
+    ),
     replicationConcurrency: integerOverride(
       env.CENTRAID_REPLICATION_CONCURRENCY,
-      constrained ? 1 : 3,
+      constrained ? 1 : performance ? 4 : 3,
       1,
       8,
     ),

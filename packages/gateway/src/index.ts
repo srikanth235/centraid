@@ -39,6 +39,32 @@ export {
   type HealthMetrics,
 } from './serve/health-registry.js';
 export {
+  RESOURCE_MODE_PREF_KEY,
+  RESOURCE_MODES,
+  formatEventLoopDetail,
+  formatLoadShedDeferringDetail,
+  formatRss,
+  isResourceMode,
+  parseResourceMode,
+  resolveResourceMode,
+  resourceModeLabel,
+  type ResourceMode,
+} from './serve/resource-mode.js';
+export {
+  formatHardwareProfileDetail,
+  hardwareClassForResourceMode,
+  resolveGatewayHardwareProfile,
+  type GatewayHardwareProfile,
+  type HardwareClass,
+} from './serve/hardware-profile.js';
+export {
+  evaluateDiskFreeStatus,
+  DISK_DEGRADED_BELOW_BYTES,
+  DISK_DEGRADED_BELOW_PERCENT,
+  DISK_ERROR_BELOW_BYTES,
+  DISK_ERROR_BELOW_PERCENT,
+} from './serve/disk-health.js';
+export {
   GatewayPerformanceMonitor,
   type GatewayPerformanceSnapshot,
   type GatewayPerformanceMonitorOptions,

@@ -2,12 +2,19 @@ import { type JSX, useEffect, useState } from 'react';
 import {
   createGatewayDeviceTicket,
   getGatewayDeviceWorkStatus,
+  getUserPrefs,
   listGatewayDevices,
   revokeGatewayDevice,
+  saveUserPrefs,
   setGatewayDeviceCompute,
   streamGatewayLogs,
 } from '../../../gateway-client.js';
 import GatewayScreen from '../../screens/GatewayScreen.js';
+import {
+  parseResourceModePref,
+  RESOURCE_MODE_PREF_KEY,
+  type ResourceMode,
+} from '../../screens/ResourceModeCard.js';
 import { useShellActions } from '../actions.js';
 import PageScroll from '../PageScroll.js';
 import { PageLoading } from '../status.js';
@@ -114,6 +121,12 @@ export default function GatewayRoute(): JSX.Element {
         loadDeviceWorkStatus={getGatewayDeviceWorkStatus}
         onRestartGateway={() => window.CentraidApi.restartGateway()}
         onExportDiagnostics={() => window.CentraidApi.exportGatewayDiagnostics()}
+        loadResourceMode={async (): Promise<ResourceMode> =>
+          parseResourceModePref(await getUserPrefs())
+        }
+        saveResourceMode={async (mode: ResourceMode) => {
+          await saveUserPrefs({ [RESOURCE_MODE_PREF_KEY]: mode });
+        }}
       />
     </PageScroll>
   );
