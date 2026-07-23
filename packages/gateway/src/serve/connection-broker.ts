@@ -488,8 +488,12 @@ export class ConnectionBroker {
 
   private readRow(
     plane: VaultPlane,
-    connector: { kind: string; label: string },
+    connector: { kind: string; label: string; connectionId?: string },
   ): ConnectionCredRow | undefined {
+    // Prefer durable connection id when the automation/manifest carries one.
+    if (connector.connectionId) {
+      return this.readRowById(plane, connector.connectionId);
+    }
     // No credential sidecar row = the harness-ambient lane (issue #290).
     return plane.db.vault
       .prepare(

@@ -1,0 +1,37 @@
+{
+  "name": "Outlook Calendar sync",
+  "version": "0.1.0",
+  "description": "Pulls Outlook calendar events into the vault — read-only Microsoft Graph.",
+  "enabled": false,
+  "prompt": "Pulls Outlook calendar events into the vault — read-only Microsoft Graph.",
+  "triggers": [
+    {
+      "kind": "cron",
+      "expr": "35 * * * *"
+    }
+  ],
+  "requires": {},
+  "connector": {
+    "kind": "pull.outlookcal",
+    "label": "personal"
+  },
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Stages Outlook calendar events into the vault as core.event rows.",
+    "scopes": [
+      {
+        "schema": "sync",
+        "verbs": "read+act"
+      }
+    ]
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-07-23T00:00:00.000Z"
+  }
+}

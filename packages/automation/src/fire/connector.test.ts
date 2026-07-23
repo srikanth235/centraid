@@ -46,6 +46,28 @@ describe('connector manifest contract', () => {
     });
   });
 
+  it('accepts connector.connectionId and soft connections bindings', () => {
+    const m = validateManifest(
+      rawManifest({
+        connector: {
+          kind: 'mcp.gmail',
+          label: 'personal',
+          principal: 'me@example.com',
+          connectionId: 'conn-abc',
+        },
+      }),
+    );
+    expect(m.connector?.connectionId).toBe('conn-abc');
+    const soft = validateManifest(
+      rawManifest({
+        connector: undefined,
+        vault: undefined,
+        connections: [{ connectionId: 'c1', kind: 'pull.github', label: 'work' }],
+      }),
+    );
+    expect(soft.connections).toEqual([{ connectionId: 'c1', kind: 'pull.github', label: 'work' }]);
+  });
+
   it('refuses a connector without a vault block', () => {
     const raw = rawManifest();
     delete raw.vault;

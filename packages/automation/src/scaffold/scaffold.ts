@@ -27,6 +27,8 @@ import {
   type Manifest,
   type Trigger,
   type HistoryKeep,
+  type ConnectionBinding,
+  type ConnectorSpec,
   type ManifestVault,
 } from '../manifest/manifest.js';
 import { isValidAppId } from '@centraid/app-engine';
@@ -65,6 +67,10 @@ export interface ScaffoldOptions {
    * scaffolding an automation that can never evaluate its own trigger.
    */
   vault?: ManifestVault;
+  /** Published connector block (deterministic pull/send). */
+  connector?: ConnectorSpec;
+  /** Soft credential bindings for agent-using automations. */
+  connections?: readonly ConnectionBinding[];
   /**
    * Initial `enabled` flag. Defaults to `true`. The conversational
    * builder scaffolds a *draft* (`false`) so the cron does not start
@@ -193,6 +199,8 @@ function starterManifest(name: string, opts: ScaffoldOptions): Manifest {
   if (opts.apps && opts.apps.length > 0) raw.apps = [...opts.apps];
   if (opts.onFailure?.trim()) raw.onFailure = opts.onFailure.trim();
   if (opts.vault) raw.vault = opts.vault;
+  if (opts.connector) raw.connector = opts.connector;
+  if (opts.connections && opts.connections.length > 0) raw.connections = [...opts.connections];
   // Round-trip through the validator so a scaffold can never write a
   // manifest the runtime would later reject.
   return validateManifest(raw);

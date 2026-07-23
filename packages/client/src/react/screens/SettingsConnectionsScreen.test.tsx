@@ -26,7 +26,29 @@ function makeProvider(over: Partial<ProviderOptionDTO> = {}): ProviderOptionDTO 
   return {
     allowedHosts: ['gmail.googleapis.com'],
     authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-    connectors: [{ kind: 'pull.gmail', scope: 'gmail.readonly', templateId: 'google-gmail-pull' }],
+    capabilities: {
+      actions: [
+        {
+          id: 'action:list:pull.gmail',
+          kind: 'pull.gmail',
+          title: 'List Gmail',
+          toolName: 'connector.pull_gmail.list',
+        },
+      ],
+      syncs: [
+        {
+          defaultCron: '0 * * * *',
+          id: 'sync:google-gmail-pull',
+          kind: 'pull.gmail',
+          templateId: 'google-gmail-pull',
+          title: 'Gmail sync',
+        },
+      ],
+    },
+    connectors: [
+      { kind: 'pull.gmail', scope: 'gmail.readonly', templateId: 'google-gmail-pull' },
+      { kind: 'pull.gcal', scope: 'calendar.readonly', templateId: 'google-calendar-pull' },
+    ],
     credKind: 'oauth2',
     id: 'google',
     name: 'Google (Gmail, Calendar, Contacts, Drive)',
@@ -42,9 +64,12 @@ function makeProps(
 ): SettingsConnectionsBridgeProps {
   return {
     beginAuthorize: vi.fn().mockResolvedValue('https://accounts.google.com/authorize?state=s1'),
-    configureConnection: vi.fn().mockResolvedValue(undefined),
+    configureConnection: vi.fn().mockResolvedValue({ connectionId: 'c-new', status: 'needs-auth' }),
     detachConnection: vi.fn().mockResolvedValue(undefined),
     loadConnections: vi.fn().mockResolvedValue([makeRow()]),
+    loadOAuthCallbackUri: vi
+      .fn()
+      .mockResolvedValue('http://127.0.0.1:17832/centraid/_vault/oauth/callback'),
     loadProviders: vi.fn().mockResolvedValue([makeProvider()]),
     setConnectionStatus: vi.fn().mockResolvedValue(undefined),
     showToast: vi.fn(),
@@ -74,37 +99,42 @@ async function mount(props: SettingsConnectionsBridgeProps): Promise<HTMLDivElem
     root = createRoot(container as HTMLDivElement);
     root.render(<SettingsConnectionsScreen {...props} />);
   });
+  // Connections + providers load in effects
   await act(async () => {
+    await Promise.resolve();
     await Promise.resolve();
   });
   return container;
 }
 
 describe('SettingsConnectionsScreen', () => {
-  it('renders a connection row with its health + an Authorize action for a needs-auth oauth2 row', async () => {
+  it('renders gallery chrome, connected rows, and featured tiles', async () => {
     const el = await mount(makeProps());
-    expect(el.querySelectorAll('.row').length).toBe(1);
+    expect(el.textContent).toContain('Connectors');
+    expect(el.textContent).toContain('Featured');
+    expect(el.textContent).toMatch(/connections/i);
+    expect(el.querySelectorAll('[data-testid="connector-row"]').length).toBe(1);
     expect(el.textContent).toContain('Google · Gmail');
     expect(el.textContent).toContain('Needs authorization');
-    const buttons = [...el.querySelectorAll('button')].map((b) => b.textContent);
-    expect(buttons).toContain('Authorize');
-    expect(buttons).toContain('Pause');
-    expect(buttons).toContain('Remove');
+    // Featured tiles from provider connectors
+    expect(el.querySelectorAll('[data-testid="connector-tile"]').length).toBeGreaterThanOrEqual(1);
+    expect(el.textContent).toContain('Gmail');
+    expect(el.textContent).toContain('Google Calendar');
   });
 
-  it('shows the empty state when there are no connections', async () => {
+  it('shows empty connected state when there are no connections', async () => {
     const el = await mount(makeProps({ loadConnections: vi.fn().mockResolvedValue([]) }));
-    expect(el.querySelector('.inlineEmpty')).toBeTruthy();
-    expect(el.textContent).toContain('No connections configured yet.');
+    expect(el.textContent).toContain('No connectors configured yet');
   });
 
-  it('opens the authorize URL and refreshes the list', async () => {
+  it('opens the authorize URL via Reconnect and refreshes the list', async () => {
     const props = makeProps();
     const el = await mount(props);
-    const authorizeBtn = [...el.querySelectorAll('button')].find(
-      (b) => b.textContent === 'Authorize',
+    expect(el.textContent).toContain('needs attention');
+    const reconnectBtn = [...el.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Reconnect',
     );
-    await act(async () => authorizeBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await act(async () => reconnectBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await act(async () => {
       await Promise.resolve();
     });
@@ -157,25 +187,37 @@ describe('SettingsConnectionsScreen', () => {
     expect(props.showToast).toHaveBeenCalledWith(expect.stringContaining('awaiting a decision'));
   });
 
-  it('opens the add-connection wizard and submits a new oauth2 connection', async () => {
-    const props = makeProps();
+  it('opens a featured tile into the detail sheet, then OAuth 2.0 form + authorize', async () => {
+    const props = makeProps({ loadConnections: vi.fn().mockResolvedValue([]) });
     const el = await mount(props);
-    const addBtn = [...el.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes('Add connection'),
+    const gmailTile = [...el.querySelectorAll('[data-testid="connector-tile"]')].find((b) =>
+      b.textContent?.includes('Gmail'),
     );
-    await act(async () => addBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    await act(async () => {
-      await Promise.resolve();
-    });
+    expect(gmailTile).toBeTruthy();
+    expect(gmailTile?.textContent).toContain('OAuth 2.0');
+    await act(async () => gmailTile?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
 
-    expect(el.querySelector('.wizard')).toBeTruthy();
-    // Both the Label and Client ID fields are `type="text"` — find each
-    // input by its own `.wizardField` label text rather than by type/order.
+    const sheet = el.querySelector('[data-testid="connector-sheet"]');
+    expect(sheet).toBeTruthy();
+    expect(sheet?.textContent).toContain('About this Connector');
+    expect(sheet?.querySelector('[data-testid="connector-auth-kind"]')?.textContent).toContain(
+      'OAuth 2.0',
+    );
+
+    const connectBtn = [...(sheet?.querySelectorAll('button') ?? [])].find((b) =>
+      b.textContent?.includes('Connect with OAuth 2.0'),
+    );
+    await act(async () => connectBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(el.querySelector('[data-testid="connector-wizard"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="oauth-redirect-uri"]')).toBeTruthy();
+    expect(el.textContent).toContain('Client ID');
+    expect(el.textContent).toContain('Client secret');
+
     const fieldInput = (labelText: string): HTMLInputElement | null => {
-      const field = [...el.querySelectorAll('.wizardField')].find((f) =>
-        f.querySelector('.wizardLabel')?.textContent?.includes(labelText),
+      const labels = [...el.querySelectorAll('label')].find((l) =>
+        l.textContent?.includes(labelText),
       );
-      return field?.querySelector('input') ?? null;
+      return labels?.querySelector('input') ?? null;
     };
     const idInput = fieldInput('Client ID');
     const secretInput = fieldInput('Client secret');
@@ -190,11 +232,15 @@ describe('SettingsConnectionsScreen', () => {
       if (secretInput) setNativeValue(secretInput, 'my-client-secret');
     });
 
-    const saveBtn = [...el.querySelectorAll('.wizard button')].find((b) =>
-      b.textContent?.includes('Save connection'),
+    const saveBtn = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Save & authorize'),
     );
     expect(saveBtn?.hasAttribute('disabled')).toBe(false);
     await act(async () => saveBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
 
     expect(props.configureConnection).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -205,5 +251,24 @@ describe('SettingsConnectionsScreen', () => {
         providerId: 'google',
       }),
     );
+    // OAuth2 must open the provider consent screen after save.
+    expect(props.beginAuthorize).toHaveBeenCalledWith('c-new');
+    expect(window.open).toHaveBeenCalledWith(
+      'https://accounts.google.com/authorize?state=s1',
+      '_blank',
+      'noopener',
+    );
+  });
+
+  it('New Connector opens the picker sheet', async () => {
+    const el = await mount(makeProps({ loadConnections: vi.fn().mockResolvedValue([]) }));
+    const newBtn = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('New Connector'),
+    );
+    await act(async () => newBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const sheet = el.querySelector('[data-testid="connector-sheet"]');
+    expect(sheet?.textContent).toContain('New Connector');
+    expect(sheet?.textContent).toContain('Choose a data source');
+    expect(sheet?.textContent).toContain('Gmail');
   });
 });

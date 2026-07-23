@@ -1,0 +1,37 @@
+{
+  "name": "Google Drive sync",
+  "version": "0.1.0",
+  "description": "Pulls recent Google Drive files into the vault as staged messages (name, mime, link) — read-only via your Google OAuth client.",
+  "enabled": false,
+  "prompt": "Pulls recent Google Drive files into the vault as staged messages (name, mime, link) — read-only via your Google OAuth client.",
+  "triggers": [
+    {
+      "kind": "cron",
+      "expr": "50 * * * *"
+    }
+  ],
+  "requires": {},
+  "connector": {
+    "kind": "pull.gdrive",
+    "label": "personal"
+  },
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Stages Google Drive file metadata into the vault review band.",
+    "scopes": [
+      {
+        "schema": "sync",
+        "verbs": "read+act"
+      }
+    ]
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-07-23T00:00:00.000Z"
+  }
+}

@@ -45,6 +45,8 @@ import type { AgentDispatcher, ConnectionAuth, HandlerOutcome } from '../handler
 export type ResolveConnection = (connector: {
   kind: string;
   label: string;
+  /** Preferred when set — durable vault connection id. */
+  connectionId?: string;
 }) => Promise<ConnectionAuth | { refused: string } | undefined>;
 
 /**
@@ -293,6 +295,9 @@ export async function runFire(
       resolved = await opts.resolveConnection({
         kind: row.manifest.connector.kind,
         label: row.manifest.connector.label,
+        ...(row.manifest.connector.connectionId
+          ? { connectionId: row.manifest.connector.connectionId }
+          : {}),
       });
     } catch (err) {
       await dispatch.close().catch(() => undefined);
@@ -446,7 +451,7 @@ async function revealSecret(vault: VaultBridge, ref: string): Promise<string> {
  *  trashed secret item is the same honest-liveness state a wrong login is. */
 async function flipNeedsAuth(
   vault: VaultBridge,
-  connector: { kind: string; label: string },
+  connector: { kind: string; label: string; connectionId?: string },
 ): Promise<void> {
   const connectionId = await connectionIdOf(vault, connector);
   if (!connectionId) return; // no connection yet — nothing to flip
@@ -462,8 +467,9 @@ async function flipNeedsAuth(
 
 async function connectionIdOf(
   vault: VaultBridge,
-  connector: { kind: string; label: string },
+  connector: { kind: string; label: string; connectionId?: string },
 ): Promise<string | undefined> {
+  if (connector.connectionId) return connector.connectionId;
   const reply = await vault({
     op: 'read',
     payload: {
@@ -484,8 +490,23 @@ async function connectionIdOf(
 /** Read one connection's status through the automation's consented bridge. */
 async function connectionStatus(
   vault: VaultBridge,
-  connector: { kind: string; label: string },
+  connector: { kind: string; label: string; connectionId?: string },
 ): Promise<string | undefined> {
+  if (connector.connectionId) {
+    const byId = await vault({
+      op: 'read',
+      payload: {
+        entity: 'sync.connection',
+        where: [{ column: 'connection_id', op: 'eq', value: connector.connectionId }],
+        limit: 1,
+        purpose: 'dpv:ServiceProvision',
+      },
+    });
+    if (byId.ok) {
+      const rows = (byId.result as { rows?: { status?: unknown }[] })?.rows ?? [];
+      if (typeof rows[0]?.status === 'string') return rows[0].status;
+    }
+  }
   const reply = await vault({
     op: 'read',
     payload: {

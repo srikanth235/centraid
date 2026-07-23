@@ -109,11 +109,18 @@ describe('AutomationsOverviewScreen', () => {
     // carries pending consent items → 1 automation needs attention.
     expect(el.textContent).toContain('1 active');
     expect(el.textContent).toContain('1 paused');
-    expect(el.textContent).toContain('1 need attention');
+    expect(el.textContent).toContain('1 needs attention');
+    expect(el.textContent).toContain('Your automations');
     expect(el.textContent).toContain('Daily Digest');
     expect(el.textContent).toContain('Invoice Sync');
     expect(el.textContent).toContain('Every day at 8am');
     expect(el.textContent).toContain('Next Tomorrow, 8:00 AM');
+    // Attention / failed first: Invoice Sync before Daily Digest.
+    const names = [...el.querySelectorAll('[data-testid="automation-row-name"]')].map(
+      (n) => n.textContent,
+    );
+    expect(names[0]).toBe('Invoice Sync');
+    expect(names[1]).toBe('Daily Digest');
   });
 
   it('exposes data-au-status on each fleet row and the attention badge only when pending', async () => {
@@ -145,12 +152,13 @@ describe('AutomationsOverviewScreen', () => {
   it('opens an automation and a run via callbacks', async () => {
     const props = makeProps();
     const el = await mount(props);
+    // Sorted attention-first: Invoice Sync (b@1) is first row.
     await act(async () =>
       (el.querySelector('.row') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );
-    expect(props.onOpenAutomation).toHaveBeenCalledWith('a@1');
+    expect(props.onOpenAutomation).toHaveBeenCalledWith('b@1');
     await act(async () =>
       (el.querySelector('.activityRow') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
@@ -187,6 +195,41 @@ describe('AutomationsOverviewScreen', () => {
     expect(
       [...el.querySelectorAll('button')].some((b) => b.textContent === 'Browse templates'),
     ).toBe(true);
+  });
+
+  it('renders suggested starters on the empty state and adopts via onUseSuggestion', async () => {
+    const onUseSuggestion = vi.fn();
+    const el = await mount(
+      makeProps({
+        loadData: vi.fn().mockResolvedValue(makeData({ rows: [], runs: [] })),
+        loadSuggestions: vi.fn().mockResolvedValue([
+          {
+            id: 'obligation-extractor',
+            name: 'Document deadlines',
+            desc: 'Pull due dates from docs',
+            triggerLabel: 'When a document lands',
+          },
+          {
+            id: 'google-gmail-pull',
+            name: 'Gmail sync',
+            desc: 'Pull mail into the vault',
+          },
+        ]),
+        onUseSuggestion,
+      }),
+    );
+    // suggestions load in a second effect — flush microtasks
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(el.querySelector('[data-testid="automation-suggestions"]')).toBeTruthy();
+    expect(el.textContent).toContain('Suggested');
+    expect(el.textContent).toContain('Document deadlines');
+    expect(el.textContent).toContain('Gmail sync');
+    const addBtn = [...el.querySelectorAll('button')].find((b) => b.textContent === 'Add');
+    await act(async () => addBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(onUseSuggestion).toHaveBeenCalledWith('obligation-extractor');
   });
 
   it('renders the error state + retry when loadData rejects', async () => {

@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "google-drive-pull",
+  "name": "Google Drive sync",
+  "kind": "automation",
+  "description": "Pulls recent Google Drive files into the vault as staged messages (name, mime, link) — read-only via your Google OAuth client.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

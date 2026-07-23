@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "microsoft-onedrive-pull",
+  "name": "OneDrive sync",
+  "kind": "automation",
+  "description": "Pulls recent OneDrive files into the vault as staged messages — read-only Microsoft Graph.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

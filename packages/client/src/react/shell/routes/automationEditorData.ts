@@ -50,7 +50,8 @@ const DEFAULT_EDITOR_LOAD: AutomationEditorLoadResult = {
  *  up. */
 interface ManifestConnectorExtra {
   requires: { secrets?: readonly string[] };
-  connector?: { kind: string; label: string; principal?: string };
+  connector?: { kind: string; label: string; principal?: string; connectionId?: string };
+  connections?: readonly { connectionId: string; kind: string; label: string }[];
   vault?: {
     purpose: string;
     why?: string;
@@ -69,8 +70,26 @@ function vaultScopeLabel(s: { schema: string; table?: string; verbs: string }): 
 function deriveConnectors(row: CentraidAutomationRow): AuEditorConnectorsDTO {
   const manifest = row.manifest as CentraidAutomationRow['manifest'] & ManifestConnectorExtra;
   const vault = manifest.vault;
+  const bindings: Array<{ connectionId: string; kind: string; label: string }> = [];
+  if (manifest.connections) {
+    for (const b of manifest.connections) {
+      bindings.push({
+        connectionId: b.connectionId,
+        kind: b.kind,
+        label: b.label,
+      });
+    }
+  }
+  if (manifest.connector?.connectionId) {
+    bindings.push({
+      connectionId: manifest.connector.connectionId,
+      kind: manifest.connector.kind,
+      label: manifest.connector.label,
+    });
+  }
   return {
     connector: manifest.connector?.label ?? null,
+    connections: bindings,
     mcps: [...(manifest.requires.mcps ?? [])],
     secrets: [...(manifest.requires.secrets ?? [])],
     vaultPurpose: vault?.purpose ?? null,

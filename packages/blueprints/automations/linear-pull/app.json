@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "linear-pull",
+  "name": "Linear sync",
+  "kind": "automation",
+  "description": "Pulls Linear issues into the vault — read-only via personal API key.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

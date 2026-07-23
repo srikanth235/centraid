@@ -9,7 +9,7 @@
  * capability instead.
  *
  *   GET    /centraid/_vault/connections                    — list + health (never a secret cell)
- *   GET    /centraid/_vault/connections/providers          — BYO-client wizard presets (Google, GitHub…)
+ *   GET    /centraid/_vault/connections/providers          — BYO-client wizard presets (Google, Microsoft, GitHub, …)
  *   POST   /centraid/_vault/connections                    — configure a credential (sync.configure_credential)
  *   PATCH  /centraid/_vault/connections/<id>               — {status, note?} pause / resume
  *   DELETE /centraid/_vault/connections/<id>               — remove entirely (sync.remove_connection); 404

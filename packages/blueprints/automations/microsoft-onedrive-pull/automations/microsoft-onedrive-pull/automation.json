@@ -1,0 +1,37 @@
+{
+  "name": "OneDrive sync",
+  "version": "0.1.0",
+  "description": "Pulls recent OneDrive files into the vault as staged messages — read-only Microsoft Graph.",
+  "enabled": false,
+  "prompt": "Pulls recent OneDrive files into the vault as staged messages — read-only Microsoft Graph.",
+  "triggers": [
+    {
+      "kind": "cron",
+      "expr": "55 * * * *"
+    }
+  ],
+  "requires": {},
+  "connector": {
+    "kind": "pull.onedrive",
+    "label": "personal"
+  },
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Stages OneDrive file metadata into the vault review band.",
+    "scopes": [
+      {
+        "schema": "sync",
+        "verbs": "read+act"
+      }
+    ]
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-07-23T00:00:00.000Z"
+  }
+}

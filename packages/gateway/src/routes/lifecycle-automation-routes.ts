@@ -132,6 +132,13 @@ export async function handleAutomationCreate(
     body.vault !== null && typeof body.vault === 'object' && !Array.isArray(body.vault)
       ? (body.vault as automation.ManifestVault)
       : undefined;
+  const connectorInput =
+    body.connector !== null && typeof body.connector === 'object' && !Array.isArray(body.connector)
+      ? (body.connector as automation.ConnectorSpec)
+      : undefined;
+  const connectionsInput = Array.isArray(body.connections)
+    ? (body.connections as automation.ConnectionBinding[])
+    : undefined;
 
   const files = automation.scaffoldAppFiles(id, {
     ...(typeof body.name === 'string' && body.name ? { name: body.name } : {}),
@@ -148,6 +155,8 @@ export async function handleAutomationCreate(
     ...(typeof body.onFailure === 'string' && body.onFailure ? { onFailure: body.onFailure } : {}),
     ...(typeof body.enabled === 'boolean' ? { enabled: body.enabled } : {}),
     ...(vaultInput !== undefined ? { vault: vaultInput } : {}),
+    ...(connectorInput !== undefined ? { connector: connectorInput } : {}),
+    ...(connectionsInput !== undefined ? { connections: connectionsInput } : {}),
   });
   await prepareLifecycleSession(opts.store, sessionId, ephemeralSession);
   await stageAndMaybePublish(opts, {
@@ -255,15 +264,33 @@ export async function handleAutomationUpdate(
     body.vault !== null && typeof body.vault === 'object' && !Array.isArray(body.vault)
       ? (body.vault as automation.ManifestVault)
       : undefined;
+  const hasConnectorKey = Object.prototype.hasOwnProperty.call(body, 'connector');
+  const connectorInput = hasConnectorKey
+    ? body.connector === null
+      ? null
+      : body.connector !== null &&
+          typeof body.connector === 'object' &&
+          !Array.isArray(body.connector)
+        ? (body.connector as automation.ConnectorSpec)
+        : undefined
+    : undefined;
+  const hasConnectionsKey = Object.prototype.hasOwnProperty.call(body, 'connections');
+  const connectionsInput = hasConnectionsKey
+    ? Array.isArray(body.connections)
+      ? (body.connections as automation.ConnectionBinding[])
+      : undefined
+    : undefined;
   if (
     nameInput === undefined &&
     promptInput === undefined &&
     triggersInput === undefined &&
-    vaultInput === undefined
+    vaultInput === undefined &&
+    !hasConnectorKey &&
+    !hasConnectionsKey
   ) {
     return sendJson(res, 400, {
       error: 'bad_request',
-      message: 'update needs at least one of { name, prompt, triggers }',
+      message: 'update needs at least one of { name, prompt, triggers, connections, connector }',
     });
   }
 
@@ -351,6 +378,20 @@ export async function handleAutomationUpdate(
     ...(triggers !== undefined ? { triggers } : {}),
     ...(vaultInput !== undefined ? { vault: vaultInput } : {}),
   };
+  if (hasConnectionsKey) {
+    if (connectionsInput === undefined) {
+      return sendJson(res, 400, {
+        error: 'bad_request',
+        message: 'connections must be an array when provided',
+      });
+    }
+    if (connectionsInput.length === 0) delete patched.connections;
+    else patched.connections = connectionsInput;
+  }
+  if (hasConnectorKey) {
+    if (connectorInput === null) delete patched.connector;
+    else if (connectorInput !== undefined) patched.connector = connectorInput;
+  }
   const manifest = automation.validateManifest(patched);
   const changedFile: ScaffoldFile = {
     path: targetPath,

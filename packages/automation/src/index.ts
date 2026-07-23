@@ -35,6 +35,8 @@ export {
   type ManifestRequires,
   type ManifestVault,
   type ManifestVaultScope,
+  type ConnectorSpec,
+  type ConnectionBinding,
   type ManifestValidationCode,
   type Trigger,
   type CronTrigger,

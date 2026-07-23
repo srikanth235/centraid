@@ -279,6 +279,22 @@ export interface ConnectorSpec {
   readonly label: string;
   /** Pinned external principal; unset pins on first successful run. */
   readonly principal?: string;
+  /**
+   * Durable vault connection id (preferred over kind+label lookup when set).
+   * Keeps automations bound to one credential row across renames.
+   */
+  readonly connectionId?: string;
+}
+
+/**
+ * Soft binding for agent-using automations that need a vault credential
+ * without becoming a published connector (which forbids `ctx.agent`).
+ * Distinct from `connector` — those are deterministic pull/send loops.
+ */
+export interface ConnectionBinding {
+  readonly connectionId: string;
+  readonly kind: string;
+  readonly label: string;
 }
 
 export interface Manifest {
@@ -295,6 +311,11 @@ export interface Manifest {
   readonly requires: ManifestRequires;
   /** Declares this automation a connector (issue #290 phase 4). */
   readonly connector?: ConnectorSpec;
+  /**
+   * Credential bindings for non-connector automations (assistant tools /
+   * editor-selected connections). Never includes secret cells — ids only.
+   */
+  readonly connections?: readonly ConnectionBinding[];
   /** Requested vault access — owner-approved into a grant on the automation's agent. */
   readonly vault?: ManifestVault;
   /** App ids this automation is associated with. */
@@ -622,7 +643,43 @@ function validateConnector(value: unknown): ConnectorSpec | undefined {
   if (c.principal !== undefined) {
     principal = requireString(c.principal, 'connector.principal');
   }
-  return { kind, label, ...(principal !== undefined ? { principal } : {}) };
+  let connectionId: string | undefined;
+  if (c.connectionId !== undefined) {
+    connectionId = requireString(c.connectionId, 'connector.connectionId');
+  }
+  return {
+    kind,
+    label,
+    ...(principal !== undefined ? { principal } : {}),
+    ...(connectionId !== undefined ? { connectionId } : {}),
+  };
+}
+
+function validateConnectionBindings(value: unknown): readonly ConnectionBinding[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) {
+    throw new ManifestError(
+      'invalid_field',
+      'manifest.connections must be an array',
+      'connections',
+    );
+  }
+  if (value.length === 0) return [];
+  return value.map((entry, i) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new ManifestError(
+        'invalid_field',
+        `manifest.connections[${i}] must be an object`,
+        'connections',
+      );
+    }
+    const e = entry as Record<string, unknown>;
+    return {
+      connectionId: requireString(e.connectionId, `connections[${i}].connectionId`),
+      kind: requireString(e.kind, `connections[${i}].kind`),
+      label: requireString(e.label, `connections[${i}].label`),
+    };
+  });
 }
 
 const VAULT_VERBS = new Set(['read', 'read+act', 'act', 'reveal']);
@@ -754,6 +811,7 @@ export function validateManifest(raw: unknown): Manifest {
   const triggers = resolveTriggers(r);
   const requires = validateRequires(r.requires);
   const connector = validateConnector(r.connector);
+  const connections = validateConnectionBindings(r.connections);
   const vault = validateVault(r.vault);
   // A connector's whole job is writing staged rows into the vault — a
   // connector manifest without a vault block can never do anything.
@@ -809,6 +867,7 @@ export function validateManifest(raw: unknown): Manifest {
     triggers,
     requires,
     ...(connector ? { connector } : {}),
+    ...(connections !== undefined ? { connections } : {}),
     ...(vault ? { vault } : {}),
     ...(apps ? { apps } : {}),
     ...(costEstimate ? { costEstimate } : {}),

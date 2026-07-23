@@ -108,6 +108,15 @@ export async function listConnections(): Promise<ConnectionEntry[]> {
   return (out.connections ?? []).map(fromWireRow);
 }
 
+/**
+ * Redirect URI the owner pastes into their OAuth developer app (Google Cloud,
+ * Azure, Dropbox). Matches the gateway's bearer-free callback path.
+ */
+export async function oauthCallbackUri(): Promise<string> {
+  const { baseUrl } = await auth();
+  return `${baseUrl.replace(/\/$/, '')}/centraid/_vault/oauth/callback`;
+}
+
 // ---- BYO-client wizard presets (GET /_vault/connections/providers) ----
 
 /** One bundled connector template a provider preset unlocks. */
@@ -115,6 +124,30 @@ export interface ConnectionProviderConnector {
   templateId: string;
   kind: string;
   scope?: string;
+}
+
+export interface ConnectionProviderSyncCapability {
+  id: string;
+  title: string;
+  templateId: string;
+  kind: string;
+  defaultCron: string;
+  scope?: string;
+}
+
+export interface ConnectionProviderActionCapability {
+  id: string;
+  title: string;
+  toolName: string;
+  kind: string;
+  templateId?: string;
+  approval?: 'outbox';
+  scope?: string;
+}
+
+export interface ConnectionProviderCapabilities {
+  syncs: ConnectionProviderSyncCapability[];
+  actions: ConnectionProviderActionCapability[];
 }
 
 /** A provider's wizard content — mirrors `ProviderPreset` in
@@ -130,6 +163,8 @@ export interface ConnectionProviderPreset {
   allowedHosts: string[];
   setup: string[];
   connectors: ConnectionProviderConnector[];
+  /** Declared syncs + actions (no secrets). Optional for older gateways. */
+  capabilities?: ConnectionProviderCapabilities;
 }
 
 /** The BYO-client wizard's provider catalog (Google, GitHub, …). */

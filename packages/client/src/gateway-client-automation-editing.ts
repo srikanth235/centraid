@@ -26,6 +26,21 @@ export type CentraidCreateTrigger =
   | { kind: 'data'; entities: string[]; every?: string };
 
 /** Scaffold a new automation app; mints a webhook secret when requested. */
+/** Soft connection binding (agent automations) — ids only, no secrets. */
+export type CentraidConnectionBinding = {
+  connectionId: string;
+  kind: string;
+  label: string;
+};
+
+/** Published connector block — may include durable connectionId. */
+export type CentraidConnectorSpec = {
+  kind: string;
+  label: string;
+  principal?: string;
+  connectionId?: string;
+};
+
 export async function createAutomation(input: {
   id: string;
   name?: string;
@@ -38,6 +53,10 @@ export async function createAutomation(input: {
     why?: string;
     scopes: Array<{ schema: string; table?: string; verbs: string }>;
   };
+  /** Soft credential bindings from the editor connectors picker. */
+  connections?: CentraidConnectionBinding[];
+  /** Published connector declaration (pull/send automations). */
+  connector?: CentraidConnectorSpec;
   apps?: string[];
   model?: string;
   historyKeep?: { count: number } | { days: number } | 'all' | 'errors';
@@ -84,6 +103,8 @@ export async function updateAutomation(input: {
     why?: string;
     scopes: Array<{ schema: string; table?: string; verbs: string }>;
   };
+  connections?: CentraidConnectionBinding[];
+  connector?: CentraidConnectorSpec | null;
 }): Promise<{
   row: CentraidAutomationRow | null;
   webhook?: { id: string; secret: string; url: string };
@@ -102,6 +123,8 @@ export async function updateAutomation(input: {
         ...(input.prompt !== undefined ? { prompt: input.prompt } : {}),
         ...(input.triggers !== undefined ? { triggers: input.triggers } : {}),
         ...(input.vault !== undefined ? { vault: input.vault } : {}),
+        ...(input.connections !== undefined ? { connections: input.connections } : {}),
+        ...(input.connector !== undefined ? { connector: input.connector } : {}),
         sessionId,
         publish: true,
       }),

@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "gitlab-pull",
+  "name": "GitLab sync",
+  "kind": "automation",
+  "description": "Pulls GitLab issues and merge requests into the vault — read-only via personal access token.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

@@ -382,12 +382,25 @@ export interface AuOverviewData {
   health: { active: number; paused: number; drafts: number; attention: number };
   subtitle: string;
 }
+/** One suggested starter card on the Automations empty overview. */
+export interface AuOverviewSuggestionDTO {
+  id: string;
+  name: string;
+  desc: string;
+  triggerLabel?: string;
+}
+
 export interface AutomationsOverviewBridgeProps {
   loadData: () => Promise<AuOverviewData>;
   onOpenAutomation: (ref: string) => void;
   onOpenRun: (automationId: string, runId: string) => void;
   onBrowseTemplates: () => void;
   onNewAutomation: () => void;
+  /** Curated template starters for the empty fleet — omitted when the
+   *  catalog is unavailable. Empty state falls back to Browse / New only. */
+  loadSuggestions?: () => Promise<AuOverviewSuggestionDTO[]>;
+  /** Adopt a suggested template (clone → thread), same path as Templates. */
+  onUseSuggestion?: (templateId: string) => void;
 }
 
 // ── Automation trigger hero details (thread header + editor) ───────────────
@@ -454,12 +467,13 @@ export interface AuConsentDTO {
 
 // ── Automation editor (instructions-first create/edit form) ────────────────
 // Name, Instructions (manifest `prompt` — the source of intent the builder
-// compiles into `handler.js`), a trigger picker, and Connectors / Behavior /
-// Notifications tabs. `AuEditorTriggerDTO` is the LOAD/display shape (webhook
-// carries its minted id + pending flag so the Connectors tab can show the
-// URL); `AuEditorTriggerInput` is the narrower SAVE shape `updateAutomation`
-// accepts (gateway-client-editing.ts `CentraidCreateTrigger` — a webhook
-// entry carries no fields, minting happens server-side).
+// compiles into `handler.js`), a trigger picker, and Notifications / Plan
+// tabs. Connectors are chosen from the Instructions toolbar (catalog + OAuth /
+// API-key attach). `AuEditorTriggerDTO` is the LOAD/display shape (webhook
+// carries its minted id + pending flag); `AuEditorTriggerInput` is the
+// narrower SAVE shape `updateAutomation` accepts (gateway-client-editing.ts
+// `CentraidCreateTrigger` — a webhook entry carries no fields, minting
+// happens server-side).
 export type AuEditorTriggerDTO =
   | { kind: 'cron'; expr: string }
   | { kind: 'webhook'; id: string | null; pending: boolean }
@@ -470,10 +484,9 @@ export type AuEditorTriggerInput =
   | { kind: 'webhook' }
   | { kind: 'condition'; entity: string; where?: unknown; every?: string }
   | { kind: 'data'; entities: string[]; every?: string };
-/** Connectors tab: manifest `requires`/`connector`/`vault`, resolved to
- *  display-ready chip lists (see `automationEditorData.ts`'s
- *  `deriveConnectors`) so the tab can render real chips instead of a fixed
- *  explainer. Names only — no secret values cross this DTO. */
+/** Compiled-plan connector summary (read-only chips from the manifest).
+ *  Owner-picked catalog connectors live separately on the Instructions
+ *  toolbar picker — see `loadConnectorCatalog` on the bridge. */
 export interface AuEditorConnectorsDTO {
   mcps: string[];
   secrets: string[];
@@ -484,6 +497,33 @@ export interface AuEditorConnectorsDTO {
    *  `vaultScopeLabel` for the exact format, shared with the
    *  Approvals/Vault screens' scope-summary convention. */
   vaultScopes: string[];
+  /** Durable connection bindings (ids only) when the automation references vault credentials. */
+  connections?: Array<{ connectionId: string; kind: string; label: string }>;
+}
+/** One selectable catalog connector for the automation editor picker.
+ *  Carries everything needed to configure oauth2 or api_key credentials
+ *  without re-fetching the provider preset. */
+export interface AuEditorCatalogConnectorDTO {
+  key: string;
+  kind: string;
+  name: string;
+  tone: string;
+  credKind: 'oauth2' | 'api_key';
+  providerId: string;
+  providerName: string;
+  templateId: string;
+  scope?: string;
+  scopes?: string;
+  authUrl?: string;
+  tokenUrl?: string;
+  allowedHosts: string[];
+  setup: string[];
+  /** Existing vault connection for this kind, if any. */
+  connection: {
+    connectionId: string;
+    label: string;
+    health: 'ok' | 'needs-auth' | 'paused' | 'failing';
+  } | null;
 }
 export interface AutomationEditorData {
   mode: 'create' | 'edit';
@@ -509,10 +549,8 @@ export interface AutomationEditorData {
    *  the thread shows, so "what can it do without asking" reads identically
    *  in both places. */
   consent: AuConsentDTO;
-  /** Connectors tab data. `null`/absent in create mode (nothing is
-   *  compiled yet) or when the load layer hasn't populated it — the screen
-   *  treats both as "show the explainer/empty state". Optional/additive,
-   *  same rationale as `rowId`. */
+  /** Compiled-plan connector summary (optional/additive). Owner picks from the
+   *  catalog via `loadConnectorCatalog` on the Instructions toolbar. */
   connectors?: AuEditorConnectorsDTO | null;
   /** Notifications tab: manifest `onFailure` — another automation's ref
    *  this one hands off to when a run fails. Optional/additive. */
@@ -526,6 +564,25 @@ export interface AutomationEditorSaveFields {
   name: string;
   instructions: string;
   triggers: AuEditorTriggerInput[];
+  /**
+   * Durable vault connection bindings from the connectors picker.
+   * Soft bindings only (agent automations) — connection id + kind + label.
+   */
+  connections?: Array<{ connectionId: string; kind: string; label: string }>;
+}
+/** Credential payload when attaching a catalog connector from the editor. */
+export interface AuEditorConnectFormInput {
+  providerId: string;
+  connectorKind: string;
+  label: string;
+  credKind: 'oauth2' | 'api_key';
+  authUrl?: string;
+  tokenUrl?: string;
+  scopes?: string;
+  allowedHosts: string[];
+  clientId?: string;
+  clientSecret?: string;
+  apiKey?: string;
 }
 export interface AutomationEditorBridgeProps {
   /** Load the form. For create mode (no `automationId` in the route),
@@ -544,13 +601,27 @@ export interface AutomationEditorBridgeProps {
    *  lazily the first time a data/condition trigger is present. Optional so a
    *  `loadData`-only host still typechecks; absent ⇒ no autocomplete. */
   loadEntityTypes?: () => Promise<string[]>;
+  /** Provider catalog + live connection status for the Instructions
+   *  Connectors picker. Optional so hosts without the connections API still
+   *  typecheck; absent ⇒ picker shows an empty/unavailable state. */
+  loadConnectorCatalog?: () => Promise<AuEditorCatalogConnectorDTO[]>;
+  /** Attach BYO oauth2 client or api_key credential for a connector kind.
+   *  Resolves with the new/updated `connectionId` so oauth2 can start PKCE. */
+  configureConnection?: (
+    input: AuEditorConnectFormInput,
+  ) => Promise<{ connectionId: string } | void>;
+  /** Start PKCE authorize for an oauth2 connection; returns the URL to open. */
+  beginAuthorize?: (connectionId: string) => Promise<string>;
+  showToast?: (message: string) => void;
   /** The compiled plan (automation.json + handler.js) for the read-only viewer. */
   onReadSource: () => Promise<{ manifest: string | null; handler: string | null }>;
   /** Internal-only builder handoff retained for a future surface; hidden in v0. */
   onOpenBuilder: (seedMessage?: string) => void;
   onRunNow: () => Promise<boolean>;
   onToggleEnabled: (next: boolean) => Promise<boolean>;
-  /** Behavior tab consent review — same decision surface the thread uses. */
+  /** Standing-grant consent review (edit mode) — same decision surface the
+   *  thread uses. Kept on the bridge for future surfaces; not shown as a
+   *  bottom tab anymore. */
   onDecideConsent: (
     kind: ConsentKind,
     id: string,

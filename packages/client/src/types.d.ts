@@ -82,6 +82,8 @@ declare global {
     openStarred: () => void;
     /** Navigate to the Automations page. */
     openAutomations: () => void;
+    /** Navigate to the Connectors (vault data sources) page. */
+    openConnectors: () => void;
     /** Open the ⌘K command palette. */
     openSearch: () => void;
     /**

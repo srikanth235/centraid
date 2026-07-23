@@ -32,6 +32,35 @@ export async function loadAutomationTemplates(): Promise<TemplateEntry[]> {
   }
 }
 
+/** Preferred empty-state starters on the Automations overview (curated for
+ *  signal, not catalog order). Missing ids are skipped; if none match, the
+ *  first `cap` catalog rows fill the strip. */
+const OVERVIEW_SUGGESTION_IDS = [
+  'obligation-extractor',
+  'google-gmail-pull',
+  'renewal-reminders',
+  'release-notes-drafter',
+] as const;
+
+/** Curated 3–4 automation templates for the fleet empty state. */
+export async function loadOverviewSuggestions(
+  cap = 3,
+): Promise<Array<{ id: string; name: string; desc: string; triggerLabel?: string }>> {
+  const all = await loadAutomationTemplates();
+  if (all.length === 0) return [];
+  const byId = new Map(all.map((t) => [t.id, t]));
+  const preferred = OVERVIEW_SUGGESTION_IDS.map((id) => byId.get(id)).filter(
+    (t): t is TemplateEntry => t !== undefined,
+  );
+  const picks = preferred.length > 0 ? preferred : all;
+  return picks.slice(0, cap).map((t) => ({
+    id: t.id,
+    name: t.name,
+    desc: t.desc,
+    ...(t.triggerLabel ? { triggerLabel: t.triggerLabel } : {}),
+  }));
+}
+
 /** Clone an automation template on the gateway, returning the new automation id
  *  + any once-only webhook secrets for the caller to surface (vanilla
  *  adoptTemplate, minus the navigation). Throws on clone failure. */

@@ -11,7 +11,6 @@ import {
   SearchGlyph,
   SettingsGlyph,
   SparkleGlyph,
-  StarGlyph,
 } from './glyphs.js';
 
 // The shell's own anchor type — mirrors the ambient `MenuAnchor` in the
@@ -22,12 +21,9 @@ export type ShellMenuAnchor =
   | { kind: 'point'; x: number; y: number }
   | { kind: 'rect'; rect: DOMRect };
 
-// The shell sidebar — Build new / Search, a Pages section, an Operations
-// section (Gateway + Backups — the two "how is my infrastructure doing"
-// pages), the live Apps list (folding drafts in), a disabled Chats
-// placeholder, and Settings pinned to the bottom with a `live` pill. Styled
-// by the shared chrome.module.css (one module for the whole window-chrome
-// family, co-imported by ShellFrame).
+// The shell sidebar — Search + New Chat, Automations/Connectors, Pages,
+// Operations, History (recent vault-assistant threads + See all), and
+// Settings. Styled by chrome.module.css (shared with ShellFrame).
 
 export type SidebarPage =
   | 'home'
@@ -36,12 +32,14 @@ export type SidebarPage =
   | 'discover'
   | 'starred'
   | 'automations'
+  | 'connectors'
   | 'approvals'
   | 'gateway'
   | 'backups'
   | 'atlas'
   | 'settings';
 
+/** @deprecated Sidebar no longer lists apps; kept for callers that still type app rows. */
 export interface SidebarApp {
   id: string;
   name: string;
@@ -66,14 +64,15 @@ export interface SidebarConversation {
 export interface SidebarProps {
   activeId?: string;
   activePage?: SidebarPage;
-  apps: SidebarApp[];
-  drafts: SidebarApp[];
+  /** @deprecated Apps list is no longer shown in the sidebar. */
+  apps?: SidebarApp[];
+  /** @deprecated Apps list is no longer shown in the sidebar. */
+  drafts?: SidebarApp[];
   /** Profile-switcher head row, rendered above "Build new" with a divider. */
   headSlot?: ReactNode;
   onHome: () => void;
-  /** "Build new" + the "Apps" section "+" — a builder entry point (issue #434,
-   *  Phase 3). Omitted when the builder is hidden, and both affordances vanish
-   *  with it. */
+  /** "Build new" — a builder entry point (issue #434, Phase 3). Omitted when
+   *  the builder is hidden. */
   onNewApp?: () => void;
   /** The vault assistant's persisted conversations, newest first (the list
    *  endpoint already sorts — see useAssistantConversations). */
@@ -81,20 +80,24 @@ export interface SidebarProps {
   /** The conversation id of the current route, when it's the assistant
    *  route with one open — highlights that row. */
   activeConversationId?: string;
-  /** "+" action on the Chats section header and the empty-state fallback —
-   *  starts a fresh (not-yet-created) conversation. */
+  /** Top "New Chat" + History empty-state — starts a fresh (not-yet-created)
+   *  vault-assistant conversation. */
   onNewChat?: () => void;
   onSelectConversation?: (id: string) => void;
   onDeleteConversation?: (id: string) => void;
   /** Row ••• / right-click menu (Rename + Delete). Wired by App.tsx to the
    *  shared context menu; when present it supersedes the bare delete X. */
   onConversationMenu?: (id: string, anchor: ShellMenuAnchor) => void;
+  /** "See all" under History — full conversation list surface. When omitted
+   *  the link is hidden and the sidebar shows the full recent list. */
+  onSeeAllHistory?: () => void;
   onSearch?: () => void;
+  /** @deprecated Prefer onNewChat — Assistant is no longer a separate nav row. */
   onAssistant?: () => void;
   onInsights?: () => void;
   onDiscover?: () => void;
-  onStarred?: () => void;
   onAutomations?: () => void;
+  onConnectors?: () => void;
   onApprovals?: () => void;
   /** Count badge next to "Approvals" — omitted (no live count source yet) shows no badge. */
   approvalsCount?: number;
@@ -103,7 +106,9 @@ export interface SidebarProps {
   gatewayStatus?: 'up' | 'down' | 'unknown';
   onBackups?: () => void;
   onAtlas?: () => void;
-  onAppClick: (id: string) => void;
+  /** @deprecated Apps list is no longer shown in the sidebar. */
+  onAppClick?: (id: string) => void;
+  /** @deprecated Apps list is no longer shown in the sidebar. */
   onAppContext?: (id: string, anchor: ShellMenuAnchor) => void;
   onSettings: () => void;
   /**
@@ -160,57 +165,6 @@ function SbSection({ label, onAction }: { label: string; onAction?: () => void }
           </button>
         </span>
       ) : null}
-    </div>
-  );
-}
-
-function AppIcon({ app }: { app: SidebarApp }): JSX.Element {
-  return (
-    <span className={chrome.sbAppIcon} style={{ background: app.color }}>
-      <Icon name={app.iconKey} size={11} strokeWidth={1.85} />
-    </span>
-  );
-}
-
-function AppRow({
-  app,
-  active,
-  onClick,
-  onAppContext,
-}: {
-  app: SidebarApp;
-  active: boolean;
-  onClick: () => void;
-  onAppContext?: (id: string, anchor: ShellMenuAnchor) => void;
-}): JSX.Element {
-  const item = (
-    <SbItem icon={<AppIcon app={app} />} label={app.name} active={active} onClick={onClick} />
-  );
-  if (!onAppContext) return item;
-  return (
-    <div
-      className={chrome.sbAppRow}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        onAppContext(app.id, { kind: 'point', x: e.clientX, y: e.clientY });
-      }}
-    >
-      {item}
-      <button
-        className={chrome.rowMore}
-        type="button"
-        aria-label="App actions"
-        aria-haspopup="menu"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const t = e.currentTarget;
-          t.dataset.open = 'true';
-          onAppContext(app.id, { kind: 'rect', rect: t.getBoundingClientRect() });
-        }}
-      >
-        <Icon name="MoreVert" size={14} />
-      </button>
     </div>
   );
 }
@@ -285,18 +239,25 @@ function ConversationRow({
   );
 }
 
+/** Cap recent rows in the sidebar History section; "See all" opens the rest. */
+const HISTORY_SIDEBAR_CAP = 6;
+
 /**
- * The "Chats" list, grouped for scale (issue #420): pinned threads on top, the
- * rest by recency, and archived threads tucked behind a collapsed group at the
- * bottom. Rendering + row menu are unchanged — only the ordering/sectioning is.
+ * History list (ex-"Chats"): pinned first, then recent, with optional
+ * archived group. Caps the non-archived list when `onSeeAllHistory` is set.
  */
-function ChatsSection(props: SidebarProps): JSX.Element {
+function HistorySection(props: SidebarProps): JSX.Element {
   const [archivedOpen, setArchivedOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const all = props.conversations ?? [];
   const pinned = all.filter((c) => c.pinned && !c.archived);
   const normal = all.filter((c) => !c.pinned && !c.archived);
   const archived = all.filter((c) => c.archived);
   const activeCount = pinned.length + normal.length;
+  const effectiveCap = expanded ? Number.POSITIVE_INFINITY : HISTORY_SIDEBAR_CAP;
+  const pinnedShow = pinned.slice(0, effectiveCap);
+  const remaining = Math.max(0, effectiveCap - pinnedShow.length);
+  const normalShow = normal.slice(0, remaining);
 
   const row = (c: SidebarConversation): JSX.Element => (
     <ConversationRow
@@ -313,21 +274,43 @@ function ChatsSection(props: SidebarProps): JSX.Element {
 
   return (
     <>
-      <SbSection label={`Chats · ${activeCount}`} onAction={props.onNewChat} />
+      <SbSection label="History" />
       {activeCount === 0 ? (
-        <SbItem icon={<SparkleGlyph />} label="No conversations yet" disabled />
+        <SbItem
+          icon={<SparkleGlyph />}
+          label="No chats yet"
+          disabled={!props.onNewChat}
+          onClick={props.onNewChat}
+        />
       ) : (
         <>
-          {pinned.length > 0 ? (
+          {pinnedShow.length > 0 ? (
             <>
               <div className={chrome.sbSubLabel}>Pinned</div>
-              {pinned.map(row)}
-              {normal.length > 0 ? <div className={chrome.sbSubLabel}>Recent</div> : null}
+              {pinnedShow.map(row)}
+              {normalShow.length > 0 ? <div className={chrome.sbSubLabel}>Recent</div> : null}
             </>
           ) : null}
-          {normal.map(row)}
+          {normalShow.map(row)}
         </>
       )}
+      {!expanded && activeCount > HISTORY_SIDEBAR_CAP ? (
+        <button
+          className={chrome.sbSeeAll}
+          type="button"
+          onClick={() => {
+            if (props.onSeeAllHistory) props.onSeeAllHistory();
+            else setExpanded(true);
+          }}
+        >
+          See all · {activeCount}
+        </button>
+      ) : null}
+      {expanded && activeCount > HISTORY_SIDEBAR_CAP ? (
+        <button className={chrome.sbSeeAll} type="button" onClick={() => setExpanded(false)}>
+          Show less
+        </button>
+      ) : null}
       {archived.length > 0 ? (
         <>
           <button
@@ -347,20 +330,44 @@ function ChatsSection(props: SidebarProps): JSX.Element {
 }
 
 export default function Sidebar(props: SidebarProps): JSX.Element {
-  const appList = [...props.apps, ...props.drafts];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {props.headSlot}
 
-      {props.onNewApp ? (
-        <SbItem icon={<PlusGlyph />} label="Build new" meta="⌘N" accent onClick={props.onNewApp} />
-      ) : null}
+      {/* Primary actions — Grok-style: Search + New Chat first. */}
       <SbItem
         icon={<SearchGlyph />}
         label="Search"
         meta="⌘K"
         onClick={props.onSearch}
         disabled={!props.onSearch}
+      />
+      <SbItem
+        icon={<Icon name="Plus" size={15} />}
+        label="New Chat"
+        active={props.activePage === 'assistant' && !props.activeConversationId}
+        disabled={!props.onNewChat && !props.onAssistant}
+        onClick={props.onNewChat ?? props.onAssistant}
+        accent
+      />
+      {props.onNewApp ? (
+        <SbItem icon={<PlusGlyph />} label="Build new" meta="⌘N" onClick={props.onNewApp} />
+      ) : null}
+
+      {/* Automations + Connectors sit above Pages for quick access. */}
+      <SbItem
+        icon={<Icon name="Bolt" size={15} />}
+        label="Automations"
+        active={props.activePage === 'automations'}
+        disabled={!props.onAutomations}
+        onClick={props.onAutomations}
+      />
+      <SbItem
+        icon={<Icon name="Plug" size={15} />}
+        label="Connectors"
+        active={props.activePage === 'connectors'}
+        disabled={!props.onConnectors}
+        onClick={props.onConnectors}
       />
 
       <SbSection label="Pages" />
@@ -369,13 +376,6 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         label="Home"
         active={props.activePage === 'home'}
         onClick={props.onHome}
-      />
-      <SbItem
-        icon={<SparkleGlyph />}
-        label="Assistant"
-        active={props.activePage === 'assistant'}
-        disabled={!props.onAssistant}
-        onClick={props.onAssistant}
       />
       <SbItem
         icon={<Icon name="Activity" size={15} />}
@@ -390,20 +390,6 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         active={props.activePage === 'discover'}
         disabled={!props.onDiscover}
         onClick={props.onDiscover}
-      />
-      <SbItem
-        icon={<StarGlyph />}
-        label="Starred"
-        active={props.activePage === 'starred'}
-        disabled={!props.onStarred}
-        onClick={props.onStarred}
-      />
-      <SbItem
-        icon={<Icon name="Bolt" size={15} />}
-        label="Automations"
-        active={props.activePage === 'automations'}
-        disabled={!props.onAutomations}
-        onClick={props.onAutomations}
       />
       <SbItem
         icon={<Icon name="CheckCircle" size={15} />}
@@ -443,22 +429,7 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         onClick={props.onAtlas}
       />
 
-      <SbSection label={`Apps · ${appList.length}`} onAction={props.onNewApp} />
-      {appList.length > 0 ? (
-        appList.map((a) => (
-          <AppRow
-            key={a.id}
-            app={a}
-            active={a.id === props.activeId}
-            onClick={() => props.onAppClick(a.id)}
-            onAppContext={props.onAppContext}
-          />
-        ))
-      ) : (
-        <SbItem icon={<SparkleGlyph />} label="No apps yet" disabled />
-      )}
-
-      <ChatsSection {...props} />
+      <HistorySection {...props} />
 
       <span style={{ flex: '1', minHeight: '12px' }} />
       {props.onWhatsNew ? (

@@ -254,6 +254,11 @@ test('pause and resume ride PATCH; providers expose the BYO wizard with the Goog
     (p) => p.id === 'github',
   )!;
   expect(github.credKind).toBe('api_key');
+  const ids = (providers.providers as { id: string }[]).map((p) => p.id);
+  // Wave-2 personal-vault catalog (Microsoft parity + eng/notes/tasks/chat/files).
+  for (const id of ['microsoft', 'gitlab', 'linear', 'notion', 'todoist', 'slack', 'dropbox']) {
+    expect(ids).toContain(id);
+  }
 });
 
 test('DELETE removes a connection with no history, 409s on a real refusal, 404s an unknown id', async () => {
