@@ -3,6 +3,7 @@ import {
   formatHardwareProfileDetail,
   hardwareClassForResourceMode,
   resolveGatewayHardwareProfile,
+  toStructuredResourceProfile,
 } from './hardware-profile.js';
 
 test('slow storage selects one coherent constrained-host profile', () => {
@@ -152,6 +153,57 @@ test('CENTRAID_HARDWARE_PROFILE still wins over Resource mode for class', () => 
       { CENTRAID_HARDWARE_PROFILE: 'standard' },
     ),
   ).toMatchObject({ class: 'standard', resourceMode: 'conserve' });
+});
+
+test('toStructuredResourceProfile projects a constrained conserve profile', () => {
+  const profile = resolveGatewayHardwareProfile(
+    { cores: 2, totalMemoryBytes: 2 * 1024 ** 3, storageFsyncMs: 20, resourceMode: 'conserve' },
+    {},
+  );
+  expect(toStructuredResourceProfile(profile)).toEqual({
+    class: 'constrained',
+    mode: 'conserve',
+    host: { cores: 2, totalMemoryBytes: 2 * 1024 ** 3, storageFsyncMs: 20 },
+    resolved: {
+      workerMaxConcurrent: 2,
+      workerMaxOldGenerationMb: 128,
+      workerPoolSize: 0,
+      replicationConcurrency: 1,
+      staticBrotliQuality: 5,
+      staticGzipQuality: 6,
+      sqliteSynchronous: 'NORMAL',
+      vaultSweepIntervalMs: 7_200_000,
+      outboxIdleIntervalMs: 120_000,
+    },
+  });
+});
+
+test('toStructuredResourceProfile projects a standard performance profile', () => {
+  const profile = resolveGatewayHardwareProfile(
+    { cores: 8, totalMemoryBytes: 16 * 1024 ** 3, storageFsyncMs: 1, resourceMode: 'performance' },
+    {},
+  );
+  expect(toStructuredResourceProfile(profile)).toEqual({
+    class: 'standard',
+    mode: 'performance',
+    host: { cores: 8, totalMemoryBytes: 16 * 1024 ** 3, storageFsyncMs: 1 },
+    resolved: {
+      workerMaxConcurrent: 12,
+      workerMaxOldGenerationMb: 384,
+      workerPoolSize: 4,
+      replicationConcurrency: 4,
+      staticBrotliQuality: 10,
+      staticGzipQuality: 9,
+      sqliteSynchronous: 'FULL',
+      vaultSweepIntervalMs: 3_600_000,
+      outboxIdleIntervalMs: 60_000,
+    },
+  });
+});
+
+test('toStructuredResourceProfile carries a null host storageFsyncMs through', () => {
+  const profile = resolveGatewayHardwareProfile({ cores: 8, totalMemoryBytes: 16 * 1024 ** 3 }, {});
+  expect(toStructuredResourceProfile(profile).host.storageFsyncMs).toBeNull();
 });
 
 test('hardwareClassForResourceMode maps modes without re-detection', () => {

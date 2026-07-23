@@ -90,6 +90,20 @@ export function formatLoadShedClearedDetail(): string {
   return 'Event-loop pressure cleared; background work resumes';
 }
 
+/**
+ * Human-readable detail for the owner-triggered background pause (#528
+ * Phase B). Durability work — WAL/fsync and the consent outbox — is never
+ * gated, so the copy names only the loops that actually stop.
+ */
+export function formatBackgroundPausedDetail(until: string | null): string {
+  const scope = 'Paused non-urgent background work (vault sweeps, backup retention)';
+  return until === null ? `${scope} until you resume` : `${scope} until ${until}`;
+}
+
+export function formatBackgroundResumedDetail(): string {
+  return 'Background work resumed';
+}
+
 export function formatRss(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return '—';
   if (bytes < 1024) return `${Math.round(bytes)} B`;

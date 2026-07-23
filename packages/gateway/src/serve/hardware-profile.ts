@@ -56,6 +56,56 @@ export function hardwareClassForResourceMode(
   }
 }
 
+/**
+ * Machine-readable projection of the resolved profile for the health
+ * metrics surface (#528 Phase A). Deliberately separate from
+ * `formatHardwareProfileDetail`'s human string: a self-hoster's own
+ * monitoring reads these numbers without parsing prose, and the client
+ * renders the same values in Diagnostics. Pure + unit-testable — the
+ * only source of the shape `GET /_gateway/health` publishes.
+ */
+export interface StructuredResourceProfile {
+  class: HardwareClass;
+  mode: ResourceMode;
+  host: { cores: number; totalMemoryBytes: number; storageFsyncMs: number | null };
+  resolved: {
+    workerMaxConcurrent: number;
+    workerMaxOldGenerationMb: number;
+    workerPoolSize: number;
+    replicationConcurrency: number;
+    staticBrotliQuality: number;
+    staticGzipQuality: number;
+    sqliteSynchronous: 'FULL' | 'NORMAL';
+    vaultSweepIntervalMs: number;
+    outboxIdleIntervalMs: number;
+  };
+}
+
+export function toStructuredResourceProfile(
+  profile: GatewayHardwareProfile,
+): StructuredResourceProfile {
+  return {
+    class: profile.class,
+    mode: profile.resourceMode,
+    host: {
+      cores: profile.cores,
+      totalMemoryBytes: profile.totalMemoryBytes,
+      storageFsyncMs: profile.storageFsyncMs,
+    },
+    resolved: {
+      workerMaxConcurrent: profile.workerMaxConcurrent,
+      workerMaxOldGenerationMb: profile.workerMaxOldGenerationMb,
+      workerPoolSize: profile.workerPoolSize,
+      replicationConcurrency: profile.replicationConcurrency,
+      staticBrotliQuality: profile.staticBrotliQuality,
+      staticGzipQuality: profile.staticGzipQuality,
+      sqliteSynchronous: profile.sqliteSynchronous,
+      vaultSweepIntervalMs: profile.vaultSweepIntervalMs,
+      outboxIdleIntervalMs: profile.outboxIdleIntervalMs,
+    },
+  };
+}
+
 export function formatHardwareProfileDetail(profile: GatewayHardwareProfile): string {
   return (
     `mode=${resourceModeLabel(profile.resourceMode)} (${profile.resourceMode}); ` +

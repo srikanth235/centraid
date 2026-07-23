@@ -1447,7 +1447,11 @@ export class BackupService {
       );
     });
     const runScheduled = () => {
-      if (this.health.shouldDeferBackgroundWork()) return;
+      // Retention/reconciliation is a safe loop: skip under event-loop
+      // pressure AND while the owner has paused background work (#528). The
+      // WAL drain below stays ungated — it is RPO durability, never paused.
+      if (this.health.shouldDeferBackgroundWork() || this.health.shouldPauseBackgroundWork())
+        return;
       void this.tick().catch((err) => {
         this.logger.warn(
           `backup: scheduler tick failed: ${err instanceof Error ? err.message : String(err)}`,

@@ -154,11 +154,16 @@ import { makeTemplatesRouteHandler } from '../routes/templates-routes.js';
 import { makeAgentsRouteHandler, type AgentAcpCapabilities } from '../routes/agents-routes.js';
 import { makeGatewayInfoRouteHandler } from '../routes/gateway-info-routes.js';
 import { makeHealthRouteHandler } from '../routes/health-routes.js';
+import { makeResourceRouteHandler } from '../routes/resource-routes.js';
 import { makeRemindersRouteHandler } from '../routes/reminders-routes.js';
 import { HealthRegistry } from './health-registry.js';
 import { GatewayPerformanceMonitor } from './gateway-performance.js';
 import { measureStorageLatency } from './storage-latency.js';
-import { formatHardwareProfileDetail, resolveGatewayHardwareProfile } from './hardware-profile.js';
+import {
+  formatHardwareProfileDetail,
+  resolveGatewayHardwareProfile,
+  toStructuredResourceProfile,
+} from './hardware-profile.js';
 import {
   formatEventLoopDetail,
   resolveResourceMode,
@@ -720,7 +725,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     synchronous: hardwareProfile.sqliteSynchronous,
     replicationConcurrency: hardwareProfile.replicationConcurrency,
     sweepIntervalMs: hardwareProfile.vaultSweepIntervalMs,
-    shouldDeferBackgroundWork: () => health.shouldDeferBackgroundWork(),
+    // Vault sweeps are a safe loop: defer under event-loop pressure AND honor
+    // the owner's explicit background-pause (#528). Durability loops (WAL,
+    // outbox) call `shouldDeferBackgroundWork` alone and are never paused.
+    shouldDeferBackgroundWork: () =>
+      health.shouldDeferBackgroundWork() || health.shouldPauseBackgroundWork(),
     walCaptureEnabled: () => walCaptureConfigured,
     // Disposable runner cache lives outside the vault tree (defaults to a
     // `-cache` sibling of `vaultDir` when the host doesn't pin one).
@@ -997,6 +1006,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         logsEventsSubscriberCount() + runEventsSubscriberCount() + changesSubscriberCount(),
       hardwareProfileClass: hardwareProfile.class,
       resourceMode: hardwareProfile.resourceMode,
+      resourceProfile: toStructuredResourceProfile(hardwareProfile),
     };
   });
 
@@ -2347,6 +2357,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Component-level health + structured error tail. `_gateway/info`
     // is the liveness probe; this is the "what's actually wrong" surface.
     forRoutePrefixes('/centraid/_gateway/health', makeHealthRouteHandler(health)),
+    // Owner "pause background work" control (#528 Phase B): hot-applied,
+    // in-memory only, never a durable Resource-mode flip. Same bearer gate
+    // and owner-facing family as health.
+    forRoutePrefixes('/centraid/_gateway/resource', makeResourceRouteHandler(health)),
     // A single JSON document a user can save + hand to support: version,
     // health snapshot, log tail, vault sizes, and a redacted config
     // summary. Mounted right after health — same bearer gate, same

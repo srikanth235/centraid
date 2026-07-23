@@ -29,6 +29,10 @@ Code: `apps/desktop/src/main/settings.ts`.
 
 Declarative "dotfiles" for prefs are not a product feature; treat the JSON as owned by the running gateway. Daemon `config.json` may seed `resourceMode` when the pref is unset; env `CENTRAID_RESOURCE_MODE` wins over both for operators. The selected mode is applied at gateway serve boot (worker limits are process-scoped).
 
+The resolved profile is published on the health metrics surface (`GET /centraid/_gateway/health` → `metrics.resourceProfile`, issue #528 Phase A): host class, owner mode, detected host facts, and every resolved knob (worker/replication/compression/sqlite/sweep). It is a read-only projection of the boot resolution — nothing writes back through it.
+
+**Background pause is runtime-only, never a durable mode flip.** `POST`/`DELETE /centraid/_gateway/resource/pause` (issue #528 Phase B) hot-applies an owner "pause background work" window that gates only the safe loops (vault sweeps, backup retention) — never WAL/fsync durability, the consent outbox, or request-path work. It lives **in memory on the running gateway** (a restart resumes normally) and is deliberately **never persisted to prefs** and **never changes `gateway.resourceMode`**: the durable Resource mode and the transient pause are independent surfaces with no write-back between them.
+
 ### Gateway profile (multi-gateway) — runtime wins
 
 | Path | Owner |

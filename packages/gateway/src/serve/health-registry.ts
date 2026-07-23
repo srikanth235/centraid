@@ -22,11 +22,26 @@
  */
 
 import type { RuntimeLogger } from '@centraid/app-engine';
+import type { StructuredResourceProfile } from './hardware-profile.js';
 import {
+  formatBackgroundPausedDetail,
+  formatBackgroundResumedDetail,
   formatLoadShedClearedDetail,
   formatLoadShedDeferringDetail,
   formatLoadShedForcedPassDetail,
 } from './resource-mode.js';
+
+/** Owner-triggered background-pause window (#528 Phase B) — in-memory only. */
+export interface BackgroundPauseState {
+  paused: boolean;
+  /** ISO timestamp when the pause auto-lifts; `null` when indefinite or not paused. */
+  until: string | null;
+}
+
+/** Longest a single background pause may last before it auto-lifts (24h). */
+export const MAX_BACKGROUND_PAUSE_MS = 86_400_000;
+
+const BACKGROUND_PAUSE_COMPONENT = 'background-pause';
 
 export type ComponentStatus = 'ok' | 'degraded' | 'error';
 
@@ -83,12 +98,27 @@ export interface HealthMetrics {
    */
   hardwareProfileClass?: string;
   resourceMode?: string;
+  /**
+   * Machine-readable resolved Resource profile (#528 Phase A) — the host
+   * class, owner mode, detected host facts, and every resolved knob. Present
+   * once `buildGateway` publishes it via the metrics source; the string
+   * `hardwareProfileClass`/`resourceMode` fields above stay for compatibility.
+   */
+  resourceProfile?: StructuredResourceProfile;
+  /**
+   * Owner-triggered background-pause window (#528 Phase B). Always present;
+   * `paused` is false with `until: null` when nothing is paused.
+   */
+  backgroundPause: BackgroundPauseState;
   uptimeMs: number;
 }
 
 /** What a host-injected metrics source contributes — `rssBytes`/`uptimeMs` are computed here. */
 export type MetricsSourceResult = Partial<
-  Pick<HealthMetrics, 'outboxPending' | 'sseClients' | 'hardwareProfileClass' | 'resourceMode'>
+  Pick<
+    HealthMetrics,
+    'outboxPending' | 'sseClients' | 'hardwareProfileClass' | 'resourceMode' | 'resourceProfile'
+  >
 >;
 export type MetricsSource = () => MetricsSourceResult;
 
@@ -163,6 +193,9 @@ export class HealthRegistry {
   private metricsSource?: MetricsSource;
   private performanceMetricsSource?: PerformanceMetricsSource;
   private resetPerformanceMetricsSource?: () => void;
+  private backgroundPaused = false;
+  /** Wall-clock ms when the pause auto-lifts; `undefined` when indefinite. */
+  private backgroundPauseUntilMs?: number;
 
   constructor(options: HealthRegistryOptions = {}) {
     this.maxEvents = options.maxEvents ?? DEFAULT_MAX_EVENTS;
@@ -218,6 +251,66 @@ export class HealthRegistry {
     this.reportDegraded('load-shed', formatLoadShedForcedPassDetail(p99, deferredMs));
     this.loadShedSinceMs = now;
     return false;
+  }
+
+  /**
+   * Owner-triggered "pause background work" control (#528 Phase B). A
+   * `durationMs` of `undefined` pauses indefinitely ("until I resume").
+   * Callers validate the bound; this stores it verbatim. In-memory only —
+   * a restart resumes normally, and this NEVER touches durable prefs or
+   * flips a Resource mode. The returned window (and `shouldPauseBackgroundWork`)
+   * gate only the safe loops — vault sweeps and backup retention — never
+   * WAL/fsync durability, the consent outbox, or request-path work.
+   */
+  pauseBackgroundWork(durationMs?: number): BackgroundPauseState {
+    this.backgroundPaused = true;
+    this.backgroundPauseUntilMs = durationMs === undefined ? undefined : this.now() + durationMs;
+    const state = this.readBackgroundPause();
+    const detail = formatBackgroundPausedDetail(state.until);
+    this.reportDegraded(BACKGROUND_PAUSE_COMPONENT, detail);
+    this.pushEvent(BACKGROUND_PAUSE_COMPONENT, 'warn', detail);
+    return state;
+  }
+
+  /** Lift an active pause; idempotent when nothing is paused. */
+  resumeBackgroundWork(): BackgroundPauseState {
+    if (this.backgroundPaused) this.clearBackgroundPause();
+    return this.readBackgroundPause();
+  }
+
+  /** Current pause window; an expired `until` auto-lifts on read. */
+  backgroundPauseState(): BackgroundPauseState {
+    return this.readBackgroundPause();
+  }
+
+  /** True while a pause is active — the signal safe background loops honor. */
+  shouldPauseBackgroundWork(): boolean {
+    return this.readBackgroundPause().paused;
+  }
+
+  private readBackgroundPause(): BackgroundPauseState {
+    if (
+      this.backgroundPaused &&
+      this.backgroundPauseUntilMs !== undefined &&
+      this.now() >= this.backgroundPauseUntilMs
+    ) {
+      this.clearBackgroundPause();
+    }
+    return {
+      paused: this.backgroundPaused,
+      until:
+        this.backgroundPauseUntilMs === undefined
+          ? null
+          : new Date(this.backgroundPauseUntilMs).toISOString(),
+    };
+  }
+
+  private clearBackgroundPause(): void {
+    this.backgroundPaused = false;
+    this.backgroundPauseUntilMs = undefined;
+    const detail = formatBackgroundResumedDetail();
+    this.reportOk(BACKGROUND_PAUSE_COMPONENT, detail);
+    this.pushEvent(BACKGROUND_PAUSE_COMPONENT, 'warn', detail);
   }
 
   reportOk(component: string, detail?: string): void {
@@ -312,6 +405,10 @@ export class HealthRegistry {
           ? { hardwareProfileClass: sourced.hardwareProfileClass }
           : {}),
         ...(sourced.resourceMode !== undefined ? { resourceMode: sourced.resourceMode } : {}),
+        ...(sourced.resourceProfile !== undefined
+          ? { resourceProfile: sourced.resourceProfile }
+          : {}),
+        backgroundPause: this.readBackgroundPause(),
         ...performance,
         uptimeMs,
       },
