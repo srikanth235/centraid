@@ -22,6 +22,11 @@
  */
 
 import type { RuntimeLogger } from '@centraid/app-engine';
+import {
+  formatLoadShedClearedDetail,
+  formatLoadShedDeferringDetail,
+  formatLoadShedForcedPassDetail,
+} from './resource-mode.js';
 
 export type ComponentStatus = 'ok' | 'degraded' | 'error';
 
@@ -71,11 +76,20 @@ export interface HealthMetrics {
   eventLoopLagSamples?: number;
   /** Boot-time durability-barrier latency for one 4 KiB write. */
   storageFsyncMs?: number;
+  /**
+   * Resolved hardware class (`constrained` | `standard`) and owner Resource
+   * mode (`auto` | `conserve` | `balanced` | `performance`) — issue #521.
+   * Present once `buildGateway` publishes them via the metrics source.
+   */
+  hardwareProfileClass?: string;
+  resourceMode?: string;
   uptimeMs: number;
 }
 
 /** What a host-injected metrics source contributes — `rssBytes`/`uptimeMs` are computed here. */
-export type MetricsSourceResult = Partial<Pick<HealthMetrics, 'outboxPending' | 'sseClients'>>;
+export type MetricsSourceResult = Partial<
+  Pick<HealthMetrics, 'outboxPending' | 'sseClients' | 'hardwareProfileClass' | 'resourceMode'>
+>;
 export type MetricsSource = () => MetricsSourceResult;
 
 export type PerformanceMetricsSourceResult = Partial<
@@ -184,22 +198,24 @@ export class HealthRegistry {
     if (p99 === undefined || p99 < maxP99Ms) {
       if (this.loadShedSinceMs !== undefined) {
         this.loadShedSinceMs = undefined;
-        this.reportOk('load-shed', 'event-loop pressure cleared');
+        this.reportOk('load-shed', formatLoadShedClearedDetail());
       }
       return false;
     }
 
     this.loadShedSinceMs ??= now;
     const deferredMs = now - this.loadShedSinceMs;
-    if (deferredMs < this.maxLoadShedMs) return true;
+    if (deferredMs < this.maxLoadShedMs) {
+      // Keep the component detail current while deferring so Diagnostics
+      // shows owner-facing copy, not only the forced-pass line.
+      this.reportDegraded('load-shed', formatLoadShedDeferringDetail(p99));
+      return true;
+    }
 
     // Never silently starve WAL/outbox/backup work forever. Permit one caller
     // through per max-age interval and retain a degraded health signal until
     // event-loop pressure clears.
-    this.reportDegraded(
-      'load-shed',
-      `event-loop p99 ${p99.toFixed(1)} ms; forcing one background pass after ${deferredMs} ms deferred`,
-    );
+    this.reportDegraded('load-shed', formatLoadShedForcedPassDetail(p99, deferredMs));
     this.loadShedSinceMs = now;
     return false;
   }
@@ -292,6 +308,10 @@ export class HealthRegistry {
         rssBytes: process.memoryUsage().rss,
         outboxPending: sourced.outboxPending ?? 0,
         ...(sourced.sseClients !== undefined ? { sseClients: sourced.sseClients } : {}),
+        ...(sourced.hardwareProfileClass !== undefined
+          ? { hardwareProfileClass: sourced.hardwareProfileClass }
+          : {}),
+        ...(sourced.resourceMode !== undefined ? { resourceMode: sourced.resourceMode } : {}),
         ...performance,
         uptimeMs,
       },

@@ -34,12 +34,30 @@ export interface HealthEventDTO {
   message: string;
 }
 
+/** Coarse numeric signals from the gateway health snapshot (issue #521). */
+export interface HealthMetricsDTO {
+  rssBytes: number;
+  outboxPending: number;
+  sseClients?: number;
+  eventLoopLagP50Ms?: number;
+  eventLoopLagP99Ms?: number;
+  eventLoopLagMaxMs?: number;
+  eventLoopLagPeakP99Ms?: number;
+  eventLoopLagSamples?: number;
+  storageFsyncMs?: number;
+  hardwareProfileClass?: string;
+  resourceMode?: string;
+  uptimeMs: number;
+}
+
 export interface GatewayHealthDTO {
   status: HealthStatus;
   startedAt: string;
   uptimeMs: number;
   components: HealthComponentDTO[];
   recentEvents: HealthEventDTO[];
+  /** Present on modern gateways; optional for older heartbeats/tests. */
+  metrics?: HealthMetricsDTO;
 }
 
 export interface SettingsDiagnosticsBridgeProps {
@@ -64,9 +82,19 @@ const COMPONENT_LABEL: Record<string, string> = {
   outbox: 'Outbox',
   catalog: 'Model catalog',
   tunnel: 'Phone tunnel',
+  'hardware-profile': 'Hardware profile',
+  'event-loop': 'Responsiveness',
+  'load-shed': 'Background load',
+  disk: 'Disk space',
+  'storage-latency': 'Storage latency',
+  backups: 'Backups',
+  enrichment: 'Media enrichment',
+  'blob-sweep': 'Blob sweep',
+  scheduler: 'Scheduler',
+  broker: 'Connections broker',
 };
 
-function componentLabel(component: string): string {
+export function componentLabel(component: string): string {
   return (
     COMPONENT_LABEL[component] ??
     component.charAt(0).toUpperCase() + component.slice(1).replace(/-/g, ' ')
@@ -81,6 +109,40 @@ function formatUptime(ms: number): string {
   if (days > 0) return `${days}d ${hours}h`;
   if (hours > 0) return `${hours}h ${minutes}m`;
   return `${minutes}m`;
+}
+
+function formatRss(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return '—';
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  const units = ['KB', 'MB', 'GB'] as const;
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
+}
+
+function resourceModeWord(mode: string | undefined): string {
+  switch (mode) {
+    case 'auto':
+      return 'Auto';
+    case 'conserve':
+      return 'Conserve';
+    case 'balanced':
+      return 'Balanced';
+    case 'performance':
+      return 'Performance';
+    default:
+      return mode ?? '—';
+  }
+}
+
+function hardwareClassWord(cls: string | undefined): string {
+  if (cls === 'constrained') return 'Constrained';
+  if (cls === 'standard') return 'Standard';
+  return cls ?? '—';
 }
 
 function eventClock(iso: string): string {
@@ -135,6 +197,36 @@ function ComponentRow({
   );
 }
 
+function MetricsPanel({ metrics }: { metrics: HealthMetricsDTO }): JSX.Element {
+  const lag =
+    metrics.eventLoopLagP99Ms !== undefined
+      ? `p99 ${metrics.eventLoopLagP99Ms.toFixed(1)} ms`
+      : '—';
+  const fsync =
+    metrics.storageFsyncMs !== undefined ? `${metrics.storageFsyncMs.toFixed(1)} ms` : '—';
+  return (
+    <div className={styles.metrics} data-testid="diag-metrics">
+      <div className={styles.metric}>
+        <div className={styles.metricLabel}>Memory</div>
+        <div className={styles.metricValue}>{formatRss(metrics.rssBytes)}</div>
+      </div>
+      <div className={styles.metric}>
+        <div className={styles.metricLabel}>Event-loop lag</div>
+        <div className={styles.metricValue}>{lag}</div>
+      </div>
+      <div className={styles.metric}>
+        <div className={styles.metricLabel}>Storage fsync</div>
+        <div className={styles.metricValue}>{fsync}</div>
+      </div>
+      <div className={styles.metric}>
+        <div className={styles.metricLabel}>Resource mode</div>
+        <div className={styles.metricValue}>{resourceModeWord(metrics.resourceMode)}</div>
+        <div className={styles.metricSub}>{hardwareClassWord(metrics.hardwareProfileClass)}</div>
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsDiagnosticsScreen({
   loadHealth,
   onJumpToLogs,
@@ -184,6 +276,8 @@ export default function SettingsDiagnosticsScreen({
           <span>{busy ? 'Checking…' : 'Refresh'}</span>
         </button>
       </div>
+
+      {health.metrics ? <MetricsPanel metrics={health.metrics} /> : null}
 
       <div className={styles.panel}>
         {health.components.length === 0 ? (

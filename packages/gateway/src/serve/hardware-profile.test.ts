@@ -1,5 +1,9 @@
 import { expect, test } from 'vitest';
-import { resolveGatewayHardwareProfile } from './hardware-profile.js';
+import {
+  formatHardwareProfileDetail,
+  hardwareClassForResourceMode,
+  resolveGatewayHardwareProfile,
+} from './hardware-profile.js';
 
 test('slow storage selects one coherent constrained-host profile', () => {
   expect(
@@ -9,6 +13,7 @@ test('slow storage selects one coherent constrained-host profile', () => {
     ),
   ).toMatchObject({
     class: 'constrained',
+    resourceMode: 'auto',
     // Detection tunes concurrency, but durability only relaxes on an
     // explicit operator choice.
     sqliteSynchronous: 'FULL',
@@ -70,4 +75,89 @@ test('explicit tuning overrides are reflected in the resolved profile', () => {
     staticBrotliQuality: 7,
     staticGzipQuality: 8,
   });
+});
+
+test('Conserve mode pins constrained limits and NORMAL durability', () => {
+  const profile = resolveGatewayHardwareProfile(
+    {
+      cores: 16,
+      totalMemoryBytes: 32 * 1024 ** 3,
+      storageFsyncMs: 1,
+      resourceMode: 'conserve',
+    },
+    {},
+  );
+  expect(profile).toMatchObject({
+    class: 'constrained',
+    resourceMode: 'conserve',
+    sqliteSynchronous: 'NORMAL',
+    workerMaxConcurrent: 2,
+    workerPoolSize: 0,
+    replicationConcurrency: 1,
+  });
+  expect(formatHardwareProfileDetail(profile)).toContain('mode=Conserve');
+  expect(formatHardwareProfileDetail(profile)).toContain('class=constrained');
+});
+
+test('Balanced mode pins standard throughput on a small host', () => {
+  expect(
+    resolveGatewayHardwareProfile(
+      {
+        cores: 2,
+        totalMemoryBytes: 2 * 1024 ** 3,
+        storageFsyncMs: 30,
+        resourceMode: 'balanced',
+      },
+      {},
+    ),
+  ).toMatchObject({
+    class: 'standard',
+    resourceMode: 'balanced',
+    workerMaxConcurrent: 8,
+    workerPoolSize: 2,
+    replicationConcurrency: 3,
+    sqliteSynchronous: 'FULL',
+  });
+});
+
+test('Performance mode raises standard-class worker and replication ceilings', () => {
+  const performance = resolveGatewayHardwareProfile(
+    {
+      cores: 8,
+      totalMemoryBytes: 16 * 1024 ** 3,
+      storageFsyncMs: 1,
+      resourceMode: 'performance',
+    },
+    {},
+  );
+  const balanced = resolveGatewayHardwareProfile(
+    {
+      cores: 8,
+      totalMemoryBytes: 16 * 1024 ** 3,
+      storageFsyncMs: 1,
+      resourceMode: 'balanced',
+    },
+    {},
+  );
+  expect(performance.class).toBe('standard');
+  expect(performance.workerMaxConcurrent).toBeGreaterThan(balanced.workerMaxConcurrent);
+  expect(performance.workerPoolSize).toBeGreaterThan(balanced.workerPoolSize);
+  expect(performance.replicationConcurrency).toBeGreaterThan(balanced.replicationConcurrency);
+});
+
+test('CENTRAID_HARDWARE_PROFILE still wins over Resource mode for class', () => {
+  expect(
+    resolveGatewayHardwareProfile(
+      { cores: 16, totalMemoryBytes: 32 * 1024 ** 3, resourceMode: 'conserve' },
+      { CENTRAID_HARDWARE_PROFILE: 'standard' },
+    ),
+  ).toMatchObject({ class: 'standard', resourceMode: 'conserve' });
+});
+
+test('hardwareClassForResourceMode maps modes without re-detection', () => {
+  expect(hardwareClassForResourceMode('auto', 'constrained')).toBe('constrained');
+  expect(hardwareClassForResourceMode('auto', 'standard')).toBe('standard');
+  expect(hardwareClassForResourceMode('conserve', 'standard')).toBe('constrained');
+  expect(hardwareClassForResourceMode('balanced', 'constrained')).toBe('standard');
+  expect(hardwareClassForResourceMode('performance', 'constrained')).toBe('standard');
 });
