@@ -79,7 +79,9 @@ Issue: https://github.com/srikanth235/centraid/issues/526
 - [x] **I1.** Add the Assist threat model to `SECURITY.md`.
 - [x] **I2.** Add secret-rotation, revocation, outage, rate-limit, alert, and kill-switch recovery steps.
 - [x] **I3.** Add user/operator help for Assist, reconnect, and BYO reachability.
-- [ ] **I4.** Add this receipt and publish the implementation as a PR linked to #526. The receipt exists; the box remains open until the stacked PR URL is recorded.
+- [x] **I4.** Add this receipt and publish the implementation as a PR linked to #526.
+
+Published in [PR #525](https://github.com/srikanth235/centraid/pull/525), with the Assist implementation added as commit `8b7319dd`.
 
 ### Acceptance
 
@@ -135,6 +137,7 @@ Checked-item evidence crosswalk:
 - **I1.** Add the Assist threat model to `SECURITY.md`. — the new Model B threat-model section records assets, boundaries, abuse cases, and mitigations.
 - **I2.** Add secret-rotation, revocation, outage, rate-limit, alert, and kill-switch recovery steps. — `docs/recovery/oauth-assist.md` provides the operator runbook.
 - **I3.** Add user/operator help for Assist, reconnect, and BYO reachability. — README, OAuth Assist docs, release docs, and connection UI provide the guidance.
+- **I4.** Add this receipt and publish the implementation as a PR linked to #526. — published in [PR #525](https://github.com/srikanth235/centraid/pull/525) as commit `8b7319dd`.
 - Successful exchange activates the connection; Assist and BYO refresh retain their respective paths. — gateway integration tests verify activation and both refresh modes.
 - The implementation has no Centraid/Cloudflare durable token or per-user connection store, and browser/deep-link payloads contain no tokens. — Worker configuration, courier schemas, and custody tests verify the zero-storage boundary.
 - Primary UX is one-button Assist; BYO remains Advanced. — connection-screen tests verify the final hierarchy.
@@ -329,6 +332,7 @@ unchecked.
 | codex-019f8e48-8ec-1784810888-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #526 | gpt-5.6-sol | 32203 | 0 | 1142272 | 7082 | 39285 | 0.4723 | 2203560 | 0 | 88549632 | 224835 | feat(oauth): add Centraid Assist code courier (#526) -m governance: allow-toolch |
 | codex-019f8e48-8ec-1784810962-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #526 | gpt-5.6-sol | 7981 | 0 | 461568 | 1256 | 9237 | 0.1542 | 2211541 | 0 | 89011200 | 226091 | feat(oauth): add Centraid Assist code courier (#526) -m governance: allow-toolch |
 | codex-019f8e48-8ec-1784811129-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #526 | gpt-5.6-sol | 11925 | 0 | 1001984 | 2392 | 14317 | 0.3162 | 2223466 | 0 | 90013184 | 228483 | feat(oauth): add Centraid Assist code courier (#526) -m governance: allow-toolch |
+| codex-019f8e48-8ec-1784812419-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #526 | gpt-5.6-sol | 229904 | 0 | 5777920 | 13164 | 243068 | 2.2167 | 2453370 | 0 | 95791104 | 241647 | docs(oauth): record Assist PR evidence (#526) |
 ## Steering
 
 **Check 1 — every human-steering event is recorded in ### Steering under ## Accounting**
