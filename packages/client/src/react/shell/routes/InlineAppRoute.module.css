@@ -1,0 +1,27 @@
+/* Inline app host (issue #505). The running-app pane fills the frame edge to
+   edge, mirroring AppViewRoute's full-bleed body — but the app is a React
+   subtree, not an iframe. `.scope` carries the blueprint token layer
+   (InlineAppRoute injects a rescoped `:root` block onto this class) so the app's
+   own CSS modules resolve their vars without restyling the shell chrome. */
+
+.view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.fallback {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-2, #a8adb8);
+  font: var(--t-small, 400 0.85rem/1.4 system-ui, sans-serif);
+}

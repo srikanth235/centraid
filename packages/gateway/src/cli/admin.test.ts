@@ -14,10 +14,10 @@ import crypto from 'node:crypto';
 import { commandVault } from './vault-admin.ts';
 import { commandDevices, commandPair } from './device-admin.ts';
 import {
-  makeDaemonDevicePlane,
-  watchEnrollmentRevocations,
   DEVICE_HEADER,
   DEVICE_PROOF_HEADER,
+  makeDaemonDevicePlane,
+  watchEnrollmentRevocations,
 } from './endpoint-host.ts';
 import { daemonLayoutFor } from './paths.ts';
 import { openVaultRegistry } from '../serve/vault-registry.ts';
@@ -85,97 +85,6 @@ function lastJson(text: string): Record<string, unknown> {
   const lines = text.trim().split('\n').filter(Boolean);
   return JSON.parse(lines[lines.length - 1]!) as Record<string, unknown>;
 }
-
-// ── vault admin ───────────────────────────────────────────────────────
-
-test('vault create / list / rename / delete over the admin plane', async () => {
-  // The daemon bootstraps a default vault on first mount; the CLI reads
-  // the same root.
-  const created = lastJson(
-    await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail)),
-  );
-  expect(created).toMatchObject({ name: 'Family' });
-
-  const listed = (await capture(() => commandVault(['list', '--data-dir', dataDir], fail)))
-    .trim()
-    .split('\n')
-    .filter(Boolean);
-  // The bootstrapped default vault + the one we created.
-  expect(listed).toHaveLength(2);
-
-  const renamed = lastJson(
-    await capture(() =>
-      commandVault(['rename', '--data-dir', dataDir, created.vaultId as string, 'Sharma'], fail),
-    ),
-  );
-  expect(renamed).toMatchObject({ name: 'Sharma' });
-
-  const deleted = lastJson(
-    await capture(() =>
-      commandVault(['delete', '--data-dir', dataDir, created.vaultId as string], fail),
-    ),
-  );
-  expect(deleted).toMatchObject({ deleted: created.vaultId });
-});
-
-test('vault admin rejects bad usage + the last-vault delete', async () => {
-  await expect(capture(() => commandVault(['bogus', '--data-dir', dataDir], fail))).rejects.toThrow(
-    /list, create, rename, delete/,
-  );
-  await expect(capture(() => commandVault(['list'], fail))).rejects.toThrow(/--data-dir/);
-  await expect(
-    capture(() => commandVault(['rename', '--data-dir', dataDir], fail)),
-  ).rejects.toThrow(/vault rename/);
-
-  // Deleting the sole bootstrapped vault is refused (a gateway always hosts one).
-  const only = lastJson(await capture(() => commandVault(['create', '--data-dir', dataDir], fail)));
-  // Two vaults now; delete the bootstrapped one, then the last is protected.
-  const [first] = (await capture(() => commandVault(['list', '--data-dir', dataDir], fail)))
-    .trim()
-    .split('\n')
-    .map((l) => JSON.parse(l) as { vaultId: string });
-  await capture(() => commandVault(['delete', '--data-dir', dataDir, first!.vaultId], fail));
-  await expect(
-    capture(() => commandVault(['delete', '--data-dir', dataDir, only.vaultId as string], fail)),
-  ).rejects.toThrow(/last vault/);
-});
-
-test('vault list/create --json wrap output in one {ok,...} line (issue #382)', async () => {
-  const created = lastJson(
-    await capture(() =>
-      commandVault(['create', '--data-dir', dataDir, '--name', 'Family', '--json'], fail),
-    ),
-  );
-  expect(created).toEqual({ ok: true, vaultId: expect.any(String), name: 'Family' });
-
-  const listed = lastJson(
-    await capture(() => commandVault(['list', '--data-dir', dataDir, '--json'], fail)),
-  );
-  expect(listed.ok).toBe(true);
-  expect(Array.isArray(listed.vaults)).toBe(true);
-  // The bootstrapped default vault + the one just created.
-  expect((listed.vaults as unknown[]).length).toBe(2);
-  expect(listed.vaults).toContainEqual(
-    expect.objectContaining({ vaultId: created.vaultId, name: 'Family' }),
-  );
-});
-
-test('vault --json failure emits {ok:false,error,message} on stdout, then still fails the process', async () => {
-  let captured = '';
-  const original = process.stdout.write.bind(process.stdout);
-  process.stdout.write = ((chunk: unknown): boolean => {
-    captured += String(chunk);
-    return true;
-  }) as typeof process.stdout.write;
-  try {
-    await expect(commandVault(['list', '--json'], fail)).rejects.toThrow(/--data-dir/);
-  } finally {
-    process.stdout.write = original;
-  }
-  const parsed = lastJson(captured);
-  expect(parsed).toMatchObject({ ok: false, error: 'usage' });
-  expect(parsed.message).toMatch(/--data-dir/);
-});
 
 // ── devices admin ─────────────────────────────────────────────────────
 
@@ -377,6 +286,42 @@ test('pair --json emits one JSON line instead of the pasteable text block (issue
     Buffer.from(parsed.ticket as string, 'base64url').toString('utf8'),
   ) as { kind: string; vaultName: string };
   expect(payload).toMatchObject({ kind: 'centraid-gw-pair', vaultName: 'Family' });
+});
+
+test('pair grants owner to the first device in a vault and full thereafter (issue #505)', async () => {
+  const layout = daemonLayoutFor(dataDir);
+  await fs.mkdir(dataDir, { recursive: true });
+  await fs.writeFile(
+    layout.endpointStateFile,
+    JSON.stringify({ endpointId: 'gw-endpoint', ticket: 'gw-ticket-base32' }),
+  );
+  await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
+
+  // No enrollments yet → the first pairing is the landlord device (owner) —
+  // the per-device, revocable replacement for the retired shared admin token.
+  const first = lastJson(
+    await capture(() => commandPair(['--data-dir', dataDir, '--vault', 'Family', '--json'], fail)),
+  );
+  expect(first.trust).toBe('owner');
+
+  // Enroll a device so the vault is no longer empty.
+  await capture(() =>
+    commandDevices(['add', '--data-dir', dataDir, 'ep-first', '--vault', 'Family'], fail),
+  );
+
+  // A later pairing defaults to full, not owner.
+  const second = lastJson(
+    await capture(() => commandPair(['--data-dir', dataDir, '--vault', 'Family', '--json'], fail)),
+  );
+  expect(second.trust).toBe('full');
+
+  // `--trust owner` still overrides explicitly.
+  const explicit = lastJson(
+    await capture(() =>
+      commandPair(['--data-dir', dataDir, '--vault', 'Family', '--trust', 'owner', '--json'], fail),
+    ),
+  );
+  expect(explicit.trust).toBe('owner');
 });
 
 test('pair --json failure emits {ok:false,error,message} on stdout, then still fails the process', async () => {

@@ -10,16 +10,17 @@
       "version": "0.4.1",
       "kind": "app",
       "files": [
+        "Chrome.module.css",
+        "Chrome.tsx",
         "actions/attach.ts",
         "actions/cancel-event.ts",
         "actions/detach.ts",
         "actions/propose.ts",
         "actions/reschedule.ts",
         "actions/rsvp.ts",
-        "app.css",
+        "app-inline.tsx",
+        "app-root.tsx",
         "app.json",
-        "app.tsx",
-        "chrome.ts",
         "components/CreateModal.module.css",
         "components/CreateModal.tsx",
         "components/EventDrawer.module.css",
@@ -45,8 +46,7 @@
         "queries/parties.ts",
         "queries/search.ts",
         "queries/upcoming.ts",
-        "types.ts",
-        "wall.css"
+        "types.ts"
       ],
       "appKnobs": [
         {
@@ -144,6 +144,8 @@
       "version": "0.3.1",
       "kind": "app",
       "files": [
+        "Chrome.module.css",
+        "Chrome.tsx",
         "actions/add-tag.ts",
         "actions/add.ts",
         "actions/attach.ts",
@@ -151,10 +153,9 @@
         "actions/edit.ts",
         "actions/remove-tag.ts",
         "actions/set-status.ts",
-        "app.css",
+        "app-inline.tsx",
+        "app-root.tsx",
         "app.json",
-        "app.tsx",
-        "chrome.ts",
         "components/Board.module.css",
         "components/Board.tsx",
         "components/Capture.module.css",
@@ -175,8 +176,7 @@
         "queries/board.ts",
         "queries/search.ts",
         "seed.js",
-        "types.ts",
-        "wall.css"
+        "types.ts"
       ],
       "appKnobs": [
         {
@@ -278,6 +278,8 @@
       "version": "0.1.1",
       "kind": "app",
       "files": [
+        "Chrome.module.css",
+        "Chrome.tsx",
         "actions/add-debt.ts",
         "actions/add-gift.ts",
         "actions/add-important-date.ts",
@@ -299,10 +301,9 @@
         "actions/toggle-reminder.ts",
         "actions/toggle-task.ts",
         "actions/unstar-person.ts",
-        "app.css",
+        "app-inline.tsx",
+        "app-root.tsx",
         "app.json",
-        "app.tsx",
-        "chrome.ts",
         "components/Activity.tsx",
         "components/AddPersonModal.module.css",
         "components/AddPersonModal.tsx",
@@ -338,8 +339,7 @@
         "queries/person.ts",
         "queries/search.ts",
         "seed.js",
-        "types.ts",
-        "wall.css"
+        "types.ts"
       ],
       "appKnobs": [
         {
@@ -437,6 +437,8 @@
       "version": "0.4.1",
       "kind": "app",
       "files": [
+        "Chrome.module.css",
+        "Chrome.tsx",
         "actions/add-tag.ts",
         "actions/attach.ts",
         "actions/create-note.ts",
@@ -448,10 +450,9 @@
         "actions/move-note.ts",
         "actions/remove-tag.ts",
         "actions/rename-notebook.ts",
-        "app.css",
+        "app-inline.tsx",
+        "app-root.tsx",
         "app.json",
-        "app.tsx",
-        "chrome.ts",
         "components/Card.module.css",
         "components/Card.tsx",
         "components/Editor.module.css",
@@ -475,8 +476,7 @@
         "queries/note.ts",
         "queries/search.ts",
         "seed.js",
-        "types.ts",
-        "wall.css"
+        "types.ts"
       ],
       "appKnobs": [
         {
@@ -574,6 +574,8 @@
       "version": "0.2.0",
       "kind": "app",
       "files": [
+        "Chrome.module.css",
+        "Chrome.tsx",
         "actions/add-to-album.ts",
         "actions/confirm-face.ts",
         "actions/create-album.ts",
@@ -592,9 +594,9 @@
         "actions/upload.ts",
         "activity.ts",
         "albums-actions.ts",
-        "app.css",
+        "app-inline.tsx",
+        "app-root.tsx",
         "app.json",
-        "app.tsx",
         "assets-actions.ts",
         "components/AlbumGrid.module.css",
         "components/AlbumGrid.tsx",
@@ -747,6 +749,8 @@
       "version": "0.1.0",
       "kind": "app",
       "files": [
+        "Chrome.module.css",
+        "Chrome.tsx",
         "actions/create-folder.ts",
         "actions/delete-folder.ts",
         "actions/edit.ts",
@@ -762,10 +766,9 @@
         "actions/unstar.ts",
         "actions/untag.ts",
         "actions/upload.ts",
-        "app.css",
+        "app-inline.tsx",
+        "app-root.tsx",
         "app.json",
-        "app.tsx",
-        "chrome.ts",
         "components/Activity.module.css",
         "components/Activity.tsx",
         "components/BulkBar.module.css",
@@ -905,6 +908,8 @@
       "version": "0.1.0",
       "kind": "app",
       "files": [
+        "Chrome.module.css",
+        "Chrome.tsx",
         "actions/add-item.ts",
         "actions/edit-item.ts",
         "actions/purge-item.ts",
@@ -912,9 +917,9 @@
         "actions/star-item.ts",
         "actions/trash-item.ts",
         "actions/unstar-item.ts",
-        "app.css",
+        "app-inline.tsx",
+        "app-root.tsx",
         "app.json",
-        "app.tsx",
         "components/Detail.module.css",
         "components/Detail.tsx",
         "components/EditModal.module.css",
@@ -945,8 +950,7 @@
         "queries/trash.ts",
         "queries/watchtower.ts",
         "totp.ts",
-        "types.ts",
-        "wall.css"
+        "types.ts"
       ],
       "appKnobs": [
         {
@@ -1004,6 +1008,8 @@
       "version": "0.1.1",
       "kind": "app",
       "files": [
+        "Chrome.module.css",
+        "Chrome.tsx",
         "actions/add-expense.ts",
         "actions/add-friend.ts",
         "actions/add-group-member.ts",
@@ -1015,10 +1021,9 @@
         "actions/rename-group.ts",
         "actions/restore-expense.ts",
         "actions/settle-up.ts",
-        "app.css",
+        "app-inline.tsx",
+        "app-root.tsx",
         "app.json",
-        "app.tsx",
-        "chrome.ts",
         "components/Activity.module.css",
         "components/Activity.tsx",
         "components/Dashboard.module.css",
@@ -1050,8 +1055,7 @@
         "queries/group.ts",
         "queries/search.ts",
         "seed.js",
-        "types.ts",
-        "wall.css"
+        "types.ts"
       ],
       "appKnobs": [
         {

@@ -1,0 +1,317 @@
+/* Agenda chrome shared by the served and inline routes (issue #505). Common
+   shell/sidebar/topbar/drawer geometry composes the kit-app-* vocabulary;
+   this module retains Agenda's variations. Design tokens (--ink, --_accent,
+   --bg-elev, --line, --r-md, --t-title, --mono, …) are supplied by the shell
+   document (the scoped blueprint-token block InlineAppRoute injects), so this
+   file references them directly.
+
+   Two things app.css carries at :root that the blueprint token layer does NOT,
+   yet agenda's component modules consume heavily (--accent-deep-fg ×10, --warn),
+   are folded in below under the app-root scope (`.root` == the host's
+   `.centraid-inline-scope` element) with the same light/dark variants app.css
+   defines. The day "+N more" popover (kit portals it to <body>, outside the
+   inline scope) keeps its `ag-day-pop*` rules global; its ink/mono vars resolve
+   from the shell's own :root token layer. */
+
+/* ---- App-root: the flex child of the route body + the token fold + the
+   scoping anchor for the app.css globals reused components still emit. ---- */
+.root {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* app.css :root escape hatches, absent from the blueprint token layer. */
+  --accent-deep-fg: var(--accent-deep);
+  --warn: #b06a12;
+}
+:global(:root[data-theme='dark']) .root {
+  --warn: #e0a13c;
+  --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
+}
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-theme])) .root {
+    --warn: #e0a13c;
+    --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
+  }
+}
+
+/* app.css globals reused components (Sidebar/HeaderBar/the canvas views/the
+   drawer/the create modal) still reference by literal class name — ported here
+   scoped under the inline app subtree so they never leak to the shell. */
+.root :global(.muted) {
+  color: var(--ink-2);
+}
+.root :global(.small) {
+  font-size: 0.8rem;
+}
+.root :global(mark) {
+  background: var(--accent-soft);
+  color: var(--accent-deep-fg);
+  border-radius: 3px;
+  padding: 0 1px;
+}
+.root :global(.ag-dot) {
+  flex-shrink: 0;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 3px;
+}
+.root :global(.ag-eyebrow-label) {
+  font: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--ink-3);
+  margin: 18px 0 9px;
+}
+.root :global(.ag-field-row) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font: var(--t-small);
+  color: var(--ink-3);
+}
+.root :global(.ag-field-row) span {
+  width: 38px;
+  flex-shrink: 0;
+}
+.root :global(.ag-field-row) input,
+.root :global(.ag-field-row) select {
+  flex: 1;
+  min-width: 0;
+  font: var(--t-body);
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  outline: none;
+  font-family: var(--font-sans);
+}
+.root :global(.ag-field-row) select {
+  -webkit-appearance: none;
+  appearance: none;
+}
+.root :global(.ag-field-row) input:focus,
+.root :global(.ag-field-row) select:focus {
+  border-color: var(--selb);
+  box-shadow: var(--kit-focus-ring);
+}
+/* Schedule-view row title — also a global test selector the app-boot harness
+   queries (.ag-sched-title); `tentative` is the shared state modifier. */
+.root :global(.ag-sched-title) {
+  font: var(--t-body-strong);
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.root :global(.ag-sched-title.tentative) {
+  color: var(--ink-2);
+}
+
+/* ---- Shell ---- */
+/* .shell is a flex:1 + position:relative pane (NOT height:100vh): it fills the
+   inline route body so the component-width narrow observer measures real width,
+   and it is the positioning context for the narrow (phone) sidebar drawer so
+   the drawer overlays this pane inline — never the shell's own sidebar at the
+   viewport edge. */
+.shell {
+  composes: kit-app-shell from global;
+  --kit-app-side-width: 258px;
+  --kit-app-drawer-width: 270px;
+  --kit-app-topbar-gap: 10px;
+  --kit-app-topbar-padding: 14px 22px;
+  letter-spacing: var(--tracking-body);
+}
+
+/* ---- Sidebar ---- */
+.side {
+  composes: kit-app-side from global;
+}
+.brand {
+  composes: kit-app-brand from global;
+}
+.brandMark {
+  composes: kit-app-brand-mark from global;
+}
+.brandText {
+  composes: kit-app-brand-text from global;
+}
+.brandName {
+  composes: kit-app-brand-name from global;
+}
+.brandTag {
+  composes: kit-app-brand-tag from global;
+}
+.sideClose {
+  composes: kit-app-side-close from global;
+}
+.new {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 11px 14px;
+  margin-bottom: 16px;
+  border: none;
+  border-radius: var(--r-md);
+  background: var(--accent-deep);
+  color: #fff;
+  font: var(--t-body-strong);
+  box-shadow: var(--shadow-sm);
+  transition: filter 0.14s var(--ease);
+}
+.new:hover {
+  filter: brightness(1.07);
+}
+.new:active {
+  transform: scale(0.99);
+}
+.calsLabel {
+  padding: 16px 10px 8px;
+  margin: 0;
+}
+.sideFoot {
+  composes: kit-app-side-foot from global;
+}
+.consentLine {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 4px;
+  color: var(--ink-3);
+}
+.consentLine svg {
+  color: var(--accent-deep-fg);
+  flex-shrink: 0;
+}
+.consentLine span {
+  font: var(--t-small);
+  font-size: 11.5px;
+}
+.scrim {
+  composes: kit-app-scrim from global;
+}
+
+/* ---- Main / topbar ---- */
+.main {
+  composes: kit-app-main from global;
+}
+.topbar {
+  composes: kit-app-topbar from global;
+  flex-wrap: wrap;
+}
+.hamburger {
+  composes: kit-app-hamburger from global;
+}
+.headerBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.topbarTools {
+  composes: kit-app-tools from global;
+  flex-wrap: wrap;
+}
+.search {
+  width: 190px;
+}
+.askMount {
+  composes: kit-app-ask-mount from global;
+}
+.banner {
+  margin: 14px 22px 0;
+}
+.canvas {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 22px 22px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- Narrow (phone) — driven by .isNarrow / .sideOpen on .shell ---- */
+/* Inline the drawer is absolutely positioned within .shell (the app pane), not
+   fixed to the viewport as the served full-screen app does. */
+.isNarrow {
+  composes: kit-app-narrow from global;
+}
+.sideOpen {
+  composes: kit-app-side-open from global;
+}
+.shell.isNarrow .topbar,
+.shell.isNarrow .canvas {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+.shell.isNarrow .banner {
+  margin-left: 16px;
+  margin-right: 16px;
+}
+.shell.isNarrow .topbar {
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+.shell.isNarrow .headerBar {
+  flex: 1 0 100%;
+  order: 2;
+}
+.shell.isNarrow .topbarTools {
+  flex: 1 0 100%;
+  margin-left: 0;
+  order: 3;
+}
+.shell.isNarrow .search {
+  width: auto;
+  flex: 1;
+}
+
+/* ---- Day "+N more" popover (kit portals it to <body>, outside the inline
+   scope) — ink/mono vars resolve from the shell's own :root token layer. ---- */
+:global(.ag-day-pop) {
+  width: 17rem;
+  max-height: 20rem;
+  overflow: auto;
+  padding: 0.5rem;
+}
+:global(.ag-day-pop-title) {
+  font: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--ink-3);
+  padding: 0.3rem 0.5rem 0.5rem;
+}
+:global(.ag-day-pop-item) {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: none;
+  color: var(--ink);
+  font: var(--t-body);
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+:global(.ag-day-pop-item:hover) {
+  background: var(--bg-sunken);
+}
+:global(.ag-day-pop-time) {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--ink-2);
+}
+:global(.ag-day-pop-text) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

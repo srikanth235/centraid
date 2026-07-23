@@ -1,10 +1,10 @@
 // Docs upload-side processing (issue #414 D9/D10): client SHA preflight and
 // a real PDF.js text-layer contribution before the document claim. The
-// lockfile-pinned display+worker builds are generated into the shared kit and
-// served same-origin/offline; a load or parse failure still degrades to the
-// gateway's cheap extractor, never a failed upload.
+// lockfile-pinned display+worker builds are emitted by the main client bundle
+// and cached offline; a load or parse failure still degrades to the gateway's
+// cheap extractor, never a failed upload.
 
-import { stageDerivative, stageFileBytes, type StagedBlob } from './kit.js';
+import { stageDerivative, stageFileBytes, type StagedBlob } from './kit.ts';
 import { extractPdfTextWithPdfJs } from './pdf-text.ts';
 
 export { extractPdfTextWithPdfJs } from './pdf-text.ts';

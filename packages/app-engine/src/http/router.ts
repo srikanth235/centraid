@@ -16,7 +16,9 @@ export type Route =
   | { kind: 'app-static'; appId: string; rel: string }
   | { kind: 'app-query-bundle'; appId: string; queryName: string }
   | { kind: 'app-changes'; appId: string }
-  | { kind: 'tool-invoke'; toolName: string }
+  | { kind: 'app-action'; appId: string; action: string }
+  | { kind: 'app-query'; appId: string; query: string }
+  | { kind: 'app-describe'; appId: string; query: Record<string, string> }
   | {
       kind: 'app-chat';
       appId: string;
@@ -107,18 +109,6 @@ export function parseRoute(method: string, rawUrl: string): Route {
     return { kind: 'not-found' };
   }
 
-  // /centraid/_tool/<toolName> — the generic three-tool HTTP shim that
-  // dispatches `centraid_write`/`_read`/`_describe` for non-MCP callers
-  // (the in-iframe `window.centraid.{write,read,describe}` helpers,
-  // browser DevTools, scripts). The per-handler `/_run` and `/_data`
-  // routes were removed in favour of this shim — see issue #107.
-  if (segments[0] === '_tool') {
-    if (segments.length !== 2 || m !== 'POST') return { kind: 'not-found' };
-    const toolName = decodeURIComponent(segments[1] ?? '');
-    if (!toolName) return { kind: 'not-found' };
-    return { kind: 'tool-invoke', toolName };
-  }
-
   const appId = decodeURIComponent(segments[0] ?? '');
   if (!appId || appId.startsWith('_')) return { kind: 'not-found' };
 
@@ -155,6 +145,31 @@ export function parseRoute(method: string, rawUrl: string): Route {
       appId,
       queryName: moduleName.slice(0, -'.mjs'.length),
     };
+  }
+
+  // /centraid/<id>/actions/<action> and /centraid/<id>/queries/<query> — the
+  // app RPC plane (issue #505, retiring the `/centraid/_tool/centraid_*`
+  // shim). A `POST` invokes the declared handler with a `{ input?, intentId? }`
+  // body; the app id + handler name live in the path. GETs under these
+  // segments still fall through to static serving below, exactly as before.
+  if (second === 'actions' && m === 'POST' && segments.length === 3) {
+    const action = decodeURIComponent(segments[2] ?? '');
+    if (!action) return { kind: 'not-found' };
+    return { kind: 'app-action', appId, action };
+  }
+  if (second === 'queries' && m === 'POST' && segments.length === 3) {
+    const query = decodeURIComponent(segments[2] ?? '');
+    if (!query) return { kind: 'not-found' };
+    return { kind: 'app-query', appId, query };
+  }
+
+  // /centraid/<id>/_describe — the app's declared-handler catalogue (issue
+  // #505, replacing `centraid_describe`). `GET` returns the manifest; an
+  // optional `?action=<name>`/`?query=<name>` narrows to one handler.
+  if (second === '_describe') {
+    if (m !== 'GET' || segments.length !== 2) return { kind: 'not-found' };
+    const query = Object.fromEntries(url.searchParams.entries());
+    return { kind: 'app-describe', appId, query };
   }
 
   // /centraid/<id>/_turn[/...] — per-app chat surface. The sub-route parser

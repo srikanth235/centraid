@@ -1,29 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { companionToolAllowed } from './internal-headers.js';
+import { companionHandlerAllowed } from './internal-headers.js';
 
 describe('Companion capability profile', () => {
   const locker = new Set(['locker']);
 
   it('allows only the module’s pinned query and action bundle', () => {
-    expect(
-      companionToolAllowed(locker, 'centraid_read', {
-        app: 'locker',
-        query: 'autofill-item',
-      }),
-    ).toBe(true);
-    expect(
-      companionToolAllowed(locker, 'centraid_write', { app: 'locker', action: 'add-item' }),
-    ).toBe(true);
-    expect(
-      companionToolAllowed(locker, 'centraid_write', { app: 'locker', action: 'trash-item' }),
-    ).toBe(false);
+    expect(companionHandlerAllowed(locker, 'query', 'locker', 'autofill-item')).toBe(true);
+    expect(companionHandlerAllowed(locker, 'action', 'locker', 'add-item')).toBe(true);
+    expect(companionHandlerAllowed(locker, 'action', 'locker', 'trash-item')).toBe(false);
   });
 
-  it('rejects another module, describe, and malformed calls', () => {
-    expect(
-      companionToolAllowed(locker, 'centraid_write', { app: 'notes', action: 'create-note' }),
-    ).toBe(false);
-    expect(companionToolAllowed(locker, 'centraid_describe', { app: 'locker' })).toBe(false);
-    expect(companionToolAllowed(locker, 'centraid_read', { app: 'locker' })).toBe(false);
+  it('rejects another module and cross-kind calls', () => {
+    expect(companionHandlerAllowed(locker, 'action', 'notes', 'create-note')).toBe(false);
+    // add-item is an action, not a query, on locker.
+    expect(companionHandlerAllowed(locker, 'query', 'locker', 'add-item')).toBe(false);
   });
 });

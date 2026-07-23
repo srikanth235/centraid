@@ -2,14 +2,14 @@
 // own module so `scaffold.ts` stays focused on the scaffolding logic
 // rather than carrying long template literals inline.
 //
-// app.css is the per-app styling layer built on top of the shared
-// blueprint token layer (kit/tokens.css, served next to kit.css). It
+// app.css is the per-app styling layer emitted after the canonical blueprint
+// token baseline in scaffold-files.ts. It
 // ships utility classes (.head, .add-bar, .list, .row, .empty, etc.)
 // matching the "Component primitives" block in the agent prompt — so a
 // model that follows the prompt examples gets working UI immediately.
 //
 // Rules baked in here:
-//   - No hex literals; every color is `var(--…)` from tokens.css.
+//   - No hex literals; every color is `var(--…)` from the token baseline.
 //   - Hit targets ≥ 44px via min-height on inputs/buttons/circle.
 //   - `:focus-visible` outlines preserved with `var(--accent)`.
 //   - `prefers-reduced-motion` respected.
@@ -20,7 +20,7 @@
 //     the accent paints (primary button, focus rings, links, pressed
 //     circle) via `var(--app-color, var(--accent))`. Falls back to
 //     `--accent` when no knob value is set.
-export const DEFAULT_APP_CSS = `/* Design-system contract (see the shared tokens.css): --app-hue drives the
+export const DEFAULT_APP_CSS = `/* Design-system contract: --app-hue drives the
    whole neutral ramp (ink, lines, surfaces, shadows); --accent is the app's
    identity color — pick one of the palette vars (--c-amber, --c-forest,
    --c-indigo, --c-ochre, --c-rose, --c-slate, --c-teal, --c-violet). */
@@ -255,11 +255,9 @@ bun install   # or: npm install
 
 ## Layout
 
-- \`index.html\`, \`app.css\`, \`app.jsx\` — static, served from \`/centraid/${id}/\`.
-  \`app.jsx\` is a React component; the gateway transpiles it per-request
-  (esbuild, \`jsx: 'automatic'\`) — no local build step. Import
-  \`createRoot\`/hooks from \`./react-core.min.js\`, the same shared
-  sibling-import mechanism as \`./kit.js\`.
+- \`index.html\`, \`app.css\`, \`app.js\` — dependency-free browser files
+  served from \`/centraid/${id}/\`; there is no local build step or bundled
+  framework runtime.
 - \`queries/<name>.js\` — pure function bodies invoked via
   \`window.centraid.read({ query: '<name>', input })\` → dispatched
   against the \`queries[]\` entry in \`app.json\`.
@@ -285,10 +283,9 @@ data story in \`app.json\`: a \`vault\` block requesting canonical scopes
 the gateway hosts inside the vault (the justified escape hatch). The
 gateway applies ext-table DDL on publish — never run DDL from code.
 
-## Phone-readiness
+## Compact-width readiness
 
-The mobile shell is a thin viewer — on the phone this blueprint IS the
-UI. Keep the kit reference (\`kit.css\` is served by the runtime from one
+Portable previews can be narrow. Keep the kit reference (\`kit.css\` is served by the runtime from one
 shared canonical copy — reference it from \`index.html\`, never copy it
 into the app folder), and keep the scaffold's responsive conventions
 intact: \`viewport-fit=cover\` in the

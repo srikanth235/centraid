@@ -7,7 +7,7 @@
 // the same factory shape tasks/logic.js uses. The pure derivations
 // (`sidebarCounts`/`buildWall`) need no closure and are exported standalone
 // so components can call them too.
-import { debounce, outcomeMessage, toast } from './kit.js';
+import { debounce, outcomeMessage, toast } from './kit.ts';
 import { checkStats, deriveTitle, previewText } from './format.ts';
 import type { AppData, AppState, LogicDeps, Nav, Note, NotePatch, SidebarCounts } from './types.ts';
 
@@ -104,7 +104,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     return outcome;
   }
 
-  // Like write(), but returns the raw outcome so shared helpers (kit.js
+  // Like write(), but returns the raw outcome so shared helpers (kit.ts
   // wireAttachInput) can narrate and refresh on their own.
   async function act(
     action: string,
@@ -356,7 +356,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     return outcome;
   }
 
-  // ---------- Attachments (kit.js renderAttachments / wireAttachInput) ----------
+  // ---------- Attachments (kit.ts renderAttachments / wireAttachInput) ----------
 
   let attachTarget: string | null = null;
   const setAttachTarget = (noteId: string | null) => {

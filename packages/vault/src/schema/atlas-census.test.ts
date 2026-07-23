@@ -161,6 +161,27 @@ test('BFS puts core_party at hop 0 and surfaces the unreached island', () => {
   }
 });
 
+test('graph nodes speak human: curated friendly+blurb, uncurated fall back', () => {
+  const db = freshVault();
+  const graph = atlasGraph(db.vault);
+
+  // A curated ontology kind emits its friendly name and its blurb.
+  const party = graph.nodes.find((n) => n.physical === 'core_party');
+  expect(party?.friendly).toBe('People');
+  expect(party?.blurb).toBe('Everyone you know — people and organisations.');
+
+  // An uncurated kind falls back: friendly === label, and no blurb is emitted.
+  const uncurated = graph.nodes.find((n) => n.blurb === undefined);
+  expect(uncurated).toBeDefined();
+  expect(uncurated!.friendly).toBe(uncurated!.label);
+
+  // friendly is ALWAYS present; blurb NEVER without a curated friendly name.
+  for (const node of graph.nodes) {
+    expect(typeof node.friendly).toBe('string');
+    if (node.blurb !== undefined) expect(node.friendly).not.toBe('');
+  }
+});
+
 test('self-referencing tables are flagged', () => {
   const db = freshVault();
   const graph = atlasGraph(db.vault);

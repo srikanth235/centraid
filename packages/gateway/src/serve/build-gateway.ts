@@ -160,7 +160,13 @@ import { makeRemindersRouteHandler } from '../routes/reminders-routes.js';
 import { HealthRegistry } from './health-registry.js';
 import { GatewayPerformanceMonitor } from './gateway-performance.js';
 import { measureStorageLatency } from './storage-latency.js';
-import { resolveGatewayHardwareProfile } from './hardware-profile.js';
+import { formatHardwareProfileDetail, resolveGatewayHardwareProfile } from './hardware-profile.js';
+import {
+  formatEventLoopDetail,
+  resolveResourceMode,
+  RESOURCE_MODE_PREF_KEY,
+  type ResourceMode,
+} from './resource-mode.js';
 import { logsEventsSubscriberCount, makeLogsRouteHandler } from '../routes/logs-routes.js';
 import { sendJson } from '../routes/route-helpers.js';
 import type { GatewayPaths } from '../paths.js';
@@ -186,6 +192,12 @@ export interface BuildGatewayOptions {
    * public values; confidential Google/HMAC secrets remain Worker-only.
    */
   assistOAuth?: AssistOAuthConfig;
+  /**
+   * Owner Resource mode (#521). When set (daemon config / tests), feeds
+   * hardware-profile resolution. Durable prefs (`gateway.resourceMode`) win
+   * over omission; `CENTRAID_RESOURCE_MODE` env still wins over both.
+   */
+  resourceMode?: ResourceMode;
   /**
    * The cron scheduler (issue #149) is gateway-owned and in-process: one
    * scheduler PER VAULT (issue #289 — every vault's automations fire, not
@@ -435,10 +447,13 @@ function readonlyRequestAllowed(req: IncomingMessage): boolean {
   }
   if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return true;
   if (method !== 'POST') return false;
+  // A query invocation is a read; an action invocation is a write. The
+  // app-scoped RPC routes carry the kind in the path (issue #505), so a
+  // read-only device may POST to `queries/<name>` but not `actions/<name>`.
+  // `_describe` moved to GET and is covered by the read-method branch above.
   if (
-    url.pathname === '/centraid/_tool/centraid_read' ||
-    url.pathname === '/centraid/_tool/centraid_describe' ||
-    /^\/centraid\/_draft\/[^/]+\/_tool\/centraid_(?:read|describe)$/.test(url.pathname)
+    /^\/centraid\/[^_/][^/]*\/queries\/[^/]+$/.test(url.pathname) ||
+    /^\/centraid\/_draft\/[^/]+\/[^_/][^/]*\/queries\/[^/]+$/.test(url.pathname)
   ) {
     return true;
   }
@@ -600,14 +615,25 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   }
   health.registerProbe('event-loop', async () => {
     const sample = performanceMonitor.snapshot();
-    const detail = `p50 ${sample.eventLoopLagP50Ms.toFixed(1)} ms; p99 ${sample.eventLoopLagP99Ms.toFixed(1)} ms; max ${sample.eventLoopLagMaxMs.toFixed(1)} ms`;
+    const detail = formatEventLoopDetail(sample);
     return sample.eventLoopLagP99Ms >= 50
       ? { status: 'degraded', detail }
       : { status: 'ok', detail };
   });
-  const hardwareProfile = resolveGatewayHardwareProfile(
-    storageFsyncMs === undefined ? {} : { storageFsyncMs },
-  );
+  // Resource mode (#521): durable prefs + optional daemon config feed the
+  // same profile resolver as CENTRAID_HARDWARE_PROFILE. Prefs open early so
+  // boot class matches what the owner last chose; a mode change after boot
+  // is durable and applies on the next serve (worker env is process-scoped).
+  const prefsEarly = new PrefsStore(paths.prefsFile);
+  const resourceMode = resolveResourceMode({
+    env: process.env,
+    optionsMode: options.resourceMode,
+    prefsMode: prefsEarly.getAllPrefs()[RESOURCE_MODE_PREF_KEY],
+  });
+  const hardwareProfile = resolveGatewayHardwareProfile({
+    ...(storageFsyncMs === undefined ? {} : { storageFsyncMs }),
+    resourceMode,
+  });
   // App-engine's worker/compression seams initialize lazily, after this boot
   // probe. Publish the resolved class so slow storage and explicit overrides
   // select the same actual limits that this health line reports.
@@ -623,18 +649,15 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   process.env.CENTRAID_REPLICATION_CONCURRENCY = String(hardwareProfile.replicationConcurrency);
   process.env.CENTRAID_STATIC_BROTLI_QUALITY = String(hardwareProfile.staticBrotliQuality);
   process.env.CENTRAID_STATIC_GZIP_QUALITY = String(hardwareProfile.staticGzipQuality);
-  health.reportOk(
-    'hardware-profile',
-    `${hardwareProfile.class}; sqlite=${hardwareProfile.sqliteSynchronous}; workers=${hardwareProfile.workerMaxConcurrent}x${hardwareProfile.workerMaxOldGenerationMb}MB; pool=${hardwareProfile.workerPoolSize}; replication=${hardwareProfile.replicationConcurrency}; compression=br${hardwareProfile.staticBrotliQuality}/gz${hardwareProfile.staticGzipQuality}; mount=${hardwareProfile.vaultMountStrategy}; sweep=${hardwareProfile.vaultSweepIntervalMs}ms`,
-  );
+  health.reportOk('hardware-profile', formatHardwareProfileDetail(hardwareProfile));
   const webAppSessions = new WebAppSessions(options.webSessions ?? {});
 
-  // Bundled blueprint apps (issue #434): these ids serve in place from the
-  // shipped @centraid/blueprints package, upgrade with every release, and are
+  // Bundled blueprint apps (issue #434): the main client compiles their UI
+  // directly, while the gateway reads their shipped directories for metadata,
+  // declared scopes, and generic opaque-app compatibility. Their ids are
   // RESERVED — a code-store app must never shadow one. The set is fixed for
-  // the process lifetime (it's the release's catalog), so we resolve it once
-  // here and close over it for the resolver, the id-reservation guard, and
-  // the install/listing paths below.
+  // the process lifetime (it's the release's catalog), so resolve it once for
+  // the id-reservation guard and install/listing paths below.
   const bundledAppIds = new Set((await listBundledAppTemplates()).map((t) => t.id));
   const isBundledAppId = (id: string): boolean => bundledAppIds.has(id);
 
@@ -979,6 +1002,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       outboxPending,
       sseClients:
         logsEventsSubscriberCount() + runEventsSubscriberCount() + changesSubscriberCount(),
+      hardwareProfileClass: hardwareProfile.class,
+      resourceMode: hardwareProfile.resourceMode,
     };
   });
 
@@ -1026,8 +1051,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
 
   // Device prefs (`prefs.json`) + the request vault's ledger stores. The
   // analytics/insights providers resolve the request's vault per call, so
-  // every client sees its own vault's ledger (#289).
-  const prefs = new PrefsStore(paths.prefsFile);
+  // every client sees its own vault's ledger (#289). Reuse the early prefs
+  // handle opened for Resource mode so we don't re-read the same file.
+  const prefs = prefsEarly;
   const journalProvider = () => currentWorkspace().journal();
   const analyticsStore = new AnalyticsStore(journalProvider);
   const insightsStore = new InsightsStore(journalProvider);
@@ -1419,7 +1445,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       }
       // Installed bundled apps (issue #434) aren't in the git store, so the
       // loop above misses them — re-register each from the enrollment record
-      // so it serves (from the shipped blueprint dir) after a gateway restart.
+      // so its data plane and generic compatibility route recover after a
+      // gateway restart.
       for (const appId of plane.installedAppIds()) {
         await requireRuntime().registry.ensureUploaded(appId);
         await grantDeclaredBundledScopes(plane, appId);
@@ -1531,9 +1558,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       // Bundled ids are reserved (issue #434): a scaffold/clone must never
       // mint one, or a code-store app would shadow the shipped blueprint.
       isBundledAppId,
-      // Install a bundled blueprint in place (issue #434): enroll with
-      // origin 'installed' + register + grant declared scopes, no git, no id
-      // minting. Idempotent — an already-installed app returns its existing
+      // Install a bundled blueprint in place (issue #434): its UI is already
+      // part of the main client, so enroll with origin 'installed', register
+      // the data plane, and grant declared scopes — no git or id minting.
+      // Idempotent — an already-installed app returns its existing
       // registration. Returns undefined for a non-bundled id (→ 404).
       installBundledApp: async (templateId) => {
         if (!bundledAppIds.has(templateId)) return undefined;
@@ -2071,7 +2099,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // N registries).
   const runtime = new Runtime({
     appsDir: () => currentWorkspace().appsDir,
-    // Shared kit assets (kit.js / kit.css) are served from the blueprints
+    // Shared kit assets (kit.ts / kit.css) are served from the blueprints
     // package's canonical `kit/` dir; apps no longer ship per-app copies.
     sharedAssetsDir: KIT_DIR,
     userStore: prefs,
@@ -2126,13 +2154,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       return status;
     },
     logger,
-    // Resolver rule (issue #434): a bundled blueprint app installed in the
-    // request's vault serves in place from the shipped @centraid/blueprints
-    // package (upgrades with every release, no per-vault copy). Everything
-    // else — code the gateway can't otherwise get: compiled automations,
-    // future builder forks/downloads — resolves to the git code-store
-    // worktree, as before. The installed check is per-vault so a legacy
-    // snapshot-cloned app keeps serving from the store. The app-engine
+    // Compatibility resolver (issue #434): bundled system UI is compiled into
+    // the main client, but the generic opaque-app route can still resolve an
+    // installed blueprint's shipped directory (no per-vault copy). Everything
+    // else — compiled automations or future opaque app sources — resolves to
+    // the git code-store worktree. The installed check is per-vault so a
+    // legacy snapshot-cloned app keeps resolving from the store. The app-engine
     // static-path sandbox applies identically to whichever dir is returned.
     codeDirOverride: async (appId: string) => {
       if (bundledAppIds.has(appId) && vaultRegistry.current().installedAppIds().has(appId)) {

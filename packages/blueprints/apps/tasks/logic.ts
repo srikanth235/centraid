@@ -5,7 +5,7 @@
 // defines — the same factory shape docs/logic.ts and nav.ts use. The pure
 // derivation helpers (`buildSections`/`sidebarCounts`/`todayProgress`) need
 // no closure and are exported standalone so components can call them too.
-import { debounce, outcomeMessage, toast } from './kit.js';
+import { debounce, outcomeMessage, toast } from './kit.ts';
 import { BUCKETS, VIEW_BUCKETS, bucketFor, parseNlDue, plusDays, todayStr } from './format.ts';
 import type {
   AppState,
@@ -110,7 +110,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   }
 
   // Like write(), but returns the raw outcome so the shared attachment
-  // helpers (kit.js wireAttachInput) can narrate and refresh on their own.
+  // helpers (kit.ts wireAttachInput) can narrate and refresh on their own.
   async function act(
     action: string,
     input: Record<string, unknown>,
@@ -285,7 +285,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     return outcome;
   }
 
-  // ---------- Attachments (kit.js renderAttachments / wireAttachInput) ----------
+  // ---------- Attachments (kit.ts renderAttachments / wireAttachInput) ----------
 
   let attachTarget: string | null = null;
   const setAttachTarget = (taskId: string | null) => {

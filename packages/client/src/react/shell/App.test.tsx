@@ -50,26 +50,31 @@ let App: typeof import('./App.js').default;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 
-beforeEach(async () => {
-  store.clear();
-  store.set('home.userApps', [{ id: 'todos', name: 'Todos', iconKey: 'Todo', color: '#123' }]);
-  // Ambient globals the real tileVisualFromListing (via useShellApps) probes.
-  (globalThis as unknown as { Icon: unknown }).Icon = { Todo: () => '', Sparkle: () => '' };
-  (globalThis as unknown as { ICON_PALETTE: unknown }).ICON_PALETTE = { violet: '#7C5BD9' };
-  // The App boot effect subscribes to gateway/vault change broadcasts.
-  // `getSettings` feeds useBuilderEnabled (#434) — default omits builderEnabled,
-  // so the builder stays hidden unless a test overrides it before mounting.
-  (globalThis as unknown as { CentraidApi: unknown }).CentraidApi = {
-    onGatewayChanged: () => {},
-    onVaultChanged: () => {},
-    getSettings: () => Promise.resolve({}),
-  };
-  // Home's buildHomeAppItems asks the tokens bridge for each tile's finish.
-  (globalThis as unknown as { CentraidTokens: unknown }).CentraidTokens = {
-    tileFinish: () => ({ background: '#111', boxShadow: 'none', glyphColor: '#fff' }),
-  };
-  ({ default: App } = await import('./App.js'));
-});
+beforeEach(
+  async () => {
+    store.clear();
+    store.set('home.userApps', [{ id: 'todos', name: 'Todos', iconKey: 'Todo', color: '#123' }]);
+    // Ambient globals the real tileVisualFromListing (via useShellApps) probes.
+    (globalThis as unknown as { Icon: unknown }).Icon = { Todo: () => '', Sparkle: () => '' };
+    (globalThis as unknown as { ICON_PALETTE: unknown }).ICON_PALETTE = { violet: '#7C5BD9' };
+    // The App boot effect subscribes to gateway/vault change broadcasts.
+    // `getSettings` feeds useBuilderEnabled (#434) — default omits builderEnabled,
+    // so the builder stays hidden unless a test overrides it before mounting.
+    (globalThis as unknown as { CentraidApi: unknown }).CentraidApi = {
+      onGatewayChanged: () => {},
+      onVaultChanged: () => {},
+      getSettings: () => Promise.resolve({}),
+    };
+    // Home's buildHomeAppItems asks the tokens bridge for each tile's finish.
+    (globalThis as unknown as { CentraidTokens: unknown }).CentraidTokens = {
+      tileFinish: () => ({ background: '#111', boxShadow: 'none', glyphColor: '#fff' }),
+    };
+    ({ default: App } = await import('./App.js'));
+  },
+  // The affected-package gate transforms six packages concurrently. Keep the
+  // first App graph import bounded without inheriting Vitest's 10s hook ceiling.
+  20_000,
+);
 
 afterEach(() => {
   act(() => root?.unmount());

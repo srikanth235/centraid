@@ -10,7 +10,7 @@
 // and `refresh`, that only app.tsx can define (they touch the JSX-rendering
 // roots). Everything returned here is then wired into app.tsx's render
 // functions as props/callbacks, exactly like any other value flowing down.
-import { isPendingOffsite, outcomeMessage, runBulk as runBulkBase, toast } from './kit.js';
+import { isPendingOffsite, outcomeMessage, runBulk as runBulkBase, toast } from './kit.ts';
 import { fmtBytes, typeMeta } from './format.ts';
 import { createMetadata } from './metadata.ts';
 import { createPopovers } from './popovers.ts';

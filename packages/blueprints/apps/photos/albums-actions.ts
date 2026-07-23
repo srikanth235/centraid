@@ -2,7 +2,7 @@
 // beside outcomes.ts rather than inline in app.tsx purely for line budget —
 // each still needs a couple of app.tsx-owned setters/orchestrators, passed in
 // per call exactly like every other action module here.
-import { toast } from './kit.js';
+import { toast } from './kit.ts';
 import { act, narrate } from './outcomes.ts';
 import type { Album } from './types.ts';
 

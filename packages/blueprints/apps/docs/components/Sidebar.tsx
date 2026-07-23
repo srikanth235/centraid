@@ -2,8 +2,8 @@
 // inline create/rename editors), the trash entry, and the storage footprint —
 // three separate React roots in app.tsx (#smartNav / #folderList / #storage),
 // so this file exports three top-level components rather than one.
-import { useEffect, useRef } from '../react-core.min.js';
-import { armConfirm } from '../kit.js';
+import { useEffect, useRef } from 'react';
+import { armConfirm } from '../kit.ts';
 import { DELETE_ICON, I, RENAME_ICON } from '../icons.ts';
 import { fmtBytes } from '../format.ts';
 import type { DriveDoc, Folder, Nav } from '../types.ts';

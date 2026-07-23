@@ -54,6 +54,7 @@ import {
   pickSnapshotRow,
   placeSealKey,
   recoveredAsOfMs,
+  rehydrateCodeStore,
   seedFencedBackupState,
   selectTarget,
   walReplayTruncated,
@@ -359,6 +360,9 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
     emit('adopting');
     await fs.rename(stagingDir, finalDir);
     await placeSealKey(finalDir, log);
+    // Turn the restored `apps.bundle` back into the live bare code store
+    // (issue #517) — without this the vault mounts with data but no app code.
+    await rehydrateCodeStore(finalDir, log);
     const adoptCtx: RecoverAdoptContext = {
       vaultId: target.vaultId,
       vaultDir: finalDir,

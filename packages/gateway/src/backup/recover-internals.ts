@@ -25,6 +25,7 @@ import {
   sealKeyFileFor,
   VAULT_MIGRATIONS,
 } from '@centraid/vault';
+import { run } from '../worktree-store/git.js';
 import { GATEWAY_VERSION } from '../version.js';
 import { loadBackupState, saveBackupState } from './backup-state.js';
 import { warmPreviewTinies } from './restore-warm.js';
@@ -130,6 +131,43 @@ export async function placeSealKey(vaultDir: string, log: EngineLogger): Promise
   await fs.mkdir(path.dirname(dest), { recursive: true });
   await fs.rename(restored, dest);
   log.info?.(`recover: placed the restored seal key at ${dest}`);
+}
+
+/**
+ * Rehydrate the app code store from the restored git bundle (issue #517). The
+ * snapshot carries the vault's bare code repo as a `git bundle --all` that
+ * `restoreSnapshot` materializes at `<vaultDir>/apps.bundle`, but the runtime
+ * reads app code from the bare repo `WorktreeStore` owns at
+ * `<vaultDir>/code/apps.git` (`VaultPlane.codeStoreRoot` + the store's
+ * `apps.git` layout). Nothing else bridges the two: `WorktreeStore.init()`
+ * only ever `git init --bare`s a FRESH empty repo when `apps.git/HEAD` is
+ * absent. So without this a recovered vault mounts with all its data and an
+ * EMPTY code store — every published app's code silently gone, the "data with
+ * no apps" placebo restore FORMAT.md warns about.
+ *
+ * `git clone --bare <bundle>` brings back every ref the `--all` bundle carries
+ * — `main`, each `<app>/v*` version tag (what rollback restores), and any live
+ * session branch — and sets `HEAD -> main`, exactly `WorktreeStore.init()`'s
+ * precondition (it then skips its own init/empty-commit and just materializes
+ * main). The consumed bundle is removed: the bare repo is the code store now,
+ * and a stray `apps.bundle` at the vault root is only clutter a future scan
+ * could trip on.
+ *
+ * A vault whose source code store was empty ships no bundle (`bundleCodeStore`
+ * skips an empty bare repo), so this is a no-op for it (`existsSync` guard) and
+ * `WorktreeStore.init()` plants the fresh empty repo as before.
+ */
+export async function rehydrateCodeStore(vaultDir: string, log: EngineLogger): Promise<void> {
+  const bundle = path.join(vaultDir, 'apps.bundle');
+  if (!existsSync(bundle)) return;
+  // `<vaultDir>/code` is `VaultPlane.codeStoreRoot`; `apps.git` under it is the
+  // bare repo `WorktreeStore` opens (both layout constants are private to their
+  // owners, so they are spelled out here the way `placeSealKey` spells `seal.key`).
+  const bareDir = path.join(vaultDir, 'code', 'apps.git');
+  await fs.mkdir(path.dirname(bareDir), { recursive: true });
+  await run(['clone', '--bare', bundle, bareDir], { cwd: vaultDir });
+  await fs.rm(bundle, { force: true });
+  log.info?.(`recover: rehydrated the app code store at ${bareDir} from apps.bundle`);
 }
 
 /** A materialized restore is a NEW replica history, never a continuation — the

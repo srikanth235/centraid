@@ -23,6 +23,7 @@ import LogsScreen, { type LogsBridgeProps } from './LogsScreen.js';
 import DevicesCard, { type DevicesCardProps } from './DevicesCard.js';
 import AlertHistoryPanel from './AlertHistoryPanel.js';
 import RestartGatewayButton from './RestartGatewayButton.js';
+import ResourceModeCard, { type ResourceMode } from './ResourceModeCard.js';
 import styles from './GatewayScreen.module.css';
 
 // Gateway runtime, component health, paired devices, logs, and alerts share
@@ -66,6 +67,12 @@ export interface GatewayScreenProps {
   /** Save `/centraid/_gateway/diagnostics` through a native dialog (Logs
    *  tab toolbar). `canceled` when the user dismissed the dialog. */
   onExportDiagnostics: LogsBridgeProps['onExportDiagnostics'];
+  /**
+   * Resource mode (#521) — durable owner preference for how hard the gateway
+   * may use this machine. Optional so older hosts/tests keep rendering.
+   */
+  loadResourceMode?: () => Promise<ResourceMode>;
+  saveResourceMode?: (mode: ResourceMode) => Promise<void>;
 }
 
 type TabId = 'overview' | 'components' | 'logs' | 'alerts';
@@ -319,6 +326,19 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
                 <RestartGatewayButton onRestart={props.onRestartGateway} />
               </div>
             </section>
+
+            {props.loadResourceMode && props.saveResourceMode ? (
+              <ResourceModeCard
+                loadMode={props.loadResourceMode}
+                saveMode={props.saveResourceMode}
+                {...(health?.metrics?.hardwareProfileClass
+                  ? { resolvedClass: health.metrics.hardwareProfileClass }
+                  : {})}
+                {...(health?.metrics?.resourceMode
+                  ? { activeMode: health.metrics.resourceMode }
+                  : {})}
+              />
+            ) : null}
 
             {/* Paired devices and their contributed-compute status (#392/#414). */}
             {props.loadDevices && props.onRevokeDevice ? (

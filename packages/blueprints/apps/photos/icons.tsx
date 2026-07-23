@@ -4,7 +4,7 @@
 // prompt's visual system section). Every icon is a plain function component:
 // `stroke="currentColor"` so callers color them via CSS, no props needed
 // beyond an optional `size`.
-import type { FC, SVGProps } from './react-core.min.js';
+import type { FC, SVGProps } from 'react';
 
 const base: SVGProps<SVGSVGElement> = {
   fill: 'none',

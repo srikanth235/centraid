@@ -126,11 +126,11 @@ describe('status / ownership helpers', () => {
       host: '127.0.0.1',
       port: DEFAULT_GATEWAY_PORT,
       pid: 7,
-      tokenFile: '/tmp/token.bin',
+      tokenFile: '/tmp/desktop-loopback-token.bin',
       renewedAt: '2026-01-01T00:00:01.000Z',
     });
     expect(status.url).toBe(`http://127.0.0.1:${DEFAULT_GATEWAY_PORT}`);
-    expect(status.tokenFile).toBe('/tmp/token.bin');
+    expect(status.tokenFile).toBe('/tmp/desktop-loopback-token.bin');
   });
 });
 

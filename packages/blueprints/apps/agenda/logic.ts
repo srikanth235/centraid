@@ -3,7 +3,7 @@
 // closes over app.tsx's own `state`/`data` (mutated in place, never
 // reassigned) plus the render/refresh entry points app.tsx defines — the
 // same factory shape tasks/logic.ts and notes/logic.ts use.
-import { debounce, outcomeMessage, toast } from './kit.js';
+import { debounce, outcomeMessage, toast } from './kit.ts';
 import { colorForCalendar } from './format.ts';
 import {
   clearPendingState,
@@ -244,7 +244,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     return outcome;
   }
 
-  // ---------- Attachments (kit.js renderAttachments / wireAttachInput) ----------
+  // ---------- Attachments (kit.ts renderAttachments / wireAttachInput) ----------
 
   let attachTarget: string | null = null;
   const setAttachTarget = (eventId: string) => {

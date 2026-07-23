@@ -1,5 +1,5 @@
 // Bulk-selection action bar (#bulkBar root).
-import { armConfirm } from '../kit.js';
+import { armConfirm } from '../kit.ts';
 import styles from './BulkBar.module.css';
 
 export function BulkBar({

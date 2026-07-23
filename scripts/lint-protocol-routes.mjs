@@ -30,8 +30,6 @@ const ROUTE_PATHS = [
   '/centraid/_vault/connections/assist/complete',
   '/centraid/_vault/oauth/callback',
   '/centraid/_apps',
-  '/centraid/_tool/centraid_read',
-  '/centraid/_tool/centraid_write',
   '/centraid/_web/session',
   '/centraid/_web/control',
 ];

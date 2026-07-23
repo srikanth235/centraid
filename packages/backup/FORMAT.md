@@ -365,7 +365,7 @@ payload holds everything with semantic content:
 |---|---|---|
 | `db` | `vault.db` + `journal.db` **base files** — copied (reflink where the filesystem supports it) immediately after a shipper `TRUNCATE` checkpoint, while the main file is guaranteed WAL-quiet | anchors the WAL stream; restore = base + segments |
 | `blob` | every object in the blob CAS — **only when the vault has no remote CAS tier** (with one, custody already replicates blobs whole-file to `cas`; snapshotting them too was the #405 double-store) | attachments/media |
-| `git-bundle` | `git bundle --all` of the gateway code store (`apps.git`) | installed apps snapshot into the code store; a restore without it is data with no apps |
+| `git-bundle` | `git bundle --all` of the gateway code store (`apps.git`) | installed apps snapshot into the code store; a restore without it is data with no apps. On recovery it is `git clone --bare`d back into `<vaultDir>/code/apps.git` (`recover()` → `rehydrateCodeStore`) and then removed — restoring the file alone would leave the code store empty |
 | `seal-key` | the vault's sealed-columns DEK file | it deliberately lives *outside* the vault dir, so a snapshot without it restores sealed columns as permanent ciphertext — this entry is the difference between a backup and a placebo |
 
 Upload parts → manifest → register, in that order. WAL segments upload

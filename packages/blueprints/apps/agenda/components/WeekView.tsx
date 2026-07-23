@@ -3,10 +3,10 @@
 // click-a-slot to propose prefilled. Scrolls to ~7am whenever the displayed
 // week changes (not on every unrelated re-render — an attach elsewhere must
 // not jerk a manually-scrolled view back).
-import { useEffect, useRef } from '../react-core.min.js';
+import { useEffect, useRef } from 'react';
 import { bucketByDay, fmtRange, layoutDay, segTimeText, startOfWeek } from '../format.ts';
-import { localDayKey } from '../kit.js';
-import type { CSSProperties } from '../react-core.min.js';
+import { localDayKey } from '../kit.ts';
+import type { CSSProperties } from 'react';
 import type { AgEvent, DaySegment } from '../types.ts';
 import styles from './WeekView.module.css';
 

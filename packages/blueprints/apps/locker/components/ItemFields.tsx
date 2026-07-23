@@ -3,7 +3,7 @@
 // `fieldRowTpl()` rendered. `secret` fields hide behind a reveal toggle and
 // carry copy; the password field grows a strength meter on reveal; the OTP
 // row runs the real client-side TOTP tick via totp.ts's `useTotp` hook.
-import { armConfirm } from '../kit.js';
+import { armConfirm } from '../kit.ts';
 import { copy } from '../logic.ts';
 import { catOf, fmtDate, monoOf, subOf } from '../format.ts';
 import { strength, useTotp } from '../totp.ts';

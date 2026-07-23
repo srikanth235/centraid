@@ -4,7 +4,7 @@
 // synthesized created_at/updated_at guess. Mirrors History.tsx's own
 // load/denied/empty pattern exactly, down to the async-effect shape — the
 // two panels are siblings inside the same drawer.
-import { useEffect, useState } from '../react-core.min.js';
+import { useEffect, useState } from 'react';
 import { activityLabel, actorLabel, fmtFull } from '../format.ts';
 import type { ActivityEvent } from '../types.ts';
 import styles from './Activity.module.css';

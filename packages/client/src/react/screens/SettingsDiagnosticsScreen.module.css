@@ -43,6 +43,41 @@
   color: var(--ink-3);
 }
 
+/* Resource metrics strip (#521) — plain-language pressure read. */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+.metric {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-elev);
+  padding: 12px 14px;
+  min-width: 0;
+}
+.metricLabel {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  margin-bottom: 6px;
+}
+.metricValue {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.metricSub {
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-4);
+}
+
 .panel {
   border: 1px solid var(--line);
   border-radius: 12px;

@@ -115,23 +115,24 @@ test('one-time launch establishes a cookie session that can load only its app', 
   expect(admin.status).toBe(401);
 });
 
-test('app-session tool calls are forced to the session app', async () => {
+test('app-session RPC calls are forced to the session app', async () => {
   const session = await launch('alpha');
-  const correct = await fetch(`${handle.url}/centraid/_tool/centraid_read`, {
+  const correct = await fetch(`${handle.url}/centraid/alpha/queries/ping`, {
     method: 'POST',
     headers: { Cookie: session.cookie, 'content-type': 'application/json' },
-    body: JSON.stringify({ app: 'alpha', query: 'ping', input: {} }),
+    body: JSON.stringify({ input: {} }),
   });
   expect(correct.status).toBe(200);
   expect(await correct.json()).toEqual({ app: 'alpha' });
 
-  const crossApp = await fetch(`${handle.url}/centraid/_tool/centraid_read`, {
+  // App RPC now rides under the app's own prefix (issue #505), so a cross-app
+  // path fails the session's path gate outright — it never reaches the runtime.
+  const crossApp = await fetch(`${handle.url}/centraid/beta/queries/ping`, {
     method: 'POST',
     headers: { Cookie: session.cookie, 'content-type': 'application/json' },
-    body: JSON.stringify({ app: 'beta', query: 'ping', input: {} }),
+    body: JSON.stringify({ input: {} }),
   });
-  expect(crossApp.status).toBe(403);
-  expect(await crossApp.json()).toMatchObject({ error: 'app_session_scope' });
+  expect(crossApp.status).toBe(401);
 });
 
 test('app sessions permit blob staging but not the wider vault surface', async () => {

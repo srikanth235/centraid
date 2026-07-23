@@ -188,15 +188,6 @@
 .rememberRow small {
   color: var(--text-muted);
 }
-.modeToggle {
-  display: flex;
-  gap: 6px;
-}
-.modeBtn[data-selected='true'] {
-  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
-}
 
 .foot {
   display: flex;

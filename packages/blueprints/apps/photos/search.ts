@@ -5,7 +5,7 @@
 // only the fetch-and-debounce plumbing, not the merge, so it stays a thin
 // sibling of albums-actions.ts/selection-actions.ts rather than a second copy
 // of app.tsx's search logic.
-import { debounce } from './kit.js';
+import { debounce } from './kit.ts';
 import type { Asset } from './types.ts';
 
 export function createSearch({

@@ -8,7 +8,6 @@ import {
   type DesktopSettings,
 } from './settings.js';
 import {
-  addGateway,
   GatewayError,
   listGateways,
   removeGateway,
@@ -97,7 +96,6 @@ export const Channel = {
   // Remote gateways and additional local gateways (workspaces) get
   // UUID ids and can be renamed/removed freely.
   GATEWAYS_LIST: 'centraid:gateways:list',
-  GATEWAYS_ADD: 'centraid:gateways:add',
   GATEWAYS_REMOVE: 'centraid:gateways:remove',
   GATEWAYS_RENAME: 'centraid:gateways:rename',
   GATEWAYS_UPDATE_METADATA: 'centraid:gateways:update-metadata',
@@ -306,24 +304,9 @@ export function registerIpcHandlers(): void {
   // and immediately persists to keychain via gateway-secrets.
   ipcMain.handle(Channel.GATEWAYS_LIST, async (): Promise<GatewayProfile[]> => listGateways());
 
-  ipcMain.handle(
-    Channel.GATEWAYS_ADD,
-    async (
-      _e,
-      input: {
-        label: string;
-        /** `direct` transport: an https/http URL (guardrail rejects public http). */
-        url?: string;
-        /** `iroh` transport: an EndpointTicket redeemed from a pairing ticket. */
-        endpointTicket?: string;
-        endpointId?: string;
-        token: string;
-        displayName?: string;
-        avatarColor?: string;
-        rememberDevice?: boolean;
-      },
-    ): Promise<GatewayProfile> => addGateway(input),
-  );
+  // Issue #505 phase 7 retired the renderer's manual "add gateway by URL +
+  // token" IPC — every gateway is now added through the pairing ceremony
+  // (`redeemGatewayPairing`), which calls `addGateway` in-process itself.
 
   ipcMain.handle(
     Channel.GATEWAYS_UPDATE_METADATA,

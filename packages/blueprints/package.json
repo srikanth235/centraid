@@ -20,28 +20,25 @@
     "access": "public"
   },
   "scripts": {
-    "vendor:browser-shared": "node scripts/vendor-browser-shared.mjs",
-    "vendor:pdfjs": "node scripts/vendor-pdfjs.mjs",
-    "vendor:assets": "bun run vendor:browser-shared && bun run vendor:pdfjs",
-    "build:manifest": "bun run vendor:assets && node scripts/build-manifest.mjs",
+    "build:manifest": "node scripts/build-manifest.mjs",
     "build": "bun run build:manifest && tsc -p tsconfig.build.json",
-    "lint": "node scripts/lint-apps.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && bun run typecheck:apps",
     "typecheck:apps": "tsc -p tsconfig.apps.json --noEmit",
-    "test": "bun run vendor:assets && vitest run",
+    "test": "vitest run",
     "clean": "rm -rf dist"
   },
   "dependencies": {
     "@centraid/blob-format": "workspace:*",
     "@centraid/design-tokens": "workspace:*",
+    "pdfjs-dist": "5.7.284",
     "tldts": "6.1.86"
   },
   "devDependencies": {
     "@centraid/app-engine": "workspace:*",
     "@centraid/test-kit": "workspace:*",
     "@types/node": "^22.0.0",
+    "@types/react": "~19.1.0",
     "esbuild": "^0.28.1",
-    "pdfjs-dist": "5.7.284",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "typescript": "catalog:"

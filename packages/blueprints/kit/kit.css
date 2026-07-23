@@ -50,6 +50,159 @@
   --kit-mono: var(--mono, ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, monospace);
 }
 
+/* ---------- App chrome ---------------------------------------------------- */
+/* Shared geometry for the system blueprints. CSS Modules compose these
+   classes and retain only each app's deliberate variations (width, padding,
+   accent treatment). Keeping the structural contract here prevents every
+   blueprint from growing its own copy of the same shell and phone drawer. */
+
+.kit-app-shell {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font: var(--t-body);
+}
+
+.kit-app-side {
+  width: var(--kit-app-side-width, 250px);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--kit-app-side-padding, 18px 14px);
+  background: var(--bg-elev);
+  border-right: 1px solid var(--line);
+  overflow: auto;
+}
+
+.kit-app-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: var(--kit-app-brand-padding, 2px 6px 14px);
+}
+
+.kit-app-brand-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--kit-app-brand-radius, 8px);
+  background: var(--kit-app-brand-background, var(--accent-deep));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.kit-app-brand-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.kit-app-brand-name {
+  font: var(--kit-app-brand-font, var(--t-body-strong));
+  letter-spacing: -0.01em;
+}
+
+.kit-app-brand-tag {
+  font: var(--t-mono);
+  font-size: 10px;
+  color: var(--ink-3);
+}
+
+.kit-app-side-close {
+  margin-left: auto;
+  display: none;
+}
+
+.kit-app-side-foot {
+  margin-top: auto;
+  padding-top: var(--kit-app-side-foot-padding, 16px);
+}
+
+.kit-app-scrim {
+  display: none;
+}
+
+.kit-app-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.kit-app-topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--kit-app-topbar-gap, 12px);
+  padding: var(--kit-app-topbar-padding, 16px 22px);
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.kit-app-hamburger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  flex-shrink: 0;
+}
+
+.kit-app-tools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.kit-app-ask-mount {
+  display: flex;
+  align-items: center;
+}
+
+.kit-app-shell.kit-app-narrow .kit-app-side {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--kit-app-drawer-width, 274px);
+  z-index: 46;
+  box-shadow: var(--shadow-lg);
+  transform: translateX(-110%);
+}
+
+.kit-app-shell.kit-app-narrow:not(.kit-app-defer-drawer) .kit-app-side,
+.kit-app-shell.kit-app-narrow.kit-app-ready .kit-app-side {
+  transition: transform 0.26s var(--ease);
+}
+
+.kit-app-shell.kit-app-narrow.kit-app-side-open .kit-app-side {
+  transform: translateX(0);
+}
+
+.kit-app-shell.kit-app-narrow .kit-app-side-close,
+.kit-app-shell.kit-app-narrow .kit-app-hamburger {
+  display: flex;
+}
+
+.kit-app-shell.kit-app-narrow.kit-app-side-open .kit-app-scrim {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  background: var(--kit-app-scrim-background, rgba(15, 18, 26, 0.4));
+}
+
 /* The `hidden` attribute must ALWAYS hide, even when a class on the same
    element sets `display:` (an author display beats the UA's plain
    `[hidden] { display: none }`, so `.kit-ask-ov { display: flex }` alone
@@ -849,6 +1002,15 @@ kit-reference-strip,
   }
   to {
     opacity: 1;
+  }
+}
+
+@keyframes kit-shimmer {
+  from {
+    background-position: 180% 0;
+  }
+  to {
+    background-position: -60% 0;
   }
 }
 @keyframes kit-rise-lg {
@@ -1798,7 +1960,7 @@ kit-reference-strip,
   opacity: 0.85;
 }
 /* Busy send-button state — a small spinner swapped in for the arrow glyph
-   (see kit.js `setBusy`), the same recipe as `.kit-ask-action .aa-label::before`. */
+   (see kit.ts `setBusy`), the same recipe as `.kit-ask-action .aa-label::before`. */
 .kit-ask-send-spin {
   width: 0.85rem;
   height: 0.85rem;

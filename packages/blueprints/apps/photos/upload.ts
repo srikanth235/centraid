@@ -3,7 +3,7 @@
 // from app.tsx (the only two things here that touch app-level state) — the
 // button/input DOM nodes it mutates for progress text are looked up locally
 // via `$`, exactly like the pre-split code did.
-import { isPendingOffsite, stageDerivative, stageFileBytes, toast } from './kit.js';
+import { isPendingOffsite, stageDerivative, stageFileBytes, toast } from './kit.ts';
 import { captureVideoFrames, VIDEO_POSTER_EDGE, VIDEO_THUMB_EDGE } from './video-frame.js';
 import { act, narrate } from './outcomes.ts';
 import { thumbHashFromImage } from './thumbhash.ts';

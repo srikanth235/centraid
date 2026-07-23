@@ -17,7 +17,7 @@ import {
   toCents,
 } from '../format.ts';
 import { I } from '../icons.ts';
-import type { ReactNode } from '../react-core.min.js';
+import type { ReactNode } from 'react';
 import type { ExpenseModel, Group, Member } from '../types.ts';
 import { ArmedButton, Icon, KitAvatar, ModalBackdrop } from './Shared.tsx';
 import styles from './ExpenseModal.module.css';

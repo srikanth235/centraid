@@ -8,10 +8,10 @@ HTTP server in front of it.
 
 Two hosts mount the same core:
 
-| Host | Paths come from | Bearer token | App-code backend |
+| Host | Paths come from | Loopback bearer | App-code backend |
 | --- | --- | --- | --- |
-| [`@centraid/desktop`](../../apps/desktop) embed | `gateway-paths.ts` → `<userData>/gateways/<id>/` | Electron `safeStorage` | git store |
-| `centraid-gateway` CLI (this package) | a JSON config file or `--data-dir` flag | persisted at `<dataDir>/token.bin` | legacy tarball upload |
+| [`@centraid/desktop`](../../apps/desktop) embed | `gateway-paths.ts` → `<userData>/gateways/<id>/` | per-launch token (in-memory) | git store |
+| `centraid-gateway` CLI (this package) | a JSON config file or `--data-dir` flag | ephemeral per-boot secret (not persisted; pin via `CENTRAID_GATEWAY_TOKEN`) | legacy tarball upload |
 
 No new wire protocol — every host serves the same `/centraid/*`,
 `/_centraid-conversations/*`, and `/_centraid-user/*` routes, so desktop and
@@ -50,11 +50,14 @@ tarball-upload backend (what the standalone CLI below uses).
 ## `centraid-gateway` CLI — standalone daemon
 
 ```sh
-# First boot — mints + persists token at <dataDir>/token.bin, prints URL + token
-centraid-gateway serve --data-dir /var/lib/centraid --host 0.0.0.0 --port 8765
+# Boot. The loopback bearer is an ephemeral per-boot secret (issue #505 phase 7)
+# — never written to disk, never printed. Pin a known value if a co-located
+# client (e.g. the `centraid` product CLI) needs to reach the loopback listener.
+CENTRAID_GATEWAY_TOKEN=$(openssl rand -hex 32) \
+  centraid-gateway serve --data-dir /var/lib/centraid --host 0.0.0.0 --port 8765
 
-# Read back the persisted token
-centraid-gateway print-token --data-dir /var/lib/centraid
+# Enrol a device (the first one gets the revocable `owner` admin tier):
+centraid-gateway pair --data-dir /var/lib/centraid --vault <name>
 ```
 
 Bind defaults to `127.0.0.1:0` (loopback, OS-assigned port). Pass
@@ -63,17 +66,18 @@ Bind defaults to `127.0.0.1:0` (loopback, OS-assigned port). Pass
 ### Pointing the desktop at the daemon
 
 The desktop's `GatewayKind = 'local' | 'remote'` already handles this — no new
-gateway kind. In **Settings → Gateways → Add remote**, paste:
-
-- **URL:** `http://<your-lan-ip>:<port>` (e.g. `http://192.168.1.42:8765`)
-- **Token:** the value printed by `centraid-gateway`
+gateway kind. There is **no** URL + admin-token paste (retired with the shared
+bearer, issue #505 phase 7). In **Settings → Gateways → Add gateway**, paste a
+one-time **pairing ticket** from `centraid-gateway pair`; for a self-fronted
+`direct`-tier URL, open the advanced "Connect by URL" panel and redeem the same
+ticket over that URL — either way the ceremony mints a per-device token.
 
 Switch to that gateway. The home shelf, chat panel, automations, and Insights
-screen all work — the daemon is just another host behind the same bearer.
+screen all work — the daemon is just another host behind its own per-device
+enrollment.
 
-Mobile is identical: paste URL + token in the remote-gateway form. The phone
-never needs codex / Claude Code installed locally — the runner runs on the
-daemon host.
+Mobile is identical: pair with a ticket. The phone never needs codex / Claude
+Code installed locally — the runner runs on the daemon host.
 
 ### Config file
 
@@ -112,9 +116,9 @@ inside a vault (see `daemonLayoutFor` in `src/cli/paths.ts`):
 <dataDir>/
   prefs.json             — device prefs (runner choice, binPath, …)
   model-catalog.json     — chat picker's per-runner model + tool catalog
-  token.bin              — persistent bearer token (mode 0o600)
-  devices.json           — device enrollments: device key ↔ vault (#289)
+  devices.json           — device enrollments: device key ↔ vault + trust tier (#289/#505)
   pairing-tickets.json   — one-time pairing tickets, secret hashes only (#289)
+  device-tokens.json     — per-device HTTP tokens for the direct tier, hashes only (#376)
   endpoint-key.bin       — the gateway's persistent iroh secret key (#289)
   endpoint.json          — the live endpoint's id + dial ticket, for the pair CLI (#289)
   vault/                 — vault registry root: one subdirectory per vault
@@ -135,10 +139,13 @@ not a separate file.
 Per [centraid#131](https://github.com/srikanth235/centraid/issues/131), the
 daemon ships intentionally narrow:
 
-- Single shared bearer token (no per-device tokens, no revocation list).
+- No shared admin token (retired #505 phase 7): the loopback bearer is an
+  ephemeral per-boot secret, and admin capability is the per-device, revocable
+  `owner` enrollment trust tier. Remote access is pairing-only; per-device
+  tokens (revocable) back the `direct` transport tier.
 - No TLS terminator. Bind loopback for same-machine use; for LAN, trust the
   network or front with Caddy / Tailscale Funnel / Cloudflare Tunnel.
-- No mDNS / Bonjour discovery; paste URL + token only.
+- No mDNS / Bonjour discovery; pair with a one-time ticket.
 - Single user. Multi-user identity is a larger design and lands separately.
 - No daemon auto-update. Bumping the gateway is `git pull` + `bun install` +
   restart, by design.
@@ -156,7 +163,8 @@ Covers:
 
 - `serve.test.ts` — boot, loopback bind + token mint, bearer auth, the
   `GET /centraid/_turn/runner-status` and `GET /centraid/_agents/status` routes.
-- `cli.test.ts` — config validation, prefs-patch shape, token mint/read,
-  end-to-end CLI spawn + SIGTERM.
+- `cli.test.ts` — config validation, prefs-patch shape, and an end-to-end CLI
+  spawn that authenticates with a parent-supplied `CENTRAID_GATEWAY_TOKEN`
+  loopback secret (never printed), then SIGTERM.
 - `serve-multiclient.test.ts` — two HTTP clients against the same daemon: one
   publishes an app, the other lists + static-serves it.

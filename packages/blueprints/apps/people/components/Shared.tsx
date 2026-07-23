@@ -1,6 +1,6 @@
 // Small shared presentational bits used across Sidebar/Grid/List/Details/
 // Journal/Activity. Pure functions of props — no app state.
-import type { CSSProperties, FC, MouseEvent, ReactNode } from '../react-core.min.js';
+import type { CSSProperties, FC, MouseEvent, ReactNode } from 'react';
 
 // A trusted static SVG string rendered inline, with no wrapper box in the
 // layout (`display:contents`) — see icons.ts for the glyph strings.
@@ -35,7 +35,7 @@ export function Checkbox({
 }
 
 // The vault FTS hit snippet (`⟦hit⟧`-marked) as JSX `<mark>` spans — the
-// React analogue of kit.js's `snippetInto()`, which mutates a container's DOM
+// React analogue of kit.ts's `snippetInto()`, which mutates a container's DOM
 // directly and must never target a React-owned node.
 export function Snippet({ snippet, className }: { snippet?: string | null; className?: string }) {
   const parts = String(snippet ?? '').split(/[⟦⟧]/);

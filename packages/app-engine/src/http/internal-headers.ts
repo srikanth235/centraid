@@ -5,34 +5,34 @@
  */
 export const COMPANION_GRANTS_HEADER = 'x-centraid-companion-grants';
 
-type CompanionTool = 'centraid_read' | 'centraid_write' | 'centraid_describe';
+/** The two app RPC handler kinds a Companion device may invoke. */
+type CompanionHandlerKind = 'action' | 'query';
 
 const COMPANION_CAPABILITIES: Readonly<
-  Record<string, Partial<Record<CompanionTool, readonly string[]>>>
+  Record<string, Partial<Record<CompanionHandlerKind, readonly string[]>>>
 > = {
   locker: {
-    centraid_read: ['autofill-candidates', 'autofill-item'],
-    centraid_write: ['add-item'],
+    query: ['autofill-candidates', 'autofill-item'],
+    action: ['add-item'],
   },
-  tasks: { centraid_write: ['add'] },
-  notes: { centraid_write: ['create-note'] },
-  docs: { centraid_write: ['upload'] },
-  agenda: { centraid_write: ['propose'] },
-  people: { centraid_write: ['add-person'] },
+  tasks: { action: ['add'] },
+  notes: { action: ['create-note'] },
+  docs: { action: ['upload'] },
+  agenda: { action: ['propose'] },
+  people: { action: ['add-person'] },
 };
 
-/** Enforce the narrow action/query bundle behind each selected module. */
-export function companionToolAllowed(
+/**
+ * Enforce the narrow action/query bundle behind each selected module. The app
+ * id and handler name now ride in the request path (issue #505), so the caller
+ * passes them directly rather than a tool-body envelope.
+ */
+export function companionHandlerAllowed(
   profile: ReadonlySet<string>,
-  tool: CompanionTool,
-  body: Readonly<Record<string, unknown>>,
+  kind: CompanionHandlerKind,
+  appId: string,
+  handlerName: string,
 ): boolean {
-  const app = typeof body.app === 'string' ? body.app : '';
-  if (!profile.has(app)) return false;
-  const operation =
-    tool === 'centraid_read' ? body.query : tool === 'centraid_write' ? body.action : undefined;
-  return (
-    typeof operation === 'string' &&
-    (COMPANION_CAPABILITIES[app]?.[tool]?.includes(operation) ?? false)
-  );
+  if (!profile.has(appId)) return false;
+  return COMPANION_CAPABILITIES[appId]?.[kind]?.includes(handlerName) ?? false;
 }

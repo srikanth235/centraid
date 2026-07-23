@@ -64,18 +64,9 @@ function newSharedDir(): string {
   return newDir({
     // Side effects (globalThis writes) keep esbuild's tree shaking from
     // dropping these stand-ins the way it would drop genuinely dead code.
-    'react-core.min.js':
-      'export const jsx = (t, p) => ({ t, p });\n' +
-      'export const jsxs = jsx;\n' +
-      "export const Fragment = 'frag';\n" +
-      'export const createRoot = () => ({ render() {} });\n' +
-      'globalThis.__REACT_CORE_COPIES = (globalThis.__REACT_CORE_COPIES ?? 0) + 1;\n',
-    'jsx-runtime.js': "export { Fragment, jsx, jsxs } from './react-core.min.js';\n",
     'elements.js': "globalThis.__ELEMENTS = 'shared-elements';\n",
-    'kit.js': "import './elements.js';\nexport const KIT = 'shared-kit';\n",
+    'kit.ts': "import './elements.js';\nexport const KIT = 'shared-kit';\n",
     'kit.css': '.kit-btn { color: teal; }\n',
-    'tokens.css': ':root { --tok: 1; }\n',
-    'wall.css': 'body { background: linen; }\n',
   });
 }
 
@@ -84,8 +75,6 @@ function newApp(): string {
   return newDir({
     'index.html': [
       '<!doctype html><html><head>',
-      '<link rel="stylesheet" href="wall.css" />',
-      '<link rel="stylesheet" href="tokens.css" />',
       '<link rel="stylesheet" href="app.css" />',
       '<link rel="stylesheet" href="kit.css" />',
       '</head><body><div id="root"></div>',
@@ -93,9 +82,16 @@ function newApp(): string {
       '</body></html>',
     ].join('\n'),
     'app.css': '#root { display: grid; }',
+    'react-runtime.js':
+      'export const jsx = (t, p) => ({ t, p });\n' +
+      'export const jsxs = jsx;\n' +
+      "export const Fragment = 'frag';\n" +
+      'export const createRoot = () => ({ render() {} });\n' +
+      'globalThis.__APP_REACT_COPIES = (globalThis.__APP_REACT_COPIES ?? 0) + 1;\n',
+    'jsx-runtime.js': "export { Fragment, jsx, jsxs } from './react-runtime.js';\n",
     'app.jsx': [
-      "import { KIT } from './kit.js';",
-      "import { createRoot } from './react-core.min.js';",
+      "import { KIT } from './kit.ts';",
+      "import { createRoot } from './react-runtime.js';",
       "import { label } from './util.js';",
       "import { Widget } from './components/Widget.jsx';",
       "export const APP_MARKER = 'app:' + KIT + ':' + label;",
@@ -140,17 +136,16 @@ describe('live index.html — bundle rewrite + CSS inlining', () => {
     expect(html).toContain(`src="./_bundle.${m![1]}.js"`);
     expect(html).not.toContain('src="./app.jsx"');
 
-    // All four links collapsed into one <style> block, contents present,
-    // per-app app.css and shared kit/tokens/wall all resolved.
+    // Both links collapse into one <style> block, with per-app app.css and the
+    // shared kit resolved.
     expect(html).not.toContain('<link rel="stylesheet"');
     const styleBlocks = html.match(/<style data-centraid-inlined-css>/g) ?? [];
     expect(styleBlocks.length).toBe(1);
-    for (const marker of ['display: grid', 'color: teal', '--tok: 1', 'background: linen']) {
+    for (const marker of ['display: grid', 'color: teal']) {
       expect(html).toContain(marker);
     }
-    // Inline order preserves the link order (wall → tokens → app → kit).
-    expect(html.indexOf('background: linen')).toBeLessThan(html.indexOf('--tok: 1'));
-    expect(html.indexOf('--tok: 1')).toBeLessThan(html.indexOf('display: grid'));
+    // Inline order preserves the link order (app → kit).
+    expect(html.indexOf('display: grid')).toBeLessThan(html.indexOf('color: teal'));
   });
 
   it('leaves the entry untouched when the bundle build fails (broken import)', async () => {
@@ -226,7 +221,7 @@ describe('bundle serving — ETag, immutability, 304', () => {
     expect(revalidated.body.length).toBe(0);
   });
 
-  it('bundles JSX through the automatic runtime with a single shared React instance', async () => {
+  it('bundles JSX through one app-owned automatic runtime', async () => {
     const app = newApp();
     const shared = newSharedDir();
     const html = (await serve(app, 'index.html', { sharedAssetsDir: shared })).body.toString();
@@ -237,16 +232,16 @@ describe('bundle serving — ETag, immutability, 304', () => {
 
     // No unresolved automatic-runtime import survives into the bundle…
     expect(body).not.toMatch(/from\s*["'][^"']*jsx-runtime/);
-    // …and react-core's module body appears exactly once (one React copy),
+    // …and the app-owned runtime module appears exactly once,
     // even though app.jsx and components/Widget.jsx both need the runtime.
-    const copies = body.match(/__REACT_CORE_COPIES = \(/g) ?? [];
+    const copies = body.match(/__APP_REACT_COPIES = \(/g) ?? [];
     expect(copies.length).toBe(1);
   });
 
   it('prefers a per-app override over the shared copy, same as per-file serving', async () => {
     const app = newApp();
     const shared = newSharedDir();
-    writeTree(app, { 'kit.js': "export const KIT = 'app-own-kit';" });
+    writeTree(app, { 'kit.ts': "export const KIT = 'app-own-kit';" });
     const html = (await serve(app, 'index.html', { sharedAssetsDir: shared })).body.toString();
     const hash = BUNDLE_URL_RE.exec(html)![1]!;
     const body = (
@@ -447,10 +442,10 @@ describe('request count over a served app', () => {
     const draftOpts = { ...opts, draft: { appId: 'demo', sessionId: 's' } };
 
     // Per-file baseline, i.e. exactly what a draft (or the pre-#404 server)
-    // serves: html + 4 css + app.jsx + util.js + Widget.jsx + deep.js +
-    // kit.js + elements.js + jsx-runtime.js + react-core.min.js = 13.
+    // serves: html + 2 css + app.jsx + util.js + Widget.jsx + deep.js +
+    // kit.ts + elements.js + jsx-runtime.js + react-runtime.js = 11.
     const before = await countBootRequests(app, opts, draftOpts);
-    expect(before).toBe(13);
+    expect(before).toBe(11);
 
     const after = await countBootRequests(app, opts);
     expect(after).toBe(2);
@@ -459,29 +454,19 @@ describe('request count over a served app', () => {
   const photosDir = path.resolve(import.meta.dirname, '../../../blueprints/apps/photos');
   const kitDir = path.resolve(import.meta.dirname, '../../../blueprints/kit');
   it.skipIf(!existsSync(photosDir) || !existsSync(kitDir))(
-    'collapses the real photos app to 2 requests (HTML + bundle)',
+    'does not build a served graph for the inline-only Photos system app',
     async () => {
       const opts = { sharedAssetsDir: kitDir };
       const draftOpts = { ...opts, draft: { appId: 'photos', sessionId: 's' } };
 
       const before = await countBootRequests(photosDir, opts, draftOpts);
       const after = await countBootRequests(photosDir, opts);
-      // Ground truth from the #404 audit: ~30+ requests per open. Bounded,
-      // not exact, so blueprint-side refactors don't break this suite.
-      expect(before).toBeGreaterThanOrEqual(30);
-      expect(after).toBe(2);
-
-      // The real bundle must be syntactically valid ESM — parse it (esbuild
-      // throws on a syntax error). Running it needs a DOM, which the boot
-      // gate covers per-file; this at least proves the whole-graph output
-      // is a loadable module.
-      const html = (await serve(photosDir, 'index.html', opts)).body.toString('utf8');
-      const hash = BUNDLE_URL_RE.exec(html)![1]!;
-      const bundle = (await serve(photosDir, `_bundle.${hash}.js`, opts)).body.toString('utf8');
-      const esbuild = await import('esbuild');
-      await expect(esbuild.transform(bundle, { loader: 'js' })).resolves.toBeTruthy();
-      // eslint-disable-next-line no-console -- benchmark evidence is intentional (#408)
-      console.info(`photos boot requests: before(per-file)=${before} after(bundled)=${after}`);
+      expect(before).toBe(1);
+      expect(after).toBe(1);
+      await expect(prewarmAppAssets(photosDir, kitDir)).resolves.toEqual({
+        bundles: 0,
+        variants: 0,
+      });
     },
   );
 });

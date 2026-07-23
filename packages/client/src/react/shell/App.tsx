@@ -48,6 +48,8 @@ import { getCachedGroupedRows, openGroupedVaultRegistry } from './flatVaultSwitc
 import { closeVaultSwitcher, openVaultSwitcher, updateVaultSwitcherRows } from './vaultSwitcher.js';
 import ApprovalsRoute from './routes/ApprovalsRoute.js';
 import AppViewRoute from './routes/AppViewRoute.js';
+import InlineAppRoute from './routes/InlineAppRoute.js';
+import { inlineAppLoader } from './routes/inlineApps.js';
 import AtlasRoute from './routes/AtlasRoute.js';
 import AssistantRoute from './routes/AssistantRoute.js';
 import AutomationEditorRoute from './routes/AutomationEditorRoute.js';
@@ -664,6 +666,29 @@ export default function App(): JSX.Element {
           if (!app) return <PageEmpty message="App not found." />;
           const ua = userApps.find((a) => a.id === id);
           const appId = ua?.centraidAppId ?? app.id;
+          // Bundled (blueprint) apps converted to an inline route render
+          // in-shell (no iframe) and offline-capable, REGARDLESS of builder
+          // state. The builder is a separate route (`kind: 'builder'`) reached
+          // via the Build button — which InlineAppRoute itself renders — and it
+          // remixes a blueprint into a NEW user app with its own id; it never
+          // edits the shipped blueprint source in place, so the inline and
+          // served paths render identical code and there is no divergence to
+          // protect against here. User apps have no inline loader and fall
+          // through to AppViewRoute as before (issue #505).
+          const inlineLoader = inlineAppLoader(appId);
+          if (inlineLoader) {
+            return (
+              <InlineAppRoute
+                app={app}
+                appId={appId}
+                loader={inlineLoader}
+                nav={nav}
+                renderSidebar={renderSidebar}
+                prefs={prefs}
+                onToggleSidebar={() => setPrefs({ sidebarOpen: !prefs.sidebarOpen })}
+              />
+            );
+          }
           return (
             <AppViewRoute
               app={app}

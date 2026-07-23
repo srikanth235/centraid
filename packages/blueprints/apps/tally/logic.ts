@@ -12,7 +12,7 @@
 // functions of that object, so a controlled input's `value` prop simply
 // tracks it (no React `useState` needed for these, no Lit `live()` needed
 // either: a full re-render already keeps the DOM in sync on every keystroke).
-import { debounce, outcomeMessage, toast } from './kit.js';
+import { debounce, outcomeMessage, toast } from './kit.ts';
 import { first, resolveSplits, toCents, todayKey } from './format.ts';
 import type {
   AddFriendModel,

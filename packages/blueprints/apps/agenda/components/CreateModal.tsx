@@ -4,12 +4,12 @@
 // as `attendee_party_ids`, which the propose command turns into
 // needs-action schedule_attendee rows. Opening from a day/slot click
 // prefills the time via `prefill`.
-import { useEffect, useRef, useState } from '../react-core.min.js';
-import { outcomeMessage } from '../kit.js';
+import { useEffect, useRef, useState } from 'react';
+import { outcomeMessage } from '../kit.ts';
 import { colorForCalendar, initials, nextHalfHour, toIsoUtc, toLocalInput } from '../format.ts';
 import { I } from '../icons.ts';
 import { CalDot, Icon } from './Shared.tsx';
-import type { ChangeEvent } from '../react-core.min.js';
+import type { ChangeEvent } from 'react';
 import type { Calendar, CreatePayload, PartyOption, Prefill } from '../types.ts';
 import styles from './CreateModal.module.css';
 import shared from './shared.module.css';

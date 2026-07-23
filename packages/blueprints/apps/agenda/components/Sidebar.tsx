@@ -3,7 +3,7 @@
 // row, "Create event" button and the trust footer line are static HTML in
 // index.html (stable, no per-render data), wired once in chrome.ts.
 import { bucketByDay, colorForCalendar, startOfWeek } from '../format.ts';
-import { localDayKey } from '../kit.js';
+import { localDayKey } from '../kit.ts';
 import { I } from '../icons.ts';
 import { Icon } from './Shared.tsx';
 import type { AgEvent, Calendar } from '../types.ts';

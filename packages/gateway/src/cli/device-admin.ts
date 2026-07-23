@@ -27,7 +27,7 @@ import {
   VaultRegistryError,
   type VaultRegistry,
 } from '../serve/vault-registry.js';
-import { EnrollmentStore } from '../serve/enrollment-store.js';
+import { EnrollmentStore, type GrantableTrust } from '../serve/enrollment-store.js';
 import {
   PairingTicketStore,
   encodePairingTicket,
@@ -49,7 +49,7 @@ interface DeviceArgs {
   vault?: string;
   label?: string;
   ttlMinutes?: number;
-  trust?: 'full' | 'readonly';
+  trust?: GrantableTrust;
   /** Emit machine-readable JSON instead of human text (issue #382, `pair` only). */
   json?: boolean;
   /**
@@ -89,8 +89,8 @@ function parseDeviceArgs(args: string[], fail: (msg: string, code?: number) => n
       }
       case '--trust': {
         const trust = next();
-        if (trust !== 'full' && trust !== 'readonly') {
-          fail('--trust must be "full" or "readonly"', 2);
+        if (trust !== 'owner' && trust !== 'full' && trust !== 'readonly') {
+          fail('--trust must be "owner", "full", or "readonly"', 2);
         }
         out.trust = trust;
         break;
@@ -174,7 +174,15 @@ export async function commandPair(
       const tickets = PairingTicketStore.open(layout.pairingTicketsFile);
       const ttlMs =
         parsed.ttlMinutes !== undefined ? parsed.ttlMinutes * 60 * 1000 : DEFAULT_TICKET_TTL_MS;
-      const trust = parsed.trust ?? 'full';
+      // The `owner` tier (issue #505 phase 7) is the per-device, revocable
+      // replacement for the retired shared admin token. `pair` runs on the box
+      // itself (shell access to `--data-dir` is the trust anchor), so the FIRST
+      // device paired into a vault with no enrollments yet defaults to `owner` —
+      // the landlord device. Later pairings default to `full`; `--trust`
+      // overrides either way.
+      const enrollments = EnrollmentStore.open(layout.devicesFile);
+      const firstDeviceForVault = enrollments.listByVault(vault.vaultId).length === 0;
+      const trust: GrantableTrust = parsed.trust ?? (firstDeviceForVault ? 'owner' : 'full');
       const minted = tickets.mint(vault.vaultId, ttlMs, trust);
       const token = encodePairingTicket({
         v: 1,

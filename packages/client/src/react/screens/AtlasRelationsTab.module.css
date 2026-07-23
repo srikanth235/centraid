@@ -13,6 +13,85 @@
   gap: 18px;
 }
 
+/* ── Header — question chips on the left, detail dial on the right ──────── */
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+}
+
+/* ── Question chips — saved lenses above the stage ──────────────────────── */
+.questions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ── The detail dial — a segmented Simple/Standard/Everything filter. Reuses
+   the pill idiom of the question chips, but as one connected track so the
+   three positions read as a single control (one active at a time). ──────── */
+.detailDial {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-pill, 999px);
+  background: var(--bg-elev);
+}
+.segBtn {
+  padding: 5px 12px;
+  border: 0;
+  border-radius: var(--r-pill, 999px);
+  background: transparent;
+  color: var(--ink-3);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    color 0.15s var(--ease, ease),
+    background-color 0.15s var(--ease, ease);
+}
+.segBtn:hover {
+  color: var(--ink);
+}
+.segBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.segBtn[aria-pressed='true'] {
+  color: var(--ink);
+  background: color-mix(in oklab, var(--accent) 14%, var(--bg-elev));
+}
+.qChip {
+  padding: 6px 13px;
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-pill, 999px);
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s var(--ease, ease),
+    color 0.15s var(--ease, ease),
+    background-color 0.15s var(--ease, ease);
+}
+.qChip:hover {
+  border-color: var(--ink-4);
+  color: var(--ink);
+}
+.qChip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.qChip[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--ink);
+  background: color-mix(in oklab, var(--accent) 10%, var(--bg-elev));
+}
+
 /* ── Empty / not-loaded state ──────────────────────────────────────────── */
 .empty {
   display: flex;
@@ -46,16 +125,74 @@
   }
 }
 
+/* The instrument well — a quiet vignette the orrery sits inside. Layered
+   radial washes from theme surfaces + a whisper of accent behind the plate;
+   both endpoints are tokens so every theme keeps its own atmosphere. */
 .stage {
+  position: relative;
   min-width: 0;
   overflow-x: auto;
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-card, 14px);
+  background:
+    radial-gradient(
+      circle at 50% 46%,
+      color-mix(in oklab, var(--accent) 5%, transparent),
+      transparent 58%
+    ),
+    radial-gradient(circle at 50% 50%, var(--bg-elev) 30%, var(--bg-sunken) 100%);
+  box-shadow: inset 0 0 72px -24px color-mix(in oklab, var(--accent-midnight) 32%, transparent);
 }
 .orrery {
   display: block;
   width: 100%;
   height: auto;
   min-width: 300px;
-  touch-action: manipulation;
+  /* Pointer events own touch here — panning must not scroll the page and
+     pinch must not page-zoom, so the browser hands us every gesture. */
+  touch-action: none;
+  cursor: grab;
+}
+.orrery:active {
+  cursor: grabbing;
+}
+
+/* ── Zoom controls — overlaid HTML buttons, bottom-right of the well ─────── */
+.zoomCtl {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 1;
+}
+.zoomBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-pill, 999px);
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    color 0.15s var(--ease, ease),
+    border-color 0.15s var(--ease, ease);
+}
+.zoomBtn:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+.zoomBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ── Readout rail ───────────────────────────────────────────────────────── */
@@ -83,12 +220,22 @@
   border-bottom: 0;
 }
 .roLabel {
-  margin: 0 0 9px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
   font-family: var(--font-mono);
   font-size: 9.5px;
   letter-spacing: 0.13em;
   text-transform: uppercase;
   color: var(--ink-4);
+}
+/* hairline rule completing each section label — instrument-panel engraving */
+.roLabel::after {
+  content: '';
+  flex: 1;
+  height: 0.5px;
+  background: var(--line);
 }
 
 /* breadcrumb */
@@ -143,6 +290,7 @@
 }
 .backBtn:hover:not(:disabled) {
   color: var(--ink);
+  border-color: var(--accent);
 }
 .backBtn:disabled {
   opacity: 0.4;
@@ -175,6 +323,16 @@
   color: var(--ink-2);
   word-break: break-all;
   line-height: 1.5;
+}
+/* the hovered kind's pack hue — ties the readout to its compass sector */
+.dPackDot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--pack-c, var(--ink-4));
+  margin-right: 6px;
+  vertical-align: 1px;
 }
 .dArrow {
   color: var(--accent);
@@ -216,8 +374,41 @@
   color: var(--ink-2);
   line-height: 1.5;
 }
-.dNoteGhost {
-  border-left-color: var(--accent);
+
+/* the plain-language lede — a friendly-name sentence (edge readout) or a curated
+   blurb (node readout), leading the readout above the demoted SQL detail */
+.dLede {
+  margin: 0 0 12px;
+  font: var(--t-small);
+  color: var(--ink);
+  line-height: 1.5;
+}
+.dLede b {
+  font-weight: 600;
+}
+
+/* "A few of yours" — up to three real sample rows of the current centre */
+.samples {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 5px;
+}
+.sampleRow {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--ink-2);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sampleMore {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--ink-4);
 }
 
 /* relation-vocabulary chips */
@@ -231,9 +422,9 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 8px;
+  padding: 4px 10px;
   border: 0.5px solid var(--line);
-  border-radius: var(--r-sm, 8px);
+  border-radius: var(--r-pill, 999px);
   background: transparent;
   color: var(--ink-2);
   font-family: var(--font-mono);
@@ -320,6 +511,17 @@
   border: 1.2px solid var(--ink-3);
   justify-self: center;
 }
+/* concentric rings — the hop-distance graticule the legend now names */
+.lgRing {
+  height: 12px;
+  width: 12px;
+  border-radius: 50%;
+  border: 1.2px solid var(--ink-4);
+  box-shadow: inset 0 0 0 3px transparent;
+  outline: 1.2px solid var(--line-strong);
+  outline-offset: 1.5px;
+  justify-self: center;
+}
 .lgText {
   font-family: var(--font-sans);
   font-size: 10.5px;
@@ -332,48 +534,132 @@
   font-weight: 500;
 }
 
-/* ── Caption strip ──────────────────────────────────────────────────────── */
+/* ── Caption strip — the instrument's measured-fact footer ──────────────── */
 .caption {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 20px;
-  padding-top: 12px;
-  border-top: 0.5px solid var(--line);
+  gap: 14px 34px;
+  padding: 13px 18px;
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-card, 14px);
+  background: var(--bg-elev);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 9.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
   color: var(--ink-4);
 }
 .captionItem {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
   white-space: nowrap;
 }
 .captionNum {
-  color: var(--ink-2);
-  font-weight: 500;
+  font-family: var(--font-display);
+  font-size: 17px;
+  line-height: 1;
+  letter-spacing: 0;
+  color: var(--ink);
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
 /* ── SVG parts ──────────────────────────────────────────────────────────── */
+
+/* Reveal choreography — one orchestrated bloom on mount: graticule + dial
+   fade up, rings of kinds bloom outward (per-node --dly from the chart),
+   edges fade in last. Every animation fills backwards so late elements hold
+   at zero until their turn. */
+@keyframes atlasFadeIn {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes atlasBloom {
+  from {
+    opacity: 0;
+    transform: scale(0);
+  }
+}
+@keyframes atlasBreathe {
+  50% {
+    opacity: 0.16;
+  }
+}
+@keyframes atlasSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.graticule {
+  animation: atlasFadeIn 0.6s var(--ease, ease) backwards;
+}
 .ringGuide {
   fill: none;
   stroke: var(--line);
   stroke-width: 1;
 }
+/* the unreached ring drifts — a barely-perceptible 4-minute revolution */
 .ringGuideDashed {
   stroke-dasharray: 2 6;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: atlasSpin 240s linear infinite;
 }
 .ringTick {
   font-family: var(--font-mono);
   font-size: 9px;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   fill: var(--ink-4);
+  paint-order: stroke;
+  stroke: var(--bg-sunken);
+  stroke-width: 3px;
+  stroke-opacity: 0.85;
+}
+
+/* the dial — pack sector arcs + curved names, painted in the pack hue */
+.dial {
+  animation: atlasFadeIn 0.7s var(--ease, ease) 0.12s backwards;
+}
+.sector {
+  transition: opacity 0.2s var(--ease, ease);
+}
+.sectorArc {
+  fill: none;
+  stroke: var(--sector-c, var(--ink-4));
+  stroke-opacity: 0.42;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  transition: stroke-opacity 0.2s var(--ease, ease);
+}
+.sectorTick {
+  stroke: var(--line-strong);
+  stroke-width: 1;
 }
 .sectorName {
   font-family: var(--font-mono);
   font-size: 8px;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
-  fill: var(--ink-4);
+  fill: var(--sector-c, var(--ink-4));
+  fill-opacity: 0.75;
+  transition: fill-opacity 0.2s var(--ease, ease);
+}
+/* hovering a kind lights its whole compass sector */
+.sectorHot .sectorArc {
+  stroke-opacity: 1;
+  stroke-width: 2.5;
+}
+.sectorHot .sectorName {
+  fill-opacity: 1;
+}
+/* every kind in this pack is hidden from the current centre (unreached
+   machinery) — keep the bearing, drop the presence */
+.sectorEmpty {
+  opacity: 0.3;
 }
 
 .edges {
@@ -386,6 +672,8 @@
   fill: none;
   stroke-linecap: round;
   pointer-events: none;
+  animation: atlasFadeIn 0.5s var(--ease, ease) backwards;
+  animation-delay: var(--dly, 360ms);
 }
 .edgeLive {
   stroke: var(--ink-3);
@@ -398,6 +686,7 @@
 .edgeHot {
   opacity: 1 !important;
   stroke: var(--accent);
+  filter: drop-shadow(0 0 3px color-mix(in oklab, var(--accent) 55%, transparent));
 }
 .edgeHit {
   fill: none;
@@ -419,6 +708,23 @@
 .coreGlow {
   fill: var(--accent);
   opacity: 0.1;
+  animation: atlasBreathe 7s ease-in-out infinite;
+}
+.coreBezel {
+  animation: atlasFadeIn 0.6s var(--ease, ease) 0.1s backwards;
+}
+.coreTick {
+  stroke: var(--line-strong);
+  stroke-width: 1;
+}
+.coreTickMajor {
+  stroke: var(--ink-4);
+}
+.coreRingOuter {
+  fill: none;
+  stroke: var(--accent);
+  stroke-opacity: 0.28;
+  stroke-width: 0.75;
 }
 .corePlate {
   fill: var(--bg-sunken);
@@ -441,6 +747,10 @@
   font-size: 9px;
   letter-spacing: 0.02em;
   fill: var(--ink-3);
+  paint-order: stroke;
+  stroke: var(--bg-sunken);
+  stroke-width: 3px;
+  stroke-opacity: 0.85;
 }
 .coreCaptionLit {
   fill: var(--accent);
@@ -459,6 +769,10 @@
   stroke-opacity: 0.9;
   stroke-width: 1;
   transition: fill-opacity 0.15s var(--ease, ease);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: atlasBloom 0.45s var(--ease, ease) backwards;
+  animation-delay: var(--dly, 0ms);
 }
 .nodeHalo {
   fill: none;
@@ -485,11 +799,17 @@
   font-size: 7.6px;
   letter-spacing: 0.02em;
   fill: var(--ink-3);
+  paint-order: stroke;
+  stroke: var(--bg-sunken);
+  stroke-width: 2.5px;
+  stroke-opacity: 0.7;
   pointer-events: none;
   opacity: 0.6;
   transition:
     fill 0.15s var(--ease, ease),
     opacity 0.15s var(--ease, ease);
+  animation: atlasFadeIn 0.4s var(--ease, ease) backwards;
+  animation-delay: calc(var(--dly, 0ms) + 140ms);
 }
 .nodeLabelBig {
   font-size: 9px;
@@ -503,13 +823,59 @@
   opacity: 1;
 }
 
+/* the physical SQL name, shown only at the Everything level — a quiet mono
+   second line under the friendly label, demoted so the human name still leads */
+.nodeSubLabel {
+  font-family: var(--font-mono);
+  font-size: 5.6px;
+  letter-spacing: 0.02em;
+  fill: var(--ink-4);
+  paint-order: stroke;
+  stroke: var(--bg-sunken);
+  stroke-width: 2px;
+  stroke-opacity: 0.7;
+  pointer-events: none;
+  opacity: 0.72;
+  transition: opacity 0.15s var(--ease, ease);
+  animation: atlasFadeIn 0.4s var(--ease, ease) backwards;
+  animation-delay: calc(var(--dly, 0ms) + 180ms);
+}
+.node:hover .nodeSubLabel,
+.node:focus-visible .nodeSubLabel,
+.nodeHot .nodeSubLabel {
+  fill: var(--ink-2);
+  opacity: 1;
+}
+
+/* a question dims every node it does not light — the same recede a hover gives
+   the edge layer, applied to whole nodes so the lit set reads at a glance */
+.nodeDim {
+  opacity: 0.16;
+  transition: opacity 0.2s var(--ease, ease);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .edges,
   .nodeBody,
   .nodeHalo,
   .nodeLabel,
+  .nodeSubLabel,
+  .nodeDim,
   .chip,
+  .qChip,
+  .segBtn,
   .backBtn {
     transition-duration: 0.01ms;
+  }
+  .graticule,
+  .dial,
+  .coreBezel,
+  .coreGlow,
+  .ringGuideDashed,
+  .edge,
+  .nodeBody,
+  .nodeLabel,
+  .nodeSubLabel {
+    animation: none;
   }
 }

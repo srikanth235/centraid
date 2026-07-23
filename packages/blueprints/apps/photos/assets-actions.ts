@@ -3,7 +3,7 @@
 // lightbox delete's Undo). `refresh` is the one piece of app.tsx state these
 // need — passed in by the caller on every invocation rather than imported,
 // since only app.tsx owns the module-level asset list refresh() re-reads.
-import { toast } from './kit.js';
+import { toast } from './kit.ts';
 import { act, narrate } from './outcomes.ts';
 import type { Asset } from './types.ts';
 

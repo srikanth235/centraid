@@ -729,15 +729,18 @@ interface CentraidApi {
   /** List every gateway profile (local + remote). Sorted local-first. */
   listGateways(): Promise<CentraidGatewayProfile[]>;
   /**
-   * Add a remote gateway. UUID id is minted server-side; the token is
-   * stored in keychain and is NOT echoed back. The plaintext crosses
-   * the bridge exactly once on this call.
+   * Register a `direct`-tier remote gateway from a URL + per-device token
+   * (the PWA web-host path, issue #505 phase 7). The token is the per-device
+   * token minted by the pairing ceremony — NOT a shared admin token (retired).
+   * The Electron desktop no longer exposes this bridge: it adds gateways only
+   * through the pairing ceremony (`redeemGatewayPairing`), which registers the
+   * profile in-process.
    */
   addGateway(input: {
     label: string;
     /**
-     * `direct` transport — an https/http URL + token. Plain http:// to a
-     * public host is refused (issue #289): the bearer would travel in
+     * `direct` transport — an https/http URL + per-device token. Plain http://
+     * to a public host is refused (issue #289): the bearer would travel in
      * cleartext. Omit when adding an `iroh` gateway.
      */
     url?: string;
@@ -1336,6 +1339,22 @@ export interface CentraidHealthEvent {
   message: string;
 }
 
+/** Coarse numeric signals on `GET /centraid/_gateway/health` (issue #521). */
+export interface CentraidHealthMetrics {
+  rssBytes: number;
+  outboxPending: number;
+  sseClients?: number;
+  eventLoopLagP50Ms?: number;
+  eventLoopLagP99Ms?: number;
+  eventLoopLagMaxMs?: number;
+  eventLoopLagPeakP99Ms?: number;
+  eventLoopLagSamples?: number;
+  storageFsyncMs?: number;
+  hardwareProfileClass?: string;
+  resourceMode?: string;
+  uptimeMs: number;
+}
+
 /** Aggregate payload of `GET /centraid/_gateway/health`. */
 export interface CentraidGatewayHealth {
   status: 'ok' | 'degraded' | 'error';
@@ -1343,6 +1362,7 @@ export interface CentraidGatewayHealth {
   uptimeMs: number;
   components: CentraidHealthComponent[];
   recentEvents: CentraidHealthEvent[];
+  metrics?: CentraidHealthMetrics;
 }
 
 declare global {
@@ -1635,11 +1655,27 @@ declare global {
     level: 'warn' | 'error';
     message: string;
   }
+  /** Coarse numeric signals on gateway health (issue #521) — mirrors module export. */
+  interface CentraidHealthMetrics {
+    rssBytes: number;
+    outboxPending: number;
+    sseClients?: number;
+    eventLoopLagP50Ms?: number;
+    eventLoopLagP99Ms?: number;
+    eventLoopLagMaxMs?: number;
+    eventLoopLagPeakP99Ms?: number;
+    eventLoopLagSamples?: number;
+    storageFsyncMs?: number;
+    hardwareProfileClass?: string;
+    resourceMode?: string;
+    uptimeMs: number;
+  }
   interface CentraidGatewayHealth {
     status: 'ok' | 'degraded' | 'error';
     startedAt: string;
     uptimeMs: number;
     components: CentraidHealthComponent[];
     recentEvents: CentraidHealthEvent[];
+    metrics?: CentraidHealthMetrics;
   }
 }

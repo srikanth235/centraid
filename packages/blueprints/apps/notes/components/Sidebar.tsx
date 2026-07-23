@@ -5,7 +5,7 @@
 // footer (library summary + the trust line). Three React roots — #sidebarNav,
 // #sidebarFoot — the brand row and "New note" button around them are static
 // HTML in index.html (stable, no per-render data), wired once in chrome.ts.
-import { useRef, useState } from '../react-core.min.js';
+import { useRef, useState } from 'react';
 import { I } from '../icons.ts';
 import { notebookColorVar } from '../format.ts';
 import { Icon } from './Shared.tsx';
@@ -179,7 +179,7 @@ export function SidebarNav({
 
 export function SidebarFoot({ counts }: { counts: SidebarCounts }) {
   return (
-    <div className="nt-side-foot">
+    <>
       <div className={styles.summary}>
         <div className={shared.eyebrowLabel}>This library</div>
         <div className={styles.summaryLine}>
@@ -194,6 +194,6 @@ export function SidebarFoot({ counts }: { counts: SidebarCounts }) {
         <Icon svg={I.shield} />
         <span>Every edit is consent-checked &amp; receipted</span>
       </div>
-    </div>
+    </>
   );
 }

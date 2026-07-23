@@ -18,11 +18,12 @@ embed + standalone daemon).
 - **Cloud-panel state** — `GET …/logs`, `GET/PUT …/settings`
   ([cloud-routes.ts](src/http/cloud-routes.ts)). App DATA lives in the
   vault (issue #286 phase 2) — there is no per-app database to browse.
-- **Declared-handler dispatcher** — `POST /centraid/_tool/{centraid_describe,_read,_write}`
-  ([dispatcher.ts](src/handlers/dispatcher.ts)): reads `app.json`, validates
-  `input` with Ajv, runs the handler in the worker. `centraid_read` → query,
-  `centraid_write` → action. Declared handlers ONLY — the `_sql` builtin
-  died with the silo.
+- **Declared-handler dispatcher** — `POST /centraid/<id>/actions/<action>`,
+  `POST /centraid/<id>/queries/<query>`, `GET /centraid/<id>/_describe`
+  ([dispatcher.ts](src/handlers/dispatcher.ts)): reads `app.json`, validates the
+  `{ input? }` body with Ajv, runs the handler in the worker. Declared handlers
+  ONLY — the `_sql` builtin died with the silo. (Issue #505 retired the old
+  `/centraid/_tool/centraid_*` shim in favour of these app-scoped routes.)
 - **Per-app** — `GET /centraid/<id>/` + `/<file>` (static, [security.ts](src/http/security.ts)
   allowlist), `GET /centraid/<id>/_changes` (SSE, [changes-sse.ts](src/http/changes-sse.ts)),
   `POST /centraid/<id>/_turn` (chat turn → SSE, [turn-routes.ts](src/http/turn-routes.ts)).

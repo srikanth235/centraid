@@ -328,8 +328,12 @@ test('the disk component reports free space on the vault volume', async () => {
       components: Array<{ component: string; status: string; detail?: string }>;
     };
     const disk = body.components.find((c) => c.component === 'disk');
-    expect(disk?.status).toBe('ok');
+    // The host volume may legitimately be degraded/error under the shipped
+    // percent + absolute thresholds. The classifier's deterministic status
+    // cases live in disk-health.test.ts; this integration test owns wiring.
+    expect(disk).toBeDefined();
     expect(disk?.detail).toContain('free of');
+    expect(disk?.detail).toMatch(/\(\d+\.\d% free\)/);
   } finally {
     await srv.close();
   }

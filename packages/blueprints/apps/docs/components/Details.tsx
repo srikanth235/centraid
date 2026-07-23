@@ -1,6 +1,6 @@
 // Details drawer (#detailsRoot root).
-import { useRef, useState } from '../react-core.min.js';
-import { armConfirm } from '../kit.js';
+import { useRef, useState } from 'react';
+import { armConfirm } from '../kit.ts';
 import {
   custodyMeta,
   extOf,

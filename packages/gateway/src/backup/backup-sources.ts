@@ -8,6 +8,7 @@
  * evidence, so it never removes a blob from a restorable snapshot.
  */
 
+import { createHash } from 'node:crypto';
 import { existsSync, promises as fs } from 'node:fs';
 import path from 'node:path';
 import {
@@ -22,12 +23,6 @@ import {
 import { WAL_DB_FILES, type EngineLogger, type SourceEntry } from '@centraid/backup';
 import { GitError, run } from '../worktree-store/git.js';
 import type { VaultPlane } from '../serve/vault-plane.js';
-
-/** Wipe and recreate the per-vault staging dir (`<backupDir>/staging/<vaultId>/`). */
-export async function resetStagingDir(stagingDir: string): Promise<void> {
-  await fs.rm(stagingDir, { recursive: true, force: true });
-  await fs.mkdir(stagingDir, { recursive: true });
-}
 
 /** Every blob CAS file under `<vaultDir>/blobs/sha256/<fan>/<sha>` (`FsBlobStore`'s layout). */
 async function listBlobEntries(
@@ -61,10 +56,45 @@ async function listBlobEntries(
   return entries;
 }
 
-/** `git bundle create <staging>/apps.bundle --all` from the vault's bare code store. */
+/**
+ * A stable fingerprint of the bare code store's refs — every branch + tag
+ * `git bundle --all` would pack, plus HEAD. When this is unchanged since the
+ * last snapshot, the bundle's bytes are unchanged too (a bundle is a function
+ * of its reachable refs), so we can skip regenerating it entirely. `for-each-ref`
+ * emits refs in a stable order (sorted by refname), so the digest is order-free.
+ */
+async function codeRefsDigest(bareDir: string): Promise<string> {
+  const refs = await run(['for-each-ref', '--format=%(objectname) %(refname)'], { cwd: bareDir });
+  const head = await run(['symbolic-ref', '--quiet', 'HEAD'], { cwd: bareDir }).catch(() => '');
+  return createHash('sha256').update(`${head}\n${refs}`).digest('hex');
+}
+
+/**
+ * The vault's app code store as a `git bundle --all`, written to a PERSISTENT
+ * per-vault dir (`<backupDir>/code-bundle/<vaultId>/`, NOT the per-tick-wiped
+ * `staging/`) so the file survives between backup ticks.
+ *
+ * The upload path treats the bundle like any other snapshot entry: fixed-part
+ * chunk, dedup, encrypt, upload-if-new (`engine.ts`). That path already has a
+ * `(size, mtime)`-keyed fast path that reuses a prior entry's chunk refs without
+ * re-reading — but only if the FILE is byte-stable across ticks. The old code
+ * bundled into `staging/`, which is wiped and rewritten every tick, so the
+ * bundle looked new every time: a full-history `git pack-objects` repack (git's
+ * default `pack.threads` is not even byte-deterministic on a grown repo) plus a
+ * full re-read/re-chunk and, when the bytes drifted, a wholesale re-upload — all
+ * for a code store that changes far less often than the backup cadence.
+ *
+ * So we gate on a ref digest (`codeRefsDigest`): if the store's refs are
+ * unchanged since we last bundled (sidecar `apps.bundle.refs`), the existing
+ * bundle file is reused UNTOUCHED — same size, same mtime — and the engine's
+ * fast path reuses its chunks with zero git work, zero re-read, zero re-upload.
+ * Only a real ref change (publish / rollback / delete) regenerates, and then
+ * with `-c pack.threads=1` so the pack is byte-deterministic and the parts that
+ * did not change still dedup against the previous snapshot's chunks.
+ */
 async function bundleCodeStore(
   plane: VaultPlane,
-  stagingDir: string,
+  bundleDir: string,
   log: EngineLogger,
 ): Promise<SourceEntry | undefined> {
   const bareDir = path.join(plane.codeStoreRoot, 'apps.git');
@@ -72,9 +102,27 @@ async function bundleCodeStore(
     log.info?.('backup: no code store bare repo yet — skipping git-bundle entry');
     return undefined;
   }
-  const bundlePath = path.join(stagingDir, 'apps.bundle');
+  await fs.mkdir(bundleDir, { recursive: true });
+  const bundlePath = path.join(bundleDir, 'apps.bundle');
+  const digestPath = path.join(bundleDir, 'apps.bundle.refs');
+  const digest = await codeRefsDigest(bareDir);
+
+  // Reuse the standing bundle when the code store's refs have not moved: the
+  // file stays byte-identical and untouched, so the engine skips it entirely.
+  if (existsSync(bundlePath)) {
+    const priorDigest = await fs.readFile(digestPath, 'utf8').catch(() => '');
+    if (priorDigest === digest) {
+      log.info?.('backup: code store unchanged since last snapshot — reusing apps.bundle');
+      return { path: 'apps.bundle', kind: 'git-bundle', absolutePath: bundlePath };
+    }
+  }
+
   try {
-    await run(['bundle', 'create', bundlePath, '--all'], { cwd: bareDir });
+    // `-c pack.threads=1`: single-threaded delta compression is byte-deterministic,
+    // so an unchanged region of history produces identical parts run-to-run and
+    // dedups against the previous snapshot's chunks instead of re-uploading.
+    await run(['-c', 'pack.threads=1', 'bundle', 'create', bundlePath, '--all'], { cwd: bareDir });
+    await fs.writeFile(digestPath, digest);
     return { path: 'apps.bundle', kind: 'git-bundle', absolutePath: bundlePath };
   } catch (err) {
     // An empty bare repo (no refs yet) makes `git bundle create --all` fail
@@ -114,8 +162,18 @@ function sealKeyEntry(plane: VaultPlane): SourceEntry | undefined {
 
 export interface AssembleOptions {
   plane: VaultPlane;
-  /** `<backupDir>/staging/<vaultId>/` — reset by the caller before this runs. */
-  stagingDir: string;
+  /**
+   * PERSISTENT per-vault dir the code-store bundle lives in
+   * (`<backupDir>/code-bundle/<vaultId>/`). It is deliberately NOT wiped
+   * between ticks: the standing `apps.bundle` (+ its `apps.bundle.refs` digest
+   * sidecar) is reused untouched while the code store's refs have not moved, so
+   * the engine's `(size, mtime)` fast path skips it entirely (see
+   * `bundleCodeStore`). Every other entry is read in place — db bases from the
+   * shipper's pinned clones, blobs from the CAS, the seal key from custody — so
+   * this is the only directory assembly writes to, and there is no ephemeral
+   * staging dir anymore.
+   */
+  bundleDir: string;
   /**
    * The newest pair-marker tick the provider has CONFIRMED accepting for the
    * shipper's current base pair (backup state's `walMarkerTips`). Stamped into
@@ -128,7 +186,7 @@ export interface AssembleOptions {
 
 /** Build the full `SourceEntry[]` for one backup tick, in FORMAT.md's order. */
 export async function assembleSourceEntries(opts: AssembleOptions): Promise<SourceEntry[]> {
-  const { plane, stagingDir, log } = opts;
+  const { plane, bundleDir, log } = opts;
   const entries: SourceEntry[] = [];
 
   // (a) DB base clones FIRST (issue #408): the shipper pinned each database
@@ -210,8 +268,9 @@ export async function assembleSourceEntries(opts: AssembleOptions): Promise<Sour
   }
   entries.push(...(await listBlobEntries(plane.dir, pending)));
 
-  // (c) Code store bundle.
-  const bundle = await bundleCodeStore(plane, stagingDir, log);
+  // (c) Code store bundle — into the PERSISTENT bundleDir, reused across ticks
+  // when the code store's refs have not moved (see `bundleCodeStore`).
+  const bundle = await bundleCodeStore(plane, bundleDir, log);
   if (bundle) entries.push(bundle);
 
   // (d) Seal key, if this vault has ever sealed a value.

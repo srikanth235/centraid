@@ -1,6 +1,6 @@
 // Small shared presentational bits used across Sidebar/List/Detail/overlays.
 // Pure functions of props — no app state.
-import type { FC } from '../react-core.min.js';
+import type { FC } from 'react';
 import { CAT_ICON_PATHS, ICON_PATHS } from '../icons.ts';
 
 // A trusted static SVG path fragment wrapped in a real <svg> sized/stroked

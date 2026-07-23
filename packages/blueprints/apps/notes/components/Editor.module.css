@@ -2,8 +2,7 @@
    notebook select + tools), the markdown-lite body renderer, the tag strip,
    attachments and the receipt footer. Authored camelCase. The `nt-pop` panel
    keyframe is single-consumer so it lives here (esbuild localizes the name +
-   reference together); the backdrop's fade-in uses the global `nt-fade` (kept
-   in app.css, shared with quick-add + the narrow scrim). `:global(...)` bridges
+   reference together); the backdrop uses the shared kit fade-in. `:global(...)` bridges
    the kit classes (`.kit-icon-btn`, `.kit-pending`) and the shell state class
    the narrow-viewport rules depend on. The eyebrow label, tag-chip base and
    armed-delete label live in shared.module.css. */
@@ -16,7 +15,7 @@
   flex-direction: column;
   background: color-mix(in oklab, var(--ink) 30%, rgba(10, 12, 16, 0.55));
   backdrop-filter: blur(2px);
-  animation: nt-fade 0.18s ease;
+  animation: kit-fade-in 0.18s ease;
 }
 .editor {
   margin: auto;

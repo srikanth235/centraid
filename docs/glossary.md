@@ -32,6 +32,8 @@ There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automa
 | **vault** | Sovereign personal ontology for one owner. Unit of custody: `vault.db` + `journal.db` (+ apps/, code/, …). | `packages/vault`; on-disk under `vault/<vaultId>/` |
 | **gateway** | Host-agnostic backend that mounts vaults, serves HTTP, runs automation and agent turns. Same core embedded or as `centraid-gateway` daemon. | `packages/gateway` — `buildGateway()`, `serve()` |
 | **app** | Installed projection over the vault. Code serves from the release (UI blueprints) or cloned automation sources. Declared handlers in `app.json`. | `packages/app-engine`, `packages/blueprints` |
+| **inline app** | An app rendered as a React route **inside the shell** — no iframe, no bridge, replica-backed, offline-capable. The default for the 8 bundled system apps (#505). | `packages/client/src/react/shell/routes/InlineAppRoute.tsx`; registry `inlineApps.ts`; `packages/blueprints/apps/<app>/app-inline.tsx` |
+| **served app** | An app rendered as an **opaque, same-origin iframe document** the gateway bakes and serves, under the blueprint CSP. Builder preview + mobile WebViews only since #505. | `packages/app-engine/src/http/static-server.ts`; `AppFrame.tsx` |
 | **blueprint** | Shipped template: UI app under `packages/blueprints/apps/` (install-in-place) or automation under `automations/` (clone). | `packages/blueprints` |
 | **automation** | Headless conversation + manifest + handler that fires on schedule, webhook, condition, or vault data change. | `packages/automation` |
 | **handler** | Declared query (read) or action (write) in `app.json`, validated by Ajv, run in a worker with `ctx.vault`. | `packages/app-engine/src/handlers/` |

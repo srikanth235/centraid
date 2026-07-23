@@ -11,13 +11,7 @@ You are working inside a centraid app app folder. Your job is to author or modif
 ```
 <app root>/
   index.html               # entry page; static assets sit alongside
-  app.css, app.jsx, ...    # static assets (extension allowlist below).
-                           # app.jsx is a React component — the gateway
-                           # transpiles .jsx per-request (esbuild,
-                           # jsx: 'automatic'), no local build step.
-                           # Import createRoot/hooks from
-                           # ./react-core.min.js, the same shared
-                           # sibling-import mechanism as ./kit.js.
+  app.css, app.js, ...     # dependency-free browser assets
   app.json                 # the APP MANIFEST — see "App manifest" below
   package.json             # devDependency on @centraid/app-engine (for editor types)
   queries/<name>.js        # dispatched against queries[name] in the manifest
@@ -28,28 +22,29 @@ You are working inside a centraid app app folder. Your job is to author or modif
 
 Handlers are authored as **plain `.js` ES modules** — there is no `tsconfig.json`, no `tsc`, and no build step. The gateway loads `.js` directly. Type checking comes from JSDoc annotations that the editor resolves against `@centraid/app-engine` (installed as a devDependency).
 
-### UI dialect — React
+### UI dialect — dependency-free browser modules
 
-Apps are authored as React: `app.jsx`, imports from `./react-core.min.js` (createRoot, hooks, flushSync). The kit's own custom elements (`kit-avatar`, `kit-meter`, etc., from `./elements.js`) are dependency-free vanilla Web Components and drop directly into a React tree as lowercase JSX tags (`<kit-avatar name={...} />`).
+The canonical scaffold is plain `app.js` using browser APIs and the shared kit. Centraid does not ship an app-owned React runtime, and an authored app must not import `react-core.min.js` or `jsx-runtime.js`. The kit's custom elements (`kit-avatar`, `kit-meter`, etc., from `./elements.js`) are dependency-free Web Components and can be created directly in HTML or JavaScript.
 
-React apps may (and beyond a few hundred lines, should) split into modules: `app.jsx` stays the entry/orchestrator, pure view components live in `components/<Name>.jsx`, JSX-free helpers in sibling `.js` files. The gateway transpiles every `.jsx` per-request at any depth. Two rules keep this working: every relative import carries its extension (`./components/Grid.jsx`, never `./components/Grid` — tooling resolves extensionless imports but a real browser 404s), and from a subdirectory the shared runtime imports go up one level (`../react-core.min.js`, `../kit.js`). Keep every file under 500 lines.
+Beyond a few hundred lines, split the app into browser modules: `app.js` remains the entry/orchestrator, view helpers live in `components/<name>.js`, and data/format helpers live in sibling `.js` files. Every relative import carries its `.js` extension because the browser resolves these modules directly. From a subdirectory, shared kit imports go up one level (`../kit.js`). Keep every file under 500 lines.
 
-Everything else: `window.centraid` read/write/describe/onChange, the `#consentBanner` pattern, kit.css classes via `className=`, and the inline settings bridge in `index.html`.
+Use `window.centraid` for read/write/describe/onChange, the `#consentBanner` pattern, kit.css classes via `class=`, and the inline settings bridge in `index.html`.
 
 ### Design system — shared tokens + kit primitives
 
 Styling is layered; `index.html` links the sheets in this exact order:
 
 ```html
-<link rel="stylesheet" href="wall.css" />    <!-- page-background gradient (shared) -->
-<link rel="stylesheet" href="tokens.css" />  <!-- design-token layer (shared, generated) -->
-<link rel="stylesheet" href="app.css" />     <!-- YOUR app-local styles -->
+<link rel="stylesheet" href="app.css" />     <!-- generated token baseline + YOUR styles -->
 <link rel="stylesheet" href="kit.css" />     <!-- shared component primitives -->
 ```
 
-`wall.css`, `tokens.css`, and `kit.css` are **served from the shared kit dir** — never create local copies (a local copy shadows the live shared file and the app stops tracking design-system updates).
+The scaffold generator writes the canonical token baseline at the beginning of
+`app.css`; keep that block intact and put app-local styles after it. `kit.css`
+is served from the shared kit dir — never create a local copy because it would
+shadow design-system updates.
 
-The token contract: your `app.css` `:root` sets **`--app-hue`** (one number that drives the entire neutral ramp — ink, lines, surfaces, shadows) and **`--accent`** (pick a palette var: `--c-amber`, `--c-forest`, `--c-indigo`, `--c-ochre`, `--c-rose`, `--c-slate`, `--c-teal`, `--c-violet`). Everything else derives in tokens.css; override an individual token only for a deliberate app-specific look (your `:root` loads after tokens.css, so equal-specificity overrides win). Dark theme is fully handled by tokens.css (both `data-theme` and the `prefers-color-scheme` fallback) — **never write your own dark-theme token blocks**. Paint accents through `var(--_accent)` (resolves the user's appColor knob over `--accent`).
+The token contract: your app-local `app.css` `:root` sets **`--app-hue`** (one number that drives the entire neutral ramp — ink, lines, surfaces, shadows) and **`--accent`** (pick a palette var: `--c-amber`, `--c-forest`, `--c-indigo`, `--c-ochre`, `--c-rose`, `--c-slate`, `--c-teal`, `--c-violet`). Everything else derives from the generated baseline; override an individual token only for a deliberate app-specific look. Dark theme is fully handled by that baseline (both `data-theme` and the `prefers-color-scheme` fallback) — **never write your own dark-theme token blocks**. Paint accents through `var(--_accent)` (resolves the user's appColor knob over `--accent`).
 
 Prefer kit primitives over hand-rolled equivalents: `.kit-btn`, `.kit-chip(.quiet)`, `.kit-seg`, `.kit-modal*`, `.kit-popover*`, `.kit-banner`, `.kit-empty*`, `.kit-toasts`, `.kit-skeleton`, `.kit-input(.bare)`, `.kit-search`, `.kit-icon-btn`, `.kit-viewer-nav`, `.kit-drop`/`.kit-drop-card`, `.kit-foot`, `.kit-muted`/`.kit-small`, and `box-shadow: var(--kit-focus-ring)` for focus. One cascade trap: kit.css loads **after** app.css, so an app rule overriding a kit class at equal specificity loses — bump specificity with a compound selector (`.kit-input.my-variant`), the pattern the bundled apps use throughout.
 
@@ -350,7 +345,11 @@ When the user's request includes scheduled behaviour: build the UI / queries / a
 
 ### Build / publish expectations
 
-There is **no build step**. The publish step uploads the app folder as-is; the runtime loads `.js` files directly and transpiles `.jsx` files per-request (esbuild, `jsx: 'automatic'`) — you never run a bundler yourself. Don't introduce `tsconfig.json`, don't add `build`/`watch` scripts, don't reach for a bundler. If you want editor IntelliSense locally, run `bun install` (or `npm install`) so `@centraid/app-engine` resolves — it changes nothing at runtime.
+There is **no build step**. The publish step uploads the app folder as-is and
+the runtime loads `.js` files directly. Don't introduce `tsconfig.json`, don't
+add `build`/`watch` scripts, and don't reach for a bundler. If you want editor
+IntelliSense locally, run `bun install` (or `npm install`) so
+`@centraid/app-engine` resolves — it changes nothing at runtime.
 
 ### When asked to scaffold a new app
 

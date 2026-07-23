@@ -5,8 +5,15 @@
  *   - `/centraid/_gateway/*`  shell/control plane
  *   - `/centraid/_vault/*`    vault plane
  *   - `/centraid/_apps/*`     apps store plane
- *   - `/centraid/_tool/*`     tool plane
  *   - `/centraid/_web/*`      browser session plane
+ *
+ * App RPC is NOT a plane: a handler invocation is addressed under the app's
+ * own prefix — `POST /centraid/<appId>/actions/<action>` (an action) and
+ * `POST /centraid/<appId>/queries/<query>` (a query), with the declared
+ * handlers discoverable at `GET /centraid/<appId>/_describe` (issue #505,
+ * which retired the `/centraid/_tool/centraid_*` shim). Those paths are
+ * per-app and parametric, so they are minted by the helpers below rather
+ * than living in the flat `ROUTES` table.
  *
  * New flat top-level names under `/centraid/` without a plane prefix are
  * forbidden without a migration plan (see docs/protocol.md).
@@ -20,9 +27,6 @@ export const VAULT_PLANE_PREFIX = '/centraid/_vault' as const;
 
 /** Apps plane prefix. */
 export const APPS_PLANE_PREFIX = '/centraid/_apps' as const;
-
-/** Tool plane prefix. */
-export const TOOL_PLANE_PREFIX = '/centraid/_tool' as const;
 
 /** Browser session plane prefix. */
 export const WEB_PLANE_PREFIX = '/centraid/_web' as const;
@@ -42,8 +46,6 @@ export const ROUTES = {
   vaultConnectionsAssistComplete: `${VAULT_PLANE_PREFIX}/connections/assist/complete`,
   vaultOAuthCallback: `${VAULT_PLANE_PREFIX}/oauth/callback`,
   appsList: APPS_PLANE_PREFIX,
-  toolRead: `${TOOL_PLANE_PREFIX}/centraid_read`,
-  toolWrite: `${TOOL_PLANE_PREFIX}/centraid_write`,
   webSession: `${WEB_PLANE_PREFIX}/session`,
   webControl: `${WEB_PLANE_PREFIX}/control`,
 } as const;
@@ -61,3 +63,29 @@ export function vaultConnectionAuthorizePath(encodedConnectionId: string): strin
 
 /** Every known absolute path constant — used by the route-literal drift check. */
 export const ROUTE_PATHS: readonly string[] = Object.freeze(Object.values(ROUTES));
+
+/**
+ * Build the app-scoped action-invocation path (issue #505). `POST` here with
+ * a JSON body of `{ input?, intentId? }` runs the declared action; the app id
+ * and action name ride in the path, not the body.
+ */
+export function appActionPath(appId: string, action: string): string {
+  return `/centraid/${encodeURIComponent(appId)}/actions/${encodeURIComponent(action)}`;
+}
+
+/**
+ * Build the app-scoped query-invocation path (issue #505). `POST` here with a
+ * JSON body of `{ input? }` runs the declared query.
+ */
+export function appQueryPath(appId: string, query: string): string {
+  return `/centraid/${encodeURIComponent(appId)}/queries/${encodeURIComponent(query)}`;
+}
+
+/**
+ * Build the app-scoped describe path (issue #505). `GET` returns the app's
+ * manifest; an optional `?action=<name>` or `?query=<name>` narrows to one
+ * declared handler. Replaces the `centraid_describe` tool.
+ */
+export function appDescribePath(appId: string): string {
+  return `/centraid/${encodeURIComponent(appId)}/_describe`;
+}

@@ -7,7 +7,7 @@ import { lightPalette, darkPalette, radii, spacing, fonts } from './tokens.gener
 
 export type Scheme = 'light' | 'dark';
 
-// The generated palettes plus a derived `ink4` — tokens.css has no `--ink-4`,
+// The generated palettes plus a derived `ink4` — the source has no `--ink-4`,
 // but the app uses a fourth, fainter ink (e.g. the home pager dots), so we
 // derive it here as a low-alpha ink rather than snapping to ink3.
 export type ThemeColors = Record<keyof typeof lightPalette, string> & { ink4: string };

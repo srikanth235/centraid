@@ -52,12 +52,10 @@ try {
     });
     if (!install.ok)
       throw new Error(`Locker install failed: ${install.status} ${await install.text()}`);
-    const add = await fetch(`${ctx.gateway.url}/centraid/_tool/centraid_write`, {
+    const add = await fetch(`${ctx.gateway.url}/centraid/locker/actions/add-item`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
-        app: 'locker',
-        action: 'add-item',
         intentId: crypto.randomUUID(),
         input: {
           type: 'login',

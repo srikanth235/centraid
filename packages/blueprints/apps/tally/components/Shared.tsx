@@ -1,8 +1,8 @@
 // Small shared presentational bits used across the sidebar/modals. Pure
 // functions of props — no app state. Same role as tasks/notes'
 // components/Shared.tsx.
-import { useState } from '../react-core.min.js';
-import type { FC, ReactNode } from '../react-core.min.js';
+import { useState } from 'react';
+import type { FC, ReactNode } from 'react';
 import shared from './shared.module.css';
 
 // The kit's native custom elements (`<kit-avatar>`, `<kit-skeleton>`, defined
@@ -48,7 +48,7 @@ export function ModalBackdrop({ onClose, children }: { onClose: () => void; chil
 }
 
 // Confirm-to-act delete button: first click arms (label swap, auto-disarm
-// after `timeout`), second click confirms. kit.js's `armConfirm` mutates a
+// after `timeout`), second click confirms. kit.ts's `armConfirm` mutates a
 // button's textContent directly, which a React-owned node must never take —
 // React apps use a local, remount-reset armed flag instead (see
 // notes/components/Toolbar.tsx's DeleteButton for the icon-only analogue);

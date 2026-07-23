@@ -10,7 +10,37 @@
     "baseUrl": ".",
     "paths": {
       "@centraid/client/*": ["../../packages/client/src/*"],
-      "@centraid/design-tokens": ["../../packages/design-tokens/src/index.ts"]
+      "@centraid/design-tokens": ["../../packages/design-tokens/src/index.ts"],
+      // Blueprint inline-app entries resolve to contract stubs so this program
+      // never type-checks their .tsx sources (which rely on the blueprints
+      // ambients); Vite still code-splits the real import (issue #505).
+      "@centraid/blueprints/apps/*/app-inline": [
+        "../../packages/client/src/react/blueprints/inline-app-module-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/tasks/queries/*": [
+        "../../packages/client/src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/agenda/queries/*": [
+        "../../packages/client/src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/docs/queries/*": [
+        "../../packages/client/src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/locker/queries/*": [
+        "../../packages/client/src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/notes/queries/*": [
+        "../../packages/client/src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/people/queries/*": [
+        "../../packages/client/src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/photos/queries/*": [
+        "../../packages/client/src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/tally/queries/*": [
+        "../../packages/client/src/react/blueprints/inline-query-stub.d.ts"
+      ]
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
