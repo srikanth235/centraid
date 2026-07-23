@@ -42,6 +42,10 @@ describe('isInstrumentableSource', () => {
     expect(isInstrumentableSource('packages/vault/src/foo.test.ts')).toBe(false);
     expect(isInstrumentableSource('README.md')).toBe(false);
     expect(isInstrumentableSource('scripts/x.mjs')).toBe(false);
+    // Package-root tooling configs are outside coverage include (src/**).
+    expect(isInstrumentableSource('packages/vault/stryker.config.mjs')).toBe(false);
+    expect(isInstrumentableSource('packages/vault/vitest.mutation.config.ts')).toBe(false);
+    expect(isInstrumentableSource('packages/vault/vitest.config.ts')).toBe(false);
   });
 });
 
@@ -69,6 +73,25 @@ describe('lineHits + scoreDiffCoverage', () => {
     expect(score.covered).toBe(2);
     expect(score.uncovered).toEqual([{ file: 'packages/vault/src/foo.ts', line: 12, hits: 0 }]);
     expect(score.percent).toBeCloseTo((2 / 3) * 100, 5);
+  });
+
+  test('skips changed lines with no statement-map entry (comments / uninstrumented)', () => {
+    const coverageMap = {
+      '/repo/packages/vault/src/foo.ts': {
+        path: '/repo/packages/vault/src/foo.ts',
+        statementMap: {
+          0: { start: { line: 11, column: 0 }, end: { line: 11, column: 12 } },
+        },
+        s: { 0: 1 },
+      },
+    };
+    const changed = new Map([['packages/vault/src/foo.ts', new Set([11, 99, 100])]]);
+    const score = scoreDiffCoverage(changed, coverageMap);
+    // Lines 99–100 are comments / outside the statement map → not in total.
+    expect(score.total).toBe(1);
+    expect(score.covered).toBe(1);
+    expect(score.uncovered).toEqual([]);
+    expect(score.percent).toBe(100);
   });
 });
 

@@ -101,6 +101,7 @@
 - Vault mutation suite is **contract-only** under Stryker (properties SIGSEGV under threads on Linux and drop score below the 97 floor)
 - Post-merge with connectors: automation coverage floor 72 (CI measured 72.36%; still up-only vs main 68)
 - verify job: `fetch-depth: 0` + fetch origin/main so diff-coverage can resolve merge-base
+- diff-coverage: only `src/` paths + lines present in the coverage statement map (configs/comments no longer tank the gate)
 - `receipts/issue-532-constraint-gauntlet.md` (this receipt)
 
 ### Receipt + PR linking #532

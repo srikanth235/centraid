@@ -71,11 +71,16 @@ export function parseUnifiedDiffAddedLines(diffText) {
 
 /**
  * Whether a path is an instrumentable source file under packages/ or apps/.
+ * Aligns with root vitest coverage include (package/app `src/` trees only):
+ * package-root configs (stryker/vitest) are not instrumented and must not fail
+ * the gate when they change.
  * @param {string} filePath filePath parameter.
  * @returns {boolean} Return value.
  */
 export function isInstrumentableSource(filePath) {
   if (!/^(packages|apps)\//.test(filePath)) return false;
+  // Coverage only instruments production sources under src/.
+  if (!filePath.includes('/src/')) return false;
   if (!/\.(ts|tsx|js|jsx|mjs|cjs)$/.test(filePath)) return false;
   if (/\.(test|spec)\.(ts|tsx|js|jsx)$/.test(filePath)) return false;
   if (filePath.endsWith('.d.ts')) return false;
@@ -151,9 +156,12 @@ export function scoreDiffCoverage(changed, coverageMap, opts = {}) {
   for (const [file, lines] of changed) {
     if (!filter(file)) continue;
     for (const line of [...lines].sort((a, b) => a - b)) {
-      total += 1;
       const hits = lineHits(coverageMap, file, line);
-      if (hits !== null && hits > 0) {
+      // null ⇒ not in the coverage statement map (comment/blank/type-only or
+      // outside the instrumented set). Skip rather than treat as uncovered.
+      if (hits === null) continue;
+      total += 1;
+      if (hits > 0) {
         covered += 1;
       } else {
         uncovered.push({ file, line, hits });
