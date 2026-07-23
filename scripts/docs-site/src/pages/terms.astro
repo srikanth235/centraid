@@ -1,0 +1,25 @@
+---
+import DocsLayout from '../layouts/DocsLayout.astro';
+import content from '../content/terms.html?raw';
+
+const rail = [
+  { href: '#service', no: '§01', label: 'The service', current: true },
+  { href: '#responsibility', no: '§02', label: 'Responsibility', current: false },
+  { href: '#availability', no: '§03', label: 'Availability', current: false },
+  { href: '#contact', no: '§04', label: 'Contact', current: false },
+];
+---
+
+<DocsLayout
+  title="Centraid Terms of Service"
+  description="Terms for using Centraid and the optional Centraid Assist OAuth ceremony service, including user responsibility and availability."
+  current="terms"
+  canonicalPath="terms/"
+  searchLabel="Terms"
+  searchKeywords="terms service Centraid Assist OAuth acceptable use availability"
+  bodyClass="has-rail"
+  rail={rail}
+  pageType="WebPage"
+>
+  <Fragment set:html={content} />
+</DocsLayout>

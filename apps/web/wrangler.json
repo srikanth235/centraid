@@ -4,10 +4,11 @@
   // Gateway-embedded PWA remains the LAN / always-on fallback (ARCHITECTURE.md).
   // Deploy when CLOUDFLARE_* secrets present; otherwise CI is build+smoke only.
   "name": "centraid-web",
-  "compatibility_date": "2024-11-01",
-  "compatibility_flags": [],
+  "compatibility_date": "2026-07-23",
+  "compatibility_flags": ["nodejs_compat"],
   "assets": {
-    "directory": "./dist"
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
   },
   // Bind once DNS is in the Cloudflare account:
   // "routes": [{ "pattern": "app.centraid.dev", "custom_domain": true }],

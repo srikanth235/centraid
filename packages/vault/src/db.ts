@@ -33,7 +33,7 @@ import { asVaultDiskFullError } from './errors.js';
 import { initializeReplicaProtocol } from './replica/change-log.js';
 import { repairReplicaInvocationCommits } from './replica/invocation-commits.js';
 import { registerContentTextFn } from './schema/fts.js';
-import { JOURNAL_MIGRATIONS, migrate, VAULT_MIGRATIONS } from './schema/migrate.js';
+import { JOURNAL_MIGRATIONS, migrate, migrateVault } from './schema/migrate.js';
 import { ephemeralSealKey, resolveSealKey, sealKeyFileFor } from './schema/sealed.js';
 
 export interface VaultDb {
@@ -296,7 +296,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   registerContentTextFn(vault);
   // Perceptual-hash distance (issue #299) — near-duplicates are plain SQL.
   registerHammingFn(vault);
-  migrate(vault, VAULT_MIGRATIONS);
+  migrateVault(vault);
   migrate(journal, JOURNAL_MIGRATIONS);
   // Issue #406: database-level triggers are the durable write choke point.
   // Install them after each fresh-schema open (including live ext tables

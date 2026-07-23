@@ -87,6 +87,21 @@ Probe without printing values: `bun run release:verify-secrets`.
 
 Marketing + docs remain the apex `centraid` worker (`wrangler.json` → `./dist/site`).
 
+### Centraid Assist OAuth edge
+
+- [ ] Bind **`oauth.centraid.dev`** as the only custom route for
+      `apps/oauth-worker`; disable `workers.dev` and preview URLs.
+- [ ] Create protected GitHub Environment **`oauth-production`** with the
+      maintainer as required reviewer.
+- [ ] Set repository variable `OAUTH_WORKER_DEPLOY_ENABLED=true` only after
+      [the Google/Cloudflare evidence gates](release/oauth-assist-google.md)
+      pass.
+- [ ] Store `GOOGLE_CLIENT_SECRET` and `CALLBACK_RECEIPT_SECRET` with
+      Cloudflare Worker Secrets, not GitHub or the gateway. The public
+      `GOOGLE_CLIENT_ID` is a Worker variable and gateway coordinate.
+- [ ] Establish two alert recipients and a rotation owner; exercise the
+      [Assist recovery runbook](recovery/oauth-assist.md).
+
 ## 6. Cross-cutting
 
 - [ ] GitHub Environments **`release`** / **`mobile-release`** with required reviewer = maintainer (aligns with [release.md](release.md) D1). Workflows already reference these environment names.

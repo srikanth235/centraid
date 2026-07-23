@@ -1,0 +1,37 @@
+{
+  "name": "Todoist sync",
+  "version": "0.1.0",
+  "description": "Pulls active Todoist tasks into the vault — API token, read-only list.",
+  "enabled": false,
+  "prompt": "Pulls active Todoist tasks into the vault — API token, read-only list.",
+  "triggers": [
+    {
+      "kind": "cron",
+      "expr": "15 * * * *"
+    }
+  ],
+  "requires": {},
+  "connector": {
+    "kind": "pull.todoist",
+    "label": "personal"
+  },
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Stages Todoist tasks into the vault review band as social.message rows.",
+    "scopes": [
+      {
+        "schema": "sync",
+        "verbs": "read+act"
+      }
+    ]
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-07-23T00:00:00.000Z"
+  }
+}

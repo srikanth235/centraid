@@ -1,0 +1,26 @@
+---
+import DocsLayout from '../layouts/DocsLayout.astro';
+import content from '../content/privacy.html?raw';
+
+const rail = [
+  { href: '#summary', no: '§01', label: 'Summary', current: true },
+  { href: '#google-data', no: '§02', label: 'Google data', current: false },
+  { href: '#oauth', no: '§03', label: 'OAuth custody', current: false },
+  { href: '#choices', no: '§04', label: 'Your choices', current: false },
+  { href: '#contact', no: '§05', label: 'Contact', current: false },
+];
+---
+
+<DocsLayout
+  title="Centraid Privacy Policy"
+  description="How Centraid Assist accesses, uses, stores, shares, retains, and deletes Google user data while keeping OAuth tokens on your gateway."
+  current="privacy"
+  canonicalPath="privacy/"
+  searchLabel="Privacy"
+  searchKeywords="privacy Google OAuth Assist tokens data access storage sharing retention deletion Limited Use"
+  bodyClass="has-rail"
+  rail={rail}
+  pageType="WebPage"
+>
+  <Fragment set:html={content} />
+</DocsLayout>

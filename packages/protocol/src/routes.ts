@@ -40,12 +40,26 @@ export const ROUTES = {
   vaultBlocking: `${VAULT_PLANE_PREFIX}/blocking`,
   vaultBlobs: `${VAULT_PLANE_PREFIX}/blobs`,
   vaultApps: `${VAULT_PLANE_PREFIX}/apps`,
+  vaultConnections: `${VAULT_PLANE_PREFIX}/connections`,
+  vaultConnectionProviders: `${VAULT_PLANE_PREFIX}/connections/providers`,
+  vaultConnectionsAssist: `${VAULT_PLANE_PREFIX}/connections/assist`,
+  vaultConnectionsAssistComplete: `${VAULT_PLANE_PREFIX}/connections/assist/complete`,
+  vaultOAuthCallback: `${VAULT_PLANE_PREFIX}/oauth/callback`,
   appsList: APPS_PLANE_PREFIX,
   webSession: `${WEB_PLANE_PREFIX}/session`,
   webControl: `${WEB_PLANE_PREFIX}/control`,
 } as const;
 
 export type RouteName = keyof typeof ROUTES;
+
+/** Dynamic routes whose identifier component must be encoded by the caller. */
+export function vaultConnectionPath(encodedConnectionId: string): string {
+  return `${ROUTES.vaultConnections}/${encodedConnectionId}`;
+}
+
+export function vaultConnectionAuthorizePath(encodedConnectionId: string): string {
+  return `${vaultConnectionPath(encodedConnectionId)}/authorize`;
+}
 
 /** Every known absolute path constant — used by the route-literal drift check. */
 export const ROUTE_PATHS: readonly string[] = Object.freeze(Object.values(ROUTES));

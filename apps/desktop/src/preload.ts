@@ -7,6 +7,7 @@
 
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import * as tokens from '@centraid/design-tokens';
+import { createDeepLinkBuffer } from './main/oauth-deep-link.js';
 
 const Channel = {
   SETTINGS_GET: 'centraid:settings:get',
@@ -72,7 +73,13 @@ const Channel = {
 
   // "What's new" changelog (main/changelog.ts) — GitHub Releases fetch, cached.
   CHANGELOG_GET: 'centraid:changelog:get',
+  DEEP_LINK: 'centraid:deep-link',
 } as const;
+
+const deepLinkBuffer = createDeepLinkBuffer();
+ipcRenderer.on(Channel.DEEP_LINK, (_event: IpcRendererEvent, url: unknown) => {
+  if (typeof url === 'string') deepLinkBuffer.push(url);
+});
 
 // `tokens.toCss()` is pure and stable for the lifetime of the package
 // build, so we precompute it once at preload start. The renderer
@@ -101,6 +108,7 @@ contextBridge.exposeInMainWorld('CentraidTokens', {
 });
 
 contextBridge.exposeInMainWorld('CentraidApi', {
+  onDeepLink: (cb: (url: string) => void) => deepLinkBuffer.subscribe(cb),
   // File ASR is backed by an explicitly configured loopback model service in
   // the main process; capability stays false until that adapter answers.
   getHostCapabilities: async () => {

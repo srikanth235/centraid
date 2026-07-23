@@ -1,0 +1,130 @@
+<section class="hero sec wrap" id="summary">
+  <p class="eyebrow r">Privacy policy · effective 23 July 2026</p>
+  <h1 class="r" style="--d: 0.06s">Your gateway keeps the keys.</h1>
+  <p class="lede r" style="--d: 0.12s">
+    Centraid is local-first software. Your gateway stores your vault and connector credentials.
+    The optional <b>Centraid Assist</b> ceremony helps your gateway obtain Google authorization;
+    it is not a hosted Google-data or token store.
+  </p>
+  <div class="prose r" style="--d: 0.18s">
+    <p>
+      This policy explains how Centraid accesses, uses, stores, shares, retains, and deletes Google
+      user data. It applies to the Centraid application and the Assist ceremony service at
+      <code>oauth.centraid.dev</code>. It does not replace the policies of Google, Cloudflare, a
+      model provider you configure, or the operator of a gateway you do not control.
+    </p>
+  </div>
+</section>
+
+<section class="dark" id="google-data">
+  <div class="wrap">
+    <p class="eyebrow r">§02 · Google user data</p>
+    <h2 class="r" style="--d: 0.06s">Only the capabilities you choose.</h2>
+    <div class="prose r" style="--d: 0.12s">
+      <p>
+        At connect time, you choose which supported capability to authorize. Depending on that
+        choice, Centraid may read Google Calendar events, Google Contacts, Gmail messages, or
+        Google Drive file content and metadata; it may send Gmail only when you choose the send
+        capability and approve the corresponding Centraid outbox action. Centraid does not request
+        Google identity scopes such as <code>openid</code>, <code>email</code>, or
+        <code>profile</code> for Assist.
+      </p>
+      <p>
+        Your gateway uses Google data to provide the connector, search, organization, automation,
+        and assistant features you choose. Imported records and derived results are stored in your
+        vault. Centraid does not sell Google user data, use it for advertising, or use it to train
+        a shared Centraid model.
+      </p>
+      <p>
+        If you invoke a feature that uses an AI/model service, your gateway may send the selected
+        content needed for that user-facing request to the model provider you configured. That
+        provider's terms and privacy policy apply. Assist itself does not receive imported Google
+        data.
+      </p>
+      <p>
+        Centraid's use and transfer of information received from Google APIs adheres to the
+        <a
+          href="https://developers.google.com/terms/api-services-user-data-policy"
+          target="_blank"
+          rel="noopener">Google API Services User Data Policy</a
+        >, including the Limited Use requirements.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="sec wrap" id="oauth">
+  <p class="eyebrow r">§03 · OAuth custody</p>
+  <h2 class="r" style="--d: 0.06s">A ceremony edge, not a credential cloud.</h2>
+  <div class="prose r" style="--d: 0.12s">
+    <p>
+      Google redirects a short-lived authorization code and random state to the Assist Worker.
+      The Worker returns that code to the initiating Centraid client, and the client delivers it
+      over its existing authenticated transport to your gateway. The gateway alone holds the
+      matching PKCE verifier. The Worker's token exchange attaches a confidential Google client
+      secret and returns Google's token response directly to the gateway.
+    </p>
+    <p>
+      Access and refresh tokens are stored only on your gateway, encrypted at rest. Tokens never
+      enter a browser URL, page, fragment, deep link, browser storage, Cloudflare KV/D1, or a
+      Centraid-hosted connection database. The token response is processed transiently in Worker
+      memory. Cloudflare processes network traffic as the infrastructure provider; Centraid
+      configures no per-user storage and records only aggregate route/outcome/status counters.
+    </p>
+    <p>
+      After authorization, your gateway—not the Assist Worker—contacts Google APIs. Transport
+      encryption, short-lived single-use ceremony state, PKCE, client/device binding, a callback
+      receipt, rate limits, and sealed gateway storage protect this flow.
+    </p>
+  </div>
+</section>
+
+<section class="dark" id="choices">
+  <div class="wrap">
+    <p class="eyebrow r">§04 · retention and your choices</p>
+    <h2 class="r" style="--d: 0.06s">Disconnect, revoke, delete.</h2>
+    <div class="prose r" style="--d: 0.12s">
+      <p>
+        Connector tokens remain on your gateway until you remove/reconfigure the connection,
+        delete the vault, or Google revokes the grant. You can also revoke Centraid Assist from
+        your Google Account's third-party access controls. Removing a connection stops future
+        access and removes its credential; already imported records remain in your vault until you
+        delete those records or the vault.
+      </p>
+      <p>
+        Centraid's Assist edge retains no token or connection record to delete. Aggregate
+        operational metrics contain no user identity, authorization code, token, request body, or
+        Google data. Standard Cloudflare security/abuse processing may temporarily handle network
+        metadata under Cloudflare's service terms.
+      </p>
+      <p>
+        You may use the Advanced path with your own OAuth application instead of Assist. BYO
+        credentials and tokens remain on your gateway and do not use the Assist Worker.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="sec wrap" id="contact">
+  <p class="eyebrow r">§05 · changes and contact</p>
+  <h2 class="r" style="--d: 0.06s">No silent expansion.</h2>
+  <div class="prose r" style="--d: 0.12s">
+    <p>
+      If Centraid materially changes how it uses Google user data, this policy and the in-product
+      disclosure will be updated before the new use, and new consent will be requested where
+      required. The effective date above identifies this version.
+    </p>
+    <p>
+      Privacy, access, or deletion questions:
+      <a href="mailto:srikanth@crowdshakti.com">srikanth@crowdshakti.com</a>. Security
+      vulnerabilities should follow the private reporting instructions in the
+      <a href="https://github.com/srikanth235/centraid/security/policy" target="_blank" rel="noopener"
+        >security policy</a
+      >.
+    </p>
+    <p class="aside">
+      Related: <a href="../terms/">Terms of Service</a> ·
+      <a href="../data/#connections">Connections and sync</a>
+    </p>
+  </div>
+</section>

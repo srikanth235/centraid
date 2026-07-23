@@ -2,6 +2,7 @@ import { type JSX, useRef } from 'react';
 import {
   auth,
   compileAutomation,
+  configureConnection,
   createAutomation,
   deleteAutomation,
   getBlocking,
@@ -17,17 +18,24 @@ import {
   updateAutomation,
 } from '../../../gateway-client.js';
 import type {
+  AuEditorCatalogConnectorDTO,
   AuEditorTriggerDTO,
   AuEditorTriggerInput,
   AutomationEditorData,
 } from '../../screen-contracts.js';
 import AutomationEditorScreen from '../../screens/AutomationEditorScreen.js';
+import { buildFeatured, type ConnectionRowDTO } from '../../screens/SettingsConnectionsScreen.js';
 import { useShellActions } from '../actions.js';
 import PageScroll from '../PageScroll.js';
 import { openWebhookReveal } from '../webhookReveal.js';
 import { loadAutomationEditorData } from './automationEditorData.js';
 import { deriveAutomationHero } from './automationsData.js';
 import { decideConsentItem, filterConsentForAutomation } from './automationThreadData.js';
+import {
+  beginConnectionAuthorize,
+  loadConnectionProvidersData,
+  loadConnectionsData,
+} from './settingsConnectionsData.js';
 
 /** Load-side trigger shape → the editor DTO's display shape (webhook needs
  *  its minted id + pending flag so the Connectors tab can render the URL). */
@@ -123,6 +131,58 @@ export function vaultForTriggers(triggers: readonly (AuEditorTriggerDTO | AuEdit
 // reuse across every @-search keystroke.
 let entityTypeCache: string[] | null = null;
 
+export function matchEditorConnection(
+  connections: readonly ConnectionRowDTO[],
+  providerId: string,
+  kind: string,
+): { match: ConnectionRowDTO | null; ambiguous: boolean } {
+  const candidates = connections.filter(
+    (connection) => connection.kind === kind && connection.provider === providerId,
+  );
+  return {
+    match: candidates.length === 1 ? candidates[0]! : null,
+    ambiguous: candidates.length > 1,
+  };
+}
+
+async function loadEditorConnectorCatalog(): Promise<AuEditorCatalogConnectorDTO[]> {
+  const [providers, connections] = await Promise.all([
+    loadConnectionProvidersData(),
+    loadConnectionsData(),
+  ]);
+  const featured = buildFeatured(providers);
+  return featured.map((f) => {
+    // Provider is part of connection identity. Kind-only matching can lend
+    // trusted catalog branding to a free-form credential; choosing the first
+    // of multiple same-kind accounts silently binds the wrong principal.
+    const { match, ambiguous } = matchEditorConnection(connections, f.providerId, f.kind);
+    return {
+      allowedHosts: f.provider.allowedHosts,
+      authUrl: f.provider.authUrl,
+      connection: match
+        ? {
+            connectionId: match.connectionId,
+            health: match.health,
+            label: match.label,
+          }
+        : null,
+      ...(ambiguous ? { connectionAmbiguous: true } : {}),
+      credKind: f.provider.credKind,
+      key: f.key,
+      kind: f.kind,
+      name: f.meta.name,
+      providerId: f.providerId,
+      providerName: f.provider.name,
+      scope: f.scope,
+      scopes: f.provider.scopes,
+      setup: [...f.provider.setup],
+      templateId: f.templateId,
+      tokenUrl: f.provider.tokenUrl,
+      tone: f.meta.tone,
+    };
+  });
+}
+
 export default function AutomationEditorRoute({
   automationId,
   templateId,
@@ -185,6 +245,8 @@ export default function AutomationEditorRoute({
         }}
         onSave={async (fields) => {
           try {
+            const connections =
+              fields.connections && fields.connections.length > 0 ? fields.connections : undefined;
             if (refIdRef.current) {
               const { row, webhook } = await updateAutomation({
                 automationId: refIdRef.current,
@@ -194,6 +256,7 @@ export default function AutomationEditorRoute({
                 ...(vaultForTriggers(fields.triggers)
                   ? { vault: vaultForTriggers(fields.triggers) }
                   : {}),
+                ...(connections !== undefined ? { connections } : { connections: [] }),
               });
               if (row) rowRef.current = row;
               // A `{kind:'webhook'}` trigger that didn't exist before mints a
@@ -218,6 +281,7 @@ export default function AutomationEditorRoute({
               ...(vaultForTriggers(fields.triggers)
                 ? { vault: vaultForTriggers(fields.triggers) }
                 : {}),
+              ...(connections ? { connections } : {}),
             });
             if (row) {
               rowRef.current = row;
@@ -272,6 +336,25 @@ export default function AutomationEditorRoute({
           }
           return entityTypeCache;
         }}
+        loadConnectorCatalog={loadEditorConnectorCatalog}
+        configureConnection={async (input) => {
+          const result = await configureConnection({
+            allowedHosts: input.allowedHosts,
+            apiKey: input.apiKey,
+            authUrl: input.authUrl,
+            clientId: input.clientId,
+            clientSecret: input.clientSecret,
+            credKind: input.credKind,
+            kind: input.connectorKind,
+            label: input.label,
+            provider: input.providerId,
+            scopes: input.scopes,
+            tokenUrl: input.tokenUrl,
+          });
+          return { connectionId: result.connectionId };
+        }}
+        beginAuthorize={beginConnectionAuthorize}
+        showToast={showToast}
         onReadSource={async () => {
           const ref = refIdRef.current;
           if (!ref) return { manifest: null, handler: null };

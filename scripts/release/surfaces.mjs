@@ -79,6 +79,16 @@ export const RELEASE_SURFACES = [
     notes: 'Continuous on docs paths.',
   },
   {
+    id: 'oauth-worker',
+    title: 'Centraid Assist OAuth Worker',
+    cadence: 'continuous',
+    defaultOnProductTag: false,
+    workflow: 'oauth-worker.yml',
+    secretGroups: ['web'],
+    notes:
+      'Protected main deploy only after Google production/verification and Cloudflare edge evidence gates pass.',
+  },
+  {
     id: 'companion',
     title: 'Browser companion extension',
     cadence: 'sideline',

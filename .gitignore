@@ -17,6 +17,10 @@ target
 packages/tunnel/native/*.node
 packages/tunnel/native/native-platforms.manifest.json
 .wrangler
+**/.dev.vars
+# Generated from the pinned Wrangler/workerd runtime during OAuth Worker
+# typecheck. Keeping it out of git avoids a ~16k-line vendored declaration.
+apps/oauth-worker/worker-configuration.d.ts
 .claude
 # Python bytecode created by .governance/ hook scripts (not source).
 __pycache__

@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "todoist-pull",
+  "name": "Todoist sync",
+  "kind": "automation",
+  "description": "Pulls active Todoist tasks into the vault — API token, read-only list.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

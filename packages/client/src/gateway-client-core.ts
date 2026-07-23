@@ -43,6 +43,43 @@ declare global {
 }
 
 let cachedAuth: Promise<GatewayAuth> | undefined;
+let cachedClientSessionId: string | undefined;
+
+export const CLIENT_SESSION_HEADER = 'x-centraid-client-session';
+
+/**
+ * Per-tab/window ceremony binding. It is not an authentication secret, but
+ * it never enters an OAuth URL: the gateway records it beside state and
+ * requires the same renderer to courier the callback fragment.
+ */
+export function clientSessionId(): string {
+  if (cachedClientSessionId) return cachedClientSessionId;
+  const storageKey = 'centraid.oauth.client-session.v1';
+  try {
+    const saved = window.sessionStorage.getItem(storageKey);
+    if (saved && /^[A-Za-z0-9_-]{32,128}$/.test(saved)) {
+      cachedClientSessionId = saved;
+      return saved;
+    }
+  } catch {
+    // Storage can be denied; the in-memory binding still protects this tab.
+  }
+  const bytes = new Uint8Array(32);
+  globalThis.crypto.getRandomValues(bytes);
+  cachedClientSessionId = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  try {
+    window.sessionStorage.setItem(storageKey, cachedClientSessionId);
+  } catch {
+    // In-memory fallback above is intentional.
+  }
+  return cachedClientSessionId;
+}
+
+export function withClientSession(headers: HeadersInit): Headers {
+  const out = new Headers(headers);
+  out.set(CLIENT_SESSION_HEADER, clientSessionId());
+  return out;
+}
 
 export function auth(): Promise<GatewayAuth> {
   if (!cachedAuth) cachedAuth = window.CentraidApi.getGatewayAuth();

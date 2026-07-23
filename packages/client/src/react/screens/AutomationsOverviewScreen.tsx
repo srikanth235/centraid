@@ -5,6 +5,7 @@ import type {
   AuOverviewData,
   AuOverviewRowDTO,
   AuOverviewRunDTO,
+  AuOverviewSuggestionDTO,
   AuStatusKind,
   AutomationsOverviewBridgeProps,
 } from '../screen-contracts.js';
@@ -12,12 +13,11 @@ import styles from './AutomationsOverviewScreen.module.css';
 import { cx } from '../ui/cx.js';
 import au from '../styles/automation.module.css';
 
-// The Automations overview, rebuilt as "the fleet" (Automations UI revamp —
-// see receipts/issue-387-automations-ui-revamp.md): a dense, calm register of every long-lived
-// automation (name, enabled state, trigger, last/next fire, pending consent)
-// with a secondary date-grouped feed of the fleet's recent runs below it.
-// Screen owns loading/error/data state; `loadData` (route-supplied) fetches
-// + derives everything else — this component renders, it doesn't compute.
+// Automations overview (Automations UI revamp — see
+// receipts/issue-387-automations-ui-revamp.md): a calm register of every
+// long-lived automation (name, status, trigger, last/next fire, attention)
+// with a date-grouped recent-runs feed below. Screen owns load/error/data;
+// `loadData` (route) fetches + derives — this component renders.
 
 const STATUS_META: Record<AuStatusKind, { icon: IconName; spin?: boolean }> = {
   active: { icon: 'Power' },
@@ -42,6 +42,18 @@ function StatusPill({ kind, label }: { kind: AuStatusKind; label: string }): JSX
   );
 }
 
+/** Attention / failed-last-run first, then alphabetical — so the list answers
+ *  "what needs me?" before "what's everything named?" */
+function sortOverviewRows(rows: readonly AuOverviewRowDTO[]): AuOverviewRowDTO[] {
+  return [...rows].sort((a, b) => {
+    const aAtt = a.attentionCount > 0 || a.lastRunOk === false ? 1 : 0;
+    const bAtt = b.attentionCount > 0 || b.lastRunOk === false ? 1 : 0;
+    if (aAtt !== bAtt) return bAtt - aAtt;
+    if (a.attentionCount !== b.attentionCount) return b.attentionCount - a.attentionCount;
+    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+  });
+}
+
 function FleetRow({
   row,
   onOpen,
@@ -49,11 +61,14 @@ function FleetRow({
   row: AuOverviewRowDTO;
   onOpen: (ref: string) => void;
 }): JSX.Element {
+  const needsYou = row.attentionCount > 0 || row.lastRunOk === false;
   return (
     <button
       type="button"
       className={styles.row}
       data-hue={row.hue}
+      data-needs-you={needsYou ? 'true' : undefined}
+      data-last-failed={row.lastRunOk === false ? 'true' : undefined}
       data-testid="automation-row"
       onClick={() => onOpen(row.ref)}
     >
@@ -81,11 +96,19 @@ function FleetRow({
           ) : null}
         </span>
       </span>
-      <span className={styles.rowLast} data-mono="true">
+      <span
+        className={styles.rowLast}
+        data-mono="true"
+        data-ok={row.lastRunOk === null ? undefined : String(row.lastRunOk)}
+      >
         {row.lastRunOk !== null ? (
           <i className={styles.lastDot} data-ok={String(row.lastRunOk)} aria-hidden="true" />
         ) : null}
-        <span>{row.lastRunLabel}</span>
+        <span>
+          {row.lastRunOk === false
+            ? row.lastRunLabel.replace(/^Last run /i, 'Failed ')
+            : row.lastRunLabel}
+        </span>
       </span>
       {row.attentionCount > 0 ? (
         <span
@@ -94,6 +117,10 @@ function FleetRow({
         >
           <Icon name="AlertTriangle" size={11} />
           <span>{row.attentionCount}</span>
+        </span>
+      ) : row.lastRunOk === false ? (
+        <span className={styles.failedBadge} title="Last run failed">
+          Failed
         </span>
       ) : null}
       <span className={styles.chev} aria-hidden="true">
@@ -122,12 +149,14 @@ function ActivityRow({
     <button
       type="button"
       className={styles.activityRow}
+      data-ok={String(run.ok)}
       onClick={() => onOpen(run.automationId, run.runId)}
     >
       <i className={styles.activityDot} data-ok={String(run.ok)} aria-hidden="true" />
       <span className={styles.activityName}>{run.name}</span>
       <span className={styles.activityOrigin} data-mono="true">
         {runOrigin(run.metaLabel)}
+        {run.ok ? '' : ' · failed'}
       </span>
       <span className={styles.activityWhen} data-mono="true">
         {run.whenLabel}
@@ -181,12 +210,39 @@ function HeaderActions({
   );
 }
 
+function SuggestionCard({
+  suggestion,
+  onAdd,
+}: {
+  suggestion: AuOverviewSuggestionDTO;
+  onAdd: (id: string) => void;
+}): JSX.Element {
+  return (
+    <div className={styles.suggestCard} data-testid="automation-suggestion">
+      <div className={styles.suggestMain}>
+        <div className={styles.suggestName}>{suggestion.name}</div>
+        <p className={styles.suggestDesc}>{suggestion.desc}</p>
+        {suggestion.triggerLabel ? (
+          <span className={styles.suggestTrigger} data-mono="true">
+            {suggestion.triggerLabel}
+          </span>
+        ) : null}
+      </div>
+      <Button variant="soft" size="sm" label="Add" onClick={() => onAdd(suggestion.id)} />
+    </div>
+  );
+}
+
 function EmptyState({
+  suggestions,
   onBrowseTemplates,
   onNewAutomation,
+  onUseSuggestion,
 }: {
+  suggestions: AuOverviewSuggestionDTO[];
   onBrowseTemplates: () => void;
   onNewAutomation: () => void;
+  onUseSuggestion?: (templateId: string) => void;
 }): JSX.Element {
   return (
     <div className={styles.empty}>
@@ -195,12 +251,24 @@ function EmptyState({
       </div>
       <div className={styles.emptyTitle}>No automations yet</div>
       <p className={styles.emptyText}>
-        An automation is a saved conversation that fires on a trigger. Start from a template, or
-        describe one from scratch.
+        Automations run on a schedule or when your data changes — summarize mail, sync calendars, or
+        watch the vault. Start from a template or write instructions from scratch.
       </p>
+      {suggestions.length > 0 && onUseSuggestion ? (
+        <div className={styles.suggestSection} data-testid="automation-suggestions">
+          <div className={styles.sectionHead}>
+            <span className={styles.sectionLabel}>Suggested starters</span>
+          </div>
+          <div className={styles.suggestGrid}>
+            {suggestions.map((s) => (
+              <SuggestionCard key={s.id} suggestion={s} onAdd={onUseSuggestion} />
+            ))}
+          </div>
+        </div>
+      ) : null}
       <div className={styles.emptyActions}>
-        <Button variant="soft" icon="Bolt" label="Browse templates" onClick={onBrowseTemplates} />
         <Button variant="primary" icon="Sparkle" label="New automation" onClick={onNewAutomation} />
+        <Button variant="soft" icon="Bolt" label="Browse templates" onClick={onBrowseTemplates} />
       </div>
     </div>
   );
@@ -208,13 +276,17 @@ function EmptyState({
 
 export default function AutomationsOverviewScreen({
   loadData,
+  loadSuggestions,
   onOpenAutomation,
   onOpenRun,
   onBrowseTemplates,
   onNewAutomation,
+  onUseSuggestion,
 }: AutomationsOverviewBridgeProps): JSX.Element {
   const [state, setState] = useState<AuOverviewData | 'loading' | 'error'>('loading');
   const [errMsg, setErrMsg] = useState('');
+  const [suggestions, setSuggestions] = useState<AuOverviewSuggestionDTO[]>([]);
+  const [filter, setFilter] = useState('');
 
   const reload = useCallback(async () => {
     setState('loading');
@@ -229,6 +301,24 @@ export default function AutomationsOverviewScreen({
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  useEffect(() => {
+    if (!loadSuggestions) {
+      setSuggestions([]);
+      return;
+    }
+    let cancelled = false;
+    void loadSuggestions()
+      .then((rows) => {
+        if (!cancelled) setSuggestions(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setSuggestions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loadSuggestions]);
 
   if (state === 'loading') {
     return (
@@ -253,7 +343,7 @@ export default function AutomationsOverviewScreen({
           <Icon name="AlertCircle" size={22} />
         </div>
         <div className={styles.errorTitle}>Couldn&apos;t load automations</div>
-        <div className={styles.errorText}>{errMsg}</div>
+        <div className={styles.errorText}>{errMsg || 'Check the gateway and try again.'}</div>
         <Button variant="primary" icon="Refresh" label="Retry" onClick={() => void reload()} />
       </div>
     );
@@ -267,18 +357,32 @@ export default function AutomationsOverviewScreen({
 
   const subtitle =
     rows.length === 0
-      ? 'Conversations that run on their own.'
+      ? 'Run on a schedule or when your data changes.'
       : [
           `${activeCount} active`,
           `${pausedCount} paused`,
           draftCount > 0 ? `${draftCount} draft${draftCount === 1 ? '' : 's'}` : null,
-          attentionCount > 0 ? `${attentionCount} need attention` : null,
+          attentionCount > 0
+            ? `${attentionCount} need${attentionCount === 1 ? 's' : ''} attention`
+            : null,
         ]
           .filter((part): part is string => part !== null)
           .join(' · ');
 
+  const q = filter.trim().toLowerCase();
+  const sortedRows = sortOverviewRows(rows);
+  const visibleRows = !q
+    ? sortedRows
+    : sortedRows.filter(
+        (r) =>
+          r.name.toLowerCase().includes(q) ||
+          r.triggerLabel.toLowerCase().includes(q) ||
+          r.statusLabel.toLowerCase().includes(q),
+      );
+
   const recentRuns = runs.slice(0, RECENT_CAP);
   const runGroups = groupRuns(recentRuns);
+  const isEmpty = rows.length === 0;
 
   return (
     <div className={styles.page} data-testid="automations-overview">
@@ -287,23 +391,53 @@ export default function AutomationsOverviewScreen({
           <h1 className={styles.title}>Automations</h1>
           <p className={styles.subtitle}>{subtitle}</p>
         </div>
-        <HeaderActions onBrowseTemplates={onBrowseTemplates} onNewAutomation={onNewAutomation} />
+        {/* Empty state owns its CTAs so we don't double the same pair. */}
+        {!isEmpty ? (
+          <HeaderActions onBrowseTemplates={onBrowseTemplates} onNewAutomation={onNewAutomation} />
+        ) : null}
       </header>
 
-      {rows.length === 0 ? (
-        <EmptyState onBrowseTemplates={onBrowseTemplates} onNewAutomation={onNewAutomation} />
+      {isEmpty ? (
+        <EmptyState
+          suggestions={suggestions}
+          onBrowseTemplates={onBrowseTemplates}
+          onNewAutomation={onNewAutomation}
+          onUseSuggestion={onUseSuggestion}
+        />
       ) : (
         <>
           <section className={styles.section}>
             <div className={styles.sectionHead}>
-              <span className={styles.sectionLabel}>Fleet</span>
+              <span className={styles.sectionLabel}>Your automations</span>
               <span className={styles.sectionCount}>{rows.length}</span>
+              {rows.length >= 4 ? (
+                <label className={styles.filterWrap}>
+                  <Icon name="Search" size={13} />
+                  <input
+                    className={styles.filterInput}
+                    type="search"
+                    value={filter}
+                    onChange={(e) => setFilter(e.target.value)}
+                    placeholder="Filter…"
+                    aria-label="Filter automations"
+                  />
+                </label>
+              ) : null}
             </div>
-            <div className={styles.fleet}>
-              {rows.map((row) => (
-                <FleetRow key={row.ref} row={row} onOpen={onOpenAutomation} />
-              ))}
-            </div>
+            {visibleRows.length === 0 ? (
+              <div className={styles.filterEmpty}>
+                No automations match “{filter.trim()}”.
+                <button type="button" className={styles.filterClear} onClick={() => setFilter('')}>
+                  Clear filter
+                </button>
+              </div>
+            ) : (
+              <div className={styles.fleet}>
+                {visibleRows.map((row) => (
+                  <FleetRow key={row.ref} row={row} onOpen={onOpenAutomation} />
+                ))}
+              </div>
+            )}
           </section>
 
           <section className={styles.section}>
@@ -324,7 +458,10 @@ export default function AutomationsOverviewScreen({
                 ))}
               </div>
             ) : (
-              <div className={cx(styles.activity, styles.activityEmpty)}>No runs recorded yet.</div>
+              <div className={cx(styles.activity, styles.activityEmpty)}>
+                No runs yet. Open an automation and use <strong>Run now</strong>, or wait for its
+                trigger.
+              </div>
             )}
           </section>
         </>

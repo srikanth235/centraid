@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import Sidebar, { type SidebarApp } from './Sidebar.js';
+import Sidebar from './Sidebar.js';
 
 let root: Root | null = null;
 let host: HTMLElement | null = null;
@@ -21,40 +21,15 @@ afterEach(() => {
   host = null;
 });
 
-const apps: SidebarApp[] = [
-  { id: 'todos', name: 'Todos', iconKey: 'Todo', color: '#111', status: 'new' },
-  { id: 'notes', name: 'Notes', iconKey: 'Sparkle', color: '#222', status: 'live' },
-];
-const drafts: SidebarApp[] = [
-  { id: 'd1', name: 'Draft app', iconKey: 'Sparkle', color: '#333', status: 'draft' },
-];
-
 const base = {
-  apps,
-  drafts,
   onHome: () => {},
-  onNewApp: () => {},
-  onAppClick: () => {},
   onSettings: () => {},
 };
 
 describe('Sidebar', () => {
-  it('renders the app list folding drafts in, with the count', () => {
+  it('hides "Build new" when onNewApp is omitted (#434 builder off)', () => {
     const el = render(<Sidebar {...base} />);
-    expect(el.textContent).toContain('Apps · 3');
-    expect(el.textContent).toContain('Todos');
-    expect(el.textContent).toContain('Draft app');
-  });
-
-  it('hides "Build new" and the Apps "+" when onNewApp is omitted (#434 builder off)', () => {
-    const { onNewApp: _drop, ...noBuild } = base;
-    const el = render(<Sidebar {...noBuild} />);
     expect(el.textContent).not.toContain('Build new');
-    // The "Apps · N" section header keeps its label but drops the add button.
-    const appsSection = [...el.querySelectorAll('.sbSection')].find((s) =>
-      s.textContent?.includes('Apps ·'),
-    )!;
-    expect(appsSection.querySelector('.sbSectionBtn')).toBeNull();
   });
 
   it('highlights the active page', () => {
@@ -63,28 +38,79 @@ describe('Sidebar', () => {
     expect(active?.textContent).toContain('Insights');
   });
 
-  it('fires onAppClick with the app id', () => {
-    const onAppClick = vi.fn();
-    const el = render(<Sidebar {...base} onAppClick={onAppClick} />);
-    const todos = [...el.querySelectorAll('.sbItem')].find((b) =>
-      b.textContent?.includes('Todos'),
+  it('puts New Chat first (no separate Assistant row) and renames Chats to History', () => {
+    const onNewChat = vi.fn();
+    const el = render(
+      <Sidebar
+        {...base}
+        onNewChat={onNewChat}
+        conversations={[
+          { id: 'c1', title: 'Thread one', timeLabel: '1h ago' },
+          { id: 'c2', title: 'Thread two', timeLabel: '2h ago' },
+        ]}
+      />,
+    );
+    expect(el.textContent).toContain('New Chat');
+    expect(el.textContent).toContain('History');
+    expect(el.textContent).not.toContain('Assistant');
+    expect(el.textContent).not.toMatch(/Chats ·/);
+    const newChat = [...el.querySelectorAll('.sbItem')].find((b) =>
+      b.textContent?.includes('New Chat'),
     ) as HTMLButtonElement;
-    act(() => todos.click());
-    expect(onAppClick).toHaveBeenCalledWith('todos');
+    act(() => newChat.click());
+    expect(onNewChat).toHaveBeenCalled();
   });
 
-  it('routes a row `•••` click through onAppContext with a rect anchor', () => {
-    const onAppContext = vi.fn();
-    const el = render(<Sidebar {...base} onAppContext={onAppContext} />);
-    const more = el.querySelector('.rowMore') as HTMLButtonElement;
-    act(() => more.click());
-    expect(onAppContext).toHaveBeenCalledWith('todos', expect.objectContaining({ kind: 'rect' }));
+  it('places Automations and Connectors above Pages and fires onConnectors', () => {
+    const onConnectors = vi.fn();
+    const el = render(
+      <Sidebar
+        {...base}
+        activePage="connectors"
+        onAutomations={() => {}}
+        onConnectors={onConnectors}
+      />,
+    );
+    const items = [...el.querySelectorAll('.sbItem')];
+    const automations = items.find((b) => b.textContent?.includes('Automations'))!;
+    const connectors = items.find((b) => b.textContent?.includes('Connectors'))!;
+    const pagesSection = [...el.querySelectorAll('.sbSection')].find((s) =>
+      s.textContent?.includes('Pages'),
+    )!;
+    expect(automations).toBeDefined();
+    expect(connectors).toBeDefined();
+    expect(pagesSection).toBeDefined();
+    expect(
+      automations.compareDocumentPosition(connectors) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      connectors.compareDocumentPosition(pagesSection) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    act(() => (connectors as HTMLButtonElement).click());
+    expect(onConnectors).toHaveBeenCalled();
+    expect(el.querySelector('[data-active="true"]')?.textContent).toContain('Connectors');
+  });
+
+  it('shows Discover under Pages and omits Starred and the Apps section', () => {
+    const onDiscover = vi.fn();
+    const el = render(
+      <Sidebar {...base} onNewApp={() => {}} onDiscover={onDiscover} activePage="discover" />,
+    );
+    expect(el.textContent).toContain('Discover');
+    expect(el.textContent).not.toContain('Starred');
+    expect(el.textContent).not.toMatch(/Apps ·/);
+    expect(el.textContent).not.toContain('No apps yet');
+    const discover = [...el.querySelectorAll('.sbItem')].find((b) =>
+      b.textContent?.includes('Discover'),
+    ) as HTMLButtonElement;
+    act(() => discover.click());
+    expect(onDiscover).toHaveBeenCalled();
+    expect(el.querySelector('[data-active="true"]')?.textContent).toContain('Discover');
   });
 
   it('groups Gateway and Backups under an Operations section', () => {
     const el = render(<Sidebar {...base} onGateway={() => {}} onBackups={() => {}} />);
-    // Sentence case in the markup — chrome.module.css uppercases it, matching
-    // the sibling "Apps · N" label.
+    // Sentence case in the markup — chrome.module.css uppercases it.
     const section = [...el.querySelectorAll('.sbSection')].find((s) =>
       s.textContent?.includes('Operations'),
     );
@@ -144,7 +170,9 @@ describe('Sidebar', () => {
   });
 
   it('renders the head slot above Build new — the profile switcher leads the column', () => {
-    const el = render(<Sidebar {...base} headSlot={<div data-testid="head">P</div>} />);
+    const el = render(
+      <Sidebar {...base} headSlot={<div data-testid="head">P</div>} onNewApp={() => {}} />,
+    );
     const head = el.querySelector('[data-testid="head"]')!;
     const buildNew = [...el.querySelectorAll('.sbItem')].find((b) =>
       b.textContent?.includes('Build new'),
@@ -157,12 +185,6 @@ describe('Sidebar', () => {
   it('omits the head slot entirely when none is supplied (no vault plane / not yet resolved)', () => {
     const el = render(<Sidebar {...base} />);
     expect(el.querySelector('[data-testid="head"]')).toBeNull();
-  });
-
-  it('shows the empty state when there are no apps or drafts', () => {
-    const el = render(<Sidebar {...base} apps={[]} drafts={[]} />);
-    expect(el.textContent).toContain('No apps yet');
-    expect(el.textContent).toContain('Apps · 0');
   });
 
   it('shows no relaunch pill by default', () => {

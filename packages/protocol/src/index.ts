@@ -22,6 +22,8 @@ export {
   WEB_PLANE_PREFIX,
   ROUTES,
   ROUTE_PATHS,
+  vaultConnectionAuthorizePath,
+  vaultConnectionPath,
   appActionPath,
   appQueryPath,
   appDescribePath,

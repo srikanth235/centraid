@@ -11,6 +11,15 @@ Centraid is personal software over a sovereign vault. Its backend is a single ho
 
 The web app (`apps/web`) is an installable Vite PWA and, like mobile, embeds no backend. It shares the browser-safe React shell in `packages/client` with desktop. It supports two data planes: direct HTTP (the gateway serves the PWA from a dedicated origin and the shell uses an Origin-bound HttpOnly control session), or ticket-only Iroh through an application-specific Rust/WASM client. Browsers have no UDP access, so Iroh/WASM is relay-only. A service-worker bridge carries generated-app documents, assets, and streams over the same tunnel; their one-time app sessions remain vault- and app-scoped, and the tunnel deliberately defers those requests to cookie authorization instead of injecting its broader device bearer.
 
+Centraid Assist (`apps/oauth-worker`) is a separate stateless Cloudflare
+ceremony edge, not another backend. Google redirects to its one public
+callback; it returns a short-lived code to desktop/PWA and attaches the
+confidential Web-client secret only for gateway-originated exchange/refresh
+requests. State, PKCE, connection rows, imported data, and durable tokens stay
+on the gateway. There are no Worker storage bindings. See
+[docs/oauth-assist.md](docs/oauth-assist.md) and the threat model in
+[SECURITY.md](SECURITY.md#centraid-assist-oauth-model-b-code-courier).
+
 The browser extension (`apps/extension`) is a narrower paired-device client over that same checked-in Iroh/WASM binding. Its MV3 worker enrolls with an owner-selected app allow-list that is persisted on the device row and re-enforced by the gateway before dispatch. It can reach only app tools plus narrow read-only status/module/count surfaces; every tool body is clamped to the enrolled app ids. Locker suggestions are secret-free and top-frame-only, explicit fill reveals carry a normalized origin in their receipt, and the extension stores no secret cache. Chrome is the v1 store target; the package also emits a Firefox 121+ build, while Safari needs a separate port.
 
 The monorepo is orchestrated by [Turborepo](https://turbo.build) and run on [Bun](https://bun.sh) (`packageManager` pinned at the root). Linting and formatting use [oxlint](https://oxc.rs/docs/guide/usage/linter) and [oxfmt](https://github.com/oxc-project/oxfmt); type checking is TypeScript per workspace; tests run on [vitest](https://vitest.dev) with v8 coverage.
@@ -24,6 +33,7 @@ One **product version** stamps the monorepo; surfaces may skip *ship* but not di
 | **Desktop** | Tag `v*` → `release-desktop.yml` (macOS / Windows / Linux). Installers attach to the GitHub Release when signing secrets are enrolled; electron-updater uses `latest*.yml` / beta channel. |
 | **Mobile** | Same product stamp; **ship** via `release-mobile.yml` dispatch only (not every tag). EAS when enrolled. Store-only routine path (J7). Build numbers derived from product semver. |
 | **Web PWA** | Continuous host scaffold `app.centraid.dev` (`apps/web` + `web.yml`). Gateway also embeds the built PWA for LAN/ticket clients. |
+| **Assist OAuth edge** | Protected continuous Worker `oauth.centraid.dev` (`apps/oauth-worker` + `oauth-worker.yml`); stateless callback/exchange/refresh only, with external Google/Cloudflare evidence gates. |
 | **Docs/home** | Cloudflare static assets (`docs:bundle` → `dist/site`); GHA is gate-only. |
 | **Gateway daemon** | Primary: monorepo / npm `@centraid/gateway` + optional H5 OS service. Optional: GHCR image on tags (monorepo-root `Dockerfile`; #504). npm multi-OS tunnel natives (#511). |
 | **Companion extension** | Same product version; package via `extension-release.yml` (not a second product-version line). |
@@ -48,6 +58,32 @@ An app declares **queries** (bounded reads) and **actions** (typed writes) in it
 
 The same journalled command path backs **Vault Atlas** (#441), the Operations screen that renders the model as **Kinds / Relations / Browse** (`packages/client/src/react/screens/AtlasScreen.tsx`): the Browse table editor dispatches `atlas.insert_row|update_row|delete_row` — never raw SQL, sealed columns refuse writes — and its dependent-aware deletes consult the **polymorphic-reference registry** (`packages/vault/src/schema/poly-refs.ts`), the one enumeration of every polymorphic `(type, id)` pointer with a cleanup policy, swept on purge and Browse-delete so orphaned `consent_share`/`enrich_embedding`/`sync_external_entity` rows (previously never cleaned) can no longer survive a hard delete.
 
+## Connector pull runtime
+
+Bundled pull connectors export a declarative `centraid.pull/v1` spec, not an
+imperative automation handler. A spec contains only a principal probe and a
+pull function that returns rows plus cursor updates. Its context exposes
+`now`, `input`, `abortSignal`, and broker-mediated `fetch`; it deliberately
+does not expose `vault`, `state`, `runs`, or `agent`.
+
+The automation engine resolves the manifest's durable `connectionId` before
+the worker runs, opens the sync run after the observed-principal probe, and
+owns pause/refusal gates, row staging, cursor persistence, and success/failure
+finalization. Pull-spec code therefore cannot supply or override
+`kind`, `label`, or `connection_id`, and two accounts of the same provider
+cannot collapse into a label-derived shadow connection.
+
+Cursor semantics are explicit:
+
+- `cursor.highWater(key)` retains the greatest observed provider value.
+- `cursor.provider(key)` stores, replaces, or clears an opaque provider token.
+- Offset paging is not a supported persisted strategy because mutable
+  provider lists make offsets lossy.
+
+The bundled blueprint guardrail in
+`packages/blueprints/src/app-manifests.test.ts` requires every `*-pull`
+template to use this protocol and pins its intended vault entity type.
+
 ## App render paths
 
 An app UI reaches the screen one of two ways, and which one is a property of the app, not the host (#505):
@@ -63,6 +99,7 @@ An app UI reaches the screen one of two ways, and which one is a property of the
 │   ├── desktop/                   # @centraid/desktop — Electron host; embeds the gateway
 │   ├── extension/                 # @centraid/extension — MV3 Companion; constrained Iroh/WASM device
 │   ├── web/                       # @centraid/web — installable Vite PWA; HTTP or relay-only Iroh/WASM
+│   ├── oauth-worker/              # @centraid/oauth-worker — stateless Assist ceremony/exchange/refresh edge
 │   └── mobile/                    # @centraid/mobile — Expo; HTTP client to a gateway
 ├── packages/
 │   ├── client/                    # @centraid/client — shared React shell + browser-safe HTTP clients

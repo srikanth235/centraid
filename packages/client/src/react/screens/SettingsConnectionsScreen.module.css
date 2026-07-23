@@ -1,6 +1,212 @@
-.panel {
-  border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+/* Connectors gallery — featured tile grid + detail sheet (reference-style). */
+
+.page {
+  max-width: 960px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* Title row: Connectors + New Connector */
+.toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.title {
+  margin: 0;
+  font: var(--t-h2);
+  color: var(--ink);
+}
+.subtitle {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-3);
+  max-width: 42rem;
+}
+.toolbarActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.searchWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  min-width: 180px;
+  border: 0.5px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-elev);
+  color: var(--ink-3);
+}
+.searchWrap:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  font-size: 13px;
+  color: var(--ink);
+  outline: none;
+  caret-color: var(--accent);
+}
+.searchInput::placeholder {
+  color: var(--ink-4);
+}
+
+/* Section labels */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sectionLabel {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+/* Featured 2-col tile grid */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 640px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+  padding: 14px 16px;
+  border: 0.5px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg-elev);
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    box-shadow 0.14s ease;
+}
+.tile:hover {
+  background: color-mix(in srgb, var(--ink) 3%, var(--bg-elev));
+  border-color: color-mix(in srgb, var(--ink) 12%, var(--line));
+}
+.tile:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.tileConnected {
+  border-color: color-mix(in srgb, var(--success) 35%, var(--line));
+}
+
+/* Soft tile + multicolor brand glyph (Grok-style), not a solid letter badge. */
+.brandMark {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  border: 0.5px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent);
+  overflow: hidden;
+  color: #24292f;
+}
+.brandMark[data-tone='github'] {
+  color: #24292f;
+}
+:global([data-theme='dark']) .brandMark,
+:global(.theme-dark) .brandMark,
+:global([data-color-scheme='dark']) .brandMark {
+  background: color-mix(in srgb, #fff 10%, var(--bg-elev, #1a1a1a));
+  border-color: color-mix(in srgb, #fff 14%, transparent);
+  box-shadow: none;
+  color: #f0f6fc;
+}
+:global([data-theme='dark']) .brandMark[data-tone='github'],
+:global(.theme-dark) .brandMark[data-tone='github'],
+:global([data-color-scheme='dark']) .brandMark[data-tone='github'] {
+  color: #f0f6fc;
+}
+/* Fallback: prefer-color-scheme when theme attrs aren't set on ancestors. */
+@media (prefers-color-scheme: dark) {
+  .brandMark {
+    background: color-mix(in srgb, #fff 10%, #1c1c1e);
+    border-color: color-mix(in srgb, #fff 14%, transparent);
+    color: #f0f6fc;
+  }
+  .brandMark[data-tone='github'] {
+    color: #f0f6fc;
+  }
+}
+.brandMark svg {
+  display: block;
+  flex: none;
+}
+
+.tileMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tileName {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.tileMeta {
+  font-size: 12px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tileBadge {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--success);
+}
+
+/* Connected rows */
+.connectedList {
+  display: flex;
+  flex-direction: column;
+  border: 0.5px solid var(--line);
+  border-radius: 14px;
   background: var(--bg-elev);
   overflow: hidden;
 }
@@ -11,12 +217,96 @@
   padding: 14px 16px;
 }
 .row + .row {
-  border-top: 1px solid var(--line);
+  border-top: 0.5px solid var(--line);
+}
+.rowMain {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.rowMain:hover .rowName {
+  color: var(--accent);
+}
+.syncList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+.syncRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg-sunken, var(--bg-elev));
+  border: 0.5px solid var(--line);
+}
+.syncTitle {
+  font-size: 13px;
+  font-weight: 600;
+}
+.syncMeta {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.healthBlock {
+  margin: 10px 0 4px;
+  font-size: 12px;
+  color: var(--ink-2);
 }
 
-/* Health dot + label — same three-state read as AutomationsOverviewScreen's
-   health tiles (--success / --icon-amber / --ink-3 / --danger), just at
-   row scale instead of tile scale. */
+.authKindBanner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 0.5px solid var(--line);
+  background: var(--bg-sunken, var(--bg-elev));
+  font-size: 12px;
+  color: var(--ink-2);
+  line-height: 1.4;
+}
+.authKindBanner strong {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+.authKindBanner[data-kind='oauth2'] {
+  border-color: color-mix(in oklab, var(--accent) 35%, var(--line));
+  background: color-mix(in oklab, var(--accent) 8%, var(--bg-elev));
+}
+.authKindBanner[data-kind='oauth2'] strong {
+  color: var(--accent);
+}
+
+.tileBadgeMuted {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding: 3px 6px;
+  border-radius: 6px;
+  border: 0.5px solid var(--line);
+}
+
 .dot {
   width: 9px;
   height: 9px;
@@ -92,15 +382,150 @@
   align-items: center;
   gap: 6px;
 }
-/* Add-connection wizard — an inline expanding card under the list, not a
-   modal (fewer moving parts; there's no reason to block the rest of the
-   page while filling this in). */
-.wizard {
-  margin-top: 14px;
-  padding: 16px;
+
+.emptyNote {
+  padding: 18px 16px;
+  border: 0.5px dashed var(--line-strong);
+  border-radius: 14px;
+  font-size: 13px;
+  color: var(--ink-3);
+  text-align: center;
+}
+
+/* Modal sheet */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, #000 45%, transparent);
+}
+.sheet {
+  width: min(440px, 100%);
+  max-height: min(88vh, 720px);
+  overflow: auto;
+  border-radius: 18px;
+  background: var(--bg-elev);
   border: 0.5px solid var(--line);
-  border-radius: var(--r-xl);
-  background: color-mix(in oklab, var(--bg-sunken) 60%, transparent);
+  box-shadow: 0 24px 64px color-mix(in srgb, #000 28%, transparent);
+  display: flex;
+  flex-direction: column;
+}
+.sheetHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 20px 0;
+}
+.sheetIdentity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.sheetTitle {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  color: var(--ink);
+}
+.sheetTag {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.sheetClose {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.sheetClose:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink);
+}
+.sheetBody {
+  padding: 16px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.sheetBlurb {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.about {
+  border: 0.5px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.aboutHead {
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-3);
+  border-bottom: 0.5px solid var(--line);
+  background: color-mix(in srgb, var(--ink) 2.5%, transparent);
+}
+.aboutItem {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+}
+.aboutItem + .aboutItem {
+  border-top: 0.5px solid var(--line);
+}
+.aboutIcon {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  color: var(--ink-2);
+}
+.aboutText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.aboutTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.aboutDesc {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+.sheetFoot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+.sheetNote {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-4);
+}
+
+/* Credential form inside sheet */
+.wizard {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -142,6 +567,65 @@
   border-color: color-mix(in srgb, var(--accent) 55%, transparent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
 }
+.scopePicker {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.scopeOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 0.5px solid var(--line);
+  border-radius: 9px;
+  color: var(--ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+.scopeOption input {
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+.scopeOption span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.scopeOption small {
+  color: var(--ink-4);
+  font-size: 10.5px;
+}
+.scopeOption[data-disabled='true'] {
+  color: var(--ink-4);
+  cursor: not-allowed;
+  background: color-mix(in srgb, var(--ink) 2%, transparent);
+}
+.manualHandoff {
+  margin-top: 12px;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.manualHandoff summary {
+  cursor: pointer;
+  color: var(--ink);
+}
+.manualHandoff p {
+  margin: 8px 0;
+  line-height: 1.5;
+}
+.manualHandoffRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.manualHandoffRow input {
+  min-width: 0;
+  flex: 1;
+}
 .setupGuide {
   display: flex;
   flex-direction: column;
@@ -173,9 +657,40 @@
   line-height: 1.5;
   color: var(--ink-2);
 }
-
 .wizardFoot {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+/* Picker list (New Connector modal) */
+.pickerList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pickerItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 12px;
+  border: 0.5px solid var(--line);
+  border-radius: 12px;
+  background: transparent;
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+}
+.pickerItem:hover {
+  background: color-mix(in srgb, var(--ink) 3.5%, transparent);
+}
+.pickerName {
+  font-size: 14px;
+  font-weight: 600;
+}
+.pickerSub {
+  font-size: 12px;
+  color: var(--ink-3);
 }

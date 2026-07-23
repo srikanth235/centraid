@@ -1,0 +1,8 @@
+# Copy to .dev.vars (gitignored by Wrangler) and use non-production test credentials.
+# Never commit real values.
+GOOGLE_CLIENT_ID=test.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=replace-with-local-test-secret
+CALLBACK_RECEIPT_SECRET=replace-with-at-least-32-random-bytes
+APP_ORIGIN=http://127.0.0.1:4173
+CALLBACK_URL=http://127.0.0.1:8787/callback
+RESTRICTED_SCOPES_ENABLED=false

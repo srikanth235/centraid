@@ -97,11 +97,15 @@ async function mount(): Promise<HTMLElement> {
 }
 
 describe('App root', () => {
-  it('renders the chrome frame with the app in the sidebar, opening on Home', async () => {
+  it('renders the chrome frame with primary nav, opening on Home', async () => {
     const el = await mount();
     expect(el.querySelector('.window')).not.toBeNull();
     expect(el.textContent).toContain('Todos');
-    expect(el.textContent).toContain('Apps · 1');
+    expect(el.textContent).toContain('Automations');
+    expect(el.textContent).toContain('Connectors');
+    expect(el.textContent).toContain('Discover');
+    expect(el.textContent).not.toMatch(/Apps ·/);
+    expect(el.textContent).not.toContain('Starred');
     const activeHome = el.querySelector('[data-active="true"]');
     expect(activeHome?.textContent).toContain('Home');
   });
@@ -123,16 +127,16 @@ describe('App root', () => {
     expect(el.querySelector('.mainScroll')).not.toBeNull();
   });
 
-  it('renders the Starred empty state natively', async () => {
+  it('navigates to Automations via the sidebar (above Pages)', async () => {
     const el = await mount();
-    const starredBtn = [...el.querySelectorAll('.sbItem')].find((b) =>
-      b.textContent?.includes('Starred'),
+    const autoBtn = [...el.querySelectorAll('.sbItem')].find((b) =>
+      b.textContent?.includes('Automations'),
     ) as HTMLButtonElement;
     await act(async () => {
-      starredBtn.click();
+      autoBtn.click();
     });
-    expect(el.textContent).toContain('Nothing starred yet');
-    expect(el.querySelector('.pageHead')?.textContent).toContain('Starred');
+    const active = el.querySelector('[data-active="true"]');
+    expect(active?.textContent).toContain('Automations');
   });
 
   it('hides every builder entry point by default (#434 builder off)', async () => {

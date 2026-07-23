@@ -73,7 +73,7 @@ if (continuousOnly && resolvedShip.length > 0) {
   const allContinuous = shipResolved.surfaces.every((s) => s.cadence === 'continuous');
   if (allContinuous) {
     console.error(
-      'refusing publish that only lists continuous surfaces (web/docs) — deploy from main, not v* tags',
+      'refusing publish that only lists continuous surfaces (web/docs/oauth-worker) — deploy from main, not v* tags',
     );
     process.exit(2);
   }

@@ -95,12 +95,6 @@ export const HomeGlyph = (p: GlyphProps): JSX.Element => (
   </Svg>
 );
 
-export const StarGlyph = (p: GlyphProps): JSX.Element => (
-  <Svg {...p}>
-    <path d="M12 3l2.6 5.3L20 9.3l-4 3.9.9 5.5L12 16.1 7.1 18.7 8 13.2 4 9.3l5.4-1z" />
-  </Svg>
-);
-
 export const SparkleGlyph = ({ size = 15, strokeWidth = 1.5 }: GlyphProps): JSX.Element => (
   <Svg size={size} strokeWidth={strokeWidth}>
     <>

@@ -46,6 +46,7 @@ import { fileURLToPath } from 'node:url';
 import type { BearerAuthorization } from '@centraid/app-engine';
 import type { GatewayEndpointHandle } from '@centraid/tunnel';
 import { serve } from '../serve/serve.js';
+import { assistOAuthFromEnvironment } from '../serve/assist-oauth.js';
 import { daemonLayoutFor } from './paths.js';
 import { type DaemonConfig } from './config.js';
 import { resolveDaemonConfig } from './resolve-config.js';
@@ -297,6 +298,7 @@ async function commandServe(args: string[]): Promise<void> {
   let endpoint: GatewayEndpointHandle | undefined;
   const allowedHosts = mergeAllowedHosts(parsed.allowedHosts);
   const handle = await serve({
+    assistOAuth: assistOAuthFromEnvironment(process.env),
     paths: layout,
     ...(config.host !== undefined ? { host: config.host } : {}),
     ...(config.port !== undefined ? { port: config.port } : {}),

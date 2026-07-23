@@ -1,0 +1,216 @@
+# Receipt — Issue #524: Connectors platform
+
+Issue: https://github.com/srikanth235/centraid/issues/524
+
+## Checklist
+
+- [x] Connectors is a top-level sidebar route (not only Settings subpage)
+- [x] Google/Microsoft tiles show OAuth 2.0; detail shows redirect URI + Save & authorize
+- [x] Automations can bind a concrete connectionId for a connector
+- [x] Pull lifecycle and cursor semantics are engine-owned
+- [x] Provider presets expose capabilities (syncs/actions)
+- [x] Additional pull blueprints registered in index/manifest
+- [x] Unit tests for connector platform + connections UI paths
+- [x] Broker-enforced read-only POST exceptions for provider read APIs
+- [x] Connection identity and catalog branding cannot silently cross accounts/providers
+- [x] Build-time connector SVGs reject active markup
+- [x] Receipt + PR
+
+## What changed
+
+Connectors is a top-level sidebar route (not only Settings subpage):
+
+- `packages/client/src/react/shell/Sidebar.tsx` — Connectors + Automations above Pages; Discover kept
+- `packages/client/src/react/shell/Sidebar.test.tsx`
+- `packages/client/src/react/shell/App.tsx`
+- `packages/client/src/react/shell/App.test.tsx`
+- `packages/client/src/react/shell/router.ts`
+- `packages/client/src/react/shell/router.test.ts`
+- `packages/client/src/react/shell/routes/ConnectorsRoute.tsx`
+- `packages/client/src/react/shell/routes/SettingsRoute.tsx`
+- `packages/client/src/react/shell/chrome.module.css`
+- `packages/client/src/react/shell/routes/paletteData.ts`
+- `packages/client/src/app-shell-context.ts`
+- `packages/client/src/types.d.ts`
+- `packages/client/src/react/screens/SettingsProvidersAgents.tsx`
+- `README.md`
+
+Google/Microsoft tiles show OAuth 2.0; detail shows redirect URI + Save & authorize:
+
+- `packages/client/src/react/screens/SettingsConnectionsScreen.tsx`
+- `packages/client/src/react/screens/SettingsConnectionsScreen.module.css`
+- `packages/client/src/react/screens/SettingsConnectionsScreen.test.tsx`
+- `packages/client/src/react/shell/routes/settingsConnectionsData.ts`
+- `packages/client/src/react/shell/routes/settingsConnectionsData.test.ts`
+- `packages/client/src/gateway-client-connections.ts` — oauthCallbackUri
+- `packages/client/src/react/screens/connectorBrandMarks.tsx`
+- `scripts/fetch-connector-brand-icons.mjs`
+
+Automations can bind a concrete connectionId for a connector:
+
+- `packages/automation/src/manifest/manifest.ts`
+- `packages/automation/src/scaffold/scaffold.ts`
+- `packages/automation/src/index.ts`
+- `packages/automation/src/fire/fire.ts`
+- `packages/automation/src/fire/connector.test.ts`
+- `packages/automation/src/manifest/bundled-templates.test.ts` — validates both function handlers and declarative pull specs.
+- `packages/automation/src/handler/runner.ts` — opens and finishes the manifest-bound run, stages rows, and persists cursors outside connector code.
+- `packages/automation/src/worker/runner.ts` — executes `centraid.pull/v1` specs with a fetch-only context and typed high-water/provider cursor strategies.
+- `ARCHITECTURE.md` — records the connection-scoped pull runtime and cursor contract.
+- `packages/gateway/src/routes/lifecycle-automation-routes.ts`
+- `packages/gateway/src/serve/connection-broker.ts`
+- `packages/client/src/gateway-client-automation-editing.ts`
+- `packages/client/src/react/screens/AutomationEditorConnectorsPicker.tsx`
+- `packages/client/src/react/screens/AutomationEditorScreen.tsx`
+- `packages/client/src/react/screens/AutomationEditorScreen.module.css`
+- `packages/client/src/react/screens/AutomationEditorScreen.test.tsx`
+- `packages/client/src/react/screens/AutomationEditorTriggers.test.tsx`
+- `packages/client/src/react/shell/routes/AutomationEditorRoute.tsx`
+- `packages/client/src/react/shell/routes/automationEditorData.ts`
+- `packages/client/src/react/screens/AutomationsOverviewScreen.tsx`
+- `packages/client/src/react/screens/AutomationsOverviewScreen.module.css`
+- `packages/client/src/react/screens/AutomationsOverviewScreen.test.tsx`
+- `packages/client/src/react/shell/routes/AutomationsRoute.tsx`
+- `packages/client/src/react/screen-contracts.ts`
+- `packages/client/src/react/shell/routes/templatesData.ts`
+- `packages/client/src/react/shell/routes/templatesData.test.ts`
+- `apps/desktop/tests/e2e/automations.spec.ts` — targets the automation name field by its stable accessible label after the editor copy changed.
+
+Pull lifecycle and cursor semantics are engine-owned:
+
+- The automation and vault files above make connection identity, run bracketing, staging, and cursor persistence engine concerns; declarative handlers only fetch, map rows, and report cursor progress.
+- Broker-enforced read-only POST exceptions for provider read APIs: `packages/automation/src/handler/runner.ts` keeps the default GET/HEAD/OPTIONS ceiling and permits POST only for exact broker-declared read endpoints; Linear additionally accepts query-only GraphQL documents and rejects mutations/subscriptions. `packages/gateway/src/serve/connection-broker.ts` derives those exceptions from the exact stored provider + connector kind.
+- Connection identity and catalog branding cannot silently cross accounts/providers: `packages/gateway/src/serve/connection-broker.ts` rejects durable ids that cross connector kinds and validates known provider OAuth endpoints before opening the browser. `packages/client/src/react/shell/routes/AutomationEditorRoute.tsx` requires exact provider + kind matching and refuses to guess when multiple accounts qualify; `packages/client/src/react/shell/routes/automationEditorConnections.test.ts` covers exact, mismatched, and ambiguous connection selection.
+- `packages/blueprints/automations/notion-pull/automations/notion-pull/handler.js` pins the stable Notion API user id rather than a mutable display name.
+- `packages/client/src/react/shell/routes/templatesData.ts` never writes one-time webhook capabilities to persistent desktop console logs.
+- Build-time connector SVGs reject active markup: `scripts/lib/sanitize-connector-svg.mjs` rejects active/external SVG markup before generated constants reach `dangerouslySetInnerHTML`; `scripts/lib/sanitize-connector-svg.test.mjs` exercises the accepted and rejected forms.
+
+Provider presets expose capabilities (syncs/actions):
+
+- `packages/gateway/src/routes/connection-providers.ts`
+- `packages/gateway/src/routes/connection-providers.test.ts`
+- `packages/gateway/src/routes/connections-routes.ts`
+- `packages/gateway/src/routes/connections-routes.test.ts`
+- `packages/client/src/react/shell/routes/connectorPlatform.ts`
+- `packages/client/src/react/shell/routes/connectorPlatform.test.ts`
+- `packages/client/src/react/shell/routes/connectorAssistantTools.ts`
+
+Additional pull blueprints registered in index/manifest:
+
+- `packages/blueprints/index.json`
+- `packages/blueprints/manifest.json`
+- `packages/blueprints/src/app-manifests.test.ts` — pins every pull connector to an intentional vault entity type.
+- `packages/blueprints/src/pull-handlers.test.ts` — exercises pagination, independent watermarks, stable external ids, principal pinning, and rolling calendar windows against the bundled pull specs.
+- All 15 bundled `*-pull` handlers now export declarative specs; none can invoke the vault rail or hand-roll begin/stage/finish.
+- `packages/vault/src/ingest/enrich-publishers.ts`
+- `packages/vault/src/ingest/payload-schemas.ts` — remote files, pages, issues, and tasks create/update honest `core.content_item` rows rather than fabricated correspondence.
+- `packages/blueprints/automations/dropbox-pull/app.json`
+- `packages/blueprints/automations/dropbox-pull/automations/dropbox-pull/automation.json`
+- `packages/blueprints/automations/dropbox-pull/automations/dropbox-pull/handler.js`
+- `packages/blueprints/automations/github-pull/automations/github-pull/handler.js`
+- `packages/blueprints/automations/gitlab-pull/app.json`
+- `packages/blueprints/automations/gitlab-pull/automations/gitlab-pull/automation.json`
+- `packages/blueprints/automations/gitlab-pull/automations/gitlab-pull/handler.js`
+- `packages/blueprints/automations/google-drive-pull/app.json`
+- `packages/blueprints/automations/google-drive-pull/automations/google-drive-pull/automation.json`
+- `packages/blueprints/automations/google-drive-pull/automations/google-drive-pull/handler.js`
+- `packages/blueprints/automations/google-calendar-pull/automations/google-calendar-pull/handler.js`
+- `packages/blueprints/automations/google-contacts-pull/automations/google-contacts-pull/handler.js`
+- `packages/blueprints/automations/google-gmail-pull/automations/google-gmail-pull/handler.js`
+- `packages/blueprints/automations/linear-pull/app.json`
+- `packages/blueprints/automations/linear-pull/automations/linear-pull/automation.json`
+- `packages/blueprints/automations/linear-pull/automations/linear-pull/handler.js`
+- `packages/blueprints/automations/microsoft-calendar-pull/app.json`
+- `packages/blueprints/automations/microsoft-calendar-pull/automations/microsoft-calendar-pull/automation.json`
+- `packages/blueprints/automations/microsoft-calendar-pull/automations/microsoft-calendar-pull/handler.js`
+- `packages/blueprints/automations/microsoft-contacts-pull/app.json`
+- `packages/blueprints/automations/microsoft-contacts-pull/automations/microsoft-contacts-pull/automation.json`
+- `packages/blueprints/automations/microsoft-contacts-pull/automations/microsoft-contacts-pull/handler.js`
+- `packages/blueprints/automations/microsoft-onedrive-pull/app.json`
+- `packages/blueprints/automations/microsoft-onedrive-pull/automations/microsoft-onedrive-pull/automation.json`
+- `packages/blueprints/automations/microsoft-onedrive-pull/automations/microsoft-onedrive-pull/handler.js`
+- `packages/blueprints/automations/microsoft-outlook-pull/app.json`
+- `packages/blueprints/automations/microsoft-outlook-pull/automations/microsoft-outlook-pull/automation.json`
+- `packages/blueprints/automations/microsoft-outlook-pull/automations/microsoft-outlook-pull/handler.js`
+- `packages/blueprints/automations/notion-pull/app.json`
+- `packages/blueprints/automations/notion-pull/automations/notion-pull/automation.json`
+- `packages/blueprints/automations/notion-pull/automations/notion-pull/handler.js`
+- `packages/blueprints/automations/slack-pull/app.json`
+- `packages/blueprints/automations/slack-pull/automations/slack-pull/automation.json`
+- `packages/blueprints/automations/slack-pull/automations/slack-pull/handler.js`
+- `packages/blueprints/automations/todoist-pull/app.json`
+- `packages/blueprints/automations/todoist-pull/automations/todoist-pull/automation.json`
+- `packages/blueprints/automations/todoist-pull/automations/todoist-pull/handler.js`
+
+Unit tests for connector platform + connections UI paths: covered by the `.test.ts` / `.test.tsx` files listed above.
+
+Receipt + PR: this file `receipts/issue-524-connectors-platform.md` and the PR opened for issue #524.
+
+## Out of scope
+
+- Hosted/shared Centraid OAuth app or token handoff for self-hosters who skip BYO
+- Webhook ingress, multi-tenant connection tags
+- Product copy or docs naming third-party iPaaS platforms
+- Full assistant tool execution backend beyond client-side descriptors from healthy connections
+- A dedicated task/issue ontology kind; Linear, GitLab, and Todoist use the existing `core.content_item` kind until a separately reviewed ontology proposal replaces it.
+
+## Decisions
+
+- Keep #304 BYO OAuth only in this PR; hosted assist is a separate product track.
+- Durable binding is soft `connections[]` with optional `connectionId` (not hard fail if unbound for legacy templates).
+- A declarative pull requires a durable `connectionId`; the engine supplies connection identity and owns begin/stage/cursor/finish, while manual imports retain their explicit sync command surface.
+- Persisted pagination is either a monotonic high-water value or an opaque provider token. Mutable-list offsets are not a supported cursor strategy.
+- Connectors top-level route reuses SettingsConnectionsScreen presentation rather than a second gallery implementation.
+- Brand marks + optional icon fetch script; no third-party platform names in product strings.
+- Files/pages and issue/task records are content items; only actual mail/chat connectors stage `social.message`.
+
+## Verification
+
+```
+bun run --filter @centraid/client test -- src/react/shell/routes/connectorPlatform.test.ts src/react/shell/routes/settingsConnectionsData.test.ts src/react/screens/SettingsConnectionsScreen.test.tsx src/react/screens/AutomationEditorScreen.test.tsx src/react/shell/Sidebar.test.tsx
+bun run --filter @centraid/gateway test -- src/routes/connection-providers.test.ts src/routes/connections-routes.test.ts
+bun run --filter @centraid/automation test -- src/fire/connector.test.ts
+bun run --filter @centraid/blueprints test -- src/app-manifests.test.ts src/pull-handlers.test.ts
+bun run --filter @centraid/vault test -- src/commands/sync.test.ts src/schema/migrate.test.ts
+node --test scripts/lib/sanitize-connector-svg.test.mjs
+bun run --cwd apps/desktop test:e2e -- tests/e2e/automations.spec.ts
+bun run --filter @centraid/client typecheck
+bun run --filter @centraid/gateway typecheck
+bun run --filter @centraid/automation typecheck
+bun run check:pr
+```
+
+## Audit
+
+**Check 1 — What changed faithfully describes the diff**
+PASS – Receipt enumerates client shell/Connectors UI, OAuth helpers, the engine-owned connection-scoped pull runtime, gateway capabilities, every new pull blueprint path, and tests in the change set.
+
+**Check 2 — All checked checklist items are realized in the diff**
+PASS – Each acceptance item has corresponding code: sidebar route, OAuth detail UX, connection-scoped pull binding and lifecycle, capabilities, pull blueprints, tests, this receipt (+ PR).
+
+**Check 3 — Checklist mirrors the issue**
+PASS – Checklist matches issue #524 acceptance criteria.
+
+## Accounting
+
+### Steering
+
+(no rows — no interrupt/correction events recorded for this change set)
+
+### Costs
+
+| cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| codex-019f8e48-8ec-1784814585-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #524 | gpt-5.6-sol | 131313 | 0 | 7711232 | 8230 | 139543 | 2.3795 | 2841599 | 0 | 111222272 | 261813 | test(desktop): use stable automation name selector (#524) |
+| codex-019f8e48-8ec-1784820444-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #524 | gpt-5.6-sol | 1293079 | 0 | 41413888 | 98651 | 1391730 | 15.0659 | 4134678 | 0 | 152636160 | 360464 | fix(connectors): centralize pull lifecycle and cursors (#524) |
+| codex-019f8e48-8ec-1784820597-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #524 | gpt-5.6-sol | 21136 | 0 | 676864 | 3676 | 24812 | 0.2772 | 4155814 | 0 | 153313024 | 364140 | fix(connectors): centralize pull lifecycle and cursors (#524) |
+| codex-019f8e48-8ec-1784824210-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #524 | gpt-5.6-sol | 303537 | 0 | 7401984 | 18460 | 321997 | 2.8862 | 4459351 | 0 | 160715008 | 382600 | fix(connectors): prevent pagination data loss (#524) |
+| codex-019f8e48-8ec-1784829896-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #524 | gpt-5.6-sol | 596747 | 0 | 36604416 | 76376 | 673123 | 11.7886 | 5056098 | 0 | 197319424 | 458976 | fix(connectors): harden credential-bound pulls (#524) |
+| codex-019f8e48-8ec-1784829961-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #524 | gpt-5.6-sol | 8905 | 0 | 291584 | 944 | 9849 | 0.1093 | 5065003 | 0 | 197611008 | 459920 | fix(connectors): harden credential-bound pulls (#524) |
+## Steering
+
+**Check 1 — every human-steering event is recorded in ### Steering under ## Accounting**
+PASS – No interrupt or mid-task correction events; empty steering table is correct.
+
+**Check 2 — no non-steering message is recorded as a steering event**
+PASS – No false-positive steering rows.

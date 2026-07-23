@@ -8,6 +8,7 @@
     "**/dist/**",
     "**/.expo/**",
     "**/node_modules/**",
+    "apps/oauth-worker/worker-configuration.d.ts",
     "apps/web/src/generated/**",
     "packages/blueprints/automations/**",
     "packages/blueprints/visual-harness/mock-centraid.js"

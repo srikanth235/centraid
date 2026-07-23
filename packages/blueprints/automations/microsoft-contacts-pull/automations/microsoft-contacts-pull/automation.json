@@ -1,0 +1,37 @@
+{
+  "name": "Outlook Contacts sync",
+  "version": "0.1.0",
+  "description": "Pulls Outlook contacts into the vault as people — read-only Microsoft Graph.",
+  "enabled": false,
+  "prompt": "Pulls Outlook contacts into the vault as people — read-only Microsoft Graph.",
+  "triggers": [
+    {
+      "kind": "cron",
+      "expr": "0 */6 * * *"
+    }
+  ],
+  "requires": {},
+  "connector": {
+    "kind": "pull.outlookcontacts",
+    "label": "personal"
+  },
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Stages Outlook contacts as core.party rows.",
+    "scopes": [
+      {
+        "schema": "sync",
+        "verbs": "read+act"
+      }
+    ]
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-07-23T00:00:00.000Z"
+  }
+}

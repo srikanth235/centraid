@@ -1421,6 +1421,237 @@
         "automations/release-notes-drafter/automation.json",
         "automations/release-notes-drafter/handler.js"
       ]
+    },
+    {
+      "id": "google-drive-pull",
+      "name": "Google Drive sync",
+      "desc": "Recent Drive files land in the vault as reviewable messages — metadata and links, read-only.",
+      "colorKey": "green",
+      "iconKey": "Folder",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "📁",
+      "category": "Connectors",
+      "triggerKind": "cron",
+      "triggerLabel": "Hourly · :50",
+      "integrations": [
+        "Google Drive"
+      ],
+      "files": [
+        "app.json",
+        "automations/google-drive-pull/automation.json",
+        "automations/google-drive-pull/handler.js"
+      ]
+    },
+    {
+      "id": "microsoft-outlook-pull",
+      "name": "Outlook Mail sync",
+      "desc": "Outlook / Microsoft 365 mail flows into the vault as messages — read-only via Graph.",
+      "colorKey": "blue",
+      "iconKey": "Send",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "📨",
+      "category": "Connectors",
+      "triggerKind": "cron",
+      "triggerLabel": "Hourly · :25",
+      "integrations": [
+        "Outlook"
+      ],
+      "files": [
+        "app.json",
+        "automations/microsoft-outlook-pull/automation.json",
+        "automations/microsoft-outlook-pull/handler.js"
+      ]
+    },
+    {
+      "id": "microsoft-calendar-pull",
+      "name": "Outlook Calendar sync",
+      "desc": "Outlook / Microsoft 365 calendar events land in Agenda — read-only via Graph.",
+      "colorKey": "blue",
+      "iconKey": "Calendar",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🗓️",
+      "category": "Connectors",
+      "triggerKind": "cron",
+      "triggerLabel": "Hourly · :35",
+      "integrations": [
+        "Outlook Calendar"
+      ],
+      "files": [
+        "app.json",
+        "automations/microsoft-calendar-pull/automation.json",
+        "automations/microsoft-calendar-pull/handler.js"
+      ]
+    },
+    {
+      "id": "microsoft-contacts-pull",
+      "name": "Outlook Contacts sync",
+      "desc": "Outlook contacts become people in the vault — merge-aware, read-only.",
+      "colorKey": "blue",
+      "iconKey": "Users",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "👤",
+      "category": "Connectors",
+      "triggerKind": "cron",
+      "triggerLabel": "Every 6 hours",
+      "integrations": [
+        "Outlook Contacts"
+      ],
+      "files": [
+        "app.json",
+        "automations/microsoft-contacts-pull/automation.json",
+        "automations/microsoft-contacts-pull/handler.js"
+      ]
+    },
+    {
+      "id": "microsoft-onedrive-pull",
+      "name": "OneDrive sync",
+      "desc": "Recent OneDrive files land as reviewable messages — metadata and links.",
+      "colorKey": "blue",
+      "iconKey": "Folder",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "☁️",
+      "category": "Connectors",
+      "triggerKind": "cron",
+      "triggerLabel": "Hourly · :55",
+      "integrations": [
+        "OneDrive"
+      ],
+      "files": [
+        "app.json",
+        "automations/microsoft-onedrive-pull/automation.json",
+        "automations/microsoft-onedrive-pull/handler.js"
+      ]
+    },
+    {
+      "id": "gitlab-pull",
+      "name": "GitLab sync",
+      "desc": "Issues and merge requests you are involved in flow into the vault as threads.",
+      "colorKey": "orange",
+      "iconKey": "Code",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🦊",
+      "category": "Connectors",
+      "triggerKind": "cron",
+      "triggerLabel": "Hourly · :42",
+      "integrations": [
+        "GitLab"
+      ],
+      "files": [
+        "app.json",
+        "automations/gitlab-pull/automation.json",
+        "automations/gitlab-pull/handler.js"
+      ]
+    },
+    {
+      "id": "linear-pull",
+      "name": "Linear sync",
+      "desc": "Assigned and created Linear issues land in the vault as threads.",
+      "colorKey": "indigo",
+      "iconKey": "Check",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "📐",
+      "category": "Connectors",
+      "triggerKind": "cron",
+      "triggerLabel": "Hourly · :44",
+      "integrations": [
+        "Linear"
+      ],
+      "files": [
+        "app.json",
+        "automations/linear-pull/automation.json",
+        "automations/linear-pull/handler.js"
+      ]
+    },
+    {
+      "id": "notion-pull",
+      "name": "Notion sync",
+      "desc": "Pages shared with your Notion integration land as searchable messages.",
+      "colorKey": "slate",
+      "iconKey": "Book",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "📓",
+      "category": "Connectors",
+      "triggerKind": "cron",
+      "triggerLabel": "Every 2 hours",
+      "integrations": [
+        "Notion"
+      ],
+      "files": [
+        "app.json",
+        "automations/notion-pull/automation.json",
+        "automations/notion-pull/handler.js"
+      ]
+    },
+    {
+      "id": "todoist-pull",
+      "name": "Todoist sync",
+      "desc": "Active Todoist tasks land in the vault as reviewable threads (until native task staging ships).",
+      "colorKey": "red",
+      "iconKey": "Todo",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "✅",
+      "category": "Connectors",
+      "triggerKind": "cron",
+      "triggerLabel": "Hourly · :15",
+      "integrations": [
+        "Todoist"
+      ],
+      "files": [
+        "app.json",
+        "automations/todoist-pull/automation.json",
+        "automations/todoist-pull/handler.js"
+      ]
+    },
+    {
+      "id": "slack-pull",
+      "name": "Slack sync",
+      "desc": "Recent Slack DMs and channel mentions land as vault threads.",
+      "colorKey": "purple",
+      "iconKey": "Globe",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "💬",
+      "category": "Connectors",
+      "triggerKind": "cron",
+      "triggerLabel": "Hourly · :18",
+      "integrations": [
+        "Slack"
+      ],
+      "files": [
+        "app.json",
+        "automations/slack-pull/automation.json",
+        "automations/slack-pull/handler.js"
+      ]
+    },
+    {
+      "id": "dropbox-pull",
+      "name": "Dropbox sync",
+      "desc": "Recent Dropbox files land as reviewable messages — metadata and paths.",
+      "colorKey": "blue",
+      "iconKey": "Folder",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "📦",
+      "category": "Connectors",
+      "triggerKind": "cron",
+      "triggerLabel": "Hourly · :48",
+      "integrations": [
+        "Dropbox"
+      ],
+      "files": [
+        "app.json",
+        "automations/dropbox-pull/automation.json",
+        "automations/dropbox-pull/handler.js"
+      ]
     }
   ]
 }

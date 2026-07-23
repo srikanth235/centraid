@@ -356,18 +356,19 @@
             useless to anyone else.
           </p>
           <p>
-            Centraid is <b>BYO OAuth client</b> in v0 — you register your own client with the
-            provider; there's no Centraid-hosted relay standing between you and it, on purpose.
-            The gateway runs the ceremony over a loopback callback with single-use state, then
-            seals the resulting tokens at rest and refreshes them single-flight so two requests
-            never race. The part worth teaching: automation code never touches a token — it
-            writes a placeholder like <code>{{connection:mail}}</code>, and the broker injects the
-            real credential outside the sandbox, refusing any host not on that credential's
-            <code>allowed_hosts</code> pin. Unless a credential explicitly opts into writes, the
-            injected fetch stays read-only.
+            Centraid offers two paths. <b>Centraid Assist</b> uses a public, stateless ceremony edge
+            so a desktop or PWA can return a short-lived authorization code to a paired gateway
+            that has no public DNS; state and the PKCE verifier stay on that gateway, tokens pass
+            only through edge memory on their way back, and storage remains local. Advanced
+            <b>BYO OAuth</b> keeps the direct callback for operators whose gateway is
+            browser-reachable. Both seal tokens at rest and refresh single-flight so two requests
+            never race. Automation code never touches a token — it writes a placeholder, and the
+            broker injects the credential outside the sandbox only toward its
+            <code>allowed_hosts</code> pin.
           </p>
           <p class="aside">
             Go deeper: <a href="../data/#connections">Data § connections</a> ·
+            <a href="../privacy/">Assist privacy</a> ·
             <a href="https://oauth.net/2/" target="_blank" rel="noopener">oauth.net/2</a> ·
             <a href="https://datatracker.ietf.org/doc/html/rfc7636" target="_blank" rel="noopener"
               >RFC 7636</a

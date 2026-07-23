@@ -6,26 +6,19 @@
  *
  * Shape per fire:
  *   1. whoami probe (users/me/profile) — the observed principal for
- *      `sync.begin_run`'s pinning gate, plus the CURRENT historyId (a safe
+ *      the engine's principal-pinning gate, plus the CURRENT historyId (a safe
  *      watermark captured BEFORE listing, so nothing between list and
  *      cursor-set is lost).
- *   2. incremental: users/me/history from the stored cursor; first run (or
- *      an expired cursor, Gmail answers 404): last 30 days, bounded.
+ *   2. incremental: drain users/me/history from the stored cursor; first run
+ *      (or an expired cursor, Gmail answers 404): drain the last 30 days.
  *   3. per message: metadata-format fetch (headers + snippet only — bodies
  *      and attachments are the mbox/file-drop lane, issue #300).
- *   4. stage as social.message rows; the spine's external-id map dedupes.
- *   5. advance the cursor, close the run. Failures close the run failed —
- *      sync never dies silently (issue #290 decision 4.4).
+ *   4. return social.message rows plus the provider cursor; the engine owns
+ *      staging, cursor persistence, and run finalization.
  */
 
-const PURPOSE = 'dpv:ServiceProvision';
-const KIND = 'pull.gmail';
-const LABEL = 'personal';
 const API = 'https://gmail.googleapis.com/gmail/v1/users/me';
 const AUTH = { authorization: 'Bearer {{connection:access_token}}' };
-/** Bound one fire's work; the next fire continues from the cursor. */
-const MAX_MESSAGES_PER_RUN = 100;
-
 async function api(ctx, path) {
   const res = await ctx.fetch({ url: `${API}${path}`, headers: AUTH });
   if (res.status === 404) return { notFound: true };
@@ -51,23 +44,23 @@ function header(message, name) {
   return hit ? hit.value : null;
 }
 
-export default async ({ ctx, log }) => {
-  // 1. whoami — the principal pin AND the next watermark, in one probe.
-  const profile = await api(ctx, '/profile');
-  const begin = await ctx.vault.invoke({
-    command: 'sync.begin_run',
-    input: { kind: KIND, label: LABEL, principal: profile.emailAddress },
-    purpose: PURPOSE,
-  });
-  const opened = begin && begin.output ? begin.output : begin;
-  if (opened.refused) {
-    return { summary: `skipped: ${opened.reason}`, output: { skipped: true } };
-  }
-  const { connection_id: connectionId, run_id: runId, cursors } = opened;
+let observedProfile;
 
-  try {
+export default {
+  protocol: 'centraid.pull/v1',
+
+  async principal({ ctx }) {
+    // Capture the next watermark before listing so messages arriving during
+    // this pull remain visible to the following run.
+    observedProfile = await api(ctx, '/profile');
+    return observedProfile.emailAddress;
+  },
+
+  async pull({ ctx, log, cursor }) {
+    if (!observedProfile) throw new Error('gmail principal probe did not return a profile');
+    const historyId = cursor.provider('gmail.historyId');
     // 2. Which message ids are new?
-    const startHistoryId = cursors && cursors['gmail.historyId'];
+    const startHistoryId = historyId.current;
     const ids = [];
     let mode = 'incremental';
     if (startHistoryId) {
@@ -89,7 +82,7 @@ export default async ({ ctx, log }) => {
           }
         }
         pageToken = page.nextPageToken || null;
-      } while (pageToken && ids.length < MAX_MESSAGES_PER_RUN);
+      } while (pageToken);
     } else {
       mode = 'window';
     }
@@ -103,9 +96,12 @@ export default async ({ ctx, log }) => {
         );
         for (const m of page.messages || []) ids.push(m.id);
         pageToken = page.nextPageToken || null;
-      } while (pageToken && ids.length < MAX_MESSAGES_PER_RUN);
+      } while (pageToken);
     }
-    const batchIds = [...new Set(ids)].slice(0, MAX_MESSAGES_PER_RUN);
+    // A historyId is a mailbox-wide watermark, not a per-page cursor. Drain
+    // every page before advancing it; truncating here would permanently skip
+    // every message beyond the cap.
+    const batchIds = [...new Set(ids)];
 
     // 3+4. Metadata per message → social.message staging rows.
     const rows = [];
@@ -131,41 +127,11 @@ export default async ({ ctx, log }) => {
       });
     }
 
-    let staged = 0;
-    let published = 0;
-    for (let i = 0; i < rows.length; i += 500) {
-      const outcome = await ctx.vault.invoke({
-        command: 'sync.stage_rows',
-        input: { kind: KIND, label: LABEL, rows: rows.slice(i, i + 500) },
-        purpose: PURPOSE,
-      });
-      const out = outcome && outcome.output ? outcome.output : {};
-      staged += rows.slice(i, i + 500).length;
-      if (out.published) published += (out.published.created || 0) + (out.published.updated || 0);
-    }
-
-    // 5. Advance the watermark (captured at the profile probe) and close.
-    await ctx.vault.invoke({
-      command: 'sync.set_cursor',
-      input: { connection_id: connectionId, key: 'gmail.historyId', value: profile.historyId },
-      purpose: PURPOSE,
-    });
-    await ctx.vault.invoke({
-      command: 'sync.finish_run',
-      input: { run_id: runId, ok: true, staged, published },
-      purpose: PURPOSE,
-    });
-    log.info(`gmail pull: ${staged} staged (${mode}), ${published} auto-published`);
+    historyId.set(observedProfile.historyId);
+    log.info(`gmail pull: ${rows.length} row(s) returned (${mode})`);
     return {
-      summary: `pulled ${staged} message(s) (${mode})${published ? `, ${published} published` : ''}`,
-      output: { staged, published, mode },
+      rows,
+      summary: `pulled ${rows.length} message(s) (${mode})`,
     };
-  } catch (err) {
-    await ctx.vault.invoke({
-      command: 'sync.finish_run',
-      input: { run_id: runId, ok: false, error: String((err && err.message) || err) },
-      purpose: PURPOSE,
-    });
-    throw err;
-  }
+  },
 };

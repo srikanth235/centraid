@@ -85,59 +85,99 @@ function button(el: HTMLElement, label: string): HTMLButtonElement {
   ) as HTMLButtonElement;
 }
 
+/** Create layout: dashed "+ Add Trigger" → menu item (Schedule / Data change). */
+async function addTrigger(el: HTMLElement, kind: 'Schedule' | 'Data change'): Promise<void> {
+  await act(async () => {
+    button(el, '+ Add Trigger').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+  await act(async () => {
+    const item = [...el.querySelectorAll('[role="menuitem"]')].find(
+      (b) => b.textContent === kind,
+    ) as HTMLButtonElement;
+    item.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+}
+
 describe('AutomationEditorScreen — create mode', () => {
-  it('renders Name/Instructions, keeps Create disabled until named, and saves the assembled trigger shape', async () => {
+  it('uses the full editor layout, keeps Create disabled until named, and saves cron', async () => {
     const props = makeProps();
     const el = await mount(props);
 
-    const nameInput = el.querySelector(
-      'input[placeholder="Untitled automation"]',
-    ) as HTMLInputElement;
+    // Same column layout as edit: head, Name, Instructions, Triggers, tabs.
+    expect(el.querySelector('[data-mode="create"]')).toBeTruthy();
+    expect(el.textContent).toContain('New Automation');
+    expect(el.textContent).toContain('Draft');
+    expect(el.textContent).toContain('Triggers');
+    expect(el.textContent).toContain('Without a trigger, this only runs when you press Run now');
+    // Connectors live on the Instructions toolbar, not as a bottom tab.
+    expect(
+      [...el.querySelectorAll('button')].some((b) => b.textContent?.includes('Connectors')),
+    ).toBe(true);
+    expect(el.textContent).not.toContain('Behavior');
+    expect(el.textContent).not.toContain('Model · Auto');
+    expect(el.textContent).toContain('Notifications');
+    expect(el.textContent).toContain('Plan');
+    expect(el.textContent).not.toContain('Skills');
+    // Bottom tabs are Notifications + Plan only.
+    const tabLabels = [...el.querySelectorAll('[role="tab"]')].map((b) => b.textContent);
+    expect(tabLabels).toEqual(['Notifications', 'Plan']);
+    // Create has no Run now / delete chrome.
+    expect(
+      [...el.querySelectorAll('button')].find((b) => b.textContent === 'Run now'),
+    ).toBeUndefined();
+
+    const nameInput = el.querySelector('input[placeholder="My Automation"]') as HTMLInputElement;
     const instructionsField = el.querySelector('textarea') as HTMLTextAreaElement;
     expect(nameInput).toBeTruthy();
     expect(instructionsField).toBeTruthy();
+    expect(instructionsField.placeholder).toMatch(/unread emails/i);
 
     const createBtn = button(el, 'Create automation');
     expect(createBtn.disabled).toBe(true);
 
     setValue(nameInput, 'Weekly digest');
     expect(createBtn.disabled).toBe(false);
+    expect(el.textContent).toContain('Weekly digest');
 
     setValue(instructionsField, 'Summarize the week every Monday.');
 
-    // Add a schedule without collapsing any existing triggers.
-    await act(async () =>
-      button(el, '+ Schedule').dispatchEvent(new MouseEvent('click', { bubbles: true })),
-    );
+    await addTrigger(el, 'Schedule');
     const cronCard = el.querySelector('[data-trigger-kind="cron"]');
     expect(cronCard).toBeTruthy();
     const cronInput = el.querySelector('input[placeholder="0 7 * * *"]') as HTMLInputElement;
     setValue(cronInput, '0 8 * * MON');
 
-    // Tabs switch: Behavior in create mode is explainer-only, no toggle.
+    // Notifications live in the same tab as edit (select, not a separate card).
     await act(async () =>
-      tab(el, 'Behavior').dispatchEvent(new MouseEvent('click', { bubbles: true })),
+      tab(el, 'Notifications').dispatchEvent(new MouseEvent('click', { bubbles: true })),
     );
-    expect(el.textContent).toContain('Writes park for your review');
-    expect(el.querySelector('[role="switch"]')).toBeNull();
-    await act(async () =>
-      tab(el, 'Connectors').dispatchEvent(new MouseEvent('click', { bubbles: true })),
-    );
-    expect(el.textContent).toContain(
-      'Connectors and vault scopes are declared when the plan is compiled.',
-    );
+    const notifySelect = el.querySelector(
+      'select[aria-label="Notification preference"]',
+    ) as HTMLSelectElement;
+    expect(notifySelect).toBeTruthy();
+    expect([...notifySelect.options].map((o) => o.textContent)).toEqual(['In the app', 'Off']);
 
     await act(async () =>
       button(el, 'Create automation').dispatchEvent(new MouseEvent('click', { bubbles: true })),
     );
 
     expect(props.onSave).toHaveBeenCalledWith({
+      connections: [],
       instructions: 'Summarize the week every Monday.',
       name: 'Weekly digest',
       triggers: [{ expr: '0 8 * * MON', kind: 'cron' }],
     });
     expect(props.onOpenBuilder).not.toHaveBeenCalled();
     expect(props.onCompile).toHaveBeenCalledWith(true);
+  });
+
+  it('only offers Schedule and Data change as addable triggers', async () => {
+    const el = await mount(makeProps());
+    await act(async () => {
+      button(el, '+ Add Trigger').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    const items = [...el.querySelectorAll('[role="menuitem"]')].map((b) => b.textContent);
+    expect(items).toEqual(['Schedule', 'Data change']);
   });
 
   it('searches vault entities after @ and inserts a stable token rendered as a chip', async () => {
@@ -178,214 +218,108 @@ describe('AutomationEditorScreen — edit mode', () => {
       enabled: true,
       instructions: 'Summarize yesterday’s new issues.',
       mode: 'edit',
-      model: null,
-      name: 'Daily Digest',
+      name: 'Daily issues',
       onFailure: null,
-      rowId: 'x',
+      rowId: 'row-a',
       triggers: [{ expr: '0 8 * * *', kind: 'cron' }],
       webhook: null,
       ...over,
     });
   }
 
-  it('prefills from the DTO, shows the header + enabled toggle + standing grants', async () => {
-    const props = makeProps({
-      loadData: vi.fn().mockResolvedValue(
-        editData({
-          consent: {
-            grants: [
-              {
-                createdAt: '2026-07-01T00:00:00Z',
-                grantId: 'g1',
-                revokedAt: null,
-                target: 'gmail.send',
-                verb: 'send',
-              },
-            ],
-            outbox: [],
-            parked: [],
-          },
-        }),
-      ),
-    });
-    const el = await mount(props);
-
-    expect(
-      (el.querySelector('input[placeholder="Untitled automation"]') as HTMLInputElement).value,
-    ).toBe('Daily Digest');
-    expect(
-      el.querySelector('textarea')?.textContent ??
-        (el.querySelector('textarea') as HTMLTextAreaElement).value,
-    ).toContain('Summarize');
-    expect(el.textContent).toContain('Daily Digest');
-    expect(el.textContent).toContain('Active');
-    expect(el.querySelector('[data-trigger-kind="cron"]')).toBeTruthy();
-
-    await act(async () =>
-      tab(el, 'Behavior').dispatchEvent(new MouseEvent('click', { bubbles: true })),
-    );
-    const toggle = el.querySelector('[role="switch"]') as HTMLInputElement;
-    expect(toggle).toBeTruthy();
-    expect(toggle.checked).toBe(true);
-    expect(el.textContent).toContain('gmail.send');
-
-    await act(async () =>
-      button(el, 'Revoke').dispatchEvent(new MouseEvent('click', { bubbles: true })),
-    );
-    expect(props.onDecideConsent).toHaveBeenCalledWith('grant', 'g1', 'revoke');
-  });
-
-  it('saves changed fields and starts a hidden compile when Instructions changed', async () => {
+  it('shows identity chrome, Run now, and saves name/instructions/triggers', async () => {
     const props = makeProps({ loadData: vi.fn().mockResolvedValue(editData()) });
     const el = await mount(props);
 
-    expect(el.textContent).not.toContain('Recompile plan');
+    expect(el.textContent).toContain('Daily issues');
+    expect(el.textContent).toContain('Active');
+    expect(button(el, 'Run now')).toBeTruthy();
 
-    const instructionsField = el.querySelector('textarea') as HTMLTextAreaElement;
-    setValue(instructionsField, 'Summarize yesterday’s new issues, then post to Slack.');
+    const nameInput = el.querySelector('input[placeholder="My Automation"]') as HTMLInputElement;
+    setValue(nameInput, 'Daily issues v2');
 
     await act(async () =>
       button(el, 'Save changes').dispatchEvent(new MouseEvent('click', { bubbles: true })),
     );
-
     expect(props.onSave).toHaveBeenCalledWith({
-      instructions: 'Summarize yesterday’s new issues, then post to Slack.',
-      name: 'Daily Digest',
+      connections: [],
+      instructions: 'Summarize yesterday’s new issues.',
+      name: 'Daily issues v2',
       triggers: [{ expr: '0 8 * * *', kind: 'cron' }],
     });
-    // The builder callback remains in the contract but is hidden in v0.
-    expect(props.onOpenBuilder).not.toHaveBeenCalled();
-    expect(props.onCompile).toHaveBeenCalledWith(false);
-    expect(el.textContent).not.toContain('Recompile plan');
   });
 
-  it('does not show Recompile plan after a save with unchanged Instructions', async () => {
-    const props = makeProps({ loadData: vi.fn().mockResolvedValue(editData()) });
-    const el = await mount(props);
-
-    const nameInput = el.querySelector(
-      'input[placeholder="Untitled automation"]',
-    ) as HTMLInputElement;
-    setValue(nameInput, 'Daily Digest v2');
-
-    await act(async () =>
-      button(el, 'Save changes').dispatchEvent(new MouseEvent('click', { bubbles: true })),
-    );
-
-    expect(props.onSave).toHaveBeenCalledWith(
-      expect.objectContaining({
-        instructions: 'Summarize yesterday’s new issues.',
-        name: 'Daily Digest v2',
-      }),
-    );
-    expect(el.textContent).not.toContain('Recompile plan');
-  });
-
-  it('renders loaded condition/data triggers as editable fields and round-trips them on save', async () => {
+  it('edit: enable switch in head, Notifications onFailure, Connectors picker', async () => {
+    const loadConnectorCatalog = vi.fn().mockResolvedValue([
+      {
+        allowedHosts: ['api.github.com'],
+        authUrl: undefined,
+        connection: null,
+        credKind: 'api_key' as const,
+        key: 'github:pull.github',
+        kind: 'pull.github',
+        name: 'GitHub',
+        providerId: 'github',
+        providerName: 'GitHub',
+        setup: ['Create a PAT'],
+        templateId: 'github-pull',
+        tone: 'github',
+      },
+    ]);
     const props = makeProps({
-      loadData: vi.fn().mockResolvedValue(
-        editData({
-          triggers: [
-            { expr: '0 8 * * *', kind: 'cron' },
-            {
-              entity: 'core.event',
-              every: '*/5 * * * *',
-              kind: 'condition',
-              where: [{ column: 'status', op: 'eq', value: 'open' }],
-            },
-            { entities: ['core.party'], kind: 'data' },
-          ],
-        }),
-      ),
-    });
-    const el = await mount(props);
-    expect(el.querySelectorAll('[data-trigger-kind]').length).toBe(3);
-    expect(button(el, '+ Webhook').disabled).toBe(false);
-
-    // The condition trigger is now editable: its entity, and its one where
-    // clause (column / op / value), are prefilled real inputs.
-    expect(
-      (el.querySelector('input[placeholder="business.invoice"]') as HTMLInputElement).value,
-    ).toBe('core.event');
-    expect((el.querySelector('input[aria-label="Filter column"]') as HTMLInputElement).value).toBe(
-      'status',
-    );
-    expect(
-      (el.querySelector('select[aria-label="Filter operator"]') as HTMLSelectElement).value,
-    ).toBe('eq');
-    expect((el.querySelector('input[aria-label="Filter value"]') as HTMLInputElement).value).toBe(
-      'open',
-    );
-    // The data trigger's watched entities are a comma-joined editable input.
-    expect(
-      (
-        el.querySelector(
-          'input[placeholder="core.transaction, billing.invoice"]',
-        ) as HTMLInputElement
-      ).value,
-    ).toBe('core.party');
-
-    await act(async () =>
-      button(el, 'Save changes').dispatchEvent(new MouseEvent('click', { bubbles: true })),
-    );
-
-    expect(props.onSave).toHaveBeenCalledWith({
-      instructions: 'Summarize yesterday’s new issues.',
-      name: 'Daily Digest',
-      triggers: [
-        { expr: '0 8 * * *', kind: 'cron' },
-        {
-          entity: 'core.event',
-          every: '*/5 * * * *',
-          kind: 'condition',
-          where: [{ column: 'status', op: 'eq', value: 'open' }],
-        },
-        { entities: ['core.party'], kind: 'data' },
-      ],
-    });
-  });
-
-  it('renders Connectors chips and the Notifications onFailure line from the DTO', async () => {
-    const props = makeProps({
+      loadConnectorCatalog,
       loadData: vi.fn().mockResolvedValue(
         editData({
           connectors: {
-            connector: 'Gmail',
+            connector: 'pull.github',
             mcps: ['weather'],
-            secrets: ['locker:@slack-token:value'],
-            vaultPurpose: 'Draft the digest',
-            vaultScopes: ['core.event read'],
+            secrets: ['locker:@token:password'],
+            vaultPurpose: 'dpv:ServiceProvision',
+            vaultScopes: ['sync read+act'],
           },
-          model: 'anthropic/claude-3-5-sonnet',
           onFailure: 'automation-a/notify-owner',
         }),
       ),
     });
     const el = await mount(props);
 
-    await act(async () =>
-      tab(el, 'Connectors').dispatchEvent(new MouseEvent('click', { bubbles: true })),
-    );
-    expect(el.textContent).toContain('weather');
-    expect(el.textContent).toContain('Gmail');
-    expect(el.textContent).toContain('core.event read');
-    expect(el.textContent).toContain('Draft the digest');
+    // Enable toggle moved out of the removed Behavior tab into the head.
+    expect(el.querySelector('[role="switch"]')).toBeTruthy();
+    expect(el.textContent).not.toContain('Writes park for your review');
 
     await act(async () =>
       tab(el, 'Notifications').dispatchEvent(new MouseEvent('click', { bubbles: true })),
     );
-    expect(el.textContent).toContain('On failure, runs');
     expect(el.textContent).toContain('automation-a/notify-owner');
-    expect(el.textContent).toContain('Plan runs on');
-    expect(el.textContent).toContain('anthropic/claude-3-5-sonnet');
+    expect(el.querySelector('select[aria-label="Notification preference"]')).toBeTruthy();
+
+    const connectorsBtn = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Connectors'),
+    ) as HTMLButtonElement;
+    await act(async () => connectorsBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(loadConnectorCatalog).toHaveBeenCalled();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(el.querySelector('[data-testid="automation-connectors-picker"]')?.textContent).toContain(
+      'GitHub',
+    );
+    expect(el.textContent).toContain('API key');
   });
 
-  it('shows the empty state when Connectors has nothing declared', async () => {
+  it('load → durable connection bindings round-trip into onSave', async () => {
     const props = makeProps({
       loadData: vi.fn().mockResolvedValue(
         editData({
           connectors: {
             connector: null,
+            connections: [
+              {
+                connectionId: 'conn-load-1',
+                kind: 'pull.github',
+                label: 'GitHub · personal',
+              },
+            ],
             mcps: [],
             secrets: [],
             vaultPurpose: null,
@@ -395,19 +329,141 @@ describe('AutomationEditorScreen — edit mode', () => {
       ),
     });
     const el = await mount(props);
-
     await act(async () =>
-      tab(el, 'Connectors').dispatchEvent(new MouseEvent('click', { bubbles: true })),
+      button(el, 'Save changes').dispatchEvent(new MouseEvent('click', { bubbles: true })),
     );
-    expect(el.textContent).toContain('Nothing declared yet');
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        connections: [
+          {
+            connectionId: 'conn-load-1',
+            kind: 'pull.github',
+            label: 'GitHub · personal',
+          },
+        ],
+      }),
+    );
   });
 
-  it('cancels back out via onCancel', async () => {
-    const props = makeProps({ loadData: vi.fn().mockResolvedValue(editData()) });
+  it('selecting a catalog row with a live connection binds connectionId on save', async () => {
+    const loadConnectorCatalog = vi.fn().mockResolvedValue([
+      {
+        allowedHosts: ['api.github.com'],
+        connection: {
+          connectionId: 'conn-sel-9',
+          health: 'ok' as const,
+          label: 'GitHub · work',
+        },
+        credKind: 'api_key' as const,
+        key: 'github:pull.github',
+        kind: 'pull.github',
+        name: 'GitHub',
+        providerId: 'github',
+        providerName: 'GitHub',
+        setup: [],
+        templateId: 'github-pull',
+        tone: 'github',
+      },
+    ]);
+    const props = makeProps({ loadConnectorCatalog });
     const el = await mount(props);
+    setValue(el.querySelector('input[aria-label="Name"]') as HTMLInputElement, 'Bound auto');
+
+    const connectorsBtn = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Connectors'),
+    ) as HTMLButtonElement;
+    await act(async () => connectorsBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const main = el.querySelector(
+      '[data-testid="automation-connectors-picker"] [data-kind="pull.github"] .connPickerMain',
+    ) as HTMLButtonElement;
+    await act(async () => main.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await act(async () =>
-      button(el, 'Cancel').dispatchEvent(new MouseEvent('click', { bubbles: true })),
+      button(el, 'Create automation').dispatchEvent(new MouseEvent('click', { bubbles: true })),
     );
-    expect(props.onCancel).toHaveBeenCalled();
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        connections: [
+          {
+            connectionId: 'conn-sel-9',
+            kind: 'pull.github',
+            label: 'GitHub · work',
+          },
+        ],
+        name: 'Bound auto',
+      }),
+    );
+  });
+
+  it('Connect form success binds configureConnection connectionId into onSave', async () => {
+    const base = {
+      allowedHosts: ['api.github.com'],
+      credKind: 'api_key' as const,
+      key: 'github:pull.github',
+      kind: 'pull.github',
+      name: 'GitHub',
+      providerId: 'github',
+      providerName: 'GitHub',
+      setup: [] as string[],
+      templateId: 'github-pull',
+      tone: 'github',
+    };
+    const configureConnection = vi.fn().mockResolvedValue({ connectionId: 'conn-new-42' });
+    const loadConnectorCatalog = vi
+      .fn()
+      .mockResolvedValueOnce([{ ...base, connection: null }])
+      .mockResolvedValue([
+        {
+          ...base,
+          connection: { connectionId: 'conn-new-42', health: 'ok' as const, label: 'GitHub' },
+        },
+      ]);
+    const props = makeProps({ configureConnection, loadConnectorCatalog });
+    const el = await mount(props);
+    setValue(el.querySelector('input[aria-label="Name"]') as HTMLInputElement, 'After connect');
+    const open = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Connectors'),
+    ) as HTMLButtonElement;
+    await act(async () => open.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () =>
+      [...el.querySelectorAll('button')]
+        .find((b) => b.textContent === 'Connect')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true })),
+    );
+    const apiKey = [
+      ...(el
+        .querySelector('[data-testid="automation-connectors-picker"]')
+        ?.querySelectorAll('input') ?? []),
+    ].find((i) => (i as HTMLInputElement).type === 'password') as HTMLInputElement | undefined;
+    expect(apiKey).toBeTruthy();
+    setValue(apiKey!, 'ghp_test_token');
+    const formSubmit = [...el.querySelectorAll('button')].find(
+      (b) =>
+        b.textContent === 'Save connection' ||
+        b.textContent === 'Authorize & save' ||
+        b.textContent === 'Save',
+    );
+    await act(async () => formSubmit?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(configureConnection).toHaveBeenCalled();
+    await act(async () =>
+      button(el, 'Create automation').dispatchEvent(new MouseEvent('click', { bubbles: true })),
+    );
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        connections: [
+          expect.objectContaining({ connectionId: 'conn-new-42', kind: 'pull.github' }),
+        ],
+        name: 'After connect',
+      }),
+    );
   });
 });

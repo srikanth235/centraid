@@ -6,6 +6,7 @@ import { vaultForTriggers } from './AutomationEditorRoute.js';
 // importing the route doesn't need a live gateway. (`vi.mock` is hoisted above
 // the imports at transform time — same mock seam every other route test uses.)
 vi.mock('../../../gateway-client.js', () => ({}));
+vi.mock('../../../assist-oauth-handoff.js', () => ({}));
 
 describe('vaultForTriggers', () => {
   it('returns undefined when no data/condition trigger contributes an entity', () => {
