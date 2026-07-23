@@ -163,11 +163,18 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
       if (!isAllowed(target) || deps.vaultName(target) === undefined) {
         return sendJson(res, 404, { error: 'not_found' });
       }
-      const callerEnrollment = callerKey ? deps.enrollments.get(callerKey, target) : undefined;
-      if (callerEnrollment?.trust === 'readonly') {
+      // Minting a pairing ticket ENROLLS a new device — an admin act. Per the
+      // Phase-7 model (SECURITY.md: "admin capability is the owner tier") only
+      // the landlord mints: the loopback/admin plane (no device proof,
+      // `callerKey === undefined`) or an enrolled `owner` device. A
+      // `full`/`readonly` device cannot delegate enrollment or promote peers;
+      // the box's filesystem-anchored CLI (`centraid-gateway devices pair`) is
+      // the fallback. `isAllowed(target)` above already proved a device caller
+      // is enrolled in `target`, so its enrollment resolves here.
+      if (callerKey !== undefined && deps.enrollments.get(callerKey, target)?.trust !== 'owner') {
         return sendJson(res, 403, {
-          error: 'readonly_device',
-          message: 'read-only devices cannot mint pairing tickets',
+          error: 'not_owner',
+          message: 'only the owner device can mint pairing tickets',
         });
       }
       const trust = body.trust === undefined ? 'full' : body.trust;
@@ -247,6 +254,24 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
     const target = deps.enrollments.list().find((row) => row.enrollmentId === enrollmentId);
     if (target && !isAllowed(target.vaultId)) {
       return sendJson(res, 404, { error: 'not_found' });
+    }
+
+    // Revoking a device is an admin act: a device may always unpair ITSELF, but
+    // revoking a DIFFERENT device is reserved for the landlord (loopback/admin
+    // plane, no device proof) or an `owner` device (SECURITY.md: admin
+    // capability is the owner tier). This stops a compromised/stolen `full`
+    // device from revoking the owner or its peers. `isAllowed` above already
+    // proved a device caller shares `target`'s vault, so its trust resolves.
+    if (
+      target &&
+      callerKey !== undefined &&
+      callerKey !== target.endpointId &&
+      deps.enrollments.get(callerKey, target.vaultId)?.trust !== 'owner'
+    ) {
+      return sendJson(res, 403, {
+        error: 'not_owner',
+        message: 'only the owner device can revoke another device',
+      });
     }
 
     const removed = deps.enrollments.revoke(enrollmentId);

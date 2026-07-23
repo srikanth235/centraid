@@ -317,6 +317,57 @@ offline render none → full.
   independent vault cases moved to
   `packages/gateway/src/cli/vault-admin.test.ts` while endpoint tests retain
   their shared-file sequencing.
+
+- **Post-review fixes (second-agent code review of PR #516)**: four findings
+  were raised; each was independently verified against the code/build before
+  acting.
+  - **[owner tier didn't gate device-admin — accepted, code hardened to match
+    SECURITY.md]** `devices-routes.ts` gated ticket-mint on "not readonly" and
+    left revoke ungated, so any acting `full` device could enrol peers or revoke
+    the owner — contradicting SECURITY.md's claim that "admin capability is the
+    `owner` tier." (The route authz itself was unchanged from `main`; Phase 7
+    introduced the *claim* without wiring the gate.) Fixed by gating **mint** and
+    **revoke-of-another-device** on `owner`; a device may always unpair itself;
+    the loopback/admin plane and the filesystem CLI are unaffected (the recovery
+    path for a lost sole-owner device). `enrollment-store.ts` + SECURITY.md
+    comments corrected from "a future admin-only surface can gate on it" to the
+    now-enforced behaviour. Tests: `devices-routes.test.ts` gains `full`→403 mint
+    and revoke-peer cases plus a self-revoke-allowed case.
+  - **[offline precache missed inline chunks — confirmed bug, fixed]** The
+    `sw.js` install-time crawler matched only absolute `/assets/*.js`, but with
+    the web app's default `base:'/'` Vite emits lazy chunk names as RELATIVE
+    literals (`assets/app-inline-….js`) and also emits 8 `app-inline-….css`
+    chunks. Verified against the real build: the old regex matched **0 of 16**
+    inline chunks. Fixed the regex to match relative+absolute and `.js`+`.css`,
+    normalise to the absolute request URL, and cache CSS leaves — **16/16** now
+    precache, restoring first-open-offline for never-opened apps.
+  - **[boot-JS regression ~12% — confirmed, reduced]** `inline-blob-images.ts`
+    (eager via `InlineAppRoute` → `App`) imported `authorizeBlobUrl` from
+    `kit-inline.ts`, a barrel (`export *` of the full served kit), dragging the
+    whole kit into the boot chunk (321,059 B gz, exactly as reported).
+    `authorizeBlobUrl` needs only the authed gateway client, so it was extracted
+    to a leaf module `blob-auth.ts`; `kit-inline` re-exports it (served-kit
+    consumers unchanged). Boot chunk → **308,360 B gz** (−12.7 KB). The residual
+    over the pre-#505 baseline is legitimate new inline-shell code, not the kit.
+  - **[builder forces bundled apps to iframe — working as designed, documented]**
+    `builderEnabled ? undefined : inlineAppLoader(appId)` routes every bundled
+    app through the served path when the builder is on. This is deliberate: the
+    builder can edit a bundled app's code and only the served path reflects the
+    edit; the inline loader would paint stale bundled source. Kept as-is (the
+    reviewer's "keep bundled apps inline" would show stale code post-edit); the
+    tradeoff — a builder user loses inline/offline for bundled apps while builder
+    is enabled (power-user, off-by-default) — is now documented at the decision
+    site. A per-app "code-store override" signal is the proper future fix and
+    belongs with the builder edit model, not this render switch.
+  - Files touched by this review response:
+    `packages/gateway/src/routes/devices-routes.ts`,
+    `packages/gateway/src/routes/devices-routes.test.ts`,
+    `packages/gateway/src/serve/enrollment-store.ts`,
+    `apps/web/public/sw.js`,
+    `packages/client/src/react/blueprints/blob-auth.ts` (new leaf module),
+    `packages/client/src/react/blueprints/kit-inline.ts`,
+    `packages/client/src/react/blueprints/inline-blob-images.ts`,
+    `packages/client/src/react/shell/App.tsx`, `SECURITY.md`.
 - **Governance file-coverage crosswalk**: the Phase 7 inventory also includes
   `apps/desktop/src/main/detached-gateway-core.test.ts`,
   `apps/desktop/src/main/ipc.ts`, `apps/desktop/src/main/local-gateway.ts`,
@@ -550,3 +601,5 @@ bash .governance/run.sh
 | claude-code-3f73ae52-798-1784741222-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-fable-5 | 4 | 1105 | 296526 | 669 | 1778 | 0.3438 | 1291 | 1451234 | 163345122 | 520895 | feat(app-engine): app-scoped RPC routes replace the _tool plane (#505)Phase 5: / |
 | codex-019f8b0c-c31-1784746693-1 | codex | 019f8b0c-c314-7ac0-bc80-6ccbdb4efa31 | #505 | gpt-5.6-sol | 397895 | 0 | 20473344 | 32711 | 430606 | 6.6037 | 397895 | 0 | 20473344 | 32711 | fix(ci): repair PR build failures (#505) -m Align isolated blueprint React typin |
 | codex-019f8b0c-c31-1784746742-1 | codex | 019f8b0c-c314-7ac0-bc80-6ccbdb4efa31 | #505 | gpt-5.6-sol | 3215 | 0 | 377856 | 345 | 3560 | 0.1077 | 401110 | 0 | 20851200 | 33056 | fix(ci): repair PR build failures (#505) -m Align isolated blueprint React typin |
+| claude-code-3f73ae52-798-1784777508-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-opus-4-8 | 3020 | 3502689 | 362336428 | 1296083 | 4801792 | 235.4772 | 4311 | 4953923 | 525681550 | 1816978 |  |
+| claude-code-3f73ae52-798-1784777626-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-opus-4-8 | 16 | 26379 | 1648586 | 6018 | 32413 | 1.1397 | 4327 | 4980302 | 527330136 | 1822996 |  |

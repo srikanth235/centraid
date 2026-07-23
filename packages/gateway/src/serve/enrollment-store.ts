@@ -59,10 +59,13 @@ export interface DeviceEnrollment {
    * `owner` (issue #505 phase 7) is the LANDLORD tier — the per-device,
    * revocable replacement for the retired shared admin token. It is a
    * superset of `full` for every mutation/replica gate (`actingTrust`
-   * below treats them identically); it exists as its own value so the
-   * roster can name the primary device and a future admin-only surface can
-   * gate on it. Granted through the pairing ceremony (the first device
-   * paired from the local console), never minted as a bearer string.
+   * below treats them identically), but the DEVICE-ADMIN surface gates on
+   * it specifically: minting pairing tickets and revoking another device
+   * require `owner` (see `routes/devices-routes.ts`), so a compromised
+   * `full` device cannot enrol peers or revoke the primary device. Granted
+   * through the pairing ceremony (the first device paired from the local
+   * console), never minted as a bearer string; the box's filesystem-anchored
+   * CLI remains the fallback for a lost sole-owner device.
    */
   trust: DeviceTrust;
   /**

@@ -35,10 +35,15 @@ import {
   sha256File,
 } from '@centraid/blueprints/kit/kit.js';
 import { auth, authHeaders, doFetch } from '../../gateway-client-core.js';
+import { authorizeBlobUrl, BLOB_PREFIX } from './blob-auth.js';
 
 export * from '@centraid/blueprints/kit/kit.js';
+// `authorizeBlobUrl` moved to the leaf `blob-auth.js` module so importing it
+// no longer pulls the full kit barrel into a caller's chunk (boot-size fix).
+// Re-exported here so served-kit consumers that reach it through the `./kit.js`
+// → kit-inline alias are unchanged.
+export { authorizeBlobUrl } from './blob-auth.js';
 
-const BLOB_PREFIX = '/centraid/_vault/blobs';
 const LINKS_ROUTE = '/centraid/_vault/links';
 const SUN_SVG =
   '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
@@ -89,26 +94,6 @@ interface AttachmentLike {
 }
 
 const stripObjectUrls = new WeakMap<HTMLElement, string[]>();
-
-/**
- * Fetch a `/_vault/blobs/…` pathname through the authed gateway client and hand
- * back a `blob:` object URL for it (or null if the fetch is refused). The caller
- * OWNS the returned URL's lifecycle and must `URL.revokeObjectURL` it. Shared by
- * `renderAttachments` (attachment strips) and `inline-blob-images` (the generic
- * grid/lightbox/cover authorizer), so both reach vault bytes the same way.
- * Consumed by the sibling inline-blob-images module (issue #505).
- * @public
- */
-export async function authorizeBlobUrl(pathname: string): Promise<string | null> {
-  try {
-    const { baseUrl, token } = await auth();
-    const res = await doFetch(baseUrl, pathname, { headers: authHeaders(token) });
-    if (!res.ok) return null;
-    return URL.createObjectURL(await res.blob());
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Render attachment tiles, then authorise any `/_vault/blobs/…` bytes. Inline,

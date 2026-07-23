@@ -190,6 +190,56 @@ test('DELETE of an enrollment outside a device caller’s vault → 404 and the 
   expect(enrollments.list().some((e) => e.enrollmentId === foreign.enrollmentId)).toBe(true);
 });
 
+test('DELETE of a PEER by a non-owner device → 403; the peer survives', async () => {
+  const { enrollments, deviceTokens, tickets } = await makeStores();
+  // A plain `full` laptop and the primary `owner` device share one vault.
+  enrollments.enroll({
+    endpointId: 'full-key',
+    vaultId: 'vault-a',
+    label: 'Laptop',
+    trust: 'full',
+  });
+  const owner = enrollments.enroll({
+    endpointId: 'owner-key',
+    vaultId: 'vault-a',
+    label: 'Primary',
+    trust: 'owner',
+  });
+  const base = await startHandlerServer(
+    makeDevicesRouteHandler({ enrollments, deviceTokens, tickets, vaultName, endpointTicket }),
+  );
+
+  // The full device tries to revoke the owner — refused; the owner row survives.
+  const res = await fetch(`${base}/centraid/_gateway/devices/${owner.enrollmentId}`, {
+    method: 'DELETE',
+    headers: { [AUTHED_DEVICE_HEADER]: 'full-key' },
+  });
+  expect(res.status).toBe(403);
+  expect(await res.json()).toMatchObject({ error: 'not_owner' });
+  expect(enrollments.isEnrolled('owner-key')).toBe(true);
+});
+
+test('DELETE of ITSELF by a non-owner device is always allowed (unpair this device)', async () => {
+  const { enrollments, deviceTokens, tickets } = await makeStores();
+  const self = enrollments.enroll({
+    endpointId: 'full-key',
+    vaultId: 'vault-a',
+    label: 'Laptop',
+    trust: 'full',
+  });
+  const base = await startHandlerServer(
+    makeDevicesRouteHandler({ enrollments, deviceTokens, tickets, vaultName, endpointTicket }),
+  );
+
+  const res = await fetch(`${base}/centraid/_gateway/devices/${self.enrollmentId}`, {
+    method: 'DELETE',
+    headers: { [AUTHED_DEVICE_HEADER]: 'full-key' },
+  });
+  expect(res.status).toBe(200);
+  expect((await res.json()) as unknown).toEqual({ removed: true });
+  expect(enrollments.isEnrolled('full-key')).toBe(false);
+});
+
 test('DELETE of a missing id is idempotent: { removed: false }', async () => {
   const { enrollments, deviceTokens, tickets } = await makeStores();
   const base = await startHandlerServer(
@@ -303,9 +353,10 @@ test('POST /ticket as admin mints a decodable ticket for the x-centraid-vault va
   expect(active[0]!.ticketId).toBe(decoded!.t);
 });
 
-test('POST /ticket as a device: enrolled vault mints, foreign vault → 404', async () => {
+test('POST /ticket as an owner device: enrolled vault mints, foreign vault → 404', async () => {
   const { enrollments, deviceTokens, tickets } = await makeStores();
-  enrollments.enroll({ endpointId: 'me-key', vaultId: 'vault-a', label: 'Mine' });
+  // Minting enrolls a new device — an admin act, so the caller must be `owner`.
+  enrollments.enroll({ endpointId: 'me-key', vaultId: 'vault-a', label: 'Mine', trust: 'owner' });
   const base = await startHandlerServer(
     makeDevicesRouteHandler({ enrollments, deviceTokens, tickets, vaultName, endpointTicket }),
   );
@@ -330,7 +381,7 @@ test('POST /ticket as a device: enrolled vault mints, foreign vault → 404', as
   expect(tickets.listActive().every((t) => t.vaultId === 'vault-a')).toBe(true);
 });
 
-test('POST /ticket binds owner-selected trust and refuses delegation from a read-only device', async () => {
+test('POST /ticket binds admin-selected trust and refuses delegation from non-owner devices', async () => {
   const { enrollments, deviceTokens, tickets } = await makeStores();
   enrollments.enroll({
     endpointId: 'readonly-key',
@@ -338,30 +389,46 @@ test('POST /ticket binds owner-selected trust and refuses delegation from a read
     label: 'Viewer',
     trust: 'readonly',
   });
+  // A plain acting device: still NOT the owner, so it cannot mint either.
+  enrollments.enroll({
+    endpointId: 'full-key',
+    vaultId: 'vault-a',
+    label: 'Laptop',
+    trust: 'full',
+  });
   const base = await startHandlerServer(
     makeDevicesRouteHandler({ enrollments, deviceTokens, tickets, vaultName, endpointTicket }),
   );
 
-  const owner = await fetch(`${base}/centraid/_gateway/devices/ticket`, {
+  // The landlord/admin plane (no device proof) mints, binding the ticket's tier.
+  const admin = await fetch(`${base}/centraid/_gateway/devices/ticket`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ vaultId: 'vault-a', trust: 'readonly' }),
   });
-  expect(owner.status).toBe(200);
+  expect(admin.status).toBe(200);
   expect(tickets.listActive()).toEqual([
     expect.objectContaining({ vaultId: 'vault-a', trust: 'readonly' }),
   ]);
 
-  const delegated = await fetch(`${base}/centraid/_gateway/devices/ticket`, {
+  // A read-only device cannot delegate enrollment…
+  const fromReadonly = await fetch(`${base}/centraid/_gateway/devices/ticket`, {
     method: 'POST',
-    headers: {
-      [AUTHED_DEVICE_HEADER]: 'readonly-key',
-      'Content-Type': 'application/json',
-    },
+    headers: { [AUTHED_DEVICE_HEADER]: 'readonly-key', 'Content-Type': 'application/json' },
     body: JSON.stringify({ vaultId: 'vault-a', trust: 'full' }),
   });
-  expect(delegated.status).toBe(403);
-  expect(await delegated.json()).toMatchObject({ error: 'readonly_device' });
+  expect(fromReadonly.status).toBe(403);
+  expect(await fromReadonly.json()).toMatchObject({ error: 'not_owner' });
+
+  // …and neither can an ordinary `full` device (admin capability is owner-only).
+  const fromFull = await fetch(`${base}/centraid/_gateway/devices/ticket`, {
+    method: 'POST',
+    headers: { [AUTHED_DEVICE_HEADER]: 'full-key', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ vaultId: 'vault-a', trust: 'full' }),
+  });
+  expect(fromFull.status).toBe(403);
+  expect(await fromFull.json()).toMatchObject({ error: 'not_owner' });
+
   expect(tickets.listActive()).toHaveLength(1);
 });
 

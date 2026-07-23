@@ -17,7 +17,10 @@
 // swapped best-effort after the fact. One install per app mount (from
 // InlineAppRoute), so every inline app benefits, not just photos. Every object
 // URL is tracked and revoked on teardown and on replacement, so nothing leaks.
-import { authorizeBlobUrl } from './kit-inline.js';
+// Import from the leaf `blob-auth.js` module, NOT `kit-inline.js` — the latter
+// is a barrel that would drag the entire served kit into the shell's boot chunk
+// (this module is eager via InlineAppRoute → App). See blob-auth.ts.
+import { authorizeBlobUrl } from './blob-auth.js';
 
 const BLOB_PREFIX = '/centraid/_vault/blobs';
 // `background-image: url(/centraid/_vault/blobs/…)` — optional quotes, captured.

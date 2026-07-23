@@ -669,8 +669,16 @@ export default function App(): JSX.Element {
           const ua = userApps.find((a) => a.id === id);
           const appId = ua?.centraidAppId ?? app.id;
           // Bundled apps converted to an inline route render in-shell (no
-          // iframe); the builder still needs the served/opaque document, so
-          // keep the AppFrame path whenever the builder is on (issue #505).
+          // iframe). When the builder is ON we deliberately fall back to the
+          // served/opaque document for ALL apps: the builder can edit a bundled
+          // app's code (into the vault code store), and only the served path
+          // reflects those edits — the inline loader imports the statically
+          // BUNDLED source and would paint stale code. The accepted tradeoff is
+          // that a builder user loses inline/offline rendering for bundled apps
+          // while the builder is enabled (a power-user, off-by-default state);
+          // a per-app "has a code-store override" signal would let us keep
+          // pristine bundled apps inline, but that lives with the builder's edit
+          // model, not here (issue #505; follow-up noted in the receipt).
           const inlineLoader = builderEnabled ? undefined : inlineAppLoader(appId);
           if (inlineLoader) {
             return (
