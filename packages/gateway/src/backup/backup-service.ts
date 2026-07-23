@@ -53,7 +53,7 @@ import {
   type RecoveryKitState,
 } from './backup-state.js';
 import type { RecoveryKitStateStore } from './recovery-kit-state.js';
-import { assembleSourceEntries, resetStagingDir, type AssembleOptions } from './backup-sources.js';
+import { assembleSourceEntries, type AssembleOptions } from './backup-sources.js';
 import type { HealthRegistry } from '../serve/health-registry.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
 import type { VaultPlane } from '../serve/vault-plane.js';
@@ -132,7 +132,7 @@ export function buildBackupProvider(config: BackupProviderConfig): BackupProvide
 export interface BackupServiceOptions {
   /** Static daemon/CLI configuration. When omitted, the active provider storage connection is resolved live. */
   config?: BackupConfig;
-  /** `<dataDir>/backup` — holds `keyring.json`, `state.json`, `staging/`. */
+  /** `<dataDir>/backup` — holds `keyring.json`, `state.json`, `code-bundle/`. */
   backupDir: string;
   vaults: VaultRegistry;
   health: HealthRegistry;
@@ -686,12 +686,15 @@ export class BackupService {
     // only thing that makes deleting the `wal/tick/` prefix visible at all.
     const walTipTickMs = shipper ? this.confirmedMarkerTip(shipper, target) : undefined;
 
-    const stagingDir = path.join(this.backupDir, 'staging', vaultId);
-    await resetStagingDir(stagingDir);
+    // The code-store bundle is the only artifact assembly writes, and it lives
+    // in a PERSISTENT per-vault dir (never wiped) so it survives between ticks
+    // and only re-bundles when the store's refs move. Everything else is read in
+    // place — there is no ephemeral staging dir.
+    const bundleDir = path.join(this.backupDir, 'code-bundle', vaultId);
     try {
       const entries = await this.assembleEntries({
         plane,
-        stagingDir,
+        bundleDir,
         ...(walTipTickMs !== undefined ? { walTipTickMs } : {}),
         log: { info: (m) => this.logger.info(m), warn: (m) => this.logger.warn(m) },
       });
@@ -833,9 +836,10 @@ export class BackupService {
       await saveBackupState(this.backupDir, state);
       this.health.reportError('backups', `vault ${vaultId}: backup failed: ${message}`);
       throw err;
-    } finally {
-      await resetStagingDir(stagingDir).catch(() => undefined);
     }
+    // No staging teardown: the code bundle lives in a persistent per-vault dir
+    // that is DELIBERATELY kept between ticks (a failed run leaves the standing
+    // bundle for the next tick's ref-digest check to reuse or supersede).
   }
 
   /**

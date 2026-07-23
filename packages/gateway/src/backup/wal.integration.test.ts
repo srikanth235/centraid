@@ -1022,7 +1022,7 @@ test('a no-change run whose PREVIOUS manifest still anchors the live pair DOES c
   const keyring = await loadKeyring(path.join(f.backupDir, 'keyring.json'));
   const entries = await assembleSourceEntries({
     plane: f.plane,
-    stagingDir: await tempDir('wal-e2e-oob-staging'),
+    bundleDir: await tempDir('wal-e2e-oob-bundle'),
     log: {},
   });
   await createSnapshot({

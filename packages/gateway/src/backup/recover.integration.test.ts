@@ -33,6 +33,8 @@ import { startFakeProviderServer } from '@centraid/backup/dist/testing/fake-prov
 import { FsBlobStore, ReplicaIndex } from '@centraid/vault';
 import { openVaultRegistry } from '../serve/vault-registry.js';
 import type { VaultPlane } from '../serve/vault-plane.js';
+import { WorktreeStore } from '../worktree-store/worktree-store.js';
+import { run } from '../worktree-store/git.js';
 import { HealthRegistry } from '../serve/health-registry.js';
 import { BackupService } from './backup-service.js';
 import { daemonLayoutFor } from '../cli/paths.js';
@@ -114,8 +116,29 @@ interface MachineA {
   thumbs: string[];
   itemId: string;
   grantId: string;
+  /** The app published into machine A's code store — must survive recovery (issue #517). */
+  appId: string;
   serverUrl: string;
   apiKey: string;
+}
+
+/** Publish a real app into the vault's code store so the snapshot's git bundle
+ *  carries app code the recovery must bring back (issue #517). Returns its id. */
+async function publishSeedApp(plane: VaultPlane): Promise<string> {
+  const appId = 'todo';
+  const store = new WorktreeStore({ root: plane.codeStoreRoot });
+  await store.init();
+  const session = await store.openSession('seed-session');
+  const appDir = path.join(session.worktreePath, 'apps', appId);
+  await fs.mkdir(path.join(appDir, 'actions'), { recursive: true });
+  await fs.writeFile(
+    path.join(appDir, 'app.json'),
+    JSON.stringify({ id: appId, name: 'Todo' }, null, 2),
+  );
+  await fs.writeFile(path.join(appDir, 'index.html'), '<h1>Todo</h1>\n');
+  await store.publish({ sessionId: 'seed-session', appId, message: 'seed v1' });
+  await store.closeSession('seed-session');
+  return appId;
 }
 
 /** Stand up "machine A": seed a real vault, back it up against the fake HTTP
@@ -182,6 +205,10 @@ async function seedMachineA(
   // vault bricks; the approved item + grant are what the quarantine parks.
   const { itemId, grantId } = seedSealedOutbox(plane);
 
+  // A published app in the code store — the snapshot's git bundle carries it,
+  // and a correct recovery must rehydrate the bare repo (issue #517).
+  const appId = await publishSeedApp(plane);
+
   // Machine A's vault BELIEVES originals[0] + originals[1] are durable on the
   // remote cas tier (marked 'cas' in blob_replica) — the belief the snapshot
   // carries and the R5 adopt-time reconcile checks against live inventory.
@@ -214,6 +241,7 @@ async function seedMachineA(
     thumbs,
     itemId,
     grantId,
+    appId,
     serverUrl: server.url,
     apiKey: server.apiKey,
   };
@@ -263,6 +291,20 @@ test('a blank machine recovers a whole vault from nothing but the kit and the ap
   // — the recovered vault has sealed secrets, so a wrong placement would brick
   // the mount below.
   expect(existsSync(path.join(layout.vaultDir, 'keys', `${a.vaultId}.sealkey`))).toBe(true);
+
+  // The app code store was rehydrated from the bundle (issue #517): the bare
+  // repo exists at `<vaultDir>/code/apps.git`, the consumed `apps.bundle` is
+  // gone, the published app's version tag survived, and a fresh WorktreeStore
+  // (the real runtime seam) mounts it and lists the app — a restore that left
+  // an empty code store would return no apps here.
+  const bareDir = path.join(vaultDir, 'code', 'apps.git');
+  expect(existsSync(path.join(bareDir, 'HEAD'))).toBe(true);
+  expect(existsSync(path.join(vaultDir, 'apps.bundle'))).toBe(false);
+  const tags = await run(['tag', '--list'], { cwd: bareDir });
+  expect(tags.split('\n')).toContain(`${a.appId}/v1`);
+  const recoveredStore = new WorktreeStore({ root: path.join(vaultDir, 'code') });
+  await recoveredStore.init();
+  expect(await recoveredStore.listApps()).toEqual([a.appId]);
 
   // 3. Quarantine marker present pre-mount; mounting fires it (item parked,
   //    grant revoked). Mounting a sealed vault also proves the seal key opens.
