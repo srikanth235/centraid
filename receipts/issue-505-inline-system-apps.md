@@ -484,6 +484,11 @@ tally, agenda, people, notes, docs, locker, photos) onto the single inline
   dropping the coverage): it bundles and mounts each query-free `app-root`
   through workspace React, preserving the eight behavioral boot tests without
   recreating a served runtime.
+- **Desktop app-open E2E realigned**:
+  `apps/desktop/tests/e2e/appview-templates-insights.spec.ts` now asserts that
+  bundled Notes opens in `inline-app-view` with no app iframe. The previous
+  `app-view` wait was the only failure in the remote desktop suite; the focused
+  spec passes 6 tests with 3 intentional skips.
 - **`manifest.json` regenerated** for the new file set.
 
 The generic app-engine static transport remains framework-neutral for future
@@ -748,3 +753,4 @@ for six-package transform contention.
 | codex-019f8cc4-6a5-1784791367-1 | codex | 019f8cc4-6a52-7443-852b-04751467f15b | #505 | gpt-5.6-sol | 34703 | 0 | 3074560 | 4533 | 39236 | 0.9234 | 2516105 | 0 | 73063680 | 208515 | chore(ci): retrigger PR synchronization (#505) |
 | codex-019f8cc4-6a5-1784791415-1 | codex | 019f8cc4-6a52-7443-852b-04751467f15b | #505 | gpt-5.6-sol | 2312 | 0 | 295424 | 332 | 2644 | 0.0846 | 2518417 | 0 | 73359104 | 208847 | chore(ci): retrigger PR synchronization (#505) -m governance: allow-doc-integrit |
 | codex-019f8cc4-6a5-1784791669-1 | codex | 019f8cc4-6a52-7443-852b-04751467f15b | #505 | gpt-5.6-sol | 18383 | 0 | 2440192 | 2751 | 21134 | 0.6973 | 2536800 | 0 | 75799296 | 211598 | chore(ci): schedule PR checks (#505) -m governance: allow-doc-integrity receipts |
+| codex-019f8cc4-6a5-1784793127-1 | codex | 019f8cc4-6a52-7443-852b-04751467f15b | #505 | gpt-5.6-sol | 139178 | 0 | 13562368 | 13266 | 152444 | 3.9375 | 2675978 | 0 | 89361664 | 224864 | test(desktop): expect bundled apps to render inline (#505) -m governance: allow- |

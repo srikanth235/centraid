@@ -43,17 +43,18 @@ async function openApp(
   await page.reload();
   await waitForHome(page);
   await openTile(page, id);
-  await page.getByTestId('app-view').waitFor({ state: 'visible' });
+  await page.getByTestId('inline-app-view').waitFor({ state: 'visible' });
 }
 
 // ─────────────────────────── §7 app view + chat ───────────────────────────
 
-test('7.1 — opening an app shows the iframe; back returns home', async () => {
+test('7.1 — opening a system app renders inline; back returns home', async () => {
   gateway.state.apps = [appEntry({ id: 'notes', name: 'Notes' })];
   const { app, page } = await launchApp(env);
   try {
     await openApp(page, 'notes', 'Notes');
-    await expect(page.locator('iframe[data-centraid-app]')).toHaveCount(1);
+    await expect(page.getByTestId('inline-app-view')).toBeVisible();
+    await expect(page.locator('iframe[data-centraid-app]')).toHaveCount(0);
     await page.keyboard.press('Meta+[');
     await waitForHome(page);
     await expect(page.getByTestId('apps-grid')).toBeVisible();
