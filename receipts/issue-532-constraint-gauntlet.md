@@ -78,6 +78,16 @@
 
 - `scripts/test-report/vitest.config.ts` includes `scripts/mutation/**/*.test.mjs`
 - `knip.json` ignores Stryker packages (spawned by `scripts/mutation/run.mjs`, not imported)
+
+### Post-merge with origin/main (connectors/oauth)
+
+- Merged `origin/main` (connectors/oauth #525); regenerated `bun.lock` via `bun install`
+- Dropped `@stryker-mutator/api/core` JSDoc type imports from package-local
+  `stryker.config.mjs` (knip unlisted-deps under packages/*)
+- `scripts/mutation/run.mjs` JSDoc param/returns descriptions for oxlint
+- `payload-hash-properties.test.ts`: `toReversed()`, ReplicaValue cast for tsc
+- `custody-properties.test.ts`: 60s per-property timeouts under parallel
+  `test:affected` load; main-combo `numRuns` 32
 - `receipts/issue-532-constraint-gauntlet.md` (this receipt)
 
 ### Receipt + PR linking #532

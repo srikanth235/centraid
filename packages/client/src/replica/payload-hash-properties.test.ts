@@ -9,7 +9,8 @@ const nodeDigest: ReplicaDigest = (input) =>
   Promise.resolve(createHash('sha256').update(input, 'utf8').digest('hex'));
 
 /** JSON-safe finite values (no NaN/Infinity, which fail closed in the hasher). */
-const jsonSafe: fc.Arbitrary<ReplicaValue> = fc.letrec((tie) => ({
+// Cast: fc.dictionary/letrec widen nested records to Record<string, unknown>.
+const jsonSafe = fc.letrec((tie) => ({
   value: fc.oneof(
     { depthSize: 'small', withCrossShrink: true },
     fc.constant(null),
@@ -20,7 +21,7 @@ const jsonSafe: fc.Arbitrary<ReplicaValue> = fc.letrec((tie) => ({
     fc.array(tie('value'), { maxLength: 4 }),
     fc.dictionary(fc.stringMatching(/^[a-z]{1,8}$/), tie('value'), { maxKeys: 4 }),
   ),
-})).value;
+})).value as fc.Arbitrary<ReplicaValue>;
 
 /**
  * Payload-hash properties (#532 core expansion — kills sort/key mutants).
@@ -39,7 +40,7 @@ describe('replica payload-hash property', () => {
         (obj) => {
           const keys = Object.keys(obj);
           const reversed: Record<string, number> = {};
-          for (const k of [...keys].reverse()) reversed[k] = obj[k]!;
+          for (const k of [...keys].toReversed()) reversed[k] = obj[k]!;
           expect(canonicalJson(reversed)).toBe(canonicalJson(obj));
         },
       ),
@@ -162,7 +163,7 @@ describe('replica payload-hash property', () => {
   test('array order is significant', async () => {
     await fc.assert(
       fc.asyncProperty(fc.array(fc.integer(), { minLength: 2, maxLength: 6 }), async (arr) => {
-        const rev = [...arr].reverse();
+        const rev = [...arr].toReversed();
         fc.pre(JSON.stringify(arr) !== JSON.stringify(rev));
         const h1 = await intentPayloadHash(
           { appId: 'notes', action: 'create', input: arr },

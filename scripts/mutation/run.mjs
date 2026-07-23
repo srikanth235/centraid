@@ -125,9 +125,9 @@ export function enforceMutationFloors(scores, floors) {
 /**
  * Select seeds whose watch paths intersect the changed file set.
  * @param {string[]} changedFiles Paths relative to repo root.
- * @param {import('./seeds.mjs').MutationSeed[]} [seeds]
- * @param {string[]} [globalWatch]
- * @returns {import('./seeds.mjs').MutationSeed[]}
+ * @param {import('./seeds.mjs').MutationSeed[]} [seeds] Seed list to filter (defaults to MUTATION_SEEDS).
+ * @param {string[]} [globalWatch] Paths that force every seed when changed.
+ * @returns {import('./seeds.mjs').MutationSeed[]} Seeds that need re-mutation for the change set.
  */
 export function selectAffectedSeeds(
   changedFiles,
@@ -145,7 +145,7 @@ export function selectAffectedSeeds(
  * List files changed vs a git base ref (triple-dot: merge-base…HEAD).
  * @param {string} base Git ref (e.g. origin/main).
  * @param {string} [cwd] Repo root.
- * @returns {string[]}
+ * @returns {string[]} Paths relative to the repo root.
  */
 export function listChangedFiles(base, cwd = root) {
   try {
@@ -174,8 +174,9 @@ export function listChangedFiles(base, cwd = root) {
 }
 
 /**
- * @param {string} [floorsPath]
- * @returns {Record<string, unknown>}
+ * Load mutation score floors from disk.
+ * @param {string} [floorsPath] Absolute path to mutation-floors.json.
+ * @returns {Record<string, unknown>} Parsed floors object, or empty when missing.
  */
 export function loadMutationFloors(floorsPath = path.join(root, 'tests/mutation-floors.json')) {
   if (!existsSync(floorsPath)) return {};
@@ -213,7 +214,8 @@ function findStrykerBin() {
 }
 
 /**
- * @param {import('./seeds.mjs').MutationSeed[]} seeds
+ * Run Stryker for each seed and return score rows.
+ * @param {import('./seeds.mjs').MutationSeed[]} seeds Seeds to mutate.
  */
 function runSeeds(seeds) {
   const stryker = findStrykerBin();
