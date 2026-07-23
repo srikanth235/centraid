@@ -96,7 +96,7 @@ test('8.3 — "New automation" opens the editor; the draft is posted on Save', a
       gateway.calls.some((c) => c.method === 'POST' && c.pathname === '/centraid/_automations'),
     ).toBe(false);
 
-    await page.getByPlaceholder('Untitled automation').fill('Inbox Digest');
+    await page.getByRole('textbox', { name: 'Name' }).fill('Inbox Digest');
     await page.getByRole('button', { name: 'Create automation' }).click();
     await expect
       .poll(() =>

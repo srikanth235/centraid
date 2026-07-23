@@ -66,6 +66,7 @@ Automations can bind a concrete connectionId for a connector:
 - `packages/client/src/react/screen-contracts.ts`
 - `packages/client/src/react/shell/routes/templatesData.ts`
 - `packages/client/src/react/shell/routes/templatesData.test.ts`
+- `apps/desktop/tests/e2e/automations.spec.ts` — targets the automation name field by its stable accessible label after the editor copy changed.
 
 Provider presets expose capabilities (syncs/actions):
 
@@ -139,6 +140,7 @@ Receipt + PR: this file `receipts/issue-524-connectors-platform.md` and the PR o
 bun run --filter @centraid/client test -- src/react/shell/routes/connectorPlatform.test.ts src/react/shell/routes/settingsConnectionsData.test.ts src/react/screens/SettingsConnectionsScreen.test.tsx src/react/screens/AutomationEditorScreen.test.tsx src/react/shell/Sidebar.test.tsx
 bun run --filter @centraid/gateway test -- src/routes/connection-providers.test.ts src/routes/connections-routes.test.ts
 bun run --filter @centraid/automation test -- src/fire/connector.test.ts
+bun run --cwd apps/desktop test:e2e -- tests/e2e/automations.spec.ts
 bun run --filter @centraid/client typecheck
 bun run --filter @centraid/gateway typecheck
 bun run --filter @centraid/automation typecheck
@@ -161,6 +163,11 @@ PASS – Checklist matches issue #524 acceptance criteria.
 
 (no rows — no interrupt/correction events recorded for this change set)
 
+### Costs
+
+| cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| codex-019f8e48-8ec-1784814585-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #524 | gpt-5.6-sol | 131313 | 0 | 7711232 | 8230 | 139543 | 2.3795 | 2841599 | 0 | 111222272 | 261813 | test(desktop): use stable automation name selector (#524) |
 ## Steering
 
 **Check 1 — every human-steering event is recorded in ### Steering under ## Accounting**
