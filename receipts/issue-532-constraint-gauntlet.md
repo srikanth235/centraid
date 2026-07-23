@@ -23,7 +23,10 @@
 - `package.json` script `test:mutation`; devDependencies `@stryker-mutator/core`, `@stryker-mutator/vitest-runner`
 - `bun.lock` (lockfile for stryker + fast-check)
 - `.github/workflows/e2e.yml` job `mutation-testing` + artifact `nightly-evidence-mutation`
+  (upload `path: artifacts/` so merge-multiple keeps `artifacts/mutation/scores.json`)
 - `scripts/test-report/generate.mjs` mutation score rows in test-health report
+- `scripts/test-report/validate-nightly-wiring.mjs` requires mutation-testing job +
+  rejects flattened `path: artifacts/mutation/` upload
 - `tests/matrix.json` note `G4.mutation` updated (no longer deferred)
 
 ### `tests/mutation-floors.json` + up-only ratchet
@@ -130,6 +133,11 @@ node scripts/mutation/run.mjs --dry-run
 rg -n 'check:pr:full|test:affected:full|test:diff-coverage' package.json
 rg -n 'test:diff-coverage' .github/workflows/ci.yml
 rg -n 'mutation-testing' .github/workflows/e2e.yml
+
+# Mutation artifact layout (#532 fix): upload path must be artifacts/ so
+# merge-multiple download keeps artifacts/mutation/scores.json for generate.mjs
+bun run test:matrix
+# nightly-wiring includes mutation-testing + rejects path: artifacts/mutation/
 ```
 
 ## Audit

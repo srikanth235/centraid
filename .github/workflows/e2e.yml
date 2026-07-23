@@ -562,11 +562,15 @@ jobs:
       - name: Run Stryker on seed packages
         run: bun run test:mutation
         continue-on-error: true
+      # Upload `artifacts/` (not `artifacts/mutation/`) so merge-multiple download
+      # into the report job's `artifacts/` path keeps `mutation/scores.json` —
+      # same layout as desktop/web/pairing evidence jobs. Uploading the mutation
+      # subdir alone flattens scores.json to the artifact root.
       - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         if: always()
         with:
           name: nightly-evidence-mutation
-          path: artifacts/mutation/
+          path: artifacts/
           retention-days: 14
 
   test-health-report:
