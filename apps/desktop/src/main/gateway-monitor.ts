@@ -51,6 +51,7 @@ import {
 } from './gateway-monitor-core.js';
 import { deriveOutageEvents, type OutageLogEvent } from './gateway-outage-log-core.js';
 import { loadOutageLog, persistOutageEvents } from './gateway-outage-log.js';
+import { pushPowerContext } from './power-context-push.js';
 
 export const GATEWAY_RUNTIME_POLL_MS = 5000;
 /** A hung probe counts as down well before the next tick would queue up. */
@@ -344,6 +345,14 @@ async function tick(): Promise<void> {
       : settings.gatewayUrl
         ? await probeGateway(settings.gatewayUrl, settings.gatewayToken)
         : { at: Date.now(), ok: false, detail: 'gateway URL not resolved yet' };
+  // Piggyback the power-context push (#528 Phase D) on the heartbeat so the
+  // gateway's live host power posture never approaches its 120s staleness
+  // window while the desktop runs. Best-effort and independent of the probe
+  // outcome; a transition event nudges an out-of-band tick for immediacy.
+  if (settings?.gatewayUrl) {
+    void pushPowerContext(settings.gatewayUrl, settings.gatewayToken);
+  }
+
   // Captured before `applyProbe` folds this tick's probe in — the durable
   // outage-log derivation below (issue #351 wave 4) needs the BEFORE value
   // to detect a real transition, same as `applyProbe`'s own `transitioned`
