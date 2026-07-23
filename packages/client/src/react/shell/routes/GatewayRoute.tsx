@@ -1,4 +1,4 @@
-import { type JSX, useEffect, useState } from 'react';
+import { type JSX, useCallback, useEffect, useState } from 'react';
 import {
   createGatewayDeviceTicket,
   getGatewayDeviceWorkStatus,
@@ -87,6 +87,16 @@ export default function GatewayRoute(): JSX.Element {
     }
   };
 
+  // Stable identity so ResourceModeCard does not re-fetch prefs on every
+  // 1s uptime tick (or any other parent re-render).
+  const loadResourceMode = useCallback(
+    async (): Promise<ResourceMode> => parseResourceModePref(await getUserPrefs()),
+    [],
+  );
+  const saveResourceMode = useCallback(async (mode: ResourceMode) => {
+    await saveUserPrefs({ [RESOURCE_MODE_PREF_KEY]: mode });
+  }, []);
+
   if (!snapshot) {
     return (
       <PageScroll>
@@ -121,12 +131,8 @@ export default function GatewayRoute(): JSX.Element {
         loadDeviceWorkStatus={getGatewayDeviceWorkStatus}
         onRestartGateway={() => window.CentraidApi.restartGateway()}
         onExportDiagnostics={() => window.CentraidApi.exportGatewayDiagnostics()}
-        loadResourceMode={async (): Promise<ResourceMode> =>
-          parseResourceModePref(await getUserPrefs())
-        }
-        saveResourceMode={async (mode: ResourceMode) => {
-          await saveUserPrefs({ [RESOURCE_MODE_PREF_KEY]: mode });
-        }}
+        loadResourceMode={loadResourceMode}
+        saveResourceMode={saveResourceMode}
       />
     </PageScroll>
   );

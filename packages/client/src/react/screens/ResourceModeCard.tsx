@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type JSX } from 'react';
+import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
 import { cx } from '../ui/cx.js';
 import styles from './GatewayScreen.module.css';
 import buttonCss from '../ui/Button.module.css';
@@ -56,47 +56,63 @@ export function parseResourceModePref(prefs: Record<string, unknown>): ResourceM
   return 'auto';
 }
 
-export default function ResourceModeCard(props: ResourceModeCardProps): JSX.Element {
+export default function ResourceModeCard({
+  loadMode,
+  saveMode,
+  resolvedClass,
+  activeMode,
+}: ResourceModeCardProps): JSX.Element {
   const [mode, setMode] = useState<ResourceMode>('auto');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedNote, setSavedNote] = useState<string | null>(null);
+  // Sync guard for in-flight loadMode resolves: a late GET must not clobber
+  // an optimistic selection or mid-save mode (Gateway Overview re-renders
+  // every second for uptime counters).
+  const busyRef = useRef(false);
 
   const refresh = useCallback((): void => {
-    void props
-      .loadMode()
+    void loadMode()
       .then((m) => {
+        if (busyRef.current) return;
         setMode(m);
         setError(null);
       })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
-  }, [props]);
+      .catch((err: unknown) => {
+        if (busyRef.current) return;
+        setError(err instanceof Error ? err.message : String(err));
+      });
+  }, [loadMode]);
 
-  useEffect(() => refresh(), [refresh]);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   const select = async (next: ResourceMode): Promise<void> => {
     if (next === mode || busy) return;
     const prev = mode;
     setMode(next);
+    busyRef.current = true;
     setBusy(true);
     setError(null);
     setSavedNote(null);
     try {
-      await props.saveMode(next);
+      await saveMode(next);
       setSavedNote('Saved. Applies fully on the next gateway restart.');
     } catch (err) {
       setMode(prev);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
 
   const applied =
-    props.activeMode && props.activeMode !== mode
-      ? `Running as ${props.activeMode}${props.resolvedClass ? ` · ${props.resolvedClass}` : ''} until restart`
-      : props.resolvedClass
-        ? `Active profile: ${props.resolvedClass}`
+    activeMode && activeMode !== mode
+      ? `Running as ${activeMode}${resolvedClass ? ` · ${resolvedClass}` : ''} until restart`
+      : resolvedClass
+        ? `Active profile: ${resolvedClass}`
         : null;
 
   return (

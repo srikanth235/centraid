@@ -1653,11 +1653,27 @@ declare global {
     level: 'warn' | 'error';
     message: string;
   }
+  /** Coarse numeric signals on gateway health (issue #521) — mirrors module export. */
+  interface CentraidHealthMetrics {
+    rssBytes: number;
+    outboxPending: number;
+    sseClients?: number;
+    eventLoopLagP50Ms?: number;
+    eventLoopLagP99Ms?: number;
+    eventLoopLagMaxMs?: number;
+    eventLoopLagPeakP99Ms?: number;
+    eventLoopLagSamples?: number;
+    storageFsyncMs?: number;
+    hardwareProfileClass?: string;
+    resourceMode?: string;
+    uptimeMs: number;
+  }
   interface CentraidGatewayHealth {
     status: 'ok' | 'degraded' | 'error';
     startedAt: string;
     uptimeMs: number;
     components: CentraidHealthComponent[];
     recentEvents: CentraidHealthEvent[];
+    metrics?: CentraidHealthMetrics;
   }
 }

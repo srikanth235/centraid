@@ -42,11 +42,12 @@ Durable Resource mode (Auto | Conserve | Balanced | Performance) maps onto exist
 
 Owner-facing Resource mode control (not env-only):
 
-- `packages/client/src/react/screens/ResourceModeCard.tsx` — Auto/Conserve/Balanced/Performance UI writing `gateway.resourceMode`
-- `packages/client/src/react/screens/ResourceModeCard.test.tsx`
+- `packages/client/src/react/screens/ResourceModeCard.tsx` — Auto/Conserve/Balanced/Performance UI writing `gateway.resourceMode`; refresh depends only on stable `loadMode` and ignores late GET results while a save is in flight
+- `packages/client/src/react/screens/ResourceModeCard.test.tsx` — includes stable-loadMode re-render and mid-save stale-GET guards
 - `packages/client/src/react/screens/GatewayScreen.tsx` — mount Resource mode card on Overview
 - `packages/client/src/react/screens/GatewayScreen.module.css`
-- `packages/client/src/react/shell/routes/GatewayRoute.tsx` — load/save prefs bridge
+- `packages/client/src/react/shell/routes/GatewayRoute.tsx` — `useCallback` load/save prefs bridge (identity stable across 1s uptime ticks)
+- `packages/client/src/centraid-api.d.ts` — module + `declare global` `CentraidHealthMetrics` / `CentraidGatewayHealth.metrics`
 
 In-repo tests for profile/mode, disk percent+floor, health metrics, diagnostics rendering: covered by the `*.test.ts(x)` files listed above.
 
@@ -73,7 +74,7 @@ bun run --cwd packages/gateway test -- src/serve/hardware-profile.test.ts src/se
 bun run --cwd packages/client test -- src/react/screens/SettingsDiagnosticsScreen.test.tsx src/react/screens/ResourceModeCard.test.tsx
 ```
 
-45 gateway + 11 client tests passed. Built entry points also exercised: health snapshot metrics, Conserve vs Performance limits, disk percent on 32 GiB / 2 TiB volumes.
+45 gateway + 13 client tests passed (ResourceModeCard race guards included). Built entry points also exercised: health snapshot metrics, Conserve vs Performance limits, disk percent on 32 GiB / 2 TiB volumes.
 
 ## Audit
 
@@ -93,3 +94,8 @@ PASS – No interrupt or mid-task correction; zero steering rows required. User 
 
 **Check 2 — no non-steering message is recorded as a steering event**
 PASS – No false-positive steering rows; Accounting ### Steering table absent/empty because there were no steering events.
+
+## Follow-up (PR review fixes)
+
+- Stabilized ResourceModeCard refresh (`loadMode` deps + busyRef) and GatewayRoute `useCallback` bridges so 1s Overview ticks cannot re-fetch prefs or race mid-save.
+- Mirrored `CentraidHealthMetrics` on the global `CentraidGatewayHealth` interface in `centraid-api.d.ts`.
