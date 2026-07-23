@@ -147,39 +147,43 @@ gateway CLI suites use 60s); do not add a per-test `timeout` option that sits
 
 ## Product tiers and coverage gates
 
-The deeply gated engine is now vault, client replica, gateway, app-engine,
-automation, backup, blueprints, and agent-runtime. Renderer screens and mobile
-UI are covered by extracted logic plus journeys, not by a whole-surface line
+The deeply gated engine is vault, client replica, gateway, app-engine,
+automation, backup, blueprints, agent-runtime, plus pure libraries
+design-tokens, tunnel, protocol, and cli. Renderer screens and mobile UI are
+covered by extracted logic plus journeys, not by a whole-surface line
 percentage. `packages/client/src/replica/**` is gated independently from
 `packages/client/src/react/**` for that reason.
 
 Floors live in [`tests/coverage-floors.json`](tests/coverage-floors.json) and
-are consumed directly by the root Vitest config. The new floors were seeded a
-tight margin below the 2026-07-18 measurements:
+are consumed directly by the root Vitest config. Floors are a tight margin
+(~1pt) below the latest measured `bun run coverage` run (2026-07-23):
 
 | Scope | Measured lines / branches | Floor lines / branches |
 | --- | --- | --- |
-| `packages/vault/src/**` | 91.77 / 79.10 | 90 / 78 |
-| `packages/backup/src/**` | 90.76 / 79.20 | 89 / 78 |
-| `packages/client/src/replica/**` | 72.93 / 76.44 | 69 / 73 |
-| `packages/gateway/src/**` | 80.51 / 72.79 | 75 / 71 |
-| `packages/app-engine/src/**` | 84.89 / 79.81 | 75 / 73 |
-| `packages/automation/src/**` | 72.63 / 78.53 | 68 / 74 |
-| `packages/blueprints/src/**` | 89.43 / 81.82 | 83 / 74 |
-| `packages/agent-runtime/src/**` | 31.60 / 85.71 | 27 / 84 |
+| repo-wide (`lines`) | 71.89 / — | **70** / — |
+| `packages/vault/src/**` | 91.78 / 78.97 | 90 / 78 |
+| `packages/backup/src/**` | 90.79 / 79.18 | 89 / 78 |
+| `packages/blueprints/src/**` | 90.77 / 84.09 | 89 / 83 |
+| `packages/design-tokens/src/**` | 90.23 / 81.82 | 89 / 80 |
+| `packages/app-engine/src/**` | 85.64 / 79.86 | 84 / 78 |
+| `packages/gateway/src/**` | 80.55 / 74.67 | 79 / 73 |
+| `packages/client/src/replica/**` | 75.63 / 76.73 | 74 / 75 |
+| `packages/automation/src/**` | 73.80 / 78.94 | 72 / 77 |
+| `packages/tunnel/src/**` | 73.22 / 80.42 | 72 / 79 |
+| `packages/agent-runtime/src/**` | 72.89 / 85.88 | 71 / 84 |
+| `packages/cli/src/**` | 70.14 / 57.78 | 69 / 56 |
+| `packages/protocol/src/**` | 67.08 / 70.59 | 66 / 69 |
 
-The repo-wide line floor remains 30%. `bun run test` prints the active floors
-after package tests so the local loop never hides the CI contract;
-`bun run coverage` measures and enforces them. Floors move only upward.
+`bun run test` prints the active floors after package tests so the local loop
+never hides the CI contract; `bun run coverage` measures and enforces them.
+Floors move only upward (`bun run test:ratchet`).
 
 ### agent-runtime coverage strategy
 
-`packages/agent-runtime` intentionally sits on a **low line floor (~27%)** and a
-**high branch floor (~84%)**. Most line mass is the Codex/Claude backend
-adapters and CLI spawn paths that need a real binary or long integration; those
-are covered by contract/unit tests on pure surfaces (model-enumeration,
-multimodal, catalog, safe stdin write) rather than a line-percentage campaign
-to 70%+.
+`packages/agent-runtime` keeps a **high branch floor (~84%)**. The line floor
+was ratcheted to **~71%** once measured coverage cleared the old deliberate 27%
+seed (spawn-heavy adapters remain covered by contracts + integration rather
+than a pure line chase).
 
 Do **not** raise the agent-runtime line floor without a dedicated coverage
 campaign. Do **not** lower any engine floor in this table without an explicit

@@ -1,11 +1,7 @@
 # Intentionally ungated surfaces (#532 / TESTING.md). One package or app id per
 # line (e.g. packages/protocol, apps/desktop). Comments start with #.
-# Journey / pure-module packages without a whole-tree floor:
+# Dev-only / tiny packages without a whole-tree floor:
 packages/blob-format
-packages/design-tokens
-packages/protocol
-packages/cli
-packages/tunnel
 packages/test-kit
 # client: only packages/client/src/replica/** is floored; the rest is journeys.
 packages/client

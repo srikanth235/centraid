@@ -85,6 +85,16 @@
 - This receipt (`receipts/issue-532-constraint-gauntlet.md`) is the issue-bound audit trail for #532.
 - PR opened against the default branch with subject/body linking #532.
 
+### Follow-up: fill coverage floor gaps (2026-07-23)
+
+- `tests/coverage-floors.json` — ratcheted floors ~1pt under measured `bun run coverage`:
+  repo **70**, gateway **79/73**, app-engine **84/78**, automation **72/77**,
+  blueprints **89/83**, agent-runtime **71/84** (was 27/84), plus new scopes
+  design-tokens **89/80**, tunnel **72/79**, protocol **66/69**, cli **69/56**.
+- `TESTING.md` measured/floor table refreshed to match.
+- `.governance/.../coverage-scope-reachability/allowlist.txt` — drop design-tokens,
+  tunnel, protocol, cli (now floored).
+
 ## Out of scope
 
 - Mutation beyond the three seed packages
