@@ -8,7 +8,7 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
 // seal-key) is asserted directly off the returned array.
 
 import { afterEach, expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
+import { existsSync, promises as fs } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes, createHash } from 'node:crypto';
 import path from 'node:path';
@@ -16,7 +16,7 @@ import { ReplicaIndex, sealAad, unsealValue } from '@centraid/vault';
 import { openVaultPlane, type VaultPlane } from '../serve/vault-plane.js';
 import { WorktreeStore } from '../worktree-store/worktree-store.js';
 import { run } from '../worktree-store/git.js';
-import { assembleSourceEntries, resetStagingDir } from './backup-sources.js';
+import { assembleSourceEntries } from './backup-sources.js';
 
 const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
 
@@ -102,12 +102,12 @@ function sha256Of(bytes: Buffer): string {
 
 test('a fresh vault (no blobs, no code store, nothing sealed) yields only the two staged DB entries', async () => {
   const plane = await openPlane();
-  const stagingDir = await tempDir('backup-sources-staging');
+  const bundleDir = await tempDir('backup-sources-bundle');
   const captured = capturingLogger();
 
   // The capture tick lives in doRunBackup now — run it here as the service would.
   plane.walTick();
-  const entries = await assembleSourceEntries({ plane, stagingDir, log: captured.log });
+  const entries = await assembleSourceEntries({ plane, bundleDir, log: captured.log });
 
   expect(entries.map((e) => e.kind)).toEqual(['db', 'db']);
   expect(entries.map((e) => e.path)).toEqual(['vault.db', 'journal.db']);
@@ -145,7 +145,7 @@ test(
     'yields entries in FORMAT.md order: db, db, blobs…, git-bundle, seal-key',
   async () => {
     const plane = await openPlane();
-    const stagingDir = await tempDir('backup-sources-staging');
+    const bundleDir = await tempDir('backup-sources-bundle');
 
     // (b) Two real blobs: one through the small inline data_uri door, one
     // through the staged-bytes door (large enough to exercise file custody).
@@ -178,7 +178,7 @@ test(
     if (lockerOut.status !== 'executed') throw new Error('locker.add_item failed');
 
     plane.walTick();
-    const entries = await assembleSourceEntries({ plane, stagingDir, log: silentLogger });
+    const entries = await assembleSourceEntries({ plane, bundleDir, log: silentLogger });
 
     expect(entries.map((e) => e.kind)).toEqual([
       'db',
@@ -224,9 +224,9 @@ test(
     expect(path.basename(bigBlobEntry.absolutePath)).toBe(bigSha);
     const bigOnDisk = await fs.readFile(bigBlobEntry.absolutePath);
     expect(bigOnDisk.equals(bigBytes)).toBe(true);
-    // Blob entries read the CAS IN PLACE — never duplicated into staging.
+    // Blob entries read the CAS IN PLACE — never duplicated into the bundle dir.
     expect(smallBlobEntry.absolutePath.startsWith(plane.dir)).toBe(true);
-    expect(smallBlobEntry.absolutePath.startsWith(stagingDir)).toBe(false);
+    expect(smallBlobEntry.absolutePath.startsWith(bundleDir)).toBe(false);
 
     // The git bundle is a real, verifiable bundle — `git bundle verify`
     // needs a repository context (any repo — it only checks the bundle's
@@ -239,7 +239,7 @@ test(
       run(['bundle', 'verify', bundleEntry.absolutePath], { cwd: bareRepoDir }),
     ).resolves.toBeTruthy();
     const cloneDir = await tempDir('backup-sources-clone');
-    await run(['clone', '--quiet', bundleEntry.absolutePath, cloneDir], { cwd: stagingDir });
+    await run(['clone', '--quiet', bundleEntry.absolutePath, cloneDir], { cwd: bundleDir });
     const appJson = JSON.parse(
       await fs.readFile(path.join(cloneDir, 'apps', 'todo', 'app.json'), 'utf8'),
     ) as { id: string };
@@ -269,7 +269,7 @@ test(
 
 test('a remote-primary snapshot carries only durable pending-offsite outbox blobs', async () => {
   const plane = await openPlane();
-  const stagingDir = await tempDir('backup-sources-remote-primary');
+  const bundleDir = await tempDir('backup-sources-remote-primary');
   const settingsRow = plane.db.vault
     .prepare('SELECT settings_json FROM core_vault LIMIT 1')
     .get() as { settings_json: string | null };
@@ -301,46 +301,30 @@ test('a remote-primary snapshot carries only durable pending-offsite outbox blob
   plane.db.blobTransfers.state.completeOutbox(remoteSha);
   new ReplicaIndex(plane.db.vault).mark(remoteSha, remoteBytes.length);
   plane.walTick();
-  const entries = await assembleSourceEntries({ plane, stagingDir, log: silentLogger });
+  const entries = await assembleSourceEntries({ plane, bundleDir, log: silentLogger });
   const blobPaths = entries.filter((entry) => entry.kind === 'blob').map((entry) => entry.path);
 
   expect(blobPaths).toEqual([`blobs/sha256/${pendingSha.slice(0, 2)}/${pendingSha}`]);
   expect(blobPaths.some((entry) => entry.endsWith(remoteSha))).toBe(false);
 });
 
-test('the staging dir is wiped between runs — a stale marker file never survives a second assembly', async () => {
+test('db bases are the shipper pinned clones read IN PLACE, and assembly writes nothing when there is no code store', async () => {
   const plane = await openPlane();
-  const stagingDir = await tempDir('backup-sources-staging');
+  const bundleDir = await tempDir('backup-sources-bundle');
 
-  await resetStagingDir(stagingDir);
-  const marker = path.join(stagingDir, 'stale-marker.txt');
-  await fs.writeFile(marker, 'left over from a previous, interrupted run');
-
-  await resetStagingDir(stagingDir);
-  await expect(fs.access(marker)).rejects.toThrow();
-
+  // Issue #408: db entries read the WAL shipper's pinned base clones IN PLACE
+  // (under <vaultDir>/wal-ship/bases), never copies. This vault has no code
+  // store, so there is no git bundle either — assembly writes nothing at all,
+  // and re-running it accumulates nothing (there is no staging dir to wipe).
   plane.walTick();
-  const entries = await assembleSourceEntries({ plane, stagingDir, log: silentLogger });
-  expect(entries.map((e) => e.path)).toEqual(['vault.db', 'journal.db']);
-  expect(
-    await fs.access(marker).then(
-      () => true,
-      () => false,
-    ),
-  ).toBe(false);
+  const first = await assembleSourceEntries({ plane, bundleDir, log: silentLogger });
+  expect(first.map((e) => e.path)).toEqual(['vault.db', 'journal.db']);
 
-  // A second full assembly into the same dir (as a real backup tick's
-  // finally-block reset does) leaves exactly the fresh staged files —
-  // nothing accumulates across runs, and no stale marker reappears.
-  await resetStagingDir(stagingDir);
-  const second = await assembleSourceEntries({ plane, stagingDir, log: silentLogger });
+  const second = await assembleSourceEntries({ plane, bundleDir, log: silentLogger });
   expect(second.map((e) => e.path)).toEqual(['vault.db', 'journal.db']);
-  const filesOnDisk = await fs.readdir(stagingDir);
-  expect(filesOnDisk).not.toContain('stale-marker.txt');
-  // Issue #408: db entries read the WAL shipper's pinned base clones IN
-  // PLACE (under <vaultDir>/wal-ship/), never staged copies — staging now
-  // holds only what assembly itself produces (the git bundle, when any).
-  expect(filesOnDisk).not.toContain('vault.db');
+  // A code-store-less vault writes nothing into the bundle dir (no bundle, no
+  // digest sidecar) — it stays empty across repeated assemblies.
+  expect(await fs.readdir(bundleDir)).toEqual([]);
   for (const entry of second) {
     expect(entry.absolutePath).toContain(path.join('wal-ship', 'bases'));
     expect(entry.sha256).toMatch(/^[0-9a-f]{64}$/);
@@ -353,7 +337,7 @@ test('the staging dir is wiped between runs — a stale marker file never surviv
 
 test('assembly REFUSES an uncoordinated base pair rather than registering it', async () => {
   const plane = await openPlane();
-  const stagingDir = await tempDir('backup-sources-staging');
+  const bundleDir = await tempDir('backup-sources-bundle');
   plane.walTick();
 
   // The pair the producer must never register: two bases from two ticks. It is
@@ -369,8 +353,49 @@ test('assembly REFUSES an uncoordinated base pair rather than registering it', a
     const bases = real();
     return bases.map((b, i) => (i === 0 ? { ...b, createdAtMs: b.createdAtMs + 60_000 } : b));
   };
-  await expect(assembleSourceEntries({ plane, stagingDir, log: silentLogger })).rejects.toThrow(
+  await expect(assembleSourceEntries({ plane, bundleDir, log: silentLogger })).rejects.toThrow(
     /bases are from different ticks/,
   );
   shipper.currentBases = real;
+});
+
+test('the code-store bundle is REUSED untouched while refs are unchanged, and REGENERATED when they move', async () => {
+  const plane = await openPlane();
+  // The PERSISTENT bundleDir (as the service passes `<backupDir>/code-bundle/<id>`)
+  // survives between assemblies — the standing bundle + its `apps.bundle.refs`
+  // digest sidecar are what the reuse gate keys on.
+  const bundleDir = await tempDir('backup-sources-bundle');
+  await publishRealApp(plane, 'todo');
+
+  // First assembly: bundle is generated fresh, sidecar written, in the bundleDir.
+  plane.walTick();
+  const first = capturingLogger();
+  const e1 = await assembleSourceEntries({ plane, bundleDir, log: first.log });
+  const bundle1 = e1.find((e) => e.kind === 'git-bundle')!;
+  expect(bundle1.absolutePath).toBe(path.join(bundleDir, 'apps.bundle'));
+  const digest1 = await fs.readFile(path.join(bundleDir, 'apps.bundle.refs'), 'utf8');
+  const mtime1 = (await fs.stat(bundle1.absolutePath)).mtimeMs;
+
+  // Second assembly with the SAME refs: the file is reused UNTOUCHED — same path,
+  // byte-identical mtime (the engine's reuse fast path keys on exactly this), and
+  // the reuse is logged. A fresh `git bundle create` here would have moved mtime.
+  const second = capturingLogger();
+  const e2 = await assembleSourceEntries({ plane, bundleDir, log: second.log });
+  const bundle2 = e2.find((e) => e.kind === 'git-bundle')!;
+  expect(bundle2.absolutePath).toBe(bundle1.absolutePath);
+  expect((await fs.stat(bundle2.absolutePath)).mtimeMs).toBe(mtime1);
+  expect(second.info.some((m) => m.includes('reusing apps.bundle'))).toBe(true);
+
+  // Publishing a second app moves the store's refs (new commit + `todo2/v1` tag),
+  // so the digest changes and the bundle regenerates — and the fresh bundle
+  // carries BOTH apps.
+  await publishRealApp(plane, 'todo2');
+  const e3 = await assembleSourceEntries({ plane, bundleDir, log: silentLogger });
+  const bundle3 = e3.find((e) => e.kind === 'git-bundle')!;
+  const digest3 = await fs.readFile(path.join(bundleDir, 'apps.bundle.refs'), 'utf8');
+  expect(digest3).not.toBe(digest1);
+  const cloneDir = await tempDir('backup-sources-clone-2');
+  await run(['clone', '--quiet', bundle3.absolutePath, cloneDir], { cwd: bundleDir });
+  expect(existsSync(path.join(cloneDir, 'apps', 'todo', 'app.json'))).toBe(true);
+  expect(existsSync(path.join(cloneDir, 'apps', 'todo2', 'app.json'))).toBe(true);
 });

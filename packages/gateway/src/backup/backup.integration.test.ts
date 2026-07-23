@@ -298,29 +298,28 @@ beforeAll(async () => {
   expect(first?.lastSeq).toBe(1);
 }, 30_000);
 
-test('no-change semantics: a real vault re-registers a NEW snapshot every run (documented, not papered over)', async () => {
+test('no-change semantics: an idle vault registers NO new snapshot; a code publish does', async () => {
+  // OBSERVED CONTRACT (verified against engine.ts + backup-sources.ts): the db
+  // bases are the shipper's pinned base clones — stable files that only re-clone
+  // on a generation break, not a per-tick VACUUM — and the code-store bundle is
+  // now reused UNTOUCHED across ticks while the store's refs have not moved
+  // (`bundleCodeStore`'s ref-digest gate). So for a genuinely idle vault every
+  // entry keeps its `(size, mtime)`, `createSnapshot` takes its all-reused fast
+  // path, and `chunkIndexIdentical && entriesIdentical` short-circuits to NO new
+  // registration. This is the whole point of the code-bundle stability fix: an
+  // idle vault no longer re-registers (and re-reads/re-uploads) every tick.
   const before = (await h.service.status())[h.vaultId];
   await h.service.runBackup(h.vaultId);
-  const after = (await h.service.status())[h.vaultId];
+  const idle = (await h.service.status())[h.vaultId];
+  expect(idle?.lastSeq).toBe(before?.lastSeq);
 
-  // OBSERVED CONTRACT (verified by reading engine.ts, not just guessed):
-  // `stageVaultDbs` VACUUM INTOs a FRESH vault.db/journal.db file on every
-  // tick, and `bundleCodeStore` regenerates apps.bundle fresh every tick
-  // too. createSnapshot's "reuse without re-chunking" fast path is keyed on
-  // (size, mtimeMs) matching the PREVIOUS manifest's recorded stat for that
-  // entry — a freshly-written file's mtime is "now", which never equals a
-  // prior run's recorded mtime. So for any vault with a db or git-bundle
-  // entry (every real vault has at least the db entries), at least one
-  // entry ALWAYS takes the slow re-chunk path, which flips
-  // `everyEntryReused` to false regardless of whether the actual bytes are
-  // identical — and `chunkIndexIdentical` (the no-op gate) requires
-  // `everyEntryReused`. Net effect: "no visible change → no new manifest"
-  // never fires for a real, on-disk vault; it only works for hand-built
-  // fixtures with a file that is never re-touched between runs. The
-  // dedup/reuse win from unchanged bytes still happens at the CHUNK level
-  // (no re-upload — see the "incremental" test below), just not at the
-  // whole-snapshot-registration level.
-  expect(after?.lastSeq).toBe((before?.lastSeq ?? 0) + 1);
+  // A code change moves the store's refs (a new `todo2/v1` tag + a main commit),
+  // so the digest changes, the bundle regenerates, and the next backup registers
+  // a fresh snapshot — the optimization skips UNCHANGED code, never real changes.
+  await publishRealApp(h.plane, 'todo2');
+  await h.service.runBackup(h.vaultId);
+  const afterPublish = (await h.service.status())[h.vaultId];
+  expect(afterPublish?.lastSeq).toBe((before?.lastSeq ?? 0) + 1);
 });
 
 test('incremental backup: a new blob registers a small delta, not a re-upload of everything', async () => {
