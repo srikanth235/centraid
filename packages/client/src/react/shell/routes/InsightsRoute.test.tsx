@@ -4,10 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getInsightsSummary = vi.fn();
 const listAutomations = vi.fn();
+const getGatewayHealth = vi.fn();
 const navigate = vi.fn();
 vi.mock('../../../gateway-client.js', () => ({
   getInsightsSummary: (input?: { windowDays?: number }) => getInsightsSummary(input),
   listAutomations: () => listAutomations(),
+  getGatewayHealth: () => getGatewayHealth(),
 }));
 vi.mock('../actions.js', () => ({
   useShellActions: () => ({ navigate }),
@@ -21,8 +23,10 @@ beforeEach(async () => {
   ({ default: InsightsRoute } = await import('./InsightsRoute.js'));
   getInsightsSummary.mockReset();
   listAutomations.mockReset();
+  getGatewayHealth.mockReset();
   navigate.mockReset();
   listAutomations.mockResolvedValue([]);
+  getGatewayHealth.mockResolvedValue(null);
 });
 
 async function render(): Promise<HTMLElement> {
@@ -177,5 +181,43 @@ describe('InsightsRoute', () => {
     getInsightsSummary.mockResolvedValue(summary);
     await render();
     expect(getInsightsSummary).toHaveBeenCalledWith({ windowDays: 30 });
+  });
+
+  it('renders the resource receipt when health carries resourceUsage', async () => {
+    getInsightsSummary.mockResolvedValue(summary);
+    getGatewayHealth.mockResolvedValue({
+      metrics: {
+        resourceUsage: {
+          sinceMs: Date.now() - 3_600_000,
+          process: { cpuSecondsTotal: 12, currentRssBytes: 268_435_456, peakRssBytes: 268_435_456 },
+          subsystems: {
+            workerPool: { tasks: 4, busyMs: 1000 },
+            replication: { passes: 1, bytesReplicated: 1024, busyMs: 100 },
+            backup: { drains: 0, bytesUploaded: 0, busyMs: 0 },
+            sweeps: { passes: 2, busyMs: 50 },
+            agentRuns: { runs: 3, busyMs: 9000, cpuSeconds: null },
+          },
+          backgroundTimerFiresLastHour: 12,
+        },
+      },
+    });
+    const el = await render();
+    expect(el.textContent).toContain('Resource receipt');
+    expect(el.textContent).toContain('not limited by Conserve');
+  });
+
+  it('shows the receipt unavailable line when health lacks resourceUsage', async () => {
+    getInsightsSummary.mockResolvedValue(summary);
+    getGatewayHealth.mockResolvedValue({ metrics: {} });
+    const el = await render();
+    expect(el.textContent).toContain('Not available from this gateway');
+  });
+
+  it('keeps Insights working when health fetch rejects', async () => {
+    getInsightsSummary.mockResolvedValue(summary);
+    getGatewayHealth.mockRejectedValue(new Error('offline'));
+    const el = await render();
+    expect(el.textContent).toContain('$3.40');
+    expect(el.textContent).toContain('Not available from this gateway');
   });
 });

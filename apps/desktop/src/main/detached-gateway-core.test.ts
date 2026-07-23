@@ -7,6 +7,7 @@ import {
   DEFAULT_GATEWAY_PORT,
   DEFAULT_OFFER_GATEWAY_SERVICE,
   isProcessAlive,
+  ownedGatewayNeedsRespawn,
   OWNERSHIP_FILE,
   resolveListenPort,
   shouldOfferServiceInstall,
@@ -131,6 +132,29 @@ describe('status / ownership helpers', () => {
     });
     expect(status.url).toBe(`http://127.0.0.1:${DEFAULT_GATEWAY_PORT}`);
     expect(status.tokenFile).toBe('/tmp/desktop-loopback-token.bin');
+  });
+});
+
+describe('ownedGatewayNeedsRespawn (stale-build refresh, #528 follow-up)', () => {
+  it('never respawns when the freshness gate is off (adopt whatever is live)', () => {
+    expect(ownedGatewayNeedsRespawn({ buildTag: 'old' }, 'new', false)).toBe(false);
+    expect(ownedGatewayNeedsRespawn({ buildTag: undefined }, 'new', false)).toBe(false);
+  });
+
+  it('adopts when the build tag is unchanged — no needless restart', () => {
+    expect(ownedGatewayNeedsRespawn({ buildTag: '1784800000000' }, '1784800000000', true)).toBe(
+      false,
+    );
+  });
+
+  it('respawns when the on-disk build tag differs (dev rebuild / prod update)', () => {
+    expect(ownedGatewayNeedsRespawn({ buildTag: '1784800000000' }, '1784899999999', true)).toBe(
+      true,
+    );
+  });
+
+  it('respawns once when the stamp predates the buildTag field (self-establishing)', () => {
+    expect(ownedGatewayNeedsRespawn({ buildTag: undefined }, 'new', true)).toBe(true);
   });
 });
 

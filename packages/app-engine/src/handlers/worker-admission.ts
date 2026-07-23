@@ -77,16 +77,37 @@ interface QueueEntry {
 export class WorkerAdmission {
   private inFlight = 0;
   private readonly queue: QueueEntry[] = [];
+  /** Cumulative admitted-task count since process start (#528 resource actuals). */
+  private totalAcquired = 0;
+  /** Cumulative wall-clock (ms) occupied by completed tasks (acquire→release). */
+  private totalBusyMs = 0;
+  /**
+   * FIFO acquire timestamps awaiting a matching release. Total busyMs over a
+   * bijection of acquires↔releases is pairing-independent, so oldest-first is
+   * an exact running sum of completed per-task durations.
+   */
+  private readonly acquiredAt: number[] = [];
 
   constructor(
     private readonly maxConcurrent: number = WORKER_MAX_CONCURRENT,
     private readonly maxQueue: number = WORKER_MAX_QUEUE,
     private readonly maxQueueWaitMs: number = WORKER_MAX_QUEUE_WAIT_MS,
+    private readonly now: () => number = Date.now,
   ) {}
 
-  /** Live counts — small accessor for a health/metrics surface to poll. */
-  stats(): { inFlight: number; queued: number } {
-    return { inFlight: this.inFlight, queued: this.queue.length };
+  /** Live counts + cumulative resource actuals for a health/metrics surface to poll. */
+  stats(): { inFlight: number; queued: number; tasks: number; busyMs: number } {
+    return {
+      inFlight: this.inFlight,
+      queued: this.queue.length,
+      tasks: this.totalAcquired,
+      busyMs: this.totalBusyMs,
+    };
+  }
+
+  private onAcquired(): void {
+    this.totalAcquired += 1;
+    this.acquiredAt.push(this.now());
   }
 
   /**
@@ -98,6 +119,7 @@ export class WorkerAdmission {
   async acquire(): Promise<void> {
     if (this.inFlight < this.maxConcurrent) {
       this.inFlight += 1;
+      this.onAcquired();
       return;
     }
     if (this.queue.length >= this.maxQueue) {
@@ -108,6 +130,7 @@ export class WorkerAdmission {
         resolve: () => {
           clearTimeout(entry.timer);
           this.inFlight += 1;
+          this.onAcquired();
           resolve();
         },
         timer: setTimeout(() => {
@@ -124,6 +147,8 @@ export class WorkerAdmission {
   /** Free a slot and hand it to the next queued waiter (FIFO), if any. */
   release(): void {
     this.inFlight = Math.max(0, this.inFlight - 1);
+    const acquiredAt = this.acquiredAt.shift();
+    if (acquiredAt !== undefined) this.totalBusyMs += Math.max(0, this.now() - acquiredAt);
     const next = this.queue.shift();
     next?.resolve();
   }
@@ -138,7 +163,12 @@ export function sharedWorkerAdmission(): WorkerAdmission {
   return sharedWorkerAdmissionInstance;
 }
 
-/** Live counts on the shared production admission gate (issue #351). */
-export function workerAdmissionStats(): { inFlight: number; queued: number } {
+/** Live counts + cumulative resource actuals on the shared production admission gate (issue #351/#528). */
+export function workerAdmissionStats(): {
+  inFlight: number;
+  queued: number;
+  tasks: number;
+  busyMs: number;
+} {
   return sharedWorkerAdmission().stats();
 }

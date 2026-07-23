@@ -464,3 +464,37 @@ test('confirmRecoveryKit does not disturb existing per-vault target state', asyn
 
   expect(await h.service.status()).toEqual(beforeTargets);
 });
+
+test('the hourly scheduler skips its tick while host power-context posture defers (#528 Phase D)', async () => {
+  vi.useFakeTimers();
+  try {
+    const vaultRoot = await tempDir('backup-svc-posture-vault');
+    const backupDir = await tempDir('backup-svc-posture-state');
+    const registry = openRegistry(vaultRoot);
+    let defer = true;
+    const service = new BackupService({
+      backupDir,
+      vaults: registry,
+      health: new HealthRegistry(),
+      logger: silentLogger,
+      shouldDeferPosture: () => defer,
+    });
+    cleanups.push(() => service.stop());
+    // The retention/reconciliation pass is `tick()`; the posture gate lives in
+    // the scheduler that would call it. Spying lets us assert the gate without
+    // driving a full provider round-trip.
+    const tick = vi.spyOn(service, 'tick').mockResolvedValue(undefined);
+
+    service.start();
+    // Fire the initial jittered timeout (≤ ~1.1h) and the first hourly interval.
+    await vi.advanceTimersByTimeAsync(3 * 60 * 60 * 1000);
+    expect(tick).not.toHaveBeenCalled();
+
+    // Posture clears — the next scheduled pass runs.
+    defer = false;
+    await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+    expect(tick).toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
+});

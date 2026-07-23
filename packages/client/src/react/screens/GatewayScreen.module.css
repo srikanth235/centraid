@@ -123,10 +123,14 @@
   gap: 16px;
 }
 /* Alerts is a single column of settings rows. Left at the page's 1120px it
-   stretched a 34px toggle across the full width; cap it to a readable
-   measure. Logs/Components genuinely want the width, so this is opt-in. */
+   stretched a 34px toggle across the full width; cap it to a readable measure
+   and centre it so the leftover width sits evenly on both sides — pinned left
+   (the default for a max-width flex child) it dumped all the slack on the
+   right and read as a bug. Logs/Components genuinely want the width, so this
+   is opt-in. */
 .tabPaneForm {
-  max-width: 780px;
+  max-width: 820px;
+  margin-inline: auto;
 }
 
 /* Hero — the gauge cluster. A faint status-tinted wash bleeds from the
@@ -319,12 +323,20 @@
   color: var(--ink-4);
 }
 
-/* Two-column grid below the hero. */
+/* Two packed columns below the hero. Each column stacks its own cards, so a
+   tall card (Resource mode) can't open a dead white column beside it the way
+   shared grid rows did. Left = timeline + controls; right = facts + fleet. */
 .grid {
   display: grid;
   grid-template-columns: 1.5fr 1fr;
   gap: 16px;
   align-items: start;
+}
+.gridCol {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
 }
 
 /* Resource mode card (#521). */
@@ -334,38 +346,119 @@
   line-height: 1.5;
   color: var(--ink-3);
 }
+/* Segmented mode picker (issue #528 follow-up): a compact 4-cell tray, not a
+   stack of full-width cards. Each cell is a plain styled button (no shell
+   `.btn`, so no dark-on-dark inheritance), carrying the mode name + a mono
+   preset hint (workers · memory). The full blurb lives on the title tooltip
+   and in the Compare dialog. */
 .resourceModes {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 14px 16px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+  margin: 12px 14px 0;
+  padding: 4px;
+  background: color-mix(in oklab, var(--ink) 4%, transparent);
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-md);
 }
 .resourceModeBtn {
-  display: flex !important;
+  display: flex;
   flex-direction: column;
-  align-items: flex-start !important;
+  align-items: center;
   gap: 2px;
-  width: 100%;
-  text-align: left;
-  height: auto !important;
-  padding: 10px 12px !important;
-  white-space: normal;
+  padding: 9px 5px 8px;
+  cursor: pointer;
+  text-align: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: calc(var(--r-md) - 3px);
+  transition:
+    background 0.16s,
+    border-color 0.16s,
+    box-shadow 0.16s;
 }
-.resourceModeBtnActive {
-  border-color: color-mix(in oklab, var(--accent) 45%, var(--line)) !important;
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 25%, transparent);
+.resourceModeBtn:hover:not(:disabled) {
+  background: var(--bg-elev);
+}
+.resourceModeBtn:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+.resourceModeBtnActive,
+.resourceModeBtnActive:hover:not(:disabled) {
+  background: var(--bg-elev);
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--line));
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 22%, transparent);
 }
 .resourceModeLabel {
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: 13px;
-  color: var(--ink);
+  font-size: 12.5px;
+  letter-spacing: -0.01em;
+  color: var(--ink-2);
 }
-.resourceModeBlurb {
+.resourceModeBtnActive .resourceModeLabel {
+  color: var(--accent);
+}
+.resourceModeHint {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 9px;
+  letter-spacing: 0.01em;
   color: var(--ink-4);
-  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+.resourceModeBtnActive .resourceModeHint {
+  color: var(--accent);
+}
+@media (max-width: 380px) {
+  .resourceModes {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ── Dialog openers: Compare all modes · How we sized this ── */
+.resourceActions {
+  display: flex;
+  gap: 8px;
+  margin: 10px 14px 4px;
+}
+.resourceAction {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 10px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-2);
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-md);
+  transition:
+    border-color 0.16s,
+    color 0.16s,
+    background 0.16s;
+}
+.resourceAction:hover {
+  color: var(--ink);
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--line));
+  background: color-mix(in oklab, var(--ink) 3%, transparent);
+}
+.resourceActionIcon {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  color: var(--ink-3);
+}
+.resourceActionIcon svg {
+  width: 14px;
+  height: 14px;
+}
+.resourceAction:hover .resourceActionIcon {
+  color: var(--accent);
 }
 .resourceNote {
   padding: 0 18px 14px;
@@ -378,6 +471,307 @@
   font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--danger);
+}
+
+/* ── L0 pause background work (issue #528) ──
+   A temporary override, set off from the mode controls above by a hairline
+   rule and offered as one quiet, clearly-clickable chip. It was a bare ghost
+   button before — transparent, borderless — which read as a caption, not a
+   control; a pause glyph + outline make the affordance obvious without letting
+   it shout over the mode picker the way the old full-width solid bar did. */
+.resourcePause {
+  margin: 6px 14px 14px;
+  padding-top: 13px;
+  border-top: 0.5px solid var(--line);
+}
+.resourcePauseBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px 8px 11px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-2);
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-md);
+  transition:
+    border-color 0.16s,
+    color 0.16s,
+    background 0.16s;
+}
+.resourcePauseBtn:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--line));
+  background: color-mix(in oklab, var(--ink) 3%, transparent);
+}
+.resourcePauseBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.resourcePauseIcon {
+  display: inline-flex;
+  width: 13px;
+  height: 13px;
+  color: var(--ink-3);
+}
+.resourcePauseIcon svg {
+  width: 13px;
+  height: 13px;
+}
+.resourcePauseBtn:hover:not(:disabled) .resourcePauseIcon {
+  color: var(--accent);
+}
+.resourcePauseChoices {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.resourcePauseChoicesLabel {
+  margin-right: 2px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--ink-4);
+}
+.resourcePauseActive {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: var(--r-md);
+  border: 0.5px solid color-mix(in oklab, var(--accent) 35%, var(--line));
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+}
+.resourcePauseLabel {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink);
+}
+
+/* ── L1 budget summary (issue #528) ──
+   The consequence of the mode choice, framed as one inset "here's what you
+   get" unit directly under the mode picker — not a stack of loose text lines. */
+.resourceSummary {
+  margin: 10px 14px 0;
+  padding: 11px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-md);
+  background: color-mix(in oklab, var(--ink) 3%, transparent);
+}
+.resourceSummaryLine {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--ink);
+}
+.resourceSummaryAttr {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--ink-4);
+}
+/* Running / saved status, folded into the budget block instead of floating
+   as separate note lines below the pause control. */
+.resourceSummaryStatus {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+.resourceSummaryStatusSaved {
+  color: var(--accent);
+}
+
+/* ── Power-context posture note (issue #528 Phase D) ── */
+.resourcePosture {
+  padding: 0 18px 12px;
+}
+.resourcePostureLine {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+.resourcePostureAttr {
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--ink-4);
+}
+
+/* ── L2 "how we sized this" disclosure (issue #528) ── */
+.resourceDetails {
+  border-top: 0.5px solid var(--line);
+}
+.resourceDetailsToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 11px 18px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--ink-3);
+}
+.resourceDetailsToggle:hover {
+  color: var(--ink);
+}
+.resourceDetailsChevron {
+  color: var(--ink-4);
+}
+.resourceDetailsBody {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 18px 16px;
+}
+.resourceDetailsGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.resourceDetailsGroupTitle {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.resourceDetailsList {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.resourceDetailsRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: baseline;
+  font-size: 12px;
+}
+.resourceDetailsRow dt {
+  color: var(--ink-3);
+}
+.resourceDetailsRow dd {
+  margin: 0;
+}
+.resourceDetailsValue {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink);
+  text-align: right;
+}
+
+/* ── L3 "Tune" rung: advanced knobs (issue #528 Phase F) ── */
+.resourceAdvanced {
+  border-top: 0.5px solid var(--line);
+}
+.resourceAdvancedBody {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 18px 16px;
+}
+.resourceAdvancedLead {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+.resourceKnobRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.resourceKnobHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.resourceKnobLabel {
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.resourceKnobTagLinked {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--ink-4);
+}
+.resourceKnobTagCustom {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+}
+.resourceKnobLock {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--ink-4);
+}
+.resourceKnobControls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.resourceKnobInput {
+  width: 96px;
+  padding: 5px 8px;
+  border-radius: var(--r-md);
+  border: 0.5px solid var(--line);
+  background: var(--bg-elev);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink);
+}
+.resourceKnobInput:disabled {
+  color: var(--ink-4);
+  opacity: 0.8;
+}
+.resourceKnobMeta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--ink-4);
+}
+.resourceKnobHelp {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+.resourceKnobError {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--danger);
+}
+.resourceKnobWarn {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--icon-amber);
+}
+.resourceKnobPending {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--ink-3);
 }
 
 /* Panel — shared card shell (Insights family). */
@@ -422,6 +816,12 @@
 /* Outage log rows. */
 .outages {
   padding: 10px 8px 12px;
+  /* A long session can log many downtime stretches — the list scrolls inside
+     a fixed-height card instead of growing the column (and the page) without
+     bound. ~6 rows then scroll; the newest sit at the top already. */
+  max-height: 268px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 /* `minmax(0, 1fr)` not `1fr`: a bare `1fr` floors at the message's min-content
    width, so an unbroken path/uuid pushed the row wider than the panel — and

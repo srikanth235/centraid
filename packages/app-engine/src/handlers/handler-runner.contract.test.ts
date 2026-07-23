@@ -62,8 +62,31 @@ test('a burst beyond cap+queue fails fast with a busy outcome; admitted calls st
   const seqs = admitted.map((o) => (o.value as { seq: number }).seq).toSorted((a, b) => a - b);
   expect(seqs).toEqual([1, 2, 3, 4]);
 
-  // The gate is empty again once every call has settled.
-  expect(admission.stats()).toEqual({ inFlight: 0, queued: 0 });
+  // The gate is empty again once every call has settled, and the cumulative
+  // resource actuals (#528) recorded all four admitted tasks (the refused 5th
+  // never acquired a slot, so it is not a task).
+  const settled = admission.stats();
+  expect(settled.inFlight).toBe(0);
+  expect(settled.queued).toBe(0);
+  expect(settled.tasks).toBe(4);
+  expect(settled.busyMs).toBeGreaterThanOrEqual(0);
+});
+
+test('cumulative task + busyMs counters track admitted work with an injected clock (#528)', async () => {
+  let clock = 0;
+  const admission = new WorkerAdmission(1, 4, 5_000, () => clock);
+
+  await admission.acquire(); // task 1 acquires at t=0
+  clock = 30;
+  admission.release(); // task 1 ran 30ms
+  await admission.acquire(); // task 2 acquires at t=30
+  clock = 100;
+  admission.release(); // task 2 ran 70ms
+
+  const stats = admission.stats();
+  expect(stats.tasks).toBe(2);
+  expect(stats.busyMs).toBe(100);
+  expect(stats.inFlight).toBe(0);
 });
 
 test('queued requests drain in FIFO order as slots free up', async () => {

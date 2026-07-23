@@ -4,6 +4,7 @@ import type { InsightsBridgeProps } from '../screen-contracts.js';
 import { insK, insKindLabel, insUsd, relativeTime } from '../format.js';
 import styles from './InsightsScreen.module.css';
 import { cx } from '../ui/cx.js';
+import ResourceReceiptPanel from './ResourceReceiptPanel.js';
 
 const WINDOW_OPTIONS = [7, 30, 90] as const;
 
@@ -112,6 +113,7 @@ export default function InsightsScreen({
   windowDays,
   onWindowDays,
   onOpenRun,
+  resourceUsage,
 }: InsightsBridgeProps): JSX.Element {
   const { kpis } = summary;
   const incomplete = kpis.unpricedRuns > 0 || kpis.unreportedRuns > 0;
@@ -381,6 +383,8 @@ export default function InsightsScreen({
           </Panel>
         </div>
       </div>
+
+      <ResourceReceiptPanel usage={resourceUsage} />
 
       <p className={styles.footnote}>
         Completed runs in this vault only. Agent-reported costs come from the runner; estimates use

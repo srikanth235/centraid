@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RuntimeLogger } from '@centraid/app-engine';
 import { HealthRegistry } from './health-registry.js';
+import { RESOURCE_KNOB_BOUNDS } from './hardware-profile.js';
 
 const silentLogger: RuntimeLogger = {
   info: () => undefined,
@@ -168,6 +169,50 @@ describe('HealthRegistry', () => {
       expect('sseClients' in snap.metrics).toBe(false);
     });
 
+    it('surfaces resourceUsage actuals from the source, and omits it when unset (#528)', async () => {
+      const withUsage = new HealthRegistry();
+      const usage = {
+        sinceMs: 1_000,
+        process: { cpuSecondsTotal: 1.5, currentRssBytes: 200, peakRssBytes: 300 },
+        subsystems: {
+          workerPool: { tasks: 4, busyMs: 40 },
+          replication: { passes: 2, bytesReplicated: 512, busyMs: 12 },
+          backup: { drains: 1, bytesUploaded: 2_048, busyMs: 33 },
+          sweeps: { passes: 5, busyMs: 9 },
+          agentRuns: { runs: 3, busyMs: 4_200, cpuSeconds: null },
+        },
+        backgroundTimerFiresLastHour: 7,
+      };
+      withUsage.setMetricsSource(() => ({ outboxPending: 0, resourceUsage: usage }));
+      const snap = await withUsage.snapshot();
+      expect(snap.metrics.resourceUsage).toEqual(usage);
+      expect(snap.metrics.resourceUsage?.subsystems.agentRuns.cpuSeconds).toBeNull();
+
+      const without = new HealthRegistry();
+      without.setMetricsSource(() => ({ outboxPending: 0 }));
+      expect('resourceUsage' in (await without.snapshot()).metrics).toBe(false);
+    });
+
+    it('surfaces powerContext from the source, and omits it when unset (#528 Phase D)', async () => {
+      const withPower = new HealthRegistry();
+      const powerContext = {
+        kind: 'battery' as const,
+        battery: { percent: 15, charging: false },
+        deferringBackgroundWork: true,
+        reason: 'low-battery' as const,
+        source: 'client-push' as const,
+        stealPercent: null,
+        updatedAt: 1_000,
+      };
+      withPower.setMetricsSource(() => ({ outboxPending: 0, powerContext }));
+      const snap = await withPower.snapshot();
+      expect(snap.metrics.powerContext).toEqual(powerContext);
+
+      const without = new HealthRegistry();
+      without.setMetricsSource(() => ({ outboxPending: 0 }));
+      expect('powerContext' in (await without.snapshot()).metrics).toBe(false);
+    });
+
     it('surfaces performance metrics and exposes the shared load-shed signal', async () => {
       const registry = new HealthRegistry();
       let p99 = 18;
@@ -215,6 +260,46 @@ describe('HealthRegistry', () => {
       expect(resets).toBe(1);
     });
 
+    it('carries an injected structured resourceProfile through the snapshot', async () => {
+      const registry = new HealthRegistry();
+      const resourceProfile = {
+        class: 'standard' as const,
+        mode: 'balanced' as const,
+        host: {
+          cores: 8,
+          totalMemoryBytes: 16 * 1024 ** 3,
+          storageFsyncMs: 2,
+          cgroupLimitedCpu: false,
+          cgroupLimitedMemory: false,
+          stealPercent: null,
+        },
+        budget: { cpuShare: 0.75, memoryCapMb: 12_288 },
+        resolved: {
+          workerMaxConcurrent: 8,
+          workerMaxOldGenerationMb: 256,
+          workerPoolSize: 2,
+          replicationConcurrency: 3,
+          staticBrotliQuality: 10,
+          staticGzipQuality: 9,
+          sqliteSynchronous: 'FULL' as const,
+          vaultSweepIntervalMs: 3_600_000,
+          outboxIdleIntervalMs: 60_000,
+        },
+        sources: {
+          workerMaxConcurrent: { source: 'preset' as const },
+          workerMaxOldGenerationMb: { source: 'preset' as const },
+          workerPoolSize: { source: 'preset' as const },
+          replicationConcurrency: { source: 'preset' as const },
+          staticBrotliQuality: { source: 'preset' as const },
+          staticGzipQuality: { source: 'preset' as const },
+        },
+        bounds: RESOURCE_KNOB_BOUNDS,
+      };
+      registry.setMetricsSource(() => ({ outboxPending: 0, resourceProfile }));
+      const snap = await registry.snapshot();
+      expect(snap.metrics.resourceProfile).toEqual(resourceProfile);
+    });
+
     it('forces one visible background pass after sustained load shedding', async () => {
       let clock = 1_000;
       let p99 = 75;
@@ -243,6 +328,63 @@ describe('HealthRegistry', () => {
           status: 'ok',
           detail: expect.stringContaining('pressure cleared'),
         }),
+      );
+    });
+  });
+
+  describe('background pause (issue #528 Phase B)', () => {
+    it('is unpaused by default and exposes an unpaused snapshot window', async () => {
+      const registry = new HealthRegistry();
+      expect(registry.shouldPauseBackgroundWork()).toBe(false);
+      expect(registry.backgroundPauseState()).toEqual({ paused: false, until: null });
+      expect((await registry.snapshot()).metrics.backgroundPause).toEqual({
+        paused: false,
+        until: null,
+      });
+    });
+
+    it('pauses indefinitely with a null until and records an event', async () => {
+      const registry = new HealthRegistry({ now: () => 1_000 });
+      const state = registry.pauseBackgroundWork();
+      expect(state).toEqual({ paused: true, until: null });
+      expect(registry.shouldPauseBackgroundWork()).toBe(true);
+
+      const snap = await registry.snapshot();
+      expect(snap.metrics.backgroundPause).toEqual({ paused: true, until: null });
+      expect(snap.components).toContainEqual(
+        expect.objectContaining({ component: 'background-pause', status: 'degraded' }),
+      );
+      expect(snap.recentEvents).toContainEqual(
+        expect.objectContaining({ component: 'background-pause', level: 'warn' }),
+      );
+    });
+
+    it('auto-lifts a duration-bounded pause once the clock passes until', () => {
+      let clock = 1_000;
+      const registry = new HealthRegistry({ now: () => clock });
+      const state = registry.pauseBackgroundWork(5_000);
+      expect(state.until).toBe(new Date(6_000).toISOString());
+
+      clock = 5_999;
+      expect(registry.shouldPauseBackgroundWork()).toBe(true);
+      clock = 6_000;
+      expect(registry.shouldPauseBackgroundWork()).toBe(false);
+      expect(registry.backgroundPauseState()).toEqual({ paused: false, until: null });
+    });
+
+    it('resume lifts an active pause and is a no-op afterward', async () => {
+      const registry = new HealthRegistry();
+      registry.pauseBackgroundWork();
+      expect(registry.resumeBackgroundWork()).toEqual({ paused: false, until: null });
+      expect(registry.shouldPauseBackgroundWork()).toBe(false);
+
+      const before = (await registry.snapshot()).recentEvents.length;
+      registry.resumeBackgroundWork();
+      const after = (await registry.snapshot()).recentEvents.length;
+      // Idempotent: a second resume emits no further event.
+      expect(after).toBe(before);
+      expect((await registry.snapshot()).components).toContainEqual(
+        expect.objectContaining({ component: 'background-pause', status: 'ok' }),
       );
     });
   });

@@ -246,6 +246,18 @@ export interface VaultPlaneOptions {
   shouldDeferBackgroundWork?: () => boolean;
   /** Concurrent remote pushes selected by the gateway hardware profile. */
   replicationConcurrency?: number;
+  /**
+   * Resource-actuals hook (#528 Phase C): one lifecycle sweep completed —
+   * `durationMs` is the synchronous sweep portion. Accounting only, never a
+   * gate. Detached blob replication reports separately via `onReplicationPass`.
+   */
+  onSweepPass?: (info: { durationMs: number }) => void;
+  /**
+   * Resource-actuals hook (#528 Phase C): one blob-replication pass completed —
+   * `bytesReplicated` is the summed size of newly-replicated objects,
+   * `durationMs` the wall-clock of the detached reconcile. Accounting only.
+   */
+  onReplicationPass?: (info: { bytesReplicated: number; durationMs: number }) => void;
 }
 
 /** A grant request the owner approves — scopes as the manifest declares them. */
@@ -400,6 +412,11 @@ export class VaultPlane {
   /** Whether this process is allowed to capture or checkpoint these WALs. */
   private readonly ownsWalLifecycle: boolean;
   private readonly shouldDeferBackgroundWork: () => boolean;
+  /** Resource-actuals hooks (#528 Phase C) — accounting only, never gates. */
+  private readonly onSweepPass: ((info: { durationMs: number }) => void) | undefined;
+  private readonly onReplicationPass:
+    | ((info: { bytesReplicated: number; durationMs: number }) => void)
+    | undefined;
   private sweepTimer: NodeJS.Timeout | undefined;
   private walTimer: NodeJS.Timeout | undefined;
   private firstWalTick: NodeJS.Immediate | undefined;
@@ -446,6 +463,8 @@ export class VaultPlane {
     this.sweepIntervalMs = options.sweepIntervalMs ?? 60 * 60 * 1000;
     this.leaseConflicted = options.leaseConflicted ?? (() => false);
     this.shouldDeferBackgroundWork = options.shouldDeferBackgroundWork ?? (() => false);
+    this.onSweepPass = options.onSweepPass;
+    this.onReplicationPass = options.onReplicationPass;
     this.dir = options.dir;
     // Runner scratch lives in a disposable cache OUTSIDE the vault tree; fall
     // back to the vault dir only for callers that don't supply one (tests).
@@ -1913,6 +1932,9 @@ export class VaultPlane {
 
   private runSweep(): void {
     if (this.shouldDeferBackgroundWork()) return;
+    // Resource actuals (#528 Phase C): time the SYNCHRONOUS lifecycle work.
+    // Detached blob replication (`runBlobSweep`) reports its own busyMs.
+    const sweepStartedAt = Date.now();
     try {
       const result = this.sweep();
       const touched =
@@ -2052,6 +2074,8 @@ export class VaultPlane {
       this.logger.warn(
         `vault plane: sweep failed: ${err instanceof Error ? err.message : String(err)}`,
       );
+    } finally {
+      this.onSweepPass?.({ durationMs: Date.now() - sweepStartedAt });
     }
   }
 
@@ -2063,6 +2087,9 @@ export class VaultPlane {
    * replicas and detecting missing shas still runs either way.
    */
   private runBlobSweep(): void {
+    // Resource actuals (#528 Phase C): time the detached reconcile end-to-end
+    // and sum the bytes of newly-replicated objects. Accounting only.
+    const replicationStartedAt = Date.now();
     void Promise.all([this.resolveSnapshotBlobRoots(), this.resolveOrphanGraceWindowMs()])
       .then(([roots, graceWindowMs]) =>
         this.gateway.sweepBlobs(this.ownerCredential, {
@@ -2085,6 +2112,15 @@ export class VaultPlane {
               `orphansDeleted=${blobs.orphansDeleted.length} orphansSkipped=${blobs.orphansSkipped.length} ` +
               `orphansGraceHeld=${blobs.orphansGraceHeld.length} missing=${blobs.missing.length}`,
           );
+        }
+        if (this.onReplicationPass) {
+          let bytesReplicated = 0;
+          for (const sha of blobs.replicated)
+            bytesReplicated += this.db.blobs.statSync(sha)?.size ?? 0;
+          this.onReplicationPass({
+            bytesReplicated,
+            durationMs: Date.now() - replicationStartedAt,
+          });
         }
       })
       .catch((err: unknown) => {

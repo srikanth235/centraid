@@ -9,11 +9,16 @@ import {
 } from './main/app-chrome.js';
 import { installAuthInjector } from './main/auth-injector.js';
 import { installCrashHandlers } from './main/crash-log.js';
-import { startGatewayMonitor, stopGatewayMonitor } from './main/gateway-monitor.js';
+import {
+  nudgeGatewayMonitor,
+  startGatewayMonitor,
+  stopGatewayMonitor,
+} from './main/gateway-monitor.js';
 import { registerIpcHandlers } from './main/ipc.js';
 import { applyLaunchAtLogin } from './main/login-item.js';
 import { markLocalGatewaysDisposed, shutdownAllLocalGatewaysExcept } from './main/local-gateway.js';
 import { ensurePhoneLink, shutdownPhoneLink } from './main/phone-link.js';
+import { registerPowerContextListeners } from './main/power-context-push.js';
 import { startReminderMonitor, stopReminderMonitor } from './main/reminder-monitor.js';
 import { loadSettings } from './main/settings.js';
 import { startUpdateWatcher } from './main/update-watcher.js';
@@ -159,6 +164,10 @@ if (!gotSingleInstanceLock) {
     // per-launch uptime history, and fire the OS down-alert. Lives in main
     // so it survives navigation and alerts land while backgrounded.
     startGatewayMonitor();
+    // Host power-context push (#528 Phase D): the desktop owns the battery, so
+    // a battery/AC/thermal transition nudges an immediate gateway-monitor tick
+    // (which carries the push); the 5s heartbeat keeps it fresh otherwise.
+    registerPowerContextListeners(() => nudgeGatewayMonitor());
     // Task/event reminder watch: poll due `remind_before_min`/`reminders_json`
     // alerts and fire an OS notification for each new one. Same "lives in
     // main so it survives backgrounding" posture as the gateway monitor above.

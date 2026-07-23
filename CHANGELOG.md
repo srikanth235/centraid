@@ -22,3 +22,4 @@ with the release rules in [docs/release.md](docs/release.md) (issue #468 **D3** 
 ### Changed
 
 - Gateway info handshake no longer refuses clients solely because product version strings differ; capability flags still gate features ([#512](https://github.com/srikanth235/centraid/issues/512))
+- Resource sizing is now cgroup- and steal-aware: the hardware baseline sizes the share you granted of the host rather than the raw machine, and resource modes are budget presets over that share. On container-limited or high-CPU-steal hosts the resolved worker and memory knobs may decrease to match the actually-granted share; plain hosts resolve to the same numbers as before ([#528](https://github.com/srikanth235/centraid/issues/528))

@@ -4,6 +4,8 @@ import {
   getGatewayDeviceWorkStatus,
   getUserPrefs,
   listGatewayDevices,
+  pauseBackgroundWork,
+  resumeBackgroundWork,
   revokeGatewayDevice,
   saveUserPrefs,
   setGatewayDeviceCompute,
@@ -15,9 +17,16 @@ import {
   RESOURCE_MODE_PREF_KEY,
   type ResourceMode,
 } from '../../screens/ResourceModeCard.js';
+import {
+  knobPrefKey,
+  parseResourceKnobPrefs,
+  type ResourceKnobPrefs,
+  type TunableKnobKey,
+} from '../../screens/resource-summary.js';
 import { useShellActions } from '../actions.js';
 import PageScroll from '../PageScroll.js';
 import { PageLoading } from '../status.js';
+import { startVisibilityTicker } from './visibility-ticker.js';
 import { loadDiagnosticsData } from './settingsDiagnosticsData.js';
 import { useGatewayHealth } from '../useGatewayHealth.js';
 import { useGatewayRuntime } from '../useGatewayRuntime.js';
@@ -34,7 +43,7 @@ import { useGatewayRuntime } from '../useGatewayRuntime.js';
 export default function GatewayRoute(): JSX.Element {
   const { showToast } = useShellActions();
   const snapshot = useGatewayRuntime();
-  const { health } = useGatewayHealth();
+  const { health, refresh: refreshHealth } = useGatewayHealth();
   const [saving, setSaving] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   // Launch-at-login (issue #351) isn't part of the pushed runtime snapshot —
@@ -43,10 +52,9 @@ export default function GatewayRoute(): JSX.Element {
   const [launchAtLogin, setLaunchAtLogin] = useState(false);
   const [savingLaunchAtLogin, setSavingLaunchAtLogin] = useState(false);
 
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
+  // 1s uptime ticker, suspended while the tab is hidden (issue #528 Phase D
+  // wakeup hygiene) so a backgrounded window stops waking the machine.
+  useEffect(() => startVisibilityTicker(() => setNow(Date.now())), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,6 +104,38 @@ export default function GatewayRoute(): JSX.Element {
   const saveResourceMode = useCallback(async (mode: ResourceMode) => {
     await saveUserPrefs({ [RESOURCE_MODE_PREF_KEY]: mode });
   }, []);
+  // L3 "Tune" rung knob overrides (issue #528 Phase F) — plain prefs read/write.
+  // Stable identities so the 1s uptime tick doesn't re-fetch or re-create them.
+  const loadKnobPrefs = useCallback(
+    async (): Promise<ResourceKnobPrefs> => parseResourceKnobPrefs(await getUserPrefs()),
+    [],
+  );
+  const saveKnobPrefs = useCallback(
+    async (patch: Partial<Record<TunableKnobKey, number | null>>) => {
+      const prefPatch: Record<string, number | null> = {};
+      for (const [key, value] of Object.entries(patch)) {
+        prefPatch[knobPrefKey(key as TunableKnobKey)] = value ?? null;
+      }
+      await saveUserPrefs(prefPatch);
+    },
+    [],
+  );
+  // Pause/resume hot-apply, then nudge the health poll so the paused state
+  // reconciles quickly. Stable identities (same discipline as loadResourceMode)
+  // so the 1s uptime tick doesn't re-create the callbacks.
+  const pauseBackground = useCallback(
+    async (durationMs?: number) => {
+      const res = await pauseBackgroundWork(durationMs);
+      refreshHealth();
+      return res;
+    },
+    [refreshHealth],
+  );
+  const resumeBackground = useCallback(async () => {
+    const res = await resumeBackgroundWork();
+    refreshHealth();
+    return res;
+  }, [refreshHealth]);
 
   if (!snapshot) {
     return (
@@ -133,6 +173,10 @@ export default function GatewayRoute(): JSX.Element {
         onExportDiagnostics={() => window.CentraidApi.exportGatewayDiagnostics()}
         loadResourceMode={loadResourceMode}
         saveResourceMode={saveResourceMode}
+        onPauseBackgroundWork={pauseBackground}
+        onResumeBackgroundWork={resumeBackground}
+        loadKnobPrefs={loadKnobPrefs}
+        saveKnobPrefs={saveKnobPrefs}
       />
     </PageScroll>
   );

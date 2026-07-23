@@ -1,0 +1,239 @@
+/* Dialogs for the Resource card (issue #528 follow-up): the "Compare modes"
+   table and the "How we sized this" details sheet. Self-contained overlay
+   chrome — the client has no shared <Modal> component, only the fixed-position
+   idiom (styles/modal.module.css, SpaceModal.module.css). We keep our own so
+   the wide comparison table can size independently of the 560px modal card. */
+
+@keyframes rd-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes rd-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(8, 12, 11, 0.44);
+  backdrop-filter: blur(3px);
+  animation: rd-fade 0.18s ease-out;
+}
+.dialog {
+  position: fixed;
+  z-index: 80;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(460px, calc(100vw - 40px));
+  max-height: min(86vh, 760px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lg);
+  animation: rd-rise 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.dialogWide {
+  width: min(660px, calc(100vw - 40px));
+}
+@media (prefers-reduced-motion: reduce) {
+  .backdrop,
+  .dialog {
+    animation: none;
+  }
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 20px 14px;
+  border-bottom: 0.5px solid var(--line);
+}
+.headText {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 650;
+  font-size: 16.5px;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+.sub {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+.sub b {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+.close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--ink-3);
+  background: color-mix(in oklab, var(--ink) 4%, transparent);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: 0.16s;
+}
+.close:hover {
+  color: var(--ink);
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--line));
+}
+
+.body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 20px;
+  border-top: 0.5px solid var(--line);
+  background: color-mix(in oklab, var(--ink) 2.5%, transparent);
+}
+.footMsg {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.footMsg b {
+  color: var(--ink);
+  font-weight: 600;
+}
+.footActions {
+  display: flex;
+  gap: 9px;
+}
+
+/* ── Compare table ───────────────────────────────────────────────────────── */
+.cmp {
+  display: grid;
+  grid-template-columns: 1.15fr repeat(4, minmax(0, 1fr));
+  column-gap: 2px;
+  font-size: 12px;
+}
+.cmpHeadCell {
+  padding: 0 2px 4px;
+}
+.cmpMode {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 9px 4px;
+  text-align: center;
+  cursor: pointer;
+  background: color-mix(in oklab, var(--ink) 3%, transparent);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  transition: 0.16s;
+}
+.cmpMode:hover {
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--line));
+}
+.cmpName {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+  letter-spacing: -0.01em;
+}
+.cmpPick {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.cmpModeActive {
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 30%, transparent);
+}
+.cmpModeActive .cmpName,
+.cmpModeActive .cmpPick {
+  color: var(--accent);
+}
+.cmpRowLabel {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 9px 8px 9px 2px;
+  color: var(--ink-2);
+  font-weight: 500;
+  border-top: 0.5px solid var(--line);
+}
+.cmpQ {
+  color: var(--ink-4);
+  cursor: help;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.cmpCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 9px 4px;
+  border-top: 0.5px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+.cmpCellHot {
+  color: var(--ink);
+  font-weight: 600;
+}
+.cmpColActive {
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+}
+.cmpNote {
+  margin: 14px 0 0;
+  padding: 11px 13px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-3);
+  background: color-mix(in oklab, var(--ink) 3%, transparent);
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-md);
+}
+.cmpNote b {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+@media (max-width: 520px) {
+  .cmp {
+    grid-template-columns: 1fr repeat(4, minmax(46px, 1fr));
+    font-size: 11px;
+  }
+  .cmpCell,
+  .cmpName {
+    font-size: 11px;
+  }
+}

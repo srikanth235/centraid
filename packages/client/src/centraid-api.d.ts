@@ -1337,6 +1337,100 @@ export interface CentraidHealthEvent {
   message: string;
 }
 
+/** Knob keys the resolver derives + the L3 "Tune" rung can override (issue #528 Phase F). */
+export type CentraidResourceKnobKey =
+  | 'workerMaxConcurrent'
+  | 'workerMaxOldGenerationMb'
+  | 'workerPoolSize'
+  | 'replicationConcurrency'
+  | 'staticBrotliQuality'
+  | 'staticGzipQuality';
+
+/** Structured resource contract on health metrics (issue #528 Phase A). */
+export interface CentraidResourceProfile {
+  class: 'constrained' | 'standard';
+  mode: 'auto' | 'conserve' | 'balanced' | 'performance';
+  host: { cores: number; totalMemoryBytes: number; storageFsyncMs: number | null };
+  resolved: {
+    workerMaxConcurrent: number;
+    workerMaxOldGenerationMb: number;
+    workerPoolSize: number;
+    replicationConcurrency: number;
+    staticBrotliQuality: number;
+    staticGzipQuality: number;
+    sqliteSynchronous: 'FULL' | 'NORMAL';
+    vaultSweepIntervalMs: number;
+    outboxIdleIntervalMs: number;
+  };
+  /**
+   * Provenance of each resolved knob (issue #528 Phase F). `'preset'` → the
+   * derived default (renders as **Linked**); `'prefs'` → an owner override
+   * (renders as **Custom**); `'env'` → an operator-set environment variable
+   * (locked, `envVar` names it). Additive: absent on older gateways, in which
+   * case the L3 "Tune" rung does not render.
+   */
+  sources?: Record<
+    CentraidResourceKnobKey,
+    { source: 'env' | 'prefs' | 'preset'; envVar?: string }
+  >;
+  /** Accepted range per knob (issue #528 Phase F) — inclusive. Additive. */
+  bounds?: Record<CentraidResourceKnobKey, { min: number; max: number }>;
+}
+
+/** Background-work pause state on health metrics (issue #528 Phase B). */
+export interface CentraidBackgroundPause {
+  paused: boolean;
+  /** ISO timestamp the pause lifts, or `null` for indefinite / not paused. */
+  until: string | null;
+}
+
+/**
+ * Measured resource actuals — "what the gateway host actually used" — on
+ * health metrics (issue #528 Phase C). Proxies only (CPU time, bytes,
+ * activity); no wattage. `agentRuns.cpuSeconds` is `null` in v1 because agent
+ * runs are not separately CPU-accounted yet.
+ */
+export interface CentraidResourceUsage {
+  /** Epoch ms when accounting started (gateway boot). */
+  sinceMs: number;
+  process: {
+    /** Process-wide user+system CPU seconds since boot. */
+    cpuSecondsTotal: number;
+    currentRssBytes: number;
+    /** Max RSS observed at sample points. */
+    peakRssBytes: number;
+  };
+  subsystems: {
+    workerPool: { tasks: number; busyMs: number };
+    replication: { passes: number; bytesReplicated: number; busyMs: number };
+    backup: { drains: number; bytesUploaded: number; busyMs: number };
+    sweeps: { passes: number; busyMs: number };
+    agentRuns: { runs: number; busyMs: number; cpuSeconds: number | null };
+  };
+  /** Background timer fires in the last hour, or `null` when not tracked. */
+  backgroundTimerFiresLastHour: number | null;
+}
+
+/**
+ * Power-context posture on health metrics (issue #528 Phase D). Describes the
+ * gateway HOST's power situation — battery / mains / shared server — so the
+ * client can show a posture note attributed to the host, never the viewing
+ * device. `battery` is `null` whenever the host has no battery (a mains or
+ * server host) — the client must never render battery/thermal chrome then.
+ * Optional so older gateways (which never send it) render unchanged.
+ */
+export interface CentraidPowerContext {
+  kind: 'battery' | 'mains' | 'server';
+  /** `null` ⇒ host has no battery — no battery chrome, ever. */
+  battery: { percent: number | null; charging: boolean | null } | null;
+  deferringBackgroundWork: boolean;
+  reason: 'on-battery' | 'low-battery' | 'thermal' | null;
+  source: 'os-probe' | 'client-push' | 'none';
+  /** Observed CPU steal % on a shared server host, or `null` when unknown. */
+  stealPercent: number | null;
+  updatedAt: number | null;
+}
+
 /** Coarse numeric signals on `GET /centraid/_gateway/health` (issue #521). */
 export interface CentraidHealthMetrics {
   rssBytes: number;
@@ -1350,6 +1444,14 @@ export interface CentraidHealthMetrics {
   storageFsyncMs?: number;
   hardwareProfileClass?: string;
   resourceMode?: string;
+  /** Structured resource contract (issue #528 Phase A) — host facts + resolved knobs. */
+  resourceProfile?: CentraidResourceProfile;
+  /** Background-work pause state (issue #528 Phase B). */
+  backgroundPause?: CentraidBackgroundPause;
+  /** Measured resource actuals (issue #528 Phase C) — CPU/bytes/activity proxies. */
+  resourceUsage?: CentraidResourceUsage;
+  /** Power-context posture (issue #528 Phase D) — battery / mains / server. */
+  powerContext?: CentraidPowerContext;
   uptimeMs: number;
 }
 
@@ -1666,6 +1768,10 @@ declare global {
     storageFsyncMs?: number;
     hardwareProfileClass?: string;
     resourceMode?: string;
+    /** Measured resource actuals (issue #528 Phase C) — CPU/bytes/activity proxies. */
+    resourceUsage?: CentraidResourceUsage;
+    /** Power-context posture (issue #528 Phase D) — battery / mains / server. */
+    powerContext?: CentraidPowerContext;
     uptimeMs: number;
   }
   interface CentraidGatewayHealth {

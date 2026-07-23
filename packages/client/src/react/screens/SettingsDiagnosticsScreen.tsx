@@ -5,6 +5,11 @@ import { cx } from '../ui/cx.js';
 import styles from './SettingsDiagnosticsScreen.module.css';
 import buttonCss from '../ui/Button.module.css';
 import controlsCss from '../styles/controls.module.css';
+import type {
+  BackgroundPauseDTO,
+  PowerContextState,
+  ResourceProfileDTO,
+} from './resource-summary.js';
 
 // Gateway → Components: the owner surface over the gateway's
 // component-level health (`GET /centraid/_gateway/health`). Uptime says
@@ -47,6 +52,23 @@ export interface HealthMetricsDTO {
   storageFsyncMs?: number;
   hardwareProfileClass?: string;
   resourceMode?: string;
+  /**
+   * Structured resource contract (issue #528 Phase A) — host facts, class,
+   * mode, and the resolved knobs the profile derived. Present on modern
+   * gateways only; the Resource card's L1/L2 disclosure gates on it.
+   */
+  resourceProfile?: ResourceProfileDTO;
+  /**
+   * Background-work pause state (issue #528 Phase B). Present on modern
+   * gateways only; absent hides the Resource card's pause control.
+   */
+  backgroundPause?: BackgroundPauseDTO;
+  /**
+   * Power-context posture (issue #528 Phase D) — the gateway host's battery /
+   * mains / server situation. Present on modern gateways only; drives the
+   * Resource card's posture note (battery/thermal chrome or a server fact).
+   */
+  powerContext?: PowerContextState;
   uptimeMs: number;
 }
 

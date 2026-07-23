@@ -2,16 +2,13 @@ import { useRef, useState, type JSX } from 'react';
 import Icon from '../ui/Icon.js';
 import { cx } from '../ui/cx.js';
 import {
-  ALERT_PRESETS,
   availabilityPct,
-  buildAlertHistoryRows,
   buildOutageRows,
   formatAgo,
   formatClock,
   formatDuration,
   formatUptime,
   reconcileStatus,
-  thresholdLabel,
   type GatewayRuntimeSnapshot,
   type ReconciledStatus,
 } from '../shell/routes/gatewayData.js';
@@ -21,9 +18,12 @@ import SettingsDiagnosticsScreen, {
 } from './SettingsDiagnosticsScreen.js';
 import LogsScreen, { type LogsBridgeProps } from './LogsScreen.js';
 import DevicesCard, { type DevicesCardProps } from './DevicesCard.js';
-import AlertHistoryPanel from './AlertHistoryPanel.js';
+import GatewayAlertsTab from './GatewayAlertsTab.js';
 import RestartGatewayButton from './RestartGatewayButton.js';
-import ResourceModeCard, { type ResourceMode } from './ResourceModeCard.js';
+import ResourceModeCard, {
+  type ResourceMode,
+  type ResourceModeCardProps,
+} from './ResourceModeCard.js';
 import styles from './GatewayScreen.module.css';
 
 // Gateway runtime, component health, paired devices, logs, and alerts share
@@ -73,6 +73,22 @@ export interface GatewayScreenProps {
    */
   loadResourceMode?: () => Promise<ResourceMode>;
   saveResourceMode?: (mode: ResourceMode) => Promise<void>;
+  /**
+   * Pause / resume background work (issue #528 Phase B). Optional so older
+   * hosts/tests keep rendering; the pause control also gates on the health
+   * snapshot carrying `metrics.backgroundPause`.
+   */
+  onPauseBackgroundWork?: (
+    durationMs?: number,
+  ) => Promise<{ paused: boolean; until: string | null }>;
+  onResumeBackgroundWork?: () => Promise<{ paused: boolean }>;
+  /**
+   * L3 "Tune" rung knob overrides (issue #528 Phase F). Optional so older
+   * hosts/tests keep rendering; the Advanced section also gates on the health
+   * profile carrying `sources` + `bounds`.
+   */
+  loadKnobPrefs?: ResourceModeCardProps['loadKnobPrefs'];
+  saveKnobPrefs?: ResourceModeCardProps['saveKnobPrefs'];
 }
 
 type TabId = 'overview' | 'components' | 'logs' | 'alerts';
@@ -141,12 +157,9 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
       : undefined;
   const availability = availabilityPct(snapshot);
   const outageRows = buildOutageRows(snapshot, now);
-  const alertHistoryRows = buildAlertHistoryRows(snapshot);
   const samples = snapshot.samples.slice(-STRIP_SAMPLES);
   const stripSpanMs =
     samples.length >= 2 ? (samples[samples.length - 1]?.at ?? 0) - (samples[0]?.at ?? 0) : 0;
-  const alert = snapshot.alert;
-  const hasPreset = ALERT_PRESETS.some((p) => p.seconds === alert.thresholdSeconds);
 
   return (
     <div className={styles.page} data-status={overall}>
@@ -256,110 +269,135 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
             </div>
           </section>
 
+          {/* Two packed columns, not one auto-placed grid: shared grid rows
+              let the tall Resource card open a dead column next to it. */}
           <div className={styles.grid}>
-            {/* Outage log — every stretch of missed heartbeats this session. */}
-            <section className={styles.panel}>
-              <div className={styles.panelHead}>
-                <h2>Outage log</h2>
-                <span className={styles.panelMeta}>
-                  since {formatClock(snapshot.trackingSince)} · {snapshot.checksFailed} failed{' '}
-                  {snapshot.checksFailed === 1 ? 'check' : 'checks'}
-                </span>
-              </div>
-              {outageRows.length > 0 ? (
-                <div className={styles.outages}>
-                  {outageRows.map((o) => (
-                    <div key={o.id} className={styles.outage} data-ongoing={o.ongoing || undefined}>
-                      <span className={styles.outageDot} />
-                      <span className={styles.outageStart}>{o.startedLabel}</span>
-                      <span className={styles.outageDuration}>
-                        {o.durationLabel}
-                        {o.ongoing ? ' — ongoing' : ''}
-                      </span>
-                      {o.alerted ? <span className={styles.outageBadge}>notified</span> : null}
-                    </div>
-                  ))}
+            <div className={styles.gridCol}>
+              {/* Outage log — every stretch of missed heartbeats this session. */}
+              <section className={styles.panel}>
+                <div className={styles.panelHead}>
+                  <h2>Outage log</h2>
+                  <span className={styles.panelMeta}>
+                    since {formatClock(snapshot.trackingSince)} · {snapshot.checksFailed} failed{' '}
+                    {snapshot.checksFailed === 1 ? 'check' : 'checks'}
+                  </span>
                 </div>
-              ) : (
-                <div className={styles.panelEmpty}>
-                  No downtime recorded this session. The log resets when the app relaunches or you
-                  switch gateways.
-                </div>
-              )}
-            </section>
+                {outageRows.length > 0 ? (
+                  <div className={styles.outages}>
+                    {outageRows.map((o) => (
+                      <div
+                        key={o.id}
+                        className={styles.outage}
+                        data-ongoing={o.ongoing || undefined}
+                      >
+                        <span className={styles.outageDot} />
+                        <span className={styles.outageStart}>{o.startedLabel}</span>
+                        <span className={styles.outageDuration}>
+                          {o.durationLabel}
+                          {o.ongoing ? ' — ongoing' : ''}
+                        </span>
+                        {o.alerted ? <span className={styles.outageBadge}>notified</span> : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={styles.panelEmpty}>
+                    No downtime recorded this session. The log resets when the app relaunches or you
+                    switch gateways.
+                  </div>
+                )}
+              </section>
 
-            {/* Identity — what the heartbeat is talking to. */}
-            <section className={styles.panel}>
-              <div className={styles.panelHead}>
-                <h2>Identity</h2>
-              </div>
-              <dl className={styles.idList}>
-                <div className={styles.idRow}>
-                  <dt>Gateway</dt>
-                  <dd>{snapshot.gatewayLabel}</dd>
-                </div>
-                <div className={styles.idRow}>
-                  <dt>Kind</dt>
-                  <dd className={styles.idMono}>{snapshot.gatewayKind}</dd>
-                </div>
-                <div className={styles.idRow}>
-                  <dt>Version</dt>
-                  <dd className={styles.idMono}>
-                    {snapshot.version ?? '—'}
-                    {snapshot.schemaEpoch !== undefined ? ` · epoch ${snapshot.schemaEpoch}` : ''}
-                  </dd>
-                </div>
-                <div className={styles.idRow}>
-                  <dt>Started</dt>
-                  <dd className={styles.idMono}>
-                    {uptimeMs !== undefined ? formatClock(now - uptimeMs) : '—'}
-                  </dd>
-                </div>
-                <div className={styles.idRow}>
-                  <dt>Checks</dt>
-                  <dd className={styles.idMono}>
-                    {snapshot.checksTotal} run · {snapshot.checksFailed} failed
-                  </dd>
-                </div>
-              </dl>
-              <div className={styles.idFooter}>
-                <RestartGatewayButton onRestart={props.onRestartGateway} />
-              </div>
-            </section>
+              {props.loadResourceMode && props.saveResourceMode ? (
+                <ResourceModeCard
+                  loadMode={props.loadResourceMode}
+                  saveMode={props.saveResourceMode}
+                  {...(health?.metrics?.hardwareProfileClass
+                    ? { resolvedClass: health.metrics.hardwareProfileClass }
+                    : {})}
+                  {...(health?.metrics?.resourceMode
+                    ? { activeMode: health.metrics.resourceMode }
+                    : {})}
+                  {...(health?.metrics?.resourceProfile
+                    ? { resourceProfile: health.metrics.resourceProfile }
+                    : {})}
+                  {...(health?.metrics?.backgroundPause
+                    ? { backgroundPause: health.metrics.backgroundPause }
+                    : {})}
+                  {...(health?.metrics?.powerContext
+                    ? { powerContext: health.metrics.powerContext }
+                    : {})}
+                  {...(props.onPauseBackgroundWork ? { onPause: props.onPauseBackgroundWork } : {})}
+                  {...(props.onResumeBackgroundWork
+                    ? { onResume: props.onResumeBackgroundWork }
+                    : {})}
+                  {...(props.loadKnobPrefs ? { loadKnobPrefs: props.loadKnobPrefs } : {})}
+                  {...(props.saveKnobPrefs ? { saveKnobPrefs: props.saveKnobPrefs } : {})}
+                />
+              ) : null}
+            </div>
 
-            {props.loadResourceMode && props.saveResourceMode ? (
-              <ResourceModeCard
-                loadMode={props.loadResourceMode}
-                saveMode={props.saveResourceMode}
-                {...(health?.metrics?.hardwareProfileClass
-                  ? { resolvedClass: health.metrics.hardwareProfileClass }
-                  : {})}
-                {...(health?.metrics?.resourceMode
-                  ? { activeMode: health.metrics.resourceMode }
-                  : {})}
-              />
-            ) : null}
+            <div className={styles.gridCol}>
+              {/* Identity — what the heartbeat is talking to. */}
+              <section className={styles.panel}>
+                <div className={styles.panelHead}>
+                  <h2>Identity</h2>
+                </div>
+                <dl className={styles.idList}>
+                  <div className={styles.idRow}>
+                    <dt>Gateway</dt>
+                    <dd>{snapshot.gatewayLabel}</dd>
+                  </div>
+                  <div className={styles.idRow}>
+                    <dt>Kind</dt>
+                    <dd className={styles.idMono}>{snapshot.gatewayKind}</dd>
+                  </div>
+                  <div className={styles.idRow}>
+                    <dt>Version</dt>
+                    <dd className={styles.idMono}>
+                      {snapshot.version ?? '—'}
+                      {snapshot.schemaEpoch !== undefined ? ` · epoch ${snapshot.schemaEpoch}` : ''}
+                    </dd>
+                  </div>
+                  <div className={styles.idRow}>
+                    <dt>Started</dt>
+                    <dd className={styles.idMono}>
+                      {uptimeMs !== undefined ? formatClock(now - uptimeMs) : '—'}
+                    </dd>
+                  </div>
+                  <div className={styles.idRow}>
+                    <dt>Checks</dt>
+                    <dd className={styles.idMono}>
+                      {snapshot.checksTotal} run · {snapshot.checksFailed} failed
+                    </dd>
+                  </div>
+                </dl>
+                <div className={styles.idFooter}>
+                  <RestartGatewayButton onRestart={props.onRestartGateway} />
+                </div>
+              </section>
 
-            {/* Paired devices and their contributed-compute status (#392/#414). */}
-            {props.loadDevices && props.onRevokeDevice ? (
-              <DevicesCard
-                now={now}
-                loadDevices={props.loadDevices}
-                onRevokeDevice={props.onRevokeDevice}
-                {...(props.onCurrentDeviceRevoked
-                  ? { onCurrentDeviceRevoked: props.onCurrentDeviceRevoked }
-                  : {})}
-                {...(props.onCreateDeviceTicket
-                  ? { onCreateTicket: props.onCreateDeviceTicket }
-                  : {})}
-                {...(props.onUpdateDeviceCompute
-                  ? { onUpdateCompute: props.onUpdateDeviceCompute }
-                  : {})}
-                {...(props.loadDeviceWorkStatus
-                  ? { loadWorkStatus: props.loadDeviceWorkStatus }
-                  : {})}
-              />
-            ) : null}
+              {/* Paired devices and their contributed-compute status (#392/#414). */}
+              {props.loadDevices && props.onRevokeDevice ? (
+                <DevicesCard
+                  now={now}
+                  loadDevices={props.loadDevices}
+                  onRevokeDevice={props.onRevokeDevice}
+                  {...(props.onCurrentDeviceRevoked
+                    ? { onCurrentDeviceRevoked: props.onCurrentDeviceRevoked }
+                    : {})}
+                  {...(props.onCreateDeviceTicket
+                    ? { onCreateTicket: props.onCreateDeviceTicket }
+                    : {})}
+                  {...(props.onUpdateDeviceCompute
+                    ? { onUpdateCompute: props.onUpdateDeviceCompute }
+                    : {})}
+                  {...(props.loadDeviceWorkStatus
+                    ? { loadWorkStatus: props.loadDeviceWorkStatus }
+                    : {})}
+                />
+              ) : null}
+            </div>
           </div>
         </>
       ) : null}
@@ -381,95 +419,17 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
       ) : null}
 
       {tab === 'alerts' ? (
-        <div className={cx(styles.tabPane, styles.tabPaneForm)}>
-          {/* Down alert — the configurable notification threshold. */}
-          <section className={styles.panel}>
-            <div className={styles.panelHead}>
-              <h2>Down alert</h2>
-              <span className={styles.panelMeta}>default 2m</span>
-            </div>
-            <div className={styles.alertBody}>
-              <div className={styles.alertToggleRow}>
-                <div>
-                  <div className={styles.alertToggleLabel}>Alert when unreachable</div>
-                  <div className={styles.alertToggleSub}>
-                    A system notification fires once per outage — even with this window in the
-                    background — and again when the gateway recovers.
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={alert.enabled}
-                  aria-label="Alert when unreachable"
-                  className={styles.switch}
-                  data-on={alert.enabled || undefined}
-                  disabled={props.savingAlert}
-                  onClick={() => props.onAlertsEnabledChange(!alert.enabled)}
-                >
-                  <span className={styles.switchThumb} />
-                </button>
-              </div>
-              <div className={styles.alertAfter} data-disabled={!alert.enabled || undefined}>
-                <div className={styles.alertAfterLabel}>after unreachable for</div>
-                <div className={styles.presets}>
-                  {ALERT_PRESETS.map((p) => (
-                    <button
-                      key={p.seconds}
-                      type="button"
-                      className={cx(
-                        styles.preset,
-                        p.seconds === alert.thresholdSeconds && styles.presetActive,
-                      )}
-                      disabled={props.savingAlert || !alert.enabled}
-                      onClick={() => props.onAlertSecondsChange(p.seconds)}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                  {!hasPreset ? (
-                    <span className={cx(styles.preset, styles.presetActive)}>
-                      {thresholdLabel(alert.thresholdSeconds)}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* Launch at login — the cheap 80% fix for "always-on" (no OS
-              scheduler keeps the desktop-hosted gateway up once the app quits,
-              but this brings the app itself back after a reboot/login). */}
-          <section className={styles.panel}>
-            <div className={styles.panelHead}>
-              <h2>Launch at login</h2>
-            </div>
-            <div className={styles.alertBody}>
-              <div className={styles.alertToggleRow}>
-                <div>
-                  <div className={styles.alertToggleLabel}>Start Centraid at login</div>
-                  <div className={styles.alertToggleSub}>
-                    Keeps your gateway available without having to open Centraid by hand.
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={props.launchAtLogin ?? false}
-                  aria-label="Start Centraid at login"
-                  className={styles.switch}
-                  data-on={props.launchAtLogin || undefined}
-                  disabled={props.savingLaunchAtLogin}
-                  onClick={() => props.onLaunchAtLoginChange?.(!(props.launchAtLogin ?? false))}
-                >
-                  <span className={styles.switchThumb} />
-                </button>
-              </div>
-            </div>
-          </section>
-
-          <AlertHistoryPanel rows={alertHistoryRows} />
-        </div>
+        <GatewayAlertsTab
+          snapshot={snapshot}
+          savingAlert={props.savingAlert}
+          onAlertSecondsChange={props.onAlertSecondsChange}
+          onAlertsEnabledChange={props.onAlertsEnabledChange}
+          launchAtLogin={props.launchAtLogin}
+          savingLaunchAtLogin={props.savingLaunchAtLogin}
+          {...(props.onLaunchAtLoginChange
+            ? { onLaunchAtLoginChange: props.onLaunchAtLoginChange }
+            : {})}
+        />
       ) : null}
     </div>
   );
