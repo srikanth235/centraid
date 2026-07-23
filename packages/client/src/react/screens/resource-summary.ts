@@ -3,6 +3,12 @@
 // and L2 "how we sized this" math stay unit-testable, and so ResourceModeCard
 // + ResourceCardDetails stay under the 500-line governance cap.
 
+/**
+ * The owner resource mode (issue #521). Home for the union so the card, the
+ * Compare dialog, and the prefs parser all import one definition — no cycle.
+ */
+export type ResourceMode = 'auto' | 'conserve' | 'balanced' | 'performance';
+
 /** Host facts the gateway measured, from `health.metrics.resourceProfile.host`. */
 export interface ResourceProfileHost {
   cores: number;

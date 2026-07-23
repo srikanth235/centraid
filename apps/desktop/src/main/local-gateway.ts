@@ -164,7 +164,11 @@ async function startEmbedded(gatewayId: string): Promise<LocalGatewayRuntime> {
 async function startDetached(gatewayId: string): Promise<LocalGatewayRuntime> {
   const ownerId = await getOrCreateDesktopOwnerId();
   const dataDir = gatewayDir(gatewayId);
-  const detached = await ensureDetachedGateway({ dataDir, ownerId });
+  // `replaceOwnedIfStale`: on launch, if we own a gateway that's still running
+  // from an older build than the one on disk, respawn it instead of adopting
+  // the stale daemon — so a rebuilt gateway (dev) or an updated app (prod)
+  // actually takes effect. Safe now that stop waits for real exit.
+  const detached = await ensureDetachedGateway({ dataDir, ownerId, replaceOwnedIfStale: true });
   // Phone tunnel lives in the Electron main process; register is a no-op on
   // detached handles (child owns its own health registry). Keep the probe
   // call for API parity.

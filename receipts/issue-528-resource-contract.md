@@ -185,6 +185,26 @@ One policy path; load-shed / event-loop pressure remain separate from capacity:
 
 Receipt + PR(s); Conventional Commits with issue suffix; `bun run check:pr` green: this file; PR #530 grown in place on branch `claude/resource-contract-528` (full scope folded into the one PR, no stacked PRs); gate run recorded under Verification.
 
+Card legibility follow-up — the dense stacked tables in the Resource card body forced a mode commitment before showing its consequences; lifted into two focused dialogs so the card stays a compact choose-and-glance surface:
+
+- `packages/client/src/react/screens/resource-presets.ts` / `resource-presets.test.ts` — client-side mirror of the gateway `BUDGET_PRESETS` (the health metric only ever carries the *active* mode's resolved values, so the side-by-side comparison needs the static table locally, consistent with the already-mirrored MODES list); `resourceCompareRows()` (9 knobs × formatted per-preset values + plain-English tooltip), `presetHint()` (`workers · memory` under each mode chip), `formatInterval` helper
+- `packages/client/src/react/screens/ResourceCompareDialog.tsx` — "Compare all modes": all four modes side by side with selectable columns; Auto renders `—` (it detects a class at boot, never a fixed preset); "Use this mode" applies through the existing `saveMode` path
+- `packages/client/src/react/screens/ResourceDetailsDialog.tsx` — "How we sized this": the L2 host facts + resolved knobs (`ResourceCardDetails` in a new `embedded` mode) plus the L3 advanced knobs, lifted out of the card body into one sheet
+- `packages/client/src/react/screens/ResourceDialogs.module.css` — self-contained overlay chrome (the client has no shared `<Modal>`/portal); theme-aware, reduced-motion-safe, compare-table grid
+- `packages/client/src/react/screens/ResourceCardDetails.tsx` — `embedded` prop: renders open inside the dialog; its standalone disclosure behavior is preserved for any other caller
+- `packages/client/src/react/screens/ResourceModeCard.tsx` — compact segmented mode picker with per-mode hints, one-line budget, two dialog openers; the pause trigger was a borderless `ghost` button that read as a caption — now a quiet outlined chip with a pause glyph, set off by a hairline rule, with a "Pause for" label on the duration row
+- `packages/client/src/react/screens/resource-summary.ts` — `ResourceMode` union moved here as the shared leaf home so the card, the Compare dialog, and the prefs parser import one definition (no import cycle)
+- `packages/client/src/react/screens/GatewayScreen.module.css` — segmented mode tray + dialog-opener + pause-chip styles; `.tabPaneForm` now centres its readable-measure column (`margin-inline: auto`) so the Alerts tab's leftover width sits evenly instead of pinning left and reading as a bug
+- `packages/client/src/react/screens/DevicesCard.module.css` — the card now sizes as a normal right-rail panel (`min-width: 0`, no full-bleed `grid-column`) and scrolls its device list at `max-height: 320px` instead of growing the rail
+- `packages/client/src/react/screens/ResourceModeCard.test.tsx` — the disclosure test became a dialog test (open "How we sized this", assert body facts, close); older-gateway test asserts the compact card; a new Compare-dialog test selects Performance and asserts the applied mode + restart note
+
+Gateway lifecycle robustness (surfaced while relaunch-testing #528) — an owned gateway baked from a stale build must be replaced, not reattached, and a Restart must not race its own respawn:
+
+- `apps/desktop/src/main/detached-gateway-core.ts` — `ownedGatewayNeedsRespawn` + a `buildTag` on the ownership stamp so a boot detects a stale baked gateway
+- `apps/desktop/src/main/detached-gateway.ts` — `terminateDetachedGateway` stop-and-wait + freshness gate keyed on `gatewayBuildTag`
+- `apps/desktop/src/main/local-gateway.ts` — `replaceOwnedIfStale: true` at the owned-gateway ensure site
+- `apps/desktop/src/main/detached-gateway-core.test.ts` — respawn-when-stale / keep-when-fresh coverage
+
 ## Out of scope
 
 - Metered-network posture: no metered signal is exposed by Node or Electron's powerMonitor today; deferred until a platform signal exists
@@ -255,3 +275,5 @@ PASS. Only the single mid-task scope-redirect above is recorded. No routine ackn
 | claude-code-aa0d5e54-559-1784810233-1 | claude-code | aa0d5e54-559c-44f9-a288-6184b51ff25b | #528 | claude-fable-5 | 6 | 12033 | 615618 | 1428 | 13467 | 0.8375 | 238 | 714580 | 15559411 | 211374 | feat(desktop): push host power context to the gateway (#528)Electron owns the ba |
 | claude-code-aa0d5e54-559-1784810281-1 | claude-code | aa0d5e54-559c-44f9-a288-6184b51ff25b | #528 | claude-fable-5 | 2 | 539 | 209217 | 532 | 1073 | 0.2426 | 240 | 715119 | 15768628 | 211906 | feat(client): resource receipt, power posture note, advanced knobs (#528)Phases  |
 | claude-code-aa0d5e54-559-1784810348-1 | claude-code | aa0d5e54-559c-44f9-a288-6184b51ff25b | #528 | claude-fable-5 | 16 | 9929 | 1686034 | 9368 | 19313 | 2.2787 | 256 | 725048 | 17454662 | 221274 | feat(client): resource receipt, power posture note, advanced knobs (#528)Phases  |
+| claude-code-aa0d5e54-559-1784818432-1 | claude-code | aa0d5e54-559c-44f9-a288-6184b51ff25b | #528 | claude-opus-4-8 | 2052 | 6395869 | 161334228 | 1472109 | 7870030 | 157.4543 | 2308 | 7120917 | 178788890 | 1693383 | feat(client): resource card dialogs, pause chip, alerts layout; stale-gateway re |
+| claude-code-aa0d5e54-559-1784818576-1 | claude-code | aa0d5e54-559c-44f9-a288-6184b51ff25b | #528 | claude-opus-4-8 | 12 | 15603 | 956604 | 3399 | 19014 | 0.6609 | 2320 | 7136520 | 179745494 | 1696782 | feat(client): resource card dialogs, pause chip, alerts layout; stale-gateway re |

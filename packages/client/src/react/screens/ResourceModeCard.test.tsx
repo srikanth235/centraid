@@ -172,36 +172,74 @@ describe('ResourceModeCard — L1 budget summary + L2 disclosure', () => {
     expect(summary?.textContent).toContain('Sized for this gateway’s host');
   });
 
-  it('expands and collapses the "How we sized this" disclosure', async () => {
+  it('opens the "How we sized this" dialog with host facts + resolved knobs', async () => {
     const el = await mount({
       loadMode: vi.fn().mockResolvedValue('balanced'),
       saveMode: vi.fn(),
       resourceProfile: sampleProfile,
     });
-    const toggle = el.querySelector('[data-testid="resource-details-toggle"]') as HTMLButtonElement;
-    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    // Closed by default — no dialog, no body in the tree.
+    expect(el.querySelector('[data-testid="resource-details-dialog"]')).toBeNull();
     expect(el.querySelector('[data-testid="resource-details-body"]')).toBeNull();
 
-    await act(async () => toggle.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    const open = el.querySelector('[data-testid="resource-details-open"]') as HTMLButtonElement;
+    await act(async () => open.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+
+    const dialog = el.querySelector('[data-testid="resource-details-dialog"]');
+    expect(dialog).not.toBeNull();
     const body = el.querySelector('[data-testid="resource-details-body"]');
     expect(body?.textContent).toContain('CPU cores');
     expect(body?.textContent).toContain('2 × 1280 MB');
     expect(body?.textContent).toContain('every 5 min');
 
-    await act(async () => toggle.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(el.querySelector('[data-testid="resource-details-body"]')).toBeNull();
+    // The close button dismisses it.
+    const close = dialog?.querySelector('[aria-label="Close"]') as HTMLButtonElement;
+    await act(async () => close.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(el.querySelector('[data-testid="resource-details-dialog"]')).toBeNull();
   });
 
-  it('omits L1/L2 entirely when resourceProfile is absent (older gateway)', async () => {
+  it('omits L1 + the sizing opener when resourceProfile is absent (older gateway)', async () => {
     const el = await mount({
       loadMode: vi.fn().mockResolvedValue('auto'),
       saveMode: vi.fn(),
     });
     expect(el.querySelector('[data-testid="resource-summary"]')).toBeNull();
-    expect(el.querySelector('[data-testid="resource-details-toggle"]')).toBeNull();
+    expect(el.querySelector('[data-testid="resource-details-open"]')).toBeNull();
+    // Compare works off static presets, so its opener is always present.
+    expect(el.querySelector('[data-testid="resource-compare-open"]')).not.toBeNull();
     // The card still renders its mode chips.
     expect(el.querySelectorAll('[role="radio"]')).toHaveLength(4);
+  });
+});
+
+describe('ResourceModeCard — compare modes dialog', () => {
+  it('opens the compare dialog, shows preset values, and applies a chosen mode', async () => {
+    const saveMode = vi.fn().mockResolvedValue(undefined);
+    const el = await mount({
+      loadMode: vi.fn().mockResolvedValue('balanced'),
+      saveMode,
+      resourceProfile: sampleProfile,
+    });
+    const open = el.querySelector('[data-testid="resource-compare-open"]') as HTMLButtonElement;
+    await act(async () => open.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+
+    const dialog = el.querySelector('[data-testid="resource-compare-dialog"]');
+    expect(dialog).not.toBeNull();
+    // Static preset values from the mirror are visible side by side.
+    expect(dialog?.textContent).toContain('brotli q10');
+    expect(dialog?.textContent).toContain('Relaxed');
+
+    const perf = el.querySelector(
+      '[data-testid="resource-compare-mode-performance"]',
+    ) as HTMLButtonElement;
+    await act(async () => perf.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const apply = el.querySelector('[data-testid="resource-compare-apply"]') as HTMLButtonElement;
+    await act(async () => apply.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+
+    expect(saveMode).toHaveBeenCalledWith('performance');
+    // Applying closes the dialog.
+    expect(el.querySelector('[data-testid="resource-compare-dialog"]')).toBeNull();
+    expect(el.textContent).toContain('Applies fully on the next gateway restart');
   });
 });
 

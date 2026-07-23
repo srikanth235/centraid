@@ -269,125 +269,135 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
             </div>
           </section>
 
+          {/* Two packed columns, not one auto-placed grid: shared grid rows
+              let the tall Resource card open a dead column next to it. */}
           <div className={styles.grid}>
-            {/* Outage log — every stretch of missed heartbeats this session. */}
-            <section className={styles.panel}>
-              <div className={styles.panelHead}>
-                <h2>Outage log</h2>
-                <span className={styles.panelMeta}>
-                  since {formatClock(snapshot.trackingSince)} · {snapshot.checksFailed} failed{' '}
-                  {snapshot.checksFailed === 1 ? 'check' : 'checks'}
-                </span>
-              </div>
-              {outageRows.length > 0 ? (
-                <div className={styles.outages}>
-                  {outageRows.map((o) => (
-                    <div key={o.id} className={styles.outage} data-ongoing={o.ongoing || undefined}>
-                      <span className={styles.outageDot} />
-                      <span className={styles.outageStart}>{o.startedLabel}</span>
-                      <span className={styles.outageDuration}>
-                        {o.durationLabel}
-                        {o.ongoing ? ' — ongoing' : ''}
-                      </span>
-                      {o.alerted ? <span className={styles.outageBadge}>notified</span> : null}
-                    </div>
-                  ))}
+            <div className={styles.gridCol}>
+              {/* Outage log — every stretch of missed heartbeats this session. */}
+              <section className={styles.panel}>
+                <div className={styles.panelHead}>
+                  <h2>Outage log</h2>
+                  <span className={styles.panelMeta}>
+                    since {formatClock(snapshot.trackingSince)} · {snapshot.checksFailed} failed{' '}
+                    {snapshot.checksFailed === 1 ? 'check' : 'checks'}
+                  </span>
                 </div>
-              ) : (
-                <div className={styles.panelEmpty}>
-                  No downtime recorded this session. The log resets when the app relaunches or you
-                  switch gateways.
-                </div>
-              )}
-            </section>
+                {outageRows.length > 0 ? (
+                  <div className={styles.outages}>
+                    {outageRows.map((o) => (
+                      <div
+                        key={o.id}
+                        className={styles.outage}
+                        data-ongoing={o.ongoing || undefined}
+                      >
+                        <span className={styles.outageDot} />
+                        <span className={styles.outageStart}>{o.startedLabel}</span>
+                        <span className={styles.outageDuration}>
+                          {o.durationLabel}
+                          {o.ongoing ? ' — ongoing' : ''}
+                        </span>
+                        {o.alerted ? <span className={styles.outageBadge}>notified</span> : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={styles.panelEmpty}>
+                    No downtime recorded this session. The log resets when the app relaunches or you
+                    switch gateways.
+                  </div>
+                )}
+              </section>
 
-            {/* Identity — what the heartbeat is talking to. */}
-            <section className={styles.panel}>
-              <div className={styles.panelHead}>
-                <h2>Identity</h2>
-              </div>
-              <dl className={styles.idList}>
-                <div className={styles.idRow}>
-                  <dt>Gateway</dt>
-                  <dd>{snapshot.gatewayLabel}</dd>
-                </div>
-                <div className={styles.idRow}>
-                  <dt>Kind</dt>
-                  <dd className={styles.idMono}>{snapshot.gatewayKind}</dd>
-                </div>
-                <div className={styles.idRow}>
-                  <dt>Version</dt>
-                  <dd className={styles.idMono}>
-                    {snapshot.version ?? '—'}
-                    {snapshot.schemaEpoch !== undefined ? ` · epoch ${snapshot.schemaEpoch}` : ''}
-                  </dd>
-                </div>
-                <div className={styles.idRow}>
-                  <dt>Started</dt>
-                  <dd className={styles.idMono}>
-                    {uptimeMs !== undefined ? formatClock(now - uptimeMs) : '—'}
-                  </dd>
-                </div>
-                <div className={styles.idRow}>
-                  <dt>Checks</dt>
-                  <dd className={styles.idMono}>
-                    {snapshot.checksTotal} run · {snapshot.checksFailed} failed
-                  </dd>
-                </div>
-              </dl>
-              <div className={styles.idFooter}>
-                <RestartGatewayButton onRestart={props.onRestartGateway} />
-              </div>
-            </section>
+              {props.loadResourceMode && props.saveResourceMode ? (
+                <ResourceModeCard
+                  loadMode={props.loadResourceMode}
+                  saveMode={props.saveResourceMode}
+                  {...(health?.metrics?.hardwareProfileClass
+                    ? { resolvedClass: health.metrics.hardwareProfileClass }
+                    : {})}
+                  {...(health?.metrics?.resourceMode
+                    ? { activeMode: health.metrics.resourceMode }
+                    : {})}
+                  {...(health?.metrics?.resourceProfile
+                    ? { resourceProfile: health.metrics.resourceProfile }
+                    : {})}
+                  {...(health?.metrics?.backgroundPause
+                    ? { backgroundPause: health.metrics.backgroundPause }
+                    : {})}
+                  {...(health?.metrics?.powerContext
+                    ? { powerContext: health.metrics.powerContext }
+                    : {})}
+                  {...(props.onPauseBackgroundWork ? { onPause: props.onPauseBackgroundWork } : {})}
+                  {...(props.onResumeBackgroundWork
+                    ? { onResume: props.onResumeBackgroundWork }
+                    : {})}
+                  {...(props.loadKnobPrefs ? { loadKnobPrefs: props.loadKnobPrefs } : {})}
+                  {...(props.saveKnobPrefs ? { saveKnobPrefs: props.saveKnobPrefs } : {})}
+                />
+              ) : null}
+            </div>
 
-            {props.loadResourceMode && props.saveResourceMode ? (
-              <ResourceModeCard
-                loadMode={props.loadResourceMode}
-                saveMode={props.saveResourceMode}
-                {...(health?.metrics?.hardwareProfileClass
-                  ? { resolvedClass: health.metrics.hardwareProfileClass }
-                  : {})}
-                {...(health?.metrics?.resourceMode
-                  ? { activeMode: health.metrics.resourceMode }
-                  : {})}
-                {...(health?.metrics?.resourceProfile
-                  ? { resourceProfile: health.metrics.resourceProfile }
-                  : {})}
-                {...(health?.metrics?.backgroundPause
-                  ? { backgroundPause: health.metrics.backgroundPause }
-                  : {})}
-                {...(health?.metrics?.powerContext
-                  ? { powerContext: health.metrics.powerContext }
-                  : {})}
-                {...(props.onPauseBackgroundWork ? { onPause: props.onPauseBackgroundWork } : {})}
-                {...(props.onResumeBackgroundWork
-                  ? { onResume: props.onResumeBackgroundWork }
-                  : {})}
-                {...(props.loadKnobPrefs ? { loadKnobPrefs: props.loadKnobPrefs } : {})}
-                {...(props.saveKnobPrefs ? { saveKnobPrefs: props.saveKnobPrefs } : {})}
-              />
-            ) : null}
+            <div className={styles.gridCol}>
+              {/* Identity — what the heartbeat is talking to. */}
+              <section className={styles.panel}>
+                <div className={styles.panelHead}>
+                  <h2>Identity</h2>
+                </div>
+                <dl className={styles.idList}>
+                  <div className={styles.idRow}>
+                    <dt>Gateway</dt>
+                    <dd>{snapshot.gatewayLabel}</dd>
+                  </div>
+                  <div className={styles.idRow}>
+                    <dt>Kind</dt>
+                    <dd className={styles.idMono}>{snapshot.gatewayKind}</dd>
+                  </div>
+                  <div className={styles.idRow}>
+                    <dt>Version</dt>
+                    <dd className={styles.idMono}>
+                      {snapshot.version ?? '—'}
+                      {snapshot.schemaEpoch !== undefined ? ` · epoch ${snapshot.schemaEpoch}` : ''}
+                    </dd>
+                  </div>
+                  <div className={styles.idRow}>
+                    <dt>Started</dt>
+                    <dd className={styles.idMono}>
+                      {uptimeMs !== undefined ? formatClock(now - uptimeMs) : '—'}
+                    </dd>
+                  </div>
+                  <div className={styles.idRow}>
+                    <dt>Checks</dt>
+                    <dd className={styles.idMono}>
+                      {snapshot.checksTotal} run · {snapshot.checksFailed} failed
+                    </dd>
+                  </div>
+                </dl>
+                <div className={styles.idFooter}>
+                  <RestartGatewayButton onRestart={props.onRestartGateway} />
+                </div>
+              </section>
 
-            {/* Paired devices and their contributed-compute status (#392/#414). */}
-            {props.loadDevices && props.onRevokeDevice ? (
-              <DevicesCard
-                now={now}
-                loadDevices={props.loadDevices}
-                onRevokeDevice={props.onRevokeDevice}
-                {...(props.onCurrentDeviceRevoked
-                  ? { onCurrentDeviceRevoked: props.onCurrentDeviceRevoked }
-                  : {})}
-                {...(props.onCreateDeviceTicket
-                  ? { onCreateTicket: props.onCreateDeviceTicket }
-                  : {})}
-                {...(props.onUpdateDeviceCompute
-                  ? { onUpdateCompute: props.onUpdateDeviceCompute }
-                  : {})}
-                {...(props.loadDeviceWorkStatus
-                  ? { loadWorkStatus: props.loadDeviceWorkStatus }
-                  : {})}
-              />
-            ) : null}
+              {/* Paired devices and their contributed-compute status (#392/#414). */}
+              {props.loadDevices && props.onRevokeDevice ? (
+                <DevicesCard
+                  now={now}
+                  loadDevices={props.loadDevices}
+                  onRevokeDevice={props.onRevokeDevice}
+                  {...(props.onCurrentDeviceRevoked
+                    ? { onCurrentDeviceRevoked: props.onCurrentDeviceRevoked }
+                    : {})}
+                  {...(props.onCreateDeviceTicket
+                    ? { onCreateTicket: props.onCreateDeviceTicket }
+                    : {})}
+                  {...(props.onUpdateDeviceCompute
+                    ? { onUpdateCompute: props.onUpdateDeviceCompute }
+                    : {})}
+                  {...(props.loadDeviceWorkStatus
+                    ? { loadWorkStatus: props.loadDeviceWorkStatus }
+                    : {})}
+                />
+              ) : null}
+            </div>
           </div>
         </>
       ) : null}

@@ -22,7 +22,7 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createRequire } from 'node:module';
 import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
+import { promises as fs, type Dirent } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app } from 'electron';
@@ -33,6 +33,7 @@ import {
   canControl,
   DEFAULT_GATEWAY_PORT,
   isProcessAlive,
+  ownedGatewayNeedsRespawn,
   OWNERSHIP_FILE,
   resolveListenPort,
   STATUS_FILE,
@@ -157,6 +158,7 @@ export async function readOwnershipStamp(dataDir: string): Promise<OwnershipStam
         ownerId: parsed.ownerId,
         pid: parsed.pid,
         startedAt: typeof parsed.startedAt === 'string' ? parsed.startedAt : '',
+        ...(typeof parsed.buildTag === 'string' ? { buildTag: parsed.buildTag } : {}),
       };
     }
     return null;
@@ -257,6 +259,15 @@ export interface EnsureDetachedOptions {
   nodeBin?: string;
   cliPath?: string;
   readyTimeoutMs?: number;
+  /**
+   * When adopting a gateway we OWN, first check whether it was spawned from an
+   * older build than the one on disk (via the ownership stamp's `buildTag`) and
+   * respawn it if so. The desktop passes `true` so a rebuilt gateway (dev) or an
+   * updated app (prod) takes effect on the next launch instead of the stale
+   * daemon serving forever. Only ever touches gateways we own (H3 preserved).
+   * Absent/false → adopt whatever is live (unit tests, legacy behavior).
+   */
+  replaceOwnedIfStale?: boolean;
 }
 
 function resolveNodeBin(): string {
@@ -269,6 +280,96 @@ function resolveNodeBin(): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** How long to wait for a SIGTERM'd gateway to exit before escalating (H2). */
+const STOP_TIMEOUT_MS = 5_000;
+const STOP_POLL_MS = 100;
+
+/**
+ * Send `signal` to the detached child's whole process group, falling back to
+ * the bare pid. Detached children are their own group leaders (H2), so the
+ * group signal takes grandchildren (agent runs, workers) down with the gateway.
+ */
+function signalGatewayGroup(pid: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(-pid, signal);
+  } catch {
+    try {
+      process.kill(pid, signal);
+    } catch {
+      // already gone
+    }
+  }
+}
+
+/**
+ * Stop an owned detached gateway and **wait for it to actually exit** before
+ * returning — SIGTERM the group, poll the pid, escalate to SIGKILL, then a
+ * short final wait. Callers MUST await this before rebinding the port (else the
+ * fresh child races the old listener → EADDRINUSE, swallowed by stdio:'ignore')
+ * or before re-reading the ownership stamp (else `ensureDetachedGateway` adopts
+ * the still-dying pid and never respawns). This is exactly the restart-crash
+ * footgun: the old stop was a fire-and-forget SIGTERM with no wait.
+ */
+async function terminateDetachedGateway(pid: number, timeoutMs = STOP_TIMEOUT_MS): Promise<void> {
+  if (!Number.isInteger(pid) || pid <= 0) return;
+  if (!isProcessAlive(pid, processAliveCheck)) return;
+  signalGatewayGroup(pid, 'SIGTERM');
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline && isProcessAlive(pid, processAliveCheck)) {
+    await sleep(STOP_POLL_MS);
+  }
+  if (isProcessAlive(pid, processAliveCheck)) {
+    signalGatewayGroup(pid, 'SIGKILL');
+    const hardDeadline = Date.now() + 1_000;
+    while (Date.now() < hardDeadline && isProcessAlive(pid, processAliveCheck)) {
+      await sleep(STOP_POLL_MS);
+    }
+  }
+}
+
+/**
+ * An opaque tag for the gateway BUILD on disk: the newest mtime across the
+ * compiled server tree (`dist/…`, minus the static `web/` bundle, which the
+ * daemon serves per-request and never needs a restart to pick up). A rebuild
+ * bumps a source file's mtime → a new tag → the desktop respawns instead of
+ * adopting the stale daemon. Cheap: one bounded stat walk per launch. Best
+ * effort — any failure yields 'unknown', which simply degrades to adoption.
+ */
+async function gatewayBuildTag(cliPath: string): Promise<string> {
+  // cliPath = <dist>/cli/cli.js → distRoot = <dist>
+  const distRoot = path.dirname(path.dirname(cliPath));
+  let maxMtimeMs = 0;
+  let scanned = 0;
+  const FILE_CAP = 20_000;
+  async function walk(dir: string): Promise<void> {
+    if (scanned >= FILE_CAP) return;
+    let entries: Dirent[];
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (scanned >= FILE_CAP) return;
+      if (entry.isDirectory()) {
+        // Static embedded UI — served, not executed; no restart needed for it.
+        if (entry.name === 'web') continue;
+        await walk(path.join(dir, entry.name));
+        continue;
+      }
+      scanned += 1;
+      try {
+        const st = await fs.stat(path.join(dir, entry.name));
+        if (st.mtimeMs > maxMtimeMs) maxMtimeMs = st.mtimeMs;
+      } catch {
+        // skip unreadable entry
+      }
+    }
+  }
+  await walk(distRoot);
+  return maxMtimeMs > 0 ? String(Math.floor(maxMtimeMs)) : 'unknown';
 }
 
 function makeVaults(
@@ -339,18 +440,12 @@ function makeHandle(input: {
     vaults: makeVaults(input.dataDir, input.cliPath, input.nodeBin),
     async close() {
       if (!owned) return;
-      if (!isProcessAlive(pid, processAliveCheck)) return;
-      try {
-        // Detached children are their own process group leaders (H2) —
-        // signal the group so grandchildren die with the gateway.
-        process.kill(-pid, 'SIGTERM');
-      } catch {
-        try {
-          process.kill(pid, 'SIGTERM');
-        } catch {
-          // already gone
-        }
-      }
+      // Wait for the process to actually exit (H2) — a fire-and-forget SIGTERM
+      // let `restartLocalGateway`'s stop→start race the dying daemon: the
+      // respawn either adopted the still-terminating pid or hit EADDRINUSE on
+      // the not-yet-released port, leaving the gateway down. Awaiting exit here
+      // makes stop→start correct for every caller.
+      await terminateDetachedGateway(pid);
     },
   };
 }
@@ -443,58 +538,67 @@ export async function ensureDetachedGateway(
   // Own + still alive: adopt (or wait for readiness if mid-boot).
   if (decision === 'own' && stamp && isProcessAlive(stamp.pid, processAliveCheck)) {
     if (probeOk) {
-      const token = existingToken ?? (await readDaemonToken(dataDir));
-      if (!token) {
-        throw new Error('Owned gateway is live but its loopback token file is missing');
-      }
-      return makeHandle({
-        url: candidateUrl,
-        token,
-        pid: stamp.pid,
-        host: candidateHost,
-        port: candidatePort,
-        dataDir,
-        owned: true,
-        cliPath,
-        nodeBin,
-      });
-    }
-    // Process is up but probe failed — give it time (still booting). We wrote
-    // this daemon's loopback token before spawning it, so recover it here.
-    const bootToken = existingToken ?? (await readDaemonToken(dataDir));
-    try {
-      if (!bootToken) throw new Error('owned gateway is booting but its loopback token is missing');
-      const ready = await waitUntilReady({
-        host: candidateHost,
-        port: candidatePort,
-        dataDir,
-        pid: stamp.pid,
-        timeoutMs: readyTimeoutMs,
-        token: bootToken,
-      });
-      return makeHandle({
-        url: ready.url,
-        token: ready.token,
-        pid: stamp.pid,
-        host: candidateHost,
-        port: candidatePort,
-        dataDir,
-        owned: true,
-        cliPath,
-        nodeBin,
-      });
-    } catch {
-      // Fall through to respawn after SIGTERM below.
-      try {
-        process.kill(-stamp.pid, 'SIGTERM');
-      } catch {
-        try {
-          process.kill(stamp.pid, 'SIGTERM');
-        } catch {
-          // gone
+      // Freshness gate: if the running daemon was spawned from an older build
+      // than the one on disk, stop it and respawn instead of adopting a stale
+      // binary (dev rebuild / prod app update). A missing stamp buildTag counts
+      // as stale so the mechanism self-establishes on first launch after this
+      // ships. Owned only — never touches a foreign gateway (H3).
+      const currentBuildTag = await gatewayBuildTag(cliPath);
+      const stale = ownedGatewayNeedsRespawn(
+        stamp,
+        currentBuildTag,
+        options.replaceOwnedIfStale === true,
+      );
+      if (!stale) {
+        const token = existingToken ?? (await readDaemonToken(dataDir));
+        if (!token) {
+          throw new Error('Owned gateway is live but its loopback token file is missing');
         }
+        return makeHandle({
+          url: candidateUrl,
+          token,
+          pid: stamp.pid,
+          host: candidateHost,
+          port: candidatePort,
+          dataDir,
+          owned: true,
+          cliPath,
+          nodeBin,
+        });
       }
-      await sleep(200);
+      // Stale build — retire the old daemon and fall through to a fresh spawn.
+      await terminateDetachedGateway(stamp.pid);
+    } else {
+      // Process is up but probe failed — give it time (still booting). We wrote
+      // this daemon's loopback token before spawning it, so recover it here.
+      const bootToken = existingToken ?? (await readDaemonToken(dataDir));
+      try {
+        if (!bootToken)
+          throw new Error('owned gateway is booting but its loopback token is missing');
+        const ready = await waitUntilReady({
+          host: candidateHost,
+          port: candidatePort,
+          dataDir,
+          pid: stamp.pid,
+          timeoutMs: readyTimeoutMs,
+          token: bootToken,
+        });
+        return makeHandle({
+          url: ready.url,
+          token: ready.token,
+          pid: stamp.pid,
+          host: candidateHost,
+          port: candidatePort,
+          dataDir,
+          owned: true,
+          cliPath,
+          nodeBin,
+        });
+      } catch {
+        // Booting never completed — stop it (waiting for real exit so the
+        // respawn below doesn't hit EADDRINUSE) and fall through to a fresh spawn.
+        await terminateDetachedGateway(stamp.pid);
+      }
     }
   }
 
@@ -546,6 +650,7 @@ export async function ensureDetachedGateway(
     owner: 'desktop',
     ownerId,
     pid,
+    buildTag: await gatewayBuildTag(cliPath),
   });
   await writeOwnershipStamp(dataDir, ownership);
 

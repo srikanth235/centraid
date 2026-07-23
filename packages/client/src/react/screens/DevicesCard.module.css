@@ -3,8 +3,10 @@
    (imported there as `gwStyles`) so the card reads as a sibling of
    Backups/Storage rather than a bolted-on style. */
 
+/* The card lives in the Gateway overview's right rail (a packed flex
+   column); it sizes like any other panel there. */
 .card {
-  grid-column: 1 / -1;
+  min-width: 0;
 }
 
 .body {
@@ -25,7 +27,11 @@
   flex-direction: column;
   border: 1px solid var(--line);
   border-radius: 10px;
-  overflow: hidden;
+  /* Many paired devices scroll inside the card rather than growing the rail;
+     x stays clipped so the rounded corners hold. */
+  max-height: 320px;
+  overflow: hidden auto;
+  overscroll-behavior: contain;
 }
 
 .row {

@@ -212,7 +212,7 @@ export default function ResourceAdvancedKnobs({
                     <>
                       <button
                         type="button"
-                        className={cx(buttonCss.btn, buttonCss.sm)}
+                        className={cx(buttonCss.btn, buttonCss.sm, buttonCss.soft)}
                         disabled={!canSave}
                         onClick={() => parsed?.ok && handleSave(facts, parsed.value)}
                       >
@@ -221,7 +221,7 @@ export default function ResourceAdvancedKnobs({
                       {isCustom ? (
                         <button
                           type="button"
-                          className={cx(buttonCss.btn, buttonCss.sm)}
+                          className={cx(buttonCss.btn, buttonCss.sm, buttonCss.ghost)}
                           disabled={busyKey === key}
                           onClick={() => handleClear(facts)}
                         >

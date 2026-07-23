@@ -31,6 +31,15 @@ export interface OwnershipStamp {
   ownerId: string;
   pid: number;
   startedAt: string;
+  /**
+   * Opaque identifier of the gateway BUILD this process was spawned from
+   * (issue #528 follow-up). Lets the desktop notice, on the next launch, that
+   * the running daemon predates the current on-disk build and respawn it
+   * instead of adopting a stale binary — the dev "old gateway keeps serving
+   * after a rebuild" footgun, and prod after an app update. Absent on stamps
+   * written before this field existed.
+   */
+  buildTag?: string;
 }
 
 /** Filename under the gateway data dir for the ownership stamp. */
@@ -81,6 +90,29 @@ export function canControl(
 }
 
 /**
+ * Whether an owned, live gateway should be stopped and respawned instead of
+ * adopted, because it predates the current on-disk build (issue #528 follow-up).
+ *
+ * - `replaceOwnedIfStale` off → never respawn (adopt whatever is live).
+ * - stamp's `buildTag` differs from the current on-disk `buildTag` → respawn.
+ *   A missing stamp buildTag (`undefined`) counts as different, so a gateway
+ *   spawned before this field existed is refreshed once, self-establishing the
+ *   tag. Equal tags (same build) → adopt, so a no-change relaunch never pays a
+ *   needless restart.
+ *
+ * Callers gate this on ownership first — it must never fire for a foreign
+ * gateway (H3).
+ */
+export function ownedGatewayNeedsRespawn(
+  stamp: Pick<OwnershipStamp, 'buildTag'>,
+  currentBuildTag: string,
+  replaceOwnedIfStale: boolean,
+): boolean {
+  if (!replaceOwnedIfStale) return false;
+  return stamp.buildTag !== currentBuildTag;
+}
+
+/**
  * Whether `pid` is still running. `checkFn` is injectable so unit tests
  * never touch the real process table (e.g. `(p) => alive.has(p)`).
  */
@@ -124,12 +156,14 @@ export function buildOwnershipStamp(input: {
   ownerId: string;
   pid: number;
   startedAt?: string;
+  buildTag?: string;
 }): OwnershipStamp {
   return {
     owner: input.owner,
     ownerId: input.ownerId,
     pid: input.pid,
     startedAt: input.startedAt ?? new Date().toISOString(),
+    ...(input.buildTag !== undefined ? { buildTag: input.buildTag } : {}),
   };
 }
 
