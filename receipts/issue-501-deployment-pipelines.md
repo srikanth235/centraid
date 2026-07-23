@@ -27,6 +27,7 @@
 
 ## Follow-up fix
 
+- `scripts/release/vitest.config.ts` — exclude `surfaces.test.mjs` (node:test via `release:surfaces:test` after #512) so the #501 release vitest lane (sync-versions / restamp) stays green.
 - `apps/mobile/app.config.ts` — CJS-safe `readMobilePackageVersion()` (no `import.meta`/`fileURLToPath`); merge duplicate `extra` keys. Fixes J8 `mobile-android` assembleDebug Expo config eval on CI.
 - `apps/mobile/src/version-core.test.ts` — asserts `readMobilePackageVersion` + package name walk.
 - knip green for #503: wire `checkForUpdatesManual` via `UPDATE_CHECK` in `apps/desktop/src/main/ipc.ts` + `apps/desktop/src/preload.ts` + `packages/client/src/centraid-api.d.ts`, `eas` in `knip.json` `ignoreBinaries` (CI installs EAS via expo-github-action), `apps/desktop/src/main/update-watcher-wiring.test.ts` + `bun.lock`.
