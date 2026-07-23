@@ -235,7 +235,11 @@ export function Chrome(props: ChromeProps): ReactNode {
         </div>
 
         {props.consent ? (
-          <div className={`kit-banner ${styles.banner}`}>
+          // `id="consentBanner"` is the shared hook kit's onFocusRefresh reads to
+          // detect a denied→recover state and bypass its 30s focus throttle (the
+          // served islands exposed the same id). Without it, a refocus after a
+          // revoke would be throttled and never retry the read (#505).
+          <div id="consentBanner" className={`kit-banner ${styles.banner}`}>
             <strong>No vault access yet.</strong> <span>{props.consent.message}</span>
           </div>
         ) : null}

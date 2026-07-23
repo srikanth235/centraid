@@ -262,8 +262,12 @@ function replicaFixture(app: string): unknown {
   return {};
 }
 
-// Handler dirs are node-side modules dispatched by the gateway, never
-// imported by the page — don't copy them into the boot scratch tree.
+// Handler dirs are node-side modules dispatched by the gateway, never imported
+// by the page — don't copy them into the boot scratch tree. `queries` stays
+// out too: the boot entry is the served shim → app-root.tsx (the query-free
+// Root), so the page graph never reaches a query module. Only the app-inline
+// descriptor imports queries, and that is the shell's client-bundled path, not
+// this served-fidelity harness (#505).
 const NON_UI_DIRS = new Set(['queries', 'actions', 'automations']);
 
 /** All browser-source files of an app, as relative posix paths: `.js`/`.jsx`
@@ -332,6 +336,16 @@ async function waitFor(predicate: () => boolean, what: string, timeoutMs = 4_000
 // importer of this harness with a package-wide timeout. The `beforeAll` scratch
 // build tops out ~0.7s and stays on vitest's 10s default hookTimeout.
 const BOOT_TEST_TIMEOUT_MS = 8_000;
+
+// The inline chrome (Chrome.tsx) mounts its consent notice — a `.kit-banner`
+// carrying `id="consentBanner"` — when the vault denies a read, and unmounts it
+// when the vault grants again. (The retired served islands kept a persistent
+// element and toggled `hidden`; the inline tree mounts/unmounts instead, so
+// "shown" is "present and not hidden".)
+function consentBannerShown(): boolean {
+  const banner = document.querySelector<HTMLElement>('#consentBanner');
+  return banner !== null && banner.hidden === false;
+}
 
 export function describeAppBoot(
   app: string,
@@ -614,23 +628,23 @@ export function describeAppBoot(
 
           response = DENIED;
           for (const listener of Array.from(live)) listener(response);
-          const liveBanner = document.querySelector('#consentBanner');
-          expect(liveBanner, `${app}/index.html lost its #consentBanner`).toBeTruthy();
           await waitFor(
-            () => liveBanner.hidden === false,
+            consentBannerShown,
             `${app} to reveal its consent banner for a denied live replica value`,
           );
           expectNoErrors('applying a denied live replica value');
-          expect(liveBanner.hidden, `${app} ignored a denied live replica value`).toBe(false);
+          expect(consentBannerShown(), `${app} ignored a denied live replica value`).toBe(true);
 
           response = granted;
           for (const listener of Array.from(live)) listener(response);
           await waitFor(
-            () => liveBanner.hidden === true,
+            () => !consentBannerShown(),
             `${app} to hide its consent banner for a re-granted live replica value`,
           );
           expectNoErrors('applying a re-granted live replica value');
-          expect(liveBanner.hidden, `${app} ignored a re-granted live replica value`).toBe(true);
+          expect(consentBannerShown(), `${app} ignored a re-granted live replica value`).toBe(
+            false,
+          );
 
           // A replacement live read can fail before it registers any upstream
           // dependency. The app must release that dead subscription and let a
@@ -668,30 +682,28 @@ export function describeAppBoot(
           return;
         }
 
-        // Revoke: every app clears its containers.
+        // Revoke: every app clears its board and the inline Chrome renders its
+        // consent notice in its place. Required, not optional — a guarded check
+        // would silently skip the only assertion proving the denied read landed.
         response = DENIED;
         window.dispatchEvent(new Event('focus'));
 
-        // Required, not optional: a guarded `if (banner)` would silently skip the
-        // only assertion proving the denied read was actually observed.
-        const banner = document.querySelector('#consentBanner');
-        expect(banner, `${app}/index.html lost its #consentBanner`).toBeTruthy();
         await waitFor(
-          () => banner.hidden === false,
+          consentBannerShown,
           `${app} to reveal its consent banner after the grant was revoked`,
         );
         expectNoErrors('clearing after the grant was revoked');
-        expect(banner.hidden, `${app} hid its consent banner while denied`).toBe(false);
+        expect(consentBannerShown(), `${app} hid its consent banner while denied`).toBe(true);
 
-        // Re-grant: render back into the containers the denied path just cleared.
+        // Re-grant: the consent banner unmounts and the board renders again.
         response = {};
         window.dispatchEvent(new Event('focus'));
         await waitFor(
-          () => banner.hidden === true,
+          () => !consentBannerShown(),
           `${app} to hide its consent banner after the grant came back`,
         );
         expectNoErrors('re-rendering after the grant came back');
-        expect(banner.hidden, `${app} kept its consent banner after re-grant`).toBe(true);
+        expect(consentBannerShown(), `${app} kept its consent banner after re-grant`).toBe(false);
       },
     );
   });

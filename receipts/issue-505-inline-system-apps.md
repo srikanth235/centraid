@@ -401,6 +401,91 @@ offline render none → full.
 - Phase 6: centraid_sql_* ghosts deleted; ARCHITECTURE.md / blueprint-csp trap / protocol docs updated — the Phase 6 source and documentation inventory above provides the implementation evidence.
 - Phase 7: token landlord plane retired (owner enrollment tier, token.bin/print-token deleted, direct-tier decision recorded, revocation severs all planes) — the Phase 7 code, documentation, and revocation-test inventory above provides the implementation evidence.
 
+### Post-Phase-4 convergence — one Root, served entry is a shim (2026-07-23)
+
+Phase 4 left each blueprint app with **two** parallel UI mounts: the inline
+`Root` (React tree the shell renders) and the older imperative served entry
+(`app.tsx` fanning to `createRoot` islands, plus `chrome.ts` hand-building the
+same sidebar/topbar/board markup `Chrome.tsx` already renders). Every handler,
+board-prop and refresh path lived in both — the exact duplication #505 set out to
+remove. This pass collapses them onto the single inline `Root` for all 8 apps
+(tasks, tally, agenda, people, notes, docs, locker, photos):
+
+- **New `apps/<app>/app-root.tsx`** (×8): the `Root` component + every constant,
+  helper and type it needs that does **not** depend on the node-side
+  `./queries/*` handler modules (`CHANGE_TABLES`/`PHOTOS_READ_TABLES_LIST`,
+  `VIEW_TITLES`, `VALID_VIEWS`, `makeState`, payload types). Query-free by
+  construction so the gateway's whole-graph bundler can serve it to the browser
+  without dragging node-only handler code into the client graph.
+- **`apps/<app>/app.tsx`** slimmed to a ~20-line served shim: `import { Root }
+  from './app-root.tsx'` and `createRoot(host).render(<Root … />)`. The old
+  imperative-islands body is gone.
+- **`apps/<app>/app-inline.tsx`** rewritten to a thin `InlineAppModule`
+  descriptor: `import { Root, CHANGE_TABLES } from './app-root.tsx'` + the
+  `./queries/*` wiring (which now lives ONLY here, never in the served graph).
+- **`apps/<app>/chrome.ts` deleted** where it existed (agenda, docs, notes,
+  people, tally, tasks) — the served page ships only a mount node in
+  `index.html`; `Chrome.tsx` is the sole chrome source.
+- **`apps/<app>/index.html`** slimmed to `<head>` (title, live-settings bridge,
+  stylesheet links) + `<div id="appRoot">` + `window.KIT_ASK` + the module
+  script; the hand-built sidebar/topbar/board markup is removed.
+- **Consent-banner recovery fix**: the Pattern-A apps (tasks, tally, people,
+  notes, docs) now render `id="consentBanner"` on the inline consent banner, the
+  hook kit's `onFocusRefresh` reads to bypass its 30s focus throttle on a
+  denied→recover refocus. Inline apps had silently lost recovery since Phase 4
+  because Chrome rendered an id-less banner.
+- **`src/app-boot-harness.ts` migrated** (not deleted — `test:ratchet` forbids
+  dropping the coverage): consent assertions now key on a `consentBannerShown()`
+  helper (`#consentBanner` present and not `hidden`), and `NON_UI_DIRS` again
+  excludes `queries` because the harness boots the query-free `app-root`.
+- **`manifest.json` regenerated** for the new file set.
+
+The served/WebView transport (mobile, until it moves to the native Expo client)
+still works — it renders the same `Root` the shell does — but the served entry is
+**no longer byte-for-byte** the old hand-authored page; that claim in the Phase 4
+notes above is now superseded for these 8 blueprint apps. This is the max-safe
+convergence: it leaves a trivial true-delete of the served shims + `index.html` +
+harness for once mobile→Expo lands and no served-HTML consumer remains.
+
+Scope note: this convergence is **blueprint-only**. The app-engine serve route
+and the `AppViewRoute` iframe stay for user-built apps (the builder still needs
+the served transport) — confirmed with the user.
+
+Full file manifest of this convergence pass:
+
+- New query-free Root modules: `packages/blueprints/apps/agenda/app-root.tsx`,
+  `packages/blueprints/apps/docs/app-root.tsx`,
+  `packages/blueprints/apps/locker/app-root.tsx`,
+  `packages/blueprints/apps/notes/app-root.tsx`,
+  `packages/blueprints/apps/people/app-root.tsx`,
+  `packages/blueprints/apps/photos/app-root.tsx`,
+  `packages/blueprints/apps/tally/app-root.tsx`,
+  `packages/blueprints/apps/tasks/app-root.tsx`.
+- Served shims (`app.tsx`) slimmed to render `Root`:
+  `packages/blueprints/apps/agenda/app.tsx`,
+  `packages/blueprints/apps/docs/app.tsx`,
+  `packages/blueprints/apps/locker/app.tsx`,
+  `packages/blueprints/apps/notes/app.tsx`,
+  `packages/blueprints/apps/people/app.tsx`,
+  `packages/blueprints/apps/photos/app.tsx`,
+  `packages/blueprints/apps/tally/app.tsx`,
+  `packages/blueprints/apps/tasks/app.tsx`.
+- `index.html` slimmed to the mount node:
+  `packages/blueprints/apps/agenda/index.html`,
+  `packages/blueprints/apps/docs/index.html`,
+  `packages/blueprints/apps/locker/index.html`,
+  `packages/blueprints/apps/notes/index.html`,
+  `packages/blueprints/apps/people/index.html`,
+  `packages/blueprints/apps/photos/index.html`,
+  `packages/blueprints/apps/tally/index.html`,
+  `packages/blueprints/apps/tasks/index.html`.
+- `app-inline.tsx` rewritten to a thin descriptor (agenda, docs, locker, notes,
+  people, photos, tally, tasks); `chrome.ts` deleted (agenda, docs, notes,
+  people, tally, tasks); `Chrome.tsx` gains `id="consentBanner"` (docs, notes,
+  people, tally, tasks); harness migrated in
+  `packages/blueprints/src/app-boot-harness.ts`; manifest regenerated in
+  `packages/blueprints/manifest.json`.
+
 ## Out of scope
 
 - Agent vault tools (vault_sql / vault_invoke / vault_content) and the ACP/MCP surface
@@ -609,3 +694,4 @@ bash .governance/run.sh
 | claude-code-3f73ae52-798-1784777508-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-opus-4-8 | 3020 | 3502689 | 362336428 | 1296083 | 4801792 | 235.4772 | 4311 | 4953923 | 525681550 | 1816978 |  |
 | claude-code-3f73ae52-798-1784777626-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-opus-4-8 | 16 | 26379 | 1648586 | 6018 | 32413 | 1.1397 | 4327 | 4980302 | 527330136 | 1822996 |  |
 | claude-code-3f73ae52-798-1784778493-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-opus-4-8 | 132 | 153800 | 15910135 | 89378 | 243310 | 11.1514 | 4459 | 5134102 | 543240271 | 1912374 |  |
+| claude-code-3f73ae52-798-1784782659-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-opus-4-8 | 18 | 35569 | 906686 | 7842 | 43429 | 0.8718 | 8309 | 10964590 | 972906415 | 3928932 | refactor(blueprints): converge served entry onto inline Root (#505)Phase 4 left  |

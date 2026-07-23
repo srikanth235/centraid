@@ -39,21 +39,7 @@
     <link rel="stylesheet" href="kit.css" />
   </head>
   <body>
-    <div class="locker" id="root" data-locker-root>
-      <!-- App chrome (sidebar / list / detail) is a single React root
-           mounted into #stage by app.jsx (no static shell markup here — the
-           original Lit app had none either). A hidden consent + notice
-           banner mirror the Docs pattern. -->
-      <div id="consentBanner" class="k-banner" hidden>
-        <strong>No vault access yet.</strong>
-        <span id="consentDetail"
-          >Ask the owner to approve this app's requested scopes in vault settings.</span
-        >
-      </div>
-      <div id="noticeBanner" class="k-banner notice" role="status" aria-live="polite" hidden></div>
-      <div id="stage" class="k-stage"></div>
-      <div class="k-ask-mount" data-ask-mount></div>
-    </div>
+    <div id="appRoot" style="display: flex; min-height: 100vh"></div>
 
     <script>
       window.KIT_ASK = {
