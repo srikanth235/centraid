@@ -474,6 +474,54 @@ describe('connector runtime gates', () => {
       input: { run_id: 'sync-run-1', ok: false, error: expect.stringContaining('pagination') },
     });
   });
+
+  it('preserves the handler error when closing its failed connector run also fails', async () => {
+    await writeConnector(
+      `export default {
+         protocol: 'centraid.pull/v1',
+         async principal() { return 'me@example.com'; },
+         async pull() { throw new Error('original provider failure'); },
+       };`,
+      {
+        connector: {
+          kind: 'mcp.gmail',
+          label: 'personal',
+          principal: 'me@example.com',
+          connectionId: 'conn-bound',
+        },
+      },
+    );
+    const bridge: VaultBridge = async (call) => {
+      if (call.op === 'read') {
+        return { ok: true, result: { rows: [{ status: 'active' }] } };
+      }
+      if (call.op === 'invoke' && call.payload.command === 'sync.begin_run') {
+        return {
+          ok: true,
+          result: {
+            output: {
+              connection_id: 'conn-bound',
+              run_id: 'sync-run-1',
+              cursors: {},
+            },
+          },
+        };
+      }
+      if (call.op === 'invoke' && call.payload.command === 'sync.finish_run') {
+        return { ok: false, code: 'VAULT_ERROR', error: 'close bookkeeping failed' };
+      }
+      return { ok: false, code: 'VAULT_ERROR', error: 'unexpected op' };
+    };
+
+    const { outcome } = await runFire(
+      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
+      { openDispatch: openDispatch() },
+    );
+
+    expect(outcome.ok).toBe(false);
+    expect(outcome.error).toContain('original provider failure');
+    expect(outcome.error).not.toContain('close bookkeeping failed');
+  });
 });
 
 describe('connector secrets (issue #293)', () => {

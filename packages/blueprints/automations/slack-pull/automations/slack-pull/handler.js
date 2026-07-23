@@ -30,17 +30,19 @@ async function api(ctx, path, opts = {}) {
 }
 
 function toRow(msg, channel) {
+  const channelId = channel.id;
+  const channelName = channel.name || channelId;
   return {
     entity_type: 'social.message',
-    external_id: 'slack:' + channel + ':' + msg.ts,
+    external_id: 'slack:' + channelId + ':' + msg.ts,
     payload: {
-      messageId: 'slack:' + channel + ':' + msg.ts,
-      subject: 'Slack · ' + channel,
+      messageId: 'slack:' + channelId + ':' + msg.ts,
+      subject: 'Slack · ' + channelName,
       fromName: msg.username || msg.user || null,
       fromEmail: null,
       sentAt: msg.ts ? new Date(Number(msg.ts) * 1000).toISOString() : null,
       body: msg.text || '',
-      threadKey: 'slack:' + channel + ':' + (msg.thread_ts || msg.ts),
+      threadKey: 'slack:' + channelId + ':' + (msg.thread_ts || msg.ts),
     },
   };
 }
@@ -96,7 +98,7 @@ export default {
           break;
         }
         for (const message of history.messages || []) {
-          rows.push(toRow(message, channel.name || channel.id));
+          rows.push(toRow(message, channel));
           if (!latest || message.ts > latest) latest = message.ts;
         }
         historyCursor =

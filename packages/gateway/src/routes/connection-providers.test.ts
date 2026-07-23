@@ -44,4 +44,9 @@ describe('PROVIDER_PRESETS capabilities', () => {
       google.capabilities.actions.length,
     );
   });
+
+  it('pins the GitLab token only to the API host the preset actually uses', () => {
+    const gitlab = PROVIDER_PRESETS.find((preset) => preset.id === 'gitlab')!;
+    expect(gitlab.allowedHosts).toEqual(['gitlab.com']);
+  });
 });

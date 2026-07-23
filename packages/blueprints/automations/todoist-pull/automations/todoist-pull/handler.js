@@ -53,8 +53,14 @@ function toRow(task) {
 
 export default {
   protocol: 'centraid.pull/v1',
-  async principal() {
-    return 'todoist';
+  async principal({ ctx }) {
+    // Todoist's REST API has no user-profile GET. The immutable Inbox project
+    // id is account-specific and always present, so it is a stable identity
+    // pin that detects an API token being swapped to another account.
+    const projects = await api(ctx, '/projects');
+    const inbox = projects.find((project) => project.is_inbox_project);
+    if (!inbox || !inbox.id) throw new Error(`${KIND} account has no Inbox project identity`);
+    return `todoist:${inbox.id}`;
   },
   async pull({ ctx }) {
     const tasks = await api(ctx, '/tasks');

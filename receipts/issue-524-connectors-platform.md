@@ -92,6 +92,7 @@ Additional pull blueprints registered in index/manifest:
 - `packages/blueprints/index.json`
 - `packages/blueprints/manifest.json`
 - `packages/blueprints/src/app-manifests.test.ts` — pins every pull connector to an intentional vault entity type.
+- `packages/blueprints/src/pull-handlers.test.ts` — exercises pagination, independent watermarks, stable external ids, principal pinning, and rolling calendar windows against the bundled pull specs.
 - All 15 bundled `*-pull` handlers now export declarative specs; none can invoke the vault rail or hand-roll begin/stage/finish.
 - `packages/vault/src/ingest/enrich-publishers.ts`
 - `packages/vault/src/ingest/payload-schemas.ts` — remote files, pages, issues, and tasks create/update honest `core.content_item` rows rather than fabricated correspondence.
@@ -161,7 +162,7 @@ Receipt + PR: this file `receipts/issue-524-connectors-platform.md` and the PR o
 bun run --filter @centraid/client test -- src/react/shell/routes/connectorPlatform.test.ts src/react/shell/routes/settingsConnectionsData.test.ts src/react/screens/SettingsConnectionsScreen.test.tsx src/react/screens/AutomationEditorScreen.test.tsx src/react/shell/Sidebar.test.tsx
 bun run --filter @centraid/gateway test -- src/routes/connection-providers.test.ts src/routes/connections-routes.test.ts
 bun run --filter @centraid/automation test -- src/fire/connector.test.ts
-bun run --filter @centraid/blueprints test -- src/app-manifests.test.ts
+bun run --filter @centraid/blueprints test -- src/app-manifests.test.ts src/pull-handlers.test.ts
 bun run --filter @centraid/vault test -- src/commands/sync.test.ts src/schema/migrate.test.ts
 bun run --cwd apps/desktop test:e2e -- tests/e2e/automations.spec.ts
 bun run --filter @centraid/client typecheck
@@ -194,6 +195,7 @@ PASS – Checklist matches issue #524 acceptance criteria.
 | codex-019f8e48-8ec-1784814585-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #524 | gpt-5.6-sol | 131313 | 0 | 7711232 | 8230 | 139543 | 2.3795 | 2841599 | 0 | 111222272 | 261813 | test(desktop): use stable automation name selector (#524) |
 | codex-019f8e48-8ec-1784820444-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #524 | gpt-5.6-sol | 1293079 | 0 | 41413888 | 98651 | 1391730 | 15.0659 | 4134678 | 0 | 152636160 | 360464 | fix(connectors): centralize pull lifecycle and cursors (#524) |
 | codex-019f8e48-8ec-1784820597-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #524 | gpt-5.6-sol | 21136 | 0 | 676864 | 3676 | 24812 | 0.2772 | 4155814 | 0 | 153313024 | 364140 | fix(connectors): centralize pull lifecycle and cursors (#524) |
+| codex-019f8e48-8ec-1784824210-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #524 | gpt-5.6-sol | 303537 | 0 | 7401984 | 18460 | 321997 | 2.8862 | 4459351 | 0 | 160715008 | 382600 | fix(connectors): prevent pagination data loss (#524) |
 ## Steering
 
 **Check 1 — every human-steering event is recorded in ### Steering under ## Accounting**

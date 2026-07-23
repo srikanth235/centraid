@@ -8,6 +8,7 @@ const KIND = 'pull.outlookcal';
 const API = 'https://graph.microsoft.com/v1.0';
 const AUTH = { authorization: 'Bearer {{connection:access_token}}' };
 const MAX_PAGES_PER_RUN = 3;
+const WINDOW_ROLL_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
 
 async function api(ctx, path, opts = {}) {
   const headers = { ...AUTH, ...(opts.headers || {}) };
@@ -57,6 +58,7 @@ export default {
   },
   async pull({ ctx, cursor }) {
     const traversal = cursor.provider('outlookcal.deltaLink');
+    const windowEnd = cursor.provider('outlookcal.windowEnd');
     let nextLink = traversal.current;
     const rows = [];
     let resetTried = false;
@@ -65,6 +67,18 @@ export default {
     const end = new Date(center);
     start.setUTCFullYear(start.getUTCFullYear() - 1);
     end.setUTCFullYear(end.getUTCFullYear() + 2);
+    const previousWindowEnd = windowEnd.current ? Date.parse(String(windowEnd.current)) : NaN;
+    if (
+      nextLink &&
+      (!Number.isFinite(previousWindowEnd) ||
+        end.getTime() - previousWindowEnd >= WINDOW_ROLL_AFTER_MS)
+    ) {
+      // calendarView delta tokens permanently encode their original date
+      // range. Re-bootstrap periodically so the future horizon advances.
+      traversal.clear();
+      nextLink = null;
+    }
+    if (!nextLink) windowEnd.set(end.toISOString());
     for (let page = 0; page < MAX_PAGES_PER_RUN; page += 1) {
       const listing = await api(
         ctx,
@@ -75,6 +89,7 @@ export default {
         if (resetTried) throw new Error(`${KIND} delta token remained invalid after reset`);
         traversal.clear();
         nextLink = null;
+        windowEnd.set(end.toISOString());
         resetTried = true;
         page -= 1;
         continue;

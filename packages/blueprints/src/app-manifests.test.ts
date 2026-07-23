@@ -91,7 +91,9 @@ describe('bundled blueprint manifests', () => {
     const expected = {
       'dropbox-pull': { provider: ['dropbox.cursor'] },
       'github-pull': { highWater: ['github.since'] },
-      'gitlab-pull': { highWater: ['gitlab.updated_after'] },
+      'gitlab-pull': {
+        highWater: ['gitlab.issues.updated_after', 'gitlab.merge_requests.updated_after'],
+      },
       'google-calendar-pull': {
         provider: ['gcal.syncToken', 'gcal.pageToken'],
       },
@@ -101,7 +103,9 @@ describe('bundled blueprint manifests', () => {
       'google-drive-pull': { highWater: ['gdrive.modifiedTime'] },
       'google-gmail-pull': { provider: ['gmail.historyId'] },
       'linear-pull': { provider: ['linear.after'] },
-      'microsoft-calendar-pull': { provider: ['outlookcal.deltaLink'] },
+      'microsoft-calendar-pull': {
+        provider: ['outlookcal.deltaLink', 'outlookcal.windowEnd'],
+      },
       'microsoft-contacts-pull': { highWater: ['outlookcontacts.modifiedAt'] },
       'microsoft-onedrive-pull': { provider: ['onedrive.deltaLink'] },
       'microsoft-outlook-pull': { provider: ['outlook.deltaLink'] },

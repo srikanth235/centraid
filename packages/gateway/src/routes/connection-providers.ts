@@ -259,7 +259,7 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     id: 'gitlab',
     name: 'GitLab (issues, merge requests)',
     credKind: 'api_key',
-    allowedHosts: ['gitlab.com', 'api.gitlab.com'],
+    allowedHosts: ['gitlab.com'],
     setup: [
       'Open https://gitlab.com/-/user_settings/personal_access_tokens (or your self-managed instance equivalent).',
       'Create a token with read_api (or the finer read_api scope covering issues and merge requests).',

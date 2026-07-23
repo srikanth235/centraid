@@ -7,7 +7,7 @@
 const KIND = 'pull.gitlab';
 const API = 'https://gitlab.com/api/v4';
 const AUTH = { 'PRIVATE-TOKEN': '{{connection:api_key}}' };
-const MAX_PAGES_PER_RUN = 3;
+const PAGE_SIZE = 100;
 
 async function api(ctx, path, opts = {}) {
   const headers = { ...AUTH, ...(opts.headers || {}) };
@@ -59,27 +59,35 @@ export default {
     return me.username || String(me.id);
   },
   async pull({ ctx, cursor }) {
-    const highWater = cursor.highWater('gitlab.updated_after');
-    const params = new URLSearchParams({
-      scope: 'all',
-      state: 'all',
-      order_by: 'updated_at',
-      sort: 'asc',
-      per_page: '50',
-    });
-    if (highWater.current) params.set('updated_after', String(highWater.current));
     const rows = [];
-    for (const [path, kindWord] of [
-      ['/issues?', 'issue'],
-      ['/merge_requests?', 'mr'],
+    for (const [path, kindWord, highWater] of [
+      ['/issues?', 'issue', cursor.highWater('gitlab.issues.updated_after')],
+      ['/merge_requests?', 'mr', cursor.highWater('gitlab.merge_requests.updated_after')],
     ]) {
-      const items = await api(ctx, path + params.toString());
-      for (const item of items) {
-        const row = toRow(item, kindWord);
-        highWater.observe(row.updatedAt);
-        delete row.updatedAt;
-        rows.push(row);
-      }
+      // Issues and merge requests are independent mutable collections. Each
+      // gets its own watermark, and every page is drained before that
+      // watermark advances.
+      let page = 1;
+      let items;
+      do {
+        const params = new URLSearchParams({
+          scope: 'all',
+          state: 'all',
+          order_by: 'updated_at',
+          sort: 'asc',
+          per_page: String(PAGE_SIZE),
+          page: String(page),
+        });
+        if (highWater.current) params.set('updated_after', String(highWater.current));
+        items = await api(ctx, path + params.toString());
+        for (const item of items) {
+          const row = toRow(item, kindWord);
+          highWater.observe(row.updatedAt);
+          delete row.updatedAt;
+          rows.push(row);
+        }
+        page += 1;
+      } while (items.length === PAGE_SIZE);
     }
     return { rows, summary: `pulled ${rows.length} item(s)` };
   },

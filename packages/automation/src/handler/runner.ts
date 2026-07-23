@@ -885,11 +885,14 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
           try {
             let rawValue = msg.value;
             if (!msg.ok) {
+              // Finishing the bookkeeping run is best-effort on an already
+              // failed handler path. A vault close failure must not replace
+              // the provider/handler error that actually caused the run.
               await closeConnectorRun(
                 false,
                 {},
                 msg.error ?? 'pull connector failed before returning rows',
-              );
+              ).catch(() => undefined);
             }
             if (
               msg.ok &&

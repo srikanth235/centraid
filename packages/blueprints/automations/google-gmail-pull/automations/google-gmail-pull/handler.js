@@ -9,8 +9,8 @@
  *      the engine's principal-pinning gate, plus the CURRENT historyId (a safe
  *      watermark captured BEFORE listing, so nothing between list and
  *      cursor-set is lost).
- *   2. incremental: users/me/history from the stored cursor; first run (or
- *      an expired cursor, Gmail answers 404): last 30 days, bounded.
+ *   2. incremental: drain users/me/history from the stored cursor; first run
+ *      (or an expired cursor, Gmail answers 404): drain the last 30 days.
  *   3. per message: metadata-format fetch (headers + snippet only — bodies
  *      and attachments are the mbox/file-drop lane, issue #300).
  *   4. return social.message rows plus the provider cursor; the engine owns
@@ -19,9 +19,6 @@
 
 const API = 'https://gmail.googleapis.com/gmail/v1/users/me';
 const AUTH = { authorization: 'Bearer {{connection:access_token}}' };
-/** Bound one fire's work; the next fire continues from the cursor. */
-const MAX_MESSAGES_PER_RUN = 100;
-
 async function api(ctx, path) {
   const res = await ctx.fetch({ url: `${API}${path}`, headers: AUTH });
   if (res.status === 404) return { notFound: true };
@@ -85,7 +82,7 @@ export default {
           }
         }
         pageToken = page.nextPageToken || null;
-      } while (pageToken && ids.length < MAX_MESSAGES_PER_RUN);
+      } while (pageToken);
     } else {
       mode = 'window';
     }
@@ -99,9 +96,12 @@ export default {
         );
         for (const m of page.messages || []) ids.push(m.id);
         pageToken = page.nextPageToken || null;
-      } while (pageToken && ids.length < MAX_MESSAGES_PER_RUN);
+      } while (pageToken);
     }
-    const batchIds = [...new Set(ids)].slice(0, MAX_MESSAGES_PER_RUN);
+    // A historyId is a mailbox-wide watermark, not a per-page cursor. Drain
+    // every page before advancing it; truncating here would permanently skip
+    // every message beyond the cap.
+    const batchIds = [...new Set(ids)];
 
     // 3+4. Metadata per message → social.message staging rows.
     const rows = [];
