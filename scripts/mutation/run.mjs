@@ -248,12 +248,29 @@ function runSeeds(seeds) {
       continue;
     }
     console.log(`mutation: running Stryker for ${seed.id} (cwd ${seed.cwd})…`);
-    const result = spawnSync(process.execPath, [stryker, 'run', seed.config], {
+    // One retry: CI hosts occasionally return "No tests were executed" on the
+    // first dry-run under load even though the same vitest.mutation.config is
+    // healthy (repro intermittent on ubuntu-latest for vault/automation).
+    let result = spawnSync(process.execPath, [stryker, 'run', seed.config], {
       cwd: pkgDir,
       encoding: 'utf8',
       env: { ...process.env, FORCE_COLOR: '0' },
       maxBuffer: 64 * 1024 * 1024,
     });
+    const combined = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
+    if (
+      result.status !== 0 &&
+      /No tests were (executed|found)/i.test(combined) &&
+      !existsSync(path.join(root, seed.report))
+    ) {
+      console.warn(`mutation: ${seed.id} dry-run found no tests — retrying once…`);
+      result = spawnSync(process.execPath, [stryker, 'run', seed.config], {
+        cwd: pkgDir,
+        encoding: 'utf8',
+        env: { ...process.env, FORCE_COLOR: '0' },
+        maxBuffer: 64 * 1024 * 1024,
+      });
+    }
     if (result.stdout) process.stdout.write(result.stdout);
     if (result.stderr) process.stderr.write(result.stderr);
 

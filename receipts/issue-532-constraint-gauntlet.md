@@ -88,6 +88,14 @@
 - `payload-hash-properties.test.ts`: `toReversed()`, ReplicaValue cast for tsc
 - `custody-properties.test.ts`: 60s per-property timeouts under parallel
   `test:affected` load; main-combo `numRuns` 32
+
+### CI green after merge (mutation-pr + verify perf)
+
+- Package `vitest.mutation.config.ts` files use standalone `defineConfig`
+  (not `defineProject`) so Stryker dry-run reliably discovers tests on
+  ubuntu-latest; vault include adds `custody-proven.contract.test.ts`
+- `scripts/mutation/run.mjs` retries once on "No tests were executed/found"
+- `ci.yml` per-PR perf step retries once for shared-runner event-loop noise
 - `receipts/issue-532-constraint-gauntlet.md` (this receipt)
 
 ### Receipt + PR linking #532
