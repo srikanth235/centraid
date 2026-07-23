@@ -100,6 +100,10 @@ export interface VaultRegistryOptions {
   shouldDeferBackgroundWork?: () => boolean;
   /** Concurrent remote pushes selected by the gateway hardware profile. */
   replicationConcurrency?: number;
+  /** Resource-actuals sweep hook (#528 Phase C), forwarded to every plane. */
+  onSweepPass?: (info: { durationMs: number }) => void;
+  /** Resource-actuals replication hook (#528 Phase C), forwarded to every plane. */
+  onReplicationPass?: (info: { bytesReplicated: number; durationMs: number }) => void;
 }
 
 /** One row of the vault list. */
@@ -144,6 +148,10 @@ export class VaultRegistry {
   private readonly synchronous: 'FULL' | 'NORMAL' | undefined;
   private readonly shouldDeferBackgroundWork: (() => boolean) | undefined;
   private readonly replicationConcurrency: number | undefined;
+  private readonly onSweepPass: ((info: { durationMs: number }) => void) | undefined;
+  private readonly onReplicationPass:
+    | ((info: { bytesReplicated: number; durationMs: number }) => void)
+    | undefined;
   private readonly planes = new Map<string, VaultPlane>();
   private readonly mountListeners = new Set<(plane: VaultPlane) => void>();
   /**
@@ -179,6 +187,8 @@ export class VaultRegistry {
     this.synchronous = options.synchronous;
     this.shouldDeferBackgroundWork = options.shouldDeferBackgroundWork;
     this.replicationConcurrency = options.replicationConcurrency;
+    this.onSweepPass = options.onSweepPass;
+    this.onReplicationPass = options.onReplicationPass;
     mkdirSync(this.rootDir, { recursive: true });
     if (existsSync(path.join(this.rootDir, 'vault.db'))) {
       // Pre-multi-vault layout (v0: no data migrations) — the files stay put
@@ -372,6 +382,8 @@ export class VaultRegistry {
       ...(this.replicationConcurrency !== undefined
         ? { replicationConcurrency: this.replicationConcurrency }
         : {}),
+      ...(this.onSweepPass ? { onSweepPass: this.onSweepPass } : {}),
+      ...(this.onReplicationPass ? { onReplicationPass: this.onReplicationPass } : {}),
       ...boot,
     });
   }

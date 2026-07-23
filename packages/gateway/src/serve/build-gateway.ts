@@ -56,6 +56,7 @@ import {
   resolveSubsystemRunner,
   TurnLimiter,
   prewarmAppAssets,
+  workerAdmissionStats,
   type AskModelInfo,
   type ConversationRunner,
   type ModelSubsystem,
@@ -157,6 +158,8 @@ import { makeHealthRouteHandler } from '../routes/health-routes.js';
 import { makeResourceRouteHandler } from '../routes/resource-routes.js';
 import { makeRemindersRouteHandler } from '../routes/reminders-routes.js';
 import { HealthRegistry } from './health-registry.js';
+import { PowerContextMonitor } from './power-context.js';
+import { ResourceAccounting } from './resource-accounting.js';
 import { GatewayPerformanceMonitor } from './gateway-performance.js';
 import { measureStorageLatency } from './storage-latency.js';
 import {
@@ -164,8 +167,12 @@ import {
   resolveGatewayHardwareProfile,
   toStructuredResourceProfile,
 } from './hardware-profile.js';
+import { probeHostLimits } from './host-limits.js';
 import {
   formatEventLoopDetail,
+  formatPowerPostureDeferringDetail,
+  formatPowerPostureNormalDetail,
+  parseResourceKnobPrefs,
   resolveResourceMode,
   RESOURCE_MODE_PREF_KEY,
   type ResourceMode,
@@ -623,14 +630,29 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // boot class matches what the owner last chose; a mode change after boot
   // is durable and applies on the next serve (worker env is process-scoped).
   const prefsEarly = new PrefsStore(paths.prefsFile);
+  const earlyPrefs = prefsEarly.getAllPrefs();
   const resourceMode = resolveResourceMode({
     env: process.env,
     optionsMode: options.resourceMode,
-    prefsMode: prefsEarly.getAllPrefs()[RESOURCE_MODE_PREF_KEY],
+    prefsMode: earlyPrefs[RESOURCE_MODE_PREF_KEY],
   });
+  // Durable per-knob UI overrides (#528 Phase F). The resolver keeps env > prefs
+  // > preset per knob; a knob change is durable and applies on the next serve,
+  // identical to mode. Running-vs-desired legibility is the client comparing
+  // health's structured profile with saved prefs — nothing extra here.
+  const resourceKnobPrefs = parseResourceKnobPrefs(earlyPrefs);
+  // Ground-truth sizing (#528 Phase E): probe cgroup CPU/memory quotas and one
+  // cumulative CPU-steal sample so the resolver sizes the granted share of the
+  // host, not the raw machine. All reads are failure-tolerant → nulls on a
+  // plain host, which resolve to today's unchanged numbers.
+  const hostLimits = probeHostLimits();
   const hardwareProfile = resolveGatewayHardwareProfile({
     ...(storageFsyncMs === undefined ? {} : { storageFsyncMs }),
+    cgroupCpuLimit: hostLimits.cgroupCpuLimit,
+    cgroupMemoryLimitBytes: hostLimits.cgroupMemoryLimitBytes,
+    stealPercent: hostLimits.stealPercent,
     resourceMode,
+    prefsOverrides: resourceKnobPrefs,
   });
   // App-engine's worker/compression seams initialize lazily, after this boot
   // probe. Publish the resolved class so slow storage and explicit overrides
@@ -719,17 +741,63 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // commit-time doorbell closes over this late-bound host callback. A write
   // during bootstrap simply drops the hint; the standing poll remains the
   // crash/startup correctness backstop.
+  // Per-subsystem resource ACTUALS (#528 Phase C): a boot-time accounting
+  // instance every background subsystem reports completions to. Honest measured
+  // proxies only — counts, bytes, wall-clock, OS-reported CPU/RSS. Agent-run
+  // usage is MEASURED and labeled here, never throttled. Published on the health
+  // metrics source below; the worker-pool counters are read live from the
+  // app-engine admission gate (which must not depend on the gateway).
+  const resourceAccounting = new ResourceAccounting({ workerPoolStats: workerAdmissionStats });
+
+  // Host power-context posture (#528 Phase D): a third, independent "not now"
+  // signal composed into the SAME safe-loop gate as the owner pause and the
+  // load-shed — never a durable mode flip, never touching the owner's pause.
+  // The boot probe reads the host battery; the Electron desktop pushes live
+  // state. Posture is a COURTESY, so the health component stays `ok` and only
+  // its detail changes as deferral toggles.
+  const powerContext = new PowerContextMonitor({
+    onDeferringChange: (state) => {
+      health.reportOk(
+        'power-posture',
+        state.reason !== null
+          ? formatPowerPostureDeferringDetail(state.reason, state.kind)
+          : formatPowerPostureNormalDetail(),
+      );
+    },
+  });
+  health.reportOk('power-posture', formatPowerPostureNormalDetail());
+
+  // Wrap a turn driver so every agent run's wall-clock (spawn→exit) is
+  // MEASURED and labeled (#528 Phase C) — recorded on success and failure
+  // alike, since the host consumed the time either way. This ONLY accounts;
+  // it never gates, defers, or throttles a run.
+  const accountRunTurn =
+    (base: RunTurnFn): RunTurnFn =>
+    async (input, config) => {
+      const startedAt = Date.now();
+      try {
+        return await base(input, config);
+      } finally {
+        resourceAccounting.recordAgentRun({ durationMs: Date.now() - startedAt });
+      }
+    };
+  const accountedRunTurn = accountRunTurn(runTurn);
+
   let provenanceDoorbell: (vaultId: string, entityTypes?: readonly string[]) => void = () => {};
   const vaultRegistry: VaultRegistry = openVaultRegistry({
     rootDir: paths.vaultDir,
     synchronous: hardwareProfile.sqliteSynchronous,
     replicationConcurrency: hardwareProfile.replicationConcurrency,
     sweepIntervalMs: hardwareProfile.vaultSweepIntervalMs,
-    // Vault sweeps are a safe loop: defer under event-loop pressure AND honor
-    // the owner's explicit background-pause (#528). Durability loops (WAL,
-    // outbox) call `shouldDeferBackgroundWork` alone and are never paused.
+    // Vault sweeps are a safe loop: defer under event-loop pressure, honor
+    // the owner's explicit background-pause, AND yield to host power-context
+    // posture — on battery / low battery / thermal (#528 Phase B + D).
+    // Durability loops (WAL, outbox) call `shouldDeferBackgroundWork` alone
+    // and are never paused or posture-gated.
     shouldDeferBackgroundWork: () =>
-      health.shouldDeferBackgroundWork() || health.shouldPauseBackgroundWork(),
+      health.shouldDeferBackgroundWork() ||
+      health.shouldPauseBackgroundWork() ||
+      powerContext.isDeferringBackgroundWork(),
     walCaptureEnabled: () => walCaptureConfigured,
     // Disposable runner cache lives outside the vault tree (defaults to a
     // `-cache` sibling of `vaultDir` when the host doesn't pin one).
@@ -751,6 +819,14 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // "no raster codec in the runtime" gap for imported / weak-client /
     // server-ingested images (capable clients still generate at capture).
     previewCodec: options.previewCodec ?? createImagePreviewCodec(),
+    // Resource actuals (#528 Phase C): a vault lifecycle sweep is both a sweep
+    // pass and a background timer fire; detached blob replication reports its
+    // own bytes/busyMs. Accounting only — never gates the sweep.
+    onSweepPass: (info) => {
+      resourceAccounting.recordSweepPass(info);
+      resourceAccounting.recordBackgroundTimerFire();
+    },
+    onReplicationPass: (info) => resourceAccounting.recordReplicationPass(info),
   });
 
   // Vault mounts are pull-checked at snapshot time — nothing pushes when a
@@ -1007,6 +1083,13 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       hardwareProfileClass: hardwareProfile.class,
       resourceMode: hardwareProfile.resourceMode,
       resourceProfile: toStructuredResourceProfile(hardwareProfile),
+      // Measured per-subsystem actuals (#528 Phase C) — CPU/RSS read lazily
+      // here at the health-poll cadence, subsystem counters accumulated at
+      // their completion hooks.
+      resourceUsage: resourceAccounting.snapshot(),
+      // Host power-context posture (#528 Phase D) — battery/mains/server and
+      // whether background work is being courteously deferred right now.
+      powerContext: powerContext.snapshot(),
     };
   });
 
@@ -1024,6 +1107,16 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     logger: health.loggerFor('backups', logger),
     recoveryKit,
     storageConnections,
+    // Retention/reconciliation is a safe loop — yield to host power-context
+    // posture too (#528 Phase D). Threaded as a predicate so BackupService
+    // never imports the monitor. The WAL drain stays ungated (RPO durability).
+    shouldDeferPosture: () => powerContext.isDeferringBackgroundWork(),
+    // Resource actuals (#528 Phase C): each WAL drain is a backup pass and a
+    // backup-scheduler timer fire. Accounting only.
+    onDrainAccounted: (info) => {
+      resourceAccounting.recordBackupDrain(info);
+      resourceAccounting.recordBackgroundTimerFire();
+    },
   });
 
   // The daemon-owned recovery job (issue #439 R1 wave 4). It runs the
@@ -1335,10 +1428,13 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     outboxTimer.unref();
   };
   const runOutboxSweep = async (): Promise<void> => {
+    // Resource actuals (#528 Phase C): the outbox scheduler fired.
+    resourceAccounting.recordBackgroundTimerFire();
     if (health.shouldDeferBackgroundWork()) {
       scheduleOutboxSweep(hardwareProfile.outboxIdleIntervalMs);
       return;
     }
+    const outboxStartedAt = Date.now();
     const settled = await Promise.allSettled(
       vaultRegistry.planesList().map((plane) => outboxExecutor.drain(plane)),
     );
@@ -1354,6 +1450,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         );
       }
     }
+    resourceAccounting.recordSweepPass({ durationMs: Date.now() - outboxStartedAt });
     if (failed) health.reportError('outbox', 'one or more adaptive outbox sweeps failed');
     else health.reportOk('outbox');
     const nextDelay = failed
@@ -1534,7 +1631,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       ...makeVaultToolRunners(vaultRegistry),
       ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
       // Test inject: finish headless compile without spawning a coding agent.
-      ...(options.runTurn ? { runTurn: options.runTurn } : {}),
+      // Either way the driver is wrapped for resource accounting (#528 Phase C).
+      runTurn: accountRunTurn(options.runTurn ?? runTurn),
     });
     const lifecycleOpts: LifecycleRouteOptions = {
       store,
@@ -2183,6 +2281,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     subsystem: 'assistant',
     getDispatcher,
     vaults: vaultRegistry,
+    // Measure + label every assistant agent run (#528 Phase C); never throttled.
+    runTurn: accountedRunTurn,
   });
 
   // LLM auto-title (issue #420, Wave 3): after the first turn of a new
@@ -2266,6 +2366,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     subsystem: 'ask',
     getDispatcher,
     vaults: vaultRegistry,
+    // Measure + label every ask-register agent run (#528 Phase C); never throttled.
+    runTurn: accountedRunTurn,
     buildPrompt: async (input) => {
       const plane = vaultRegistry.current();
       const meta = await askAppMeta(input.appId);
@@ -2360,7 +2462,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Owner "pause background work" control (#528 Phase B): hot-applied,
     // in-memory only, never a durable Resource-mode flip. Same bearer gate
     // and owner-facing family as health.
-    forRoutePrefixes('/centraid/_gateway/resource', makeResourceRouteHandler(health)),
+    forRoutePrefixes('/centraid/_gateway/resource', makeResourceRouteHandler(health, powerContext)),
     // A single JSON document a user can save + hand to support: version,
     // health snapshot, log tail, vault sizes, and a redacted config
     // summary. Mounted right after health — same bearer gate, same

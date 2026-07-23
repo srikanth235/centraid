@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RuntimeLogger } from '@centraid/app-engine';
 import { HealthRegistry } from './health-registry.js';
+import { RESOURCE_KNOB_BOUNDS } from './hardware-profile.js';
 
 const silentLogger: RuntimeLogger = {
   info: () => undefined,
@@ -168,6 +169,50 @@ describe('HealthRegistry', () => {
       expect('sseClients' in snap.metrics).toBe(false);
     });
 
+    it('surfaces resourceUsage actuals from the source, and omits it when unset (#528)', async () => {
+      const withUsage = new HealthRegistry();
+      const usage = {
+        sinceMs: 1_000,
+        process: { cpuSecondsTotal: 1.5, currentRssBytes: 200, peakRssBytes: 300 },
+        subsystems: {
+          workerPool: { tasks: 4, busyMs: 40 },
+          replication: { passes: 2, bytesReplicated: 512, busyMs: 12 },
+          backup: { drains: 1, bytesUploaded: 2_048, busyMs: 33 },
+          sweeps: { passes: 5, busyMs: 9 },
+          agentRuns: { runs: 3, busyMs: 4_200, cpuSeconds: null },
+        },
+        backgroundTimerFiresLastHour: 7,
+      };
+      withUsage.setMetricsSource(() => ({ outboxPending: 0, resourceUsage: usage }));
+      const snap = await withUsage.snapshot();
+      expect(snap.metrics.resourceUsage).toEqual(usage);
+      expect(snap.metrics.resourceUsage?.subsystems.agentRuns.cpuSeconds).toBeNull();
+
+      const without = new HealthRegistry();
+      without.setMetricsSource(() => ({ outboxPending: 0 }));
+      expect('resourceUsage' in (await without.snapshot()).metrics).toBe(false);
+    });
+
+    it('surfaces powerContext from the source, and omits it when unset (#528 Phase D)', async () => {
+      const withPower = new HealthRegistry();
+      const powerContext = {
+        kind: 'battery' as const,
+        battery: { percent: 15, charging: false },
+        deferringBackgroundWork: true,
+        reason: 'low-battery' as const,
+        source: 'client-push' as const,
+        stealPercent: null,
+        updatedAt: 1_000,
+      };
+      withPower.setMetricsSource(() => ({ outboxPending: 0, powerContext }));
+      const snap = await withPower.snapshot();
+      expect(snap.metrics.powerContext).toEqual(powerContext);
+
+      const without = new HealthRegistry();
+      without.setMetricsSource(() => ({ outboxPending: 0 }));
+      expect('powerContext' in (await without.snapshot()).metrics).toBe(false);
+    });
+
     it('surfaces performance metrics and exposes the shared load-shed signal', async () => {
       const registry = new HealthRegistry();
       let p99 = 18;
@@ -220,7 +265,15 @@ describe('HealthRegistry', () => {
       const resourceProfile = {
         class: 'standard' as const,
         mode: 'balanced' as const,
-        host: { cores: 8, totalMemoryBytes: 16 * 1024 ** 3, storageFsyncMs: 2 },
+        host: {
+          cores: 8,
+          totalMemoryBytes: 16 * 1024 ** 3,
+          storageFsyncMs: 2,
+          cgroupLimitedCpu: false,
+          cgroupLimitedMemory: false,
+          stealPercent: null,
+        },
+        budget: { cpuShare: 0.75, memoryCapMb: 12_288 },
         resolved: {
           workerMaxConcurrent: 8,
           workerMaxOldGenerationMb: 256,
@@ -232,6 +285,15 @@ describe('HealthRegistry', () => {
           vaultSweepIntervalMs: 3_600_000,
           outboxIdleIntervalMs: 60_000,
         },
+        sources: {
+          workerMaxConcurrent: { source: 'preset' as const },
+          workerMaxOldGenerationMb: { source: 'preset' as const },
+          workerPoolSize: { source: 'preset' as const },
+          replicationConcurrency: { source: 'preset' as const },
+          staticBrotliQuality: { source: 'preset' as const },
+          staticGzipQuality: { source: 'preset' as const },
+        },
+        bounds: RESOURCE_KNOB_BOUNDS,
       };
       registry.setMetricsSource(() => ({ outboxPending: 0, resourceProfile }));
       const snap = await registry.snapshot();

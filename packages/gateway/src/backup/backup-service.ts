@@ -159,6 +159,19 @@ export interface BackupServiceOptions {
   recoveryKit?: RecoveryKitStateStore;
   /** Injectable target-independent CAS inventory seam (tests). */
   casReconcile?: typeof runCasOnlyReconciliation;
+  /**
+   * Host power-context posture gate (#528 Phase D). When it returns true, the
+   * hourly retention/reconciliation tick is skipped — the same safe-loop
+   * courtesy as the owner pause. Defaults to "never defer". The WAL drain
+   * (RPO durability) is intentionally NOT gated by this predicate.
+   */
+  shouldDeferPosture?: () => boolean;
+  /**
+   * Resource-actuals hook (#528 Phase C): one WAL drain (per vault, per pass)
+   * completed — `bytesUploaded` is the sealed bytes shipped, `durationMs` the
+   * wall-clock of the drain. Accounting only, never a gate.
+   */
+  onDrainAccounted?: (info: { bytesUploaded: number; durationMs: number }) => void;
 }
 
 /**
@@ -266,6 +279,10 @@ export class BackupService {
   private readonly snapshot: typeof createSnapshot;
   private readonly casReconcile: typeof runCasOnlyReconciliation;
   private readonly recoveryKit: RecoveryKitStateStore | undefined;
+  private readonly onDrainAccounted:
+    | ((info: { bytesUploaded: number; durationMs: number }) => void)
+    | undefined;
+  private readonly shouldDeferPosture: () => boolean;
   private keyring: Keyring | undefined;
   private timer: NodeJS.Timeout | undefined;
   private walTimer: NodeJS.Timeout | undefined;
@@ -299,6 +316,8 @@ export class BackupService {
     this.snapshot = opts.snapshot ?? createSnapshot;
     this.casReconcile = opts.casReconcile ?? runCasOnlyReconciliation;
     this.recoveryKit = opts.recoveryKit;
+    this.onDrainAccounted = opts.onDrainAccounted;
+    this.shouldDeferPosture = opts.shouldDeferPosture ?? (() => false);
 
     this.health.registerProbe('backups', async () => this.probe());
   }
@@ -1382,6 +1401,7 @@ export class BackupService {
         this.assertTargetBackend(target, backend);
         const keyring = await this.ensureKeyring();
         const newPins: Record<string, number> = {};
+        const drainStartedAt = this.now();
         const result = await drainWalFiles({
           plane,
           provider: backend.provider,
@@ -1395,6 +1415,11 @@ export class BackupService {
             return keyring.active;
           },
           logger: this.logger,
+        });
+        // Resource actuals (#528 Phase C): every drain pass, even a no-op one.
+        this.onDrainAccounted?.({
+          bytesUploaded: result.bytes,
+          durationMs: this.now() - drainStartedAt,
         });
         {
           // Merge into a FRESH state read: the drain's uploads take long
@@ -1448,9 +1473,14 @@ export class BackupService {
     });
     const runScheduled = () => {
       // Retention/reconciliation is a safe loop: skip under event-loop
-      // pressure AND while the owner has paused background work (#528). The
-      // WAL drain below stays ungated — it is RPO durability, never paused.
-      if (this.health.shouldDeferBackgroundWork() || this.health.shouldPauseBackgroundWork())
+      // pressure, while the owner has paused background work, AND while host
+      // power-context posture defers (#528 Phase B + D). The WAL drain below
+      // stays ungated — it is RPO durability, never paused or posture-gated.
+      if (
+        this.health.shouldDeferBackgroundWork() ||
+        this.health.shouldPauseBackgroundWork() ||
+        this.shouldDeferPosture()
+      )
         return;
       void this.tick().catch((err) => {
         this.logger.warn(

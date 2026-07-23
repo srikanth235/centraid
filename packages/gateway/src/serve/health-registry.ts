@@ -23,6 +23,8 @@
 
 import type { RuntimeLogger } from '@centraid/app-engine';
 import type { StructuredResourceProfile } from './hardware-profile.js';
+import type { PowerContextState } from './power-context.js';
+import type { ResourceUsageActuals } from './resource-accounting.js';
 import {
   formatBackgroundPausedDetail,
   formatBackgroundResumedDetail,
@@ -106,6 +108,19 @@ export interface HealthMetrics {
    */
   resourceProfile?: StructuredResourceProfile;
   /**
+   * Measured per-subsystem resource ACTUALS (#528 Phase C) — replication,
+   * backup, sweep, worker-pool, and agent-run counts/bytes/busyMs, plus
+   * process CPU/RSS. Honest measured proxies only (no modeled energy).
+   * Present once `buildGateway` publishes it via the metrics source.
+   */
+  resourceUsage?: ResourceUsageActuals;
+  /**
+   * Host power-context posture (#528 Phase D) — battery/mains/server, whether
+   * background work is being courteously deferred, and why. Present once
+   * `buildGateway` publishes it via the metrics source.
+   */
+  powerContext?: PowerContextState;
+  /**
    * Owner-triggered background-pause window (#528 Phase B). Always present;
    * `paused` is false with `until: null` when nothing is paused.
    */
@@ -117,7 +132,13 @@ export interface HealthMetrics {
 export type MetricsSourceResult = Partial<
   Pick<
     HealthMetrics,
-    'outboxPending' | 'sseClients' | 'hardwareProfileClass' | 'resourceMode' | 'resourceProfile'
+    | 'outboxPending'
+    | 'sseClients'
+    | 'hardwareProfileClass'
+    | 'resourceMode'
+    | 'resourceProfile'
+    | 'resourceUsage'
+    | 'powerContext'
   >
 >;
 export type MetricsSource = () => MetricsSourceResult;
@@ -408,6 +429,8 @@ export class HealthRegistry {
         ...(sourced.resourceProfile !== undefined
           ? { resourceProfile: sourced.resourceProfile }
           : {}),
+        ...(sourced.resourceUsage !== undefined ? { resourceUsage: sourced.resourceUsage } : {}),
+        ...(sourced.powerContext !== undefined ? { powerContext: sourced.powerContext } : {}),
         backgroundPause: this.readBackgroundPause(),
         ...performance,
         uptimeMs,

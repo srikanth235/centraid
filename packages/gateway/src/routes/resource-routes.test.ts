@@ -3,6 +3,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { RouteHandler } from '../serve/build-gateway.js';
 import { HealthRegistry, MAX_BACKGROUND_PAUSE_MS } from '../serve/health-registry.js';
+import { PowerContextMonitor } from '../serve/power-context.js';
 import { makeResourceRouteHandler } from './resource-routes.js';
 
 const servers: http.Server[] = [];
@@ -26,6 +27,18 @@ function startHandlerServer(handler: RouteHandler): Promise<string> {
 }
 
 const PAUSE = '/centraid/_gateway/resource/pause';
+const POWER = '/centraid/_gateway/resource/power-context';
+
+/** A monitor with a resolved no-battery probe (darwin ⇒ mains) for route tests. */
+async function readyMonitor(): Promise<PowerContextMonitor> {
+  const m = new PowerContextMonitor({
+    platform: 'darwin',
+    now: () => 0,
+    probeBattery: async () => ({ present: true, percent: 90, charging: true, discharging: false }),
+  });
+  await m.ready;
+  return m;
+}
 
 afterEach(() => {
   for (const server of servers.splice(0)) server.close();
@@ -114,5 +127,99 @@ describe('makeResourceRouteHandler', () => {
 
     const other = await fetch(`${url}/centraid/_gateway/resource/other`);
     expect(other.status).toBe(404);
+  });
+});
+
+describe('makeResourceRouteHandler power-context', () => {
+  it('POST applies a valid push and flips the monitor deferral', async () => {
+    const monitor = await readyMonitor();
+    const url = await startHandlerServer(makeResourceRouteHandler(new HealthRegistry(), monitor));
+
+    expect(monitor.isDeferringBackgroundWork()).toBe(false);
+    const res = await fetch(`${url}${POWER}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ onBattery: true, batteryPercent: 10 }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(monitor.isDeferringBackgroundWork()).toBe(true);
+    expect(monitor.snapshot().reason).toBe('low-battery');
+  });
+
+  it('DELETE clears pushed state', async () => {
+    const monitor = await readyMonitor();
+    monitor.applyClientPush({ onBattery: true, batteryPercent: 5 });
+    const url = await startHandlerServer(makeResourceRouteHandler(new HealthRegistry(), monitor));
+
+    const res = await fetch(`${url}${POWER}`, { method: 'DELETE' });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(monitor.isDeferringBackgroundWork()).toBe(false);
+  });
+
+  it('rejects garbage bodies with 400 and never pushes', async () => {
+    const monitor = await readyMonitor();
+    const url = await startHandlerServer(makeResourceRouteHandler(new HealthRegistry(), monitor));
+
+    const bad: unknown[] = [
+      {}, // onBattery missing
+      { onBattery: 'yes' }, // wrong type
+      { onBattery: true, batteryPercent: 150 }, // out of range
+      { onBattery: true, batteryPercent: 'full' }, // wrong type
+      { onBattery: true, charging: 'no' }, // wrong type
+      { onBattery: true, thermalPressure: 'melting' }, // not an enum member
+    ];
+    for (const body of bad) {
+      const res = await fetch(`${url}${POWER}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      expect(res.status, JSON.stringify(body)).toBe(400);
+    }
+    expect(monitor.isDeferringBackgroundWork()).toBe(false);
+  });
+
+  it('accepts an explicit thermal push on mains', async () => {
+    const monitor = await readyMonitor();
+    const url = await startHandlerServer(makeResourceRouteHandler(new HealthRegistry(), monitor));
+
+    const res = await fetch(`${url}${POWER}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ onBattery: false, thermalPressure: 'critical' }),
+    });
+    expect(res.status).toBe(200);
+    expect(monitor.snapshot().reason).toBe('thermal');
+  });
+
+  it('answers 405 for GET and 503 when no monitor is wired', async () => {
+    const monitor = await readyMonitor();
+    const withMonitor = await startHandlerServer(
+      makeResourceRouteHandler(new HealthRegistry(), monitor),
+    );
+    const get = await fetch(`${withMonitor}${POWER}`, { method: 'GET' });
+    expect(get.status).toBe(405);
+
+    const noMonitor = await startHandlerServer(makeResourceRouteHandler(new HealthRegistry()));
+    const res = await fetch(`${noMonitor}${POWER}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ onBattery: true }),
+    });
+    expect(res.status).toBe(503);
+  });
+
+  it('rejects a malformed JSON body with 400', async () => {
+    const monitor = await readyMonitor();
+    const url = await startHandlerServer(makeResourceRouteHandler(new HealthRegistry(), monitor));
+
+    const res = await fetch(`${url}${POWER}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{bad',
+    });
+    expect(res.status).toBe(400);
   });
 });

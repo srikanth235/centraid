@@ -4,9 +4,11 @@ import {
   formatLoadShedDeferringDetail,
   formatLoadShedForcedPassDetail,
   formatRss,
+  parseResourceKnobPrefs,
   parseResourceMode,
   resolveResourceMode,
   resourceModeLabel,
+  RESOURCE_KNOB_PREF_KEYS,
   RESOURCE_MODE_PREF_KEY,
 } from './resource-mode.js';
 
@@ -65,4 +67,39 @@ test('formatRss and labels stay owner-friendly', () => {
   expect(formatRss(200 * 1024 * 1024)).toBe('200.0 MB');
   expect(resourceModeLabel('auto')).toBe('Auto');
   expect(resourceModeLabel('conserve')).toBe('Conserve');
+});
+
+test('resource knob pref keys are stable and namespaced for the shell', () => {
+  expect(RESOURCE_KNOB_PREF_KEYS).toEqual({
+    workerMaxConcurrent: 'gateway.resource.workerMaxConcurrent',
+    workerMaxOldGenerationMb: 'gateway.resource.workerMaxOldGenerationMb',
+    workerPoolSize: 'gateway.resource.workerPoolSize',
+    replicationConcurrency: 'gateway.resource.replicationConcurrency',
+  });
+});
+
+test('parseResourceKnobPrefs reads only the four knob keys as positive integers', () => {
+  expect(
+    parseResourceKnobPrefs({
+      'gateway.resource.workerMaxConcurrent': 6,
+      'gateway.resource.replicationConcurrency': 3,
+      'gateway.resourceMode': 'balanced',
+      unrelated: 42,
+    }),
+  ).toEqual({ workerMaxConcurrent: 6, replicationConcurrency: 3 });
+});
+
+test('parseResourceKnobPrefs drops garbage so a stale prefs.json never widens a bound', () => {
+  expect(
+    parseResourceKnobPrefs({
+      'gateway.resource.workerMaxConcurrent': '8', // string
+      'gateway.resource.workerMaxOldGenerationMb': -4, // negative
+      'gateway.resource.workerPoolSize': 2.5, // float
+      'gateway.resource.replicationConcurrency': Number.NaN, // NaN
+    }),
+  ).toEqual({});
+});
+
+test('parseResourceKnobPrefs returns an empty object for empty prefs', () => {
+  expect(parseResourceKnobPrefs({})).toEqual({});
 });
