@@ -10,7 +10,7 @@ on:
     inputs:
       # #496 C3 — re-run one broken lane without the full ~70-min graph.
       suite:
-        description: 'Which suite to run (all | desktop | web | mobile | mobile-android | pairing | report)'
+        description: 'Which suite to run (all | desktop | web | mobile | mobile-android | pairing | report | mutation)'
         required: false
         default: 'all'
         type: choice
@@ -22,6 +22,7 @@ on:
           - mobile-android
           - pairing
           - report
+          - mutation
 
 # #496 C3 — overlapping schedule + dispatch must not double-run macOS.
 concurrency:
@@ -540,6 +541,34 @@ jobs:
             tests/agent-e2e-pairing/runs/
           retention-days: 7
 
+  # #532 — Stryker mutation lane (nightly). Scores land in artifacts/mutation/
+  # and the test-health report. Too slow for per-PR; floors ratcheted via
+  # tests/mutation-floors.json + test:ratchet.
+  mutation-testing:
+    if: >
+      github.event_name != 'workflow_dispatch' ||
+      github.event.inputs.suite == 'all' ||
+      github.event.inputs.suite == 'report' ||
+      github.event.inputs.suite == 'mutation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - name: Run Stryker on seed packages
+        run: bun run test:mutation
+        continue-on-error: true
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-evidence-mutation
+          path: artifacts/mutation/
+          retention-days: 14
+
   test-health-report:
     needs:
       [
@@ -550,6 +579,7 @@ jobs:
         pairing-lifecycle,
         pairing-ticket-hygiene,
         pairing-cross-network-relay,
+        mutation-testing,
       ]
     if: >
       always() &&

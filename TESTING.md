@@ -48,6 +48,7 @@ v8 coverage result.
 | Pairing journey | `tests/agent-e2e-pairing/flows/*.mjs` | daemon/CLI/device and relay ceremony | nightly + exploratory |
 | Performance | `tests/perf/*.perf.test.ts` | hot-path budgets | nightly |
 | Scale | `tests/scale/*.scale.test.ts` | correctness and duration at volume | nightly |
+| Mutation | StrykerJS on vault / client replica / automation | mutation-score floors | nightly |
 
 ### PR vs nightly (L1 / E2)
 
@@ -58,7 +59,7 @@ Decided in [#468](https://github.com/srikanth235/centraid/issues/468); cite
 | --- | --- |
 | **Every PR** | Unit, integration, contract; matrix validation + **floors ratchet** via `check:pr`; **affected-package vitest** (`turbo run test --filter='[origin/main]'` — changed packages only, not the full dependent graph); **boot-the-artifact smoke** when client-e2e-pr triggers (includes `packages/gateway` + `packages/app-engine` path filters — #496 E7); **path-filtered client e2e** |
 | **Path filters (client e2e)** | **Web** e2e when `apps/web`, `packages/client`, or service-worker files change; **desktop** e2e when `apps/desktop` changes; **boot-smoke** also when gateway/app-engine change. Shard to keep wall-clock roughly under ten minutes. |
-| **Nightly** | Full cross-client suites, perf budgets, mobile (**iOS + Android home-loads**), pairing journeys, scale |
+| **Nightly** | Full cross-client suites, perf budgets, mobile (**iOS + Android home-loads**), pairing journeys, scale, **mutation (Stryker)** |
 
 **Promotion rule:** if a nightly-only area burns us **twice**, move it to PR-time.
 
@@ -77,14 +78,18 @@ Soft SLA (auto-issue, not a hard age gate):
 4. Missing nightly HTML is **visible** (error annotation + tracking issue), not
    a silent `::warning` only.
 
-### Floors ratchet (#496 E4)
+### Floors ratchet (#496 E4, extended #532)
 
-`tests/coverage-floors.json` values and matrix flow `minimumTests` **move only
-upward**. CI and `bun run test:ratchet` / `check:pr` fail on any decrease unless
-the JSON carries:
+`tests/coverage-floors.json` values, matrix flow `minimumTests`, and
+`tests/mutation-floors.json` scores **move only upward**. Perf budget files
+(`apps/web/tests/e2e/perf-budgets.ts`,
+`packages/gateway/benchmarks/low-end-budgets.json`) are **tighten-only**:
+ceilings may drop freely; widening a ceiling or lowering a `min*` floor fails.
+CI and `bun run test:ratchet` / `check:pr` fail on any decrease/widen unless:
 
-- top-level `approvedDeviation` on `coverage-floors.json`, or
-- per-flow `approvedMinimumTestsDeviation` on the lowered flow.
+- top-level `approvedDeviation` on `coverage-floors.json` or `mutation-floors.json`,
+- per-flow `approvedMinimumTestsDeviation` on the lowered flow, or
+- `approvedDeviation` in the perf budget source when deliberately widening.
 
 ### Skipped-gate honesty + partial → solid (#496 B2/B3)
 
@@ -236,18 +241,21 @@ chat turns use — there is no automation-specific mock LLM (the
 | Command / workflow | Contents |
 | --- | --- |
 | `bun run check:pr` | **Before every push:** format + oxlint + turbo lint + typecheck + lint:types + knip + lint:css + test:matrix + **test:ratchet** + **test:ratchet:unit** + **test:affected**. Superset of CI `static` (which omits `test:affected`; full vitest is on `verify`). Vitest alone is not a substitute. |
+| `bun run check:pr:full` | Same as `check:pr`, but runs **dependents** via `turbo --filter='...[origin/main]'` (`test:affected:full`). Use before requesting merge when a shared package changed. |
 | `bun run test` | package unit + integration + contract tests; prints floors |
 | `bun run test:affected` | vitest for packages changed since `origin/main` (`turbo --filter='[origin/main]'` — changed packages only; dependents stay on full CI `verify`) |
-| `bun run test:ratchet` | Floors / `minimumTests` up-only vs `origin/main` (deletions count as decreases) |
-| `bun run test:ratchet:unit` | Unit tests for the ratchet pure functions (`scripts/test-report/vitest.config.ts`) |
-| `bun run test:ratchet` | fail if coverage floors or `minimumTests` decreased vs merge base |
+| `bun run test:affected:full` | vitest for changed packages **and dependents** (`turbo --filter='...[origin/main]'`) |
+| `bun run test:ratchet` | coverage floors + `minimumTests` + mutation floors up-only, and perf budgets tighten-only, vs `origin/main` |
+| `bun run test:ratchet:unit` | Unit tests for the ratchet / diff-coverage pure functions (`scripts/test-report/vitest.config.ts`) |
+| `bun run test:diff-coverage` | changed instrumentable lines vs merge base must be ≥ **80%** covered (`coverage-final.json`); CI `verify` after `coverage` |
+| `bun run test:mutation` | StrykerJS on vault / client replica / automation (nightly); writes `artifacts/mutation/scores.json` |
 | `bun run coverage` | unified per-PR suite, v8 report, floor enforcement, Vitest JSON (`ci.yml` **verify** job) |
 | `bun run test:matrix` | catalog/owner/contract validation (also inside `check:pr`) |
 | `bun run test:perf` | hot-path budget tests; nightly only |
 | `bun run test:scale` | deterministic volume tests; nightly only |
 | `bun run test:report` | build `dist/test-report/index.html` (+ `summary.json` / `summary.md`) from available evidence |
 | `.github/workflows/ci.yml` | parallel **static** + **verify**, required **check** aggregator (ruleset-required); **publish-report** on main only (Pages); Bun/Turbo/Cargo caches |
-| `.github/workflows/e2e.yml` | desktop, web, mobile (iOS + Android home-loads), pairing, perf, scale, full report → **publish-nightly-report** on main only; red scheduled nightly → auto-issue |
+| `.github/workflows/e2e.yml` | desktop, web, mobile (iOS + Android home-loads), pairing, perf, scale, **mutation**, full report → **publish-nightly-report** on main only; red scheduled nightly → auto-issue |
 
 ### Test-health report (main + nightly)
 
@@ -322,11 +330,51 @@ agent to self-check and for review to enforce.
 When in doubt, apply the adversarial check: _could the code be wrong and this
 test still pass?_ If yes, the test is not yet meaningful.
 
+### Diff coverage (#532)
+
+After `bun run coverage`, CI `verify` runs `bun run test:diff-coverage`. It
+intersects `git diff origin/main` added lines (instrumentable `packages/*` /
+`apps/*` sources only) with Istanbul/v8 `coverage/coverage-final.json`. Threshold
+is **80%** of changed instrumentable lines. Failures name uncovered hunks.
+Waive with a non-empty `approvedDeviation` in
+`tests/diff-coverage-deviation.json` (constitutional exception — temporary).
+
+### Mutation testing (#532)
+
+Nightly StrykerJS (`@stryker-mutator/vitest-runner`) on:
+
+- `packages/vault`
+- `packages/client/src/replica`
+- `packages/automation`
+
+Configs live under `tests/mutation/`; `bun run test:mutation` writes
+`artifacts/mutation/scores.json` for the test-health report. Floors live in
+`tests/mutation-floors.json` and ratchet up-only. Per-PR mutation is out of
+scope (too slow). Seed floors start at 0 until the first measured nightly
+scores land; then raise floors a tight margin below measured.
+
+### Property contracts (fast-check, #532)
+
+`@centraid/test-kit/fast-check` re-exports a pinned `fast-check`. State-machine
+contracts use model-based / property tests:
+
+- blob custody / CAS — `packages/vault/src/blob/custody-properties.test.ts`
+- replica intent idempotency — `packages/client/src/replica/intent-idempotency-properties.test.ts`
+- scheduler no-backfill — `packages/automation/src/fire/scheduler-ledger.contract.test.ts`
+
+`minimumTests` on the matching matrix flows still protect them from shrinking.
+
+### Coverage-scope reachability (#532)
+
+Governance directive `coverage-scope-reachability` fails when a `packages/*` or
+`apps/*` tree has non-test TypeScript source but no coverage floor, matrix
+owner, or intentional allowlist entry — so a new engine package cannot land
+invisible to every floor.
+
 ## Deliberately deferred
 
-- Mutation testing for the engine packages.
 - A second React Native component-test toolchain.
-- Per-PR UI, performance, or scale gating.
+- Per-PR UI, performance, scale, or mutation gating.
 - Chasing 100% or testing trivial getters.
 
 ## Related

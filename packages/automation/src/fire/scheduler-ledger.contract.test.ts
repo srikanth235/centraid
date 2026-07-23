@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, test } from 'vitest';
+import { fc } from '@centraid/test-kit/fast-check';
 import {
   computeMissedWindows,
   parseSchedulerLedgerSnapshot,
@@ -81,6 +82,51 @@ describe('computeMissedWindows', () => {
       entries: [{ ref: 'a/one', crons: ['* * * * *'] }],
     });
     expect(missed).toEqual([]);
+  });
+
+  /**
+   * No-backfill property (#532): for any outage gap on a once-a-minute cron,
+   * the ledger records at most ONE entry per automation (earliest missed fire),
+   * never one per missed minute — the product stance is "record, don't backfill".
+   */
+  test('property: at most one missed entry per automation per gap (no backfill)', () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 5, max: 180 }),
+        fc.array(
+          fc.tuple(
+            fc.stringMatching(/^[a-z]{1,8}$/),
+            fc.constantFrom('* * * * *', '*/5 * * * *', '0 * * * *'),
+          ),
+          { minLength: 1, maxLength: 6 },
+        ),
+        (gapMinutes, rawEntries) => {
+          // Deduplicate refs so the model matches product identity.
+          const seen = new Set<string>();
+          const entries = rawEntries
+            .map(([id, cron]) => ({ ref: `a/${id}`, crons: [cron] as string[] }))
+            .filter((e) => {
+              if (seen.has(e.ref)) return false;
+              seen.add(e.ref);
+              return true;
+            });
+          const lastTickAt = at(8, 0);
+          const now = new Date(lastTickAt.getTime() + gapMinutes * 60_000);
+          const missed = computeMissedWindows({ lastTickAt, now, entries });
+          const byRef = new Map<string, number>();
+          for (const m of missed) {
+            byRef.set(m.automationRef, (byRef.get(m.automationRef) ?? 0) + 1);
+          }
+          for (const [ref, count] of byRef) {
+            expect(count).toBe(1);
+            expect(ref.startsWith('a/')).toBe(true);
+          }
+          // Never more entries than automations (no per-minute backfill flood).
+          expect(missed.length).toBeLessThanOrEqual(entries.length);
+        },
+      ),
+      { numRuns: 40, seed: 53203 },
+    );
   });
 });
 

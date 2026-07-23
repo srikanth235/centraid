@@ -20,7 +20,7 @@
     "gateway.scalability": "Owned by tests/scale/gateway-sessions.scale.test.ts (multi-session headroom).",
     "automations.scalability": "Owned by tests/scale/automations-fire.scale.test.ts (computeMissedWindows at volume \u2014 one missed entry per auto per gap; not live fire).",
     "desktop.performance": "Partial crude cold-path budget in tests/perf/desktop-cold.perf.test.ts (module import / first-paint proxy \u2014 not full Electron launch).",
-    "G4.mutation": "Optional Stryker on vault consent + replica intents deferred; not scheduled in CI (documented skip).",
+    "G4.mutation": "StrykerJS nightly on packages/vault, packages/client/src/replica, packages/automation (#532). Floors in tests/mutation-floors.json; scores in artifacts/mutation/ via e2e.yml mutation-testing job. Not per-PR.",
     "G5.interop": "packages/backup test:interop runs via .github/workflows/interop-weekly.yml (schedule + workflow_dispatch, CLAWGNITION_INTEROP=1). Not part of test:quality:nightly (perf+scale+report only).",
     "client.react.floor": "No whole-surface coverage floor on packages/client/src/react \u2014 journeys + extracted pure modules only (documented #496 open Q5).",
     "search": "Flow vault-search owns search over ext/FTS (packages/vault/src/gateway/search.test.ts).",

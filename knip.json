@@ -8,7 +8,8 @@
     ".": {
       "entry": ["scripts/**/*.{js,mjs,ts}", ".github/workflows/*.{yml,yaml}"],
       "project": ["scripts/**/*.{js,mjs,ts}"],
-      "ignoreUnresolved": ["react", "react-native"]
+      "ignoreUnresolved": ["react", "react-native"],
+      "ignoreDependencies": ["@stryker-mutator/core", "@stryker-mutator/vitest-runner"]
     },
     "packages/*": {
       "entry": ["src/index.ts"],

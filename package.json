@@ -46,6 +46,7 @@
     "gateway:package:assemble": "node scripts/gateway-package/assemble-runtime.mjs",
     "gateway:package:assemble:test": "node --test scripts/gateway-package/assemble-runtime.test.mjs",
     "check:pr": "bun run format:check && bunx oxlint . && bun run lint:packages && bunx turbo run lint && bun run typecheck && bun run lint:types && bun run knip && bun run lint:css && bun run lint:e2e-flows && bun run lint:protocol-routes && bun run lint:acp-min-versions && bun run test:matrix && bun run test:ratchet && bun run test:ratchet:unit && bun run test:affected",
+    "check:pr:full": "bun run format:check && bunx oxlint . && bun run lint:packages && bunx turbo run lint && bun run typecheck && bun run lint:types && bun run knip && bun run lint:css && bun run lint:e2e-flows && bun run lint:protocol-routes && bun run lint:acp-min-versions && bun run test:matrix && bun run test:ratchet && bun run test:ratchet:unit && bun run test:affected:full",
     "ci": "bun run check:pr",
     "knip": "knip",
     "docs:build": "node scripts/docs-site/build.mjs",
@@ -67,7 +68,10 @@
     "ci:retry": "node scripts/ci/retry.mjs",
     "test:ratchet": "node scripts/test-report/ratchet-floors.mjs",
     "test:ratchet:unit": "node node_modules/vitest/vitest.mjs run --config scripts/test-report/vitest.config.ts",
+    "test:diff-coverage": "node scripts/test-report/diff-coverage.mjs",
+    "test:mutation": "node scripts/mutation/run.mjs",
     "test:affected": "turbo run test --filter='[origin/main]' --concurrency=6",
+    "test:affected:full": "turbo run test --filter='...[origin/main]' --concurrency=6",
     "test:interop:backup": "bun run --cwd packages/backup test:interop",
     "gateway:npm:pack": "node scripts/gateway-npm/pack.mjs",
     "gateway:npm:pack:dry": "node scripts/gateway-npm/pack.mjs --dry-run",
@@ -77,6 +81,8 @@
     "gateway:install": "bash scripts/install-gateway.sh"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "^9.0.1",
+    "@stryker-mutator/vitest-runner": "^9.0.1",
     "@vitest/coverage-v8": "3.2.4",
     "astro": "^7.0.6",
     "jsdom": "26.1.0",

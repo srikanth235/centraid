@@ -2,6 +2,7 @@ import { accessSync } from 'node:fs';
 import { access } from 'node:fs/promises';
 import { expect, test } from 'vitest';
 import { useFakeClock } from './fake-clock.js';
+import { fc } from './fast-check.js';
 import { tempDir, tempDirSync } from './temp-dir.js';
 import { generateVolumeFixture } from './volume-fixture.js';
 
@@ -37,4 +38,16 @@ test('volume fixtures are deterministic and preserve requested cardinality', () 
   expect(first.blobs).toHaveLength(12);
   expect(first.replicaRows).toHaveLength(17);
   expect(first.conversations.flatMap((conversation) => conversation.turns)).toHaveLength(28);
+});
+
+test('fast-check re-export runs a property', () => {
+  let runs = 0;
+  fc.assert(
+    fc.property(fc.integer(), fc.integer(), (a, b) => {
+      runs += 1;
+      return a + b === b + a;
+    }),
+    { numRuns: 32 },
+  );
+  expect(runs).toBeGreaterThan(0);
 });

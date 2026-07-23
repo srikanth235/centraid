@@ -169,6 +169,9 @@ jobs:
           CENTRAID_BENCH_REQUIRE_FSYNC: '1'
           CENTRAID_HARDWARE_PROFILE: constrained
       - run: bun run coverage
+      # #532 — changed-line coverage vs origin/main must be ≥80% (or approvedDeviation).
+      - name: Diff coverage on changed lines
+        run: bun run test:diff-coverage
       - name: Generate test-health report
         if: always()
         run: bun run test:report

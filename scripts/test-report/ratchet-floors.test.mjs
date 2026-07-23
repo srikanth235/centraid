@@ -1,5 +1,14 @@
 import { describe, expect, test } from 'vitest';
-import { diffCoverageFloors, diffMinimumTests, ratchetFloors } from './ratchet-floors.mjs';
+import {
+  diffCoverageFloors,
+  diffMinimumTests,
+  diffMutationFloors,
+  diffPerfBudgetNumbers,
+  extractBudgetNumbersFromSource,
+  flattenBudgetNumbers,
+  isBudgetFloorKey,
+  ratchetFloors,
+} from './ratchet-floors.mjs';
 
 describe('diffCoverageFloors', () => {
   test('flags a top-level line floor decrease', () => {
@@ -44,6 +53,28 @@ describe('diffCoverageFloors', () => {
   });
 });
 
+describe('diffMutationFloors', () => {
+  test('flags a package mutation score decrease', () => {
+    expect(
+      diffMutationFloors(
+        { 'packages/vault': 80, 'packages/automation': 70 },
+        { 'packages/vault': 75, 'packages/automation': 70 },
+      ),
+    ).toEqual(['mutation floor "packages/vault" decreased 80 → 75']);
+  });
+
+  test('flags removal of a mutation floor', () => {
+    expect(diffMutationFloors({ 'packages/vault': 80 }, {})).toEqual([
+      'mutation floor "packages/vault" removed (was 80)',
+    ]);
+  });
+
+  test('allows increase and equal', () => {
+    expect(diffMutationFloors({ 'packages/vault': 80 }, { 'packages/vault': 85 })).toEqual([]);
+    expect(diffMutationFloors({ 'packages/vault': 80 }, { 'packages/vault': 80 })).toEqual([]);
+  });
+});
+
 describe('diffMinimumTests', () => {
   test('flags a minimumTests decrease without waiver', () => {
     const base = { flows: [{ id: 'a', minimumTests: 10 }] };
@@ -80,6 +111,72 @@ describe('diffMinimumTests', () => {
   });
 });
 
+describe('perf budget ratchet', () => {
+  test('isBudgetFloorKey recognizes min* keys', () => {
+    expect(isBudgetFloorKey('minStreamsForProof')).toBe(true);
+    expect(isBudgetFloorKey('maxRequests')).toBe(false);
+    expect(isBudgetFloorKey('requestP99Ms')).toBe(false);
+  });
+
+  test('flattenBudgetNumbers walks nested trees', () => {
+    expect(
+      flattenBudgetNumbers({
+        shell: { maxRequests: 10, nested: { maxTransferBytes: 100 } },
+        minStreamsForProof: 3,
+      }),
+    ).toEqual({
+      'shell.maxRequests': 10,
+      'shell.nested.maxTransferBytes': 100,
+      minStreamsForProof: 3,
+    });
+  });
+
+  test('diffPerfBudgetNumbers flags ceiling widen and min loosen', () => {
+    expect(
+      diffPerfBudgetNumbers(
+        { 'shell.maxRequests': 10, minStreamsForProof: 3 },
+        { 'shell.maxRequests': 12, minStreamsForProof: 3 },
+      ),
+    ).toEqual(['perf budget "shell.maxRequests" widened 10 → 12 (ceilings may only tighten)']);
+
+    expect(diffPerfBudgetNumbers({ minStreamsForProof: 3 }, { minStreamsForProof: 2 })).toEqual([
+      'perf budget "minStreamsForProof" loosened 3 → 2 (min floors may only rise)',
+    ]);
+  });
+
+  test('diffPerfBudgetNumbers allows tighten and equal', () => {
+    expect(
+      diffPerfBudgetNumbers(
+        { 'shell.maxRequests': 10, minStreamsForProof: 3 },
+        { 'shell.maxRequests': 8, minStreamsForProof: 4 },
+      ),
+    ).toEqual([]);
+    expect(diffPerfBudgetNumbers({ a: 1 }, { a: 1 })).toEqual([]);
+  });
+
+  test('extractBudgetNumbersFromSource parses nested TS export', () => {
+    const source = `
+export interface PerfBudgets { shell: { maxRequests: number } }
+export const perfBudgets: PerfBudgets = {
+  shell: {
+    // comment
+    maxRequests: 10,
+    maxTransferBytes: 1_250_000,
+  },
+  irohPool: {
+    minStreamsForProof: 3,
+  },
+};
+export const enforceTiming = true;
+`;
+    expect(extractBudgetNumbersFromSource(source, 'perfBudgets')).toEqual({
+      'shell.maxRequests': 10,
+      'shell.maxTransferBytes': 1_250_000,
+      'irohPool.minStreamsForProof': 3,
+    });
+  });
+});
+
 describe('ratchetFloors', () => {
   test('waives floor decreases when approvedDeviation is set', () => {
     const { errors, waived } = ratchetFloors({
@@ -110,5 +207,68 @@ describe('ratchetFloors', () => {
       headMatrix: { flows: [] },
     });
     expect(errors.some((e) => e.includes('removed'))).toBe(true);
+  });
+
+  test('waives mutation floor decrease with mutation approvedDeviation', () => {
+    const { errors, waived } = ratchetFloors({
+      baseFloors: { lines: 30 },
+      headFloors: { lines: 30 },
+      baseMatrix: { flows: [] },
+      headMatrix: { flows: [] },
+      baseMutation: { 'packages/vault': 80 },
+      headMutation: {
+        'packages/vault': 70,
+        approvedDeviation: 'temporary #532 recalibration after suite split',
+      },
+    });
+    expect(waived).toBe(true);
+    expect(errors).toEqual([]);
+  });
+
+  test('fails mutation floor decrease without waiver', () => {
+    const { errors } = ratchetFloors({
+      baseFloors: { lines: 30 },
+      headFloors: { lines: 30 },
+      baseMatrix: { flows: [] },
+      headMatrix: { flows: [] },
+      baseMutation: { 'packages/vault': 80 },
+      headMutation: { 'packages/vault': 70 },
+    });
+    expect(errors.some((e) => e.includes('mutation floor'))).toBe(true);
+  });
+
+  test('fails perf budget widen without approvedDeviation', () => {
+    const { errors } = ratchetFloors({
+      baseFloors: { lines: 30 },
+      headFloors: { lines: 30 },
+      baseMatrix: { flows: [] },
+      headMatrix: { flows: [] },
+      perfBudgets: [
+        {
+          label: 'apps/web/tests/e2e/perf-budgets.ts',
+          base: { 'shell.maxRequests': 10 },
+          head: { 'shell.maxRequests': 99 },
+        },
+      ],
+    });
+    expect(errors.some((e) => e.includes('widened'))).toBe(true);
+  });
+
+  test('allows perf budget widen with approvedDeviation', () => {
+    const { errors } = ratchetFloors({
+      baseFloors: { lines: 30 },
+      headFloors: { lines: 30 },
+      baseMatrix: { flows: [] },
+      headMatrix: { flows: [] },
+      perfBudgets: [
+        {
+          label: 'apps/web/tests/e2e/perf-budgets.ts',
+          base: { 'shell.maxRequests': 10 },
+          head: { 'shell.maxRequests': 99 },
+          approvedDeviation: 'measured regression after intentional fixture growth (#999)',
+        },
+      ],
+    });
+    expect(errors).toEqual([]);
   });
 });
