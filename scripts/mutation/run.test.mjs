@@ -18,12 +18,39 @@ describe('mutationScoreFromReport', () => {
     expect(mutationScoreFromReport(null)).toBe(null);
     expect(mutationScoreFromReport({})).toBe(null);
   });
+
+  test('derives score from Stryker 9 per-file mutants statuses', () => {
+    expect(
+      mutationScoreFromReport({
+        files: {
+          'a.ts': {
+            mutants: [
+              { status: 'Killed' },
+              { status: 'Killed' },
+              { status: 'Survived' },
+              { status: 'Ignored' },
+              { status: 'NoCoverage' },
+            ],
+          },
+        },
+      }),
+    ).toBe(50); // 2 killed / (2 killed + 1 survived + 1 noCoverage)
+  });
 });
 
 describe('MUTATION_SEEDS', () => {
-  test('covers the three #532 seed packages with package-local configs', () => {
+  test('covers core property-defended packages with package-local configs', () => {
     expect(MUTATION_SEEDS.map((s) => s.id).sort()).toEqual(
-      ['packages/automation', 'packages/client/src/replica', 'packages/vault'].sort(),
+      [
+        'packages/app-engine',
+        'packages/automation',
+        'packages/backup',
+        'packages/blob-format',
+        'packages/client/src/replica',
+        'packages/protocol',
+        'packages/tunnel',
+        'packages/vault',
+      ].sort(),
     );
     for (const seed of MUTATION_SEEDS) {
       expect(seed.config).toBe('stryker.config.mjs');

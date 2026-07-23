@@ -42,6 +42,41 @@ export const MUTATION_SEEDS = [
     config: 'stryker.config.mjs',
     report: 'artifacts/mutation/automation-report.json',
   },
+  {
+    id: 'packages/backup',
+    label: 'backup',
+    cwd: 'packages/backup',
+    config: 'stryker.config.mjs',
+    report: 'artifacts/mutation/backup-report.json',
+  },
+  {
+    id: 'packages/blob-format',
+    label: 'blob-format',
+    cwd: 'packages/blob-format',
+    config: 'stryker.config.mjs',
+    report: 'artifacts/mutation/blob-format-report.json',
+  },
+  {
+    id: 'packages/protocol',
+    label: 'protocol',
+    cwd: 'packages/protocol',
+    config: 'stryker.config.mjs',
+    report: 'artifacts/mutation/protocol-report.json',
+  },
+  {
+    id: 'packages/tunnel',
+    label: 'tunnel',
+    cwd: 'packages/tunnel',
+    config: 'stryker.config.mjs',
+    report: 'artifacts/mutation/tunnel-report.json',
+  },
+  {
+    id: 'packages/app-engine',
+    label: 'app-engine',
+    cwd: 'packages/app-engine',
+    config: 'stryker.config.mjs',
+    report: 'artifacts/mutation/app-engine-report.json',
+  },
 ];
 
 /**
@@ -71,14 +106,37 @@ export function mutationScoreFromReport(report) {
   }
   // Stryker 9 files map: average file scores if present
   if (r.files && typeof r.files === 'object') {
-    const scores = Object.values(
-      /** @type {Record<string, { mutationScore?: number }> } */ (r.files),
-    )
-      .map((f) => f?.mutationScore)
-      .filter((n) => typeof n === 'number');
+    const fileEntries = Object.values(
+      /** @type {Record<string, { mutationScore?: number; mutants?: Array<{ status?: string }> }> } */ (
+        r.files
+      ),
+    );
+    const scores = fileEntries.map((f) => f?.mutationScore).filter((n) => typeof n === 'number');
     if (scores.length) {
       return scores.reduce((a, b) => a + b, 0) / scores.length;
     }
+    // Stryker 9 JSON report: per-file mutants[] with status, no rollup metrics.
+    let killed = 0;
+    let valid = 0;
+    for (const f of fileEntries) {
+      if (!Array.isArray(f?.mutants)) continue;
+      for (const m of f.mutants) {
+        const status = m?.status;
+        if (
+          status === 'Killed' ||
+          status === 'Timeout' ||
+          status === 'RuntimeError' ||
+          status === 'CompileError'
+        ) {
+          killed += status === 'Killed' || status === 'Timeout' ? 1 : 0;
+          valid += 1;
+        } else if (status === 'Survived' || status === 'NoCoverage') {
+          valid += 1;
+        }
+        // Ignored / Pending do not count toward the score denominator.
+      }
+    }
+    if (valid > 0) return (killed / valid) * 100;
   }
   return null;
 }

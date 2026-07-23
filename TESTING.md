@@ -345,35 +345,43 @@ Waive with a non-empty `approvedDeviation` in
 
 ### Mutation testing (#532)
 
-Nightly StrykerJS (`@stryker-mutator/vitest-runner`) on:
+Nightly StrykerJS (`@stryker-mutator/vitest-runner`) on property-defended core
+packages:
 
-- `packages/vault`
-- `packages/client/src/replica`
-- `packages/automation`
+- `packages/vault` (custody)
+- `packages/client/src/replica` (intents + payload-hash)
+- `packages/automation` (scheduler ledger)
+- `packages/backup` (AES-GCM seal + WAL address keys)
+- `packages/blob-format` (CBSF directory codec)
+- `packages/protocol` (handshake judge)
+- `packages/tunnel` (wire frame / pair QR / sanitize)
+- `packages/app-engine` (pricing cost formula)
 
-Package-local Stryker configs (`packages/{vault,client,automation}/stryker.config.mjs`
-+ `vitest.mutation.config.ts`) mutate the property-defended modules; root
-pointers live under `tests/mutation/`. `bun run test:mutation` writes
-`artifacts/mutation/scores.json` for the test-health report. Floors live in
-`tests/mutation-floors.json` and ratchet up-only (seeded 2026-07-23: vault **97**,
-client replica **67**, automation **80**). Per-PR mutation is out of scope.
+Package-local Stryker configs (`stryker.config.mjs` + `vitest.mutation.config.ts`)
+mutate the property-defended modules; root pointers live under `tests/mutation/`.
+`bun run test:mutation` writes `artifacts/mutation/scores.json` for the
+test-health report. Floors live in `tests/mutation-floors.json` and ratchet
+up-only (measured 2026-07-23/24 — see file comment). Per-PR mutation is out of
+scope.
 
 ### Property contracts (fast-check, #532)
 
-`@centraid/test-kit/fast-check` re-exports a pinned `fast-check`. State-machine
-contracts use model-based / property tests:
-
-- blob custody / CAS — `packages/vault/src/blob/custody-properties.test.ts`
-- replica intent idempotency — `packages/client/src/replica/intent-idempotency-properties.test.ts`
-- scheduler no-backfill — `packages/automation/src/fire/scheduler-ledger.contract.test.ts`
-
-Matrix `minimumTests` protect them from shrinking (2026-07-23 backfill):
+`@centraid/test-kit/fast-check` re-exports a pinned `fast-check`. Core contracts
+use model-based / property tests across the load-bearing pure surfaces:
 
 | Flow | Owner | `minimumTests` |
 | --- | --- | ---: |
 | `blob-custody-properties` | vault custody-properties | **12** |
+| `vault-json-schema-properties` | vault json-schema-properties | **7** |
 | `replica-intent-properties` | client intent-idempotency-properties | **10** |
+| `replica-payload-hash-properties` | client payload-hash-properties | **7** |
 | `scheduler-no-backfill` | automation scheduler-ledger.contract | **23** |
+| `backup-crypto-properties` | backup crypto-properties | **8** |
+| `backup-wal-address-properties` | backup wal-address-properties | **7** |
+| `blob-format-cbsf-properties` | blob-format cbsf-properties | **6** |
+| `protocol-handshake-properties` | protocol handshake-properties | **9** |
+| `tunnel-wire-properties` | tunnel wire-properties | **5** |
+| `app-engine-cost-properties` | app-engine cost-properties | **7** |
 
 ### Coverage-scope reachability (#532)
 

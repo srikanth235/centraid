@@ -20,7 +20,7 @@
     "gateway.scalability": "Owned by tests/scale/gateway-sessions.scale.test.ts (multi-session headroom).",
     "automations.scalability": "Owned by tests/scale/automations-fire.scale.test.ts (computeMissedWindows at volume — one missed entry per auto per gap; not live fire).",
     "desktop.performance": "Partial crude cold-path budget in tests/perf/desktop-cold.perf.test.ts (module import / first-paint proxy — not full Electron launch).",
-    "G4.mutation": "StrykerJS nightly on packages/vault, packages/client/src/replica, packages/automation (#532). Floors in tests/mutation-floors.json; scores in artifacts/mutation/ via e2e.yml mutation-testing job. Not per-PR.",
+    "G4.mutation": "StrykerJS nightly on property-defended core packages: vault, client/replica, automation, backup, blob-format, protocol, tunnel, app-engine (#532). Floors in tests/mutation-floors.json; scores in artifacts/mutation/ via e2e.yml mutation-testing job. Not per-PR.",
     "G5.interop": "packages/backup test:interop runs via .github/workflows/interop-weekly.yml (schedule + workflow_dispatch, CLAWGNITION_INTEROP=1). Not part of test:quality:nightly (perf+scale+report only).",
     "client.react.floor": "No whole-surface coverage floor on packages/client/src/react — journeys + extracted pure modules only (documented #496 open Q5).",
     "search": "Flow vault-search owns search over ext/FTS (packages/vault/src/gateway/search.test.ts).",
@@ -726,6 +726,78 @@
       "tier": "unit",
       "owner": "packages/vault/src/blob/custody-properties.test.ts",
       "minimumTests": 12
+    },
+    {
+      "id": "vault-json-schema-properties",
+      "name": "Command JSON-schema validation holds for generated values",
+      "surface": "vault-core",
+      "dimension": "correctness",
+      "tier": "unit",
+      "owner": "packages/vault/src/gateway/json-schema-properties.test.ts",
+      "minimumTests": 7
+    },
+    {
+      "id": "backup-crypto-properties",
+      "name": "Backup AES-GCM seal/unseal and key derivation properties",
+      "surface": "backup-restore",
+      "dimension": "correctness",
+      "tier": "unit",
+      "owner": "packages/backup/src/crypto-properties.test.ts",
+      "minimumTests": 8
+    },
+    {
+      "id": "backup-wal-address-properties",
+      "name": "WAL segment/closer/marker address keys round-trip",
+      "surface": "backup-restore",
+      "dimension": "correctness",
+      "tier": "unit",
+      "owner": "packages/backup/src/wal-address-properties.test.ts",
+      "minimumTests": 7
+    },
+    {
+      "id": "blob-format-cbsf-properties",
+      "name": "CBSF directory codec and AAD properties",
+      "surface": "blob-custody",
+      "dimension": "correctness",
+      "tier": "unit",
+      "owner": "packages/blob-format/src/cbsf-properties.test.ts",
+      "minimumTests": 6
+    },
+    {
+      "id": "protocol-handshake-properties",
+      "name": "Gateway protocol handshake CapVer properties",
+      "surface": "gateway",
+      "dimension": "correctness",
+      "tier": "unit",
+      "owner": "packages/protocol/src/handshake-properties.test.ts",
+      "minimumTests": 9
+    },
+    {
+      "id": "tunnel-wire-properties",
+      "name": "Tunnel wire frame / pair QR / hop-by-hop properties",
+      "surface": "tunnel-pairing",
+      "dimension": "correctness",
+      "tier": "unit",
+      "owner": "packages/tunnel/src/wire-properties.test.ts",
+      "minimumTests": 5
+    },
+    {
+      "id": "replica-payload-hash-properties",
+      "name": "Intent payload hash is order-independent and fail-closed",
+      "surface": "replica-sync",
+      "dimension": "correctness",
+      "tier": "unit",
+      "owner": "packages/client/src/replica/payload-hash-properties.test.ts",
+      "minimumTests": 7
+    },
+    {
+      "id": "app-engine-cost-properties",
+      "name": "Inference cost formula is linear and fail-safe on missing rates",
+      "surface": "app-engine",
+      "dimension": "correctness",
+      "tier": "unit",
+      "owner": "packages/app-engine/src/pricing/cost-properties.test.ts",
+      "minimumTests": 7
     },
     {
       "id": "blob-disk-full",

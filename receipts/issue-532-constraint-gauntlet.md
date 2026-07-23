@@ -111,11 +111,73 @@
   - `scripts/mutation/run.mjs` runs from package cwd; root pointers under `tests/mutation/`
   - `.gitignore` ignores `**/.stryker-tmp/`
 
+### Follow-up: core-wide property + mutation coverage (2026-07-24)
+
+Leave no important pure core surface unowned by a property suite + mutation seed.
+
+**Property suites**
+
+- `packages/vault/src/gateway/json-schema-properties.test.ts`
+- `packages/client/src/replica/payload-hash-properties.test.ts`
+- `packages/backup/src/crypto-properties.test.ts`
+- `packages/backup/src/wal-address-properties.test.ts`
+- `packages/blob-format/src/cbsf-properties.test.ts`
+- `packages/protocol/src/handshake-properties.test.ts`
+- `packages/tunnel/src/wire-properties.test.ts`
+- `packages/app-engine/src/pricing/cost-properties.test.ts`
+
+**Package-local Stryker + mutation vitest configs**
+
+- `packages/backup/stryker.config.mjs`, `packages/backup/vitest.mutation.config.ts`
+- `packages/blob-format/stryker.config.mjs`, `packages/blob-format/vitest.mutation.config.ts`
+- `packages/protocol/stryker.config.mjs`, `packages/protocol/vitest.mutation.config.ts`
+- `packages/tunnel/stryker.config.mjs`, `packages/tunnel/vitest.mutation.config.ts`
+- `packages/app-engine/stryker.config.mjs`, `packages/app-engine/vitest.mutation.config.ts`
+- `packages/client/vitest.mutation.config.ts` (include payload-hash properties)
+- `packages/vault/stryker.config.mjs` (custody mutate stays; json-schema is matrix-only)
+
+**Root mutation pointers**
+
+- `tests/mutation/stryker.backup.mjs`
+- `tests/mutation/stryker.blob-format.mjs`
+- `tests/mutation/stryker.protocol.mjs`
+- `tests/mutation/stryker.tunnel.mjs`
+- `tests/mutation/stryker.app-engine.mjs`
+
+**Stryker scope comments (I/O / non-property surface excluded from mutate set)**
+
+- `packages/backup/src/crypto.ts` — disable keyring I/O after pure seal/HKDF
+- `packages/backup/src/wal-format.ts` — disable frame math / seal / replay after address keys
+- `packages/protocol/src/handshake.ts` — disable `handshakeGateway` network I/O
+- `packages/tunnel/src/protocol.ts` — disable async stream readers
+
+**Floors / matrix / runner / docs**
+
+- `tests/mutation-floors.json` — vault 97, client 70, automation 80, backup 42,
+  blob-format 97, protocol 73, tunnel 78, app-engine 97
+- `tests/matrix.json` — new property flows + `minimumTests` for each suite
+- `scripts/mutation/run.mjs` — eight seeds; Stryker 9 mutant-status score parse
+- `scripts/mutation/run.test.mjs` — seed list + score parse unit tests
+- `TESTING.md` — expanded property + mutation tables
+- `receipts/issue-532-constraint-gauntlet.md` — this section
+
+| Package | Property suite | Mutate set | Floor |
+| --- | --- | --- | ---: |
+| vault | custody (+ json-schema props, matrix-only) | custody-proven | **97** |
+| client replica | intents + payload-hash | intents + payload-hash | **70** |
+| automation | scheduler-ledger | scheduler-ledger | **80** |
+| backup | crypto + wal-address | crypto seal/HKDF + WAL keys | **42** |
+| blob-format | cbsf-properties | index.ts | **97** |
+| protocol | handshake-properties | handshake judge | **73** |
+| tunnel | wire-properties | protocol pure helpers | **78** |
+| app-engine | cost-properties | pricing/cost.ts | **97** |
+
 ## Out of scope
 
-- Mutation beyond the three seed packages
+- UI / journey mutation (desktop, mobile, web React shells)
+- Mutating whole large modules (WAL seal/replay, tunnel stream I/O, keyring I/O)
+  — those stay unit/contract owned; property mutate sets are the pure contracts
 - Per-PR mutation or perf gating
-- Changing existing coverage floor values in `tests/coverage-floors.json`
 - Second property library / RN component toolchain / Gherkin
 - Making `check:pr` itself run dependents (only `check:pr:full`)
 
@@ -140,8 +202,17 @@ bun run test:ratchet
 # → bun run test:ratchet exits 1
 
 bun run --cwd packages/vault test -- src/blob/custody-properties.test.ts
+bun run --cwd packages/vault test -- src/gateway/json-schema-properties.test.ts
 bun run --cwd packages/client test -- src/replica/intent-idempotency-properties.test.ts
+bun run --cwd packages/client test -- src/replica/payload-hash-properties.test.ts
 bun run --cwd packages/automation test -- src/fire/scheduler-ledger.contract.test.ts
+bun run --cwd packages/backup test -- src/crypto-properties.test.ts src/wal-address-properties.test.ts
+bun run --cwd packages/blob-format test -- src/cbsf-properties.test.ts
+bun run --cwd packages/protocol test -- src/handshake-properties.test.ts
+bun run --cwd packages/tunnel test -- src/wire-properties.test.ts
+bun run --cwd packages/app-engine test -- src/pricing/cost-properties.test.ts
+bun run test:mutation -- --package blob-format
+# + other seeds as needed; full lane: bun run test:mutation
 bun run --cwd packages/test-kit test
 
 bun run test:matrix

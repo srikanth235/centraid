@@ -112,6 +112,10 @@ export function chunkId(dedupKey: Uint8Array, plain: Uint8Array): string {
 // ---------------------------------------------------------------------------
 // Keyring (FORMAT.md § Key custody — epochs)
 // ---------------------------------------------------------------------------
+// Mutation ownership for #532 is the pure seal/HKDF surface above (property
+// suite). Keyring I/O is covered by crypto.test.ts unit tests, not the
+// property/mutation mutate set.
+// Stryker disable all
 
 export interface KeyringEpoch {
   epoch: number;

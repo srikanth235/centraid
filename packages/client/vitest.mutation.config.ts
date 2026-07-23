@@ -18,6 +18,8 @@ export default jsdomProject({
       'src/replica/intent-idempotency-properties.test.ts',
       'src/replica/intents.contract.test.ts',
       'src/replica/payload-hash-identity.test.ts',
+      'src/replica/payload-hash-properties.test.ts',
+      'src/replica/payload-hash.test.ts',
     ],
   },
 });
