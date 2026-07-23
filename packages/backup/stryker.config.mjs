@@ -1,8 +1,10 @@
 /** Package-local Stryker options (types from root @stryker-mutator/core). */
 export default {
   packageManager: 'npm',
+  inPlace: true,
   testRunner: 'vitest',
   vitest: { configFile: 'vitest.mutation.config.ts', related: false },
+  testFiles: ['src/crypto-properties.test.ts', 'src/wal-address-properties.test.ts'],
   mutate: ['src/crypto.ts', 'src/wal-format.ts'],
   reporters: ['clear-text', 'json'],
   jsonReporter: { fileName: '../../artifacts/mutation/backup-report.json' },

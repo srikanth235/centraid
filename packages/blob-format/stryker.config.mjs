@@ -1,8 +1,10 @@
 /** Package-local Stryker options (types from root @stryker-mutator/core). */
 export default {
   packageManager: 'npm',
+  inPlace: true,
   testRunner: 'vitest',
   vitest: { configFile: 'vitest.mutation.config.ts', related: false },
+  testFiles: ['src/cbsf-properties.test.ts', 'src/cbsf.test.ts'],
   mutate: ['src/index.ts'],
   reporters: ['clear-text', 'json'],
   jsonReporter: { fileName: '../../artifacts/mutation/blob-format-report.json' },

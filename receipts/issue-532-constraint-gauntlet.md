@@ -92,8 +92,10 @@
 ### CI green after merge (mutation-pr + verify perf)
 
 - Package `vitest.mutation.config.ts` files use standalone `defineConfig`
-  (not `defineProject`) so Stryker dry-run reliably discovers tests on
-  ubuntu-latest; vault include adds `custody-proven.contract.test.ts`
+  (not `defineProject`); seeds pass explicit `testFiles` + `inPlace: true`
+- Vault + automation use Stryker **command** runner (vitest plugin dry-run
+  finds 0 tests for those two packages only on ubuntu-latest CI); vault
+  mutation suite is contract-only for command-runner speed
 - `scripts/mutation/run.mjs` retries once on "No tests were executed/found"
 - `ci.yml` per-PR perf step retries once for shared-runner event-loop noise
 - `receipts/issue-532-constraint-gauntlet.md` (this receipt)

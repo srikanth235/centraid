@@ -1,8 +1,10 @@
 /** Package-local Stryker options (types from root @stryker-mutator/core). */
 export default {
   packageManager: 'npm',
+  inPlace: true,
   testRunner: 'vitest',
   vitest: { configFile: 'vitest.mutation.config.ts', related: false },
+  testFiles: ['src/wire-properties.test.ts'],
   // Pure wire helpers (encode/parse/sanitize). Async stream readers have low
   // property coverage; scores reflect that and ratchet from a measured floor.
   mutate: ['src/protocol.ts'],
