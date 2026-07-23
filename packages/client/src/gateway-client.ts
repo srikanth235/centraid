@@ -518,6 +518,34 @@ export async function getGatewayHealth(): Promise<CentraidGatewayHealth> {
   return readJson<CentraidGatewayHealth>(res, 'gateway health');
 }
 
+/**
+ * Hot-apply a background-work pause (issue #528 Phase B). `durationMs` absent
+ * ⇒ an indefinite pause (`until: null`); the gateway clamps to a 24h max.
+ * Returns the reconciled pause state — same shape health reports under
+ * `metrics.backgroundPause`.
+ */
+export async function pauseBackgroundWork(
+  durationMs?: number,
+): Promise<{ paused: boolean; until: string | null }> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, '/centraid/_gateway/resource/pause', {
+    method: 'POST',
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify(durationMs !== undefined ? { durationMs } : {}),
+  });
+  return readJson<{ paused: boolean; until: string | null }>(res, 'pause background work');
+}
+
+/** Lift a background-work pause (issue #528 Phase B). */
+export async function resumeBackgroundWork(): Promise<{ paused: boolean }> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, '/centraid/_gateway/resource/pause', {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+  return readJson<{ paused: boolean }>(res, 'resume background work');
+}
+
 // ───────────────────────── editing + lifecycle ─────────────────────
 // The app-editing (sessions / files / publish) + lifecycle (create / clone
 // / meta / automation CRUD) surface lives in `gateway-client-editing.ts`

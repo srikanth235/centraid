@@ -1337,6 +1337,31 @@ export interface CentraidHealthEvent {
   message: string;
 }
 
+/** Structured resource contract on health metrics (issue #528 Phase A). */
+export interface CentraidResourceProfile {
+  class: 'constrained' | 'standard';
+  mode: 'auto' | 'conserve' | 'balanced' | 'performance';
+  host: { cores: number; totalMemoryBytes: number; storageFsyncMs: number | null };
+  resolved: {
+    workerMaxConcurrent: number;
+    workerMaxOldGenerationMb: number;
+    workerPoolSize: number;
+    replicationConcurrency: number;
+    staticBrotliQuality: number;
+    staticGzipQuality: number;
+    sqliteSynchronous: 'FULL' | 'NORMAL';
+    vaultSweepIntervalMs: number;
+    outboxIdleIntervalMs: number;
+  };
+}
+
+/** Background-work pause state on health metrics (issue #528 Phase B). */
+export interface CentraidBackgroundPause {
+  paused: boolean;
+  /** ISO timestamp the pause lifts, or `null` for indefinite / not paused. */
+  until: string | null;
+}
+
 /** Coarse numeric signals on `GET /centraid/_gateway/health` (issue #521). */
 export interface CentraidHealthMetrics {
   rssBytes: number;
@@ -1350,6 +1375,10 @@ export interface CentraidHealthMetrics {
   storageFsyncMs?: number;
   hardwareProfileClass?: string;
   resourceMode?: string;
+  /** Structured resource contract (issue #528 Phase A) — host facts + resolved knobs. */
+  resourceProfile?: CentraidResourceProfile;
+  /** Background-work pause state (issue #528 Phase B). */
+  backgroundPause?: CentraidBackgroundPause;
   uptimeMs: number;
 }
 

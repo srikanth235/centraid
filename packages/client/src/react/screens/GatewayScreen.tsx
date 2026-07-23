@@ -73,6 +73,15 @@ export interface GatewayScreenProps {
    */
   loadResourceMode?: () => Promise<ResourceMode>;
   saveResourceMode?: (mode: ResourceMode) => Promise<void>;
+  /**
+   * Pause / resume background work (issue #528 Phase B). Optional so older
+   * hosts/tests keep rendering; the pause control also gates on the health
+   * snapshot carrying `metrics.backgroundPause`.
+   */
+  onPauseBackgroundWork?: (
+    durationMs?: number,
+  ) => Promise<{ paused: boolean; until: string | null }>;
+  onResumeBackgroundWork?: () => Promise<{ paused: boolean }>;
 }
 
 type TabId = 'overview' | 'components' | 'logs' | 'alerts';
@@ -336,6 +345,16 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
                   : {})}
                 {...(health?.metrics?.resourceMode
                   ? { activeMode: health.metrics.resourceMode }
+                  : {})}
+                {...(health?.metrics?.resourceProfile
+                  ? { resourceProfile: health.metrics.resourceProfile }
+                  : {})}
+                {...(health?.metrics?.backgroundPause
+                  ? { backgroundPause: health.metrics.backgroundPause }
+                  : {})}
+                {...(props.onPauseBackgroundWork ? { onPause: props.onPauseBackgroundWork } : {})}
+                {...(props.onResumeBackgroundWork
+                  ? { onResume: props.onResumeBackgroundWork }
                   : {})}
               />
             ) : null}

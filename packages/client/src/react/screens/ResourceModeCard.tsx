@@ -3,6 +3,15 @@ import { cx } from '../ui/cx.js';
 import styles from './GatewayScreen.module.css';
 import buttonCss from '../ui/Button.module.css';
 import controlsCss from '../styles/controls.module.css';
+import ResourceCardDetails from './ResourceCardDetails.js';
+import {
+  formatBudgetSummary,
+  formatPauseUntil,
+  msUntilTonight,
+  PAUSE_ONE_HOUR_MS,
+  type BackgroundPauseDTO,
+  type ResourceProfileDTO,
+} from './resource-summary.js';
 
 // Owner Resource mode control (#521). Writes `gateway.resourceMode` through
 // the device prefs store; the gateway reads it at serve boot and reports the
@@ -46,6 +55,24 @@ export interface ResourceModeCardProps {
   resolvedClass?: string;
   /** Active mode reported by health metrics (boot-applied). */
   activeMode?: string;
+  /**
+   * Structured resource profile from `health.metrics.resourceProfile` (issue
+   * #528). Present on modern gateways only — when absent the card renders
+   * exactly as it did before (mode chips + running-vs-desired note), no
+   * L1 budget summary and no L2 disclosure.
+   */
+  resourceProfile?: ResourceProfileDTO;
+  /**
+   * Background-work pause state from `health.metrics.backgroundPause` (issue
+   * #528). Absent → the pause control is hidden entirely (older gateway).
+   * When present the card reconciles its optimistic pause state against this
+   * on every poll.
+   */
+  backgroundPause?: BackgroundPauseDTO;
+  /** Hot-apply a background-work pause; absent ⇒ no pause control. */
+  onPause?: (durationMs?: number) => Promise<{ paused: boolean; until: string | null }>;
+  /** Lift a background-work pause; absent ⇒ no pause control. */
+  onResume?: () => Promise<{ paused: boolean }>;
 }
 
 export function parseResourceModePref(prefs: Record<string, unknown>): ResourceMode {
@@ -61,6 +88,10 @@ export default function ResourceModeCard({
   saveMode,
   resolvedClass,
   activeMode,
+  resourceProfile,
+  backgroundPause,
+  onPause,
+  onResume,
 }: ResourceModeCardProps): JSX.Element {
   const [mode, setMode] = useState<ResourceMode>('auto');
   const [busy, setBusy] = useState(false);
@@ -70,6 +101,53 @@ export default function ResourceModeCard({
   // an optimistic selection or mid-save mode (Gateway Overview re-renders
   // every second for uptime counters).
   const busyRef = useRef(false);
+
+  // ── Pause background work (L0, issue #528) ──
+  // Optimistic pause state seeded from health, reconciled on each poll unless
+  // a POST/DELETE is in flight (same busyRef discipline as the mode save).
+  const [pauseState, setPauseState] = useState<BackgroundPauseDTO | null>(backgroundPause ?? null);
+  const [pauseBusy, setPauseBusy] = useState(false);
+  const [showPauseChoices, setShowPauseChoices] = useState(false);
+  const pauseBusyRef = useRef(false);
+  const pauseControlOn = Boolean(backgroundPause && onPause && onResume);
+
+  useEffect(() => {
+    if (pauseBusyRef.current) return;
+    if (backgroundPause) setPauseState(backgroundPause);
+  }, [backgroundPause]);
+
+  const applyPause = async (durationMs?: number): Promise<void> => {
+    if (!onPause || pauseBusy) return;
+    setShowPauseChoices(false);
+    pauseBusyRef.current = true;
+    setPauseBusy(true);
+    setError(null);
+    try {
+      const res = await onPause(durationMs);
+      setPauseState({ paused: res.paused, until: res.until });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      pauseBusyRef.current = false;
+      setPauseBusy(false);
+    }
+  };
+
+  const liftPause = async (): Promise<void> => {
+    if (!onResume || pauseBusy) return;
+    pauseBusyRef.current = true;
+    setPauseBusy(true);
+    setError(null);
+    try {
+      const res = await onResume();
+      setPauseState({ paused: res.paused, until: null });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      pauseBusyRef.current = false;
+      setPauseBusy(false);
+    }
+  };
 
   const refresh = useCallback((): void => {
     void loadMode()
@@ -147,9 +225,71 @@ export default function ResourceModeCard({
           </button>
         ))}
       </div>
+      {pauseControlOn ? (
+        <div className={styles.resourcePause} data-testid="resource-pause">
+          {pauseState?.paused ? (
+            <div className={styles.resourcePauseActive} data-testid="resource-pause-active">
+              <span className={styles.resourcePauseLabel}>
+                {formatPauseUntil(pauseState.until)}
+              </span>
+              <button
+                type="button"
+                className={cx(buttonCss.btn, buttonCss.sm)}
+                disabled={pauseBusy}
+                onClick={() => void liftPause()}
+              >
+                Resume
+              </button>
+            </div>
+          ) : showPauseChoices ? (
+            <div className={styles.resourcePauseChoices} role="group" aria-label="Pause duration">
+              <button
+                type="button"
+                className={cx(buttonCss.btn, buttonCss.sm)}
+                disabled={pauseBusy}
+                onClick={() => void applyPause(PAUSE_ONE_HOUR_MS)}
+              >
+                1 hour
+              </button>
+              <button
+                type="button"
+                className={cx(buttonCss.btn, buttonCss.sm)}
+                disabled={pauseBusy}
+                onClick={() => void applyPause(msUntilTonight(Date.now()))}
+              >
+                Until tonight
+              </button>
+              <button
+                type="button"
+                className={cx(buttonCss.btn, buttonCss.sm)}
+                disabled={pauseBusy}
+                onClick={() => void applyPause(undefined)}
+              >
+                Until I resume
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className={cx(buttonCss.btn, buttonCss.sm, styles.resourcePauseOpen)}
+              data-testid="resource-pause-open"
+              onClick={() => setShowPauseChoices(true)}
+            >
+              Pause background work
+            </button>
+          )}
+        </div>
+      ) : null}
+      {resourceProfile ? (
+        <div className={styles.resourceSummary} data-testid="resource-summary">
+          <div className={styles.resourceSummaryLine}>{formatBudgetSummary(resourceProfile)}</div>
+          <div className={styles.resourceSummaryAttr}>Sized for this gateway’s host</div>
+        </div>
+      ) : null}
       {applied ? <div className={styles.resourceNote}>{applied}</div> : null}
       {savedNote ? <div className={styles.resourceNote}>{savedNote}</div> : null}
       {error ? <div className={styles.resourceError}>Couldn’t save: {error}</div> : null}
+      {resourceProfile ? <ResourceCardDetails profile={resourceProfile} /> : null}
     </section>
   );
 }

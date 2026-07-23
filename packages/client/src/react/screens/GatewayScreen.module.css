@@ -380,6 +380,119 @@
   color: var(--danger);
 }
 
+/* ── L0 pause background work (issue #528) ── */
+.resourcePause {
+  padding: 0 14px 12px;
+}
+.resourcePauseOpen {
+  width: 100%;
+}
+.resourcePauseChoices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.resourcePauseActive {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: var(--r-md);
+  border: 0.5px solid color-mix(in oklab, var(--accent) 35%, var(--line));
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+}
+.resourcePauseLabel {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink);
+}
+
+/* ── L1 budget summary (issue #528) ── */
+.resourceSummary {
+  padding: 0 18px 12px;
+}
+.resourceSummaryLine {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+.resourceSummaryAttr {
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--ink-4);
+}
+
+/* ── L2 "how we sized this" disclosure (issue #528) ── */
+.resourceDetails {
+  border-top: 0.5px solid var(--line);
+}
+.resourceDetailsToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 11px 18px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--ink-3);
+}
+.resourceDetailsToggle:hover {
+  color: var(--ink);
+}
+.resourceDetailsChevron {
+  color: var(--ink-4);
+}
+.resourceDetailsBody {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 18px 16px;
+}
+.resourceDetailsGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.resourceDetailsGroupTitle {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.resourceDetailsList {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.resourceDetailsRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: baseline;
+  font-size: 12px;
+}
+.resourceDetailsRow dt {
+  color: var(--ink-3);
+}
+.resourceDetailsRow dd {
+  margin: 0;
+}
+.resourceDetailsValue {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink);
+  text-align: right;
+}
+
 /* Panel — shared card shell (Insights family). */
 .panel {
   border-radius: 14px;

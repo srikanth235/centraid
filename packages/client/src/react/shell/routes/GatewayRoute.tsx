@@ -4,6 +4,8 @@ import {
   getGatewayDeviceWorkStatus,
   getUserPrefs,
   listGatewayDevices,
+  pauseBackgroundWork,
+  resumeBackgroundWork,
   revokeGatewayDevice,
   saveUserPrefs,
   setGatewayDeviceCompute,
@@ -34,7 +36,7 @@ import { useGatewayRuntime } from '../useGatewayRuntime.js';
 export default function GatewayRoute(): JSX.Element {
   const { showToast } = useShellActions();
   const snapshot = useGatewayRuntime();
-  const { health } = useGatewayHealth();
+  const { health, refresh: refreshHealth } = useGatewayHealth();
   const [saving, setSaving] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   // Launch-at-login (issue #351) isn't part of the pushed runtime snapshot —
@@ -96,6 +98,22 @@ export default function GatewayRoute(): JSX.Element {
   const saveResourceMode = useCallback(async (mode: ResourceMode) => {
     await saveUserPrefs({ [RESOURCE_MODE_PREF_KEY]: mode });
   }, []);
+  // Pause/resume hot-apply, then nudge the health poll so the paused state
+  // reconciles quickly. Stable identities (same discipline as loadResourceMode)
+  // so the 1s uptime tick doesn't re-create the callbacks.
+  const pauseBackground = useCallback(
+    async (durationMs?: number) => {
+      const res = await pauseBackgroundWork(durationMs);
+      refreshHealth();
+      return res;
+    },
+    [refreshHealth],
+  );
+  const resumeBackground = useCallback(async () => {
+    const res = await resumeBackgroundWork();
+    refreshHealth();
+    return res;
+  }, [refreshHealth]);
 
   if (!snapshot) {
     return (
@@ -133,6 +151,8 @@ export default function GatewayRoute(): JSX.Element {
         onExportDiagnostics={() => window.CentraidApi.exportGatewayDiagnostics()}
         loadResourceMode={loadResourceMode}
         saveResourceMode={saveResourceMode}
+        onPauseBackgroundWork={pauseBackground}
+        onResumeBackgroundWork={resumeBackground}
       />
     </PageScroll>
   );
