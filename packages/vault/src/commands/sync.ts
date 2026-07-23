@@ -631,6 +631,9 @@ const CONFIGURE_CREDENTIAL: CommandDefinition = {
       // `none` detaches: every credential cell nulls, the connection falls
       // back to the harness-ambient lane.
       cred_kind: { type: 'string', enum: ['oauth2', 'api_key', 'none'] },
+      // `assist` uses Centraid's confidential Worker client; no client
+      // secret is accepted or stored on the gateway.
+      oauth_mode: { type: 'string', enum: ['byo', 'assist'] },
       // Wizard/docs key, e.g. `google`, `github` — names which BYO-client
       // walkthrough applies. Free-form.
       provider: { type: 'string', minLength: 1 },
@@ -673,6 +676,7 @@ function configureCredential(ctx: HandlerCtx): Record<string, unknown> {
     kind: string;
     label: string;
     cred_kind: 'oauth2' | 'api_key' | 'none';
+    oauth_mode?: 'byo' | 'assist';
     provider?: string;
     auth_url?: string;
     token_url?: string;
@@ -712,6 +716,11 @@ function configureCredential(ctx: HandlerCtx): Record<string, unknown> {
         'cred_kind "oauth2" requires auth_url, token_url and client_id (the owner-registered BYO client, issue #304)',
       );
     }
+    if (input.oauth_mode === 'assist' && input.client_secret) {
+      throw new Error('Centraid Assist must not send or store a Google client secret');
+    }
+  } else if (input.oauth_mode !== undefined) {
+    throw new Error('oauth_mode is valid only for oauth2 credentials');
   } else if (!input.api_key) {
     throw new Error('cred_kind "api_key" requires api_key');
   }
@@ -723,14 +732,15 @@ function configureCredential(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare(
       `INSERT OR REPLACE INTO sync_connection_credential
-         (connection_id, cred_kind, provider, auth_url, token_url, scopes,
+         (connection_id, cred_kind, oauth_mode, provider, auth_url, token_url, scopes,
           client_id, client_secret, access_token, refresh_token, api_key,
           token_expires_at, allowed_hosts, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, NULL, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, NULL, ?, ?)`,
     )
     .run(
       connectionId,
       input.cred_kind,
+      input.cred_kind === 'oauth2' ? (input.oauth_mode ?? 'byo') : 'byo',
       input.provider ?? null,
       input.auth_url ?? null,
       input.token_url ?? null,

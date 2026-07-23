@@ -1,18 +1,21 @@
 import { tempDir } from '@centraid/test-kit/temp-dir';
+// governance: allow-repo-hygiene file-size-limit #526 Keep broker custody and Assist regression scenarios together.
 // The connection broker (issue #304): token custody correctness. The three
 // rot points each get a scenario — rotated pair persisted before use,
 // single-flight refresh under concurrency, invalid_grant flips needs-auth
 // with an owner-readable note while a 5xx stays transient (no flip).
 
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import http from 'node:http';
 import { openVaultPlane, type VaultPlane } from './vault-plane.js';
 import { ConnectionBroker } from './connection-broker.js';
+import { ASSIST_DEVELOPMENT_WORKER_ORIGIN } from './assist-oauth.js';
 
 const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
 
 const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
+  vi.useRealTimers();
   while (cleanups.length > 0) await cleanups.pop()?.();
 });
 function openPlane(dir: string): VaultPlane {
@@ -65,7 +68,10 @@ async function startTokenServer(): Promise<TokenServer> {
     });
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  cleanups.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  cleanups.push(() => {
+    server.closeAllConnections();
+    server.close();
+  });
   const port = (server.address() as { port: number }).port;
   return {
     url: `http://127.0.0.1:${port}/token`,
@@ -102,6 +108,29 @@ function configureOauth(
   });
   if (outcome.status !== 'executed')
     throw new Error(`configure failed: ${JSON.stringify(outcome)}`);
+  return (outcome as { output: { connection_id: string } }).output.connection_id;
+}
+
+function configureAssist(plane: VaultPlane): string {
+  const outcome = plane.gateway.invoke(plane.ownerCredential, {
+    command: 'sync.configure_credential',
+    input: {
+      kind: 'pull.gcal',
+      label: 'Centraid Assist',
+      cred_kind: 'oauth2',
+      oauth_mode: 'assist',
+      provider: 'google',
+      auth_url: 'https://accounts.google.com/o/oauth2/v2/auth',
+      token_url: 'https://oauth2.googleapis.com/token',
+      scopes: 'https://www.googleapis.com/auth/calendar.readonly',
+      client_id: 'shared.apps.googleusercontent.com',
+      allowed_hosts: ['www.googleapis.com', 'oauth2.googleapis.com'],
+    },
+    purpose: 'dpv:ServiceProvision',
+  });
+  if (outcome.status !== 'executed') {
+    throw new Error(`configure failed: ${JSON.stringify(outcome)}`);
+  }
   return (outcome as { output: { connection_id: string } }).output.connection_id;
 }
 
@@ -308,4 +337,219 @@ test('force refresh (the 401 lane) refreshes even an unexpired token', async () 
   if (!auth || !('refresh' in auth) || !auth.refresh) throw new Error('expected a refresh hook');
   expect(await auth.refresh()).toEqual({ access_token: 'ya29.after-force' });
   expect(tokens.requests).toHaveLength(1);
+});
+
+test('Assist state is PKCE-bound, client-session/device-bound, single-use, and exchanged only by the Worker', async () => {
+  const plane = openPlane(await tempDir());
+  const requests: Array<{ path: string; body: Record<string, unknown> }> = [];
+  const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    requests.push({
+      path: new URL(String(input)).pathname,
+      body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+    });
+    return Response.json({
+      access_token: 'ya29.assist',
+      refresh_token: '1//assist',
+      expires_in: 3600,
+    });
+  });
+  const connectionId = configureAssist(plane);
+  const broker = new ConnectionBroker(
+    () => plane,
+    500,
+    {
+      workerBaseUrl: ASSIST_DEVELOPMENT_WORKER_ORIGIN,
+      googleClientId: 'centraid-shared.apps.googleusercontent.com',
+      restrictedScopesEnabled: false,
+    },
+    fetchImpl as typeof fetch,
+  );
+  const ceremony = broker.beginAssistAuthorization({
+    plane,
+    connectionId,
+    clientSessionId: 's'.repeat(64),
+    deviceKey: 'device-a',
+    surface: 'web',
+  });
+  const start = new URL(ceremony.authUrl);
+  expect(start.origin + start.pathname).toBe(`${ASSIST_DEVELOPMENT_WORKER_ORIGIN}/start`);
+  const startFragment = new URLSearchParams(start.hash.slice(1));
+  expect(startFragment.get('browser_binding')).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  const authorize = new URL(startFragment.get('authorization_url')!);
+  expect(authorize.searchParams.get('state')).toMatch(/^w\.[A-Za-z0-9_-]{43}$/);
+  expect(authorize.searchParams.get('redirect_uri')).toBe(
+    `${ASSIST_DEVELOPMENT_WORKER_ORIGIN}/callback`,
+  );
+  expect(authorize.searchParams.get('code_challenge_method')).toBe('S256');
+  expect(authorize.searchParams.get('scope')).toBe(
+    'https://www.googleapis.com/auth/calendar.readonly',
+  );
+  expect(ceremony.authUrl).not.toMatch(/openid|userinfo\.email|userinfo\.profile/);
+
+  // A copied browser fragment cannot burn or redeem another device/session's
+  // state. The correctly-bound client can still complete afterwards.
+  await expect(
+    broker.completeAssistAuthorization({
+      state: ceremony.state,
+      code: 'google-code',
+      receipt: 'v1.receipt',
+      clientSessionId: 'x'.repeat(64),
+      deviceKey: 'device-b',
+    }),
+  ).rejects.toThrow(/different client session/);
+  expect(requests).toHaveLength(0);
+  await expect(
+    broker.completeAssistAuthorization({
+      state: ceremony.state,
+      code: 'google-code',
+      receipt: 'v1.receipt',
+      clientSessionId: 's'.repeat(64),
+      deviceKey: 'device-a',
+    }),
+  ).resolves.toEqual({ connectionId });
+  expect(requests).toHaveLength(1);
+  expect(requests[0]).toMatchObject({
+    path: '/exchange',
+    body: {
+      provider: 'google',
+      code: 'google-code',
+      receipt: 'v1.receipt',
+      redirect_uri: `${ASSIST_DEVELOPMENT_WORKER_ORIGIN}/callback`,
+      state: ceremony.state,
+      browser_binding: startFragment.get('browser_binding'),
+      scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
+    },
+  });
+  expect(String(requests[0]!.body.code_verifier)).toMatch(/^[A-Za-z0-9_-]{64}$/);
+  expect(JSON.stringify(requests[0])).not.toContain('client_secret');
+  await expect(
+    broker.completeAssistAuthorization({
+      state: ceremony.state,
+      code: 'google-code',
+      receipt: 'v1.receipt',
+      clientSessionId: 's'.repeat(64),
+      deviceKey: 'device-a',
+    }),
+  ).rejects.toThrow(/unknown or expired/);
+});
+
+test('Assist ceremony expires without calling the Worker', async () => {
+  const plane = openPlane(await tempDir());
+  const fetchImpl = vi.fn();
+  let now = Date.parse('2026-07-23T10:00:00Z');
+  const connectionId = configureAssist(plane);
+  const broker = new ConnectionBroker(
+    () => plane,
+    500,
+    {
+      workerBaseUrl: ASSIST_DEVELOPMENT_WORKER_ORIGIN,
+      googleClientId: 'centraid-shared.apps.googleusercontent.com',
+      restrictedScopesEnabled: false,
+    },
+    fetchImpl as typeof fetch,
+    () => now,
+  );
+  const ceremony = broker.beginAssistAuthorization({
+    plane,
+    connectionId,
+    clientSessionId: 's'.repeat(64),
+    surface: 'desktop',
+  });
+  now += 11 * 60 * 1000;
+  await expect(
+    broker.completeAssistAuthorization({
+      state: ceremony.state,
+      code: 'google-code',
+      receipt: 'v1.receipt',
+      clientSessionId: 's'.repeat(64),
+    }),
+  ).rejects.toThrow(/unknown or expired/);
+  expect(fetchImpl).not.toHaveBeenCalled();
+});
+
+test('transient Assist exchange failure retries without flipping an active connection', async () => {
+  const plane = openPlane(await tempDir());
+  const connectionId = configureAssist(plane);
+  storeTokens(plane, connectionId, {
+    access_token: 'ya29.existing',
+    refresh_token: '1//existing',
+    expires_at: new Date(Date.now() + 3600_000).toISOString(),
+  });
+  const fetchImpl = vi.fn(async () =>
+    Response.json({ error: 'temporarily_unavailable' }, { status: 503 }),
+  );
+  const broker = new ConnectionBroker(
+    () => plane,
+    500,
+    {
+      workerBaseUrl: ASSIST_DEVELOPMENT_WORKER_ORIGIN,
+      googleClientId: 'centraid-shared.apps.googleusercontent.com',
+      restrictedScopesEnabled: false,
+    },
+    fetchImpl as typeof fetch,
+  );
+  const ceremony = broker.beginAssistAuthorization({
+    plane,
+    connectionId,
+    clientSessionId: 's'.repeat(64),
+    surface: 'desktop',
+  });
+
+  await expect(
+    broker.completeAssistAuthorization({
+      state: ceremony.state,
+      code: 'google-code',
+      receipt: 'v1.receipt',
+      clientSessionId: 's'.repeat(64),
+    }),
+  ).rejects.toThrow(/assist_worker_503/);
+
+  expect(fetchImpl).toHaveBeenCalledTimes(2);
+  expect(connectionRow(plane, connectionId).status).toBe('active');
+});
+
+test('Assist refresh uses only the Worker and persists a rotated pair before use', async () => {
+  const plane = openPlane(await tempDir());
+  const connectionId = configureAssist(plane);
+  storeTokens(plane, connectionId, {
+    access_token: 'ya29.assist-stale',
+    refresh_token: '1//assist-original',
+    expires_at: new Date(Date.now() - 1000).toISOString(),
+  });
+  const requests: Array<{ path: string; body: Record<string, unknown> }> = [];
+  const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    requests.push({
+      path: new URL(String(input)).pathname,
+      body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+    });
+    return Response.json({
+      access_token: 'ya29.assist-fresh',
+      refresh_token: '1//assist-rotated',
+      expires_in: 3600,
+    });
+  });
+  const broker = new ConnectionBroker(
+    () => plane,
+    500,
+    {
+      workerBaseUrl: ASSIST_DEVELOPMENT_WORKER_ORIGIN,
+      googleClientId: 'centraid-shared.apps.googleusercontent.com',
+      restrictedScopesEnabled: false,
+    },
+    fetchImpl as typeof fetch,
+  );
+  const auth = await broker.resolveForFire({ kind: 'pull.gcal', label: 'Centraid Assist' });
+  expect(auth && 'values' in auth ? auth.values : undefined).toEqual({
+    access_token: 'ya29.assist-fresh',
+  });
+  expect(requests).toEqual([
+    {
+      path: '/refresh',
+      body: { provider: 'google', refresh_token: '1//assist-original' },
+    },
+  ]);
+  expect(JSON.stringify(requests)).not.toContain('client_secret');
+  const row = connectionRow(plane, connectionId);
+  expect(String(row.access_token)).toMatch(/^sealed:v1:/);
+  expect(String(row.refresh_token)).toMatch(/^sealed:v1:/);
 });

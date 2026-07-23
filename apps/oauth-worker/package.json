@@ -1,0 +1,21 @@
+{
+  "name": "@centraid/oauth-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "wrangler deploy --config wrangler.jsonc --dry-run --outdir=dist",
+    "cf-typegen": "wrangler types --config wrangler.jsonc",
+    "deploy": "wrangler deploy --config wrangler.jsonc",
+    "dev": "wrangler dev --config wrangler.jsonc",
+    "secret:put:google-client": "wrangler secret put GOOGLE_CLIENT_SECRET --config wrangler.jsonc",
+    "secret:put:receipt": "wrangler secret put CALLBACK_RECEIPT_SECRET --config wrangler.jsonc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@centraid/test-kit": "workspace:*",
+    "typescript": "catalog:",
+    "wrangler": "^4.36.0"
+  }
+}

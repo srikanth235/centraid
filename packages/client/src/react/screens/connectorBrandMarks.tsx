@@ -75,26 +75,6 @@ export const CONNECTOR_BRAND_SVG: Record<string, string> = {
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="100%" height="100%" aria-hidden="true" focusable="false"><rect x="3" y="3" width="18" height="18" rx="5" fill="var(--accent, #6366f1)" opacity="0.15"/><path d="M8 12h8M12 8v8" stroke="var(--accent, #6366f1)" stroke-width="2" stroke-linecap="round"/></svg>',
 };
 
-/** Iconify collection:icon ids used for each tone (for docs / regen). */
-export const CONNECTOR_BRAND_SOURCES: Record<string, string> = {
-  gmail: 'logos:google-gmail',
-  gcal: 'logos:google-calendar',
-  gcontacts: 'selfhst:google-contacts',
-  gdrive: 'logos:google-drive',
-  github: 'logos:github-icon',
-  outlook: 'vscode-icons:file-type-outlook',
-  outlookcal: 'fluent-color:calendar-16',
-  outlookcontacts: 'fluent-color:contact-card-16',
-  onedrive: 'logos:microsoft-onedrive',
-  gitlab: 'logos:gitlab-icon',
-  linear: 'logos:linear-icon',
-  notion: 'logos:notion-icon',
-  todoist: 'logos:todoist-icon',
-  slack: 'logos:slack-icon',
-  dropbox: 'logos:dropbox',
-  default: 'local:default',
-};
-
 /**
  * Brand mark glyph for the Featured connectors gallery.
  * SVGs are embedded at build time — no runtime network calls.
@@ -107,7 +87,7 @@ export function ConnectorBrandGlyph({
   size?: number;
 }): JSX.Element {
   const reactId = useId().replace(/:/g, '');
-  const svg = CONNECTOR_BRAND_SVG[tone] ?? CONNECTOR_BRAND_SVG.default;
+  const svg = CONNECTOR_BRAND_SVG[tone] ?? CONNECTOR_BRAND_SVG.default!;
   // Prefix gradient/filter IDs so multiple marks on one page don't collide.
   const uid = `cb-${tone.replace(/[^a-z0-9]+/gi, '')}-${reactId}`;
   const unique = svg

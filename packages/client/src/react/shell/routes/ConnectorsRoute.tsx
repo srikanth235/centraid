@@ -4,6 +4,7 @@ import { useShellActions } from '../actions.js';
 import PageScroll from '../PageScroll.js';
 import {
   beginConnectionAuthorize,
+  completeAssistReturnLink,
   installSyncForConnection,
   loadConnectionProvidersData,
   loadConnectionsData,
@@ -33,6 +34,7 @@ export default function ConnectorsRoute(): JSX.Element {
         setConnectionStatus={updateConnectionStatus}
         detachConnection={detachConnection}
         beginAuthorize={beginConnectionAuthorize}
+        completeAssistReturnLink={completeAssistReturnLink}
         showToast={showToast}
         loadLinkedSyncs={loadLinkedSyncsForConnection}
         installSync={installSyncForConnection}

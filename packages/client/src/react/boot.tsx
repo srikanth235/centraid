@@ -25,6 +25,10 @@ import {
   streamRecoverEvents,
   validateRecoveryKit,
 } from '../gateway-client-recover.js';
+import {
+  consumeInitialAssistHandoff,
+  installDesktopAssistHandoff,
+} from '../assist-oauth-handoff.js';
 
 // Install terminal replica cleanup before any AppFrame asks for a local read;
 // inactive gateway removal and vault switches must also reach dormant storage.
@@ -96,6 +100,8 @@ sync();
 void (async (): Promise<void> => {
   const shell = document.querySelector<HTMLElement>(SHELL_SELECTOR);
   if (!shell) return;
+  const assistHandoff = await consumeInitialAssistHandoff();
+  installDesktopAssistHandoff();
   const shellRoot = createRoot(shell);
   const settings = await window.CentraidApi.getSettings().catch(
     () => ({}) as Awaited<ReturnType<typeof window.CentraidApi.getSettings>>,
@@ -105,6 +111,7 @@ void (async (): Promise<void> => {
   );
   if (settings.onboardingCompletedAt) {
     shellRoot.render(wrap(<App />));
+    if (assistHandoff.status === 'error') window.alert(assistHandoff.message);
     return;
   }
   shellRoot.render(

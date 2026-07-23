@@ -300,6 +300,56 @@ describe('sync.configure_credential + sync.store_tokens (issue #304)', () => {
     expect(health.auth_note).toMatch(/authorization pending/);
   });
 
+  test('Assist records its mode without accepting or storing a shared client secret', () => {
+    const outcome = gw.invoke(owner, {
+      command: 'sync.configure_credential',
+      input: {
+        kind: 'pull.gcal',
+        label: 'Centraid Assist',
+        cred_kind: 'oauth2',
+        oauth_mode: 'assist',
+        provider: 'google',
+        auth_url: 'https://accounts.google.com/o/oauth2/v2/auth',
+        token_url: 'https://oauth2.googleapis.com/token',
+        scopes: 'https://www.googleapis.com/auth/calendar.readonly',
+        client_id: 'shared.apps.googleusercontent.com',
+        allowed_hosts: ['www.googleapis.com'],
+      },
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(outcome.status).toBe('executed');
+    const row = db.vault
+      .prepare('SELECT oauth_mode, client_id, client_secret FROM sync_connection_credential')
+      .get() as { oauth_mode: string; client_id: string; client_secret: string | null };
+    expect(row).toEqual({
+      oauth_mode: 'assist',
+      client_id: 'shared.apps.googleusercontent.com',
+      client_secret: null,
+    });
+
+    const refused = gw.invoke(owner, {
+      command: 'sync.configure_credential',
+      input: {
+        kind: 'pull.gcal',
+        label: 'Centraid Assist',
+        cred_kind: 'oauth2',
+        oauth_mode: 'assist',
+        provider: 'google',
+        auth_url: 'https://accounts.google.com/o/oauth2/v2/auth',
+        token_url: 'https://oauth2.googleapis.com/token',
+        client_id: 'shared.apps.googleusercontent.com',
+        client_secret: 'must-never-land',
+        allowed_hosts: ['www.googleapis.com'],
+      },
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(refused.status).toBe('failed');
+    expect((refused as { reason: string }).reason).toMatch(/must not send or store/);
+    expect(
+      JSON.stringify(db.vault.prepare('SELECT * FROM sync_connection_credential').all()),
+    ).not.toContain('must-never-land');
+  });
+
   test('a credential without allowed_hosts refuses to configure (anti-exfiltration pin)', () => {
     const outcome = gw.invoke(owner, {
       command: 'sync.configure_credential',

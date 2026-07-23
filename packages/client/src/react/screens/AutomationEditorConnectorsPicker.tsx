@@ -41,7 +41,7 @@ function ConnectInlineForm({
       : apiKey.trim().length > 0);
 
   return (
-    <div className={styles.connForm} onClick={(e) => e.stopPropagation()}>
+    <div className={styles.connForm}>
       <p className={styles.connFormLead}>
         {item.credKind === 'oauth2'
           ? 'OAuth — register your own client (BYO), then authorize in the browser.'
@@ -91,7 +91,7 @@ function ConnectInlineForm({
         </label>
       )}
       {item.setup.length > 0 ? (
-        <div className={styles.connGuide}>
+        <div>
           <button
             type="button"
             className={styles.connGuideToggle}

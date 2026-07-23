@@ -4,11 +4,12 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
 // on the (bearer-free) callback, and watch the connection flip to active
 // with sealed tokens — plus the health list never leaking a secret cell.
 
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import crypto from 'node:crypto';
 import http from 'node:http';
 import { openVaultRegistry } from '../serve/vault-registry.js';
 import { ConnectionBroker } from '../serve/connection-broker.js';
+import { ASSIST_DEVELOPMENT_WORKER_ORIGIN } from '../serve/assist-oauth.js';
 import { makeConnectionsRouteHandler } from './connections-routes.js';
 
 const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
@@ -29,7 +30,10 @@ async function startHandlerServer(
     });
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  cleanups.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  cleanups.push(() => {
+    server.closeAllConnections();
+    server.close();
+  });
   const addr = server.address() as { port: number };
   return `http://127.0.0.1:${addr.port}`;
 }
@@ -55,7 +59,10 @@ async function startTokenServer(): Promise<{
     });
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  cleanups.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  cleanups.push(() => {
+    server.closeAllConnections();
+    server.close();
+  });
   const addr = server.address() as { port: number };
   return {
     url: `http://127.0.0.1:${addr.port}/token`,
@@ -212,6 +219,127 @@ test('a declined consent screen lands a readable page and consumes the state', a
   // The state died with the denial.
   const replay = await fetch(`${base}/centraid/_vault/oauth/callback?state=${state}&code=x`);
   expect(await replay.text()).toContain('unknown or expired');
+});
+
+test('Assist config → bound courier handoff → Worker exchange stores tokens without a public gateway callback', async () => {
+  const dir = await tempDir();
+  const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
+  cleanups.push(() => registry.stop());
+  const workerRequests: Array<{ path: string; body: Record<string, unknown> }> = [];
+  const workerFetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    workerRequests.push({
+      path: new URL(String(input)).pathname,
+      body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+    });
+    return Response.json({
+      access_token: 'ya29.assist-route',
+      refresh_token: '1//assist-route',
+      expires_in: 3600,
+    });
+  });
+  const assist = {
+    workerBaseUrl: ASSIST_DEVELOPMENT_WORKER_ORIGIN,
+    googleClientId: 'centraid-shared.apps.googleusercontent.com',
+    restrictedScopesEnabled: false,
+  };
+  const broker = new ConnectionBroker(
+    () => registry.current(),
+    500,
+    assist,
+    workerFetch as typeof fetch,
+  );
+  const base = await startHandlerServer(makeConnectionsRouteHandler(registry, broker, assist));
+  const gated = await fetch(`${base}/centraid/_vault/connections/assist`, {
+    method: 'POST',
+    signal: AbortSignal.timeout(2_000),
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      kind: 'pull.gmail',
+      label: 'Gmail · Assist',
+      scopes: ['https://www.googleapis.com/auth/gmail.readonly'],
+    }),
+  });
+  expect(gated.status).toBe(400);
+  expect(await gated.json()).toMatchObject({ error: 'invalid_assist_scopes' });
+
+  const configured = (await (
+    await fetch(`${base}/centraid/_vault/connections/assist`, {
+      method: 'POST',
+      signal: AbortSignal.timeout(2_000),
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'pull.gcal',
+        label: 'Google Calendar · Assist',
+        scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
+      }),
+    })
+  ).json()) as Record<string, unknown>;
+  expect(configured).toMatchObject({ ok: true, status: 'needs-auth' });
+  const connectionId = configured.connection_id as string;
+  const clientSession = 's'.repeat(64);
+  const authorize = (await (
+    await fetch(`${base}/centraid/_vault/connections/${connectionId}/authorize`, {
+      method: 'POST',
+      signal: AbortSignal.timeout(2_000),
+      headers: {
+        'content-type': 'application/json',
+        'x-centraid-client-session': clientSession,
+      },
+      body: JSON.stringify({ surface: 'web' }),
+    })
+  ).json()) as Record<string, unknown>;
+  const startUrl = new URL(authorize.auth_url as string);
+  expect(startUrl.origin + startUrl.pathname).toBe(`${ASSIST_DEVELOPMENT_WORKER_ORIGIN}/start`);
+  const startFragment = new URLSearchParams(startUrl.hash.slice(1));
+  expect(startFragment.get('browser_binding')).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  const authUrl = new URL(startFragment.get('authorization_url')!);
+  expect(authUrl.searchParams.get('client_id')).toBe('centraid-shared.apps.googleusercontent.com');
+  expect(authUrl.searchParams.get('redirect_uri')).toBe(
+    `${ASSIST_DEVELOPMENT_WORKER_ORIGIN}/callback`,
+  );
+  expect(authorize.redirect_uri).toBe(`${ASSIST_DEVELOPMENT_WORKER_ORIGIN}/callback`);
+  expect(authUrl.searchParams.get('state')).toBe(authorize.state);
+
+  const completed = await fetch(`${base}/centraid/_vault/connections/assist/complete`, {
+    method: 'POST',
+    signal: AbortSignal.timeout(2_000),
+    headers: {
+      'content-type': 'application/json',
+      'x-centraid-client-session': clientSession,
+    },
+    body: JSON.stringify({
+      state: authorize.state,
+      code: 'google-code',
+      receipt: 'v1.callback-receipt',
+    }),
+  });
+  expect(completed.status).toBe(200);
+  expect(await completed.json()).toMatchObject({ ok: true, connection_id: connectionId });
+  expect(workerRequests).toHaveLength(1);
+  expect(workerRequests[0]).toMatchObject({
+    path: '/exchange',
+    body: {
+      provider: 'google',
+      code: 'google-code',
+      receipt: 'v1.callback-receipt',
+      state: authorize.state,
+      browser_binding: startFragment.get('browser_binding'),
+      scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
+    },
+  });
+  expect(JSON.stringify(workerRequests)).not.toContain('client_secret');
+  const row = registry
+    .current()
+    .db.vault.prepare(
+      `SELECT c.status, cc.oauth_mode, cc.client_secret, cc.access_token, cc.refresh_token
+         FROM sync_connection c
+         JOIN sync_connection_credential cc ON cc.connection_id = c.connection_id
+        WHERE c.connection_id = ?`,
+    )
+    .get(connectionId) as Record<string, unknown>;
+  expect(row).toMatchObject({ status: 'active', oauth_mode: 'assist', client_secret: null });
+  expect(String(row.access_token)).toMatch(/^sealed:v1:/);
+  expect(String(row.refresh_token)).toMatch(/^sealed:v1:/);
 });
 
 test('pause and resume ride PATCH; providers expose the BYO wizard with the Google traps', async () => {

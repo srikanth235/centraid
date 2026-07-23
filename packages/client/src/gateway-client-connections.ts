@@ -33,7 +33,9 @@ import {
   doFetch,
   enc,
   readJson,
+  withClientSession,
 } from './gateway-client-core.js';
+import { ROUTES, vaultConnectionAuthorizePath, vaultConnectionPath } from '@centraid/protocol';
 
 // ---- Connection health list (GET /_vault/connections) ----
 
@@ -48,6 +50,7 @@ interface ConnectionWireRow {
   created_at: string;
   last_run_at: string | null;
   cred_kind: 'oauth2' | 'api_key' | null;
+  oauth_mode?: 'byo' | 'assist' | null;
   provider: string | null;
   scopes: string | null;
   allowed_hosts: string[] | null;
@@ -69,6 +72,7 @@ export interface ConnectionEntry {
   /** `null` = no credential attached yet — the connection rides the
    *  harness-ambient lane instead of a BYO credential. */
   credKind: 'oauth2' | 'api_key' | null;
+  oauthMode: 'byo' | 'assist' | null;
   provider: string | null;
   scopes: string | null;
   allowedHosts: string[] | null;
@@ -84,6 +88,7 @@ function fromWireRow(r: ConnectionWireRow): ConnectionEntry {
     connectionId: r.connection_id,
     createdAt: r.created_at,
     credKind: r.cred_kind,
+    oauthMode: r.oauth_mode ?? (r.cred_kind === 'oauth2' ? 'byo' : null),
     hasRefreshToken: r.has_refresh_token,
     kind: r.kind,
     label: r.label,
@@ -100,7 +105,7 @@ function fromWireRow(r: ConnectionWireRow): ConnectionEntry {
 /** Every configured connection, newest-first (the gateway's own ordering). */
 export async function listConnections(): Promise<ConnectionEntry[]> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_vault/connections', {
+  const res = await doFetch(baseUrl, ROUTES.vaultConnections, {
     method: 'GET',
     headers: authHeaders(token),
   });
@@ -114,7 +119,7 @@ export async function listConnections(): Promise<ConnectionEntry[]> {
  */
 export async function oauthCallbackUri(): Promise<string> {
   const { baseUrl } = await auth();
-  return `${baseUrl.replace(/\/$/, '')}/centraid/_vault/oauth/callback`;
+  return `${baseUrl.replace(/\/$/, '')}${ROUTES.vaultOAuthCallback}`;
 }
 
 // ---- BYO-client wizard presets (GET /_vault/connections/providers) ----
@@ -167,15 +172,43 @@ export interface ConnectionProviderPreset {
   capabilities?: ConnectionProviderCapabilities;
 }
 
-/** The BYO-client wizard's provider catalog (Google, GitHub, …). */
-export async function listConnectionProviders(): Promise<ConnectionProviderPreset[]> {
+export type AssistOAuthAvailability =
+  | { enabled: false }
+  | {
+      enabled: true;
+      provider: 'google';
+      callbackUrl: string;
+      restrictedScopesEnabled: boolean;
+      scopeTiers: {
+        standard: string[];
+        restricted: string[];
+      };
+    };
+
+export interface ConnectionProviderCatalog {
+  providers: ConnectionProviderPreset[];
+  assist: AssistOAuthAvailability;
+}
+
+export async function loadConnectionProviderCatalog(): Promise<ConnectionProviderCatalog> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_vault/connections/providers', {
+  const res = await doFetch(baseUrl, ROUTES.vaultConnectionProviders, {
     method: 'GET',
     headers: authHeaders(token),
   });
-  const out = await readJson<{ providers: ConnectionProviderPreset[] }>(res, 'list providers');
-  return out.providers ?? [];
+  const out = await readJson<{
+    providers: ConnectionProviderPreset[];
+    assist?: AssistOAuthAvailability;
+  }>(res, 'list providers');
+  return {
+    providers: out.providers ?? [],
+    assist: out.assist ?? { enabled: false },
+  };
+}
+
+/** The BYO-client wizard's provider catalog (Google, GitHub, …). */
+export async function listConnectionProviders(): Promise<ConnectionProviderPreset[]> {
+  return (await loadConnectionProviderCatalog()).providers;
 }
 
 // ---- Configure / detach a credential (POST /_vault/connections) ----
@@ -200,6 +233,30 @@ export interface ConfigureConnectionInput {
   allowedHosts?: string[];
 }
 
+export interface ConfigureAssistConnectionInput {
+  kind: string;
+  label: string;
+  scopes: string[];
+}
+
+export async function configureAssistConnection(
+  input: ConfigureAssistConnectionInput,
+): Promise<{ connectionId: string; credKind: string; status: string }> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, ROUTES.vaultConnectionsAssist, {
+    body: JSON.stringify(input),
+    headers: authHeaders(token, 'application/json'),
+    method: 'POST',
+  });
+  const out = await readJson<{
+    ok: true;
+    connection_id: string;
+    cred_kind: string;
+    status: string;
+  }>(res, 'configure Centraid Assist connection');
+  return { connectionId: out.connection_id, credKind: out.cred_kind, status: out.status };
+}
+
 export async function configureConnection(
   input: ConfigureConnectionInput,
 ): Promise<{ connectionId: string; credKind: string; status: string }> {
@@ -217,7 +274,7 @@ export async function configureConnection(
   if (input.clientSecret) body.client_secret = input.clientSecret;
   if (input.apiKey) body.api_key = input.apiKey;
   if (input.allowedHosts) body.allowed_hosts = input.allowedHosts;
-  const res = await doFetch(baseUrl, '/centraid/_vault/connections', {
+  const res = await doFetch(baseUrl, ROUTES.vaultConnections, {
     body: JSON.stringify(body),
     headers: authHeaders(token, 'application/json'),
     method: 'POST',
@@ -239,7 +296,7 @@ export async function setConnectionStatus(input: {
   note?: string;
 }): Promise<{ connectionId: string; status: string }> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_vault/connections/${enc(input.connectionId)}`, {
+  const res = await doFetch(baseUrl, vaultConnectionPath(enc(input.connectionId)), {
     body: JSON.stringify({ status: input.status, ...(input.note ? { note: input.note } : {}) }),
     headers: authHeaders(token, 'application/json'),
     method: 'PATCH',
@@ -301,7 +358,7 @@ async function readRemoveOutcome(res: Response, op: string): Promise<{ connectio
  */
 export async function removeConnection(connectionId: string): Promise<{ connectionId: string }> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_vault/connections/${enc(connectionId)}`, {
+  const res = await doFetch(baseUrl, vaultConnectionPath(enc(connectionId)), {
     headers: authHeaders(token),
     method: 'DELETE',
   });
@@ -328,20 +385,44 @@ export interface BeginConnectionAuthorization {
 export async function beginConnectionAuthorization(input: {
   connectionId: string;
   redirectUri?: string;
+  surface?: 'desktop' | 'web';
 }): Promise<BeginConnectionAuthorization> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(
-    baseUrl,
-    `/centraid/_vault/connections/${enc(input.connectionId)}/authorize`,
-    {
-      body: JSON.stringify(input.redirectUri ? { redirect_uri: input.redirectUri } : {}),
-      headers: authHeaders(token, 'application/json'),
-      method: 'POST',
-    },
-  );
+  const res = await doFetch(baseUrl, vaultConnectionAuthorizePath(enc(input.connectionId)), {
+    body: JSON.stringify({
+      ...(input.redirectUri ? { redirect_uri: input.redirectUri } : {}),
+      ...(input.surface ? { surface: input.surface } : {}),
+    }),
+    headers: withClientSession(authHeaders(token, 'application/json')),
+    method: 'POST',
+  });
   const out = await readJson<{ auth_url: string; state: string; redirect_uri: string }>(
     res,
     'begin authorization',
   );
   return { authUrl: out.auth_url, redirectUri: out.redirect_uri, state: out.state };
+}
+
+export interface AssistOAuthHandoff {
+  state: string;
+  code?: string;
+  receipt?: string;
+  error?: string;
+}
+
+/** Deliver fragment material to its originating gateway ceremony. */
+export async function completeAssistAuthorization(
+  handoff: AssistOAuthHandoff,
+): Promise<{ connectionId: string }> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, ROUTES.vaultConnectionsAssistComplete, {
+    body: JSON.stringify(handoff),
+    headers: withClientSession(authHeaders(token, 'application/json')),
+    method: 'POST',
+  });
+  const out = await readJson<{ ok: true; connection_id: string }>(
+    res,
+    'complete Centraid Assist authorization',
+  );
+  return { connectionId: out.connection_id };
 }

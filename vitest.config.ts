@@ -25,6 +25,7 @@ export default defineConfig({
       'apps/desktop',
       'apps/extension',
       'apps/mobile',
+      'apps/oauth-worker',
       'apps/web',
     ],
     coverage: {

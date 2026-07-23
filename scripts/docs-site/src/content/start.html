@@ -159,11 +159,11 @@
             with per-row provenance.
           </p>
           <p>
-            For live sources, automation templates ship for Gmail, Google Calendar, Google Contacts,
-            and GitHub: you bring your own OAuth client, the broker keeps the tokens sealed —
-            handler code never sees a secret — and each sync stages rows through the same review
-            door. Connection health lives in Settings → Import; the guided connect wizard is still
-            landing in the UI, so expect this corner to be the most beta of the lot.
+            For live sources, open <b>Connectors</b> for Gmail, Google Calendar, Google Contacts,
+            and GitHub. Google sources offer <b>Connect with Centraid</b>: the browser carries only
+            a short-lived code and your gateway keeps every token sealed. Advanced keeps the
+            bring-your-own OAuth client path. Handler code never sees a secret, and each sync stages
+            rows through the same review door.
           </p>
           <p class="aside">
             How staging, the external-id map, and the broker actually work:

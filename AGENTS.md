@@ -47,6 +47,8 @@ The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageM
 | [docs/platform-gating.md](docs/platform-gating.md) | `isWeb` / `isNative` / Electron / compact form-factor |
 | [docs/client-keying.md](docs/client-keying.md) | Cache/UI key axes (vault path, gateway, conversation) |
 | [docs/release.md](docs/release.md) | Three numbers, surfaces matrix, prepare vs publish, patch/minor, beta |
+| [docs/oauth-assist.md](docs/oauth-assist.md) | Assist code-courier architecture, privacy, scopes, BYO, reconnect |
+| [docs/release/oauth-assist-google.md](docs/release/oauth-assist-google.md) | Google/Cloudflare production and verification evidence gates |
 | [docs/identifiers.md](docs/identifiers.md) | `dev.centraid.*` table (J5) |
 | [docs/enrollment.md](docs/enrollment.md) | Human checklist: Apple / Azure / Play signing |
 | [docs/config-ownership.md](docs/config-ownership.md) | Which writer wins for dual-write config surfaces |
@@ -56,7 +58,7 @@ The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageM
 | [docs/multi-agent.md](docs/multi-agent.md) | Parallel-agent norms + supervision caps |
 | [docs/refactors/](docs/refactors/) | Multi-session plan format + progress logs |
 | [docs/traps/](docs/traps/) | One doc per known footgun |
-| [docs/recovery/](docs/recovery/) | Exact recovery steps (release, backup, pairing) |
+| [docs/recovery/](docs/recovery/) | Exact recovery steps (release, backup, pairing, Assist OAuth) |
 | [docs/plans/](docs/plans/) | Design/measurement plans (examples for refactors) |
 
 ### Traps (one file each)

@@ -684,6 +684,8 @@ interface CentraidApi {
   }): Promise<string>;
   getSettings(): Promise<CentraidSettings>;
   saveSettings(patch: Partial<CentraidSettings>): Promise<CentraidSettings>;
+  /** Desktop protocol courier. Values are delivered in-memory and never logged. */
+  onDeepLink?(cb: (url: string) => void): () => void;
 
   // App list/create/files/write/delete/update-meta + publish moved to the
   // renderer's direct HTTP client (renderer/gateway-client.ts) under the

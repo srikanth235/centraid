@@ -17,6 +17,7 @@ target
 packages/tunnel/native/*.node
 packages/tunnel/native/native-platforms.manifest.json
 .wrangler
+**/.dev.vars
 .claude
 # Python bytecode created by .governance/ hook scripts (not source).
 __pycache__

@@ -260,6 +260,122 @@ describe('SettingsConnectionsScreen', () => {
     );
   });
 
+  it('makes Centraid Assist primary, scopes it to the selected connector, and keeps BYO advanced', async () => {
+    const calendarScope = 'https://www.googleapis.com/auth/calendar.readonly';
+    const gmailScope = 'https://www.googleapis.com/auth/gmail.readonly';
+    const props = makeProps({
+      loadConnections: vi.fn().mockResolvedValue([]),
+      loadProviders: vi.fn().mockResolvedValue([
+        makeProvider({
+          assist: {
+            callbackUrl: 'https://oauth.centraid.dev/callback',
+            enabled: true,
+            provider: 'google',
+            restrictedScopesEnabled: false,
+            scopeTiers: {
+              restricted: [gmailScope],
+              standard: [calendarScope],
+            },
+          },
+          connectors: [
+            {
+              kind: 'pull.gmail',
+              scope: gmailScope,
+              templateId: 'google-gmail-pull',
+            },
+            {
+              kind: 'pull.gcal',
+              scope: calendarScope,
+              templateId: 'google-calendar-pull',
+            },
+          ],
+        }),
+      ]),
+    });
+    const el = await mount(props);
+    const calendarTile = [...el.querySelectorAll('[data-testid="connector-tile"]')].find((tile) =>
+      tile.textContent?.includes('Google Calendar'),
+    );
+    await act(async () => calendarTile?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(el.textContent).toContain('Connect with Centraid');
+    expect(el.textContent).toContain('Use my own OAuth app (Advanced)');
+
+    const assistButton = [...el.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Connect with Centraid',
+    );
+    await act(async () => assistButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+
+    const wizard = el.querySelector('[data-testid="connector-assist-wizard"]');
+    expect(wizard?.textContent).toContain('Read Google Calendar');
+    expect(wizard?.textContent).not.toContain('Read Gmail');
+    expect(wizard?.textContent).toContain('does not request Google identity scopes');
+
+    const continueButton = [...(wizard?.querySelectorAll('button') ?? [])].find(
+      (button) => button.textContent === 'Continue to Google',
+    );
+    expect(continueButton?.hasAttribute('disabled')).toBe(false);
+    await act(async () =>
+      continueButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })),
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(props.configureConnection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        connectorKind: 'pull.gcal',
+        oauthMode: 'assist',
+        scopes: calendarScope,
+      }),
+    );
+    expect(props.beginAuthorize).toHaveBeenCalledWith('c-new');
+  });
+
+  it('fail-closes restricted Assist scopes until verification is enabled', async () => {
+    const gmailScope = 'https://www.googleapis.com/auth/gmail.readonly';
+    const el = await mount(
+      makeProps({
+        loadConnections: vi.fn().mockResolvedValue([]),
+        loadProviders: vi.fn().mockResolvedValue([
+          makeProvider({
+            assist: {
+              callbackUrl: 'https://oauth.centraid.dev/callback',
+              enabled: true,
+              provider: 'google',
+              restrictedScopesEnabled: false,
+              scopeTiers: { restricted: [gmailScope], standard: [] },
+            },
+            connectors: [
+              {
+                kind: 'pull.gmail',
+                scope: gmailScope,
+                templateId: 'google-gmail-pull',
+              },
+            ],
+          }),
+        ]),
+      }),
+    );
+    const gmailTile = [...el.querySelectorAll('[data-testid="connector-tile"]')].find((tile) =>
+      tile.textContent?.includes('Gmail'),
+    );
+    await act(async () => gmailTile?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const assistButton = [...el.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Connect with Centraid',
+    );
+    await act(async () => assistButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+
+    const wizard = el.querySelector('[data-testid="connector-assist-wizard"]');
+    const checkbox = wizard?.querySelector('input[type="checkbox"]');
+    const continueButton = [...(wizard?.querySelectorAll('button') ?? [])].find(
+      (button) => button.textContent === 'Continue to Google',
+    );
+    expect(checkbox?.hasAttribute('disabled')).toBe(true);
+    expect(continueButton?.hasAttribute('disabled')).toBe(true);
+    expect(wizard?.textContent).toContain('until Google restricted-scope verification is complete');
+  });
+
   it('New Connector opens the picker sheet', async () => {
     const el = await mount(makeProps({ loadConnections: vi.fn().mockResolvedValue([]) }));
     const newBtn = [...el.querySelectorAll('button')].find((b) =>

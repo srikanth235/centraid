@@ -1,9 +1,10 @@
 import {
   beginConnectionAuthorization,
   cloneTemplate as gwCloneTemplate,
+  configureAssistConnection as gwConfigureAssistConnection,
   configureConnection as gwConfigureConnection,
   listAutomations,
-  listConnectionProviders,
+  loadConnectionProviderCatalog,
   listConnections,
   oauthCallbackUri as gwOauthCallbackUri,
   removeConnection as gwRemoveConnection,
@@ -11,6 +12,7 @@ import {
   updateAutomation,
   type ConnectionEntry,
   type ConnectionProviderPreset,
+  type AssistOAuthAvailability,
 } from '../../../gateway-client.js';
 import type {
   ConnectionFormInput,
@@ -24,6 +26,7 @@ import {
   toolDescriptorsFromHealthyConnections,
   type ProviderCapabilitiesDTO,
 } from './connectorPlatform.js';
+import { completeAssistReturnLink as completeAssistReturnLinkFromClient } from '../../../assist-oauth-handoff.js';
 
 // Connectors data layer (issue #304 renderer half; screen now lives on the
 // primary Connectors sidebar route): maps the gateway's broker-owned OAuth /
@@ -45,6 +48,7 @@ function toRowDTO(c: ConnectionEntry): ConnectionRowDTO {
     authNote: c.authNote,
     connectionId: c.connectionId,
     credKind: c.credKind,
+    oauthMode: c.oauthMode,
     health: STATUS_TO_HEALTH[c.status],
     kind: c.kind,
     label: c.label,
@@ -93,7 +97,10 @@ function fallbackCapabilities(
   return { syncs, actions };
 }
 
-function toProviderDTO(p: ConnectionProviderPreset): ProviderOptionDTO {
+function toProviderDTO(
+  p: ConnectionProviderPreset,
+  assist: AssistOAuthAvailability,
+): ProviderOptionDTO {
   const capabilities = p.capabilities
     ? {
         syncs: p.capabilities.syncs.map((s) => ({ ...s })),
@@ -115,6 +122,7 @@ function toProviderDTO(p: ConnectionProviderPreset): ProviderOptionDTO {
     scopes: p.scopes,
     setup: p.setup,
     tokenUrl: p.tokenUrl,
+    ...(p.id === 'google' ? { assist } : {}),
   };
 }
 
@@ -124,8 +132,8 @@ export async function loadConnectionsData(): Promise<ConnectionRowDTO[]> {
 }
 
 export async function loadConnectionProvidersData(): Promise<ProviderOptionDTO[]> {
-  const providers = await listConnectionProviders();
-  return providers.map(toProviderDTO);
+  const catalog = await loadConnectionProviderCatalog();
+  return catalog.providers.map((provider) => toProviderDTO(provider, catalog.assist));
 }
 
 /**
@@ -221,6 +229,14 @@ export async function installSyncForConnection(input: {
 export async function submitConnectionForm(
   input: ConnectionFormInput,
 ): Promise<{ connectionId: string; status: string }> {
+  if (input.oauthMode === 'assist') {
+    const out = await gwConfigureAssistConnection({
+      kind: input.connectorKind,
+      label: input.label,
+      scopes: input.scopes?.split(/\s+/).filter(Boolean) ?? [],
+    });
+    return { connectionId: out.connectionId, status: out.status };
+  }
   const out = await gwConfigureConnection({
     allowedHosts: input.allowedHosts,
     apiKey: input.apiKey,
@@ -255,8 +271,15 @@ export async function updateConnectionStatus(
 
 /** Begins the PKCE ceremony; the screen opens the returned URL itself. */
 export async function beginConnectionAuthorize(connectionId: string): Promise<string> {
-  const { authUrl } = await beginConnectionAuthorization({ connectionId });
+  const capabilities = await window.CentraidApi.getHostCapabilities?.();
+  const surface = capabilities?.platform === 'web' ? 'web' : 'desktop';
+  const { authUrl } = await beginConnectionAuthorization({ connectionId, surface });
   return authUrl;
+}
+
+/** Deliver the Worker finish page's manual custom-scheme fallback. */
+export async function completeAssistReturnLink(rawUrl: string): Promise<{ connectionId: string }> {
+  return completeAssistReturnLinkFromClient(rawUrl);
 }
 
 /**

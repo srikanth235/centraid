@@ -112,6 +112,7 @@ export const SYNC_CREDENTIAL_DDL = `
 CREATE TABLE IF NOT EXISTS sync_connection_credential (
   connection_id    TEXT PRIMARY KEY REFERENCES sync_connection(connection_id) ON DELETE CASCADE,
   cred_kind        TEXT NOT NULL CHECK (cred_kind IN ('oauth2','api_key')),
+  oauth_mode       TEXT NOT NULL DEFAULT 'byo' CHECK (oauth_mode IN ('byo','assist')),
   provider         TEXT,
   auth_url         TEXT,
   token_url        TEXT,

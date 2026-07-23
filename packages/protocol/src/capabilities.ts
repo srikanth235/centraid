@@ -16,6 +16,12 @@ export interface GatewayCapabilities {
   tunnel: boolean;
   /** Continuous WAL backup shipper surface. */
   backupWal: boolean;
+  /**
+   * Shared-client Google OAuth courier is configured on this gateway.
+   * Optional on the wire so pre-#526 gateways remain structurally valid;
+   * clients interpret absence as false.
+   */
+  assistOAuth?: boolean;
 }
 
 /** Default capability surface for a modern loopback/daemon gateway. */
@@ -24,6 +30,7 @@ export const DEFAULT_GATEWAY_CAPABILITIES: GatewayCapabilities = Object.freeze({
   devicePairing: true,
   tunnel: true,
   backupWal: true,
+  assistOAuth: false,
 });
 
 export function isGatewayCapabilities(value: unknown): value is GatewayCapabilities {
@@ -33,6 +40,7 @@ export function isGatewayCapabilities(value: unknown): value is GatewayCapabilit
     typeof c.webSessions === 'boolean' &&
     typeof c.devicePairing === 'boolean' &&
     typeof c.tunnel === 'boolean' &&
-    typeof c.backupWal === 'boolean'
+    typeof c.backupWal === 'boolean' &&
+    (c.assistOAuth === undefined || typeof c.assistOAuth === 'boolean')
   );
 }

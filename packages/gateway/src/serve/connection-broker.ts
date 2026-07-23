@@ -38,6 +38,13 @@ import type { ConnectionAuth, ResolveConnection } from '@centraid/automation';
 import type { VaultPlane } from './vault-plane.js';
 import { authDeadError, ConnectionLimiter, delay } from './connection-limiter.js';
 import { timeoutSignal } from './fetch-timeout.js';
+import {
+  ASSIST_GOOGLE_AUTH_URL,
+  assistCallbackUrl,
+  assistScopes,
+  validateAssistOAuthConfig,
+  type AssistOAuthConfig,
+} from './assist-oauth.js';
 
 /** Purpose stamped on the broker's own vault acts. */
 const BROKER_PURPOSE = 'dpv:ServiceProvision';
@@ -60,6 +67,7 @@ export const TOKEN_ENDPOINT_TIMEOUT_MS = 30_000;
 interface ConnectionCredRow {
   connection_id: string;
   cred_kind: 'oauth2' | 'api_key' | null;
+  oauth_mode: 'byo' | 'assist';
   auth_url: string | null;
   token_url: string | null;
   scopes: string | null;
@@ -70,19 +78,37 @@ interface ConnectionCredRow {
   api_key: string | null;
   token_expires_at: string | null;
   allowed_hosts: string | null;
+  principal: string | null;
 }
 
 /** One in-flight consent ceremony, keyed by its single-use `state`. */
 interface PendingCeremony {
+  mode: 'byo' | 'assist';
   plane: VaultPlane;
   connectionId: string;
   verifier: string;
   redirectUri: string;
   expiresAt: number;
+  /** Assist only: never placed in the authorization URL. */
+  clientSessionId?: string;
+  /** Assist only: enrolled transport identity, or null for admin/loopback. */
+  deviceKey?: string | null;
+  /**
+   * Assist only: one-ceremony browser binding. It is delivered in the
+   * Worker's scrubbed `/start` fragment, never in Google's authorization URL.
+   */
+  browserBinding?: string;
+  /** Assist only: exact allowlisted scopes expected back from Google. */
+  requestedScopes?: readonly string[];
 }
 
 /** A ceremony the owner walked away from is dead after ten minutes. */
 const CEREMONY_TTL_MS = 10 * 60 * 1000;
+const MAX_TOKEN_RESPONSE_BYTES = 64 * 1024;
+
+type TokenResponse =
+  | { ok: true; accessToken: string; refreshToken?: string; expiresAt?: string }
+  | { ok: false; authDead: boolean; detail: string };
 
 export class ConnectionBroker {
   /** Single-flight refresh per `<vaultId>:<connectionId>` (rot point 2). */
@@ -90,12 +116,21 @@ export class ConnectionBroker {
   private readonly limiters = new Map<string, ConnectionLimiter>();
   /** In-flight consent ceremonies, single-use, TTL-bound. */
   private readonly pending = new Map<string, PendingCeremony>();
+  private readonly assistOAuth?: AssistOAuthConfig;
 
   constructor(
     private readonly planeFor: () => VaultPlane,
     /** Overridable for tests; production callers take the default. */
     private readonly tokenTimeoutMs: number = TOKEN_ENDPOINT_TIMEOUT_MS,
-  ) {}
+    assistOAuth?: AssistOAuthConfig,
+    private readonly fetchImpl: typeof fetch = fetch,
+    private readonly now: () => number = Date.now,
+  ) {
+    // Defense in depth: every caller, including embedders that bypass the
+    // environment parser, gets the same fixed-origin validation before a
+    // refresh token can ever be posted.
+    this.assistOAuth = assistOAuth ? validateAssistOAuthConfig(assistOAuth) : undefined;
+  }
 
   /**
    * Start the consent ceremony (issue #304 decision 3): mint the PKCE
@@ -116,9 +151,7 @@ export class ConnectionBroker {
     if (!row.auth_url || !row.client_id) {
       throw new Error('oauth2 credential is missing auth_url/client_id');
     }
-    for (const [key, entry] of this.pending) {
-      if (entry.expiresAt < Date.now()) this.pending.delete(key);
-    }
+    this.pruneCeremonies();
     const state = randomBytes(32).toString('hex');
     const verifier = randomBytes(48).toString('base64url');
     const challenge = createHash('sha256').update(verifier).digest('base64url');
@@ -133,13 +166,71 @@ export class ConnectionBroker {
     url.searchParams.set('access_type', 'offline');
     url.searchParams.set('prompt', 'consent');
     this.pending.set(state, {
+      mode: 'byo',
       plane,
       connectionId,
       verifier,
       redirectUri,
-      expiresAt: Date.now() + CEREMONY_TTL_MS,
+      expiresAt: this.now() + CEREMONY_TTL_MS,
     });
     return { authUrl: url.toString(), state };
+  }
+
+  /**
+   * Start Model-B Assist. The gateway alone owns state + PKCE verifier.
+   * The state prefix is a non-authorizing return-surface hint the stateless
+   * Worker may read; the random remainder and every validation decision stay
+   * gateway-owned.
+   */
+  beginAssistAuthorization(input: {
+    plane: VaultPlane;
+    connectionId: string;
+    clientSessionId: string;
+    deviceKey?: string;
+    surface: 'desktop' | 'web';
+  }): { authUrl: string; state: string; redirectUri: string } {
+    const config = this.assistOAuth;
+    if (!config) throw new Error('Centraid Assist is not configured on this gateway');
+    const row = this.readRowById(input.plane, input.connectionId);
+    if (!row || row.cred_kind !== 'oauth2' || row.oauth_mode !== 'assist') {
+      throw new Error('connection is not configured for Centraid Assist');
+    }
+    this.pruneCeremonies();
+    const state = `${input.surface === 'desktop' ? 'd' : 'w'}.${randomBytes(32).toString('base64url')}`;
+    const verifier = randomBytes(48).toString('base64url');
+    const challenge = createHash('sha256').update(verifier).digest('base64url');
+    const browserBinding = randomBytes(32).toString('base64url');
+    const redirectUri = assistCallbackUrl(config);
+    const requestedScopes = assistScopes((row.scopes ?? '').split(/\s+/).filter(Boolean), config);
+    const googleUrl = new URL(ASSIST_GOOGLE_AUTH_URL);
+    googleUrl.searchParams.set('client_id', config.googleClientId);
+    googleUrl.searchParams.set('redirect_uri', redirectUri);
+    googleUrl.searchParams.set('response_type', 'code');
+    googleUrl.searchParams.set('scope', requestedScopes.join(' '));
+    googleUrl.searchParams.set('code_challenge', challenge);
+    googleUrl.searchParams.set('code_challenge_method', 'S256');
+    googleUrl.searchParams.set('state', state);
+    googleUrl.searchParams.set('access_type', 'offline');
+    googleUrl.searchParams.set('prompt', 'consent');
+    if (row.principal) googleUrl.searchParams.set('login_hint', row.principal);
+    const startUrl = new URL('/start', `${config.workerBaseUrl}/`);
+    startUrl.hash = new URLSearchParams({
+      authorization_url: googleUrl.toString(),
+      browser_binding: browserBinding,
+    }).toString();
+    this.pending.set(state, {
+      mode: 'assist',
+      plane: input.plane,
+      connectionId: input.connectionId,
+      verifier,
+      redirectUri,
+      expiresAt: this.now() + CEREMONY_TTL_MS,
+      clientSessionId: input.clientSessionId,
+      deviceKey: input.deviceKey ?? null,
+      browserBinding,
+      requestedScopes,
+    });
+    return { authUrl: startUrl.toString(), state, redirectUri };
   }
 
   /**
@@ -151,10 +242,11 @@ export class ConnectionBroker {
    */
   async completeAuthorization(state: string, code: string): Promise<{ connectionId: string }> {
     const ceremony = this.pending.get(state);
-    this.pending.delete(state);
-    if (!ceremony || ceremony.expiresAt < Date.now()) {
+    if (!ceremony || ceremony.expiresAt < this.now() || ceremony.mode !== 'byo') {
+      if (ceremony?.expiresAt && ceremony.expiresAt < this.now()) this.pending.delete(state);
       throw new Error('unknown or expired authorization state — start Connect again');
     }
+    this.pending.delete(state);
     const { plane, connectionId } = ceremony;
     const row = this.readRowById(plane, connectionId);
     if (!row || row.cred_kind !== 'oauth2' || !row.token_url || !row.client_id) {
@@ -177,22 +269,87 @@ export class ConnectionBroker {
     if (!response.ok) {
       throw new Error(`authorization code exchange failed: ${response.detail}`);
     }
-    const outcome: InvokeOutcome = await plane.invoke(plane.ownerCredential, {
-      command: 'sync.store_tokens',
-      input: {
-        connection_id: connectionId,
-        access_token: response.accessToken,
-        ...(response.refreshToken ? { refresh_token: response.refreshToken } : {}),
-        ...(response.expiresAt ? { expires_at: response.expiresAt } : {}),
-      },
-      purpose: BROKER_PURPOSE,
-    });
-    if (outcome.status !== 'executed') {
-      throw new Error(
-        `tokens did not persist (${outcome.status}: ${'reason' in outcome ? outcome.reason : 'unknown'})`,
-      );
-    }
+    await this.persistTokens(plane, connectionId, response, 'tokens did not persist');
     return { connectionId };
+  }
+
+  /**
+   * Redeem an Assist courier handoff. Binding checks happen before state is
+   * consumed so a copied fragment from another client/device cannot burn the
+   * owner's live ceremony. A valid bound attempt is single-use even if the
+   * Worker or Google later refuses it.
+   */
+  async completeAssistAuthorization(input: {
+    state: string;
+    code: string;
+    receipt: string;
+    clientSessionId: string;
+    deviceKey?: string;
+  }): Promise<{ connectionId: string }> {
+    const config = this.assistOAuth;
+    if (!config) throw new Error('Centraid Assist is not configured on this gateway');
+    const ceremony = this.pending.get(input.state);
+    if (!ceremony || ceremony.mode !== 'assist' || ceremony.expiresAt < this.now()) {
+      if (ceremony?.expiresAt && ceremony.expiresAt < this.now()) this.pending.delete(input.state);
+      throw new Error('unknown or expired authorization state — start Connect again');
+    }
+    if (
+      ceremony.clientSessionId !== input.clientSessionId ||
+      ceremony.deviceKey !== (input.deviceKey ?? null)
+    ) {
+      throw new Error('authorization handoff belongs to a different client session');
+    }
+    this.pending.delete(input.state);
+    const row = this.readRowById(ceremony.plane, ceremony.connectionId);
+    if (!row || row.cred_kind !== 'oauth2' || row.oauth_mode !== 'assist') {
+      throw new Error('the connection lost its Assist credential mid-ceremony');
+    }
+    const response = await this.postAssist('/exchange', {
+      provider: 'google',
+      code: input.code,
+      code_verifier: ceremony.verifier,
+      redirect_uri: ceremony.redirectUri,
+      receipt: input.receipt,
+      state: input.state,
+      browser_binding: ceremony.browserBinding,
+      scopes: ceremony.requestedScopes,
+    });
+    if (!response.ok) {
+      if (response.authDead) {
+        await this.flipNeedsAuth(
+          ceremony.plane,
+          ceremony.connectionId,
+          `Centraid Assist authorization failed (${response.detail}) — Reconnect with Centraid Assist`,
+        );
+      }
+      throw new Error(`authorization code exchange failed: ${response.detail}`);
+    }
+    await this.persistTokens(
+      ceremony.plane,
+      ceremony.connectionId,
+      response,
+      'tokens did not persist',
+    );
+    return { connectionId: ceremony.connectionId };
+  }
+
+  /** Consume a denied/abandoned ceremony without ever attempting exchange. */
+  cancelAuthorization(input: {
+    state: string;
+    clientSessionId?: string;
+    deviceKey?: string;
+  }): void {
+    const ceremony = this.pending.get(input.state);
+    if (!ceremony) return;
+    if (ceremony.mode === 'assist') {
+      if (
+        ceremony.clientSessionId !== input.clientSessionId ||
+        ceremony.deviceKey !== (input.deviceKey ?? null)
+      ) {
+        return;
+      }
+    }
+    this.pending.delete(input.state);
   }
 
   /**
@@ -338,17 +495,67 @@ export class ConnectionBroker {
     row: ConnectionCredRow,
   ): Promise<string> {
     if (!row.refresh_token) {
-      await this.flipNeedsAuth(plane, connectionId, 'no refresh token on record — run Connect');
+      await this.flipNeedsAuth(
+        plane,
+        connectionId,
+        row.oauth_mode === 'assist'
+          ? 'No refresh token is available — Reconnect with Centraid Assist'
+          : 'no refresh token on record — run Connect',
+      );
       throw authDeadError('no refresh token on record');
     }
     if (!row.token_url || !row.client_id) {
       await this.flipNeedsAuth(plane, connectionId, 'credential is missing token_url/client_id');
       throw authDeadError('credential is missing token_url/client_id');
     }
+    const refreshToken = this.unseal(plane, connectionId, 'refresh_token', row.refresh_token);
+    const response =
+      row.oauth_mode === 'assist'
+        ? await this.postAssist('/refresh', { provider: 'google', refresh_token: refreshToken })
+        : await this.postByoRefresh(row, connectionId, plane, refreshToken);
+    if (!response.ok && response.authDead) {
+      // Rot point 3: invalid_grant et al. — the refresh token is dead, only
+      // a new consent ceremony revives this connection.
+      await this.flipNeedsAuth(
+        plane,
+        connectionId,
+        row.oauth_mode === 'assist'
+          ? `Centraid Assist refresh refused (${response.detail}) — Reconnect with Centraid Assist`
+          : `token refresh refused (${response.detail}) — reconnect to re-authorize`,
+      );
+      throw authDeadError(`token refresh refused: ${response.detail}`);
+    }
+    if (!response.ok) {
+      throw new Error(`token refresh failed transiently: ${response.detail}`);
+    }
+    const { accessToken, refreshToken: rotatedRefreshToken, expiresAt } = response;
+    // Rot point 1: persist BEFORE first use — receipted, sealed by the
+    // command pipeline, journal-redacted via sealedInput.
+    await this.persistTokens(
+      plane,
+      connectionId,
+      {
+        ok: true,
+        accessToken,
+        ...(rotatedRefreshToken ? { refreshToken: rotatedRefreshToken } : {}),
+        ...(expiresAt ? { expiresAt } : {}),
+      },
+      'refreshed tokens did not persist',
+      ' — refusing to use an unpersisted token',
+    );
+    return accessToken;
+  }
+
+  private async postByoRefresh(
+    row: ConnectionCredRow,
+    connectionId: string,
+    plane: VaultPlane,
+    refreshToken: string,
+  ): Promise<TokenResponse> {
     const form = new URLSearchParams({
       grant_type: 'refresh_token',
-      refresh_token: this.unseal(plane, connectionId, 'refresh_token', row.refresh_token),
-      client_id: row.client_id,
+      refresh_token: refreshToken,
+      client_id: row.client_id!,
     });
     if (row.client_secret) {
       form.set(
@@ -356,65 +563,26 @@ export class ConnectionBroker {
         this.unseal(plane, connectionId, 'client_secret', row.client_secret),
       );
     }
-
-    const response = await this.postTokenForm(row.token_url, form);
-    if (!response.ok && response.authDead) {
-      // Rot point 3: invalid_grant et al. — the refresh token is dead, only
-      // a new consent ceremony revives this connection.
-      await this.flipNeedsAuth(
-        plane,
-        connectionId,
-        `token refresh refused (${response.detail}) — reconnect to re-authorize`,
-      );
-      throw authDeadError(`token refresh refused: ${response.detail}`);
-    }
-    if (!response.ok) {
-      throw new Error(`token refresh failed transiently: ${response.detail}`);
-    }
-    const { accessToken, refreshToken, expiresAt } = response;
-    // Rot point 1: persist BEFORE first use — receipted, sealed by the
-    // command pipeline, journal-redacted via sealedInput.
-    const outcome: InvokeOutcome = await plane.invoke(plane.ownerCredential, {
-      command: 'sync.store_tokens',
-      input: {
-        connection_id: connectionId,
-        access_token: accessToken,
-        ...(refreshToken ? { refresh_token: refreshToken } : {}),
-        ...(expiresAt ? { expires_at: expiresAt } : {}),
-      },
-      purpose: BROKER_PURPOSE,
-    });
-    if (outcome.status !== 'executed') {
-      throw new Error(
-        `refreshed tokens did not persist (${outcome.status}: ${'reason' in outcome ? outcome.reason : 'unknown'}) — refusing to use an unpersisted token`,
-      );
-    }
-    return accessToken;
+    return this.postTokenForm(row.token_url!, form);
   }
 
   /**
    * One token-endpoint POST with a single transient retry. Distinguishes
    * auth-dead (4xx with an OAuth error body) from transient (network/5xx).
    */
-  private async postTokenForm(
-    tokenUrl: string,
-    form: URLSearchParams,
-  ): Promise<
-    | { ok: true; accessToken: string; refreshToken?: string; expiresAt?: string }
-    | { ok: false; authDead: boolean; detail: string }
-  > {
+  private async postTokenForm(tokenUrl: string, form: URLSearchParams): Promise<TokenResponse> {
     for (let attempt = 0; ; attempt++) {
       let status: number;
       let text: string;
       try {
-        const res = await fetch(tokenUrl, {
+        const res = await this.fetchImpl(tokenUrl, {
           method: 'POST',
           headers: { 'content-type': 'application/x-www-form-urlencoded' },
           body: form.toString(),
           signal: timeoutSignal(this.tokenTimeoutMs),
         });
         status = res.status;
-        text = await res.text();
+        text = await readBoundedResponseText(res, MAX_TOKEN_RESPONSE_BYTES);
       } catch (err) {
         if (attempt === 0) {
           await delay(TRANSIENT_RETRY_DELAY_MS);
@@ -463,6 +631,109 @@ export class ConnectionBroker {
     }
   }
 
+  /** Stateless confidential-client hop; the gateway never receives a client secret. */
+  private async postAssist(path: '/exchange' | '/refresh', body: unknown): Promise<TokenResponse> {
+    const config = this.assistOAuth;
+    if (!config) return { ok: false, authDead: false, detail: 'assist_not_configured' };
+    const endpoint = new URL(path, `${config.workerBaseUrl}/`).toString();
+    for (let attempt = 0; ; attempt++) {
+      let status: number;
+      let text: string;
+      try {
+        const res = await this.fetchImpl(endpoint, {
+          method: 'POST',
+          headers: {
+            accept: 'application/json',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify(body),
+          redirect: 'error',
+          signal: timeoutSignal(this.tokenTimeoutMs),
+        });
+        status = res.status;
+        text = await readBoundedResponseText(res, MAX_TOKEN_RESPONSE_BYTES);
+      } catch (err) {
+        if (attempt === 0) {
+          await delay(TRANSIENT_RETRY_DELAY_MS);
+          continue;
+        }
+        return {
+          ok: false,
+          authDead: false,
+          detail: err instanceof Error ? err.message : String(err),
+        };
+      }
+      if (status >= 500 || status === 429) {
+        if (attempt === 0) {
+          await delay(TRANSIENT_RETRY_DELAY_MS);
+          continue;
+        }
+        return { ok: false, authDead: false, detail: `assist_worker_${status}` };
+      }
+      let parsed: Record<string, unknown> = {};
+      try {
+        parsed = JSON.parse(text) as Record<string, unknown>;
+      } catch {
+        return { ok: false, authDead: false, detail: 'assist_worker_invalid_response' };
+      }
+      if (status >= 400) {
+        const code = typeof parsed.error === 'string' ? parsed.error : `assist_worker_${status}`;
+        return {
+          ok: false,
+          authDead:
+            status === 400 &&
+            ['invalid_grant', 'invalid_receipt', 'expired_receipt'].includes(code),
+          detail: code,
+        };
+      }
+      const accessToken = parsed.access_token;
+      if (typeof accessToken !== 'string' || accessToken.length === 0) {
+        return { ok: false, authDead: false, detail: 'assist_worker_missing_access_token' };
+      }
+      const expiresIn = typeof parsed.expires_in === 'number' ? parsed.expires_in : undefined;
+      return {
+        ok: true,
+        accessToken,
+        ...(typeof parsed.refresh_token === 'string' && parsed.refresh_token
+          ? { refreshToken: parsed.refresh_token }
+          : {}),
+        ...(expiresIn && Number.isFinite(expiresIn) && expiresIn > 0
+          ? { expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString() }
+          : {}),
+      };
+    }
+  }
+
+  private async persistTokens(
+    plane: VaultPlane,
+    connectionId: string,
+    response: Extract<TokenResponse, { ok: true }>,
+    prefix: string,
+    suffix = '',
+  ): Promise<void> {
+    const outcome: InvokeOutcome = await plane.invoke(plane.ownerCredential, {
+      command: 'sync.store_tokens',
+      input: {
+        connection_id: connectionId,
+        access_token: response.accessToken,
+        ...(response.refreshToken ? { refresh_token: response.refreshToken } : {}),
+        ...(response.expiresAt ? { expires_at: response.expiresAt } : {}),
+      },
+      purpose: BROKER_PURPOSE,
+    });
+    if (outcome.status !== 'executed') {
+      throw new Error(
+        `${prefix} (${outcome.status}: ${'reason' in outcome ? outcome.reason : 'unknown'})${suffix}`,
+      );
+    }
+  }
+
+  private pruneCeremonies(now = this.now()): void {
+    for (const [key, entry] of this.pending) {
+      if (entry.expiresAt < now) this.pending.delete(key);
+    }
+  }
+
   /** needs-auth with a reason — the ONE actionable reconnect state. */
   private async flipNeedsAuth(
     plane: VaultPlane,
@@ -497,9 +768,9 @@ export class ConnectionBroker {
     // No credential sidecar row = the harness-ambient lane (issue #290).
     return plane.db.vault
       .prepare(
-        `SELECT cc.connection_id, cc.cred_kind, cc.auth_url, cc.token_url, cc.scopes,
+        `SELECT cc.connection_id, cc.cred_kind, cc.oauth_mode, cc.auth_url, cc.token_url, cc.scopes,
                 cc.client_id, cc.client_secret, cc.access_token, cc.refresh_token,
-                cc.api_key, cc.token_expires_at, cc.allowed_hosts
+                cc.api_key, cc.token_expires_at, cc.allowed_hosts, c.principal
            FROM sync_connection_credential cc
            JOIN sync_connection c ON c.connection_id = cc.connection_id
           WHERE c.kind = ? AND c.label = ?`,
@@ -509,7 +780,12 @@ export class ConnectionBroker {
 
   private readRowById(plane: VaultPlane, connectionId: string): ConnectionCredRow | undefined {
     return plane.db.vault
-      .prepare(`SELECT * FROM sync_connection_credential WHERE connection_id = ?`)
+      .prepare(
+        `SELECT cc.*, c.principal
+           FROM sync_connection_credential cc
+           JOIN sync_connection c ON c.connection_id = cc.connection_id
+          WHERE cc.connection_id = ?`,
+      )
       .get(connectionId) as ConnectionCredRow | undefined;
   }
 
@@ -536,4 +812,28 @@ function parseHosts(json: string | null): readonly string[] {
 function expiringSoon(expiresAt: string | null): boolean {
   if (!expiresAt) return false; // no recorded expiry — trust it until a 401 forces a refresh
   return Date.parse(expiresAt) - Date.now() < EXPIRY_SLACK_MS;
+}
+
+async function readBoundedResponseText(response: Response, limit: number): Promise<string> {
+  const declared = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > limit) {
+    throw new Error('token endpoint response exceeded safety limit');
+  }
+  if (!response.body) return '';
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let total = 0;
+  let text = '';
+  try {
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      total += chunk.value.byteLength;
+      if (total > limit) throw new Error('token endpoint response exceeded safety limit');
+      text += decoder.decode(chunk.value, { stream: true });
+    }
+    return text + decoder.decode();
+  } finally {
+    reader.releaseLock();
+  }
 }

@@ -264,7 +264,7 @@ export async function handleAutomationUpdate(
     body.vault !== null && typeof body.vault === 'object' && !Array.isArray(body.vault)
       ? (body.vault as automation.ManifestVault)
       : undefined;
-  const hasConnectorKey = Object.prototype.hasOwnProperty.call(body, 'connector');
+  const hasConnectorKey = Object.hasOwn(body, 'connector');
   const connectorInput = hasConnectorKey
     ? body.connector === null
       ? null
@@ -274,7 +274,7 @@ export async function handleAutomationUpdate(
         ? (body.connector as automation.ConnectorSpec)
         : undefined
     : undefined;
-  const hasConnectionsKey = Object.prototype.hasOwnProperty.call(body, 'connections');
+  const hasConnectionsKey = Object.hasOwn(body, 'connections');
   const connectionsInput = hasConnectionsKey
     ? Array.isArray(body.connections)
       ? (body.connections as automation.ConnectionBinding[])

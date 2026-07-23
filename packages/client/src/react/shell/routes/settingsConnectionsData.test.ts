@@ -20,6 +20,9 @@ const updateAutomation = vi.fn((_input?: unknown) => Promise.resolve({ row: null
 const configureConnection = vi.fn((_input?: unknown) =>
   Promise.resolve({ connectionId: 'c1', credKind: 'oauth2', status: 'needs-auth' }),
 );
+const configureAssistConnection = vi.fn((_input?: unknown) =>
+  Promise.resolve({ connectionId: 'c-assist', credKind: 'oauth2', status: 'needs-auth' }),
+);
 const setConnectionStatus = vi.fn((_input?: unknown) =>
   Promise.resolve({ connectionId: 'c1', status: 'paused' }),
 );
@@ -40,8 +43,13 @@ const removeConnection = vi.fn((_connectionId?: unknown) =>
 vi.mock('../../../gateway-client.js', () => ({
   beginConnectionAuthorization: (a: unknown) => beginConnectionAuthorization(a),
   cloneTemplate: (a: unknown) => cloneTemplate(a),
+  configureAssistConnection: (a: unknown) => configureAssistConnection(a),
   configureConnection: (a: unknown) => configureConnection(a),
   listAutomations: () => listAutomations(),
+  loadConnectionProviderCatalog: async () => ({
+    assist: { enabled: false },
+    providers: await listConnectionProviders(),
+  }),
   listConnectionProviders: () => listConnectionProviders(),
   listConnections: () => listConnections(),
   oauthCallbackUri: () => Promise.resolve('http://127.0.0.1:17832/centraid/_vault/oauth/callback'),
@@ -49,11 +57,18 @@ vi.mock('../../../gateway-client.js', () => ({
   setConnectionStatus: (a: unknown) => setConnectionStatus(a),
   updateAutomation: (a: unknown) => updateAutomation(a),
 }));
+vi.mock('../../../assist-oauth-handoff.js', () => ({
+  completeAssistReturnLink: vi.fn(),
+}));
 
 beforeEach(() => {
+  window.CentraidApi = {
+    getHostCapabilities: vi.fn().mockResolvedValue({ platform: 'desktop' }),
+  } as unknown as typeof window.CentraidApi;
   listConnections.mockClear();
   listConnectionProviders.mockClear();
   configureConnection.mockClear();
+  configureAssistConnection.mockClear();
   setConnectionStatus.mockClear();
   beginConnectionAuthorization.mockClear();
   removeConnection.mockClear();
@@ -241,7 +256,10 @@ describe('settingsConnectionsData', () => {
   it('beginConnectionAuthorize returns just the auth URL', async () => {
     const url = await beginConnectionAuthorize('c1');
     expect(url).toBe('https://accounts.example/auth');
-    expect(beginConnectionAuthorization).toHaveBeenCalledWith({ connectionId: 'c1' });
+    expect(beginConnectionAuthorization).toHaveBeenCalledWith({
+      connectionId: 'c1',
+      surface: 'desktop',
+    });
   });
 
   describe('makeDetachConnection', () => {

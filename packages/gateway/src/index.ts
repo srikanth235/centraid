@@ -26,6 +26,15 @@ export {
   type FireAutomation,
 } from './serve/build-gateway.js';
 export { serve, type ServeOptions, type GatewayServeHandle } from './serve/serve.js';
+export {
+  ASSIST_PRODUCTION_CALLBACK_URL,
+  ASSIST_PRODUCTION_WORKER_ORIGIN,
+  GOOGLE_ASSIST_SCOPE_TIERS,
+  assistOAuthFromEnvironment,
+  validateAssistOAuthConfig,
+  type AssistOAuthConfig,
+  type AssistOAuthEnvironment,
+} from './serve/assist-oauth.js';
 // Component-level health (self-hosting observability): hosts push their
 // own components (tunnel, disk) through `BuiltGateway.health`; clients
 // read the aggregate at `GET /centraid/_gateway/health`.

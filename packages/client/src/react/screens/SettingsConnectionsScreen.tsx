@@ -7,6 +7,7 @@ import { cx } from '../ui/cx.js';
 import styles from './SettingsConnectionsScreen.module.css';
 import controlsCss from '../styles/controls.module.css';
 import { ConnectorBrandGlyph } from './connectorBrandMarks.js';
+import { ASSIST_HANDOFF_EVENT, type AssistHandoffResult } from '../../assist-oauth-events.js';
 
 // Connectors gallery (issue #304 renderer half; primary sidebar page). Featured
 // tile grid of gateway provider connectors (Gmail, Calendar, Drive, GitHub, …)
@@ -24,6 +25,7 @@ export interface ConnectionRowDTO {
   /** `null` = no credential attached — the connection rides the
    *  harness-ambient lane rather than a BYO one. */
   credKind: 'oauth2' | 'api_key' | null;
+  oauthMode?: 'byo' | 'assist' | null;
   provider: string | null;
   authNote: string | null;
   lastRunAt: string | null;
@@ -68,14 +70,15 @@ export interface ProviderOptionDTO {
     syncs: ProviderSyncCapabilityDTO[];
     actions: ProviderActionCapabilityDTO[];
   };
-}
-
-/** Linked automation summary on a connection detail (no secrets). */
-export interface LinkedAutomationDTO {
-  ref: string;
-  name: string;
-  enabled: boolean;
-  kind: string | null;
+  assist?:
+    | { enabled: false }
+    | {
+        enabled: true;
+        provider: 'google';
+        callbackUrl: string;
+        restrictedScopesEnabled: boolean;
+        scopeTiers: { standard: string[]; restricted: string[] };
+      };
 }
 
 export interface LinkedSyncDTO {
@@ -97,6 +100,7 @@ export interface ConnectionFormInput {
   connectorKind: string;
   label: string;
   credKind: 'oauth2' | 'api_key';
+  oauthMode?: 'byo' | 'assist';
   authUrl?: string;
   tokenUrl?: string;
   /** The connector's specific scope when the preset names one per
@@ -122,6 +126,8 @@ export interface SettingsConnectionsBridgeProps {
   /** Begins the PKCE ceremony, returning the URL the owner's browser must
    *  visit. This screen opens it (`window.open`) — never navigates the app. */
   beginAuthorize: (connectionId: string) => Promise<string>;
+  /** Manual desktop fallback when the custom-scheme launch is blocked. */
+  completeAssistReturnLink?: (rawUrl: string) => Promise<{ connectionId: string }>;
   showToast: (message: string) => void;
   /** Linked pull automations for a connection (detail sheet). Optional. */
   loadLinkedSyncs?: (connection: ConnectionRowDTO) => Promise<LinkedSyncDTO[]>;
@@ -296,10 +302,6 @@ const FEATURED_META: Record<string, FeaturedMeta> = {
   },
 };
 
-function connectorLabel(kind: string): string {
-  return FEATURED_META[kind]?.name ?? kindLabelFallback(kind);
-}
-
 function kindLabelFallback(kind: string): string {
   const tail = kind.includes('.') ? kind.slice(kind.indexOf('.') + 1) : kind;
   return tail.charAt(0).toUpperCase() + tail.slice(1);
@@ -402,7 +404,13 @@ function ConnectionRow({
             <Button
               variant="primary"
               size="sm"
-              label={authorizing ? 'Waiting…' : 'Reconnect'}
+              label={
+                authorizing
+                  ? 'Still waiting…'
+                  : row.oauthMode === 'assist'
+                    ? 'Reconnect with Centraid Assist'
+                    : 'Reconnect'
+              }
               disabled={busy}
               onClick={onReconnect}
             />
@@ -488,6 +496,7 @@ function ConnectForm({
       clientSecret: isOauth ? clientSecret.trim() : undefined,
       connectorKind: featured.kind,
       credKind: provider.credKind,
+      oauthMode: isOauth ? 'byo' : undefined,
       label: label.trim(),
       providerId: provider.id,
       scopes: featured.scope ?? provider.scopes,
@@ -592,6 +601,183 @@ function ConnectForm({
   );
 }
 
+function scopeLabel(scope: string): string {
+  if (scope.endsWith('/calendar.readonly')) return 'Read Google Calendar';
+  if (scope.endsWith('/contacts.readonly')) return 'Read Google Contacts';
+  if (scope.endsWith('/gmail.readonly')) return 'Read Gmail';
+  if (scope.endsWith('/gmail.send')) return 'Send Gmail (owner approval still required)';
+  if (scope.endsWith('/drive.readonly')) return 'Read Google Drive';
+  return scope;
+}
+
+function AssistConnectForm({
+  featured,
+  busy,
+  onCancel,
+  onSubmit,
+}: {
+  featured: FeaturedConnector;
+  busy: boolean;
+  onCancel: () => void;
+  onSubmit: (input: ConnectionFormInput) => void;
+}): JSX.Element {
+  const assist = featured.provider.assist;
+  const standardScopes = assist?.enabled ? assist.scopeTiers.standard : [];
+  const restrictedScopes = assist?.enabled ? assist.scopeTiers.restricted : [];
+  const connectorScopes = new Set(
+    featured.provider.connectors
+      .filter((connector) => connector.kind === featured.kind)
+      .flatMap((connector) => (connector.scope ? [connector.scope] : [])),
+  );
+  const permitted = [
+    ...standardScopes.map((scope) => ({ scope, tier: 'standard' as const })),
+    ...restrictedScopes.map((scope) => ({ scope, tier: 'restricted' as const })),
+  ].filter(({ scope }) => connectorScopes.has(scope));
+  const initialScope =
+    featured.scope &&
+    permitted.some(
+      (entry) =>
+        entry.scope === featured.scope &&
+        (entry.tier !== 'restricted' ||
+          (assist?.enabled === true && assist.restrictedScopesEnabled)),
+    )
+      ? featured.scope
+      : permitted.find((entry) => entry.tier === 'standard')?.scope;
+  const [label, setLabel] = useState(() => `Google · ${featured.meta.name}`);
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(initialScope ? [initialScope] : []),
+  );
+  const toggle = (scope: string): void => {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(scope)) next.delete(scope);
+      else next.add(scope);
+      return next;
+    });
+  };
+  const ready = label.trim().length > 0 && selected.size > 0;
+  if (!assist?.enabled) {
+    return <div className={styles.emptyNote}>Centraid Assist is unavailable on this gateway.</div>;
+  }
+  return (
+    <div className={styles.wizard} data-testid="connector-assist-wizard">
+      <div className={styles.authKindBanner} data-kind="oauth2">
+        <strong>Centraid Assist</strong>
+        <span>
+          Sign in with Google. The browser only couriers a short-lived authorization code; tokens go
+          directly to your gateway and are never stored by Centraid cloud services.
+        </span>
+      </div>
+      <label className={styles.wizardField}>
+        <span className={styles.wizardLabel}>Label</span>
+        <input
+          className={styles.textInput}
+          type="text"
+          value={label}
+          onChange={(event) => setLabel(event.target.value)}
+        />
+      </label>
+      <fieldset className={styles.scopePicker}>
+        <legend className={styles.wizardLabel}>Google capabilities</legend>
+        {permitted.map(({ scope, tier }) => {
+          const disabled = tier === 'restricted' && !assist.restrictedScopesEnabled;
+          return (
+            <label key={scope} className={styles.scopeOption} data-disabled={disabled}>
+              <input
+                type="checkbox"
+                checked={selected.has(scope)}
+                disabled={disabled}
+                onChange={() => toggle(scope)}
+              />
+              <span>
+                {scopeLabel(scope)}
+                {tier === 'restricted' ? (
+                  <small>
+                    {assist.restrictedScopesEnabled
+                      ? 'Restricted Google scope'
+                      : 'Available after Google verification'}
+                  </small>
+                ) : (
+                  <small>Sensitive scope · standard Assist tier</small>
+                )}
+              </span>
+            </label>
+          );
+        })}
+      </fieldset>
+      <p className={styles.sheetNote}>
+        Centraid does not request Google identity scopes (openid, email, or profile). Disconnect or
+        reconnect at any time.
+      </p>
+      {permitted.length > 0 &&
+      permitted.every((entry) => entry.tier === 'restricted' && !assist.restrictedScopesEnabled) ? (
+        <p className={styles.sheetNote}>
+          This connector remains unavailable until Google restricted-scope verification is complete.
+          You can use your own OAuth client from Advanced now.
+        </p>
+      ) : null}
+      <div className={styles.wizardFoot}>
+        <Button variant="ghost" size="sm" label="Cancel" onClick={onCancel} />
+        <Button
+          variant="primary"
+          size="sm"
+          label={busy ? 'Starting…' : 'Continue to Google'}
+          disabled={!ready || busy}
+          onClick={() =>
+            onSubmit({
+              allowedHosts: featured.provider.allowedHosts,
+              connectorKind: featured.kind,
+              credKind: 'oauth2',
+              label: label.trim(),
+              oauthMode: 'assist',
+              providerId: 'google',
+              scopes: [...selected].join(' '),
+            })
+          }
+        />
+      </div>
+    </div>
+  );
+}
+
+function ManualAssistHandoff({
+  busy,
+  onSubmit,
+}: {
+  busy: boolean;
+  onSubmit: (rawUrl: string) => void;
+}): JSX.Element {
+  const [returnLink, setReturnLink] = useState('');
+  return (
+    <details className={styles.manualHandoff}>
+      <summary>Centraid did not reopen?</summary>
+      <p>
+        Copy the complete <code>centraid://oauth/finish</code> return link from the browser and
+        paste it here. It is delivered directly to this gateway and is not saved.
+      </p>
+      <div className={styles.manualHandoffRow}>
+        <input
+          className={styles.textInput}
+          type="text"
+          autoComplete="off"
+          spellCheck={false}
+          value={returnLink}
+          placeholder="centraid://oauth/finish#…"
+          aria-label="Centraid Assist return link"
+          onChange={(event) => setReturnLink(event.target.value)}
+        />
+        <Button
+          variant="soft"
+          size="sm"
+          label={busy ? 'Finishing…' : 'Finish connecting'}
+          disabled={busy || returnLink.trim().length === 0}
+          onClick={() => onSubmit(returnLink)}
+        />
+      </div>
+    </details>
+  );
+}
+
 function BrandMark({ meta, size = 36 }: { meta: FeaturedMeta; size?: number }): JSX.Element {
   // ~70% of the soft tile so multicolor marks stay legible on dark chrome.
   const glyph = Math.round(size * 0.7);
@@ -610,7 +796,11 @@ function BrandMark({ meta, size = 36 }: { meta: FeaturedMeta; size?: number }): 
 type SheetMode =
   | { kind: 'closed' }
   | { kind: 'picker' }
-  | { kind: 'detail'; featured: FeaturedConnector; connecting: boolean }
+  | {
+      kind: 'detail';
+      featured: FeaturedConnector;
+      connecting: false | 'assist' | 'byo';
+    }
   | {
       kind: 'connection';
       row: ConnectionRowDTO;
@@ -625,6 +815,7 @@ export default function SettingsConnectionsScreen({
   setConnectionStatus,
   detachConnection,
   beginAuthorize,
+  completeAssistReturnLink,
   showToast,
   loadLinkedSyncs,
   installSync,
@@ -640,6 +831,7 @@ export default function SettingsConnectionsScreen({
   const [linkedSyncs, setLinkedSyncs] = useState<LinkedSyncDTO[] | null>(null);
   const [installingSync, setInstallingSync] = useState<string | null>(null);
   const [oauthCallbackUri, setOauthCallbackUri] = useState<string | null>(null);
+  const [finishingManualHandoff, setFinishingManualHandoff] = useState(false);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollDeadline = useRef(0);
 
@@ -668,6 +860,26 @@ export default function SettingsConnectionsScreen({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- (#524) mount-once load
   }, [loadConnections, loadProviders, loadOAuthCallbackUri]);
+
+  useEffect(() => {
+    const onHandoff = (event: Event): void => {
+      const result = (event as CustomEvent<AssistHandoffResult>).detail;
+      if (result.status === 'complete') {
+        setAuthorizingIds((current) => {
+          const next = new Set(current);
+          next.delete(result.connectionId);
+          return next;
+        });
+        showToast('Connected with Centraid Assist.');
+        refresh();
+      } else if (result.status === 'error') {
+        setAuthorizingIds(new Set());
+        showToast(result.message);
+      }
+    };
+    window.addEventListener(ASSIST_HANDOFF_EVENT, onHandoff);
+    return () => window.removeEventListener(ASSIST_HANDOFF_EVENT, onHandoff);
+  }, [refresh, showToast]);
 
   const featured = useMemo(() => (providers ? buildFeatured(providers) : []), [providers]);
 
@@ -723,7 +935,7 @@ export default function SettingsConnectionsScreen({
           setRows(freshRows);
           const row = freshRows.find((r) => r.connectionId === connectionId);
           const done = !row || row.health !== 'needs-auth';
-          if (done || Date.now() >= pollDeadline.current) {
+          if (done) {
             setAuthorizingIds((s) => {
               const n = new Set(s);
               n.delete(connectionId);
@@ -731,6 +943,10 @@ export default function SettingsConnectionsScreen({
             });
             return;
           }
+          // Keep the explicit "Still waiting…" state after the polling
+          // window. The ceremony itself remains gateway-TTL-bound, and the
+          // owner can retry or use the manual return-link fallback.
+          if (Date.now() >= pollDeadline.current) return;
           pollTimer.current = setTimeout(tick, POLL_MS);
         });
     };
@@ -740,7 +956,14 @@ export default function SettingsConnectionsScreen({
   const onAuthorize = (row: ConnectionRowDTO): void => {
     setAuthorizingIds((s) => new Set(s).add(row.connectionId));
     void beginAuthorize(row.connectionId)
-      .then((authUrl) => {
+      .then(async (authUrl) => {
+        if (row.oauthMode === 'assist') {
+          const host = await window.CentraidApi.getHostCapabilities?.();
+          if (host?.platform === 'web') {
+            window.location.assign(authUrl);
+            return;
+          }
+        }
         window.open(authUrl, '_blank', 'noopener');
         pollAfterAuthorize(row.connectionId);
       })
@@ -794,6 +1017,24 @@ export default function SettingsConnectionsScreen({
     setSheet({ kind: 'connection', row, featured, reconnecting: true });
   };
 
+  const onManualAssistHandoff = (rawUrl: string): void => {
+    if (!completeAssistReturnLink) return;
+    setFinishingManualHandoff(true);
+    void completeAssistReturnLink(rawUrl)
+      .then(({ connectionId }) => {
+        setAuthorizingIds((current) => {
+          const next = new Set(current);
+          next.delete(connectionId);
+          return next;
+        });
+        setSheet({ kind: 'closed' });
+        showToast('Connected with Centraid Assist.');
+        refresh();
+      })
+      .catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)))
+      .finally(() => setFinishingManualHandoff(false));
+  };
+
   const onSubmitWizard = (input: ConnectionFormInput): void => {
     setSaving(true);
     void configureConnection(input)
@@ -810,9 +1051,20 @@ export default function SettingsConnectionsScreen({
           setAuthorizingIds((s) => new Set(s).add(connectionId));
           try {
             const authUrl = await beginAuthorize(connectionId);
+            if (input.oauthMode === 'assist') {
+              const host = await window.CentraidApi.getHostCapabilities?.();
+              if (host?.platform === 'web') {
+                window.location.assign(authUrl);
+                return;
+              }
+            }
             window.open(authUrl, '_blank', 'noopener');
             pollAfterAuthorize(connectionId);
-            showToast(`Authorize ${input.label} in the browser window…`);
+            showToast(
+              input.oauthMode === 'assist'
+                ? `Finish connecting ${input.label} in your browser…`
+                : `Authorize ${input.label} in the browser window…`,
+            );
           } catch (err: unknown) {
             showToast(err instanceof Error ? err.message : String(err));
             setAuthorizingIds((s) => {
@@ -1053,13 +1305,27 @@ export default function SettingsConnectionsScreen({
                   </div>
                   {(sheet.row.health === 'needs-auth' || sheet.row.health === 'failing') &&
                   !sheet.reconnecting ? (
-                    <div className={styles.sheetFoot}>
-                      <Button
-                        variant="primary"
-                        label="Reconnect"
-                        onClick={() => onReconnect(sheet.row)}
-                      />
-                    </div>
+                    <>
+                      <div className={styles.sheetFoot}>
+                        <Button
+                          variant="primary"
+                          label={
+                            sheet.row.oauthMode === 'assist'
+                              ? authorizingIds.has(sheet.row.connectionId)
+                                ? 'Still waiting…'
+                                : 'Reconnect with Centraid Assist'
+                              : 'Reconnect'
+                          }
+                          onClick={() => onReconnect(sheet.row)}
+                        />
+                      </div>
+                      {sheet.row.oauthMode === 'assist' && completeAssistReturnLink ? (
+                        <ManualAssistHandoff
+                          busy={finishingManualHandoff}
+                          onSubmit={onManualAssistHandoff}
+                        />
+                      ) : null}
+                    </>
                   ) : null}
                   {sheet.reconnecting && sheet.featured ? (
                     <ConnectForm
@@ -1150,8 +1416,9 @@ export default function SettingsConnectionsScreen({
                       <>
                         <strong>OAuth 2.0</strong>
                         <span>
-                          Connect with your own Google / Microsoft / Dropbox OAuth client. You will
-                          sign in at the provider after saving credentials.
+                          {sheet.featured.provider.assist?.enabled
+                            ? 'Connect through Centraid Assist, or use your own OAuth client from Advanced.'
+                            : 'Connect with your own Google / Microsoft / Dropbox OAuth client. You will sign in at the provider after saving credentials.'}
                         </span>
                       </>
                     ) : (
@@ -1186,12 +1453,16 @@ export default function SettingsConnectionsScreen({
                           <div className={styles.aboutText}>
                             <span className={styles.aboutTitle}>
                               {sheet.featured.provider.credKind === 'oauth2'
-                                ? 'OAuth 2.0 (your client)'
+                                ? sheet.featured.provider.assist?.enabled
+                                  ? 'Centraid Assist or your own OAuth client'
+                                  : 'OAuth 2.0 (your client)'
                                 : 'API key / token'}
                             </span>
                             <span className={styles.aboutDesc}>
                               {sheet.featured.provider.credKind === 'oauth2'
-                                ? 'Register a Web application OAuth client with this gateway’s redirect URI, paste Client ID + secret here, then authorize in the browser.'
+                                ? sheet.featured.provider.assist?.enabled
+                                  ? 'Assist keeps the shared Google client secret in a stateless Cloudflare Worker. Your gateway alone stores tokens.'
+                                  : 'Register a Web application OAuth client with this gateway’s redirect URI, paste Client ID + secret here, then authorize in the browser.'
                                 : 'Credentials stay sealed on your gateway — never shared as training data.'}
                             </span>
                           </div>
@@ -1210,7 +1481,9 @@ export default function SettingsConnectionsScreen({
                       </div>
                       <p className={styles.sheetNote}>
                         {sheet.featured.provider.credKind === 'oauth2'
-                          ? 'OAuth 2.0 uses your own developer client (BYO). Centraid never hosts a shared Google app.'
+                          ? sheet.featured.provider.assist?.enabled
+                            ? 'Tokens never pass through the browser, URL fragments, deep links, or Cloudflare storage. BYO remains available under Advanced.'
+                            : 'OAuth 2.0 uses your own developer client (BYO).'
                           : 'Paste an API key or personal token. Review scopes before connecting.'}
                       </p>
                       <div className={styles.sheetFoot}>
@@ -1218,19 +1491,52 @@ export default function SettingsConnectionsScreen({
                           variant="primary"
                           label={
                             sheet.featured.provider.credKind === 'oauth2'
-                              ? 'Connect with OAuth 2.0'
+                              ? sheet.featured.provider.assist?.enabled
+                                ? 'Connect with Centraid'
+                                : 'Connect with OAuth 2.0 (Advanced)'
                               : 'Connect'
                           }
                           onClick={() =>
                             setSheet({
                               kind: 'detail',
                               featured: sheet.featured,
-                              connecting: true,
+                              connecting:
+                                sheet.featured.provider.credKind === 'oauth2' &&
+                                sheet.featured.provider.assist?.enabled
+                                  ? 'assist'
+                                  : 'byo',
                             })
                           }
                         />
+                        {sheet.featured.provider.credKind === 'oauth2' &&
+                        sheet.featured.provider.assist?.enabled ? (
+                          <Button
+                            variant="soft"
+                            label="Use my own OAuth app (Advanced)"
+                            onClick={() =>
+                              setSheet({
+                                kind: 'detail',
+                                featured: sheet.featured,
+                                connecting: 'byo',
+                              })
+                            }
+                          />
+                        ) : null}
                       </div>
                     </>
+                  ) : sheet.connecting === 'assist' ? (
+                    <AssistConnectForm
+                      featured={sheet.featured}
+                      busy={saving}
+                      onCancel={() =>
+                        setSheet({
+                          kind: 'detail',
+                          featured: sheet.featured,
+                          connecting: false,
+                        })
+                      }
+                      onSubmit={onSubmitWizard}
+                    />
                   ) : (
                     <ConnectForm
                       featured={sheet.featured}
@@ -1256,5 +1562,4 @@ export default function SettingsConnectionsScreen({
   );
 }
 
-// Re-export for tests that assert display names.
-export { connectorLabel, buildFeatured };
+export { buildFeatured };

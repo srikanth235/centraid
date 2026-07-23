@@ -567,6 +567,65 @@
   border-color: color-mix(in srgb, var(--accent) 55%, transparent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
 }
+.scopePicker {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.scopeOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 0.5px solid var(--line);
+  border-radius: 9px;
+  color: var(--ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+.scopeOption input {
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+.scopeOption span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.scopeOption small {
+  color: var(--ink-4);
+  font-size: 10.5px;
+}
+.scopeOption[data-disabled='true'] {
+  color: var(--ink-4);
+  cursor: not-allowed;
+  background: color-mix(in srgb, var(--ink) 2%, transparent);
+}
+.manualHandoff {
+  margin-top: 12px;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.manualHandoff summary {
+  cursor: pointer;
+  color: var(--ink);
+}
+.manualHandoff p {
+  margin: 8px 0;
+  line-height: 1.5;
+}
+.manualHandoffRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.manualHandoffRow input {
+  min-width: 0;
+  flex: 1;
+}
 .setupGuide {
   display: flex;
   flex-direction: column;
