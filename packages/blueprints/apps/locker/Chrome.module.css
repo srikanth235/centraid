@@ -1,0 +1,164 @@
+/* Locker chrome shared by the served and inline routes (issue #505). The whole
+   surface (sidebar / list / detail / overlays) is React-rendered into a single
+   root, so this file
+   is thinner than the topbar apps'. It supplies only the `.locker` FRAME
+   (app.css's `.locker` + the consent/notice banners + the ask mount + the two
+   narrow-viewport `#root` rules), rescoped to the inline route. The sidebar /
+   list / detail layout (including their own narrow-drawer rules) stays in the
+   reused components/*.module.css, which key on the GLOBAL `.locker.is-narrow`
+   / `.show-list` / `.side-open` state classes Chrome.tsx stamps on this frame.
+
+   The shared design-token layer (--ink/--bg/--line/--_accent, shadows, type
+   scale …) is supplied by the shell (the scoped blueprint-token block
+   InlineAppRoute injects under .centraid-inline-scope), so this file references
+   those directly and never loads tokens.css/wall.css. The locker-SPECIFIC
+   tokens app.css's :root added on top of that layer — the accent-derived
+   --accs/--accd/--accd-fg, the sidebar surface --bg-side, and the
+   --warn/--t-strong/--tk-eye aliases the reused component CSS modules read —
+   are NOT in the shared layer, so they are folded in here on .appRoot (trap
+   #3). */
+
+.appRoot {
+  composes: kit-app-shell from global;
+  /* Locker-specific tokens folded from app.css :root (light). The shared
+     blueprint layer supplies everything else; these are the app's own palette
+     add-ons the reused components/*.module.css reference. --app-hue/--_accent
+     resolve from the injected .centraid-inline-scope ancestor. */
+  --accs: color-mix(in oklab, var(--_accent) 12%, transparent);
+  --accd: color-mix(in oklab, var(--_accent) 92%, hsl(var(--app-hue) 45% 7%));
+  --accd-fg: var(--accd);
+  --bg-side: hsl(var(--app-hue) 20% 97%);
+  --warn: #e0902e;
+  --t-strong: 600 0.855rem/1.4 var(--font-sans);
+  --tk-eye: 0.09em;
+
+  /* The `.locker` frame: a horizontal flex row (sidebar | list | detail). It is
+     the flex:1 child of the app-inline wrapper (a flex column), so it gets a
+     bounded height rather than app.css's served 100vh. `contain: layout` makes
+     it the containing block for the reused component modules' narrow-drawer /
+     detail `position: fixed` overlays AND the kit modal/ask overlays, so they
+     overlay THIS app pane inline instead of the whole shell viewport (trap #1
+     — the served path can use fixed because the app IS the viewport). */
+  contain: layout;
+}
+
+/* Dark overrides for the folded locker tokens — mirrors app.css's dark block.
+   Emitted for both the explicit [data-theme='dark'] and the standalone
+   prefers-color-scheme fallback, the same two-selector shape the token layer
+   uses. */
+:global(:root[data-theme='dark']) .appRoot {
+  --accd: color-mix(in oklab, var(--_accent) 76%, hsl(var(--app-hue) 40% 12%));
+  --accd-fg: color-mix(in oklab, var(--_accent) 65%, white);
+  --bg-side: hsl(var(--app-hue) 12% calc(var(--bg-l) + 3%));
+}
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-theme])) .appRoot {
+    --accd: color-mix(in oklab, var(--_accent) 76%, hsl(var(--app-hue) 40% 12%));
+    --accd-fg: color-mix(in oklab, var(--_accent) 65%, white);
+    --bg-side: hsl(var(--app-hue) 12% calc(var(--bg-l) + 3%));
+  }
+}
+
+/* Knob: appFont swaps the body/UI face between sans and mono. The host sets
+   data-app-font on the inline scope wrapper (pushKnobToInlineRoot); app.css's
+   :root[data-app-font] rule isn't loaded inline, so re-express it here keyed on
+   that wrapper. */
+:global(.centraid-inline-scope[data-app-font='mono']) {
+  --font-sans: var(--mono);
+  --font-title: var(--mono);
+}
+
+/* The reused Sidebar/List/Detail modules bake app.css's served `height: 100vh`
+   onto `.side`/`.list`/`.detail` (the app was full-screen). Inline the frame is
+   NOT the viewport, so 100vh overflows the pane and clips the internal scroll
+   regions. These panes are the frame's direct element children (LockerSidebar →
+   <aside>, LockerList/LockerDetail → <section>); size them to the bounded frame
+   instead. Specificity 0,1,1 beats the modules' 0,1,0 `height:100vh` without
+   touching those served files. Narrow rules re-position them fixed, overriding
+   this. */
+.appRoot > aside,
+.appRoot > section {
+  height: 100%;
+  min-height: 0;
+}
+
+/* First-paint / remount animation guard (issue #505). The narrow drawer's
+   `transition: transform` lives in the reused Sidebar.module.css
+   (`:global(.locker.is-narrow) .side`), which this route can't edit. Until the
+   frame is `.ready` (stamped one rAF after mount), suppress that transition on
+   the sidebar `<aside>` so the width-seeded narrow state applies with NO slide
+   on first paint (and on a Tasks→Locker remount). The doubled `.appRoot.appRoot`
+   lifts specificity to (0,3,1), beating the component rule's (0,3,0) without
+   `!important` (trap #3). Once `.ready` is present the transition returns, so
+   user-driven drawer open/close still animates. */
+.appRoot.appRoot:not(.ready) > aside {
+  transition: none;
+}
+/* A POSITIVE `.ready` reference is required so css-modules EXPORTS the class: a
+   local class used only inside `:not()` is scoped in the emitted CSS but left
+   OUT of the JS `styles` object, so `styles.ready` would be undefined and the
+   class never stamped — pinning the transition off forever. This rule both
+   forces the export and restores the reused Sidebar.module.css drawer slide
+   once ready (value mirrors that module so open/close animates as designed). */
+.appRoot.ready > aside {
+  transition: transform 0.26s var(--ease);
+}
+
+/* Consent / notice banners (app.css `.k-banner`, folded in). Fixed + centered
+   over the app pane (contained by .appRoot). Driven imperatively by the reused
+   logic.ts (applyDenied / notice / readFailed) via their stable ids in
+   Chrome.tsx, so no `display` is set here — the `hidden` attribute governs
+   visibility. */
+.banner {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 85;
+  max-width: min(560px, calc(100% - 32px));
+  background: var(--bg-elev);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  padding: 11px 16px;
+  font: var(--t-small);
+  color: var(--ink-2);
+}
+.banner strong {
+  color: var(--ink);
+}
+.banner.notice {
+  border-color: color-mix(in oklab, var(--warn) 40%, var(--line-strong));
+}
+
+/* Floating "Ask" launcher mount — this app has no topbar to host it, so it
+   floats in the corner of the pane (contained by .appRoot). Non-essential
+   (kit-ask-inline mounts the button lazily; degrades to nothing if it fails). */
+.askMount {
+  composes: kit-app-ask-mount from global;
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 30;
+}
+
+/* Narrow (phone) drawer scrim — app.css's `.locker.is-narrow.side-open::after`,
+   re-expressed on this frame. Purely a visual dimmer (the served ::after had no
+   click handler either; the drawer closes via its X, a nav pick, or Escape).
+   `inset: 0` resolves to the contained frame, not the viewport. */
+.appRoot:global(.is-narrow.side-open)::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  background: rgba(12, 18, 32, 0.4);
+}
+
+/* Narrow: keep the floating ask launcher clear of the fixed detail/back button
+   (app.css re-pinned `.k-ask-mount` top-right in narrow). */
+.appRoot:global(.is-narrow) .askMount {
+  top: 12px;
+  right: 14px;
+  bottom: auto;
+  z-index: 45;
+}

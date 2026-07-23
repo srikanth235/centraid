@@ -1,6 +1,6 @@
 // Shared turn-stream core (issue #420) — the ONE SSE frame parser for every
 // chat surface. Canonical copy: packages/blueprints/kit/turn-stream.js. Both
-// the kit's Ask panel (served verbatim as a native ESM sibling of kit.js) and
+// the kit's Ask panel (served verbatim as a native ESM sibling of kit.ts) and
 // the React shell (packages/client, which re-exports this) drive their `_turn`
 // streams through `consumeSse` here, so a wire-protocol change lands once.
 //

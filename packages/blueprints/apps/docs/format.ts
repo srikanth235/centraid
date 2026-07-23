@@ -4,7 +4,7 @@
 // orchestrator (currentRows' type filter, the upload size-skip message, the
 // empty-row copy) and the row/details/quick-look components can call these
 // directly instead of threading them all as props.
-import { fmtBytes as fmtBytesBase } from './kit.js';
+import { fmtBytes as fmtBytesBase } from './kit.ts';
 import { I } from './icons.ts';
 import type { AppState, CustodyInfo, DocFields, EmptyStateCfg, TypeMeta } from './types.ts';
 

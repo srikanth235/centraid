@@ -3,7 +3,7 @@
 // picker state (`pickerAlbum`/`pickerPicked`), so they stay there and are
 // passed straight through.
 import { mountMedia } from '../media.ts';
-import type { MouseEvent } from '../react-core.min.js';
+import type { MouseEvent } from 'react';
 import type { Album, Asset } from '../types.ts';
 import styles from './Picker.module.css';
 

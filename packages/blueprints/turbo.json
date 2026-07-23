@@ -3,13 +3,7 @@
   "extends": ["//"],
   "tasks": {
     "build": {
-      "outputs": [
-        "dist/**",
-        "kit/pdf.min.mjs",
-        "kit/pdf.worker.min.mjs",
-        "kit/blob-format.js",
-        "kit/video-frame.js"
-      ]
+      "outputs": ["dist/**"]
     }
   }
 }

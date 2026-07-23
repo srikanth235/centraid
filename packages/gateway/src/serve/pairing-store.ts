@@ -18,16 +18,21 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import type { GrantableTrust } from './enrollment-store.js';
 
 /** Default ticket lifetime: long enough to paste, short enough to leak safely. */
 export const DEFAULT_TICKET_TTL_MS = 15 * 60 * 1000;
+
+function isGrantableTrust(value: unknown): value is GrantableTrust {
+  return value === 'owner' || value === 'full' || value === 'readonly';
+}
 
 interface StoredTicket {
   ticketId: string;
   /** SHA-256 hex of the one-time secret — never the secret itself. */
   secretHash: string;
   vaultId: string;
-  trust: 'full' | 'readonly';
+  trust: GrantableTrust;
   createdAt: string;
   expiresAt: number;
 }
@@ -109,7 +114,7 @@ export class PairingTicketStore {
               typeof (t as StoredTicket).ticketId === 'string' &&
               typeof (t as StoredTicket).secretHash === 'string' &&
               typeof (t as StoredTicket).vaultId === 'string' &&
-              ((t as StoredTicket).trust === 'full' || (t as StoredTicket).trust === 'readonly') &&
+              isGrantableTrust((t as StoredTicket).trust) &&
               typeof (t as StoredTicket).expiresAt === 'number',
           )
         : [];
@@ -136,7 +141,7 @@ export class PairingTicketStore {
   mint(
     vaultId: string,
     ttlMs = DEFAULT_TICKET_TTL_MS,
-    trust: 'full' | 'readonly' = 'full',
+    trust: GrantableTrust = 'full',
   ): {
     ticketId: string;
     secret: string;
@@ -163,10 +168,7 @@ export class PairingTicketStore {
    * TTL, burn it, and hand back the vault it enrolls into. Every failure
    * is the same `undefined` — a caller learns nothing about WHY.
    */
-  redeem(
-    ticketId: string,
-    secret: string,
-  ): { vaultId: string; trust: 'full' | 'readonly' } | undefined {
+  redeem(ticketId: string, secret: string): { vaultId: string; trust: GrantableTrust } | undefined {
     this.reloadIfChanged();
     const ticket = this.tickets.find((t) => t.ticketId === ticketId);
     if (!ticket) return undefined;
@@ -186,7 +188,7 @@ export class PairingTicketStore {
   listActive(): Array<{
     ticketId: string;
     vaultId: string;
-    trust: 'full' | 'readonly';
+    trust: GrantableTrust;
     expiresAt: number;
   }> {
     this.reloadIfChanged();

@@ -4,10 +4,10 @@
 // one batch. Pure view — `duplicates.tsx` (the app-root orchestrator) owns
 // the load/selection state and passes it down, same split as toolbar.jsx/
 // Chips.jsx.
-import { fmtBytes } from '../kit.js';
+import { fmtBytes } from '../kit.ts';
 import { mountMedia } from '../media.ts';
-import { armConfirm } from '../kit.js';
-import type { FC } from '../react-core.min.js';
+import { armConfirm } from '../kit.ts';
+import type { FC } from 'react';
 import type { Asset, DuplicateCluster } from '../types.ts';
 import styles from './Duplicates.module.css';
 

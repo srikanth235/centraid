@@ -7,7 +7,40 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "types": [],
-    "noEmit": true
+    "noEmit": true,
+    // Blueprint inline-app entries resolve to contract stubs so this program
+    // never type-checks their .tsx sources (which rely on the blueprints
+    // ambients); Vite still code-splits the real import (issue #505). Paths are
+    // resolved relative to this file (no baseUrl) since TS 4.1.
+    "paths": {
+      "@centraid/blueprints/apps/*/app-inline": [
+        "../../packages/client/src/react/blueprints/inline-app-module-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/tasks/queries/*": [
+        "../../packages/client/src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/agenda/queries/*": [
+        "../../packages/client/src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/docs/queries/*": [
+        "../../packages/client/src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/locker/queries/*": [
+        "../../packages/client/src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/notes/queries/*": [
+        "../../packages/client/src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/people/queries/*": [
+        "../../packages/client/src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/photos/queries/*": [
+        "../../packages/client/src/react/blueprints/inline-query-stub.d.ts"
+      ],
+      "@centraid/blueprints/apps/tally/queries/*": [
+        "../../packages/client/src/react/blueprints/inline-query-stub.d.ts"
+      ]
+    }
   },
   "include": [
     "../../packages/client/src/**/*.tsx",

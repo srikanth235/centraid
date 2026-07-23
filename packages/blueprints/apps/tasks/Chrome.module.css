@@ -1,0 +1,135 @@
+/* Tasks chrome shared by the served and inline routes (issue #505). Common
+   shell/sidebar/topbar/drawer geometry composes the kit-app-* vocabulary.
+   Design tokens (--ink, --accent,
+   --bg-elev, --line, --r-md, --t-title, …) are supplied by the shell document
+   (the scoped blueprint-token block InlineAppRoute injects), so this file
+   references them directly. */
+
+.shell {
+  composes: kit-app-shell from global;
+  --kit-app-side-width: 250px;
+  --kit-app-drawer-width: 270px;
+  --kit-app-topbar-padding: 16px 26px;
+}
+
+.side {
+  composes: kit-app-side from global;
+}
+.brand {
+  composes: kit-app-brand from global;
+}
+.brandMark {
+  composes: kit-app-brand-mark from global;
+}
+.brandText {
+  composes: kit-app-brand-text from global;
+}
+.brandName {
+  composes: kit-app-brand-name from global;
+}
+.brandTag {
+  composes: kit-app-brand-tag from global;
+}
+.sideClose {
+  composes: kit-app-side-close from global;
+}
+.new {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 11px 14px;
+  margin-bottom: 16px;
+  border: none;
+  border-radius: var(--r-md);
+  background: var(--accent-deep);
+  color: #fff;
+  font: var(--t-body-strong);
+  box-shadow: var(--shadow-sm);
+  transition: filter 0.14s var(--ease);
+}
+.new:hover {
+  filter: brightness(1.07);
+}
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sideFoot {
+  composes: kit-app-side-foot from global;
+}
+.scrim {
+  composes: kit-app-scrim from global;
+}
+
+.main {
+  composes: kit-app-main from global;
+}
+.topbar {
+  composes: kit-app-topbar from global;
+}
+.hamburger {
+  composes: kit-app-hamburger from global;
+}
+.heading {
+  min-width: 0;
+}
+.title {
+  font: var(--t-title);
+  letter-spacing: var(--tracking-h);
+}
+.sub {
+  font: var(--t-small);
+  color: var(--ink-2);
+  margin-top: 1px;
+}
+.topbarTools {
+  composes: kit-app-tools from global;
+}
+.search {
+  width: 180px;
+}
+.askMount {
+  composes: kit-app-ask-mount from global;
+}
+.banner {
+  margin: 14px 26px 0;
+}
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px 26px 48px;
+}
+
+/* ---------- Narrow (phone) — driven by .isNarrow / .sideOpen on .shell ---------- */
+/* Inline the drawer is absolutely positioned within .shell (the app pane), not
+   fixed to the viewport as the served full-screen app does. */
+.isNarrow {
+  composes: kit-app-narrow from global;
+}
+.sideOpen {
+  composes: kit-app-side-open from global;
+}
+.shell.isNarrow .topbar,
+.shell.isNarrow .scroll {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+.shell.isNarrow .banner {
+  margin-left: 16px;
+  margin-right: 16px;
+}
+.shell.isNarrow .topbar {
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+.shell.isNarrow .topbarTools {
+  flex: 1 0 100%;
+  margin-left: 0;
+}
+.shell.isNarrow .search {
+  width: auto;
+  flex: 1;
+}

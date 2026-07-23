@@ -6,6 +6,7 @@
 
 import crypto from 'node:crypto';
 import type { DatabaseSync, SQLInputValue, StatementSync } from 'node:sqlite';
+import { actingTrust, type GrantableTrust } from '../serve/enrollment-store.js';
 import {
   compileFilters,
   compileReplicaHistoricalFilters,
@@ -25,7 +26,7 @@ export const REPLICA_MAX_VALUE_BYTES = 64 * 1024;
 export const REPLICA_SYNTHETIC_PRIMARY_KEY = '__centraid_row_id';
 
 export interface ReplicaShapeAccess {
-  trust: 'full' | 'readonly';
+  trust: GrantableTrust;
   rememberDevice: boolean;
   /** Trusted web-app session header or an explicit shell selection. */
   appId?: string;
@@ -334,7 +335,7 @@ export function buildReplicaShapes(
             callerId: grantee.app_id,
             provAgentKind: 'app',
             partyId: null,
-            mayAct: access.trust === 'full',
+            mayAct: actingTrust(access.trust),
           },
           ref.schema,
           ref.table,

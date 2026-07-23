@@ -194,8 +194,8 @@ export interface TurnInput {
    */
   extraPath?: string;
   /**
-   * Inline-tool wiring. When present, the codex / claude adapters declare
-   * the three `centraid_sql_*` tools and dispatch them in-process; without
+   * Inline-tool wiring. When present, the adapters declare the vault tools
+   * (`vault_sql` / `vault_invoke`) and dispatch them in-process; without
    * it, the agent falls back to its generic shell tool. Chat callers always
    * supply one; builder callers (no per-app data file) omit it.
    */

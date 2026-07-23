@@ -9,10 +9,12 @@
  *      bundled automation into editable, user-owned app code.
  *   3. UI-app install — bundled apps under `apps/<id>/` are enrolled in place
  *      (`consent.app`, origin `installed`, declared-scope grants). No source is
- *      copied: the app serves from the package and upgrades with the release.
+ *      copied: the main client compiles their UI modules from this package,
+ *      while the gateway reads the same tree for catalog metadata and scopes.
  *
- * The gallery half: bundled, pre-built Centraid UI apps are installed in
- * place; automation templates are cloned. Each source folder lives under a
+ * The gallery half: bundled Centraid UI apps are installed in place and
+ * compiled into the main client; automation templates are cloned. Each source
+ * folder lives under a
  * kind-segment directory — `apps/<id>/` for shipped UI apps (`apps/agenda/`,
  * `apps/notes/`, `apps/vitals/`, …) and `automations/<id>/` for cloneable
  * automations. Both carry runtime-ready files; ownership and upgrade behavior,
@@ -63,7 +65,7 @@ const PACKAGE_ROOT = path.resolve(DIST_DIR, '..');
 export const appTemplatesDir: string = PACKAGE_ROOT;
 
 /**
- * Absolute path to the canonical shared kit dir (`kit.js` / `kit.css`).
+ * Absolute path to the canonical shared kit dir (`kit.ts` / `kit.css`).
  * Apps no longer carry per-app copies of these; the app-engine runtime
  * serves them from here as a fallback for `/centraid/<id>/kit.{js,css}`.
  * Hosts pass this as the runtime's `sharedAssetsDir`.
@@ -98,22 +100,24 @@ export async function listTemplates(): Promise<TemplateMeta[]> {
 
 /**
  * The bundled APP-kind templates (automations excluded). Issue #434:
- * install = serve the shipped blueprint in place, no copy — so these ids
- * are RESERVED (a code-store app must never shadow one) and each serves
- * straight from {@link bundledAppDir}. Automation templates are excluded
+ * install = enroll the shipped blueprint in place, no copy — so these ids
+ * are RESERVED (a code-store app must never shadow one). The main client owns
+ * the system UI; the gateway reads {@link bundledAppDir} for metadata, scopes,
+ * and the generic opaque-app compatibility route. Automation templates are excluded
  * because they still compile into the vault's git code store (the hidden
- * builder is the compiler), never served in place.
+ * builder is the compiler).
  */
 export async function listBundledAppTemplates(): Promise<TemplateMeta[]> {
   return (await listTemplates()).filter((t) => (t.kind ?? 'app') !== 'automation');
 }
 
 /**
- * Absolute dir a bundled APP-kind template serves from, inside the shipped
+ * Absolute dir for a bundled APP-kind template inside the shipped
  * `@centraid/blueprints` package (`<package>/apps/<id>/`). Issue #434: these
  * are real directories on disk under the installed package — no per-vault
- * copy and no materialized cache is needed; the app upgrades with every
- * release because the gateway serves this path directly.
+ * copy or materialized cache is needed. The main client compiles the UI from
+ * this tree; the gateway reads it for metadata, scopes, and opaque-app
+ * compatibility.
  */
 export function bundledAppDir(id: string): string {
   return templateSourceDir(id, { kind: 'app' });

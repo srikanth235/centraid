@@ -4,8 +4,8 @@
 // / #listList / #journalNav / #storage), so this file exports several
 // top-level components rather than one. The static containers stay global in
 // app.css; the JSX-only rows moved into Sidebar.module.css.
-import { useEffect, useRef } from '../react-core.min.js';
-import { armConfirm } from '../kit.js';
+import { useEffect, useRef } from 'react';
+import { armConfirm } from '../kit.ts';
 import { I } from '../icons.ts';
 import { listColor, daysSince } from '../format.ts';
 import type { Nav, Person, PersonList } from '../types.ts';

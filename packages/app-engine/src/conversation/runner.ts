@@ -35,7 +35,7 @@ export type TurnStreamEvent =
       toolCallId: string;
       toolName: string;
       args?: unknown;
-      /** When the tool is a centraid_sql_* tool, the SQL is surfaced separately for the UI. */
+      /** When the tool is a vault_sql call, the SQL is surfaced separately for the UI. */
       sql?: string;
       /** ACP tool kind when the agent supplied one (read/edit/delete/move/…​). */
       kind?: string;

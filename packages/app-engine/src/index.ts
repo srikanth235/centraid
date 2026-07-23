@@ -162,9 +162,7 @@ export {
 } from './registry/manifest.js';
 export {
   Dispatcher,
-  isToolName,
   statusForToolError,
-  TOOL_NAMES,
   type CentraidWriteInput,
   type CentraidReadInput,
   type CentraidDescribeInput,
@@ -174,7 +172,6 @@ export {
   type ToolErrorResult,
   type ToolSuccessResult,
   type ToolResult,
-  type ToolName,
 } from './handlers/dispatcher.js';
 
 // ctx.vault bridge contract (duaility §12). app-engine defines only the

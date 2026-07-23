@@ -18,8 +18,7 @@ import type { CentraidRedeemGatewayPairingResult } from '../../../centraid-api.j
 
 export interface GatewayConnectSuccess {
   ok: true;
-  /** Vault name (ticket flows) or the gateway's own label (token flow) —
-   *  whichever the connect actually resolved, for "Connected to X" copy. */
+  /** Vault name the pairing resolved, for "Connected to X" copy. */
   label: string;
   gatewayId: string;
   vaultId?: string;
@@ -39,8 +38,7 @@ export type GatewayPairingInput =
       url: string;
       label?: string;
       rememberDevice?: boolean;
-    }
-  | { kind: 'token'; url: string; token: string; label: string };
+    };
 
 // Copy for `redeemGatewayPairing`'s stable error codes (centraid-api.d.ts).
 // Anything not in this map (or the raw `addGateway` throw path) falls back to
@@ -71,28 +69,15 @@ function foldRedeemResult(res: CentraidRedeemGatewayPairingResult): GatewayConne
 }
 
 /**
- * Redeem a pairing ticket (default iroh dial, or `mode:'http'` when the
- * caller supplied a URL) or add a token-authenticated gateway directly.
- * The ticket flows switch the active gateway + vault as a side effect
- * (main's `redeemGatewayPairing`); the token flow switches active gateway
- * only, via an explicit `setActiveGateway` follow-up. Never throws — the
- * `redeemGatewayPairing` IPC already resolves failures as `{ok:false}`, and
- * the `addGateway` throw path is caught here to match.
+ * Redeem a pairing ticket — the only way to add a gateway (issue #505 phase 7,
+ * which retired the manual URL + admin-token add). Default iroh dial, or
+ * `mode:'http'` when the caller supplied a URL for the `direct` transport tier;
+ * either way the ceremony mints a per-device token and switches the active
+ * gateway + vault as a side effect (main's `redeemGatewayPairing`). Never
+ * throws — the `redeemGatewayPairing` IPC already resolves failures as
+ * `{ok:false}`.
  */
 export async function connectGateway(input: GatewayPairingInput): Promise<GatewayConnectResult> {
-  if (input.kind === 'token') {
-    try {
-      const profile = await window.CentraidApi.addGateway({
-        label: input.label,
-        token: input.token,
-        url: input.url,
-      });
-      await window.CentraidApi.setActiveGateway({ id: profile.id });
-      return { gatewayId: profile.id, label: profile.displayName ?? profile.label, ok: true };
-    } catch (err) {
-      return { message: err instanceof Error ? err.message : String(err), ok: false };
-    }
-  }
   const res = await window.CentraidApi.redeemGatewayPairing(
     input.kind === 'ticket-url'
       ? {

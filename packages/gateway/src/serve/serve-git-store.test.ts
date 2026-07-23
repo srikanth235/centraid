@@ -99,11 +99,11 @@ test('serves an app from the git-store main worktree, not versions/', async () =
   expect(html.status).toBe(200);
   expect(await html.text()).toMatch(/git-store/);
 
-  // The three-tool dispatch resolves the query handler from the worktree.
-  const read = await fetch(`${handle.url}/centraid/_tool/centraid_read`, {
+  // App RPC dispatch resolves the query handler from the worktree.
+  const read = await fetch(`${handle.url}/centraid/gitapp/queries/ping`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${handle.token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ app: 'gitapp', query: 'ping', input: {} }),
+    body: JSON.stringify({ input: {} }),
   });
   expect(read.status).toBe(200);
   expect(await read.json()).toEqual({ pong: true });

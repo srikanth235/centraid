@@ -9,7 +9,7 @@ export function Icon({ svg }: { svg: string }) {
 }
 
 // The vault FTS hit snippet (`⟦hit⟧`-marked) as JSX `<mark>` spans — the
-// React analogue of kit.js's `snippetInto()`, which mutates a container's DOM
+// React analogue of kit.ts's `snippetInto()`, which mutates a container's DOM
 // directly and must never target a React-owned node.
 export function Snippet({ snippet, className }: { snippet: string; className?: string }) {
   const segments = snippetSegments(snippet);

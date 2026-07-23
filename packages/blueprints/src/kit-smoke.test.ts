@@ -4,7 +4,7 @@
    tsc. Suppressing per-file beats adding DOM types to the whole package. */
 // @ts-nocheck — imports the untyped browser kit (plain JS + DOM globals)
 // @vitest-environment jsdom
-// Runtime smoke test: evaluates the real kit modules (elements.js + kit.js)
+// Runtime smoke test: evaluates the real kit modules (elements.js + kit.ts)
 // under jsdom and exercises the shared surface the apps consume.
 //
 // `elements.js` is Lit-free (native custom elements — see its header); Lit
@@ -20,7 +20,7 @@ import { describe, expect, it, vi } from 'vitest';
 const PKG = path.resolve(import.meta.dirname, '..');
 // Resolved at runtime so the file URL loads natively; jsdom's globals are
 // already installed by the environment.
-const kitUrl = pathToFileURL(path.resolve(PKG, 'kit/kit.js')).href;
+const kitUrl = pathToFileURL(path.resolve(PKG, 'kit/kit.ts')).href;
 const elementsUrl = pathToFileURL(path.resolve(PKG, 'kit/elements.js')).href;
 const {
   barSpan,

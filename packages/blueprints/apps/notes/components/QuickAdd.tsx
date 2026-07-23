@@ -3,7 +3,7 @@
 // this subtree, not the whole wall. It only calls up to `onSubmit` with the
 // assembled {title, body}; it never touches `state`/`data` directly. Mirrors
 // tasks/components/Capture.jsx's shape.
-import { useEffect, useRef, useState } from '../react-core.min.js';
+import { useEffect, useRef, useState } from 'react';
 import styles from './QuickAdd.module.css';
 
 export interface QuickAddProps {

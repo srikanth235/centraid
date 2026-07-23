@@ -11,10 +11,10 @@
 // CURRENT rotated frame, so it always lines up with what's on screen.
 // CSS split: own bits in Editor.module.css; `lightbox-note` (bare, no rule)
 // and `kit-*` classes stay global strings.
-import { isPendingOffsite, stageFileBytes, toast } from '../kit.js';
+import { isPendingOffsite, stageFileBytes, toast } from '../kit.ts';
 import { act, narrate } from '../outcomes.ts';
-import { useEffect, useRef, useState } from '../react-core.min.js';
-import type { PointerEvent } from '../react-core.min.js';
+import { useEffect, useRef, useState } from 'react';
+import type { PointerEvent } from 'react';
 import type { Asset } from '../types.ts';
 import styles from './Editor.module.css';
 

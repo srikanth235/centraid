@@ -6,7 +6,11 @@
  *   - resolving the bundled `centraid-gateway` CLI entry (H6)
  *   - spawning with detached/stdio-ignore/unref (H2)
  *   - ownership + status files under the gateway data dir (H3/H4)
- *   - polling `token.bin` + HTTP `/centraid/_gateway/info` until ready
+ *   - minting the per-launch loopback token, handing it to the spawned daemon
+ *     via `CENTRAID_GATEWAY_TOKEN`, and polling `/centraid/_gateway/info` until
+ *     ready (issue #505 phase 7 retired the daemon's persistent `token.bin`;
+ *     the desktop is the loopback token's landlord now, persisting it beside
+ *     the data dir so it can re-adopt its own child after a restart)
  *   - stopping only processes we own
  *
  * Lifecycle verbs (start/stop/status/service) all invoke the same CLI
@@ -17,6 +21,7 @@
 
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createRequire } from 'node:module';
+import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -86,8 +91,21 @@ function statusPath(dataDir: string): string {
   return path.join(dataDir, STATUS_FILE);
 }
 
+/**
+ * The per-launch loopback token file the DESKTOP writes (issue #505 phase 7).
+ * NOT the retired daemon `token.bin` (that shared admin plane is gone): this is
+ * a loopback-only bearer the desktop mints, hands to its spawned daemon via
+ * `CENTRAID_GATEWAY_TOKEN`, and reads back to re-adopt that same child across a
+ * desktop restart. A CLI/service daemon we did not spawn has no matching file,
+ * so its ephemeral secret is unknown to us and adoption fails closed.
+ */
 function tokenPath(dataDir: string): string {
-  return path.join(dataDir, 'token.bin');
+  return path.join(dataDir, 'desktop-loopback-token.bin');
+}
+
+async function writeLoopbackToken(dataDir: string, token: string): Promise<void> {
+  await fs.mkdir(dataDir, { recursive: true });
+  await fs.writeFile(tokenPath(dataDir), token, { mode: 0o600 });
 }
 
 /** Stable per-install owner id for ownership stamps (persisted in userData). */
@@ -183,10 +201,11 @@ export async function writeStatusFile(dataDir: string, status: GatewayStatusFile
 }
 
 /**
- * Read the daemon's plaintext `token.bin` (UTF-8 hex). Returns undefined when
- * missing/empty. Desktop remote-gateway tokens use safeStorage encryption in
- * the same filename for *remote* profiles; the local detached daemon always
- * writes plaintext hex as `packages/gateway/src/cli/token.ts` does.
+ * Read the per-launch loopback token this desktop wrote for a daemon it
+ * spawned (UTF-8 hex, issue #505 phase 7). Returns undefined when missing/empty.
+ * Remote-gateway profile tokens use safeStorage encryption under a different
+ * tree (`gateway-secrets.ts`); this plaintext-hex file only ever guards the
+ * loopback listener of a locally-spawned detached daemon.
  */
 export async function readDaemonToken(dataDir: string): Promise<string | undefined> {
   try {
@@ -342,6 +361,12 @@ async function waitUntilReady(input: {
   dataDir: string;
   pid: number;
   timeoutMs: number;
+  /**
+   * The loopback token the daemon was spawned with (issue #505 phase 7). The
+   * desktop minted it and handed it over via `CENTRAID_GATEWAY_TOKEN`, so we
+   * already know the bearer — no polling a daemon-written token file.
+   */
+  token: string;
 }): Promise<{ url: string; token: string }> {
   const url = `http://${input.host}:${input.port}`;
   const deadline = Date.now() + input.timeoutMs;
@@ -349,19 +374,8 @@ async function waitUntilReady(input: {
     if (!isProcessAlive(input.pid, processAliveCheck)) {
       throw new Error(`detached gateway pid ${input.pid} exited before becoming ready`);
     }
-    const token = await readDaemonToken(input.dataDir);
-    if (token) {
-      const ok = await probeGatewayInfo(url, token);
-      if (ok) return { url, token };
-    } else {
-      // Token not yet minted — still try unauthenticated probe (some builds).
-      const ok = await probeGatewayInfo(url);
-      if (ok) {
-        // Wait a bit more for token.bin
-        const later = await readDaemonToken(input.dataDir);
-        if (later) return { url, token: later };
-      }
-    }
+    const ok = await probeGatewayInfo(url, input.token);
+    if (ok) return { url, token: input.token };
     await sleep(READY_POLL_MS);
   }
   throw new Error(`detached gateway at ${url} did not become ready within ${input.timeoutMs}ms`);
@@ -431,7 +445,7 @@ export async function ensureDetachedGateway(
     if (probeOk) {
       const token = existingToken ?? (await readDaemonToken(dataDir));
       if (!token) {
-        throw new Error('Owned gateway is live but token.bin is missing');
+        throw new Error('Owned gateway is live but its loopback token file is missing');
       }
       return makeHandle({
         url: candidateUrl,
@@ -445,14 +459,18 @@ export async function ensureDetachedGateway(
         nodeBin,
       });
     }
-    // Process is up but probe failed — give it time (still booting).
+    // Process is up but probe failed — give it time (still booting). We wrote
+    // this daemon's loopback token before spawning it, so recover it here.
+    const bootToken = existingToken ?? (await readDaemonToken(dataDir));
     try {
+      if (!bootToken) throw new Error('owned gateway is booting but its loopback token is missing');
       const ready = await waitUntilReady({
         host: candidateHost,
         port: candidatePort,
         dataDir,
         pid: stamp.pid,
         timeoutMs: readyTimeoutMs,
+        token: bootToken,
       });
       return makeHandle({
         url: ready.url,
@@ -496,12 +514,18 @@ export async function ensureDetachedGateway(
     listenHost,
   ];
 
+  // Mint the per-launch loopback token and hand it to the daemon via
+  // `CENTRAID_GATEWAY_TOKEN` (issue #505 phase 7). Persist it beside the data
+  // dir first so a desktop restart can re-adopt this same child.
+  const loopbackToken = crypto.randomBytes(32).toString('hex');
+  await writeLoopbackToken(dataDir, loopbackToken);
+
   let child: ChildProcess;
   try {
     child = spawn(nodeBin, args, {
       detached: spawnOpts.detached,
       stdio: spawnOpts.stdio,
-      env: process.env,
+      env: { ...process.env, CENTRAID_GATEWAY_TOKEN: loopbackToken },
     });
   } catch (err) {
     throw new Error(
@@ -531,6 +555,7 @@ export async function ensureDetachedGateway(
     dataDir,
     pid,
     timeoutMs: readyTimeoutMs,
+    token: loopbackToken,
   });
 
   const statusPayload = buildStatusFile({

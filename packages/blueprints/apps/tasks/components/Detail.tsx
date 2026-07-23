@@ -3,9 +3,9 @@
 // title/notes/subtask-draft state always starts from the newly opened task,
 // no stale-buffer bugs, no defaultValue tricks. Edits commit on blur/Enter
 // (never per keystroke) so typing never spams the vault with writes.
-import { useEffect, useRef, useState } from '../react-core.min.js';
-import type { ChangeEvent, FormEvent, KeyboardEvent, MouseEvent } from '../react-core.min.js';
-import { renderAttachments } from '../kit.js';
+import { useEffect, useRef, useState } from 'react';
+import type { ChangeEvent, FormEvent, KeyboardEvent, MouseEvent } from 'react';
+import { renderAttachments } from '../kit.ts';
 import { flagLevel, fmtDay, plusDays, todayStr } from '../format.ts';
 import type { ActivityEntry, EditPatch, Task } from '../types.ts';
 import { I } from '../icons.ts';

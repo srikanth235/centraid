@@ -1,5 +1,7 @@
 # issue-512 — three-number versioning + multi-surface release synthesis
 
+<!-- governance: allow-receipt-per-issue This receipt was independently added on main and re-added in the historical #505 branch before the histories merged; it must not become the file-coverage anchor for #505. -->
+
 ## Checklist
 
 - [x] Handshake does not refuse on product version skew

@@ -28,7 +28,7 @@ Barrel: `@centraid/design-tokens` (`packages/design-tokens/src/index.ts`). Prefe
 
 - [ ] Change tokens in `packages/design-tokens/src`, not in a one-off CSS file under `apps/`
 - [ ] Rebuild / let turbo rebuild dependents
-- [ ] Blueprints that vendor tokens: run the package's vendor/manifest scripts if required (`packages/blueprints/scripts/vendor-tokens.mjs`)
+- [ ] Blueprint/mobile consumers: verify direct `@centraid/design-tokens` generation and run the relevant package tests
 - [ ] Grep for new hex in the touched UI surfaces
 
 ## Related

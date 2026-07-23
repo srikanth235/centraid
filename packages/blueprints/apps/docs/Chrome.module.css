@@ -1,0 +1,369 @@
+/* Docs chrome shared by the served and inline routes (issue #505). Common
+   shell/sidebar/topbar/drawer geometry composes the kit-app-* vocabulary.
+   The shared design-token layer
+   (--ink, --bg, --line, --accent, --accent-deep, --sel/--selb, --shadow-*, the
+   type scale, --r-*, --ease …) is supplied by the shell (the scoped token block
+   InlineAppRoute injects under .centraid-inline-scope), so this file references
+   those directly and never loads tokens.css/wall.css.
+
+   The docs-SPECIFIC tokens app.css's :root added ON TOP of that layer — the
+   file-type tints (--c-pdf/--c-image/--c-doc/--c-sheet/--c-slide/--c-media, read
+   as inline `var(--c-*)` styles in Grid/List/Details/shared), plus
+   --accent-deep-fg and --custody-warn (read by the reused components/*.module.css)
+   — are NOT in the shared layer, so they are folded in here on .shell with the
+   same light/dark split app.css uses (trap #3). App.css's own keyframes are
+   `kit-rise`/`kit-fade`, both kit.css globals (loaded once by the host), so no
+   @keyframes are folded here. */
+
+.shell {
+  composes: kit-app-shell kit-app-defer-drawer from global;
+  /* Docs-specific tokens folded from app.css :root (light). The shared blueprint
+     layer supplies everything else. File-type tints live only inside thumbnails
+     and badges; --accent-deep-fg is accent-deep read AS a foreground on a soft/
+     dark surface; --custody-warn is the amber custody dot/label tone. */
+  --c-pdf: #c2410c;
+  --c-image: #0e7490;
+  --c-doc: #4058cf;
+  --c-sheet: #4e7a40;
+  --c-slide: #9a6528;
+  --c-media: #7c3aed;
+  --accent-deep-fg: var(--accent-deep);
+  --custody-warn: #9a6b1f;
+  --kit-app-drawer-width: 274px;
+}
+
+/* Dark override for the folded tokens — mirrors app.css's dark block, emitted for
+   both the explicit [data-theme='dark'] and the standalone prefers-color-scheme
+   fallback (the same two-selector shape the token layer uses). */
+:global(:root[data-theme='dark']) .shell {
+  --c-pdf: #ea9a52;
+  --c-image: #4fc3d6;
+  --c-doc: #8aa0ff;
+  --c-sheet: #93c17f;
+  --c-slide: #d9ab6d;
+  --c-media: #b69cff;
+  --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
+  --custody-warn: #e0a94a;
+}
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-theme])) .shell {
+    --c-pdf: #ea9a52;
+    --c-image: #4fc3d6;
+    --c-doc: #8aa0ff;
+    --c-sheet: #93c17f;
+    --c-slide: #d9ab6d;
+    --c-media: #b69cff;
+    --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
+    --custody-warn: #e0a94a;
+  }
+}
+
+/* Knob: appFont swaps the body/UI sans face. The host sets data-app-font on the
+   inline scope wrapper (pushKnobToInlineRoot); app.css's :root[data-app-font]
+   rules aren't loaded inline, so re-express them here keyed on that wrapper. */
+:global(.centraid-inline-scope[data-app-font='sans']) {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+:global(.centraid-inline-scope[data-app-font='serif']) {
+  --font-sans: 'New York', 'Iowan Old Style', Georgia, Cambria, serif;
+}
+:global(.centraid-inline-scope[data-app-font='mono']) {
+  --font-sans: var(--mono);
+}
+
+/* ---------- Sidebar (static chrome; nav rows/folders/storage → *.module.css) ---------- */
+
+.side {
+  composes: kit-app-side from global;
+}
+.brand {
+  composes: kit-app-brand from global;
+}
+.brandMark {
+  composes: kit-app-brand-mark from global;
+}
+.brandText {
+  composes: kit-app-brand-text from global;
+}
+.brandName {
+  composes: kit-app-brand-name from global;
+}
+.brandTag {
+  composes: kit-app-brand-tag from global;
+}
+.sideClose {
+  composes: kit-app-side-close from global;
+}
+
+.newWrap {
+  position: relative;
+  margin-bottom: 14px;
+}
+.new {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 11px 14px;
+  border: none;
+  border-radius: var(--r-md);
+  background: var(--accent-deep);
+  color: #fff;
+  font: var(--t-body-strong);
+  box-shadow: var(--shadow-sm);
+  transition: filter 0.14s var(--ease);
+}
+.new span {
+  text-align: left;
+}
+.newChev {
+  margin-left: auto;
+  opacity: 0.85;
+}
+.new:hover {
+  filter: brightness(1.07);
+}
+.new:active {
+  transform: scale(0.99);
+}
+.newMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  padding: 5px;
+  animation: kit-rise 0.16s var(--ease);
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sectionLabel {
+  font: var(--t-tiny);
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  padding: 16px 10px 8px;
+}
+.folders {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sideFoot {
+  composes: kit-app-side-foot from global;
+}
+.storage {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 13px;
+  background: var(--bg-elev);
+}
+.consentLine {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 4px 2px;
+  color: var(--ink-3);
+}
+.consentLine svg {
+  color: var(--accent-deep-fg);
+  flex-shrink: 0;
+}
+.consentLine span {
+  font: var(--t-small);
+  font-size: 11.5px;
+}
+
+.scrim {
+  composes: kit-app-scrim from global;
+}
+
+/* ---------- Main (static chrome) ---------- */
+
+.main {
+  composes: kit-app-main from global;
+}
+
+.topbar {
+  composes: kit-app-topbar from global;
+}
+.hamburger {
+  composes: kit-app-hamburger from global;
+}
+/* kit.css's .kit-search owns the pill/icon/input look; docs keeps only the
+   layout placement (max-width, flex basis) in the topbar row. */
+.search {
+  flex: 1;
+  max-width: 460px;
+}
+.topbarTools {
+  composes: kit-app-tools from global;
+}
+/* Grid/list toggle: kit.css .kit-seg; segments are icon-only squares here. */
+.topbarTools :global(.kit-seg) > button {
+  width: 32px;
+  padding: 0;
+}
+.askMount {
+  composes: kit-app-ask-mount from global;
+}
+
+/* Trust banners: kit.css .kit-banner owns the shape; .banner is only the layout
+   hook aligning it with the padded topbar/toolbar. */
+.banner {
+  margin: 14px 22px 0;
+}
+
+/* Toolbar */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 22px 12px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.toolbarTitle {
+  min-width: 0;
+}
+.title {
+  font: var(--t-title);
+  letter-spacing: var(--tracking-h);
+}
+.sub {
+  font: var(--t-small);
+  color: var(--ink-2);
+  margin-top: 1px;
+}
+.toolbarTools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.toolbarDiv {
+  width: 1px;
+  height: 22px;
+  background: var(--line);
+  margin: 0 2px;
+}
+
+/* Bulk bar (its contents come from BulkBar.module.css) */
+.bulk {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 22px 10px;
+  padding: 8px 10px 8px 16px;
+  border: 1px solid var(--selb);
+  border-radius: var(--r-pill);
+  background: var(--sel);
+  animation: kit-rise 0.18s var(--ease);
+}
+
+/* Scroll region */
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 2px 22px 40px;
+}
+
+/* ---------- Grid + list containers ---------- */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+  gap: 14px;
+}
+.listwrap {
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  overflow: hidden;
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-sm);
+}
+.listHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-sunken);
+}
+
+/* ---------- Consent-denied: no grant yet — collapse to just the banner ---------- */
+.shell.denied {
+  display: block;
+  overflow: auto;
+}
+.shell.denied .side,
+.shell.denied .scrim,
+.shell.denied .topbar,
+.shell.denied .toolbar,
+.shell.denied .bulk,
+.shell.denied .scroll {
+  display: none;
+}
+.shell.denied .main {
+  height: auto;
+}
+.shell.denied .banner {
+  margin: 22px auto;
+  max-width: 32rem;
+}
+
+/* ---------- Narrow (phone) — driven by .isNarrow / .sideOpen on .shell ---------- */
+/* Inline the drawer is absolutely positioned within .shell (the app pane), not
+   fixed to the viewport as the served full-screen app does. The reused component
+   narrow rules key on the GLOBAL `.docs.is-narrow` state class Chrome.tsx also
+   stamps on this same element, so they keep working. */
+
+.isNarrow {
+  composes: kit-app-narrow from global;
+}
+.ready {
+  composes: kit-app-ready from global;
+}
+.sideOpen {
+  composes: kit-app-side-open from global;
+}
+.shell.isNarrow.sideOpen .scrim {
+  animation: kit-fade 0.2s ease;
+}
+.shell.isNarrow .topbar,
+.shell.isNarrow .toolbar {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+.shell.isNarrow .banner {
+  margin-left: 16px;
+  margin-right: 16px;
+}
+.shell.isNarrow .bulk {
+  margin-left: 16px;
+  margin-right: 16px;
+}
+.shell.isNarrow .scroll {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+.shell.isNarrow .grid {
+  grid-template-columns: repeat(2, 1fr);
+}
+.shell.isNarrow .listHead {
+  display: none !important;
+}

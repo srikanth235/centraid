@@ -7,6 +7,8 @@ export interface ErrorBoundaryProps {
   children: ReactNode;
   /** Optional title shown above the message. */
   title?: string;
+  /** Called when the user hits "Try again" — lets a host remount the subtree. */
+  onReset?: () => void;
 }
 
 interface ErrorBoundaryState {
@@ -31,6 +33,7 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
   }
 
   private handleReset = (): void => {
+    this.props.onReset?.();
     this.setState({ error: null });
   };
 

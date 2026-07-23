@@ -342,7 +342,7 @@ describe('ConversationHistoryStore', () => {
       nodes: [
         {
           kind: 'tool',
-          toolName: 'centraid_sql_read',
+          toolName: 'vault_sql',
           sql: 'SELECT COUNT(*) FROM x',
           ok: true,
           result: [{ n: 1 }],
@@ -357,7 +357,7 @@ describe('ConversationHistoryStore', () => {
     expect(loaded?.messages.length).toBe(3);
     const tool = loaded?.messages[1]!.payload as Record<string, unknown>;
     expect(tool.kind).toBe('tool');
-    expect(tool.tool).toBe('centraid_sql_read');
+    expect(tool.tool).toBe('vault_sql');
     expect(tool.sql).toBe('SELECT COUNT(*) FROM x');
     expect(tool.state).toBe('ok');
     expect(tool.result).toEqual([{ n: 1 }]);
@@ -377,7 +377,7 @@ describe('ConversationHistoryStore', () => {
       nodes: [
         {
           kind: 'tool',
-          toolName: 'centraid_sql_write',
+          toolName: 'vault_invoke',
           ok: false,
           errorText: 'no such table',
           startedAt: t,

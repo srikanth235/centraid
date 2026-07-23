@@ -4,7 +4,7 @@
 // base32 decode → HMAC-SHA1 over the big-endian 30s counter → dynamic
 // truncation → 6 digits. Cached per (seed, 30s-step) so the once-a-second
 // tick is cheap; the seed and code never get logged.
-import { useEffect, useState } from './react-core.min.js';
+import { useEffect, useState } from 'react';
 
 export function base32Decode(input: string | null | undefined): Uint8Array<ArrayBuffer> | null {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';

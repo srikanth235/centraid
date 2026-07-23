@@ -1,26 +1,21 @@
 // Centraid — blueprint-app token layer.
 //
-// Blueprint apps (packages/blueprints/apps/*) are sandboxed iframe apps with
-// their OWN design language — a "field notebook" look: per-app hue-tinted
+// Blueprint surfaces use their OWN design language — a "field notebook" look:
+// per-app hue-tinted
 // neutrals parameterized by a single `--app-hue` knob, rather than the
-// desktop shell's fixed palette. This is deliberately NOT `toCss()` (the
-// desktop's token generator): the desktop's `fontStacks` (Geist / Space
-// Grotesk) can't load inside a sandboxed app iframe with no font-loading
-// affordance, so this module hand-rolls system font stacks instead, and the
-// color system is built around a hue variable the apps retune rather than
-// the desktop's fixed theme presets.
+// shell's fixed palette. This is deliberately NOT `toCss()` (the shell token
+// generator): the portable scaffold and Expo theme need system font stacks,
+// and the color system is built around a hue variable rather than the shell's
+// fixed theme presets.
 //
-// `toBlueprintCss()` is consumed as the generated `packages/blueprints/
-// kit/tokens.css` (see packages/blueprints/scripts/vendor-tokens.mjs). Each
-// blueprint app's own `app.css` loads AFTER this file in the served
-// cascade and sets `--app-hue` + `--accent` (and may override individual
-// tokens) to retune the whole surface — this file only supplies defaults.
+// `toBlueprintCss()` is consumed directly by the main client, the
+// framework-free scaffold generator, and Expo's native-theme generator. Inline
+// system apps set their identity overrides in scoped Chrome modules.
 //
-// Ground truth for the concrete values below: the 8 apps' own app.css
-// :root/dark blocks converged on near-identical formulas by hand (see
-// packages/blueprints/apps/docs/app.css and .../photos/app.css); this module
-// generalizes that convergence into one hue-parameterized source so future
-// apps (and a future re-vendor) don't have to re-derive it per app.
+// Ground truth for the concrete values below: the 8 apps' former app.css
+// :root/dark blocks converged on near-identical formulas by hand. Their live
+// identity overrides now sit in Chrome.module.css; this module generalizes the
+// shared formulas so portable surfaces don't re-derive them per app.
 
 import { palette } from './palette';
 import { radii } from './radii';
@@ -113,8 +108,8 @@ function lightProps(): Record<string, string> {
     '--tracking-h': '-0.01em',
     '--tracking-eyebrow': '0.09em',
 
-    // Type shorthands (font: style weight size/line family) — copied
-    // verbatim from packages/blueprints/apps/docs/app.css :root.
+    // Type shorthands (font: style weight size/line family) retained from the
+    // original Docs identity layer.
     '--t-title': '600 1.15rem/1.2 var(--font-title)',
     '--t-body': '400 0.855rem/1.5 var(--font-sans)',
     '--t-body-strong': '600 0.855rem/1.4 var(--font-sans)',
@@ -132,9 +127,8 @@ function lightProps(): Record<string, string> {
 /**
  * Dark-theme recipe — the ONE map shared verbatim by both the
  * `:root[data-theme='dark']` selector and the `prefers-color-scheme: dark`
- * media-query fallback (see `toBlueprintCss`). Grounded in
- * packages/blueprints/apps/docs/app.css (~L87-129) and .../photos/app.css
- * (~L37-67), generalized by `--app-hue`.
+ * media-query fallback (see `toBlueprintCss`). Grounded in the original Docs
+ * and Photos identity layers, generalized by `--app-hue`.
  *
  * Only tokens that actually change between light/dark are listed here;
  * everything else (radii, tracking, type shorthands, --accent itself…)

@@ -19,6 +19,25 @@ import crypto from 'node:crypto';
 
 const DEFAULT_STAT_TTL_MS = 1_000;
 
+/**
+ * The trust tiers a device enrollment can hold (issue #289 / #406 / #505).
+ * `owner` and `full` both act; `readonly` may only read; `revoked` is dead.
+ */
+export type DeviceTrust = 'owner' | 'full' | 'readonly' | 'revoked';
+
+/** The tiers the pairing ceremony may grant (a device is never born revoked). */
+export type GrantableTrust = 'owner' | 'full' | 'readonly';
+
+/**
+ * Whether a trust tier may submit intents / mutate — the landlord `owner`
+ * and ordinary `full` both act; `readonly` and `revoked` do not. The single
+ * predicate every replica/mutation gate should consult so `owner` never has
+ * to be enumerated alongside `full` at each call site.
+ */
+export function actingTrust(trust: DeviceTrust): boolean {
+  return trust === 'owner' || trust === 'full';
+}
+
 export interface DeviceEnrollment {
   /** Row id — the revocation handle. */
   enrollmentId: string;
@@ -36,8 +55,19 @@ export interface DeviceEnrollment {
    * submit an intent. Revoked rows are normally removed immediately; the
    * value remains in the type so a future tombstone-backed revocation can
    * fail closed without widening an older client.
+   *
+   * `owner` (issue #505 phase 7) is the LANDLORD tier — the per-device,
+   * revocable replacement for the retired shared admin token. It is a
+   * superset of `full` for every mutation/replica gate (`actingTrust`
+   * below treats them identically), but the DEVICE-ADMIN surface gates on
+   * it specifically: minting pairing tickets and revoking another device
+   * require `owner` (see `routes/devices-routes.ts`), so a compromised
+   * `full` device cannot enrol peers or revoke the primary device. Granted
+   * through the pairing ceremony (the first device paired from the local
+   * console), never minted as a bearer string; the box's filesystem-anchored
+   * CLI remains the fallback for a lost sole-owner device.
    */
-  trust: 'full' | 'readonly' | 'revoked';
+  trust: DeviceTrust;
   /**
    * Whether durable client state was explicitly requested at pairing time.
    * The daemon persists the choice alongside enrollment; clients use it to
@@ -200,7 +230,7 @@ export class EnrollmentStore {
     vaultId: string;
     label: string;
     platform?: string;
-    trust?: 'full' | 'readonly';
+    trust?: GrantableTrust;
     rememberDevice?: boolean;
     grantProfile?: string[];
   }): DeviceEnrollment {
@@ -286,11 +316,7 @@ export class EnrollmentStore {
   }
 
   /** Owner-controlled trust downgrade/upgrade for an enrolled device. */
-  setTrust(
-    endpointId: string,
-    vaultId: string,
-    trust: 'full' | 'readonly' | 'revoked',
-  ): DeviceEnrollment {
+  setTrust(endpointId: string, vaultId: string, trust: DeviceTrust): DeviceEnrollment {
     return this.mutate(() => {
       const enrollment = this.mutableEnrollment(endpointId, vaultId);
       enrollment.trust = trust;
@@ -413,6 +439,7 @@ function normalizeEnrollment(value: unknown): DeviceEnrollment | undefined {
     typeof enrollment.addedAt === 'string' &&
     (enrollment.platform === undefined || typeof enrollment.platform === 'string') &&
     (enrollment.trust === undefined ||
+      enrollment.trust === 'owner' ||
       enrollment.trust === 'full' ||
       enrollment.trust === 'readonly' ||
       enrollment.trust === 'revoked') &&

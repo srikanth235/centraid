@@ -7,7 +7,7 @@
 // callback that writes the generated value straight into this component's
 // own `fields` state, the same bridge app.js's `genTarget` gave the
 // module-level `state.edit.fields`.
-import { useState } from '../react-core.min.js';
+import { useState } from 'react';
 import { CAT_ORDER, TYPE_LABEL } from '../format.ts';
 import type { EditSeed, SavePayload } from '../types.ts';
 import { Icon } from './Shared.tsx';

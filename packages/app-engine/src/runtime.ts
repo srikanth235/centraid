@@ -4,13 +4,7 @@ import os from 'node:os';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Registry, RegistryError } from './registry/registry.js';
 import { parseWithDraft } from './http/router.js';
-import {
-  Dispatcher,
-  isToolName,
-  statusForToolError,
-  type ToolName,
-  type ToolResult,
-} from './handlers/dispatcher.js';
+import { Dispatcher, statusForToolError, type ToolResult } from './handlers/dispatcher.js';
 import { serveStatic } from './http/static-server.js';
 import { readBody, sendError, sendJson } from './http/http-utils.js';
 import { sendJsonNegotiated } from './http/compression.js';
@@ -30,7 +24,7 @@ import type { ConversationRunner } from './conversation/runner.js';
 import type { RunnerKind } from './conversation/turn.js';
 import type { VaultBridge } from './handlers/vault-bridge.js';
 import type { AppRef, RegistryEntry } from './types.js';
-import { COMPANION_GRANTS_HEADER, companionToolAllowed } from './http/internal-headers.js';
+import { COMPANION_GRANTS_HEADER, companionHandlerAllowed } from './http/internal-headers.js';
 
 const WEB_APP_HEADER = 'x-centraid-web-app';
 const WEB_SHELL_ORIGIN_HEADER = 'x-centraid-web-shell-origin';
@@ -51,8 +45,8 @@ export interface RuntimeOptions {
   appsDir: string | (() => string);
   /**
    * Optional canonical dir for assets shared verbatim by every app
-   * (`kit.js` / `kit.css`). Apps no longer ship their own copy; a request
-   * for `/centraid/<id>/kit.js` that the app folder can't satisfy is served
+   * (`kit.ts` / `kit.css`). Apps no longer ship their own copy; a request
+   * for `/centraid/<id>/kit.ts` that the app folder can't satisfy is served
    * from here. Hosts point this at `@centraid/blueprints`'s `KIT_DIR`.
    * Omit to disable the fallback.
    */
@@ -255,7 +249,7 @@ const noopLogger: RuntimeLogger = {
 export class Runtime {
   /**
    * Declared-handler dispatcher (issue #107). Exposed so hosts can
-   * delegate here (the `_tool` HTTP shim for app UIs does) rather than
+   * delegate here (the app RPC routes for app UIs do) rather than
    * re-implementing the manifest + validation surface.
    */
   readonly dispatcher: Dispatcher;
@@ -426,64 +420,34 @@ export class Runtime {
   }
 
   /**
-   * HTTP shim for the three-tool surface (issue #107). Parses
-   * `POST /centraid/_tool/<toolName>`, dispatches to the right method
-   * on the shared `Dispatcher`, and maps the MCP-shaped `ToolResult`
-   * to an HTTP response: success → 200 with the `structuredContent` as
-   * the JSON body; `isError: true` → status from `statusForToolError`
-   * with `{code, message, path?}` as the body.
+   * App RPC handler-invocation route (issue #505, retiring the
+   * `/centraid/_tool/centraid_*` shim). Serves
+   * `POST /centraid/<appId>/actions/<action>` and
+   * `POST /centraid/<appId>/queries/<query>`: the app id + handler name ride
+   * in the path, the JSON body carries `{ input?, intentId? }`. Dispatches to
+   * the right method on the shared `Dispatcher` and maps the MCP-shaped
+   * `ToolResult` to HTTP: success → 200 with `structuredContent`; `isError`
+   * → status from `statusForToolError` with `{code, message, path?}`.
    *
-   * This is the only path non-MCP callers (browser UI, scripts, the
-   * mobile bridge) take to invoke handlers.
+   * This is the only path non-MCP callers (browser UI, scripts, the mobile
+   * bridge, the Companion extension) take to invoke handlers.
    */
-  private async handleToolInvoke(
+  private async handleAppRpc(
     req: IncomingMessage,
     res: ServerResponse,
-    toolName: string,
+    kind: 'action' | 'query',
+    appId: string,
+    handlerName: string,
     draftSessionId?: string,
   ): Promise<void> {
-    if (!isToolName(toolName)) {
-      sendError(
-        res,
-        404,
-        'unknown_tool',
-        `tool "${toolName}" is not a centraid tool — expected one of centraid_write, centraid_read, centraid_describe`,
-      );
-      return;
-    }
-    let body: Record<string, unknown> = {};
-    try {
-      const raw = (await readBody(req)).toString('utf8');
-      if (raw.length > 0) {
-        const parsed = JSON.parse(raw) as unknown;
-        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-          sendError(res, 400, 'bad_request', 'Tool body must be a JSON object.');
-          return;
-        }
-        body = parsed as Record<string, unknown>;
-      }
-    } catch (err) {
-      sendError(
-        res,
-        400,
-        'bad_request',
-        `tool body is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      return;
-    }
-
-    const webApp = req.headers[WEB_APP_HEADER];
-    if (typeof webApp === 'string') {
-      if (typeof body.app !== 'string' || body.app !== webApp) {
-        sendError(res, 403, 'app_session_scope', 'This browser session is scoped to another app.');
-        return;
-      }
-    }
+    // A browser session is pinned to one app; the app id is now in the path,
+    // so scope-check against it directly rather than a body field.
+    if (!this.enforceWebAppScope(req, res, appId)) return;
 
     const companionProfile = req.headers[COMPANION_GRANTS_HEADER];
     if (typeof companionProfile === 'string') {
       const allowed = new Set(companionProfile.split(',').filter(Boolean));
-      if (!companionToolAllowed(allowed, toolName, body)) {
+      if (!companionHandlerAllowed(allowed, kind, appId, handlerName)) {
         sendError(
           res,
           403,
@@ -494,12 +458,109 @@ export class Runtime {
       }
     }
 
-    const result = await this.dispatchTool(toolName, body, draftSessionId);
-    // Tool JSON is the headline compressible payload (a `centraid_read`
-    // result can be large) — negotiate br/gzip off the request's
-    // Accept-Encoding (issue #404). Skips small bodies internally; the PWA
-    // service-worker path never forwards Accept-Encoding, so it opts out and
-    // receives raw JSON — see http/compression.ts.
+    let body: Record<string, unknown> = {};
+    try {
+      const raw = (await readBody(req)).toString('utf8');
+      if (raw.length > 0) {
+        const parsed = JSON.parse(raw) as unknown;
+        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          sendError(res, 400, 'bad_request', 'Request body must be a JSON object.');
+          return;
+        }
+        body = parsed as Record<string, unknown>;
+      }
+    } catch (err) {
+      sendError(
+        res,
+        400,
+        'bad_request',
+        `request body is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return;
+    }
+
+    const overrideCodeDir = await this.draftOverride(appId, draftSessionId);
+    const result =
+      kind === 'action'
+        ? await this.dispatcher.write(
+            {
+              app: appId,
+              action: handlerName,
+              input: body.input,
+              ...(typeof body.intentId === 'string' ? { intentId: body.intentId } : {}),
+            },
+            overrideCodeDir,
+          )
+        : await this.dispatcher.read(
+            { app: appId, query: handlerName, input: body.input },
+            overrideCodeDir,
+          );
+    await this.sendToolResult(req, res, result);
+  }
+
+  /**
+   * App describe route (issue #505, replacing `centraid_describe`):
+   * `GET /centraid/<appId>/_describe` returns the app's manifest; an optional
+   * `?action=<name>`/`?query=<name>` narrows to one declared handler.
+   */
+  private async handleAppDescribe(
+    req: IncomingMessage,
+    res: ServerResponse,
+    appId: string,
+    query: Record<string, string>,
+    draftSessionId?: string,
+  ): Promise<void> {
+    if (!this.enforceWebAppScope(req, res, appId)) return;
+    const overrideCodeDir = await this.draftOverride(appId, draftSessionId);
+    const result = await this.dispatcher.describe(
+      {
+        app: appId,
+        ...(typeof query.action === 'string' ? { action: query.action } : {}),
+        ...(typeof query.query === 'string' ? { query: query.query } : {}),
+      },
+      overrideCodeDir,
+    );
+    await this.sendToolResult(req, res, result);
+  }
+
+  /**
+   * Reject the request (403) when a browser session pinned via
+   * `x-centraid-web-app` addresses a different app. Returns `true` when the
+   * caller may proceed.
+   */
+  private enforceWebAppScope(req: IncomingMessage, res: ServerResponse, appId: string): boolean {
+    const webApp = req.headers[WEB_APP_HEADER];
+    if (typeof webApp === 'string' && webApp !== appId) {
+      sendError(res, 403, 'app_session_scope', 'This browser session is scoped to another app.');
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Draft preview (issue #141): resolve the session worktree's code dir so a
+   * `/centraid/_draft/<sessionId>/…` invocation runs against the app's live
+   * data. Live requests (no draft session) resolve to `undefined`.
+   */
+  private async draftOverride(appId: string, draftSessionId?: string): Promise<string | undefined> {
+    return draftSessionId && this.draftCodeDir && appId
+      ? this.draftCodeDir(appId, draftSessionId)
+      : undefined;
+  }
+
+  /**
+   * Map an MCP-shaped `ToolResult` to an HTTP response. The handler JSON is
+   * the headline compressible payload (a query result can be large) — so
+   * negotiate br/gzip off the request's Accept-Encoding (issue #404). Skips
+   * small bodies internally; the PWA service-worker path never forwards
+   * Accept-Encoding, so it opts out and receives raw JSON — see
+   * http/compression.ts.
+   */
+  private async sendToolResult(
+    req: IncomingMessage,
+    res: ServerResponse,
+    result: ToolResult,
+  ): Promise<void> {
     if (result.isError) {
       await sendJsonNegotiated(
         req,
@@ -510,51 +571,6 @@ export class Runtime {
       return;
     }
     await sendJsonNegotiated(req, res, 200, result.structuredContent ?? null);
-  }
-
-  private async dispatchTool(
-    toolName: ToolName,
-    body: Record<string, unknown>,
-    draftSessionId?: string,
-  ): Promise<ToolResult> {
-    // Draft preview (issue #141): run the session worktree's handlers
-    // against the app's live data. The app id is in the body, so resolve
-    // the draft code dir here and pass it as the per-call override.
-    const appId = typeof body.app === 'string' ? body.app : '';
-    const overrideCodeDir =
-      draftSessionId && this.draftCodeDir && appId
-        ? await this.draftCodeDir(appId, draftSessionId)
-        : undefined;
-    switch (toolName) {
-      case 'centraid_write':
-        return this.dispatcher.write(
-          {
-            app: String(body.app ?? ''),
-            action: String(body.action ?? ''),
-            input: body.input,
-            ...(typeof body.intentId === 'string' ? { intentId: body.intentId } : {}),
-          },
-          overrideCodeDir,
-        );
-      case 'centraid_read':
-        return this.dispatcher.read(
-          {
-            app: String(body.app ?? ''),
-            query: String(body.query ?? ''),
-            input: body.input,
-          },
-          overrideCodeDir,
-        );
-      case 'centraid_describe':
-        return this.dispatcher.describe(
-          {
-            ...(typeof body.app === 'string' ? { app: body.app } : {}),
-            ...(typeof body.action === 'string' ? { action: body.action } : {}),
-            ...(typeof body.query === 'string' ? { query: body.query } : {}),
-          },
-          overrideCodeDir,
-        );
-    }
   }
 
   /**
@@ -684,7 +700,7 @@ export class Runtime {
           const draftServe = draftSessionId
             ? { draft: { appId: entry.id, sessionId: draftSessionId } }
             : {};
-          // Kit assets (kit.js / kit.css) are served from the shared canonical
+          // Kit assets (kit.ts / kit.css) are served from the shared canonical
           // dir when the app folder doesn't ship its own copy.
           const sharedServe = this.sharedAssetsDir ? { sharedAssetsDir: this.sharedAssetsDir } : {};
           const rel = route.kind === 'app-index' ? 'index.html' : route.rel;
@@ -710,8 +726,18 @@ export class Runtime {
           return;
         }
 
-        case 'tool-invoke': {
-          await this.handleToolInvoke(req, res, route.toolName, draftSessionId);
+        case 'app-action': {
+          await this.handleAppRpc(req, res, 'action', route.appId, route.action, draftSessionId);
+          return;
+        }
+
+        case 'app-query': {
+          await this.handleAppRpc(req, res, 'query', route.appId, route.query, draftSessionId);
+          return;
+        }
+
+        case 'app-describe': {
+          await this.handleAppDescribe(req, res, route.appId, route.query, draftSessionId);
           return;
         }
 

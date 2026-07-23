@@ -51,12 +51,62 @@ async function assetUrlsFromIndex() {
   }
 }
 
+// Lazy per-app chunks (issue #505 inline apps) are `import()`ed from the entry
+// JS, not referenced in index.html — so index parsing alone never precaches
+// them and the FIRST offline app-open after a normal visit would fail. Crawl the
+// entry/vendor JS transitively for further chunk references and cache them too,
+// so an app opens offline even if it was never opened online first.
+//
+// Two subtleties the naive `/assets/*.js` match missed:
+//   1. With the web app's default `base: '/'`, Vite emits the dynamic-import
+//      chunk names as RELATIVE string literals (`assets/app-inline-….js`, no
+//      leading slash) and prepends the base at runtime — so the browser fetches
+//      `/assets/…`. Match both forms and normalise to that absolute request URL
+//      (the exact key the fetch handler will look up), or every inline-app chunk
+//      is silently skipped.
+//   2. Inline apps ship their own lazy CSS chunks (`assets/app-inline-….css`).
+//      Those must be precached too, else a never-opened app paints unstyled
+//      offline. Match `.css` as well; only `.js` is re-crawled (CSS imports no
+//      further chunks).
+// Bounded by a seen set + a hard ceiling; best-effort per entry so one 404 never
+// aborts install.
+const CHUNK_CRAWL_CEILING = 400;
+async function crawlAssetChunks(seeds, cache) {
+  const toAbs = (ref) => (ref[0] === '/' ? ref : `/${ref}`);
+  const seen = new Set(seeds.map(toAbs));
+  const queue = seeds.filter((url) => url.endsWith('.js'));
+  const chunkRe = /\/?assets\/[A-Za-z0-9_.-]+\.(?:js|css)/g;
+  while (queue.length > 0 && seen.size < CHUNK_CRAWL_CEILING) {
+    const url = queue.shift();
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const body = await res.clone().text();
+      await cache.put(url, res);
+      let match;
+      while ((match = chunkRe.exec(body))) {
+        const next = toAbs(match[0]);
+        if (seen.has(next)) continue;
+        seen.add(next);
+        // JS may import further chunks → crawl it; CSS is a leaf → cache now.
+        if (next.endsWith('.js')) queue.push(next);
+        else await cache.add(next).catch(() => undefined);
+      }
+    } catch {
+      /* a missing/opaque chunk is skipped — never abort the whole install */
+    }
+  }
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(SHELL_CACHE);
       const assets = await assetUrlsFromIndex();
       await cache.addAll([...SHELL, ...assets]);
+      // After the required shell is cached, best-effort precache the lazy chunk
+      // graph (inline app chunks + their deps).
+      await crawlAssetChunks(assets, cache).catch(() => undefined);
     })(),
   );
   self.skipWaiting();

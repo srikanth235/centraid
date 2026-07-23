@@ -19,10 +19,12 @@ export {
   GATEWAY_PLANE_PREFIX,
   VAULT_PLANE_PREFIX,
   APPS_PLANE_PREFIX,
-  TOOL_PLANE_PREFIX,
   WEB_PLANE_PREFIX,
   ROUTES,
   ROUTE_PATHS,
+  appActionPath,
+  appQueryPath,
+  appDescribePath,
   type RouteName,
 } from './routes.js';
 

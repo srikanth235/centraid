@@ -5,7 +5,7 @@
 // the same factory shape tasks/notes/agenda's logic.ts use. The pure
 // derivations (`currentPool`/`sidebarCounts`/`catCounts`/`sidebarTags`) need
 // no closure and are exported standalone so components can call them too.
-import { debounce, outcomeMessage, toast } from './kit.js';
+import { debounce, outcomeMessage, toast } from './kit.ts';
 import { CAT_ORDER, byTitle, catOf } from './format.ts';
 import { genPassword } from './totp.ts';
 import type { AppData, AppState, LockerDetail, LockerRow, Nav, SavePayload } from './types.ts';

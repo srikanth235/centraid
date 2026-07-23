@@ -1,9 +1,6 @@
 // Sidebar region: the focus-view nav (with live counts) and the footer
-// (today progress meter + the trust line) — two React roots, #sidebarNav and
-// #sidebarFoot. The brand row and "New task" button around them are static
-// HTML in index.html (stable, no per-render data), wired once in chrome.ts.
-// `.tk-nav` / `.tk-side-foot` are those static containers (global classes);
-// the nav-item + progress rules moved to Sidebar.module.css.
+// (today progress meter + the trust line). Chrome owns the shared nav/footer
+// containers; this component supplies only their app-specific contents.
 import { I } from '../icons.ts';
 import { Icon } from './Shared.tsx';
 import type { SidebarCountsShape, TodayProgress, View } from '../types.ts';
@@ -28,7 +25,7 @@ export function SidebarNav({
   onSelectView: (view: View) => void;
 }) {
   return (
-    <nav className="tk-nav" aria-label="Focus views">
+    <>
       {VIEWS.map((v) => (
         <button
           key={v.key}
@@ -42,13 +39,13 @@ export function SidebarNav({
           <span className={styles.navCount}>{counts[v.key] ?? 0}</span>
         </button>
       ))}
-    </nav>
+    </>
   );
 }
 
 export function SidebarFoot({ progress }: { progress: TodayProgress }) {
   return (
-    <div className="tk-side-foot">
+    <>
       <div className={styles.progress}>
         <div className={styles.progressTop}>
           <span className={shared.eyebrowLabel}>Today</span>
@@ -63,6 +60,6 @@ export function SidebarFoot({ progress }: { progress: TodayProgress }) {
         <Icon svg={I.shield} />
         <span>Every change is a receipted vault command</span>
       </div>
-    </div>
+    </>
   );
 }

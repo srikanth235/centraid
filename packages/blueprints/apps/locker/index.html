@@ -2,68 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <title>Locker</title>
-    <script>
-      // Centraid live settings bridge — the runtime bakes theme/knobs
-      // server-side; this handles the no-bake preview path and live pref
-      // flips (theme, accent, font, width, default view) over postMessage.
-      (function () {
-        var h = document.documentElement;
-        function applyTheme(t, b) {
-          if (t === 'dark' || t === 'light') h.dataset.theme = t;
-          if (b != null && b !== '') h.style.setProperty('--bg-l', b + '%');
-        }
-        function applySettings(s) {
-          if (s.dataAttrs) {
-            for (var k in s.dataAttrs) h.setAttribute('data-' + k, s.dataAttrs[k]);
-          }
-          if (s.cssVars) {
-            for (var k in s.cssVars) h.style.setProperty('--' + k, s.cssVars[k]);
-          }
-        }
-        try {
-          var p = new URLSearchParams((location.hash || '').slice(1));
-          applyTheme(p.get('theme'), p.get('bgL'));
-        } catch (_) {}
-        addEventListener('message', function (e) {
-          var d = e && e.data;
-          if (!d) return;
-          if (d.type === 'centraid:settings') applySettings(d);
-          else if (d.type === 'centraid:theme') applyTheme(d.theme, d.bgL);
-        });
-      })();
-    </script>
-    <link rel="stylesheet" href="wall.css" />
-    <link rel="stylesheet" href="app.css" />
-    <link rel="stylesheet" href="kit.css" />
   </head>
   <body>
-    <div class="locker" id="root" data-locker-root>
-      <!-- App chrome (sidebar / list / detail) is a single React root
-           mounted into #stage by app.jsx (no static shell markup here — the
-           original Lit app had none either). A hidden consent + notice
-           banner mirror the Docs pattern. -->
-      <div id="consentBanner" class="k-banner" hidden>
-        <strong>No vault access yet.</strong>
-        <span id="consentDetail"
-          >Ask the owner to approve this app's requested scopes in vault settings.</span
-        >
-      </div>
-      <div id="noticeBanner" class="k-banner notice" role="status" aria-live="polite" hidden></div>
-      <div id="stage" class="k-stage"></div>
-      <div class="k-ask-mount" data-ask-mount></div>
-    </div>
-
-    <script>
-      window.KIT_ASK = {
-        scope: 'locker',
-        placeholder: 'Ask your locker…',
-        intro:
-          'Ask me to find a login, add a card, or generate a strong password. Writes show for your approval before they touch the vault — secrets never leave a field unless you copy or reveal them.',
-        suggest: ['Find my GitHub login', 'Add a new credit card', 'Which passwords are weak?'],
-      };
-    </script>
-    <script type="module" src="./app.tsx"></script>
+    <!-- Bundled system apps render inline in the main client. This file remains
+         only as the current app-listing UI marker; it is not a runtime entry. -->
   </body>
 </html>

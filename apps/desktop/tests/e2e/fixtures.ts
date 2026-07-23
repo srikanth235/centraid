@@ -714,24 +714,10 @@ export async function seedRemoteGateway(
   gateway: { url: string },
   opts: { onboarding?: boolean } = {},
 ): Promise<void> {
-  const gwDir = path.join(env.userData, 'gateways', env.gatewayId);
-  await fs.mkdir(gwDir, { recursive: true });
-  await fs.writeFile(
-    path.join(gwDir, 'profile.json'),
-    JSON.stringify(
-      {
-        id: env.gatewayId,
-        kind: 'remote',
-        label: 'E2E Gateway',
-        displayName: 'E2E Gateway',
-        url: gateway.url,
-        createdAt: '2024-01-01T00:00:00.000Z',
-      },
-      null,
-      2,
-    ) + '\n',
-    { mode: 0o600 },
-  );
+  await seedRemoteGatewayProfile(env, gateway, {
+    id: env.gatewayId,
+    label: 'E2E Gateway',
+  });
   await fs.writeFile(
     path.join(env.userData, 'centraid-settings.json'),
     JSON.stringify(
@@ -747,6 +733,35 @@ export async function seedRemoteGateway(
     ),
     { mode: 0o600 },
   );
+}
+
+/** Seed an additional paired remote profile without changing the active gateway. */
+export async function seedRemoteGatewayProfile(
+  env: TestEnv,
+  gateway: { url: string },
+  opts: { id?: string; label?: string } = {},
+): Promise<string> {
+  const id = opts.id ?? crypto.randomUUID();
+  const label = opts.label ?? 'E2E Gateway';
+  const gwDir = path.join(env.userData, 'gateways', id);
+  await fs.mkdir(gwDir, { recursive: true });
+  await fs.writeFile(
+    path.join(gwDir, 'profile.json'),
+    JSON.stringify(
+      {
+        id,
+        kind: 'remote',
+        label,
+        displayName: label,
+        url: gateway.url,
+        createdAt: '2024-01-01T00:00:00.000Z',
+      },
+      null,
+      2,
+    ) + '\n',
+    { mode: 0o600 },
+  );
+  return id;
 }
 
 export async function launchApp(env: TestEnv): Promise<{ app: ElectronApplication; page: Page }> {

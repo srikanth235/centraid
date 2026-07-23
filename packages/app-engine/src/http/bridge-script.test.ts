@@ -745,10 +745,8 @@ test('replica-unavailable write fallback preserves its idempotency key', async (
     }),
   ).resolves.toEqual({ source: 'server' });
   expect(bridge.fetches).toContainEqual({
-    url: '/centraid/_tool/centraid_write',
+    url: '/centraid/demo/actions/complete',
     body: {
-      app: 'demo',
-      action: 'complete',
       input: { task_id: 'task-1' },
       intentId: 'intent-timeout-1',
     },
@@ -768,10 +766,8 @@ test('managed online-only writes fail with the network and never enter the shell
   ).rejects.toThrow('offline');
 
   expect(bridge.fetches).toContainEqual({
-    url: '/centraid/_tool/centraid_write',
+    url: '/centraid/demo/actions/add-item',
     body: {
-      app: 'demo',
-      action: 'add-item',
       input: { title: 'Email', password: 'do-not-persist' },
     },
   });
@@ -916,8 +912,8 @@ test('a remembered opaque app prewarms every declared query without evaluating i
         method: 'GET',
       }),
       expect.objectContaining({
-        url: 'https://shell.test/__centraid_iroh__/d-device/centraid/_tool/centraid_describe',
-        method: 'POST',
+        url: 'https://shell.test/__centraid_iroh__/d-device/centraid/demo/_describe',
+        method: 'GET',
       }),
     ]),
   );

@@ -3,8 +3,8 @@
 // subtask list, Things-style); a row only ever carries a "1/3" badge for
 // them. Local `completing` state gives the circle an optimistic fill the
 // instant it's clicked, reverting if the write didn't execute.
-import { useState } from '../react-core.min.js';
-import type { MouseEvent } from '../react-core.min.js';
+import { useState } from 'react';
+import type { MouseEvent } from 'react';
 import { flagLevel, fmtDay, fmtEffort, highlightSegments, todayStr } from '../format.ts';
 import type { Task } from '../types.ts';
 import { Icon, Snippet } from './Shared.tsx';

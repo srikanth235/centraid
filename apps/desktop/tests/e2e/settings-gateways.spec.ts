@@ -9,6 +9,7 @@ import {
   markUserApp,
   openTileMenu,
   seedRemoteGateway,
+  seedRemoteGatewayProfile,
   startMockGateway,
   waitForHome,
   type MockGateway,
@@ -188,20 +189,13 @@ test('12.4 — the Agents (providers) settings page renders', async () => {
 
 // ─────────────────────────── §13 Gateways / profiles ───────────────────────────
 
-test('13.2 — adding a remote gateway registers it in the store', async () => {
+test('13.2 — desktop exposes pairing-only gateway enrollment', async () => {
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    const before = await page.evaluate(() =>
-      window.CentraidApi.listGateways().then((g) => g.length),
-    );
-    await page.evaluate(
-      (url) => window.CentraidApi.addGateway({ label: 'Staging', url, token: '' }),
-      gateway.url,
-    );
-    const after = await page.evaluate(() => window.CentraidApi.listGateways());
-    expect((after as unknown[]).length).toBe(before + 1);
-    expect((after as Array<{ label: string }>).some((g) => g.label === 'Staging')).toBe(true);
+    expect(await page.evaluate(() => typeof window.CentraidApi.addGateway)).toBe('undefined');
+    const gateways = await page.evaluate(() => window.CentraidApi.listGateways());
+    expect(gateways.some((entry) => entry.id === env.gatewayId)).toBe(true);
   } finally {
     await closeApp(app);
   }
@@ -210,14 +204,10 @@ test('13.2 — adding a remote gateway registers it in the store', async () => {
 test('13.4 — switching the active gateway re-scopes home', async () => {
   // A second gateway pointing at the same mock, so its app list resolves.
   gateway.state.apps = [appEntry({ id: 'shared', name: 'Shared App' })];
+  const newId = await seedRemoteGatewayProfile(env, gateway, { label: 'Second' });
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    const newId = (await page.evaluate(
-      (url) => window.CentraidApi.addGateway({ label: 'Second', url, token: '' }).then((g) => g.id),
-      gateway.url,
-    )) as string;
-
     const callsBefore = gateway.calls.length;
     await page.evaluate((id) => window.CentraidApi.setActiveGateway({ id }), newId);
 
@@ -239,13 +229,10 @@ test('13.4 — switching the active gateway re-scopes home', async () => {
 });
 
 test('13.7 — a remote gateway can be removed; the local one cannot', async () => {
+  const id = await seedRemoteGatewayProfile(env, gateway, { label: 'Temp' });
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    const id = (await page.evaluate(
-      (url) => window.CentraidApi.addGateway({ label: 'Temp', url, token: '' }).then((g) => g.id),
-      gateway.url,
-    )) as string;
     await page.evaluate((gid) => window.CentraidApi.removeGateway({ id: gid }), id);
     const list = (await page.evaluate(() => window.CentraidApi.listGateways())) as Array<{
       id: string;
@@ -264,15 +251,11 @@ test('13.7 — a remote gateway can be removed; the local one cannot', async () 
   }
 });
 
-test('13.5 + 13.6 — a remote gateway can be renamed and have its token rotated', async () => {
+test('13.5 + 13.6 — a paired remote gateway can be renamed and have its token rotated', async () => {
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    const id = (await page.evaluate(
-      (url) =>
-        window.CentraidApi.addGateway({ label: 'Old Label', url, token: '' }).then((g) => g.id),
-      gateway.url,
-    )) as string;
+    const id = env.gatewayId;
 
     await page.evaluate(
       (gid) => window.CentraidApi.renameGateway({ id: gid, label: 'New Label' }),
@@ -299,14 +282,14 @@ test('13.5 + 13.6 — a remote gateway can be renamed and have its token rotated
 });
 
 test('13.8 — switching to an unreachable gateway degrades gracefully', async () => {
+  const deadId = await seedRemoteGatewayProfile(
+    env,
+    { url: 'http://127.0.0.1:1' },
+    { label: 'Dead' },
+  );
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    const deadId = (await page.evaluate(() =>
-      window.CentraidApi.addGateway({ label: 'Dead', url: 'http://127.0.0.1:1', token: '' }).then(
-        (g) => g.id,
-      ),
-    )) as string;
     await page.evaluate((id) => window.CentraidApi.setActiveGateway({ id }), deadId);
     // No crash — the shell stays mounted even though the gateway is unreachable.
     // `[data-sidebar]` is the shell chrome root (ShellFrame.tsx:165).

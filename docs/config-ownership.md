@@ -72,7 +72,7 @@ Hand-edited units may be replaced on reinstall. Service install is **opt-in, def
 
 | Path | Owner |
 | --- | --- |
-| `devices.json`, `pairing-tickets.json`, `device-tokens.json`, `web-sessions.json`, `endpoint.json`, `endpoint-key.bin`, `token.bin` | Daemon / pairing CLI |
+| `devices.json`, `pairing-tickets.json`, `device-tokens.json`, `web-sessions.json`, `endpoint.json`, `endpoint-key.bin` | Daemon / pairing CLI |
 
 Do not hand-merge these mid-flight. Recovery: [recovery/pairing.md](recovery/pairing.md).
 

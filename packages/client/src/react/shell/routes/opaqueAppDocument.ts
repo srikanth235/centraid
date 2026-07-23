@@ -262,7 +262,7 @@ function normalizeScopedUrl(
     throw resourceError('App resource selected another Iroh session.');
   }
   if (!url.pathname.startsWith(`${scope.rootPath}/`)) {
-    // Root-relative app code (`/centraid/_tool/...`, blob routes, etc.) was
+    // Root-relative app code (blob routes, replica capability paths, etc.) was
     // authored for a direct gateway origin. Re-home it under this exact Iroh
     // bridge rather than letting it address the PWA shell.
     url = new URL(`${scope.rootUrl.replace(/\/$/, '')}${url.pathname}${url.search}${url.hash}`);
@@ -282,12 +282,15 @@ function assertAllowedAppResource(raw: string, scope: TunnelScope, appId: string
   const url = new URL(raw);
   const targetPath = url.pathname.slice(scope.rootPath.length);
   const appRoot = `/centraid/${encodeURIComponent(appId)}/`;
+  // App RPC (`actions/`, `queries/`, `_describe`) now lives under the app's
+  // own prefix (issue #505), so it is covered here rather than as a shared
+  // capability.
   const appOwned = targetPath.startsWith(appRoot);
-  // These are the only shared gateway capabilities used by app code. Their
-  // web-session cookie remains app-scoped server-side; the fixed app query
-  // above additionally partitions any safe GET response cached by the SW.
-  const sharedCapability =
-    targetPath.startsWith('/centraid/_tool/') || targetPath.startsWith('/centraid/_vault/');
+  // The only shared gateway capability used by app code is the vault blob /
+  // replica surface. Its web-session cookie remains app-scoped server-side;
+  // the fixed app query above additionally partitions any safe GET response
+  // cached by the SW.
+  const sharedCapability = targetPath.startsWith('/centraid/_vault/');
   if (!appOwned && !sharedCapability) {
     throw resourceError('App resource escaped the requested app capability.');
   }

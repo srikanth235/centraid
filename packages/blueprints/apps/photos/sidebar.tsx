@@ -5,10 +5,10 @@
 // `selectedAlbum` stays app.tsx's own state (refresh/renderGrid/the picker
 // all read it directly), threaded through as a getter/setter pair.
 import { deleteAlbumConfirmed, submitNewAlbum, submitRenameAlbum } from './albums-actions.ts';
-import { fmtBytes } from './kit.js';
+import { fmtBytes } from './kit.ts';
 import { SidebarView } from './components/Sidebar.tsx';
 import { $ } from './dom.ts';
-import type { ReactNode } from './react-core.min.js';
+import type { ReactNode } from 'react';
 import type { Album, Asset } from './types.ts';
 
 type Root = { render: (node: ReactNode) => void };

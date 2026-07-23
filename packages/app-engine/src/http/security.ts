@@ -60,25 +60,17 @@ const CONTENT_TYPES: Record<string, string> = {
  * (app-bundle.ts) resolve through the SAME list without an import cycle.
  */
 export const SHARED_ASSET_FILES = new Set([
-  'kit.js',
+  'kit.ts',
   'kit.css',
   'elements.js',
-  'blob-format.js',
-  'video-frame.js',
   'edge-upload.js',
-  // Shared chat-client core (issue #420) — vanilla ESM siblings kit.js imports.
+  // Shared chat-client core (issue #420) — vanilla ESM siblings kit.ts imports.
   'turn-stream.js',
   'assistant-rich.js',
   'gfm.js',
   'code-highlight.js',
   'consent-cards.js',
   'conversation-client.js',
-  'pdf.min.mjs',
-  'pdf.worker.min.mjs',
-  'react-core.min.js',
-  'jsx-runtime.js',
-  'tokens.css',
-  'wall.css',
 ]);
 
 /** Files whose names are reserved and never served as static.

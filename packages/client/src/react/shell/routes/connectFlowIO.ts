@@ -1,7 +1,6 @@
 import { listVaults } from '../../../gateway-client.js';
 import { connectGateway, friendlyGatewayError } from './gatewayModals.js';
 import {
-  isTokenMode,
   type ConnectFlowResult,
   type ConnectFlowState,
   type ConnectTestInput,
@@ -133,41 +132,27 @@ async function commitLocal(state: ConnectFlowState): Promise<ConnectFlowResult> 
 
 async function commitGateway(state: ConnectFlowState): Promise<ConnectFlowResult> {
   const label = state.label.trim() || undefined;
-  const result = isTokenMode(state)
-    ? await connectGateway({
-        kind: 'token',
-        label: label ?? state.url.trim(),
-        token: state.token.trim(),
-        url: state.url.trim(),
-      })
-    : await connectGateway(
-        state.advancedOpen
-          ? {
-              kind: 'ticket-url',
-              label,
-              rememberDevice: state.rememberDevice,
-              ticket: state.ticket.trim(),
-              url: state.url.trim(),
-            }
-          : {
-              kind: 'ticket',
-              label,
-              rememberDevice: state.rememberDevice,
-              ticket: state.ticket.trim(),
-            },
-      );
+  // Every gateway is added through the pairing ceremony (issue #505 phase 7):
+  // an iroh ticket by default, or the same ticket redeemed over an explicit URL
+  // for the `direct` transport tier — both mint a per-device token. The manual
+  // URL + admin-token paste was retired with the shared gateway-wide bearer.
+  const result = await connectGateway(
+    state.advancedOpen
+      ? {
+          kind: 'ticket-url',
+          label,
+          rememberDevice: state.rememberDevice,
+          ticket: state.ticket.trim(),
+          url: state.url.trim(),
+        }
+      : {
+          kind: 'ticket',
+          label,
+          rememberDevice: state.rememberDevice,
+          ticket: state.ticket.trim(),
+        },
+  );
   if (!result.ok) throw new Error(result.message);
-  // Token connects only add + switch the gateway (no ticket payload naming a
-  // vault) — if the user picked one of the admin plane's listed vaults,
-  // follow up with the vault switch (gatewayModals.ts's contract note).
-  if (isTokenMode(state) && state.vaultChoice?.kind === 'existing') {
-    await window.CentraidApi.setActiveVault({ vaultId: state.vaultChoice.vaultId });
-    return {
-      displayLabel: result.label,
-      gatewayId: result.gatewayId,
-      vaultId: state.vaultChoice.vaultId,
-    };
-  }
   return { displayLabel: result.label, gatewayId: result.gatewayId, vaultId: result.vaultId ?? '' };
 }
 

@@ -133,7 +133,7 @@ async function serveAppAsset(req, res, appId, rel) {
 // in format.js accept it as a real image/PDF source without any app-side
 // changes. `?variant=thumb` gets a smaller placeholder.
 //
-// POST handles the upload staging round trip (kit.js `stageFileBytes`):
+// POST handles the upload staging round trip (kit.ts `stageFileBytes`):
 // real bytes in, a real sha256 out — just never persisted, since the GET
 // side below generates its placeholder purely from the id in the URL.
 // ---------------------------------------------------------------------

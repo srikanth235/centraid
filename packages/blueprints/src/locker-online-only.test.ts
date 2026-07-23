@@ -17,7 +17,7 @@ beforeAll(() => {
   for (const file of ['logic.ts', 'format.ts', 'totp.ts', 'types.ts']) {
     cpSync(path.resolve(PKG, 'apps/locker', file), path.resolve(SCRATCH, file));
   }
-  for (const file of ['kit.js', 'elements.js', 'react-core.min.js']) {
+  for (const file of ['kit.ts', 'elements.js']) {
     symlinkSync(path.resolve(PKG, 'kit', file), path.resolve(SCRATCH, file));
   }
 });

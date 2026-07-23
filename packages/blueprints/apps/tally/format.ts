@@ -4,7 +4,7 @@
 // no vault IO — every function is a plain projection of its arguments so
 // app.tsx and the components can both call them without a circular import.
 // Same role as tasks/format.ts and notes/format.ts.
-import { fmtMoney, localDayKey } from './kit.js';
+import { fmtMoney, localDayKey } from './kit.ts';
 import type { BalLabel, ExpenseModel, Member, SplitEntry, SplitSum } from './types.ts';
 
 /** Category metadata: emoji glyph + tint colour. */

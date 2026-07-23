@@ -6,7 +6,7 @@
 // components/Lightbox.tsx.
 import { LightboxShell } from './components/Lightbox.tsx';
 import { $ } from './dom.ts';
-import type { ReactNode } from './react-core.min.js';
+import type { ReactNode } from 'react';
 import type { Album, Asset, Place } from './types.ts';
 
 type Root = { render: (node: ReactNode) => void };

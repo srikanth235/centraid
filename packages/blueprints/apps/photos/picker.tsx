@@ -4,7 +4,7 @@
 import { PickerView } from './components/Picker.tsx';
 import { submitPicker as runSubmitPicker } from './picker-actions.ts';
 import { $ } from './dom.ts';
-import type { MouseEvent, ReactNode } from './react-core.min.js';
+import type { MouseEvent, ReactNode } from 'react';
 import type { Album, Asset } from './types.ts';
 
 type Root = { render: (node: ReactNode) => void };

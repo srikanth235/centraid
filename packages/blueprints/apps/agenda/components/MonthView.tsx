@@ -4,9 +4,9 @@
 // multi-day render as solid bars), a "+N more" past that, and clicking empty
 // day space starts a proposal prefilled there.
 import { bucketByDay, fmtRange, fmtTime, startOfWeek } from '../format.ts';
-import { localDayKey } from '../kit.js';
+import { localDayKey } from '../kit.ts';
 import { CalDot } from './Shared.tsx';
-import type { CSSProperties } from '../react-core.min.js';
+import type { CSSProperties } from 'react';
 import type { AgEvent, DaySegment } from '../types.ts';
 import styles from './MonthView.module.css';
 

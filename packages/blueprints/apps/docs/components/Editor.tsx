@@ -18,7 +18,7 @@
 // `fetch()`-ing a data: URI is blocked by the app's own CSP (`connect-src`
 // inherits `default-src 'self'`, and data: isn't 'self'), so that branch is
 // load-bearing, not an optimization.
-import { useEffect, useRef, useState } from '../react-core.min.js';
+import { useEffect, useRef, useState } from 'react';
 import { decodeDataUri, fmtFull } from '../format.ts';
 import { I } from '../icons.ts';
 import type { DriveDoc } from '../types.ts';

@@ -3,8 +3,8 @@
 // drives an away-click listener added/removed in lockstep with it) — this
 // view only reads it as a prop. `countRef` is the batch-progress node that
 // selection-actions.ts mutates via direct `textContent` writes.
-import { armConfirm } from '../kit.js';
-import { useRef } from '../react-core.min.js';
+import { armConfirm } from '../kit.ts';
+import { useRef } from 'react';
 import { runBatchAddToAlbum, runBatchDelete } from '../selection-actions.ts';
 import type { Album } from '../types.ts';
 import styles from './SelectionBar.module.css';

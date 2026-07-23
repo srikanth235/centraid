@@ -17,10 +17,12 @@
  *     can trust `x-centraid-device` came from the QUIC handshake and not
  *     from a client header.
  *
- * The proof matters because the HTTP listener still accepts the shared
- * bearer directly (loopback / `direct` transports): without it, any
- * bearer-holder could stamp an arbitrary device key and dodge the
- * per-vault enrollment check.
+ * The proof matters because the HTTP listener still accepts the ephemeral
+ * per-boot loopback secret directly (issue #505 phase 7): without it, a
+ * holder of that secret could stamp an arbitrary device key and dodge the
+ * per-vault enrollment check. The forwarder is the only in-process holder of
+ * both the secret and the proof, so a proved iroh request is the only way a
+ * device key ever reaches `composedHandler`.
  *
  * Issue #376 extends the same ACL to the HTTP surface itself: this module
  * also opens a `DeviceTokenStore` and exposes it (alongside the

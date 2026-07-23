@@ -29,7 +29,7 @@
  * Constructed over a vault's `journal.db` `DatabaseProvider` (which may
  * resolve "the ACTIVE vault" — the store re-prepares when the handle
  * changes). Runtime-owned: never reachable from the handler `db` proxy or
- * the `centraid_sql_*` agent tools. The `run_summary` Insights source is a
+ * the `vault_sql` agent tool. The `run_summary` Insights source is a
  * VIEW over these tables (see `CONVERSATION_LEDGER_DDL`) — `finishTurn`
  * needs no write-through; a finished turn simply appears in the view.
  *

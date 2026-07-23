@@ -1,6 +1,5 @@
 /* The "Take a note…" quick-add card. Authored camelCase. `.qaMore` animates in
-   with the global `nt-fade` keyframe (kept in app.css because the editor
-   backdrop and the narrow scrim also consume it). The `:last-child` reset
+   with the shared kit fade-in. The `:last-child` reset
    targets the kit button via a `:global(...)` bridge. */
 
 .quickadd {
@@ -30,7 +29,7 @@
   color: var(--ink-3);
 }
 .qaMore {
-  animation: nt-fade 0.16s ease;
+  animation: kit-fade-in 0.16s ease;
 }
 .qaBody {
   width: 100%;

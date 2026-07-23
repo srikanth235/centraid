@@ -5,7 +5,7 @@
 // journal nav is active, leaving stale content hidden otherwise, same as the
 // old Lit version's module-level `journalDraft`/`journalMood` vars), so a
 // mood pick or partial line survives a trip to another view and back.
-import { useRef, useState } from '../react-core.min.js';
+import { useRef, useState } from 'react';
 import { fmtJournalDate, hashInt, PALETTE } from '../format.ts';
 import type { JournalItem } from '../types.ts';
 import { KitAvatar } from './Shared.tsx';

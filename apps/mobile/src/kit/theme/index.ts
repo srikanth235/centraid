@@ -8,7 +8,7 @@
 // from the package — this file only owns the RN-specific font resolution.
 //
 // Dark mode: `useTheme()` (below) returns a scheme-aware palette lowered from
-// the blueprint kit's tokens.css (see tokens.generated.ts / resolve.ts). The
+// the canonical blueprint token source (see tokens.generated.ts / resolve.ts). The
 // legacy `colors` export stays light-only for callers that read it at module
 // scope; anything that needs to follow the OS theme should call `useTheme()`.
 
@@ -68,7 +68,7 @@ export const t = (key: TypeKey): Pick<TextStyle, 'fontSize' | 'lineHeight' | 'fo
 export { themes, densities, spacing, palette, radii, fonts, tileFinish, TILE_VARIANTS };
 export type { Theme, ThemeName, DensityName, TileVariant, TileFinish };
 
-// Dark-mode-aware theme API, lowered from the blueprint kit tokens.css.
+// Dark-mode-aware theme API, lowered from the canonical blueprint token source.
 export { useTheme } from './useTheme';
 export { resolveTheme, navThemes, navThemeFor } from './resolve';
 export type { ThemeValue, ThemeColors, Scheme } from './resolve';

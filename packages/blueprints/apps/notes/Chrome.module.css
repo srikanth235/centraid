@@ -1,0 +1,214 @@
+/* Notes chrome shared by the served and inline routes (issue #505). Common
+   shell/sidebar/topbar/drawer geometry composes the kit-app-* vocabulary.
+   The shared design-token layer
+   (--ink, --bg, --line, --accent, --accent-deep, --shadow-sm/md/lg, the type
+   scale, --sel, --r-card …) is supplied by the shell (the scoped token block
+   InlineAppRoute
+   injects under .centraid-inline-scope), so this file references those directly
+   and never loads tokens.css/wall.css. The one notes-SPECIFIC token app.css's
+   :root added on top of that layer — --accent-deep-fg, which the reused
+   components/*.module.css read — is NOT in the shared layer, so it is folded in
+   here on .shell (trap #3). */
+
+.shell {
+  /* Notes-specific token folded from app.css :root (light). The shared blueprint
+     layer supplies everything else; this alias is the app's own — nav-active
+     labels/chips show accent-deep AS foreground on --accent-soft. */
+  --accent-deep-fg: var(--accent-deep);
+
+  composes: kit-app-shell from global;
+  --kit-app-drawer-width: 270px;
+}
+
+/* Dark override for the folded token — mirrors app.css's dark block, emitted for
+   both the explicit [data-theme='dark'] and the standalone prefers-color-scheme
+   fallback (the same two-selector shape the token layer uses). */
+:global(:root[data-theme='dark']) .shell {
+  --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
+}
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-theme])) .shell {
+    --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
+  }
+}
+
+/* Knob: appFont swaps the body/UI sans face. The host sets data-app-font on the
+   inline scope wrapper (pushKnobToInlineRoot); app.css's :root[data-app-font]
+   rules aren't loaded inline, so re-express them here keyed on that wrapper. */
+:global(.centraid-inline-scope[data-app-font='sans']) {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+:global(.centraid-inline-scope[data-app-font='serif']) {
+  --font-sans: 'New York', 'Iowan Old Style', Georgia, Cambria, serif;
+}
+:global(.centraid-inline-scope[data-app-font='mono']) {
+  --font-sans: var(--mono);
+}
+
+/* ---------- Sidebar (static chrome; nav/notebooks/summary → Sidebar.module.css) ---------- */
+
+.side {
+  composes: kit-app-side from global;
+}
+.brand {
+  composes: kit-app-brand from global;
+}
+.brandMark {
+  composes: kit-app-brand-mark from global;
+}
+.brandText {
+  composes: kit-app-brand-text from global;
+}
+.brandName {
+  composes: kit-app-brand-name from global;
+}
+.brandTag {
+  composes: kit-app-brand-tag from global;
+}
+.sideClose {
+  composes: kit-app-side-close from global;
+}
+.new {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 11px 14px;
+  margin-bottom: 14px;
+  border: none;
+  border-radius: var(--r-md);
+  background: var(--accent-deep);
+  color: #fff;
+  font: var(--t-body-strong);
+  box-shadow: var(--shadow-sm);
+  transition: filter 0.14s var(--ease);
+}
+.new:hover {
+  filter: brightness(1.07);
+}
+.new:active {
+  transform: scale(0.99);
+}
+.sideFoot {
+  composes: kit-app-side-foot from global;
+}
+.scrim {
+  composes: kit-app-scrim from global;
+}
+
+/* ---------- Main ---------- */
+
+.main {
+  composes: kit-app-main from global;
+}
+.topbar {
+  composes: kit-app-topbar from global;
+}
+.hamburger {
+  composes: kit-app-hamburger from global;
+}
+.search {
+  flex: 1;
+  max-width: 480px;
+  position: relative;
+}
+.searchClear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  border-radius: 999px;
+  color: var(--ink-3);
+}
+.searchClear:hover {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+/* Show the clear affordance only while the field carries text — a JS-free
+   equivalent of the served chrome.ts `hidden` toggle. */
+.search input:placeholder-shown ~ .searchClear {
+  display: none;
+}
+.topbarTools {
+  composes: kit-app-tools from global;
+}
+.viewToggle {
+  display: flex;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-elev);
+}
+.viewToggle button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 30px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: var(--ink-3);
+}
+.viewToggle button[aria-pressed='true'] {
+  background: var(--accent-deep);
+  color: #fff;
+}
+.askMount {
+  composes: kit-app-ask-mount from global;
+}
+.banner {
+  margin: 14px 22px 0;
+}
+
+/* ---------- Scroll region (wall/eyebrows/quick-add/cards → *.module.css) ---------- */
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 22px 48px;
+}
+
+/* ---------- Narrow (phone) — driven by .isNarrow / .sideOpen on .shell ---------- */
+/* Inline the drawer is absolutely positioned within .shell (the app pane), not
+   fixed to the viewport as the served full-screen app does. The reused component
+   narrow rules key on the GLOBAL `.nt-shell.is-narrow` state class Chrome.tsx
+   also stamps on this same element, so they keep working. */
+
+.isNarrow {
+  composes: kit-app-narrow from global;
+}
+.sideOpen {
+  composes: kit-app-side-open from global;
+}
+.shell.isNarrow.sideOpen .scrim {
+  animation: kit-fade-in 0.2s ease;
+}
+.shell.isNarrow .topbar,
+.shell.isNarrow .scroll {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+.shell.isNarrow .banner {
+  margin-left: 16px;
+  margin-right: 16px;
+}
+.shell.isNarrow .topbar {
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+.shell.isNarrow .topbarTools {
+  flex: 1 0 100%;
+  margin-left: 0;
+}
+.shell.isNarrow .search {
+  max-width: none;
+}

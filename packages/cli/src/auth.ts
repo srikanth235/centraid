@@ -1,29 +1,20 @@
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-
 export interface AuthOptions {
   token?: string;
-  dataDir?: string;
   env?: NodeJS.ProcessEnv;
 }
 
 /**
  * Resolve a bearer for product CLI calls.
- * Precedence: --token > CENTRAID_TOKEN > <dataDir>/token.bin.
+ * Precedence: --token > CENTRAID_TOKEN > CENTRAID_GATEWAY_TOKEN.
+ *
+ * Issue #505 phase 7 retired the daemon's persistent `token.bin`, so there is
+ * no on-disk token to auto-discover from a data dir. To reach a local daemon's
+ * loopback listener, start it with `CENTRAID_GATEWAY_TOKEN=<hex>` and pass the
+ * same value here (or `--token`); a remote `direct`-tier gateway takes the
+ * per-device token minted by pairing.
  */
-export async function resolveToken(opts: AuthOptions): Promise<string | undefined> {
+export function resolveToken(opts: AuthOptions): string | undefined {
   if (opts.token && opts.token.trim() !== '') return opts.token.trim();
   const env = opts.env ?? process.env;
-  const fromEnv = env.CENTRAID_TOKEN?.trim();
-  if (fromEnv) return fromEnv;
-  const dataDir = opts.dataDir?.trim() || env.CENTRAID_DATA_DIR?.trim();
-  if (!dataDir) return undefined;
-  try {
-    const raw = await fs.readFile(path.join(dataDir, 'token.bin'), 'utf8');
-    const trimmed = raw.trim();
-    return trimmed.length > 0 ? trimmed : undefined;
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-    throw err;
-  }
+  return env.CENTRAID_TOKEN?.trim() || env.CENTRAID_GATEWAY_TOKEN?.trim() || undefined;
 }

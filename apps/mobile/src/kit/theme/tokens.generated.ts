@@ -1,8 +1,8 @@
 // GENERATED — do not edit by hand.
-// Source: packages/blueprints/kit/tokens.css
+// Source: @centraid/design-tokens#toBlueprintCss
 // Regenerate: bun run generate:theme
 //
-// React-Native theme tokens lowered from the blueprint kit's tokens.css.
+// React-Native theme tokens lowered from the canonical blueprint token source.
 // See src/theme/generate.ts for the translation rules.
 
 export const lightPalette = {

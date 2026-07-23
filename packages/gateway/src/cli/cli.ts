@@ -4,19 +4,26 @@
  *
  * The same `serve()` the Electron desktop embeds, wrapped with:
  *   - JSON config file (`--config <path>`)
- *   - persistent shared bearer token (`<dataDir>/token.bin`)
+ *   - an ephemeral per-boot loopback secret (issue #505 phase 7) — the
+ *     bearer the in-process iroh endpoint host forwards with, minted fresh
+ *     each boot, NEVER written to disk and NEVER printed. A parent process
+ *     that spawns this daemon (the desktop) may pin it via the
+ *     `CENTRAID_GATEWAY_TOKEN` env so it can reach the loopback listener.
  *   - SIGINT / SIGTERM graceful shutdown
  *
  * v0 PoC scope per centraid#131: loopback or LAN bind, no TLS. The shared
- * bearer token is the ADMIN plane; per-device HTTP tokens (issue #376,
- * minted by `pair`/`devices add` + `POST /centraid/_gateway/pair`) are the
- * TENANT plane, confined to their device's vault enrollments. TLS
- * termination stays a documented out-of-scope follow-up (front with
- * Caddy / Tailscale Funnel / Cloudflare Tunnel).
+ * gateway-wide admin token is RETIRED (issue #505 phase 7): admin capability
+ * is now a per-device, revocable `owner` enrollment trust tier granted through
+ * the pairing ceremony, and the landlord's trust anchor is OS filesystem
+ * access to `--data-dir` (every `vault`/`pair`/`devices`/`key` subcommand
+ * operates on those files directly, never over HTTP). Per-device HTTP tokens
+ * (issue #376, minted by `POST /centraid/_gateway/pair`) remain the TENANT
+ * plane for the `direct` transport tier, confined to their device's vault
+ * enrollments. TLS termination stays a documented out-of-scope follow-up
+ * (front with Caddy / Tailscale Funnel / Cloudflare Tunnel).
  *
  * Subcommands:
  *   centraid-gateway serve [--config <path>] [--data-dir <path>] [--host <h>] [--port <p>]
- *   centraid-gateway print-token --data-dir <path>
  *   centraid-gateway vault <list|create|rename|delete> --data-dir <path> …   (admin plane, #289)
  *   centraid-gateway pair --data-dir <path> [--vault <name-or-id>] [--ttl-minutes <n>] [--json]
  *   centraid-gateway devices <list|add|revoke> --data-dir <path> …
@@ -39,10 +46,9 @@ import { fileURLToPath } from 'node:url';
 import type { BearerAuthorization } from '@centraid/app-engine';
 import type { GatewayEndpointHandle } from '@centraid/tunnel';
 import { serve } from '../serve/serve.js';
-import { daemonLayoutFor, type DaemonLayout } from './paths.js';
+import { daemonLayoutFor } from './paths.js';
 import { type DaemonConfig } from './config.js';
 import { resolveDaemonConfig } from './resolve-config.js';
-import { readOrMintToken, readPersistedToken } from './token.js';
 import { seedRunnerPrefs } from './runner-prefs.js';
 import { commandVault } from './vault-admin.js';
 import { commandDevices, commandPair } from './device-admin.js';
@@ -98,12 +104,11 @@ function usage(): never {
     [
       'Usage:',
       '  centraid-gateway serve [--config <path>] [--data-dir <path>] [--host <h>] [--port <p>] [--allowed-host <name>]…',
-      '  centraid-gateway print-token --data-dir <path>',
       '  centraid-gateway vault list --data-dir <path> [--json]',
       '  centraid-gateway vault create --data-dir <path> [--name <name>] [--json]',
       '  centraid-gateway vault rename --data-dir <path> <vaultId> <name>',
       '  centraid-gateway vault delete --data-dir <path> <vaultId>',
-      '  centraid-gateway pair --data-dir <path> [--vault <name-or-id>] [--ttl-minutes <n>] [--qr] [--json]',
+      '  centraid-gateway pair --data-dir <path> [--vault <name-or-id>] [--ttl-minutes <n>] [--trust owner|full|readonly] [--qr] [--json]',
       '  centraid-gateway devices list --data-dir <path> [--vault <name-or-id>]',
       '  centraid-gateway devices add --data-dir <path> <endpoint-id> --vault <name-or-id> [--label <l>]',
       '  centraid-gateway devices revoke --data-dir <path> <enrollment-or-endpoint-id>',
@@ -132,16 +137,16 @@ function usage(): never {
       'secrets (issue #298): copying a vault directory carries ciphertext',
       'only; the key travels ONLY through these receipted gestures.',
       '',
-      'pair --qr prints a UTF-8 block QR of the one-line ticket for phones',
-      'over SSH; desktop/PWA still paste the same token into Add gateway.',
-      '',
-      'A ticket minted by `pair` also redeems over plain HTTP (POST',
+      'There is NO shared gateway-wide admin token (issue #505 phase 7):',
+      'admin capability is a per-device, revocable `owner` enrollment trust',
+      'tier. `pair` grants `owner` to the FIRST device paired into a vault',
+      '(the landlord device); later pairings default to `full`; `--trust`',
+      'overrides. pair --qr prints a UTF-8 block QR of the one-line ticket',
+      'for phones over SSH. A ticket minted by `pair` also redeems over plain HTTP (POST',
       '/centraid/_gateway/pair, issue #376) for a device that cannot dial',
       'the iroh endpoint directly — it enrolls the caller and mints it a',
       "per-device HTTP bearer token, confined to that device's vaults the",
-      'same way an iroh-proved caller is. The printed token above (serve /',
-      'print-token) stays the unrestricted ADMIN plane; never hand it to a',
-      'device you mean to confine.',
+      'same way an iroh-proved caller is.',
       '',
       'backup is the offsite engine (PROTOCOL.md/FORMAT.md), config from the',
       'same --config/--data-dir resolution `serve` uses (its JSON config',
@@ -244,7 +249,17 @@ async function commandServe(args: string[]): Promise<void> {
 
   await fs.mkdir(config.dataDir, { recursive: true });
 
-  const token = await readOrMintToken(layout.tokenFile);
+  // Ephemeral per-boot loopback secret (issue #505 phase 7). This is the
+  // bearer the in-process iroh endpoint host forwards with when it hands a
+  // proved iroh request to the loopback HTTP listener; forwarded requests also
+  // carry the per-boot device proof header, so the real per-device identity is
+  // what `composedHandler` scopes on (this bearer only unlocks the loopback
+  // door). It is MINTED FRESH each boot, never written to disk, never printed —
+  // the retired `token.bin` shared admin plane is gone. A parent that spawns
+  // this daemon (the desktop's detached gateway) may pin a known value via
+  // `CENTRAID_GATEWAY_TOKEN` so it can reach the loopback listener itself.
+  const loopbackSecret =
+    process.env.CENTRAID_GATEWAY_TOKEN?.trim() || crypto.randomBytes(32).toString('hex');
   const dataPlaneSecret = process.env.CENTRAID_DATA_PLANE_SECRET;
   const dataPlaneHttpUrl = process.env.CENTRAID_DATA_PLANE_HTTP_URL;
 
@@ -265,13 +280,16 @@ async function commandServe(args: string[]): Promise<void> {
     ...(dataPlaneSecret ? { controlSecret: dataPlaneSecret } : {}),
   });
 
-  // Per-device HTTP bearer tokens (issue #376): the shared token remains
-  // the landlord/admin plane (unrestricted — every vault); a presented
-  // `cdt_...` token resolves through `DeviceTokenStore` to its device key
-  // and gets confined to that device's enrollments exactly like an
-  // iroh-proved request (`build-gateway.ts`'s `composedHandler`).
+  // Bearer authorization (issue #376 + #505 phase 7). The ephemeral loopback
+  // secret unlocks the loopback listener as the `admin` plane — used only by
+  // the in-process endpoint-host forwarder (whose requests also carry the
+  // device proof header, so `composedHandler` still scopes them to the proved
+  // device). A presented `cdt_...` per-device token resolves through
+  // `DeviceTokenStore` to its device key and is confined to that device's
+  // enrollments (the `direct` transport tier). There is no durable, on-disk
+  // admin bearer any device could hold.
   const authorizeBearer = (bearer: string): BearerAuthorization | undefined => {
-    if (timingSafeTokenEqual(bearer, token)) return { plane: 'admin' };
+    if (timingSafeTokenEqual(bearer, loopbackSecret)) return { plane: 'admin' };
     const device = devicePlane.pairing.deviceTokens.authorize(bearer);
     return device ? { plane: 'device', deviceKey: device.deviceKey } : undefined;
   };
@@ -284,7 +302,7 @@ async function commandServe(args: string[]): Promise<void> {
     ...(config.port !== undefined ? { port: config.port } : {}),
     ...(allowedHosts.length > 0 ? { allowedHosts } : {}),
     ...(config.backup ? { backup: config.backup } : {}),
-    token,
+    token: loopbackSecret,
     logTag: 'centraid-gateway',
     deviceAccess: devicePlane.deviceAccess,
     dataPlaneControl: devicePlane.dataPlaneControl,
@@ -349,7 +367,7 @@ async function commandServe(args: string[]): Promise<void> {
       ? undefined
       : await devicePlane.startEndpoint({
           baseUrl: handle.url,
-          token,
+          token: loopbackSecret,
         });
   if (endpoint) {
     process.stdout.write(`[centraid-gateway] endpoint: ${endpoint.endpointId}\n`);
@@ -365,8 +383,10 @@ async function commandServe(args: string[]): Promise<void> {
     );
   }
 
+  // The loopback secret is deliberately NOT printed (issue #505 phase 7) — it
+  // is ephemeral in-process plumbing, not a credential to paste anywhere.
   process.stdout.write(
-    `[centraid-gateway] listening on ${handle.url}\n${handle.webUrl ? `[centraid-gateway] web app: ${handle.webUrl}\n` : ''}[centraid-gateway] token: ${handle.token}\n[centraid-gateway] dataDir: ${path.resolve(config.dataDir)}\n`,
+    `[centraid-gateway] listening on ${handle.url}\n${handle.webUrl ? `[centraid-gateway] web app: ${handle.webUrl}\n` : ''}[centraid-gateway] dataDir: ${path.resolve(config.dataDir)}\n`,
   );
 
   const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
@@ -383,22 +403,6 @@ async function commandServe(args: string[]): Promise<void> {
   process.on('SIGTERM', (signal) => void shutdown(signal));
 }
 
-async function commandPrintToken(args: string[]): Promise<void> {
-  let dataDir: string | undefined;
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--data-dir') {
-      dataDir = args[++i];
-    } else {
-      fail(`unknown flag "${args[i]}"`, 2);
-    }
-  }
-  if (!dataDir) fail('--data-dir is required', 2);
-  const layout: DaemonLayout = daemonLayoutFor(dataDir);
-  const token = await readPersistedToken(layout.tokenFile);
-  if (!token) fail(`no token at ${layout.tokenFile} — run "centraid-gateway serve" first`, 1);
-  process.stdout.write(`${token}\n`);
-}
-
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const [sub, ...rest] = argv;
@@ -410,9 +414,6 @@ async function main(): Promise<void> {
   switch (sub) {
     case 'serve':
       await commandServe(rest);
-      return;
-    case 'print-token':
-      await commandPrintToken(rest);
       return;
     case 'vault':
       await commandVault(rest, fail);

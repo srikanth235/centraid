@@ -97,10 +97,10 @@ test('serves a staged draft (static + handlers) while live keeps the published v
   expect(liveHtml.status).toBe(200);
   expect(await liveHtml.text()).toMatch(/PUBLISHED/);
 
-  const liveRead = await fetch(`${handle.url}/centraid/_tool/centraid_read`, {
+  const liveRead = await fetch(`${handle.url}/centraid/app/queries/ping`, {
     method: 'POST',
     headers: { ...auth, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ app: 'app', query: 'ping', input: {} }),
+    body: JSON.stringify({ input: {} }),
   });
   expect(await liveRead.json()).toEqual({ marker: 'published' });
 
@@ -109,14 +109,14 @@ test('serves a staged draft (static + handlers) while live keeps the published v
   expect(draftHtml.status).toBe(200);
   const draftBody = await draftHtml.text();
   expect(draftBody).toMatch(/DRAFT/);
-  // The injected bridge must route tool calls through the draft shim so
+  // The injected bridge must route app RPC calls through the draft prefix so
   // the draft's handlers run (not the live ones).
-  expect(draftBody).toMatch(/\/centraid\/_draft\/draft1\/_tool\//);
+  expect(draftBody).toMatch(/\/centraid\/_draft\/draft1\/app\//);
 
-  const draftRead = await fetch(`${handle.url}/centraid/_draft/draft1/_tool/centraid_read`, {
+  const draftRead = await fetch(`${handle.url}/centraid/_draft/draft1/app/queries/ping`, {
     method: 'POST',
     headers: { ...auth, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ app: 'app', query: 'ping', input: {} }),
+    body: JSON.stringify({ input: {} }),
   });
   expect(draftRead.status).toBe(200);
   expect(await draftRead.json()).toEqual({ marker: 'draft' });

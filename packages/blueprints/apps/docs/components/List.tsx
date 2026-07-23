@@ -1,6 +1,6 @@
 // List view: the head row (#listHead root), each row (#list root's mapped
 // children) and the truncation footer (#windowFoot root).
-import type { CSSProperties, MouseEvent } from '../react-core.min.js';
+import type { CSSProperties, MouseEvent } from 'react';
 import {
   fmtBytes,
   fmtDate,

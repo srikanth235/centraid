@@ -428,10 +428,13 @@ function readonlyRequestAllowed(req: IncomingMessage): boolean {
   }
   if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return true;
   if (method !== 'POST') return false;
+  // A query invocation is a read; an action invocation is a write. The
+  // app-scoped RPC routes carry the kind in the path (issue #505), so a
+  // read-only device may POST to `queries/<name>` but not `actions/<name>`.
+  // `_describe` moved to GET and is covered by the read-method branch above.
   if (
-    url.pathname === '/centraid/_tool/centraid_read' ||
-    url.pathname === '/centraid/_tool/centraid_describe' ||
-    /^\/centraid\/_draft\/[^/]+\/_tool\/centraid_(?:read|describe)$/.test(url.pathname)
+    /^\/centraid\/[^_/][^/]*\/queries\/[^/]+$/.test(url.pathname) ||
+    /^\/centraid\/_draft\/[^/]+\/[^_/][^/]*\/queries\/[^/]+$/.test(url.pathname)
   ) {
     return true;
   }
@@ -622,12 +625,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   );
   const webAppSessions = new WebAppSessions(options.webSessions ?? {});
 
-  // Bundled blueprint apps (issue #434): these ids serve in place from the
-  // shipped @centraid/blueprints package, upgrade with every release, and are
+  // Bundled blueprint apps (issue #434): the main client compiles their UI
+  // directly, while the gateway reads their shipped directories for metadata,
+  // declared scopes, and generic opaque-app compatibility. Their ids are
   // RESERVED — a code-store app must never shadow one. The set is fixed for
-  // the process lifetime (it's the release's catalog), so we resolve it once
-  // here and close over it for the resolver, the id-reservation guard, and
-  // the install/listing paths below.
+  // the process lifetime (it's the release's catalog), so resolve it once for
+  // the id-reservation guard and install/listing paths below.
   const bundledAppIds = new Set((await listBundledAppTemplates()).map((t) => t.id));
   const isBundledAppId = (id: string): boolean => bundledAppIds.has(id);
 
@@ -1408,7 +1411,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       }
       // Installed bundled apps (issue #434) aren't in the git store, so the
       // loop above misses them — re-register each from the enrollment record
-      // so it serves (from the shipped blueprint dir) after a gateway restart.
+      // so its data plane and generic compatibility route recover after a
+      // gateway restart.
       for (const appId of plane.installedAppIds()) {
         await requireRuntime().registry.ensureUploaded(appId);
         await grantDeclaredBundledScopes(plane, appId);
@@ -1520,9 +1524,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       // Bundled ids are reserved (issue #434): a scaffold/clone must never
       // mint one, or a code-store app would shadow the shipped blueprint.
       isBundledAppId,
-      // Install a bundled blueprint in place (issue #434): enroll with
-      // origin 'installed' + register + grant declared scopes, no git, no id
-      // minting. Idempotent — an already-installed app returns its existing
+      // Install a bundled blueprint in place (issue #434): its UI is already
+      // part of the main client, so enroll with origin 'installed', register
+      // the data plane, and grant declared scopes — no git or id minting.
+      // Idempotent — an already-installed app returns its existing
       // registration. Returns undefined for a non-bundled id (→ 404).
       installBundledApp: async (templateId) => {
         if (!bundledAppIds.has(templateId)) return undefined;
@@ -2060,7 +2065,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // N registries).
   const runtime = new Runtime({
     appsDir: () => currentWorkspace().appsDir,
-    // Shared kit assets (kit.js / kit.css) are served from the blueprints
+    // Shared kit assets (kit.ts / kit.css) are served from the blueprints
     // package's canonical `kit/` dir; apps no longer ship per-app copies.
     sharedAssetsDir: KIT_DIR,
     userStore: prefs,
@@ -2115,13 +2120,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       return status;
     },
     logger,
-    // Resolver rule (issue #434): a bundled blueprint app installed in the
-    // request's vault serves in place from the shipped @centraid/blueprints
-    // package (upgrades with every release, no per-vault copy). Everything
-    // else — code the gateway can't otherwise get: compiled automations,
-    // future builder forks/downloads — resolves to the git code-store
-    // worktree, as before. The installed check is per-vault so a legacy
-    // snapshot-cloned app keeps serving from the store. The app-engine
+    // Compatibility resolver (issue #434): bundled system UI is compiled into
+    // the main client, but the generic opaque-app route can still resolve an
+    // installed blueprint's shipped directory (no per-vault copy). Everything
+    // else — compiled automations or future opaque app sources — resolves to
+    // the git code-store worktree. The installed check is per-vault so a
+    // legacy snapshot-cloned app keeps resolving from the store. The app-engine
     // static-path sandbox applies identically to whichever dir is returned.
     codeDirOverride: async (appId: string) => {
       if (bundledAppIds.has(appId) && vaultRegistry.current().installedAppIds().has(appId)) {

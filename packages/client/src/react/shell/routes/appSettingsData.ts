@@ -115,6 +115,18 @@ export function pushKnobToAppFrame(key: string, value: string): void {
   frame.contentWindow?.postMessage({ type: 'centraid:settings', dataAttrs, cssVars }, '*');
 }
 
+/**
+ * Live-push a knob to an INLINE app's root element (issue #505). Same
+ * kebab/CSS-var-vs-data-attr split as `pushKnobToAppFrame`, but applied straight
+ * to the element the inline app reads (no iframe, no postMessage). The app's own
+ * CSS + `data-app-*` reads react in place.
+ */
+export function pushKnobToInlineRoot(root: HTMLElement, key: string, value: string): void {
+  const name = appKnobKebab(key);
+  if (/(?:Color|Accent)$/.test(key)) root.style.setProperty(`--${name}`, value);
+  else root.setAttribute(`data-${name}`, value);
+}
+
 /** Hard-reload the app frame — its vault access just changed under it. */
 export function reloadAppFrame(): void {
   const frame = appFrame();
