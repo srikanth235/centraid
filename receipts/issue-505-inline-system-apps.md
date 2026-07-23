@@ -349,16 +349,21 @@ offline render none → full.
     to a leaf module `blob-auth.ts`; `kit-inline` re-exports it (served-kit
     consumers unchanged). Boot chunk → **308,360 B gz** (−12.7 KB). The residual
     over the pre-#505 baseline is legitimate new inline-shell code, not the kit.
-  - **[builder forces bundled apps to iframe — working as designed, documented]**
-    `builderEnabled ? undefined : inlineAppLoader(appId)` routes every bundled
-    app through the served path when the builder is on. This is deliberate: the
-    builder can edit a bundled app's code and only the served path reflects the
-    edit; the inline loader would paint stale bundled source. Kept as-is (the
-    reviewer's "keep bundled apps inline" would show stale code post-edit); the
-    tradeoff — a builder user loses inline/offline for bundled apps while builder
-    is enabled (power-user, off-by-default) — is now documented at the decision
-    site. A per-app "code-store override" signal is the proper future fix and
-    belongs with the builder edit model, not this render switch.
+  - **[builder forces bundled apps to iframe — confirmed regression, fixed]**
+    `builderEnabled ? undefined : inlineAppLoader(appId)` routed every blueprint
+    app through the served iframe whenever the builder was merely enabled. On
+    re-examination this was a real regression, not a necessary coupling: the
+    builder is a SEPARATE route (`kind: 'builder'`), reached via a Build button
+    that `InlineAppRoute` itself renders; building a blueprint remixes it into a
+    NEW user app with its own id and never edits the shipped `packages/blueprints`
+    source in place — so the inline and served paths render identical code and
+    there was no divergence to protect against. (An earlier note here claimed the
+    served path was needed to reflect in-place blueprint edits; that premise was
+    wrong.) Fixed to `inlineAppLoader(appId)` so blueprint apps stay inline and
+    offline-capable regardless of builder state; user apps still have no inline
+    loader and fall through to `AppViewRoute`. The `App.inline-branch.test.tsx`
+    case that asserted the iframe-under-builder behaviour was flipped to assert
+    the inline route survives builder-enabled.
   - Files touched by this review response:
     `packages/gateway/src/routes/devices-routes.ts`,
     `packages/gateway/src/routes/devices-routes.test.ts`,
@@ -603,3 +608,4 @@ bash .governance/run.sh
 | codex-019f8b0c-c31-1784746742-1 | codex | 019f8b0c-c314-7ac0-bc80-6ccbdb4efa31 | #505 | gpt-5.6-sol | 3215 | 0 | 377856 | 345 | 3560 | 0.1077 | 401110 | 0 | 20851200 | 33056 | fix(ci): repair PR build failures (#505) -m Align isolated blueprint React typin |
 | claude-code-3f73ae52-798-1784777508-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-opus-4-8 | 3020 | 3502689 | 362336428 | 1296083 | 4801792 | 235.4772 | 4311 | 4953923 | 525681550 | 1816978 |  |
 | claude-code-3f73ae52-798-1784777626-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-opus-4-8 | 16 | 26379 | 1648586 | 6018 | 32413 | 1.1397 | 4327 | 4980302 | 527330136 | 1822996 |  |
+| claude-code-3f73ae52-798-1784778493-1 | claude-code | 3f73ae52-798f-419a-bac9-2e6ed4a21184 | #505 | claude-opus-4-8 | 132 | 153800 | 15910135 | 89378 | 243310 | 11.1514 | 4459 | 5134102 | 543240271 | 1912374 |  |

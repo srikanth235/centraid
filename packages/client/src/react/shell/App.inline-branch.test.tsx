@@ -2,10 +2,12 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// The `app` route branches to the inline route only for a registered inline id
-// while the builder is OFF; everything else keeps the (iframe) AppViewRoute.
-// Mock both route components to identifiable markers and the registry so the
-// branch decision is observable without mounting the real inline machinery.
+// The `app` route branches to the inline route for any registered inline id —
+// regardless of builder state (the builder is a separate `kind: 'builder'`
+// route, so enabling it must NOT knock blueprint apps back to the iframe);
+// everything else keeps the (iframe) AppViewRoute. Mock both route components
+// to identifiable markers and the registry so the branch decision is observable
+// without mounting the real inline machinery.
 vi.mock('./routes/InlineAppRoute.js', () => ({
   default: () => <div data-testid="inline-marker">INLINE</div>,
 }));
@@ -102,7 +104,10 @@ describe('App — inline vs iframe app route (#505)', () => {
     expect(el.querySelector('[data-testid="inline-marker"]')).toBeNull();
   });
 
-  it('keeps AppViewRoute for an inline id while the builder is enabled', async () => {
+  it('keeps a registered inline id on InlineAppRoute even while the builder is enabled', async () => {
+    // Enabling the builder must NOT knock blueprint apps back to the iframe: the
+    // builder is a separate route, and a blueprint's code is never edited in
+    // place, so the inline path stays correct and offline-capable.
     (globalThis as unknown as { CentraidApi: { getSettings: unknown } }).CentraidApi.getSettings =
       () => Promise.resolve({ builderEnabled: true });
     const el = await mount();
@@ -111,7 +116,7 @@ describe('App — inline vs iframe app route (#505)', () => {
       await Promise.resolve();
     });
     await act(async () => openApp('tasks'));
-    expect(el.querySelector('[data-testid="appview-marker"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="inline-marker"]')).toBeNull();
+    expect(el.querySelector('[data-testid="inline-marker"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="appview-marker"]')).toBeNull();
   });
 });
