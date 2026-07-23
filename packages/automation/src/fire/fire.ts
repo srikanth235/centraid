@@ -337,7 +337,16 @@ export async function runFire(
       history: row.manifest.history,
       ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
       ...(row.manifest.connector
-        ? { connector: secretRefs.length > 0 ? { secrets: secretRefs } : {} }
+        ? {
+            connector: {
+              kind: row.manifest.connector.kind,
+              label: row.manifest.connector.label,
+              ...(secretRefs.length > 0 ? { secrets: secretRefs } : {}),
+              ...(row.manifest.connector.connectionId
+                ? { connectionId: row.manifest.connector.connectionId }
+                : {}),
+            },
+          }
         : {}),
       ...(secretCache.size > 0
         ? {
@@ -502,10 +511,9 @@ async function connectionStatus(
         purpose: 'dpv:ServiceProvision',
       },
     });
-    if (byId.ok) {
-      const rows = (byId.result as { rows?: { status?: unknown }[] })?.rows ?? [];
-      if (typeof rows[0]?.status === 'string') return rows[0].status;
-    }
+    if (!byId.ok) return undefined;
+    const rows = (byId.result as { rows?: { status?: unknown }[] })?.rows ?? [];
+    return typeof rows[0]?.status === 'string' ? rows[0].status : undefined;
   }
   const reply = await vault({
     op: 'read',

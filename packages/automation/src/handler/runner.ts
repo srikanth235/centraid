@@ -163,7 +163,19 @@ export interface RunHandlerOptions {
    * `secrets` (issue #293) is the allowlist for `{{secret:…}}` placeholders
    * in `ctx.fetch` — `locker:<item_id>:<column>` refs the manifest declared.
    */
-  connector?: { readonly secrets?: readonly string[] };
+  connector?: {
+    /** Manifest-owned identity; handler code cannot override either field. */
+    readonly kind: string;
+    readonly label: string;
+    readonly secrets?: readonly string[];
+    /**
+     * Durable owner-selected connection binding (#524). The parent injects
+     * this id into sync.begin_run/sync.stage_rows after the worker boundary,
+     * so published handler code cannot accidentally fork a label-based
+     * shadow connection when the owner renamed or custom-labelled the row.
+     */
+    readonly connectionId?: string;
+  };
   /**
    * Host-injected secret resolution for connector `ctx.fetch` (issue #293):
    * ref → plaintext, backed by the automation agent's `reveal` grant. The
@@ -227,6 +239,20 @@ export interface ConnectionAuth {
   readonly allowWrites?: boolean;
 }
 
+function bindConnectorVaultPayload(
+  op: string,
+  payload: Record<string, unknown>,
+  connectionId: string | undefined,
+): Record<string, unknown> {
+  if (op !== 'invoke' || !connectionId) return payload;
+  if (payload.command !== 'sync.begin_run' && payload.command !== 'sync.stage_rows') return payload;
+  const input =
+    payload.input && typeof payload.input === 'object' && !Array.isArray(payload.input)
+      ? (payload.input as Record<string, unknown>)
+      : {};
+  return { ...payload, input: { ...input, connection_id: connectionId } };
+}
+
 export interface HandlerOutcome {
   ok: boolean;
   value?: unknown;
@@ -259,6 +285,7 @@ type WorkerToParentMessage =
       content?: { contentId: string; variant: string; maxBytes?: number }[];
     }
   | { type: 'fetch'; id: number; spec: FetchSpecWire }
+  | { type: 'connector-open'; id: number; principal: string }
   | { type: 'state'; id: number; method: 'get' | 'set' | 'delete'; key: string; value?: unknown }
   | {
       type: 'runs';
@@ -583,6 +610,107 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     worker.postMessage(msg);
   };
 
+  let connectorRunId: string | undefined;
+  let connectorConnectionId: string | undefined;
+  let connectorRunOpened = false;
+  let connectorRunClosed = false;
+
+  const invokeConnectorCommand = async (
+    command: string,
+    input: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> => {
+    const reply = await handleVaultMessage(audit, opts.vault, 'invoke', {
+      command,
+      input,
+      purpose: 'dpv:ServiceProvision',
+    });
+    if (!reply.ok) throw new Error(reply.error ?? `${command} failed`);
+    const result = reply.result;
+    if (!result || typeof result !== 'object') return {};
+    const outcome = result as Record<string, unknown>;
+    return outcome.output && typeof outcome.output === 'object'
+      ? (outcome.output as Record<string, unknown>)
+      : outcome;
+  };
+
+  const openConnectorRun = async (principal: string): Promise<Record<string, unknown>> => {
+    if (!opts.connector?.connectionId) {
+      throw new Error('declarative pull connector has no durable connection binding');
+    }
+    if (connectorRunOpened) {
+      throw new Error('connector run scope may be opened exactly once');
+    }
+    connectorRunOpened = true;
+    const opened = await invokeConnectorCommand('sync.begin_run', {
+      connection_id: opts.connector.connectionId,
+      principal,
+    });
+    if (typeof opened.run_id === 'string') connectorRunId = opened.run_id;
+    if (typeof opened.connection_id === 'string') connectorConnectionId = opened.connection_id;
+    if (!opened.refused && (connectorRunId === undefined || connectorConnectionId === undefined)) {
+      throw new Error('sync.begin_run did not return a connection-scoped run');
+    }
+    return opened;
+  };
+
+  const closeConnectorRun = async (
+    ok: boolean,
+    counts: { staged?: number; published?: number; skipped?: number } = {},
+    error?: string,
+  ): Promise<void> => {
+    if (!connectorRunId || connectorRunClosed) return;
+    await invokeConnectorCommand('sync.finish_run', {
+      run_id: connectorRunId,
+      ok,
+      ...counts,
+      ...(error ? { error } : {}),
+    });
+    connectorRunClosed = true;
+  };
+
+  const publishPullResult = async (
+    pull: Record<string, unknown>,
+  ): Promise<{ summary?: string; output: Record<string, unknown> }> => {
+    if (!connectorRunId || !connectorConnectionId || !opts.connector) {
+      throw new Error('pull connector returned rows without an open connection-scoped run');
+    }
+    const rows = Array.isArray(pull.rows) ? pull.rows : [];
+    let staged = 0;
+    let published = 0;
+    try {
+      for (let i = 0; i < rows.length; i += 500) {
+        const chunk = rows.slice(i, i + 500);
+        const outcome = await invokeConnectorCommand('sync.stage_rows', {
+          connection_id: connectorConnectionId,
+          rows: chunk,
+        });
+        staged += chunk.length;
+        const counts = outcome.published as { created?: number; updated?: number } | undefined;
+        published += (counts?.created ?? 0) + (counts?.updated ?? 0);
+      }
+      const cursors = Array.isArray(pull.cursors) ? pull.cursors : [];
+      for (const entry of cursors) {
+        if (!Array.isArray(entry) || typeof entry[0] !== 'string') {
+          throw new Error('pull connector returned an invalid cursor update');
+        }
+        await invokeConnectorCommand('sync.set_cursor', {
+          connection_id: connectorConnectionId,
+          key: entry[0],
+          value: entry[1],
+        });
+      }
+      await closeConnectorRun(true, { staged, published });
+      return {
+        ...(typeof pull.summary === 'string' ? { summary: pull.summary } : {}),
+        output: { staged, published },
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await closeConnectorRun(false, { staged, published }, message).catch(() => undefined);
+      throw err;
+    }
+  };
+
   return await new Promise<HandlerOutcome>((resolve) => {
     const state: PendingState = { resolve, resolved: false };
 
@@ -690,6 +818,30 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
           });
         return;
       }
+      if (msg.type === 'connector-open') {
+        if (!opts.connector) {
+          send({
+            type: 'connector-open-reply',
+            id: msg.id,
+            ok: false,
+            error: 'connection-scoped runs are connector-only',
+          });
+          return;
+        }
+        void openConnectorRun(msg.principal)
+          .then((result) => {
+            send({ type: 'connector-open-reply', id: msg.id, ok: true, result });
+          })
+          .catch((err: unknown) => {
+            send({
+              type: 'connector-open-reply',
+              id: msg.id,
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          });
+        return;
+      }
       if (msg.type === 'state') {
         send({
           type: 'state-reply',
@@ -707,7 +859,12 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
         return;
       }
       if (msg.type === 'vault') {
-        void handleVaultMessage(audit, opts.vault, msg.op, msg.payload).then((reply) => {
+        const payload = bindConnectorVaultPayload(
+          msg.op,
+          msg.payload,
+          opts.connector?.connectionId,
+        );
+        void handleVaultMessage(audit, opts.vault, msg.op, payload).then((reply) => {
           send({ type: 'vault-reply', id: msg.id, ...reply });
         });
         return;
@@ -724,37 +881,73 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
         return;
       }
       if (msg.type === 'result') {
-        const envelope = msg.ok
-          ? extractReturnEnvelope(msg.value)
-          : ({ value: msg.value } satisfies HandlerReturnEnvelope);
-        let outcomeError = msg.error;
-        let outcomeOk = msg.ok;
-        if (msg.ok && opts.outputSchema && envelope.output !== undefined) {
-          const schemaErr = validateOutputAgainstSchema(opts.outputSchema, envelope.output);
-          if (schemaErr) {
-            outcomeOk = false;
-            outcomeError = `outputSchema validation failed: ${schemaErr}`;
+        void (async () => {
+          try {
+            let rawValue = msg.value;
+            if (!msg.ok) {
+              await closeConnectorRun(
+                false,
+                {},
+                msg.error ?? 'pull connector failed before returning rows',
+              );
+            }
+            if (
+              msg.ok &&
+              rawValue &&
+              typeof rawValue === 'object' &&
+              '__centraidPull' in rawValue
+            ) {
+              const published = await publishPullResult(
+                (rawValue as { __centraidPull: Record<string, unknown> }).__centraidPull,
+              );
+              rawValue = {
+                ...(published.summary ? { summary: published.summary } : {}),
+                output: published.output,
+              };
+            }
+            const envelope = msg.ok
+              ? extractReturnEnvelope(rawValue)
+              : ({ value: rawValue } satisfies HandlerReturnEnvelope);
+            let outcomeError = msg.error;
+            let outcomeOk = msg.ok;
+            if (msg.ok && opts.outputSchema && envelope.output !== undefined) {
+              const schemaErr = validateOutputAgainstSchema(opts.outputSchema, envelope.output);
+              if (schemaErr) {
+                outcomeOk = false;
+                outcomeError = `outputSchema validation failed: ${schemaErr}`;
+              }
+            }
+            if (!outcomeOk && outcomeError) {
+              persistedEntries.push({
+                ts: Date.now(),
+                level: 'error',
+                msg: `automation handler failed: ${outcomeError}`,
+                source: 'action',
+                handler: handlerName,
+              });
+            }
+            finish({
+              ok: outcomeOk,
+              value: envelope.value,
+              ...(envelope.summary !== undefined ? { summary: envelope.summary } : {}),
+              ...(envelope.output !== undefined ? { output: envelope.output } : {}),
+              ...(outcomeError !== undefined ? { error: outcomeError } : {}),
+              logs,
+              toolBatches,
+              agentCalls,
+            });
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            await closeConnectorRun(false, {}, message).catch(() => undefined);
+            finish({
+              ok: false,
+              error: message,
+              logs,
+              toolBatches,
+              agentCalls,
+            });
           }
-        }
-        if (!outcomeOk && outcomeError) {
-          persistedEntries.push({
-            ts: Date.now(),
-            level: 'error',
-            msg: `automation handler failed: ${outcomeError}`,
-            source: 'action',
-            handler: handlerName,
-          });
-        }
-        finish({
-          ok: outcomeOk,
-          value: envelope.value,
-          ...(envelope.summary !== undefined ? { summary: envelope.summary } : {}),
-          ...(envelope.output !== undefined ? { output: envelope.output } : {}),
-          ...(outcomeError !== undefined ? { error: outcomeError } : {}),
-          logs,
-          toolBatches,
-          agentCalls,
-        });
+        })();
       }
     });
 
@@ -766,7 +959,9 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
         source: 'action',
         handler: handlerName,
       });
-      finish({ ok: false, error: err.message, logs, toolBatches, agentCalls });
+      void closeConnectorRun(false, {}, err.message)
+        .catch(() => undefined)
+        .finally(() => finish({ ok: false, error: err.message, logs, toolBatches, agentCalls }));
     });
 
     worker.on('exit', (code) => {
@@ -778,13 +973,10 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
           source: 'action',
           handler: handlerName,
         });
-        finish({
-          ok: false,
-          error: `worker exited with code ${code}`,
-          logs,
-          toolBatches,
-          agentCalls,
-        });
+        const error = `worker exited with code ${code}`;
+        void closeConnectorRun(false, {}, error)
+          .catch(() => undefined)
+          .finally(() => finish({ ok: false, error, logs, toolBatches, agentCalls }));
       }
     });
 

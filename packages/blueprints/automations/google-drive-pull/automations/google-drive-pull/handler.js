@@ -1,13 +1,11 @@
 /**
  * pull.gdrive connector — read-only ingest through the connection broker.
- * Stages into the vault review band via sync.stage_rows; credentials are
+ * Returns honest rows to the engine-owned staging run; credentials are
  * substituted at the transport layer ({{connection:…}}), never in handler code.
- * Files stage as social.message so the assistant can search/summarize without a full blob copy.
+ * Files stage as core.content_item so file metadata never masquerades as correspondence.
  */
 
-const PURPOSE = 'dpv:ServiceProvision';
 const KIND = 'pull.gdrive';
-const LABEL = 'personal';
 const API = 'https://www.googleapis.com/drive/v3';
 const AUTH = { authorization: 'Bearer {{connection:access_token}}' };
 const MAX_PAGES_PER_RUN = 3;
@@ -33,88 +31,55 @@ async function api(ctx, path, opts = {}) {
 }
 
 function toRow(file) {
+  const sourceId = 'gdrive:' + file.id;
+  const owner = file.owners && file.owners[0];
   return {
-    entity_type: 'social.message',
-    external_id: 'gdrive:' + file.id,
+    entity_type: 'core.content_item',
+    external_id: sourceId,
     payload: {
-      messageId: 'gdrive:' + file.id,
-      subject: file.name || '(untitled)',
-      fromName: (file.owners && file.owners[0] && file.owners[0].displayName) || 'Drive',
-      fromEmail: (file.owners && file.owners[0] && file.owners[0].emailAddress) || null,
-      sentAt: file.modifiedTime || file.createdTime || null,
-      body: [file.mimeType, file.webViewLink || file.webContentLink, file.description]
-        .filter(Boolean)
-        .join('\n'),
-      threadKey: 'gdrive:' + file.id,
+      sourceId,
+      title: file.name || '(untitled)',
+      mediaType: file.mimeType || 'application/octet-stream',
+      sourceUrl: file.webViewLink || file.webContentLink || sourceId,
+      modifiedAt: file.modifiedTime || file.createdTime || null,
+      owner: (owner && (owner.emailAddress || owner.displayName)) || null,
+      body: file.description || '',
     },
+    updatedAt: file.modifiedTime || file.createdTime,
   };
 }
 
-export default async ({ ctx, log }) => {
-  const about = await api(ctx, '/about?fields=user');
-  const principal = (about.user && about.user.emailAddress) || 'drive';
-  const begin = await ctx.vault.invoke({
-    command: 'sync.begin_run',
-    input: { kind: KIND, label: LABEL, principal: principal },
-    purpose: PURPOSE,
-  });
-  const opened = begin && begin.output ? begin.output : begin;
-  if (opened.refused) {
-    return { summary: `skipped: ${opened.reason}`, output: { skipped: true } };
-  }
-  const { connection_id: connectionId, run_id: runId, cursors } = opened;
-
-  try {
-    const pageToken = cursors && cursors['gdrive.pageToken'];
+export default {
+  protocol: 'centraid.pull/v1',
+  async principal({ ctx }) {
+    const about = await api(ctx, '/about?fields=user');
+    return (about.user && about.user.emailAddress) || 'drive';
+  },
+  async pull({ ctx, cursor }) {
+    const modifiedAt = cursor.highWater('gdrive.modifiedTime');
+    let pageToken = null;
     const rows = [];
-    let nextCursor = null;
-    const params = new URLSearchParams({
-      pageSize: '50',
-      fields:
-        'nextPageToken,files(id,name,mimeType,modifiedTime,createdTime,webViewLink,webContentLink,description,owners)',
-      orderBy: 'modifiedTime desc',
-      q: 'trashed = false',
-    });
-    if (pageToken) params.set('pageToken', String(pageToken));
-    const listing = await api(ctx, '/files?' + params.toString());
-    for (const file of listing.files || []) rows.push(toRow(file));
-    nextCursor = listing.nextPageToken || null;
-    let staged = 0;
-    let published = 0;
-    for (let i = 0; i < rows.length; i += 500) {
-      const outcome = await ctx.vault.invoke({
-        command: 'sync.stage_rows',
-        input: { kind: KIND, label: LABEL, rows: rows.slice(i, i + 500) },
-        purpose: PURPOSE,
+    for (let page = 0; page < MAX_PAGES_PER_RUN; page += 1) {
+      const params = new URLSearchParams({
+        pageSize: '50',
+        fields:
+          'nextPageToken,files(id,name,mimeType,modifiedTime,createdTime,webViewLink,webContentLink,description,owners)',
+        orderBy: 'modifiedTime asc',
+        q: modifiedAt.current
+          ? `trashed = false and modifiedTime >= '${String(modifiedAt.current)}'`
+          : 'trashed = false',
       });
-      const out = outcome && outcome.output ? outcome.output : {};
-      staged += rows.slice(i, i + 500).length;
-      if (out.published) published += (out.published.created || 0) + (out.published.updated || 0);
+      if (pageToken) params.set('pageToken', String(pageToken));
+      const listing = await api(ctx, '/files?' + params.toString());
+      for (const item of listing.files || []) {
+        const row = toRow(item);
+        modifiedAt.observe(row.updatedAt);
+        delete row.updatedAt;
+        rows.push(row);
+      }
+      pageToken = listing.nextPageToken || null;
+      if (!pageToken) break;
     }
-
-    if (typeof nextCursor !== 'undefined' && nextCursor) {
-      await ctx.vault.invoke({
-        command: 'sync.set_cursor',
-        input: { connection_id: connectionId, key: 'gdrive.pageToken', value: nextCursor },
-        purpose: PURPOSE,
-      });
-    }
-    await ctx.vault.invoke({
-      command: 'sync.finish_run',
-      input: { run_id: runId, ok: true, staged, published },
-      purpose: PURPOSE,
-    });
-    log.info(`${KIND}: ${staged} staged`);
-    return {
-      summary: `pulled ${staged} item(s)${published ? `, ${published} published` : ''}`,
-      output: { staged, published },
-    };
-  } catch (err) {
-    await ctx.vault.invoke({
-      command: 'sync.finish_run',
-      input: { run_id: runId, ok: false, error: String((err && err.message) || err) },
-      purpose: PURPOSE,
-    });
-    throw err;
-  }
+    return { rows, summary: `pulled ${rows.length} item(s)` };
+  },
 };

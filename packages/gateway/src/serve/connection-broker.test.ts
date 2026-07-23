@@ -508,6 +508,64 @@ test('transient Assist exchange failure retries without flipping an active conne
   expect(connectionRow(plane, connectionId).status).toBe('active');
 });
 
+test('an expired Assist reconnect receipt preserves an existing working token pair', async () => {
+  const plane = openPlane(await tempDir());
+  const connectionId = configureAssist(plane);
+  storeTokens(plane, connectionId, {
+    access_token: 'ya29.existing',
+    refresh_token: '1//existing',
+    expires_at: new Date(Date.now() + 3600_000).toISOString(),
+  });
+  const fetchImpl = vi.fn(async () => Response.json({ error: 'expired_receipt' }, { status: 400 }));
+  const broker = new ConnectionBroker(
+    () => plane,
+    500,
+    {
+      workerBaseUrl: ASSIST_DEVELOPMENT_WORKER_ORIGIN,
+      googleClientId: 'centraid-shared.apps.googleusercontent.com',
+      restrictedScopesEnabled: false,
+    },
+    fetchImpl as typeof fetch,
+  );
+  const ceremony = broker.beginAssistAuthorization({
+    plane,
+    connectionId,
+    clientSessionId: 's'.repeat(64),
+    surface: 'desktop',
+  });
+
+  await expect(
+    broker.completeAssistAuthorization({
+      state: ceremony.state,
+      code: 'google-code',
+      receipt: 'v1.expired',
+      clientSessionId: 's'.repeat(64),
+    }),
+  ).rejects.toThrow(/expired_receipt/);
+
+  expect(connectionRow(plane, connectionId).status).toBe('active');
+});
+
+test('BYO token posts refuse redirects before credentials can be forwarded', async () => {
+  const plane = openPlane(await tempDir());
+  const fetchImpl = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+    expect(init?.redirect).toBe('error');
+    return Response.json({ access_token: 'fresh', expires_in: 3600 });
+  });
+  const connectionId = configureOauth(plane, 'https://oauth.example/token');
+  const broker = new ConnectionBroker(() => plane, 500, undefined, fetchImpl as typeof fetch);
+  const ceremony = broker.beginAuthorization(
+    plane,
+    connectionId,
+    'http://127.0.0.1/oauth/callback',
+  );
+  const authorize = new URL(ceremony.authUrl);
+
+  await expect(
+    broker.completeAuthorization(authorize.searchParams.get('state')!, 'authorization-code'),
+  ).resolves.toEqual({ connectionId });
+});
+
 test('Assist refresh uses only the Worker and persists a rotated pair before use', async () => {
   const plane = openPlane(await tempDir());
   const connectionId = configureAssist(plane);

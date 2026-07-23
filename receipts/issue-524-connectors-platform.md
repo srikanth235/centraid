@@ -7,6 +7,7 @@ Issue: https://github.com/srikanth235/centraid/issues/524
 - [x] Connectors is a top-level sidebar route (not only Settings subpage)
 - [x] Google/Microsoft tiles show OAuth 2.0; detail shows redirect URI + Save & authorize
 - [x] Automations can bind a concrete connectionId for a connector
+- [x] Pull lifecycle and cursor semantics are engine-owned
 - [x] Provider presets expose capabilities (syncs/actions)
 - [x] Additional pull blueprints registered in index/manifest
 - [x] Unit tests for connector platform + connections UI paths
@@ -49,6 +50,10 @@ Automations can bind a concrete connectionId for a connector:
 - `packages/automation/src/index.ts`
 - `packages/automation/src/fire/fire.ts`
 - `packages/automation/src/fire/connector.test.ts`
+- `packages/automation/src/manifest/bundled-templates.test.ts` — validates both function handlers and declarative pull specs.
+- `packages/automation/src/handler/runner.ts` — opens and finishes the manifest-bound run, stages rows, and persists cursors outside connector code.
+- `packages/automation/src/worker/runner.ts` — executes `centraid.pull/v1` specs with a fetch-only context and typed high-water/provider cursor strategies.
+- `ARCHITECTURE.md` — records the connection-scoped pull runtime and cursor contract.
 - `packages/gateway/src/routes/lifecycle-automation-routes.ts`
 - `packages/gateway/src/serve/connection-broker.ts`
 - `packages/client/src/gateway-client-automation-editing.ts`
@@ -68,6 +73,10 @@ Automations can bind a concrete connectionId for a connector:
 - `packages/client/src/react/shell/routes/templatesData.test.ts`
 - `apps/desktop/tests/e2e/automations.spec.ts` — targets the automation name field by its stable accessible label after the editor copy changed.
 
+Pull lifecycle and cursor semantics are engine-owned:
+
+- The automation and vault files above make connection identity, run bracketing, staging, and cursor persistence engine concerns; declarative handlers only fetch, map rows, and report cursor progress.
+
 Provider presets expose capabilities (syncs/actions):
 
 - `packages/gateway/src/routes/connection-providers.ts`
@@ -82,15 +91,23 @@ Additional pull blueprints registered in index/manifest:
 
 - `packages/blueprints/index.json`
 - `packages/blueprints/manifest.json`
+- `packages/blueprints/src/app-manifests.test.ts` — pins every pull connector to an intentional vault entity type.
+- All 15 bundled `*-pull` handlers now export declarative specs; none can invoke the vault rail or hand-roll begin/stage/finish.
+- `packages/vault/src/ingest/enrich-publishers.ts`
+- `packages/vault/src/ingest/payload-schemas.ts` — remote files, pages, issues, and tasks create/update honest `core.content_item` rows rather than fabricated correspondence.
 - `packages/blueprints/automations/dropbox-pull/app.json`
 - `packages/blueprints/automations/dropbox-pull/automations/dropbox-pull/automation.json`
 - `packages/blueprints/automations/dropbox-pull/automations/dropbox-pull/handler.js`
+- `packages/blueprints/automations/github-pull/automations/github-pull/handler.js`
 - `packages/blueprints/automations/gitlab-pull/app.json`
 - `packages/blueprints/automations/gitlab-pull/automations/gitlab-pull/automation.json`
 - `packages/blueprints/automations/gitlab-pull/automations/gitlab-pull/handler.js`
 - `packages/blueprints/automations/google-drive-pull/app.json`
 - `packages/blueprints/automations/google-drive-pull/automations/google-drive-pull/automation.json`
 - `packages/blueprints/automations/google-drive-pull/automations/google-drive-pull/handler.js`
+- `packages/blueprints/automations/google-calendar-pull/automations/google-calendar-pull/handler.js`
+- `packages/blueprints/automations/google-contacts-pull/automations/google-contacts-pull/handler.js`
+- `packages/blueprints/automations/google-gmail-pull/automations/google-gmail-pull/handler.js`
 - `packages/blueprints/automations/linear-pull/app.json`
 - `packages/blueprints/automations/linear-pull/automations/linear-pull/automation.json`
 - `packages/blueprints/automations/linear-pull/automations/linear-pull/handler.js`
@@ -126,13 +143,17 @@ Receipt + PR: this file `receipts/issue-524-connectors-platform.md` and the PR o
 - Webhook ingress, multi-tenant connection tags
 - Product copy or docs naming third-party iPaaS platforms
 - Full assistant tool execution backend beyond client-side descriptors from healthy connections
+- A dedicated task/issue ontology kind; Linear, GitLab, and Todoist use the existing `core.content_item` kind until a separately reviewed ontology proposal replaces it.
 
 ## Decisions
 
 - Keep #304 BYO OAuth only in this PR; hosted assist is a separate product track.
 - Durable binding is soft `connections[]` with optional `connectionId` (not hard fail if unbound for legacy templates).
+- A declarative pull requires a durable `connectionId`; the engine supplies connection identity and owns begin/stage/cursor/finish, while manual imports retain their explicit sync command surface.
+- Persisted pagination is either a monotonic high-water value or an opaque provider token. Mutable-list offsets are not a supported cursor strategy.
 - Connectors top-level route reuses SettingsConnectionsScreen presentation rather than a second gallery implementation.
 - Brand marks + optional icon fetch script; no third-party platform names in product strings.
+- Files/pages and issue/task records are content items; only actual mail/chat connectors stage `social.message`.
 
 ## Verification
 
@@ -140,19 +161,22 @@ Receipt + PR: this file `receipts/issue-524-connectors-platform.md` and the PR o
 bun run --filter @centraid/client test -- src/react/shell/routes/connectorPlatform.test.ts src/react/shell/routes/settingsConnectionsData.test.ts src/react/screens/SettingsConnectionsScreen.test.tsx src/react/screens/AutomationEditorScreen.test.tsx src/react/shell/Sidebar.test.tsx
 bun run --filter @centraid/gateway test -- src/routes/connection-providers.test.ts src/routes/connections-routes.test.ts
 bun run --filter @centraid/automation test -- src/fire/connector.test.ts
+bun run --filter @centraid/blueprints test -- src/app-manifests.test.ts
+bun run --filter @centraid/vault test -- src/commands/sync.test.ts src/schema/migrate.test.ts
 bun run --cwd apps/desktop test:e2e -- tests/e2e/automations.spec.ts
 bun run --filter @centraid/client typecheck
 bun run --filter @centraid/gateway typecheck
 bun run --filter @centraid/automation typecheck
+bun run check:pr
 ```
 
 ## Audit
 
 **Check 1 — What changed faithfully describes the diff**
-PASS – Receipt enumerates client shell/Connectors UI, OAuth helpers, automation connectionId binding, gateway capabilities, every new pull blueprint path, and tests in the change set.
+PASS – Receipt enumerates client shell/Connectors UI, OAuth helpers, the engine-owned connection-scoped pull runtime, gateway capabilities, every new pull blueprint path, and tests in the change set.
 
 **Check 2 — All checked checklist items are realized in the diff**
-PASS – Each acceptance item has corresponding code: sidebar route, OAuth detail UX, connectionId binding, capabilities, pull blueprints, tests, this receipt (+ PR).
+PASS – Each acceptance item has corresponding code: sidebar route, OAuth detail UX, connection-scoped pull binding and lifecycle, capabilities, pull blueprints, tests, this receipt (+ PR).
 
 **Check 3 — Checklist mirrors the issue**
 PASS – Checklist matches issue #524 acceptance criteria.
@@ -168,6 +192,8 @@ PASS – Checklist matches issue #524 acceptance criteria.
 | cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | codex-019f8e48-8ec-1784814585-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #524 | gpt-5.6-sol | 131313 | 0 | 7711232 | 8230 | 139543 | 2.3795 | 2841599 | 0 | 111222272 | 261813 | test(desktop): use stable automation name selector (#524) |
+| codex-019f8e48-8ec-1784820444-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #524 | gpt-5.6-sol | 1293079 | 0 | 41413888 | 98651 | 1391730 | 15.0659 | 4134678 | 0 | 152636160 | 360464 | fix(connectors): centralize pull lifecycle and cursors (#524) |
+| codex-019f8e48-8ec-1784820597-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #524 | gpt-5.6-sol | 21136 | 0 | 676864 | 3676 | 24812 | 0.2772 | 4155814 | 0 | 153313024 | 364140 | fix(connectors): centralize pull lifecycle and cursors (#524) |
 ## Steering
 
 **Check 1 — every human-steering event is recorded in ### Steering under ## Accounting**

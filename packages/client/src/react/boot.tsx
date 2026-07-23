@@ -100,7 +100,9 @@ sync();
 void (async (): Promise<void> => {
   const shell = document.querySelector<HTMLElement>(SHELL_SELECTOR);
   if (!shell) return;
-  const assistHandoff = await consumeInitialAssistHandoff();
+  // Calling this before render synchronously scrubs the sensitive fragment;
+  // awaiting it later keeps a slow gateway exchange from blanking the PWA.
+  const assistHandoffPromise = consumeInitialAssistHandoff();
   installDesktopAssistHandoff();
   const shellRoot = createRoot(shell);
   const settings = await window.CentraidApi.getSettings().catch(
@@ -111,9 +113,13 @@ void (async (): Promise<void> => {
   );
   if (settings.onboardingCompletedAt) {
     shellRoot.render(wrap(<App />));
+    const assistHandoff = await assistHandoffPromise;
     if (assistHandoff.status === 'error') window.alert(assistHandoff.message);
     return;
   }
+  void assistHandoffPromise.then((assistHandoff) => {
+    if (assistHandoff.status === 'error') window.alert(assistHandoff.message);
+  });
   shellRoot.render(
     wrap(
       <FirstRunGate

@@ -315,7 +315,10 @@ export class ConnectionBroker {
       scopes: ceremony.requestedScopes,
     });
     if (!response.ok) {
-      if (response.authDead) {
+      // A reconnect ceremony is additive until replacement tokens persist.
+      // A stale/expired courier receipt must not disable an already-working
+      // connection; the stored pair remains authoritative for normal fires.
+      if (response.authDead && !row.access_token && !row.refresh_token) {
         await this.flipNeedsAuth(
           ceremony.plane,
           ceremony.connectionId,
@@ -579,6 +582,9 @@ export class ConnectionBroker {
           method: 'POST',
           headers: { 'content-type': 'application/x-www-form-urlencoded' },
           body: form.toString(),
+          // Never forward a code, refresh token, or client secret to a
+          // token endpoint's attacker-controlled redirect target.
+          redirect: 'error',
           signal: timeoutSignal(this.tokenTimeoutMs),
         });
         status = res.status;

@@ -89,7 +89,9 @@ export function capabilitiesFromConnectors(
       actions.push({
         id: `action:${c.templateId}`,
         title: titleFromTemplate(c.templateId, c.kind),
-        toolName: `connector.${c.kind.replace(/\./g, '_')}.send`,
+        // Send templates can share a connection kind (Gmail mail + calendar
+        // invite), so the template id—not kind—is the collision-free key.
+        toolName: `connector.${c.templateId.replace(/-/g, '_')}`,
         kind: c.kind,
         templateId: c.templateId,
         approval: 'outbox',

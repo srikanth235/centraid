@@ -58,6 +58,32 @@ An app declares **queries** (bounded reads) and **actions** (typed writes) in it
 
 The same journalled command path backs **Vault Atlas** (#441), the Operations screen that renders the model as **Kinds / Relations / Browse** (`packages/client/src/react/screens/AtlasScreen.tsx`): the Browse table editor dispatches `atlas.insert_row|update_row|delete_row` — never raw SQL, sealed columns refuse writes — and its dependent-aware deletes consult the **polymorphic-reference registry** (`packages/vault/src/schema/poly-refs.ts`), the one enumeration of every polymorphic `(type, id)` pointer with a cleanup policy, swept on purge and Browse-delete so orphaned `consent_share`/`enrich_embedding`/`sync_external_entity` rows (previously never cleaned) can no longer survive a hard delete.
 
+## Connector pull runtime
+
+Bundled pull connectors export a declarative `centraid.pull/v1` spec, not an
+imperative automation handler. A spec contains only a principal probe and a
+pull function that returns rows plus cursor updates. Its context exposes
+`now`, `input`, `abortSignal`, and broker-mediated `fetch`; it deliberately
+does not expose `vault`, `state`, `runs`, or `agent`.
+
+The automation engine resolves the manifest's durable `connectionId` before
+the worker runs, opens the sync run after the observed-principal probe, and
+owns pause/refusal gates, row staging, cursor persistence, and success/failure
+finalization. Pull-spec code therefore cannot supply or override
+`kind`, `label`, or `connection_id`, and two accounts of the same provider
+cannot collapse into a label-derived shadow connection.
+
+Cursor semantics are explicit:
+
+- `cursor.highWater(key)` retains the greatest observed provider value.
+- `cursor.provider(key)` stores, replaces, or clears an opaque provider token.
+- Offset paging is not a supported persisted strategy because mutable
+  provider lists make offsets lossy.
+
+The bundled blueprint guardrail in
+`packages/blueprints/src/app-manifests.test.ts` requires every `*-pull`
+template to use this protocol and pins its intended vault entity type.
+
 ## App render paths
 
 An app UI reaches the screen one of two ways, and which one is a property of the app, not the host (#505):

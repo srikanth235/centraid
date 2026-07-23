@@ -138,7 +138,10 @@ async function loadEditorConnectorCatalog(): Promise<AuEditorCatalogConnectorDTO
   ]);
   const featured = buildFeatured(providers);
   return featured.map((f) => {
-    const match = connections.find((c) => c.kind === f.kind) ?? null;
+    const match =
+      connections.find((c) => c.kind === f.kind && c.health === 'ok') ??
+      connections.find((c) => c.kind === f.kind) ??
+      null;
     return {
       allowedHosts: f.provider.allowedHosts,
       authUrl: f.provider.authUrl,

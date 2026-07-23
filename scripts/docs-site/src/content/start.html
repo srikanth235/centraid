@@ -160,10 +160,11 @@
           </p>
           <p>
             For live sources, open <b>Connectors</b> for Gmail, Google Calendar, Google Contacts,
-            and GitHub. Google sources offer <b>Connect with Centraid</b>: the browser carries only
-            a short-lived code and your gateway keeps every token sealed. Advanced keeps the
-            bring-your-own OAuth client path. Handler code never sees a secret, and each sync stages
-            rows through the same review door.
+            and GitHub. Verified Google scopes offer <b>Connect with Centraid</b>: the browser
+            carries only a short-lived code and your gateway keeps every token sealed. Restricted
+            Gmail and Drive scopes remain unavailable through Assist until Google verification is
+            complete; Advanced keeps the bring-your-own OAuth client path. Handler code never sees
+            a secret, and each sync stages rows through the same review door.
           </p>
           <p class="aside">
             How staging, the external-id map, and the broker actually work:

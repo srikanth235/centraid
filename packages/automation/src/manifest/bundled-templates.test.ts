@@ -47,10 +47,18 @@ describe('bundled automation templates', () => {
 
   it.each(ids.map((id) => [id] as const))('%s: handler.js loads as a module', async (id) => {
     // A real import: a template with a syntax error would fail every fire at
-    // load time. Handlers are pure `export default` functions — importing
-    // executes no side effects.
+    // load time. Pull connectors export declarative specs; other automations
+    // export functions. Importing either form executes no side effects.
     const file = path.join(AUTOMATIONS_DIR, id, 'automations', id, 'handler.js');
     const mod = (await import(`${'file://'}${file}`)) as { default?: unknown };
-    expect(typeof mod.default).toBe('function');
+    if (id.endsWith('-pull')) {
+      expect(mod.default).toMatchObject({
+        protocol: 'centraid.pull/v1',
+        principal: expect.any(Function),
+        pull: expect.any(Function),
+      });
+    } else {
+      expect(typeof mod.default).toBe('function');
+    }
   });
 });

@@ -1,12 +1,10 @@
 /**
  * pull.notion connector — read-only ingest through the connection broker.
- * Stages into the vault review band via sync.stage_rows; credentials are
+ * Returns honest rows to the engine-owned staging run; credentials are
  * substituted at the transport layer ({{connection:…}}), never in handler code.
  */
 
-const PURPOSE = 'dpv:ServiceProvision';
 const KIND = 'pull.notion';
-const LABEL = 'personal';
 const API = 'https://api.notion.com/v1';
 const AUTH = {
   authorization: 'Bearer {{connection:api_key}}',
@@ -27,9 +25,12 @@ async function api(ctx, path, opts = {}) {
     throw new Error(`${KIND} auth failed (${res.status}): ${res.text.slice(0, 200)}`);
   }
   if (res.status !== 200 && res.status !== 201) {
-    throw new Error(
+    const error = new Error(
       `${KIND} ${String(path).split('?')[0]} answered ${res.status}: ${res.text.slice(0, 200)}`,
     );
+    error.status = res.status;
+    error.responseText = res.text;
+    throw error;
   }
   if (!res.text) return {};
   return JSON.parse(res.text);
@@ -46,84 +47,61 @@ function titleOf(page) {
   return '(untitled)';
 }
 function toRow(page) {
+  const sourceId = 'notion:' + page.id;
   return {
-    entity_type: 'social.message',
-    external_id: 'notion:' + page.id,
+    entity_type: 'core.content_item',
+    external_id: sourceId,
     payload: {
-      messageId: 'notion:' + page.id,
-      subject: titleOf(page),
-      fromName: 'Notion',
-      fromEmail: null,
-      sentAt: page.last_edited_time || page.created_time || null,
-      body: 'Notion page ' + (page.url || page.id),
-      threadKey: 'notion:' + page.id,
+      sourceId,
+      title: titleOf(page),
+      mediaType: 'application/vnd.notion.page',
+      sourceUrl: page.url || sourceId,
+      modifiedAt: page.last_edited_time || page.created_time || null,
+      owner: (page.last_edited_by && (page.last_edited_by.name || page.last_edited_by.id)) || null,
+      body: '',
     },
   };
 }
 
-export default async ({ ctx, log }) => {
-  const me = await api(ctx, '/users/me');
-  const principal =
-    (me.bot && me.bot.owner && me.bot.owner.user && me.bot.owner.user.name) || me.name || 'notion';
-  const begin = await ctx.vault.invoke({
-    command: 'sync.begin_run',
-    input: { kind: KIND, label: LABEL, principal: principal },
-    purpose: PURPOSE,
-  });
-  const opened = begin && begin.output ? begin.output : begin;
-  if (opened.refused) {
-    return { summary: `skipped: ${opened.reason}`, output: { skipped: true } };
-  }
-  const { connection_id: connectionId, run_id: runId, cursors } = opened;
-
-  try {
-    const start = cursors && cursors['notion.start_cursor'];
+export default {
+  protocol: 'centraid.pull/v1',
+  async principal({ ctx }) {
+    const me = await api(ctx, '/users/me');
+    return (
+      (me.bot && me.bot.owner && me.bot.owner.user && me.bot.owner.user.name) || me.name || 'notion'
+    );
+  },
+  async pull({ ctx, cursor }) {
+    const traversal = cursor.provider('notion.start_cursor');
+    let start = traversal.current;
     const rows = [];
-    let nextCursor = null;
-    const body = { page_size: 50, filter: { property: 'object', value: 'page' } };
-    if (start) body.start_cursor = String(start);
-    // search is POST
-    const listing = await api(ctx, '/search', { method: 'POST', body: JSON.stringify(body) });
-    for (const page of listing.results || []) {
-      if (page.object === 'page') rows.push(toRow(page));
+    let resetTried = false;
+    for (let page = 0; page < MAX_PAGES_PER_RUN; page += 1) {
+      const body = { page_size: 50, filter: { property: 'object', value: 'page' } };
+      if (start) body.start_cursor = String(start);
+      let listing;
+      try {
+        listing = await api(ctx, '/search', { method: 'POST', body: JSON.stringify(body) });
+      } catch (error) {
+        const invalidCursor =
+          start &&
+          error &&
+          error.status === 400 &&
+          /cursor|start_cursor/i.test(String(error.responseText || error.message || ''));
+        if (!invalidCursor || resetTried) throw error;
+        traversal.clear();
+        start = null;
+        resetTried = true;
+        page -= 1;
+        continue;
+      }
+      for (const result of listing.results || []) {
+        if (result.object === 'page') rows.push(toRow(result));
+      }
+      start = listing.has_more && listing.next_cursor ? listing.next_cursor : null;
+      if (!start) break;
     }
-    nextCursor = listing.has_more && listing.next_cursor ? listing.next_cursor : null;
-    let staged = 0;
-    let published = 0;
-    for (let i = 0; i < rows.length; i += 500) {
-      const outcome = await ctx.vault.invoke({
-        command: 'sync.stage_rows',
-        input: { kind: KIND, label: LABEL, rows: rows.slice(i, i + 500) },
-        purpose: PURPOSE,
-      });
-      const out = outcome && outcome.output ? outcome.output : {};
-      staged += rows.slice(i, i + 500).length;
-      if (out.published) published += (out.published.created || 0) + (out.published.updated || 0);
-    }
-
-    if (typeof nextCursor !== 'undefined' && nextCursor) {
-      await ctx.vault.invoke({
-        command: 'sync.set_cursor',
-        input: { connection_id: connectionId, key: 'notion.start_cursor', value: nextCursor },
-        purpose: PURPOSE,
-      });
-    }
-    await ctx.vault.invoke({
-      command: 'sync.finish_run',
-      input: { run_id: runId, ok: true, staged, published },
-      purpose: PURPOSE,
-    });
-    log.info(`${KIND}: ${staged} staged`);
-    return {
-      summary: `pulled ${staged} item(s)${published ? `, ${published} published` : ''}`,
-      output: { staged, published },
-    };
-  } catch (err) {
-    await ctx.vault.invoke({
-      command: 'sync.finish_run',
-      input: { run_id: runId, ok: false, error: String((err && err.message) || err) },
-      purpose: PURPOSE,
-    });
-    throw err;
-  }
+    traversal.set(start);
+    return { rows, summary: `pulled ${rows.length} item(s)` };
+  },
 };

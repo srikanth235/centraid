@@ -40,5 +40,8 @@ describe('PROVIDER_PRESETS capabilities', () => {
         (a) => a.toolName.includes('gmail') && a.approval === 'outbox',
       ),
     ).toBe(true);
+    expect(new Set(google.capabilities.actions.map((action) => action.toolName)).size).toBe(
+      google.capabilities.actions.length,
+    );
   });
 });

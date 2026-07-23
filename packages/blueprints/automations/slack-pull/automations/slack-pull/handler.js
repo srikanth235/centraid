@@ -1,12 +1,10 @@
 /**
  * pull.slack connector — read-only ingest through the connection broker.
- * Stages into the vault review band via sync.stage_rows; credentials are
+ * Returns honest rows to the engine-owned staging run; credentials are
  * substituted at the transport layer ({{connection:…}}), never in handler code.
  */
 
-const PURPOSE = 'dpv:ServiceProvision';
 const KIND = 'pull.slack';
-const LABEL = 'personal';
 const API = 'https://slack.com/api';
 const AUTH = { authorization: 'Bearer {{connection:api_key}}' };
 const MAX_PAGES_PER_RUN = 3;
@@ -47,81 +45,69 @@ function toRow(msg, channel) {
   };
 }
 
-export default async ({ ctx, log }) => {
-  const auth = await api(ctx, '/auth.test');
-  if (auth.ok === false) throw new Error('slack auth.test failed: ' + (auth.error || 'unknown'));
-  const principal = auth.user || auth.user_id || 'slack';
-  const begin = await ctx.vault.invoke({
-    command: 'sync.begin_run',
-    input: { kind: KIND, label: LABEL, principal: principal },
-    purpose: PURPOSE,
-  });
-  const opened = begin && begin.output ? begin.output : begin;
-  if (opened.refused) {
-    return { summary: `skipped: ${opened.reason}`, output: { skipped: true } };
-  }
-  const { connection_id: connectionId, run_id: runId, cursors } = opened;
-
-  try {
-    const oldest = cursors && cursors['slack.oldest'];
+export default {
+  protocol: 'centraid.pull/v1',
+  async principal({ ctx }) {
+    const auth = await api(ctx, '/auth.test');
+    if (auth.ok === false) throw new Error('slack auth.test failed: ' + (auth.error || 'unknown'));
+    return auth.user || auth.user_id || 'slack';
+  },
+  async pull({ ctx, log, cursor }) {
     const rows = [];
-    let nextCursor = oldest || null;
-    const conv = await api(
-      ctx,
-      '/conversations.list?types=im,mpim,public_channel,private_channel&limit=20&exclude_archived=true',
-    );
-    if (conv.ok === false)
-      throw new Error('slack conversations.list failed: ' + (conv.error || 'unknown'));
-    for (const ch of conv.channels || []) {
-      const hist = await api(
+    const channels = [];
+    const channelTraversal = cursor.provider('slack.channels_cursor');
+    let channelsCursor = channelTraversal.current;
+    for (let page = 0; page < MAX_PAGES_PER_RUN; page += 1) {
+      const listing = await api(
         ctx,
-        '/conversations.history?channel=' +
-          encodeURIComponent(ch.id) +
-          '&limit=30' +
-          (oldest ? '&oldest=' + encodeURIComponent(String(oldest)) : ''),
+        '/conversations.list?types=im,mpim,public_channel,private_channel&limit=100&exclude_archived=true' +
+          (channelsCursor ? '&cursor=' + encodeURIComponent(String(channelsCursor)) : ''),
       );
-      if (hist.ok === false) continue;
-      for (const msg of hist.messages || []) {
-        rows.push(toRow(msg, ch.name || ch.id));
-        if (!nextCursor || msg.ts > nextCursor) nextCursor = msg.ts;
+      if (listing.ok === false) {
+        throw new Error('slack conversations.list failed: ' + (listing.error || 'unknown'));
       }
+      channels.push(...(listing.channels || []));
+      channelsCursor = (listing.response_metadata && listing.response_metadata.next_cursor) || null;
+      if (!channelsCursor) break;
     }
-    let staged = 0;
-    let published = 0;
-    for (let i = 0; i < rows.length; i += 500) {
-      const outcome = await ctx.vault.invoke({
-        command: 'sync.stage_rows',
-        input: { kind: KIND, label: LABEL, rows: rows.slice(i, i + 500) },
-        purpose: PURPOSE,
-      });
-      const out = outcome && outcome.output ? outcome.output : {};
-      staged += rows.slice(i, i + 500).length;
-      if (out.published) published += (out.published.created || 0) + (out.published.updated || 0);
+    channelTraversal.set(channelsCursor);
+
+    for (const channel of channels) {
+      const highWater = cursor.highWater('slack.oldest.' + channel.id);
+      const historyTraversal = cursor.provider('slack.history_cursor.' + channel.id);
+      const oldest = highWater.current;
+      let historyCursor = historyTraversal.current;
+      let latest = oldest || null;
+      let failed = false;
+      for (let page = 0; page < MAX_PAGES_PER_RUN; page += 1) {
+        const history = await api(
+          ctx,
+          '/conversations.history?channel=' +
+            encodeURIComponent(channel.id) +
+            '&limit=100' +
+            (oldest ? '&oldest=' + encodeURIComponent(String(oldest)) : '') +
+            (historyCursor ? '&cursor=' + encodeURIComponent(String(historyCursor)) : ''),
+        );
+        if (history.ok === false) {
+          log.warn(
+            `${KIND}: channel ${channel.id} history failed: ${history.error || 'unknown'}; cursor preserved`,
+          );
+          failed = true;
+          break;
+        }
+        for (const message of history.messages || []) {
+          rows.push(toRow(message, channel.name || channel.id));
+          if (!latest || message.ts > latest) latest = message.ts;
+        }
+        historyCursor =
+          (history.response_metadata && history.response_metadata.next_cursor) || null;
+        if (!historyCursor) break;
+      }
+      if (failed) continue;
+      historyTraversal.set(historyCursor);
+      if (!historyCursor && latest) highWater.observe(latest);
     }
 
-    if (typeof nextCursor !== 'undefined' && nextCursor) {
-      await ctx.vault.invoke({
-        command: 'sync.set_cursor',
-        input: { connection_id: connectionId, key: 'slack.oldest', value: nextCursor },
-        purpose: PURPOSE,
-      });
-    }
-    await ctx.vault.invoke({
-      command: 'sync.finish_run',
-      input: { run_id: runId, ok: true, staged, published },
-      purpose: PURPOSE,
-    });
-    log.info(`${KIND}: ${staged} staged`);
-    return {
-      summary: `pulled ${staged} item(s)${published ? `, ${published} published` : ''}`,
-      output: { staged, published },
-    };
-  } catch (err) {
-    await ctx.vault.invoke({
-      command: 'sync.finish_run',
-      input: { run_id: runId, ok: false, error: String((err && err.message) || err) },
-      purpose: PURPOSE,
-    });
-    throw err;
-  }
+    return { rows, summary: `pulled ${rows.length} message(s)` };
+  },
 };

@@ -149,6 +149,15 @@ const HEALTH_LABEL: Record<ConnectionHealth, string> = {
 
 const POLL_MS = 2000;
 const POLL_WINDOW_MS = 45_000;
+const ASSIST_PWA_ORIGIN = 'https://app.centraid.dev';
+
+function assertAssistWebOrigin(): void {
+  if (window.location.origin !== ASSIST_PWA_ORIGIN) {
+    throw new Error(
+      'Connect with Centraid is available in the desktop app or at app.centraid.dev. Use Advanced with your own OAuth client on this web origin.',
+    );
+  }
+}
 
 /** Display metadata for a connector kind (gallery tile + detail sheet). */
 interface FeaturedMeta {
@@ -930,7 +939,6 @@ export default function SettingsConnectionsScreen({
     pollDeadline.current = Date.now() + POLL_WINDOW_MS;
     const tick = (): void => {
       void loadConnections()
-        .catch(() => [] as ConnectionRowDTO[])
         .then((freshRows) => {
           setRows(freshRows);
           const row = freshRows.find((r) => r.connectionId === connectionId);
@@ -948,6 +956,13 @@ export default function SettingsConnectionsScreen({
           // owner can retry or use the manual return-link fallback.
           if (Date.now() >= pollDeadline.current) return;
           pollTimer.current = setTimeout(tick, POLL_MS);
+        })
+        .catch(() => {
+          // A transient gateway read must neither erase the visible list nor
+          // masquerade as a deleted/healthy connection and stop polling.
+          if (Date.now() < pollDeadline.current) {
+            pollTimer.current = setTimeout(tick, POLL_MS);
+          }
         });
     };
     pollTimer.current = setTimeout(tick, POLL_MS);
@@ -960,6 +975,7 @@ export default function SettingsConnectionsScreen({
         if (row.oauthMode === 'assist') {
           const host = await window.CentraidApi.getHostCapabilities?.();
           if (host?.platform === 'web') {
+            assertAssistWebOrigin();
             window.location.assign(authUrl);
             return;
           }
@@ -1054,6 +1070,7 @@ export default function SettingsConnectionsScreen({
             if (input.oauthMode === 'assist') {
               const host = await window.CentraidApi.getHostCapabilities?.();
               if (host?.platform === 'web') {
+                assertAssistWebOrigin();
                 window.location.assign(authUrl);
                 return;
               }

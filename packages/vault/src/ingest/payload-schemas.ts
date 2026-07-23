@@ -159,6 +159,17 @@ const SCHEMAS: Record<string, JsonSchema> = {
       folder: { type: 'string' },
     },
   },
+  RemoteContentPayload: {
+    type: 'object',
+    required: ['sourceId', 'title', 'mediaType', 'sourceUrl', 'modifiedAt', 'owner'],
+    properties: {
+      sourceId: { type: 'string', minLength: 1 },
+      title: { type: 'string', minLength: 1 },
+      mediaType: { type: 'string', minLength: 1 },
+      sourceUrl: { type: 'string', minLength: 1 },
+      body: { type: 'string' },
+    },
+  },
 };
 
 /**

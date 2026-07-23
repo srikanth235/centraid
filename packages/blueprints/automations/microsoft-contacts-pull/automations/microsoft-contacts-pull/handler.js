@@ -1,12 +1,10 @@
 /**
  * pull.outlookcontacts connector — read-only ingest through the connection broker.
- * Stages into the vault review band via sync.stage_rows; credentials are
+ * Returns honest rows to the engine-owned staging run; credentials are
  * substituted at the transport layer ({{connection:…}}), never in handler code.
  */
 
-const PURPOSE = 'dpv:ServiceProvision';
 const KIND = 'pull.outlookcontacts';
-const LABEL = 'personal';
 const API = 'https://graph.microsoft.com/v1.0';
 const AUTH = { authorization: 'Bearer {{connection:access_token}}' };
 const MAX_PAGES_PER_RUN = 3;
@@ -55,74 +53,42 @@ function toRow(c) {
       bday: c.birthday ? String(c.birthday).slice(0, 10) : null,
       identifiers,
     },
+    updatedAt: c.lastModifiedDateTime,
   };
 }
 
-export default async ({ ctx, log }) => {
-  const me = await api(ctx, '/me?$select=mail,userPrincipalName');
-  const principal = (me.mail || me.userPrincipalName || 'outlook').toLowerCase();
-  const begin = await ctx.vault.invoke({
-    command: 'sync.begin_run',
-    input: { kind: KIND, label: LABEL, principal: principal },
-    purpose: PURPOSE,
-  });
-  const opened = begin && begin.output ? begin.output : begin;
-  if (opened.refused) {
-    return { summary: `skipped: ${opened.reason}`, output: { skipped: true } };
-  }
-  const { connection_id: connectionId, run_id: runId, cursors } = opened;
-
-  try {
-    const skip = Number((cursors && cursors['outlookcontacts.skip']) || 0);
+export default {
+  protocol: 'centraid.pull/v1',
+  async principal({ ctx }) {
+    const me = await api(ctx, '/me?$select=mail,userPrincipalName');
+    return (me.mail || me.userPrincipalName || 'outlook').toLowerCase();
+  },
+  async pull({ ctx, cursor }) {
+    const modifiedAt = cursor.highWater('outlookcontacts.modifiedAt');
+    const params = new URLSearchParams({
+      $top: '50',
+      $orderby: 'lastModifiedDateTime asc',
+      $select:
+        'id,displayName,givenName,surname,emailAddresses,mobilePhone,birthday,lastModifiedDateTime',
+    });
+    if (modifiedAt.current) {
+      params.set('$filter', `lastModifiedDateTime ge ${String(modifiedAt.current)}`);
+    }
+    let nextLink = '/me/contacts?' + params.toString();
     const rows = [];
-    let nextCursor = null;
-    const listing = await api(
-      ctx,
-      '/me/contacts?$top=50&$skip=' +
-        skip +
-        '&$select=id,displayName,givenName,surname,emailAddresses,mobilePhone,birthday',
-    );
-    for (const c of listing.value || []) {
-      const row = toRow(c);
-      if (row) rows.push(row);
+    for (let page = 0; page < MAX_PAGES_PER_RUN; page += 1) {
+      const listing = await api(ctx, nextLink);
+      for (const contact of listing.value || []) {
+        const row = toRow(contact);
+        if (row) {
+          modifiedAt.observe(row.updatedAt);
+          delete row.updatedAt;
+          rows.push(row);
+        }
+      }
+      nextLink = listing['@odata.nextLink'] || null;
+      if (!nextLink) break;
     }
-    nextCursor = listing['@odata.nextLink'] ? String(skip + (listing.value || []).length) : null;
-    let staged = 0;
-    let published = 0;
-    for (let i = 0; i < rows.length; i += 500) {
-      const outcome = await ctx.vault.invoke({
-        command: 'sync.stage_rows',
-        input: { kind: KIND, label: LABEL, rows: rows.slice(i, i + 500) },
-        purpose: PURPOSE,
-      });
-      const out = outcome && outcome.output ? outcome.output : {};
-      staged += rows.slice(i, i + 500).length;
-      if (out.published) published += (out.published.created || 0) + (out.published.updated || 0);
-    }
-
-    if (typeof nextCursor !== 'undefined' && nextCursor) {
-      await ctx.vault.invoke({
-        command: 'sync.set_cursor',
-        input: { connection_id: connectionId, key: 'outlookcontacts.skip', value: nextCursor },
-        purpose: PURPOSE,
-      });
-    }
-    await ctx.vault.invoke({
-      command: 'sync.finish_run',
-      input: { run_id: runId, ok: true, staged, published },
-      purpose: PURPOSE,
-    });
-    log.info(`${KIND}: ${staged} staged`);
-    return {
-      summary: `pulled ${staged} item(s)${published ? `, ${published} published` : ''}`,
-      output: { staged, published },
-    };
-  } catch (err) {
-    await ctx.vault.invoke({
-      command: 'sync.finish_run',
-      input: { run_id: runId, ok: false, error: String((err && err.message) || err) },
-      purpose: PURPOSE,
-    });
-    throw err;
-  }
+    return { rows, summary: `pulled ${rows.length} item(s)` };
+  },
 };

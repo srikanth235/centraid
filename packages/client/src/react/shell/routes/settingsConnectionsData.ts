@@ -200,25 +200,27 @@ export async function installSyncForConnection(input: {
   const result = await gwCloneTemplate({ templateId: input.templateId });
   const rows = await listAutomations().catch(() => []);
   const row = rows.find((r) => r.id === result.app.id);
-  const ref = row?.ref ?? `${result.app.id}/${input.templateId}`;
-  if (row) {
-    const existing = (
-      row.manifest as {
-        connector?: { kind?: string; label?: string; principal?: string };
-      }
-    ).connector;
-    if (existing?.kind && existing.label) {
-      await updateAutomation({
-        automationId: ref,
-        connector: {
-          kind: existing.kind,
-          label: existing.label,
-          connectionId: input.connection.connectionId,
-          ...(existing.principal ? { principal: existing.principal } : {}),
-        },
-      }).catch(() => undefined);
-    }
+  if (!row) {
+    throw new Error(`cloned automation "${result.app.id}" was not available to bind`);
   }
+  const ref = row?.ref ?? `${result.app.id}/${input.templateId}`;
+  const existing = (
+    row.manifest as {
+      connector?: { kind?: string; label?: string; principal?: string };
+    }
+  ).connector;
+  if (!existing?.kind || !existing.label) {
+    throw new Error(`cloned automation "${ref}" has no connector binding`);
+  }
+  await updateAutomation({
+    automationId: ref,
+    connector: {
+      kind: existing.kind,
+      label: existing.label,
+      connectionId: input.connection.connectionId,
+      ...(existing.principal ? { principal: existing.principal } : {}),
+    },
+  });
   return { ref };
 }
 

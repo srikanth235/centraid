@@ -1,12 +1,10 @@
 /**
  * pull.dropbox connector — read-only ingest through the connection broker.
- * Stages into the vault review band via sync.stage_rows; credentials are
+ * Returns honest rows to the engine-owned staging run; credentials are
  * substituted at the transport layer ({{connection:…}}), never in handler code.
  */
 
-const PURPOSE = 'dpv:ServiceProvision';
 const KIND = 'pull.dropbox';
-const LABEL = 'personal';
 const API = 'https://api.dropboxapi.com/2';
 const AUTH = {
   authorization: 'Bearer {{connection:access_token}}',
@@ -26,102 +24,82 @@ async function api(ctx, path, opts = {}) {
     throw new Error(`${KIND} auth failed (${res.status}): ${res.text.slice(0, 200)}`);
   }
   if (res.status !== 200 && res.status !== 201) {
-    throw new Error(
+    const error = new Error(
       `${KIND} ${String(path).split('?')[0]} answered ${res.status}: ${res.text.slice(0, 200)}`,
     );
+    error.status = res.status;
+    error.responseText = res.text;
+    throw error;
   }
   if (!res.text) return {};
   return JSON.parse(res.text);
 }
 
-function toRow(entry) {
+function toRow(entry, owner) {
+  const sourceId = 'dropbox:' + (entry.id || entry.path_lower);
   return {
-    entity_type: 'social.message',
-    external_id: 'dropbox:' + (entry.id || entry.path_lower),
+    entity_type: 'core.content_item',
+    external_id: sourceId,
     payload: {
-      messageId: 'dropbox:' + (entry.id || entry.path_lower),
-      subject: entry.name || entry.path_display || '(file)',
-      fromName: 'Dropbox',
-      fromEmail: null,
-      sentAt: entry.client_modified || entry.server_modified || null,
-      body: [entry.path_display, entry['.tag'], entry.size ? entry.size + ' bytes' : null]
-        .filter(Boolean)
-        .join('\n'),
-      threadKey: 'dropbox:' + (entry.id || entry.path_lower),
+      sourceId,
+      title: entry.name || entry.path_display || '(file)',
+      mediaType: 'application/octet-stream',
+      sourceUrl: entry.path_display ? 'dropbox:' + entry.path_display : sourceId,
+      modifiedAt: entry.server_modified || entry.client_modified || null,
+      owner: owner || null,
+      body: entry.size ? entry.size + ' bytes' : '',
     },
   };
 }
 
-export default async ({ ctx, log }) => {
-  const acct = await api(ctx, '/users/get_current_account', { method: 'POST', body: 'null' });
-  const principal = (acct.email || acct.account_id || 'dropbox').toLowerCase();
-  const begin = await ctx.vault.invoke({
-    command: 'sync.begin_run',
-    input: { kind: KIND, label: LABEL, principal: principal },
-    purpose: PURPOSE,
-  });
-  const opened = begin && begin.output ? begin.output : begin;
-  if (opened.refused) {
-    return { summary: `skipped: ${opened.reason}`, output: { skipped: true } };
-  }
-  const { connection_id: connectionId, run_id: runId, cursors } = opened;
-
-  try {
-    const cursor = cursors && cursors['dropbox.cursor'];
+export default {
+  protocol: 'centraid.pull/v1',
+  async principal({ ctx }) {
+    const account = await api(ctx, '/users/get_current_account', { method: 'POST', body: 'null' });
+    return (account.email || account.account_id || 'dropbox').toLowerCase();
+  },
+  async pull({ ctx, cursor }) {
+    const traversal = cursor.provider('dropbox.cursor');
+    let providerCursor = traversal.current;
     const rows = [];
-    let nextCursor = null;
-    let listing;
-    if (cursor) {
-      listing = await api(ctx, '/files/list_folder/continue', {
-        method: 'POST',
-        body: JSON.stringify({ cursor: String(cursor) }),
-      });
-    } else {
-      listing = await api(ctx, '/files/list_folder', {
-        method: 'POST',
-        body: JSON.stringify({ path: '', recursive: false, limit: 100, include_media_info: false }),
-      });
+    let resetTried = false;
+    for (let page = 0; page < MAX_PAGES_PER_RUN; page += 1) {
+      let listing;
+      try {
+        listing = providerCursor
+          ? await api(ctx, '/files/list_folder/continue', {
+              method: 'POST',
+              body: JSON.stringify({ cursor: String(providerCursor) }),
+            })
+          : await api(ctx, '/files/list_folder', {
+              method: 'POST',
+              body: JSON.stringify({
+                path: '',
+                recursive: false,
+                limit: 100,
+                include_media_info: false,
+              }),
+            });
+      } catch (error) {
+        const reset =
+          providerCursor &&
+          error &&
+          error.status === 409 &&
+          String(error.responseText || error.message || '').includes('reset');
+        if (!reset || resetTried) throw error;
+        providerCursor = null;
+        traversal.clear();
+        resetTried = true;
+        page -= 1;
+        continue;
+      }
+      for (const entry of listing.entries || []) {
+        if (entry['.tag'] === 'file') rows.push(toRow(entry, null));
+      }
+      providerCursor = listing.cursor || null;
+      if (!listing.has_more) break;
     }
-    for (const entry of listing.entries || []) {
-      if (entry['.tag'] === 'file') rows.push(toRow(entry));
-    }
-    nextCursor = listing.cursor || null;
-    let staged = 0;
-    let published = 0;
-    for (let i = 0; i < rows.length; i += 500) {
-      const outcome = await ctx.vault.invoke({
-        command: 'sync.stage_rows',
-        input: { kind: KIND, label: LABEL, rows: rows.slice(i, i + 500) },
-        purpose: PURPOSE,
-      });
-      const out = outcome && outcome.output ? outcome.output : {};
-      staged += rows.slice(i, i + 500).length;
-      if (out.published) published += (out.published.created || 0) + (out.published.updated || 0);
-    }
-
-    if (typeof nextCursor !== 'undefined' && nextCursor) {
-      await ctx.vault.invoke({
-        command: 'sync.set_cursor',
-        input: { connection_id: connectionId, key: 'dropbox.cursor', value: nextCursor },
-        purpose: PURPOSE,
-      });
-    }
-    await ctx.vault.invoke({
-      command: 'sync.finish_run',
-      input: { run_id: runId, ok: true, staged, published },
-      purpose: PURPOSE,
-    });
-    log.info(`${KIND}: ${staged} staged`);
-    return {
-      summary: `pulled ${staged} item(s)${published ? `, ${published} published` : ''}`,
-      output: { staged, published },
-    };
-  } catch (err) {
-    await ctx.vault.invoke({
-      command: 'sync.finish_run',
-      input: { run_id: runId, ok: false, error: String((err && err.message) || err) },
-      purpose: PURPOSE,
-    });
-    throw err;
-  }
+    traversal.set(providerCursor);
+    return { rows, summary: `pulled ${rows.length} item(s)` };
+  },
 };

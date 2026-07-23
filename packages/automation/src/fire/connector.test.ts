@@ -90,8 +90,9 @@ describe('connector runtime gates', () => {
   async function writeConnector(
     handler: string,
     over: Record<string, unknown> = {},
+    appId = 'mail',
   ): Promise<void> {
-    const dir = path.join(appsDir, 'mail', 'automations', 'pull');
+    const dir = path.join(appsDir, appId, 'automations', 'pull');
     await fs.mkdir(dir, { recursive: true });
     const manifest = validateManifest(rawManifest(over)) as Manifest;
     await fs.writeFile(path.join(dir, 'automation.json'), JSON.stringify(manifest, null, 2));
@@ -157,6 +158,321 @@ describe('connector runtime gates', () => {
     );
     expect(outcome.ok).toBe(true);
     expect(outcome.value).toMatchObject({ ran: true });
+  });
+
+  it('owns run identity, staging, cursors, and finish outside the pull spec', async () => {
+    await writeConnector(
+      `export default {
+         protocol: 'centraid.pull/v1',
+         async principal() { return 'me@example.com'; },
+         async pull({ cursor }) {
+           const highWater = cursor.highWater('messages.updated_at');
+           highWater.observe('2026-07-22T12:00:00Z');
+           highWater.observe('2026-07-23T12:00:00Z');
+           const provider = cursor.provider('provider.page');
+           if (provider.current === 'poison') provider.clear();
+           return {
+             rows: [{ entity_type: 'social.message', external_id: 'm1', payload: {} }],
+             summary: 'pulled one',
+           };
+         },
+       };`,
+      {
+        connector: {
+          kind: 'mcp.gmail',
+          label: 'personal',
+          principal: 'me@example.com',
+          connectionId: 'conn-bound',
+        },
+      },
+    );
+    const invoked: Record<string, unknown>[] = [];
+    const bridge: VaultBridge = async (call) => {
+      if (call.op === 'read') {
+        return { ok: true, result: { rows: [{ status: 'active' }] } };
+      }
+      if (call.op === 'invoke') {
+        invoked.push(call.payload);
+        const command = call.payload.command;
+        if (command === 'sync.begin_run') {
+          return {
+            ok: true,
+            result: {
+              output: {
+                connection_id: 'conn-bound',
+                run_id: 'sync-run-1',
+                cursors: {
+                  'messages.updated_at': '2026-07-22T18:00:00Z',
+                  'provider.page': 'poison',
+                },
+              },
+            },
+          };
+        }
+        if (command === 'sync.stage_rows') {
+          return { ok: true, result: { output: { published: { created: 1, updated: 0 } } } };
+        }
+        return { ok: true, result: { output: {} } };
+      }
+      return { ok: false, code: 'VAULT_ERROR', error: 'unexpected op' };
+    };
+    const { outcome } = await runFire(
+      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
+      { openDispatch: openDispatch() },
+    );
+    expect(outcome.ok).toBe(true);
+    expect(outcome).toMatchObject({
+      summary: 'pulled one',
+      output: { staged: 1, published: 1 },
+    });
+    expect(invoked.map((payload) => payload.command)).toEqual([
+      'sync.begin_run',
+      'sync.stage_rows',
+      'sync.set_cursor',
+      'sync.set_cursor',
+      'sync.finish_run',
+    ]);
+    for (const payload of invoked) {
+      if (payload.command === 'sync.finish_run') continue;
+      expect(payload).toMatchObject({ input: { connection_id: 'conn-bound' } });
+    }
+    expect(invoked[0]).toMatchObject({
+      input: { connection_id: 'conn-bound', principal: 'me@example.com' },
+    });
+    expect(invoked[0]?.input).not.toHaveProperty('kind');
+    expect(invoked[0]?.input).not.toHaveProperty('label');
+    expect(invoked[1]?.input).not.toHaveProperty('kind');
+    expect(invoked[1]?.input).not.toHaveProperty('label');
+    expect(invoked[2]).toMatchObject({
+      input: {
+        key: 'messages.updated_at',
+        value: '2026-07-23T12:00:00Z',
+      },
+    });
+    expect(invoked[3]).toMatchObject({
+      input: {
+        key: 'provider.page',
+        value: null,
+      },
+    });
+  });
+
+  it('keeps two same-kind connector accounts isolated by manifest binding', async () => {
+    const handler = `export default {
+      protocol: 'centraid.pull/v1',
+      async principal() { return 'same@example.com'; },
+      async pull() { return { rows: [] }; },
+    };`;
+    await writeConnector(
+      handler,
+      {
+        connector: {
+          kind: 'mcp.gmail',
+          label: 'personal',
+          principal: 'same@example.com',
+          connectionId: 'conn-personal',
+        },
+      },
+      'mail-personal',
+    );
+    await writeConnector(
+      handler,
+      {
+        connector: {
+          kind: 'mcp.gmail',
+          label: 'personal',
+          principal: 'same@example.com',
+          connectionId: 'conn-work',
+        },
+      },
+      'mail-work',
+    );
+    const beginInputs: Record<string, unknown>[] = [];
+    const bridge: VaultBridge = async (call) => {
+      if (call.op === 'read') {
+        return { ok: true, result: { rows: [{ status: 'active' }] } };
+      }
+      if (call.op === 'invoke') {
+        const input = call.payload.input as Record<string, unknown>;
+        if (call.payload.command === 'sync.begin_run') {
+          beginInputs.push(input);
+          return {
+            ok: true,
+            result: {
+              output: {
+                connection_id: input.connection_id,
+                run_id: `run-${String(input.connection_id)}`,
+                cursors: {},
+              },
+            },
+          };
+        }
+        return { ok: true, result: { output: {} } };
+      }
+      return { ok: false, code: 'VAULT_ERROR', error: 'unexpected op' };
+    };
+
+    for (const automationRef of ['mail-personal/pull', 'mail-work/pull']) {
+      const { outcome } = await runFire(
+        { automationRef, appsDir, journalDbFile, vaultFor: () => bridge },
+        { openDispatch: openDispatch() },
+      );
+      expect(outcome.ok).toBe(true);
+    }
+
+    expect(beginInputs).toEqual([
+      expect.objectContaining({ connection_id: 'conn-personal' }),
+      expect.objectContaining({ connection_id: 'conn-work' }),
+    ]);
+  });
+
+  it('does not invoke provider paging when the engine refuses the scoped run', async () => {
+    await writeConnector(
+      `export default {
+         protocol: 'centraid.pull/v1',
+         async principal() { return 'me@example.com'; },
+         async pull() { throw new Error('pull must not run after refusal'); },
+       };`,
+      {
+        connector: {
+          kind: 'mcp.gmail',
+          label: 'personal',
+          principal: 'me@example.com',
+          connectionId: 'conn-bound',
+        },
+      },
+    );
+    const invoked: string[] = [];
+    const bridge: VaultBridge = async (call) => {
+      if (call.op === 'read') {
+        return { ok: true, result: { rows: [{ status: 'active' }] } };
+      }
+      if (call.op === 'invoke') {
+        invoked.push(String(call.payload.command));
+        return {
+          ok: true,
+          result: { output: { refused: 'paused', reason: 'paused by owner' } },
+        };
+      }
+      return { ok: false, code: 'VAULT_ERROR', error: 'unexpected op' };
+    };
+
+    const { outcome } = await runFire(
+      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
+      { openDispatch: openDispatch() },
+    );
+
+    expect(outcome.ok).toBe(true);
+    expect(outcome).toMatchObject({
+      summary: 'skipped: paused by owner',
+      output: { skipped: true },
+    });
+    expect(invoked).toEqual(['sync.begin_run']);
+  });
+
+  it('does not expose vault or state rails to declarative pull specs', async () => {
+    await writeConnector(
+      `export default {
+         protocol: 'centraid.pull/v1',
+         async principal({ ctx }) {
+           if ('vault' in ctx || 'state' in ctx || 'runs' in ctx || 'agent' in ctx) {
+             throw new Error('privileged rail leaked into pull context');
+           }
+           return 'me@example.com';
+         },
+         async pull() { return { rows: [] }; },
+       };`,
+      {
+        connector: {
+          kind: 'mcp.gmail',
+          label: 'personal',
+          principal: 'me@example.com',
+          connectionId: 'conn-bound',
+        },
+      },
+    );
+    const bridge: VaultBridge = async (call) => {
+      if (call.op === 'read') {
+        return { ok: true, result: { rows: [{ status: 'active' }] } };
+      }
+      if (call.op === 'invoke' && call.payload.command === 'sync.begin_run') {
+        return {
+          ok: true,
+          result: {
+            output: {
+              connection_id: 'conn-bound',
+              run_id: 'sync-run-1',
+              cursors: {},
+            },
+          },
+        };
+      }
+      if (call.op === 'invoke') return { ok: true, result: { output: {} } };
+      return { ok: false, code: 'VAULT_ERROR', error: 'unexpected op' };
+    };
+
+    const { outcome } = await runFire(
+      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
+      { openDispatch: openDispatch() },
+    );
+
+    expect(outcome.ok).toBe(true);
+  });
+
+  it('closes an engine-owned run when a pull spec throws', async () => {
+    await writeConnector(
+      `export default {
+         protocol: 'centraid.pull/v1',
+         async principal() { return 'me@example.com'; },
+         async pull() { throw new Error('provider pagination failed'); },
+       };`,
+      {
+        connector: {
+          kind: 'mcp.gmail',
+          label: 'personal',
+          principal: 'me@example.com',
+          connectionId: 'conn-bound',
+        },
+      },
+    );
+    const invoked: Record<string, unknown>[] = [];
+    const bridge: VaultBridge = async (call) => {
+      if (call.op === 'read') {
+        return { ok: true, result: { rows: [{ status: 'active' }] } };
+      }
+      if (call.op === 'invoke') {
+        invoked.push(call.payload);
+        if (call.payload.command === 'sync.begin_run') {
+          return {
+            ok: true,
+            result: {
+              output: {
+                connection_id: 'conn-bound',
+                run_id: 'sync-run-1',
+                cursors: {},
+              },
+            },
+          };
+        }
+        return { ok: true, result: { output: {} } };
+      }
+      return { ok: false, code: 'VAULT_ERROR', error: 'unexpected op' };
+    };
+
+    const { outcome } = await runFire(
+      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
+      { openDispatch: openDispatch() },
+    );
+
+    expect(outcome.ok).toBe(false);
+    expect(outcome.error).toMatch(/provider pagination failed/);
+    expect(invoked.map((payload) => payload.command)).toEqual([
+      'sync.begin_run',
+      'sync.finish_run',
+    ]);
+    expect(invoked[1]).toMatchObject({
+      input: { run_id: 'sync-run-1', ok: false, error: expect.stringContaining('pagination') },
+    });
   });
 });
 

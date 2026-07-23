@@ -89,6 +89,38 @@ export const VAULT_MIGRATIONS: readonly string[] = [
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];
 
+/**
+ * Repair the #526 credential sidecar added while the v0 ladder was still
+ * collapsed to one rung. Existing development vaults already stamped at
+ * user_version=1 do not replay CREATE TABLE IF NOT EXISTS, so add the column
+ * explicitly before broker queries can touch it.
+ */
+// COMPAT(sync-oauth-mode-v0): added 2026-07-23, drop when the supported vault floor postdates #526.
+export function repairSyncCredentialOauthMode(db: DatabaseSync): void {
+  const table = db
+    .prepare(
+      `SELECT 1 AS present FROM sqlite_master
+        WHERE type = 'table' AND name = 'sync_connection_credential'`,
+    )
+    .get();
+  if (!table) return;
+  const columns = db.prepare(`PRAGMA table_info('sync_connection_credential')`).all() as {
+    name: string;
+  }[];
+  if (columns.some((column) => column.name === 'oauth_mode')) return;
+  db.exec(
+    `ALTER TABLE sync_connection_credential
+       ADD COLUMN oauth_mode TEXT NOT NULL DEFAULT 'byo'
+       CHECK (oauth_mode IN ('byo','assist'))`,
+  );
+}
+
+/** Apply the vault schema and its replay-safe compatibility repairs together. */
+export function migrateVault(db: DatabaseSync): void {
+  migrate(db, VAULT_MIGRATIONS);
+  repairSyncCredentialOauthMode(db);
+}
+
 function currentVersion(db: DatabaseSync): number {
   const row = db.prepare('PRAGMA user_version').get() as { user_version: number };
   return row.user_version;

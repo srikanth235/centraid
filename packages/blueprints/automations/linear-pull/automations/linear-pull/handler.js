@@ -2,9 +2,7 @@
  * Linear pull — GraphQL over api.linear.app with an API key.
  */
 
-const PURPOSE = 'dpv:ServiceProvision';
 const KIND = 'pull.linear';
-const LABEL = 'personal';
 const API = 'https://api.linear.app/graphql';
 const AUTH = { authorization: '{{connection:api_key}}', 'content-type': 'application/json' };
 
@@ -26,84 +24,49 @@ async function gql(ctx, query, variables) {
 }
 
 function toRow(issue) {
+  const sourceId = 'linear:' + issue.id;
   return {
-    entity_type: 'social.message',
-    external_id: 'linear:' + issue.id,
+    entity_type: 'core.content_item',
+    external_id: sourceId,
     payload: {
-      messageId: 'linear:' + issue.id,
-      subject: '[' + (issue.identifier || issue.id) + '] ' + (issue.title || ''),
-      fromName:
+      sourceId,
+      title: '[' + (issue.identifier || issue.id) + '] ' + (issue.title || ''),
+      mediaType: 'application/vnd.linear.issue',
+      sourceUrl: issue.url || sourceId,
+      modifiedAt: issue.updatedAt || issue.createdAt || null,
+      owner:
         (issue.assignee && issue.assignee.name) || (issue.creator && issue.creator.name) || null,
-      fromEmail: null,
-      sentAt: issue.createdAt,
       body:
         (issue.state && issue.state.name ? 'Status: ' + issue.state.name + '\n\n' : '') +
         (issue.description || '').slice(0, 4000),
-      threadKey: 'linear:' + issue.id,
     },
   };
 }
 
-export default async ({ ctx, log }) => {
-  const viewer = await gql(ctx, '{ viewer { id name email } }');
-  const principal = (viewer.viewer && (viewer.viewer.email || viewer.viewer.name)) || 'linear';
-  const begin = await ctx.vault.invoke({
-    command: 'sync.begin_run',
-    input: { kind: KIND, label: LABEL, principal },
-    purpose: PURPOSE,
-  });
-  const opened = begin && begin.output ? begin.output : begin;
-  if (opened.refused) return { summary: 'skipped: ' + opened.reason, output: { skipped: true } };
-  const { connection_id: connectionId, run_id: runId, cursors } = opened;
-  try {
-    const after = cursors && cursors['linear.after'];
+export default {
+  protocol: 'centraid.pull/v1',
+  async principal({ ctx }) {
+    const viewer = await gql(ctx, '{ viewer { id name email } }');
+    return (viewer.viewer && (viewer.viewer.email || viewer.viewer.name)) || 'linear';
+  },
+  async pull({ ctx, cursor }) {
+    const traversal = cursor.provider('linear.after');
     const data = await gql(
       ctx,
       `query($after: String) {
-      issues(first: 50, after: $after, orderBy: updatedAt) {
-        pageInfo { hasNextPage endCursor }
-        nodes { id identifier title description createdAt updatedAt state { name } assignee { name } creator { name } }
-      }
-    }`,
-      { after: after || null },
+        issues(first: 50, after: $after, orderBy: updatedAt) {
+          pageInfo { hasNextPage endCursor }
+          nodes { id identifier title description url createdAt updatedAt state { name } assignee { name } creator { name } }
+        }
+      }`,
+      { after: traversal.current || null },
     );
     const rows = (data.issues.nodes || []).map(toRow);
-    let staged = 0,
-      published = 0;
-    for (let i = 0; i < rows.length; i += 500) {
-      const outcome = await ctx.vault.invoke({
-        command: 'sync.stage_rows',
-        input: { kind: KIND, label: LABEL, rows: rows.slice(i, i + 500) },
-        purpose: PURPOSE,
-      });
-      const out = outcome && outcome.output ? outcome.output : {};
-      staged += rows.slice(i, i + 500).length;
-      if (out.published) published += (out.published.created || 0) + (out.published.updated || 0);
-    }
-    if (data.issues.pageInfo && data.issues.pageInfo.endCursor) {
-      await ctx.vault.invoke({
-        command: 'sync.set_cursor',
-        input: {
-          connection_id: connectionId,
-          key: 'linear.after',
-          value: data.issues.pageInfo.endCursor,
-        },
-        purpose: PURPOSE,
-      });
-    }
-    await ctx.vault.invoke({
-      command: 'sync.finish_run',
-      input: { run_id: runId, ok: true, staged, published },
-      purpose: PURPOSE,
-    });
-    log.info('linear pull: ' + staged + ' staged');
-    return { summary: 'pulled ' + staged + ' issue(s)', output: { staged, published } };
-  } catch (err) {
-    await ctx.vault.invoke({
-      command: 'sync.finish_run',
-      input: { run_id: runId, ok: false, error: String((err && err.message) || err) },
-      purpose: PURPOSE,
-    });
-    throw err;
-  }
+    traversal.set(
+      data.issues.pageInfo && data.issues.pageInfo.hasNextPage
+        ? data.issues.pageInfo.endCursor
+        : null,
+    );
+    return { rows, summary: `pulled ${rows.length} issue(s)` };
+  },
 };

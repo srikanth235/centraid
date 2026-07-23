@@ -178,6 +178,9 @@ Gateway, vault, and protocol:
 - `packages/protocol/src/routes.ts`
 - `packages/vault/src/commands/sync.test.ts`
 - `packages/vault/src/commands/sync.ts`
+- `packages/vault/src/db.ts`
+- `packages/vault/src/schema/migrate.test.ts`
+- `packages/vault/src/schema/migrate.ts` — repairs the `oauth_mode` column on pre-#526 v0 vaults before broker queries run.
 - `packages/vault/src/schema/sync.ts`
 - `scripts/lint-protocol-routes.mjs`
 
@@ -205,7 +208,6 @@ Desktop, PWA, and Connectors UX:
 - `packages/client/src/react/shell/routes/ConnectorsRoute.tsx`
 - `packages/client/src/react/shell/routes/automationEditorPrefill.test.ts`
 - `packages/client/src/react/shell/routes/automationEditorVault.test.ts`
-- `packages/client/src/react/shell/routes/connectorAssistantTools.ts` — removed unused #525 shim so the stacked PR passes the repository dead-code gate.
 - `packages/client/src/react/shell/routes/settingsConnectionsData.test.ts`
 - `packages/client/src/react/shell/routes/settingsConnectionsData.ts`
 

@@ -8,9 +8,6 @@
  * increment. A 410 GONE (expired token) restarts the walk honestly.
  */
 
-const PURPOSE = 'dpv:ServiceProvision';
-const KIND = 'pull.gcal';
-const LABEL = 'personal';
 const API = 'https://www.googleapis.com/calendar/v3';
 const AUTH = { authorization: 'Bearer {{connection:access_token}}' };
 /** Pages per fire on the initial walk (250 events each). */
@@ -46,23 +43,19 @@ function toEventRow(event) {
   };
 }
 
-export default async ({ ctx, log }) => {
-  // whoami: the primary calendar's id IS the account email — the principal.
-  const primary = await api(ctx, '/calendars/primary');
-  const begin = await ctx.vault.invoke({
-    command: 'sync.begin_run',
-    input: { kind: KIND, label: LABEL, principal: primary.id },
-    purpose: PURPOSE,
-  });
-  const opened = begin && begin.output ? begin.output : begin;
-  if (opened.refused) {
-    return { summary: `skipped: ${opened.reason}`, output: { skipped: true } };
-  }
-  const { connection_id: connectionId, run_id: runId, cursors } = opened;
+export default {
+  protocol: 'centraid.pull/v1',
 
-  try {
-    let syncToken = cursors && cursors['gcal.syncToken'];
-    let pageToken = cursors && cursors['gcal.pageToken'];
+  async principal({ ctx }) {
+    const primary = await api(ctx, '/calendars/primary');
+    return primary.id;
+  },
+
+  async pull({ ctx, log, cursor }) {
+    const syncCursor = cursor.provider('gcal.syncToken');
+    const pageCursor = cursor.provider('gcal.pageToken');
+    let syncToken = syncCursor.current;
+    let pageToken = pageCursor.current;
     const rows = [];
     let nextSyncToken = null;
     let nextPageToken = null;
@@ -101,63 +94,22 @@ export default async ({ ctx, log }) => {
       pageToken = nextPageToken;
     }
 
-    let staged = 0;
-    let published = 0;
-    for (let i = 0; i < rows.length; i += 500) {
-      const outcome = await ctx.vault.invoke({
-        command: 'sync.stage_rows',
-        input: { kind: KIND, label: LABEL, rows: rows.slice(i, i + 500) },
-        purpose: PURPOSE,
-      });
-      const out = outcome && outcome.output ? outcome.output : {};
-      staged += rows.slice(i, i + 500).length;
-      if (out.published) published += (out.published.created || 0) + (out.published.updated || 0);
-    }
-
     // Cursor discipline: a finished listing hands a syncToken (clear the
     // pageToken); an unfinished walk keeps its pageToken for the next fire.
     if (nextSyncToken) {
-      await ctx.vault.invoke({
-        command: 'sync.set_cursor',
-        input: { connection_id: connectionId, key: 'gcal.syncToken', value: nextSyncToken },
-        purpose: PURPOSE,
-      });
-      await ctx.vault.invoke({
-        command: 'sync.set_cursor',
-        input: { connection_id: connectionId, key: 'gcal.pageToken', value: null },
-        purpose: PURPOSE,
-      });
+      syncCursor.set(nextSyncToken);
+      pageCursor.clear();
     } else {
-      await ctx.vault.invoke({
-        command: 'sync.set_cursor',
-        input: { connection_id: connectionId, key: 'gcal.pageToken', value: nextPageToken },
-        purpose: PURPOSE,
-      });
+      pageCursor.set(nextPageToken);
       if (mode === 'walk' && !nextPageToken) {
         // A reset (410) also clears a stale syncToken so the next fire restarts.
-        await ctx.vault.invoke({
-          command: 'sync.set_cursor',
-          input: { connection_id: connectionId, key: 'gcal.syncToken', value: null },
-          purpose: PURPOSE,
-        });
+        syncCursor.clear();
       }
     }
-    await ctx.vault.invoke({
-      command: 'sync.finish_run',
-      input: { run_id: runId, ok: true, staged, published },
-      purpose: PURPOSE,
-    });
-    log.info(`calendar pull: ${staged} staged (${mode})`);
+    log.info(`calendar pull: ${rows.length} row(s) returned (${mode})`);
     return {
-      summary: `pulled ${staged} event(s) (${mode})${published ? `, ${published} published` : ''}`,
-      output: { staged, published, mode },
+      rows,
+      summary: `pulled ${rows.length} event(s) (${mode})`,
     };
-  } catch (err) {
-    await ctx.vault.invoke({
-      command: 'sync.finish_run',
-      input: { run_id: runId, ok: false, error: String((err && err.message) || err) },
-      purpose: PURPOSE,
-    });
-    throw err;
-  }
+  },
 };

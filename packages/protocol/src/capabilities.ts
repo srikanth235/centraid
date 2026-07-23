@@ -21,6 +21,7 @@ export interface GatewayCapabilities {
    * Optional on the wire so pre-#526 gateways remain structurally valid;
    * clients interpret absence as false.
    */
+  // COMPAT(assist-oauth-capability): added 2026-07-23; drop optionality when the protocol floor requires #526.
   assistOAuth?: boolean;
 }
 
