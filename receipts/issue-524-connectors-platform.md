@@ -11,6 +11,9 @@ Issue: https://github.com/srikanth235/centraid/issues/524
 - [x] Provider presets expose capabilities (syncs/actions)
 - [x] Additional pull blueprints registered in index/manifest
 - [x] Unit tests for connector platform + connections UI paths
+- [x] Broker-enforced read-only POST exceptions for provider read APIs
+- [x] Connection identity and catalog branding cannot silently cross accounts/providers
+- [x] Build-time connector SVGs reject active markup
 - [x] Receipt + PR
 
 ## What changed
@@ -76,6 +79,11 @@ Automations can bind a concrete connectionId for a connector:
 Pull lifecycle and cursor semantics are engine-owned:
 
 - The automation and vault files above make connection identity, run bracketing, staging, and cursor persistence engine concerns; declarative handlers only fetch, map rows, and report cursor progress.
+- Broker-enforced read-only POST exceptions for provider read APIs: `packages/automation/src/handler/runner.ts` keeps the default GET/HEAD/OPTIONS ceiling and permits POST only for exact broker-declared read endpoints; Linear additionally accepts query-only GraphQL documents and rejects mutations/subscriptions. `packages/gateway/src/serve/connection-broker.ts` derives those exceptions from the exact stored provider + connector kind.
+- Connection identity and catalog branding cannot silently cross accounts/providers: `packages/gateway/src/serve/connection-broker.ts` rejects durable ids that cross connector kinds and validates known provider OAuth endpoints before opening the browser. `packages/client/src/react/shell/routes/AutomationEditorRoute.tsx` requires exact provider + kind matching and refuses to guess when multiple accounts qualify; `packages/client/src/react/shell/routes/automationEditorConnections.test.ts` covers exact, mismatched, and ambiguous connection selection.
+- `packages/blueprints/automations/notion-pull/automations/notion-pull/handler.js` pins the stable Notion API user id rather than a mutable display name.
+- `packages/client/src/react/shell/routes/templatesData.ts` never writes one-time webhook capabilities to persistent desktop console logs.
+- Build-time connector SVGs reject active markup: `scripts/lib/sanitize-connector-svg.mjs` rejects active/external SVG markup before generated constants reach `dangerouslySetInnerHTML`; `scripts/lib/sanitize-connector-svg.test.mjs` exercises the accepted and rejected forms.
 
 Provider presets expose capabilities (syncs/actions):
 
@@ -164,6 +172,7 @@ bun run --filter @centraid/gateway test -- src/routes/connection-providers.test.
 bun run --filter @centraid/automation test -- src/fire/connector.test.ts
 bun run --filter @centraid/blueprints test -- src/app-manifests.test.ts src/pull-handlers.test.ts
 bun run --filter @centraid/vault test -- src/commands/sync.test.ts src/schema/migrate.test.ts
+node --test scripts/lib/sanitize-connector-svg.test.mjs
 bun run --cwd apps/desktop test:e2e -- tests/e2e/automations.spec.ts
 bun run --filter @centraid/client typecheck
 bun run --filter @centraid/gateway typecheck
@@ -196,6 +205,8 @@ PASS – Checklist matches issue #524 acceptance criteria.
 | codex-019f8e48-8ec-1784820444-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #524 | gpt-5.6-sol | 1293079 | 0 | 41413888 | 98651 | 1391730 | 15.0659 | 4134678 | 0 | 152636160 | 360464 | fix(connectors): centralize pull lifecycle and cursors (#524) |
 | codex-019f8e48-8ec-1784820597-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #524 | gpt-5.6-sol | 21136 | 0 | 676864 | 3676 | 24812 | 0.2772 | 4155814 | 0 | 153313024 | 364140 | fix(connectors): centralize pull lifecycle and cursors (#524) |
 | codex-019f8e48-8ec-1784824210-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #524 | gpt-5.6-sol | 303537 | 0 | 7401984 | 18460 | 321997 | 2.8862 | 4459351 | 0 | 160715008 | 382600 | fix(connectors): prevent pagination data loss (#524) |
+| codex-019f8e48-8ec-1784829896-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #524 | gpt-5.6-sol | 596747 | 0 | 36604416 | 76376 | 673123 | 11.7886 | 5056098 | 0 | 197319424 | 458976 | fix(connectors): harden credential-bound pulls (#524) |
+| codex-019f8e48-8ec-1784829961-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #524 | gpt-5.6-sol | 8905 | 0 | 291584 | 944 | 9849 | 0.1093 | 5065003 | 0 | 197611008 | 459920 | fix(connectors): harden credential-bound pulls (#524) |
 ## Steering
 
 **Check 1 — every human-steering event is recorded in ### Steering under ## Accounting**

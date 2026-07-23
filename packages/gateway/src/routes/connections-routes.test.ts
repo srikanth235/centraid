@@ -87,7 +87,10 @@ test('the whole ceremony: configure → authorize → callback → active with s
         kind: 'pull.gmail',
         label: 'personal',
         cred_kind: 'oauth2',
-        provider: 'google',
+        // Custom provider id keeps this local token-server integration on
+        // the free-form BYO lane. Known catalog ids are pinned to their
+        // production OAuth endpoints by the broker.
+        provider: 'test-oauth',
         auth_url: 'https://accounts.google.com/o/oauth2/v2/auth',
         token_url: tokens.url,
         scopes: 'https://www.googleapis.com/auth/gmail.readonly',

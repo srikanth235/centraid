@@ -13,6 +13,7 @@ import path from 'node:path';
 import type { VaultBridge } from '@centraid/app-engine';
 import { runFire, type DispatchSurface, type OpenDispatchArgs } from './fire.js';
 import { validateManifest, type Manifest } from '../manifest/manifest.js';
+import { isBrokerReadOnlyPost } from '../handler/runner.js';
 
 const VAULT_BLOCK = {
   purpose: 'dpv:ServiceProvision',
@@ -1118,6 +1119,57 @@ describe('read-only ceiling on injected fetches (issue #304 phase 5)', () => {
         resolveConnection: async () => ({
           values: { access_token: 'tok' },
           allowedHosts: ['gmail.googleapis.com'],
+        }),
+      },
+      { openDispatch: noDispatch },
+    );
+    expect(outcome.ok).toBe(true);
+    expect(outcome.value).toMatchObject({
+      reached: false,
+      reason: expect.stringContaining('read-only'),
+    });
+  });
+
+  it('allows only an exact broker-declared read-only POST endpoint', () => {
+    const policy = [{ host: 'api.notion.com', path: '/v1/search', body: 'json' as const }];
+    expect(isBrokerReadOnlyPost(policy, new URL('https://api.notion.com/v1/search'), '{}')).toBe(
+      true,
+    );
+    expect(isBrokerReadOnlyPost(policy, new URL('https://api.notion.com/v1/pages'), '{}')).toBe(
+      false,
+    );
+    expect(isBrokerReadOnlyPost(policy, new URL('https://attacker.example/v1/search'), '{}')).toBe(
+      false,
+    );
+    expect(
+      isBrokerReadOnlyPost(policy, new URL('https://api.notion.com/v1/search'), undefined),
+    ).toBe(false);
+  });
+
+  it('rejects a GraphQL mutation on a query-only POST endpoint', async () => {
+    await writeAutomation(`export default async ({ ctx }) => {
+      try {
+        await ctx.fetch({
+          method: 'POST',
+          url: 'https://api.linear.app/graphql',
+          headers: { authorization: '{{connection:api_key}}' },
+          body: JSON.stringify({ query: 'mutation { issueDelete(id: "x") { success } }' }),
+        });
+        return { reached: true };
+      } catch (err) {
+        return { reached: false, reason: err.message };
+      }
+    };`);
+    const { outcome } = await runFire(
+      {
+        automationRef: 'mail/pull',
+        appsDir,
+        journalDbFile,
+        vaultFor: () => activeBridge,
+        resolveConnection: async () => ({
+          values: { api_key: 'lin_api_test' },
+          allowedHosts: ['api.linear.app'],
+          readOnlyPosts: [{ host: 'api.linear.app', path: '/graphql', body: 'graphql-query' }],
         }),
       },
       { openDispatch: noDispatch },

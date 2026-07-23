@@ -228,6 +228,25 @@ describe('bundled pull handler correctness', () => {
     await expect(spec.principal({ ctx })).resolves.toBe('todoist:project-inbox');
   });
 
+  it('pins Notion identity to its stable API user id, not a display name', async () => {
+    const spec = await loadPull('notion-pull');
+    const ctx: PullContext = {
+      now: '2026-07-23T00:00:00.000Z',
+      async fetch({ url }) {
+        if (url.endsWith('/users/me')) {
+          return json({
+            id: 'bot-stable-123',
+            name: 'Shared Owner',
+            bot: { owner: { user: { id: 'owner-456', name: 'Shared Owner' } } },
+          });
+        }
+        throw new Error(`unexpected Notion URL ${url}`);
+      },
+    };
+
+    await expect(spec.principal({ ctx })).resolves.toBe('notion:bot-stable-123');
+  });
+
   it('restarts Microsoft Calendar delta when its encoded horizon goes stale', async () => {
     const spec = await loadPull('microsoft-calendar-pull');
     const requested: string[] = [];

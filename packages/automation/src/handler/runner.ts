@@ -237,6 +237,47 @@ export interface ConnectionAuth {
    * (issue #306), never raw ctx.fetch.
    */
   readonly allowWrites?: boolean;
+  /**
+   * Exact provider endpoints whose APIs model read operations as POST.
+   * Broker-owned policy only: handler code cannot grant itself a target.
+   */
+  readonly readOnlyPosts?: readonly {
+    readonly host: string;
+    readonly path: string;
+    readonly body: 'json' | 'graphql-query';
+  }[];
+}
+
+export function isBrokerReadOnlyPost(
+  policies: ConnectionAuth['readOnlyPosts'],
+  url: URL,
+  body: string | undefined,
+): boolean {
+  const policy = policies?.find(
+    (entry) => entry.host === url.hostname && entry.path === url.pathname,
+  );
+  if (!policy || body === undefined) return false;
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    if (policy.body === 'json') return true;
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      typeof (parsed as { query?: unknown }).query !== 'string'
+    ) {
+      return false;
+    }
+    // Strip comments and strings before looking for operation keywords.
+    // Erring closed here is preferable to letting a connector smuggle a
+    // GraphQL mutation through the read-only POST exception.
+    const document = (parsed as { query: string }).query
+      .replace(/#[^\r\n]*/g, '')
+      .replace(/"""[\s\S]*?"""/g, '""')
+      .replace(/"(?:\\.|[^"\\])*"/g, '""');
+    return !/\b(?:mutation|subscription)\b/i.test(document);
+  } catch {
+    return false;
+  }
 }
 
 function bindConnectorVaultPayload(
@@ -405,7 +446,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
   const isLoopback = (url: URL): boolean =>
     url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1';
   const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-  const assertInjectable = (rawUrl: string, method: string): void => {
+  const assertInjectable = (rawUrl: string, method: string, body?: string): void => {
     const url = new URL(rawUrl);
     if (url.protocol !== 'https:' && !isLoopback(url)) {
       throw new Error(`injected fetch refuses non-https destination ${url.hostname} (issue #304)`);
@@ -419,7 +460,15 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     // toward SAFE methods only inside a fire. The write half shipped as the
     // outbox (issue #306) — the error names the actual path (issue #308 B1)
     // so a model that hits the ceiling can self-correct instead of retrying.
-    if (!SAFE_METHODS.has(method.toUpperCase()) && !opts.connectionAuth?.allowWrites) {
+    const normalizedMethod = method.toUpperCase();
+    if (
+      !SAFE_METHODS.has(normalizedMethod) &&
+      !opts.connectionAuth?.allowWrites &&
+      !(
+        normalizedMethod === 'POST' &&
+        isBrokerReadOnlyPost(opts.connectionAuth?.readOnlyPosts, url, body)
+      )
+    ) {
       throw new Error(
         `injected ${method.toUpperCase()} refused — this connection is read-only inside a fire. External writes are STAGED, never sent from handler code: ctx.vault.invoke({ command: 'outbox.stage', input: { kind, label, verb, target, artifact, request } }) parks the exact request for the owner's approval and the gateway executor performs the send (issues #304/#306)`,
       );
@@ -485,7 +534,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
   const executeFetch = async (rawSpec: FetchSpecWire): Promise<FetchWireResult> => {
     let { spec, injected } = await substituteSecrets(rawSpec, opts.connectionAuth?.values ?? {});
     if (!injected) return fetchOnce(spec, false);
-    assertInjectable(spec.url, spec.method ?? 'GET');
+    assertInjectable(spec.url, spec.method ?? 'GET', spec.body);
     const auth = opts.connectionAuth!;
     const gated = (s: FetchSpecWire): Promise<FetchWireResult> =>
       auth.limit ? auth.limit(() => fetchOnce(s, true)) : fetchOnce(s, true);

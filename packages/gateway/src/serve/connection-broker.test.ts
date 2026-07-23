@@ -186,6 +186,51 @@ test('a connection without a broker credential resolves to undefined (harness-am
   expect(await broker.resolveForFire({ kind: 'pull.gmail', label: 'nope' })).toBeUndefined();
 });
 
+test('a durable connection id cannot cross connector kinds', async () => {
+  const plane = openPlane(await tempDir());
+  const outcome = plane.gateway.invoke(plane.ownerCredential, {
+    command: 'sync.configure_credential',
+    input: {
+      kind: 'pull.github',
+      label: 'personal',
+      cred_kind: 'api_key',
+      provider: 'github',
+      api_key: 'ghp_broker_live',
+      allowed_hosts: ['api.github.com'],
+    },
+    purpose: 'dpv:ServiceProvision',
+  });
+  if (outcome.status !== 'executed') throw new Error('configure failed');
+  const connectionId = (outcome as { output: { connection_id: string } }).output.connection_id;
+  const broker = new ConnectionBroker(() => plane);
+
+  await expect(
+    broker.resolveForFire({ kind: 'pull.linear', label: 'work', connectionId }),
+  ).resolves.toBeUndefined();
+});
+
+test('broker grants read-only POST policy only to its exact provider and kind', async () => {
+  const plane = openPlane(await tempDir());
+  const outcome = plane.gateway.invoke(plane.ownerCredential, {
+    command: 'sync.configure_credential',
+    input: {
+      kind: 'pull.linear',
+      label: 'work',
+      cred_kind: 'api_key',
+      provider: 'linear',
+      api_key: 'lin_api_test',
+      allowed_hosts: ['api.linear.app'],
+    },
+    purpose: 'dpv:ServiceProvision',
+  });
+  if (outcome.status !== 'executed') throw new Error('configure failed');
+  const broker = new ConnectionBroker(() => plane);
+  const auth = await broker.resolveForFire({ kind: 'pull.linear', label: 'work' });
+  expect(auth && 'readOnlyPosts' in auth ? auth.readOnlyPosts : undefined).toEqual([
+    { host: 'api.linear.app', path: '/graphql', body: 'graphql-query' },
+  ]);
+});
+
 test('an unexpired stored token serves without touching the token endpoint', async () => {
   const plane = openPlane(await tempDir());
   const tokens = await startTokenServer();
@@ -201,6 +246,21 @@ test('an unexpired stored token serves without touching the token endpoint', asy
     access_token: 'ya29.long-lived',
   });
   expect(tokens.requests).toHaveLength(0);
+});
+
+test('a trusted provider id cannot redirect OAuth to substituted endpoints', async () => {
+  const plane = openPlane(await tempDir());
+  const connectionId = configureOauth(plane, 'https://oauth2.googleapis.com/token', {
+    auth_url: 'https://attacker.example/authorize',
+  });
+  const broker = new ConnectionBroker(() => plane);
+  expect(() =>
+    broker.beginAuthorization(
+      plane,
+      connectionId,
+      'http://127.0.0.1:3210/centraid/_vault/oauth/callback',
+    ),
+  ).toThrow(/does not match its trusted OAuth endpoints/);
 });
 
 test('an expired token refreshes; a ROTATED refresh token persists before the new access token is used', async () => {
@@ -552,7 +612,10 @@ test('BYO token posts refuse redirects before credentials can be forwarded', asy
     expect(init?.redirect).toBe('error');
     return Response.json({ access_token: 'fresh', expires_in: 3600 });
   });
-  const connectionId = configureOauth(plane, 'https://oauth.example/token');
+  const connectionId = configureOauth(plane, 'https://oauth.example/token', {
+    provider: 'test-oauth',
+    auth_url: 'https://oauth.example/authorize',
+  });
   const broker = new ConnectionBroker(() => plane, 500, undefined, fetchImpl as typeof fetch);
   const ceremony = broker.beginAuthorization(
     plane,

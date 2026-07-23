@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import https from 'node:https';
 import { fileURLToPath } from 'node:url';
+import { assertSafeConnectorSvg } from './lib/sanitize-connector-svg.mjs';
 
 const MAP = {
   gmail: 'logos:google-gmail',
@@ -49,6 +50,7 @@ function fetchSvg(url) {
 }
 
 function normalizeSvg(svg, tone) {
+  assertSafeConnectorSvg(svg, tone);
   let s = svg.trim().replace(/\s+/g, ' ').replace(/> </g, '><');
   s = s.replace(/<svg\b([^>]*)>/, (_m, attrs) => {
     const vb = attrs.match(/viewBox="([^"]+)"/);

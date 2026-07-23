@@ -45,6 +45,7 @@ import {
   validateAssistOAuthConfig,
   type AssistOAuthConfig,
 } from './assist-oauth.js';
+import { PROVIDER_PRESETS } from '../routes/connection-providers.js';
 
 /** Purpose stamped on the broker's own vault acts. */
 const BROKER_PURPOSE = 'dpv:ServiceProvision';
@@ -66,6 +67,9 @@ export const TOKEN_ENDPOINT_TIMEOUT_MS = 30_000;
 
 interface ConnectionCredRow {
   connection_id: string;
+  kind: string;
+  label: string;
+  provider: string | null;
   cred_kind: 'oauth2' | 'api_key' | null;
   oauth_mode: 'byo' | 'assist';
   auth_url: string | null;
@@ -79,6 +83,31 @@ interface ConnectionCredRow {
   token_expires_at: string | null;
   allowed_hosts: string | null;
   principal: string | null;
+}
+
+function readOnlyPostsFor(row: ConnectionCredRow): ConnectionAuth['readOnlyPosts'] {
+  switch (`${row.provider ?? ''}:${row.kind}`) {
+    case 'dropbox:pull.dropbox':
+      return [
+        {
+          host: 'api.dropboxapi.com',
+          path: '/2/users/get_current_account',
+          body: 'json',
+        },
+        { host: 'api.dropboxapi.com', path: '/2/files/list_folder', body: 'json' },
+        {
+          host: 'api.dropboxapi.com',
+          path: '/2/files/list_folder/continue',
+          body: 'json',
+        },
+      ];
+    case 'notion:pull.notion':
+      return [{ host: 'api.notion.com', path: '/v1/search', body: 'json' }];
+    case 'linear:pull.linear':
+      return [{ host: 'api.linear.app', path: '/graphql', body: 'graphql-query' }];
+    default:
+      return undefined;
+  }
 }
 
 /** One in-flight consent ceremony, keyed by its single-use `state`. */
@@ -150,6 +179,15 @@ export class ConnectionBroker {
     }
     if (!row.auth_url || !row.client_id) {
       throw new Error('oauth2 credential is missing auth_url/client_id');
+    }
+    const preset = PROVIDER_PRESETS.find((candidate) => candidate.id === row.provider);
+    if (
+      preset?.credKind === 'oauth2' &&
+      (row.auth_url !== preset.authUrl || row.token_url !== preset.tokenUrl)
+    ) {
+      throw new Error(
+        `connection provider "${preset.id}" does not match its trusted OAuth endpoints`,
+      );
     }
     this.pruneCeremonies();
     const state = randomBytes(32).toString('hex');
@@ -373,6 +411,7 @@ export class ConnectionBroker {
       };
     }
     const limiter = this.limiterFor(plane, row.connection_id);
+    const readOnlyPosts = readOnlyPostsFor(row);
     const limit = <T>(fn: () => Promise<T>): Promise<T> => limiter.run(fn);
     const onAuthDead = (reason: string): Promise<void> =>
       this.flipNeedsAuth(plane, row.connection_id, reason);
@@ -384,6 +423,7 @@ export class ConnectionBroker {
       return {
         values: { api_key: this.unseal(plane, row.connection_id, 'api_key', row.api_key) },
         allowedHosts,
+        ...(readOnlyPosts ? { readOnlyPosts } : {}),
         onAuthDead,
         limit,
       } satisfies ConnectionAuth;
@@ -395,6 +435,7 @@ export class ConnectionBroker {
       return {
         values: { access_token: accessToken },
         allowedHosts,
+        ...(readOnlyPosts ? { readOnlyPosts } : {}),
         refresh: async () => ({
           access_token: await this.ensureFreshToken(plane, row.connection_id, true),
         }),
@@ -769,12 +810,16 @@ export class ConnectionBroker {
   ): ConnectionCredRow | undefined {
     // Prefer durable connection id when the automation/manifest carries one.
     if (connector.connectionId) {
-      return this.readRowById(plane, connector.connectionId);
+      const row = this.readRowById(plane, connector.connectionId);
+      // Durable ids survive label changes, but cannot retarget a manifest to
+      // a credential belonging to another connector kind.
+      return row?.kind === connector.kind ? row : undefined;
     }
     // No credential sidecar row = the harness-ambient lane (issue #290).
     return plane.db.vault
       .prepare(
-        `SELECT cc.connection_id, cc.cred_kind, cc.oauth_mode, cc.auth_url, cc.token_url, cc.scopes,
+        `SELECT cc.connection_id, c.kind, c.label, cc.provider,
+                cc.cred_kind, cc.oauth_mode, cc.auth_url, cc.token_url, cc.scopes,
                 cc.client_id, cc.client_secret, cc.access_token, cc.refresh_token,
                 cc.api_key, cc.token_expires_at, cc.allowed_hosts, c.principal
            FROM sync_connection_credential cc
@@ -787,7 +832,7 @@ export class ConnectionBroker {
   private readRowById(plane: VaultPlane, connectionId: string): ConnectionCredRow | undefined {
     return plane.db.vault
       .prepare(
-        `SELECT cc.*, c.principal
+        `SELECT cc.*, c.kind, c.label, c.principal
            FROM sync_connection_credential cc
            JOIN sync_connection c ON c.connection_id = cc.connection_id
           WHERE cc.connection_id = ?`,

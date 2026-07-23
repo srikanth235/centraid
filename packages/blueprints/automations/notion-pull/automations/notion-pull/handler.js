@@ -67,9 +67,8 @@ export default {
   protocol: 'centraid.pull/v1',
   async principal({ ctx }) {
     const me = await api(ctx, '/users/me');
-    return (
-      (me.bot && me.bot.owner && me.bot.owner.user && me.bot.owner.user.name) || me.name || 'notion'
-    );
+    if (!me.id) throw new Error('notion principal probe did not return a stable user id');
+    return 'notion:' + me.id;
   },
   async pull({ ctx, cursor }) {
     const traversal = cursor.provider('notion.start_cursor');

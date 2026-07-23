@@ -136,13 +136,10 @@ describe('templatesData', () => {
     expect(pin.desc).toBe('d');
   });
 
-  it('surfaceMintedWebhook logs the URL + plaintext secret as a dev-console fallback', () => {
+  it('surfaceMintedWebhook never logs the URL or plaintext secret', () => {
     const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
     surfaceMintedWebhook({ url: 'https://gw.example/_centraid-hook/abc', secret: 'shh' });
-    expect(spy).toHaveBeenCalledTimes(1);
-    const [line] = spy.mock.calls[0] as [string];
-    expect(line).toContain('https://gw.example/_centraid-hook/abc');
-    expect(line).toContain('shh');
+    expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
   });
 });

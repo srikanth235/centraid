@@ -524,6 +524,9 @@ export interface AuEditorCatalogConnectorDTO {
     label: string;
     health: 'ok' | 'needs-auth' | 'paused' | 'failing';
   } | null;
+  /** More than one exact provider+kind account exists. Never guess which
+   *  credential an automation should receive. */
+  connectionAmbiguous?: boolean;
 }
 export interface AutomationEditorData {
   mode: 'create' | 'edit';

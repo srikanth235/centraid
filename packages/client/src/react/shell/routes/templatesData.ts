@@ -89,9 +89,9 @@ export async function cloneAutomationTemplate(tmpl: TemplateEntry): Promise<{
  *  Only the SHA-256 hash is persisted server-side, so between the two this
  *  is the one and only chance anyone has to read the plaintext secret. */
 export function surfaceMintedWebhook(w: { url: string; secret: string }): void {
-  console.info(
-    `[centraid] Webhook minted: ${w.url}\n  Bearer secret (shown once, only its hash is stored): ${w.secret}`,
-  );
+  // The reveal UI is the one-time delivery surface. Desktop forwards console
+  // output to persistent stdout logs, so neither capability belongs here.
+  void w;
 }
 
 /** Install a bundled app template in place and pin it straight to Home

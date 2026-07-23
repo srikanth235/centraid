@@ -24,7 +24,7 @@ import type {
   AutomationEditorData,
 } from '../../screen-contracts.js';
 import AutomationEditorScreen from '../../screens/AutomationEditorScreen.js';
-import { buildFeatured } from '../../screens/SettingsConnectionsScreen.js';
+import { buildFeatured, type ConnectionRowDTO } from '../../screens/SettingsConnectionsScreen.js';
 import { useShellActions } from '../actions.js';
 import PageScroll from '../PageScroll.js';
 import { openWebhookReveal } from '../webhookReveal.js';
@@ -131,6 +131,20 @@ export function vaultForTriggers(triggers: readonly (AuEditorTriggerDTO | AuEdit
 // reuse across every @-search keystroke.
 let entityTypeCache: string[] | null = null;
 
+export function matchEditorConnection(
+  connections: readonly ConnectionRowDTO[],
+  providerId: string,
+  kind: string,
+): { match: ConnectionRowDTO | null; ambiguous: boolean } {
+  const candidates = connections.filter(
+    (connection) => connection.kind === kind && connection.provider === providerId,
+  );
+  return {
+    match: candidates.length === 1 ? candidates[0]! : null,
+    ambiguous: candidates.length > 1,
+  };
+}
+
 async function loadEditorConnectorCatalog(): Promise<AuEditorCatalogConnectorDTO[]> {
   const [providers, connections] = await Promise.all([
     loadConnectionProvidersData(),
@@ -138,10 +152,10 @@ async function loadEditorConnectorCatalog(): Promise<AuEditorCatalogConnectorDTO
   ]);
   const featured = buildFeatured(providers);
   return featured.map((f) => {
-    const match =
-      connections.find((c) => c.kind === f.kind && c.health === 'ok') ??
-      connections.find((c) => c.kind === f.kind) ??
-      null;
+    // Provider is part of connection identity. Kind-only matching can lend
+    // trusted catalog branding to a free-form credential; choosing the first
+    // of multiple same-kind accounts silently binds the wrong principal.
+    const { match, ambiguous } = matchEditorConnection(connections, f.providerId, f.kind);
     return {
       allowedHosts: f.provider.allowedHosts,
       authUrl: f.provider.authUrl,
@@ -152,6 +166,7 @@ async function loadEditorConnectorCatalog(): Promise<AuEditorCatalogConnectorDTO
             label: match.label,
           }
         : null,
+      ...(ambiguous ? { connectionAmbiguous: true } : {}),
       credKind: f.provider.credKind,
       key: f.key,
       kind: f.kind,

@@ -305,6 +305,7 @@ export function AutomationEditorConnectorsPicker({
           rows.map((item) => {
             const isSelected = selected.has(item.kind);
             const health = item.connection?.health;
+            const ambiguous = item.connectionAmbiguous === true;
             const connecting = connectingKind === item.kind;
             const busy = busyKind === item.kind;
             return (
@@ -317,7 +318,10 @@ export function AutomationEditorConnectorsPicker({
                 <button
                   type="button"
                   className={styles.connPickerMain}
-                  onClick={() => onToggleSelect(item.kind)}
+                  onClick={() => {
+                    if (!ambiguous) onToggleSelect(item.kind);
+                  }}
+                  disabled={ambiguous}
                   aria-pressed={isSelected}
                 >
                   <span className={styles.connPickerMark} aria-hidden="true">
@@ -330,7 +334,11 @@ export function AutomationEditorConnectorsPicker({
                     <span className={styles.connPickerName}>{item.name}</span>
                     <span className={styles.connPickerSub}>
                       {item.credKind === 'oauth2' ? 'OAuth' : 'API key'}
-                      {health ? ` · ${HEALTH_LABEL[health]}` : ' · Not connected'}
+                      {ambiguous
+                        ? ' · Multiple accounts — choose in Connectors'
+                        : health
+                          ? ` · ${HEALTH_LABEL[health]} · ${item.connection?.label}`
+                          : ' · Not connected'}
                     </span>
                   </span>
                   <span
@@ -342,7 +350,8 @@ export function AutomationEditorConnectorsPicker({
                   </span>
                 </button>
                 <div className={styles.connPickerActions}>
-                  {health === 'ok' ? null : health === 'needs-auth' && item.connection ? (
+                  {ambiguous ? null : health === 'ok' ? null : health === 'needs-auth' &&
+                    item.connection ? (
                     <Button
                       variant="soft"
                       size="sm"
