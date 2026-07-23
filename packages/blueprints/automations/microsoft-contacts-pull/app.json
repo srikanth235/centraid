@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "microsoft-contacts-pull",
+  "name": "Outlook Contacts sync",
+  "kind": "automation",
+  "description": "Pulls Outlook contacts into the vault as people — read-only Microsoft Graph.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

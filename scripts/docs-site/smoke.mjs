@@ -27,6 +27,8 @@ const REQUIRED = [
   'apps/index.html',
   'devices/index.html',
   'backups/index.html',
+  'privacy/index.html',
+  'terms/index.html',
   'ontology/index.html',
   '404.html',
   '_headers',

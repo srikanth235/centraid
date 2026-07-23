@@ -7,9 +7,6 @@
  * pageToken, then syncToken increments; an expired token (410) restarts.
  */
 
-const PURPOSE = 'dpv:ServiceProvision';
-const KIND = 'pull.gcontacts';
-const LABEL = 'personal';
 const API = 'https://people.googleapis.com/v1';
 const AUTH = { authorization: 'Bearer {{connection:access_token}}' };
 const FIELDS = 'names,emailAddresses,phoneNumbers,birthdays';
@@ -67,28 +64,19 @@ function toPartyRow(person) {
   };
 }
 
-export default async ({ ctx, log }) => {
-  // whoami: the account's own profile email — the principal pin.
-  const me = await api(ctx, '/people/me?personFields=emailAddresses');
-  const primaryEmail = (((me.emailAddresses || [])[0] || {}).value || '').toLowerCase();
-  const begin = await ctx.vault.invoke({
-    command: 'sync.begin_run',
-    input: {
-      kind: KIND,
-      label: LABEL,
-      ...(primaryEmail ? { principal: primaryEmail } : {}),
-    },
-    purpose: PURPOSE,
-  });
-  const opened = begin && begin.output ? begin.output : begin;
-  if (opened.refused) {
-    return { summary: `skipped: ${opened.reason}`, output: { skipped: true } };
-  }
-  const { connection_id: connectionId, run_id: runId, cursors } = opened;
+export default {
+  protocol: 'centraid.pull/v1',
 
-  try {
-    let syncToken = cursors && cursors['gcontacts.syncToken'];
-    let pageToken = cursors && cursors['gcontacts.pageToken'];
+  async principal({ ctx }) {
+    const me = await api(ctx, '/people/me?personFields=emailAddresses');
+    return (((me.emailAddresses || [])[0] || {}).value || '').toLowerCase();
+  },
+
+  async pull({ ctx, log, cursor }) {
+    const syncCursor = cursor.provider('gcontacts.syncToken');
+    const pageCursor = cursor.provider('gcontacts.pageToken');
+    let syncToken = syncCursor.current;
+    let pageToken = pageCursor.current;
     let mode = syncToken ? 'incremental' : 'walk';
     const rows = [];
     let nextSyncToken = null;
@@ -121,60 +109,19 @@ export default async ({ ctx, log }) => {
       pageToken = nextPageToken;
     }
 
-    let staged = 0;
-    let published = 0;
-    for (let i = 0; i < rows.length; i += 500) {
-      const outcome = await ctx.vault.invoke({
-        command: 'sync.stage_rows',
-        input: { kind: KIND, label: LABEL, rows: rows.slice(i, i + 500) },
-        purpose: PURPOSE,
-      });
-      const out = outcome && outcome.output ? outcome.output : {};
-      staged += rows.slice(i, i + 500).length;
-      if (out.published) published += (out.published.created || 0) + (out.published.updated || 0);
-    }
-
     if (nextSyncToken) {
-      await ctx.vault.invoke({
-        command: 'sync.set_cursor',
-        input: { connection_id: connectionId, key: 'gcontacts.syncToken', value: nextSyncToken },
-        purpose: PURPOSE,
-      });
-      await ctx.vault.invoke({
-        command: 'sync.set_cursor',
-        input: { connection_id: connectionId, key: 'gcontacts.pageToken', value: null },
-        purpose: PURPOSE,
-      });
+      syncCursor.set(nextSyncToken);
+      pageCursor.clear();
     } else {
-      await ctx.vault.invoke({
-        command: 'sync.set_cursor',
-        input: { connection_id: connectionId, key: 'gcontacts.pageToken', value: nextPageToken },
-        purpose: PURPOSE,
-      });
+      pageCursor.set(nextPageToken);
       if (mode === 'walk' && !nextPageToken) {
-        await ctx.vault.invoke({
-          command: 'sync.set_cursor',
-          input: { connection_id: connectionId, key: 'gcontacts.syncToken', value: null },
-          purpose: PURPOSE,
-        });
+        syncCursor.clear();
       }
     }
-    await ctx.vault.invoke({
-      command: 'sync.finish_run',
-      input: { run_id: runId, ok: true, staged, published },
-      purpose: PURPOSE,
-    });
-    log.info(`contacts pull: ${staged} staged (${mode})`);
+    log.info(`contacts pull: ${rows.length} row(s) returned (${mode})`);
     return {
-      summary: `pulled ${staged} contact(s) (${mode})${published ? `, ${published} published` : ''}`,
-      output: { staged, published, mode },
+      rows,
+      summary: `pulled ${rows.length} contact(s) (${mode})`,
     };
-  } catch (err) {
-    await ctx.vault.invoke({
-      command: 'sync.finish_run',
-      input: { run_id: runId, ok: false, error: String((err && err.message) || err) },
-      purpose: PURPOSE,
-    });
-    throw err;
-  }
+  },
 };

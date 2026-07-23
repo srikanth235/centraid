@@ -60,6 +60,9 @@ export type ShellRoute =
   | { kind: 'discover' }
   | { kind: 'starred' }
   | { kind: 'automations' }
+  // Vault data-source connections (Gmail, GitHub, …) — primary sidebar
+  // destination; previously Settings → Account → Connections.
+  | { kind: 'connectors' }
   | { kind: 'approvals' }
   | { kind: 'gateway' }
   // Snapshot custody + remote bytes — split out of the Gateway page's

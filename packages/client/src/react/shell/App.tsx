@@ -32,7 +32,6 @@ import Sidebar, {
 } from './Sidebar.js';
 import ShellApp, { type ShellNav } from './ShellApp.js';
 import { showToast } from './toast.js';
-import { toSidebarApps } from './sidebarApps.js';
 import { PageEmpty } from './status.js';
 import { useActiveVault } from './useActiveVault.js';
 import { useAppearance } from './useAppearance.js';
@@ -59,6 +58,7 @@ import AutomationViewRoute from './routes/AutomationViewRoute.js';
 import BackupsRoute from './routes/BackupsRoute.js';
 import BuilderRoute from './routes/BuilderRoute.js';
 import ConnectFlowModal from './routes/ConnectFlowModal.js';
+import ConnectorsRoute from './routes/ConnectorsRoute.js';
 import DiscoverRoute from './routes/DiscoverRoute.js';
 import GatewayRoute from './routes/GatewayRoute.js';
 import HomeRoute from './routes/HomeRoute.js';
@@ -112,12 +112,15 @@ function activePageFor(route: ShellRoute): SidebarPage | undefined {
     case 'discover':
     case 'starred':
     case 'automations':
+    case 'connectors':
     case 'approvals':
     case 'gateway':
     case 'backups':
     case 'atlas':
-    case 'settings':
       return route.kind;
+    case 'settings':
+      // Legacy deep link Settings → Connections → promote highlight to Connectors.
+      return route.page === 'connections' ? 'connectors' : 'settings';
     case 'app':
     case 'builder':
     case 'run-view':
@@ -286,6 +289,7 @@ export default function App(): JSX.Element {
       openDiscover: go({ kind: 'discover' }),
       openStarred: go({ kind: 'starred' }),
       openAutomations: go({ kind: 'automations' }),
+      openConnectors: go({ kind: 'connectors' }),
       openInsights: go({ kind: 'insights' }),
       renderHome: go({ kind: 'home' }),
       getRuntimeMode: () => undefined,
@@ -453,10 +457,6 @@ export default function App(): JSX.Element {
 
   const renderSidebar = useCallback(
     (nav: ShellNav) => {
-      const { apps, drafts: draftApps } = toSidebarApps(
-        userApps,
-        builderEnabled ? drafts : NO_DRAFTS,
-      );
       const page = activePageFor(nav.route);
       const go = (route: ShellRoute) => () => nav.navigate(route);
       const headSlot = (
@@ -553,10 +553,7 @@ export default function App(): JSX.Element {
         }));
       return (
         <Sidebar
-          apps={apps}
-          drafts={draftApps}
           activePage={page}
-          activeId={nav.route.kind === 'app' ? nav.route.id : undefined}
           conversations={conversations}
           activeConversationId={
             nav.route.kind === 'assistant' ? nav.route.conversationId : undefined
@@ -567,8 +564,8 @@ export default function App(): JSX.Element {
           onAssistant={go({ kind: 'assistant' })}
           onInsights={go({ kind: 'insights' })}
           onDiscover={go({ kind: 'discover' })}
-          onStarred={go({ kind: 'starred' })}
           onAutomations={go({ kind: 'automations' })}
+          onConnectors={go({ kind: 'connectors' })}
           onApprovals={go({ kind: 'approvals' })}
           approvalsCount={blockingCount}
           onGateway={go({ kind: 'gateway' })}
@@ -576,7 +573,6 @@ export default function App(): JSX.Element {
           onBackups={go({ kind: 'backups' })}
           onAtlas={go({ kind: 'atlas' })}
           onSettings={go({ kind: 'settings' })}
-          onAppClick={(id) => nav.navigate({ kind: 'app', id })}
           {...(builderEnabled ? { onNewApp: () => nav.navigate({ kind: 'builder' }) } : {})}
           onNewChat={() => nav.navigate({ kind: 'assistant' })}
           onSelectConversation={(id) => nav.navigate({ kind: 'assistant', conversationId: id })}
@@ -595,8 +591,6 @@ export default function App(): JSX.Element {
       );
     },
     [
-      userApps,
-      drafts,
       builderEnabled,
       activeVault,
       vaultSwitcherOpen,
@@ -634,6 +628,8 @@ export default function App(): JSX.Element {
           return <InsightsRoute />;
         case 'automations':
           return <AutomationsRoute />;
+        case 'connectors':
+          return <ConnectorsRoute />;
         case 'approvals':
           return <ApprovalsRoute />;
         case 'gateway':
@@ -661,6 +657,8 @@ export default function App(): JSX.Element {
         case 'templates':
           return <TemplatesRoute />;
         case 'settings':
+          // Legacy deep link: Settings → Connections now lives at Connectors.
+          if (nav.route.page === 'connections') return <ConnectorsRoute />;
           return <SettingsRoute prefs={prefs} setPrefs={setPrefs} initialPage={nav.route.page} />;
         case 'app': {
           const id = nav.route.id;

@@ -136,6 +136,50 @@ test('an unpublishable entity type is refused at staging time', () => {
   expect((outcome as { reason: string }).reason).toMatch(/no publisher/);
 });
 
+test('remote files publish as content items rather than fabricated messages', () => {
+  const staged = gw.invoke(agent, {
+    command: 'sync.stage_rows',
+    input: {
+      kind: 'pull.gdrive',
+      label: 'Drive',
+      rows: [
+        {
+          entity_type: 'core.content_item',
+          external_id: 'gdrive:file-1',
+          payload: {
+            sourceId: 'gdrive:file-1',
+            title: 'Quarterly plan.pdf',
+            mediaType: 'application/pdf',
+            sourceUrl: 'https://drive.google.com/file/d/file-1/view',
+            modifiedAt: '2026-07-23T10:00:00Z',
+            owner: 'owner@example.com',
+            body: '',
+          },
+        },
+      ],
+    },
+    purpose: 'dpv:ServiceProvision',
+  });
+  const batchId = (staged as { output: { batch_id: string } }).output.batch_id;
+  const proposed = gw.invoke(agent, {
+    command: 'sync.publish_batch',
+    input: { batch_id: batchId },
+    purpose: 'dpv:ServiceProvision',
+  });
+  const published = gw.confirm(owner, (proposed as { invocationId: string }).invocationId, true);
+  expect(published.status).toBe('executed');
+  expect(
+    db.vault.prepare('SELECT title, media_type, content_uri FROM core_content_item').get(),
+  ).toEqual({
+    title: 'Quarterly plan.pdf',
+    media_type: 'application/pdf',
+    content_uri: 'https://drive.google.com/file/d/file-1/view',
+  });
+  expect(
+    (db.vault.prepare('SELECT count(*) AS n FROM social_message').get() as { n: number }).n,
+  ).toBe(0);
+});
+
 test('a sealed entity type never stages through an agent (issue #293)', () => {
   const outcome = gw.invoke(agent, {
     command: 'sync.stage_rows',
@@ -173,6 +217,39 @@ describe('connection lifecycle (phase 4)', () => {
       purpose: 'dpv:ServiceProvision',
     });
   }
+
+  test('an explicit connection id survives label changes without creating a shadow row', () => {
+    const first = beginRun('me@example.com');
+    expect(first.status).toBe('executed');
+    const connectionId = (first as { output: { connection_id: string } }).output.connection_id;
+
+    const rebound = gw.invoke(agent, {
+      command: 'sync.begin_run',
+      input: {
+        connection_id: connectionId,
+        principal: 'me@example.com',
+      },
+      purpose: 'dpv:ServiceProvision',
+    });
+
+    expect(rebound.status).toBe('executed');
+    expect((rebound as { output: { connection_id: string } }).output.connection_id).toBe(
+      connectionId,
+    );
+    const staged = gw.invoke(agent, {
+      command: 'sync.stage_rows',
+      input: { connection_id: connectionId, rows: ROWS },
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(staged.status).toBe('executed');
+    expect(
+      (
+        db.vault
+          .prepare(`SELECT count(*) AS n FROM sync_connection WHERE kind = 'mcp.gmail'`)
+          .get() as { n: number }
+      ).n,
+    ).toBe(1);
+  });
 
   test('first run pins the principal; a mismatch flips needs-auth and refuses', () => {
     const first = beginRun('me@example.com');
@@ -298,6 +375,56 @@ describe('sync.configure_credential + sync.store_tokens (issue #304)', () => {
       auth_note: string;
     };
     expect(health.auth_note).toMatch(/authorization pending/);
+  });
+
+  test('Assist records its mode without accepting or storing a shared client secret', () => {
+    const outcome = gw.invoke(owner, {
+      command: 'sync.configure_credential',
+      input: {
+        kind: 'pull.gcal',
+        label: 'Centraid Assist',
+        cred_kind: 'oauth2',
+        oauth_mode: 'assist',
+        provider: 'google',
+        auth_url: 'https://accounts.google.com/o/oauth2/v2/auth',
+        token_url: 'https://oauth2.googleapis.com/token',
+        scopes: 'https://www.googleapis.com/auth/calendar.readonly',
+        client_id: 'shared.apps.googleusercontent.com',
+        allowed_hosts: ['www.googleapis.com'],
+      },
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(outcome.status).toBe('executed');
+    const row = db.vault
+      .prepare('SELECT oauth_mode, client_id, client_secret FROM sync_connection_credential')
+      .get() as { oauth_mode: string; client_id: string; client_secret: string | null };
+    expect(row).toEqual({
+      oauth_mode: 'assist',
+      client_id: 'shared.apps.googleusercontent.com',
+      client_secret: null,
+    });
+
+    const refused = gw.invoke(owner, {
+      command: 'sync.configure_credential',
+      input: {
+        kind: 'pull.gcal',
+        label: 'Centraid Assist',
+        cred_kind: 'oauth2',
+        oauth_mode: 'assist',
+        provider: 'google',
+        auth_url: 'https://accounts.google.com/o/oauth2/v2/auth',
+        token_url: 'https://oauth2.googleapis.com/token',
+        client_id: 'shared.apps.googleusercontent.com',
+        client_secret: 'must-never-land',
+        allowed_hosts: ['www.googleapis.com'],
+      },
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(refused.status).toBe('failed');
+    expect((refused as { reason: string }).reason).toMatch(/must not send or store/);
+    expect(
+      JSON.stringify(db.vault.prepare('SELECT * FROM sync_connection_credential').all()),
+    ).not.toContain('must-never-land');
   });
 
   test('a credential without allowed_hosts refuses to configure (anti-exfiltration pin)', () => {

@@ -5,31 +5,24 @@ import { relativeRunLabel } from '../../app-format.js';
 import { glyphForId, hueForId } from '../../automation-identity.js';
 import { cronNextRuns } from '../../cron.js';
 import type {
-  AuEditorConnectorsDTO,
+  AuEditorCatalogConnectorDTO,
   AuEditorTriggerInput,
   AutomationEditorBridgeProps,
   AutomationEditorData,
-  GrantDTO,
 } from '../screen-contracts.js';
 import { Button, Icon, IconButton } from '../ui/index.js';
 import { cx } from '../ui/cx.js';
 import au from '../styles/automation.module.css';
 import inlineEmptyCss from '../styles/inlineEmpty.module.css';
+import { AutomationEditorConnectorsPicker } from './AutomationEditorConnectorsPicker.js';
 import styles from './AutomationEditorScreen.module.css';
 
-// Automation editor — the instructions-first create/edit form (Automations
-// UI revamp, see receipts/issue-387-automations-ui-revamp.md). Name, Instructions (manifest
-// `prompt` — the source of intent the compiler compiles), a multi-trigger
-// editor, and Connectors / Behavior / Notifications tabs.
-//
-// The Connectors tab's manifest `requires`/`connector`/`vault`-scope chips
-// and the Notifications tab's `onFailure`/`model` lines read
-// `AutomationEditorData.connectors`/`onFailure`/`model` (screen-contracts.ts,
-// populated by `automationEditorData.ts`'s `deriveConnectors` et al). Those
-// fields are optional/additive on the DTO, so a `loadData` implementation
-// that hasn't been updated to populate them (or a create-mode load, which
-// has nothing compiled yet) degrades to the same explainer/empty-state text
-// this screen always showed.
+// Automation editor — shared create/edit form (Automations UI revamp, see
+// receipts/issue-387-automations-ui-revamp.md). Name, Instructions (manifest
+// `prompt` — the source of intent the compiler compiles) with a Connectors
+// catalog picker on the toolbar, Schedule/Data triggers only, and
+// Notifications / Plan tabs. Connector OAuth + API-key attach reuses the
+// same gateway flows as Settings → Connectors.
 
 type TriggerKind = 'cron' | 'webhook' | 'condition' | 'data';
 /** One row of a condition trigger's `where` builder. `value` is the raw text
@@ -45,11 +38,9 @@ type TriggerDraft = {
   every: string;
   entities: string;
 };
-type TabId = 'connectors' | 'behavior' | 'notifications' | 'plan';
+type TabId = 'notifications' | 'plan';
 
 const TABS: readonly { id: TabId; label: string }[] = [
-  { id: 'connectors', label: 'Connectors' },
-  { id: 'behavior', label: 'Behavior' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'plan', label: 'Plan' },
 ];
@@ -72,13 +63,29 @@ const CONDITION_OPS = [
   'within-next-days',
 ] as const;
 type ConditionOp = (typeof CONDITION_OPS)[number];
-/** Add-trigger button labels, keyed by kind. */
-const TRIGGER_ADD_LABEL: Record<TriggerKind, string> = {
+/** Kinds the owner can add from the create/edit form. Webhook + condition
+ *  remain editable when already present on a loaded automation, but new
+ *  authoring matches the Grok-style surface: schedule (cron) and vault data
+ *  changes only. */
+const ADDABLE_TRIGGER_KINDS = ['cron', 'data'] as const satisfies readonly TriggerKind[];
+const TRIGGER_ADD_LABEL: Record<(typeof ADDABLE_TRIGGER_KINDS)[number], string> = {
+  cron: 'Schedule',
+  data: 'Data change',
+};
+const TRIGGER_KIND_LABEL: Record<TriggerKind, string> = {
   cron: 'Schedule',
   webhook: 'Webhook',
   data: 'Data change',
   condition: 'Condition',
 };
+/** Run-outcome notifications. Centraid surfaces failures on Home under needs
+ *  attention today — only App / Off are real. (Email options were removed so
+ *  the control doesn't promise a channel that isn't wired yet.) */
+type NotifyMode = 'app' | 'off';
+const NOTIFY_OPTIONS: readonly { id: NotifyMode; label: string }[] = [
+  { id: 'app', label: 'In the app' },
+  { id: 'off', label: 'Off' },
+];
 /** Ops that take no `value` (unary null checks). */
 const NO_VALUE_OPS: ReadonlySet<string> = new Set(['is-null', 'not-null']);
 /** Ops whose value is a comma-separated list. */
@@ -265,93 +272,41 @@ function EntityKindPicker({
   );
 }
 
-/** A labeled row of pill chips; renders nothing when `items` is empty so
- *  callers can list every group unconditionally. */
-function ChipGroup({
-  label,
-  items,
-  mono,
-}: {
-  label: string;
-  items: string[];
-  mono?: boolean;
-}): JSX.Element | null {
-  if (items.length === 0) return null;
-  return (
-    <div className={styles.connGroup}>
-      <div className={styles.microLabel}>{label}</div>
-      <div className={styles.chipRow}>
-        {items.map((item) => (
-          <span key={item} className={cx(styles.chip, mono && styles.chipMono)}>
-            {item}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ConnectorsPanel({
-  mode,
-  connectors,
-}: {
-  mode: 'create' | 'edit';
-  connectors: AuEditorConnectorsDTO | null;
-}): JSX.Element {
-  if (mode === 'create') {
-    return (
-      <div className={inlineEmptyCss.inlineEmpty}>
-        <p>Connectors and vault scopes are declared when the plan is compiled.</p>
-      </div>
-    );
-  }
-  const c = connectors;
-  const hasAny =
-    !!c &&
-    (c.mcps.length > 0 || c.secrets.length > 0 || c.connector !== null || c.vaultScopes.length > 0);
-  if (!c || !hasAny) {
-    return (
-      <div className={inlineEmptyCss.inlineEmpty}>
-        <p>Nothing declared yet — the compiled plan declares what it needs.</p>
-      </div>
-    );
-  }
-  return (
-    <div className={styles.connectorsPanel}>
-      <ChipGroup label="Connector" items={c.connector ? [c.connector] : []} />
-      <ChipGroup label="MCPs" items={c.mcps} mono />
-      <ChipGroup label="Secrets" items={c.secrets} mono />
-      {c.vaultScopes.length > 0 ? (
-        <div className={styles.connGroup}>
-          <div className={styles.microLabel}>Vault access</div>
-          {c.vaultPurpose ? <p className={styles.vaultPurpose}>{c.vaultPurpose}</p> : null}
-          <div className={styles.chipRow}>
-            {c.vaultScopes.map((scope) => (
-              <span key={scope} className={cx(styles.chip, styles.chipMono)}>
-                {scope}
-              </span>
-            ))}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 function NotificationsPanel({
   onFailure,
   model,
+  notifyMode,
+  onNotifyMode,
 }: {
   onFailure: string | null;
   model: string | null;
+  notifyMode: NotifyMode;
+  onNotifyMode: (mode: NotifyMode) => void;
 }): JSX.Element {
   return (
     <div className={styles.notifPanel}>
+      <label className={styles.subField}>
+        <span className={styles.microLabel}>Failed runs</span>
+        <select
+          className={styles.notifySelect}
+          value={notifyMode}
+          aria-label="Notification preference"
+          onChange={(e) => onNotifyMode(e.target.value as NotifyMode)}
+        >
+          {NOTIFY_OPTIONS.map((opt) => (
+            <option key={opt.id} value={opt.id}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </label>
       <p className={styles.notifLine}>
         {onFailure ? (
           <>
-            On failure, runs <code>{onFailure}</code>
+            On failure, also runs <code>{onFailure}</code>
           </>
+        ) : notifyMode === 'off' ? (
+          'Failures stay in this automation’s run history only.'
         ) : (
           'Failed runs surface on Home under needs attention.'
         )}
@@ -360,88 +315,6 @@ function NotificationsPanel({
         <p className={cx(styles.notifLine, styles.notifMeta)}>
           Plan runs on <code>{model}</code>
         </p>
-      ) : null}
-    </div>
-  );
-}
-
-function GrantRow({
-  grant,
-  onRevoke,
-}: {
-  grant: GrantDTO;
-  onRevoke: (id: string) => void;
-}): JSX.Element {
-  const revoked = grant.revokedAt !== null;
-  return (
-    <div className={styles.grantRow} data-revoked={String(revoked)}>
-      <code className={styles.grantVerb}>{grant.verb}</code>
-      <span className={styles.grantTarget}>{grant.target}</span>
-      {revoked ? (
-        <span className={styles.grantRevoked}>Revoked</span>
-      ) : (
-        <button
-          type="button"
-          className={styles.grantRevokeBtn}
-          onClick={() => onRevoke(grant.grantId)}
-        >
-          Revoke
-        </button>
-      )}
-    </div>
-  );
-}
-
-function BehaviorPanel({
-  mode,
-  enabled,
-  busy,
-  onToggle,
-  grants,
-  onRevokeGrant,
-}: {
-  mode: 'create' | 'edit';
-  enabled: boolean;
-  busy: boolean;
-  onToggle: (next: boolean) => void;
-  grants: GrantDTO[];
-  onRevokeGrant: (id: string) => void;
-}): JSX.Element {
-  return (
-    <div className={styles.behaviorPanel}>
-      {mode === 'edit' ? (
-        <div className={styles.enableRow}>
-          <div>
-            <div className={styles.enableLabel}>Enabled</div>
-            <div className={styles.enableHint}>
-              {enabled ? 'Runs on its trigger.' : "Paused — won't fire until enabled."}
-            </div>
-          </div>
-          <label className={styles.switch} title={enabled ? 'Disable' : 'Enable'}>
-            <input
-              type="checkbox"
-              role="switch"
-              aria-checked={enabled}
-              aria-label={`${enabled ? 'Disable' : 'Enable'} automation`}
-              checked={enabled}
-              disabled={busy}
-              onChange={(e) => onToggle(e.target.checked)}
-            />
-            <span className={styles.switchTrack} aria-hidden="true" />
-          </label>
-        </div>
-      ) : null}
-      <p className={styles.behaviorExplainer}>
-        Writes park for your review unless you mint a standing grant. External sends always stage in
-        the outbox.
-      </p>
-      {mode === 'edit' && grants.length > 0 ? (
-        <div className={styles.grants}>
-          <div className={styles.microLabel}>Standing grants</div>
-          {grants.map((g) => (
-            <GrantRow key={g.grantId} grant={g} onRevoke={onRevokeGrant} />
-          ))}
-        </div>
       ) : null}
     </div>
   );
@@ -571,10 +444,13 @@ export default function AutomationEditorScreen({
   onCompile,
   onSearchEntities,
   loadEntityTypes,
+  loadConnectorCatalog,
+  configureConnection,
+  beginAuthorize,
+  showToast,
   onReadSource,
   onRunNow,
   onToggleEnabled,
-  onDecideConsent,
   onCopyWebhook,
   onRotateWebhook,
   onDelete,
@@ -590,7 +466,7 @@ export default function AutomationEditorScreen({
     Array<{ type: string; id: string; title: string | null; subtitle: string | null }>
   >([]);
   const [enabled, setEnabled] = useState(false);
-  const [tab, setTab] = useState<TabId>('connectors');
+  const [tab, setTab] = useState<TabId>('notifications');
   const [source, setSource] = useState<{ manifest: string | null; handler: string | null } | null>(
     null,
   );
@@ -600,9 +476,21 @@ export default function AutomationEditorScreen({
   const [deleting, setDeleting] = useState(false);
   const [toggleBusy, setToggleBusy] = useState(false);
   const [regenBusy, setRegenBusy] = useState(false);
+  const [addTriggerOpen, setAddTriggerOpen] = useState(false);
+  const [notifyMode, setNotifyMode] = useState<NotifyMode>('app');
+  const [connectorsOpen, setConnectorsOpen] = useState(false);
+  const [catalog, setCatalog] = useState<AuEditorCatalogConnectorDTO[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [selectedConnectors, setSelectedConnectors] = useState<Set<string>>(() => new Set());
+  /** Durable connection bindings keyed by catalog kind (connection id + label). */
+  const [connectionBindings, setConnectionBindings] = useState<
+    Map<string, { connectionId: string; kind: string; label: string }>
+  >(() => new Map());
 
   const baselineInstructionsRef = useRef('');
   const instructionsRef = useRef<HTMLTextAreaElement | null>(null);
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
+  const connectorsWrapRef = useRef<HTMLDivElement | null>(null);
 
   // Applies a freshly-loaded DTO to `state` plus, on the initial load
   // (`resetForm: true`), every editable field derived from it. Actions that
@@ -620,6 +508,13 @@ export default function AutomationEditorScreen({
     setInstructions(d.instructions);
     baselineInstructionsRef.current = d.instructions;
     setTriggers(d.triggers.map(loadedTrigger));
+    const bound = d.connectors?.connections ?? [];
+    setSelectedConnectors(new Set(bound.map((b) => b.kind)));
+    setConnectionBindings(
+      new Map(
+        bound.map((b) => [b.kind, { connectionId: b.connectionId, kind: b.kind, label: b.label }]),
+      ),
+    );
   }, []);
 
   const reload = useCallback(async () => {
@@ -710,6 +605,68 @@ export default function AutomationEditorScreen({
     };
   }, [mention, onSearchEntities]);
 
+  const refreshCatalog = useCallback(async (): Promise<void> => {
+    if (!loadConnectorCatalog) {
+      setCatalog([]);
+      return;
+    }
+    setCatalogLoading(true);
+    try {
+      const next = await loadConnectorCatalog();
+      setCatalog(next);
+      // Rehydrate durable bindings for any selected kinds that now have a
+      // live vault connection (covers select-then-connect + post-refresh).
+      setSelectedConnectors((selected) => {
+        setConnectionBindings((prev) => {
+          const copy = new Map(prev);
+          for (const cat of next) {
+            if (!selected.has(cat.kind) || !cat.connection) continue;
+            copy.set(cat.kind, {
+              connectionId: cat.connection.connectionId,
+              kind: cat.kind,
+              label: cat.connection.label,
+            });
+          }
+          return copy;
+        });
+        return selected;
+      });
+    } catch {
+      setCatalog([]);
+    } finally {
+      setCatalogLoading(false);
+    }
+  }, [loadConnectorCatalog]);
+
+  // Dismiss the connectors popover on outside click or Escape.
+  useEffect(() => {
+    if (!connectorsOpen) return;
+    const onDoc = (event: MouseEvent): void => {
+      const t = event.target as Node | null;
+      if (t && connectorsWrapRef.current?.contains(t)) return;
+      setConnectorsOpen(false);
+    };
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setConnectorsOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [connectorsOpen]);
+
+  // Create mode: land the caret in Name so the first action is obvious.
+  const createFocused = useRef(false);
+  useEffect(() => {
+    if (createFocused.current) return;
+    if (typeof state !== 'object' || state.mode !== 'create') return;
+    createFocused.current = true;
+    const id = window.requestAnimationFrame(() => nameInputRef.current?.focus());
+    return () => window.cancelAnimationFrame(id);
+  }, [state]);
+
   if (state === 'loading' || state === 'error') {
     return (
       <div className={styles.page}>
@@ -775,7 +732,15 @@ export default function AutomationEditorScreen({
     const changed = instructions !== baselineInstructionsRef.current;
     try {
       const builtTriggers = buildTriggers();
-      const ok = await onSave({ instructions, name: name.trim(), triggers: builtTriggers });
+      const connections = [...connectionBindings.values()].filter((b) =>
+        selectedConnectors.has(b.kind),
+      );
+      const ok = await onSave({
+        instructions,
+        name: name.trim(),
+        triggers: builtTriggers,
+        connections,
+      });
       if (ok) {
         baselineInstructionsRef.current = instructions;
         if (d.mode === 'create' || changed) await onCompile(d.mode === 'create');
@@ -818,9 +783,11 @@ export default function AutomationEditorScreen({
       .finally(() => setRegenBusy(false));
   };
 
-  const doRevokeGrant = (id: string): void => {
-    void onDecideConsent('grant', id, 'revoke').then((ok) => {
-      if (ok) void refreshConsent();
+  const openConnectorsPicker = (): void => {
+    setConnectorsOpen((open) => {
+      const next = !open;
+      if (next) void refreshCatalog();
+      return next;
     });
   };
 
@@ -848,385 +815,563 @@ export default function AutomationEditorScreen({
     });
   };
 
-  return (
-    <div className={styles.page} data-testid="automation-editor">
-      {d.mode === 'edit' ? (
-        <div className={styles.head} data-hue={hue}>
-          <div className={styles.headIdentity}>
-            <span className={au.auGlyph} data-hue={hue} data-size="lg" aria-hidden="true">
-              <Icon name={glyph as IconName} size={20} />
-            </span>
-            <div>
-              <div className={styles.headName}>{name || d.name}</div>
-              <span className={au.auStatus} data-tone={enabled ? 'active' : 'paused'}>
-                <span className={au.auStatusIc} aria-hidden="true">
-                  <Icon name={enabled ? 'Power' : 'Pause'} size={11} />
-                </span>
-                <span>{enabled ? 'Active' : 'Paused'}</span>
-              </span>
-            </div>
-          </div>
-          <div className={styles.headActions}>
-            <Button
-              variant="soft"
-              size="sm"
-              icon="Play"
-              label={running ? 'Starting…' : 'Run now'}
-              disabled={running}
-              onClick={doRun}
-            />
-            <IconButton
-              icon="Trash"
-              ariaLabel="Delete automation"
-              title="Delete automation"
-              disabled={deleting}
-              onClick={doDelete}
-            />
-          </div>
+  const connectorCount = selectedConnectors.size;
+  const isCreate = d.mode === 'create';
+
+  const addTriggerMenu = (
+    <div className={styles.addTriggerWrap}>
+      <button
+        type="button"
+        className={styles.addTriggerBtn}
+        aria-expanded={addTriggerOpen}
+        aria-haspopup="menu"
+        onClick={() => setAddTriggerOpen((o) => !o)}
+      >
+        + Add Trigger
+      </button>
+      {addTriggerOpen ? (
+        <div className={styles.addTriggerMenu} role="menu" aria-label="Trigger kinds">
+          {ADDABLE_TRIGGER_KINDS.map((kind) => (
+            <button
+              key={kind}
+              type="button"
+              role="menuitem"
+              className={styles.addTriggerItem}
+              onClick={() => {
+                setTriggers((current) => [...current, draftTrigger(kind)]);
+                setAddTriggerOpen(false);
+              }}
+            >
+              {TRIGGER_ADD_LABEL[kind]}
+            </button>
+          ))}
         </div>
       ) : null}
+    </div>
+  );
+
+  const renderTriggerRows = (): JSX.Element => (
+    <div className={styles.triggerList}>
+      {triggers.map((trigger, index) => {
+        const update = (patch: Partial<TriggerDraft>): void =>
+          setTriggers((current) =>
+            current.map((item) => (item.key === trigger.key ? { ...item, ...patch } : item)),
+          );
+        const preview =
+          trigger.kind === 'cron' && trigger.expr.trim()
+            ? cronNextRuns(trigger.expr.trim(), 3).map(relativeRunLabel)
+            : [];
+        const everyPreview =
+          (trigger.kind === 'data' || trigger.kind === 'condition') && trigger.every.trim()
+            ? cronNextRuns(trigger.every.trim(), 3).map(relativeRunLabel)
+            : [];
+        // New authoring only offers cron + data; keep legacy kinds when loaded.
+        const kindOptions: TriggerKind[] =
+          trigger.kind === 'webhook' || trigger.kind === 'condition'
+            ? [trigger.kind, ...ADDABLE_TRIGGER_KINDS]
+            : [...ADDABLE_TRIGGER_KINDS];
+        return (
+          <div key={trigger.key} className={styles.triggerRow} data-trigger-kind={trigger.kind}>
+            <div className={styles.triggerRowHead}>
+              <span className={styles.triggerIndex}>{String(index + 1).padStart(2, '0')}</span>
+              <select
+                className={styles.triggerSelect}
+                value={trigger.kind}
+                aria-label={`Trigger ${index + 1} kind`}
+                onChange={(event) => {
+                  const kind = event.target.value as TriggerKind;
+                  update({ ...draftTrigger(kind), key: trigger.key });
+                }}
+              >
+                {kindOptions.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {TRIGGER_KIND_LABEL[kind]}
+                  </option>
+                ))}
+              </select>
+              <IconButton
+                icon="Trash"
+                ariaLabel={`Remove trigger ${index + 1}`}
+                title="Remove trigger"
+                onClick={() =>
+                  setTriggers((current) => current.filter((item) => item.key !== trigger.key))
+                }
+              />
+            </div>
+            {trigger.kind === 'cron' ? (
+              <div className={styles.trigFields}>
+                <label className={styles.subField}>
+                  <span className={styles.microLabel}>Cron expression</span>
+                  <input
+                    className={cx(styles.input, styles.mono)}
+                    value={trigger.expr}
+                    onChange={(event) => update({ expr: event.target.value })}
+                    placeholder="0 7 * * *"
+                  />
+                </label>
+                {preview.length > 0 ? (
+                  <div className={styles.cronPreview}>
+                    <span className={cx(styles.microLabel, styles.cronPreviewLbl)}>Next</span>
+                    {preview.map((label) => (
+                      <span key={label} className={styles.cronPreviewPill}>
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            {trigger.kind === 'data' ? (
+              <div className={styles.trigFields}>
+                <div className={styles.subField}>
+                  <span className={styles.microLabel}>Entities</span>
+                  <EntityKindPicker
+                    value={trigger.entities}
+                    list={entityTypes}
+                    segmented
+                    onChange={(entities) => update({ entities })}
+                    placeholder="core.transaction, billing.invoice"
+                  />
+                  <span className={styles.trigHint}>
+                    Comma-separated <code>schema.table</code> names to watch for changes.
+                  </span>
+                </div>
+                <label className={styles.subField}>
+                  <span className={styles.microLabel}>Poll every (optional)</span>
+                  <input
+                    className={cx(styles.input, styles.mono)}
+                    value={trigger.every}
+                    onChange={(event) => update({ every: event.target.value })}
+                    placeholder="* * * * *"
+                    spellCheck={false}
+                  />
+                  <span className={styles.trigHint}>
+                    5-field cron gate. Defaults to every minute.
+                  </span>
+                </label>
+                {everyPreview.length > 0 ? (
+                  <div className={styles.cronPreview}>
+                    <span className={cx(styles.microLabel, styles.cronPreviewLbl)}>Next</span>
+                    {everyPreview.map((label) => (
+                      <span key={label} className={styles.cronPreviewPill}>
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            {trigger.kind === 'condition' ? (
+              <div className={styles.trigFields}>
+                <div className={styles.subField}>
+                  <span className={styles.microLabel}>Entity</span>
+                  <EntityKindPicker
+                    value={trigger.entity}
+                    list={entityTypes}
+                    onChange={(entity) => update({ entity })}
+                    placeholder="business.invoice"
+                  />
+                </div>
+                <div className={styles.subField}>
+                  <span className={styles.microLabel}>Where (optional)</span>
+                  <div className={styles.whereBuilder}>
+                    {trigger.whereRows.map((row, rowIndex) => {
+                      const setRow = (patch: Partial<WhereRowDraft>): void =>
+                        update({
+                          whereRows: trigger.whereRows.map((r, i) =>
+                            i === rowIndex ? { ...r, ...patch } : r,
+                          ),
+                        });
+                      const takesValue = !NO_VALUE_OPS.has(row.op);
+                      return (
+                        <div key={rowIndex} className={styles.whereRow}>
+                          <input
+                            className={cx(styles.input, styles.mono, styles.whereField)}
+                            value={row.column}
+                            onChange={(event) => setRow({ column: event.target.value })}
+                            placeholder="column"
+                            aria-label="Filter column"
+                            spellCheck={false}
+                          />
+                          <select
+                            className={styles.whereSelect}
+                            value={row.op}
+                            aria-label="Filter operator"
+                            onChange={(event) => setRow({ op: event.target.value as ConditionOp })}
+                          >
+                            {CONDITION_OPS.map((op) => (
+                              <option key={op} value={op}>
+                                {op}
+                              </option>
+                            ))}
+                          </select>
+                          {takesValue ? (
+                            <input
+                              className={cx(styles.input, styles.mono, styles.whereField)}
+                              value={row.value}
+                              onChange={(event) => setRow({ value: event.target.value })}
+                              placeholder={
+                                LIST_OPS.has(row.op)
+                                  ? 'a, b, c'
+                                  : NUMERIC_OPS.has(row.op)
+                                    ? 'days'
+                                    : 'value'
+                              }
+                              inputMode={NUMERIC_OPS.has(row.op) ? 'numeric' : undefined}
+                              aria-label="Filter value"
+                              spellCheck={false}
+                            />
+                          ) : (
+                            <span className={styles.whereValueOff}>no value</span>
+                          )}
+                          <IconButton
+                            icon="Trash"
+                            ariaLabel={`Remove filter ${rowIndex + 1}`}
+                            title="Remove filter"
+                            onClick={() =>
+                              update({
+                                whereRows: trigger.whereRows.filter((_, i) => i !== rowIndex),
+                              })
+                            }
+                          />
+                        </div>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      className={styles.whereAddBtn}
+                      onClick={() =>
+                        update({
+                          whereRows: [...trigger.whereRows, { column: '', op: 'eq', value: '' }],
+                        })
+                      }
+                    >
+                      + Add filter
+                    </button>
+                  </div>
+                </div>
+                <label className={styles.subField}>
+                  <span className={styles.microLabel}>Evaluate every (optional)</span>
+                  <input
+                    className={cx(styles.input, styles.mono)}
+                    value={trigger.every}
+                    onChange={(event) => update({ every: event.target.value })}
+                    placeholder="*/5 * * * *"
+                    spellCheck={false}
+                  />
+                  <span className={styles.trigHint}>
+                    5-field cron gate. Defaults to every 5 minutes.
+                  </span>
+                </label>
+                {everyPreview.length > 0 ? (
+                  <div className={styles.cronPreview}>
+                    <span className={cx(styles.microLabel, styles.cronPreviewLbl)}>Next</span>
+                    {everyPreview.map((label) => (
+                      <span key={label} className={styles.cronPreviewPill}>
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            {trigger.kind === 'webhook' ? (
+              <div className={styles.trigFields}>
+                {d.webhook && !d.webhook.pending && d.webhook.url ? (
+                  <div className={styles.webhookRow}>
+                    <code className={styles.webhookUrl}>{d.webhook.url}</code>
+                    <IconButton
+                      icon="Copy"
+                      ariaLabel="Copy webhook URL"
+                      title="Copy webhook URL"
+                      onClick={() => d.webhook?.url && onCopyWebhook(d.webhook.url)}
+                    />
+                    <button
+                      type="button"
+                      className={styles.regenBtn}
+                      disabled={regenBusy}
+                      onClick={doRegenerate}
+                    >
+                      <Icon name="Refresh" size={12} />
+                      <span>{regenBusy ? 'Regenerating…' : 'Regenerate secret'}</span>
+                    </button>
+                  </div>
+                ) : (
+                  <p className={styles.trigHint}>
+                    The endpoint and one-time secret are minted when you save.
+                  </p>
+                )}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const toggleConnector = (kind: string): void => {
+    setSelectedConnectors((prev) => {
+      const next = new Set(prev);
+      if (next.has(kind)) {
+        next.delete(kind);
+        setConnectionBindings((m) => {
+          const copy = new Map(m);
+          copy.delete(kind);
+          return copy;
+        });
+      } else {
+        next.add(kind);
+        const cat = catalog.find((c) => c.kind === kind);
+        if (cat?.connection) {
+          setConnectionBindings((m) => {
+            const copy = new Map(m);
+            copy.set(kind, {
+              connectionId: cat.connection!.connectionId,
+              kind: cat.kind,
+              label: cat.connection!.label,
+            });
+            return copy;
+          });
+        }
+      }
+      return next;
+    });
+  };
+
+  /** After picker configure/authorize — always select + persist durable id. */
+  const bindConnection = (binding: { connectionId: string; kind: string; label: string }): void => {
+    setSelectedConnectors((prev) => new Set(prev).add(binding.kind));
+    setConnectionBindings((m) => {
+      const copy = new Map(m);
+      copy.set(binding.kind, binding);
+      return copy;
+    });
+  };
+
+  const selectedConnectorItems = catalog.filter((c) => selectedConnectors.has(c.kind));
+
+  const instructionsBlock = (
+    <div className={cx(styles.field, styles.instructionsField, styles.instructionsCard)}>
+      <span className={cx(styles.fieldLabel, styles.instructionsLabel)}>Instructions</span>
+      <textarea
+        ref={instructionsRef}
+        className={styles.textarea}
+        rows={6}
+        value={instructions}
+        onChange={onInstructionsChange}
+        placeholder="Read my unread emails and summarize…"
+        aria-label="Instructions"
+      />
+      {Array.from(instructions.matchAll(/@\[([^/\]]+)\/([^\]]+)\]/g)).length > 0 ? (
+        <div className={styles.entityTokens} aria-label="Tagged data">
+          {Array.from(instructions.matchAll(/@\[([^/\]]+)\/([^\]]+)\]/g), (match) => (
+            <span key={match[0]} className={styles.entityToken}>
+              <code>@{match[1]}</code>
+              <span>{match[2] === '*' ? 'type' : match[2]}</span>
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {mention && mentionHits.length > 0 ? (
+        <div className={styles.mentionPopover} role="listbox" aria-label="Tag vault data">
+          {mentionHits.map((hit) => (
+            <button
+              key={`${hit.type}/${hit.id}`}
+              type="button"
+              role="option"
+              aria-selected="false"
+              className={styles.mentionOption}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => insertMention(hit)}
+            >
+              <span>{hit.title ?? hit.id}</span>
+              <code>{hit.subtitle ?? hit.type}</code>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {selectedConnectorItems.length > 0 ? (
+        <div className={styles.selectedConnectors} aria-label="Selected connectors">
+          {selectedConnectorItems.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              className={styles.selectedConnChip}
+              title={
+                c.connection?.health === 'ok'
+                  ? `${c.name} · connected — click to remove`
+                  : `${c.name} · not fully connected — click to remove`
+              }
+              onClick={() => toggleConnector(c.kind)}
+            >
+              <span className={styles.selectedConnMark} aria-hidden="true">
+                <Icon name="Plug" size={11} />
+              </span>
+              <span>{c.name}</span>
+              {c.connection?.health === 'ok' ? (
+                <span className={styles.selectedConnOk} aria-hidden="true">
+                  ✓
+                </span>
+              ) : (
+                <span className={styles.selectedConnWarn} aria-hidden="true">
+                  !
+                </span>
+              )}
+              <span className={styles.selectedConnX} aria-hidden="true">
+                ×
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <div className={styles.instrToolbar} ref={connectorsWrapRef}>
+        <button
+          type="button"
+          className={styles.instrChip}
+          data-open={String(connectorsOpen)}
+          onClick={openConnectorsPicker}
+          aria-expanded={connectorsOpen}
+          aria-haspopup="dialog"
+          title="Choose connectors this automation may use"
+        >
+          <Icon name="Plug" size={14} />
+          <span>Connectors</span>
+          <span className={styles.instrChipCount}>{connectorCount}</span>
+          <Icon name="ChevronDown" size={12} />
+        </button>
+        <span className={styles.instrHint}>
+          {connectorCount === 0
+            ? 'Optional — attach Gmail, GitHub, …'
+            : `${connectorCount} selected`}
+        </span>
+        <AutomationEditorConnectorsPicker
+          open={connectorsOpen}
+          catalog={catalog}
+          loading={catalogLoading}
+          selected={selectedConnectors}
+          onToggleSelect={toggleConnector}
+          onBoundConnection={bindConnection}
+          onClose={() => setConnectorsOpen(false)}
+          configureConnection={configureConnection}
+          beginAuthorize={beginAuthorize}
+          onConnected={() => void refreshCatalog()}
+          showToast={showToast}
+        />
+      </div>
+    </div>
+  );
+
+  return (
+    <div className={styles.page} data-testid="automation-editor" data-mode={d.mode}>
+      <div className={styles.head} data-hue={hue}>
+        <div className={styles.headIdentity}>
+          <span className={au.auGlyph} data-hue={hue} data-size="lg" aria-hidden="true">
+            <Icon name={glyph as IconName} size={20} />
+          </span>
+          <div>
+            <div className={styles.headName}>
+              {name.trim() || (isCreate ? 'New Automation' : d.name)}
+            </div>
+            <span
+              className={au.auStatus}
+              data-tone={isCreate ? 'draft' : enabled ? 'active' : 'paused'}
+            >
+              <span className={au.auStatusIc} aria-hidden="true">
+                <Icon name={isCreate ? 'Pencil' : enabled ? 'Power' : 'Pause'} size={11} />
+              </span>
+              <span>{isCreate ? 'Draft' : enabled ? 'Active' : 'Paused'}</span>
+            </span>
+          </div>
+        </div>
+        <div className={styles.headActions}>
+          {isCreate ? (
+            <IconButton icon="X" ariaLabel="Close" title="Close" onClick={onCancel} />
+          ) : (
+            <>
+              <label className={styles.enableControl} title={enabled ? 'Disable' : 'Enable'}>
+                <span className={styles.enableText}>{enabled ? 'On' : 'Off'}</span>
+                <span className={styles.switch}>
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    aria-checked={enabled}
+                    aria-label={`${enabled ? 'Disable' : 'Enable'} automation`}
+                    checked={enabled}
+                    disabled={toggleBusy}
+                    onChange={(e) => doToggle(e.target.checked)}
+                  />
+                  <span className={styles.switchTrack} aria-hidden="true" />
+                </span>
+              </label>
+              <Button
+                variant="soft"
+                size="sm"
+                icon="Play"
+                label={running ? 'Starting…' : 'Run now'}
+                disabled={running}
+                onClick={doRun}
+              />
+              <IconButton
+                icon="Trash"
+                ariaLabel="Delete automation"
+                title="Delete automation"
+                disabled={deleting}
+                onClick={doDelete}
+              />
+            </>
+          )}
+        </div>
+      </div>
 
       <label className={styles.field}>
         <span className={styles.fieldLabel}>Name</span>
         <input
+          ref={nameInputRef}
           className={styles.input}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Untitled automation"
+          placeholder="My Automation"
+          aria-label="Name"
           required
         />
       </label>
 
-      <label className={cx(styles.field, styles.instructionsField)}>
-        <span className={styles.fieldLabel}>Instructions</span>
-        <textarea
-          ref={instructionsRef}
-          className={styles.textarea}
-          rows={8}
-          value={instructions}
-          onChange={onInstructionsChange}
-          placeholder="Describe the outcome, data, and actions this automation should handle. Type @ to tag vault data."
-        />
-        {Array.from(instructions.matchAll(/@\[([^/\]]+)\/([^\]]+)\]/g)).length > 0 ? (
-          <div className={styles.entityTokens} aria-label="Tagged data">
-            {Array.from(instructions.matchAll(/@\[([^/\]]+)\/([^\]]+)\]/g), (match) => (
-              <span key={match[0]} className={styles.entityToken}>
-                <code>@{match[1]}</code>
-                <span>{match[2] === '*' ? 'type' : match[2]}</span>
-              </span>
-            ))}
-          </div>
-        ) : null}
-        {mention && mentionHits.length > 0 ? (
-          <div className={styles.mentionPopover} role="listbox" aria-label="Tag vault data">
-            {mentionHits.map((hit) => (
-              <button
-                key={`${hit.type}/${hit.id}`}
-                type="button"
-                role="option"
-                aria-selected="false"
-                className={styles.mentionOption}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => insertMention(hit)}
-              >
-                <span>{hit.title ?? hit.id}</span>
-                <code>{hit.subtitle ?? hit.type}</code>
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </label>
+      {instructionsBlock}
 
       <section className={styles.section}>
         <div className={styles.sectionHeading}>
           <div>
             <h2 className={styles.sectionTitle}>Triggers</h2>
             <p className={styles.sectionHint}>
-              Run this on a schedule, an inbound webhook, a vault data change, or when rows start
-              matching a condition.
+              Optional. Without a trigger, this only runs when you press Run now.
             </p>
           </div>
-          <div className={styles.addTrigger} aria-label="Add trigger">
-            {(['cron', 'webhook', 'data', 'condition'] as const).map((kind) => (
-              <button
-                key={kind}
-                type="button"
-                disabled={
-                  kind === 'webhook' && triggers.some((trigger) => trigger.kind === 'webhook')
-                }
-                onClick={() => setTriggers((current) => [...current, draftTrigger(kind)])}
-              >
-                + {TRIGGER_ADD_LABEL[kind]}
-              </button>
-            ))}
-          </div>
+          {addTriggerMenu}
         </div>
         {triggers.length === 0 ? (
-          <p className={styles.triggerEmpty}>Manual only — add a trigger to run automatically.</p>
+          <div className={styles.triggerEmptyCard}>
+            <p className={styles.triggerEmpty}>
+              Manual only for now — add a schedule or watch vault data to run automatically.
+            </p>
+            <div className={styles.triggerEmptyActions}>
+              <button
+                type="button"
+                className={styles.triggerEmptyBtn}
+                onClick={() => setTriggers((t) => [...t, draftTrigger('cron')])}
+              >
+                + Schedule
+              </button>
+              <button
+                type="button"
+                className={styles.triggerEmptyBtn}
+                onClick={() => setTriggers((t) => [...t, draftTrigger('data')])}
+              >
+                + Data change
+              </button>
+            </div>
+          </div>
         ) : null}
-        <div className={styles.triggerList}>
-          {triggers.map((trigger, index) => {
-            const update = (patch: Partial<TriggerDraft>): void =>
-              setTriggers((current) =>
-                current.map((item) => (item.key === trigger.key ? { ...item, ...patch } : item)),
-              );
-            const preview =
-              trigger.kind === 'cron' && trigger.expr.trim()
-                ? cronNextRuns(trigger.expr.trim(), 3).map(relativeRunLabel)
-                : [];
-            // The `every` gate on a data/condition trigger is a cron too, so it
-            // gets the same next-runs preview the Schedule trigger shows.
-            const everyPreview =
-              (trigger.kind === 'data' || trigger.kind === 'condition') && trigger.every.trim()
-                ? cronNextRuns(trigger.every.trim(), 3).map(relativeRunLabel)
-                : [];
-            const webhookTakenElsewhere = triggers.some(
-              (item) => item.kind === 'webhook' && item.key !== trigger.key,
-            );
-            return (
-              <div key={trigger.key} className={styles.triggerRow} data-trigger-kind={trigger.kind}>
-                <div className={styles.triggerRowHead}>
-                  <span className={styles.triggerIndex}>{String(index + 1).padStart(2, '0')}</span>
-                  <select
-                    className={styles.triggerSelect}
-                    value={trigger.kind}
-                    onChange={(event) => {
-                      const kind = event.target.value as TriggerKind;
-                      if (kind === 'webhook' && triggers.some((item) => item.kind === 'webhook'))
-                        return;
-                      update({ ...draftTrigger(kind), key: trigger.key });
-                    }}
-                  >
-                    <option value="cron">Schedule</option>
-                    <option value="webhook" disabled={webhookTakenElsewhere}>
-                      Webhook
-                    </option>
-                    <option value="data">Data change</option>
-                    <option value="condition">Condition</option>
-                  </select>
-                  <IconButton
-                    icon="Trash"
-                    ariaLabel={`Remove trigger ${index + 1}`}
-                    title="Remove trigger"
-                    onClick={() =>
-                      setTriggers((current) => current.filter((item) => item.key !== trigger.key))
-                    }
-                  />
-                </div>
-                {trigger.kind === 'cron' ? (
-                  <div className={styles.trigFields}>
-                    <label className={styles.subField}>
-                      <span className={styles.microLabel}>Cron expression</span>
-                      <input
-                        className={cx(styles.input, styles.mono)}
-                        value={trigger.expr}
-                        onChange={(event) => update({ expr: event.target.value })}
-                        placeholder="0 7 * * *"
-                      />
-                    </label>
-                    {preview.length > 0 ? (
-                      <div className={styles.cronPreview}>
-                        <span className={cx(styles.microLabel, styles.cronPreviewLbl)}>Next</span>
-                        {preview.map((label) => (
-                          <span key={label} className={styles.cronPreviewPill}>
-                            {label}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-                {trigger.kind === 'data' ? (
-                  <div className={styles.trigFields}>
-                    <div className={styles.subField}>
-                      <span className={styles.microLabel}>Entities</span>
-                      <EntityKindPicker
-                        value={trigger.entities}
-                        list={entityTypes}
-                        segmented
-                        onChange={(entities) => update({ entities })}
-                        placeholder="core.transaction, billing.invoice"
-                      />
-                      <span className={styles.trigHint}>
-                        Comma-separated <code>schema.table</code> names to watch for changes.
-                      </span>
-                    </div>
-                    <label className={styles.subField}>
-                      <span className={styles.microLabel}>Poll every (optional)</span>
-                      <input
-                        className={cx(styles.input, styles.mono)}
-                        value={trigger.every}
-                        onChange={(event) => update({ every: event.target.value })}
-                        placeholder="* * * * *"
-                        spellCheck={false}
-                      />
-                      <span className={styles.trigHint}>
-                        5-field cron gate. Defaults to every minute.
-                      </span>
-                    </label>
-                    {everyPreview.length > 0 ? (
-                      <div className={styles.cronPreview}>
-                        <span className={cx(styles.microLabel, styles.cronPreviewLbl)}>Next</span>
-                        {everyPreview.map((label) => (
-                          <span key={label} className={styles.cronPreviewPill}>
-                            {label}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-                {trigger.kind === 'condition' ? (
-                  <div className={styles.trigFields}>
-                    <div className={styles.subField}>
-                      <span className={styles.microLabel}>Entity</span>
-                      <EntityKindPicker
-                        value={trigger.entity}
-                        list={entityTypes}
-                        onChange={(entity) => update({ entity })}
-                        placeholder="business.invoice"
-                      />
-                    </div>
-                    <div className={styles.subField}>
-                      <span className={styles.microLabel}>Where (optional)</span>
-                      <div className={styles.whereBuilder}>
-                        {trigger.whereRows.map((row, rowIndex) => {
-                          const setRow = (patch: Partial<WhereRowDraft>): void =>
-                            update({
-                              whereRows: trigger.whereRows.map((r, i) =>
-                                i === rowIndex ? { ...r, ...patch } : r,
-                              ),
-                            });
-                          const takesValue = !NO_VALUE_OPS.has(row.op);
-                          return (
-                            <div key={rowIndex} className={styles.whereRow}>
-                              <input
-                                className={cx(styles.input, styles.mono, styles.whereField)}
-                                value={row.column}
-                                onChange={(event) => setRow({ column: event.target.value })}
-                                placeholder="column"
-                                aria-label="Filter column"
-                                spellCheck={false}
-                              />
-                              <select
-                                className={styles.whereSelect}
-                                value={row.op}
-                                aria-label="Filter operator"
-                                onChange={(event) =>
-                                  setRow({ op: event.target.value as ConditionOp })
-                                }
-                              >
-                                {CONDITION_OPS.map((op) => (
-                                  <option key={op} value={op}>
-                                    {op}
-                                  </option>
-                                ))}
-                              </select>
-                              {takesValue ? (
-                                <input
-                                  className={cx(styles.input, styles.mono, styles.whereField)}
-                                  value={row.value}
-                                  onChange={(event) => setRow({ value: event.target.value })}
-                                  placeholder={
-                                    LIST_OPS.has(row.op)
-                                      ? 'a, b, c'
-                                      : NUMERIC_OPS.has(row.op)
-                                        ? 'days'
-                                        : 'value'
-                                  }
-                                  inputMode={NUMERIC_OPS.has(row.op) ? 'numeric' : undefined}
-                                  aria-label="Filter value"
-                                  spellCheck={false}
-                                />
-                              ) : (
-                                <span className={styles.whereValueOff}>no value</span>
-                              )}
-                              <IconButton
-                                icon="Trash"
-                                ariaLabel={`Remove filter ${rowIndex + 1}`}
-                                title="Remove filter"
-                                onClick={() =>
-                                  update({
-                                    whereRows: trigger.whereRows.filter((_, i) => i !== rowIndex),
-                                  })
-                                }
-                              />
-                            </div>
-                          );
-                        })}
-                        <button
-                          type="button"
-                          className={styles.whereAddBtn}
-                          onClick={() =>
-                            update({
-                              whereRows: [
-                                ...trigger.whereRows,
-                                { column: '', op: 'eq', value: '' },
-                              ],
-                            })
-                          }
-                        >
-                          + Add filter
-                        </button>
-                      </div>
-                    </div>
-                    <label className={styles.subField}>
-                      <span className={styles.microLabel}>Evaluate every (optional)</span>
-                      <input
-                        className={cx(styles.input, styles.mono)}
-                        value={trigger.every}
-                        onChange={(event) => update({ every: event.target.value })}
-                        placeholder="*/5 * * * *"
-                        spellCheck={false}
-                      />
-                      <span className={styles.trigHint}>
-                        5-field cron gate. Defaults to every 5 minutes.
-                      </span>
-                    </label>
-                    {everyPreview.length > 0 ? (
-                      <div className={styles.cronPreview}>
-                        <span className={cx(styles.microLabel, styles.cronPreviewLbl)}>Next</span>
-                        {everyPreview.map((label) => (
-                          <span key={label} className={styles.cronPreviewPill}>
-                            {label}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-                {trigger.kind === 'webhook' ? (
-                  <div className={styles.trigFields}>
-                    {d.webhook && !d.webhook.pending && d.webhook.url ? (
-                      <div className={styles.webhookRow}>
-                        <code className={styles.webhookUrl}>{d.webhook.url}</code>
-                        <IconButton
-                          icon="Copy"
-                          ariaLabel="Copy webhook URL"
-                          title="Copy webhook URL"
-                          onClick={() => d.webhook?.url && onCopyWebhook(d.webhook.url)}
-                        />
-                        <button
-                          type="button"
-                          className={styles.regenBtn}
-                          disabled={regenBusy}
-                          onClick={doRegenerate}
-                        >
-                          <Icon name="Refresh" size={12} />
-                          <span>{regenBusy ? 'Regenerating…' : 'Regenerate secret'}</span>
-                        </button>
-                      </div>
-                    ) : (
-                      <p className={styles.trigHint}>
-                        The endpoint and one-time secret are minted when you save.
-                      </p>
-                    )}
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
+        {renderTriggerRows()}
       </section>
 
       <section className={styles.section}>
@@ -1246,21 +1391,13 @@ export default function AutomationEditorScreen({
           ))}
         </nav>
         <div className={styles.tabPanel}>
-          {tab === 'connectors' ? (
-            <ConnectorsPanel mode={d.mode} connectors={d.connectors ?? null} />
-          ) : null}
-          {tab === 'behavior' ? (
-            <BehaviorPanel
-              mode={d.mode}
-              enabled={enabled}
-              busy={toggleBusy}
-              onToggle={doToggle}
-              grants={d.consent.grants}
-              onRevokeGrant={doRevokeGrant}
-            />
-          ) : null}
           {tab === 'notifications' ? (
-            <NotificationsPanel onFailure={d.onFailure ?? null} model={d.model ?? null} />
+            <NotificationsPanel
+              onFailure={d.onFailure ?? null}
+              model={d.model ?? null}
+              notifyMode={notifyMode}
+              onNotifyMode={setNotifyMode}
+            />
           ) : null}
           {tab === 'plan' ? (
             <PlanPanel mode={d.mode} source={source} file={sourceFile} onFile={setSourceFile} />
@@ -1269,13 +1406,30 @@ export default function AutomationEditorScreen({
       </section>
 
       <div className={styles.footer}>
-        <Button variant="ghost" label="Cancel" onClick={onCancel} />
-        <Button
-          variant="primary"
-          label={d.mode === 'create' ? 'Create automation' : 'Save changes'}
-          disabled={!name.trim() || saving}
-          onClick={() => void doSave()}
-        />
+        <p className={styles.footerHint}>
+          {!name.trim()
+            ? 'Name required to save'
+            : isCreate
+              ? 'Creates a draft plan from your instructions'
+              : 'Saves name, instructions, and triggers'}
+        </p>
+        <div className={styles.footerActions}>
+          <Button variant="ghost" label="Cancel" onClick={onCancel} />
+          <Button
+            variant="primary"
+            label={
+              isCreate
+                ? saving
+                  ? 'Creating…'
+                  : 'Create automation'
+                : saving
+                  ? 'Saving…'
+                  : 'Save changes'
+            }
+            disabled={!name.trim() || saving}
+            onClick={() => void doSave()}
+          />
+        </div>
       </div>
     </div>
   );

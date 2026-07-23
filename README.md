@@ -20,7 +20,8 @@ Centraid is **solo-maintained**. Coding agents do much of the implementation; re
 ## What it does
 
 - **Install apps** — 8 blueprint apps (Docs, Photos, Notes, People, Locker, Tally, Agenda, Tasks). Installing writes a consent row and grants the scopes the app declares — nothing is copied; apps serve from the shipped release, upgrade with it, and uninstall keeps your data.
-- **Automate your data** — 16 automation templates (Google/GitHub connectors plus enrichers like photo captioner and document deadlines) that fire on a schedule, webhook, condition, or vault data change. Each is a saved conversation; its handler runs in a worker thread with a curated `ctx` surface (`ctx.vault`, `ctx.agent`, `ctx.fetch`, KV state, run history). Templates still copy into the vault.
+- **Automate your data** — automation templates (Google/Microsoft/GitHub/GitLab/Linear/Notion/Todoist/Slack/Dropbox connectors plus enrichers like photo captioner and document deadlines) that fire on a schedule, webhook, condition, or vault data change. Each is a saved conversation; its handler runs in a worker thread with a curated `ctx` surface (`ctx.vault`, `ctx.agent`, `ctx.fetch`, KV state, run history). Templates still copy into the vault.
+- **Connect Google without Cloud Console** — Centraid Assist uses a stateless public OAuth ceremony so desktop/PWA clients paired to a remote gateway can connect Calendar or Contacts without exposing that gateway. The browser carries only a short-lived code; tokens are sealed only on the gateway. BYO OAuth remains under Advanced. [Privacy and architecture](docs/oauth-assist.md).
 - **Ask your vault** — a vault-wide assistant reads across every app through one tool register; each app also answers data questions on its own `/centraid/<id>/_turn` surface.
 - **Explore the model** — **Vault Atlas** maps every kind, how kinds relate (a star centered on `core_party`), and a browsable table editor — every write going through the journalled command path.
 - **Run it anywhere** — one gateway core, two hosts: embedded in Electron or the standalone `centraid-gateway` daemon. Desktop and the installable web PWA share one React client (the PWA pairs with just a ticket over relay-only Iroh/WASM); mobile is an Expo client with native **Photos, Docs, and Agenda** over a consent-scoped offline replica, and the Centraid Companion extension adds explicit Locker fill plus web capture through a constrained paired-device profile.
@@ -92,6 +93,7 @@ Full tour: [Get started](https://centraid.dev/docs/start/) — install → vault
 | `apps/extension` | MV3 Centraid Companion for explicit Locker fill and web capture over paired Iroh/WASM. |
 | `apps/web` | Vite PWA host plus its application-specific Iroh/WASM transport; embeds no gateway. |
 | `apps/mobile` | Expo app for iOS / Android / web. Connects to a gateway over HTTP; embeds nothing. |
+| `apps/oauth-worker` | Stateless Cloudflare Worker for Centraid Assist callback, confidential exchange, and refresh; no per-user storage. |
 | `packages/client` | Browser-safe gateway client plus the React shell/UI shared by desktop and web. |
 | `packages/gateway` | Host-agnostic gateway: wires everything below against injected paths/secrets. Ships the `centraid-gateway` daemon. |
 | `packages/vault` | The personal ontology: `vault.db` + `journal.db` DDL, consent gateway, typed commands, sealed columns, sync/outbox spine. |
@@ -99,7 +101,7 @@ Full tour: [Get started](https://centraid.dev/docs/start/) — install → vault
 | `packages/agent-runtime` | Drives one turn through the Agent Client Protocol — the single path for every runner kind, with first-party adapters for CLIs that don't speak ACP ([docs/runners.md](docs/runners.md)); ships the vault-register tools and the `centraid` CLI. |
 | `packages/automation` | Manifest schema, fire spine, in-process scheduler, webhook ingress, worker-thread handler runner. |
 | `packages/tunnel` | iroh QUIC wire protocol — device tunnel + one-time pairing; the TS reference the Swift/Kotlin mobile ports mirror. |
-| `packages/blueprints` | Template gallery: 8 blueprint apps + 16 automation templates, plus blank-app scaffolders. |
+| `packages/blueprints` | Template gallery: 8 blueprint apps + 27 automation templates, plus blank-app scaffolders. |
 | `packages/design-tokens` | Colors, type, spacing, app metadata, icons — shared across desktop and mobile. |
 
 ## Gateway install (npm / curl|bash)
@@ -237,6 +239,8 @@ The docs ([centraid.dev/docs](https://centraid.dev/docs/)) are Astro-built stati
 | [Apps](https://centraid.dev/docs/apps/) | The eight blueprints, app anatomy, the install model, attach & link, the agent surface, mobile |
 | [Devices](https://centraid.dev/docs/devices/) | Star topology, (gateway, vault) addressing, pairing, iroh, desktop & mobile clients, agent runtimes |
 | [Ontology](https://centraid.dev/docs/ontology/) | The full logical model — schemas, entity map, ownership matrix, gateway contract, rules |
+| [Privacy](https://centraid.dev/docs/privacy/) | Google user-data use, OAuth custody, retention, sharing, and deletion |
+| [Terms](https://centraid.dev/docs/terms/) | Terms for Centraid and the optional Assist ceremony service |
 
 [AGENTS.md](AGENTS.md) maps the durable docs agents and humans use to orient in this repo.
 

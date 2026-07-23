@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "microsoft-calendar-pull",
+  "name": "Outlook Calendar sync",
+  "kind": "automation",
+  "description": "Pulls Outlook calendar events into the vault — read-only Microsoft Graph.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

@@ -1,7 +1,8 @@
-/* Automation editor — instructions-first create/edit form (Automations UI
-   revamp, see receipts/issue-387-automations-ui-revamp.md). "Flight recorder, not dashboard":
-   a single centered column, mono for machine truth (cron/URLs), identity
-   hue as atmosphere only in edit mode, hairlines + --r-md everywhere. */
+/* Automation editor — shared create/edit column layout (Automations UI
+   revamp, see receipts/issue-387-automations-ui-revamp.md). Name +
+   instructions card (Connectors picker on the toolbar), Schedule/Data
+   triggers only, Notifications / Plan tabs. Create and edit share the same
+   chrome; only the head actions and primary CTA differ. */
 
 .page {
   max-width: 720px;
@@ -9,7 +10,346 @@
   display: flex;
   flex-direction: column;
   gap: 26px;
-  padding-bottom: 40px;
+  padding-bottom: 88px;
+}
+.addTriggerWrap {
+  position: relative;
+}
+.addTriggerBtn {
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+.addTriggerBtn:hover {
+  color: var(--accent);
+}
+.addTriggerMenu,
+.addTriggerMenuInline {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line-strong);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+}
+.addTriggerMenu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  min-width: 160px;
+}
+.addTriggerMenuInline {
+  margin-top: 8px;
+}
+.addTriggerItem {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.addTriggerItem:hover {
+  background: var(--bg-sunken);
+}
+.instructionsCard {
+  border: 0.5px solid var(--line);
+  border-radius: 16px;
+  background: var(--bg);
+  padding: 4px;
+  gap: 0;
+}
+.instructionsCard .textarea {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  min-height: 120px;
+  padding: 14px 14px 8px;
+}
+.instructionsCard .textarea:focus-visible {
+  box-shadow: none;
+}
+.instructionsLabel {
+  padding: 10px 14px 0;
+}
+.selectedConnectors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 12px 6px;
+}
+.selectedConnChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0.5px solid var(--line);
+  background: var(--bg-sunken);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 550;
+  border-radius: 999px;
+  padding: 4px 8px 4px 6px;
+  cursor: pointer;
+}
+.selectedConnChip:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+.selectedConnMark {
+  display: grid;
+  place-items: center;
+  color: var(--ink-3);
+}
+.selectedConnOk {
+  color: var(--success);
+  font-size: 11px;
+}
+.selectedConnWarn {
+  color: var(--c-amber, #d4a017);
+  font-size: 11px;
+  font-weight: 700;
+}
+.selectedConnX {
+  color: var(--ink-4);
+  font-size: 13px;
+  line-height: 1;
+  margin-left: 2px;
+}
+.instrToolbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px 10px;
+  border-top: 0.5px solid var(--line);
+  margin: 0 6px;
+}
+.instrChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0.5px solid var(--line);
+  background: var(--bg-elev);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 999px;
+}
+.instrChip:hover,
+.instrChip[data-open='true'] {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-elev));
+}
+.instrChipCount {
+  color: var(--ink-3);
+  font-weight: 500;
+  min-width: 0.8em;
+}
+.instrHint {
+  font-size: 12px;
+  color: var(--ink-4);
+}
+.connPicker {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+  width: min(420px, calc(100vw - 48px));
+  max-height: min(420px, 55vh);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line-strong);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+}
+.connPickerHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.connPickerTitle {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--ink);
+}
+.connPickerHint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+.connPickerClose {
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 8px;
+  line-height: 0;
+}
+.connPickerClose:hover {
+  color: var(--ink);
+  background: var(--bg-sunken);
+}
+.connPickerSearch {
+  font-size: 13px;
+}
+.connPickerList {
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 80px;
+}
+.connPickerEmpty {
+  margin: 12px 4px;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.connPickerRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 0.5px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+  padding: 6px;
+}
+.connPickerRow[data-selected='true'] {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg));
+}
+.connPickerMain {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.connPickerMain:hover {
+  background: var(--bg-sunken);
+}
+.connPickerMark {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--bg-sunken);
+}
+.connPickerMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.connPickerName {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.connPickerSub {
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.connPickerCheck {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 0.5px solid var(--line-strong);
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+}
+.connPickerCheck[data-on='true'] {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: var(--accent);
+}
+.connPickerActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 0 6px 4px;
+}
+.connForm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border-top: 0.5px solid var(--line);
+}
+.connFormLead {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+.connField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.connGuideToggle {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+.connGuideList {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+.connFormActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+.notifySelect {
+  appearance: none;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink);
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  width: 100%;
 }
 
 .loadingBody {
@@ -19,7 +359,7 @@
   text-align: center;
 }
 
-/* Edit-mode header — identity glyph + name + status, actions right. */
+/* Header — identity glyph + name + status; create closes, edit runs/deletes. */
 .head {
   display: flex;
   align-items: center;
@@ -722,14 +1062,77 @@
   background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
 
-/* Footer — right-aligned actions. */
+/* Footer — sticky save bar so primary action stays reachable on long forms. */
 .footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 15;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  padding-top: 6px;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 12px 0 4px;
   border-top: 0.5px solid var(--line);
+  background: linear-gradient(
+    to top,
+    var(--bg) 70%,
+    color-mix(in srgb, var(--bg) 88%, transparent)
+  );
+}
+.footerHint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-4);
+  min-width: 0;
+}
+.footerActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+.enableControl {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+.enableText {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-3);
+  min-width: 1.6em;
+}
+.triggerEmptyCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 14px 12px;
+  border: 0.5px dashed var(--line-strong);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-elev) 50%, transparent);
+}
+.triggerEmptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.triggerEmptyBtn {
+  border: 0.5px solid var(--line);
+  background: var(--bg-elev);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 550;
+  border-radius: 999px;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+.triggerEmptyBtn:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  color: var(--accent);
 }
 
 /* Compiled-plan viewer (Plan tab): read-only handler.js / automation.json. */

@@ -16,6 +16,8 @@ with the release rules in [docs/release.md](docs/release.md) (issue #468 **D3** 
 
 ### Added
 
+- First-class Connectors platform ([#524](https://github.com/srikanth235/centraid/issues/524)): top-level navigation, durable connection-bound automations, provider sync/action capabilities, and 11 additional pull templates with recoverable incremental cursors.
+- Centraid Assist for Google connectors ([#526](https://github.com/srikanth235/centraid/issues/526)): a stateless OAuth code courier, gateway-owned PKCE and token custody, desktop/PWA return handling, fail-closed restricted scopes, recovery guidance, and production verification gates.
 - Three-number versioning and multi-surface release synthesis ([#512](https://github.com/srikanth235/centraid/issues/512)): product / build / protocol separation; handshake connects on protocol only; release surface matrix (`bun run release:matrix`); prepare/publish ship set
 - Agent self-serve documentation set for solo-maintainer leverage ([#468](https://github.com/srikanth235/centraid/issues/468)): decisions, glossary, coding standards, protocol, release, recovery, traps, enrollment, identifiers, and related root docs.
 

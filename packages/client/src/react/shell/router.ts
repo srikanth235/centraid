@@ -39,6 +39,7 @@ export function routeKey(route: ShellRoute): string {
     case 'discover':
     case 'starred':
     case 'automations':
+    case 'connectors':
     case 'approvals':
     case 'gateway':
     case 'backups':

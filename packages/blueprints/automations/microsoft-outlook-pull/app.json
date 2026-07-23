@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "microsoft-outlook-pull",
+  "name": "Outlook Mail sync",
+  "kind": "automation",
+  "description": "Pulls recent Outlook messages into the vault — read-only Microsoft Graph, your own Azure app registration.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "dropbox-pull",
+  "name": "Dropbox sync",
+  "kind": "automation",
+  "description": "Pulls recent Dropbox files into the vault — OAuth app you register, list folder.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

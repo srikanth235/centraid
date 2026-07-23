@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "notion-pull",
+  "name": "Notion sync",
+  "kind": "automation",
+  "description": "Pulls Notion pages your integration can see into the vault — internal integration token.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

@@ -16,7 +16,7 @@
 //     place; wiping derived rows and re-running is always safe.
 
 import type { DatabaseSync } from 'node:sqlite';
-import { uuidv7 } from '../ids.js';
+import { sha256Hex, uuidv7 } from '../ids.js';
 import { DOCUMENT_TARGET_TYPE, FOLDER_SCHEME_URI } from '../commands/documents.js';
 import { VISION_SCHEME_URI } from '../schema/enrich.js';
 import { assertPayload } from './payload-schemas.js';
@@ -321,11 +321,43 @@ export interface FilingPayload {
   folder?: string;
 }
 
-const filingPublisher: Publisher = {
+export interface RemoteContentPayload {
+  /** Provider-qualified stable identity, e.g. `gdrive:<file-id>`. */
+  sourceId: string;
+  title: string;
+  mediaType: string;
+  sourceUrl: string;
+  modifiedAt: string | null;
+  owner: string | null;
+  body?: string;
+}
+
+function isFilingPayload(
+  payload: Record<string, unknown>,
+): payload is FilingPayload & Record<string, unknown> {
+  return typeof payload.content_id === 'string';
+}
+
+function remoteContentSha(sourceId: string): string {
+  // Remote connectors do not download bytes. A provider-qualified source id
+  // is the stable identity material; content_uri retains the canonical URL.
+  return sha256Hex(`remote-content\n${sourceId}`);
+}
+
+const contentItemPublisher: Publisher = {
   entityType: 'core.content_item',
   probe(vault, payload) {
-    // Read-only lookup — see AnnotationPayload.probe's comment above.
-    const p = payload as unknown as FilingPayload;
+    if (!isFilingPayload(payload)) {
+      const p = payload as unknown as RemoteContentPayload;
+      if (!p.sourceId) return null;
+      const existing = vault
+        .prepare('SELECT content_id FROM core_content_item WHERE sha256 = ? AND deleted_at IS NULL')
+        .get(remoteContentSha(p.sourceId)) as { content_id: string } | undefined;
+      return existing
+        ? { entityId: existing.content_id, disposition: 'update', note: 'remote content item' }
+        : null;
+    }
+    const p = payload;
     const existing = vault
       .prepare(
         'SELECT content_id FROM core_content_item WHERE content_id = ? AND deleted_at IS NULL',
@@ -334,12 +366,36 @@ const filingPublisher: Publisher = {
     if (!existing) return null;
     return { entityId: existing.content_id, disposition: 'update', note: 'filing proposal' };
   },
-  create() {
-    // Filing never mints documents — a proposal for a missing content item
-    // fails per-row, honestly.
-    throw new Error('core.content_item stages as filing updates only, never creates');
+  create(vault, _owner, payload, now) {
+    if (isFilingPayload(payload)) {
+      // Filing never mints documents — a proposal for a missing content item
+      // fails per-row, honestly.
+      throw new Error('a filing proposal for a missing core.content_item cannot create it');
+    }
+    const p = assertPayload<RemoteContentPayload>('RemoteContentPayload', payload);
+    const contentId = uuidv7();
+    vault
+      .prepare(
+        `INSERT INTO core_content_item
+           (content_id, media_type, content_uri, sha256, byte_size, title, language,
+            creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
+         VALUES (?, ?, ?, ?, 0, ?, NULL, NULL, NULL, NULL, NULL, ?)`,
+      )
+      .run(contentId, p.mediaType, p.sourceUrl, remoteContentSha(p.sourceId), p.title, now);
+    return { entityId: contentId, wrote: [] };
   },
   update(vault, entityId, payload, now) {
+    if (!isFilingPayload(payload)) {
+      const p = assertPayload<RemoteContentPayload>('RemoteContentPayload', payload);
+      vault
+        .prepare(
+          `UPDATE core_content_item
+              SET media_type = ?, content_uri = ?, title = ?
+            WHERE content_id = ?`,
+        )
+        .run(p.mediaType, p.sourceUrl, p.title, entityId);
+      return { wrote: [] };
+    }
     const p = assertPayload<FilingPayload>('FilingPayload', payload);
     const wrote: PublishedWrite[] = [];
     // A wrapped content item's display title and folder tag live on its
@@ -396,5 +452,5 @@ export const ENRICH_PUBLISHERS: readonly Publisher[] = [
   tagPublisher,
   faceRegionPublisher,
   collectionPublisher,
-  filingPublisher,
+  contentItemPublisher,
 ];

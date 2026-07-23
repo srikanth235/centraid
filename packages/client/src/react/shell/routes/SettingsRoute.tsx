@@ -5,7 +5,6 @@ import Icon from '../../ui/Icon.js';
 import ImportScreen from '../../screens/ImportScreen.js';
 import PhoneScreen from '../../screens/PhoneScreen.js';
 import SettingsAppearanceScreen from '../../screens/SettingsAppearanceScreen.js';
-import SettingsConnectionsScreen from '../../screens/SettingsConnectionsScreen.js';
 import SettingsLayoutScreen from '../../screens/SettingsLayoutScreen.js';
 import SettingsProvidersScreen from '../../screens/SettingsProvidersScreen.js';
 import SettingsSpaceScreen from '../../screens/SettingsSpaceScreen.js';
@@ -14,14 +13,6 @@ import { useShellActions } from '../actions.js';
 import { PageEmpty, PageLoading } from '../status.js';
 import { useAsyncData } from '../useAsyncData.js';
 import { importCallbacks, loadActiveSpaceData, phoneCallbacks } from './settingsAccountData.js';
-import {
-  beginConnectionAuthorize,
-  loadConnectionProvidersData,
-  loadConnectionsData,
-  makeDetachConnection,
-  submitConnectionForm,
-  updateConnectionStatus,
-} from './settingsConnectionsData.js';
 import { deleteSpace, saveSpace } from './spaceModals.js';
 import {
   activateRunner,
@@ -58,7 +49,6 @@ type SettingsPageId =
   | 'space'
   | 'phone'
   | 'import'
-  | 'connections'
   | 'providers'
   | 'storage';
 
@@ -115,14 +105,7 @@ const PAGES: readonly PageDef[] = [
     subtitle:
       'Bring your existing data into the vault — everything stages for review before it lands.',
   },
-  {
-    id: 'connections',
-    label: 'Connections',
-    section: 'Account',
-    icon: 'Plug',
-    subtitle:
-      'Data sources the vault pulls from — Gmail, Calendar, GitHub, and anything else you connect yourself.',
-  },
+  // Connections / Connectors moved to a primary sidebar page (ConnectorsRoute).
   {
     id: 'storage',
     label: 'Storage',
@@ -170,7 +153,6 @@ export default function SettingsRoute({
   const { showToast, navigate, confirm } = useShellActions();
   const phoneProps = useMemo(() => phoneCallbacks(showToast), [showToast]);
   const importProps = useMemo(() => importCallbacks(showToast), [showToast]);
-  const detachConnection = useMemo(() => makeDetachConnection(confirm), [confirm]);
   const deleteStorageConnectionGated = useMemo(
     () => makeDeleteStorageConnection(confirm),
     [confirm],
@@ -321,16 +303,6 @@ export default function SettingsRoute({
               <PhoneScreen {...phoneProps} />
             ) : page === 'import' ? (
               <ImportScreen {...importProps} />
-            ) : page === 'connections' ? (
-              <SettingsConnectionsScreen
-                loadConnections={loadConnectionsData}
-                loadProviders={loadConnectionProvidersData}
-                configureConnection={submitConnectionForm}
-                setConnectionStatus={updateConnectionStatus}
-                detachConnection={detachConnection}
-                beginAuthorize={beginConnectionAuthorize}
-                showToast={showToast}
-              />
             ) : page === 'storage' ? (
               <SettingsStorageScreen
                 loadConnections={loadStorageConnectionsData}

@@ -69,6 +69,7 @@ import {
 } from '@centraid/app-engine';
 import { KIT_DIR, bundledAppDir, listBundledAppTemplates } from '@centraid/blueprints';
 import * as automation from '@centraid/automation';
+import { ROUTES } from '@centraid/protocol';
 import { isExpectedPrewarmSkip } from './app-prewarm-errors.js';
 import {
   runAutomation,
@@ -103,6 +104,7 @@ import { createStorageQuotaHealthProbe } from './storage-quota-health.js';
 import { createVaultIntegrityHealthProbe } from './vault-integrity-health.js';
 import { GatewayInstanceLease } from './gateway-instance-lease.js';
 import { ConnectionBroker } from './connection-broker.js';
+import type { AssistOAuthConfig } from './assist-oauth.js';
 import { OutboxExecutor } from './outbox-executor.js';
 import type { InstallScopeBlock, VaultPlane } from './vault-plane.js';
 import { runWithVaultContext, VAULT_HEADER, type DeviceAccess } from './vault-context.js';
@@ -197,6 +199,11 @@ export type { DeviceAccess } from './vault-context.js';
 export interface BuildGatewayOptions {
   /** On-disk slots the runtime reads/writes. Caller-derived. */
   paths: GatewayPaths;
+  /**
+   * Optional shared-client OAuth courier coordinates. Hosts inject only
+   * public values; confidential Google/HMAC secrets remain Worker-only.
+   */
+  assistOAuth?: AssistOAuthConfig;
   /**
    * Owner Resource mode (#521). When set (daemon config / tests), feeds
    * hardware-profile resolution. Durable prefs (`gateway.resourceMode`) win
@@ -1347,7 +1354,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // refresh under a per-connection single-flight, values injected transport-
   // side, never handed to handler code. Resolves the CURRENT vault's plane at
   // call time, exactly like `vaultFor` below.
-  const connectionBroker = new ConnectionBroker(() => vaultRegistry.current());
+  const connectionBroker = new ConnectionBroker(
+    () => vaultRegistry.current(),
+    undefined,
+    options.assistOAuth,
+  );
 
   // The outbox executor (issue #306): the only writer on the broker's
   // `allowWrites` lane, draining owner-approved / grant-matched items. It
@@ -2400,7 +2411,16 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // JSON, mounted first — health polling hits it every few seconds.
     forRoutePrefixes(
       '/centraid/_gateway/info',
-      makeGatewayInfoRouteHandler({ instanceId: instanceLease.instanceId }),
+      makeGatewayInfoRouteHandler({
+        instanceId: instanceLease.instanceId,
+        capabilities: {
+          webSessions: true,
+          devicePairing: Boolean(options.devicePairing),
+          tunnel: Boolean(options.dataPlaneControl),
+          backupWal: options.backup?.enabled === true,
+          assistOAuth: Boolean(options.assistOAuth),
+        },
+      }),
     ),
     ...(options.dataPlaneControl
       ? [
@@ -2545,8 +2565,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // configure, pause/resume, and the PKCE consent ceremony. Mounted
     // BEFORE the generic `_vault` handler (same prefix family).
     forRoutePrefixes(
-      ['/centraid/_vault/connections', '/centraid/_vault/oauth/callback'],
-      makeConnectionsRouteHandler(vaultRegistry, connectionBroker),
+      [ROUTES.vaultConnections, ROUTES.vaultOAuthCallback],
+      makeConnectionsRouteHandler(vaultRegistry, connectionBroker, options.assistOAuth),
     ),
     // Consent-derived offline replica protocol (#406). Mounted before the
     // generic owner `_vault` handler because both share that prefix. The

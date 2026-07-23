@@ -9,7 +9,7 @@ import styles from './SettingsProvidersScreen.module.css';
 // table on the screen itself.
 //
 // Each entry used to carry an expandable "N tools" drawer listing the builtins
-// and MCP tools the agent exposed. That listing is retired: Connections is
+// and MCP tools the agent exposed. That listing is retired: Connectors is
 // where the user reasons about what an agent can reach, and a flat per-agent
 // tool dump duplicated it without the consent story. Host tools are still
 // enumerated gateway-side — they ground the builder agent — they just aren't a

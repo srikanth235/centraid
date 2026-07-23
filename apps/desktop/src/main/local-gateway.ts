@@ -1,4 +1,9 @@
-import { createWasmImagePreviewCodec, serve, type GatewayServeHandle } from '@centraid/gateway';
+import {
+  assistOAuthFromEnvironment,
+  createWasmImagePreviewCodec,
+  serve,
+  type GatewayServeHandle,
+} from '@centraid/gateway';
 import path from 'node:path';
 import {
   gatewayDir,
@@ -137,6 +142,7 @@ function wrapDetached(handle: DetachedGatewayHandle): LocalGatewayRuntime {
 async function startEmbedded(gatewayId: string): Promise<LocalGatewayRuntime> {
   const settings = await loadPersistedSettings();
   const handle = await serve({
+    assistOAuth: assistOAuthFromEnvironment(process.env),
     previewCodec: createWasmImagePreviewCodec(),
     paths: {
       vaultDir: gatewayVaultDir(gatewayId),

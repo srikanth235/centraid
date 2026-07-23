@@ -9,9 +9,6 @@
  * cursor, never a wall clock.
  */
 
-const PURPOSE = 'dpv:ServiceProvision';
-const KIND = 'pull.github';
-const LABEL = 'personal';
 const API = 'https://api.github.com';
 const AUTH = {
   authorization: 'Bearer {{connection:api_key}}',
@@ -56,24 +53,18 @@ function toIssueRow(issue) {
   };
 }
 
-export default async ({ ctx, log }) => {
-  // whoami: the PAT's owner login — the principal pin.
-  const user = await api(ctx, '/user');
-  const begin = await ctx.vault.invoke({
-    command: 'sync.begin_run',
-    input: { kind: KIND, label: LABEL, principal: user.login },
-    purpose: PURPOSE,
-  });
-  const opened = begin && begin.output ? begin.output : begin;
-  if (opened.refused) {
-    return { summary: `skipped: ${opened.reason}`, output: { skipped: true } };
-  }
-  const { connection_id: connectionId, run_id: runId, cursors } = opened;
+export default {
+  protocol: 'centraid.pull/v1',
 
-  try {
-    const since = cursors && cursors['github.since'];
+  async principal({ ctx }) {
+    const user = await api(ctx, '/user');
+    return user.login;
+  },
+
+  async pull({ ctx, log, cursor }) {
+    const updatedAt = cursor.highWater('github.since');
+    const since = updatedAt.current;
     const rows = [];
-    let maxUpdated = since || null;
     for (let page = 1; page <= MAX_PAGES_PER_RUN; page++) {
       const params = new URLSearchParams({
         filter: 'all',
@@ -87,49 +78,17 @@ export default async ({ ctx, log }) => {
       const listing = await api(ctx, `/issues?${params.toString()}`);
       for (const issue of listing) {
         const row = toIssueRow(issue);
-        if (!maxUpdated || row.updatedAt > maxUpdated) maxUpdated = row.updatedAt;
+        updatedAt.observe(row.updatedAt);
         delete row.updatedAt;
         rows.push(row);
       }
       if (listing.length < 100) break;
     }
 
-    let staged = 0;
-    let published = 0;
-    for (let i = 0; i < rows.length; i += 500) {
-      const outcome = await ctx.vault.invoke({
-        command: 'sync.stage_rows',
-        input: { kind: KIND, label: LABEL, rows: rows.slice(i, i + 500) },
-        purpose: PURPOSE,
-      });
-      const out = outcome && outcome.output ? outcome.output : {};
-      staged += rows.slice(i, i + 500).length;
-      if (out.published) published += (out.published.created || 0) + (out.published.updated || 0);
-    }
-
-    if (maxUpdated) {
-      await ctx.vault.invoke({
-        command: 'sync.set_cursor',
-        input: { connection_id: connectionId, key: 'github.since', value: maxUpdated },
-        purpose: PURPOSE,
-      });
-    }
-    await ctx.vault.invoke({
-      command: 'sync.finish_run',
-      input: { run_id: runId, ok: true, staged, published },
-      purpose: PURPOSE,
-    });
-    log.info(`github pull: ${staged} staged`);
+    log.info(`github pull: ${rows.length} row(s) returned`);
     return {
-      summary: `pulled ${staged} issue(s)/PR(s)${published ? `, ${published} published` : ''}`,
-      output: { staged, published },
+      rows,
+      summary: `pulled ${rows.length} issue(s)/PR(s)`,
     };
-  } catch (err) {
-    await ctx.vault.invoke({
-      command: 'sync.finish_run',
-      input: { run_id: runId, ok: false, error: String((err && err.message) || err) },
-      purpose: PURPOSE,
-    });
-    throw err;
-  }
+  },
 };

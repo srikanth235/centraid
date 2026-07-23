@@ -42,12 +42,14 @@ const STAGE_ROWS: CommandDefinition = {
   ownerSchema: 'sync',
   inputSchema: {
     type: 'object',
-    required: ['kind', 'label', 'rows'],
+    required: ['rows'],
+    anyOf: [{ required: ['connection_id'] }, { required: ['kind', 'label'] }],
     additionalProperties: false,
     properties: {
       // e.g. `pull.gmail`, `pull.gcal` — names the SOURCE the agent read.
       kind: { type: 'string', minLength: 1 },
       label: { type: 'string', minLength: 1 },
+      connection_id: { type: 'string', minLength: 1 },
       rows: {
         type: 'array',
         minItems: 1,
@@ -94,8 +96,9 @@ const STAGE_ROWS: CommandDefinition = {
 
 function stageRows(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as {
-    kind: string;
-    label: string;
+    kind?: string;
+    label?: string;
+    connection_id?: string;
     rows: { entity_type: string; external_id: string; payload: Record<string, unknown> }[];
   };
   // Only entity types with a publisher can ever land — refuse at staging
@@ -114,7 +117,8 @@ function stageRows(ctx: HandlerCtx): Record<string, unknown> {
       );
     }
   }
-  const connectionId = ensureConnectionTx(ctx.db, { kind: input.kind, label: input.label });
+  const connection = resolveConnectionIdentity(ctx, input);
+  const connectionId = connection.connectionId;
   // Attribution is injected server-side, never trusted from source data
   // (issue #299 §1): an annotation candidate is stamped with the CALLER's
   // party — the enricher's enrolled agent party, or the owner running an
@@ -168,7 +172,7 @@ function stageRows(ctx: HandlerCtx): Record<string, unknown> {
     const applied = applyBatchTx(ctx.db, batchId, PUBLISHERS, ownerPartyIdOf(ctx), ctx.now);
     for (const write of applied.provenanced) ctx.wrote(write.type, write.id);
     ctx.cite({
-      claim: `auto-published ${applied.created + applied.updated} row(s) from ${input.kind} "${input.label}" under the connection's standing trust (${applied.failed.length} failed)`,
+      claim: `auto-published ${applied.created + applied.updated} row(s) from ${connection.kind} "${connection.label}" under the connection's standing trust (${applied.failed.length} failed)`,
       entityType: 'sync.import_batch',
       entityId: batchId,
     });
@@ -188,7 +192,7 @@ function stageRows(ctx: HandlerCtx): Record<string, unknown> {
   const { batchId, counts } = stageBatchTx(ctx.db, connectionId, candidates, PUBLISHERS, ctx.now);
   ctx.wrote('sync.import_batch', batchId);
   ctx.cite({
-    claim: `staged ${input.rows.length} row(s) from ${input.kind} "${input.label}" as draft ${batchId} (${counts.create} create, ${counts.update} update, ${counts.skip} skip)`,
+    claim: `staged ${input.rows.length} row(s) from ${connection.kind} "${connection.label}" as draft ${batchId} (${counts.create} create, ${counts.update} update, ${counts.skip} skip)`,
     entityType: 'sync.import_batch',
     entityId: batchId,
   });
@@ -289,11 +293,12 @@ const BEGIN_RUN: CommandDefinition = {
   ownerSchema: 'sync',
   inputSchema: {
     type: 'object',
-    required: ['kind', 'label'],
+    anyOf: [{ required: ['connection_id'] }, { required: ['kind', 'label'] }],
     additionalProperties: false,
     properties: {
       kind: { type: 'string', minLength: 1 },
       label: { type: 'string', minLength: 1 },
+      connection_id: { type: 'string', minLength: 1 },
       /** The OBSERVED authenticated account (the connector's whoami probe). */
       principal: { type: 'string', minLength: 1 },
     },
@@ -318,9 +323,45 @@ const BEGIN_RUN: CommandDefinition = {
   handler: beginRun,
 };
 
+function resolveConnectionIdentity(
+  ctx: HandlerCtx,
+  input: { kind?: string; label?: string; connection_id?: string },
+): { connectionId: string; kind: string; label: string } {
+  if (!input.connection_id) {
+    if (!input.kind || !input.label) {
+      throw new Error('sync connection requires connection_id or kind + label');
+    }
+    return {
+      connectionId: ensureConnectionTx(ctx.db, { kind: input.kind, label: input.label }),
+      kind: input.kind,
+      label: input.label,
+    };
+  }
+  const connection = ctx.db
+    .prepare('SELECT kind, label FROM sync_connection WHERE connection_id = ?')
+    .get(input.connection_id) as { kind: string; label: string } | undefined;
+  if (!connection) throw new Error(`bound connection "${input.connection_id}" does not exist`);
+  if (input.kind && connection.kind !== input.kind) {
+    throw new Error(
+      `bound connection "${input.connection_id}" has kind "${connection.kind}", expected "${input.kind}"`,
+    );
+  }
+  return {
+    connectionId: input.connection_id,
+    kind: connection.kind,
+    label: connection.label,
+  };
+}
+
 function beginRun(ctx: HandlerCtx): Record<string, unknown> {
-  const input = ctx.input as { kind: string; label: string; principal?: string };
-  const connectionId = ensureConnectionTx(ctx.db, { kind: input.kind, label: input.label });
+  const input = ctx.input as {
+    kind?: string;
+    label?: string;
+    connection_id?: string;
+    principal?: string;
+  };
+  const identity = resolveConnectionIdentity(ctx, input);
+  const connectionId = identity.connectionId;
   const connection = ctx.db
     .prepare('SELECT principal, status FROM sync_connection WHERE connection_id = ?')
     .get(connectionId) as { principal: string | null; status: string };
@@ -330,7 +371,7 @@ function beginRun(ctx: HandlerCtx): Record<string, unknown> {
     return {
       connection_id: connectionId,
       refused: 'paused',
-      reason: `connection "${input.label}" is paused by the owner`,
+      reason: `connection "${identity.label}" is paused by the owner`,
     };
   }
   // Principal pinning: the first observed principal pins; every later run
@@ -350,7 +391,7 @@ function beginRun(ctx: HandlerCtx): Record<string, unknown> {
       return {
         connection_id: connectionId,
         refused: 'principal-required',
-        reason: `connection "${input.label}" pins principal "${connection.principal}" — begin_run must carry the observed principal`,
+        reason: `connection "${identity.label}" pins principal "${connection.principal}" — begin_run must carry the observed principal`,
       };
     }
     if (input.principal !== connection.principal) {
@@ -361,7 +402,7 @@ function beginRun(ctx: HandlerCtx): Record<string, unknown> {
       return {
         connection_id: connectionId,
         refused: 'principal-mismatch',
-        reason: `connection "${input.label}" pins "${connection.principal}" but the harness is authenticated as "${input.principal}"`,
+        reason: `connection "${identity.label}" pins "${connection.principal}" but the harness is authenticated as "${input.principal}"`,
       };
     }
   }
@@ -631,6 +672,9 @@ const CONFIGURE_CREDENTIAL: CommandDefinition = {
       // `none` detaches: every credential cell nulls, the connection falls
       // back to the harness-ambient lane.
       cred_kind: { type: 'string', enum: ['oauth2', 'api_key', 'none'] },
+      // `assist` uses Centraid's confidential Worker client; no client
+      // secret is accepted or stored on the gateway.
+      oauth_mode: { type: 'string', enum: ['byo', 'assist'] },
       // Wizard/docs key, e.g. `google`, `github` — names which BYO-client
       // walkthrough applies. Free-form.
       provider: { type: 'string', minLength: 1 },
@@ -673,6 +717,7 @@ function configureCredential(ctx: HandlerCtx): Record<string, unknown> {
     kind: string;
     label: string;
     cred_kind: 'oauth2' | 'api_key' | 'none';
+    oauth_mode?: 'byo' | 'assist';
     provider?: string;
     auth_url?: string;
     token_url?: string;
@@ -712,6 +757,11 @@ function configureCredential(ctx: HandlerCtx): Record<string, unknown> {
         'cred_kind "oauth2" requires auth_url, token_url and client_id (the owner-registered BYO client, issue #304)',
       );
     }
+    if (input.oauth_mode === 'assist' && input.client_secret) {
+      throw new Error('Centraid Assist must not send or store a Google client secret');
+    }
+  } else if (input.oauth_mode !== undefined) {
+    throw new Error('oauth_mode is valid only for oauth2 credentials');
   } else if (!input.api_key) {
     throw new Error('cred_kind "api_key" requires api_key');
   }
@@ -723,14 +773,15 @@ function configureCredential(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare(
       `INSERT OR REPLACE INTO sync_connection_credential
-         (connection_id, cred_kind, provider, auth_url, token_url, scopes,
+         (connection_id, cred_kind, oauth_mode, provider, auth_url, token_url, scopes,
           client_id, client_secret, access_token, refresh_token, api_key,
           token_expires_at, allowed_hosts, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, NULL, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, NULL, ?, ?)`,
     )
     .run(
       connectionId,
       input.cred_kind,
+      input.cred_kind === 'oauth2' ? (input.oauth_mode ?? 'byo') : 'byo',
       input.provider ?? null,
       input.auth_url ?? null,
       input.token_url ?? null,

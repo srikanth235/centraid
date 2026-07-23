@@ -1,0 +1,37 @@
+{
+  "name": "GitLab sync",
+  "version": "0.1.0",
+  "description": "Pulls GitLab issues and merge requests into the vault — read-only via personal access token.",
+  "enabled": false,
+  "prompt": "Pulls GitLab issues and merge requests into the vault — read-only via personal access token.",
+  "triggers": [
+    {
+      "kind": "cron",
+      "expr": "42 * * * *"
+    }
+  ],
+  "requires": {},
+  "connector": {
+    "kind": "pull.gitlab",
+    "label": "personal"
+  },
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Stages GitLab issues/MRs into the vault review band.",
+    "scopes": [
+      {
+        "schema": "sync",
+        "verbs": "read+act"
+      }
+    ]
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-07-23T00:00:00.000Z"
+  }
+}

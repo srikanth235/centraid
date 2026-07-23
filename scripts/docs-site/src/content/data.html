@@ -319,13 +319,15 @@
             <div class="step">
               <span class="dot">a</span>
               <div>
-                <h3>Bring your own client</h3>
+                <h3>Assist by default; bring your own when you need to</h3>
                 <p>
-                  A connection is your own OAuth client (or API key) for Gmail, Google Calendar,
-                  Google Contacts, GitHub… The PKCE ceremony runs once; tokens land <b>sealed</b> as
-                  credential sidecar rows. The broker refreshes single-flight and injects tokens
-                  only into requests bound for the connection's pinned hosts — connector code sees
-                  <code>{{connection:access_token}}</code>, never the token.
+                  <b>Centraid Assist</b> makes Google consent work even when a paired gateway has
+                  no public address: the browser couriers a short-lived code, while state, PKCE and
+                  every stored token stay on the gateway. Advanced keeps your own OAuth client (or
+                  API key) for air-gapped and operator-branded setups. The broker refreshes
+                  single-flight and injects tokens only into requests bound for the connection's
+                  pinned hosts — connector code sees <code>{{connection:access_token}}</code>,
+                  never the token.
                 </p>
               </div>
             </div>
@@ -358,9 +360,9 @@
             </div>
           </div>
           <p class="note r" style="--d: 0.24s; margin-top: 18px">
-            Honest beta note: the broker, staging, templates and health panel are real; the guided
-            "sign in with…" wizard UI is still landing. Today connections are configured through the
-            automation templates.
+            Assist is ceremony-only: Google API traffic goes from your gateway to Google, and
+            tokens are never stored by Centraid cloud. <a href="../privacy/">Read the privacy
+            policy →</a>
           </p>
         </div>
       </section>

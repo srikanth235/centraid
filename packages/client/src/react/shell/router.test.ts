@@ -75,6 +75,7 @@ describe('shell router', () => {
     expect(routeKey({ kind: 'automation-editor', automationId: 'a2' })).toBe(
       'automation-editor:a2',
     );
+    expect(routeKey({ kind: 'connectors' })).toBe('connectors');
   });
 
   it('treats distinct parameterized routes as separate entries', () => {

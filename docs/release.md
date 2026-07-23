@@ -32,6 +32,7 @@ Machine catalog: `scripts/release/surfaces.mjs`. Print: `bun run release:matrix`
 | `gateway-npm` | tag | yes (dry-run without `NPM_TOKEN`) | `npm-gateway-publish.yml` |
 | `mobile` | store | **no** — dispatch | `release-mobile.yml` |
 | `web` | continuous | n/a | `web.yml` |
+| `oauth-worker` | continuous, gated | n/a | `oauth-worker.yml` |
 | `docs` | continuous | n/a | `docs.yml` |
 | `companion` | sideline | no | `extension-release.yml` |
 
@@ -135,6 +136,7 @@ Do not fork process text into skills.
 | `release-desktop.yml` | `v*` tags | macOS + Windows + Linux; Environment `release` |
 | `release-mobile.yml` | `workflow_dispatch` | Environment `mobile-release`; EAS when `EXPO_TOKEN` |
 | `web.yml` | path-filtered main/PR | build+smoke; CF deploy when token present |
+| `oauth-worker.yml` | path-filtered main/PR | test/typecheck/dry build; protected deploy only when explicit flag + production evidence gates pass |
 | `release-gateway-image.yml` | `v*` tags | GHCR optional image |
 | `npm-gateway-publish.yml` | `v*` tags / dispatch | multi-OS native + pack; publish when token |
 | `docs.yml` | docs paths | build+smoke; CF Git deploys marketing+docs |
@@ -142,7 +144,7 @@ Do not fork process text into skills.
 
 ## Enrollment / signing secrets
 
-Signing identities and enrollment steps live in [enrollment.md](enrollment.md). Secrets stay in platform stores / GitHub Actions — never in the repo. Prepare may verify "secrets present" without printing them (`bun run release:verify-secrets`). Groups include desktop Apple/Azure, mobile, web CF, `NPM_TOKEN`, and GHCR readiness.
+Signing identities and enrollment steps live in [enrollment.md](enrollment.md). Secrets stay in platform stores / GitHub Actions — never in the repo. Prepare may verify "secrets present" without printing them (`bun run release:verify-secrets`). Groups include desktop Apple/Azure, mobile, web/Assist CF deploy, `NPM_TOKEN`, and GHCR readiness. Assist additionally has an external evidence gate in [release/oauth-assist-google.md](release/oauth-assist-google.md).
 
 ## Recovery
 

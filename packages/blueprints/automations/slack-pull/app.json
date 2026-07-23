@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "slack-pull",
+  "name": "Slack sync",
+  "kind": "automation",
+  "description": "Pulls recent Slack conversations you can access — user token (xoxp-), read-only.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

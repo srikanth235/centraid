@@ -7,6 +7,7 @@ import {
   JOURNAL_MIGRATIONS,
   migrate,
   ONTOLOGY_VERSION,
+  repairSyncCredentialOauthMode,
   VAULT_MIGRATIONS,
   VaultSchemaAheadError,
 } from './migrate.js';
@@ -221,6 +222,27 @@ test('migrate: no-op guard does not fire for a fresh (behind) or already-migrate
   expect(() => migrate(db, JOURNAL_MIGRATIONS)).not.toThrow();
   const afterReplay = db.prepare('PRAGMA user_version').get() as { user_version: number };
   expect(afterReplay.user_version).toBe(JOURNAL_MIGRATIONS.length);
+  db.close();
+});
+
+test('oauth_mode is repaired on a pre-#526 credential sidecar', () => {
+  const db = new DatabaseSync(':memory:');
+  db.exec(`
+    CREATE TABLE sync_connection_credential (
+      connection_id TEXT PRIMARY KEY,
+      cred_kind TEXT NOT NULL
+    ) STRICT;
+    INSERT INTO sync_connection_credential (connection_id, cred_kind)
+    VALUES ('legacy', 'oauth2');
+  `);
+
+  repairSyncCredentialOauthMode(db);
+  repairSyncCredentialOauthMode(db);
+
+  const row = db
+    .prepare(`SELECT oauth_mode FROM sync_connection_credential WHERE connection_id = 'legacy'`)
+    .get() as { oauth_mode: string };
+  expect(row.oauth_mode).toBe('byo');
   db.close();
 });
 

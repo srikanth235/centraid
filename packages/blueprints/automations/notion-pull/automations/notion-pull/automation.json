@@ -1,0 +1,37 @@
+{
+  "name": "Notion sync",
+  "version": "0.1.0",
+  "description": "Pulls Notion pages your integration can see into the vault — internal integration token.",
+  "enabled": false,
+  "prompt": "Pulls Notion pages your integration can see into the vault — internal integration token.",
+  "triggers": [
+    {
+      "kind": "cron",
+      "expr": "20 */2 * * *"
+    }
+  ],
+  "requires": {},
+  "connector": {
+    "kind": "pull.notion",
+    "label": "personal"
+  },
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Stages Notion pages into the vault review band.",
+    "scopes": [
+      {
+        "schema": "sync",
+        "verbs": "read+act"
+      }
+    ]
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-07-23T00:00:00.000Z"
+  }
+}

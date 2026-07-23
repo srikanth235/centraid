@@ -48,6 +48,13 @@ type ParentMessage =
       error?: string;
       code?: string;
     }
+  | {
+      type: 'connector-open-reply';
+      id: number;
+      ok: boolean;
+      result?: unknown;
+      error?: string;
+    }
   | { type: 'abort'; reason?: string }
   | { type: 'run'; request: WorkerRequest };
 
@@ -96,6 +103,7 @@ type WorkerMessage =
       payload: Record<string, unknown>;
     }
   | { type: 'fetch'; id: number; spec: FetchSpec }
+  | { type: 'connector-open'; id: number; principal: string }
   | { type: 'log'; level: 'info' | 'warn' | 'error'; msg: string }
   | { type: 'result'; ok: boolean; value?: unknown; error?: string };
 
@@ -149,7 +157,8 @@ port.on('message', (msg: ParentMessage) => {
     msg.type === 'state-reply' ||
     msg.type === 'runs-reply' ||
     msg.type === 'fetch-reply' ||
-    msg.type === 'vault-reply'
+    msg.type === 'vault-reply' ||
+    msg.type === 'connector-open-reply'
   ) {
     const p = pendingCalls.get(msg.id);
     if (!p) return;
@@ -317,6 +326,111 @@ const ctx = {
   abortSignal: abortController.signal,
 };
 
+interface PullRow {
+  entity_type: string;
+  external_id: string;
+  payload: Record<string, unknown>;
+}
+
+interface PullContext {
+  readonly now: string;
+  readonly input: unknown;
+  readonly abortSignal: AbortSignal;
+  readonly fetch: typeof ctx.fetch;
+}
+
+interface PullSpec {
+  protocol: 'centraid.pull/v1';
+  principal(args: { ctx: PullContext; log: typeof log }): Promise<string>;
+  pull(args: {
+    ctx: PullContext;
+    log: typeof log;
+    cursor: ReturnType<typeof cursorManager>;
+  }): Promise<{ rows: PullRow[]; summary?: string }>;
+}
+
+function cursorManager(initial: Record<string, unknown>) {
+  const updates = new Map<string, unknown>();
+  return {
+    highWater(key: string) {
+      const initialValue = initial[key];
+      let value =
+        typeof initialValue === 'string' || typeof initialValue === 'number'
+          ? initialValue
+          : undefined;
+      return {
+        current: value,
+        observe(candidate: string | number | null | undefined): void {
+          if (candidate === null || candidate === undefined) return;
+          if (value !== undefined && typeof candidate !== typeof value) {
+            throw new Error(`high-water cursor "${key}" changed value type`);
+          }
+          if (value === undefined || candidate > value) value = candidate;
+          updates.set(key, value);
+        },
+      };
+    },
+    provider(key: string) {
+      let value = initial[key];
+      return {
+        get current(): unknown {
+          return value;
+        },
+        set(next: unknown): void {
+          value = next;
+          updates.set(key, next);
+        },
+        clear(): void {
+          value = null;
+          updates.set(key, null);
+        },
+      };
+    },
+    entries(): [string, unknown][] {
+      return [...updates.entries()];
+    },
+  };
+}
+
+async function executePullSpec(spec: PullSpec): Promise<unknown> {
+  // Pull specs deliberately receive no vault/state/runs/agent rails. Run
+  // identity, staging, cursor persistence and finish semantics are owned by
+  // the parent engine and therefore cannot be overridden by handler code.
+  const pullCtx: PullContext = {
+    now: ctx.now,
+    input: ctx.input,
+    abortSignal: ctx.abortSignal,
+    fetch: ctx.fetch,
+  };
+  const principal = await spec.principal({ ctx: pullCtx, log });
+  if (typeof principal !== 'string' || principal.trim().length === 0) {
+    throw new Error('pull connector principal probe returned no identity');
+  }
+  const openedRaw = await rpcCall({ type: 'connector-open', principal: principal.trim() });
+  const opened =
+    openedRaw && typeof openedRaw === 'object' && 'output' in openedRaw
+      ? (openedRaw as { output: Record<string, unknown> }).output
+      : (openedRaw as Record<string, unknown>);
+  if (!opened || typeof opened !== 'object') {
+    throw new Error('pull connector run scope returned no result');
+  }
+  if (opened.refused) {
+    return {
+      summary: `skipped: ${String(opened.reason ?? opened.refused)}`,
+      output: { skipped: true },
+    };
+  }
+  const cursor = cursorManager((opened.cursors as Record<string, unknown>) ?? {});
+  const result = await spec.pull({ ctx: pullCtx, log, cursor });
+  return {
+    __centraidPull: {
+      rows: result.rows,
+      cursors: cursor.entries(),
+      ...(result.summary ? { summary: result.summary } : {}),
+    },
+  };
+}
+
 function execute(request: WorkerRequest): void {
   req = request;
   ctx.now = request.now;
@@ -324,13 +438,24 @@ function execute(request: WorkerRequest): void {
   void (async () => {
     try {
       const mod = (await import(pathToFileURL(req.handlerFile).href)) as {
-        default?: (args: unknown) => Promise<unknown>;
+        default?: ((args: unknown) => Promise<unknown>) | PullSpec;
       };
-      if (typeof mod.default !== 'function') {
+      if (
+        typeof mod.default !== 'function' &&
+        !(
+          mod.default &&
+          mod.default.protocol === 'centraid.pull/v1' &&
+          typeof mod.default.principal === 'function' &&
+          typeof mod.default.pull === 'function'
+        )
+      ) {
         throw new Error(`${req.handlerFile} has no default export`);
       }
       const fullArgs = { ...(req.args as object), log, ctx };
-      const value = await mod.default(fullArgs);
+      const value =
+        typeof mod.default === 'function'
+          ? await mod.default(fullArgs)
+          : await executePullSpec(mod.default);
       port.postMessage({ type: 'result', ok: true, value } satisfies WorkerMessage);
     } catch (err) {
       port.postMessage({

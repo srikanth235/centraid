@@ -40,6 +40,101 @@ describe('bundled blueprint manifests', () => {
     expect(manifest.id).toBe(id);
   });
 
+  it('pull connectors declare an intentional vault entity type', () => {
+    const expected = {
+      'dropbox-pull': 'core.content_item',
+      'github-pull': 'social.message',
+      'gitlab-pull': 'core.content_item',
+      'google-calendar-pull': 'core.event',
+      'google-contacts-pull': 'core.party',
+      'google-drive-pull': 'core.content_item',
+      'google-gmail-pull': 'social.message',
+      'linear-pull': 'core.content_item',
+      'microsoft-calendar-pull': 'core.event',
+      'microsoft-contacts-pull': 'core.party',
+      'microsoft-onedrive-pull': 'core.content_item',
+      'microsoft-outlook-pull': 'social.message',
+      'notion-pull': 'core.content_item',
+      'slack-pull': 'social.message',
+      'todoist-pull': 'core.content_item',
+    } as const;
+
+    expect(automations.filter((id) => id.endsWith('-pull')).toSorted()).toEqual(
+      Object.keys(expected).toSorted(),
+    );
+    for (const [id, entityType] of Object.entries(expected)) {
+      const source = readFileSync(
+        path.join(PACKAGE_ROOT, 'automations', id, 'automations', id, 'handler.js'),
+        'utf8',
+      );
+      expect(source, `${id} must stage ${entityType}`).toContain(`entity_type: '${entityType}'`);
+    }
+  });
+
+  it('pull connectors use the engine-owned declarative lifecycle', () => {
+    for (const id of automations.filter((candidate) => candidate.endsWith('-pull'))) {
+      const source = readFileSync(
+        path.join(PACKAGE_ROOT, 'automations', id, 'automations', id, 'handler.js'),
+        'utf8',
+      );
+      expect(source, `${id} must export a declarative pull spec`).toContain(
+        "protocol: 'centraid.pull/v1'",
+      );
+      expect(source, `${id} must not reach the vault rail`).not.toContain('ctx.vault');
+      expect(source, `${id} must not bracket its own sync run`).not.toMatch(
+        /sync\.(?:begin_run|stage_rows|finish_run)/,
+      );
+    }
+  });
+
+  it('pull connectors declare an intentional persisted cursor strategy', () => {
+    const expected = {
+      'dropbox-pull': { provider: ['dropbox.cursor'] },
+      'github-pull': { highWater: ['github.since'] },
+      'gitlab-pull': {
+        highWater: ['gitlab.issues.updated_after', 'gitlab.merge_requests.updated_after'],
+      },
+      'google-calendar-pull': {
+        provider: ['gcal.syncToken', 'gcal.pageToken'],
+      },
+      'google-contacts-pull': {
+        provider: ['gcontacts.syncToken', 'gcontacts.pageToken'],
+      },
+      'google-drive-pull': { highWater: ['gdrive.modifiedTime'] },
+      'google-gmail-pull': { provider: ['gmail.historyId'] },
+      'linear-pull': { provider: ['linear.after'] },
+      'microsoft-calendar-pull': {
+        provider: ['outlookcal.deltaLink', 'outlookcal.windowEnd'],
+      },
+      'microsoft-contacts-pull': { highWater: ['outlookcontacts.modifiedAt'] },
+      'microsoft-onedrive-pull': { provider: ['onedrive.deltaLink'] },
+      'microsoft-outlook-pull': { provider: ['outlook.deltaLink'] },
+      'notion-pull': { provider: ['notion.start_cursor'] },
+      'slack-pull': {
+        provider: ['slack.channels_cursor', 'slack.history_cursor.'],
+        highWater: ['slack.oldest.'],
+      },
+      'todoist-pull': {},
+    } as const;
+
+    for (const [id, strategies] of Object.entries(expected)) {
+      const source = readFileSync(
+        path.join(PACKAGE_ROOT, 'automations', id, 'automations', id, 'handler.js'),
+        'utf8',
+      );
+      for (const [strategy, keys] of Object.entries(strategies)) {
+        for (const key of keys) {
+          expect(source, `${id} must use ${strategy} for ${key}`).toContain(
+            `cursor.${strategy}('${key}`,
+          );
+        }
+      }
+      expect(source, `${id} must not persist mutable-list offsets`).not.toMatch(
+        /cursor\.(?:provider|highWater)\([^)]*(?:offset|\$skip)/i,
+      );
+    }
+  });
+
   it.each(apps.map((id) => [id] as const))(
     'apps/%s declares only handlers that exist on disk',
     (id) => {

@@ -14,11 +14,13 @@ import {
 } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isOAuthFinishDeepLink } from './oauth-deep-link.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let tray: Tray | null = null;
 let gatewayRunning = false;
+const pendingDeepLinks: string[] = [];
 
 function focusMainWindow(): void {
   const [win] = BrowserWindow.getAllWindows();
@@ -151,11 +153,26 @@ export function installDeepLinkProtocol(): void {
   }
 
   const handleUrl = (url: string): void => {
-    process.stdout.write(`[deep-link] ${url}\n`);
+    if (!isOAuthFinishDeepLink(url)) return;
+    process.stdout.write('[deep-link] OAuth finish handoff received\n');
     focusMainWindow();
     const [win] = BrowserWindow.getAllWindows();
-    win?.webContents.send('centraid:deep-link', url);
+    if (!win) {
+      if (pendingDeepLinks.length < 4) pendingDeepLinks.push(url);
+      return;
+    }
+    deliverDeepLink(win, url);
   };
+
+  app.on('browser-window-created', (_event, win) => {
+    win.webContents.once('did-finish-load', () => {
+      for (;;) {
+        const url = pendingDeepLinks.shift();
+        if (!url) break;
+        win.webContents.send('centraid:deep-link', url);
+      }
+    });
+  });
 
   app.on('open-url', (event, url) => {
     event.preventDefault();
@@ -167,4 +184,16 @@ export function installDeepLinkProtocol(): void {
     const url = argv.find((a) => a.startsWith('centraid://'));
     if (url) handleUrl(url);
   });
+
+  // Cold-start protocol launches arrive in the first instance's argv.
+  const initialUrl = process.argv.find((argument) => isOAuthFinishDeepLink(argument));
+  if (initialUrl) queueMicrotask(() => handleUrl(initialUrl));
+}
+
+function deliverDeepLink(win: BrowserWindow, url: string): void {
+  if (win.webContents.isLoadingMainFrame()) {
+    win.webContents.once('did-finish-load', () => win.webContents.send('centraid:deep-link', url));
+    return;
+  }
+  win.webContents.send('centraid:deep-link', url);
 }
