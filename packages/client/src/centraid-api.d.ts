@@ -1334,6 +1334,22 @@ export interface CentraidHealthEvent {
   message: string;
 }
 
+/** Coarse numeric signals on `GET /centraid/_gateway/health` (issue #521). */
+export interface CentraidHealthMetrics {
+  rssBytes: number;
+  outboxPending: number;
+  sseClients?: number;
+  eventLoopLagP50Ms?: number;
+  eventLoopLagP99Ms?: number;
+  eventLoopLagMaxMs?: number;
+  eventLoopLagPeakP99Ms?: number;
+  eventLoopLagSamples?: number;
+  storageFsyncMs?: number;
+  hardwareProfileClass?: string;
+  resourceMode?: string;
+  uptimeMs: number;
+}
+
 /** Aggregate payload of `GET /centraid/_gateway/health`. */
 export interface CentraidGatewayHealth {
   status: 'ok' | 'degraded' | 'error';
@@ -1341,6 +1357,7 @@ export interface CentraidGatewayHealth {
   uptimeMs: number;
   components: CentraidHealthComponent[];
   recentEvents: CentraidHealthEvent[];
+  metrics?: CentraidHealthMetrics;
 }
 
 declare global {

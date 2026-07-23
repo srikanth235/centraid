@@ -158,7 +158,13 @@ import { makeRemindersRouteHandler } from '../routes/reminders-routes.js';
 import { HealthRegistry } from './health-registry.js';
 import { GatewayPerformanceMonitor } from './gateway-performance.js';
 import { measureStorageLatency } from './storage-latency.js';
-import { resolveGatewayHardwareProfile } from './hardware-profile.js';
+import { formatHardwareProfileDetail, resolveGatewayHardwareProfile } from './hardware-profile.js';
+import {
+  formatEventLoopDetail,
+  resolveResourceMode,
+  RESOURCE_MODE_PREF_KEY,
+  type ResourceMode,
+} from './resource-mode.js';
 import { logsEventsSubscriberCount, makeLogsRouteHandler } from '../routes/logs-routes.js';
 import { sendJson } from '../routes/route-helpers.js';
 import type { GatewayPaths } from '../paths.js';
@@ -179,6 +185,12 @@ export type { DeviceAccess } from './vault-context.js';
 export interface BuildGatewayOptions {
   /** On-disk slots the runtime reads/writes. Caller-derived. */
   paths: GatewayPaths;
+  /**
+   * Owner Resource mode (#521). When set (daemon config / tests), feeds
+   * hardware-profile resolution. Durable prefs (`gateway.resourceMode`) win
+   * over omission; `CENTRAID_RESOURCE_MODE` env still wins over both.
+   */
+  resourceMode?: ResourceMode;
   /**
    * The cron scheduler (issue #149) is gateway-owned and in-process: one
    * scheduler PER VAULT (issue #289 — every vault's automations fire, not
@@ -593,14 +605,25 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   }
   health.registerProbe('event-loop', async () => {
     const sample = performanceMonitor.snapshot();
-    const detail = `p50 ${sample.eventLoopLagP50Ms.toFixed(1)} ms; p99 ${sample.eventLoopLagP99Ms.toFixed(1)} ms; max ${sample.eventLoopLagMaxMs.toFixed(1)} ms`;
+    const detail = formatEventLoopDetail(sample);
     return sample.eventLoopLagP99Ms >= 50
       ? { status: 'degraded', detail }
       : { status: 'ok', detail };
   });
-  const hardwareProfile = resolveGatewayHardwareProfile(
-    storageFsyncMs === undefined ? {} : { storageFsyncMs },
-  );
+  // Resource mode (#521): durable prefs + optional daemon config feed the
+  // same profile resolver as CENTRAID_HARDWARE_PROFILE. Prefs open early so
+  // boot class matches what the owner last chose; a mode change after boot
+  // is durable and applies on the next serve (worker env is process-scoped).
+  const prefsEarly = new PrefsStore(paths.prefsFile);
+  const resourceMode = resolveResourceMode({
+    env: process.env,
+    optionsMode: options.resourceMode,
+    prefsMode: prefsEarly.getAllPrefs()[RESOURCE_MODE_PREF_KEY],
+  });
+  const hardwareProfile = resolveGatewayHardwareProfile({
+    ...(storageFsyncMs === undefined ? {} : { storageFsyncMs }),
+    resourceMode,
+  });
   // App-engine's worker/compression seams initialize lazily, after this boot
   // probe. Publish the resolved class so slow storage and explicit overrides
   // select the same actual limits that this health line reports.
@@ -616,10 +639,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   process.env.CENTRAID_REPLICATION_CONCURRENCY = String(hardwareProfile.replicationConcurrency);
   process.env.CENTRAID_STATIC_BROTLI_QUALITY = String(hardwareProfile.staticBrotliQuality);
   process.env.CENTRAID_STATIC_GZIP_QUALITY = String(hardwareProfile.staticGzipQuality);
-  health.reportOk(
-    'hardware-profile',
-    `${hardwareProfile.class}; sqlite=${hardwareProfile.sqliteSynchronous}; workers=${hardwareProfile.workerMaxConcurrent}x${hardwareProfile.workerMaxOldGenerationMb}MB; pool=${hardwareProfile.workerPoolSize}; replication=${hardwareProfile.replicationConcurrency}; compression=br${hardwareProfile.staticBrotliQuality}/gz${hardwareProfile.staticGzipQuality}; mount=${hardwareProfile.vaultMountStrategy}; sweep=${hardwareProfile.vaultSweepIntervalMs}ms`,
-  );
+  health.reportOk('hardware-profile', formatHardwareProfileDetail(hardwareProfile));
   const webAppSessions = new WebAppSessions(options.webSessions ?? {});
 
   // Bundled blueprint apps (issue #434): these ids serve in place from the
@@ -972,6 +992,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       outboxPending,
       sseClients:
         logsEventsSubscriberCount() + runEventsSubscriberCount() + changesSubscriberCount(),
+      hardwareProfileClass: hardwareProfile.class,
+      resourceMode: hardwareProfile.resourceMode,
     };
   });
 
@@ -1019,8 +1041,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
 
   // Device prefs (`prefs.json`) + the request vault's ledger stores. The
   // analytics/insights providers resolve the request's vault per call, so
-  // every client sees its own vault's ledger (#289).
-  const prefs = new PrefsStore(paths.prefsFile);
+  // every client sees its own vault's ledger (#289). Reuse the early prefs
+  // handle opened for Resource mode so we don't re-read the same file.
+  const prefs = prefsEarly;
   const journalProvider = () => currentWorkspace().journal();
   const analyticsStore = new AnalyticsStore(journalProvider);
   const insightsStore = new InsightsStore(journalProvider);

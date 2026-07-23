@@ -153,4 +153,57 @@ describe('SettingsDiagnosticsScreen', () => {
     const sub = el.querySelector('[title]');
     expect(sub?.getAttribute('title')).toBe(longDetail);
   });
+
+  it('surfaces resource metrics and friendly labels for hardware/load-shed components', async () => {
+    const health = makeHealth({
+      components: [
+        {
+          component: 'hardware-profile',
+          status: 'ok',
+          detail: 'mode=Conserve (conserve); class=constrained',
+          errorCount: 0,
+        },
+        {
+          component: 'event-loop',
+          status: 'degraded',
+          detail: 'Busy: pausing non-urgent background work so apps stay responsive',
+          errorCount: 0,
+        },
+        {
+          component: 'load-shed',
+          status: 'degraded',
+          detail: 'Busy: pausing backups, sweeps, and other background work',
+          errorCount: 0,
+        },
+        {
+          component: 'disk',
+          status: 'ok',
+          detail: '4.0 GB free of 32.0 GB (12.5% free)',
+          errorCount: 0,
+        },
+      ],
+      metrics: {
+        rssBytes: 200 * 1024 * 1024,
+        outboxPending: 0,
+        eventLoopLagP50Ms: 4,
+        eventLoopLagP99Ms: 12.5,
+        storageFsyncMs: 3.2,
+        hardwareProfileClass: 'constrained',
+        resourceMode: 'conserve',
+        uptimeMs: 3_600_000,
+      },
+    });
+    const el = await mount({ loadHealth: vi.fn().mockResolvedValue(health) });
+    expect(el.textContent).toContain('Hardware profile');
+    expect(el.textContent).toContain('Responsiveness');
+    expect(el.textContent).toContain('Background load');
+    expect(el.textContent).toContain('Disk space');
+    expect(el.textContent).toContain('pausing backups');
+    const metrics = el.querySelector('[data-testid="diag-metrics"]');
+    expect(metrics?.textContent).toContain('200.0 MB');
+    expect(metrics?.textContent).toContain('p99 12.5 ms');
+    expect(metrics?.textContent).toContain('3.2 ms');
+    expect(metrics?.textContent).toContain('Conserve');
+    expect(metrics?.textContent).toContain('Constrained');
+  });
 });

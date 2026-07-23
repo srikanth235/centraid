@@ -284,6 +284,7 @@ async function commandServe(args: string[]): Promise<void> {
     ...(config.port !== undefined ? { port: config.port } : {}),
     ...(allowedHosts.length > 0 ? { allowedHosts } : {}),
     ...(config.backup ? { backup: config.backup } : {}),
+    ...(config.resourceMode !== undefined ? { resourceMode: config.resourceMode } : {}),
     token,
     logTag: 'centraid-gateway',
     deviceAccess: devicePlane.deviceAccess,

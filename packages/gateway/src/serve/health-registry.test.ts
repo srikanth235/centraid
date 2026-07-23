@@ -185,15 +185,32 @@ describe('HealthRegistry', () => {
           resets += 1;
         },
       );
+      registry.setMetricsSource(() => ({
+        outboxPending: 0,
+        hardwareProfileClass: 'constrained',
+        resourceMode: 'conserve',
+      }));
 
-      expect((await registry.snapshot()).metrics).toMatchObject({
+      const snap = await registry.snapshot();
+      expect(snap.metrics).toMatchObject({
         eventLoopLagP50Ms: 7,
         eventLoopLagP99Ms: 18,
         storageFsyncMs: 11,
+        hardwareProfileClass: 'constrained',
+        resourceMode: 'conserve',
       });
+      expect(typeof snap.metrics.rssBytes).toBe('number');
+      expect(snap.metrics.rssBytes).toBeGreaterThan(0);
       expect(registry.shouldDeferBackgroundWork()).toBe(false);
       p99 = 51;
       expect(registry.shouldDeferBackgroundWork()).toBe(true);
+      expect((await registry.snapshot()).components).toContainEqual(
+        expect.objectContaining({
+          component: 'load-shed',
+          status: 'degraded',
+          detail: expect.stringContaining('pausing backups'),
+        }),
+      );
       registry.resetPerformanceMetrics();
       expect(resets).toBe(1);
     });
@@ -211,13 +228,21 @@ describe('HealthRegistry', () => {
       expect(registry.shouldDeferBackgroundWork()).toBe(false);
       expect(registry.shouldDeferBackgroundWork()).toBe(true);
       expect((await registry.snapshot()).components).toContainEqual(
-        expect.objectContaining({ component: 'load-shed', status: 'degraded' }),
+        expect.objectContaining({
+          component: 'load-shed',
+          status: 'degraded',
+          detail: expect.stringMatching(/deferred background pass|pausing backups/),
+        }),
       );
 
       p99 = 10;
       expect(registry.shouldDeferBackgroundWork()).toBe(false);
       expect((await registry.snapshot()).components).toContainEqual(
-        expect.objectContaining({ component: 'load-shed', status: 'ok' }),
+        expect.objectContaining({
+          component: 'load-shed',
+          status: 'ok',
+          detail: expect.stringContaining('pressure cleared'),
+        }),
       );
     });
   });

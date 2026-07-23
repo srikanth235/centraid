@@ -42,6 +42,8 @@ export interface DaemonRunnerConfig {
   extraArgs?: string[];
 }
 
+export type DaemonResourceMode = 'auto' | 'conserve' | 'balanced' | 'performance';
+
 export interface DaemonConfig {
   dataDir: string;
   host?: string;
@@ -55,6 +57,11 @@ export interface DaemonConfig {
   endpoint?: boolean;
   /** Offsite backup engine (PROTOCOL.md/FORMAT.md), off by default. */
   backup?: BackupConfig;
+  /**
+   * Owner Resource mode (#521). Feeds hardware-profile resolution when prefs
+   * have not set `gateway.resourceMode`. Env `CENTRAID_RESOURCE_MODE` wins.
+   */
+  resourceMode?: DaemonResourceMode;
 }
 
 export class DaemonConfigError extends Error {
@@ -119,6 +126,19 @@ export function validateConfig(value: unknown): DaemonConfig {
     } catch (err) {
       throw new DaemonConfigError(err instanceof Error ? err.message : String(err));
     }
+  }
+  if (value.resourceMode !== undefined) {
+    if (
+      value.resourceMode !== 'auto' &&
+      value.resourceMode !== 'conserve' &&
+      value.resourceMode !== 'balanced' &&
+      value.resourceMode !== 'performance'
+    ) {
+      throw new DaemonConfigError(
+        '`resourceMode` must be one of "auto", "conserve", "balanced", "performance"',
+      );
+    }
+    out.resourceMode = value.resourceMode;
   }
   return out;
 }
