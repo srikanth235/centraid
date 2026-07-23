@@ -99,3 +99,17 @@ PASS – No false-positive steering rows; Accounting ### Steering table absent/e
 
 - Stabilized ResourceModeCard refresh (`loadMode` deps + busyRef) and GatewayRoute `useCallback` bridges so 1s Overview ticks cannot re-fetch prefs or race mid-save.
 - Mirrored `CentraidHealthMetrics` on the global `CentraidGatewayHealth` interface in `centraid-api.d.ts`.
+- `packages/gateway/src/serve/build-gateway.test.ts` — kept the disk-health integration
+  assertion host-independent: it proves the free-space detail is wired while deterministic
+  threshold statuses remain owned by `disk-health.test.ts`.
+
+## Accounting
+
+<!-- Accounting rows are maintained by the agent-token-accounting and agent-steering-accounting pre-commit hooks. Keys are opaque — do not parse. -->
+
+### Costs
+
+| cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| codex-019f8e26-847-1784797315-1 | codex | 019f8e26-847c-78d2-9536-7470d4dc7d5b | #521 | gpt-5.6-sol | 333642 | 0 | 5613056 | 9619 | 343261 | 2.3817 | 333642 | 0 | 5613056 | 9619 | test(gateway): make disk health wiring host-independent (#521) |
+| codex-019f8e26-847-1784797385-1 | codex | 019f8e26-847c-78d2-9536-7470d4dc7d5b | #521 | gpt-5.6-sol | 4383 | 0 | 611584 | 485 | 4868 | 0.1711 | 338025 | 0 | 6224640 | 10104 | test(gateway): make disk health wiring host-independent (#521) |
