@@ -100,6 +100,7 @@
 - `ci.yml` per-PR perf step retries once for shared-runner event-loop noise
 - Vault mutation suite is **contract-only** under Stryker (properties SIGSEGV under threads on Linux and drop score below the 97 floor)
 - Post-merge with connectors: automation coverage floor 72 (CI measured 72.36%; still up-only vs main 68)
+- verify job: `fetch-depth: 0` + fetch origin/main so diff-coverage can resolve merge-base
 - `receipts/issue-532-constraint-gauntlet.md` (this receipt)
 
 ### Receipt + PR linking #532
