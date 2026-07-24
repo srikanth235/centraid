@@ -45,6 +45,12 @@ const dest = path.join(siteDir, 'test-report', slot);
 await mkdir(dest, { recursive: true });
 await cp(reportDir, dest, { recursive: true });
 
+// Main slot clarity (#535 F7): ensure the per-push page states its scope and
+// links to nightly even when the HTML was generated without --scope main.
+if (slot === 'main') {
+  await ensureMainScopeBanner(path.join(dest, 'index.html'));
+}
+
 let archived = null;
 let series = [];
 if (runSlug) {
@@ -322,4 +328,24 @@ function parseFlags(args) {
     index += 1;
   }
   return result;
+}
+
+/**
+ * Inject a per-push scope banner + nightly link into main-slot HTML when the
+ * generator did not already render one (ci.yml can also pass TEST_REPORT_SCOPE=main).
+ */
+async function ensureMainScopeBanner(indexPath) {
+  let html;
+  try {
+    html = await readFile(indexPath, 'utf8');
+  } catch {
+    return;
+  }
+  if (html.includes('/test-report/nightly/') && html.includes('per-push')) return;
+  const banner = `<p class="lede" style="border-left:3px solid var(--blue);padding-left:12px">This is the <strong>per-push / main</strong> slot (CI after merge). It does not include nightly desktop/web/mobile/pairing e2e, perf, or scale. Full product lanes: <a href="../nightly/" style="color:var(--blue)">/test-report/nightly/</a>.</p>`;
+  // Prefer after the primary lede paragraph.
+  const next = html.includes('<p class="lede">')
+    ? html.replace('<p class="lede">', `${banner}<p class="lede">`)
+    : html.replace('<body>', `<body>${banner}`);
+  if (next !== html) await writeFile(indexPath, next, 'utf8');
 }

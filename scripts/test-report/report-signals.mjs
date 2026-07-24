@@ -137,3 +137,119 @@ export async function collectEnvGatedOwners(manifest, { root, readFile }) {
   }
   return rows;
 }
+
+/**
+ * Collect every owner path registered on the matrix (cellOwners + flows).
+ * Used to detect orphaned e2e evidence that would otherwise drop on the floor (#535 F3).
+ */
+export function collectRegisteredOwners(manifest) {
+  const owners = new Set();
+  for (const cellOwner of Object.values(manifest?.cellOwners ?? {})) {
+    if (cellOwner?.owner) owners.add(String(cellOwner.owner).replaceAll('\\', '/'));
+  }
+  for (const flow of manifest?.flows ?? []) {
+    if (flow?.owner) owners.add(String(flow.owner).replaceAll('\\', '/'));
+  }
+  return owners;
+}
+
+/**
+ * Evidence JSON whose owner is not registered on any matrix cell/flow.
+ * @returns {{ unmapped: object[], failedUnmapped: object[], unmappedEvidence: number }} Unmapped rows and counts.
+ */
+export function findUnmappedEvidence(results, manifest, { normalizeOwner } = {}) {
+  const registered = collectRegisteredOwners(manifest);
+  const norm =
+    typeof normalizeOwner === 'function'
+      ? normalizeOwner
+      : (value) => String(value ?? '').replaceAll('\\', '/');
+  const unmapped = [];
+  for (const result of results ?? []) {
+    const owner = norm(result?.owner);
+    if (!owner) continue;
+    if (!registered.has(owner)) unmapped.push({ ...result, owner });
+  }
+  const failedUnmapped = unmapped.filter((item) => {
+    const status = String(item.status ?? '').toLowerCase();
+    return status === 'failed' || status === 'fail' || status === 'error';
+  });
+  return {
+    unmapped,
+    failedUnmapped,
+    unmappedEvidence: unmapped.length,
+  };
+}
+
+/**
+ * Reconcile evidence-producing needs.* job conclusions against report summary.
+ * When any needed job failed but summary.failed is 0, the report must not
+ * present an implicit all-clear (#535 F5).
+ *
+ * @param {Record<string, { result?: string }>|null|undefined} needs GHA needs.* map (or job-conclusions.json).
+ * @param {{ failed?: number }|null|undefined} summary Report evidence summary with failed count.
+ * @param {{ evidenceJobs?: string[] }} [options] Optional allowlist of job names to consider.
+ */
+export function reconcileJobConclusions(needs, summary, options = {}) {
+  const evidenceJobs = options.evidenceJobs ?? null;
+  const failedJobs = [];
+  for (const [job, info] of Object.entries(needs ?? {})) {
+    if (evidenceJobs && !evidenceJobs.includes(job)) continue;
+    const result = info?.result ?? info?.conclusion ?? info;
+    if (result === 'failure' || result === 'failed') failedJobs.push(job);
+  }
+  failedJobs.sort();
+  const evidenceFailed = Number(summary?.failed ?? 0);
+  const silentAllClear = failedJobs.length > 0 && evidenceFailed === 0;
+  return {
+    failedJobs,
+    silentAllClear,
+    message: silentAllClear
+      ? `Evidence-producing job(s) failed but report shows failed: 0 — ${failedJobs.join(', ')}`
+      : null,
+  };
+}
+
+/**
+ * Ratchet cellsMissing vs the prior durable-history point (#535 F5).
+ * historyPoints: oldest-first series *excluding* the current run.
+ */
+export function cellsMissingRatchet(currentMissing, historyPoints) {
+  const current = Number(currentMissing ?? 0);
+  const priorPoints = (historyPoints ?? []).filter(
+    (point) => point != null && Number.isFinite(Number(point.cellsMissing)),
+  );
+  if (!priorPoints.length) {
+    return { prior: null, current, delta: 0, rose: false };
+  }
+  const prior = Number(priorPoints.at(-1).cellsMissing);
+  const delta = current - prior;
+  return { prior, current, delta, rose: delta > 0 };
+}
+
+/**
+ * Drop `_`-prefixed / non-scope meta keys from a floors-style config
+ * (e.g. coverage-floors `_comment`) so they never render as coverage rows.
+ */
+export function filterFloorConfigEntries(floorConfig) {
+  return Object.entries(floorConfig ?? {}).filter(
+    ([key, value]) =>
+      !key.startsWith('_') &&
+      key !== 'approvedDeviation' &&
+      (typeof value === 'number' || (value && typeof value === 'object')),
+  );
+}
+
+/**
+ * Merge per-lane marker maps written as `lane-starts-<lane>.json` (and the
+ * legacy single `lane-starts.json`) so merge-multiple never last-write-wins.
+ */
+export function mergeLaneMarkers(markerMaps) {
+  const merged = {};
+  for (const map of markerMaps ?? []) {
+    if (!map || typeof map !== 'object') continue;
+    for (const [lane, at] of Object.entries(map)) {
+      if (typeof at === 'string' && at) merged[lane] = at;
+    }
+  }
+  return merged;
+}

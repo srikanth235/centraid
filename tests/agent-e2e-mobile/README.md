@@ -257,7 +257,7 @@ reaches Metro on the host. No manual port forwarding needed.
     `visibilityPercentage: 100` before asserting or tapping.
   - *Prefer a string unique to the target screen.* `assertVisible:
     "Settings"` passes on Home — the header gear, the tab, and the
-    screen title are all "Settings". Assert "Desktop link" instead.
+    screen title are all "Settings". Assert "Gateway link" instead.
     Same trap for every tab label, which is on screen everywhere.
   - *Route names are not labels.* Settings calls
     `navigation.navigate('Apps', …)`, so `visible: "Apps"` looks right

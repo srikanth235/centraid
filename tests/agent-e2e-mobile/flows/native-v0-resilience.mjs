@@ -14,7 +14,7 @@ await runFlow('native-v0-resilience', async (ctx) => {
   //   Photos  → "Search photos"          (apps/mobile/src/apps/photos/PhotosHome.tsx)
   //   Docs    → "Add document or folder"  (apps/mobile/src/apps/docs/DocsHome.tsx)
   //   Agenda  → "Create event"            (apps/mobile/src/apps/agenda/AgendaHome.tsx)
-  //   Settings→ "Desktop link"            (visible heading, Settings-unique)
+  //   Settings→ "Gateway link"            (visible heading, Settings-unique; was "Desktop link")
   // These are Pressable accessibilityLabels — surfaced to the iOS a11y tree and
   // Maestro-matchable, the same construct template-gate keys on with "Open <name>".
   await ctx.run(
@@ -43,7 +43,7 @@ await runFlow('native-v0-resilience', async (ctx) => {
 - tapOn:
     text: "Settings.*"
 - extendedWaitUntil:
-    visible: "Desktop link"
+    visible: "Gateway link"
     timeout: 15000
 - tapOn:
     text: "Home.*"

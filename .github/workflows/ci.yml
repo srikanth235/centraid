@@ -164,6 +164,9 @@ jobs:
         run: bun run test:diff-coverage
       - name: Generate test-health report
         if: always()
+        env:
+          # Main slot is per-push only; banner + link to nightly (#535 F7).
+          TEST_REPORT_SCOPE: main
         run: bun run test:report
       # Job Summary is local to the Actions run (PRs included). Public Pages
       # HTML is main-only — see publish-report.
