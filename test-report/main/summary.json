@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-24T13:50:55.539Z",
+  "generatedAt": "2026-07-24T14:41:00.823Z",
   "passed": 607,
   "failed": 0,
   "skipped": 0,
@@ -19,6 +19,8 @@
   "cellsMissingPrior": null,
   "cellsMissingRose": false,
   "cellsMissingDelta": 0,
-  "coverageBelowFloor": [],
+  "coverageBelowFloor": [
+    "repo-wide"
+  ],
   "validationErrorCount": 0
 }
