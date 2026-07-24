@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-24T03:05:49.153Z",
-  "passed": 592,
+  "generatedAt": "2026-07-24T09:05:38.970Z",
+  "passed": 607,
   "failed": 0,
   "skipped": 0,
   "skippedTests": 36,
@@ -11,8 +11,14 @@
   "cellsFailed": 0,
   "cellsMissing": 28,
   "envGatedOwners": [],
-  "coverageBelowFloor": [
-    "repo-wide"
-  ],
+  "unmappedEvidence": 0,
+  "unmappedFailed": [],
+  "failedJobs": [],
+  "silentAllClear": false,
+  "jobReconciliation": null,
+  "cellsMissingPrior": null,
+  "cellsMissingRose": false,
+  "cellsMissingDelta": 0,
+  "coverageBelowFloor": [],
   "validationErrorCount": 0
 }
