@@ -71,6 +71,7 @@
         "@centraid/design-tokens": "workspace:*",
         "@expo-google-fonts/geist": "^0.4.1",
         "@expo-google-fonts/jetbrains-mono": "^0.4.1",
+        "@expo-google-fonts/playfair-display": "^0.4.1",
         "@expo-google-fonts/space-grotesk": "^0.4.1",
         "@expo/vector-icons": "^15.1.1",
         "@op-engineering/op-sqlite": "17.1.2",
@@ -785,6 +786,8 @@
     "@expo-google-fonts/geist": ["@expo-google-fonts/geist@0.4.1", "", {}, "sha512-UOBwoTJkKC0ViMOS8gjlQyUcT/5PX0phCroz/8z0DP1+7FcoD1RGGeG//nVQYWbT3y/ze4XoE63gSunml9Wdbw=="],
 
     "@expo-google-fonts/jetbrains-mono": ["@expo-google-fonts/jetbrains-mono@0.4.1", "", {}, "sha512-CslACrtMOcRwoWXCO7OMEI+9w3fukWSoBtvNz46OqPoogEuuoY0tkDY1O8sFumk8t0pC6Cx0Xr95O0TOQhpkug=="],
+
+    "@expo-google-fonts/playfair-display": ["@expo-google-fonts/playfair-display@0.4.2", "", {}, "sha512-mWhBV59RUjSS3aYpytUb7UyHHTnXcHh7epAn7gq+M4XAEh5PuMKUrP8eiUfkJLb6UwHZCi7EhQpUzxHu5OL96w=="],
 
     "@expo-google-fonts/space-grotesk": ["@expo-google-fonts/space-grotesk@0.4.1", "", {}, "sha512-ZVQYw4Ok/pgcSJiufP8oRZE3AVxS9xtmKEUfsurbHkHNdMc/GA1gDXP9G4Cr7KL4KqSc0haexR2TuMigotCn4Q=="],
 

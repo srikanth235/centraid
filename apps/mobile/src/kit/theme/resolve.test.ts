@@ -5,10 +5,17 @@ import { darkPalette, lightPalette } from './tokens.generated';
 describe('resolveTheme', () => {
   it('selects the palette by scheme', () => {
     expect(resolveTheme('light').scheme).toBe('light');
-    expect(resolveTheme('light').colors.bg).toBe(lightPalette.bg);
     expect(resolveTheme('dark').scheme).toBe('dark');
     expect(resolveTheme('dark').colors.bg).toBe(darkPalette.bg);
     expect(resolveTheme('dark').colors.bg).not.toBe(resolveTheme('light').colors.bg);
+  });
+
+  it('applies the design’s warm solar light ramp (mobile-only override)', () => {
+    // Light mode overrides the shared cool palette with the "Centraid Mobile"
+    // design's parchment-cream canvas; it must NOT be the generated cool bg.
+    expect(resolveTheme('light').colors.bg).toBe('#f1ece1');
+    expect(resolveTheme('light').colors.bg).not.toBe(lightPalette.bg);
+    expect(resolveTheme('light').colors.ink).toBe('#231f18');
   });
 
   it('defaults to light for null/undefined (no OS preference)', () => {
@@ -39,7 +46,7 @@ describe('navThemeFor', () => {
     expect(navThemeFor('dark').dark).toBe(true);
     expect(navThemeFor('light').dark).toBe(false);
     expect(navThemeFor('dark').colors.background).toBe(darkPalette.bg);
-    expect(navThemeFor('light').colors.text).toBe(lightPalette.ink);
+    expect(navThemeFor('light').colors.text).toBe('#231f18');
   });
 
   it('maps nav fonts onto the loaded Geist families', () => {
