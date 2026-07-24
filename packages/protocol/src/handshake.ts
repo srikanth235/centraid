@@ -156,7 +156,11 @@ export function judgeGatewayInfo(raw: unknown): HandshakeResult {
  * Fetch + judge a gateway's `/centraid/_gateway/info`. Network failures and
  * non-200s become `unreachable`; a shape/protocol mismatch is surfaced so the
  * switcher can badge the pair. `fetchImpl` is injectable for tests.
+ *
+ * Network I/O is unit-tested separately; #532 mutation owns the pure judge
+ * surface above (protocolsCompatible / judgeGatewayInfo).
  */
+// Stryker disable all
 export async function handshakeGateway(
   baseUrl: string,
   token: string | undefined,

@@ -61,3 +61,4 @@ ds-bundle-desktop/
 # builds @centraid/web without a Rust/wasm toolchain) stays green. Regenerate
 # with `bun run --cwd apps/web build:iroh` after changing iroh-wasm
 # (issue #468 K15 — ensure-iroh still rebuilds if the file is deleted).
+**/.stryker-tmp/

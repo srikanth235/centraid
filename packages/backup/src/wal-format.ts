@@ -306,6 +306,10 @@ function assertValidPosition(pos: WalPairPosition, db: WalDbName): void {
 // ---------------------------------------------------------------------------
 // WAL frame-boundary math (SQLite WAL file format, sqlite.org/walformat.html)
 // ---------------------------------------------------------------------------
+// #532 property/mutation ownership is the addressing surface above (keys +
+// parsers). Frame math, seal/open, and replay planning keep unit/contract
+// coverage via wal-format.test.ts — not the property mutate set.
+// Stryker disable all
 
 export const WAL_HEADER_BYTES = 32;
 const FRAME_HEADER_BYTES = 24;

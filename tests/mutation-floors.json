@@ -1,0 +1,11 @@
+{
+  "_comment": "Mutation-score floors (#532). Up-only under test:ratchet. Seeded ~2–3pt below measured Stryker on property-defended mutate sets (2026-07-23/24): vault custody 100%; client intents+payload-hash ~73.5%; automation scheduler ~82%; backup pure seal+address ~44.5%; blob-format CBSF 100%; protocol judge ~76.3%; tunnel pure wire ~81.5%; app-engine cost formula 100%.",
+  "packages/vault": 97,
+  "packages/client/src/replica": 70,
+  "packages/automation": 80,
+  "packages/backup": 42,
+  "packages/blob-format": 97,
+  "packages/protocol": 73,
+  "packages/tunnel": 78,
+  "packages/app-engine": 97
+}

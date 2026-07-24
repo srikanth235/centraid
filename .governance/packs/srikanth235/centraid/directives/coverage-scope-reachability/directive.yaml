@@ -1,0 +1,17 @@
+# coverage-scope-reachability — gated src scopes must stay visible to coverage
+# floors / matrix ownership (#532).
+category: Testing
+recommended: true
+summary: |
+  Every top-level package (or app) under packages/*/src or apps/*/src that
+  contains non-test TypeScript source must either (a) be covered by a
+  coverage-floors.json glob, (b) own at least one tests/matrix.json flow, or
+  (c) be listed in this directive's intentional-ungated allowlist. Catches the
+  blind spot where a new engine package lands outside the eight floored scopes
+  and is invisible to every coverage ratchet.
+
+  Additionally, every coverage-floors.json glob key must still match the
+  vitest coverage include patterns (packages/*/src/**, apps/*/src/**) so a
+  floor cannot point at a scope the coverage tool never instruments.
+surface: repo-state
+hook: pre-commit

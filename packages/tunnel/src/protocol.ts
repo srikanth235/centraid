@@ -102,6 +102,9 @@ interface ChunkRecv {
   read(sizeLimit: number): Promise<Array<number>>;
 }
 
+// Async stream readers are integration-owned (#532 property suite covers
+// encodeHeaderFrame / parsePairQrPayload / sanitizeHeaders only).
+// Stryker disable all
 /** Read one header frame. Throws on oversized or malformed frames. */
 export async function readHeaderFrame<T>(recv: FrameRecv): Promise<T> {
   const lenBytes = Buffer.from(await recv.readExact(4));

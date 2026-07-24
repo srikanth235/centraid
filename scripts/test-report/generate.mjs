@@ -45,6 +45,12 @@ const playwright = await readPlaywright(
 const e2e = await readLane(path.resolve(flags.e2e ?? path.join(root, 'artifacts/e2e')));
 const perf = await readLane(path.resolve(flags.perf ?? path.join(root, 'artifacts/perf')));
 const scale = await readLane(path.resolve(flags.scale ?? path.join(root, 'artifacts/scale')));
+// #532 mutation scores (nightly Stryker) — grey when absent, same path as perf/scale.
+const mutationScores = await readJson(
+  path.resolve(flags.mutation ?? path.join(root, 'artifacts/mutation/scores.json')),
+  null,
+);
+const mutationFloors = await readJson(path.join(root, 'tests/mutation-floors.json'), {});
 // Durable, gh-pages-committed summary series. Preferred trend source because it
 // survives the 7-day/10GB eviction of the `quality-history-` Actions cache that
 // feeds artifacts/perf and artifacts/scale.
@@ -82,11 +88,13 @@ const summary = {
   envGatedOwners,
 };
 
+const mutationRows = collectMutationRows(mutationScores, mutationFloors);
 const model = {
   generatedAt: new Date().toISOString(),
   matrix,
   cells,
   coverageRows,
+  mutationRows,
   slowest: vitestFiles.sort((a, b) => b.duration - a.duration).slice(0, 10),
   packageRuntime: packageRuntime(vitestFiles),
   laneResults,
@@ -424,6 +432,29 @@ function collectCoverage(summary, floorConfig) {
   });
 }
 
+/** #532 — mutation scores vs floors for the test-health report. */
+function collectMutationRows(scoresArtifact, floorConfig) {
+  const floors =
+    floorConfig && typeof floorConfig === 'object'
+      ? Object.entries(floorConfig).filter(
+          ([key, value]) =>
+            !key.startsWith('_') && key !== 'approvedDeviation' && typeof value === 'number',
+        )
+      : [];
+  const byId = new Map((scoresArtifact?.packages ?? []).map((row) => [row.id, row]));
+  const ids = new Set([...floors.map(([id]) => id), ...byId.keys()]);
+  return [...ids].sort().map((id) => {
+    const floor = floorConfig?.[id];
+    const row = byId.get(id);
+    return {
+      scope: id,
+      score: typeof row?.score === 'number' ? row.score : null,
+      floor: typeof floor === 'number' ? floor : null,
+      status: row?.status ?? 'missing',
+    };
+  });
+}
+
 function aggregateCoverage(entries) {
   if (!entries.length) return null;
   const result = {};
@@ -494,6 +525,19 @@ function render(model) {
       return `<tr><td>${escapeHtml(row.scope)}</td><td class="metric ${lineState}">${row.lines ?? '—'}% <small>/ ${row.lineFloor}%</small></td><td class="metric ${branchState}">${row.branches ?? '—'}% <small>/ ${row.branchFloor ?? '—'}%</small></td></tr>`;
     })
     .join('');
+  const mutationRows = (model.mutationRows ?? []).length
+    ? (model.mutationRows ?? [])
+        .map((row) => {
+          const state =
+            row.score == null
+              ? 'missing'
+              : row.floor == null || row.score >= row.floor
+                ? 'passed'
+                : 'failed';
+          return `<tr><td>${escapeHtml(row.scope)}</td><td class="metric ${state}">${row.score == null ? '—' : `${row.score.toFixed(1)}%`} <small>/ ${row.floor ?? '—'}%</small></td><td class="muted">${escapeHtml(row.status)}</td></tr>`;
+        })
+        .join('')
+    : '<tr><td colspan="3" class="muted">No mutation scores (nightly Stryker lane)</td></tr>';
   const runtimeRows = model.packageRuntime.length
     ? model.packageRuntime
         .map(
@@ -549,7 +593,7 @@ function render(model) {
       : ''
   }</div><div class="summary"><div class="stat"><b>${model.summary.passed}</b><small>evidence passed</small></div><div class="stat"><b>${model.summary.failed}</b><small>evidence failed</small></div><div class="stat"><b>${model.summary.cellsFailed ?? 0}</b><small>cells failed</small></div><div class="stat"><b>${model.summary.cellsMissing ?? 0}</b><small>cells not run</small></div><div class="stat"><b>${model.summary.unhandledErrors ?? 0}</b><small>unhandled errors</small></div><div class="stat"><b>${model.summary.skippedTests}</b><small>tests skipped</small></div><div class="stat"><b>${model.summary.envGated}</b><small>environment-gated</small></div><div class="stat"><b>${model.summary.stale}</b><small>stale owners</small></div></div></header>
 <section class="matrix-shell"><div class="matrix-head"><h2>Surface × quality dimension</h2><div class="legend"><span><i class="dot passed"></i>passed</span><span><i class="dot failed"></i>failed (ran)</span><span><i class="dot skipped"></i>skipped</span><span><i class="dot missing"></i>missing / not run</span></div></div><div class="matrix-scroll"><table class="heatmap"><thead><tr><th>Product surface</th>${dimensionHeaders}</tr></thead><tbody>${rows}</tbody></table></div><div class="inspector" aria-live="polite"><div><span class="kicker" id="inspector-kicker">Select a matrix cell</span><h3 id="inspector-title">Evidence inspector</h3></div><div class="flow-list" id="inspector-flows"><p class="muted">Choose any cell to see its canonical flow owner, tier, lane, and latest result.</p></div></div></section>
-<section class="grid"><article class="card"><h2>Coverage vs ratchet floor</h2><table class="data"><thead><tr><th>Scope</th><th>Lines</th><th>Branches</th></tr></thead><tbody>${coverageRows}</tbody></table></article><article class="card"><h2>Per-package wall clock</h2><table class="data"><thead><tr><th>Package</th><th>Runtime</th></tr></thead><tbody>${runtimeRows}</tbody></table></article><article class="card wide"><h2>Slowest 10 test files · bloat watch</h2><table class="data"><thead><tr><th>#</th><th>File</th><th>Runtime</th><th>Skipped</th><th>Env-gated</th></tr></thead><tbody>${slowRows}</tbody></table></article><article class="card wide"><h2>Environment-gated matrix owners</h2>${
+<section class="grid"><article class="card"><h2>Coverage vs ratchet floor</h2><table class="data"><thead><tr><th>Scope</th><th>Lines</th><th>Branches</th></tr></thead><tbody>${coverageRows}</tbody></table></article><article class="card"><h2>Mutation vs ratchet floor</h2><table class="data"><thead><tr><th>Package</th><th>Score</th><th>Status</th></tr></thead><tbody>${mutationRows}</tbody></table></article><article class="card"><h2>Per-package wall clock</h2><table class="data"><thead><tr><th>Package</th><th>Runtime</th></tr></thead><tbody>${runtimeRows}</tbody></table></article><article class="card wide"><h2>Slowest 10 test files · bloat watch</h2><table class="data"><thead><tr><th>#</th><th>File</th><th>Runtime</th><th>Skipped</th><th>Env-gated</th></tr></thead><tbody>${slowRows}</tbody></table></article><article class="card wide"><h2>Environment-gated matrix owners</h2>${
     (model.summary.envGatedOwners ?? []).length
       ? `<table class="data"><thead><tr><th>Cell</th><th>Owner</th><th>Env</th><th>Kind</th></tr></thead><tbody>${(
           model.summary.envGatedOwners ?? []
