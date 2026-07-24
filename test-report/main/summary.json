@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-24T02:34:04.020Z",
+  "generatedAt": "2026-07-24T03:05:49.153Z",
   "passed": 592,
   "failed": 0,
   "skipped": 0,
@@ -11,6 +11,8 @@
   "cellsFailed": 0,
   "cellsMissing": 28,
   "envGatedOwners": [],
-  "coverageBelowFloor": [],
+  "coverageBelowFloor": [
+    "repo-wide"
+  ],
   "validationErrorCount": 0
 }
