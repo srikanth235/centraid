@@ -2,7 +2,7 @@
 // `no-gateway` state. Proves the harness loop end-to-end (sim discovery,
 // app-install check, ctx.run, screenshot capture, verdict.md).
 
-import { SKIP_ONBOARDING } from '../lib/first-run.mjs';
+import { skipOnboarding } from '../lib/first-run.mjs';
 import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from '../lib/harness.mjs';
 
 await runFlow('home-loads', async (ctx) => {
@@ -16,7 +16,7 @@ await runFlow('home-loads', async (ctx) => {
 ---
 - launchApp:
     clearState: true
-${SKIP_ONBOARDING}- extendedWaitUntil:
+${skipOnboarding(ctx.state.platform, FIRST_LAUNCH_TIMEOUT_MS)}- extendedWaitUntil:
     visible:
       text: "Everything you build, in one place."
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}

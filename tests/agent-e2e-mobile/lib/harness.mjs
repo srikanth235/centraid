@@ -20,7 +20,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultRunId, writeFlowVerdict } from '../../agent-e2e-shared/harness.mjs';
-import { DISMISS_KEYBOARD_ONBOARDING, SKIP_ONBOARDING } from './first-run.mjs';
+import { DISMISS_KEYBOARD_ONBOARDING, skipOnboarding } from './first-run.mjs';
 import { metroReachable, prewarmMetroBundle } from './metro.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -356,7 +356,7 @@ ${DISMISS_KEYBOARD_ONBOARDING}`
 ---
 - launchApp:
     clearState: true
-${SKIP_ONBOARDING}- extendedWaitUntil:
+${skipOnboarding(state.platform, FIRST_LAUNCH_TIMEOUT_MS)}- extendedWaitUntil:
     visible:
       text: "Everything you build, in one place."
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
