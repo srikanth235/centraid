@@ -621,6 +621,10 @@ export default function AutomationEditorScreen({
           const copy = new Map(prev);
           for (const cat of next) {
             if (!selected.has(cat.kind) || !cat.connection) continue;
+            // A catalog refresh may make a formerly unique kind ambiguous.
+            // Preserve the owner's explicit account choice; only hydrate a
+            // binding when the form does not already carry one.
+            if (copy.has(cat.kind)) continue;
             copy.set(cat.kind, {
               connectionId: cat.connection.connectionId,
               kind: cat.kind,
@@ -1109,10 +1113,11 @@ export default function AutomationEditorScreen({
     </div>
   );
 
-  const toggleConnector = (kind: string): void => {
+  const toggleConnector = (kind: string, connectionId?: string): void => {
     setSelectedConnectors((prev) => {
       const next = new Set(prev);
-      if (next.has(kind)) {
+      const existing = connectionBindings.get(kind);
+      if (next.has(kind) && (!connectionId || existing?.connectionId === connectionId)) {
         next.delete(kind);
         setConnectionBindings((m) => {
           const copy = new Map(m);
@@ -1122,13 +1127,16 @@ export default function AutomationEditorScreen({
       } else {
         next.add(kind);
         const cat = catalog.find((c) => c.kind === kind);
-        if (cat?.connection) {
+        const connection = connectionId
+          ? cat?.connections.find((candidate) => candidate.connectionId === connectionId)
+          : cat?.connection;
+        if (connection) {
           setConnectionBindings((m) => {
             const copy = new Map(m);
             copy.set(kind, {
-              connectionId: cat.connection!.connectionId,
-              kind: cat.kind,
-              label: cat.connection!.label,
+              connectionId: connection.connectionId,
+              kind,
+              label: connection.label,
             });
             return copy;
           });
@@ -1249,6 +1257,7 @@ export default function AutomationEditorScreen({
           catalog={catalog}
           loading={catalogLoading}
           selected={selectedConnectors}
+          bindings={connectionBindings}
           onToggleSelect={toggleConnector}
           onBoundConnection={bindConnection}
           onClose={() => setConnectorsOpen(false)}

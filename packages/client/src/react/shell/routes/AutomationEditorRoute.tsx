@@ -135,13 +135,13 @@ export function matchEditorConnection(
   connections: readonly ConnectionRowDTO[],
   providerId: string,
   kind: string,
-): { match: ConnectionRowDTO | null; ambiguous: boolean } {
+): { match: ConnectionRowDTO | null; matches: ConnectionRowDTO[] } {
   const candidates = connections.filter(
     (connection) => connection.kind === kind && connection.provider === providerId,
   );
   return {
     match: candidates.length === 1 ? candidates[0]! : null,
-    ambiguous: candidates.length > 1,
+    matches: candidates,
   };
 }
 
@@ -155,7 +155,7 @@ async function loadEditorConnectorCatalog(): Promise<AuEditorCatalogConnectorDTO
     // Provider is part of connection identity. Kind-only matching can lend
     // trusted catalog branding to a free-form credential; choosing the first
     // of multiple same-kind accounts silently binds the wrong principal.
-    const { match, ambiguous } = matchEditorConnection(connections, f.providerId, f.kind);
+    const { match, matches } = matchEditorConnection(connections, f.providerId, f.kind);
     return {
       allowedHosts: f.provider.allowedHosts,
       authUrl: f.provider.authUrl,
@@ -164,9 +164,15 @@ async function loadEditorConnectorCatalog(): Promise<AuEditorCatalogConnectorDTO
             connectionId: match.connectionId,
             health: match.health,
             label: match.label,
+            principal: match.principal,
           }
         : null,
-      ...(ambiguous ? { connectionAmbiguous: true } : {}),
+      connections: matches.map((connection) => ({
+        connectionId: connection.connectionId,
+        health: connection.health,
+        label: connection.label,
+        principal: connection.principal,
+      })),
       credKind: f.provider.credKind,
       key: f.key,
       kind: f.kind,

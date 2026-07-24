@@ -148,6 +148,7 @@ export function AutomationEditorConnectorsPicker({
   catalog,
   loading,
   selected,
+  bindings,
   onToggleSelect,
   onBoundConnection,
   onClose,
@@ -160,7 +161,8 @@ export function AutomationEditorConnectorsPicker({
   catalog: AuEditorCatalogConnectorDTO[];
   loading: boolean;
   selected: ReadonlySet<string>;
-  onToggleSelect: (kind: string) => void;
+  bindings: ReadonlyMap<string, { connectionId: string; kind: string; label: string }>;
+  onToggleSelect: (kind: string, connectionId?: string) => void;
   /**
    * After a successful configure/authorize — persists durable vault
    * connection id on the editor form so save includes the binding.
@@ -310,7 +312,8 @@ export function AutomationEditorConnectorsPicker({
           rows.map((item) => {
             const isSelected = selected.has(item.kind);
             const health = item.connection?.health;
-            const ambiguous = item.connectionAmbiguous === true;
+            const hasAccountChoice = item.connections.length > 1;
+            const boundConnectionId = bindings.get(item.kind)?.connectionId;
             const connecting = connectingKind === item.kind;
             const busy = busyKind === item.kind;
             return (
@@ -324,9 +327,10 @@ export function AutomationEditorConnectorsPicker({
                   type="button"
                   className={styles.connPickerMain}
                   onClick={() => {
-                    if (!ambiguous) onToggleSelect(item.kind);
+                    if (!hasAccountChoice || isSelected) {
+                      onToggleSelect(item.kind, item.connection?.connectionId);
+                    }
                   }}
-                  disabled={ambiguous}
                   aria-pressed={isSelected}
                 >
                   <span className={styles.connPickerMark} aria-hidden="true">
@@ -339,8 +343,8 @@ export function AutomationEditorConnectorsPicker({
                     <span className={styles.connPickerName}>{item.name}</span>
                     <span className={styles.connPickerSub}>
                       {item.credKind === 'oauth2' ? 'OAuth' : 'API key'}
-                      {ambiguous
-                        ? ' · Multiple accounts — choose in Connectors'
+                      {hasAccountChoice
+                        ? ` · ${item.connections.length} configured accounts`
                         : health
                           ? ` · ${HEALTH_LABEL[health]} · ${item.connection?.label}`
                           : ' · Not connected'}
@@ -354,8 +358,51 @@ export function AutomationEditorConnectorsPicker({
                     {isSelected ? <Icon name="Check" size={14} /> : null}
                   </span>
                 </button>
+                {hasAccountChoice ? (
+                  <div
+                    className={styles.connAccountList}
+                    role="group"
+                    aria-label={`Choose ${item.name} account`}
+                  >
+                    {item.connections.map((connection) => {
+                      const chosen = boundConnectionId === connection.connectionId;
+                      return (
+                        <button
+                          key={connection.connectionId}
+                          type="button"
+                          className={styles.connAccount}
+                          data-chosen={String(chosen)}
+                          data-connection-id={connection.connectionId}
+                          onClick={() =>
+                            onBoundConnection({
+                              connectionId: connection.connectionId,
+                              kind: item.kind,
+                              label: connection.label,
+                            })
+                          }
+                        >
+                          <span className={styles.connAccountCopy}>
+                            <span className={styles.connAccountLabel}>{connection.label}</span>
+                            <span className={styles.connAccountPrincipal}>
+                              {connection.principal ?? 'Principal unavailable'}
+                            </span>
+                          </span>
+                          <span
+                            className={styles.connAccountHealth}
+                            data-health={connection.health}
+                          >
+                            {HEALTH_LABEL[connection.health]}
+                          </span>
+                          <span className={styles.connAccountCheck} aria-hidden="true">
+                            {chosen ? <Icon name="Check" size={13} /> : null}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
                 <div className={styles.connPickerActions}>
-                  {ambiguous ? null : health === 'ok' ? null : health === 'needs-auth' &&
+                  {hasAccountChoice ? null : health === 'ok' ? null : health === 'needs-auth' &&
                     item.connection ? (
                     <Button
                       variant="soft"

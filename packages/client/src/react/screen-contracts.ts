@@ -530,11 +530,17 @@ export interface AuEditorCatalogConnectorDTO {
   connection: {
     connectionId: string;
     label: string;
+    principal: string | null;
     health: 'ok' | 'needs-auth' | 'paused' | 'failing';
   } | null;
-  /** More than one exact provider+kind account exists. Never guess which
-   *  credential an automation should receive. */
-  connectionAmbiguous?: boolean;
+  /** Every configured account for this exact provider + connector kind.
+   *  The editor renders an account chooser when more than one exists. */
+  connections: Array<{
+    connectionId: string;
+    label: string;
+    principal: string | null;
+    health: 'ok' | 'needs-auth' | 'paused' | 'failing';
+  }>;
 }
 export interface AutomationEditorData {
   mode: 'create' | 'edit';

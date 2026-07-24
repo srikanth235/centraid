@@ -255,6 +255,7 @@ describe('AutomationEditorScreen — edit mode', () => {
         allowedHosts: ['api.github.com'],
         authUrl: undefined,
         connection: null,
+        connections: [],
         credKind: 'api_key' as const,
         key: 'github:pull.github',
         kind: 'pull.github',
@@ -353,7 +354,16 @@ describe('AutomationEditorScreen — edit mode', () => {
           connectionId: 'conn-sel-9',
           health: 'ok' as const,
           label: 'GitHub · work',
+          principal: 'work@example.com',
         },
+        connections: [
+          {
+            connectionId: 'conn-sel-9',
+            health: 'ok' as const,
+            label: 'GitHub · work',
+            principal: 'work@example.com',
+          },
+        ],
         credKind: 'api_key' as const,
         key: 'github:pull.github',
         kind: 'pull.github',
@@ -401,6 +411,7 @@ describe('AutomationEditorScreen — edit mode', () => {
     const base = {
       allowedHosts: ['api.github.com'],
       credKind: 'api_key' as const,
+      connections: [],
       key: 'github:pull.github',
       kind: 'pull.github',
       name: 'GitHub',
@@ -417,7 +428,20 @@ describe('AutomationEditorScreen — edit mode', () => {
       .mockResolvedValue([
         {
           ...base,
-          connection: { connectionId: 'conn-new-42', health: 'ok' as const, label: 'GitHub' },
+          connection: {
+            connectionId: 'conn-new-42',
+            health: 'ok' as const,
+            label: 'GitHub',
+            principal: 'octocat',
+          },
+          connections: [
+            {
+              connectionId: 'conn-new-42',
+              health: 'ok' as const,
+              label: 'GitHub',
+              principal: 'octocat',
+            },
+          ],
         },
       ]);
     const props = makeProps({ configureConnection, loadConnectorCatalog });
