@@ -27,6 +27,7 @@ version) and ignores `apps/mobile/src/**` and the CI YAML.
 - [x] iOS lane keyed on the `@expo/fingerprint` hash plus host toolchain
 - [x] Android lane keyed on the `@expo/fingerprint` hash plus host toolchain
 - [x] repin `reactivecircus/android-emulator-runner` to v2.38.0 (dead SHA, F6)
+- [x] migrate the Android lane to ubuntu-latest + KVM so the emulator can boot
 
 ## What changed
 
@@ -36,6 +37,7 @@ version) and ignores `apps/mobile/src/**` and the CI YAML.
 - **iOS lane keyed on the `@expo/fingerprint` hash plus host toolchain** (`.github/workflows/e2e.yml`): key `ios-app-<os>-xc<12>-fp<40>`. `bun install` now precedes the fingerprint step (fingerprint reads `node_modules`). Net −31 lines — the bespoke `git ls-files` block is gone. Transport (split restore/save, all-or-nothing key, `if: always()` save) unchanged.
 - **Android lane keyed on the `@expo/fingerprint` hash plus host toolchain** (`.github/workflows/e2e.yml`): new `native_android` fingerprint step, a `Restore the built Android app` step, an `ANDROID_CACHE_HIT`-branched emulator script (install banked apk + `adb reverse` on hit; build + bank apk on miss), and an `if: always() && steps.emu.outputs.built == 'true'` save. Key `android-app-<os>-jdk<12>-fp<40>`.
 - **repin `reactivecircus/android-emulator-runner` to v2.38.0 (dead SHA, F6)** — the previously pinned SHA `1dcd0090…` no longer resolves upstream, so the Android job failed at "Set up job" before any step ran (proven on dispatch run 30074719338). The lane has therefore been dead, not merely slow — this repin is a prerequisite for the Android cache (or the lane at all) to run.
+- **migrate the Android lane to ubuntu-latest + KVM so the emulator can boot** (`.github/workflows/e2e.yml`) — after the repin, the emulator still could not boot on `macos-15` (`HVF error: HV_UNSUPPORTED`: those runners have no Hypervisor.framework, so QEMU cannot hardware-accelerate). Moved the job to `ubuntu-latest`, added an `Enable KVM` udev step, pinned the build JDK via `actions/setup-java@v4.8.0` (temurin 17), and switched the emulator to `arch: x86_64` / `target: google_apis` (the KVM-accelerable image). The fingerprint keying, cache transport, and build-vs-install branch are unchanged; only the host and emulator image differ. This is what makes an actual Android cold/warm timing obtainable.
 
 ## Out of scope
 
@@ -94,9 +96,12 @@ The `Fingerprint the iOS native build inputs` step adds ~9–15s on both runs.
 
 Not comparable across the two runs (unrelated to the build cache): the gateway
 build (~5m36s both) and the journeys step (cold 3m33s / warm 6m04s — product
-flakiness, not cache). The Android lane could not be timed: its emulator cannot
-boot on the `macos-15` runner (`HVF error: HV_UNSUPPORTED`), a pre-existing
-infra defect that predates and is independent of this cache change.
+flakiness, not cache). The Android lane originally could not be timed at all: its
+emulator cannot boot on the `macos-15` runner (`HVF error: HV_UNSUPPORTED`), a
+pre-existing infra defect independent of this cache change. That lane has now
+been moved to `ubuntu-latest` + KVM (see What changed) so an Android cold/warm
+number becomes obtainable; the measured Android figures are recorded here once
+that run completes.
 
 ## Audit
 
@@ -121,6 +126,7 @@ infra defect that predates and is independent of this cache change.
 | claude-code-955653fc-da5-1784877314-1 | claude-code | 955653fc-da50-425f-95f2-bc71a62f0f63 | #535 | claude-opus-4-8 | 56 | 28038 | 6764185 | 25451 | 53545 | 4.1939 | 575 | 1566598 | 41586175 | 464743 |  |
 | claude-code-955653fc-da5-1784879567-1 | claude-code | 955653fc-da50-425f-95f2-bc71a62f0f63 | #535 | claude-opus-4-8 | 171 | 190771 | 24377411 | 122589 | 313531 | 16.4466 | 746 | 1757369 | 65963586 | 587332 |  |
 | claude-code-955653fc-da5-1784880476-1 | claude-code | 955653fc-da50-425f-95f2-bc71a62f0f63 | #535 | claude-opus-4-8 | 254 | 1193300 | 14752495 | 187551 | 1381105 | 19.5244 | 1000 | 2950669 | 80716081 | 774883 |  |
+| claude-code-955653fc-da5-1784880905-1 | claude-code | 955653fc-da50-425f-95f2-bc71a62f0f63 | #535 | claude-opus-4-8 | 57 | 51783 | 2633089 | 27274 | 79114 | 2.3223 | 1057 | 3002452 | 83349170 | 802157 |  |
 
 ### Steering
 
