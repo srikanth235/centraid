@@ -240,12 +240,7 @@ export default function PhotosSearch({
           <Text style={[styles.fallbackText, { color: colors.ink2 }]}>{notice}</Text>
           <Pressable
             disabled={!online}
-            onPress={() =>
-              navigation.navigate('Tabs', {
-                screen: 'Apps',
-                params: { screen: 'AppDetail', params: { appId: 'photos' } },
-              })
-            }
+            onPress={() => navigation.navigate('AppDetail', { appId: 'photos' })}
           >
             <Text style={[styles.fallbackAction, { color: online ? colors.accent : colors.ink3 }]}>
               {online ? 'Search online' : 'Reconnect for online search'}

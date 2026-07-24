@@ -17,11 +17,20 @@ import {
   createNativeReplicaSession,
   type NativeReplicaSession,
 } from '../../lib/replica/native-session';
+import {
+  LAST_BASE,
+  getActiveSpace,
+  hydrateSpaces,
+  noteActiveIdentity,
+  subscribeSpaces,
+} from '../../lib/spaces';
 import { Store } from '../../storage';
 
-const LAST_GATEWAY = 'replica.lastGateway';
-const LAST_VAULT = 'replica.lastVault';
-const LAST_BASE = 'replica.lastBase';
+// Thrown when the device has never been paired (no cached gateway/vault and no
+// live base). This is an expected first-run state, not a failure — the Home
+// screen already invites pairing — so the error banner suppresses it by identity
+// rather than showing an alarming red bar. Exported as the single source of truth.
+export const REPLICA_UNPAIRED_MESSAGE = 'Pair a desktop once to create the local replica.';
 
 interface ReplicaContextValue {
   session?: NativeReplicaSession;
@@ -48,40 +57,46 @@ async function resolveIdentity(): Promise<{
   gatewayId: string;
   online: boolean;
 }> {
-  // A paired device opens its local SQLite identity first. Network discovery
-  // is only a first-pair bootstrap, never a prerequisite for native reads.
-  const [cachedGatewayId, cachedVaultId, cachedBase] = await Promise.all([
-    Store.hydrate(LAST_GATEWAY, ''),
-    Store.hydrate(LAST_VAULT, ''),
-    Store.hydrate(LAST_BASE, 'http://127.0.0.1'),
-  ]);
-  if (cachedGatewayId && cachedVaultId) {
-    // The loopback port belongs to a particular tunnel process. Always ask
-    // phone-link to restart/resolve it after boot; the cached URL is only an
+  // The active Space is the source of truth for (gatewayId, vaultId) — reading
+  // it in-memory (not re-hydrating LAST_* from AsyncStorage) avoids a race where
+  // a just-projected slot hasn't flushed to disk yet. Network discovery is only
+  // a first-pair bootstrap, never a prerequisite for native reads.
+  await hydrateSpaces();
+  const active = getActiveSpace();
+  const cachedBase = await Store.hydrate(LAST_BASE, 'http://127.0.0.1');
+
+  if (active && active.gatewayId && active.vaultId) {
+    // A fully-resolved tuple: open the local SQLite replica immediately. The
+    // loopback port belongs to a particular tunnel process, so always ask
+    // phone-link to restart/resolve the live base; the cached URL is only an
     // offline placeholder for opening the local replica.
     const liveBase = await resolveGatewayBase().catch(() => undefined);
     if (liveBase) Store.set(LAST_BASE, liveBase);
     return {
       auth: {
         baseUrl: liveBase ?? cachedBase,
-        gatewayId: cachedGatewayId,
-        vaultId: cachedVaultId,
+        gatewayId: active.gatewayId,
+        vaultId: active.vaultId,
       },
-      gatewayId: cachedGatewayId,
+      gatewayId: active.gatewayId,
       online: liveBase !== undefined,
     };
   }
 
+  // A provisional Space (freshly paired, vault not yet known) or none at all:
+  // the enrolled vault must be probed over the network.
   const liveBase = await resolveGatewayBase().catch(() => undefined);
   if (liveBase) {
     const probe = await fetchReplicaBootstrapPage(
       { baseUrl: liveBase },
       { window: 1, fetcher: fetcher() },
     );
-    const gatewayId = getDesktopName() || liveBase;
-    Store.set(LAST_GATEWAY, gatewayId);
-    Store.set(LAST_VAULT, probe.vaultId);
+    const gatewayId = getDesktopName() || active?.gatewayId || liveBase;
     Store.set(LAST_BASE, liveBase);
+    // Fill the active Space's (gatewayId, vaultId) in so the switcher shows it
+    // and the next open takes the fast path above. No-op if there is no Space
+    // (manual-URL dev with nothing added), which simply won't persist a tuple.
+    await noteActiveIdentity({ gatewayId, vaultId: probe.vaultId });
     return {
       auth: { baseUrl: liveBase, gatewayId, vaultId: probe.vaultId },
       gatewayId,
@@ -89,13 +104,33 @@ async function resolveIdentity(): Promise<{
     };
   }
 
-  throw new Error('Pair a desktop once to create the local replica.');
+  throw new Error(REPLICA_UNPAIRED_MESSAGE);
 }
 
 export function ReplicaProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
   const [value, setValue] = useState<ReplicaContextValue>({ ready: false, online: false });
 
+  // Re-key the replica when the user switches the active Space. Keyed on the
+  // active Space *id*: switching / forgetting / pairing changes the id, tearing
+  // down the session and rebuilding it on the new (gateway, vault). Filling in a
+  // provisional Space's vault keeps the same id, so it does NOT force an extra
+  // rebuild — the in-flight init already resolved that vault. `undefined` means
+  // "not read yet"; the main effect waits for it so mount builds exactly once.
+  const [activeSpaceId, setActiveSpaceId] = useState<string | undefined>(undefined);
   useEffect(() => {
+    let unsubscribe = (): void => {};
+    void hydrateSpaces().then(() => {
+      setActiveSpaceId(getActiveSpace()?.id ?? '');
+      unsubscribe = subscribeSpaces(() => setActiveSpaceId(getActiveSpace()?.id ?? ''));
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (activeSpaceId === undefined) return undefined; // wait for the first Space read
+    // A switch: drop back to a loading state so consumers don't read the old
+    // vault's session while the new one opens.
+    setValue({ ready: false, online: false });
     let cancelled = false;
     let session: NativeReplicaSession | undefined;
     // Held so an unmount landing in the window between opening the op-sqlite
@@ -182,7 +217,7 @@ export function ReplicaProvider({ children }: { children: React.ReactNode }): Re
       changeFeed?.setActive(false);
       driver?.close();
     };
-  }, []);
+  }, [activeSpaceId]);
 
   const stable = useMemo(() => value, [value]);
   return <ReplicaContext.Provider value={stable}>{children}</ReplicaContext.Provider>;

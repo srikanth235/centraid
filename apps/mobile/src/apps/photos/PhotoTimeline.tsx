@@ -215,7 +215,9 @@ export default function PhotoTimeline({
     [onSelectionChange],
   );
 
-  const dragSelect = (x: number, y: number): void => {
+  // Hit-test a gesture point (relative to the list view) to the asset under it.
+  // Shared by tap-to-open and long-press drag-select so both agree on geometry.
+  const assetAt = (x: number, y: number): PhotoAsset | undefined => {
     const cursor = scrollOffset.current + y;
     // Binary search for the row whose band contains the cursor.
     let lo = 0;
@@ -233,7 +235,7 @@ export default function PhotoTimeline({
       }
     }
     const row = rowIndex >= 0 ? rows[rowIndex] : undefined;
-    if (!row || row.type !== 'assets') return;
+    if (!row || row.type !== 'assets') return undefined;
     let position = Math.max(0, x);
     let assetIndex = 0;
     for (let index = 0; index < row.widths.length; index += 1) {
@@ -244,7 +246,11 @@ export default function PhotoTimeline({
       position -= row.widths[index]! + 2;
       assetIndex = Math.min(index + 1, row.assets.length - 1);
     }
-    const asset = row.assets[assetIndex];
+    return row.assets[assetIndex];
+  };
+
+  const dragSelect = (x: number, y: number): void => {
+    const asset = assetAt(x, y);
     if (!asset || selectionRef.current.has(asset.id)) return;
     void Haptics.selectionAsync();
     const next = addDragSelection(selectionRef.current, asset.id);
@@ -252,11 +258,32 @@ export default function PhotoTimeline({
     onSelectionChange(next);
   };
 
+  // Quick tap: open the photo (or toggle it while multi-selecting). This MUST be
+  // a gesture, not just the cell's <Pressable onPress>: the ancestor Pan below
+  // claims the whole touch sequence on iOS, so the JS-responder-based Pressable
+  // never receives the tap. Routing tap through the same gesture system that
+  // owns long-press is what makes a plain tap register at all.
+  const tapAsset = (x: number, y: number): void => {
+    const asset = assetAt(x, y);
+    if (!asset) return;
+    if (selectionRef.current.size > 0) toggle(asset);
+    else handleOpen(asset);
+  };
+
+  const tap = Gesture.Tap().onEnd((event, success) => {
+    if (success) runOnJS(tapAsset)(event.x, event.y);
+  });
+  // Select on long-press *activation* (onStart), not touch-begin (onBegin): the
+  // latter fired on every touch-down — including quick taps — and fought the tap
+  // gesture. The drag only starts after the 220ms hold, so onStart is the moment
+  // the first cell is grabbed; onUpdate extends the selection as the finger moves.
   const drag = Gesture.Pan()
     .activateAfterLongPress(220)
-    .onBegin(({ x, y }) => runOnJS(dragSelect)(x, y))
+    .onStart(({ x, y }) => runOnJS(dragSelect)(x, y))
     .onUpdate(({ x, y }) => runOnJS(dragSelect)(x, y));
-  const gestures = Gesture.Simultaneous(pinch, drag);
+  // Exclusive(drag, tap): a held gesture becomes a drag-select, a quick release a
+  // tap — never both. Pinch (two fingers) runs simultaneously with either.
+  const gestures = Gesture.Simultaneous(pinch, Gesture.Exclusive(drag, tap));
 
   const scrub = (pageY: number): void => {
     const ratio = Math.max(0, Math.min(1, (pageY - 100) / Math.max(1, height - 180)));

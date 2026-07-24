@@ -6,6 +6,7 @@ import * as Haptics from 'expo-haptics';
 
 import { useTheme } from '../../kit/theme';
 import { useReplica } from '../../kit/replica/ReplicaProvider';
+import HomeKey from '../../kit/components/HomeKey';
 import type { AgendaScreenProps } from '../../navigation';
 import type { AgendaEventModel } from './recurrence';
 import { styles } from './AgendaHome.styles';
@@ -122,10 +123,7 @@ export default function AgendaHome({
     setSummary('');
     setCreateOpen(false);
     if (result.status === 'parked' || result.status === 'queued')
-      navigation.navigate('Tabs', {
-        screen: 'SettingsTab',
-        params: { screen: 'Approvals' },
-      });
+      navigation.navigate('Settings', { screen: 'Approvals' });
   };
   const move = (direction: number): void => {
     const next = new Date(cursor);
@@ -149,7 +147,8 @@ export default function AgendaHome({
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]} edges={['top']}>
       <View style={styles.header}>
-        <View>
+        <HomeKey variant="leave" onPress={() => navigation.goBack()} />
+        <View style={styles.headerCopy}>
           <Text style={[styles.title, { color: colors.ink }]}>Agenda</Text>
           <Text style={[styles.subtitle, { color: colors.ink2 }]}>Your time, in one view</Text>
         </View>

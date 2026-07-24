@@ -25,8 +25,17 @@ export interface ThemeValue {
 // near-white. That warmth is specific to the phone, so we override the light
 // ramp here (mobile-only) instead of touching the generated palette or the
 // shared tokens.css that desktop + web read. Backgrounds, lines and inks are
-// warmed to sit on the cream; the indigo `accent` and `danger` are unchanged.
-// Dark mode already matches the design closely, so it passes through untouched.
+// warmed to sit on the cream.
+//
+// The mobile design uses a single primary: brand teal for every tappable /
+// system affordance (buttons, links, the Automations tile, the Assistant FAB,
+// the launcher Home key). It replaces the generated indigo `accent` on both
+// schemes — desktop + web keep indigo. `danger` is unchanged. This is the same
+// teal as `BRAND_TEAL` in lib/profile.ts (the profile default), so out of the
+// box identity and actions read as one colour; personalising the profile colour
+// then only re-tints the avatar + greeting, not the app's controls.
+const BRAND_TEAL = '#128A78';
+
 const SOLAR_LIGHT: ThemeColors = {
   ...lightPalette,
   bg: '#f1ece1', // design screenBg — the solar cream canvas
@@ -43,10 +52,15 @@ const SOLAR_LIGHT: ThemeColors = {
   line: 'rgba(60, 48, 22, 0.1)',
   lineStrong: 'rgba(60, 48, 22, 0.18)',
   ink4: 'rgba(35, 31, 24, 0.28)',
+  accent: BRAND_TEAL, // teal on cream carries white glyphs cleanly
 };
 
 const LIGHT_COLORS: ThemeColors = SOLAR_LIGHT;
-const DARK_COLORS: ThemeColors = { ...darkPalette, ink4: 'rgba(237, 239, 242, 0.28)' };
+const DARK_COLORS: ThemeColors = {
+  ...darkPalette,
+  ink4: 'rgba(237, 239, 242, 0.28)',
+  accent: BRAND_TEAL, // same teal reads on the near-black ground (matches the greeting highlight)
+};
 
 // Frozen singletons per scheme so `colors` keeps a stable identity across
 // renders — lets screens `useMemo(makeStyles, [colors])` without thrash.

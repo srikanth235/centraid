@@ -8,8 +8,16 @@
 //    from `centraid-gateway pair` / `pair --qr`, redeemed over `centraid/gw-pair/1`
 //    (pairWithGateway). The stored tunnel ticket is `gw` (gateway EndpointTicket).
 //
-// From then on `ensureTunnelStarted()` runs a localhost HTTP proxy — everything
+// The phone never holds a gateway bearer. From then on `ensureTunnelStarted()`
+// runs a localhost HTTP proxy — everything (documents, module imports, SSE)
 // rides the iroh tunnel; the gateway/desktop attaches auth on its side.
+//
+// The phone can pair with several gateways: each pairing is recorded as a
+// (gateway, vault) Space in lib/spaces, and this module operates on the ACTIVE
+// Space's projected slot (LINK_* keys). `pair()` adds a Space, `switchSpace()`
+// re-points the active slot (restarting the tunnel when the gateway changes),
+// and `forgetSpace()`/`unpair()` drop one. The device secret key is device-wide
+// — one EndpointId enrolls with every desktop — so it is never per-Space.
 
 import { Platform } from 'react-native';
 import {
@@ -24,16 +32,27 @@ import {
 } from '../../modules/centraid-tunnel';
 import type { TunnelStatus } from '../../modules/centraid-tunnel';
 import { getSecure, hydrateSecure, setSecure } from './secure-storage';
+import {
+  LINK_DESKTOP_NAME_KEY,
+  LINK_DEVICE_ID_KEY,
+  LINK_SECRET_KEY,
+  LINK_TICKET_KEY,
+  addSpace,
+  getActiveSpace,
+  hydrateSpaces,
+  removeSpace,
+  setActiveSpace,
+  type Space,
+} from './spaces';
 import { Store } from '../storage';
 import { parsePairingInput } from './phone-link-parse';
 
 export { parsePairingInput, parsePairQr } from './phone-link-parse';
 export type { DesktopPairPayload, GatewayPairPayload, PairingInput } from './phone-link-parse';
 
-export const LINK_TICKET_KEY = 'phoneLink.ticket';
-export const LINK_DESKTOP_NAME_KEY = 'phoneLink.desktopName';
-export const LINK_DEVICE_ID_KEY = 'phoneLink.deviceId';
-export const LINK_SECRET_KEY = 'phoneLink.secretKey';
+// The active-slot keys now live in their new owner, lib/spaces (the Spaces
+// registry projects the active (gateway, vault) tuple into them); imported above
+// for this module's own tunnel/link reads.
 
 export class PhoneLinkError extends Error {
   constructor(
@@ -47,6 +66,9 @@ export class PhoneLinkError extends Error {
 
 /** Pull link prefs into Store + secrets into secure storage. Idempotent. */
 export async function hydratePhoneLink(): Promise<void> {
+  // Hydrate the registry first: it folds any pre-registry install into a Space
+  // and projects the active Space into the LINK_* slot keys read below.
+  await hydrateSpaces();
   await Promise.all([
     hydrateSecure(LINK_TICKET_KEY, ''),
     Store.hydrate<string>(LINK_DESKTOP_NAME_KEY, ''),
@@ -111,11 +133,25 @@ export async function pair(
         result.error ?? 'Pairing was refused by the desktop.',
       );
     }
-    await setSecure(LINK_TICKET_KEY, parsed.ticket);
     const desktopName = result.desktopName ?? '';
-    Store.set<string>(LINK_DESKTOP_NAME_KEY, desktopName);
-    Store.set<string>(LINK_DEVICE_ID_KEY, result.deviceId);
-    return { desktopName, deviceId: result.deviceId };
+    const deviceId = result.deviceId;
+    // A new pairing may target a DIFFERENT gateway than the running tunnel. Stop
+    // it so the re-init (driven by the active-Space change) dials the gateway we
+    // just paired with rather than reusing the old proxy.
+    await stopTunnel().catch(() => {
+      /* not running */
+    });
+    // Record this desktop as the active Space; addSpace projects the active
+    // LINK_* slot (ticket + names). vaultId starts empty and is filled by
+    // ReplicaProvider's bootstrap probe.
+    await addSpace({
+      gatewayId: desktopName || deviceId,
+      desktopName,
+      deviceId,
+      vaultId: '',
+      ticket: parsed.ticket,
+    });
+    return { desktopName, deviceId };
   }
 
   // Headless gateway ticket.
@@ -130,28 +166,83 @@ export async function pair(
   if (!result.ok) {
     throw new PhoneLinkError('pair_failed', result.error ?? 'Pairing was refused by the gateway.');
   }
-  // Tunnel dials the gateway EndpointTicket embedded in the pairing token.
-  await setSecure(LINK_TICKET_KEY, parsed.gw);
+  // The tunnel dials the gateway EndpointTicket (`gw`) embedded in the pairing
+  // token. A new pairing may target a DIFFERENT gateway than the running tunnel,
+  // so stop it — the re-init (driven by the active-Space change) dials the
+  // gateway we just paired with rather than reusing the old proxy.
+  await stopTunnel().catch(() => {
+    /* not running */
+  });
   const desktopName = result.vaultName || result.gatewayName || parsed.vaultName || 'Gateway';
   const deviceId = result.enrollmentId || result.gatewayId || result.deviceId || 'gateway';
-  Store.set<string>(LINK_DESKTOP_NAME_KEY, desktopName);
-  Store.set<string>(LINK_DEVICE_ID_KEY, deviceId);
+  // Record this gateway as the active Space (ticket = the gateway EndpointTicket).
+  // gatewayId mirrors the value ReplicaProvider keys the replica on
+  // (`getDesktopName()` → the desktop/vault name); vaultId starts empty and is
+  // filled by the bootstrap probe. addSpace projects the active LINK_* slot.
+  await addSpace({
+    gatewayId: desktopName || deviceId,
+    desktopName,
+    deviceId,
+    vaultId: '',
+    vaultName: parsed.vaultName,
+    ticket: parsed.gw,
+  });
   return { desktopName, deviceId };
 }
 
 /**
- * Forget the desktop/gateway link. Keeps the device secret key so a future re-pair
- * presents the same EndpointId (the peer can also revoke it by name).
+ * Forget the ACTIVE desktop/gateway link (Settings' "Unpair"). Stops the tunnel
+ * and removes the active Space, falling back to another Space if one remains.
+ * Keeps the device secret key so a future re-pair presents the same EndpointId
+ * (the peer can also revoke it by name).
  */
 export async function unpair(): Promise<void> {
+  await hydrateSpaces();
   if (isTunnelAvailable()) {
     await stopTunnel().catch(() => {
       /* already stopped */
     });
   }
-  await setSecure(LINK_TICKET_KEY, '');
-  Store.set<string>(LINK_DESKTOP_NAME_KEY, '');
-  Store.set<string>(LINK_DEVICE_ID_KEY, '');
+  const active = getActiveSpace();
+  if (active) await removeSpace(active.id);
+}
+
+/**
+ * Make a saved Space active. Re-points the active slot to its (gateway, vault)
+ * tuple; when the gateway differs from the current one, stops the tunnel so the
+ * next `ensureTunnelStarted` dials the new gateway (a same-gateway vault switch
+ * keeps the tunnel up and only changes the vault header + replica key). The
+ * replica re-keys off the active-Space change; returns the now-active Space.
+ */
+export async function switchSpace(id: string): Promise<Space | undefined> {
+  await hydrateSpaces();
+  const prev = getActiveSpace();
+  if (prev?.id === id) return prev;
+  const next = await setActiveSpace(id);
+  if (!next) return undefined;
+  if (isTunnelAvailable() && prev && prev.gatewayId !== next.gatewayId) {
+    await stopTunnel().catch(() => {
+      /* not running */
+    });
+  }
+  return next;
+}
+
+/**
+ * Forget one Space by id (the switcher's "Remove from this phone"). The vault
+ * stays on the gateway — this only drops the local tuple + its ticket. When the
+ * forgotten Space is active, the tunnel is stopped so the fallback Space (if
+ * any) can re-connect cleanly.
+ */
+export async function forgetSpace(id: string): Promise<void> {
+  await hydrateSpaces();
+  const wasActive = getActiveSpace()?.id === id;
+  if (wasActive && isTunnelAvailable()) {
+    await stopTunnel().catch(() => {
+      /* not running */
+    });
+  }
+  await removeSpace(id);
 }
 
 // Deduplicate concurrent starts (Home + AppDetail can race on mount).
