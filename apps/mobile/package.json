@@ -71,6 +71,7 @@
   "devDependencies": {
     "@babel/core": "^7.24.0",
     "@centraid/test-kit": "workspace:*",
+    "@expo/fingerprint": "~0.15.5",
     "@types/jpeg-js": "^0.3.7",
     "@types/react": "~19.1.0",
     "babel-preset-expo": "^55.0.21",
