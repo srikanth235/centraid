@@ -452,37 +452,10 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: |
-            # `set -eu`, not `-euo pipefail`: on Linux the action runs this via
-            # /usr/bin/sh (dash), which rejects `-o pipefail`. The script has no
-            # pipelines, so -eu is equivalent safety here.
-            set -eu
-            cached_apk="$HOME/.cache/centraid-mobile-e2e-android/app-debug.apk"
-            if [ "${ANDROID_CACHE_HIT:-}" = "true" ] && [ -f "$cached_apk" ]; then
-              # Warm path: skip the native build, install the banked dev-client
-              # apk, and set up the Metro reverse tunnel that `expo run:android`
-              # would normally create so the app can reach the host bundler on 8081.
-              echo "Android cache hit — installing $cached_apk (skipping gradle)"
-              adb install -r "$cached_apk"
-              adb reverse tcp:8081 tcp:8081
-            else
-              cd apps/mobile
-              # Always --no-bundler: Metro is already running on the host. A fallback
-              # without --no-bundler would spawn a second Metro and hang the job.
-              bunx expo run:android --no-bundler --device
-              cd ../..
-              # Bank the debug apk under the content-addressed cache path. Fail
-              # hard if it is missing rather than caching nothing (a later hit
-              # would install nothing and fail obscurely at flow time). Signal the
-              # save step below that there is a real apk to bank.
-              apk="$(find apps/mobile/android -type f -path '*/outputs/apk/debug/*.apk' -print -quit 2>/dev/null || true)"
-              test -n "$apk" || { echo "::error::built debug apk not found"; exit 1; }
-              mkdir -p "$(dirname "$cached_apk")"
-              cp "$apk" "$cached_apk"
-              echo 'built=true' >> "$GITHUB_OUTPUT"
-            fi
-            node scripts/test-report/prepare.mjs
-            MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/home-loads.mjs
+          # The action executes `script:` via dash; a multi-line if/else with
+          # comments and non-ASCII chars tripped its parser (#535). Keep this a
+          # single line that hands off to a committed bash file instead.
+          script: bash apps/mobile/scripts/android-emulator-e2e.sh
       # Bank the apk even if a later flow failed — the artifact is the product of
       # the fingerprinted inputs regardless of whether Maestro passed (see iOS).
       # Guarded on the build having actually produced an apk, so a cache-hit run
