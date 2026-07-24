@@ -1,5 +1,7 @@
 # Receipt: issue #535 — nightly report honesty
 
+<!-- governance: allow-receipt-per-issue — #535 is a multi-slice umbrella. This report-honesty slice (PR #536) and the mobile-CI-build-cache slice (receipts/issue-535-mobile-ci-build-cache.md, PR #540) each ship their own receipt; this waiver marks that coexistence as deliberate. No recorded fact in this receipt is altered — annotation only. -->
+
 ## Checklist
 
 - [x] Phase 1 — dual-path uploads fixed (5 jobs) + Playwright JSON at repo-root `artifacts/`; local layout fixture
