@@ -73,8 +73,30 @@ bun run format:check && bun run lint && bun run lint:packages && bun run knip \
   && bun run lint:e2e-flows && (cd apps/mobile && bun run typecheck)
 ```
 
-CI timing (cold cache-miss vs warm cache-hit) measured on this branch via
-`workflow_dispatch` — results recorded below once both runs complete.
+CI timing measured on this branch via `workflow_dispatch` — a cold cache-miss
+run (30074717423) then a warm cache-hit run (30076766957) with only a JS change
+between them, so the fingerprint is identical and the warm run hits. Isolating
+the native-build portion (the only part the build cache touches):
+
+| Step | Cold (miss) | Warm (hit) |
+| --- | ---: | ---: |
+| Restore the built iOS app | 0m42s | 0m48s |
+| Build and install the mobile dev app | **22m04s** | **skipped (0m01s)** |
+| Save the built iOS app | 0m03s | skipped |
+| Install the cached mobile dev app | 0m00s | 0m33s |
+| **Native-build portion** | **22m49s** | **1m22s** |
+
+**Measured saving: 21m27s per JS-only night** (~94% off the native-build
+portion) — the ~22-minute Xcode compile is fully skipped and replaced by a 48s
+restore + 33s install. iOS cache size on disk: **30.3 MiB**. Cross-machine
+determinism confirmed: the CI fingerprint (`af99369b…`) equals the local hash.
+The `Fingerprint the iOS native build inputs` step adds ~9–15s on both runs.
+
+Not comparable across the two runs (unrelated to the build cache): the gateway
+build (~5m36s both) and the journeys step (cold 3m33s / warm 6m04s — product
+flakiness, not cache). The Android lane could not be timed: its emulator cannot
+boot on the `macos-15` runner (`HVF error: HV_UNSUPPORTED`), a pre-existing
+infra defect that predates and is independent of this cache change.
 
 ## Audit
 
@@ -98,6 +120,7 @@ CI timing (cold cache-miss vs warm cache-hit) measured on this branch via
 | claude-code-955653fc-da5-1784877007-1 | claude-code | 955653fc-da50-425f-95f2-bc71a62f0f63 | #535 | claude-opus-4-8 | 21 | 9625 | 2521549 | 8078 | 17724 | 1.5230 | 519 | 1538560 | 34821990 | 439292 |  |
 | claude-code-955653fc-da5-1784877314-1 | claude-code | 955653fc-da50-425f-95f2-bc71a62f0f63 | #535 | claude-opus-4-8 | 56 | 28038 | 6764185 | 25451 | 53545 | 4.1939 | 575 | 1566598 | 41586175 | 464743 |  |
 | claude-code-955653fc-da5-1784879567-1 | claude-code | 955653fc-da50-425f-95f2-bc71a62f0f63 | #535 | claude-opus-4-8 | 171 | 190771 | 24377411 | 122589 | 313531 | 16.4466 | 746 | 1757369 | 65963586 | 587332 |  |
+| claude-code-955653fc-da5-1784880476-1 | claude-code | 955653fc-da50-425f-95f2-bc71a62f0f63 | #535 | claude-opus-4-8 | 254 | 1193300 | 14752495 | 187551 | 1381105 | 19.5244 | 1000 | 2950669 | 80716081 | 774883 |  |
 
 ### Steering
 
