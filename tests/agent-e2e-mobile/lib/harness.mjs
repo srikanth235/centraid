@@ -20,13 +20,23 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultRunId, writeFlowVerdict } from '../../agent-e2e-shared/harness.mjs';
+import { DISMISS_KEYBOARD_ONBOARDING, skipOnboarding } from './first-run.mjs';
 import { metroReachable, prewarmMetroBundle } from './metro.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const RUNS_DIR = path.join(__dirname, '..', 'runs');
 
+// iOS bundle id, and the Android *release* applicationId. Android *debug*
+// builds append `.debug` (applicationIdSuffix in android/app/build.gradle, kept
+// so a debug build and a Play-release build can coexist on one device —
+// J1/#501). The agent-e2e build is a debug build, so on Android the package
+// that actually installs and launches is the suffixed `dev.centraid.mobile.debug`.
+// `setup()` resolves the id per platform and threads it through `state.appId`;
+// flows must launch the package that is installed, not this base id, so they
+// read `ctx.state.appId` rather than importing APP_ID.
 export const APP_ID = 'dev.centraid.mobile';
+const appIdForPlatform = (platform) => (platform === 'android' ? `${APP_ID}.debug` : APP_ID);
 
 /**
  * Budget for the first `assertVisible` after a `clearState: true` launch.
@@ -45,23 +55,6 @@ export const APP_ID = 'dev.centraid.mobile';
  * wait, not a product-latency assertion, and nothing is proven by making it tight.
  */
 export const FIRST_LAUNCH_TIMEOUT_MS = 120_000;
-
-/**
- * The first keystroke on a freshly-booted simulator raises iOS's multilingual
- * keyboard onboarding sheet ("Type English and Dutch … Continue"). It covers the
- * bottom of the screen — including the tab bar — so every subsequent tap silently
- * lands on the sheet instead, and any keystrokes typed while it animates in are
- * swallowed (that is what corrupts text fields — see configureGateway). CI boots
- * a clean simulator each run, so it hits this every time. Dismiss it if it showed
- * up; do nothing if it didn't. Provoke it with a throwaway keystroke FIRST so its
- * appearance is deterministic rather than racing the real input.
- */
-export const DISMISS_KEYBOARD_ONBOARDING = `- runFlow:
-    when:
-      visible: "Continue"
-    commands:
-      - tapOn: "Continue"
-`;
 
 function spawnText(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
@@ -183,9 +176,10 @@ export async function setup({ runId } = {}) {
         'to force a side when both are present.',
     );
   }
-  if (!(await appInstalled(device, APP_ID))) {
+  const appId = appIdForPlatform(device.platform);
+  if (!(await appInstalled(device, appId))) {
     throw new Error(
-      `${APP_ID} not installed on ${device.platform} device ${device.udid}. ` +
+      `${appId} not installed on ${device.platform} device ${device.udid}. ` +
         `Run \`bun run --filter=@centraid/mobile ${device.platform}\` first.`,
     );
   }
@@ -200,7 +194,7 @@ export async function setup({ runId } = {}) {
         'serve the JS bundle — start it with `cd apps/mobile && bun expo start --dev-client`.',
     );
   }
-  await prewarmMetroBundle(device.platform, APP_ID);
+  await prewarmMetroBundle(device.platform, appId);
   const id = runId ?? defaultRunId();
   const runDir = path.join(RUNS_DIR, id);
   const screenshotsDir = path.join(runDir, 'screenshots');
@@ -215,7 +209,7 @@ export async function setup({ runId } = {}) {
     flowsDir,
     udid: device.udid,
     platform: device.platform,
-    appId: APP_ID,
+    appId,
   };
   await fs.writeFile(path.join(runDir, 'state.json'), JSON.stringify(state, null, 2));
   return state;
@@ -358,11 +352,11 @@ ${DISMISS_KEYBOARD_ONBOARDING}`
     //     what a user sees, and prove the setting actually took by requiring the
     //     no-gateway card to be gone.
     await ctx.run(
-      `appId: ${APP_ID}
+      `appId: ${state.appId}
 ---
 - launchApp:
     clearState: true
-- extendedWaitUntil:
+${skipOnboarding(state.platform, FIRST_LAUNCH_TIMEOUT_MS)}- extendedWaitUntil:
     visible:
       text: "Everything you build, in one place."
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
@@ -427,7 +421,7 @@ ${tokenSteps}- hideKeyboard
     console.log('  restart …');
     await new Promise((resolve) => setTimeout(resolve, 300));
     await ctx.run(
-      `appId: ${APP_ID}
+      `appId: ${state.appId}
 ---
 - stopApp
 - launchApp:

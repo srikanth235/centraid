@@ -35,7 +35,7 @@
     "clean": "rm -rf dist native/*.node"
   },
   "dependencies": {
-    "@number0/iroh": "1.0.0"
+    "@number0/iroh": "1.1.0"
   },
   "devDependencies": {
     "@centraid/test-kit": "workspace:*",

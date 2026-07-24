@@ -17,8 +17,8 @@ Pod::Spec.new do |s|
 
   s.dependency 'ExpoModulesCore'
 
-  # Iroh Swift binding, sourced from the OFFICIAL n0-computer/iroh-ffi 1.0.0
-  # release artifact — no bytes committed, no bespoke fetch script. This is
+  # Iroh Swift binding, sourced from the OFFICIAL n0-computer/iroh-ffi release
+  # artifact — no bytes committed, no bespoke fetch script. This is
   # the same prebuilt xcframework (identical SHA-256) that the upstream
   # SwiftPM package (product `IrohLib`) resolves for git-URL / Swift Package
   # Index consumers; we pull it via CocoaPods instead because Expo integrates
@@ -32,12 +32,18 @@ Pod::Spec.new do |s|
   # commands below once (or re-run `pod install`) before building — see
   # ../README.md ("iOS binding"). The pinned checksum matches upstream
   # Package.swift's `releaseChecksum`.
-  iroh_tag = 'v1.0.0'
-  iroh_sha = '514b147f7965fe17acaece9a1157cf9421463b6c9282224983e871ea868b86ef'
+  # Keep in lockstep with the Android side's `computer.iroh:iroh-android`
+  # version (android/build.gradle) so both mobile platforms speak the same
+  # iroh. The `.iroh-version` marker makes the fetch version-aware: a bare
+  # existence check would silently keep a previous tag's framework on dev
+  # machines after a bump.
+  iroh_tag = 'v1.1.0'
+  iroh_sha = 'ad46dadf09f9224157512992923562931ed60f252414230d50893a4d515c5776'
   iroh_base = "https://github.com/n0-computer/iroh-ffi"
   s.prepare_command = <<-CMD
     set -euo pipefail
-    if [ ! -d Iroh.xcframework ]; then
+    if [ ! -d Iroh.xcframework ] || [ "$(cat .iroh-version 2>/dev/null || true)" != "#{iroh_tag}" ]; then
+      rm -rf Iroh.xcframework IrohLib.swift .iroh-version
       tmp="$(mktemp -d)"
       curl -sSL -o "$tmp/iroh.zip" "#{iroh_base}/releases/download/#{iroh_tag}/IrohLib.xcframework.zip"
       got="$(shasum -a 256 "$tmp/iroh.zip" | awk '{print $1}')"
@@ -49,6 +55,7 @@ Pod::Spec.new do |s|
     if [ ! -f IrohLib.swift ]; then
       curl -sSL -o IrohLib.swift "https://raw.githubusercontent.com/n0-computer/iroh-ffi/#{iroh_tag}/IrohLib/Sources/IrohLib/IrohLib.swift"
     fi
+    echo "#{iroh_tag}" > .iroh-version
   CMD
 
   s.vendored_frameworks = 'Iroh.xcframework'

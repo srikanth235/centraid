@@ -72,8 +72,8 @@
       "ignoreDependencies": ["react", "react-dom", "@types/react", "@types/react-dom"]
     },
     "apps/mobile": {
-      "entry": ["index.ts", "App.tsx"],
-      "project": ["src/**/*.{ts,tsx}"],
+      "entry": ["index.ts", "App.tsx", "scripts/*.mjs"],
+      "project": ["src/**/*.{ts,tsx}", "scripts/*.mjs"],
       "ignoreDependencies": ["@babel/core", "expo-system-ui"]
     },
     "apps/extension": {

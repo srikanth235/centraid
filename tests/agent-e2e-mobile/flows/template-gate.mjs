@@ -14,7 +14,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runFlow, APP_ID } from '../lib/harness.mjs';
+import { runFlow } from '../lib/harness.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
@@ -152,7 +152,7 @@ await runFlow('template-gate', async (ctx) => {
         // deliberately publishes as this control's accessible name, so it is
         // the honest thing to drive.
         await ctx.run(
-          `appId: ${APP_ID}
+          `appId: ${ctx.state.appId}
 ---
 - stopApp
 - launchApp:

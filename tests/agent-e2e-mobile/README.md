@@ -104,10 +104,13 @@ flows/
 Skeleton:
 
 ```js
-import { runFlow, APP_ID, FIRST_LAUNCH_TIMEOUT_MS } from '../lib/harness.mjs';
+import { runFlow, FIRST_LAUNCH_TIMEOUT_MS } from '../lib/harness.mjs';
 
 await runFlow('my-flow', async (ctx) => {
-  await ctx.run(`appId: ${APP_ID}
+  // `ctx.state.appId` is the installed package for the resolved platform —
+  // `dev.centraid.mobile` on iOS, `dev.centraid.mobile.debug` on Android
+  // (debug builds carry the `.debug` applicationIdSuffix). Don't hardcode it.
+  await ctx.run(`appId: ${ctx.state.appId}
 ---
 - launchApp: { clearState: true }
 - extendedWaitUntil:
@@ -266,7 +269,7 @@ reaches Metro on the host. No manual port forwarding needed.
     onboarding sheet* ("Type English and Dutch … Continue"), which
     covers the tab bar and swallows later taps. CI boots a fresh
     simulator every run, so it hits this every time — use
-    `DISMISS_KEYBOARD_ONBOARDING` from the harness after typing.
+    `DISMISS_KEYBOARD_ONBOARDING` from `lib/first-run.mjs` after typing.
 - **`RN accessibilityLabel` on `TextInput` does not reach the iOS a11y
   tree** — the node keeps the placeholder as its `hintText` and gains no
   `accessibilityText`. Adding one to make a field selectable does not
