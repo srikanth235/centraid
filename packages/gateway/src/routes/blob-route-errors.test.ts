@@ -10,49 +10,63 @@ import {
 } from '@centraid/vault';
 import { sendBlobRouteError } from './blob-route-errors.js';
 
-function mockRes(over: Partial<ServerResponse> = {}): ServerResponse {
-  const res = {
+interface MockRes {
+  headersSent: boolean;
+  destroyed: boolean;
+  statusCode?: number;
+  body?: string;
+  headers: Record<string, string>;
+  setHeader: (name: string, value: string | number | readonly string[]) => MockRes;
+  writeHead: (status: number, headers?: Record<string, string>) => MockRes;
+  end: (chunk?: unknown) => MockRes;
+  destroy: ReturnType<typeof vi.fn>;
+}
+
+function mockRes(over: Partial<MockRes> = {}): MockRes {
+  const res: MockRes = {
     headersSent: false,
     destroyed: false,
-    statusCode: undefined as number | undefined,
-    body: undefined as string | undefined,
-    headers: {} as Record<string, string>,
-    setHeader(name: string, value: string | number | readonly string[]) {
+    headers: {},
+    setHeader(name: string, value: string | number | readonly string[]): MockRes {
       res.headers[name.toLowerCase()] = String(value);
       return res;
     },
-    writeHead(status: number, headers?: Record<string, string>) {
+    writeHead(status: number, headers?: Record<string, string>): MockRes {
       res.statusCode = status;
       res.headersSent = true;
       if (headers) Object.assign(res.headers, headers);
       return res;
     },
-    end(chunk?: unknown) {
+    end(chunk?: unknown): MockRes {
       res.headersSent = true;
       if (chunk !== undefined && chunk !== null) {
         res.body = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
       }
       return res;
     },
-    destroy: vi.fn(() => {
-      res.destroyed = true;
-      return res;
+    destroy: vi.fn(function destroy(this: MockRes) {
+      this.destroyed = true;
+      return this;
     }),
     ...over,
   };
+  return res;
+}
+
+function asServerRes(res: MockRes): ServerResponse {
   return res as unknown as ServerResponse;
 }
 
 describe('sendBlobRouteError', () => {
   it('destroys the response when headers were already sent', () => {
     const res = mockRes({ headersSent: true, destroyed: false });
-    expect(sendBlobRouteError(res, new Error('late'))).toBe(true);
+    expect(sendBlobRouteError(asServerRes(res), new Error('late'))).toBe(true);
     expect(res.destroy).toHaveBeenCalled();
   });
 
   it('is a no-op when the socket is already destroyed', () => {
     const res = mockRes({ headersSent: true, destroyed: true });
-    expect(sendBlobRouteError(res, new Error('gone'))).toBe(true);
+    expect(sendBlobRouteError(asServerRes(res), new Error('gone'))).toBe(true);
     expect(res.destroy).not.toHaveBeenCalled();
   });
 
@@ -105,7 +119,7 @@ describe('sendBlobRouteError', () => {
 
     for (const c of cases) {
       const res = mockRes();
-      expect(sendBlobRouteError(res, c.err)).toBe(true);
+      expect(sendBlobRouteError(asServerRes(res), c.err)).toBe(true);
       expect(res.statusCode).toBe(c.status);
       const body = JSON.parse(res.body ?? '{}') as { error?: string; expectedOffset?: number };
       if (c.error) expect(body.error).toBe(c.error);
@@ -117,7 +131,7 @@ describe('sendBlobRouteError', () => {
 
   it('stringifies non-Error failures as 400', () => {
     const res = mockRes();
-    sendBlobRouteError(res, 'raw');
+    sendBlobRouteError(asServerRes(res), 'raw');
     expect(res.statusCode).toBe(400);
     expect(JSON.parse(res.body ?? '{}')).toEqual({ error: 'raw' });
   });

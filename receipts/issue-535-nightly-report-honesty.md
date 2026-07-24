@@ -66,7 +66,9 @@
 ### Follow-up — PR CI green: coverage ≥71% (no floor lower), desktop e2e 8.2 Retry thrash fix
 
 - `packages/client/src/react/screens/AutomationsOverviewScreen.tsx` — `loadData` via ref so parent identity churn does not remount the load effect (Retry no longer detaches mid-click).
-- `packages/client/src/react/shell/routes/AutomationsRoute.tsx` — stable `useCallback` for `loadData` / `useSuggestion`.
+- `packages/client/src/react/shell/routes/AutomationsRoute.tsx` — stable `useCallback` wrappers over extracted load/adopt helpers.
+- `packages/client/src/react/shell/routes/automationsOverviewLoad.ts` — fleet load + suggestion adopt extracted for unit tests / diff-coverage ≥80%.
+- `packages/client/src/react/shell/routes/automationsOverviewLoad.test.ts` — load + adopt path unit tests.
 - `packages/client/src/react/screens/AutomationsOverviewScreen.test.tsx` — unit proof that swapping `loadData` identity does not auto-refetch; Retry still uses latest.
 - `apps/desktop/tests/e2e/automations.spec.ts` — settle error card before rewiring mock + click Retry.
 - Coverage lift (floors untouched): `packages/vault/src/replica/doorbell.test.ts`, `packages/automation/src/manifest/manifest-output.test.ts`, `packages/automation/src/scaffold/webhook.test.ts` (route handler + secret helpers), `packages/gateway/src/routes/blob-route-errors.test.ts`.
