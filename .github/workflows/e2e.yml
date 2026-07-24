@@ -142,7 +142,7 @@ jobs:
           path: artifacts/
           retention-days: 7
 
-  mobile-e2e:
+  mobile-e2e-ios:
     if: >
       github.event_name != 'workflow_dispatch' ||
       github.event.inputs.suite == 'all' ||
@@ -609,7 +609,7 @@ jobs:
       [
         desktop-e2e,
         web-e2e,
-        mobile-e2e,
+        mobile-e2e-ios,
         mobile-e2e-android,
         pairing-lifecycle,
         pairing-ticket-hygiene,
@@ -830,7 +830,7 @@ jobs:
       [
         desktop-e2e,
         web-e2e,
-        mobile-e2e,
+        mobile-e2e-ios,
         mobile-e2e-android,
         pairing-lifecycle,
         pairing-ticket-hygiene,
@@ -844,7 +844,7 @@ jobs:
       (
         needs.desktop-e2e.result == 'failure' ||
         needs.web-e2e.result == 'failure' ||
-        needs.mobile-e2e.result == 'failure' ||
+        needs.mobile-e2e-ios.result == 'failure' ||
         needs.mobile-e2e-android.result == 'failure' ||
         needs.pairing-lifecycle.result == 'failure' ||
         needs.pairing-ticket-hygiene.result == 'failure' ||
@@ -880,7 +880,7 @@ jobs:
           ### Job results
           - desktop-e2e: \`${{ needs.desktop-e2e.result }}\`
           - web-e2e: \`${{ needs.web-e2e.result }}\`
-          - mobile-e2e: \`${{ needs.mobile-e2e.result }}\`
+          - mobile-e2e-ios: \`${{ needs.mobile-e2e-ios.result }}\`
           - mobile-e2e-android: \`${{ needs.mobile-e2e-android.result }}\`
           - pairing-lifecycle: \`${{ needs.pairing-lifecycle.result }}\`
           - pairing-ticket-hygiene: \`${{ needs.pairing-ticket-hygiene.result }}\`
