@@ -41,8 +41,17 @@ export function buildRunSnapshot(
   const fallbackRef = run.automationId ?? run.runId;
   const identityId = row === null ? fallbackRef : row.id;
   const inFlight = run.endedAt === undefined;
-  const model = row === null ? 'Centraid' : (row.manifest.requires.model ?? 'Centraid');
+  // `requires.model` is `provider/model-id`; show the readable model id (the
+  // part after the last '/'). When unset the gateway auto-selects, so the
+  // honest label is 'Auto' — never the brand name 'Centraid', which is the
+  // assistant/actor, not a model.
+  const rawModel = row === null ? undefined : row.manifest.requires.model;
+  const model = rawModel ? (rawModel.split('/').pop() ?? rawModel) : 'Auto';
   const tokens = (run.totalInputTokens ?? 0) + (run.totalOutputTokens ?? 0);
+  // Deterministic / zero-usage runs (fixed output, no model step) have no
+  // meaningful tokens/cost/steps — the Usage card collapses those rows to a
+  // single caption instead of showing a wall of dashes/zeros.
+  const hasUsage = tokens > 0 || (run.totalCostUsd ?? 0) > 0 || (run.stepCount ?? nodes.length) > 0;
   const duration =
     run.endedAt !== undefined ? formatDuration(run.endedAt - run.startedAt) : 'running';
   const statusKind: AuStatusKind = inFlight ? 'running' : run.ok ? 'success' : 'failed';
@@ -195,6 +204,7 @@ export function buildRunSnapshot(
     side: {
       cost: run.totalCostUsd ? `$${run.totalCostUsd.toFixed(2)}` : '—',
       duration,
+      hasUsage,
       model,
       outcomeKind: statusKind,
       outcomeLabel: statusLabel,

@@ -316,6 +316,13 @@
   flex-direction: column;
   gap: 4px;
 }
+/* Helper caption under the connection Label — clarifies naming and that a
+   distinct label is what lets more than one account of a provider coexist. */
+.connFieldHint {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ink-4);
+}
 .connGuideToggle {
   border: 0;
   background: transparent;

@@ -1,5 +1,5 @@
-// governance: allow-repo-hygiene file-size-limit (#387) single cohesive screen component (header/consent-strip/run-spine/composer of one thread surface); splitting would fragment one visual unit
-import { type JSX, useCallback, useEffect, useRef, useState } from 'react';
+// governance: allow-repo-hygiene file-size-limit (#539) single cohesive screen component (header/consent-strip/chat-turn spine/steering composer of one thread surface); splitting would fragment one visual unit
+import { type FormEvent, type JSX, useCallback, useEffect, useRef, useState } from 'react';
 import type { IconName } from '@centraid/design-tokens';
 import { Icon } from '../ui/index.js';
 import { cx } from '../ui/cx.js';
@@ -15,18 +15,21 @@ import type {
   OutboxItemDTO,
   ParkedItemDTO,
   ThreadRunDTO,
-  ThreadRunStatus,
 } from '../screen-contracts.js';
 
 // The automation thread — "the automation IS a conversation" (Automations UI
-// revamp, receipts/issue-387-automations-ui-revamp.md). Replaces AutomationViewScreen at the
-// `automation-view` route. Header (identity + trigger chips + enable/run/
-// edit/delete), an inline consent strip (parked/outbox/grants — consent is
-// reviewed here, never begged at runtime), the run spine (a flight-recorder
-// timeline, oldest→newest, date-grouped). The builder-backed composer is
-// intentionally hidden in v0; instruction edits compile through the editor. Purely presentational: the route
-// wrapper (`AutomationViewRoute.tsx`) owns IO, confirm dialogs, toasts, and
-// navigation.
+// revamp, receipts/issue-387-automations-ui-revamp.md; chat rendering +
+// steering composer, receipts/issue-539-automations-chat-thread.md). Replaces
+// AutomationViewScreen at the `automation-view` route. Header (identity +
+// trigger chips + enable/run/edit/delete), an inline consent strip
+// (parked/outbox/grants — consent is reviewed here, never begged at runtime),
+// then the thread itself: every fire is a chat turn on a flight-recorder spine
+// (oldest→newest, date-grouped) — the run summary is the message, telemetry
+// sits in a quiet footer, and a failed run speaks as an error you can retry in
+// place. A steering composer at the foot routes a reply through the existing
+// conversational-revision path (`onSendMessage`). Purely presentational: the
+// route wrapper (`AutomationViewRoute.tsx`) owns IO, confirm dialogs, toasts,
+// and navigation.
 
 /**
  * `AutomationThreadData` plus two additive, OPTIONAL route-derived fields —
@@ -70,13 +73,6 @@ const STATUS_ICON: Record<AuStatusKind, IconName> = {
   running: 'Loader',
   success: 'CheckCircle',
   failed: 'AlertTriangle',
-};
-
-const RUN_STATUS_ICON: Record<ThreadRunStatus, IconName> = {
-  ok: 'CheckCircle',
-  fail: 'AlertCircle',
-  running: 'Loader',
-  pending: 'Clock',
 };
 
 // Poll lightly for the full lifetime of an in-flight run. Component cleanup
@@ -371,44 +367,171 @@ function GrantsLine({
   );
 }
 
-function RunEntry({
+// The node icon sits on the thread spine and encodes the trigger *origin*
+// (not just the run's outcome): a running run always spins its loader, a
+// failed one shows the alert, otherwise we read the origin label — the only
+// origin signal `ThreadRunDTO` carries — to distinguish a scheduled fire from
+// a manual/webhook/data one. Keeps the chip honest without a DTO change.
+function nodeIconFor(run: ThreadRunDTO): IconName {
+  if (run.status === 'running') return 'Loader';
+  if (run.status === 'fail') return 'AlertTriangle';
+  const origin = run.originLabel.toLowerCase();
+  if (origin.includes('manual')) return 'Play';
+  if (origin.includes('webhook')) return 'Webhook';
+  if (origin.includes('data') || origin.includes('watch')) return 'Folder';
+  if (origin.includes('replay')) return 'Refresh';
+  return 'Clock';
+}
+
+// One run = one chat turn. The automation "speaks" each time it fires: the
+// spine node marks the trigger, the header names the origin + time, the run
+// summary is the message body, and a quiet footer carries the telemetry. A
+// failed run speaks as an error you can retry in place; either way "Details"
+// opens the full step-by-step run-view. This is the compact register turned
+// into a conversation, over the same `ThreadRunDTO` (issue #539).
+function RunTurn({
   run,
   tokens,
   onOpen,
+  onRerun,
+  rerunBusy,
 }: {
   run: ThreadRunDTO;
   tokens?: number;
   onOpen: () => void;
+  onRerun: () => void;
+  rerunBusy: boolean;
 }): JSX.Element {
   const time = new Date(run.startedAt).toLocaleTimeString(undefined, {
     hour: 'numeric',
     minute: '2-digit',
   });
+  const running = run.status === 'running';
+  const failed = run.status === 'fail';
   return (
-    <button
-      type="button"
-      className={styles.entry}
-      data-run-status={run.status}
-      data-testid="run-entry"
-      onClick={onOpen}
-    >
-      <span className={styles.entryDot} data-run-status={run.status} aria-hidden="true" />
-      <span className={styles.entryOrigin}>
-        <span className={styles.entryOriginIc} aria-hidden="true">
-          <Icon name={RUN_STATUS_ICON[run.status]} size={12} />
+    <article className={styles.turn} data-run-status={run.status} data-testid="run-entry">
+      <span
+        className={styles.node}
+        data-run-status={run.status}
+        data-spin={running ? 'true' : undefined}
+        aria-hidden="true"
+      >
+        <Icon name={nodeIconFor(run)} size={12} />
+      </span>
+      <div className={styles.turnHead}>
+        <span className={styles.turnOrigin}>{run.originLabel}</span>
+        <span className={styles.turnTime}>{time}</span>
+        <span className={styles.turnHeadSpacer} />
+        {!running ? (
+          <button type="button" className={styles.turnRerun} disabled={rerunBusy} onClick={onRerun}>
+            <Icon name="Refresh" size={12} />
+            <span>Run again</span>
+          </button>
+        ) : null}
+      </div>
+
+      {running ? (
+        <div className={styles.turnGenerating}>
+          <span className={styles.turnSpinner} aria-hidden="true" />
+          <span>Working through your instructions…</span>
+        </div>
+      ) : failed ? (
+        <div className={styles.turnError}>
+          <div className={styles.turnErrorBody}>{run.summary}</div>
+          <div className={styles.turnErrorActions}>
+            <button
+              type="button"
+              className={cx(au.auBtn, au.auBtnPrimary, styles.turnErrorBtn)}
+              disabled={rerunBusy}
+              onClick={onRerun}
+            >
+              Try again
+            </button>
+            <button
+              type="button"
+              className={cx(au.auBtn, au.auBtnGhost, styles.turnErrorBtn)}
+              data-testid="run-details"
+              onClick={onOpen}
+            >
+              View details
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className={styles.turnBody}>{run.summary}</div>
+          <div className={styles.turnFoot}>
+            <span className={styles.turnOutcome} data-ok="true">
+              <Icon name="CheckCircle" size={13} />
+              <span>Done</span>
+            </span>
+            <span className={styles.turnTelem}>
+              {run.durationMs !== null ? <span>{fmtDuration(run.durationMs)}</span> : null}
+              {run.costUsd ? <span>{fmtCost(run.costUsd)}</span> : null}
+              {tokens ? <span>{fmtTokens(tokens)}</span> : null}
+            </span>
+            <span className={styles.turnHeadSpacer} />
+            <button
+              type="button"
+              className={styles.turnDetails}
+              data-testid="run-details"
+              onClick={onOpen}
+            >
+              <span>Details</span>
+              <Icon name="ArrowRight" size={12} />
+            </button>
+          </div>
+        </>
+      )}
+    </article>
+  );
+}
+
+// The steering composer. Replying is how you refine an automation now: with
+// "Apply to future runs" on, the message is a standing instruction the
+// schedule keeps; off, it's a one-off note framed for this thread only. Both
+// route through the existing conversational-revision path (`onSendMessage`).
+function Composer({ onSend }: { onSend: (text: string) => void }): JSX.Element {
+  const [draft, setDraft] = useState('');
+  const [applyFuture, setApplyFuture] = useState(true);
+  const trimmed = draft.trim();
+  const submit = (e: FormEvent): void => {
+    e.preventDefault();
+    if (!trimmed) return;
+    onSend(applyFuture ? trimmed : `For this thread only (don't change the schedule): ${trimmed}`);
+    setDraft('');
+  };
+  return (
+    <form className={styles.composerWrap} onSubmit={submit}>
+      <div className={styles.steerRow}>
+        <button
+          type="button"
+          className={cx(styles.steerToggle, applyFuture && styles.steerToggleOn)}
+          aria-pressed={applyFuture}
+          onClick={() => setApplyFuture((v) => !v)}
+        >
+          <span className={styles.steerSwitch} aria-hidden="true" />
+          <span>Apply to future runs</span>
+        </button>
+        <span className={styles.steerHint}>
+          {applyFuture
+            ? 'Becomes a standing instruction the schedule keeps.'
+            : "One-off — won't change the schedule."}
         </span>
-        {run.originLabel}
-      </span>
-      <span className={styles.entryTime}>{time}</span>
-      <span className={styles.entrySummary} data-run-status={run.status}>
-        {run.summary}
-      </span>
-      <span className={styles.entryMeta}>
-        {run.durationMs !== null ? <span>{fmtDuration(run.durationMs)}</span> : null}
-        {run.costUsd ? <span>{fmtCost(run.costUsd)}</span> : null}
-        {tokens ? <span>{fmtTokens(tokens)}</span> : null}
-      </span>
-    </button>
+      </div>
+      <div className={styles.composer}>
+        <input
+          className={styles.composerInput}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="Steer this automation, or ask a follow-up…"
+          aria-label="Message this automation"
+        />
+        <button type="submit" className={styles.composerSend} aria-label="Send" disabled={!trimmed}>
+          <Icon name="Send" size={15} />
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -421,6 +544,7 @@ export default function AutomationThreadScreen({
   onRunNow,
   onToggleEnabled,
   onDecideConsent,
+  onSendMessage,
   onCopyWebhook,
   onRotateWebhook,
   onDelete,
@@ -437,6 +561,11 @@ export default function AutomationThreadScreen({
   const runCountAtFire = useRef(0);
   const [regenBusy, setRegenBusy] = useState(false);
   const [decidingId, setDecidingId] = useState<string | null>(null);
+  // The header's overflow menu (Edit / Pause-Resume / Delete). Closes on
+  // Escape or an outside click — the document listeners are only attached
+  // while it's open and torn down on close/unmount.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuWrapRef = useRef<HTMLDivElement | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -471,6 +600,24 @@ export default function AutomationThreadScreen({
     }, POLL_INTERVAL_MS);
     return () => clearInterval(id);
   }, [state, reload, awaitingRun]);
+
+  // Dismiss the overflow menu on Escape or an outside click. Listeners live
+  // only for the menu's open lifetime.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    const onClick = (e: MouseEvent): void => {
+      if (!menuWrapRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('mousedown', onClick);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onClick);
+    };
+  }, [menuOpen]);
 
   if (state === 'loading' || state === 'error' || state === 'missing') {
     return (
@@ -547,15 +694,6 @@ export default function AutomationThreadScreen({
   return (
     <div className={styles.screen} data-hue={header.hue} data-testid="automation-thread">
       <div className={styles.head}>
-        <div className={au.auCrumb}>
-          <button type="button" onClick={onBack}>
-            Automations
-          </button>
-          <span className={au.auCrumbSep} aria-hidden="true">
-            <Icon name="ArrowRight" size={12} />
-          </span>
-          <span>{header.name}</span>
-        </div>
         <div className={styles.headMain}>
           <span className={au.auGlyph} data-hue={header.hue} data-size="lg">
             <Icon name={header.glyphIcon as IconName} size={22} />
@@ -574,32 +712,24 @@ export default function AutomationThreadScreen({
               </div>
             ) : null}
           </div>
-          <span
-            className={au.auStatus}
-            data-tone={header.statusKind}
-            data-au-status={header.statusKind}
-            role="status"
-          >
+          {/* Header stays quiet in the happy path: the compile state already
+              shows as its own turn in the thread (Compiling… / Plan ready /
+              Compile failed → Retry button), and enable/disable lives in the
+              ⋯ menu. Only "Paused" is worth a persistent header badge, since
+              nothing else signals a stopped automation at a glance. */}
+          {header.statusKind === 'paused' ? (
             <span
-              className={au.auStatusIc}
-              data-spin={header.statusKind === 'running' ? 'true' : undefined}
-              aria-hidden="true"
+              className={au.auStatus}
+              data-tone={header.statusKind}
+              data-au-status={header.statusKind}
+              role="status"
             >
-              <Icon name={STATUS_ICON[header.statusKind]} size={12} />
+              <span className={au.auStatusIc} aria-hidden="true">
+                <Icon name={STATUS_ICON[header.statusKind]} size={12} />
+              </span>
+              <span>{header.statusLabel}</span>
             </span>
-            <span>{header.statusLabel}</span>
-          </span>
-          <label className={styles.switch} title={header.enabled ? 'Disable' : 'Enable'}>
-            <input
-              type="checkbox"
-              role="switch"
-              aria-checked={header.enabled}
-              aria-label={`${header.enabled ? 'Disable' : 'Enable'} ${header.name}`}
-              checked={header.enabled}
-              onChange={(e) => doToggle(e.target.checked)}
-            />
-            <span className={styles.switchTrack} aria-hidden="true" />
-          </label>
+          ) : null}
           <div className={au.auActions}>
             {header.statusLabel === 'Compile failed' ? (
               <button
@@ -627,24 +757,64 @@ export default function AutomationThreadScreen({
               <Icon name="Play" size={14} />
               <span>{running ? 'Starting…' : 'Run now'}</span>
             </button>
-            <button
-              type="button"
-              className={cx(au.auBtn, au.auBtnGhost)}
-              disabled={busy}
-              onClick={onEdit}
-            >
-              <Icon name="Pencil" size={14} />
-              <span>Edit</span>
-            </button>
-            <button
-              type="button"
-              className={cx(au.auBtn, au.auBtnGhost, styles.btnDanger)}
-              disabled={busy}
-              onClick={doDelete}
-            >
-              <Icon name="Trash" size={14} />
-              <span>Delete</span>
-            </button>
+            <div className={styles.menuWrap} ref={menuWrapRef}>
+              <button
+                type="button"
+                className={styles.menuTrigger}
+                data-testid="automation-menu-trigger"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                aria-label="More actions"
+                disabled={busy}
+                onClick={() => setMenuOpen((v) => !v)}
+              >
+                <Icon name="MoreHoriz" size={18} />
+              </button>
+              {menuOpen ? (
+                <div className={styles.menu} role="menu">
+                  <button
+                    type="button"
+                    className={styles.menuItem}
+                    role="menuitem"
+                    data-testid="automation-menu-edit"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onEdit();
+                    }}
+                  >
+                    <Icon name="Pencil" size={15} />
+                    <span>Edit setup</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.menuItem}
+                    role="menuitem"
+                    data-testid="automation-menu-toggle"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      doToggle(!header.enabled);
+                    }}
+                  >
+                    <Icon name={header.enabled ? 'Pause' : 'Play'} size={15} />
+                    <span>{header.enabled ? 'Pause' : 'Resume'}</span>
+                  </button>
+                  <div className={styles.menuDivider} role="separator" />
+                  <button
+                    type="button"
+                    className={cx(styles.menuItem, styles.menuItemDanger)}
+                    role="menuitem"
+                    data-testid="automation-menu-delete"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      doDelete();
+                    }}
+                  >
+                    <Icon name="Trash" size={15} />
+                    <span>Delete</span>
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
         <TriggerChips
@@ -702,17 +872,21 @@ export default function AutomationThreadScreen({
                 <span>{g.dateGroup}</span>
               </div>
               {g.runs.map((run) => (
-                <RunEntry
+                <RunTurn
                   key={run.runId}
                   run={run}
                   tokens={d.runTokens?.[run.runId]}
+                  rerunBusy={busy || running}
                   onOpen={() => onOpenRun(run.runId)}
+                  onRerun={doRun}
                 />
               ))}
             </div>
           ))
         )}
       </div>
+
+      <Composer onSend={onSendMessage} />
     </div>
   );
 }

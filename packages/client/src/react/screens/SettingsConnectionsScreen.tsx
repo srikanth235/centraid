@@ -466,10 +466,31 @@ function SetupGuide({ steps }: { steps: string[] }): JSX.Element {
   );
 }
 
+/**
+ * A connection's identity is `(kind, label)` — so a second account for the same
+ * connector must carry a distinct label or it silently reuses/overwrites the
+ * first. When a label is already taken we suffix ` 2`, ` 3`, … so the default
+ * never collides; the owner is still nudged to rename it to something meaningful.
+ */
+function withUniqueLabel(base: string, taken: readonly string[]): string {
+  const used = new Set(taken.map((l) => l.trim().toLowerCase()));
+  if (!used.has(base.trim().toLowerCase())) return base;
+  for (let n = 2; ; n++) {
+    const candidate = `${base} ${n}`;
+    if (!used.has(candidate.toLowerCase())) return candidate;
+  }
+}
+
+/** Labels of existing connections for a connector kind — powers multi-account uniqueness. */
+function labelsForKind(rows: ConnectionRowDTO[] | null, kind: string): string[] {
+  return (rows ?? []).filter((r) => r.kind === kind).map((r) => r.label);
+}
+
 function ConnectForm({
   featured,
   busy,
   oauthCallbackUri,
+  existingLabels,
   onCancel,
   onSubmit,
 }: {
@@ -477,13 +498,21 @@ function ConnectForm({
   busy: boolean;
   /** Shown for oauth2 so the owner can paste it into Google Cloud Console etc. */
   oauthCallbackUri: string | null;
+  /** Labels already in use for this connector kind — for multi-account uniqueness. */
+  existingLabels: readonly string[];
   onCancel: () => void;
   onSubmit: (input: ConnectionFormInput) => void;
 }): JSX.Element {
   const provider = featured.provider;
   const isOauth = provider.credKind === 'oauth2';
-  const [label, setLabel] = useState(
-    () => `${provider.name.split(' (')[0] ?? provider.name} · ${featured.meta.name}`,
+  const [label, setLabel] = useState(() =>
+    withUniqueLabel(
+      `${provider.name.split(' (')[0] ?? provider.name} · ${featured.meta.name}`,
+      existingLabels,
+    ),
+  );
+  const labelTaken = existingLabels.some(
+    (l) => l.trim().toLowerCase() === label.trim().toLowerCase(),
   );
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
@@ -515,23 +544,6 @@ function ConnectForm({
 
   return (
     <div className={styles.wizard} data-testid="connector-wizard">
-      <div className={styles.authKindBanner} data-kind={provider.credKind}>
-        {isOauth ? (
-          <>
-            <strong>OAuth 2.0</strong>
-            <span>
-              Use your own client ID and secret (BYO). After you save, Centraid opens the provider
-              consent screen to authorize access.
-            </span>
-          </>
-        ) : (
-          <>
-            <strong>API key</strong>
-            <span>Paste a personal access token or integration secret for this service.</span>
-          </>
-        )}
-      </div>
-
       <label className={styles.wizardField}>
         <span className={styles.wizardLabel}>Label</span>
         <input
@@ -539,7 +551,17 @@ function ConnectForm({
           type="text"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
+          data-testid="connector-label-input"
         />
+        <span className={styles.wizardHint} data-tone={labelTaken ? 'warn' : undefined}>
+          {labelTaken
+            ? 'A connection with this label already exists — saving will update it. Rename to add a separate account.'
+            : existingLabels.length > 0
+              ? `You already have ${existingLabels.length} ${
+                  existingLabels.length === 1 ? 'account' : 'accounts'
+                } connected here. Give this one a distinct name (e.g. “${featured.meta.name} · work”).`
+              : 'Name this connection. Use a distinct label per account to connect more than one.'}
+        </span>
       </label>
 
       {isOauth ? (
@@ -622,11 +644,14 @@ function scopeLabel(scope: string): string {
 function AssistConnectForm({
   featured,
   busy,
+  existingLabels,
   onCancel,
   onSubmit,
 }: {
   featured: FeaturedConnector;
   busy: boolean;
+  /** Labels already in use for this connector kind — for multi-account uniqueness. */
+  existingLabels: readonly string[];
   onCancel: () => void;
   onSubmit: (input: ConnectionFormInput) => void;
 }): JSX.Element {
@@ -652,7 +677,12 @@ function AssistConnectForm({
     )
       ? featured.scope
       : permitted.find((entry) => entry.tier === 'standard')?.scope;
-  const [label, setLabel] = useState(() => `Google · ${featured.meta.name}`);
+  const [label, setLabel] = useState(() =>
+    withUniqueLabel(`Google · ${featured.meta.name}`, existingLabels),
+  );
+  const labelTaken = existingLabels.some(
+    (l) => l.trim().toLowerCase() === label.trim().toLowerCase(),
+  );
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(initialScope ? [initialScope] : []),
   );
@@ -670,13 +700,6 @@ function AssistConnectForm({
   }
   return (
     <div className={styles.wizard} data-testid="connector-assist-wizard">
-      <div className={styles.authKindBanner} data-kind="oauth2">
-        <strong>Centraid Assist</strong>
-        <span>
-          Sign in with Google. The browser only couriers a short-lived authorization code; tokens go
-          directly to your gateway and are never stored by Centraid cloud services.
-        </span>
-      </div>
       <label className={styles.wizardField}>
         <span className={styles.wizardLabel}>Label</span>
         <input
@@ -684,7 +707,17 @@ function AssistConnectForm({
           type="text"
           value={label}
           onChange={(event) => setLabel(event.target.value)}
+          data-testid="connector-label-input"
         />
+        <span className={styles.wizardHint} data-tone={labelTaken ? 'warn' : undefined}>
+          {labelTaken
+            ? 'A connection with this label already exists — saving will update it. Rename to add a separate account.'
+            : existingLabels.length > 0
+              ? `You already have ${existingLabels.length} ${
+                  existingLabels.length === 1 ? 'account' : 'accounts'
+                } connected here. Give this one a distinct name (e.g. “${featured.meta.name} · work”).`
+              : 'Name this connection. Use a distinct label per account to connect more than one.'}
+        </span>
       </label>
       <fieldset className={styles.scopePicker}>
         <legend className={styles.wizardLabel}>Google capabilities</legend>
@@ -1349,6 +1382,9 @@ export default function SettingsConnectionsScreen({
                       featured={sheet.featured}
                       busy={saving}
                       oauthCallbackUri={oauthCallbackUri}
+                      /* Reconnect re-authorizes THIS connection: keep its label
+                         stable (no uniqueness suffix) so it updates in place. */
+                      existingLabels={[]}
                       onCancel={() =>
                         setSheet({
                           kind: 'connection',
@@ -1545,6 +1581,7 @@ export default function SettingsConnectionsScreen({
                     <AssistConnectForm
                       featured={sheet.featured}
                       busy={saving}
+                      existingLabels={labelsForKind(rows, sheet.featured.kind)}
                       onCancel={() =>
                         setSheet({
                           kind: 'detail',
@@ -1559,6 +1596,7 @@ export default function SettingsConnectionsScreen({
                       featured={sheet.featured}
                       busy={saving}
                       oauthCallbackUri={oauthCallbackUri}
+                      existingLabels={labelsForKind(rows, sheet.featured.kind)}
                       onCancel={() =>
                         setSheet({
                           kind: 'detail',

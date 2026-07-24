@@ -90,6 +90,13 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
+/* Two-up crowds the tile (name + auth badge collide) once the pane narrows —
+   drop to a single column so the label and badge always have room. */
+@media (max-width: 760px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
 @media (max-width: 640px) {
   .grid {
     grid-template-columns: 1fr;
@@ -547,6 +554,18 @@
   font-size: 12px;
   font-weight: 500;
   color: var(--ink);
+}
+/* Helper caption under a wizard input — explains naming / multi-account, and
+   flips amber when the typed label would overwrite an existing connection. */
+.wizardHint {
+  display: block;
+  margin-top: 6px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-4);
+}
+.wizardHint[data-tone='warn'] {
+  color: var(--c-amber);
 }
 .textInput {
   width: 100%;

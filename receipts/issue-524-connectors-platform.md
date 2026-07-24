@@ -207,6 +207,7 @@ PASS – Checklist matches issue #524 acceptance criteria.
 | codex-019f8e48-8ec-1784824210-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #524 | gpt-5.6-sol | 303537 | 0 | 7401984 | 18460 | 321997 | 2.8862 | 4459351 | 0 | 160715008 | 382600 | fix(connectors): prevent pagination data loss (#524) |
 | codex-019f8e48-8ec-1784829896-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #524 | gpt-5.6-sol | 596747 | 0 | 36604416 | 76376 | 673123 | 11.7886 | 5056098 | 0 | 197319424 | 458976 | fix(connectors): harden credential-bound pulls (#524) |
 | codex-019f8e48-8ec-1784829961-1 | codex | 019f8e48-8ec9-7800-9630-fb1e00b1121b | #524 | gpt-5.6-sol | 8905 | 0 | 291584 | 944 | 9849 | 0.1093 | 5065003 | 0 | 197611008 | 459920 | fix(connectors): harden credential-bound pulls (#524) |
+| claude-code-9bc5e3aa-00b-1784903813-1 | claude-code | 9bc5e3aa-00b6-4796-bdfc-d88220157baa | #524 | claude-opus-4-8 | 6 | 4143 | 624702 | 7011 | 11160 | 0.5135 | 5931 | 13436480 | 573952568 | 2502309 | feat(connectors): distinct labels for multi-account connections (#524)A connecti |
 ## Steering
 
 **Check 1 — every human-steering event is recorded in ### Steering under ## Accounting**

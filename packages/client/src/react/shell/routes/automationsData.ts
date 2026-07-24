@@ -168,6 +168,11 @@ export function buildOverviewData(
           ? `Last run ${relativeTime(new Date(last.run.startedAt).toISOString())}`
           : 'No runs yet',
         lastRunOk: last?.run.endedAt !== undefined ? last.run.ok : null,
+        lastRunSummary: last
+          ? last.run.ok
+            ? (last.run.summary ?? null)
+            : (last.run.error ?? 'Failed')
+          : null,
         name: r.name,
         nextRunLabel: nextRun ? relativeRunLabel(nextRun) : null,
         ref: r.ref,

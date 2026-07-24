@@ -41,6 +41,63 @@ bun run build && centraid-gateway serve --data-dir ./gw-data --host 127.0.0.1 --
 
 Parameterize ports via CLI flags / env documented on each package; do not hardcode foreign ports into other apps without a single config owner.
 
+## Preview the web app in a browser against an existing vault
+
+The desktop app provisions its vault **in-process**, so a fresh browser origin
+served by a standalone gateway lands on onboarding rather than your data. Do
+**not** pick **This Mac** in that onboarding — it tries to *create* a vault over
+HTTP, which the gateway rejects (vault creation is admin-only, issue #289, so you
+get `Create vaults on the gateway host`). The supported way to reach an existing
+vault from a browser is **pair a device**, exactly like a phone or a second
+desktop:
+
+1. **Serve the existing vault.** Point a gateway at the data dir that already has
+   the vault. Desktop's lives at
+   `~/Library/Application Support/@centraid/desktop/gateways/local`.
+
+   ```sh
+   centraid-gateway serve --data-dir "<data-dir>" --host 127.0.0.1 --port 17832
+   ```
+
+   The gateway serves the **API** on `--port` and the **web UI on a second port**
+   — read the exact `web app: http://127.0.0.1:<p>` line it prints on startup.
+   The web UI it serves is the **build-time snapshot** embedded in
+   `packages/gateway/dist/web`. To preview *uncommitted client edits*, rebuild and
+   re-embed first (no full gateway rebuild needed):
+
+   ```sh
+   bun run --cwd apps/web build && node packages/gateway/scripts/embed-web.mjs
+   ```
+
+2. **Mint a pairing ticket** for the vault (one line; redeems over plain HTTP via
+   `POST /centraid/_gateway/pair`, issue #376):
+
+   ```sh
+   centraid-gateway pair --data-dir "<same data-dir>" --vault "<name-or-id>"
+   ```
+
+3. **Open the web UI in the browser pane.** Register the web port in
+   `.claude/launch.json` and start it with the preview tool — ad-hoc navigation to
+   a bare `http://localhost:<port>` is policy-blocked, but a `preview_start`-managed
+   server (a config with just a `url` **attaches** to the already-running gateway)
+   is the sanctioned path:
+
+   ```json
+   { "version": "0.0.1",
+     "configurations": [{ "name": "centraid-web", "url": "http://127.0.0.1:17833", "port": 17833 }] }
+   ```
+
+4. In onboarding choose **Existing gateway → paste the ticket** (the ConnectFlow,
+   `packages/client/src/react/shell/routes/ConnectFlow.tsx`). The ticket redeems
+   for a per-device HTTP token and connects to the existing vault — its
+   automations, runs, and data appear as in desktop.
+
+Alternatively pin the loopback bearer with `CENTRAID_GATEWAY_TOKEN=<hex>` on the
+`serve` (table above) and connect by URL + token; the pairing ticket is the less
+fiddly path for a browser session. Do not point a standalone gateway at a data
+dir the desktop app is **also** running against — two writers on one SQLite vault
+(see [traps/wal-checkpoint.md](traps/wal-checkpoint.md)).
+
 ## Worktrees
 
 Agents often work in git worktrees (including under `.claude/worktrees/`).

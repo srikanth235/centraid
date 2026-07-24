@@ -353,6 +353,10 @@ export interface AuOverviewRowDTO {
   triggerLabel: string;
   integrations: string[];
   lastRunLabel: string;
+  /** The most recent run's message — its summary, or the error text when it
+   *  failed — shown as the inbox row's preview line. `null` before the first
+   *  run (issue #539, automation-as-conversation inbox). */
+  lastRunSummary: string | null;
   statusKind: AuStatusKind;
   statusLabel: string;
   /** Whether the automation's most recent run succeeded — `null` when it has
@@ -944,6 +948,9 @@ export interface RunViewSnapshot {
     cost: string;
     steps: string;
     model: string;
+    /** False for deterministic / zero-usage runs (no tokens, cost, or steps).
+     * The Usage card then shows a single caption instead of empty rows. */
+    hasUsage: boolean;
   };
   logKpi: {
     triggerIcon: string;
