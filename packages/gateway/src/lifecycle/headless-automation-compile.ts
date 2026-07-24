@@ -4,6 +4,7 @@ import {
   ConversationStore,
   makeJournalDbProvider,
   type ConversationRunner,
+  type RunnerKind,
   type TurnStreamEvent,
 } from '@centraid/app-engine';
 import { validateManifest, type Manifest } from '@centraid/automation';
@@ -19,6 +20,10 @@ export interface HeadlessCompileOptions {
   automationRef: string;
   automationName: string;
   instructions: string;
+  /** Validated manifest harness override. */
+  runnerKind?: RunnerKind;
+  /** Explicit manifest/prefs-resolved model for this compile. */
+  model?: string;
   onSuccess: () => Promise<void>;
   onFailure?: (error: string) => Promise<void> | void;
   runId?: string;
@@ -136,6 +141,8 @@ export async function runHeadlessAutomationCompile(opts: HeadlessCompileOptions)
       message,
       register: 'build',
       extraSystemPrompt: '',
+      ...(opts.runnerKind ? { runnerKind: opts.runnerKind } : {}),
+      ...(opts.model ? { model: opts.model } : {}),
       abortSignal: new AbortController().signal,
       onEvent,
     });

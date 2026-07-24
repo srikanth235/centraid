@@ -15,6 +15,7 @@ import { cx } from '../ui/cx.js';
 import au from '../styles/automation.module.css';
 import inlineEmptyCss from '../styles/inlineEmpty.module.css';
 import { AutomationEditorConnectorsPicker } from './AutomationEditorConnectorsPicker.js';
+import { AutomationEditorAgentPicker } from './AutomationEditorAgentPicker.js';
 import styles from './AutomationEditorScreen.module.css';
 
 // Automation editor — shared create/edit form (Automations UI revamp, see
@@ -459,6 +460,8 @@ export default function AutomationEditorScreen({
   const [state, setState] = useState<AutomationEditorData | 'loading' | 'error'>('loading');
   const [name, setName] = useState('');
   const [instructions, setInstructions] = useState('');
+  const [runner, setRunner] = useState<string | null | undefined>(undefined);
+  const [model, setModel] = useState<string | null | undefined>(undefined);
   const [triggers, setTriggers] = useState<TriggerDraft[]>([]);
   const [entityTypes, setEntityTypes] = useState<string[]>([]);
   const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
@@ -506,6 +509,8 @@ export default function AutomationEditorScreen({
     if (!resetForm) return;
     setName(d.name);
     setInstructions(d.instructions);
+    setRunner(d.runner);
+    setModel(d.model);
     baselineInstructionsRef.current = d.instructions;
     setTriggers(d.triggers.map(loadedTrigger));
     const bound = d.connectors?.connections ?? [];
@@ -744,6 +749,8 @@ export default function AutomationEditorScreen({
         name: name.trim(),
         triggers: builtTriggers,
         connections,
+        ...(runner !== undefined ? { runner } : {}),
+        ...(model !== undefined ? { model } : {}),
       });
       if (ok) {
         baselineInstructionsRef.current = instructions;
@@ -1233,6 +1240,17 @@ export default function AutomationEditorScreen({
         </div>
       ) : null}
       <div className={styles.instrToolbar} ref={connectorsWrapRef}>
+        <AutomationEditorAgentPicker
+          runners={d.agentRunners ?? []}
+          runner={runner}
+          model={model}
+          defaultRunnerKind={d.defaultRunnerKind}
+          defaultModel={d.defaultModel}
+          onChange={(next) => {
+            setRunner(next.runner);
+            setModel(next.model);
+          }}
+        />
         <button
           type="button"
           className={styles.instrChip}

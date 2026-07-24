@@ -28,6 +28,8 @@ import { buildFeatured, type ConnectionRowDTO } from '../../screens/SettingsConn
 import { useShellActions } from '../actions.js';
 import PageScroll from '../PageScroll.js';
 import { openWebhookReveal } from '../webhookReveal.js';
+import { buildAutomationAgentEditorData } from './automationEditorAgentData.js';
+import { buildCreateAutomationEditorData } from './automationEditorCreateData.js';
 import { loadAutomationEditorData } from './automationEditorData.js';
 import { deriveAutomationHero } from './automationsData.js';
 import { decideConsentItem, filterConsentForAutomation } from './automationThreadData.js';
@@ -36,6 +38,7 @@ import {
   loadConnectionProvidersData,
   loadConnectionsData,
 } from './settingsConnectionsData.js';
+import { loadProviders } from './settingsProvidersData.js';
 
 /** Load-side trigger shape → the editor DTO's display shape (webhook needs
  *  its minted id + pending flag so the Connectors tab can render the URL). */
@@ -59,45 +62,6 @@ function triggerToDto(t: CentraidAutomationRow['triggers'][number]): AuEditorTri
         ...(t.every ? { every: t.every } : {}),
       };
   }
-}
-
-/** The initial editor DTO for create mode (no existing row). Pure so the
- *  prefill contract — a `templateId` seeding a template trigger, or a
- *  `watchEntity` (an entity KIND, `schema.table`) seeding a data trigger that
- *  watches it — is unit-testable without a live gateway. A template's own
- *  trigger kind wins over `watchEntity` (a template is the more specific seed);
- *  with neither, the form opens trigger-less exactly as before. Mirrors how the
- *  screen already renders any data trigger in the DTO as a fully editable row,
- *  so a seeded `{ kind: 'data' }` needs zero screen changes (issue #446). */
-export function buildCreateAutomationEditorData(opts: {
-  template?: { name: string; desc: string; triggerKind?: 'cron' | 'webhook' };
-  watchEntity?: string;
-  instructions: string;
-  name: string;
-}): AutomationEditorData {
-  const { template, watchEntity, instructions, name } = opts;
-  const triggers: AuEditorTriggerDTO[] =
-    template?.triggerKind === 'webhook'
-      ? [{ id: null, kind: 'webhook', pending: true }]
-      : template?.triggerKind === 'cron'
-        ? [{ expr: '0 9 * * *', kind: 'cron' }]
-        : watchEntity
-          ? [{ entities: [watchEntity], kind: 'data' }]
-          : [];
-  return {
-    automationId: null,
-    connectors: null,
-    consent: { grants: [], outbox: [], parked: [] },
-    enabled: false,
-    instructions: template?.desc ?? instructions,
-    mode: 'create',
-    model: null,
-    name: template?.name ?? name,
-    onFailure: null,
-    rowId: null,
-    triggers,
-    webhook: null,
-  };
 }
 
 export function vaultForTriggers(triggers: readonly (AuEditorTriggerDTO | AuEditorTriggerInput)[]) {
@@ -213,21 +177,25 @@ export default function AutomationEditorRoute({
           rowRef.current = loaded.row;
           refIdRef.current = loaded.row?.ref ?? automationId ?? null;
           if (!loaded.row) {
-            const template = templateId
-              ? (await listTemplates()).find((entry) => entry.id === templateId)
-              : undefined;
+            const [templates, agentStatus] = await Promise.all([
+              templateId ? listTemplates() : Promise.resolve([]),
+              loadProviders(),
+            ]);
+            const template = templates.find((entry) => entry.id === templateId);
             return buildCreateAutomationEditorData({
+              agent: buildAutomationAgentEditorData(agentStatus),
               ...(template ? { template } : {}),
               ...(watchEntity ? { watchEntity } : {}),
               instructions: loaded.instructions,
               name: loaded.name,
             });
           }
-          const [{ baseUrl }, blocking, grants, agents] = await Promise.all([
+          const [{ baseUrl }, blocking, grants, agents, agentStatus] = await Promise.all([
             auth(),
             getBlocking(),
             listOutboxGrants(),
             listAgents(),
+            loadProviders(),
           ]);
           const hero = deriveAutomationHero(loaded.row, baseUrl);
           return {
@@ -245,8 +213,10 @@ export default function AutomationEditorRoute({
             name: loaded.name,
             onFailure: loaded.onFailure,
             rowId: loaded.rowId,
+            runner: loaded.runner,
             triggers: loaded.triggers.map(triggerToDto),
             webhook: hero.webhook,
+            ...buildAutomationAgentEditorData(agentStatus),
           };
         }}
         onSave={async (fields) => {
@@ -263,6 +233,8 @@ export default function AutomationEditorRoute({
                   ? { vault: vaultForTriggers(fields.triggers) }
                   : {}),
                 ...(connections !== undefined ? { connections } : { connections: [] }),
+                ...(fields.runner !== undefined ? { runner: fields.runner } : {}),
+                ...(fields.model !== undefined ? { model: fields.model } : {}),
               });
               if (row) rowRef.current = row;
               // A `{kind:'webhook'}` trigger that didn't exist before mints a
@@ -288,6 +260,8 @@ export default function AutomationEditorRoute({
                 ? { vault: vaultForTriggers(fields.triggers) }
                 : {}),
               ...(connections ? { connections } : {}),
+              ...(fields.runner ? { runner: fields.runner } : {}),
+              ...(fields.model ? { model: fields.model } : {}),
             });
             if (row) {
               rowRef.current = row;

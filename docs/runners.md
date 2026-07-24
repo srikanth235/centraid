@@ -124,6 +124,23 @@ ACP has no per-prompt model field. An agent advertises `configOptions` on the `s
 
 Kinds whose picker offers capability tiers (`smart`/`balanced`/`fast`) set `resolveModel` to map a tier to the runtime's native alias before matching. When the agent advertises no model option, or offers nothing matching, the turn emits a `notice` — never a silent drop.
 
+An automation can pin both choices in `automation.json`:
+`requires.runner` is an open, non-empty registry key and `requires.model` is
+the model id/alias. At execution time the gateway accepts the runner only when
+the current `RUNNER_KINDS` registry recognizes it; an unknown future/removed
+key falls back to `runner.automations` (then the default agent). Model
+precedence is the manifest pin, `model.<resolved-runner>.automations`, the
+runner-wide default, then the backend default. The same resolution feeds
+headless compile plus manual, scheduled, and webhook fires. Any
+automation-specific conversational route must reuse this resolver rather than
+reading subsystem prefs directly, so authoring and execution cannot silently
+use different harnesses.
+
+`agent.runner.binPath` and `agent.runner.extraArgs` belong only to the
+configured default runner. A manifest pin to another registered kind uses that
+kind's registry launch defaults; never carry one runner's executable or flags
+across a per-turn override.
+
 ### Usage
 
 `usage_update` carries only context-window `used`/`size` plus a **cumulative** `cost { amount, currency }`; the token breakdown rides on the `session/prompt` result as `PromptResponse.usage`. Both are cumulative per session, which equals per turn here because every turn spawns a fresh agent process whose counters start at zero.

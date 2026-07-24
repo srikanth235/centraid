@@ -53,6 +53,8 @@ export interface ScaffoldOptions {
   triggers?: readonly Trigger[];
   /** App ids this automation is associated with. */
   apps?: readonly string[];
+  /** Open runner-registry key to pin for this automation. */
+  runner?: string;
   /** Model `ctx.agent` calls route through (`provider/model-id`). */
   model?: string;
   /** Run-retention policy. Defaults to keeping the last 100 runs. */
@@ -184,6 +186,7 @@ function starterManifest(name: string, opts: ScaffoldOptions): Manifest {
   // It is left out until chosen so it is never a misleading default; a handler
   // that never calls ctx.agent needs no `requires` at all.
   const requires: Record<string, unknown> = {};
+  if (opts.runner?.trim()) requires.runner = opts.runner.trim();
   if (opts.model?.trim()) requires.model = opts.model.trim();
   const raw: Record<string, unknown> = {
     name,

@@ -24,14 +24,17 @@ import {
   type ModelSubsystem,
 } from '@centraid/app-engine';
 import { runTurn } from './runtime.js';
-import type { RunnerPrefs } from './types.js';
+import type { RunnerKind, RunnerPrefs } from './types.js';
 
 export interface MakeConversationRunnerOptions {
   /** Loader for the user's persisted runner prefs. Called per turn so
    *  the adapter picks up settings changes without a runtime restart.
    *  Receives `subsystem` when one is configured, so a host that scopes
    *  runner selection per subsystem can answer with the right kind. */
-  prefsLoader: (subsystem?: ModelSubsystem) => Promise<RunnerPrefs | undefined>;
+  prefsLoader: (
+    subsystem?: ModelSubsystem,
+    runnerKind?: RunnerKind,
+  ) => Promise<RunnerPrefs | undefined>;
   /** Which subsystem's runner/model prefs this adapter rides. Unset →
    *  the host's default agent (the pre-existing behavior). */
   subsystem?: ModelSubsystem;

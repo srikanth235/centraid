@@ -19,7 +19,10 @@ afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
-async function harness(runner: ConversationRunner) {
+async function harness(
+  runner: ConversationRunner,
+  agent: { runnerKind?: 'claude-code'; model?: string } = {},
+) {
   const dir = await tempDir('centraid-headless-compile-');
   dirs.push(dir);
   const journalDbFile = path.join(dir, 'journal.db');
@@ -35,6 +38,7 @@ async function harness(runner: ConversationRunner) {
     automationRef: 'digest/main',
     automationName: 'Daily digest',
     instructions: 'Summarize mail about @[core.party/p-1].',
+    ...agent,
     onSuccess,
     onFailure,
     runId: 'compile-1',
@@ -49,18 +53,27 @@ async function harness(runner: ConversationRunner) {
 describe('runHeadlessAutomationCompile', () => {
   it('records a successful compile turn on the stable automation conversation', async () => {
     let receivedDraftSessionId: string | undefined;
+    let receivedRunnerKind: string | undefined;
+    let receivedModel: string | undefined;
     const runner: ConversationRunner = {
       run: async (input) => {
         receivedDraftSessionId = input.draftSessionId;
+        receivedRunnerKind = input.runnerKind;
+        receivedModel = input.model;
         input.onEvent({ type: 'final', text: 'Files ready.' });
         input.onEvent({ type: 'usage', model: 'test-model', inputTokens: 12, outputTokens: 4 });
         return { adapterKind: 'codex' };
       },
     };
-    const { store, onSuccess, onFailure } = await harness(runner);
+    const { store, onSuccess, onFailure } = await harness(runner, {
+      runnerKind: 'claude-code',
+      model: 'claude-custom',
+    });
     expect(onSuccess).toHaveBeenCalledOnce();
     expect(onFailure).not.toHaveBeenCalled();
     expect(receivedDraftSessionId).toBe('compile-digest-1');
+    expect(receivedRunnerKind).toBe('claude-code');
+    expect(receivedModel).toBe('claude-custom');
     expect(store.getConversation('digest/main')?.title).toBe('Daily digest');
     const turn = store.getTurn('compile-1');
     expect(turn?.conversationId).toBe('digest/main');

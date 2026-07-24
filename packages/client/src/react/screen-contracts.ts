@@ -573,9 +573,24 @@ export interface AutomationEditorData {
    *  this one hands off to when a run fails. Optional/additive. */
   onFailure?: string | null;
   /** Notifications tab: manifest `requires.model` (falling back to
-   *  `costEstimate.model`) — the model the compiled plan runs on.
-   *  Optional/additive. */
+   *  the selected runner's effective default) — the model the compiled plan
+   *  runs on. `null` means "Use default". Optional/additive. */
   model?: string | null;
+  /** Manifest `requires.runner`; `null` means the automations subsystem runner. */
+  runner?: AgentRunnerKind | null;
+  /** Effective automations subsystem runner inherited when `runner` is null. */
+  defaultRunnerKind?: AgentRunnerKind;
+  /** Effective model inherited for `defaultRunnerKind` when `model` is null. */
+  defaultModel?: string | null;
+  /** Dynamic gateway runner/model catalog used by the editor Agent control. */
+  agentRunners?: Array<{
+    kind: AgentRunnerKind;
+    label: string;
+    accent: string;
+    connected: boolean;
+    models: AgentModelDTO[];
+    defaultModel: string | null;
+  }>;
 }
 export interface AutomationEditorSaveFields {
   name: string;
@@ -586,6 +601,10 @@ export interface AutomationEditorSaveFields {
    * Soft bindings only (agent automations) — connection id + kind + label.
    */
   connections?: Array<{ connectionId: string; kind: string; label: string }>;
+  /** Explicit harness pin; `null` clears back to the automations default. */
+  runner?: AgentRunnerKind | null;
+  /** Explicit model pin; `null` clears back to the selected runner's default. */
+  model?: string | null;
 }
 /** Credential payload when attaching a catalog connector from the editor. */
 export interface AuEditorConnectFormInput {

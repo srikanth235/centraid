@@ -17,7 +17,7 @@
  */
 
 import type { RunKind } from './schema.js';
-import type { TurnAttachment } from './turn.js';
+import type { RunnerKind, TurnAttachment } from './turn.js';
 
 /**
  * Normalized stream events both adapters emit. The route handler translates
@@ -166,6 +166,8 @@ export interface ConversationTurnInput {
    * live schema). Adapters splice this into their own system-prompt flag.
    */
   extraSystemPrompt: string;
+  /** Optional validated per-turn harness override (for automation manifests). */
+  runnerKind?: RunnerKind;
   model?: string;
   thinking?: string;
   abortSignal: AbortSignal;

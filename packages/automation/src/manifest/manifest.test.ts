@@ -151,6 +151,19 @@ describe('validateManifest', () => {
     ).toThrow(ManifestError);
   });
 
+  it('round-trips an open runner key and rejects only empty/non-string values', () => {
+    expect(
+      validateManifest(baseManifest({ requires: { runner: 'future-registry-runner' } })).requires
+        .runner,
+    ).toBe('future-registry-runner');
+    expect(() => validateManifest(baseManifest({ requires: { runner: '' } }))).toThrow(
+      /requires\.runner must be a non-empty string/,
+    );
+    expect(() => validateManifest(baseManifest({ requires: { runner: 42 } }))).toThrow(
+      /requires\.runner must be a non-empty string/,
+    );
+  });
+
   it('defaults history.keep to {count:100} when history is absent', () => {
     const raw = baseManifest();
     delete raw.history;

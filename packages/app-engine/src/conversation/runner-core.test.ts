@@ -33,7 +33,10 @@ function turnInput(over: Partial<ConversationTurnInput> = {}): ConversationTurnI
 
 /** A core wired to a stub turn driver; captures what the driver received. */
 function build(opts: {
-  prefsLoader: (subsystem?: ModelSubsystem) => Promise<RunnerPrefs | undefined>;
+  prefsLoader: (
+    subsystem?: ModelSubsystem,
+    runnerKind?: RunnerPrefs['kind'],
+  ) => Promise<RunnerPrefs | undefined>;
   subsystem?: ModelSubsystem;
 }) {
   const seen: TurnInput[] = [];
@@ -91,6 +94,50 @@ describe('makeConversationRunnerCore — per-subsystem prefs loading', () => {
     kind = 'claude-code';
     await runner.run(turnInput());
     expect(runTurn.mock.calls[1]![1]).toEqual({ prefs: { kind: 'claude-code' } });
+  });
+
+  it('lets a validated automation turn override only the loaded runner kind', async () => {
+    const prefsLoader = vi.fn(
+      async (_subsystem?: ModelSubsystem, requested?: RunnerPrefs['kind']) =>
+        requested === 'claude-code'
+          ? {
+              kind: 'claude-code' as const,
+              binPath: '/configured/claude',
+              extraArgs: ['--profile', 'work'],
+            }
+          : { kind: 'codex' as const, binPath: '/configured/codex' },
+    );
+    const { runner, runTurn } = build({
+      prefsLoader,
+      subsystem: 'automations',
+    });
+
+    await runner.run(turnInput({ runnerKind: 'claude-code', model: 'claude-custom' }));
+
+    expect(runTurn.mock.calls[0]![1]).toEqual({
+      prefs: {
+        kind: 'claude-code',
+        binPath: '/configured/claude',
+        extraArgs: ['--profile', 'work'],
+      },
+    });
+    expect(prefsLoader).toHaveBeenCalledWith('automations', 'claude-code');
+    expect(runTurn.mock.calls[0]![0].model).toBe('claude-custom');
+  });
+
+  it("drops another runner's launch settings when a legacy loader ignores the override", async () => {
+    const { runner, runTurn } = build({
+      prefsLoader: async () => ({
+        kind: 'codex',
+        binPath: '/configured/codex',
+        extraArgs: ['--codex-only'],
+      }),
+      subsystem: 'automations',
+    });
+
+    await runner.run(turnInput({ runnerKind: 'claude-code' }));
+
+    expect(runTurn.mock.calls[0]![1]).toEqual({ prefs: { kind: 'claude-code' } });
   });
 });
 

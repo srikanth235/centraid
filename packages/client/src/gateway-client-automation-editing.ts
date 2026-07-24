@@ -58,6 +58,7 @@ export async function createAutomation(input: {
   /** Published connector declaration (pull/send automations). */
   connector?: CentraidConnectorSpec;
   apps?: string[];
+  runner?: string;
   model?: string;
   historyKeep?: { count: number } | { days: number } | 'all' | 'errors';
   onFailure?: string;
@@ -105,6 +106,10 @@ export async function updateAutomation(input: {
   };
   connections?: CentraidConnectionBinding[];
   connector?: CentraidConnectorSpec | null;
+  /** `null` clears the manifest pin and restores the subsystem default. */
+  runner?: string | null;
+  /** `null` clears the manifest pin and restores the selected runner's default. */
+  model?: string | null;
 }): Promise<{
   row: CentraidAutomationRow | null;
   webhook?: { id: string; secret: string; url: string };
@@ -125,6 +130,8 @@ export async function updateAutomation(input: {
         ...(input.vault !== undefined ? { vault: input.vault } : {}),
         ...(input.connections !== undefined ? { connections: input.connections } : {}),
         ...(input.connector !== undefined ? { connector: input.connector } : {}),
+        ...(input.runner !== undefined ? { runner: input.runner } : {}),
+        ...(input.model !== undefined ? { model: input.model } : {}),
         sessionId,
         publish: true,
       }),

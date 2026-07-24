@@ -24,8 +24,9 @@ export interface AutomationEditorLoadResult {
   connectors: AuEditorConnectorsDTO | null;
   /** Manifest `onFailure`, `null` when unset or in create mode. */
   onFailure: string | null;
-  /** Manifest `requires.model` falling back to `costEstimate.model`,
-   *  `null` when neither is set or in create mode. */
+  /** Explicit manifest `requires.runner`; `null` inherits subsystem prefs. */
+  runner: string | null;
+  /** Explicit manifest `requires.model`; `null` inherits runner prefs. */
   model: string | null;
 }
 
@@ -37,6 +38,7 @@ const DEFAULT_EDITOR_LOAD: AutomationEditorLoadResult = {
   onFailure: null,
   row: null,
   rowId: null,
+  runner: null,
   triggers: [],
 };
 
@@ -49,7 +51,7 @@ const DEFAULT_EDITOR_LOAD: AutomationEditorLoadResult = {
  *  pattern as the `prompt` cast below; drop once the ambient type catches
  *  up. */
 interface ManifestConnectorExtra {
-  requires: { secrets?: readonly string[] };
+  requires: { secrets?: readonly string[]; runner?: string };
   connector?: { kind: string; label: string; principal?: string; connectionId?: string };
   connections?: readonly { connectionId: string; kind: string; label: string }[];
   vault?: {
@@ -120,11 +122,12 @@ export async function loadAutomationEditorData(input: {
   return {
     connectors: deriveConnectors(row),
     instructions: withPrompt.prompt ?? row.manifest.prompt ?? '',
-    model: row.manifest.requires.model ?? row.manifest.costEstimate?.model ?? null,
+    model: row.manifest.requires.model ?? null,
     name: row.name,
     onFailure: row.manifest.onFailure ?? null,
     row,
     rowId: row.id,
+    runner: row.manifest.requires.runner ?? null,
     triggers: row.triggers,
   };
 }

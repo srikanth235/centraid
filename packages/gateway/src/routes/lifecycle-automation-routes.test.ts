@@ -29,7 +29,15 @@ function auth(): Record<string, string> {
 }
 
 interface CreatedAutomation {
-  row: { ref: string; manifest: { name: string; prompt: string; triggers: unknown[] } };
+  row: {
+    ref: string;
+    manifest: {
+      name: string;
+      prompt: string;
+      triggers: unknown[];
+      requires?: { runner?: string; model?: string };
+    };
+  };
   webhook?: { id: string; secret: string; url: string };
 }
 
@@ -105,6 +113,29 @@ test('update patches only the prompt, leaving name/triggers untouched', async ()
   expect(row.manifest.prompt).toBe('do a different thing now');
   expect(row.manifest.name).toBe('reprompter');
   expect(row.manifest.triggers).toEqual([{ kind: 'cron', expr: '0 9 * * *' }]);
+});
+
+test('create/update persist runner and model pins, and null clears both', async () => {
+  const created = await createAutomation('pinned-agent', {
+    runner: 'claude-code',
+    model: 'claude-custom',
+  });
+  expect(created.row.manifest.requires).toEqual({
+    runner: 'claude-code',
+    model: 'claude-custom',
+  });
+
+  const changed = await update(created.row.ref, { runner: 'codex', model: 'gpt-custom' });
+  expect(changed.status).toBe(200);
+  expect(
+    (changed.json.row as { manifest: { requires: Record<string, unknown> } }).manifest.requires,
+  ).toEqual({ runner: 'codex', model: 'gpt-custom' });
+
+  const cleared = await update(created.row.ref, { runner: null, model: null });
+  expect(cleared.status).toBe(200);
+  expect(
+    (cleared.json.row as { manifest: { requires: Record<string, unknown> } }).manifest.requires,
+  ).toEqual({});
 });
 
 test('update replaces a cron trigger with a different cron expression', async () => {

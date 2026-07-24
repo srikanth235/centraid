@@ -148,6 +148,7 @@ export async function handleAutomationCreate(
     ...(typeof body.prompt === 'string' && body.prompt ? { prompt: body.prompt } : {}),
     ...(triggers !== undefined ? { triggers } : {}),
     ...(Array.isArray(body.apps) ? { apps: body.apps.filter((a) => typeof a === 'string') } : {}),
+    ...(typeof body.runner === 'string' && body.runner ? { runner: body.runner } : {}),
     ...(typeof body.model === 'string' && body.model ? { model: body.model } : {}),
     ...(parseHistoryKeep(body.historyKeep) !== undefined
       ? { historyKeep: parseHistoryKeep(body.historyKeep) }
@@ -280,17 +281,22 @@ export async function handleAutomationUpdate(
       ? (body.connections as automation.ConnectionBinding[])
       : undefined
     : undefined;
+  const hasRunnerKey = Object.hasOwn(body, 'runner');
+  const hasModelKey = Object.hasOwn(body, 'model');
   if (
     nameInput === undefined &&
     promptInput === undefined &&
     triggersInput === undefined &&
     vaultInput === undefined &&
     !hasConnectorKey &&
-    !hasConnectionsKey
+    !hasConnectionsKey &&
+    !hasRunnerKey &&
+    !hasModelKey
   ) {
     return sendJson(res, 400, {
       error: 'bad_request',
-      message: 'update needs at least one of { name, prompt, triggers, connections, connector }',
+      message:
+        'update needs at least one of { name, prompt, triggers, connections, connector, runner, model }',
     });
   }
 
@@ -391,6 +397,18 @@ export async function handleAutomationUpdate(
   if (hasConnectorKey) {
     if (connectorInput === null) delete patched.connector;
     else if (connectorInput !== undefined) patched.connector = connectorInput;
+  }
+  if (hasRunnerKey || hasModelKey) {
+    const requires = { ...existing.requires } as Record<string, unknown>;
+    if (hasRunnerKey) {
+      if (body.runner === null) delete requires.runner;
+      else requires.runner = body.runner;
+    }
+    if (hasModelKey) {
+      if (body.model === null) delete requires.model;
+      else requires.model = body.model;
+    }
+    patched.requires = requires;
   }
   const manifest = automation.validateManifest(patched);
   const changedFile: ScaffoldFile = {

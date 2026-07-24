@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { AutomationEditorBridgeProps, AutomationEditorData } from '../screen-contracts.js';
 import AutomationEditorScreen from './AutomationEditorScreen.js';
 
-function makeData(): AutomationEditorData {
+function makeData(over: Partial<AutomationEditorData> = {}): AutomationEditorData {
   return {
     automationId: null,
     consent: { grants: [], outbox: [], parked: [] },
@@ -14,7 +14,19 @@ function makeData(): AutomationEditorData {
     name: '',
     triggers: [],
     webhook: null,
+    ...over,
   };
+}
+
+function setSelectValue(el: HTMLSelectElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(
+    globalThis.HTMLSelectElement.prototype,
+    'value',
+  )?.set;
+  act(() => {
+    setter?.call(el, value);
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
 }
 
 function makeProps(over: Partial<AutomationEditorBridgeProps> = {}): AutomationEditorBridgeProps {
@@ -134,5 +146,62 @@ it('chooses among configured accounts inline and preserves the explicit binding 
         },
       ],
     }),
+  );
+});
+
+it('saves a dynamic per-automation runner and model pin', async () => {
+  const data = makeData({
+    agentRunners: [
+      {
+        accent: '#556677',
+        connected: true,
+        defaultModel: 'gpt-default',
+        kind: 'codex',
+        label: 'Codex',
+        models: [{ default: true, id: 'gpt-default', name: 'GPT Default' }],
+      },
+      {
+        accent: '#775566',
+        connected: true,
+        defaultModel: 'acp-default',
+        kind: 'acp',
+        label: 'Work ACP',
+        models: [
+          { default: true, id: 'acp-default', name: 'ACP Default' },
+          { id: 'acp-smart', name: 'ACP Smart' },
+        ],
+      },
+    ],
+    defaultModel: 'gpt-default',
+    defaultRunnerKind: 'codex',
+    model: null,
+    runner: null,
+  });
+  const props = makeProps({ loadData: vi.fn().mockResolvedValue(data) });
+  const el = await mount(props);
+  setValue(el.querySelector('input[aria-label="Name"]') as HTMLInputElement, 'Pinned agent');
+
+  const agentButton = [...el.querySelectorAll('button')].find((candidate) =>
+    candidate.textContent?.includes('Agent'),
+  ) as HTMLButtonElement;
+  await act(async () => agentButton.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+  expect(el.textContent).toContain('Use default (codex)');
+  expect(el.textContent).toContain('Work ACP');
+
+  setSelectValue(
+    el.querySelector('select[aria-label="Automation runner"]') as HTMLSelectElement,
+    'acp',
+  );
+  expect(el.textContent).toContain('Use default (acp-default)');
+  setSelectValue(
+    el.querySelector('select[aria-label="Automation model"]') as HTMLSelectElement,
+    'acp-smart',
+  );
+
+  await act(async () =>
+    button(el, 'Create automation').dispatchEvent(new MouseEvent('click', { bubbles: true })),
+  );
+  expect(props.onSave).toHaveBeenCalledWith(
+    expect.objectContaining({ model: 'acp-smart', runner: 'acp' }),
   );
 });

@@ -47,13 +47,11 @@ import {
   changesSubscriberCount,
   cleanupDeregisteredApp,
   deriveTitle,
-  isRunnerKind,
   generateConversationTitle,
   makeConversationRouteHandler,
   makeJournalDbProvider,
   makeUserStoreRouteHandler,
   resolveSubsystemModel,
-  resolveSubsystemRunner,
   TurnLimiter,
   prewarmAppAssets,
   workerAdmissionStats,
@@ -147,6 +145,7 @@ import {
   finalizeCompiledManifest,
   runHeadlessAutomationCompile,
 } from '../lifecycle/headless-automation-compile.js';
+import { resolveAutomationAgentSelection } from '../lifecycle/automation-agent-selection.js';
 import { makeUnifiedConversationRunner } from '../runs/unified-conversation-runner.js';
 import {
   assistantCwd,
@@ -164,6 +163,7 @@ import { makeRemindersRouteHandler } from '../routes/reminders-routes.js';
 import { HealthRegistry } from './health-registry.js';
 import { PowerContextMonitor } from './power-context.js';
 import { ResourceAccounting } from './resource-accounting.js';
+import { resolveGatewayRunnerPrefs } from './runner-prefs.js';
 import { GatewayPerformanceMonitor } from './gateway-performance.js';
 import { measureStorageLatency } from './storage-latency.js';
 import {
@@ -1244,29 +1244,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // subsystem get the default agent — byte-identical to the old behavior,
   // which is what keeps a prefs file with no `runner.*` keys working
   // exactly as it did.
-  const prefsLoader = async (subsystem?: ModelSubsystem): Promise<RunnerPrefs | undefined> => {
-    const allPrefs = prefs.getAllPrefs();
-    const kindRaw = subsystem
-      ? resolveSubsystemRunner(allPrefs, subsystem)
-      : allPrefs['agent.runner.kind'];
-    // Codex is the default when the user hasn't picked (or persisted junk /
-    // a kind this build no longer registers). Validated against the runner
-    // registry rather than a literal pair, so a newly registered kind is
-    // honoured here the moment it exists.
-    const kind: RunnerPrefs['kind'] = isRunnerKind(kindRaw) ? kindRaw : 'codex';
-    const binPath =
-      typeof allPrefs['agent.runner.binPath'] === 'string'
-        ? (allPrefs['agent.runner.binPath'] as string)
-        : undefined;
-    const extraArgsRaw = allPrefs['agent.runner.extraArgs'];
-    const extraArgs = Array.isArray(extraArgsRaw)
-      ? (extraArgsRaw.filter((v) => typeof v === 'string') as string[])
-      : undefined;
-    return {
-      kind,
-      ...(binPath ? { binPath } : {}),
-      ...(extraArgs ? { extraArgs } : {}),
-    };
+  const prefsLoader = async (
+    subsystem?: ModelSubsystem,
+    requestedRunner?: RunnerKind,
+  ): Promise<RunnerPrefs | undefined> => {
+    return resolveGatewayRunnerPrefs(prefs.getAllPrefs(), subsystem, requestedRunner);
   };
 
   // Per-subsystem model resolution (shared prefs contract): explicit
@@ -1286,6 +1268,24 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     const runnerPrefs = await prefsLoader(subsystem);
     if (!runnerPrefs) return explicit;
     return resolveSubsystemModel(prefs.getAllPrefs(), runnerPrefs.kind, subsystem, explicit);
+  };
+
+  const resolveAutomationAgent = async (
+    requires: automation.ManifestRequires,
+  ): Promise<{ runner: RunnerKind; model?: string }> => {
+    const fallbackRunner = (await prefsLoader('automations'))?.kind ?? 'codex';
+    return resolveAutomationAgentSelection(requires, prefs.getAllPrefs(), fallbackRunner);
+  };
+
+  const resolveAutomationAgentForRef = async (
+    automationRef: string,
+    codeAppsDir: string,
+  ): Promise<{ runner: RunnerKind; model?: string }> => {
+    const parsed = automation.parseRef(automationRef);
+    const row = parsed
+      ? await automation.readAppOwned(codeAppsDir, parsed.appId, parsed.automationId)
+      : undefined;
+    return resolveAutomationAgent(row?.manifest.requires ?? {});
   };
 
   // One warmer owns host-capability enumeration — the model list, for every
@@ -1545,12 +1545,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Mint the runId here so every fire (cron included) has a bus channel.
     const runId = opts.runId ?? `${automationRef}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
     void (async () => {
-      const runnerPrefs = await prefsLoader('automations');
       const host = await currentVaultHost();
       const ws = currentWorkspace();
-      // Prefs fallback for `ctx.agent` calls — the automation's own
-      // `requires.model` (read inside `runFire`) still wins over this.
-      const automationsModel = await resolveModel('automations');
+      const agent = await resolveAutomationAgentForRef(automationRef, host.codeAppsDir());
       await runAutomation({
         automationRef,
         runId,
@@ -1561,11 +1558,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         // agent.agent credential, resolved per app id (duaility §12).
         vaultFor: (appId: string) => vaultRegistry.agentBridgeFor(appId),
         resolveConnection: connectionBroker.resolveForFire,
-        runner: runnerPrefs?.kind ?? 'codex',
+        runner: agent.runner,
         triggerKind: opts.triggerKind,
         triggerOrigin: opts.triggerOrigin,
         ...(opts.input !== undefined ? { input: opts.input } : {}),
-        ...(automationsModel ? { model: automationsModel } : {}),
+        ...(agent.model ? { model: agent.model } : {}),
         onRunEvent: (ev) => runEventBus.publish(runId, ev),
       });
       // Grant-matched outbox items the fire just staged drain now, not
@@ -1771,6 +1768,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             parsed.automationId,
           );
           if (!row) return;
+          const agent = await resolveAutomationAgent(row.manifest.requires);
           const enabledBeforeCompile = row.enabled;
           // Compiles are one-shot drafts. Reusing the interactive chat/edit
           // worktree lets a failed publish leave a rebase in progress, which
@@ -1789,6 +1787,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             automationRef,
             automationName: row.name,
             instructions: row.manifest.prompt,
+            runnerKind: agent.runner,
+            ...(agent.model ? { model: agent.model } : {}),
             runId,
             onSuccess: async () => {
               const appDir = await store.snapshotSessionAppDir(sessionId, parsed.appId);
@@ -2164,10 +2164,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     if (!plane) return { ok: false, error: `unknown vault "${vaultId}"` };
     const host = settledHostFor(vaultId);
     const runId = `${automationRef}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
-    const runnerPrefs = await prefsLoader('automations');
-    // Prefs fallback for `ctx.agent` calls — the automation's own
-    // `requires.model` (read inside `runFire`) still wins over this.
-    const automationsModel = await resolveModel('automations');
+    const agent = await resolveAutomationAgentForRef(automationRef, host.codeAppsDir());
     try {
       const { outcome } = await runWithVaultContext({ vaultId }, () =>
         runAutomation({
@@ -2181,11 +2178,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           // same as the default local fire path above.
           vaultFor: (appId: string) => vaultRegistry.agentBridgeFor(appId),
           resolveConnection: connectionBroker.resolveForFire,
-          runner: runnerPrefs?.kind ?? 'codex',
+          runner: agent.runner,
           triggerKind: 'scheduled',
           triggerOrigin: 'webhook',
           ...(body !== undefined ? { input: body } : {}),
-          ...(automationsModel ? { model: automationsModel } : {}),
+          ...(agent.model ? { model: agent.model } : {}),
           onRunEvent: (ev) => runEventBus.publish(runId, ev),
         }),
       );

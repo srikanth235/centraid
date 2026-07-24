@@ -36,6 +36,13 @@ export interface ManifestRequires {
   /** MCP server ids the handler requires (`["github", "linear"]`). */
   readonly mcps?: readonly string[];
   /**
+   * Coding-agent harness used by compile, interactive turns, and `ctx.agent`.
+   * This is an open registry key: manifests validate only that it is non-empty;
+   * the executing gateway decides whether the key is registered and otherwise
+   * falls back to the automations subsystem preference.
+   */
+  readonly runner?: string;
+  /**
    * Model the `ctx.agent` calls should route through. Format: `provider/model-id`
    * (`"anthropic/claude-3-5-sonnet"`, `"openai/gpt-4o"`). Must not target the
    * mock provider (`centraid-mock/*`) — that would recurse into the mock
@@ -591,6 +598,17 @@ function validateRequires(raw: unknown): ManifestRequires {
   }
   const req = (raw ?? {}) as Record<string, unknown>;
   const mcps = optionalStringArray(req.mcps, 'requires.mcps');
+  let runner: string | undefined;
+  if (req.runner !== undefined) {
+    if (typeof req.runner !== 'string' || req.runner.length === 0) {
+      throw new ManifestError(
+        'invalid_field',
+        'manifest.requires.runner must be a non-empty string',
+        'requires.runner',
+      );
+    }
+    runner = req.runner;
+  }
   let model: string | undefined;
   if (req.model !== undefined) {
     if (typeof req.model !== 'string' || req.model.length === 0) {
@@ -626,6 +644,7 @@ function validateRequires(raw: unknown): ManifestRequires {
   }
   const requires: ManifestRequires = {};
   if (mcps) (requires as { mcps: readonly string[] }).mcps = mcps;
+  if (runner !== undefined) (requires as { runner: string }).runner = runner;
   if (model !== undefined) (requires as { model: string }).model = model;
   if (secrets) (requires as { secrets: readonly string[] }).secrets = secrets;
   return requires;

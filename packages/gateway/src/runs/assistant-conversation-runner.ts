@@ -25,6 +25,7 @@ import {
   type ConversationTurnInput,
   type Dispatcher,
   type ModelSubsystem,
+  type RunnerKind,
   type RunnerPrefs,
   type RunTurnFn,
   type VaultInvokeRunner,
@@ -37,7 +38,10 @@ export interface AssistantConversationRunnerOptions {
   /** Per-turn runner prefs (kind + provider) — same loader app chat uses.
    *  Receives `subsystem` so a host that pins a runner per subsystem answers
    *  with THIS register's kind (assistant and ask are separate pins). */
-  prefsLoader: (subsystem?: ModelSubsystem) => Promise<RunnerPrefs | undefined>;
+  prefsLoader: (
+    subsystem?: ModelSubsystem,
+    runnerKind?: RunnerKind,
+  ) => Promise<RunnerPrefs | undefined>;
   /** Which subsystem's runner/model prefs these turns ride. The gateway
    *  builds this factory twice — `'assistant'` for the shell register and
    *  `'ask'` for the per-app copilot; unset → the host's default agent. */
