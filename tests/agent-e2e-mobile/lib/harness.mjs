@@ -341,7 +341,8 @@ ${DISMISS_KEYBOARD_ONBOARDING}`
     //     reports COMPLETED. Use the header gear, which is always on screen.
     //   * Confirming we arrived: `assertVisible: "Settings"` is vacuous — the
     //     header gear, the tab, and the screen title are all "Settings", so it
-    //     passes on Home too. "Desktop link" is unique to the Settings screen.
+    //     passes on Home too. "Gateway link" is unique to the Settings screen
+    //     (post-#498 redesign; was "Desktop link").
     //   * The URL field: Maestro matches text as a SUBSTRING, so a bare
     //     `tapOn: "http://127.0.0.1:18789"` matched the help paragraph above the
     //     field ("…e.g. http://127.0.0.1:18789. An authed gateway…") and focused
@@ -367,7 +368,7 @@ ${DISMISS_KEYBOARD_ONBOARDING}`
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 - tapOn: "Settings"
 - extendedWaitUntil:
-    visible: "Desktop link"
+    visible: "Gateway link"
     timeout: 15000
 - tapOn: "Advanced (developer)"
 - extendedWaitUntil:

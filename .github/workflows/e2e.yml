@@ -372,21 +372,34 @@ jobs:
           exit 1
         working-directory: apps/mobile
       - run: node scripts/test-report/prepare.mjs
+      # Non-short-circuit: each flow always runs and writes evidence; aggregate
+      # exit afterward so a mid-run fail cannot grey later cells (#535 F4).
       - name: Run all committed mobile journeys
         env:
           MAESTRO_PLATFORM: ios
         run: |
-          node tests/agent-e2e-mobile/flows/home-loads.mjs
-          node tests/agent-e2e-mobile/flows/template-gate.mjs
-          node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs
+          set +e
+          ec=0
+          node tests/agent-e2e-mobile/flows/home-loads.mjs || ec=$?
+          node tests/agent-e2e-mobile/flows/template-gate.mjs || ec=$?
+          node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs || ec=$?
+          exit "$ec"
+      # Single-root evidence upload only — dual path (artifacts/ + runs/) made
+      # upload-artifact v4 LCA-nest as artifacts/artifacts/e2e after merge-multiple
+      # download, which generate.mjs never reads (#535 F1).
       - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         if: always()
         with:
           name: nightly-evidence-mobile
-          path: |
-            artifacts/
-            tests/agent-e2e-mobile/runs/
+          path: artifacts/
           retention-days: 7
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-debug-mobile-runs
+          path: tests/agent-e2e-mobile/runs/
+          retention-days: 7
+          if-no-files-found: ignore
 
   # #496 PC1 — Android home-loads at least every nightly (macOS minutes free on
   # public repos). Leaner than iOS: only home-loads; longer paths stay on iOS.
@@ -426,7 +439,8 @@ jobs:
           cat /tmp/centraid-metro-android.log
           exit 1
       - name: Set up Android SDK + emulator
-        uses: reactivecircus/android-emulator-runner@1dcd0090116d15dd95c8371a98ef77c0cff894dd # v2.34.0
+        # v2.38.0 — prior pin 1dcd009…dd was a typo/orphan SHA (#535 F6).
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 34
           arch: arm64-v8a
@@ -447,10 +461,15 @@ jobs:
         if: always()
         with:
           name: nightly-evidence-mobile-android
-          path: |
-            artifacts/
-            tests/agent-e2e-mobile/runs/
+          path: artifacts/
           retention-days: 7
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-debug-mobile-android-runs
+          path: tests/agent-e2e-mobile/runs/
+          retention-days: 7
+          if-no-files-found: ignore
 
   # Pairing journeys (issue #289 / matrix tunnel-pairing). Independent jobs so
   # one failure still leaves evidence from the others for the health report.
@@ -477,10 +496,15 @@ jobs:
         if: always()
         with:
           name: nightly-evidence-pairing-lifecycle
-          path: |
-            artifacts/
-            tests/agent-e2e-pairing/runs/
+          path: artifacts/
           retention-days: 7
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-debug-pairing-lifecycle-runs
+          path: tests/agent-e2e-pairing/runs/
+          retention-days: 7
+          if-no-files-found: ignore
 
   pairing-ticket-hygiene:
     if: >
@@ -505,10 +529,15 @@ jobs:
         if: always()
         with:
           name: nightly-evidence-pairing-ticket-hygiene
-          path: |
-            artifacts/
-            tests/agent-e2e-pairing/runs/
+          path: artifacts/
           retention-days: 7
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-debug-pairing-ticket-hygiene-runs
+          path: tests/agent-e2e-pairing/runs/
+          retention-days: 7
+          if-no-files-found: ignore
 
   pairing-cross-network-relay:
     if: >
@@ -536,10 +565,15 @@ jobs:
         if: always()
         with:
           name: nightly-evidence-pairing-cross-network-relay
-          path: |
-            artifacts/
-            tests/agent-e2e-pairing/runs/
+          path: artifacts/
           retention-days: 7
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-debug-pairing-cross-network-relay-runs
+          path: tests/agent-e2e-pairing/runs/
+          retention-days: 7
+          if-no-files-found: ignore
 
   # #532 — Stryker mutation lane (nightly, all seeds). Per-PR runs affected
   # seeds only via ci.yml mutation-pr. Floors ratcheted via
@@ -645,6 +679,15 @@ jobs:
             cp .gh-pages-history/test-report/history/*.json artifacts/report-history/ || true
           fi
           rm -rf .gh-pages-history
+      # Job conclusions for honesty: a red needs.* job cannot yield silent
+      # failed:0 (#535 F5). generate.mjs reads artifacts/test-results/job-conclusions.json.
+      - name: Write evidence-job conclusions
+        if: always()
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          mkdir -p artifacts/test-results
+          printf '%s\n' "$NEEDS_JSON" > artifacts/test-results/job-conclusions.json
       - name: Generate full nightly report
         if: always()
         run: bun run test:report

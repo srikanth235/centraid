@@ -1,9 +1,15 @@
 import { describe, expect, test } from 'vitest';
 import {
+  cellsMissingRatchet,
   detectDefaultCiEnvGate,
   extractUnhandledErrors,
+  filterFloorConfigEntries,
+  findUnmappedEvidence,
+  mergeLaneMarkers,
+  reconcileJobConclusions,
   summarizeCellStates,
 } from './report-signals.mjs';
+import { validateMatrix } from './validate-matrix.mjs';
 import {
   REPORT_COMMENT_MARKER,
   coverageScopesBelowFloor,
@@ -164,5 +170,139 @@ describe('publicReportUrl', () => {
     expect(publicReportUrl({ owner: 'srikanth235', repo: 'centraid', slot: 'main' })).toBe(
       'https://srikanth235.github.io/centraid/test-report/main/',
     );
+  });
+});
+
+describe('findUnmappedEvidence', () => {
+  test('counts orphaned e2e results and separates failed unmapped', () => {
+    const matrix = {
+      cellOwners: {
+        'mobile.journey': { owner: 'tests/agent-e2e-mobile/flows/home-loads.mjs', tier: 'e2e' },
+      },
+      flows: [],
+    };
+    const results = [
+      { owner: 'tests/agent-e2e-mobile/flows/home-loads.mjs', status: 'passed' },
+      { owner: 'tests/agent-e2e-mobile/flows/template-gate.mjs', status: 'failed' },
+      { owner: 'tests/orphan/no-owner.mjs', status: 'passed' },
+    ];
+    const found = findUnmappedEvidence(results, matrix);
+    expect(found.unmappedEvidence).toBe(2);
+    expect(found.failedUnmapped.map((r) => r.owner)).toEqual([
+      'tests/agent-e2e-mobile/flows/template-gate.mjs',
+    ]);
+  });
+
+  test('treats flow owners as registered', () => {
+    const matrix = {
+      cellOwners: { 'mobile.journey': null },
+      flows: [
+        {
+          id: 'mobile-template-gate',
+          owner: 'tests/agent-e2e-mobile/flows/template-gate.mjs',
+        },
+      ],
+    };
+    const found = findUnmappedEvidence(
+      [{ owner: 'tests/agent-e2e-mobile/flows/template-gate.mjs', status: 'failed' }],
+      matrix,
+    );
+    expect(found.unmappedEvidence).toBe(0);
+    expect(found.failedUnmapped).toEqual([]);
+  });
+});
+
+describe('reconcileJobConclusions', () => {
+  test('flags silent all-clear when needs jobs failed but summary.failed is 0', () => {
+    const recon = reconcileJobConclusions(
+      {
+        'desktop-e2e': { result: 'success' },
+        'mobile-e2e': { result: 'failure' },
+        'mobile-e2e-android': { result: 'failure' },
+      },
+      { failed: 0 },
+    );
+    expect(recon.silentAllClear).toBe(true);
+    expect(recon.failedJobs).toEqual(['mobile-e2e', 'mobile-e2e-android']);
+    expect(recon.message).toMatch(/mobile-e2e/);
+  });
+
+  test('is quiet when failed evidence already accounts for the red jobs', () => {
+    const recon = reconcileJobConclusions({ 'mobile-e2e': { result: 'failure' } }, { failed: 2 });
+    expect(recon.silentAllClear).toBe(false);
+    expect(recon.message).toBeNull();
+  });
+});
+
+describe('cellsMissingRatchet', () => {
+  test('detects grey creep vs prior durable history point', () => {
+    const ratchet = cellsMissingRatchet(18, [
+      { label: '2026-07-20', cellsMissing: 12 },
+      { label: '2026-07-21', cellsMissing: 15 },
+    ]);
+    expect(ratchet.prior).toBe(15);
+    expect(ratchet.current).toBe(18);
+    expect(ratchet.delta).toBe(3);
+    expect(ratchet.rose).toBe(true);
+  });
+
+  test('does not flag improvement or first run', () => {
+    expect(cellsMissingRatchet(10, [{ cellsMissing: 15 }]).rose).toBe(false);
+    expect(cellsMissingRatchet(10, []).rose).toBe(false);
+  });
+});
+
+describe('filterFloorConfigEntries', () => {
+  test('drops _comment and non-scope meta keys', () => {
+    const entries = filterFloorConfigEntries({
+      _comment: 'seed floors',
+      approvedDeviation: { reason: 'x' },
+      lines: 70,
+      'packages/gateway/**': { lines: 80 },
+    });
+    expect(entries.map(([k]) => k).sort()).toEqual(['lines', 'packages/gateway/**']);
+  });
+});
+
+describe('mergeLaneMarkers', () => {
+  test('merges per-lane shards without last-write-win loss', () => {
+    expect(
+      mergeLaneMarkers([
+        { 'desktop-playwright': '2026-07-24T01:00:00.000Z' },
+        { 'web-playwright': '2026-07-24T02:00:00.000Z' },
+        { 'desktop-playwright': '2026-07-24T03:00:00.000Z' },
+      ]),
+    ).toEqual({
+      'desktop-playwright': '2026-07-24T03:00:00.000Z',
+      'web-playwright': '2026-07-24T02:00:00.000Z',
+    });
+  });
+});
+
+describe('validateMatrix skip notes (#535)', () => {
+  test('fails when a skip cell has no matrix.notes rationale', async () => {
+    const matrix = {
+      dimensions: [{ id: 'journey', label: 'Journey', lane: 'e2e' }],
+      surfaces: [{ id: 'mobile', label: 'Mobile', assessment: { journey: 'skip' } }],
+      cellOwners: { 'mobile.journey': null },
+      flows: [],
+      notes: {},
+    };
+    const { errors } = await validateMatrix(matrix, { checkFiles: false });
+    expect(errors.some((e) => e.includes('mobile.journey') && e.includes('matrix.notes'))).toBe(
+      true,
+    );
+  });
+
+  test('accepts a skip cell with a one-line note', async () => {
+    const matrix = {
+      dimensions: [{ id: 'journey', label: 'Journey', lane: 'e2e' }],
+      surfaces: [{ id: 'mobile', label: 'Mobile', assessment: { journey: 'skip' } }],
+      cellOwners: { 'mobile.journey': null },
+      flows: [],
+      notes: { 'mobile.journey': 'Delegated to consuming surface; no native journey surface.' },
+    };
+    const { errors } = await validateMatrix(matrix, { checkFiles: false });
+    expect(errors.filter((e) => e.includes('matrix.notes'))).toEqual([]);
   });
 });
