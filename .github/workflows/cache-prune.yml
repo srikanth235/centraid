@@ -41,6 +41,13 @@ jobs:
             // Flip to false once the dry-run report has been confirmed (#538).
             const SCHEDULE_DRY_RUN = true;
             const KEEP = 2;
+            // Granular, content-addressed caches (the turbo GitHub-backed adapter
+            // keys everything `turbogha_<taskhash>`) must NOT be keep-N pruned:
+            // each entry is a distinct task artifact, not a successive version of
+            // one blob, so collapsing them by family and keeping only the newest
+            // few would gut the cache. They are small and recreated on demand —
+            // GitHub's LRU manages them. Rule 1 (dead-PR deletion) still applies.
+            const EXEMPT_KEEP_N_PREFIXES = ['turbogha_'];
 
             const isDispatch = context.eventName === 'workflow_dispatch';
             // workflow_dispatch boolean inputs arrive as the strings 'true'/'false'.
@@ -94,6 +101,7 @@ jobs:
             for (const c of caches) {
               if (doomedIds.has(c.id)) continue;
               if (!c.ref.startsWith('refs/heads/')) continue; // pulls handled by rule 1
+              if (EXEMPT_KEEP_N_PREFIXES.some(p => c.key.startsWith(p))) continue;
               const key = JSON.stringify([c.ref, familyOf(c.key)]);
               if (!groups.has(key)) groups.set(key, []);
               groups.get(key).push(c);
