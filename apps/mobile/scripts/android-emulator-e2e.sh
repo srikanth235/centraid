@@ -50,5 +50,15 @@ else
   echo 'built=true' >> "$GITHUB_OUTPUT"
 fi
 
+# Suppress Android's "isn't responding" (ANR) / "has stopped" system dialogs.
+# Under the emulator's software GPU the Pixel Launcher intermittently ANRs while
+# our app is foregrounded, and Android pops a system dialog OVER it. Maestro then
+# queries that system window (which has no app content) and every `visible`/tap
+# against the app fails — a flaky non-repro that blocked the onboarding "Skip"
+# even though the app had rendered it (#535; screenshot: launcher ANR over the
+# Welcome screen). `hide_error_dialogs 1` lets the launcher ANR silently in the
+# background instead of stealing the window.
+adb shell settings put global hide_error_dialogs 1 || true
+
 node scripts/test-report/prepare.mjs
 MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/home-loads.mjs
