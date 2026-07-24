@@ -422,7 +422,7 @@ jobs:
           key: android-app-${{ runner.os }}-${{ steps.native_android.outputs.hash }}
       - name: Set up Android SDK + emulator
         id: emu
-        uses: reactivecircus/android-emulator-runner@1dcd0090116d15dd95c8371a98ef77c0cff894dd # v2.34.0
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         env:
           # Read inside the action's script to branch build-vs-install. The apk
           # lives under $HOME so it carries from the restore step into the

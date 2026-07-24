@@ -26,6 +26,7 @@ version) and ignores `apps/mobile/src/**` and the CI YAML.
 - [x] `knip.json` — `scripts/*.mjs` added to the mobile entry
 - [x] iOS lane keyed on the `@expo/fingerprint` hash plus host toolchain
 - [x] Android lane keyed on the `@expo/fingerprint` hash plus host toolchain
+- [x] repin `reactivecircus/android-emulator-runner` to v2.38.0 (dead SHA, F6)
 
 ## What changed
 
@@ -34,6 +35,7 @@ version) and ignores `apps/mobile/src/**` and the CI YAML.
 - **`knip.json` — `scripts/*.mjs` added to the mobile entry** (entry + project), so knip sees the script's import and does not flag the dep as unused.
 - **iOS lane keyed on the `@expo/fingerprint` hash plus host toolchain** (`.github/workflows/e2e.yml`): key `ios-app-<os>-xc<12>-fp<40>`. `bun install` now precedes the fingerprint step (fingerprint reads `node_modules`). Net −31 lines — the bespoke `git ls-files` block is gone. Transport (split restore/save, all-or-nothing key, `if: always()` save) unchanged.
 - **Android lane keyed on the `@expo/fingerprint` hash plus host toolchain** (`.github/workflows/e2e.yml`): new `native_android` fingerprint step, a `Restore the built Android app` step, an `ANDROID_CACHE_HIT`-branched emulator script (install banked apk + `adb reverse` on hit; build + bank apk on miss), and an `if: always() && steps.emu.outputs.built == 'true'` save. Key `android-app-<os>-jdk<12>-fp<40>`.
+- **repin `reactivecircus/android-emulator-runner` to v2.38.0 (dead SHA, F6)** — the previously pinned SHA `1dcd0090…` no longer resolves upstream, so the Android job failed at "Set up job" before any step ran (proven on dispatch run 30074719338). The lane has therefore been dead, not merely slow — this repin is a prerequisite for the Android cache (or the lane at all) to run.
 
 ## Out of scope
 
@@ -94,6 +96,7 @@ CI timing (cold cache-miss vs warm cache-hit) measured on this branch via
 | claude-code-955653fc-da5-1784876733-1 | claude-code | 955653fc-da50-425f-95f2-bc71a62f0f63 | #535 | claude-opus-4-8 | 12 | 17900 | 1172349 | 15967 | 33879 | 1.0973 | 492 | 1515642 | 31688180 | 430218 | ci(mobile): key native build cache on @expo/fingerprint (#535)The iOS .app cache |
 | claude-code-955653fc-da5-1784876794-1 | claude-code | 955653fc-da50-425f-95f2-bc71a62f0f63 | #535 | claude-opus-4-8 | 6 | 13293 | 612261 | 996 | 14295 | 0.4141 | 498 | 1528935 | 32300441 | 431214 | ci(mobile): key native build cache on @expo/fingerprint (#535) |
 | claude-code-955653fc-da5-1784877007-1 | claude-code | 955653fc-da50-425f-95f2-bc71a62f0f63 | #535 | claude-opus-4-8 | 21 | 9625 | 2521549 | 8078 | 17724 | 1.5230 | 519 | 1538560 | 34821990 | 439292 |  |
+| claude-code-955653fc-da5-1784877314-1 | claude-code | 955653fc-da50-425f-95f2-bc71a62f0f63 | #535 | claude-opus-4-8 | 56 | 28038 | 6764185 | 25451 | 53545 | 4.1939 | 575 | 1566598 | 41586175 | 464743 |  |
 
 ### Steering
 
