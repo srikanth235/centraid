@@ -23,17 +23,28 @@ if [ "${ANDROID_CACHE_HIT:-}" = "true" ] && [ -f "$cached_apk" ]; then
   adb install -r "$cached_apk"
   adb reverse tcp:8081 tcp:8081
 else
-  # Cold path: build + install the dev client. Always --no-bundler: Metro is
-  # already running on the host, and a second Metro would hang the job. No
-  # --device flag: as a bare boolean it opens expo's interactive device picker
-  # ("Input is required ... in non-interactive mode"); omitting it makes expo
-  # auto-select the single booted emulator.
-  ( cd apps/mobile && bunx expo run:android --no-bundler )
+  # Cold path: build the dev-client apk with gradle directly, then install it
+  # and set up the Metro reverse — the SAME handoff the warm path uses, so both
+  # paths end with the apk installed and Maestro driving the launch.
+  #
+  # We deliberately do NOT use `expo run:android` here. After a successful build
+  # it runs a launch check for the base applicationId `dev.centraid.mobile`, but
+  # debug builds install as `dev.centraid.mobile.debug` (applicationIdSuffix in
+  # android/app/build.gradle, kept so a debug build and a Play-release build can
+  # coexist — J1/#501). That mismatch aborts the job with "No development build
+  # (dev.centraid.mobile) ... is installed" even though the apk built and
+  # installed fine (see #535). Maestro launches the real `.debug` package itself
+  # (the harness resolves the id per platform), so expo's launch step is both
+  # broken for this build and unnecessary. android/ is a committed native
+  # project, so `assembleDebug` needs no prebuild.
+  ( cd apps/mobile/android && ./gradlew :app:assembleDebug --console=plain )
   # Bank the debug apk under the content-addressed cache path. Fail hard if it
   # is missing rather than caching nothing (a later hit would install nothing
   # and fail obscurely at flow time).
   apk="$(find apps/mobile/android -type f -path '*/outputs/apk/debug/*.apk' -print -quit 2>/dev/null || true)"
   test -n "$apk" || { echo "::error::built debug apk not found"; exit 1; }
+  adb install -r "$apk"
+  adb reverse tcp:8081 tcp:8081
   mkdir -p "$(dirname "$cached_apk")"
   cp "$apk" "$cached_apk"
   echo 'built=true' >> "$GITHUB_OUTPUT"

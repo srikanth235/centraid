@@ -26,7 +26,16 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const RUNS_DIR = path.join(__dirname, '..', 'runs');
 
+// iOS bundle id, and the Android *release* applicationId. Android *debug*
+// builds append `.debug` (applicationIdSuffix in android/app/build.gradle, kept
+// so a debug build and a Play-release build can coexist on one device —
+// J1/#501). The agent-e2e build is a debug build, so on Android the package
+// that actually installs and launches is the suffixed `dev.centraid.mobile.debug`.
+// `setup()` resolves the id per platform and threads it through `state.appId`;
+// flows must launch the package that is installed, not this base id, so they
+// read `ctx.state.appId` rather than importing APP_ID.
 export const APP_ID = 'dev.centraid.mobile';
+const appIdForPlatform = (platform) => (platform === 'android' ? `${APP_ID}.debug` : APP_ID);
 
 /**
  * Budget for the first `assertVisible` after a `clearState: true` launch.
@@ -183,9 +192,10 @@ export async function setup({ runId } = {}) {
         'to force a side when both are present.',
     );
   }
-  if (!(await appInstalled(device, APP_ID))) {
+  const appId = appIdForPlatform(device.platform);
+  if (!(await appInstalled(device, appId))) {
     throw new Error(
-      `${APP_ID} not installed on ${device.platform} device ${device.udid}. ` +
+      `${appId} not installed on ${device.platform} device ${device.udid}. ` +
         `Run \`bun run --filter=@centraid/mobile ${device.platform}\` first.`,
     );
   }
@@ -200,7 +210,7 @@ export async function setup({ runId } = {}) {
         'serve the JS bundle — start it with `cd apps/mobile && bun expo start --dev-client`.',
     );
   }
-  await prewarmMetroBundle(device.platform, APP_ID);
+  await prewarmMetroBundle(device.platform, appId);
   const id = runId ?? defaultRunId();
   const runDir = path.join(RUNS_DIR, id);
   const screenshotsDir = path.join(runDir, 'screenshots');
@@ -215,7 +225,7 @@ export async function setup({ runId } = {}) {
     flowsDir,
     udid: device.udid,
     platform: device.platform,
-    appId: APP_ID,
+    appId,
   };
   await fs.writeFile(path.join(runDir, 'state.json'), JSON.stringify(state, null, 2));
   return state;
@@ -357,7 +367,7 @@ ${DISMISS_KEYBOARD_ONBOARDING}`
     //     what a user sees, and prove the setting actually took by requiring the
     //     no-gateway card to be gone.
     await ctx.run(
-      `appId: ${APP_ID}
+      `appId: ${state.appId}
 ---
 - launchApp:
     clearState: true
@@ -426,7 +436,7 @@ ${tokenSteps}- hideKeyboard
     console.log('  restart …');
     await new Promise((resolve) => setTimeout(resolve, 300));
     await ctx.run(
-      `appId: ${APP_ID}
+      `appId: ${state.appId}
 ---
 - stopApp
 - launchApp:

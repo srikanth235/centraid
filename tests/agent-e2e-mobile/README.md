@@ -104,10 +104,13 @@ flows/
 Skeleton:
 
 ```js
-import { runFlow, APP_ID, FIRST_LAUNCH_TIMEOUT_MS } from '../lib/harness.mjs';
+import { runFlow, FIRST_LAUNCH_TIMEOUT_MS } from '../lib/harness.mjs';
 
 await runFlow('my-flow', async (ctx) => {
-  await ctx.run(`appId: ${APP_ID}
+  // `ctx.state.appId` is the installed package for the resolved platform —
+  // `dev.centraid.mobile` on iOS, `dev.centraid.mobile.debug` on Android
+  // (debug builds carry the `.debug` applicationIdSuffix). Don't hardcode it.
+  await ctx.run(`appId: ${ctx.state.appId}
 ---
 - launchApp: { clearState: true }
 - extendedWaitUntil:

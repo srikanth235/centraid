@@ -2,7 +2,7 @@
 // `no-gateway` state. Proves the harness loop end-to-end (sim discovery,
 // app-install check, ctx.run, screenshot capture, verdict.md).
 
-import { runFlow, APP_ID, FIRST_LAUNCH_TIMEOUT_MS } from '../lib/harness.mjs';
+import { runFlow, FIRST_LAUNCH_TIMEOUT_MS } from '../lib/harness.mjs';
 
 await runFlow('home-loads', async (ctx) => {
   // Wait on the hero, not the pairing card: the hero is the first thing Home
@@ -11,7 +11,7 @@ await runFlow('home-loads', async (ctx) => {
   // with "did the probe finish" and, on a fresh launch, the card also starts
   // below the fold — see the scroll below.
   await ctx.run(
-    `appId: ${APP_ID}
+    `appId: ${ctx.state.appId}
 ---
 - launchApp:
     clearState: true
@@ -32,7 +32,7 @@ await runFlow('home-loads', async (ctx) => {
   // hidden behind the tab bar, which is how the old flow "passed" while the
   // pairing button was in fact untappable.
   await ctx.run(
-    `appId: ${APP_ID}
+    `appId: ${ctx.state.appId}
 ---
 - scrollUntilVisible:
     element:

@@ -28,6 +28,7 @@ version) and ignores `apps/mobile/src/**` and the CI YAML.
 - [x] Android lane keyed on the `@expo/fingerprint` hash plus host toolchain
 - [x] repin `reactivecircus/android-emulator-runner` to v2.38.0 (dead SHA, F6)
 - [x] migrate the Android lane to ubuntu-latest + KVM so the emulator can boot
+- [x] fix the Android dev-client launch: build via gradle + `adb install`, target the `.debug` package
 
 ## What changed
 
@@ -39,6 +40,7 @@ version) and ignores `apps/mobile/src/**` and the CI YAML.
 - **repin `reactivecircus/android-emulator-runner` to v2.38.0 (dead SHA, F6)** — the previously pinned SHA `1dcd0090…` no longer resolves upstream, so the Android job failed at "Set up job" before any step ran (proven on dispatch run 30074719338). The lane has therefore been dead, not merely slow — this repin is a prerequisite for the Android cache (or the lane at all) to run.
 - **migrate the Android lane to ubuntu-latest + KVM so the emulator can boot** (`.github/workflows/e2e.yml`) — after the repin, the emulator still could not boot on `macos-15` (`HVF error: HV_UNSUPPORTED`: those runners have no Hypervisor.framework, so QEMU cannot hardware-accelerate). Moved the job to `ubuntu-latest`, added an `Enable KVM` udev step, pinned the build JDK via `actions/setup-java@v4.8.0` (temurin 17), and switched the emulator to `arch: x86_64` / `target: google_apis` (the KVM-accelerable image). The fingerprint keying, cache transport, and build-vs-install branch are unchanged; only the host and emulator image differ. This is what makes an actual Android cold/warm timing obtainable. Confirmed on run 30078700178 that the x86_64 emulator boots under KVM in ~1m — the macos-15 blocker is gone.
 - **`apps/mobile/scripts/android-emulator-e2e.sh` — extract the emulator-side logic to a committed bash file** (`.github/workflows/e2e.yml` now calls `script: bash apps/mobile/scripts/android-emulator-e2e.sh`). The `reactivecircus/android-emulator-runner` action runs its inline `script:` under dash, which rejected first `set -o pipefail` and then the multi-line `if/else` with `#` comments and non-ASCII em-dashes (two separate parse failures on the Linux runner; macOS `sh` is bash, so neither bit before the re-host). Moving the logic into a `#!/usr/bin/env bash` file executed via a single-line hand-off removes the action's script-parser from the path entirely.
+- **fix the Android dev-client launch: build via gradle + `adb install`, target the `.debug` package** (`apps/mobile/scripts/android-emulator-e2e.sh`, `tests/agent-e2e-mobile/lib/harness.mjs`, `tests/agent-e2e-mobile/flows/home-loads.mjs`, `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs`, `tests/agent-e2e-mobile/flows/template-gate.mjs`, `tests/agent-e2e-mobile/README.md`). On run 30079552726 the emulator booted and gradle reported `BUILD SUCCESSFUL in 20m 39s`, but the job then failed at `CommandError: No development build (dev.centraid.mobile) for this project is installed`. Root cause: debug builds carry `applicationIdSuffix '.debug'` (android/app/build.gradle, kept so a debug and a Play-release build coexist — J1/#501), so the apk installs as `dev.centraid.mobile.debug`, while `expo run:android`'s post-install launch check looks for the un-suffixed base id. The build and install had *succeeded*; only expo's launch step failed — and it is unnecessary, since Maestro launches the app. Two changes: (1) the cold path now builds with `./gradlew :app:assembleDebug` and installs with `adb install -r` + `adb reverse` — the same handoff the warm path already uses — instead of `expo run:android`, dropping expo's broken launch entirely; (2) the harness resolves the installed package per platform (`dev.centraid.mobile` on iOS, `dev.centraid.mobile.debug` on Android) and threads it through `ctx.state.appId`, so Maestro's `launchApp` (and the harness install check + Metro prewarm) target the package that is actually installed. Flows read `ctx.state.appId` instead of the hardcoded `APP_ID`. iOS is unaffected — its bundle id has no suffix, which is why only Android hit this.
 
 ## Out of scope
 
@@ -101,14 +103,25 @@ flakiness, not cache). The Android lane originally could not be timed at all: it
 emulator cannot boot on the `macos-15` runner (`HVF error: HV_UNSUPPORTED`), a
 pre-existing infra defect independent of this cache change. That lane has now
 been moved to `ubuntu-latest` + KVM (see What changed) so an Android cold/warm
-number becomes obtainable; the measured Android figures are recorded here once
-that run completes.
+number becomes obtainable.
+
+Android progress is measured, not assumed: on `ubuntu-latest` + KVM the x86_64
+emulator boots in ~1m (run 30078700178) and the cold gradle build takes **20m39s**
+(`BUILD SUCCESSFUL`, run 30079552726) — so the native-build cost the Android cache
+targets is now a real number. That run still red-failed at expo's post-install
+launch check (the `.debug` applicationId mismatch, fixed in What changed); the
+cold-completes-green run and the warm (cache-hit) Android figure are recorded here
+once a run with the launch fix finishes end-to-end.
 
 ## Audit
 
-- **A1 — PASS:** Receipt's "## What changed" accurately describes all files in the staged diff (native-fingerprint.mjs, package.json, bun.lock, knip.json, e2e.yml) with correct scope for each.
-- **A2 — PASS:** All four checklist items are realized in the diff: fingerprint script created, @expo/fingerprint declared, knip.json updated, iOS and Android lanes converted to fingerprint keying.
-- **A3 — PASS:** Checklist maps to the issue's mobile-CI-cache-cost slice (#535 umbrella); receipt correctly excludes other umbrella phases (transport fixes, honesty invariants, 46 skip cells).
+Re-attested by an independent sub-agent after the Android dev-client launch fix
+was added to the staged diff (`android-emulator-e2e.sh`, `harness.mjs`, three
+flows, `README.md`).
+
+- **A1 — PASS:** `## What changed` names every file in the staged diff and describes each accurately — including the newest bullet: the cold path swaps `bunx expo run:android --no-bundler` for `./gradlew :app:assembleDebug` + `adb install -r` + `adb reverse`, and the harness adds `appIdForPlatform` (appends `.debug` on Android), resolves `appId` in `setup()`, threads it via `state.appId`, and all flows switch `APP_ID` → `ctx.state.appId`. The `.debug`/J1/#501 rationale matches the code comments.
+- **A2 — PASS:** Every `[x]` item is realized in the diff, including "fix the Android dev-client launch: build via gradle + `adb install`, target the `.debug` package" (gradle `assembleDebug`, `adb install -r`, and `.debug` targeting via `appIdForPlatform` across the install-check, Metro prewarm, and launch).
+- **A3 — PASS:** The launch fix is the prerequisite that makes the Android build-cache lane run end-to-end — squarely the #535 mobile-CI-build-cache slice; `## Out of scope` correctly excludes the Expo remote build-cache provider and the other umbrella slices. Checklist↔What-changed crosswalk OK (each `[x]` text appears verbatim in a bullet).
 
 ## Accounting
 
@@ -131,6 +144,8 @@ that run completes.
 | claude-code-955653fc-da5-1784881287-1 | claude-code | 955653fc-da50-425f-95f2-bc71a62f0f63 | #535 | claude-fable-5 | 67 | 276302 | 3471563 | 37017 | 313386 | 8.7769 | 1124 | 3278754 | 86820733 | 839174 |  |
 | claude-code-955653fc-da5-1784881762-1 | claude-code | 955653fc-da50-425f-95f2-bc71a62f0f63 | #535 | claude-opus-4-8 | 75 | 85040 | 5255307 | 45279 | 130394 | 4.2915 | 1199 | 3363794 | 92076040 | 884453 |  |
 | claude-code-955653fc-da5-1784882134-1 | claude-code | 955653fc-da50-425f-95f2-bc71a62f0f63 | #535 | claude-opus-4-8 | 65 | 82025 | 5482893 | 57461 | 139551 | 4.6910 | 1264 | 3445819 | 97558933 | 941914 |  |
+| claude-code-955653fc-da5-1784887193-1 | claude-code | 955653fc-da50-425f-95f2-bc71a62f0f63 | #535 | claude-opus-4-8 | 182 | 534648 | 13617601 | 176025 | 710855 | 14.5519 | 1705 | 6372760 | 142073207 | 1289475 |  |
+| claude-code-955653fc-da5-1784887267-1 | claude-code | 955653fc-da50-425f-95f2-bc71a62f0f63 | #535 | claude-opus-4-8 | 8 | 20681 | 750847 | 8024 | 28713 | 0.7053 | 1713 | 6393441 | 142824054 | 1297499 |  |
 
 ### Steering
 
