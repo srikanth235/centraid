@@ -20,6 +20,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultRunId, writeFlowVerdict } from '../../agent-e2e-shared/harness.mjs';
+import { DISMISS_KEYBOARD_ONBOARDING, SKIP_ONBOARDING } from './first-run.mjs';
 import { metroReachable, prewarmMetroBundle } from './metro.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -54,23 +55,6 @@ const appIdForPlatform = (platform) => (platform === 'android' ? `${APP_ID}.debu
  * wait, not a product-latency assertion, and nothing is proven by making it tight.
  */
 export const FIRST_LAUNCH_TIMEOUT_MS = 120_000;
-
-/**
- * The first keystroke on a freshly-booted simulator raises iOS's multilingual
- * keyboard onboarding sheet ("Type English and Dutch … Continue"). It covers the
- * bottom of the screen — including the tab bar — so every subsequent tap silently
- * lands on the sheet instead, and any keystrokes typed while it animates in are
- * swallowed (that is what corrupts text fields — see configureGateway). CI boots
- * a clean simulator each run, so it hits this every time. Dismiss it if it showed
- * up; do nothing if it didn't. Provoke it with a throwaway keystroke FIRST so its
- * appearance is deterministic rather than racing the real input.
- */
-export const DISMISS_KEYBOARD_ONBOARDING = `- runFlow:
-    when:
-      visible: "Continue"
-    commands:
-      - tapOn: "Continue"
-`;
 
 function spawnText(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
@@ -372,7 +356,7 @@ ${DISMISS_KEYBOARD_ONBOARDING}`
 ---
 - launchApp:
     clearState: true
-- extendedWaitUntil:
+${SKIP_ONBOARDING}- extendedWaitUntil:
     visible:
       text: "Everything you build, in one place."
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}

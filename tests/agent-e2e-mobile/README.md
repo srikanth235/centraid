@@ -269,7 +269,7 @@ reaches Metro on the host. No manual port forwarding needed.
     onboarding sheet* ("Type English and Dutch … Continue"), which
     covers the tab bar and swallows later taps. CI boots a fresh
     simulator every run, so it hits this every time — use
-    `DISMISS_KEYBOARD_ONBOARDING` from the harness after typing.
+    `DISMISS_KEYBOARD_ONBOARDING` from `lib/first-run.mjs` after typing.
 - **`RN accessibilityLabel` on `TextInput` does not reach the iOS a11y
   tree** — the node keeps the placeholder as its `hintText` and gains no
   `accessibilityText`. Adding one to make a field selectable does not
