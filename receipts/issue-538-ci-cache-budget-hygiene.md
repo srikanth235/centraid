@@ -1,4 +1,4 @@
-# issue-538 — CI cache-budget hygiene: drop bun cache, granular turbo cache, prune
+# issue-538 — CI cache-budget hygiene: drop bun cache, granular turbo cache, native LRU
 
 GitHub issue: [#538](https://github.com/srikanth235/centraid/issues/538)
 
@@ -21,14 +21,14 @@ merely deduplicated a cache that should not exist.
 
 - [x] remove the bun install cache from all CI workflows
 - [x] migrate turbo to a granular GitHub-backed remote-cache adapter
-- [x] add a scheduled cache-prune workflow (dry-run first), exempting granular caches
+- [x] rely on GitHub's native LRU + 7-day expiry instead of a scheduled prune workflow
 - [x] one-off reclaim of dead merged-PR caches
 
 ## What changed
 
 - **remove the bun install cache from all CI workflows** (`.github/workflows/ci.yml`, `.github/workflows/client-e2e-pr.yml`, `.github/workflows/interop-weekly.yml`, `.github/workflows/gateway-package.yml`) — deleted all 9 `actions/cache` steps for `~/.bun/install/cache` (the whole bun family, 41% of the pool). Measured: the cache *restore* alone was 11–19s vs an 11–12s fully-cold `bun install`, so the cache made jobs slower while dominating the budget. This supersedes the earlier "unify the bun key" change (commit `2cca0974`) — the correct number of bun cache keys is zero.
 - **migrate turbo to a granular GitHub-backed remote-cache adapter** (`.github/workflows/ci.yml` ×2, `.github/workflows/client-e2e-pr.yml` ×3) — replaced the 5 `actions/cache` steps that tarred `.turbo` into a per-commit ~600 MiB blob (`turbo-static`/`turbo-verify`/`turbo-client-e2e` keys, each suffixed `-${{ github.sha }}` so every commit banked a fresh copy) with `rharkor/caching-for-turbo@v2.5.0`. The adapter runs a local server implementing turbo's native remote-cache protocol backed by the GitHub Actions cache API — caching becomes per-task and content-addressed (`turbogha_<taskhash>`), so unchanged tasks are re-read (LRU-refreshed) instead of re-saved. No external service, account, or secret: it uses the runner's built-in cache token, keeping build artifacts on GitHub in line with the repo's self-host posture.
-- **add a scheduled cache-prune workflow (dry-run first), exempting granular caches** — new `.github/workflows/cache-prune.yml` (github-script) runs nightly at 08:00 UTC and on `workflow_dispatch`. Policy: delete `refs/pull/<n>/merge` caches whose PR is closed/merged (dead — only that PR's runs can read them); on `refs/heads/*`, keep the newest 2 per (ref, family) and delete the rest, where family = the key with trailing ≥32-hex content hashes stripped. The turbo adapter's `turbogha_` entries are **exempt from the keep-N rule** (each is a distinct task artifact, not a successive version, so keep-N would gut them) — GitHub LRU manages them, and dead-PR deletion still applies. Ships report-only (`SCHEDULE_DRY_RUN = true`, dispatch `dry_run` default true) so the policy is confirmed against real data before any deletion is enabled.
+- **rely on GitHub's native LRU + 7-day expiry instead of a scheduled prune workflow** — a `.github/workflows/cache-prune.yml` (github-script, keep-newest-2-per-family + dead-PR deletion, dry-run) was drafted earlier this issue and is **removed** here: it was a garbage collector for the bun+turbo saturation this issue eliminates at the source. Once the bun family is gone (produced by nothing) and turbo is granular `turbogha_` entries, the pool settles well under the 10 GB cap (measured saturating families were bun ~4.2 GB + turbo tarballs ~4.6 GB = 87% of the cap; both stop being produced), so GitHub's built-in 10 GB LRU eviction and 7-day idle expiry keep it bounded with no bespoke job. Dead merged-PR caches age out on their own within 7 days and, absent the big blobs, are too small to evict anything valuable before then. Keeping a daily `actions: write` job that deletes caches would be a standing liability guarding a pool that no longer overflows — deleting it is the structural end-state, not a regression.
 - **one-off reclaim of dead merged-PR caches** — deleted the 4 caches owned by merged PR #533 (turbo-verify 602, turbo-static 585, turbo-client-e2e 189, cargo-iroh-wasm 62 MiB), freeing 1,438 MiB immediately (pool 10,089 → 8,709 MiB, headroom 151 → 1,531 MiB). Deleted by cache **id**, not key, because the `cargo-iroh-wasm` key is shared across refs and key-deletion would also drop the open PR #536's copy.
 
 ## Out of scope
@@ -38,8 +38,8 @@ merely deduplicated a cache that should not exist.
 - A hosted turbo remote cache (Vercel Remote Cache, or the adapter's own S3/R2
   provider) — rejected in favour of the free GitHub-backed provider so no build
   artifact leaves GitHub and no account/secret is introduced (self-host posture).
-- Per-family budget alerting (threshold warn) — optional follow-up once the prune
-  policy is proven live.
+- Per-family budget alerting (threshold warn) — optional follow-up if the pool
+  ever trends back toward the cap after the bun/turbo change lands on `main`.
 
 ## Decisions
 
@@ -52,29 +52,28 @@ merely deduplicated a cache that should not exist.
   gives turbo's native granular protocol while keeping artifacts on GitHub and
   needing no secret — the elegant fit for this repo. A hosted cache (Vercel/S3/R2)
   would be faster to wire but moves data off GitHub; declined (see Out of scope).
-- **Exempted `turbogha_` from the prune's keep-N rule.** Content-addressed
-  granular entries are distinct artifacts, not versions of one blob; keep-N would
-  delete all but the two newest each night. They are small and recreated on
-  demand, so GitHub LRU is the right manager; dead-PR deletion still applies.
-- **Prune keeps newest 2 per family (not 1)** so an in-flight write or an
-  entry mid-eviction still leaves a usable fallback; targets ~6–7 GB steady with
-  no hit-rate loss.
-- **Dry-run first.** The pool being over budget is not an emergency (LRU already
-  handles it; worst case is one cold rebuild), so the workflow lands report-only
-  and is flipped to deleting (`SCHEDULE_DRY_RUN = false`) after one night of real
-  data confirms the condemned set.
-- **Never delete on PR-state lookup failure** — a failed `pulls.get` marks the PR
-  `unknown`, which is excluded from deletion, so a transient API error can never
-  drop a live cache.
+- **No scheduled prune workflow — deleted the draft.** A garbage collector only
+  earns its keep when the pool overflows. This issue removes the overflow at the
+  source (bun family gone, turbo tarballs → small `turbogha_` entries), so the
+  steady-state pool sits well under the 10 GB cap and GitHub's own LRU eviction +
+  7-day idle expiry are sufficient. A daily `actions: write` job that deletes
+  caches is itself a liability (delete-logic bugs, another workflow to maintain)
+  and was still in dry-run — it never deleted anything, so removing it forfeits no
+  live behaviour. Choosing the platform's native mechanism over a bespoke pruner
+  is the same structural-over-symptomatic call as deleting the bun cache. If the
+  pool ever trends back toward the cap after this lands on `main`, a pruner (or the
+  budget alert in Out of scope) can be reconsidered against real data.
 
 ## Verification
 
-All four edited workflows parse; `cache-prune.yml`'s embedded github-script
-passes `node --check`; no `~/.bun/install/cache` or `.turbo` `actions/cache`
-step remains, and the turbo adapter is wired into all 5 turbo-running jobs:
+All four edited workflows parse; `cache-prune.yml` is deleted (no CI ruleset or
+other workflow referenced it); no `~/.bun/install/cache` or `.turbo`
+`actions/cache` step remains, and the turbo adapter is wired into all 5
+turbo-running jobs:
 
 ```sh
-node -e 'for(const f of ["ci.yml","client-e2e-pr.yml","interop-weekly.yml","gateway-package.yml","cache-prune.yml"]) require("js-yaml").load(require("fs").readFileSync(".github/workflows/"+f,"utf8"))'
+node -e 'for(const f of ["ci.yml","client-e2e-pr.yml","interop-weekly.yml","gateway-package.yml"]) require("js-yaml").load(require("fs").readFileSync(".github/workflows/"+f,"utf8"))'
+test ! -e .github/workflows/cache-prune.yml ; : expect the pruner to be gone
 grep -rE "~/.bun/install/cache|path: .turbo" .github/workflows/ ; : expect no matches
 grep -rc "caching-for-turbo" .github/workflows/ci.yml .github/workflows/client-e2e-pr.yml ; : expect 2 and 3
 ```
@@ -88,12 +87,9 @@ gh api "repos/{owner}/{repo}/actions/runs/<ci-run>/jobs" \
 ```
 
 Turbo cache hits and the net job-time delta are confirmed on a CI dispatch after
-this lands (the adapter logs `Cache hit`/`Cache miss` per task). Dispatch the
-prune in dry-run to see its condemned set before enabling deletion:
-
-```sh
-gh workflow run cache-prune.yml -f dry_run=true
-```
+this lands (the adapter logs `Cache hit`/`Cache miss` per task); `ci.yml` runs
+only on `push` to `main` and on PRs, so the first live hit/miss numbers arrive
+when this branch opens a PR or merges.
 
 Effect of the one-off reclaim, measured:
 
@@ -105,9 +101,14 @@ gh api "repos/{owner}/{repo}/actions/caches?per_page=100" \
 
 ## Audit
 
-- **A1 — PASS:** `## What changed` correctly names all modified files (ci.yml, client-e2e-pr.yml, interop-weekly.yml, gateway-package.yml, cache-prune.yml, receipt itself) and accurately describes the staged diff: 9 bun cache `actions/cache` deletions across 4 workflows, 5 turbo tarball replacements with `rharkor/caching-for-turbo@v2.5.0` in ci.yml (×2) and client-e2e-pr.yml (×3), cache-prune.yml `EXEMPT_KEEP_N_PREFIXES` logic for `turbogha_` adapter entries, one-off reclaim narrative.
-- **A2 — PASS:** All four [x] checklist items are fully realized in the staged diff: (1) bun cache deleted from all 4 workflows (9 `actions/cache` steps removed), (2) turbo migrated to GitHub-backed adapter in 5 turbo-running jobs (`rharkor/caching-for-turbo@75f8ebf4a43d2c60b23bc2a27082cfea94ffdad9`), (3) cache-prune.yml added with nightly/dispatch schedule and `EXEMPT_KEEP_N_PREFIXES = ['turbogha_']` exemption from keep-N rule, (4) one-off reclaim of PR #533's 4 caches (1,438 MiB) documented as executed.
-- **A3 — PASS:** Checklist mirrors issue #538's core intent (saturated 10 GB budget, fix dominating bun/turbo caches) and all acceptance criteria (bun unified pool, turbo per-task cache, durable pruning guard); actual work expands scope from original A/B/C (full bun deletion + turbo adapter migration) and is justified in receipt's reasoning and Decisions section.
+Re-attested by an independent sub-agent after the scheduled `cache-prune.yml`
+draft was **removed** from this issue in favour of GitHub's native LRU + 7-day
+expiry. The bun-deletion and turbo-adapter items were realized in earlier
+commits on this branch (`8394a03c`); this final commit deletes the pruner.
+
+- **A1 — PASS:** `## What changed` matches the staged diff — `cache-prune.yml` is deleted (not added), and the receipt's title, checklist, and prose are reframed to native-LRU. Every remaining pruner mention is past-tense ("was drafted earlier… removed"); no prose asserts a pruner ships.
+- **A2 — PASS:** Every `[x]` item is coherent for a multi-commit issue; the item audited in this staged diff — "rely on GitHub's native LRU + 7-day expiry instead of a scheduled prune workflow" — is realized by the file deletion and appears verbatim in its What-changed bullet. The earlier three items (bun removal, turbo adapter, one-off reclaim) were realized in prior commits.
+- **A3 — PASS:** Removing a dry-run-only GC that never deleted anything fits #538's cache-budget-hygiene intent: the structural fix (bun family gone, turbo → small content-addressed `turbogha_` entries) removes the saturation the pruner guarded, leaving GitHub's native 10 GB LRU + 7-day idle expiry sufficient. `## Decisions` explains the why; `## Verification` asserts the pruner's absence (`test ! -e`) rather than referencing it as live. Reasoning is internally consistent.
 
 ## Steering
 
@@ -128,6 +129,7 @@ gh api "repos/{owner}/{repo}/actions/caches?per_page=100" \
 | claude-code-955653fc-da5-1784882813-1 | claude-code | 955653fc-da50-425f-95f2-bc71a62f0f63 | #538 | claude-opus-4-8 | 8 | 8982 | 874931 | 2573 | 11563 | 0.5580 | 1343 | 3567094 | 105944124 | 982840 |  |
 | claude-code-955653fc-da5-1784884168-1 | claude-code | 955653fc-da50-425f-95f2-bc71a62f0f63 | #538 | claude-opus-4-8 | 159 | 2259370 | 18997475 | 120502 | 2380031 | 26.6331 | 1502 | 5826464 | 124941599 | 1103342 |  |
 | claude-code-955653fc-da5-1784884297-1 | claude-code | 955653fc-da50-425f-95f2-bc71a62f0f63 | #538 | claude-opus-4-8 | 21 | 11648 | 3514007 | 10108 | 21777 | 2.0826 | 1523 | 5838112 | 128455606 | 1113450 |  |
+| claude-code-955653fc-da5-1784887404-1 | claude-code | 955653fc-da50-425f-95f2-bc71a62f0f63 | #538 | claude-opus-4-8 | 11 | 19789 | 1385712 | 6584 | 26384 | 0.9812 | 1724 | 6413230 | 144209766 | 1304083 |  |
 
 ### Steering
 
