@@ -24,8 +24,11 @@ if [ "${ANDROID_CACHE_HIT:-}" = "true" ] && [ -f "$cached_apk" ]; then
   adb reverse tcp:8081 tcp:8081
 else
   # Cold path: build + install the dev client. Always --no-bundler: Metro is
-  # already running on the host, and a second Metro would hang the job.
-  ( cd apps/mobile && bunx expo run:android --no-bundler --device )
+  # already running on the host, and a second Metro would hang the job. No
+  # --device flag: as a bare boolean it opens expo's interactive device picker
+  # ("Input is required ... in non-interactive mode"); omitting it makes expo
+  # auto-select the single booted emulator.
+  ( cd apps/mobile && bunx expo run:android --no-bundler )
   # Bank the debug apk under the content-addressed cache path. Fail hard if it
   # is missing rather than caching nothing (a later hit would install nothing
   # and fail obscurely at flow time).
