@@ -14,9 +14,10 @@ permissions:
   contents: read
 
 # Wall-clock plan: static (format/lint/typecheck) and verify (build/tests/coverage)
-# run in parallel. Each restores Turbo + Bun (+ Cargo on verify) caches so warm
-# PR pushes skip cold tsc/cargo. The thin `check` job is the required gate name
-# branch protection already expects; it fails if either lane fails.
+# run in parallel. Each uses turbo's GitHub-backed remote cache (+ Cargo cache on
+# verify) so warm PR pushes skip cold tsc/cargo. No bun cache — a cold `bun
+# install` is faster than restoring one (#538). The thin `check` job is the
+# required gate name branch protection already expects; it fails if either lane fails.
 jobs:
   static:
     runs-on: ubuntu-latest
