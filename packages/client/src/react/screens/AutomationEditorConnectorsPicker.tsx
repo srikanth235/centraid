@@ -54,7 +54,12 @@ function ConnectInlineForm({
           value={label}
           onChange={(e) => setLabel(e.target.value)}
           autoComplete="off"
+          data-testid="connector-label-input"
         />
+        <span className={styles.connFieldHint}>
+          Names this connection. Use a distinct label per account (e.g. “{item.name} · work”) to
+          connect more than one.
+        </span>
       </label>
       {item.credKind === 'oauth2' ? (
         <>

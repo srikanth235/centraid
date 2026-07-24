@@ -376,6 +376,47 @@ describe('SettingsConnectionsScreen', () => {
     expect(wizard?.textContent).toContain('until Google restricted-scope verification is complete');
   });
 
+  it('differentiates the label and warns when adding a second account for a connected provider', async () => {
+    // Default props already carry one Gmail connection (kind pull.gmail, label
+    // "Google · Gmail"). Adding another must not silently reuse that identity.
+    const props = makeProps();
+    const el = await mount(props);
+    const gmailTile = [...el.querySelectorAll('[data-testid="connector-tile"]')].find((b) =>
+      b.textContent?.includes('Gmail'),
+    );
+    await act(async () => gmailTile?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const connectBtn = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Connect with OAuth 2.0'),
+    );
+    await act(async () => connectBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+
+    const wizard = el.querySelector('[data-testid="connector-wizard"]');
+    const labelInput = wizard?.querySelector<HTMLInputElement>(
+      '[data-testid="connector-label-input"]',
+    );
+    // A distinct default so a save can't overwrite the existing account…
+    expect(labelInput?.value).not.toBe('Google · Gmail');
+    expect(labelInput?.value.startsWith('Google · Gmail')).toBe(true);
+    // …and the owner is told why. The redundant in-form auth banner is gone.
+    expect(wizard?.textContent).toMatch(/already have 1 account/i);
+    expect(wizard?.textContent).not.toContain('Use your own client ID and secret (BYO)');
+  });
+
+  it('keeps the plain single-account label default when nothing is connected yet', async () => {
+    const props = makeProps({ loadConnections: vi.fn().mockResolvedValue([]) });
+    const el = await mount(props);
+    const gmailTile = [...el.querySelectorAll('[data-testid="connector-tile"]')].find((b) =>
+      b.textContent?.includes('Gmail'),
+    );
+    await act(async () => gmailTile?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const connectBtn = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Connect with OAuth 2.0'),
+    );
+    await act(async () => connectBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const labelInput = el.querySelector<HTMLInputElement>('[data-testid="connector-label-input"]');
+    expect(labelInput?.value).toBe('Google · Gmail');
+  });
+
   it('New Connector opens the picker sheet', async () => {
     const el = await mount(makeProps({ loadConnections: vi.fn().mockResolvedValue([]) }));
     const newBtn = [...el.querySelectorAll('button')].find((b) =>
