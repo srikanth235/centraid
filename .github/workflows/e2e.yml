@@ -453,7 +453,10 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |
-            set -euo pipefail
+            # `set -eu`, not `-euo pipefail`: on Linux the action runs this via
+            # /usr/bin/sh (dash), which rejects `-o pipefail`. The script has no
+            # pipelines, so -eu is equivalent safety here.
+            set -eu
             cached_apk="$HOME/.cache/centraid-mobile-e2e-android/app-debug.apk"
             if [ "${ANDROID_CACHE_HIT:-}" = "true" ] && [ -f "$cached_apk" ]; then
               # Warm path: skip the native build, install the banked dev-client
