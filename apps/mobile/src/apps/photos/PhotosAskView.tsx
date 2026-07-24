@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 
 import { family, useTheme } from '../../kit/theme';
@@ -17,7 +18,12 @@ const SUGGESTIONS = [
 export default function PhotosAskView({ navigation }: { navigation: Nav }): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
   const search = (): void => navigation.navigate('PhotosSearch');
+  // The floating nav pill + FAB overlay the bottom strip (PhotosHome renders them
+  // position:absolute over this view). Lift the composer clear of them: the bar is
+  // ~64pt tall over the home-indicator inset, so pad past both plus a gap.
+  const barClearance = insets.bottom + 64 + 16;
 
   return (
     <View style={styles.root}>
@@ -54,7 +60,12 @@ export default function PhotosAskView({ navigation }: { navigation: Nav }): Reac
         </View>
       </ScrollView>
 
-      <View style={[styles.inputBar, { backgroundColor: colors.bg, borderTopColor: colors.line }]}>
+      <View
+        style={[
+          styles.inputBar,
+          { backgroundColor: colors.bg, borderTopColor: colors.line, paddingBottom: barClearance },
+        ]}
+      >
         <Pressable
           style={[styles.input, { backgroundColor: colors.bgSunken }]}
           onPress={search}

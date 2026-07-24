@@ -77,3 +77,13 @@ export { useTheme } from './useTheme';
 export { resolveTheme, navThemes, navThemeFor } from './resolve';
 export type { ThemeValue, ThemeColors, Scheme } from './resolve';
 export { lightPalette, darkPalette } from './tokens.generated';
+
+// Device-local Appearance override (System / Light / Dark) folded over the OS.
+export {
+  useAppearance,
+  getAppearance,
+  setAppearance,
+  hydrateAppearance,
+  resolveScheme,
+} from './appearance';
+export type { Appearance } from './appearance';

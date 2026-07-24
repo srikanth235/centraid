@@ -1,21 +1,25 @@
 // Single source of truth for the navigation tree + route params.
 //
-//   RootStack (native stack)
-//   ├─ Tabs (bottom tabs)
-//   │  ├─ Apps      → AppsStack    (super-app launcher, AppDetail)
-//   │  ├─ Photos    → PhotosStack  (timeline, lightbox, library/search/backup)
-//   │  ├─ Docs      → DocsStack    (drive, viewer)
-//   │  ├─ Agenda    → AgendaStack  (calendar, event)
-//   │  └─ SettingsTab → SettingsStack (Settings, Approvals)
-//   └─ MobileFallback (root-level modal, over the tabs)
+//   RootStack (native stack, springboard model)
+//   ├─ Home          → HomeScreen                      (launcher, root)
+//   ├─ Photos        → PhotosStack  (timeline, lightbox, library/search/backup)
+//   ├─ Docs          → DocsStack    (drive, viewer)
+//   ├─ Agenda        → AgendaStack  (calendar, event)
+//   ├─ AppDetail     → AppDetailScreen (remote-app WebView cover)
+//   ├─ Assistant     → AssistantScreen (chat with the gateway assistant)
+//   ├─ Automations   → AutomationsScreen (list + run the space's automations)
+//   ├─ Insights      → InsightsScreen (gateway health + limited usage insights)
+//   ├─ Settings      → SettingsStack (Settings, Approvals)
+//   └─ MobileFallback (desktop-builder fallback modal)
 //
-// Each screen imports its own typed props off the helpers below. Screens
-// inside a tab use `CompositeScreenProps` so `navigation.navigate` still
-// type-checks when they cross into a sibling tab (e.g. Home → Approvals) or
-// up to the root modal (Home → MobileFallback).
+// There is no bottom-tab navigator: the apps are full-screen covers that slide
+// up over Home and dismiss with the native swipe-down gesture. Each nested-stack
+// screen imports its own typed props off the helpers below, composed with the
+// root stack via `CompositeScreenProps` so `navigation.navigate` still
+// type-checks when it crosses up to a sibling cover (e.g. Docs → Approvals) or
+// back to Home.
 
 import type { CompositeScreenProps, NavigatorScreenParams } from '@react-navigation/native';
-import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 export type PhotosStackParamList = {
@@ -43,26 +47,21 @@ export type AgendaStackParamList = {
   AgendaEvent: { eventId: string; instanceKey?: string };
 };
 
-export type AppsStackParamList = {
-  Home: undefined;
-  AppDetail: { appId: string };
-};
-
 export type SettingsStackParamList = {
   Settings: undefined;
   Approvals: undefined;
 };
 
-export type TabParamList = {
+export type RootStackParamList = {
+  Home: undefined;
   Photos: NavigatorScreenParams<PhotosStackParamList>;
   Docs: NavigatorScreenParams<DocsStackParamList>;
   Agenda: NavigatorScreenParams<AgendaStackParamList>;
-  Apps: NavigatorScreenParams<AppsStackParamList>;
-  SettingsTab: NavigatorScreenParams<SettingsStackParamList>;
-};
-
-export type RootStackParamList = {
-  Tabs: NavigatorScreenParams<TabParamList>;
+  AppDetail: { appId: string };
+  Assistant: undefined;
+  Automations: undefined;
+  Insights: undefined;
+  Settings: NavigatorScreenParams<SettingsStackParamList>;
   MobileFallback: undefined;
 };
 
@@ -71,36 +70,41 @@ export type RootScreenProps<T extends keyof RootStackParamList> = NativeStackScr
   T
 >;
 
-// Shared outer context for any tab screen: the bottom-tab navigator plus the
-// root stack (for the MobileFallback modal). Composed with each stack below.
-type TabAndRoot = CompositeScreenProps<
-  BottomTabScreenProps<TabParamList>,
-  RootScreenProps<keyof RootStackParamList>
->;
+// Root-level screens (no nested stack of their own).
+export type HomeScreenProps = RootScreenProps<'Home'>;
+export type AppDetailScreenProps = RootScreenProps<'AppDetail'>;
+export type AssistantScreenProps = RootScreenProps<'Assistant'>;
+export type AutomationsScreenProps = RootScreenProps<'Automations'>;
+export type InsightsScreenProps = RootScreenProps<'Insights'>;
+
+// Shared outer context for any nested-stack screen: the root stack, so a screen
+// deep inside a cover can still navigate to a sibling cover or back to Home.
+type Root = RootScreenProps<keyof RootStackParamList>;
 
 export type PhotosScreenProps<T extends keyof PhotosStackParamList> = CompositeScreenProps<
   NativeStackScreenProps<PhotosStackParamList, T>,
-  TabAndRoot
->;
-
-export type AppsScreenProps<T extends keyof AppsStackParamList> = CompositeScreenProps<
-  NativeStackScreenProps<AppsStackParamList, T>,
-  TabAndRoot
+  Root
 >;
 
 export type DocsScreenProps<T extends keyof DocsStackParamList> = CompositeScreenProps<
   NativeStackScreenProps<DocsStackParamList, T>,
-  TabAndRoot
+  Root
 >;
 
 export type AgendaScreenProps<T extends keyof AgendaStackParamList> = CompositeScreenProps<
   NativeStackScreenProps<AgendaStackParamList, T>,
-  TabAndRoot
+  Root
 >;
 
-export type SettingsScreenProps<T extends keyof SettingsStackParamList> = CompositeScreenProps<
-  NativeStackScreenProps<SettingsStackParamList, T>,
-  TabAndRoot
+// The Settings cover's screens are intentionally NOT composed with the root
+// stack: the root route that presents this cover is itself named `Settings`, so
+// an intersection with the root param list would collapse the inner `Settings`
+// screen's params to `never`. These screens never navigate out to a sibling
+// cover — they move between Settings and Approvals and dismiss via
+// `navigation.getParent()?.goBack()` — so the plain stack props are sufficient.
+export type SettingsScreenProps<T extends keyof SettingsStackParamList> = NativeStackScreenProps<
+  SettingsStackParamList,
+  T
 >;
 
 declare global {

@@ -11,6 +11,7 @@ import { OnlineOnlyError } from '@centraid/client/replica/native';
 import { backupDocument } from '../../lib/upload/media-producer';
 import { useTheme } from '../../kit/theme';
 import { useReplica } from '../../kit/replica/ReplicaProvider';
+import HomeKey from '../../kit/components/HomeKey';
 import type { DocsScreenProps } from '../../navigation';
 import type { NativeDocument, NativeFolder } from './docs-model';
 import { styles } from './DocsHome.styles';
@@ -172,10 +173,7 @@ export default function DocsHome({
       setFolderName('');
       setAddOpen(false);
       if (result.status === 'parked' || result.status === 'queued') {
-        navigation.navigate('Tabs', {
-          screen: 'SettingsTab',
-          params: { screen: 'Approvals' },
-        });
+        navigation.navigate('Settings', { screen: 'Approvals' });
       } else if (result.status === 'denied' || result.status === 'failed') {
         Alert.alert('Folder not created', result.reason ?? 'The vault rejected this change.');
       } else {
@@ -198,10 +196,14 @@ export default function DocsHome({
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]} edges={['top']}>
       <View style={styles.header}>
         {folderId ? (
-          <Pressable onPress={() => navigation.goBack()}>
+          // In a folder: chevron = up one level, still inside Docs.
+          <Pressable accessibilityLabel="Up to parent folder" onPress={() => navigation.goBack()}>
             <Feather name="chevron-left" size={26} color={colors.ink} />
           </Pressable>
-        ) : null}
+        ) : (
+          // At the root: the shared teal grid = leave Docs for your apps.
+          <HomeKey variant="leave" onPress={() => navigation.goBack()} />
+        )}
         <View style={styles.headerCopy}>
           <Text style={[styles.title, { color: colors.ink }]}>{parent?.name ?? 'Docs'}</Text>
           <Text style={[styles.subtitle, { color: colors.ink2 }]}>Private document library</Text>

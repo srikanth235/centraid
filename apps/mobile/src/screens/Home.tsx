@@ -1,96 +1,98 @@
-// governance: allow-repo-hygiene file-size-limit cohesive design-port launcher screen (greeting + app grid + automations + bottom bar); decompose into subcomponents in a follow-up (#498)
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
+// The springboard Home launcher (issue #498, Slice B). A thin composition over
+// the pieces in ./home: the editorial greeting, the attention-first status line,
+// the always-eight-apps grid, the floating glass dock, and the search overlay.
+//
+// Home owns only the data load and the navigation wiring; every visual block is
+// its own component so this file stays a readable assembly (and under the
+// repo-hygiene size cap, hence no exemption header).
+//
+// Data model: one `listAppRegistry()` fetch per load splits into openable apps
+// (the grid, merged over the static catalog) and an automations count (the
+// attention line); parked approvals load best-effort on top. When there's no
+// gateway, the grid still renders — the eight apps show, gateway-hosted ones
+// dimmed — so the launcher always advertises the full surface.
+
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, Text } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { runOnJS, useSharedValue } from 'react-native-reanimated';
 import { useFocusEffect } from '@react-navigation/native';
 import type { AppMetaResolved } from '@centraid/design-tokens';
 
-import Icon from '../kit/components/Icon';
-import { family, spacing, t, useTheme, type ThemeColors } from '../kit/theme';
-import { GatewayError, listApps, resolveAppMeta, resolveGatewayBase } from '../lib/gateway';
+import { family, useTheme, type ThemeColors } from '../kit/theme';
 import {
-  firstNameOf,
-  getProfileColor,
-  getProfileName,
-  greetingFor,
-  initialsOf,
-} from '../lib/profile';
-import type { AppsScreenProps } from '../navigation';
+  GatewayError,
+  isOpenableApp,
+  listAppRegistry,
+  listParked,
+  resolveAppMeta,
+  resolveGatewayBase,
+} from '../lib/gateway';
+import { getProfileColor, getProfileName } from '../lib/profile';
+import { subscribeSpaces } from '../lib/spaces';
+import type { HomeScreenProps } from '../navigation';
+import GreetingHeader from './home/GreetingHeader';
+import AttentionLine, { type ConnectionState } from './home/AttentionLine';
+import LauncherGrid from './home/LauncherGrid';
+import GlassDock from './home/GlassDock';
+import SearchOverlay from './home/SearchOverlay';
+import SpaceDrawer from './home/SpaceDrawer';
+import SpacesSwitcher from './home/SpacesSwitcher';
+import { NATIVE_APP_IDS, buildLauncherItems, type LauncherItem } from './home/catalog';
 
 const H_PADDING = 20;
-const NATIVE_APPS: readonly AppMetaResolved[] = [
-  resolveAppMeta({
-    id: 'photos',
-    name: 'Photos',
-    description: 'Timeline, memories, albums and private backup.',
-    iconKey: 'Camera',
-    colorKey: 'ochre',
-  }),
-  resolveAppMeta({
-    id: 'docs',
-    name: 'Docs',
-    description: 'Files, folders, offline search and secure custody.',
-    iconKey: 'Folder',
-    colorKey: 'slate',
-  }),
-  resolveAppMeta({
-    id: 'agenda',
-    name: 'Agenda',
-    description: 'Calendar, schedule, guests and reminders.',
-    iconKey: 'Calendar',
-    colorKey: 'indigo',
-  }),
-];
 
-const DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
-  weekday: 'long',
-  month: 'long',
-  day: 'numeric',
-});
+// A drag must start within this many points of the left screen edge to open the
+// Space drawer, so an edge-swipe never competes with in-content horizontal
+// scroll (e.g. the attention line's chip strip).
+const EDGE_ZONE = 24;
+
+// Stable empty listing for the not-ready states — a fresh `[]` per render would
+// defeat the `items` memo below (exhaustive-deps flags it).
+const NO_APPS: readonly AppMetaResolved[] = [];
 
 type HomeState =
   | { kind: 'loading' }
   | { kind: 'no-gateway' }
-  | { kind: 'ready'; apps: AppMetaResolved[] }
+  | { kind: 'ready'; apps: AppMetaResolved[]; automations: number }
   | { kind: 'error'; message: string };
 
-export default function HomeScreen({ navigation }: AppsScreenProps<'Home'>): React.JSX.Element {
+export default function HomeScreen({ navigation }: HomeScreenProps): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const insets = useSafeAreaInsets();
   const [state, setState] = useState<HomeState>({ kind: 'loading' });
+  const [approvals, setApprovals] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
-  const [searching, setSearching] = useState(false);
-  const [query, setQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [spacesOpen, setSpacesOpen] = useState(false);
   const [profile, setProfile] = useState(() => ({
     name: getProfileName(),
     color: getProfileColor(),
   }));
-  const inputRef = useRef<TextInput | null>(null);
 
   const load = useCallback(async (): Promise<void> => {
     try {
       const base = await resolveGatewayBase();
       if (!base) {
         setState({ kind: 'no-gateway' });
+        setApprovals(0);
         return;
       }
-      const rows = await listApps();
-      const nativeIds = new Set(NATIVE_APPS.map((app) => app.id));
-      setState({
-        apps: rows.map(resolveAppMeta).filter((app) => !nativeIds.has(app.id)),
-        kind: 'ready',
-      });
+      const rows = await listAppRegistry();
+      const apps = rows
+        .filter(isOpenableApp)
+        .map(resolveAppMeta)
+        .filter((app) => !NATIVE_APP_IDS.has(app.id));
+      const automations = rows.filter((row) => row.kind === 'automation').length;
+      setState({ apps, automations, kind: 'ready' });
+      // Approvals are secondary — never fail the whole load over them.
+      try {
+        setApprovals((await listParked()).length);
+      } catch {
+        setApprovals(0);
+      }
     } catch (error) {
       setState({
         kind: 'error',
@@ -101,12 +103,16 @@ export default function HomeScreen({ navigation }: AppsScreenProps<'Home'>): Rea
               ? error.message
               : 'Could not load apps.',
       });
+      setApprovals(0);
     }
   }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
+  // Switching / adding / forgetting a Space re-points the whole app at a new
+  // vault — reload the grid so it reflects the now-active space's apps.
+  useEffect(() => subscribeSpaces(() => void load()), [load]);
   useFocusEffect(
     useCallback(() => {
       void load();
@@ -119,373 +125,151 @@ export default function HomeScreen({ navigation }: AppsScreenProps<'Home'>): Rea
     await load();
     setRefreshing(false);
   }, [load]);
-  const openSearch = (): void => {
-    setSearching(true);
-    setTimeout(() => inputRef.current?.focus(), 0);
-  };
-  const closeSearch = (): void => {
-    setSearching(false);
-    setQuery('');
-  };
-  const q = query.trim().toLowerCase();
-  const remoteApps = state.kind === 'ready' ? state.apps : [];
-  const filter = (app: AppMetaResolved): boolean =>
-    !q || app.name.toLowerCase().includes(q) || app.desc.toLowerCase().includes(q);
-  const nativeMatches = NATIVE_APPS.filter(filter);
-  const remoteMatches = remoteApps.filter(filter);
-  const allApps = [...nativeMatches, ...remoteMatches];
 
-  const openApp = (app: AppMetaResolved): void => {
-    if (app.id === 'photos') navigation.navigate('Photos', { screen: 'PhotosHome' });
-    else if (app.id === 'docs') navigation.navigate('Docs', { screen: 'DocsHome' });
-    else if (app.id === 'agenda') navigation.navigate('Agenda', { screen: 'AgendaHome' });
-    else navigation.navigate('AppDetail', { appId: app.id });
-  };
+  const remoteApps = state.kind === 'ready' ? state.apps : NO_APPS;
+  const items = useMemo(() => buildLauncherItems(remoteApps), [remoteApps]);
+  const automations = state.kind === 'ready' ? state.automations : 0;
 
-  const greetName = firstNameOf(profile.name) || 'there';
+  const connection: ConnectionState =
+    state.kind === 'ready'
+      ? { kind: 'ready' }
+      : state.kind === 'error'
+        ? { kind: 'error', message: state.message }
+        : state; // loading | no-gateway
+
+  const openItem = useCallback(
+    (item: LauncherItem): void => {
+      const { route } = item;
+      // The root stack fires the launch haptic on transitionStart (App.tsx), so
+      // this handler only routes.
+      switch (route.kind) {
+        case 'photos':
+          navigation.navigate('Photos', { screen: 'PhotosHome' });
+          break;
+        case 'docs':
+          navigation.navigate('Docs', { screen: 'DocsHome' });
+          break;
+        case 'agenda':
+          navigation.navigate('Agenda', { screen: 'AgendaHome' });
+          break;
+        case 'app':
+          navigation.navigate('AppDetail', { appId: route.appId });
+          break;
+        case 'pair':
+          navigation.navigate('Settings', { screen: 'Settings' });
+          break;
+      }
+    },
+    [navigation],
+  );
+
+  const openFromSearch = useCallback(
+    (item: LauncherItem): void => {
+      setSearchOpen(false);
+      openItem(item);
+    },
+    [openItem],
+  );
+
+  const openSettings = useCallback(
+    () => navigation.navigate('Settings', { screen: 'Settings' }),
+    [navigation],
+  );
+
+  const openMenu = useCallback(() => setMenuOpen(true), []);
+
+  // Left-edge swipe opens the drawer. `activeOffsetX` demands horizontal intent
+  // and `failOffsetY` bows out to vertical grid scroll, so the gesture only wins
+  // on a deliberate rightward drag; the edge guard keeps it off in-content swipes.
+  const edgeStartX = useSharedValue(0);
+  const edgeSwipe = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX(18)
+        .failOffsetY([-16, 16])
+        .onBegin((event) => {
+          edgeStartX.value = event.x;
+        })
+        .onStart(() => {
+          if (edgeStartX.value <= EDGE_ZONE) runOnJS(setMenuOpen)(true);
+        }),
+    [edgeStartX],
+  );
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      {searching ? (
-        <View style={styles.searchBar}>
-          <View style={styles.searchField}>
-            <Icon name="Search" size={16} color={colors.ink3} strokeWidth={1.75} />
-            <TextInput
-              ref={inputRef}
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Search all apps"
-              placeholderTextColor={colors.ink3}
-              style={styles.searchInput}
-              returnKeyType="search"
-              autoCorrect={false}
-              autoCapitalize="none"
+    <GestureDetector gesture={edgeSwipe}>
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        <GreetingHeader name={profile.name} color={profile.color} onOpenMenu={openMenu} />
+
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void onRefresh()}
+              tintColor={colors.accent}
             />
-            <Pressable onPress={closeSearch} hitSlop={8} accessibilityLabel="Close search">
-              <Icon name="X" size={18} color={colors.ink2} strokeWidth={1.75} />
-            </Pressable>
-          </View>
-        </View>
-      ) : (
-        <View style={styles.header}>
-          <View style={styles.greetBlock}>
-            <Text style={styles.date}>{DATE_FORMAT.format(new Date()).toUpperCase()}</Text>
-            <Text style={styles.greet}>
-              {greetingFor()},{'\n'}
-              <Text style={[styles.greetName, { color: profile.color }]}>{greetName}</Text>
-            </Text>
-          </View>
-          <Pressable
-            accessibilityLabel="Profile and settings"
-            onPress={() => navigation.navigate('SettingsTab', { screen: 'Settings' })}
-            style={({ pressed }) => [
-              styles.avatar,
-              { backgroundColor: profile.color },
-              pressed && { opacity: 0.7 },
-            ]}
-          >
-            <Text style={styles.avatarText}>{initialsOf(profile.name)}</Text>
-          </Pressable>
-        </View>
-      )}
-
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => void onRefresh()}
-            tintColor={colors.accent}
-          />
-        }
-      >
-        <Text style={styles.railLabel}>YOUR APPS</Text>
-
-        {allApps.length ? (
-          <View style={styles.appGrid}>
-            {allApps.map((app) => (
-              <LauncherTile key={app.id} app={app} onPress={() => openApp(app)} styles={styles} />
-            ))}
-          </View>
-        ) : null}
-
-        {state.kind === 'loading' ? (
-          <View style={styles.statusRow}>
-            <ActivityIndicator color={colors.accent} />
-            <Text style={styles.statusCopy}>Loading your apps…</Text>
-          </View>
-        ) : state.kind === 'no-gateway' ? (
-          <ConnectionCard
-            title="Connect your computer"
-            copy="Pair once to bring every app you build into this launcher."
-            action="Pair desktop"
-            onPress={() => navigation.navigate('SettingsTab', { screen: 'Settings' })}
-            styles={styles}
-          />
-        ) : state.kind === 'error' ? (
-          <ConnectionCard
-            title="Desktop is offline"
-            copy={state.message}
-            action="Check settings"
-            onPress={() => navigation.navigate('SettingsTab', { screen: 'Settings' })}
-            styles={styles}
-          />
-        ) : remoteMatches.length === 0 && q ? (
-          <Text style={styles.statusCopy}>No apps match “{query}”.</Text>
-        ) : null}
-
-        <Pressable
-          onPress={() => navigation.navigate('MobileFallback')}
-          style={({ pressed }) => [styles.automationRow, pressed && { opacity: 0.85 }]}
+          }
         >
-          <View style={[styles.automationIcon, { backgroundColor: colors.accent }]}>
-            <Icon name="Sparkle" size={22} color="#fff" strokeWidth={1.6} />
-          </View>
-          <View style={styles.automationCopy}>
-            <Text style={styles.automationTitle}>Automations</Text>
-            <Text style={styles.automationSub}>3 running · 15 available</Text>
-          </View>
-          <Icon name="ChevronRight" size={18} color={colors.ink4} strokeWidth={2} />
-        </Pressable>
-      </ScrollView>
+          <AttentionLine
+            connection={connection}
+            approvals={approvals}
+            automations={automations}
+            onApprovals={() => navigation.navigate('Settings', { screen: 'Approvals' })}
+            onAutomations={() => navigation.navigate('Automations')}
+            onPair={openSettings}
+          />
 
-      <View style={[styles.tabBar, { paddingBottom: 9 + insets.bottom }]}>
-        <TabItem
-          label="Approvals"
-          feather="check-circle"
-          onPress={() => navigation.navigate('SettingsTab', { screen: 'Approvals' })}
-          styles={styles}
-          colors={colors}
-        />
-        <TabItem
-          label="Search"
-          feather="search"
-          onPress={openSearch}
-          styles={styles}
-          colors={colors}
-        />
-        <View style={styles.fabColumn}>
-          <Pressable
-            accessibilityLabel="Assistant"
-            onPress={() => navigation.navigate('MobileFallback')}
-            style={({ pressed }) => [
-              styles.fab,
-              { backgroundColor: colors.accent },
-              pressed && { opacity: 0.85 },
-            ]}
-          >
-            <View style={styles.fabHighlight} pointerEvents="none" />
-            <Icon name="Sparkle" size={24} color="#fff" strokeWidth={1.6} />
-          </Pressable>
-          <Text style={styles.fabLabel}>Assistant</Text>
-        </View>
-        <TabItem
-          label="Settings"
-          feather="settings"
-          onPress={() => navigation.navigate('SettingsTab', { screen: 'Settings' })}
-          styles={styles}
-          colors={colors}
-        />
-        <TabItem
-          label="Gateway"
-          feather="bar-chart-2"
-          onPress={() => navigation.navigate('SettingsTab', { screen: 'Settings' })}
-          styles={styles}
-          colors={colors}
-        />
-      </View>
-    </SafeAreaView>
-  );
-}
+          <Text style={styles.railLabel}>YOUR APPS</Text>
+          <LauncherGrid items={items} onOpen={openItem} />
+        </ScrollView>
 
-function LauncherTile({
-  app,
-  onPress,
-  styles,
-}: {
-  app: AppMetaResolved;
-  onPress(): void;
-  styles: ReturnType<typeof makeStyles>;
-}): React.JSX.Element {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Open ${app.name}`}
-      onPress={onPress}
-      style={({ pressed }) => [styles.tile, pressed && styles.tilePressed]}
-    >
-      <View style={[styles.tileIcon, { backgroundColor: app.color }]}>
-        <View style={styles.tileHighlight} pointerEvents="none" />
-        <Icon name={app.iconKey} size={30} color="#fff" strokeWidth={1.7} />
-      </View>
-      <Text style={styles.tileLabel} numberOfLines={1}>
-        {app.name}
-      </Text>
-    </Pressable>
-  );
-}
+        <GlassDock
+          onSearch={() => setSearchOpen(true)}
+          onAssistant={() => navigation.navigate('Assistant')}
+          onSettings={openSettings}
+        />
 
-function ConnectionCard({
-  title,
-  copy,
-  action,
-  onPress,
-  styles,
-}: {
-  title: string;
-  copy: string;
-  action: string;
-  onPress(): void;
-  styles: ReturnType<typeof makeStyles>;
-}): React.JSX.Element {
-  return (
-    <View style={styles.connectionCard}>
-      <View style={styles.connectionCopy}>
-        <Text style={styles.connectionTitle}>{title}</Text>
-        <Text style={styles.statusCopy}>{copy}</Text>
-      </View>
-      <Pressable onPress={onPress} style={styles.connectionAction}>
-        <Text style={styles.connectionActionText}>{action}</Text>
-      </Pressable>
-    </View>
-  );
-}
+        {searchOpen ? (
+          <SearchOverlay
+            items={items}
+            onOpen={openFromSearch}
+            onClose={() => setSearchOpen(false)}
+          />
+        ) : null}
 
-function TabItem({
-  label,
-  feather,
-  onPress,
-  styles,
-  colors,
-}: {
-  label: string;
-  feather: React.ComponentProps<typeof Feather>['name'];
-  onPress(): void;
-  styles: ReturnType<typeof makeStyles>;
-  colors: ThemeColors;
-}): React.JSX.Element {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      onPress={onPress}
-      style={({ pressed }) => [styles.tabItem, pressed && { opacity: 0.6 }]}
-    >
-      <Feather name={feather} size={22} color={colors.ink3} />
-      <Text style={styles.tabLabel}>{label}</Text>
-    </Pressable>
+        <SpaceDrawer
+          open={menuOpen}
+          onClose={() => setMenuOpen(false)}
+          connection={connection}
+          approvals={approvals}
+          profile={profile}
+          onSpaces={() => {
+            setMenuOpen(false);
+            setSpacesOpen(true);
+          }}
+          onAssistant={() => navigation.navigate('Assistant')}
+          onAutomations={() => navigation.navigate('Automations')}
+          onInsights={() => navigation.navigate('Insights')}
+          onApprovals={() => navigation.navigate('Settings', { screen: 'Approvals' })}
+          onSettings={openSettings}
+        />
+
+        <SpacesSwitcher
+          open={spacesOpen}
+          onClose={() => setSpacesOpen(false)}
+          onPairDesktop={openSettings}
+        />
+      </SafeAreaView>
+    </GestureDetector>
   );
 }
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    appGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      rowGap: 20,
-    },
-    automationCopy: { flex: 1 },
-    automationIcon: {
-      alignItems: 'center',
-      borderRadius: 13,
-      elevation: 6,
-      height: 46,
-      justifyContent: 'center',
-      shadowColor: colors.accent,
-      shadowOffset: { height: 8, width: 0 },
-      shadowOpacity: 0.4,
-      shadowRadius: 12,
-      width: 46,
-    },
-    automationRow: {
-      alignItems: 'center',
-      backgroundColor: colors.bgElev,
-      borderColor: colors.line,
-      borderRadius: 16,
-      borderWidth: StyleSheet.hairlineWidth,
-      flexDirection: 'row',
-      gap: 14,
-      marginTop: spacing[6],
-      paddingHorizontal: 16,
-      paddingVertical: 15,
-    },
-    automationSub: { ...t('small'), color: colors.ink3, marginTop: 1 },
-    automationTitle: { ...t('bodyStrong'), color: colors.ink },
-    avatar: {
-      alignItems: 'center',
-      borderRadius: 19,
-      height: 38,
-      justifyContent: 'center',
-      width: 38,
-    },
-    avatarText: { color: '#fff', fontFamily: family.sansBold, fontSize: 14 },
-    connectionAction: { paddingHorizontal: 4, paddingVertical: 8 },
-    connectionActionText: { ...t('small'), color: colors.accent, fontFamily: family.sansBold },
-    connectionCard: {
-      alignItems: 'center',
-      backgroundColor: colors.bgSunken,
-      borderRadius: 14,
-      flexDirection: 'row',
-      gap: 12,
-      marginTop: 22,
-      padding: 14,
-    },
-    connectionCopy: { flex: 1 },
-    connectionTitle: { ...t('bodyStrong'), color: colors.ink, marginBottom: 4 },
-    content: { paddingBottom: 20, paddingHorizontal: H_PADDING, paddingTop: 6 },
-    date: {
-      color: colors.ink3,
-      fontFamily: family.monoMedium,
-      fontSize: 11,
-      letterSpacing: 0.9,
-    },
-    fab: {
-      alignItems: 'center',
-      borderRadius: 26,
-      elevation: 8,
-      height: 52,
-      justifyContent: 'center',
-      overflow: 'hidden',
-      shadowColor: colors.accent,
-      shadowOffset: { height: 8, width: 0 },
-      shadowOpacity: 0.45,
-      shadowRadius: 12,
-      transform: [{ translateY: -16 }],
-      width: 52,
-    },
-    fabColumn: { alignItems: 'center', flex: 1 },
-    fabHighlight: {
-      backgroundColor: 'rgba(255,255,255,0.22)',
-      borderTopLeftRadius: 26,
-      borderTopRightRadius: 26,
-      height: '52%',
-      left: 0,
-      position: 'absolute',
-      right: 0,
-      top: 0,
-    },
-    fabLabel: { color: colors.ink3, fontFamily: family.sansMedium, fontSize: 10, marginTop: -9 },
-    greet: {
-      color: colors.ink,
-      fontFamily: family.serif,
-      fontSize: 28,
-      letterSpacing: -0.3,
-      lineHeight: 33,
-      marginTop: 9,
-    },
-    greetBlock: { flex: 1 },
-    greetName: { fontFamily: family.serifItalic },
-    header: {
-      alignItems: 'flex-start',
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      minHeight: 52,
-      paddingBottom: 22,
-      paddingHorizontal: H_PADDING,
-      paddingTop: 8,
-    },
+    // Bottom padding clears the floating dock so the last app row stays tappable.
+    content: { paddingBottom: 140, paddingHorizontal: H_PADDING, paddingTop: 6 },
     railLabel: {
       color: colors.ink3,
       fontFamily: family.monoMedium,
@@ -494,57 +278,4 @@ const makeStyles = (colors: ThemeColors) =>
       marginBottom: 16,
     },
     safe: { backgroundColor: colors.bg, flex: 1 },
-    searchBar: { paddingBottom: 12, paddingHorizontal: H_PADDING, paddingTop: 8 },
-    searchField: {
-      alignItems: 'center',
-      backgroundColor: colors.bgElev,
-      borderColor: colors.line,
-      borderRadius: 10,
-      borderWidth: 1,
-      flexDirection: 'row',
-      gap: 8,
-      height: 44,
-      paddingHorizontal: 12,
-    },
-    searchInput: { ...t('body'), color: colors.ink, flex: 1, padding: 0 },
-    statusCopy: { ...t('small'), color: colors.ink2, lineHeight: 18 },
-    statusRow: { alignItems: 'center', flexDirection: 'row', gap: 10, paddingVertical: 14 },
-    tabBar: {
-      alignItems: 'flex-end',
-      backgroundColor: colors.bgElev,
-      borderTopColor: colors.line,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      flexDirection: 'row',
-      justifyContent: 'space-around',
-      paddingHorizontal: 8,
-      paddingTop: 9,
-    },
-    tabItem: { alignItems: 'center', flex: 1, gap: 4 },
-    tabLabel: { color: colors.ink3, fontFamily: family.sansMedium, fontSize: 10 },
-    tile: { alignItems: 'center', gap: 9, width: '25%' },
-    tileHighlight: {
-      backgroundColor: 'rgba(255,255,255,0.16)',
-      borderTopLeftRadius: 18,
-      borderTopRightRadius: 18,
-      height: '55%',
-      left: 0,
-      position: 'absolute',
-      right: 0,
-      top: 0,
-    },
-    tileIcon: {
-      alignItems: 'center',
-      borderRadius: 18,
-      elevation: 4,
-      height: 62,
-      justifyContent: 'center',
-      overflow: 'hidden',
-      shadowColor: '#000',
-      shadowOffset: { height: 6, width: 0 },
-      shadowOpacity: 0.22,
-      shadowRadius: 10,
-      width: 62,
-    },
-    tileLabel: { color: colors.ink2, fontFamily: family.sansMedium, fontSize: 12 },
-    tilePressed: { opacity: 0.7, transform: [{ scale: 0.94 }] },
   });

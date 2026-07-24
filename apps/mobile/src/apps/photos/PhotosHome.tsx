@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit cohesive Photos cover (timeline + memory hero + four-view switch + glass bottom bar + drawer/switcher wiring); decompose the views in a follow-up (#498)
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +10,8 @@ import { File } from 'expo-file-system';
 import * as Notifications from 'expo-notifications';
 
 import { family, useTheme } from '../../kit/theme';
+import GlassBar from '../../kit/components/GlassBar';
+import HomeKey from '../../kit/components/HomeKey';
 import { useReplica } from '../../kit/replica/ReplicaProvider';
 import { useReplicaQuery } from '../../kit/hooks/useReplicaQuery';
 import { backupDeviceMedia } from '../../lib/upload/media-producer';
@@ -19,6 +22,7 @@ import PhotosCollectionsView from './PhotosCollectionsView';
 import PhotosCreateView from './PhotosCreateView';
 import PhotosAskView from './PhotosAskView';
 import PhotosDrawer from './PhotosDrawer';
+import SpacesSwitcher from '../../screens/home/SpacesSwitcher';
 import { imageSource } from './media-source';
 import { onThisDay } from './timeline-model';
 import { usePhotoTimeline } from './timeline-source';
@@ -29,21 +33,34 @@ const NAV_ACTIVE = '#B47B3F';
 
 type PhotosView = 'photos' | 'collections' | 'create' | 'ask';
 
-const NAV_ITEMS: Array<{ view: PhotosView; icon: keyof typeof Feather.glyphMap; label: string }> = [
-  { view: 'photos', icon: 'grid', label: 'Photos' },
-  { view: 'collections', icon: 'layers', label: 'Collections' },
-  { view: 'create', icon: 'plus-square', label: 'Create' },
+// Icon-only destinations inside the glass pill — the mini-app's OWN sections and
+// nothing else. Leaving Photos for the Centraid springboard is a separate,
+// system-tinted key detached to the LEFT of the pill (never a "home" tab in
+// here: in a super-app a house glyph is ambiguous — it reads as either this
+// app's home or the launcher's). The pill's first tab, `photos`, IS this app's
+// home (its full library); the active tab wears a raised disc. `create` is the
+// detached "+" FAB on the RIGHT — the screen's one primary action.
+const PILL_ITEMS: Array<{
+  key: string;
+  icon: keyof typeof Feather.glyphMap;
+  label: string;
+  view: PhotosView;
+}> = [
+  { key: 'photos', icon: 'image', label: 'Library', view: 'photos' },
+  { key: 'collections', icon: 'layers', label: 'Collections', view: 'collections' },
+  { key: 'ask', icon: 'message-circle', label: 'Ask', view: 'ask' },
 ];
 
 export default function PhotosHome({
   navigation,
 }: PhotosScreenProps<'PhotosHome'>): React.JSX.Element {
-  const { colors } = useTheme();
+  const { colors, scheme } = useTheme();
   const insets = useSafeAreaInsets();
   const { session, gatewayBase } = useReplica();
   const timeline = usePhotoTimeline();
   const [view, setView] = useState<PhotosView>('photos');
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [spacesOpen, setSpacesOpen] = useState(false);
   const [selection, setSelection] = useState(new Set<string>());
   const [backingUp, setBackingUp] = useState(false);
   const collections = useReplicaQuery(
@@ -288,42 +305,67 @@ export default function PhotosHome({
 
       {selecting ? null : (
         <View
-          style={[
-            styles.bottomNav,
-            {
-              backgroundColor: colors.bg,
-              borderTopColor: colors.line,
-              paddingBottom: Math.max(insets.bottom, 14),
-            },
-          ]}
+          style={[styles.bottomWrap, { paddingBottom: Math.max(insets.bottom, 8) }]}
+          pointerEvents="box-none"
         >
-          {NAV_ITEMS.map((item) => {
-            const active = view === item.view;
-            return (
-              <Pressable
-                key={item.view}
-                style={styles.navItem}
-                onPress={() => setView(item.view)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-                accessibilityLabel={item.label}
-              >
-                <Feather name={item.icon} size={23} color={active ? NAV_ACTIVE : colors.ink3} />
-                <Text style={[styles.navLabel, { color: active ? NAV_ACTIVE : colors.ink3 }]}>
-                  {item.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-          <Pressable
-            style={styles.navItem}
-            onPress={() => navigation.navigate('Apps', { screen: 'Home' })}
-            accessibilityRole="button"
-            accessibilityLabel="Home"
-          >
-            <Feather name="home" size={23} color={colors.ink3} />
-            <Text style={[styles.navLabel, { color: colors.ink3 }]}>Home</Text>
-          </Pressable>
+          <View style={styles.barRow}>
+            {/* Detached, teal, LEFT — leave Photos for the Centraid springboard.
+                The shared grid key (never a house): "back to your apps", not a tab
+                in the pill, so the two navigation axes — move within vs. leave —
+                never share a control. */}
+            <HomeKey variant="bar" onPress={() => navigation.goBack()} />
+
+            <GlassBar radius={32} style={styles.pill}>
+              <View style={styles.pillRow}>
+                {PILL_ITEMS.map((item) => {
+                  const active = view === item.view;
+                  return (
+                    <Pressable
+                      key={item.key}
+                      style={styles.pillItem}
+                      onPress={() => setView(item.view)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      accessibilityLabel={item.label}
+                    >
+                      <View
+                        style={[
+                          styles.segment,
+                          active && {
+                            backgroundColor:
+                              scheme === 'dark' ? 'rgba(255,255,255,0.13)' : '#ffffff',
+                          },
+                        ]}
+                      >
+                        <Feather
+                          name={item.icon}
+                          size={22}
+                          color={active ? NAV_ACTIVE : colors.ink3}
+                        />
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </GlassBar>
+
+            {/* Detached primary action — a high-contrast disc, distinct from the
+                glass pill, echoing the reference's stand-alone "+". */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Create"
+              accessibilityState={{ selected: view === 'create' }}
+              onPress={() => setView('create')}
+              style={({ pressed }) => [
+                styles.fab,
+                { backgroundColor: colors.ink },
+                view === 'create' && { borderColor: NAV_ACTIVE, borderWidth: 2 },
+                pressed && styles.fabPressed,
+              ]}
+            >
+              <Feather name="plus" size={26} color={colors.bg} />
+            </Pressable>
+          </View>
         </View>
       )}
 
@@ -332,11 +374,24 @@ export default function PhotosHome({
         onClose={() => setDrawerOpen(false)}
         onHome={() => {
           setDrawerOpen(false);
-          navigation.navigate('Apps', { screen: 'Home' });
+          navigation.goBack();
+        }}
+        onSwitchVault={() => {
+          setDrawerOpen(false);
+          setSpacesOpen(true);
         }}
         onSettings={() => {
           setDrawerOpen(false);
-          navigation.navigate('SettingsTab', { screen: 'Settings' });
+          navigation.navigate('Settings', { screen: 'Settings' });
+        }}
+      />
+
+      <SpacesSwitcher
+        open={spacesOpen}
+        onClose={() => setSpacesOpen(false)}
+        onPairDesktop={() => {
+          setSpacesOpen(false);
+          navigation.navigate('Settings', { screen: 'Settings' });
         }}
       />
     </SafeAreaView>
@@ -344,6 +399,9 @@ export default function PhotosHome({
 }
 
 const styles = StyleSheet.create({
+  // The glass pill + detached FAB share one row: the pill takes the remaining
+  // width (flex), the FAB is a fixed disc to its right with a gap between.
+  barRow: { alignItems: 'center', flexDirection: 'row', gap: 12 },
   body: { flex: 1 },
   body2: {
     fontFamily: family.sansRegular,
@@ -353,11 +411,16 @@ const styles = StyleSheet.create({
     maxWidth: 290,
     textAlign: 'center',
   },
-  bottomNav: {
-    borderTopWidth: 0.5,
-    flexDirection: 'row',
-    paddingHorizontal: 12,
-    paddingTop: 10,
+  // Floating bar, inset from the screen edges and anchored above the home
+  // indicator — the timeline reserves paddingBottom for it. `stretch` lets the
+  // inner row span the full inset width so the pill can flex beside the FAB.
+  bottomWrap: {
+    alignItems: 'stretch',
+    bottom: 0,
+    left: 0,
+    paddingHorizontal: 16,
+    position: 'absolute',
+    right: 0,
   },
   center: { alignItems: 'center', flex: 1, justifyContent: 'center', paddingHorizontal: 28 },
   emptyTitle: { fontFamily: family.displayBold, fontSize: 21, marginTop: 18 },
@@ -410,8 +473,35 @@ const styles = StyleSheet.create({
   },
   memoryPillText: { color: '#fff', fontFamily: family.sansMedium, fontSize: 12 },
   menuBtn: { alignItems: 'flex-start', height: 44, justifyContent: 'center', width: 24 },
-  navItem: { alignItems: 'center', flex: 1, gap: 4 },
-  navLabel: { fontFamily: family.sansMedium, fontSize: 10 },
+  // Every item — the Home segment and the three app tabs — shares this 60pt
+  // height and centres its icon+label, so all four baselines line up across the
+  // pill instead of the Home segment floating at a different offset.
+  // Detached primary-action disc, sized like the reference's "+" button.
+  fab: {
+    alignItems: 'center',
+    borderRadius: 28,
+    elevation: 8,
+    height: 56,
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { height: 6, width: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    width: 56,
+  },
+  fabPressed: { opacity: 0.85 },
+  // Active-item selection: a concentric "segment" that echoes the enclosure — a
+  // rounded rect filling the item's cell, inset evenly (via pillItem padding) so it
+  // reads as a smaller copy of the pill nested inside it (iOS segmented-control
+  // idiom), not a circle fighting the stadium. Radius 29 = half the 58pt inset
+  // height, so its rounded ends carry the same full curve as the enclosure.
+  segment: { alignItems: 'center', borderRadius: 29, flex: 1, justifyContent: 'center' },
+  pill: { flex: 1 },
+  // pillItem is the tap target + the even inset around the segment (3pt top/bottom
+  // keeps the segment hugging the enclosure with only a hairline gap; 4pt sides give
+  // the gap between segments). Stretch (not center) so the segment fills the height.
+  pillItem: { flex: 1, paddingHorizontal: 4, paddingVertical: 3 },
+  pillRow: { alignItems: 'stretch', flexDirection: 'row', height: 64, paddingHorizontal: 6 },
   protectedStatus: { alignItems: 'center', flexDirection: 'row', gap: 5 },
   protectedText: { fontFamily: family.sansMedium, fontSize: 11 },
   safe: { flex: 1 },

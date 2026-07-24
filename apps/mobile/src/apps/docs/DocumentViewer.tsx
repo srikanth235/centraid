@@ -56,10 +56,7 @@ export default function DocumentViewer({
       // Approve/Discard rather than silently vanish (M5); denials/failures are
       // shown, not swallowed.
       if (result.status === 'parked' || result.status === 'queued') {
-        navigation.navigate('Tabs', {
-          screen: 'SettingsTab',
-          params: { screen: 'Approvals' },
-        });
+        navigation.navigate('Settings', { screen: 'Approvals' });
       } else if (result.status === 'denied' || result.status === 'failed') {
         Alert.alert('Not applied', result.reason ?? 'The vault rejected this change.');
       }

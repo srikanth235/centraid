@@ -1,20 +1,29 @@
 import React, { useCallback, useEffect } from 'react';
 import { Text, View, useColorScheme } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 import { ShareIntentProvider } from 'expo-share-intent';
-import { navThemeFor, resolveTheme } from './src/kit/theme';
+import {
+  hydrateAppearance,
+  navThemeFor,
+  resolveScheme,
+  resolveTheme,
+  useAppearance,
+  useTheme,
+} from './src/kit/theme';
 import { useUploadReconciliation } from './src/lib/upload/boot';
-import { ReplicaProvider, useReplica } from './src/kit/replica/ReplicaProvider';
+import {
+  REPLICA_UNPAIRED_MESSAGE,
+  ReplicaProvider,
+  useReplica,
+} from './src/kit/replica/ReplicaProvider';
 import { ShareIntentIngest } from './src/kit/hooks/ShareIntentIngest';
 import { hydrateProfile, isOnboarded } from './src/lib/profile';
 import OnboardingScreen from './src/screens/Onboarding';
@@ -38,6 +47,9 @@ import AppDetailScreen from './src/screens/AppDetail';
 import SettingsScreen from './src/screens/Settings';
 import ApprovalsScreen from './src/screens/Approvals';
 import MobileFallbackScreen from './src/screens/MobileFallback';
+import AssistantScreen from './src/apps/assistant/Assistant';
+import AutomationsScreen from './src/apps/automations/Automations';
+import InsightsScreen from './src/apps/insights/Insights';
 import PhotosHome from './src/apps/photos/PhotosHome';
 import PhotoLightbox from './src/apps/photos/PhotoLightbox';
 import PhotosLibrary from './src/apps/photos/PhotosLibrary';
@@ -54,12 +66,10 @@ import AgendaHome from './src/apps/agenda/AgendaHome';
 import AgendaEvent from './src/apps/agenda/AgendaEvent';
 import type {
   AgendaStackParamList,
-  AppsStackParamList,
   DocsStackParamList,
   PhotosStackParamList,
   RootStackParamList,
   SettingsStackParamList,
-  TabParamList,
 } from './src/navigation';
 
 // Keep the native splash up until fonts have loaded — avoids a flash of
@@ -81,12 +91,23 @@ Notifications.setNotificationHandler({
 });
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
-const Tab = createBottomTabNavigator<TabParamList>();
 const PhotosStack = createNativeStackNavigator<PhotosStackParamList>();
 const DocsStack = createNativeStackNavigator<DocsStackParamList>();
 const AgendaStack = createNativeStackNavigator<AgendaStackParamList>();
-const AppsStack = createNativeStackNavigator<AppsStackParamList>();
 const SettingsStack = createNativeStackNavigator<SettingsStackParamList>();
+
+// Presenting an app cover: an edge-to-edge full-screen modal that cross-fades in
+// (`fade`). `fullScreenModal` (not `modal`) so the cover truly covers the screen —
+// the plain `modal` presentation is the native iOS card sheet (rounded top, inset,
+// parent receding behind), which is what gives the interactive pull-down but never
+// fills the screen. A cover has no native pull-down then; it exits via the in-app
+// leave key. A true zoom-out-of-the-tile transition isn't expressible on
+// native-stack, which only takes fixed animation presets. Headers stay hidden —
+// each screen draws its own bar.
+const COVER_OPTIONS = {
+  animation: 'fade',
+  presentation: 'fullScreenModal',
+} as const;
 
 function UploadReconciliation(): null {
   const { session } = useReplica();
@@ -95,7 +116,7 @@ function UploadReconciliation(): null {
 }
 
 function PhotosNavigator(): React.JSX.Element {
-  const { colors } = resolveTheme(useColorScheme());
+  const { colors } = useTheme();
   return (
     <PhotosStack.Navigator
       screenOptions={{ contentStyle: { backgroundColor: colors.bg }, headerShown: false }}
@@ -119,7 +140,7 @@ function PhotosNavigator(): React.JSX.Element {
 }
 
 function DocsNavigator(): React.JSX.Element {
-  const { colors } = resolveTheme(useColorScheme());
+  const { colors } = useTheme();
   return (
     <DocsStack.Navigator
       screenOptions={{ contentStyle: { backgroundColor: colors.bg }, headerShown: false }}
@@ -131,7 +152,7 @@ function DocsNavigator(): React.JSX.Element {
 }
 
 function AgendaNavigator(): React.JSX.Element {
-  const { colors } = resolveTheme(useColorScheme());
+  const { colors } = useTheme();
   return (
     <AgendaStack.Navigator
       screenOptions={{ contentStyle: { backgroundColor: colors.bg }, headerShown: false }}
@@ -142,24 +163,8 @@ function AgendaNavigator(): React.JSX.Element {
   );
 }
 
-function AppsNavigator(): React.JSX.Element {
-  const { colors } = resolveTheme(useColorScheme());
-  return (
-    <AppsStack.Navigator
-      screenOptions={{
-        animation: 'slide_from_right',
-        contentStyle: { backgroundColor: colors.bg },
-        headerShown: false,
-      }}
-    >
-      <AppsStack.Screen name="Home" component={HomeScreen} />
-      <AppsStack.Screen name="AppDetail" component={AppDetailScreen} />
-    </AppsStack.Navigator>
-  );
-}
-
 function SettingsNavigator(): React.JSX.Element {
-  const { colors } = resolveTheme(useColorScheme());
+  const { colors } = useTheme();
   return (
     <SettingsStack.Navigator
       screenOptions={{
@@ -174,17 +179,24 @@ function SettingsNavigator(): React.JSX.Element {
   );
 }
 
-/** Surfaces ReplicaProvider.error when the session fails to open (issue #468 K2). */
+/**
+ * Surfaces ReplicaProvider.error when the session fails to open (issue #468 K2).
+ * The "never paired yet" case is expected — Home already invites pairing — so it
+ * is suppressed here; only a genuine open failure raises the red bar. The top
+ * inset keeps that bar clear of the status bar instead of bleeding under it.
+ */
 function ReplicaErrorBanner(): React.JSX.Element | null {
   const { error, ready } = useReplica();
-  const { colors } = resolveTheme(useColorScheme());
-  if (!ready || !error) return null;
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  if (!ready || !error || error === REPLICA_UNPAIRED_MESSAGE) return null;
   return (
     <View
       style={{
         backgroundColor: colors.danger ?? '#c44',
+        paddingBottom: 10,
         paddingHorizontal: 14,
-        paddingVertical: 10,
+        paddingTop: insets.top + 10,
       }}
     >
       <Text style={{ color: '#fff', fontFamily: 'Geist_500Medium', fontSize: 13 }}>{error}</Text>
@@ -192,69 +204,11 @@ function ReplicaErrorBanner(): React.JSX.Element | null {
   );
 }
 
-function Tabs(): React.JSX.Element {
-  return (
-    <Tab.Navigator
-      initialRouteName="Apps"
-      screenListeners={{
-        // `selection` haptic on tab switch — matches the bridge vocabulary
-        // WebView apps get via expo-haptics (src/lib/bridge/dispatch.ts).
-        tabPress: () => {
-          void Haptics.selectionAsync();
-        },
-      }}
-      screenOptions={{
-        headerShown: false,
-        // The Centraid Mobile design is a launcher model: Home and each app
-        // screen carry their own bottom bar, so the OS tab bar is hidden and
-        // the tab navigator is used purely as a route container.
-        tabBarStyle: { display: 'none' },
-      }}
-    >
-      <Tab.Screen
-        name="Apps"
-        component={AppsNavigator}
-        options={{
-          tabBarLabel: 'Home',
-          tabBarIcon: ({ color, size }) => <Feather name="grid" size={size} color={color} />,
-        }}
-      />
-      <Tab.Screen
-        name="Photos"
-        component={PhotosNavigator}
-        options={{
-          tabBarLabel: 'Photos',
-          tabBarIcon: ({ color, size }) => <Feather name="image" size={size} color={color} />,
-        }}
-      />
-      <Tab.Screen
-        name="Docs"
-        component={DocsNavigator}
-        options={{
-          tabBarIcon: ({ color, size }) => <Feather name="folder" size={size} color={color} />,
-        }}
-      />
-      <Tab.Screen
-        name="Agenda"
-        component={AgendaNavigator}
-        options={{
-          tabBarIcon: ({ color, size }) => <Feather name="calendar" size={size} color={color} />,
-        }}
-      />
-      <Tab.Screen
-        name="SettingsTab"
-        component={SettingsNavigator}
-        options={{
-          tabBarLabel: 'Settings',
-          tabBarIcon: ({ color, size }) => <Feather name="settings" size={size} color={color} />,
-        }}
-      />
-    </Tab.Navigator>
-  );
-}
-
 export default function App(): React.JSX.Element | null {
-  const scheme = useColorScheme();
+  // The device-local Appearance preference (System/Light/Dark) folds over the OS
+  // scheme here so the nav container theme + status bar follow it, matching the
+  // per-screen `useTheme()` override (src/kit/theme/appearance.ts).
+  const scheme = resolveScheme(useAppearance(), useColorScheme());
   const { colors } = resolveTheme(scheme);
   // `null` while the profile prefs hydrate; then true/false gates onboarding.
   const [onboarded, setOnboarded] = React.useState<boolean | null>(null);
@@ -272,6 +226,9 @@ export default function App(): React.JSX.Element | null {
   });
 
   useEffect(() => {
+    // Load the persisted Appearance override so the launch scheme matches the
+    // user's Settings choice instead of flashing the OS default first.
+    void hydrateAppearance();
     void hydrateProfile().then(() => setOnboarded(isOnboarded()));
   }, []);
 
@@ -306,9 +263,60 @@ export default function App(): React.JSX.Element | null {
                 {onboarded ? <ReplicaErrorBanner /> : null}
                 {onboarded ? (
                   <NavigationContainer theme={navThemeFor(scheme)}>
-                    <StatusBar style="auto" />
-                    <RootStack.Navigator screenOptions={{ headerShown: false }}>
-                      <RootStack.Screen name="Tabs" component={Tabs} />
+                    <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+                    <RootStack.Navigator
+                      screenOptions={{ headerShown: false }}
+                      // `selection` haptic when a cover opens — preserves the
+                      // vocabulary the old tabPress listener gave, and the one
+                      // WebView apps get via expo-haptics (src/lib/bridge/dispatch.ts).
+                      // `closing` guards it to the open transition, not dismissal.
+                      screenListeners={{
+                        transitionStart: (e) => {
+                          if (!e.data.closing) void Haptics.selectionAsync();
+                        },
+                      }}
+                    >
+                      <RootStack.Screen name="Home" component={HomeScreen} />
+                      <RootStack.Screen
+                        name="Photos"
+                        component={PhotosNavigator}
+                        options={COVER_OPTIONS}
+                      />
+                      <RootStack.Screen
+                        name="Docs"
+                        component={DocsNavigator}
+                        options={COVER_OPTIONS}
+                      />
+                      <RootStack.Screen
+                        name="Agenda"
+                        component={AgendaNavigator}
+                        options={COVER_OPTIONS}
+                      />
+                      <RootStack.Screen
+                        name="AppDetail"
+                        component={AppDetailScreen}
+                        options={COVER_OPTIONS}
+                      />
+                      <RootStack.Screen
+                        name="Assistant"
+                        component={AssistantScreen}
+                        options={COVER_OPTIONS}
+                      />
+                      <RootStack.Screen
+                        name="Automations"
+                        component={AutomationsScreen}
+                        options={COVER_OPTIONS}
+                      />
+                      <RootStack.Screen
+                        name="Insights"
+                        component={InsightsScreen}
+                        options={COVER_OPTIONS}
+                      />
+                      <RootStack.Screen
+                        name="Settings"
+                        component={SettingsNavigator}
+                        options={COVER_OPTIONS}
+                      />
                       <RootStack.Screen
                         name="MobileFallback"
                         component={MobileFallbackScreen}

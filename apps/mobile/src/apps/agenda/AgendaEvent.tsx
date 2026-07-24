@@ -178,12 +178,7 @@ export default function AgendaEvent({
         {pending ? (
           <Pressable
             style={[styles.pending, { backgroundColor: colors.bgSunken }]}
-            onPress={() =>
-              navigation.navigate('Tabs', {
-                screen: 'SettingsTab',
-                params: { screen: 'Approvals' },
-              })
-            }
+            onPress={() => navigation.navigate('Settings', { screen: 'Approvals' })}
           >
             <Feather name="clock" size={17} color={colors.accent} />
             <Text style={[styles.pendingText, { color: colors.ink }]}>{pending}</Text>

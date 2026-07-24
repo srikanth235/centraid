@@ -7,16 +7,35 @@
 // secure-storage via phone-link.ts). Callers `hydrateProfile()` once at boot,
 // then read synchronously on the render path.
 
+import { palette } from '@centraid/design-tokens';
 import { Store } from '../storage';
 
 const PROFILE_NAME_KEY = 'profile.name';
 const PROFILE_COLOR_KEY = 'profile.color';
 const PROFILE_ONBOARDED_KEY = 'profile.onboarded';
 
-// Brand teal from the mobile design system — used for the profile avatar,
-// the greeting highlight, and the onboarding call-to-actions. Distinct from
-// the UI `accent` (indigo) that buttons and links use.
+// Brand teal — the mobile design's single primary. It is the theme `accent`
+// (buttons, links, Automations, Assistant, the Home key; see kit/theme/resolve
+// ts) and also the default profile colour used for the avatar + greeting
+// highlight. So out of the box the whole app is teal; personalising the profile
+// colour re-tints only the avatar + greeting, leaving the controls teal.
 export const BRAND_TEAL = '#128A78';
+
+// Swatch options offered in Settings → You for the avatar + greeting tint. Teal
+// (the brand default) leads; the rest are the shared design-tokens palette, so a
+// person and their space (Settings → Space uses the same palette) can wear the
+// same colour. The profile colour is stored as a free hex string (see
+// `setProfileColor`), which is exactly what these values are.
+export const PROFILE_COLORS: readonly string[] = [
+  BRAND_TEAL,
+  palette.indigo,
+  palette.rose,
+  palette.violet,
+  palette.amber,
+  palette.forest,
+  palette.ochre,
+  palette.slate,
+];
 
 /** Pull the profile prefs into the Store cache. Idempotent. */
 export async function hydrateProfile(): Promise<void> {

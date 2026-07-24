@@ -10,23 +10,32 @@
 // nearest real screen or surfaces an "on desktop" note, matching how the rest
 // of the Photos port handles desktop-only affordances.
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 
 import { family, useTheme } from '../../kit/theme';
 import { getProfileColor, getProfileName, initialsOf } from '../../lib/profile';
+import { getActiveSpace, subscribeSpaces } from '../../lib/spaces';
 
 const PANEL_WIDTH = 288;
 // The green used by the design for the "On" backup badge.
 const ON_GREEN = '#5C8A4E';
+
+// A ~12%-alpha wash of a 6-hex colour for the accent pill; opaque palette hexes
+// get an alpha byte appended, anything else falls back to an elevated surface.
+function washFor(hex: string, fallback: string): string {
+  return /^#[0-9a-fA-F]{6}$/.test(hex) ? `${hex}22` : fallback;
+}
 
 export type PhotosDrawerProps = {
   visible: boolean;
   onClose: () => void;
   onHome: () => void;
   onSettings: () => void;
+  /** Open the Spaces switcher (add / switch / forget device-local vaults). */
+  onSwitchVault: () => void;
 };
 
 export default function PhotosDrawer({
@@ -34,11 +43,18 @@ export default function PhotosDrawer({
   onClose,
   onHome,
   onSettings,
+  onSwitchVault,
 }: PhotosDrawerProps): React.JSX.Element {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const name = getProfileName();
   const color = getProfileColor();
+  // The active (gateway, vault) tuple, kept live so the switch card names the
+  // vault the app is actually pointed at — not a static placeholder.
+  const [space, setSpace] = useState(() => getActiveSpace());
+  useEffect(() => subscribeSpaces(() => setSpace(getActiveSpace())), []);
+  const vaultName = space?.vaultName || space?.desktopName || name || 'Personal vault';
+  const vaultColor = space?.color || color;
   const slide = useRef(new Animated.Value(-PANEL_WIDTH)).current;
   const fade = useRef(new Animated.Value(0)).current;
 
@@ -90,28 +106,34 @@ export default function PhotosDrawer({
           </View>
 
           <View style={styles.scroll}>
-            <Pressable style={[styles.switchVault, { backgroundColor: colors.bgSunken }]}>
-              <Text style={[styles.switchVaultLabel, { color: colors.ink }]}>Switch vault</Text>
-              <View style={styles.vaultAvatars}>
-                <View
-                  style={[
-                    styles.vaultDot,
-                    { backgroundColor: '#5B8DEF', borderColor: colors.bgElev },
-                  ]}
-                />
-                <View
-                  style={[
-                    styles.vaultDot,
-                    styles.vaultDotOverlap,
-                    { backgroundColor: '#3AA890', borderColor: colors.bgElev },
-                  ]}
-                />
-                <Feather
-                  name="chevron-down"
-                  size={17}
-                  color={colors.ink4}
-                  style={styles.vaultChevron}
-                />
+            {/* Explicit space switcher: names the CURRENT vault + a labelled
+                "Switch" control, and opens the real Spaces sheet. Replaces the
+                old cryptic overlapping-avatars pill, which did nothing. */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Switch vault. Current vault: ${vaultName}`}
+              onPress={onSwitchVault}
+              style={({ pressed }) => [
+                styles.switchVault,
+                { backgroundColor: colors.bgSunken },
+                pressed && styles.pressed,
+              ]}
+            >
+              <View style={[styles.vaultDot, { backgroundColor: vaultColor }]} />
+              <View style={styles.switchMeta}>
+                <Text style={[styles.switchEyebrow, { color: colors.ink3 }]}>CURRENT VAULT</Text>
+                <Text style={[styles.switchName, { color: colors.ink }]} numberOfLines={1}>
+                  {vaultName}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.switchPill,
+                  { backgroundColor: washFor(colors.accent, colors.bgElev) },
+                ]}
+              >
+                <Feather name="chevrons-down" size={13} color={colors.accent} />
+                <Text style={[styles.switchPillText, { color: colors.accent }]}>Switch</Text>
               </View>
             </Pressable>
 
@@ -219,6 +241,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     width: PANEL_WIDTH,
   },
+  pressed: { opacity: 0.6 },
   profile: {
     alignItems: 'center',
     borderBottomWidth: 0.5,
@@ -258,18 +281,31 @@ const styles = StyleSheet.create({
   storageHead: { alignItems: 'center', flexDirection: 'row', gap: 9, marginBottom: 11 },
   storageText: { flex: 1, fontFamily: family.sansBold, fontSize: 15 },
   storageTrack: { borderRadius: 4, height: 7, marginBottom: 11, overflow: 'hidden' },
+  switchEyebrow: {
+    fontFamily: family.monoMedium,
+    fontSize: 10,
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  switchMeta: { flex: 1, minWidth: 0 },
+  switchName: { fontFamily: family.sansBold, fontSize: 15 },
+  switchPill: {
+    alignItems: 'center',
+    borderRadius: 999,
+    flexDirection: 'row',
+    gap: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+  },
+  switchPillText: { fontFamily: family.sansBold, fontSize: 12 },
   switchVault: {
     alignItems: 'center',
     borderRadius: 12,
     flexDirection: 'row',
-    gap: 10,
+    gap: 11,
     marginBottom: 11,
     paddingHorizontal: 13,
     paddingVertical: 11,
   },
-  switchVaultLabel: { flex: 1, fontFamily: family.sansRegular, fontSize: 15 },
-  vaultAvatars: { alignItems: 'center', flexDirection: 'row' },
-  vaultChevron: { marginLeft: 5 },
-  vaultDot: { borderRadius: 12, borderWidth: 2, height: 24, width: 24 },
-  vaultDotOverlap: { marginLeft: -8 },
+  vaultDot: { borderRadius: 6, height: 12, width: 12 },
 });
