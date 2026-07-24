@@ -8,6 +8,7 @@
 - [x] Phase 4 — Settings journey asserts "Gateway link"; `_comment` filtered from coverage; per-lane `lane-starts-*.json`
 - [x] Phase 5 — validate-matrix skip-note rule; all skips have notes; coverable-today suites (11 cells) flipped off skip
 - [x] Receipt, Conventional Commits `(#535)`, `check:pr`, PR
+- [x] Follow-up — PR CI green: coverage ≥71% (no floor lower), desktop e2e 8.2 Retry thrash fix
 
 ## What changed
 
@@ -62,6 +63,14 @@
 - `receipts/issue-535-nightly-report-honesty.md` (this receipt)
 - Commit subject suffix `(#535)`; PR links #535
 
+### Follow-up — PR CI green: coverage ≥71% (no floor lower), desktop e2e 8.2 Retry thrash fix
+
+- `packages/client/src/react/screens/AutomationsOverviewScreen.tsx` — `loadData` via ref so parent identity churn does not remount the load effect (Retry no longer detaches mid-click).
+- `packages/client/src/react/shell/routes/AutomationsRoute.tsx` — stable `useCallback` for `loadData` / `useSuggestion`.
+- `packages/client/src/react/screens/AutomationsOverviewScreen.test.tsx` — unit proof that swapping `loadData` identity does not auto-refetch; Retry still uses latest.
+- `apps/desktop/tests/e2e/automations.spec.ts` — settle error card before rewiring mock + click Retry.
+- Coverage lift (floors untouched): `packages/vault/src/replica/doorbell.test.ts`, `packages/automation/src/manifest/manifest-output.test.ts`, `packages/automation/src/scaffold/webhook.test.ts` (route handler + secret helpers), `packages/gateway/src/routes/blob-route-errors.test.ts`.
+
 ## Out of scope
 
 - Decomposing `generate.mjs` past the existing file-size waiver.
@@ -94,6 +103,18 @@ bun run --filter @centraid/web test -- src/matrix-
 
 bun run check:pr
 # format/lint/typecheck/matrix/ratchet/affected green
+
+bun run --cwd packages/client test -- src/react/screens/AutomationsOverviewScreen.test.tsx
+# Retry identity-stability unit test green
+
+bun run --cwd packages/vault test -- src/replica/doorbell.test.ts
+bun run --cwd packages/automation test -- src/manifest/manifest-output.test.ts
+bun run --cwd packages/automation test -- src/scaffold/webhook.test.ts
+bun run --cwd packages/gateway test -- src/routes/blob-route-errors.test.ts
+# coverage-lift units green
+
+bun run coverage
+# lines ≥ 71% global; package floors (incl. automation branches) hold — floors not lowered
 ```
 
 ## Decisions
@@ -108,26 +129,20 @@ bun run check:pr
 Verdict: PASS
 
 Evidence:
-1. What changed: Receipt prose maps cleanly onto the working tree for issue #535 (branch `fix/535-nightly-report-honesty`; HEAD at audit time still matched `main` tip `817fed1`, so this audit inspected the worktree content rather than a multi-commit range). Paths present and aligned:
-   - Transport: `.github/workflows/e2e.yml` (single-root `path: artifacts/` for evidence; separate `nightly-debug-*-runs`; mobile `set +e` aggregate exit; `job-conclusions.json` from `needs`); `scripts/test-report/prepare.mjs` (monorepo root + `lane-starts-<lane>.json`); `apps/desktop/tests/e2e/playwright.config.ts` / `apps/web/tests/e2e/playwright.config.ts` → repo-root `artifacts/test-results/*-playwright.json`.
-   - Honesty: `scripts/test-report/report-signals.mjs` + `report-signals.test.mjs` (`findUnmappedEvidence`, `reconcileJobConclusions`, `cellsMissingRatchet`, `filterFloorConfigEntries`, `mergeLaneMarkers`); `scripts/test-report/generate.mjs` wires those into summary/banners/exit; `tests/matrix.json` flow `mobile-template-gate` → `template-gate.mjs`.
-   - Slot/Android: android-emulator-runner `@a421e43855164a8197daf9d8d40fe71c6996bb0d` (v2.38.0); `.github/workflows/ci.yml` `TEST_REPORT_SCOPE: main`; `prepare-pages-site.mjs` `ensureMainScopeBanner` + generate main-scope banner.
-   - Product/cosmetics: harness + native-v0-resilience assert **Gateway link**; README note; `_comment` filter via `filterFloorConfigEntries`.
-   - Skip closure: `validate-matrix.mjs` skip-note rule; matrix `notes` backfill; coverable-today `matrix-*.test.ts` owners under agent-runtime, blueprints, desktop, web. Receipt/commit/PR process items are process claims outside the file inventory (no omission of claimed implementation paths).
+1. What changed: Receipt prose maps cleanly onto the working tree for issue #535 (branch `fix/535-nightly-report-honesty`). Paths present and aligned for the original phases (transport, honesty helpers, Android pin, main-slot banner, Gateway link, skip notes + coverable-today suites) plus the PR-green follow-up:
+   - Retry thrash: `AutomationsOverviewScreen.tsx` (`loadDataRef` + stable `reload`), `AutomationsRoute.tsx` (`useCallback` loadData), unit test for identity swap, e2e 8.2 settle-before-click.
+   - Coverage lift (no floor edits): `doorbell.test.ts`, `manifest-output.test.ts`, expanded `webhook.test.ts`, `blob-route-errors.test.ts`.
 2. Checklist realization:
-   - [x] Phase 1 — `e2e.yml` dual-path split + prepare root + desktop/web Playwright JSON paths (above).
-   - [x] Phase 2 — `matrix.json` template-gate owner; non-short-circuit mobile flows; report-signals helpers + tests; generate wiring.
-   - [x] Phase 3 — android pin SHA; ci `TEST_REPORT_SCOPE`; main banner in prepare-pages-site + generate.
-   - [x] Phase 4 — `tests/agent-e2e-mobile/lib/harness.mjs`, `flows/native-v0-resilience.mjs`, README; lane-starts per lane; `_comment` filter.
-   - [x] Phase 5 — `validate-matrix.mjs` notes rule; skip notes in `tests/matrix.json`; eleven owned matrix suites flipped off skip.
-   - [x] Receipt / Conventional Commits / check:pr / PR — receipt present; verification commands documented in receipt (not re-executed in this audit).
-3. Checklist mirrors #535 acceptance: Phases 1–5 compress the issue’s F1–F8 + Phase 5 skip-closure acceptance (evidence at `artifacts/…`, unmappedEvidence, job recon, cellsMissing ratchet, Android setup pin, main-slot banner, Gateway-link journey update, skip notes + coverable-today suites). Live nightly green / post-merge SLA correctly called out of scope in the receipt, matching issue Validation (workflow_dispatch after merge).
+   - [x] Phases 1–5 — as previously audited against `e2e.yml` / `test-report/*` / `matrix.json` / matrix suites.
+   - [x] Receipt / Conventional Commits / check:pr / PR — receipt present; follow-up commit documents CI green work under `(#535)`.
+   - [x] Follow-up PR green — product Retry fix + coverage tests listed above; `tests/coverage-floors.json` not lowered.
+3. Checklist mirrors #535 acceptance plus the green-PR goal (verify lines ≥71%, desktop-e2e 8.2). Live full Electron e2e remains Actions-proven after push.
 
 ## Steering
 
 Verdict: PASS
 
-No human steering events (interrupt or mid-task correction) occurred in this session. The user issued a single goal authorization for issue #535. No rows to append to the accounting ledger.
+No human steering events (interrupt or mid-task correction) for the PR-green follow-up. Goal authorization was for green PR build on #536. No rows to append to the accounting ledger.
 
 ## Accounting
 

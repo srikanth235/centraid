@@ -1,4 +1,4 @@
-import type { JSX } from 'react';
+import { useCallback, type JSX } from 'react';
 import type { TemplateEntry } from '../../../app-shell-context.js';
 import {
   getBlocking,
@@ -31,51 +31,61 @@ import {
 export default function AutomationsRoute(): JSX.Element {
   const { navigate, showToast } = useShellActions();
 
-  const useSuggestion = (templateId: string): void => {
-    void (async () => {
-      try {
-        const all = (await listTemplates()) as TemplateEntry[];
-        const tmpl = all.find((t) => t.id === templateId);
-        if (!tmpl) {
-          showToast(`Template “${templateId}” is no longer available.`);
-          return;
+  // Stable identity: AutomationsOverviewScreen mounts a load effect from
+  // loadData; an inline async would re-fire on every shell re-render and thrash
+  // the error/Retry UI (desktop e2e 8.2).
+  const loadData = useCallback(async () => {
+    const [rows, entries, blocking, grants, agents] = await Promise.all([
+      listAutomations(),
+      collectAutomationRuns(),
+      getBlocking(),
+      listOutboxGrants(),
+      listAgents(),
+    ]);
+    const attentionByRef = new Map<string, number>(
+      rows.map((row) => {
+        const consent = filterConsentForAutomation(
+          agents.find((agent) => agent.hostKey === row.ownerApp)?.agentId,
+          blocking,
+          grants,
+        );
+        return [row.ref, consent.parked.length + consent.outbox.length];
+      }),
+    );
+    return buildOverviewData(rows, entries, attentionByRef);
+  }, []);
+
+  const useSuggestion = useCallback(
+    (templateId: string): void => {
+      void (async () => {
+        try {
+          const all = (await listTemplates()) as TemplateEntry[];
+          const tmpl = all.find((t) => t.id === templateId);
+          if (!tmpl) {
+            showToast(`Template “${templateId}” is no longer available.`);
+            return;
+          }
+          const { ref, webhooks } = await cloneAutomationTemplate(tmpl);
+          for (const w of webhooks) {
+            surfaceMintedWebhook(w);
+            await openWebhookReveal(w);
+          }
+          if (ref) navigate({ kind: 'automation-view', automationId: ref });
+          else navigate({ kind: 'automations' });
+        } catch (err: unknown) {
+          showToast(
+            `Could not adopt template: ${err instanceof Error ? err.message : String(err)}`,
+          );
         }
-        const { ref, webhooks } = await cloneAutomationTemplate(tmpl);
-        for (const w of webhooks) {
-          surfaceMintedWebhook(w);
-          await openWebhookReveal(w);
-        }
-        if (ref) navigate({ kind: 'automation-view', automationId: ref });
-        else navigate({ kind: 'automations' });
-      } catch (err: unknown) {
-        showToast(`Could not adopt template: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    })();
-  };
+      })();
+    },
+    [navigate, showToast],
+  );
 
   return (
     <PageScroll>
       <AutomationsOverviewScreen
-        loadData={async () => {
-          const [rows, entries, blocking, grants, agents] = await Promise.all([
-            listAutomations(),
-            collectAutomationRuns(),
-            getBlocking(),
-            listOutboxGrants(),
-            listAgents(),
-          ]);
-          const attentionByRef = new Map<string, number>(
-            rows.map((row) => {
-              const consent = filterConsentForAutomation(
-                agents.find((agent) => agent.hostKey === row.ownerApp)?.agentId,
-                blocking,
-                grants,
-              );
-              return [row.ref, consent.parked.length + consent.outbox.length];
-            }),
-          );
-          return buildOverviewData(rows, entries, attentionByRef);
-        }}
+        loadData={loadData}
         loadSuggestions={loadOverviewSuggestions}
         onBrowseTemplates={() => navigate({ kind: 'templates' })}
         onNewAutomation={() => navigate({ kind: 'automation-editor' })}
