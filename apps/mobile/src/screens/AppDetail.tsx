@@ -15,7 +15,7 @@ import { appLiveUrl, resolveGatewayBase, resolveAppMeta } from '../lib/gateway';
 import { dispatch } from '../lib/bridge/dispatch';
 import { INJECTED_JS } from '../lib/bridge/injected';
 import { CENTRAID_HANDSHAKE, type BridgeRequest } from '../lib/bridge/protocol';
-import type { AppsScreenProps } from '../navigation';
+import type { AppDetailScreenProps } from '../navigation';
 
 /**
  * Renders a Centraid app inside a WebView. The native shell owns the
@@ -32,7 +32,7 @@ import type { AppsScreenProps } from '../navigation';
 export default function AppDetailScreen({
   navigation,
   route,
-}: AppsScreenProps<'AppDetail'>): React.JSX.Element {
+}: AppDetailScreenProps): React.JSX.Element {
   const { appId } = route.params;
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -153,7 +153,7 @@ export default function AppDetailScreen({
           title="Not connected"
           message="Pair with your desktop (or set a gateway URL under Advanced) to open apps."
           actionLabel="Open Settings"
-          onAction={() => navigation.navigate('SettingsTab', { screen: 'Settings' })}
+          onAction={() => navigation.navigate('Settings', { screen: 'Settings' })}
           styles={styles}
         />
       ) : loadError ? (

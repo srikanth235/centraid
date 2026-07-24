@@ -41,6 +41,7 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
   headerActions: { alignItems: 'center', flexDirection: 'row', gap: 22 },
+  headerCopy: { flex: 1, marginLeft: 12 },
   input: {
     borderRadius: 10,
     borderWidth: 1,

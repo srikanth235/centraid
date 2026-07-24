@@ -69,11 +69,17 @@ test('8.2 — a list load failure shows the error card and Retry recovers', asyn
   const { app, page } = await launchApp(env);
   try {
     await openAutomations(page);
-    await expect(page.getByTestId('automations-error')).toContainText("Couldn't load automations");
+    const errorCard = page.getByTestId('automations-error');
+    await expect(errorCard).toContainText("Couldn't load automations");
+    const retry = errorCard.getByRole('button', { name: 'Retry' });
+    // Error UI must settle before we rewire the mock — a mid-flight reload
+    // would still see 500 and re-paint the card under the cursor.
+    await expect(retry).toBeVisible();
+    await expect(retry).toBeEnabled();
     // Recover: fix the gateway, click Retry.
     gateway.state.automationsStatus = 200;
     gateway.state.automations = [automationRow({ id: 'digest', name: 'Inbox Digest' })];
-    await page.getByTestId('automations-error').getByRole('button', { name: 'Retry' }).click();
+    await retry.click();
     await expect(page.getByTestId('automation-row')).toHaveCount(1);
   } finally {
     await closeApp(app);

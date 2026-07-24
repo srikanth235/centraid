@@ -1,16 +1,20 @@
-# iroh-ffi 1.0.0 native/generated artifacts are NOT committed — they are large
-# generated or third-party binaries. Only our hand-written adapters and the
-# gradle/podspec config are tracked. How they are reconstructed (git-ignored):
+# iroh-ffi native/generated artifacts are NOT committed — they are large
+# third-party binaries. Only our hand-written adapters and the gradle/podspec
+# config are tracked. How they are reconstructed (git-ignored):
 #   iOS      — the podspec's prepare_command downloads the official release
 #              xcframework + IrohLib.swift (see ios/CentraidTunnel.podspec).
-#   Android  — cargo-ndk cross-compiles the .so + uniffi generates the Kotlin
-#              bindings (see README.md "Android binding").
+#   Android  — gradle resolves the official `computer.iroh:iroh-android` AAR
+#              from Maven Central (natives for all four ABIs; no local step).
 
-# iOS: the official release xcframework + the uniffi-generated Swift wrapper.
+# iOS: the official release xcframework + the uniffi-generated Swift wrapper,
+# plus the version marker the prepare_command uses to refetch on a tag bump.
 ios/Iroh.xcframework/
 ios/IrohLib.swift
+ios/.iroh-version
 
-# Android: uniffi-generated Kotlin bindings + upstream JNI shim, and the .so.
+# Android: OBSOLETE pre-AAR vendored tree (cargo-ndk .so + uniffi Kotlin).
+# Kept ignored so stale dev checkouts don't accidentally commit it; the gradle
+# build fails fast with a delete-me message if these dirs exist.
 android/src/main/java/computer/iroh/
 android/src/main/jniLibs/
 android/build/

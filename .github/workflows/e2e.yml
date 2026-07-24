@@ -142,7 +142,7 @@ jobs:
           path: artifacts/
           retention-days: 7
 
-  mobile-e2e:
+  mobile-e2e-ios:
     if: >
       github.event_name != 'workflow_dispatch' ||
       github.event.inputs.suite == 'all' ||
@@ -157,84 +157,53 @@ jobs:
       - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
         with:
           bun-version: 1.3.13
-      # Fingerprint of every input that can change the iOS *native* binary.
-      # Everything the app does in JS is served by Metro at runtime, so a
-      # JS-only commit must NOT invalidate the 32-minute native build — but a
-      # change to any of these must, or a stale .app would silently be tested.
+      # The iOS dev build is cached and reused whenever nothing that changes the
+      # *native binary* changed. A JS/TS commit is served live by Metro, so it
+      # must not pay the ~32-minute compile; a config-plugin, native-module,
+      # bundle-id, or autolinked-pod change must. The cache key (built below) has
+      # two independent parts:
       #
-      # Inputs, and why each is in the hash:
-      #   apps/mobile/ios/**        — the Xcode project, Podfile(.lock),
-      #                               Info.plist, entitlements, assets.
-      #   apps/mobile/modules/**    — the local `centraid-tunnel` Expo module.
-      #                               NOTE: only its 17 TRACKED files. The
-      #                               vendored Iroh.xcframework and the generated
-      #                               IrohLib.swift are git-ignored and therefore
-      #                               NOT hashed directly — but the podspec that
-      #                               reconstructs them pins both an upstream tag
-      #                               and a SHA-256, and the podspec IS tracked,
-      #                               so a change to what gets fetched still moves
-      #                               the fingerprint.
-      #   apps/mobile/plugins/**    — config plugins that mutate the native project.
-      #   apps/mobile/app.config.ts + src/version-core.cjs
-      #                             — bundle identifier, buildNumber, infoPlist,
-      #                               the plugin list.
-      #   apps/mobile/package.json, package.json, bun.lock
-      #                             — the autolinked native pods come from
-      #                               node_modules, which the lockfile pins.
-      #   .github/workflows/e2e.yml — the build INVOCATION is an input too. Without
-      #                               this, changing `expo run:ios` flags (Release,
-      #                               a different device) would reuse a binary built
-      #                               the old way.
-      #   xcodebuild / iphonesimulator SDK version
-      #                             — the macos-15 image rolls Xcode forward;
-      #                               a binary built by another toolchain must
-      #                               not be reused.
-      # Deliberately NOT in the hash: babel.config.js, metro.config.js and
-      # everything under apps/mobile/src (except version-core.cjs). Those only
-      # affect the JS bundle Metro serves live, never the compiled binary.
+      #   fp<hash>  @expo/fingerprint over the native inputs ONLY — config
+      #             plugins, autolinked native modules (read from node_modules,
+      #             so the install MUST run first), the bare apps/mobile/ios
+      #             project, the resolved Expo config, and the RN version. It
+      #             deliberately ignores apps/mobile/src/** (Metro-served JS) and
+      #             THIS workflow file, so editing either no longer forces a
+      #             rebuild — the exact over-hashing the old hand-rolled
+      #             `git ls-files | shasum` key suffered (it mixed in the whole
+      #             e2e.yml and all of ios/, including gitignored build products,
+      #             so any workflow edit or leftover build dir busted the cache).
+      #             The hashing lives in apps/mobile/scripts/native-fingerprint.mjs.
+      #   xc<hash>  the host toolchain (Xcode build + iphonesimulator SDK).
+      #             @expo/fingerprint hashes the PROJECT, not the MACHINE — so a
+      #             binary built by a newer Xcode after a macos-15 image roll must
+      #             still not be reused; this component forces that rebuild. It
+      #             subsumes the old key's raw ImageOS (the Xcode/SDK version is
+      #             the part of the image that actually matters here).
       #
-      # Hashing uses `git ls-files` (tracked files only) rather than
-      # `hashFiles('apps/mobile/ios/**')` on purpose: ios/Pods and ios/build are
-      # gitignored build products, so a glob-based key would depend on whatever
-      # a previous build left in the tree.
-      - name: Fingerprint the iOS native build inputs
-        id: native
-        working-directory: ${{ github.workspace }}
-        run: |
-          set -euo pipefail
-          sources="$(
-            git ls-files -z -- \
-              'apps/mobile/ios' \
-              'apps/mobile/modules' \
-              'apps/mobile/plugins' \
-              'apps/mobile/app.config.ts' \
-              'apps/mobile/package.json' \
-              'apps/mobile/src/version-core.cjs' \
-              'package.json' \
-              'bun.lock' \
-              '.github/workflows/e2e.yml' \
-            | xargs -0 shasum -a 256
-          )"
-          # Fail loudly rather than hashing an empty set — an empty digest would
-          # be a constant key, i.e. a permanent false cache hit.
-          test -n "$sources" || { echo "::error::no native sources matched"; exit 1; }
-          # Captured separately: `a="$(cmd1; cmd2)"` takes only cmd2's exit
-          # status, so a broken xcodebuild would silently yield a shorter
-          # toolchain string and a weaker key instead of failing the step.
-          xcode="$(xcodebuild -version)"
-          sdk="$(xcrun --show-sdk-version --sdk iphonesimulator)"
-          toolchain="$(printf '%s\n%s\n%s\n' "$xcode" "$sdk" "${ImageOS:-unknown}")"
-          digest="$(printf '%s\n%s\n' "$sources" "$toolchain" | shasum -a 256 | cut -d' ' -f1)"
-          echo "hash=$digest" >> "$GITHUB_OUTPUT"
-          echo "iOS native fingerprint: $digest"
-          echo "$toolchain"
       # Deliberately NOT caching turbo here. A per-sha key never hits, so every
       # run would SAVE a fresh multi-hundred-MB blob; against GitHub's 10 GB
       # per-repo budget with LRU eviction, the natural victim is the .app entry
-      # below — which is only ever read, never re-saved on a hit. Trading the
-      # 32-minute win for a few minutes of build replay is a bad deal, and it
-      # would evict other workflows' caches besides.
+      # below — which is only ever read, never re-saved on a hit.
       - run: bun install --frozen-lockfile
+      - name: Fingerprint the iOS native build inputs
+        id: native
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          # @expo/fingerprint reads node_modules for the autolinked native tree,
+          # so this runs after `bun install` above. The script prints the bare
+          # hash and hard-fails on an empty digest (no constant false-hit key).
+          fp="$(node scripts/native-fingerprint.mjs ios)"
+          test -n "$fp" || { echo "::error::empty iOS fingerprint"; exit 1; }
+          # Toolchain captured separately: `a="$(cmd1; cmd2)"` keeps only cmd2's
+          # exit status, so a broken xcodebuild would silently weaken the key
+          # instead of failing the step.
+          xcode="$(xcodebuild -version)"
+          sdk="$(xcrun --show-sdk-version --sdk iphonesimulator)"
+          xc="$(printf '%s\n%s\n' "$xcode" "$sdk" | shasum -a 256 | cut -d' ' -f1)"
+          echo "hash=xc${xc:0:12}-fp${fp}" >> "$GITHUB_OUTPUT"
+          echo "iOS native fingerprint: fp=$fp toolchain(xc)=$xc"
       - name: Build and start the tokenless mobile test gateway
         # Scoped to the gateway's dependency subgraph instead of a full
         # `bun run build`. tests/agent-e2e-mobile/lib/ci-gateway.mjs imports only
@@ -372,21 +341,34 @@ jobs:
           exit 1
         working-directory: apps/mobile
       - run: node scripts/test-report/prepare.mjs
+      # Non-short-circuit: each flow always runs and writes evidence; aggregate
+      # exit afterward so a mid-run fail cannot grey later cells (#535 F4).
       - name: Run all committed mobile journeys
         env:
           MAESTRO_PLATFORM: ios
         run: |
-          node tests/agent-e2e-mobile/flows/home-loads.mjs
-          node tests/agent-e2e-mobile/flows/template-gate.mjs
-          node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs
+          set +e
+          ec=0
+          node tests/agent-e2e-mobile/flows/home-loads.mjs || ec=$?
+          node tests/agent-e2e-mobile/flows/template-gate.mjs || ec=$?
+          node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs || ec=$?
+          exit "$ec"
+      # Single-root evidence upload only — dual path (artifacts/ + runs/) made
+      # upload-artifact v4 LCA-nest as artifacts/artifacts/e2e after merge-multiple
+      # download, which generate.mjs never reads (#535 F1).
       - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         if: always()
         with:
           name: nightly-evidence-mobile
-          path: |
-            artifacts/
-            tests/agent-e2e-mobile/runs/
+          path: artifacts/
           retention-days: 7
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-debug-mobile-runs
+          path: tests/agent-e2e-mobile/runs/
+          retention-days: 7
+          if-no-files-found: ignore
 
   # #496 PC1 — Android home-loads at least every nightly (macOS minutes free on
   # public repos). Leaner than iOS: only home-loads; longer paths stay on iOS.
@@ -398,7 +380,7 @@ jobs:
       github.event_name != 'workflow_dispatch' ||
       github.event.inputs.suite == 'all' ||
       github.event.inputs.suite == 'mobile-android'
-    runs-on: macos-15
+    runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -408,7 +390,38 @@ jobs:
       - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
         with:
           bun-version: 1.3.13
+      # ubuntu-latest exposes /dev/kvm; enable it so the x86_64 emulator gets
+      # hardware acceleration. macos-15 runners have no Hypervisor.framework
+      # (HVF error: HV_UNSUPPORTED), so the Android emulator could not boot there
+      # at all — this lane was dead, not slow. This is why the job is on Linux.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      # Pin the build JDK to 17 so gradle (via `expo run:android`) is stable and
+      # the fingerprint's jdk<hash> component does not drift with runner images.
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4.8.0
+        with:
+          distribution: temurin
+          java-version: '17'
       - run: bun install --frozen-lockfile
+      # Fingerprint the Android native build inputs — same mechanism as the iOS
+      # job (apps/mobile/scripts/native-fingerprint.mjs). Keyed so a JS-only
+      # commit reuses the cached .apk while any native-input change rebuilds it.
+      # The Android build toolchain (Gradle/AGP/NDK/compileSdk) lives in the
+      # tracked android/ gradle files, which the fingerprint already hashes; the
+      # host JDK is folded in separately (jdk<hash>), mirroring iOS's xc<hash>.
+      - name: Fingerprint the Android native build inputs
+        id: native_android
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          fp="$(node scripts/native-fingerprint.mjs android)"
+          test -n "$fp" || { echo "::error::empty Android fingerprint"; exit 1; }
+          jdk="$(java -version 2>&1 | head -1 | shasum -a 256 | cut -d' ' -f1)"
+          echo "hash=jdk${jdk:0:12}-fp${fp}" >> "$GITHUB_OUTPUT"
+          echo "Android native fingerprint: fp=$fp jdk=$jdk"
       - name: Install Maestro CLI
         run: |
           curl -fsSL "https://get.maestro.mobile.dev" | bash
@@ -425,32 +438,103 @@ jobs:
           done
           cat /tmp/centraid-metro-android.log
           exit 1
-      - name: Set up Android SDK + emulator
-        uses: reactivecircus/android-emulator-runner@1dcd0090116d15dd95c8371a98ef77c0cff894dd # v2.34.0
+      # Restore the built Android dev-client .apk. Same all-or-nothing, split
+      # restore/save rationale as the iOS job: the emulator action's script runs
+      # the build, so a cache HIT skips gradle entirely and just adb-installs the
+      # banked apk. No restore-keys — a partial match would install a stale apk.
+      - name: Restore the built Android app
+        id: android_app
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
+          path: ~/.cache/centraid-mobile-e2e-android
+          key: android-app-${{ runner.os }}-${{ steps.native_android.outputs.hash }}
+      # AVD snapshot caching — the reactivecircus best practice. The first run
+      # boots a clean emulator once and banks a booted-state snapshot; every
+      # later run resumes from it in seconds instead of a ~40s cold boot. It also
+      # removes the first-boot Pixel Launcher race that ANR'd under the software
+      # GPU and stole the window from Maestro (#535): a resumed launcher is
+      # already settled. The key pins every AVD-shaping input — bump the trailing
+      # -vN to invalidate after an emulator/image bump. Distinct from the apk
+      # cache (different key, different path); both can hit independently.
+      - name: AVD cache
+        id: avd_cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api34-x86_64-google_apis-pixel6-r4096-c4-v1
+      - name: Create AVD + snapshot (cache miss only)
+        if: steps.avd_cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          # Every AVD-shaping input below MUST match the test step's, or the
+          # cached snapshot will not load. `disable-animations: false` here so the
+          # setting is not baked wrong into the snapshot (reactivecircus pattern).
           api-level: 34
-          arch: arm64-v8a
+          arch: x86_64
+          target: google_apis
           profile: pixel_6
+          ram-size: 4096M
+          cores: 4
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: echo "Generated AVD snapshot for caching."
+      - name: Set up Android SDK + emulator
+        id: emu
+        # v2.38.0 — prior pin 1dcd009…dd was a typo/orphan SHA (#535 F6).
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        env:
+          # Read inside the action's script to branch build-vs-install. The apk
+          # lives under $HOME so it carries from the restore step into the
+          # action's shell (same runner, same home).
+          ANDROID_CACHE_HIT: ${{ steps.android_app.outputs.cache-hit }}
+        with:
+          api-level: 34
+          # x86_64 (not arm64-v8a) so /dev/kvm on the Linux runner accelerates it.
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          # Match the snapshot-gen step's AVD shape exactly (or the cached
+          # snapshot will not load). 4 GB / 4 cores on the 16 GB / 4-vCPU runner
+          # gives the app real headroom, so the launcher is far less likely to
+          # ANR under Metro + app load.
+          ram-size: 4096M
+          cores: 4
+          force-avd-creation: false
+          # `-no-snapshot-save`: boot FROM the cached snapshot but do not re-bank
+          # it, so a test run never rewrites the clean cached snapshot.
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
           disable-animations: true
-          script: |
-            set -euo pipefail
-            cd apps/mobile
-            # Always --no-bundler: Metro is already running on the host. A fallback
-            # without --no-bundler would spawn a second Metro and hang the job.
-            bunx expo run:android --no-bundler --device
-            cd ../..
-            node scripts/test-report/prepare.mjs
-            MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/home-loads.mjs
+          # The action executes `script:` via dash; a multi-line if/else with
+          # comments and non-ASCII chars tripped its parser (#535). Keep this a
+          # single line that hands off to a committed bash file instead.
+          script: bash apps/mobile/scripts/android-emulator-e2e.sh
+      # Bank the apk even if a later flow failed — the artifact is the product of
+      # the fingerprinted inputs regardless of whether Maestro passed (see iOS).
+      # Guarded on the build having actually produced an apk, so a cache-hit run
+      # does not re-save what it just restored and a run that died before the
+      # build cannot cache an empty directory.
+      - name: Save the built Android app
+        if: always() && steps.emu.outputs.built == 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/centraid-mobile-e2e-android
+          key: android-app-${{ runner.os }}-${{ steps.native_android.outputs.hash }}
       - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         if: always()
         with:
           name: nightly-evidence-mobile-android
-          path: |
-            artifacts/
-            tests/agent-e2e-mobile/runs/
+          path: artifacts/
           retention-days: 7
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-debug-mobile-android-runs
+          path: tests/agent-e2e-mobile/runs/
+          retention-days: 7
+          if-no-files-found: ignore
 
   # Pairing journeys (issue #289 / matrix tunnel-pairing). Independent jobs so
   # one failure still leaves evidence from the others for the health report.
@@ -477,10 +561,15 @@ jobs:
         if: always()
         with:
           name: nightly-evidence-pairing-lifecycle
-          path: |
-            artifacts/
-            tests/agent-e2e-pairing/runs/
+          path: artifacts/
           retention-days: 7
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-debug-pairing-lifecycle-runs
+          path: tests/agent-e2e-pairing/runs/
+          retention-days: 7
+          if-no-files-found: ignore
 
   pairing-ticket-hygiene:
     if: >
@@ -505,10 +594,15 @@ jobs:
         if: always()
         with:
           name: nightly-evidence-pairing-ticket-hygiene
-          path: |
-            artifacts/
-            tests/agent-e2e-pairing/runs/
+          path: artifacts/
           retention-days: 7
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-debug-pairing-ticket-hygiene-runs
+          path: tests/agent-e2e-pairing/runs/
+          retention-days: 7
+          if-no-files-found: ignore
 
   pairing-cross-network-relay:
     if: >
@@ -536,10 +630,15 @@ jobs:
         if: always()
         with:
           name: nightly-evidence-pairing-cross-network-relay
-          path: |
-            artifacts/
-            tests/agent-e2e-pairing/runs/
+          path: artifacts/
           retention-days: 7
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-debug-pairing-cross-network-relay-runs
+          path: tests/agent-e2e-pairing/runs/
+          retention-days: 7
+          if-no-files-found: ignore
 
   # #532 — Stryker mutation lane (nightly, all seeds). Per-PR runs affected
   # seeds only via ci.yml mutation-pr. Floors ratcheted via
@@ -578,7 +677,7 @@ jobs:
       [
         desktop-e2e,
         web-e2e,
-        mobile-e2e,
+        mobile-e2e-ios,
         mobile-e2e-android,
         pairing-lifecycle,
         pairing-ticket-hygiene,
@@ -645,6 +744,15 @@ jobs:
             cp .gh-pages-history/test-report/history/*.json artifacts/report-history/ || true
           fi
           rm -rf .gh-pages-history
+      # Job conclusions for honesty: a red needs.* job cannot yield silent
+      # failed:0 (#535 F5). generate.mjs reads artifacts/test-results/job-conclusions.json.
+      - name: Write evidence-job conclusions
+        if: always()
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          mkdir -p artifacts/test-results
+          printf '%s\n' "$NEEDS_JSON" > artifacts/test-results/job-conclusions.json
       - name: Generate full nightly report
         if: always()
         run: bun run test:report
@@ -799,7 +907,7 @@ jobs:
       [
         desktop-e2e,
         web-e2e,
-        mobile-e2e,
+        mobile-e2e-ios,
         mobile-e2e-android,
         pairing-lifecycle,
         pairing-ticket-hygiene,
@@ -813,7 +921,7 @@ jobs:
       (
         needs.desktop-e2e.result == 'failure' ||
         needs.web-e2e.result == 'failure' ||
-        needs.mobile-e2e.result == 'failure' ||
+        needs.mobile-e2e-ios.result == 'failure' ||
         needs.mobile-e2e-android.result == 'failure' ||
         needs.pairing-lifecycle.result == 'failure' ||
         needs.pairing-ticket-hygiene.result == 'failure' ||
@@ -849,7 +957,7 @@ jobs:
           ### Job results
           - desktop-e2e: \`${{ needs.desktop-e2e.result }}\`
           - web-e2e: \`${{ needs.web-e2e.result }}\`
-          - mobile-e2e: \`${{ needs.mobile-e2e.result }}\`
+          - mobile-e2e-ios: \`${{ needs.mobile-e2e-ios.result }}\`
           - mobile-e2e-android: \`${{ needs.mobile-e2e-android.result }}\`
           - pairing-lifecycle: \`${{ needs.pairing-lifecycle.result }}\`
           - pairing-ticket-hygiene: \`${{ needs.pairing-ticket-hygiene.result }}\`

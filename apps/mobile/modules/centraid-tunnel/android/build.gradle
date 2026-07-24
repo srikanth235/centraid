@@ -17,22 +17,17 @@ android {
 dependencies {
   implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
 
-  // Iroh Kotlin binding (uniffi, n0-computer/iroh-ffi 1.0.0).
-  //
-  // Compile-time: Maven `computer.iroh:iroh` provides the uniffi Kotlin API
-  // (Endpoint, Connection, …) so assembleDebug / CI can typecheck without the
-  // gitignored cargo-ndk tree (issue #468 J8).
-  //
-  // Exclude its transitive JNA *jar* — we pin the Android `@aar` below so
-  // checkDebugDuplicateClasses does not see jna-jar + jna-aar together.
-  //
-  // Runtime on device: the Maven jar is desktop-JVM-native (no Android ABI
-  // `.so`). For a *running* tunnel on phone, still place the cargo-ndk
-  // `libiroh_ffi.so` under src/main/jniLibs as documented in ../README.md.
-  implementation('computer.iroh:iroh:1.0.0') {
-    exclude group: 'net.java.dev.jna', module: 'jna'
-  }
-  implementation 'net.java.dev.jna:jna:5.15.0@aar'
+  // Iroh binding: the official Android AAR (published 2026-07-17). It bundles
+  // `libiroh_ffi.so` for all four ABIs (arm64-v8a, armeabi-v7a, x86, x86_64)
+  // plus the `IrohAndroid` JNI initializer, and transitively provides the
+  // uniffi Kotlin API (`computer.iroh:iroh`, with its desktop-JVM JNA jar
+  // excluded in favour of `jna@aar` — the same dance this file used to do by
+  // hand). This replaces the git-ignored cargo-ndk vendored tree entirely:
+  // compile-time API and runtime natives now both come from Maven, and the
+  // x86_64 ABI means the KVM-accelerated CI emulator can load the tunnel
+  // (issue #535 — the vendored tree was arm64-only, so the app redboxed with
+  // `dlopen failed: libiroh_ffi.so not found` on the x86_64 AVD).
+  implementation 'computer.iroh:iroh-android:1.1.0'
   implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0'
 
   // Wire-protocol conformance test (TunnelWireConformanceTest) — plain JVM
@@ -40,4 +35,21 @@ dependencies {
   // org.json is a unit-test stub) + JUnit4; loads no native iroh code.
   testImplementation 'junit:junit:4.13.2'
   testImplementation 'org.json:json:20240303'
+}
+
+// Dev machines that followed the pre-AAR README carry a git-ignored vendored
+// tree (uniffi Kotlin under src/main/java/computer/iroh/, cargo-ndk .so under
+// src/main/jniLibs/). Those now DUPLICATE the classes and natives inside
+// computer.iroh:iroh-android and fail the build with an opaque
+// checkDebugDuplicateClasses / mergeDebugJniLibFolders error. Fail fast with
+// the fix instead.
+def vendoredKotlin = file('src/main/java/computer/iroh')
+def vendoredJni = file('src/main/jniLibs')
+if (vendoredKotlin.exists() || vendoredJni.exists()) {
+  throw new GradleException(
+    "centraid-tunnel: stale vendored iroh tree found (" +
+    [vendoredKotlin, vendoredJni].findAll { it.exists() }.join(', ') +
+    "). iroh now ships as the computer.iroh:iroh-android AAR; delete the " +
+    "vendored directories (they are git-ignored) and rebuild. See README.md."
+  )
 }

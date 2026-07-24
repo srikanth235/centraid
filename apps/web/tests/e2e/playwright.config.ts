@@ -9,8 +9,21 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 1 : 0,
+  // Repo-root artifacts/ (not apps/web/artifacts/) so nightly upload-artifact
+  // `path: artifacts/` and generate.mjs readPlaywright agree (#535 F2).
   reporter: process.env.CI
-    ? [['list'], ['json', { outputFile: '../../artifacts/test-results/web-playwright.json' }]]
+    ? [
+        ['list'],
+        [
+          'json',
+          {
+            outputFile: path.resolve(
+              here,
+              '../../../../artifacts/test-results/web-playwright.json',
+            ),
+          },
+        ],
+      ]
     : 'list',
   timeout: 60_000,
   // Suite-level backstop, CI only. Without it nothing stops the run before the

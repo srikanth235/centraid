@@ -10,6 +10,7 @@ import { apps as BUILTIN_APPS, icons, palette } from '@centraid/design-tokens';
 import type { AppMetaResolved, ColorKey, IconName } from '@centraid/design-tokens';
 import { ensureTunnelStarted } from './phone-link';
 import { getSecure, hydrateSecure, setSecure } from './secure-storage';
+import { getActiveVaultId } from './spaces';
 import { Store } from '../storage';
 
 export const SETTINGS_KEY = 'settings.gatewayUrl';
@@ -89,6 +90,25 @@ export function authHeader(): Record<string, string> {
 }
 
 /**
+ * The `x-centraid-vault` header addressing the active Space's vault (issue #289
+ * addressing model). Every RN-side gateway fetch carries it so the whole app —
+ * app grid, Settings → Space, approvals — follows whichever vault the Spaces
+ * switcher has active, instead of floating to the gateway's implied default.
+ * '' (no active vault, e.g. fresh manual-URL dev) sends no header, preserving
+ * the old "let the gateway pick" behaviour. The replica sends its own copy of
+ * this header (ReplicaProvider) keyed on the same active Space.
+ */
+export function vaultHeader(): Record<string, string> {
+  const vaultId = getActiveVaultId();
+  return vaultId ? { 'x-centraid-vault': vaultId } : {};
+}
+
+/** The RN-fetch header set every authed gateway call needs: auth + active vault. */
+export function apiHeaders(extra?: Record<string, string>): Record<string, string> {
+  return { ...authHeader(), ...vaultHeader(), ...extra };
+}
+
+/**
  * Resolve the base URL for every gateway request: paired tunnel first,
  * manual URL second. `undefined` when neither is configured; throws
  * PhoneLinkError when the device is paired but the tunnel fails to start.
@@ -97,10 +117,17 @@ export async function resolveGatewayBase(): Promise<string | undefined> {
   const tunnel = await ensureTunnelStarted();
   if (tunnel) return tunnel.baseUrl;
   const manual = await hydrateGatewayUrl();
-  return manual ? normalizeBase(manual) : undefined;
+  if (!manual) return undefined;
+  // Warm the token cache before the caller builds `authHeader()`. That helper is
+  // sync (cache-only), and the Settings screen is otherwise the ONLY place that
+  // hydrates the token — so on a cold start into manual-URL dev mode every authed
+  // fetch would go out bearer-less and 401 until Settings was opened once. The
+  // tunnel path skips this: the desktop attaches its own auth on forward.
+  await hydrateGatewayToken();
+  return normalizeBase(manual);
 }
 
-async function requireGatewayBase(): Promise<string> {
+export async function requireGatewayBase(): Promise<string> {
   const base = await resolveGatewayBase();
   if (!base) {
     throw new GatewayError(
@@ -126,7 +153,7 @@ async function fetchOrThrow(href: string, init?: RequestInit): Promise<Response>
   }
 }
 
-async function fetchJson<T>(href: string, init?: RequestInit): Promise<T> {
+export async function fetchJson<T>(href: string, init?: RequestInit): Promise<T> {
   const res = await fetchOrThrow(href, init);
   if (!res.ok) {
     throw new GatewayError('bad_response', `Gateway returned HTTP ${res.status}`);
@@ -140,23 +167,34 @@ async function fetchJson<T>(href: string, init?: RequestInit): Promise<T> {
 }
 
 /**
- * List openable apps. Rows without a published `index.html` and automation
- * rows are filtered out — mobile is a viewer for published UIs.
+ * The full worktree-store listing — apps *and* automations, published or not.
+ * The Home launcher reads this once per load and splits it locally: openable
+ * apps feed the grid, automation rows feed the attention line's count. Keeping
+ * the single fetch here (rather than one call per view) halves the tunnel
+ * round-trips on every focus/refresh.
  */
-export async function listApps(): Promise<AppRegistryRow[]> {
+export async function listAppRegistry(): Promise<AppRegistryRow[]> {
   const base = await requireGatewayBase();
-  const rows = await fetchJson<AppRegistryRow[]>(`${base}/centraid/_apps`, {
-    headers: authHeader(),
+  return fetchJson<AppRegistryRow[]>(`${base}/centraid/_apps`, {
+    headers: apiHeaders(),
     method: 'GET',
   });
-  return rows.filter((row) => row.hasIndex !== false && row.kind !== 'automation');
+}
+
+/**
+ * An openable app: has a published `index.html` and is not an automation.
+ * Mobile is a viewer for published UIs, so unpublished/automation rows never
+ * become launcher tiles. Exported so the split rule lives in exactly one place.
+ */
+export function isOpenableApp(row: AppRegistryRow): boolean {
+  return row.hasIndex !== false && row.kind !== 'automation';
 }
 
 /** Parked vault invocations awaiting the owner's confirmation. */
 export async function listParked(): Promise<ParkedInvocation[]> {
   const base = await requireGatewayBase();
   const body = await fetchJson<{ parked: ParkedInvocation[] }>(`${base}/centraid/_vault/parked`, {
-    headers: authHeader(),
+    headers: apiHeaders(),
     method: 'GET',
   });
   return body.parked;
@@ -167,8 +205,67 @@ export async function confirmParked(invocationId: string, approve: boolean): Pro
   const base = await requireGatewayBase();
   await fetchJson<unknown>(`${base}/centraid/_vault/parked/${encodeURIComponent(invocationId)}`, {
     body: JSON.stringify({ approve }),
-    headers: { 'content-type': 'application/json', ...authHeader() },
+    headers: apiHeaders({ 'content-type': 'application/json' }),
     method: 'POST',
+  });
+}
+
+/**
+ * One vault of the owner's registry — a "space" in the UI. Presentation
+ * (`color`/`icon`/`blurb`) lives in `core_vault.settings_json` (#280: profiles
+ * are vaults). Mirrors `VaultListEntry` in packages/client gateway-client-vault
+ * ts — `color` is a raw hex string, `icon` a design-tokens IconName key.
+ */
+export interface VaultRow {
+  vaultId: string;
+  name: string;
+  ownerPartyId: string;
+  color?: string;
+  icon?: string;
+  blurb?: string;
+}
+
+/**
+ * The owner's vault registry from `GET /centraid/_vault/vaults` (returns
+ * `{ vaults }`). `undefined` when the gateway mounts no vault plane (route
+ * 404s) — a valid deployment, so callers render a "no space" state, not an
+ * error. There is no server-side active flag (#289): the active vault is a
+ * device-local pointer (see lib/spaces.ts), and the Spaces switcher reads this
+ * list to offer the vaults this device may address. Deliberately header-free
+ * (no `vaultHeader()`): the switcher's own data source must not depend on the
+ * active vault being valid, and an unknown `x-centraid-vault` would 404 here.
+ */
+export async function listVaults(): Promise<VaultRow[] | undefined> {
+  const base = await requireGatewayBase();
+  const res = await fetchOrThrow(`${base}/centraid/_vault/vaults`, {
+    headers: authHeader(),
+    method: 'GET',
+  });
+  if (res.status === 404) return undefined;
+  if (!res.ok) throw new GatewayError('bad_response', `Gateway returned HTTP ${res.status}`);
+  const body = (await res.json()) as { vaults: VaultRow[] };
+  return body.vaults;
+}
+
+/**
+ * Rename a vault and/or update its presentation via `PATCH
+ * /centraid/_vault/vaults/:id` (only supplied fields are written). Returns the
+ * updated row. The vault is named by URL path, so this is header-free like
+ * `listVaults` — no `vaultHeader()`. Vault create/delete have NO client HTTP
+ * surface by design (#289): the gateway answers 405 and points at
+ * `centraid-gateway vault create|delete` on the host. The mobile "Spaces"
+ * feature (lib/spaces.ts) adds/switches/forgets device-local (gateway, vault)
+ * tuples — it never creates or destroys a vault.
+ */
+export async function updateVault(
+  vaultId: string,
+  patch: { name?: string; color?: string; icon?: string; blurb?: string },
+): Promise<VaultRow> {
+  const base = await requireGatewayBase();
+  return fetchJson<VaultRow>(`${base}/centraid/_vault/vaults/${encodeURIComponent(vaultId)}`, {
+    body: JSON.stringify(patch),
+    headers: { 'content-type': 'application/json', ...authHeader() },
+    method: 'PATCH',
   });
 }
 

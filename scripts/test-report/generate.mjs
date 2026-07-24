@@ -4,13 +4,18 @@
 // rendered, and splitting the reader from the model it feeds would scatter the
 // evidence-collection vocabulary across files without making either half
 // independently testable. Worth a real decomposition, but not inside a CI fix.
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateMatrix } from './validate-matrix.mjs';
 import {
+  cellsMissingRatchet,
   collectEnvGatedOwners,
   extractUnhandledErrors,
+  filterFloorConfigEntries,
+  findUnmappedEvidence,
+  mergeLaneMarkers,
+  reconcileJobConclusions,
   summarizeCellStates,
 } from './report-signals.mjs';
 import { coverageScopesBelowFloor, writeSummarySidecars } from './summary-markdown.mjs';
@@ -19,9 +24,9 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const flags = parseFlags(process.argv.slice(2));
 const matrixPath = path.resolve(flags.matrix ?? path.join(root, 'tests/matrix.json'));
 const outputPath = path.resolve(flags.output ?? path.join(root, 'dist/test-report/index.html'));
-const laneMarkers = await readJson(
-  path.resolve(flags['lane-markers'] ?? path.join(root, 'artifacts/test-results/lane-starts.json')),
-  {},
+const reportScope = String(flags.scope ?? process.env.TEST_REPORT_SCOPE ?? '');
+const laneMarkers = await readLaneMarkers(
+  path.resolve(flags['lane-markers'] ?? path.join(root, 'artifacts/test-results')),
 );
 const maxEvidenceAgeMs =
   Number(flags['max-age-hours'] ?? process.env.TEST_REPORT_MAX_EVIDENCE_AGE_HOURS ?? 36) *
@@ -71,6 +76,14 @@ const laneResults = [...perf, ...scale];
 const unhandledErrors = extractUnhandledErrors(vitest);
 const cellStateCounts = summarizeCellStates(cells);
 const envGatedOwners = await collectEnvGatedOwners(matrix, { root, readFile });
+// Orphaned e2e evidence (owner not on any matrix cell/flow) — #535 F3.
+const unmapped = findUnmappedEvidence(e2e, matrix, { normalizeOwner: normalizeFile });
+const jobConclusions = await readJson(
+  path.resolve(
+    flags['job-conclusions'] ?? path.join(root, 'artifacts/test-results/job-conclusions.json'),
+  ),
+  null,
+);
 const summary = {
   passed: evidence.filter((item) => item.status === 'passed').length,
   failed: evidence.filter((item) => item.status === 'failed').length,
@@ -86,7 +99,17 @@ const summary = {
   cellsFailed: cellStateCounts.cellsFailed,
   cellsMissing: cellStateCounts.cellsMissing,
   envGatedOwners,
+  unmappedEvidence: unmapped.unmappedEvidence,
+  unmappedFailed: unmapped.failedUnmapped.map((item) => item.owner),
 };
+const jobRecon = reconcileJobConclusions(jobConclusions, summary);
+summary.failedJobs = jobRecon.failedJobs;
+summary.silentAllClear = jobRecon.silentAllClear;
+summary.jobReconciliation = jobRecon.message;
+const missingRatchet = cellsMissingRatchet(summary.cellsMissing, durableHistory);
+summary.cellsMissingPrior = missingRatchet.prior;
+summary.cellsMissingRose = missingRatchet.rose;
+summary.cellsMissingDelta = missingRatchet.delta;
 
 const mutationRows = collectMutationRows(mutationScores, mutationFloors);
 const model = {
@@ -99,6 +122,7 @@ const model = {
   packageRuntime: packageRuntime(vitestFiles),
   laneResults,
   summary,
+  reportScope,
   healthHistory: [...durableHistory, historyPoint({ label: 'this run', ...summary })],
   validationErrors: validation.errors,
 };
@@ -122,6 +146,25 @@ if (validation.errors.length) {
   for (const error of validation.errors) console.error(`matrix: ${error}`);
   process.exitCode = 1;
 }
+// Honesty exits (#535): orphaned failed evidence, silent all-clear, grey creep.
+if (unmapped.failedUnmapped.length) {
+  for (const item of unmapped.failedUnmapped) {
+    console.error(`unmapped failed evidence: ${item.owner} (${item.status})`);
+  }
+  process.exitCode = 1;
+}
+if (jobRecon.silentAllClear) {
+  console.error(`job reconciliation: ${jobRecon.message}`);
+  process.exitCode = 1;
+}
+if (missingRatchet.rose) {
+  console.error(
+    `cellsMissing rose: prior=${missingRatchet.prior} current=${missingRatchet.current} delta=+${missingRatchet.delta}`,
+  );
+  // Main (per-push) always has more greys than a full nightly history point —
+  // fail the ratchet only on full/nightly reports (#535 F5 / F7).
+  if (reportScope !== 'main') process.exitCode = 1;
+}
 
 function parseFlags(args) {
   const result = {};
@@ -139,6 +182,30 @@ async function readJson(file, fallback) {
     return JSON.parse(await readFile(file, 'utf8'));
   } catch {
     return fallback;
+  }
+}
+
+/**
+ * Load lane start markers. Accepts a single JSON file (legacy) or a directory
+ * of `lane-starts*.json` shards written by prepare.mjs (#535 lane-starts merge).
+ */
+async function readLaneMarkers(target) {
+  try {
+    const info = await stat(target);
+    if (info.isFile()) return (await readJson(target, {})) ?? {};
+  } catch {
+    // fall through to directory / glob merge
+  }
+  const dir = target.endsWith('.json') ? path.dirname(target) : target;
+  try {
+    const files = (await readdir(dir))
+      .filter((file) => file === 'lane-starts.json' || file.startsWith('lane-starts-'))
+      .filter((file) => file.endsWith('.json'))
+      .sort();
+    const maps = await Promise.all(files.map((file) => readJson(path.join(dir, file), {})));
+    return mergeLaneMarkers(maps);
+  } catch {
+    return {};
   }
 }
 
@@ -412,7 +479,8 @@ function packageRuntime(files) {
 }
 
 function collectCoverage(summary, floorConfig) {
-  return Object.entries(floorConfig).map(([scope, floor]) => {
+  // Skip `_comment` / meta keys — same filter mutation rows already use (#535).
+  return filterFloorConfigEntries(floorConfig).map(([scope, floor]) => {
     const target = typeof floor === 'number' ? { lines: floor } : floor;
     const prefix = scope.replace('/**', '');
     const entries = summary
@@ -580,12 +648,38 @@ function render(model) {
     : '<p class="empty">Perf and scale results are missing. The lane stays visible until nightly evidence arrives.</p>';
   const trends = `${durableTrends}${laneTrends}`;
 
+  const honestyBanners = [];
+  if (model.reportScope === 'main') {
+    honestyBanners.push(
+      `<p class="lede" style="border-left:3px solid var(--blue);padding-left:12px">This is the <strong>per-push / main</strong> slot (CI after merge). It does not include nightly desktop/web/mobile/pairing e2e, perf, or scale. Full product lanes: <a href="../nightly/" style="color:var(--blue)">/test-report/nightly/</a>.</p>`,
+    );
+  }
+  if (model.summary.silentAllClear && model.summary.jobReconciliation) {
+    honestyBanners.push(
+      `<p class="lede" style="color:var(--red)">${escapeHtml(model.summary.jobReconciliation)}</p>`,
+    );
+  }
+  if (model.summary.unmappedEvidence) {
+    honestyBanners.push(
+      `<p class="lede" style="color:var(--amber)">Unmapped e2e evidence: ${model.summary.unmappedEvidence}${
+        (model.summary.unmappedFailed ?? []).length
+          ? ` (${(model.summary.unmappedFailed ?? []).length} failed: ${escapeHtml((model.summary.unmappedFailed ?? []).join(', '))})`
+          : ''
+      }</p>`,
+    );
+  }
+  if (model.summary.cellsMissingRose) {
+    honestyBanners.push(
+      `<p class="lede" style="color:var(--amber)">cellsMissing rose vs prior durable history: ${model.summary.cellsMissingPrior} → ${model.summary.cellsMissing} (Δ+${model.summary.cellsMissingDelta})</p>`,
+    );
+  }
+
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Centraid test health</title><style>
 :root{color-scheme:dark;--ink:#ecf3ee;--muted:#8f9f98;--panel:#111713;--line:#273129;--bg:#090d0b;--green:#5bd697;--red:#ff766f;--amber:#e9b95c;--blue:#72a9ff;--grey:#4a544e;--sans:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 90% -10%,#173126 0,transparent 35%),var(--bg);color:var(--ink);font:14px/1.5 var(--sans)}main{width:min(1480px,calc(100% - 40px));margin:auto;padding:56px 0 80px}.eyebrow{color:var(--green);font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase}h1{font-size:clamp(34px,5vw,66px);letter-spacing:-.055em;line-height:.95;margin:14px 0 16px;max-width:780px}.lede{color:#afbbb5;font-size:16px;max-width:720px;margin:0}.hero{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:44px;align-items:end;margin-bottom:42px}.summary{display:grid;grid-template-columns:repeat(3,92px);gap:8px}.stat{background:#101612;border:1px solid var(--line);border-radius:4px;padding:15px 12px}.stat b{display:block;font-size:25px}.stat small,.muted,small{color:var(--muted)}.matrix-shell,.card{background:color-mix(in srgb,var(--panel) 94%,transparent);border:1px solid var(--line);border-radius:6px}.matrix-head{display:flex;justify-content:space-between;gap:24px;align-items:center;padding:18px 20px;border-bottom:1px solid var(--line)}.matrix-head h2,.card h2{font-size:15px;margin:0;letter-spacing:-.01em}.legend{display:flex;gap:14px;flex-wrap:wrap;color:var(--muted);font-size:12px}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}.dot.passed{background:var(--green)}.dot.failed{background:var(--red)}.dot.skipped{background:var(--amber)}.dot.missing{background:var(--grey)}.matrix-scroll{overflow:auto;padding:10px}table{border-collapse:separate;border-spacing:4px;width:100%}.heatmap th{font-size:11px;color:var(--muted);font-weight:650;text-align:left;min-width:68px}.heatmap thead th:not(:first-child){height:98px;vertical-align:bottom}.heatmap thead th span{display:block;writing-mode:vertical-rl;transform:rotate(180deg);height:74px}.heatmap thead th small{display:none}.heatmap tbody th{min-width:230px;color:#bdc9c3}.cell{width:100%;min-width:52px;height:40px;border:1px solid transparent;border-radius:3px;color:#07110c;display:flex;justify-content:space-between;align-items:center;padding:0 9px;font:700 13px var(--sans);cursor:pointer;transition:transform .16s,border-color .16s,filter .16s;animation:rise .34s both;animation-delay:calc(var(--row)*28ms)}.cell small{color:inherit;opacity:.65}.cell:hover,.cell:focus-visible{transform:translateY(-2px);filter:brightness(1.12);outline:none;border-color:#fff8}.cell.passed{background:var(--green)}.cell.failed{background:var(--red)}.cell.skipped{background:var(--amber)}.cell.missing,.cell.stale{background:#303a34;color:#aab6b0}.inspector{display:grid;grid-template-columns:220px minmax(0,1fr);gap:22px;padding:20px;border-top:1px solid var(--line);min-height:126px}.inspector .kicker{color:var(--muted);font-size:12px}.inspector h3{margin:4px 0 0;font-size:18px}.flow-list{display:grid;gap:8px}.flow{display:grid;grid-template-columns:minmax(150px,.45fr) 78px 84px 84px minmax(230px,1fr);gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid #202923}.flow:last-child{border-bottom:0}.tier{color:var(--blue);font-size:11px;text-transform:uppercase;letter-spacing:.08em}.result{font-size:11px;font-weight:750;text-transform:uppercase}.result.passed{color:var(--green)}.result.failed{color:var(--red)}.result.skipped{color:var(--amber)}.result.missing,.result.stale{color:var(--muted)}.path{color:#a8b7af;font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}.card{padding:20px;overflow:auto}.card h2{margin-bottom:14px}.data{border-spacing:0;width:100%}.data th,.data td{text-align:left;border-bottom:1px solid #202923;padding:8px 7px;font-size:12px}.data th{color:var(--muted);font-weight:650}.metric.passed{color:var(--green)}.metric.failed{color:var(--red)}.metric.missing{color:var(--muted)}.wide{grid-column:1/-1}.trend-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px}.trend{display:flex;justify-content:space-between;gap:12px;align-items:center;background:#0c110e;border:1px solid #202923;padding:12px}.trend strong,.trend small{display:block}.spark{width:120px;height:40px}.spark polyline{fill:none;stroke:var(--green);stroke-width:2;vector-effect:non-scaling-stroke}.empty{color:var(--muted);border:1px dashed #334038;padding:24px;margin:0}.foot{margin-top:20px;color:var(--muted);font-size:12px}@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}@media(max-width:900px){main{width:min(100% - 22px,1480px);padding-top:30px}.hero{grid-template-columns:1fr}.summary{grid-template-columns:repeat(3,1fr)}.grid{grid-template-columns:1fr}.wide{grid-column:auto}.inspector{grid-template-columns:1fr}.flow{grid-template-columns:1fr}.matrix-head{align-items:flex-start;flex-direction:column}}@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style></head><body><main>
-<header class="hero"><div><div class="eyebrow">Centraid · test intelligence</div><h1>Product health, with the gaps left visible.</h1><p class="lede">One view across per-PR correctness and nightly journey, performance, and scale evidence. Grey is intentional: missing proof should never disappear. Red cells failed with evidence; grey cells were not run.</p>${
+<header class="hero"><div><div class="eyebrow">Centraid · test intelligence</div><h1>Product health, with the gaps left visible.</h1><p class="lede">One view across per-PR correctness and nightly journey, performance, and scale evidence. Grey is intentional: missing proof should never disappear. Red cells failed with evidence; grey cells were not run.</p>${honestyBanners.join('')}${
     model.summary.unhandledErrors
       ? `<p class="lede" style="color:var(--red)">Unhandled Vitest errors: ${model.summary.unhandledErrors} — ${escapeHtml(
           (model.summary.unhandledErrorMessages ?? []).join(' · ').slice(0, 400),

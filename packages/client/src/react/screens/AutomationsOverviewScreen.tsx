@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type JSX } from 'react';
+import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
 import { Icon, Button, KindBadge } from '../ui/index.js';
 import type { IconName } from '@centraid/design-tokens';
 import type {
@@ -304,15 +304,22 @@ export default function AutomationsOverviewScreen({
   const [suggestions, setSuggestions] = useState<AuOverviewSuggestionDTO[]>([]);
   const [filter, setFilter] = useState('');
 
+  // Keep the latest loadData without rebinding reload. Routes historically pass
+  // an inline async prop; if reload depended on that identity, every parent
+  // re-render remounted the load effect, thrashing error ↔ loading and detaching
+  // the Retry button mid-click (desktop e2e 8.2).
+  const loadDataRef = useRef(loadData);
+  loadDataRef.current = loadData;
+
   const reload = useCallback(async () => {
     setState('loading');
     try {
-      setState(await loadData());
+      setState(await loadDataRef.current());
     } catch (err) {
       setErrMsg(err instanceof Error ? err.message : String(err));
       setState('error');
     }
-  }, [loadData]);
+  }, []);
 
   useEffect(() => {
     void reload();

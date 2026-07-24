@@ -8,26 +8,70 @@
     "skip": "Deliberately low-value for the current v0 product posture"
   },
   "notes": {
-    "web.concurrency": "Partial→stronger: multi-writer.contract.test.ts now covers double-write distinct intents + exclusive claims (P3). web-pwa-cache.spec.ts still owns multi-tab shell bridge; Playwright double-write remains opportunistic.",
+    "web.concurrency": "Partial\u2192stronger: multi-writer.contract.test.ts now covers double-write distinct intents + exclusive claims (P3). web-pwa-cache.spec.ts still owns multi-tab shell bridge; Playwright double-write remains opportunistic.",
     "mobile.performance": "Honest skip for on-device budget until a Maestro metric owner lands; #404 PWA waterfall owns web.performance. Android home-loads runs nightly (PC1).",
     "replica-sync.performance": "Partial: tests/perf/replica-sync-io.perf.test.ts exercises store/bootstrap/IO budget (replaces deleted in-memory fake).",
     "tunnel-pairing.performance": "JS fallback floor remains in tunnel-throughput.perf.test.ts; native QUIC budget is tests/perf/tunnel-native.perf.test.ts (nightly when native module present).",
     "blob-custody.durability": "Owned by packages/vault/src/blob/enospc-custody.integration.test.ts (always-on fault-injected ENOSPC). Real hdiutil path remains in disk-full.integration.test.ts behind CENTRAID_DISKFULL_E2E=1 (darwin).",
-    "agent-runtime.journey": "Owned by packages/agent-runtime/src/backends/acp/journey.integration.test.ts (fake-acp message→vault side-effect→transcript). Desktop copilot Playwright specs stay skipped until mock serves blueprint kits (#470).",
-    "builder.publish": "Punted (#496): builder is not in v0. builder.spec.ts \"Publish posts to the gateway\" stays skipped with this product reason — declared gap, not fake solid.",
-    "desktop.copilot-e2e": "Unconditional Playwright skips in appview-templates-insights (7.2–7.4) target removed FAB UI; journey owned at agent-runtime.journey until #470 mock blueprint serving.",
+    "agent-runtime.journey": "Owned by packages/agent-runtime/src/backends/acp/journey.integration.test.ts (fake-acp message\u2192vault side-effect\u2192transcript). Desktop copilot Playwright specs stay skipped until mock serves blueprint kits (#470).",
+    "builder.publish": "Punted (#496): builder is not in v0. builder.spec.ts \"Publish posts to the gateway\" stays skipped with this product reason \u2014 declared gap, not fake solid.",
+    "desktop.copilot-e2e": "Unconditional Playwright skips in appview-templates-insights (7.2\u20137.4) target removed FAB UI; journey owned at agent-runtime.journey until #470 mock blueprint serving.",
     "mobile.scalability": "Honest skip: no volume proof on-device yet; mobile-real-journey + crash durability cover the correctness path.",
     "gateway.scalability": "Owned by tests/scale/gateway-sessions.scale.test.ts (multi-session headroom).",
-    "automations.scalability": "Owned by tests/scale/automations-fire.scale.test.ts (computeMissedWindows at volume — one missed entry per auto per gap; not live fire).",
-    "desktop.performance": "Partial crude cold-path budget in tests/perf/desktop-cold.perf.test.ts (module import / first-paint proxy — not full Electron launch).",
+    "automations.scalability": "Owned by tests/scale/automations-fire.scale.test.ts (computeMissedWindows at volume \u2014 one missed entry per auto per gap; not live fire).",
+    "desktop.performance": "Partial crude cold-path budget in tests/perf/desktop-cold.perf.test.ts (module import / first-paint proxy \u2014 not full Electron launch).",
     "G4.mutation": "StrykerJS nightly on property-defended core packages: vault, client/replica, automation, backup, blob-format, protocol, tunnel, app-engine (#532). Floors in tests/mutation-floors.json; scores in artifacts/mutation/ via e2e.yml mutation-testing job. Not per-PR.",
     "G5.interop": "packages/backup test:interop runs via .github/workflows/interop-weekly.yml (schedule + workflow_dispatch, CLAWGNITION_INTEROP=1). Not part of test:quality:nightly (perf+scale+report only).",
-    "client.react.floor": "No whole-surface coverage floor on packages/client/src/react — journeys + extracted pure modules only (documented #496 open Q5).",
+    "client.react.floor": "No whole-surface coverage floor on packages/client/src/react \u2014 journeys + extracted pure modules only (documented #496 open Q5).",
     "search": "Flow vault-search owns search over ext/FTS (packages/vault/src/gateway/search.test.ts).",
-    "enrichment": "Flow vault-enrichment owns device enrichment → searchable transcript (packages/gateway/src/routes/device-work-routes.test.ts).",
+    "enrichment": "Flow vault-enrichment owns device enrichment \u2192 searchable transcript (packages/gateway/src/routes/device-work-routes.test.ts).",
     "cross-linking": "Flow vault-cross-link owns core.link_entities (packages/vault/src/gateway/ext.test.ts).",
     "people": "Flow people-crm owns people.* commands (packages/vault/src/commands/people.test.ts).",
-    "blank-machine-restore": "Product blank-machine journey is recover.integration.test.ts (recover() + kit). Backup primitive round-trips live under packages/backup engine tests."
+    "blank-machine-restore": "Product blank-machine journey is recover.integration.test.ts (recover() + kit). Backup primitive round-trips live under packages/backup engine tests.",
+    "agent-runtime.contracts": "Coverable-today suite (#535): owned by packages/agent-runtime/src/matrix-contracts.test.ts.",
+    "agent-runtime.durability": "Coverable-today suite (#535): owned by packages/agent-runtime/src/matrix-durability.test.ts.",
+    "agent-runtime.concurrency": "Coverable-today suite (#535): owned by packages/agent-runtime/src/matrix-concurrency.test.ts.",
+    "blueprints.contracts": "Coverable-today suite (#535): owned by packages/blueprints/src/matrix-contracts.test.ts.",
+    "blueprints.durability": "Coverable-today suite (#535): owned by packages/blueprints/src/matrix-durability.test.ts.",
+    "blueprints.concurrency": "Coverable-today suite (#535): owned by packages/blueprints/src/matrix-concurrency.test.ts.",
+    "desktop.contracts": "Coverable-today suite (#535): owned by apps/desktop/src/main/matrix-contracts.test.ts.",
+    "desktop.durability": "Coverable-today suite (#535): owned by apps/desktop/src/main/matrix-durability.test.ts.",
+    "desktop.concurrency": "Coverable-today suite (#535): owned by apps/desktop/src/main/matrix-concurrency.test.ts.",
+    "web.contracts": "Coverable-today suite (#535): owned by apps/web/src/matrix-contracts.test.ts.",
+    "web.durability": "Coverable-today suite (#535): owned by apps/web/src/matrix-durability.test.ts.",
+    "vault-core.offline": "Skip: vault is a storage primitive; offline UX is exercised by mobile.offline + web.offline consuming surfaces.",
+    "vault-core.compat": "Skip: no vault schema migrations ship in v0; compat assertions would be tautological until a migration lands.",
+    "vault-core.journey": "Skip: no end-user vault journey surface; blank-machine restore owns backup-restore.journey and search/enrichment flows own vault correctness paths.",
+    "blob-custody.offline": "Skip: blob store has no offline user journey; durability is ENOSPC custody + disk-full e2e; offline is a consuming-surface concern.",
+    "blob-custody.compat": "Skip: no blob format migration path in v0; CBSF mutation + format floors cover format stability instead.",
+    "blob-custody.journey": "Skip: custody is a primitive; journeys live on mobile upload durability and desktop/gateway blob consumers.",
+    "backup-restore.performance": "Skip: no dedicated backup throughput budget yet; correctness+journey (recover) own the product path \u2014 child issue for a restore-time floor.",
+    "backup-restore.offline": "Skip: restore is an online blank-machine operation; offline continuity is owned by vault WAL + mobile offline, not backup kit.",
+    "gateway.offline": "Skip: gateway is always the online host; offline UX lives on mobile/web clients. No meaningful gateway-offline matrix cell.",
+    "gateway.compat": "Skip: no gateway wire migration suite in v0; protocol judge + tunnel wire contracts own compatibility pressure.",
+    "app-engine.performance": "Skip: no isolated app-engine perf harness yet; cost formula mutation + desktop cold path cover adjacent budgets \u2014 child issue for engine-only floor.",
+    "app-engine.offline": "Skip: app-engine runs server-side with the gateway; offline is a client-surface dimension.",
+    "app-engine.compat": "Skip: no app-engine API migration surface in v0; runner registry contracts own kind-compat pressure.",
+    "app-engine.journey": "Skip: user journeys are desktop/web/mobile copilot paths; engine is exercised via agent-runtime.journey (fake-acp).",
+    "automations.performance": "Skip: no dedicated automation fire latency budget; scale lane owns volume via automations-fire.scale \u2014 child issue for p95 fire latency.",
+    "automations.offline": "Skip: automations schedule on the gateway host; offline client behavior is mobile/web. No offline scheduler product path.",
+    "automations.compat": "Skip: no automations schema migration in v0; scheduler mutation floors cover pure compute stability.",
+    "agent-runtime.performance": "Skip: no runner turn-latency budget harness yet; journey.integration covers correctness \u2014 child issue for ACP turn p95.",
+    "agent-runtime.scalability": "Skip: no multi-session runner load rig; gateway-sessions.scale covers session headroom at the host.",
+    "agent-runtime.offline": "Skip: runners require a live CLI/ACP process; offline is not a runtime dimension (client offline owns UX).",
+    "blueprints.performance": "Skip: scaffold/clone is filesystem-bound and not product-critical for a budget; kit-smoke + handler CRUD own correctness.",
+    "blueprints.scalability": "Skip: no multi-app clone volume rig; not product-critical for v0 \u2014 child issue if catalog size grows.",
+    "blueprints.offline": "Skip: blueprints are authoring-time; offline runtime is mobile/web. No offline blueprint surface.",
+    "blueprints.compat": "Skip: no blueprint manifest migration suite in v0; app.json shape is covered by scaffold contracts + clone rewrites.",
+    "desktop.scalability": "Skip: no multi-window Electron load rig; journey e2e + supervisor unit cover functional paths \u2014 child issue for window headroom.",
+    "desktop.offline": "Skip: desktop hosts the gateway; offline UX is mobile/web. Detached-gateway outage logging covers host-side continuity.",
+    "desktop.compat": "Skip: no desktop settings/schema migration suite in v0; settings-merge contracts cover preserve-or-set durability of prefs.",
+    "web.scalability": "Skip: no multi-tab volume rig beyond cache concurrency e2e; PWA waterfall owns perf \u2014 child issue for tab fan-out.",
+    "web.compat": "Skip: no web storage migration suite in v0; sw-version + webGatewayId contracts cover identity/version stability.",
+    "mobile.contracts": "Skip: mobile has no separate public protocol surface beyond gateway bridge; security transfer-policy + replica unit cover contracts-adjacent rules.",
+    "mobile.compat": "Skip: no mobile storage migration suite in v0; crash durability + replica unit cover state continuity instead.",
+    "tunnel-pairing.durability": "Skip: pairing tickets are intentionally ephemeral; hygiene journey burns wrong-secret/expiry. Durable custody is vault/blob, not tickets.",
+    "tunnel-pairing.scalability": "Skip: no multi-pair fan-out rig; cross-network relay + throughput perf own the product path \u2014 child issue for concurrent pair load."
   },
   "cellOwners": {
     "vault-core.correctness": {
@@ -263,9 +307,18 @@
       "owner": "packages/agent-runtime/src/backends/acp/backend.test.ts",
       "tier": "unit"
     },
-    "agent-runtime.contracts": null,
-    "agent-runtime.durability": null,
-    "agent-runtime.concurrency": null,
+    "agent-runtime.contracts": {
+      "owner": "packages/agent-runtime/src/matrix-contracts.test.ts",
+      "tier": "unit"
+    },
+    "agent-runtime.durability": {
+      "owner": "packages/agent-runtime/src/matrix-durability.test.ts",
+      "tier": "unit"
+    },
+    "agent-runtime.concurrency": {
+      "owner": "packages/agent-runtime/src/matrix-concurrency.test.ts",
+      "tier": "unit"
+    },
     "agent-runtime.performance": null,
     "agent-runtime.scalability": null,
     "agent-runtime.security": {
@@ -285,9 +338,18 @@
       "owner": "packages/blueprints/src/scaffold-boot.test.ts",
       "tier": "integration"
     },
-    "blueprints.contracts": null,
-    "blueprints.durability": null,
-    "blueprints.concurrency": null,
+    "blueprints.contracts": {
+      "owner": "packages/blueprints/src/matrix-contracts.test.ts",
+      "tier": "unit"
+    },
+    "blueprints.durability": {
+      "owner": "packages/blueprints/src/matrix-durability.test.ts",
+      "tier": "unit"
+    },
+    "blueprints.concurrency": {
+      "owner": "packages/blueprints/src/matrix-concurrency.test.ts",
+      "tier": "unit"
+    },
     "blueprints.performance": null,
     "blueprints.scalability": null,
     "blueprints.security": {
@@ -304,9 +366,18 @@
       "owner": "apps/desktop/src/main/gateway-supervisor-core.test.ts",
       "tier": "unit"
     },
-    "desktop.contracts": null,
-    "desktop.durability": null,
-    "desktop.concurrency": null,
+    "desktop.contracts": {
+      "owner": "apps/desktop/src/main/matrix-contracts.test.ts",
+      "tier": "unit"
+    },
+    "desktop.durability": {
+      "owner": "apps/desktop/src/main/matrix-durability.test.ts",
+      "tier": "unit"
+    },
+    "desktop.concurrency": {
+      "owner": "apps/desktop/src/main/matrix-concurrency.test.ts",
+      "tier": "unit"
+    },
     "desktop.performance": {
       "owner": "tests/perf/desktop-cold.perf.test.ts",
       "tier": "perf"
@@ -326,8 +397,14 @@
       "owner": "apps/web/src/web-host.test.ts",
       "tier": "unit"
     },
-    "web.contracts": null,
-    "web.durability": null,
+    "web.contracts": {
+      "owner": "apps/web/src/matrix-contracts.test.ts",
+      "tier": "unit"
+    },
+    "web.durability": {
+      "owner": "apps/web/src/matrix-durability.test.ts",
+      "tier": "unit"
+    },
     "web.concurrency": {
       "owner": "apps/web/tests/e2e/web-pwa-cache.spec.ts",
       "tier": "e2e"
@@ -583,9 +660,9 @@
       "label": "Agent runtime / chat",
       "assessment": {
         "correctness": "partial",
-        "contracts": "skip",
-        "durability": "skip",
-        "concurrency": "skip",
+        "contracts": "partial",
+        "durability": "partial",
+        "concurrency": "partial",
         "performance": "skip",
         "scalability": "skip",
         "security": "partial",
@@ -599,9 +676,9 @@
       "label": "Blueprint apps (x8)",
       "assessment": {
         "correctness": "solid",
-        "contracts": "skip",
-        "durability": "skip",
-        "concurrency": "skip",
+        "contracts": "partial",
+        "durability": "partial",
+        "concurrency": "partial",
         "performance": "skip",
         "scalability": "skip",
         "security": "partial",
@@ -615,9 +692,9 @@
       "label": "Desktop shell (Electron)",
       "assessment": {
         "correctness": "partial",
-        "contracts": "skip",
-        "durability": "skip",
-        "concurrency": "skip",
+        "contracts": "partial",
+        "durability": "partial",
+        "concurrency": "partial",
         "performance": "partial",
         "scalability": "skip",
         "security": "partial",
@@ -631,8 +708,8 @@
       "label": "Web PWA",
       "assessment": {
         "correctness": "partial",
-        "contracts": "skip",
-        "durability": "skip",
+        "contracts": "partial",
+        "durability": "partial",
         "concurrency": "partial",
         "performance": "solid",
         "scalability": "skip",
@@ -1024,6 +1101,14 @@
       "owner": "tests/agent-e2e-mobile/flows/home-loads.mjs"
     },
     {
+      "id": "mobile-template-gate",
+      "name": "Native template gate journey (clone/install/open UI templates)",
+      "surface": "mobile",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "tests/agent-e2e-mobile/flows/template-gate.mjs"
+    },
+    {
       "id": "tunnel-wire",
       "name": "Tunnel wire protocol stays conformant",
       "surface": "tunnel-pairing",
@@ -1050,7 +1135,7 @@
     },
     {
       "id": "agent-chat-journey",
-      "name": "Chat message → vault side effect → transcript (fake-acp)",
+      "name": "Chat message \u2192 vault side effect \u2192 transcript (fake-acp)",
       "surface": "agent-runtime",
       "dimension": "journey",
       "tier": "integration",
@@ -1059,7 +1144,7 @@
     },
     {
       "id": "blank-machine-restore",
-      "name": "Blank-machine recover: kit + api-key → mountable vault (recover())",
+      "name": "Blank-machine recover: kit + api-key \u2192 mountable vault (recover())",
       "surface": "backup-restore",
       "dimension": "journey",
       "tier": "integration",

@@ -256,4 +256,32 @@ describe('AutomationsOverviewScreen', () => {
     expect(loadData).toHaveBeenCalledTimes(2);
     expect(el.textContent).toContain('Daily Digest');
   });
+
+  it('does not re-fetch when the parent swaps loadData identity (stable Retry card)', async () => {
+    // Routes historically pass an inline async loadData each render. Remounting
+    // the load effect on every identity change thrash-detached the Retry button
+    // under Playwright (desktop e2e 8.2). loadData is read via a ref so only
+    // mount + explicit Retry re-call it.
+    const first = vi.fn().mockRejectedValue(new Error('gateway 500'));
+    const second = vi.fn().mockRejectedValue(new Error('still 500'));
+    const el = await mount(makeProps({ loadData: first }));
+    expect(el.textContent).toContain("Couldn't load automations");
+    expect(first).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      root!.render(<AutomationsOverviewScreen {...makeProps({ loadData: second })} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // Still the error card — no second automatic load from identity churn.
+    expect(el.textContent).toContain("Couldn't load automations");
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).toHaveBeenCalledTimes(0);
+    // Retry must invoke the *current* loadData (second), not a stale first.
+    const retry = [...el.querySelectorAll('button')].find((b) => b.textContent === 'Retry');
+    second.mockResolvedValueOnce(makeData());
+    await act(async () => retry?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(el.textContent).toContain('Daily Digest');
+  });
 });

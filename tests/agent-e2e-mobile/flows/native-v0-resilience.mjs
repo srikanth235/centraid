@@ -1,4 +1,4 @@
-import { APP_ID, FIRST_LAUNCH_TIMEOUT_MS, runFlow } from '../lib/harness.mjs';
+import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from '../lib/harness.mjs';
 
 await runFlow('native-v0-resilience', async (ctx) => {
   await ctx.configureGateway();
@@ -14,11 +14,11 @@ await runFlow('native-v0-resilience', async (ctx) => {
   //   Photos  → "Search photos"          (apps/mobile/src/apps/photos/PhotosHome.tsx)
   //   Docs    → "Add document or folder"  (apps/mobile/src/apps/docs/DocsHome.tsx)
   //   Agenda  → "Create event"            (apps/mobile/src/apps/agenda/AgendaHome.tsx)
-  //   Settings→ "Desktop link"            (visible heading, Settings-unique)
+  //   Settings→ "Gateway link"            (visible heading, Settings-unique; was "Desktop link")
   // These are Pressable accessibilityLabels — surfaced to the iOS a11y tree and
   // Maestro-matchable, the same construct template-gate keys on with "Open <name>".
   await ctx.run(
-    `appId: ${APP_ID}
+    `appId: ${ctx.state.appId}
 ---
 - launchApp:
     clearState: false
@@ -43,7 +43,7 @@ await runFlow('native-v0-resilience', async (ctx) => {
 - tapOn:
     text: "Settings.*"
 - extendedWaitUntil:
-    visible: "Desktop link"
+    visible: "Gateway link"
     timeout: 15000
 - tapOn:
     text: "Home.*"
@@ -54,7 +54,7 @@ await runFlow('native-v0-resilience', async (ctx) => {
   );
   await ctx.restart();
   await ctx.run(
-    `appId: ${APP_ID}
+    `appId: ${ctx.state.appId}
 ---
 - extendedWaitUntil:
     visible: "Everything you build, in one place."

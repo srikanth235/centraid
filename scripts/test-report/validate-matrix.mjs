@@ -16,6 +16,8 @@ export async function validateMatrix(matrix, options = {}) {
   if (!dimensions.size) errors.push('matrix has no dimensions');
   if (!surfaces.size) errors.push('matrix has no surfaces');
 
+  const notes = matrix.notes ?? {};
+
   for (const surface of surfaces.values()) {
     for (const dimension of dimensions.values()) {
       const cellId = `${surface.id}.${dimension.id}`;
@@ -59,6 +61,16 @@ export async function validateMatrix(matrix, options = {}) {
         }
       } else if (cellOwner !== null) {
         errors.push(`${cellId} is ${status} and must map explicitly to null`);
+      }
+      // #535 Phase 5 — every skip cell must carry a reviewed one-line rationale
+      // in matrix.notes so blanket amber skips cannot reappear without a note.
+      if (status === 'skip' && options.checkSkipNotes !== false) {
+        const note = notes[cellId];
+        if (typeof note !== 'string' || !note.trim()) {
+          errors.push(
+            `${cellId} is skip but has no matrix.notes rationale (add a one-line note or real owned coverage)`,
+          );
+        }
       }
     }
     for (const assessment of Object.keys(surface.assessment ?? {})) {
