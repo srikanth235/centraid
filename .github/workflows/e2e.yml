@@ -448,6 +448,39 @@ jobs:
         with:
           path: ~/.cache/centraid-mobile-e2e-android
           key: android-app-${{ runner.os }}-${{ steps.native_android.outputs.hash }}
+      # AVD snapshot caching — the reactivecircus best practice. The first run
+      # boots a clean emulator once and banks a booted-state snapshot; every
+      # later run resumes from it in seconds instead of a ~40s cold boot. It also
+      # removes the first-boot Pixel Launcher race that ANR'd under the software
+      # GPU and stole the window from Maestro (#535): a resumed launcher is
+      # already settled. The key pins every AVD-shaping input — bump the trailing
+      # -vN to invalidate after an emulator/image bump. Distinct from the apk
+      # cache (different key, different path); both can hit independently.
+      - name: AVD cache
+        id: avd_cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api34-x86_64-google_apis-pixel6-r4096-c4-v1
+      - name: Create AVD + snapshot (cache miss only)
+        if: steps.avd_cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          # Every AVD-shaping input below MUST match the test step's, or the
+          # cached snapshot will not load. `disable-animations: false` here so the
+          # setting is not baked wrong into the snapshot (reactivecircus pattern).
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          ram-size: 4096M
+          cores: 4
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: echo "Generated AVD snapshot for caching."
       - name: Set up Android SDK + emulator
         id: emu
         # v2.38.0 — prior pin 1dcd009…dd was a typo/orphan SHA (#535 F6).
@@ -463,8 +496,16 @@ jobs:
           arch: x86_64
           target: google_apis
           profile: pixel_6
+          # Match the snapshot-gen step's AVD shape exactly (or the cached
+          # snapshot will not load). 4 GB / 4 cores on the 16 GB / 4-vCPU runner
+          # gives the app real headroom, so the launcher is far less likely to
+          # ANR under Metro + app load.
+          ram-size: 4096M
+          cores: 4
           force-avd-creation: false
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          # `-no-snapshot-save`: boot FROM the cached snapshot but do not re-bank
+          # it, so a test run never rewrites the clean cached snapshot.
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
           disable-animations: true
           # The action executes `script:` via dash; a multi-line if/else with
           # comments and non-ASCII chars tripped its parser (#535). Keep this a
