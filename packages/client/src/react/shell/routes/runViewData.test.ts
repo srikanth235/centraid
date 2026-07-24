@@ -117,6 +117,59 @@ describe('buildRunSnapshot', () => {
     expect(snap.deleted).toBe(false);
   });
 
+  it('shows a readable model label, stripping the provider prefix', () => {
+    const pinned = {
+      ...row(),
+      manifest: {
+        requires: { model: 'anthropic/claude-sonnet-5' },
+        prompt: 'Summarize',
+        history: {},
+      },
+    } as unknown as CentraidAutomationRow;
+    const snap = buildRunSnapshot(pinned, run({ endedAt: Date.now() }), [], new Map());
+    expect(snap.model).toBe('claude-sonnet-5');
+    expect(snap.side.model).toBe('claude-sonnet-5');
+    expect(snap.final.model).toBe('claude-sonnet-5');
+  });
+
+  it("labels the model 'Auto' (never 'Centraid') when the automation pins none", () => {
+    const unpinned = {
+      ...row(),
+      manifest: { requires: {}, prompt: 'Summarize', history: {} },
+    } as unknown as CentraidAutomationRow;
+    const snap = buildRunSnapshot(unpinned, run({ endedAt: Date.now() }), [], new Map());
+    expect(snap.model).toBe('Auto');
+    expect(snap.side.model).toBe('Auto');
+  });
+
+  it("labels a deleted run's model 'Auto' rather than the brand name", () => {
+    const snap = buildRunSnapshot(null, run({ endedAt: Date.now() }), [], new Map());
+    expect(snap.side.model).toBe('Auto');
+  });
+
+  it('flags hasUsage false for a deterministic zero-usage run', () => {
+    const snap = buildRunSnapshot(row(), run({ endedAt: Date.now() }), [], new Map());
+    expect(snap.side.hasUsage).toBe(false);
+  });
+
+  it('flags hasUsage true when the run reports tokens', () => {
+    const snap = buildRunSnapshot(
+      row(),
+      run({ endedAt: Date.now(), totalInputTokens: 100, totalOutputTokens: 20 } as never),
+      [],
+      new Map(),
+    );
+    expect(snap.side.hasUsage).toBe(true);
+  });
+
+  it('flags hasUsage true when the run has recorded steps', () => {
+    const nodes = [
+      { runId: 'r1', ordinal: 1, kind: 'tool', name: 'fetch', startedAt: Date.now(), ok: true },
+    ] as unknown as CentraidAutomationRunNode[];
+    const snap = buildRunSnapshot(row(), run({ endedAt: Date.now() }), nodes, new Map());
+    expect(snap.side.hasUsage).toBe(true);
+  });
+
   it('surfaces streamed live text on an in-flight agent node', () => {
     const nodes = [
       { runId: 'r1', ordinal: 2, kind: 'agent', startedAt: Date.now(), ok: true },

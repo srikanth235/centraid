@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type JSX } from 'react';
-import { Icon, Button } from '../ui/index.js';
+import { Icon, Button, KindBadge } from '../ui/index.js';
 import type { IconName } from '@centraid/design-tokens';
 import type {
   AuOverviewData,
@@ -10,14 +10,20 @@ import type {
   AutomationsOverviewBridgeProps,
 } from '../screen-contracts.js';
 import styles from './AutomationsOverviewScreen.module.css';
+import homeCss from './HomeScreen.module.css';
+import cardCss from '../ui/AppCard.module.css';
 import { cx } from '../ui/cx.js';
 import au from '../styles/automation.module.css';
 
 // Automations overview (Automations UI revamp — see
-// receipts/issue-387-automations-ui-revamp.md): a calm register of every
-// long-lived automation (name, status, trigger, last/next fire, attention)
-// with a date-grouped recent-runs feed below. Screen owns load/error/data;
-// `loadData` (route) fetches + derives — this component renders.
+// receipts/issue-387-automations-ui-revamp.md; chat-thread redesign,
+// receipts/issue-539-automations-chat-thread.md): a grid of automation tiles
+// that mirrors the Home shelf (same `appsGrid`/AppCard family) — each tile
+// shows the automation's glyph, name, most-recent-run blurb, status + trigger,
+// and last-run foot, with attention/failed tiles surfaced first and given a
+// restrained danger accent. A secondary date-grouped recent-runs feed sits
+// below. Screen owns load/error/data; `loadData` (route) fetches + derives —
+// this component renders.
 
 const STATUS_META: Record<AuStatusKind, { icon: IconName; spin?: boolean }> = {
   active: { icon: 'Power' },
@@ -54,7 +60,12 @@ function sortOverviewRows(rows: readonly AuOverviewRowDTO[]): AuOverviewRowDTO[]
   });
 }
 
-function FleetRow({
+/** Automation tile — mirrors HomeScreen's `AutoCard` (issue #539 chat-thread
+ *  redesign): a gallery card with a glyph plate, name + last-run blurb, a
+ *  status/trigger meta strip, and a kind-badge/last-run foot. Attention or a
+ *  failed last run gives the tile a restrained danger-tinted accent + badge —
+ *  the grid still answers "what needs me?" first via the attention-first sort. */
+function AutoTile({
   row,
   onOpen,
 }: {
@@ -62,71 +73,76 @@ function FleetRow({
   onOpen: (ref: string) => void;
 }): JSX.Element {
   const needsYou = row.attentionCount > 0 || row.lastRunOk === false;
+  // Blurb = the most recent run's message; before the first run (or when the
+  // engine gave us no summary) fall back to the trigger so the card is never
+  // blank.
+  const blurb = row.lastRunSummary ?? row.triggerLabel;
   return (
-    <button
-      type="button"
-      className={styles.row}
-      data-hue={row.hue}
-      data-needs-you={needsYou ? 'true' : undefined}
-      data-last-failed={row.lastRunOk === false ? 'true' : undefined}
-      data-testid="automation-row"
-      onClick={() => onOpen(row.ref)}
-    >
-      <span className={au.auGlyph} data-hue={row.hue} data-size="sm" aria-hidden="true">
-        <Icon name={row.glyphIcon as IconName} size={16} />
-      </span>
-      <span className={styles.rowMain}>
-        <span className={styles.rowNameLine}>
-          <span className={styles.rowName} data-testid="automation-row-name">
-            {row.name}
+    <div className={cardCss.wrap}>
+      <button
+        type="button"
+        className={cx(cardCss.card, cardCss.small, styles.tile)}
+        data-kind="automation"
+        data-attention={needsYou ? 'true' : undefined}
+        data-last-failed={row.lastRunOk === false ? 'true' : undefined}
+        data-testid="automation-row"
+        onClick={() => onOpen(row.ref)}
+      >
+        <div className={cardCss.head}>
+          <span
+            className={au.auGlyph}
+            data-hue={row.hue}
+            style={{ width: 52, height: 52 }}
+            aria-hidden="true"
+          >
+            <Icon name={row.glyphIcon as IconName} size={24} />
           </span>
+          <div className={cx(cardCss.headText, styles.tileText)}>
+            <div className={cardCss.nameRow}>
+              <div className={cardCss.name} data-testid="automation-row-name">
+                {row.name}
+              </div>
+              {row.attentionCount > 0 ? (
+                <span
+                  className={styles.attentionBadge}
+                  title={`${row.attentionCount} item${row.attentionCount === 1 ? '' : 's'} waiting on you`}
+                >
+                  <Icon name="AlertTriangle" size={11} />
+                  <span>{row.attentionCount}</span>
+                </span>
+              ) : row.lastRunOk === false ? (
+                <span className={styles.failedBadge} title="Last run failed">
+                  Failed
+                </span>
+              ) : null}
+            </div>
+            <div className={cx(cardCss.desc, styles.tileBlurb)}>{blurb}</div>
+          </div>
+        </div>
+        <div className={styles.cardMeta}>
           <StatusPill kind={row.statusKind} label={row.statusLabel} />
-        </span>
-        <span className={styles.rowMeta}>
-          <span className={au.auTrigbadge} data-mono="true">
-            <span className={au.auTrigbadgeIc} aria-hidden="true">
-              <Icon name={row.triggerIcon as IconName} size={11} />
+          <span className={styles.cardTrig}>
+            <span aria-hidden="true">
+              <Icon name={row.triggerIcon as IconName} size={12} />
             </span>
             <span>{row.triggerLabel}</span>
           </span>
-          {row.nextRunLabel ? (
-            <span className={styles.rowNext} data-mono="true">
-              Next {row.nextRunLabel}
-            </span>
-          ) : null}
-        </span>
-      </span>
-      <span
-        className={styles.rowLast}
-        data-mono="true"
-        data-ok={row.lastRunOk === null ? undefined : String(row.lastRunOk)}
-      >
-        {row.lastRunOk !== null ? (
-          <i className={styles.lastDot} data-ok={String(row.lastRunOk)} aria-hidden="true" />
-        ) : null}
-        <span>
-          {row.lastRunOk === false
-            ? row.lastRunLabel.replace(/^Last run /i, 'Failed ')
-            : row.lastRunLabel}
-        </span>
-      </span>
-      {row.attentionCount > 0 ? (
-        <span
-          className={styles.attentionBadge}
-          title={`${row.attentionCount} item${row.attentionCount === 1 ? '' : 's'} waiting on you`}
-        >
-          <Icon name="AlertTriangle" size={11} />
-          <span>{row.attentionCount}</span>
-        </span>
-      ) : row.lastRunOk === false ? (
-        <span className={styles.failedBadge} title="Last run failed">
-          Failed
-        </span>
-      ) : null}
-      <span className={styles.chev} aria-hidden="true">
-        <Icon name="ChevronRight" size={15} />
-      </span>
-    </button>
+        </div>
+        <div className={cardCss.foot}>
+          <KindBadge kind="automation">
+            <span>Automation</span>
+          </KindBadge>
+          <span className={cardCss.footTime} data-ok={row.lastRunOk === true ? 'true' : undefined}>
+            {row.lastRunOk === true ? (
+              <span aria-hidden="true">
+                <Icon name="CheckCircle" size={13} />
+              </span>
+            ) : null}
+            <span>{row.lastRunLabel}</span>
+          </span>
+        </div>
+      </button>
+    </div>
   );
 }
 
@@ -432,15 +448,15 @@ export default function AutomationsOverviewScreen({
                 </button>
               </div>
             ) : (
-              <div className={styles.fleet}>
+              <div className={cx(homeCss.appsGrid, homeCss.appsGridSmall)} data-testid="apps-grid">
                 {visibleRows.map((row) => (
-                  <FleetRow key={row.ref} row={row} onOpen={onOpenAutomation} />
+                  <AutoTile key={row.ref} row={row} onOpen={onOpenAutomation} />
                 ))}
               </div>
             )}
           </section>
 
-          <section className={styles.section}>
+          <section className={cx(styles.section, styles.activitySection)}>
             <div className={styles.sectionHead}>
               <span className={styles.sectionLabel}>Recent activity</span>
             </div>

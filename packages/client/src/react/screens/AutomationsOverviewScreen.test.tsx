@@ -20,6 +20,7 @@ function makeData(over: Partial<AuOverviewData> = {}): AuOverviewData {
         integrations: ['Gmail'],
         lastRunLabel: 'Last run 2h ago',
         lastRunOk: true,
+        lastRunSummary: 'Emailed your morning digest',
         nextRunLabel: 'Tomorrow, 8:00 AM',
         attentionCount: 0,
         statusKind: 'active',
@@ -36,6 +37,7 @@ function makeData(over: Partial<AuOverviewData> = {}): AuOverviewData {
         integrations: [],
         lastRunLabel: 'Last run 1d ago',
         lastRunOk: false,
+        lastRunSummary: 'Timed out reaching the billing API',
         nextRunLabel: null,
         attentionCount: 2,
         statusKind: 'paused',
@@ -101,7 +103,7 @@ async function mount(props: AutomationsOverviewBridgeProps): Promise<HTMLDivElem
 }
 
 describe('AutomationsOverviewScreen', () => {
-  it('renders the header, live-count subtitle, and both fleet rows', async () => {
+  it('renders the header, live-count subtitle, and both automation tiles', async () => {
     const el = await mount(makeProps());
     const heading = el.querySelector('h1');
     expect(heading?.textContent).toBe('Automations');
@@ -114,16 +116,22 @@ describe('AutomationsOverviewScreen', () => {
     expect(el.textContent).toContain('Daily Digest');
     expect(el.textContent).toContain('Invoice Sync');
     expect(el.textContent).toContain('Every day at 8am');
-    expect(el.textContent).toContain('Next Tomorrow, 8:00 AM');
+    // The tile shows the most-recent-run blurb (its summary) as the card body.
+    expect(el.textContent).toContain('Emailed your morning digest');
+    expect(el.textContent).toContain('Timed out reaching the billing API');
     // Attention / failed first: Invoice Sync before Daily Digest.
     const names = [...el.querySelectorAll('[data-testid="automation-row-name"]')].map(
       (n) => n.textContent,
     );
     expect(names[0]).toBe('Invoice Sync');
     expect(names[1]).toBe('Daily Digest');
+    // Tiles live in the same grid container Home uses.
+    const grid = el.querySelector('[data-testid="apps-grid"]');
+    expect(grid).toBeTruthy();
+    expect(grid?.querySelectorAll('[data-testid="automation-row"]').length).toBe(2);
   });
 
-  it('exposes data-au-status on each fleet row and the attention badge only when pending', async () => {
+  it('exposes data-au-status on each tile and the attention badge only when pending', async () => {
     const el = await mount(makeProps());
     const statuses = [...el.querySelectorAll('[data-au-status]')].map(
       (n) => (n as HTMLElement).dataset.auStatus,
@@ -132,12 +140,15 @@ describe('AutomationsOverviewScreen', () => {
     expect(statuses).toContain('paused');
     // Only "Invoice Sync" (attentionCount: 2) shows the amber badge.
     expect(el.querySelectorAll('.attentionBadge').length).toBe(1);
-    const rows = [...el.querySelectorAll('.row')];
+    const rows = [...el.querySelectorAll('[data-testid="automation-row"]')];
     expect(rows).toHaveLength(2);
     const invoiceRow = rows.find((r) => r.textContent?.includes('Invoice Sync'));
     expect(invoiceRow?.textContent).toContain('2');
+    // The failed/attention tile carries the restrained danger accent hook.
+    expect((invoiceRow as HTMLElement).dataset.attention).toBe('true');
     const digestRow = rows.find((r) => r.textContent?.includes('Daily Digest'));
     expect(digestRow?.querySelector('.attentionBadge')).toBeNull();
+    expect((digestRow as HTMLElement).dataset.attention).toBeUndefined();
   });
 
   it('renders the recent-activity feed grouped by date', async () => {
@@ -152,9 +163,9 @@ describe('AutomationsOverviewScreen', () => {
   it('opens an automation and a run via callbacks', async () => {
     const props = makeProps();
     const el = await mount(props);
-    // Sorted attention-first: Invoice Sync (b@1) is first row.
+    // Sorted attention-first: Invoice Sync (b@1) is the first tile.
     await act(async () =>
-      (el.querySelector('.row') as HTMLButtonElement).dispatchEvent(
+      (el.querySelector('[data-testid="automation-row"]') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );

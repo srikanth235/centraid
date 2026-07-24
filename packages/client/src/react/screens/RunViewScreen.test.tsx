@@ -55,6 +55,7 @@ function makeSnapshot(over: Partial<RunViewSnapshot> = {}): RunViewSnapshot {
       cost: '$0.40',
       steps: '2',
       model: 'claude-opus-4-8',
+      hasUsage: true,
     },
     logKpi: {
       triggerIcon: 'Clock',
@@ -133,7 +134,7 @@ describe('RunViewScreen', () => {
     expect(el.textContent).not.toContain('Loading run…');
   });
 
-  it('renders a deleted-automation notice with breadcrumb/back affordance, and hides actions requiring the automation', () => {
+  it('renders a deleted-automation notice and hides actions requiring the automation', () => {
     const props = makeProps();
     const el = mount(props);
     push(
@@ -146,21 +147,13 @@ describe('RunViewScreen', () => {
     );
     expect(el.textContent).toContain('This automation was deleted');
     expect(el.textContent).toContain('digest/main');
-    // The crumb segment for the automation is no longer a clickable link.
-    const crumbButtons = [...el.querySelectorAll('.auCrumb button')];
-    expect(crumbButtons.some((b) => b.textContent === 'digest/main')).toBe(false);
+    // The loaded run detail has no in-page breadcrumb (shell chrome owns back).
+    expect(el.querySelector('.auCrumb')).toBeNull();
     // "Run again" requires a live automation row — hidden when deleted.
     const runAgain = [...el.querySelectorAll('.auBtn')].find((b) =>
       b.textContent?.includes('Run again'),
     );
     expect(runAgain).toBeUndefined();
-    // Back navigation still works.
-    void act(() =>
-      (el.querySelector('.auCrumb button') as HTMLButtonElement).dispatchEvent(
-        new MouseEvent('click', { bubbles: true }),
-      ),
-    );
-    expect(props.onBack).toHaveBeenCalled();
   });
 
   it('renders the timeline: breadcrumb, header, node cards, final outcome, KPI rail', () => {
@@ -185,33 +178,69 @@ describe('RunViewScreen', () => {
     expect(el.querySelector('.tlBody')?.hasAttribute('hidden')).toBe(false);
   });
 
-  it('switches to log mode (persisted) and renders transcript rows', () => {
-    const props = makeProps();
-    const el = mount(props);
+  it('renders log mode when opened with initialMode "log"', () => {
+    const el = mount(makeProps({ initialMode: 'log' }));
     push(makeSnapshot());
-    const logTab = [...el.querySelectorAll('.rvSegB')].find((b) =>
-      b.textContent?.includes('Log'),
-    ) as HTMLButtonElement;
-    void act(() => logTab.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(props.onSetMode).toHaveBeenCalledWith('log');
     expect(el.querySelector('.log')).toBeTruthy();
     expect(el.querySelectorAll('.logRow').length).toBe(3);
     expect(el.querySelector('.tl')).toBeNull();
   });
 
-  it('dedupes the final attribution label when provider and model are the same string', () => {
-    const el = mount(makeProps());
-    push(makeSnapshot({ final: { kind: 'ok', model: 'Centraid', summary: 'Done.' } }));
-    const name = el.querySelector('[data-testid="timeline-final"] .tlName');
-    expect(name?.textContent).toBe('Centraid');
-    expect(name?.textContent).not.toContain('Centraid · Centraid');
-  });
-
-  it('keeps the provider · model attribution when they differ', () => {
+  it('names the assistant reply author "Centraid" without a model suffix', () => {
     const el = mount(makeProps());
     push(makeSnapshot());
     const name = el.querySelector('[data-testid="timeline-final"] .tlName');
-    expect(name?.textContent).toBe('Centraid · claude-opus-4-8');
+    expect(name?.textContent).toBe('Centraid');
+    expect(name?.textContent).not.toContain('·');
+  });
+
+  it('labels the final node "Run failed" when the run failed', () => {
+    const el = mount(makeProps());
+    push(
+      makeSnapshot({
+        statusKind: 'failed',
+        statusLabel: 'Failed',
+        final: { kind: 'fail', model: 'claude-opus-4-8', error: 'boom' },
+      }),
+    );
+    const name = el.querySelector('[data-testid="timeline-final"] .tlName');
+    expect(name?.textContent).toBe('Run failed');
+  });
+
+  it('always shows the Model row, plus token/cost/step rows when usage exists', () => {
+    const el = mount(makeProps());
+    push(makeSnapshot());
+    const usageCard = [...el.querySelectorAll('.rsideCard')].find((c) =>
+      c.textContent?.includes('Usage'),
+    );
+    expect(usageCard?.textContent).toContain('Model');
+    expect(usageCard?.textContent).toContain('claude-opus-4-8');
+    expect(usageCard?.textContent).toContain('Tokens');
+    expect(usageCard?.textContent).toContain('Steps');
+    expect(usageCard?.querySelector('.rsideEmpty')).toBeNull();
+  });
+
+  it('collapses token/cost/step rows to a caption for a deterministic run', () => {
+    const el = mount(makeProps());
+    push(makeSnapshot({ side: { ...makeSnapshot().side, hasUsage: false } }));
+    const usageCard = [...el.querySelectorAll('.rsideCard')].find((c) =>
+      c.textContent?.includes('Usage'),
+    );
+    expect(usageCard?.textContent).toContain('Model');
+    expect(usageCard?.querySelector('.rsideEmpty')?.textContent).toContain('deterministic');
+    expect(usageCard?.textContent).not.toContain('Tokens');
+  });
+
+  it('renders no run-view controls — the detail is a single calm view', () => {
+    const el = mount(makeProps());
+    push(makeSnapshot());
+    // No Timeline/Log toggle, no details-collapse button, no Run again.
+    expect(el.querySelector('.rvSeg')).toBeNull();
+    expect(el.querySelector('.rvHeadActions')).toBeNull();
+    const controls = [...el.querySelectorAll('.rvHead button')];
+    expect(controls.length).toBe(0);
+    // The side panel is always present.
+    expect(el.querySelector('.rside')).toBeTruthy();
   });
 
   it('shows a pending final node while in flight', () => {
@@ -226,22 +255,5 @@ describe('RunViewScreen', () => {
     );
     expect(el.querySelector('.pending')).toBeTruthy();
     expect(el.textContent).toContain('updates live');
-  });
-
-  it('fires back / run-again callbacks', () => {
-    const props = makeProps();
-    const el = mount(props);
-    push(makeSnapshot());
-    void act(() =>
-      (el.querySelector('.auCrumb button') as HTMLButtonElement).dispatchEvent(
-        new MouseEvent('click', { bubbles: true }),
-      ),
-    );
-    expect(props.onBack).toHaveBeenCalled();
-    const runAgain = [...el.querySelectorAll('.auBtn')].find((b) =>
-      b.textContent?.includes('Run again'),
-    ) as HTMLButtonElement;
-    void act(() => runAgain.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(props.onRunAgain).toHaveBeenCalled();
   });
 });

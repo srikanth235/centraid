@@ -206,12 +206,14 @@ export default function RunViewScreen({
   onReady,
   onBack,
   onOpenAutomation,
-  onRunAgain,
-  onSetMode,
 }: RunViewBridgeProps): JSX.Element {
   const [snap, setSnap] = useState<RunViewSnapshot | null>(null);
-  const [mode, setMode] = useState(initialMode);
-  const [detailsHidden, setDetailsHidden] = useState(false);
+  // The run detail is a single, calm view. The in-view controls — the
+  // Timeline/Log toggle, the details-collapse button and Run again — were
+  // removed as noise (re-running lives on the automation thread's Run now).
+  // The view still honours `initialMode`, so a deep link can open the raw
+  // log; there just isn't a control to flip it here.
+  const mode = initialMode;
 
   useEffect(() => {
     onReady((s) => setSnap(s));
@@ -238,32 +240,8 @@ export default function RunViewScreen({
     );
   }
 
-  const setModeAnd = (m: 'timeline' | 'log'): void => {
-    setMode(m);
-    onSetMode(m);
-  };
-
   const header = (
     <>
-      <div className={au.auCrumb}>
-        <button type="button" onClick={onBack}>
-          Automations
-        </button>
-        <span className={au.auCrumbSep} aria-hidden="true">
-          <Icon name="ArrowRight" size={12} />
-        </span>
-        {snap.deleted ? (
-          <span>{snap.crumbName}</span>
-        ) : (
-          <button type="button" onClick={onOpenAutomation}>
-            {snap.crumbName}
-          </button>
-        )}
-        <span className={au.auCrumbSep} aria-hidden="true">
-          <Icon name="ArrowRight" size={12} />
-        </span>
-        <span>Run</span>
-      </div>
       {snap.deleted ? (
         <div className={styles.deletedNotice} role="status">
           <span className={styles.deletedNoticeIc} aria-hidden="true">
@@ -282,44 +260,6 @@ export default function RunViewScreen({
             <StatusPill kind={snap.statusKind} label={snap.statusLabel} />
           </div>
           <div className={styles.rvHeadMeta}>{`${snap.startedLabel}  ·  ${snap.model}`}</div>
-        </div>
-        <div className={cx(au.auActions, styles.rvHeadActions)}>
-          <div className={styles.rvSeg} role="tablist" aria-label="Run view">
-            {(['timeline', 'log'] as const).map((k) => (
-              <button
-                key={k}
-                type="button"
-                className={styles.rvSegB}
-                role="tab"
-                aria-selected={mode === k}
-                data-active={mode === k ? 'true' : undefined}
-                onClick={() => setModeAnd(k)}
-              >
-                <Icon name={k === 'timeline' ? 'Activity' : 'Braces'} size={12} />
-                <span>{k === 'timeline' ? 'Timeline' : 'Log'}</span>
-              </button>
-            ))}
-          </div>
-          {mode === 'timeline' ? (
-            <button
-              type="button"
-              className={cx(au.auBtn, au.auBtnGhost, styles.btnSm)}
-              onClick={() => setDetailsHidden((v) => !v)}
-            >
-              <Icon name="Eye" size={13} />
-              <span>{detailsHidden ? 'Show details' : 'Hide details'}</span>
-            </button>
-          ) : null}
-          {snap.deleted ? null : (
-            <button
-              type="button"
-              className={cx(au.auBtn, au.auBtnGhost, styles.btnSm)}
-              onClick={onRunAgain}
-            >
-              <Icon name="Reset" size={13} />
-              <span>Run again</span>
-            </button>
-          )}
         </div>
       </div>
     </>
@@ -374,7 +314,7 @@ export default function RunViewScreen({
   return (
     <div className={styles.rv} data-testid="run-view">
       {header}
-      <div className={detailsHidden ? cx(styles.rvGrid, styles.rvGridNarrow) : styles.rvGrid}>
+      <div className={styles.rvGrid}>
         {/* Unclassed: this is .rvGrid's first grid item — the track sizing and
             `align-items: start` come from the grid, not from the item. */}
         <div>
@@ -438,11 +378,7 @@ export default function RunViewScreen({
                     />
                   </span>
                   <span className={styles.tlName}>
-                    {snap.final.kind === 'fail'
-                      ? 'Run failed'
-                      : snap.final.model === 'Centraid'
-                        ? 'Centraid'
-                        : `Centraid · ${snap.final.model}`}
+                    {snap.final.kind === 'fail' ? 'Run failed' : 'Centraid'}
                   </span>
                 </div>
                 {snap.final.kind === 'pending' ? (
@@ -508,19 +444,26 @@ export default function RunViewScreen({
           </div>
           <div className={styles.rsideCard}>
             <div className={styles.rsideH}>Usage</div>
-            {(
-              [
-                ['Tokens', snap.side.tokens],
-                ['Cost', snap.side.cost],
-                ['Steps', snap.side.steps],
-                ['Model', snap.side.model],
-              ] as const
-            ).map(([k, v]) => (
-              <div key={k} className={styles.rsideRow}>
-                <span className={styles.rsideK}>{k}</span>
-                <span className={styles.rsideV}>{v}</span>
-              </div>
-            ))}
+            <div className={styles.rsideRow}>
+              <span className={styles.rsideK}>Model</span>
+              <span className={styles.rsideV}>{snap.side.model}</span>
+            </div>
+            {snap.side.hasUsage ? (
+              (
+                [
+                  ['Tokens', snap.side.tokens],
+                  ['Cost', snap.side.cost],
+                  ['Steps', snap.side.steps],
+                ] as const
+              ).map(([k, v]) => (
+                <div key={k} className={styles.rsideRow}>
+                  <span className={styles.rsideK}>{k}</span>
+                  <span className={styles.rsideV}>{v}</span>
+                </div>
+              ))
+            ) : (
+              <div className={styles.rsideEmpty}>No token usage — this run was deterministic.</div>
+            )}
           </div>
           <div className={styles.rsideCard}>
             <div className={styles.rsideH}>Belongs to</div>

@@ -40,10 +40,6 @@
   flex: none;
   color: var(--ink-3);
 }
-.btnSm {
-  padding: 7px 12px;
-  font-size: 12px;
-}
 .rvHead {
   display: flex;
   flex-wrap: wrap;
@@ -55,13 +51,6 @@
 .rvHeadMain {
   min-width: 0;
   flex: 1 1 260px;
-}
-.rvHeadActions {
-  flex: 0 0 auto;
-}
-.rvHeadActions .rvSegB,
-.rvHeadActions .btnSm {
-  white-space: nowrap;
 }
 .rvHeadName {
   display: flex;
@@ -84,49 +73,6 @@
   grid-template-columns: 1fr 248px;
   gap: 26px;
   align-items: start;
-  transition: grid-template-columns 0.2s ease;
-}
-.rvGridNarrow {
-  grid-template-columns: 1fr;
-}
-.rvGridNarrow .rside {
-  display: none;
-}
-.rvSeg {
-  display: inline-flex;
-  padding: 3px;
-  gap: 2px;
-  border: 0.5px solid var(--line);
-  border-radius: 8px;
-  background: var(--bg-sunken);
-}
-.rvSegB {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 10px;
-  border: none;
-  border-radius: 6px;
-  background: none;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--ink-3);
-  cursor: pointer;
-  transition:
-    background 0.14s ease,
-    color 0.14s ease;
-}
-.rvSegB:hover {
-  color: var(--ink);
-}
-.rvSegB[data-active='true'] {
-  background: var(--accent);
-  color: #fff;
-}
-.rvSegB:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 .log {
   max-width: 880px;
@@ -612,6 +558,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.rsideEmpty {
+  padding: 4px 15px 13px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
 .rsideDeleted {
   display: flex;
   align-items: center;
@@ -641,11 +593,19 @@
 .rsideLink span {
   display: inline-flex;
 }
+/* Narrow / compact: the side panel reflows below the timeline instead of
+   vanishing — its outcome, usage and "belongs to" cards lay out as a
+   responsive auto-fit row so the run's metadata stays reachable on a phone
+   or a split pane. */
 @media (max-width: 860px) {
   .rvGrid {
     grid-template-columns: 1fr;
   }
-  .rvGrid .rside {
-    display: none;
+  .rside {
+    position: static;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 12px;
+    align-items: start;
   }
 }
