@@ -95,26 +95,16 @@ test('extractPdfText skips streams whose compressed size exceeds the 2 MiB cap',
 });
 
 test('extractPdfText ignores streams with non-Flate filters', () => {
-  const raw = Buffer.from('BT (should not appear in output for DCT) Tj ET', 'latin1');
-  const dict = `<< /Filter /DCTDecode /Length ${raw.length} >>`;
+  // Clear-text path may still see the latin1 probe of a stream body that
+  // embeds Tj operators. With DCTDecode the stream is skipped; use a body
+  // without bare Tj outside so the filter skip is what makes extract null.
+  const noTj = Buffer.from('BT hello ET', 'latin1');
+  const dict = `<< /Filter /DCTDecode /Length ${noTj.length} >>`;
   const pdf = Buffer.concat([
     Buffer.from('%PDF-1.4\n'),
     Buffer.from(`${dict}stream\n`, 'latin1'),
-    raw,
-    Buffer.from('\nendstream\n', 'latin1'),
-  ]);
-  // Clear-text path may still see the latin1 probe of the stream body, so
-  // force a probe that only has the filtered stream without bare Tj outside.
-  // With DCTDecode the stream is skipped; bare Tj inside the binary is still
-  // visible on the latin1 probe — use a body without Tj operators outside.
-  const noTj = Buffer.from('BT hello ET', 'latin1');
-  const d2 = `<< /Filter /DCTDecode /Length ${noTj.length} >>`;
-  const pdf2 = Buffer.concat([
-    Buffer.from('%PDF-1.4\n'),
-    Buffer.from(`${d2}stream\n`, 'latin1'),
     noTj,
     Buffer.from('\nendstream\n', 'latin1'),
   ]);
-  expect(extractPdfText(pdf2)).toBeNull();
-  void pdf;
+  expect(extractPdfText(pdf)).toBeNull();
 });

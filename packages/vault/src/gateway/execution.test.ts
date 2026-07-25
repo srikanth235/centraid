@@ -4,7 +4,7 @@
 // recording, ACID postcondition rollback, seal sweep, and idempotent replay
 // without going through the full Gateway facade for each path.
 
-import { beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { uuidv7 } from '../ids.js';
@@ -43,6 +43,10 @@ beforeEach(() => {
     mayAct: true,
   };
   consent = { decision: 'allow', grantId: null, rowFilter: [], fieldMask: null };
+});
+
+afterEach(() => {
+  db.close();
 });
 
 function commandRow(over: Partial<CommandRow> & { name: string }): CommandRow {

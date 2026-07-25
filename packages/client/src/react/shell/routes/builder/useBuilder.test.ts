@@ -21,8 +21,10 @@ vi.mock('../../../../cron.js', () => ({ describeCron: () => '' }));
 import { useBuilder } from './useBuilder.js';
 
 describe('useBuilder module', () => {
-  it('exports a React hook function', () => {
-    expect(typeof useBuilder).toBe('function');
+  it('is a React hook (throws when called without shell context)', () => {
     expect(useBuilder.name).toBe('useBuilder');
+    // Without AppContext / React dispatcher the hook fails closed — not a
+    // typeof-only smoke. Message varies by React version and input shape.
+    expect(() => useBuilder()).toThrow();
   });
 });

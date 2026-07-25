@@ -1,11 +1,14 @@
 import type { CompanionModule, CompanionRequest, ModuleStatus, PageCapture } from './types.js';
-import { errorText, moduleAvailability, unwrapPopupEnvelope } from './popup-core.js';
+import {
+  errorText,
+  moduleAvailability,
+  unwrapPopupEnvelope,
+  type PopupEnvelope,
+} from './popup-core.js';
 import { blockingSummary, pausedModuleStatuses } from './popup-state.js';
 
 async function send<T>(message: CompanionRequest): Promise<T> {
-  const response = (await chrome.runtime.sendMessage(message)) as
-    | { ok: boolean; value?: T; error?: string }
-    | undefined;
+  const response = (await chrome.runtime.sendMessage(message)) as PopupEnvelope<T> | undefined;
   return unwrapPopupEnvelope(response);
 }
 

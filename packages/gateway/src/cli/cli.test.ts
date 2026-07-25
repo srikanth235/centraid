@@ -9,7 +9,7 @@ import { validateConfig, DaemonConfigError } from './config.ts';
 import { buildPrefsPatch, seedRunnerPrefs } from './runner-prefs.ts';
 import type { PrefsStore } from '@centraid/app-engine';
 import { daemonLayoutFor } from './paths.ts';
-import { parseServeArgsPure, timingSafeTokenEqual } from './cli.ts';
+import { isProcessMainModule, parseServeArgsPure, timingSafeTokenEqual } from './cli.ts';
 // Also name the pure helper module so cold-spot reachability is unambiguous.
 import { parseServeArgsPure as pureFromHelper } from './cli-serve-args.ts';
 
@@ -78,12 +78,25 @@ test('parseServeArgsPure rejects bad port, missing values, and unknown flags', (
   expect(parseServeArgsPure(['--help'])).toEqual({ ok: false, help: true });
 });
 
-test('timingSafeTokenEqual is constant-time equality', () => {
+test('timingSafeTokenEqual matches equal secrets and rejects length/content mismatches', () => {
   expect(timingSafeTokenEqual('abc', 'abc')).toBe(true);
   expect(timingSafeTokenEqual('abc', 'abd')).toBe(false);
   expect(timingSafeTokenEqual('abc', 'ab')).toBe(false);
   // Re-export from the entrypoint matches the pure helper module.
   expect(pureFromHelper(['--port', '1'])).toEqual(parseServeArgsPure(['--port', '1']));
+});
+
+test('isProcessMainModule realpaths symlink argv so Node bin install is not a silent no-op', async () => {
+  const linkDir = await tempDir('cli-main-symlink-');
+  const linkPath = path.join(linkDir, 'centraid-gateway');
+  await fs.symlink(CLI_TS, linkPath);
+  expect(isProcessMainModule(linkPath, url.pathToFileURL(CLI_TS))).toBe(true);
+  expect(isProcessMainModule(CLI_TS, url.pathToFileURL(CLI_TS))).toBe(true);
+  expect(isProcessMainModule(undefined, url.pathToFileURL(CLI_TS))).toBe(false);
+  expect(isProcessMainModule(path.join(linkDir, 'other.ts'), url.pathToFileURL(CLI_TS))).toBe(
+    false,
+  );
+  await fs.rm(linkDir, { recursive: true, force: true });
 });
 
 test('validateConfig rejects missing dataDir', () => {

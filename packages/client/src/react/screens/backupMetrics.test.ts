@@ -44,6 +44,11 @@ describe('aggregateUsage', () => {
 describe('computeStorageMetrics', () => {
   it('uses the oldest vault clocks and slowest declared cadence', () => {
     const now = Date.parse('2026-07-25T12:00:00.000Z');
+    const oldestSnapshot = Date.parse('2026-07-24T10:00:00.000Z');
+    const oldestVerify = Date.parse('2026-07-20T00:00:00.000Z');
+    const oldestWal = Date.parse('2026-07-25T11:00:00.000Z');
+    // Slowest policy: verifyEveryDays=14 → 14d beats snapshot 48h and RPO 120s.
+    const slowestCadenceMs = 14 * 24 * 60 * 60 * 1000;
     const status = {
       configured: true,
       vaults: [
@@ -68,7 +73,17 @@ describe('computeStorageMetrics', () => {
     } as BackupStatusDTO;
 
     const metrics = computeStorageMetrics(status, null, now);
-    expect(metrics).toBeDefined();
+    expect(metrics.freshness.declaredCadenceMs).toBe(slowestCadenceMs);
+    expect(metrics.freshness.clocks).toEqual({
+      lastRegisteredSnapshotAt: oldestSnapshot,
+      lastSuccessfulVerificationAt: oldestVerify,
+      lastAckedWalSegmentAt: oldestWal,
+      outboxDrainedWatermarkAt: oldestWal,
+    });
+    // T = min of four clocks = oldest verify.
+    expect(metrics.freshness.tMs).toBe(oldestVerify);
+    expect(metrics.freshness.ageMs).toBe(now - oldestVerify);
+
     // Any vault missing a clock forces that edge to null — inject one miss.
     const missing = computeStorageMetrics(
       {
@@ -78,8 +93,9 @@ describe('computeStorageMetrics', () => {
       { backup: { bytesStored: 1, quotaBytes: 10 } },
       now,
     );
-    expect(missing).toBeDefined();
-    // Freshness clocks with a missing verify → unproven edge.
-    expect(missing.freshness).toBeDefined();
+    expect(missing.freshness.status).toBe('unknown');
+    expect(missing.freshness.tMs).toBeNull();
+    expect(missing.freshness.clocks.lastSuccessfulVerificationAt).toBeNull();
+    expect(missing.cost.bytesStored).toBe(1);
   });
 });

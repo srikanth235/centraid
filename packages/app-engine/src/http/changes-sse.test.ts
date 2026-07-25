@@ -140,11 +140,6 @@ test('SSE: client disconnect unsubscribes the listener from the bus', async () =
   await vi.waitFor(() => {
     expect(runtime.changeBus.listenerCount('cleanup-app')).toBe(1);
   });
-  // Drain a chunk so the connection is fully established.
-  await Promise.race([
-    reader.read(),
-    vi.waitFor(() => expect(runtime.changeBus.listenerCount('cleanup-app')).toBe(1)),
-  ]);
 
   // Cancel the reader → underlying socket closes → server cleanup fires.
   await reader.cancel();

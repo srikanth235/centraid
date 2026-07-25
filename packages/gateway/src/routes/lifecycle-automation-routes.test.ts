@@ -14,14 +14,7 @@ import crypto from 'node:crypto';
 import { hashWebhookSecret } from '@centraid/automation';
 import { serve, type GatewayServeHandle } from '../serve/serve.ts';
 import type { GatewayPaths } from '../paths.ts';
-// Name the lifecycle-automation-routes module (issue #545 B3) so cold-spot
-// reachability counts this suite against the webhook mint path.
-import {
-  handleAutomationCompile,
-  handleAutomationCreate,
-  handleAutomationRotateWebhook,
-  handleAutomationUpdate,
-} from './lifecycle-automation-routes.ts';
+// lifecycle-automation-routes is exercised through serve() HTTP paths below (#545 B3).
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -94,13 +87,6 @@ beforeEach(async () => {
 afterEach(async () => {
   await handle?.close().catch(() => undefined);
   await fs.rm(dataDir, { recursive: true, force: true });
-});
-
-test('lifecycle-automation-routes exports the create/update/rotate/compile handlers', () => {
-  expect(typeof handleAutomationCreate).toBe('function');
-  expect(typeof handleAutomationUpdate).toBe('function');
-  expect(typeof handleAutomationRotateWebhook).toBe('function');
-  expect(typeof handleAutomationCompile).toBe('function');
 });
 
 test('create mints a webhook plaintext once and persists only the hash', async () => {

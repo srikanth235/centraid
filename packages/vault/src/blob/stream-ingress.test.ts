@@ -21,9 +21,11 @@ import { BlobTransferCoordinator } from './transfers.js';
 
 const TEST_CHUNK_BYTES = 1024 * 1024;
 
-test('stream-ingress module exports the 16 MiB default chunk size and the class', () => {
+test('stream-ingress module exports the 16 MiB default chunk size', () => {
   expect(STREAM_INGRESS_CHUNK_BYTES).toBe(16 * 1024 * 1024);
-  expect(typeof RemoteStreamIngress).toBe('function');
+  // Class is exercised by the coordinator stream-through suites below; pin
+  // the named export remains constructible without a typeof-only smoke.
+  expect(RemoteStreamIngress.name).toBe('RemoteStreamIngress');
 });
 
 interface FakeRemote {

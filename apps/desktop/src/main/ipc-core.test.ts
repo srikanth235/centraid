@@ -8,6 +8,7 @@ import {
   hostCapabilities,
   vaultChangedPayload,
 } from './ipc-core.js';
+import { UPDATE_AVAILABLE_CHANNEL } from './update-watcher.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -35,6 +36,11 @@ describe('Channel map', () => {
     expect(Channel.VAULT_METADATA_PUSH).toBe('centraid:vaults:metadata-push');
     expect(Channel.DEEP_LINK).toBe('centraid:deep-link');
     expect(Channel.GATEWAY_AUTH_GET).toBe('centraid:gateways:auth');
+  });
+
+  it('pins UPDATE_AVAILABLE to the update-watcher broadcast channel', () => {
+    expect(Channel.UPDATE_AVAILABLE).toBe(UPDATE_AVAILABLE_CHANNEL);
+    expect(Channel.UPDATE_AVAILABLE).toBe('centraid:update:available');
   });
 });
 

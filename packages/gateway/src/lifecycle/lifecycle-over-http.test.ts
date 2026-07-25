@@ -19,9 +19,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { serve, type GatewayServeHandle } from '../serve/serve.ts';
 import type { GatewayPaths } from '../paths.ts';
-// Name lifecycle-routes (issue #545 B7) so cold-spot reachability counts
-// this HTTP suite against the scaffold/clone/meta surface.
-import { makeLifecycleRouteHandler } from '../routes/lifecycle-routes.ts';
+// lifecycle-routes is exercised through serve() HTTP paths below (#545 B7).
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -64,17 +62,6 @@ beforeEach(async () => {
 afterEach(async () => {
   await handle?.close().catch(() => undefined);
   await fs.rm(dataDir, { recursive: true, force: true });
-});
-
-test('makeLifecycleRouteHandler returns a dispatch function', () => {
-  const handler = makeLifecycleRouteHandler({
-    store: {} as never,
-    codeAppsDir: () => '/tmp',
-    ensureRegistered: async () => undefined,
-    deregister: async () => undefined,
-    reconcile: () => undefined,
-  });
-  expect(typeof handler).toBe('function');
 });
 
 test('POST /_apps stages a draft, and publish:true lands it on main', async () => {

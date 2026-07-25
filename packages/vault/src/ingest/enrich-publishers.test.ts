@@ -1,6 +1,6 @@
 // Enrichment publisher unit tests (issue #545 B6) — tagNotation + ATTRIBUTED contract.
 
-import { beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { uuidv7 } from '../ids.js';
@@ -12,6 +12,10 @@ let boot: BootstrapResult;
 beforeEach(() => {
   db = openVaultDb();
   boot = bootstrapVault(db, { ownerName: 'Priya' });
+});
+
+afterEach(() => {
+  db.close();
 });
 
 test('tagNotation lowercases, slugifies, and caps length', () => {

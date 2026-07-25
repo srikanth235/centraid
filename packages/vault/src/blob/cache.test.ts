@@ -479,11 +479,14 @@ test('bulk replication parks while an interactive read-through is in flight', as
 
   const putsBefore = h.remote.calls.put;
   const replicating = h.custody.replicate();
-  // Poll a few microtasks — replication must stay parked while the read is hot.
-  for (let i = 0; i < 5; i++) {
-    await new Promise<void>((resolve) => setImmediate(resolve));
+  // Hold the QoS invariant across a real wall-clock window — setImmediate alone
+  // can miss a setTimeout(1) deferred put that the old 20ms window caught.
+  const holdDeadline = Date.now() + 50;
+  while (Date.now() < holdDeadline) {
     expect(h.remote.calls.put).toBe(putsBefore); // parked by QoS
+    await new Promise((resolve) => setTimeout(resolve, 10));
   }
+  expect(h.remote.calls.put).toBe(putsBefore);
 
   getGate.resolveAll(); // the interactive read completes
   await reading;

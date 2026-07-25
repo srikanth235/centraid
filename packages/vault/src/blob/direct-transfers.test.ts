@@ -1,7 +1,7 @@
 // Direct edge-sealed upload unit tests (issue #545 B6) — mocked remote tier.
 
 import { createHash, randomBytes } from 'node:crypto';
-import { beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { bootstrapVault } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { VaultBlobRemoteUnavailableError } from '../errors.js';
@@ -24,6 +24,10 @@ beforeEach(() => {
   deviceId = boot.deviceId;
   contentKeys = new BlobContentKeyRegistry(db.vault, randomBytes(32));
   state = new BlobTransferState(db.vault);
+});
+
+afterEach(() => {
+  db.close();
 });
 
 function makeTransfers(opts: {

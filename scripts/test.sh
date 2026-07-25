@@ -36,7 +36,8 @@ while IFS= read -r f; do
 done < <(
   {
     find .governance -type f \( -name '*.sh' -o -name 'run.sh' -o -name 'lib.sh' \) 2>/dev/null || true
-    find .githooks -type f 2>/dev/null || true
+    # Shell scripts only — avoid shellchecking future non-shell files under .githooks.
+    find .githooks -type f \( -name '*.sh' -o -name 'pre-*' -o -name 'commit-msg' -o -name 'prepare-commit-msg' -o -name 'post-*' \) 2>/dev/null || true
   } | sort -u
 )
 

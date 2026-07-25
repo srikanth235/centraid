@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { flushMicrotasks } from './test-flush.js';
+import { flushMicrotasks } from '@centraid/test-kit/flush';
 
 const core = vi.hoisted(() => ({
   auth: vi.fn(),

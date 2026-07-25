@@ -48,11 +48,7 @@ test('handler worker executes a JS handler and returns result (names worker/runn
     execArgv: process.execArgv.filter((a) => !a.includes('vitest')),
   });
 
-  // Pooled workers announce ready; accept either ready-then-run or run alone.
-  const readyOrIgnore = waitFor(worker, (m) => m.type === 'ready' || m.type === 'result').catch(
-    () => undefined,
-  );
-  await new Promise((resolve) => setTimeout(resolve, 30));
+  // worker_threads queues messages until a listener attaches — no fixed sleep.
   worker.postMessage({
     type: 'run',
     request: {
@@ -61,7 +57,6 @@ test('handler worker executes a JS handler and returns result (names worker/runn
       args: { body: { a: 2, b: 40 } },
     },
   });
-  void readyOrIgnore;
 
   const result = await waitFor(worker, (m) => m.type === 'result');
   expect(result.ok).toBe(true);

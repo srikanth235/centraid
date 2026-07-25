@@ -9,8 +9,8 @@
   honesty, Android home-loads, CI latency pins, and hygiene chip-away
   (`toHaveBeenCalled` / fixed sleeps). See [TESTING.md](TESTING.md) Nightly SLA
   + confidence map. Residual hygiene debt: ~600 `toHaveBeenCalled*` sites
-  (~160 bare `toHaveBeenCalled()`) and remaining fixed sleeps; continue
-  per-file chip-away under #545 E1–E3.
+  (~116 bare `toHaveBeenCalled()` after #545 E1/E2) and remaining fixed
+  sleeps; continue per-file chip-away.
 - #212 — Testing strategy ([TESTING.md](TESTING.md)) follow-up: the three
   per-layer workstreams (`assert.*` → `expect`, coverage-floor ratchet, desktop
   renderer logic-extraction) landed under #214; the **desktop Playwright e2e

@@ -112,7 +112,8 @@ describe('pairGatewayOverIroh', () => {
     expect(result.endpointId).toBe('endpoint-web-1');
     expect(result.response).toMatchObject({ ok: true, gatewayId: 'gw-1', vaultId: 'vault-1' });
     expect(wasm.BrowserEndpoint.spawn).toHaveBeenCalledTimes(1);
-    expect(localStorage.getItem(DEVICE_KEY)).toBeTruthy();
+    // encodeBytes([1,2,3]) is deterministic base64 'AQID'.
+    expect(localStorage.getItem(DEVICE_KEY)).toBe('AQID');
   });
 
   test('propagates WASM spawn failures and clears the memoized endpoint', async () => {

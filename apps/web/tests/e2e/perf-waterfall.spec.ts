@@ -113,11 +113,20 @@ async function waitForShellBundle(page: Page): Promise<void> {
       { timeout: 20_000 },
     )
     .toBe(true);
-  // Settle until the document is interactive and stylesheets have applied —
-  // replaces a fixed 500ms sleep so a slow/fast host both pass honestly.
+  // readyState is already 'complete' once waitForLoadState('load') resolves.
+  // Poll resource-timing until the count is stable so trailing CSS/token
+  // chunks are counted (same pattern as the SWR settle below).
   await expect
-    .poll(() => page.evaluate(() => document.readyState), { timeout: 5_000 })
-    .toBe('complete');
+    .poll(
+      async () => {
+        const a = await page.evaluate(() => performance.getEntriesByType('resource').length);
+        await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 40)));
+        const b = await page.evaluate(() => performance.getEntriesByType('resource').length);
+        return a === b;
+      },
+      { timeout: 5_000 },
+    )
+    .toBe(true);
 }
 
 // Mirror the working control-session bootstrap from web-pwa.spec.ts: mint a
@@ -207,16 +216,24 @@ async function openInstalledAndMeasure(
   });
   const frame = await iframe.contentFrame();
   expect(frame).not.toBeNull();
-  // Static markup paints before the iframe's network settles, so wait for the
-  // marker, then poll until the iframe document is complete. NOTE: the app
-  // runtime holds a long-lived `_changes` SSE open, so `networkidle` never
-  // settles — expect.poll on readyState is the honest wait here.
+  // Static markup paints before the iframe's network settles. The app runtime
+  // holds a long-lived `_changes` SSE, so networkidle never settles. Poll
+  // resource-timing until the count is stable so late fetch() assets are
+  // included (readyState alone is already complete by #ready paint).
   await page.frameLocator('iframe[title="app"]').locator('#ready').waitFor({ state: 'visible' });
   await expect
-    .poll(() => frame!.evaluate(() => document.readyState).catch(() => 'loading'), {
-      timeout: 10_000,
-    })
-    .toBe('complete');
+    .poll(
+      async () => {
+        const count = () =>
+          frame!.evaluate(() => performance.getEntriesByType('resource').length).catch(() => -1);
+        const a = await count();
+        await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 40)));
+        const b = await count();
+        return a >= 0 && a === b;
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(true);
   const origin = new URL(frame!.url()).origin;
   const summary = await collect(frame!, origin);
   return { summary, elapsedMs: Date.now() - started };

@@ -2,7 +2,7 @@
 // Imports `duties.ts` by name — admitImportedRow / resolveHandle / revoke /
 // sweepLifecycle pure-ish paths with a bootstrapped vault.
 
-import { beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test } from 'vitest';
 import { bootstrapVault, createGrant, enrollApp, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { uuidv7 } from '../ids.js';
@@ -23,6 +23,10 @@ beforeEach(() => {
     partyId: boot.ownerPartyId,
     mayAct: true,
   };
+});
+
+afterEach(() => {
+  db.close();
 });
 
 test('admitImportedRow inserts once and dedupes on the external id column', () => {

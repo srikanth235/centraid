@@ -10,8 +10,10 @@
 #
 # Bash 3.2 compatible (macOS /bin/bash) — no mapfile, no associative arrays.
 #
-# Self-test: GOVERNANCE_COVERAGE_SCOPE_SELFTEST=1 injects a synthetic unowned
-# package id and expects a violation.
+# Self-test: GOVERNANCE_COVERAGE_SCOPE_SELFTEST=1 proves violation + exit
+# wiring by emitting a synthetic unowned package id. It does not re-run the
+# classification loop against a real packages/* tree — that is what the live
+# check (scripts/test.sh step 2) covers.
 set -u
 source "$(dirname "$0")/../../../../../lib.sh"
 directive_start "coverage-scope-reachability"
@@ -30,7 +32,7 @@ if [[ ! -f "$FLOORS" || ! -f "$MATRIX" ]]; then
     exit 0
 fi
 
-# --- self-test path ---
+# --- self-test path (output/exit wiring only) ---
 if [[ "${GOVERNANCE_COVERAGE_SCOPE_SELFTEST:-0}" == "1" ]]; then
     synthetic="packages/__coverage_scope_selftest_unowned__"
     if grep -q "$synthetic" "$FLOORS" 2>/dev/null; then

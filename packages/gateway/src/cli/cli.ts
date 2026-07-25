@@ -39,7 +39,7 @@
  * output is unchanged.
  */
 
-import { promises as fs, readFileSync } from 'node:fs';
+import { promises as fs, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -396,16 +396,29 @@ async function main(): Promise<void> {
 
 // Only boot when this file is the process entrypoint (tsx/node/bin). Importing
 // pure helpers for unit tests (issue #545 B7) must not call process.exit.
-const isMain =
-  typeof process.argv[1] === 'string' &&
-  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-if (isMain) {
+// Node realpaths the ESM main for import.meta.url but leaves argv[1] as the
+// install symlink (node_modules/.bin/centraid-gateway); Bun realpaths both.
+// Compare realpaths so the documented Node bin is not a silent no-op (#545).
+if (isProcessMainModule(process.argv[1], import.meta.url)) {
   main().catch((err) => {
     process.stderr.write(
       `centraid-gateway: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`,
     );
     process.exit(1);
   });
+}
+
+/** True when argv[1] is this module after resolving install symlinks. */
+export function isProcessMainModule(argv1: string | undefined, moduleUrl: string | URL): boolean {
+  if (typeof argv1 !== 'string' || argv1.length === 0) return false;
+  const resolveReal = (p: string): string => {
+    try {
+      return realpathSync(p);
+    } catch {
+      return path.resolve(p);
+    }
+  };
+  return resolveReal(path.resolve(argv1)) === resolveReal(fileURLToPath(moduleUrl));
 }
 
 export { parseServeArgsPure, timingSafeTokenEqual } from './cli-serve-args.js';

@@ -161,10 +161,13 @@ test('placeSealKey moves restored seal.key into the sibling keys custody path', 
     return null;
   }
   const found = await findSeal(root);
-  expect(found).toBeTruthy();
+  expect(found, 'seal key should land under the custody tree').toBeTruthy();
   expect(await fs.readFile(found!, 'utf8')).toBe('sealed-dek');
+  // Prefer the canonical keys path when the layout matches.
+  if (await fs.stat(dest).catch(() => null)) {
+    expect(found).toBe(dest);
+  }
   expect(logs.some((l) => l.includes('placed the restored seal key'))).toBe(true);
-  void dest;
 });
 
 test('placeSealKey is a no-op when the snapshot carried no seal.key', async () => {

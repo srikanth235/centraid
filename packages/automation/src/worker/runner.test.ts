@@ -58,9 +58,7 @@ test('automation worker runs a handler and posts result (names worker/runner.ts)
     execArgv: process.execArgv.filter((a) => !a.includes('vitest')),
   });
 
-  // Pooled shape: wait for ready, then run.
-  // Some builds may not emit 'ready' if boot is inline — send run either way after a tick.
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  // worker_threads queues messages until a listener attaches — no fixed sleep.
   worker.postMessage({
     type: 'run',
     request: {

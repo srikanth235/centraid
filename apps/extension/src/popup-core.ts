@@ -24,10 +24,15 @@ export function moduleAvailability(modules: readonly ModuleStatus[]): {
   };
 }
 
+/** Message envelope from chrome.runtime.sendMessage (owned here for popup). */
+export interface PopupEnvelope<T> {
+  readonly ok: boolean;
+  readonly value?: T;
+  readonly error?: string;
+}
+
 /** Envelope unwrap for popup send() — same contract as content-core. */
-export function unwrapPopupEnvelope<T>(
-  response: { ok: boolean; value?: T; error?: string } | undefined,
-): T {
+export function unwrapPopupEnvelope<T>(response: PopupEnvelope<T> | undefined): T {
   if (!response?.ok) throw new Error(response?.error ?? 'Request failed.');
   return response.value as T;
 }

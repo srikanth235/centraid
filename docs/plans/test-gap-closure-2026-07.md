@@ -72,3 +72,9 @@ Close A first so later floors and CI honestly gate the rest.
 ## Status
 
 **Done** — PR [#548](https://github.com/srikanth235/centraid/pull/548) on branch `feat/issue-545-test-gap-closure` closes issue #545 (A–E).
+
+### Review follow-up (pre-merge)
+
+- **Blocker:** `isProcessMainModule` realpaths Node bin symlinks so `centraid-gateway` is not a silent no-op.
+- **Major:** vault `afterEach` closes + drop `--dangerouslyIgnoreUnhandledErrors`; perf-waterfall resource-timing settle; `backupMetrics` asserts oldest clocks / slowest cadence.
+- **Minor/nits:** tautology smokes, dead e2e aggregator step, matrix/QUALITY notes, protocol floors 98/96, flush → `@centraid/test-kit/flush`, delete redundant `routes-capabilities.test.ts`, etc.

@@ -4,15 +4,13 @@ import {
   isTrustedCredentialGesture,
   passwordForSave,
 } from './credential-gesture.js';
-import { randomPassword, unwrapCompanionEnvelope } from './content-core.js';
+import { randomPassword, unwrapCompanionEnvelope, type CompanionEnvelope } from './content-core.js';
 import { applyFillToLiveFields, findFields, isLiveFillTarget } from './page-fields.js';
 
 if (window.top === window.self && window.isSecureContext) installCompanion();
 
 async function send<T>(message: CompanionRequest): Promise<T> {
-  const envelope = (await chrome.runtime.sendMessage(message)) as
-    | { ok: boolean; value?: T; error?: string }
-    | undefined;
+  const envelope = (await chrome.runtime.sendMessage(message)) as CompanionEnvelope<T> | undefined;
   return unwrapCompanionEnvelope(envelope);
 }
 
