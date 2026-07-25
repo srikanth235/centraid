@@ -169,9 +169,9 @@ describe('AssistantScreen', () => {
         ],
       }),
     );
-    expect(props.hydrateRefs).toHaveBeenCalled();
+    expect(props.hydrateRefs).toHaveBeenCalledTimes(1);
     const node = (props.hydrateRefs as ReturnType<typeof vi.fn>).mock.calls[0]![0] as HTMLElement;
-    expect(node.querySelector('.cd-asst-ref')).toBeTruthy();
+    expect(node.querySelector('.cd-asst-ref')).not.toBeNull();
   });
 
   it('shows a live streaming bubble with a cursor', async () => {
@@ -184,7 +184,7 @@ describe('AssistantScreen', () => {
       }),
     );
     expect(el.querySelector('.live')?.textContent).toBe('Working on it');
-    expect(el.querySelector('.cursor')).toBeTruthy();
+    expect(el.querySelector('.cursor')).not.toBeNull();
   });
 
   it('sends the composed draft on Enter and clears it', async () => {
@@ -207,8 +207,8 @@ describe('AssistantScreen', () => {
     const send = el.querySelector('.send') as HTMLButtonElement;
     expect(send.getAttribute('aria-label')).toBe('Stop');
     void act(() => send.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(props.onStop).toHaveBeenCalled();
-    expect(props.onSend).not.toHaveBeenCalled();
+    expect(props.onStop).toHaveBeenCalledTimes(1);
+    expect(props.onSend).toHaveBeenCalledTimes(0);
   });
 
   it('does not send while busy or when the draft is blank and nothing is attached', async () => {
@@ -220,7 +220,7 @@ describe('AssistantScreen', () => {
     void act(() =>
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })),
     );
-    expect(props.onSend).not.toHaveBeenCalled();
+    expect(props.onSend).toHaveBeenCalledTimes(0);
   });
 
   it('sends a blank draft when a ready attachment is staged', async () => {
@@ -310,7 +310,7 @@ describe('AssistantScreen', () => {
       const el = await mount(props);
       push(emptySnap({ empty: false, messages: [finalAi({ canRegenerate: true })] }));
       clickLabel(el, 'Regenerate response');
-      expect(props.onRegenerate).toHaveBeenCalled();
+      expect(props.onRegenerate).toHaveBeenCalledTimes(1);
     });
 
     it('flips the retry pager', async () => {
@@ -357,7 +357,7 @@ describe('AssistantScreen', () => {
       const btn = el.querySelector('.modelBtn') as HTMLButtonElement;
       expect(btn.getAttribute('aria-label')).toBe('Assistant model');
       expect(btn.textContent).toContain('Default · Sonnet 5');
-      expect(props.loadModelPicker).toHaveBeenCalled();
+      expect(props.loadModelPicker).toHaveBeenCalledTimes(1);
     });
 
     it('shows the overridden model name when the subsystem pref is set', async () => {

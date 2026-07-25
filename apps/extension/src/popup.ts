@@ -1,26 +1,21 @@
 import type { CompanionModule, CompanionRequest, ModuleStatus, PageCapture } from './types.js';
+import {
+  errorText,
+  moduleAvailability,
+  unwrapPopupEnvelope,
+  type PopupEnvelope,
+} from './popup-core.js';
 import { blockingSummary, pausedModuleStatuses } from './popup-state.js';
 
-interface Envelope<T> {
-  ok: boolean;
-  value?: T;
-  error?: string;
-}
-
 async function send<T>(message: CompanionRequest): Promise<T> {
-  const response = (await chrome.runtime.sendMessage(message)) as Envelope<T> | undefined;
-  if (!response?.ok) throw new Error(response?.error ?? 'Request failed.');
-  return response.value as T;
+  const response = (await chrome.runtime.sendMessage(message)) as PopupEnvelope<T> | undefined;
+  return unwrapPopupEnvelope(response);
 }
 
 function byId<T extends HTMLElement>(id: string): T {
   const element = document.querySelector(`#${id}`);
   if (!element) throw new Error(`Missing #${id}`);
   return element as T;
-}
-
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 async function activeTab(): Promise<ChromeTab | undefined> {
@@ -46,16 +41,16 @@ function setNotice(text: string, kind: 'ok' | 'error' = 'ok'): void {
 }
 
 function applyModuleAvailability(modules: readonly ModuleStatus[]): void {
-  const available = new Map(modules.map((module) => [module.id, module.state === 'granted']));
+  const { enabled, agendaVisible, peopleVisible } = moduleAvailability(modules);
   for (const [module, elementId] of [
     ['tasks', 'task'],
     ['notes', 'note'],
     ['docs', 'document'],
   ] as const) {
-    byId<HTMLButtonElement>(elementId).disabled = !available.get(module);
+    byId<HTMLButtonElement>(elementId).disabled = !enabled.has(module);
   }
-  byId('agenda-module').hidden = !available.get('agenda');
-  byId('people-module').hidden = !available.get('people');
+  byId('agenda-module').hidden = !agendaVisible;
+  byId('people-module').hidden = !peopleVisible;
 }
 
 function renderModules(modules: readonly ModuleStatus[]): void {

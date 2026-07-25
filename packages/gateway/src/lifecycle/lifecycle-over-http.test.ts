@@ -19,6 +19,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { serve, type GatewayServeHandle } from '../serve/serve.ts';
 import type { GatewayPaths } from '../paths.ts';
+// lifecycle-routes is exercised through serve() HTTP paths below (#545 B7).
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -75,8 +76,9 @@ test('POST /_apps stages a draft, and publish:true lands it on main', async () =
   expect(staged.status).toBe(201);
   const stagedBody = (await staged.json()) as { sessionId: string; staged: boolean };
   expect(stagedBody.staged).toBe(true);
-  expect(stagedBody.sessionId).toBeTruthy();
-  expect(!(await listApps()).some((a) => a.id === 'jotter')).toBeTruthy();
+  expect(typeof stagedBody.sessionId).toBe('string');
+  expect(stagedBody.sessionId.length).toBeGreaterThan(0);
+  expect((await listApps()).some((a) => a.id === 'jotter')).toBe(false);
 
   // The staged draft serves through the runtime (issue #141 draft preview).
   const draft = await fetch(
@@ -98,7 +100,7 @@ test('POST /_apps stages a draft, and publish:true lands it on main', async () =
   expect(pubBody.staged).toBe(false);
   const apps = await listApps();
   const row = apps.find((a) => a.id === 'planner');
-  expect(row).toBeTruthy();
+  expect(row).toBeDefined();
   expect(row?.name).toBe('Planner');
 });
 
@@ -175,7 +177,7 @@ test('a bundled app is installed in place, not cloned (issue #434)', async () =>
   const body = (await res.json()) as { app: { id: string; name?: string } };
   expect(body.app.id).toBe('tasks');
   const row = (await listApps()).find((a) => a.id === 'tasks');
-  expect(row).toBeTruthy();
+  expect(row).toBeDefined();
   expect(row?.kind).toBe('app');
 });
 
@@ -198,10 +200,10 @@ test('POST /_automations mints a webhook secret and publishes the automation', a
     staged: boolean;
   };
   expect(body.staged).toBe(false);
-  expect(body.row).toBeTruthy();
+  expect(body.row).toBeDefined();
   expect(body.row?.ownerApp).toBe('inbound');
-  expect(body.webhook).toBeTruthy();
-  expect(body.webhook!.secret.length > 0).toBeTruthy();
+  expect(body.webhook).toBeDefined();
+  expect(body.webhook!.secret.length).toBeGreaterThan(0);
   expect(body.webhook!.url).toMatch(/\/_centraid-hook\//);
 
   // The app is on `main`, marked as an automation app.
@@ -248,7 +250,7 @@ test('automation set-enabled then delete flows through publish', async () => {
   expect(del.status).toBe(200);
   const delBody = (await del.json()) as { deletedApp?: boolean };
   expect(delBody.deletedApp).toBe(true);
-  expect(!(await listApps()).some((a) => a.id === 'digest')).toBeTruthy();
+  expect((await listApps()).some((a) => a.id === 'digest')).toBe(false);
 
   // Finding A regression: the data dir is gone too — and NOT resurrected.
   // The old code called `ensureRegistered` after `deleteApp`, re-creating
@@ -273,7 +275,7 @@ test('DELETE /_apps/<id> tears down the app data dir, not just the code', async 
     headers: auth(),
   });
   expect(del.status).toBe(200);
-  expect(!(await listApps()).some((a) => a.id === 'shelf')).toBeTruthy();
+  expect((await listApps()).some((a) => a.id === 'shelf')).toBe(false);
 
   // Finding A regression: the wrapper dir under appsDir is removed, so a
   // recreated `shelf` cannot inherit stale rows/history.
@@ -324,8 +326,8 @@ test('a one-shot publish (no sessionId) closes its lifecycle session — no orph
     body: JSON.stringify({ id: 'ledger', name: 'Ledger', publish: true }),
   });
   expect(res.status).toBe(201);
-  expect((await listApps()).some((a) => a.id === 'ledger')).toBeTruthy();
-  expect(!(await listSessions()).includes('lifecycle-ledger')).toBeTruthy();
+  expect((await listApps()).some((a) => a.id === 'ledger')).toBe(true);
+  expect((await listSessions()).includes('lifecycle-ledger')).toBe(false);
 });
 
 test('an explicit (renderer) editing session is preserved across a publish', async () => {
@@ -342,7 +344,7 @@ test('an explicit (renderer) editing session is preserved across a publish', asy
     body: JSON.stringify({ id: 'board', name: 'Board', sessionId: 'desktop-board', publish: true }),
   });
   expect(res.status).toBe(201);
-  expect((await listSessions()).includes('desktop-board')).toBeTruthy();
+  expect((await listSessions()).includes('desktop-board')).toBe(true);
 });
 
 test('a one-shot publish opens fresh off main even when a stale lifecycle session orphan exists', async () => {
@@ -354,7 +356,7 @@ test('a one-shot publish opens fresh off main even when a stale lifecycle sessio
     headers: auth({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ sessionId: 'lifecycle-relics' }),
   });
-  expect((await listSessions()).includes('lifecycle-relics')).toBeTruthy();
+  expect((await listSessions()).includes('lifecycle-relics')).toBe(true);
 
   // Now create `relics` for real via the defaulting path. Pre-fix this hit
   // `session_exists` and reused the stale worktree; post-fix it opens fresh.
@@ -364,6 +366,6 @@ test('a one-shot publish opens fresh off main even when a stale lifecycle sessio
     body: JSON.stringify({ id: 'relics', name: 'Relics', publish: true }),
   });
   expect(res.status).toBe(201);
-  expect((await listApps()).some((a) => a.id === 'relics')).toBeTruthy();
-  expect(!(await listSessions()).includes('lifecycle-relics')).toBeTruthy();
+  expect((await listApps()).some((a) => a.id === 'relics')).toBe(true);
+  expect((await listSessions()).includes('lifecycle-relics')).toBe(false);
 });

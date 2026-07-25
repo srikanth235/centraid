@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
+  assertFloorsSubsetOfSeeds,
   buildScoresArtifact,
   enforceMutationFloors,
   mutationScoreFromReport,
@@ -49,11 +50,13 @@ describe('MUTATION_SEEDS', () => {
   test('covers core property-defended packages with package-local configs', () => {
     expect(MUTATION_SEEDS.map((s) => s.id).sort()).toEqual(
       [
+        'packages/agent-runtime',
         'packages/app-engine',
         'packages/automation',
         'packages/backup',
         'packages/blob-format',
         'packages/client/src/replica',
+        'packages/gateway',
         'packages/protocol',
         'packages/tunnel',
         'packages/vault',
@@ -107,7 +110,18 @@ describe('enforceMutationFloors', () => {
     ).toEqual(['mutation floor "packages/vault" not met: measured 90.00 < floor 97']);
   });
 
-  test('passes when score meets floor and skips missing scores', () => {
+  test('passes when score meets floor', () => {
+    expect(
+      enforceMutationFloors(
+        {
+          packages: [{ id: 'packages/vault', score: 97 }],
+        },
+        { 'packages/vault': 97 },
+      ),
+    ).toEqual([]);
+  });
+
+  test('fails when a floored seed has no measured score (#545 A5)', () => {
     expect(
       enforceMutationFloors(
         {
@@ -118,6 +132,37 @@ describe('enforceMutationFloors', () => {
         },
         { 'packages/vault': 97, 'packages/backup': 42 },
       ),
-    ).toEqual([]);
+    ).toEqual([
+      'mutation floor "packages/backup" has no measured score (seed missing, crashed, or skipped)',
+    ]);
+  });
+
+  test('fails when floor id is absent from scores entirely', () => {
+    expect(
+      enforceMutationFloors(
+        { packages: [{ id: 'packages/vault', score: 99 }] },
+        {
+          'packages/vault': 97,
+          'packages/ghost': 50,
+        },
+      ),
+    ).toEqual([
+      'mutation floor "packages/ghost" has no measured score (seed missing, crashed, or skipped)',
+    ]);
+  });
+});
+
+describe('assertFloorsSubsetOfSeeds', () => {
+  test('fails when a floor id is not in MUTATION_SEEDS', () => {
+    const errors = assertFloorsSubsetOfSeeds({
+      'packages/vault': 97,
+      'packages/not-a-seed': 50,
+    });
+    expect(errors.some((e) => e.includes('packages/not-a-seed'))).toBe(true);
+  });
+
+  test('passes when every numeric floor is a known seed id', () => {
+    const floors = Object.fromEntries(MUTATION_SEEDS.map((s) => [s.id, 50]));
+    expect(assertFloorsSubsetOfSeeds(floors)).toEqual([]);
   });
 });

@@ -9,6 +9,9 @@ import { validateConfig, DaemonConfigError } from './config.ts';
 import { buildPrefsPatch, seedRunnerPrefs } from './runner-prefs.ts';
 import type { PrefsStore } from '@centraid/app-engine';
 import { daemonLayoutFor } from './paths.ts';
+import { isProcessMainModule, parseServeArgsPure, timingSafeTokenEqual } from './cli.ts';
+// Also name the pure helper module so cold-spot reachability is unambiguous.
+import { parseServeArgsPure as pureFromHelper } from './cli-serve-args.ts';
 
 const here = path.dirname(url.fileURLToPath(import.meta.url));
 const CLI_TS = path.resolve(here, 'cli.ts');
@@ -22,6 +25,78 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await fs.rm(dataDir, { recursive: true, force: true });
+});
+
+test('parseServeArgsPure accepts host/port/data-dir/allowed-host flags', () => {
+  const parsed = parseServeArgsPure([
+    '--data-dir',
+    '/tmp/x',
+    '--host',
+    '0.0.0.0',
+    '--port',
+    '8765',
+    '--allowed-host',
+    'gateway.local',
+    '--allowed-host',
+    'other.local',
+    '--config',
+    '/tmp/cfg.json',
+  ]);
+  expect(parsed).toEqual({
+    ok: true,
+    value: {
+      dataDir: '/tmp/x',
+      host: '0.0.0.0',
+      port: 8765,
+      allowedHosts: ['gateway.local', 'other.local'],
+      configPath: '/tmp/cfg.json',
+    },
+  });
+});
+
+test('parseServeArgsPure rejects bad port, missing values, and unknown flags', () => {
+  expect(parseServeArgsPure(['--port', '99999'])).toEqual({
+    ok: false,
+    message: '--port must be an integer in [0, 65535], got "99999"',
+    code: 2,
+  });
+  expect(parseServeArgsPure(['--data-dir'])).toEqual({
+    ok: false,
+    message: 'flag "--data-dir" requires a value',
+    code: 2,
+  });
+  expect(parseServeArgsPure(['--allowed-host', '  '])).toEqual({
+    ok: false,
+    message: '--allowed-host requires a hostname',
+    code: 2,
+  });
+  expect(parseServeArgsPure(['--nope'])).toEqual({
+    ok: false,
+    message: 'unknown flag "--nope"',
+    code: 2,
+  });
+  expect(parseServeArgsPure(['--help'])).toEqual({ ok: false, help: true });
+});
+
+test('timingSafeTokenEqual matches equal secrets and rejects length/content mismatches', () => {
+  expect(timingSafeTokenEqual('abc', 'abc')).toBe(true);
+  expect(timingSafeTokenEqual('abc', 'abd')).toBe(false);
+  expect(timingSafeTokenEqual('abc', 'ab')).toBe(false);
+  // Re-export from the entrypoint matches the pure helper module.
+  expect(pureFromHelper(['--port', '1'])).toEqual(parseServeArgsPure(['--port', '1']));
+});
+
+test('isProcessMainModule realpaths symlink argv so Node bin install is not a silent no-op', async () => {
+  const linkDir = await tempDir('cli-main-symlink-');
+  const linkPath = path.join(linkDir, 'centraid-gateway');
+  await fs.symlink(CLI_TS, linkPath);
+  expect(isProcessMainModule(linkPath, url.pathToFileURL(CLI_TS))).toBe(true);
+  expect(isProcessMainModule(CLI_TS, url.pathToFileURL(CLI_TS))).toBe(true);
+  expect(isProcessMainModule(undefined, url.pathToFileURL(CLI_TS))).toBe(false);
+  expect(isProcessMainModule(path.join(linkDir, 'other.ts'), url.pathToFileURL(CLI_TS))).toBe(
+    false,
+  );
+  await fs.rm(linkDir, { recursive: true, force: true });
 });
 
 test('validateConfig rejects missing dataDir', () => {

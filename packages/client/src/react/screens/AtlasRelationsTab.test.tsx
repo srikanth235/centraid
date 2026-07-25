@@ -26,7 +26,7 @@ afterEach(cleanupTab);
 describe('AtlasRelationsTab', () => {
   it('renders a quiet empty state when the graph is null', async () => {
     const el = await mountTab(null);
-    expect(el.querySelector('[data-testid="atlas-relations-empty"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="atlas-relations-empty"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="atlas-orrery"]')).toBeNull();
   });
 
@@ -40,11 +40,11 @@ describe('AtlasRelationsTab', () => {
     // core_party is the centre — drawn as the plate, not a node
     expect(nodeEl(el, 'core_party')).toBeNull();
     // ontology kinds render, including the unreached island members
-    expect(nodeEl(el, 'knowledge_note')).toBeTruthy();
-    expect(nodeEl(el, 'locker_item')).toBeTruthy();
+    expect(nodeEl(el, 'knowledge_note')).not.toBeNull();
+    expect(nodeEl(el, 'locker_item')).not.toBeNull();
     // reachable machinery renders; unreachable machinery (sync_connection,
     // an island member) is hidden to keep the chart about the ontology
-    expect(nodeEl(el, 'consent_device')).toBeTruthy();
+    expect(nodeEl(el, 'consent_device')).not.toBeNull();
     expect(nodeEl(el, 'sync_connection')).toBeNull();
     // FK edges present; the self-reference is excluded from the edge layer,
     // and so is any edge touching a hidden kind — sync_connection is hidden
@@ -68,7 +68,7 @@ describe('AtlasRelationsTab', () => {
     // ghost edges are a standard-lens fact — simple hides them by design
     await setLevel(el, 'standard');
     const ghost = el.querySelector<HTMLElement>('[data-testid="atlas-edge"][data-ghost="true"]');
-    expect(ghost).toBeTruthy();
+    expect(ghost).not.toBeNull();
     expect(ghost?.getAttribute('class')).toContain('edgeGhost');
   });
 
@@ -89,7 +89,7 @@ describe('AtlasRelationsTab', () => {
     const el = await mountTab(makeGraph());
     const concept = nodeEl(el, 'core_concept');
     expect(concept?.dataset.selfref).toBe('true');
-    expect(concept?.querySelector('[data-testid="atlas-selfref-glyph"]')).toBeTruthy();
+    expect(concept?.querySelector('[data-testid="atlas-selfref-glyph"]')).not.toBeNull();
   });
 
   it('puts unreached ontology kinds on the unreached ring, agreeing with island', async () => {
@@ -125,7 +125,7 @@ describe('AtlasRelationsTab', () => {
     expect(chip?.getAttribute('aria-pressed')).toBe('false');
 
     await fire(chip, 'click');
-    expect(el.querySelector('[data-testid="atlas-authored-arc"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="atlas-authored-arc"]')).not.toBeNull();
     expect(
       el
         .querySelector('[data-testid="atlas-relation-chip"][data-relation="mentions"]')
@@ -217,7 +217,7 @@ describe('AtlasRelationsTab', () => {
     const el = await mountTab(makeGraph(), { fetchSampleRows });
     await flush();
     const list = el.querySelector('[data-testid="atlas-samples"]');
-    expect(list).toBeTruthy();
+    expect(list).not.toBeNull();
     expect(list?.textContent).toContain('Ada Lovelace');
     expect(list?.textContent).toContain(SEALED_SENTINEL);
     expect(list?.textContent).toContain('p3');
@@ -287,8 +287,8 @@ describe('AtlasRelationsTab', () => {
     expect(viewportTransform(el)).toBe('translate(0.000 0.000) scale(1.0000)');
     // the viewport carries the whole chart — nodes/edges live inside it
     const viewport = el.querySelector('[data-testid="atlas-viewport"]');
-    expect(viewport?.querySelector('[data-testid="atlas-node"]')).toBeTruthy();
-    expect(viewport?.querySelector('[data-testid="atlas-edge"]')).toBeTruthy();
+    expect(viewport?.querySelector('[data-testid="atlas-node"]')).not.toBeNull();
+    expect(viewport?.querySelector('[data-testid="atlas-edge"]')).not.toBeNull();
   });
 
   it('zoom-in button scales the viewport up; reset restores identity', async () => {
@@ -351,8 +351,8 @@ describe('AtlasRelationsTab', () => {
     // the dial lands on simple by default
     expect(dialLevel(el)).toBe('simple');
     // kinds carrying data show…
-    expect(nodeEl(el, 'core_observation')).toBeTruthy();
-    expect(nodeEl(el, 'knowledge_note')).toBeTruthy();
+    expect(nodeEl(el, 'core_observation')).not.toBeNull();
+    expect(nodeEl(el, 'knowledge_note')).not.toBeNull();
     // …the provably-empty ontology kind and the machinery kind are hidden
     expect(nodeEl(el, 'knowledge_tag')).toBeNull();
     expect(nodeEl(el, 'consent_device')).toBeNull();
@@ -366,7 +366,7 @@ describe('AtlasRelationsTab', () => {
 
     await setLevel(el, 'everything');
     // the unreachable machinery (an island member) now renders…
-    expect(nodeEl(el, 'sync_connection')).toBeTruthy();
+    expect(nodeEl(el, 'sync_connection')).not.toBeNull();
     // …and every node carries its physical name as a demoted second label line
     const sub = nodeEl(el, 'knowledge_note')?.querySelector('[data-testid="atlas-node-physical"]');
     expect(sub?.textContent).toBe('knowledge_note');

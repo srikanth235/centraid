@@ -61,56 +61,64 @@ afterEach(async () => {
   await fs.rm(dataDir, { recursive: true, force: true });
 });
 
-test('status --json with no --data-dir reports service only (never-installed unit reads clean)', async () => {
-  if (process.platform !== 'darwin' && process.platform !== 'linux') return;
-  const parsed = lastJson(await capture(() => commandStatus(['--json'], fail)));
-  expect(parsed.ok).toBe(true);
-  expect(parsed.dataDir).toBeUndefined();
-  const service = parsed.service as { installed: boolean; label: string };
-  expect(service.installed).toBe(false);
-  expect(typeof service.label).toBe('string');
-});
+const servicePlatform = process.platform !== 'darwin' && process.platform !== 'linux';
 
-test('status --json with --data-dir adds the data-dir summary (exists, endpoint identity, vault count)', async () => {
-  if (process.platform !== 'darwin' && process.platform !== 'linux') return;
-  // A bootstrapped vault + a published endpoint identity, same as a daemon
-  // that has actually booted once.
-  await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
-  const layout = daemonLayoutFor(dataDir);
-  await fs.writeFile(
-    layout.endpointStateFile,
-    JSON.stringify({ endpointId: 'gw-endpoint-abc', ticket: 'gw-ticket-base32' }),
-  );
+// #545 A10 — skipIf so report-signals sees the skip (bare return was false-green).
+test.skipIf(servicePlatform)(
+  'status --json with no --data-dir reports service only (never-installed unit reads clean)',
+  async () => {
+    const parsed = lastJson(await capture(() => commandStatus(['--json'], fail)));
+    expect(parsed.ok).toBe(true);
+    expect(parsed.dataDir).toBeUndefined();
+    const service = parsed.service as { installed: boolean; label: string };
+    expect(service.installed).toBe(false);
+    expect(typeof service.label).toBe('string');
+  },
+);
 
-  const parsed = lastJson(
-    await capture(() => commandStatus(['--data-dir', dataDir, '--json'], fail)),
-  );
-  expect(parsed.ok).toBe(true);
-  const summary = parsed.dataDir as {
-    exists: boolean;
-    endpointId?: string;
-    vaultCount?: number;
-  };
-  expect(summary.exists).toBe(true);
-  expect(summary.endpointId).toBe('gw-endpoint-abc');
-  // The bootstrapped default vault + the one just created.
-  expect(summary.vaultCount).toBe(2);
-});
+test.skipIf(servicePlatform)(
+  'status --json with --data-dir adds the data-dir summary (exists, endpoint identity, vault count)',
+  async () => {
+    // A bootstrapped vault + a published endpoint identity, same as a daemon
+    // that has actually booted once.
+    await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
+    const layout = daemonLayoutFor(dataDir);
+    await fs.writeFile(
+      layout.endpointStateFile,
+      JSON.stringify({ endpointId: 'gw-endpoint-abc', ticket: 'gw-ticket-base32' }),
+    );
 
-test('status --json against a --data-dir that does not exist reports exists:false, no throw', async () => {
-  if (process.platform !== 'darwin' && process.platform !== 'linux') return;
-  const missing = path.join(dataDir, 'never-created');
-  const parsed = lastJson(
-    await capture(() => commandStatus(['--data-dir', missing, '--json'], fail)),
-  );
-  expect(parsed.ok).toBe(true);
-  const summary = parsed.dataDir as { exists: boolean; endpointId?: string };
-  expect(summary.exists).toBe(false);
-  expect(summary.endpointId).toBeUndefined();
-});
+    const parsed = lastJson(
+      await capture(() => commandStatus(['--data-dir', dataDir, '--json'], fail)),
+    );
+    expect(parsed.ok).toBe(true);
+    const summary = parsed.dataDir as {
+      exists: boolean;
+      endpointId?: string;
+      vaultCount?: number;
+    };
+    expect(summary.exists).toBe(true);
+    expect(summary.endpointId).toBe('gw-endpoint-abc');
+    // The bootstrapped default vault + the one just created.
+    expect(summary.vaultCount).toBe(2);
+  },
+);
 
-test('status (human mode) prints readable lines, not JSON', async () => {
-  if (process.platform !== 'darwin' && process.platform !== 'linux') return;
+test.skipIf(servicePlatform)(
+  'status --json against a --data-dir that does not exist reports exists:false, no throw',
+  async () => {
+    const missing = path.join(dataDir, 'never-created');
+    const parsed = lastJson(
+      await capture(() => commandStatus(['--data-dir', missing, '--json'], fail)),
+    );
+    expect(parsed.ok).toBe(true);
+    const summary = parsed.dataDir as { exists: boolean; endpointId?: string };
+    expect(summary.exists).toBe(false);
+    expect(summary.endpointId).toBeUndefined();
+  },
+);
+
+test.skipIf(servicePlatform)('status (human mode) prints readable lines, not JSON', async () => {
   const text = await capture(() => commandStatus(['--data-dir', dataDir], fail));
   expect(text).toContain('service:');
   expect(text).toContain('data dir:');

@@ -11,8 +11,10 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { hashWebhookSecret } from '@centraid/automation';
 import { serve, type GatewayServeHandle } from '../serve/serve.ts';
 import type { GatewayPaths } from '../paths.ts';
+// lifecycle-automation-routes is exercised through serve() HTTP paths below (#545 B3).
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -93,6 +95,25 @@ beforeEach(async () => {
 afterEach(async () => {
   await handle?.close().catch(() => undefined);
   await fs.rm(dataDir, { recursive: true, force: true });
+});
+
+test('create mints a webhook plaintext once and persists only the hash', async () => {
+  const created = await createAutomation('minted-hook', {
+    triggers: [{ kind: 'webhook' }],
+  });
+  expect(created.webhook).toBeTruthy();
+  const secret = created.webhook!.secret;
+  expect(secret.length).toBeGreaterThan(16);
+  const trigger = created.row.manifest.triggers[0] as {
+    kind: string;
+    id: string;
+    secretHash: string;
+  };
+  expect(trigger.kind).toBe('webhook');
+  expect(trigger.id).toBe(created.webhook!.id);
+  // Plaintext is returned once; the manifest stores only SHA-256(secret).
+  expect(trigger.secretHash).toBe(hashWebhookSecret(secret));
+  expect(JSON.stringify(created.row.manifest)).not.toContain(secret);
 });
 
 test('update patches only the name, leaving prompt/triggers untouched', async () => {
@@ -215,8 +236,9 @@ test('update mints a fresh webhook when the automation had none before', async (
   expect(webhook.url).toMatch(/\/_centraid-hook\//);
   const row = json.row as { manifest: { triggers: Array<{ kind: string; id?: string }> } };
   expect(row.manifest.triggers).toEqual([
-    { kind: 'webhook', id: webhook.id, secretHash: expect.any(String) },
+    { kind: 'webhook', id: webhook.id, secretHash: hashWebhookSecret(webhook.secret) },
   ]);
+  expect(JSON.stringify(row.manifest)).not.toContain(webhook.secret);
 });
 
 test('update keeps an existing webhook trigger secret untouched when re-declared', async () => {

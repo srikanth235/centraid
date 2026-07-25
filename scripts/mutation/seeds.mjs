@@ -137,4 +137,32 @@ export const MUTATION_SEEDS = [
       'packages/app-engine/vitest.mutation.config.ts',
     ],
   },
+  {
+    id: 'packages/gateway',
+    label: 'gateway',
+    cwd: 'packages/gateway',
+    config: 'stryker.config.mjs',
+    report: 'artifacts/mutation/gateway-report.json',
+    watch: [
+      'packages/gateway/src/cli/allowed-hosts.ts',
+      'packages/gateway/src/cli/allowed-hosts.test.ts',
+      'packages/gateway/src/cli/allowed-hosts-properties.test.ts',
+      'packages/gateway/stryker.config.mjs',
+      'packages/gateway/vitest.mutation.config.ts',
+    ],
+  },
+  {
+    id: 'packages/agent-runtime',
+    label: 'agent-runtime',
+    cwd: 'packages/agent-runtime',
+    config: 'stryker.config.mjs',
+    report: 'artifacts/mutation/agent-runtime-report.json',
+    watch: [
+      'packages/agent-runtime/src/low-priority.ts',
+      'packages/agent-runtime/src/low-priority.test.ts',
+      'packages/agent-runtime/src/low-priority-properties.test.ts',
+      'packages/agent-runtime/stryker.config.mjs',
+      'packages/agent-runtime/vitest.mutation.config.ts',
+    ],
+  },
 ];

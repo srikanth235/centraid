@@ -83,8 +83,23 @@ jobs:
       # named contract suite shrinks below its recorded floor. Offline and fast,
       # so it belongs on the per-PR loop next to lint/typecheck.
       - run: bun run test:matrix
+      # #545 A6–A8 — smoke + orphaned script lanes + protocol/css linters that
+      # previously lived only in check:pr (no CI enforcement).
+      - run: bun run test:report:smoke
+      - name: Scripts release + sanitizer tests
+        run: |
+          bun run scripts:test
+      - run: bun run lint:css
+      - run: bun run lint:protocol-routes
+      - run: bun run lint:acp-min-versions
+      # #545 D9 — shellcheck governance hooks + coverage-scope self-test.
+      - name: Install shellcheck (governance shell lane)
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - run: bun run test:governance-shell
       # #496 E4 — floors/minimumTests may only move upward vs the merge base
       # (or carry an approvedDeviation / approvedMinimumTestsDeviation marker).
+      # Fetch is best-effort; ratchet-floors.mjs fails closed when the base ref
+      # is missing (no silent "run everything" skip) (#545 A11).
       - name: Ratchet coverage floors and minimumTests
         run: |
           git fetch --no-tags --depth=1 origin main 2>/dev/null || true

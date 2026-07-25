@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InProcessScheduler } from './in-process-scheduler.js';
 import type { Row } from '../scaffold/app.js';
 import type { Manifest } from '../manifest/manifest.js';
@@ -207,6 +207,12 @@ describe('condition-trigger watches', () => {
 });
 
 describe('InProcessScheduler.nudge', () => {
+  // Fake-timer tests call vi.useFakeTimers(); always restore so real-timer
+  // suites (bootstrap / cron backstop) never inherit a stuck clock.
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   function dataRow(ref: string, entities: readonly string[]): Row {
     const [ownerApp, id] = ref.split('/') as [string, string];
     const triggers = [{ kind: 'data' as const, entities }];
@@ -230,33 +236,30 @@ describe('InProcessScheduler.nudge', () => {
       evaluate: (ref, index) => void evals.push([ref, index]),
       nudgeDelayMs: 25,
     });
-    try {
-      await s.reconcile([
-        dataRow('studio/invoices', ['business.invoice']),
-        dataRow('studio/transactions', ['core.transaction']),
-      ]);
-      evals.length = 0;
+    await s.reconcile([
+      dataRow('studio/invoices', ['business.invoice']),
+      dataRow('studio/transactions', ['core.transaction']),
+    ]);
+    evals.length = 0;
 
-      // Model five committed write hints spread across a tight burst rather
-      // than five calls in the same JS turn. The fixed window starts at the
-      // first hint and all later hints inside it join the same pass.
-      s.nudge(['business.invoice']);
-      await vi.advanceTimersByTimeAsync(5);
-      s.nudge(['business.invoice']);
-      await vi.advanceTimersByTimeAsync(5);
-      s.nudge(['business.invoice']);
-      s.nudge(['business.invoice']);
-      s.nudge(['business.invoice']);
-      expect(evals).toEqual([]);
-      await vi.advanceTimersByTimeAsync(15);
+    // Model five committed write hints spread across a tight burst rather
+    // than five calls in the same JS turn. The fixed window starts at the
+    // first hint and all later hints inside it join the same pass.
+    s.nudge(['business.invoice']);
+    await vi.advanceTimersByTimeAsync(5);
+    s.nudge(['business.invoice']);
+    await vi.advanceTimersByTimeAsync(5);
+    s.nudge(['business.invoice']);
+    s.nudge(['business.invoice']);
+    s.nudge(['business.invoice']);
+    expect(evals).toEqual([]);
+    await vi.advanceTimersByTimeAsync(15);
 
-      expect(evals).toEqual([['studio/invoices', 0]]);
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(evals).toEqual([['studio/invoices', 0]]);
   });
 
   it('bypasses the minute gate while leaving condition triggers poll-only', async () => {
+    vi.useFakeTimers();
     const evals: Array<[string, number]> = [];
     const s = new InProcessScheduler({
       fire: () => {},
@@ -277,7 +280,8 @@ describe('InProcessScheduler.nudge', () => {
       ['studio/condition', 0],
     ]);
     s.nudge(['business.invoice']);
-    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+    // nudgeDelayMs: 0 still schedules via setTimeout — advance the fake clock.
+    await vi.advanceTimersByTimeAsync(0);
 
     expect(evals).toEqual([
       ['studio/data', 0],
@@ -287,18 +291,18 @@ describe('InProcessScheduler.nudge', () => {
   });
 
   it('bootstraps a fresh data watcher during reconcile before its first write', async () => {
+    vi.useFakeTimers();
     const evals: Array<[string, number]> = [];
     const s = new InProcessScheduler({
       fire: () => {},
       evaluate: (ref, index) => void evals.push([ref, index]),
       nudgeDelayMs: 0,
     });
-
     await s.reconcile([dataRow('studio/data', ['core.party'])]);
     expect(evals).toEqual([['studio/data', 0]]);
 
     s.nudge(['core.party']);
-    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+    await vi.advanceTimersByTimeAsync(0);
     expect(evals).toEqual([
       ['studio/data', 0],
       ['studio/data', 0],
@@ -330,6 +334,7 @@ describe('InProcessScheduler.nudge', () => {
   });
 
   it('serializes a doorbell that races the minute tick and performs one dirty rerun', async () => {
+    vi.useFakeTimers();
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -352,12 +357,12 @@ describe('InProcessScheduler.nudge', () => {
     await s.register(dataRow('studio/data', ['core.party']));
 
     s.nudge(['core.party']);
-    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+    await vi.advanceTimersByTimeAsync(0);
     expect(calls).toBe(1);
     s.tick();
     expect(calls).toBe(1);
     release();
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await vi.advanceTimersByTimeAsync(0);
 
     expect(calls).toBe(2);
     expect(maxActive).toBe(1);
@@ -396,6 +401,7 @@ describe('InProcessScheduler.nudge', () => {
   });
 
   it('routes rejected off-cycle evaluations without rejecting the caller', async () => {
+    vi.useFakeTimers();
     const errors: string[] = [];
     const s = new InProcessScheduler({
       fire: () => {},
@@ -408,7 +414,7 @@ describe('InProcessScheduler.nudge', () => {
     await s.register(dataRow('studio/data', ['core.transaction']));
 
     expect(() => s.nudge()).not.toThrow();
-    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+    await vi.advanceTimersByTimeAsync(0);
 
     expect(errors).toEqual(['nudge failed']);
   });

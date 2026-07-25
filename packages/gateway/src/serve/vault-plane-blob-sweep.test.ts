@@ -33,6 +33,16 @@ async function until(check: () => boolean | Promise<boolean>, timeoutMs = 3000):
   }
 }
 
+/** Assert `check` stays true across a wall-clock window (poll, not a blind sleep). */
+async function holdWhile(check: () => boolean | Promise<boolean>, holdMs: number): Promise<void> {
+  const deadline = Date.now() + holdMs;
+  while (Date.now() < deadline) {
+    expect(await check()).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 15));
+  }
+  expect(await check()).toBe(true);
+}
+
 describe('blobSweepBackoff (pure)', () => {
   test('no failures yet — never skips', () => {
     expect(blobSweepBackoff({ consecutiveFailures: 0, lastAttemptedAt: null }, Date.now())).toEqual(
@@ -108,9 +118,8 @@ describe('VaultPlane blob sweep — real S3, lease gate + resumability', () => {
     server.putObjectDirect('b', `p/blobs/sha256/${orphanSha}`, Buffer.from('orphan'));
 
     plane.start();
-    // Give the sweep clock a few ticks while conflicted — the orphan must survive.
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    expect(server.hasObjectDirect('b', `p/blobs/sha256/${orphanSha}`)).toBe(true);
+    // Hold while conflicted across several sweep ticks — the orphan must survive.
+    await holdWhile(() => server.hasObjectDirect('b', `p/blobs/sha256/${orphanSha}`), 200);
 
     conflicted = false;
     await until(() => !server.hasObjectDirect('b', `p/blobs/sha256/${orphanSha}`), 3000);
@@ -178,9 +187,8 @@ describe('VaultPlane blob sweep — real S3, lease gate + resumability', () => {
     };
 
     plane.start();
-    // Let several sweep ticks (25ms) elapse; the orphan must persist.
-    await new Promise((resolve) => setTimeout(resolve, 250));
-    expect(server.hasObjectDirect('b', `p/blobs/sha256/${orphanSha}`)).toBe(true);
+    // Across several sweep ticks the orphan must persist (fail-safe on throw).
+    await holdWhile(() => server.hasObjectDirect('b', `p/blobs/sha256/${orphanSha}`), 250);
   });
 });
 

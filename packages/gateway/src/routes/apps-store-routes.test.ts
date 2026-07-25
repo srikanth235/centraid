@@ -13,6 +13,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { serve, type GatewayServeHandle } from '../serve/serve.ts';
 import type { GatewayPaths } from '../paths.ts';
+// apps-store-routes is exercised through serve() HTTP paths below (#545 B7).
 
 let dataDir: string;
 let handle: GatewayServeHandle;

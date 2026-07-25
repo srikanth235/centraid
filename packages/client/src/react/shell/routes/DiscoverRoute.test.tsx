@@ -135,14 +135,14 @@ describe('DiscoverRoute', () => {
     const installBtn = [...document.querySelectorAll('.primary')].find((b) =>
       b.textContent?.includes('Install'),
     ) as HTMLButtonElement;
-    expect(installBtn).toBeTruthy();
+    expect(installBtn).toBeInstanceOf(HTMLButtonElement);
     await act(async () => {
       installBtn.click();
       await flush();
     });
 
     expect(gwInstallTemplate).toHaveBeenCalledWith({ templateId: 'todos' });
-    expect(gwCloneTemplate).not.toHaveBeenCalled();
+    expect(gwCloneTemplate).toHaveBeenCalledTimes(0);
     expect(setUserApps).toHaveBeenCalledTimes(1);
     const [pinned] = setUserApps.mock.calls[0] as [UserAppMeta[]];
     expect(pinned).toHaveLength(1);
@@ -172,8 +172,8 @@ describe('DiscoverRoute', () => {
     });
 
     expect(showToast).toHaveBeenCalledWith('Install failed: offline');
-    expect(setUserApps).not.toHaveBeenCalled();
-    expect(navigate).not.toHaveBeenCalled();
+    expect(setUserApps).toHaveBeenCalledTimes(0);
+    expect(navigate).toHaveBeenCalledTimes(0);
   });
 
   it('an already-installed app card OPENS the app instead of showing the install sheet', async () => {
@@ -190,7 +190,7 @@ describe('DiscoverRoute', () => {
     expect(navigate).toHaveBeenCalledWith({ kind: 'app', id: 'todos' });
     // No install sheet, no install call.
     expect(document.querySelector('.tmplPreview')).toBeNull();
-    expect(gwInstallTemplate).not.toHaveBeenCalled();
+    expect(gwInstallTemplate).toHaveBeenCalledTimes(0);
   });
 
   it('right-clicking an installed app card offers Open, and an uninstalled one offers Install', async () => {
@@ -225,16 +225,16 @@ describe('DiscoverRoute', () => {
     const useBtn = [...document.querySelectorAll('button')].find((b) =>
       b.textContent?.includes('Use template'),
     ) as HTMLButtonElement;
-    expect(useBtn).toBeTruthy();
+    expect(useBtn).toBeInstanceOf(HTMLButtonElement);
     await act(async () => {
       useBtn.click();
       await flush();
     });
 
     expect(gwCloneTemplate).toHaveBeenCalledWith({ templateId: 'digest' });
-    expect(gwInstallTemplate).not.toHaveBeenCalled();
+    expect(gwInstallTemplate).toHaveBeenCalledTimes(0);
     expect(navigate).toHaveBeenCalledWith({ kind: 'automations' });
-    expect(setUserApps).not.toHaveBeenCalled();
+    expect(setUserApps).toHaveBeenCalledTimes(0);
   });
 
   it('right-clicking an automation template card and choosing "Use this template" clones it into the automation builder — not the app-install path', async () => {
@@ -254,7 +254,7 @@ describe('DiscoverRoute', () => {
     const useItem = [...document.querySelectorAll('[role="menuitem"]')].find((b) =>
       b.textContent?.includes('Use this template'),
     ) as HTMLButtonElement;
-    expect(useItem).toBeTruthy();
+    expect(useItem).toBeInstanceOf(HTMLButtonElement);
     await act(async () => {
       useItem.click();
       await flush();
@@ -262,7 +262,7 @@ describe('DiscoverRoute', () => {
 
     expect(gwCloneTemplate).toHaveBeenCalledWith({ templateId: 'digest' });
     expect(navigate).toHaveBeenCalledWith({ kind: 'automations' });
-    expect(setUserApps).not.toHaveBeenCalled();
+    expect(setUserApps).toHaveBeenCalledTimes(0);
     expect(navigate).not.toHaveBeenCalledWith({ kind: 'home' });
   });
 

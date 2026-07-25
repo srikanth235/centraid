@@ -16,9 +16,17 @@ import type { RemoteBlobTransfer } from './remote-transfer.js';
 import { sealBlob, unsealBlob } from './seal.js';
 import type { BlobRange, BlobStat, BlobStore } from './store.js';
 import { sha256OfBytes } from './store.js';
+import { STREAM_INGRESS_CHUNK_BYTES, RemoteStreamIngress } from './stream-ingress.js';
 import { BlobTransferCoordinator } from './transfers.js';
 
 const TEST_CHUNK_BYTES = 1024 * 1024;
+
+test('stream-ingress module exports the 16 MiB default chunk size', () => {
+  expect(STREAM_INGRESS_CHUNK_BYTES).toBe(16 * 1024 * 1024);
+  // Class is exercised by the coordinator stream-through suites below; pin
+  // the named export remains constructible without a typeof-only smoke.
+  expect(RemoteStreamIngress.name).toBe('RemoteStreamIngress');
+});
 
 interface FakeRemote {
   remote: RemoteTier;

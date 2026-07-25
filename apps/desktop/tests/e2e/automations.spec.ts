@@ -43,6 +43,18 @@ async function openAutomations(page: import('@playwright/test').Page): Promise<v
     .waitFor({ state: 'visible' });
 }
 
+/** Overflow menu (⋯) holds Edit / Pause·Resume / Delete after the chat-thread redesign. */
+async function openAutomationMenu(page: import('@playwright/test').Page): Promise<void> {
+  await page.getByTestId('automation-menu-trigger').click();
+  await expect(page.getByRole('menu')).toBeVisible();
+}
+
+/** Run cards open the viewer via Details / View details, not the entry shell. */
+async function openRunDetails(page: import('@playwright/test').Page): Promise<void> {
+  await page.getByTestId('run-entry').first().waitFor({ timeout: 15_000 });
+  await page.getByTestId('run-details').first().click({ timeout: 15_000 });
+}
+
 // ─────────────────────────── §8 list & viewer ───────────────────────────
 
 test('8.1 — the automations list renders rows with status pills', async () => {
@@ -137,11 +149,13 @@ test('8.5 — toggling the lifecycle menu posts set-enabled; a failed toggle toa
     await page.getByTestId('automation-row').filter({ hasText: 'Inbox Digest' }).click();
     await expect(page.getByTestId('automation-thread')).toBeVisible();
 
-    // Realignment: this test used to expect a success toast. A successful
-    // toggle is deliberately silent — AutomationViewRoute toasts only on the
-    // failure path — so success is verified by the POST plus the switch's new
-    // state, and the toast is asserted on the path that actually raises one.
-    await page.getByTestId('automation-menu-trigger').click();
+    // Enable/disable lives in the ⋯ menu (Pause when enabled, Resume when not).
+    // Success is silent — toast only on failure. set-enabled is async
+    // (opens an app session first), so poll the mock rather than assert
+    // synchronously. Never-run rows become draft (not "paused") when
+    // disabled, so re-open the menu and assert Resume.
+    await openAutomationMenu(page);
+    await expect(page.getByTestId('automation-menu-toggle')).toContainText('Pause');
     await page.getByTestId('automation-menu-toggle').click();
     await expect
       .poll(() =>
@@ -150,11 +164,11 @@ test('8.5 — toggling the lifecycle menu posts set-enabled; a failed toggle toa
         ),
       )
       .toBe(true);
-
-    // Fault-inject the failure path — the one that does toast.
-    gateway.state.setEnabledStatus = 500;
-    await page.getByTestId('automation-menu-trigger').click();
+    await openAutomationMenu(page);
     await expect(page.getByTestId('automation-menu-toggle')).toContainText('Resume');
+
+    // Fault-inject the Resume path — the one that does toast.
+    gateway.state.setEnabledStatus = 500;
     await page.getByTestId('automation-menu-toggle').click();
     await expect(page.locator('[data-global-toast]')).toContainText(
       /Could not enable Inbox Digest/i,
@@ -191,7 +205,7 @@ test('8.7 — deleting an automation confirms, posts DELETE, returns to the list
     await openAutomations(page);
     await page.getByTestId('automation-row').filter({ hasText: 'Inbox Digest' }).click();
     await expect(page.getByTestId('automation-thread')).toBeVisible();
-    await page.getByTestId('automation-menu-trigger').click();
+    await openAutomationMenu(page);
     await page.getByTestId('automation-menu-delete').click();
     await expectConfirm(page, 'Delete automation?');
     await confirmDelete(page);
@@ -211,7 +225,7 @@ test('8.8 — Edit opens the automation builder', async () => {
     await openAutomations(page);
     await page.getByTestId('automation-row').filter({ hasText: 'Inbox Digest' }).click();
     await expect(page.getByTestId('automation-thread')).toBeVisible();
-    await page.getByTestId('automation-menu-trigger').click();
+    await openAutomationMenu(page);
     await page.getByTestId('automation-menu-edit').click();
     await expect(page.getByTestId('automation-editor')).toBeVisible();
   } finally {
@@ -267,9 +281,9 @@ test('9.1 + 9.2 — Run now opens the forensic viewer and the timeline resolves 
     await openAutomations(page);
     await page.getByTestId('automation-row').filter({ hasText: 'Inbox Digest' }).click();
     await page.getByRole('button', { name: 'Run now' }).click();
-    // The fired turn lands in the thread feed; opening it shows the forensic
+    // The fired turn lands in the thread feed; Details opens the forensic
     // viewer, whose timeline resolves to a successful final node.
-    await page.getByTestId('run-details').first().click({ timeout: 15_000 });
+    await openRunDetails(page);
     await expect(page.getByTestId('run-view')).toBeVisible();
     await expect(page.getByTestId('timeline-final')).toHaveAttribute('data-status', 'ok', {
       timeout: 10_000,
@@ -327,7 +341,7 @@ test('9.3 — a failed turn surfaces the failure outcome', async () => {
     await openAutomations(page);
     await page.getByTestId('automation-row').filter({ hasText: 'Inbox Digest' }).click();
     await page.getByRole('button', { name: 'Run now' }).click();
-    await page.getByTestId('run-details').first().click({ timeout: 15_000 });
+    await openRunDetails(page);
     await expect(page.getByTestId('timeline-final')).toHaveAttribute('data-status', 'fail', {
       timeout: 10_000,
     });
@@ -345,7 +359,7 @@ test('9.4 + 9.9 — the forensic timeline uses the shared tool-and-answer transc
     await openAutomations(page);
     await page.getByTestId('automation-row').filter({ hasText: 'Inbox Digest' }).click();
     await page.getByRole('button', { name: 'Run now' }).click();
-    await page.getByTestId('run-details').first().click({ timeout: 15_000 });
+    await openRunDetails(page);
     await expect(page.getByTestId('timeline-final')).toHaveAttribute('data-status', 'ok', {
       timeout: 10_000,
     });
@@ -367,6 +381,10 @@ test('9.7 — Run again fires another turn from the automation thread', async ()
     await openAutomations(page);
     await page.getByTestId('automation-row').filter({ hasText: 'Inbox Digest' }).click();
     await page.getByRole('button', { name: 'Run now' }).click();
+    // Re-run lives on the automation thread card ("Run again"), not the
+    // run-view detail (those in-view controls were removed as noise).
+    await page.getByTestId('run-entry').first().waitFor({ timeout: 15_000 });
+    await expect(page.getByTestId('run-details').first()).toBeVisible({ timeout: 15_000 });
     const before = gateway.countCalls('POST', (p) => p === '/centraid/_automations/turn-now');
     await page.getByRole('button', { name: 'Run again' }).first().click();
     await expect

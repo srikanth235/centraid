@@ -6,6 +6,7 @@
   "type": "module",
   "exports": {
     "./fake-clock": "./src/fake-clock.ts",
+    "./flush": "./src/flush.ts",
     "./vitest": "./src/vitest.ts",
     "./quality-result": "./src/quality-result.ts",
     "./temp-dir": "./src/temp-dir.ts",

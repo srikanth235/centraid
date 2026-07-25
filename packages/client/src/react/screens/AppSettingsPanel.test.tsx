@@ -242,7 +242,7 @@ describe('AppSettingsPanel', () => {
       }),
     );
     clickTab(el, 'Automations');
-    expect(props.onMountRuns).not.toHaveBeenCalled();
+    expect(props.onMountRuns).toHaveBeenCalledTimes(0);
     void act(() =>
       (el.querySelector('.orderRunsToggle') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
@@ -267,18 +267,18 @@ describe('AppSettingsPanel', () => {
     clickTab(el, 'Manage');
     const del = el.querySelector('.settingsDangerItem') as HTMLButtonElement;
     void act(() => del.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(props.onDelete).not.toHaveBeenCalled();
+    expect(props.onDelete).toHaveBeenCalledTimes(0);
     expect(del.dataset.armed).toBe('true');
     void act(() => del.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onDelete).toHaveBeenCalledTimes(1);
 
     const items = [...el.querySelectorAll<HTMLButtonElement>('.settingsManage .settingsMenuItem')];
     void act(() => items[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(props.onRename).toHaveBeenCalled();
+    expect(props.onRename).toHaveBeenCalledTimes(1);
     void act(() => items[1]!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(props.onShare).toHaveBeenCalled();
+    expect(props.onShare).toHaveBeenCalledTimes(1);
     void act(() => items[2]!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(props.onReveal).toHaveBeenCalled();
+    expect(props.onReveal).toHaveBeenCalledTimes(1);
   });
 
   it('opens the Automations destination from the pane link', () => {
@@ -291,6 +291,6 @@ describe('AppSettingsPanel', () => {
         new MouseEvent('click', { bubbles: true }),
       ),
     );
-    expect(props.onOpenAutomations).toHaveBeenCalled();
+    expect(props.onOpenAutomations).toHaveBeenCalledTimes(1);
   });
 });

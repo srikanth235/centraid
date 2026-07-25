@@ -6,20 +6,17 @@ import initWasm, {
   type BrowserResponse,
 } from '../../web/src/generated/centraid_web_iroh.js';
 import { loadDeviceKey, loadPairing, purgeCompanionState, saveDeviceKey } from './storage.js';
+import {
+  companionHttpError,
+  decodeBytes,
+  encodeBytes,
+  isDeviceRevoked,
+  shouldRetryCompanionRequest,
+} from './transport-core.js';
 
 const CONNECT_TIMEOUT_MS = 15_000;
 const IDEMPOTENT = new Set(['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE']);
 let endpointPromise: Promise<BrowserEndpoint> | undefined;
-
-function decodeBytes(raw: string): Uint8Array {
-  return Uint8Array.from(atob(raw), (char) => char.charCodeAt(0));
-}
-
-function encodeBytes(bytes: Uint8Array): string {
-  let binary = '';
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
-}
 
 async function endpoint(): Promise<BrowserEndpoint> {
   if (!endpointPromise) {
@@ -68,16 +65,6 @@ export async function pairOverIroh(input: {
   return { endpointId: node.endpoint_id(), response: JSON.parse(raw) as Record<string, unknown> };
 }
 
-function isConnectFailure(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes(connect_failure_marker());
-}
-
-function isDeviceRevoked(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes(device_revoked_marker());
-}
-
 async function requestWithRetry(
   node: BrowserEndpoint,
   ticket: string,
@@ -100,8 +87,19 @@ async function requestWithRetry(
         timeout,
       ]);
     } catch (error) {
-      if (isDeviceRevoked(error)) throw error;
-      if (attempt >= 2 || (!IDEMPOTENT.has(method) && !isConnectFailure(error))) throw error;
+      if (
+        !shouldRetryCompanionRequest({
+          attempt,
+          maxAttempts: 2,
+          method,
+          error,
+          connectFailureMarker: connect_failure_marker(),
+          deviceRevokedMarker: device_revoked_marker(),
+          idempotentMethods: IDEMPOTENT,
+        })
+      ) {
+        throw error;
+      }
       await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 250 : 750));
     } finally {
       if (timer) clearTimeout(timer);
@@ -148,20 +146,19 @@ export async function companionJson<T>(path: string, init: RequestInit = {}): Pr
   try {
     response = await companionFetch(path, init);
   } catch (error) {
-    if (!isDeviceRevoked(error)) throw error;
+    if (!isDeviceRevoked(error, device_revoked_marker())) throw error;
     await closeTransport();
     await purgeCompanionState();
-    throw new Error('This device was revoked. Pair it again from Centraid Settings.', {
-      cause: error,
-    });
+    throw new Error(companionHttpError(401, ''), { cause: error });
   }
   const text = await response.text();
-  if (response.status === 401) {
-    await closeTransport();
-    await purgeCompanionState();
-    throw new Error('This device was revoked. Pair it again from Centraid Settings.');
+  if (!response.ok) {
+    if (response.status === 401) {
+      await closeTransport();
+      await purgeCompanionState();
+    }
+    throw new Error(companionHttpError(response.status, text));
   }
-  if (!response.ok) throw new Error(text || `Gateway returned HTTP ${response.status}.`);
   return (text ? JSON.parse(text) : null) as T;
 }
 

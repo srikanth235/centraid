@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { flushMacrotasks } from '@centraid/test-kit/flush';
 
 const core = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -35,9 +36,7 @@ beforeEach(async () => {
 
 afterAll(() => vi.useRealTimers());
 
-function flush(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
-}
+const flush = flushMacrotasks;
 
 function controlledBody(): {
   body: ReadableStream<Uint8Array>;

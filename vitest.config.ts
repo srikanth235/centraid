@@ -33,7 +33,19 @@ export default defineConfig({
       reporter: ['text', 'json', 'json-summary', 'html'],
       reportsDirectory: './coverage',
       include: ['packages/*/src/**', 'apps/*/src/**'],
-      exclude: ['**/*.test.ts', '**/*.test.tsx', '**/*.d.ts', '**/dist/**', '**/index.ts'],
+      exclude: [
+        '**/*.test.ts',
+        '**/*.test.tsx',
+        '**/*.d.ts',
+        '**/dist/**',
+        '**/index.ts',
+        // Test-only harnesses (issue #545 B12) — not product surface.
+        'packages/backup/src/testing/**',
+        // wasm-bindgen glue for the web iroh transport — generated, not hand-owned.
+        'apps/web/src/generated/**',
+        // In-tree ACP fake used by agent-runtime tests, not product code.
+        'packages/agent-runtime/src/backends/acp/fake-acp-agent.mjs',
+      ],
       // Engine packages are where the meaningful coverage lives (TESTING.md).
       // These are the *seeded* regression floors — set a conservative margin
       // below the measured baseline so they catch backsliding without flaking,

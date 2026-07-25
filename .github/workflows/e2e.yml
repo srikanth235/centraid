@@ -658,9 +658,11 @@ jobs:
           bun-version: 1.3.13
       - run: bun install --frozen-lockfile
       - run: bun run build
+      # #545 A2 — mutation must fail the job (and thus nightly-failure-issue)
+      # when floors/seeds go red. continue-on-error was silencing breaches.
       - name: Run Stryker on seed packages
-        run: bun run test:mutation
-        continue-on-error: true
+        id: mutation
+        run: bun run test:mutation -- --enforce-floors
       # Upload `artifacts/` (not `artifacts/mutation/`) so merge-multiple download
       # into the report job's `artifacts/` path keeps `mutation/scores.json` —
       # same layout as desktop/web/pairing evidence jobs. Uploading the mutation
@@ -718,6 +720,8 @@ jobs:
           restore-keys: quality-history-${{ runner.os }}-
       - run: sudo apt-get update && sudo apt-get install -y strace
       - run: bun run build
+      # #545 A1 — keep continue-on-error so the report still generates when a
+      # quality lane fails; a post-step re-reads outcomes and fails the job.
       - id: coverage
         continue-on-error: true
         run: bun run coverage
@@ -741,7 +745,11 @@ jobs:
         run: |
           mkdir -p artifacts/report-history
           if [ -d .gh-pages-history/test-report/history ]; then
-            cp .gh-pages-history/test-report/history/*.json artifacts/report-history/ || true
+            if ! cp .gh-pages-history/test-report/history/*.json artifacts/report-history/ 2>/dev/null; then
+              echo "::warning::report history copy produced no files (empty or missing history dir)"
+            fi
+          else
+            echo "::warning::no durable report history on gh-pages yet; trend series starts empty"
           fi
           rm -rf .gh-pages-history
       # Job conclusions for honesty: a red needs.* job cannot yield silent
@@ -756,6 +764,20 @@ jobs:
       - name: Generate full nightly report
         if: always()
         run: bun run test:report
+      # #545 A1 — mirror ci.yml check aggregator: coverage/perf/scale must fail
+      # the job so nightly-failure-issue can fire (needs.*.result == failure).
+      - name: Fail if quality lanes failed
+        if: always()
+        run: |
+          echo "coverage=${{ steps.coverage.outcome }}"
+          echo "perf=${{ steps.perf.outcome }}"
+          echo "scale=${{ steps.scale.outcome }}"
+          if [ "${{ steps.coverage.outcome }}" != "success" ] || \
+             [ "${{ steps.perf.outcome }}" != "success" ] || \
+             [ "${{ steps.scale.outcome }}" != "success" ]; then
+            echo "::error::Nightly quality lane failed (coverage/perf/scale) — see steps above"
+            exit 1
+          fi
       - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         if: always()
         with:
@@ -767,9 +789,6 @@ jobs:
         env:
           TEST_REPORT_PUBLIC_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/test-report/nightly/
         run: node scripts/test-report/write-job-summary.mjs --report-url "$TEST_REPORT_PUBLIC_URL" --title "Nightly test health"
-      - name: Preserve lane failures after publishing the report
-        if: steps.coverage.outcome == 'failure' || steps.perf.outcome == 'failure' || steps.scale.outcome == 'failure'
-        run: exit 1
 
   # Public nightly HTML (same Pages tree as main; no per-PR slots).
   # #496 E2 — main-only so branch workflow_dispatch cannot red the workflow
@@ -912,6 +931,7 @@ jobs:
         pairing-lifecycle,
         pairing-ticket-hygiene,
         pairing-cross-network-relay,
+        mutation-testing,
         test-health-report,
       ]
     if: >
@@ -926,6 +946,7 @@ jobs:
         needs.pairing-lifecycle.result == 'failure' ||
         needs.pairing-ticket-hygiene.result == 'failure' ||
         needs.pairing-cross-network-relay.result == 'failure' ||
+        needs.mutation-testing.result == 'failure' ||
         needs.test-health-report.result == 'failure'
       )
     runs-on: ubuntu-latest
@@ -962,6 +983,7 @@ jobs:
           - pairing-lifecycle: \`${{ needs.pairing-lifecycle.result }}\`
           - pairing-ticket-hygiene: \`${{ needs.pairing-ticket-hygiene.result }}\`
           - pairing-cross-network-relay: \`${{ needs.pairing-cross-network-relay.result }}\`
+          - mutation-testing: \`${{ needs.mutation-testing.result }}\`
           - test-health-report: \`${{ needs.test-health-report.result }}\`
 
           _Auto-filed by e2e.yml \`nightly-failure-issue\`. Prefer updating this issue over opening duplicates._
@@ -969,8 +991,14 @@ jobs:
           )"
           existing="$(gh issue list --search 'in:title [nightly] e2e lane red' --state open --json number --jq '.[0].number' || true)"
           if [ -n "${existing:-}" ] && [ "$existing" != "null" ]; then
-            gh issue comment "$existing" --body "$BODY"
+            if ! gh issue comment "$existing" --body "$BODY"; then
+              echo "::error::Failed to comment on nightly tracking issue #$existing — run ${RUN_URL}"
+              exit 1
+            fi
             echo "Updated issue #$existing"
           else
-            gh issue create --title "$TITLE" --body "$BODY" || true
+            if ! gh issue create --title "$TITLE" --body "$BODY"; then
+              echo "::error::Failed to create nightly tracking issue — run ${RUN_URL}"
+              exit 1
+            fi
           fi

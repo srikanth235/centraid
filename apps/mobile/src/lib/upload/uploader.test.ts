@@ -118,7 +118,7 @@ describe('UploadDrainer', () => {
 
       await drainer({ client: evil, putPart }).drainOnce();
 
-      expect(putPart, 'no bytes may leave before the URL is pinned').not.toHaveBeenCalled();
+      expect(putPart, 'no bytes may leave before the URL is pinned').toHaveBeenCalledTimes(0);
       expect(store.bySha(SHA)?.lastError).toMatch(/not the active provider/);
     });
 
@@ -144,7 +144,7 @@ describe('UploadDrainer', () => {
         complete: async () => ({}),
       };
       await drainer({ client: evil, putPart }).drainOnce();
-      expect(putPart).not.toHaveBeenCalled();
+      expect(putPart).toHaveBeenCalledTimes(0);
     });
   });
 
@@ -160,7 +160,7 @@ describe('UploadDrainer', () => {
     const summary = await drainer({ putPart }).drainOnce();
 
     expect(summary.deduped).toBe(1);
-    expect(putPart, 'alreadyPresent must skip the transfer entirely').not.toHaveBeenCalled();
+    expect(putPart, 'alreadyPresent must skip the transfer entirely').toHaveBeenCalledTimes(0);
     // The receipt is the gateway's, verbatim — casAck came from the server.
     expect(store.bySha(SHA)?.receipt).toMatchObject({
       alreadyPresent: true,
@@ -195,7 +195,7 @@ describe('UploadDrainer', () => {
     const summary = await drainer({ client: localOnly, putPart }).drainOnce();
 
     expect(summary.deduped).toBe(1);
-    expect(putPart).not.toHaveBeenCalled();
+    expect(putPart).toHaveBeenCalledTimes(0);
     expect(store.bySha(SHA)?.receipt).toEqual({
       alreadyPresent: true,
       sha256: SHA,
@@ -222,10 +222,9 @@ describe('UploadDrainer', () => {
     const putPart = vi.fn<PartPutter>(async () => '"etag"');
     await drainer({ putPart }).drainOnce();
 
-    expect(
-      putPart,
-      'a part the gateway already has must not be re-uploaded',
-    ).not.toHaveBeenCalled();
+    expect(putPart, 'a part the gateway already has must not be re-uploaded').toHaveBeenCalledTimes(
+      0,
+    );
     expect(store.parts(item.itemId)[0]?.state).toBe('recorded');
   });
 
@@ -270,7 +269,7 @@ describe('UploadDrainer', () => {
     const putPart = vi.fn<PartPutter>(async () => '"etag"');
     const summary = await drainer({ putPart, policy: { canTransfer: () => false } }).drainOnce();
     expect(summary.halted).toBe(true);
-    expect(putPart).not.toHaveBeenCalled();
+    expect(putPart).toHaveBeenCalledTimes(0);
     expect(store.bySha(SHA)?.state).toBe('pending');
   });
 

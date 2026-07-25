@@ -20,7 +20,7 @@ bug**: the row-browser pager never advanced (see "Bug found" below).
 | Real Electron + real UI | ✅ | ✅ |
 | Per-test isolation | ✅ | ✅ (mock gateway + `userData`) |
 | Streaming (chat turns, run timelines) | ❌ | ✅ SSE in the mock |
-| Runs in PR CI | ❌ | ❌ (too heavy for PRs) — **but now runs nightly** (`e2e.yml`) |
+| Runs in PR CI | ❌ | ✅ path-filtered via [`client-e2e-pr.yml`](../../../../.github/workflows/client-e2e-pr.yml); full suite still on nightly (`e2e.yml`) |
 
 ## Harness
 
@@ -77,9 +77,12 @@ marked **N/A** — neither has a surface in the current UI.
 
 ## CI integration
 
-The PR `ci` workflow ([.github/workflows/ci.yml](../../../../.github/workflows/ci.yml)) still
-runs vitest unit coverage only — the e2e suite builds + launches Electron, which is too
-heavy for every PR. It now runs **nightly** (and on-demand via `workflow_dispatch`) in
+The main PR `ci` workflow ([.github/workflows/ci.yml](../../../../.github/workflows/ci.yml))
+still runs vitest unit coverage only. **Desktop e2e does run on PRs** when client /
+desktop paths change, via
+[.github/workflows/client-e2e-pr.yml](../../../../.github/workflows/client-e2e-pr.yml)
+(`desktop-e2e` job: build + `bun run test:e2e`). The full suite also runs **nightly**
+(and on-demand via `workflow_dispatch`) in
 [.github/workflows/e2e.yml](../../../../.github/workflows/e2e.yml): it installs the
 Playwright/Electron host deps (`playwright install --with-deps chromium`), builds every
 package, and runs the suite under `xvfb-run`. Traces/screenshots upload as an artifact

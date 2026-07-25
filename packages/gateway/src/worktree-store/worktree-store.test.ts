@@ -25,7 +25,7 @@ async function expectRejectsWithCode(op: () => Promise<unknown>, code: string): 
   } catch (e) {
     err = e;
   }
-  expect(err instanceof WorktreeStoreError).toBeTruthy();
+  expect(err).toBeInstanceOf(WorktreeStoreError);
   expect((err as WorktreeStoreError).code).toBe(code);
 }
 
@@ -54,8 +54,9 @@ test('init creates the layout and is idempotent', async () => {
     await store.init();
 
     const mainDir = store.getActiveMainDir();
-    expect(mainDir).toBeTruthy();
-    expect(mainDir!.startsWith(path.join(root, 'worktrees', 'main') + path.sep)).toBeTruthy();
+    expect(typeof mainDir).toBe('string');
+    expect(mainDir!.length).toBeGreaterThan(0);
+    expect(mainDir!.startsWith(path.join(root, 'worktrees', 'main') + path.sep)).toBe(true);
 
     // Bare repo exists with the `main` ref planted.
     const head = await fs.readFile(path.join(root, 'apps.git', 'HEAD'), 'utf8');
@@ -128,13 +129,13 @@ test('openSession creates a worktree branched off main; multiple sessions coexis
 
     expect(a.id).toBe('alpha');
     expect(a.branch).toBe('sessions/alpha');
-    expect(a.worktreePath.endsWith(path.join('worktrees', 'sessions', 'alpha'))).toBeTruthy();
+    expect(a.worktreePath.endsWith(path.join('worktrees', 'sessions', 'alpha'))).toBe(true);
     expect(
       await fs
         .stat(a.worktreePath)
         .then((s) => s.isDirectory())
         .catch(() => false),
-    ).toBeTruthy();
+    ).toBe(true);
 
     expect(b.id).toBe('beta');
     expect(a.worktreePath).not.toBe(b.worktreePath);
@@ -229,7 +230,7 @@ test('publish of a brand-new app tags v1 and materializes new main', async () =>
     expect(result.sha.length).toBe(40);
     expect(
       result.materializedMainDir.startsWith(path.join(root, 'worktrees', 'main') + path.sep),
-    ).toBeTruthy();
+    ).toBe(true);
     expect(result.materializedMainDir).not.toBe(mainBefore);
     expect(store.getActiveMainDir()).toBe(result.materializedMainDir);
 
@@ -300,7 +301,8 @@ test('publish is path-scoped: a session that edits two apps publishes only one',
     expect(notesInSession).toBe(true);
 
     const todoActive = await store.resolveActiveAppDir('todo');
-    expect(todoActive).toBeTruthy();
+    expect(typeof todoActive).toBe('string');
+    expect(todoActive!.length).toBeGreaterThan(0);
   } finally {
     await rmTempRoot(root);
   }
@@ -349,8 +351,10 @@ test('concurrent publishes on the same store serialize and both succeed', async 
     // Both apps are reachable from the final main worktree.
     const todoDir = await store.resolveActiveAppDir('todo');
     const notesDir = await store.resolveActiveAppDir('notes');
-    expect(todoDir).toBeTruthy();
-    expect(notesDir).toBeTruthy();
+    expect(typeof todoDir).toBe('string');
+    expect(todoDir!.length).toBeGreaterThan(0);
+    expect(typeof notesDir).toBe('string');
+    expect(notesDir!.length).toBeGreaterThan(0);
 
     // Active main was swapped exactly to the second publish's
     // materialization — the first one was evicted.
@@ -384,7 +388,8 @@ test('rollback overlays the old subtree onto main without minting a tag', async 
 
     // Active app dir reflects v1's content.
     const appDir = await store.resolveActiveAppDir('todo');
-    expect(appDir).toBeTruthy();
+    expect(typeof appDir).toBe('string');
+    expect(appDir!.length).toBeGreaterThan(0);
     const appJson = JSON.parse(await fs.readFile(path.join(appDir!, 'app.json'), 'utf8')) as {
       marker: string;
     };
@@ -473,7 +478,9 @@ test('deleteApp removes the app from main and reaps its version tags', async () 
     await store.closeSession('s1');
 
     // Before: app is live + has a tag.
-    expect(await store.resolveActiveAppDir('todo')).toBeTruthy();
+    const liveDir = await store.resolveActiveAppDir('todo');
+    expect(typeof liveDir).toBe('string');
+    expect(liveDir!.length).toBeGreaterThan(0);
     expect((await store.listVersions('todo')).map((v) => v.tag)).toEqual(['todo/v1']);
 
     const out = await store.deleteApp('todo');

@@ -1,8 +1,20 @@
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { onTestFinished } from 'vitest';
 import type { BuildGatewayOptions, BuiltGateway, GatewayPaths } from '@centraid/gateway';
 import type { OpenVaultOptions, VaultDb } from '@centraid/vault';
 import { tempDir } from '@centraid/test-kit/temp-dir';
+
+const helpersDir = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Resolve a workspace package's TypeScript entry without requiring a prior
+ * `tsc` build — vitest can transform the source directly. Dynamic package
+ * imports of `@centraid/*` fail when `dist/` is absent.
+ */
+function workspaceSrc(packageName: string, entry = 'index.ts'): string {
+  return pathToFileURL(join(helpersDir, '..', '..', 'packages', packageName, 'src', entry)).href;
+}
 
 export interface CreateTestVaultOptions extends OpenVaultOptions {
   /** Defaults to an on-disk pair so tests exercise the production SQLite posture. */
@@ -13,7 +25,7 @@ export interface CreateTestVaultOptions extends OpenVaultOptions {
 }
 
 export async function createTestVault(options: CreateTestVaultOptions = {}): Promise<VaultDb> {
-  const { bootstrapVault, openVaultDb } = await import('@centraid/vault');
+  const { bootstrapVault, openVaultDb } = await import(workspaceSrc('vault'));
   const { inMemory = false, bootstrap = true, ownerName = 'Test owner', ...vaultOptions } = options;
   const dir = inMemory ? undefined : (vaultOptions.dir ?? (await tempDir('centraid-vault-test-')));
   const vault = openVaultDb({ ...vaultOptions, ...(dir ? { dir } : {}) });
@@ -39,7 +51,7 @@ export interface TestGateway {
 export async function buildTestGateway(
   options: BuildTestGatewayOptions = {},
 ): Promise<TestGateway> {
-  const { buildGateway } = await import('@centraid/gateway');
+  const { buildGateway } = await import(workspaceSrc('gateway'));
   const { rootDir: providedRoot, paths: pathOverrides, ...gatewayOptions } = options;
   const rootDir = providedRoot ?? (await tempDir('centraid-gateway-test-'));
   const paths: GatewayPaths = {

@@ -51,6 +51,9 @@ import {
   transcribeDeviceMedia,
   type DeviceTranscriptionInput,
 } from './device-transcription.js';
+import { Channel, gatewayChangedPayload, vaultChangedPayload } from './ipc-core.js';
+
+export { Channel };
 
 /**
  * Status read for the auto-publish queue (issue #137: there is no
@@ -63,151 +66,6 @@ import {
 type PublishStatus = { inFlight: boolean; lastError?: string; lastPublishedAt?: number };
 const getPublishStatus = (_id: string): PublishStatus => ({ inFlight: false });
 
-/**
- * IPC channel names. Keep in sync with `preload.ts` (contextBridge surface)
- * and the renderer-side typings in `renderer/centraid-api.d.ts`.
- */
-export const Channel = {
-  SETTINGS_GET: 'centraid:settings:get',
-  SETTINGS_SAVE: 'centraid:settings:save',
-  DEVICE_TRANSCRIPT_AVAILABLE: 'centraid:device-transcript:available',
-  DEVICE_TRANSCRIBE: 'centraid:device-transcript:run',
-
-  // App create/files/write/delete/update-meta + publish moved to the
-  // renderer's direct HTTP client (renderer/gateway-client.ts). The preview
-  // iframe now points at the gateway draft URL (Phase 4), so only the
-  // local-only reveal-in-Finder stays on IPC.
-  APPS_OPEN: 'centraid:apps:open',
-
-  // The in-process AGENT_* builder retired with the unified chat (issue
-  // #141, Phase 3): the builder now streams the gateway's `/centraid/<id>/_turn`
-  // SSE directly, so the agent runs server-side in the draft worktree.
-
-  // PUBLISH + the app read surface (APP_LIVE_URL / APP_SCHEMA /
-  // APP_TABLE_ROWS / APP_QUERY / APP_LOGS / APPS_DEREGISTER / VERSIONS_LIST /
-  // VERSIONS_ACTIVATE) are gone — the renderer calls these gateway routes
-  // directly (thin-client pivot; see renderer/gateway-client.ts).
-
-  /** Status read for the auto-publish queue (renderer toast / debug). */
-  PUBLISH_STATUS: 'centraid:publish:status',
-
-  // Gateway lifecycle (issue #109). The primordial local gateway
-  // ('local') is special-cased (always present, can't be removed).
-  // Remote gateways and additional local gateways (workspaces) get
-  // UUID ids and can be renamed/removed freely.
-  GATEWAYS_LIST: 'centraid:gateways:list',
-  GATEWAYS_REMOVE: 'centraid:gateways:remove',
-  GATEWAYS_RENAME: 'centraid:gateways:rename',
-  GATEWAYS_UPDATE_METADATA: 'centraid:gateways:update-metadata',
-  GATEWAYS_UPDATE_TOKEN: 'centraid:gateways:update-token',
-  GATEWAYS_SET_ACTIVE: 'centraid:gateways:set-active',
-  GATEWAY_CHANGED: 'centraid:gateways:changed',
-  // Pairing-ticket redemption (issue #376): the desktop half of "Add gateway
-  // by pairing code" — decode + dial/POST, add-or-reuse the profile, flip
-  // active gateway + active vault. See `gateway-pairing.ts`.
-  GATEWAY_PAIR_REDEEM: 'centraid:gateways:pair-redeem',
-  // Read a gateway's vault list WITHOUT switching to it (issue #376) — the
-  // flat (gateway, vault) switcher preview. See `gateway-vaults.ts`.
-  GATEWAYS_LIST_VAULTS: 'centraid:gateways:list-vaults',
-  // ConnectFlow "handshake ladder" (issue #382): staged connectivity check
-  // for a not-yet-added (or already-known) gateway, across every method —
-  // url/ticket/ssh/gateway. See `gateway-connectivity.ts`.
-  GATEWAY_TEST_CONNECTION: 'centraid:gateways:test-connection',
-  // ConnectFlow "Over SSH" commit step (issue #382): (optional) create a
-  // vault remotely, mint+redeem a pairing ticket, persist the ssh block on
-  // the resulting profile. See `gateway-ssh-connect.ts`.
-  GATEWAY_SSH_CONNECT: 'centraid:gateways:ssh-connect',
-  // Vault addressing (issue #289): the active vault is client-side state,
-  // keyed by gateway. Switching is a pure pointer flip — no server call —
-  // that changes the `x-centraid-vault` header the renderer sends. The
-  // VAULT_CHANGED broadcast tells the renderer to re-read + re-render
-  // WITHOUT the wholesale cache wipe a gateway switch triggers.
-  VAULTS_SET_ACTIVE: 'centraid:vaults:set-active',
-  VAULT_CHANGED: 'centraid:vaults:changed',
-  // Vault lifecycle is an ADMIN act (issue #289): for a REMOTE gateway it's
-  // the server CLI over SSH (no client surface). For the desktop's own
-  // in-process LOCAL gateway the desktop IS the landlord, so these run
-  // against the embedded registry directly.
-  VAULTS_CREATE: 'centraid:vaults:create',
-  VAULTS_DELETE: 'centraid:vaults:delete',
-  // Vault metadata (name/color/icon/blurb) rides a direct renderer->gateway
-  // HTTP `updateVault()` call (`spaceModals.ts`'s `saveSpace`), not IPC — so
-  // unlike create/switch/delete it never fired any broadcast, leaving the
-  // sidebar head showing the stale name/color after a Settings -> Space
-  // save until an unrelated event refreshed it (found via live E2E, #382
-  // follow-up). VAULT_METADATA_CHANGED is the renderer->main "please notify"
-  // invoke, called right after `updateVault()` succeeds. It deliberately
-  // does NOT reuse VAULT_CHANGED's broadcast: App.tsx's `reScope` treats
-  // every VAULT_CHANGED as "the ADDRESSED vault changed" and navigates Home
-  // + wipes gateway-scoped state — correct for a real switch, wrong for a
-  // same-vault rename (confirmed live: it silently kicked the user off the
-  // Settings -> Space page mid-edit). VAULT_METADATA_PUSH is the resulting
-  // main->renderer broadcast; only `useActiveVault`'s lightweight "re-read
-  // the vault list" listens to it, not `reScope`.
-  VAULT_METADATA_CHANGED: 'centraid:vaults:metadata-changed',
-  VAULT_METADATA_PUSH: 'centraid:vaults:metadata-push',
-  // Thin-client: hands the renderer the active gateway's HTTP base URL +
-  // bearer token so it can call the runtime/data plane directly. Main
-  // still owns where the token lives (keychain-backed settings); this is
-  // the single point where it crosses to the renderer.
-  GATEWAY_AUTH_GET: 'centraid:gateways:auth',
-
-  // Gateway runtime watch (gateway-monitor.ts): main polls the active
-  // gateway's `/_gateway/health` heartbeat (falling back to `/_gateway/info`
-  // for older gateways), keeps the per-launch sample/outage history, and
-  // fires the OS down-alert. GET serves the latest snapshot; EVENT pushes
-  // one per poll so the Gateway page live-updates.
-  GATEWAY_RUNTIME_GET: 'centraid:gateway-runtime:get',
-  GATEWAY_RUNTIME_EVENT: 'centraid:gateway-runtime:event',
-  // Gateway ops (issue #351): manual restart of the local embedded gateway
-  // + save-dialog export of the gateway's diagnostics bundle.
-  GATEWAY_RESTART: 'centraid:gateway-runtime:restart',
-  GATEWAY_DIAGNOSTICS_EXPORT: 'centraid:gateway-runtime:export-diagnostics',
-  GATEWAY_RECOVERY_KIT_EXPORT: 'centraid:gateway-runtime:export-recovery-kit',
-
-  // Phone link (issue #263): the iroh tunnel that lets the mobile app reach
-  // this desktop's loopback gateway from anywhere. Pairing is a one-time
-  // QR code; paired devices are EndpointId-keyed and revocable.
-  PHONE_STATUS: 'centraid:phone:status',
-  PHONE_BEGIN_PAIRING: 'centraid:phone:begin-pairing',
-  PHONE_CANCEL_PAIRING: 'centraid:phone:cancel-pairing',
-  PHONE_REVOKE: 'centraid:phone:revoke',
-  PHONE_PAIRED: 'centraid:phone:paired',
-
-  // Relaunch-to-update: the dist watcher (main/update-watcher.ts) notices a
-  // new build on disk and broadcasts UPDATE_AVAILABLE (channel string owned
-  // by that module); the sidebar pill reads the snapshot and triggers the
-  // relaunch through these two.
-  UPDATE_STATUS: 'centraid:update:status',
-  UPDATE_CHECK: 'centraid:update:check',
-  UPDATE_RELAUNCH: 'centraid:update:relaunch',
-  /** H5 — opt-in OS service install for the detached local gateway. */
-  GATEWAY_SERVICE_INSTALL: 'centraid:gateway:service-install',
-
-  // "What's new" changelog: main fetches the project's GitHub Releases (there
-  // is no bundled CHANGELOG — each release's notes are the changelog) and
-  // hands the renderer modal the running version + the release list. Cached in
-  // main so reopening / the auto-open probe doesn't hammer GitHub's rate limit.
-  CHANGELOG_GET: 'centraid:changelog:get',
-
-  // TEMPLATES_LIST + TEMPLATES_CLONE moved to the renderer's direct HTTP
-  // client — the gateway owns the catalog + clone (`POST /_apps/_clone`).
-
-  // Gateway-side user identity + global preferences (theme, density, accent…)
-  // moved to the renderer's direct HTTP client (renderer/gateway-client.ts)
-  // under the thin-client pivot — pure `/_centraid-user/*` reads/writes.
-  //
-  // Coding-agent detection, the runner preflight, and the custom
-  // OpenAI-compatible endpoint config + key all moved to the gateway (it's
-  // colocated with the runner): the renderer reads `/centraid/_agents/status`
-  // and `/centraid/_turn/runner-status` over HTTP.
-
-  // Automations (issue #98): the full surface — create/enable/delete +
-  // read/run/analytics + INSIGHTS_SUMMARY — moved to the renderer's direct
-  // HTTP client (renderer/gateway-client.ts) under the thin-client pivot;
-  // the gateway owns scaffold + webhook mint + stage + publish.
-} as const;
-
 export function registerIpcHandlers(): void {
   // Broadcast helper for "active gateway changed" — fires after any
   // mutation that affects the active gateway's URL/token/identity so
@@ -218,15 +76,7 @@ export function registerIpcHandlers(): void {
   ): void => {
     for (const win of BrowserWindow.getAllWindows()) {
       if (win.isDestroyed()) continue;
-      win.webContents.send(Channel.GATEWAY_CHANGED, {
-        activeGatewayId: next.activeGatewayId,
-        activeGatewayKind: next.activeGatewayKind,
-        activeGatewayLabel: next.activeGatewayLabel,
-        activeProfileDisplayName: next.activeProfileDisplayName,
-        activeProfileAvatarColor: next.activeProfileAvatarColor,
-        gatewayId: next.activeGatewayId,
-        ...detail,
-      });
+      win.webContents.send(Channel.GATEWAY_CHANGED, gatewayChangedPayload(next, detail));
     }
   };
 
@@ -261,11 +111,7 @@ export function registerIpcHandlers(): void {
   const broadcastVaultChanged = (next: DesktopSettings): void => {
     for (const win of BrowserWindow.getAllWindows()) {
       if (win.isDestroyed()) continue;
-      win.webContents.send(Channel.VAULT_CHANGED, {
-        activeGatewayId: next.activeGatewayId,
-        gatewayId: next.activeGatewayId,
-        ...(next.activeVaultId !== undefined ? { activeVaultId: next.activeVaultId } : {}),
-      });
+      win.webContents.send(Channel.VAULT_CHANGED, vaultChangedPayload(next));
     }
   };
 
