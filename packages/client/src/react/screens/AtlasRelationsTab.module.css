@@ -1,881 +1,675 @@
-/* Relations tab — the orrery (issue #441 B2). Co-located with
-   AtlasRelationsTab.tsx. A radial SVG star chart on the left (kinds on
-   concentric hop rings, fixed per-pack bearings, fill-weighted FK edges) and a
-   fixed readout rail on the right (breadcrumb, hover detail, relation-vocabulary
-   chips, legend), with a measured-fact caption strip beneath. Mobile-first: one
-   column with the rail below the chart; a two-column instrument with a sticky
-   rail appears at >=720px. SVG colours come from design tokens via classes and
-   the per-node `--node-c` custom property — never hardcoded hex. */
+/* The Map tab — a hierarchical sunburst over the vault (issue #441 B2, rebuilt
+   for #519's follow-on). Co-located with AtlasRelationsTab.tsx and shared by
+   its three leaves (chart, index, detail).
+
+   The layout is three columns that collapse to one: the ring (shape), the index
+   (names), and the detail rail (one kind). Ring and index are two renderings of
+   the SAME rung and the SAME selection — the index is not a legend, it is how
+   the map stays usable by keyboard, by screen reader, and for any name longer
+   than the arc it sits on.
+
+   Every colour is a design token or one of the per-wedge `--hue` / `--hue2` /
+   `--mix` custom properties. No hardcoded hex — `assignHues` hands each domain
+   a pair of `--c-*` tokens and the kinds inside it sweep between them.
+
+   The sweep mixes in **oklch**, not oklab. An oklab mix walks a straight line
+   through the colour solid, so teal → rose passes within a hair of neutral and
+   the middle of a 21-kind fan comes out grey. oklch rotates around the hue
+   circle instead, holding chroma the whole way. */
 
 .tab {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
 }
 
-/* ── Header — question chips on the left, detail dial on the right ──────── */
+/* ── Head: breadcrumb + the one switch ─────────────────────────────────── */
 .head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 10px 14px;
+  padding-bottom: 12px;
+  border-bottom: 0.5px solid var(--line);
 }
 
-/* ── Question chips — saved lenses above the stage ──────────────────────── */
-.questions {
+.crumbs {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-/* ── The detail dial — a segmented Simple/Standard/Everything filter. Reuses
-   the pill idiom of the question chips, but as one connected track so the
-   three positions read as a single control (one active at a time). ──────── */
-.detailDial {
-  display: inline-flex;
+  align-items: center;
   gap: 2px;
-  padding: 2px;
-  border: 0.5px solid var(--line);
-  border-radius: var(--r-pill, 999px);
-  background: var(--bg-elev);
+  min-width: 0;
 }
-.segBtn {
-  padding: 5px 12px;
+.crumb {
+  padding: 4px 8px;
   border: 0;
-  border-radius: var(--r-pill, 999px);
+  border-radius: 6px;
   background: transparent;
   color: var(--ink-3);
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   transition:
-    color 0.15s var(--ease, ease),
-    background-color 0.15s var(--ease, ease);
+    color 0.14s var(--ease, ease),
+    background-color 0.14s var(--ease, ease);
 }
-.segBtn:hover {
+.crumb:hover {
   color: var(--ink);
+  background: var(--bg-sunken);
 }
-.segBtn:focus-visible {
+.crumb:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.segBtn[aria-pressed='true'] {
+.crumb[aria-current='page'] {
   color: var(--ink);
-  background: color-mix(in oklab, var(--accent) 14%, var(--bg-elev));
+  font-weight: 560;
+  cursor: default;
 }
-.qChip {
-  padding: 6px 13px;
+.crumb[aria-current='page']:hover {
+  background: transparent;
+}
+.crumbSep {
+  color: var(--ink-4);
+  font-size: 12px;
+  user-select: none;
+}
+
+.plumbing {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 13px 0 11px;
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-pill, 999px);
+  background: var(--bg-elev);
+  color: var(--ink-3);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: color 0.14s var(--ease, ease);
+}
+.plumbing:hover {
+  color: var(--ink);
+}
+.plumbing:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.plumbingSwitch {
+  position: relative;
+  flex: none;
+  width: 25px;
+  height: 14px;
+  border-radius: var(--r-pill, 999px);
+  background: var(--ink-4);
+  transition: background-color 0.18s var(--ease, ease);
+}
+.plumbingSwitch::after {
+  content: '';
+  position: absolute;
+  inset: 2px auto 2px 2px;
+  width: 10px;
+  border-radius: var(--r-pill, 999px);
+  background: var(--bg-elev);
+  transition: transform 0.18s var(--ease, ease);
+}
+.plumbing[aria-pressed='true'] {
+  color: var(--ink);
+}
+.plumbing[aria-pressed='true'] .plumbingSwitch {
+  background: var(--accent);
+}
+.plumbing[aria-pressed='true'] .plumbingSwitch::after {
+  transform: translateX(11px);
+}
+
+/* ── Stage ─────────────────────────────────────────────────────────────── */
+.stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+@media (min-width: 840px) {
+  .stage {
+    grid-template-columns: minmax(0, 1fr) 232px;
+  }
+}
+@media (min-width: 1220px) {
+  .stage[data-detail='true'] {
+    grid-template-columns: minmax(0, 1fr) 232px 290px;
+  }
+}
+
+/* Cap the ring's width so a wide column leaves it centred rather than pinned
+   left with a field of dead space beside it. */
+.ringWrap {
+  min-width: 0;
+  max-width: 560px;
+  margin-inline: auto;
+}
+.ring {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 60vh;
+  touch-action: manipulation;
+}
+
+/* ── Paint ──────────────────────────────────────────────────────────────
+   One rule computes the colour every surface of a wedge uses. `--hue` is the
+   domain's own hue and `--hue2` the next one on the ramp; `--mix` says how far
+   along that sweep this particular kind sits (100% at the domain rung, where a
+   domain keeps its hue pure). See the oklch note at the top of this file. */
+.wedge,
+.row,
+.bezel,
+.core,
+.detail,
+.hop {
+  --paint: color-mix(in oklch, var(--hue) var(--mix, 100%), var(--hue2, var(--hue)));
+}
+
+/* ── The ring ──────────────────────────────────────────────────────────── */
+.guide {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 1;
+  stroke-opacity: 0.45;
+}
+
+.wedge {
+  cursor: pointer;
+}
+.wedge:focus {
+  outline: none;
+}
+/* The full-span floor band: the hit target. A wedge holding two rows is exactly
+   as easy to click as one holding forty thousand. */
+.wedgeFloor {
+  fill: var(--paint);
+  fill-opacity: 0.14;
+  transition: fill-opacity 0.16s var(--ease, ease);
+}
+.wedgeBody {
+  fill: var(--paint);
+  fill-opacity: 1;
+  stroke: var(--bg);
+  stroke-width: 1.5;
+  transition:
+    fill-opacity 0.16s var(--ease, ease),
+    filter 0.16s var(--ease, ease);
+}
+/* The lit surface: a highlight along the inner edge falling to a deepened rim.
+   Not data — it is what stops a flat fill reading as a paint chip. */
+.wedgeSheen {
+  pointer-events: none;
+  mix-blend-mode: soft-light;
+}
+.wedge:hover .wedgeFloor,
+.wedgeHot .wedgeFloor {
+  fill-opacity: 0.3;
+}
+.wedge:hover .wedgeBody,
+.wedgeHot .wedgeBody {
+  fill-opacity: 1;
+  filter: drop-shadow(0 0 7px color-mix(in oklab, var(--paint) 65%, transparent));
+}
+/* Empty is a STATE, drawn as a bright dashed outline at the floor radius —
+   present, named, and clickable. The chroma lives in the STROKE, not a dimmed
+   fill: a 14%-opacity amber on graphite is brown, and a domain that has nothing
+   in it yet must not be the drabbest thing on the ring. */
+.wedgeEmpty .wedgeBody {
+  fill: var(--paint);
+  fill-opacity: 0.09;
+  stroke: var(--paint);
+  stroke-width: 1.75;
+  stroke-opacity: 1;
+  stroke-dasharray: 4 3;
+  filter: drop-shadow(0 0 4px color-mix(in oklab, var(--paint) 45%, transparent));
+}
+.wedgeEmpty:hover .wedgeBody,
+.wedgeEmpty.wedgeHot .wedgeBody {
+  fill-opacity: 0.3;
+  stroke-dasharray: none;
+}
+.wedgeSel .wedgeBody {
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: none;
+}
+.wedge:focus-visible .wedgeBody {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-dasharray: none;
+}
+.wedgeLabel {
+  fill: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  font-weight: 560;
+  letter-spacing: -0.005em;
+  pointer-events: none;
+}
+
+/* ── The bezel — every domain, at a bearing that never moves ───────────── */
+.bezel {
+  cursor: pointer;
+}
+.bezel:focus {
+  outline: none;
+}
+.bezelArc {
+  fill: var(--paint);
+  fill-opacity: 0.62;
+  transition:
+    fill-opacity 0.16s var(--ease, ease),
+    filter 0.16s var(--ease, ease);
+}
+.bezel:hover .bezelArc {
+  fill-opacity: 1;
+}
+/* Where you are: full chroma plus a bloom, so the ring you are standing in is
+   findable on the rim without reading a single label. */
+.bezelHere .bezelArc {
+  fill-opacity: 1;
+  filter: drop-shadow(0 0 6px color-mix(in oklab, var(--paint) 80%, transparent));
+}
+/* An empty domain keeps its hue and loses only weight — the rim must not turn
+   grey the moment a domain has no rows. */
+.bezelEmpty .bezelArc {
+  fill-opacity: 0.3;
+}
+.bezel:focus-visible .bezelArc {
+  fill-opacity: 1;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+.bezelName {
+  fill: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+.bezelHere .bezelName {
+  fill: var(--ink);
+}
+
+/* ── The centre plate ──────────────────────────────────────────────────── */
+.core {
+  cursor: pointer;
+}
+.core:focus {
+  outline: none;
+}
+.coreRoot {
+  cursor: default;
+}
+/* The plate takes a wash of whichever domain you are standing in, so the centre
+   answers "where am I" in colour before you read the name. */
+.corePlate {
+  fill: color-mix(in oklab, var(--paint) 12%, var(--bg-sunken));
+  stroke: color-mix(in oklab, var(--paint) 55%, var(--line-strong));
+  stroke-width: 1.5;
+  transition:
+    fill 0.2s var(--ease, ease),
+    stroke 0.16s var(--ease, ease);
+}
+.core:not(.coreRoot):hover .corePlate {
+  stroke: var(--accent);
+}
+.core:focus-visible .corePlate {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+.coreName {
+  fill: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.coreNum {
+  fill: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.coreSub {
+  fill: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+.coreUp {
+  fill: var(--ink-4);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+/* ── The index — the same rung, as names ───────────────────────────────── */
+.index {
+  min-width: 0;
+}
+.indexHead {
+  margin: 0 0 8px;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-2);
+  font-family: var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 0.12s var(--ease, ease),
+    color 0.12s var(--ease, ease);
+}
+.row:hover,
+.rowHot {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+.rowSel {
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+  color: var(--ink);
+}
+.row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.rowDot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--r-pill, 999px);
+  background: var(--paint);
+  box-shadow: 0 0 5px color-mix(in oklab, var(--paint) 60%, transparent);
+}
+/* Hollow, but in the kind's OWN colour — the dot still names its domain. */
+.rowEmpty .rowDot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--paint);
+}
+.rowName {
+  overflow: hidden;
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.rowNum {
+  margin-left: auto;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.rowEmpty .rowNum {
+  color: var(--ink-4);
+}
+
+/* ── The detail rail ───────────────────────────────────────────────────── */
+.detail {
+  padding: 15px 15px 14px;
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-sm);
+}
+@media (min-width: 1220px) {
+  .detail {
+    position: sticky;
+    top: 16px;
+  }
+}
+.detailTop {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.detailName {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.018em;
+}
+.detailPhys {
+  margin: 2px 0 0;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.detailClose {
+  margin-left: auto;
+  padding: 3px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
+  line-height: 0;
+  cursor: pointer;
+}
+.detailClose:hover {
+  color: var(--ink);
+  background: var(--bg-sunken);
+}
+.detailClose:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.detailBlurb {
+  margin: 10px 0 0;
+  color: var(--ink-2);
+  font-size: 13.5px;
+}
+.detailStat {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 13px 0 0;
+  padding-top: 12px;
+  border-top: 0.5px solid var(--line);
+}
+.detailStat b {
+  font-family: var(--font-mono);
+  font-size: 25px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+.detailStat span {
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+.detailSect {
+  margin-top: 15px;
+  padding-top: 12px;
+  border-top: 0.5px solid var(--line);
+}
+.detailSectHead {
+  margin: 0 0 9px;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+.detailNote {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+.detailBtn {
+  width: 100%;
+  margin-top: 14px;
+  padding: 8px 12px;
+  border: 0.5px solid var(--accent);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 520;
+  cursor: pointer;
+  transition: background-color 0.14s var(--ease, ease);
+}
+.detailBtn:hover {
+  background: color-mix(in oklab, var(--accent) 26%, transparent);
+}
+.detailBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.samples {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sampleRow {
+  overflow: hidden;
+  padding: 6px 9px;
+  border-radius: 7px;
+  background: var(--bg-sunken);
+  color: var(--ink-2);
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sampleMore {
+  padding: 2px 9px;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* The FK graph, as a walkable list instead of an arc thicket. */
+.hops {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.hop {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px 4px 9px;
   border: 0.5px solid var(--line);
   border-radius: var(--r-pill, 999px);
   background: var(--bg-elev);
   color: var(--ink-2);
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: 12.5px;
   cursor: pointer;
   transition:
-    border-color 0.15s var(--ease, ease),
-    color 0.15s var(--ease, ease),
-    background-color 0.15s var(--ease, ease);
+    color 0.14s var(--ease, ease),
+    border-color 0.14s var(--ease, ease);
 }
-.qChip:hover {
-  border-color: var(--ink-4);
+.hop:hover {
   color: var(--ink);
+  border-color: var(--line-strong);
 }
-.qChip:focus-visible {
+.hop:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.qChip[aria-pressed='true'] {
-  border-color: var(--accent);
-  color: var(--ink);
-  background: color-mix(in oklab, var(--accent) 10%, var(--bg-elev));
+.hopDot {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: var(--r-pill, 999px);
+  background: var(--paint);
+}
+.hopNum {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
 }
 
-/* ── Empty / not-loaded state ──────────────────────────────────────────── */
+/* ── Caption ───────────────────────────────────────────────────────────── */
+.caption {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 22px;
+  padding-top: 12px;
+  border-top: 0.5px solid var(--line);
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+.captionItem {
+  display: inline;
+}
+.captionNum {
+  margin-right: 4px;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Empty state ───────────────────────────────────────────────────────── */
 .empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  padding: 48px 24px;
+  padding: 48px 16px;
+  border: 0.5px dashed var(--line-strong);
+  border-radius: 10px;
   text-align: center;
-  color: var(--ink-3);
 }
 .emptyIcon {
   color: var(--ink-4);
+  line-height: 0;
 }
 .emptyText {
-  margin: 0;
   max-width: 42ch;
-  font: var(--t-small);
-  color: var(--ink-3);
-}
-
-/* ── Layout ─────────────────────────────────────────────────────────────── */
-.instrument {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
-}
-@media (min-width: 720px) {
-  .instrument {
-    grid-template-columns: minmax(0, 1fr) 300px;
-    align-items: start;
-  }
-}
-
-/* The instrument well — a quiet vignette the orrery sits inside. Layered
-   radial washes from theme surfaces + a whisper of accent behind the plate;
-   both endpoints are tokens so every theme keeps its own atmosphere. */
-.stage {
-  position: relative;
-  min-width: 0;
-  overflow-x: auto;
-  border: 0.5px solid var(--line);
-  border-radius: var(--r-card, 14px);
-  background:
-    radial-gradient(
-      circle at 50% 46%,
-      color-mix(in oklab, var(--accent) 5%, transparent),
-      transparent 58%
-    ),
-    radial-gradient(circle at 50% 50%, var(--bg-elev) 30%, var(--bg-sunken) 100%);
-  box-shadow: inset 0 0 72px -24px color-mix(in oklab, var(--accent-midnight) 32%, transparent);
-}
-.orrery {
-  display: block;
-  width: 100%;
-  height: auto;
-  min-width: 300px;
-  /* Pointer events own touch here — panning must not scroll the page and
-     pinch must not page-zoom, so the browser hands us every gesture. */
-  touch-action: none;
-  cursor: grab;
-}
-.orrery:active {
-  cursor: grabbing;
-}
-
-/* ── Zoom controls — overlaid HTML buttons, bottom-right of the well ─────── */
-.zoomCtl {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  z-index: 1;
-}
-.zoomBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border: 0.5px solid var(--line);
-  border-radius: var(--r-pill, 999px);
-  background: var(--bg-elev);
-  color: var(--ink-2);
-  font-family: var(--font-mono);
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-  transition:
-    color 0.15s var(--ease, ease),
-    border-color 0.15s var(--ease, ease);
-}
-.zoomBtn:hover {
-  color: var(--ink);
-  border-color: var(--accent);
-}
-.zoomBtn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* ── Readout rail ───────────────────────────────────────────────────────── */
-.readout {
-  display: flex;
-  flex-direction: column;
-  border: 0.5px solid var(--line);
-  border-radius: var(--r-card, 14px);
-  background: var(--bg-elev);
-  overflow: hidden;
-}
-@media (min-width: 720px) {
-  .readout {
-    position: sticky;
-    top: 8px;
-    max-height: calc(100vh - 24px);
-    overflow-y: auto;
-  }
-}
-.roSec {
-  padding: 14px 16px;
-  border-bottom: 0.5px solid var(--line);
-}
-.roSec:last-child {
-  border-bottom: 0;
-}
-.roLabel {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 0 10px;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-  color: var(--ink-4);
-}
-/* hairline rule completing each section label — instrument-panel engraving */
-.roLabel::after {
-  content: '';
-  flex: 1;
-  height: 0.5px;
-  background: var(--line);
-}
-
-/* breadcrumb */
-.crumbs {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 3px;
-}
-.crumbWrap {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
-.crumbSep {
-  color: var(--ink-4);
-  font-size: 11px;
-}
-.crumb {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  background: none;
-  border: 0;
-  padding: 2px 3px;
-  cursor: pointer;
-  color: var(--ink-3);
-  border-bottom: 1px solid transparent;
-}
-.crumb:hover:not(:disabled) {
-  color: var(--ink);
-  border-bottom-color: var(--line-strong);
-}
-.crumbCurrent {
-  color: var(--accent);
-  cursor: default;
-}
-.backBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 11px;
-  padding: 5px 10px;
-  border-radius: var(--r-pill, 999px);
-  border: 0.5px solid var(--line);
-  background: var(--bg-sunken);
-  color: var(--ink-2);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.03em;
-  cursor: pointer;
-  transition: color 0.15s var(--ease, ease);
-}
-.backBtn:hover:not(:disabled) {
-  color: var(--ink);
-  border-color: var(--accent);
-}
-.backBtn:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-/* hover / focus detail */
-.detail {
-  min-height: 150px;
-}
-.dEmpty {
   margin: 0;
-  font: var(--t-small);
   color: var(--ink-3);
-  line-height: 1.55;
-}
-.dKind {
-  margin: 0 0 3px;
-  font: var(--t-title);
-  color: var(--ink);
-  word-break: break-word;
-}
-.dKindCol {
-  color: var(--ink-4);
-}
-.dSig {
-  margin: 0 0 12px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--ink-2);
-  word-break: break-all;
-  line-height: 1.5;
-}
-/* the hovered kind's pack hue — ties the readout to its compass sector */
-.dPackDot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--pack-c, var(--ink-4));
-  margin-right: 6px;
-  vertical-align: 1px;
-}
-.dArrow {
-  color: var(--accent);
-  padding: 0 3px;
-}
-.dFigs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px;
-  margin: 0 0 12px;
-}
-.dFig {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.dFigN {
-  font-family: var(--font-display);
-  font-size: 22px;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink);
-}
-.dFigNGhost {
-  color: var(--ink-4);
-}
-.dFigK {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--ink-4);
-}
-.dNote {
-  margin: 0;
-  padding-left: 9px;
-  border-left: 2px solid var(--line);
-  font: var(--t-small);
-  color: var(--ink-2);
-  line-height: 1.5;
-}
-
-/* the plain-language lede — a friendly-name sentence (edge readout) or a curated
-   blurb (node readout), leading the readout above the demoted SQL detail */
-.dLede {
-  margin: 0 0 12px;
-  font: var(--t-small);
-  color: var(--ink);
-  line-height: 1.5;
-}
-.dLede b {
-  font-weight: 600;
-}
-
-/* "A few of yours" — up to three real sample rows of the current centre */
-.samples {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 5px;
-}
-.sampleRow {
-  font-family: var(--font-sans);
-  font-size: 12px;
-  color: var(--ink-2);
-  line-height: 1.35;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.sampleMore {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  color: var(--ink-4);
-}
-
-/* relation-vocabulary chips */
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-bottom: 10px;
-}
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border: 0.5px solid var(--line);
-  border-radius: var(--r-pill, 999px);
-  background: transparent;
-  color: var(--ink-2);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  cursor: pointer;
-  transition:
-    border-color 0.15s var(--ease, ease),
-    color 0.15s var(--ease, ease),
-    opacity 0.15s var(--ease, ease);
-}
-.chip:hover {
-  border-color: var(--ink-4);
-  color: var(--ink);
-}
-.chip[aria-pressed='false'] {
-  opacity: 0.55;
-}
-.chip[aria-pressed='true'] {
-  border-color: var(--accent);
-  color: var(--ink);
-}
-.chipDot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--ink-4);
-  flex: none;
-}
-.chip[aria-pressed='true'] .chipDot {
-  background: var(--accent);
-}
-.chipCount {
-  color: var(--ink-4);
-  font-size: 9.5px;
-  font-variant-numeric: tabular-nums;
-}
-.roFoot {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: 11px;
-  line-height: 1.55;
-  color: var(--ink-3);
-}
-.roFoot b {
-  color: var(--ink-2);
-  font-weight: 500;
-}
-
-/* legend */
-.legend {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 8px;
-}
-.lgRow {
-  display: grid;
-  grid-template-columns: 24px 1fr;
-  gap: 9px;
-  align-items: center;
-}
-.lgSwatch {
-  height: 3px;
-  border-radius: 2px;
-  align-self: center;
-}
-.lgLive {
-  height: 4px;
-  background: var(--ink-3);
-}
-.lgGhost {
-  height: 0;
-  border-top: 1.5px dotted var(--line-strong);
-}
-.lgAuthored {
-  height: 0;
-  border-top: 2px dashed var(--accent);
-}
-.lgSelf {
-  height: 10px;
-  width: 10px;
-  border-radius: 50%;
-  border: 1.2px solid var(--ink-3);
-  justify-self: center;
-}
-/* concentric rings — the hop-distance graticule the legend now names */
-.lgRing {
-  height: 12px;
-  width: 12px;
-  border-radius: 50%;
-  border: 1.2px solid var(--ink-4);
-  box-shadow: inset 0 0 0 3px transparent;
-  outline: 1.2px solid var(--line-strong);
-  outline-offset: 1.5px;
-  justify-self: center;
-}
-.lgText {
-  font-family: var(--font-sans);
-  font-size: 10.5px;
-  color: var(--ink-3);
-  line-height: 1.35;
-}
-.lgText b {
-  display: block;
-  color: var(--ink);
-  font-weight: 500;
-}
-
-/* ── Caption strip — the instrument's measured-fact footer ──────────────── */
-.caption {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px 34px;
-  padding: 13px 18px;
-  border: 0.5px solid var(--line);
-  border-radius: var(--r-card, 14px);
-  background: var(--bg-elev);
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--ink-4);
-}
-.captionItem {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  white-space: nowrap;
-}
-.captionNum {
-  font-family: var(--font-display);
-  font-size: 17px;
-  line-height: 1;
-  letter-spacing: 0;
-  color: var(--ink);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-/* ── SVG parts ──────────────────────────────────────────────────────────── */
-
-/* Reveal choreography — one orchestrated bloom on mount: graticule + dial
-   fade up, rings of kinds bloom outward (per-node --dly from the chart),
-   edges fade in last. Every animation fills backwards so late elements hold
-   at zero until their turn. */
-@keyframes atlasFadeIn {
-  from {
-    opacity: 0;
-  }
-}
-@keyframes atlasBloom {
-  from {
-    opacity: 0;
-    transform: scale(0);
-  }
-}
-@keyframes atlasBreathe {
-  50% {
-    opacity: 0.16;
-  }
-}
-@keyframes atlasSpin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.graticule {
-  animation: atlasFadeIn 0.6s var(--ease, ease) backwards;
-}
-.ringGuide {
-  fill: none;
-  stroke: var(--line);
-  stroke-width: 1;
-}
-/* the unreached ring drifts — a barely-perceptible 4-minute revolution */
-.ringGuideDashed {
-  stroke-dasharray: 2 6;
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: atlasSpin 240s linear infinite;
-}
-.ringTick {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  fill: var(--ink-4);
-  paint-order: stroke;
-  stroke: var(--bg-sunken);
-  stroke-width: 3px;
-  stroke-opacity: 0.85;
-}
-
-/* the dial — pack sector arcs + curved names, painted in the pack hue */
-.dial {
-  animation: atlasFadeIn 0.7s var(--ease, ease) 0.12s backwards;
-}
-.sector {
-  transition: opacity 0.2s var(--ease, ease);
-}
-.sectorArc {
-  fill: none;
-  stroke: var(--sector-c, var(--ink-4));
-  stroke-opacity: 0.42;
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  transition: stroke-opacity 0.2s var(--ease, ease);
-}
-.sectorTick {
-  stroke: var(--line-strong);
-  stroke-width: 1;
-}
-.sectorName {
-  font-family: var(--font-mono);
-  font-size: 8px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  fill: var(--sector-c, var(--ink-4));
-  fill-opacity: 0.75;
-  transition: fill-opacity 0.2s var(--ease, ease);
-}
-/* hovering a kind lights its whole compass sector */
-.sectorHot .sectorArc {
-  stroke-opacity: 1;
-  stroke-width: 2.5;
-}
-.sectorHot .sectorName {
-  fill-opacity: 1;
-}
-/* every kind in this pack is hidden from the current centre (unreached
-   machinery) — keep the bearing, drop the presence */
-.sectorEmpty {
-  opacity: 0.3;
-}
-
-.edges {
-  transition: opacity 0.2s var(--ease, ease);
-}
-.edgesDimmed .edge:not(.edgeHot) {
-  opacity: 0.12;
-}
-.edge {
-  fill: none;
-  stroke-linecap: round;
-  pointer-events: none;
-  animation: atlasFadeIn 0.5s var(--ease, ease) backwards;
-  animation-delay: var(--dly, 360ms);
-}
-.edgeLive {
-  stroke: var(--ink-3);
-}
-.edgeGhost {
-  stroke: var(--line-strong);
-  stroke-width: 0.8;
-  stroke-dasharray: 1.5 4.5;
-}
-.edgeHot {
-  opacity: 1 !important;
-  stroke: var(--accent);
-  filter: drop-shadow(0 0 3px color-mix(in oklab, var(--accent) 55%, transparent));
-}
-.edgeHit {
-  fill: none;
-  stroke: transparent;
-  stroke-width: 11;
-  cursor: pointer;
-}
-
-.authoredArc {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 1.4;
-  stroke-dasharray: 5 4;
-  stroke-linecap: round;
-  opacity: 0.85;
-  pointer-events: none;
-}
-
-.coreGlow {
-  fill: var(--accent);
-  opacity: 0.1;
-  animation: atlasBreathe 7s ease-in-out infinite;
-}
-.coreBezel {
-  animation: atlasFadeIn 0.6s var(--ease, ease) 0.1s backwards;
-}
-.coreTick {
-  stroke: var(--line-strong);
-  stroke-width: 1;
-}
-.coreTickMajor {
-  stroke: var(--ink-4);
-}
-.coreRingOuter {
-  fill: none;
-  stroke: var(--accent);
-  stroke-opacity: 0.28;
-  stroke-width: 0.75;
-}
-.corePlate {
-  fill: var(--bg-sunken);
-  stroke: var(--accent);
-  stroke-width: 1.4;
-}
-.coreName {
-  font-family: var(--font-display);
-  font-size: 13px;
-  fill: var(--accent);
-}
-.coreK {
-  font-family: var(--font-mono);
-  font-size: 7px;
-  letter-spacing: 0.14em;
-  fill: var(--ink-4);
-}
-.coreCaption {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.02em;
-  fill: var(--ink-3);
-  paint-order: stroke;
-  stroke: var(--bg-sunken);
-  stroke-width: 3px;
-  stroke-opacity: 0.85;
-}
-.coreCaptionLit {
-  fill: var(--accent);
-}
-
-.node {
-  cursor: pointer;
-}
-.node:focus {
-  outline: none;
-}
-.nodeBody {
-  fill: var(--node-c, var(--ink-3));
-  fill-opacity: 0.55;
-  stroke: var(--node-c, var(--ink-3));
-  stroke-opacity: 0.9;
-  stroke-width: 1;
-  transition: fill-opacity 0.15s var(--ease, ease);
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: atlasBloom 0.45s var(--ease, ease) backwards;
-  animation-delay: var(--dly, 0ms);
-}
-.nodeHalo {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 1.5;
-  opacity: 0;
-  transition: opacity 0.15s var(--ease, ease);
-}
-.node:hover .nodeHalo,
-.node:focus-visible .nodeHalo,
-.nodeHot .nodeHalo {
-  opacity: 0.9;
-}
-.nodeSelfcurl {
-  fill: none;
-  stroke: var(--node-c, var(--ink-3));
-  stroke-width: 1.1;
-}
-.nodeHit {
-  fill: transparent;
-}
-.nodeLabel {
-  font-family: var(--font-mono);
-  font-size: 7.6px;
-  letter-spacing: 0.02em;
-  fill: var(--ink-3);
-  paint-order: stroke;
-  stroke: var(--bg-sunken);
-  stroke-width: 2.5px;
-  stroke-opacity: 0.7;
-  pointer-events: none;
-  opacity: 0.6;
-  transition:
-    fill 0.15s var(--ease, ease),
-    opacity 0.15s var(--ease, ease);
-  animation: atlasFadeIn 0.4s var(--ease, ease) backwards;
-  animation-delay: calc(var(--dly, 0ms) + 140ms);
-}
-.nodeLabelBig {
-  font-size: 9px;
-  fill: var(--ink-2);
-  opacity: 1;
-}
-.node:hover .nodeLabel,
-.node:focus-visible .nodeLabel,
-.nodeHot .nodeLabel {
-  fill: var(--accent);
-  opacity: 1;
-}
-
-/* the physical SQL name, shown only at the Everything level — a quiet mono
-   second line under the friendly label, demoted so the human name still leads */
-.nodeSubLabel {
-  font-family: var(--font-mono);
-  font-size: 5.6px;
-  letter-spacing: 0.02em;
-  fill: var(--ink-4);
-  paint-order: stroke;
-  stroke: var(--bg-sunken);
-  stroke-width: 2px;
-  stroke-opacity: 0.7;
-  pointer-events: none;
-  opacity: 0.72;
-  transition: opacity 0.15s var(--ease, ease);
-  animation: atlasFadeIn 0.4s var(--ease, ease) backwards;
-  animation-delay: calc(var(--dly, 0ms) + 180ms);
-}
-.node:hover .nodeSubLabel,
-.node:focus-visible .nodeSubLabel,
-.nodeHot .nodeSubLabel {
-  fill: var(--ink-2);
-  opacity: 1;
-}
-
-/* a question dims every node it does not light — the same recede a hover gives
-   the edge layer, applied to whole nodes so the lit set reads at a glance */
-.nodeDim {
-  opacity: 0.16;
-  transition: opacity 0.2s var(--ease, ease);
+  font-size: 13.5px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .edges,
-  .nodeBody,
-  .nodeHalo,
-  .nodeLabel,
-  .nodeSubLabel,
-  .nodeDim,
-  .chip,
-  .qChip,
-  .segBtn,
-  .backBtn {
-    transition-duration: 0.01ms;
-  }
-  .graticule,
-  .dial,
-  .coreBezel,
-  .coreGlow,
-  .ringGuideDashed,
-  .edge,
-  .nodeBody,
-  .nodeLabel,
-  .nodeSubLabel {
-    animation: none;
+  .wedgeFloor,
+  .wedgeBody,
+  .bezelArc,
+  .corePlate,
+  .row,
+  .crumb,
+  .hop,
+  .detailBtn,
+  .plumbing,
+  .plumbingSwitch,
+  .plumbingSwitch::after {
+    transition-duration: 0.001ms;
   }
 }
