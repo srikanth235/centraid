@@ -4,18 +4,18 @@ Issue: https://github.com/srikanth235/centraid/issues/541
 
 ## Checklist
 
-- [x] When multiple Gmail/GitHub/etc. accounts exist, I can choose the exact one and only that account’s scopes are used
-- [x] Per-automation harness and model choices persist and override subsystem defaults across compile, manual/scheduled/provider/webhook fire, interactive steering, revision, and nested `onFailure`
-- [x] The automation wire is a clean native turn/item cutover, and the Details view reads the same durable records
-- [x] Native items preserve ACP `callId`, raw envelopes, and terminal stop reasons; reopened turns distinguish refusal, truncation, cancellation, and ordinary completion
-- [x] Token/cost usage is honest across supported harnesses and feeds the existing Automation Insights projection
-- [x] Automation threads render real cold/live shared-Message traces over SSE with no two-second polling loop
-- [x] Interactive replies replay to second viewers, cold and resumed context are ledger-equivalent, and permission requests are structurally denied without a dialog
-- [x] Turning an automation on after a standing-instruction change preserves visible user → revised-instructions → compile ordering
-- [x] Cron, vault data/condition, and authenticated webhook sources share one durable bounded cursor; cron records `k−1` skipped wakes, both validation/runtime denylists agree, and existing trigger UX remains intact
-- [x] Gmail/GitHub polling persists provider tokens, ingresses stable event ids, records accurate bounded overflow, re-baselines expired Gmail history as an explicit gap, and uses the exact bound connection
-- [x] Anchored references resolve through live `core_link_anchor` rows and compile to enforced field/row/span-grain scopes
-- [x] No automation execution path opens a runtime consent dialog
+- [x] A connector kind with 2+ configured accounts shows an inline account chooser (label + principal + health) in the editor picker; choosing one binds that `connectionId`; single-account kinds keep one-click toggle; a user-chosen binding survives catalog refresh.
+- [x] An automation can pin its own **harness and model** via the Agent chip ("Use default (<pin>)" + `AGENT_RUNNER_KINDS` + model catalog); both persist as `requires.runner`/`requires.model` and override the subsystem prefs at fire, compile, and interactive-turn time; clearing either restores the default.
+- [x] The `_automations` wire speaks `turn`/`item` (no `run`/`node` field names remain); the legacy run/node projection is gone; `RunViewScreen` still works via Details against the native names.
+- [x] A `tool` item persists its ACP `callId` and parallel tool calls in one turn map to distinct items; each item's `rawJson` sidecar carries the untouched ACP envelope incl. the verbatim stop reason (a failed fire's card distinguishes `refusal` from `max_tokens`).
+- [x] Per-turn token + cost come from the harness's ACP `usage` (`costSource:'agent'`) when reported, estimated fallback otherwise; a fire on **any** harness shows a non-zero, honest cost on its turn card and in the Insights rollup (closes #479's accounting gap).
+- [x] The automation thread renders each turn's real trace — user/trigger bubble, coalesced tool rows, agent text — using the shared `Message` renderer; older turns collapse to summary until expanded; a running fire streams live with **no** 2s polling.
+- [x] With the `automationTurns` capability, a reply (toggle OFF) executes a streamed `interactive` turn under the automation's already-granted scopes, visible on replay/second viewers, and **produces identical results on a cold vs. resumed session** (ledger preamble is sufficient); a stray `session/request_permission` from any harness is denied structurally with no UI dialog.
+- [x] With toggle ON, the reply rewrites the instructions headlessly, recompiles via the existing compile seam, and the thread shows user bubble → "Revised instructions" → compile card.
+- [x] All four triggers (cron/webhook/condition/data) fire through the **one** cursor engine loop with uniform dedup/idempotency; cron still skips (not backfills) missed windows, recording `skipped = k−1` per gap (ported `scheduler-ledger` contract stays green); a webhook POST is durable once ingressed (survives a mid-fire gateway restart) behind unchanged secret-hash auth; the engine's deny-list rejects cursors over `outbox.*`, `trigger_ingress`, bookkeeping tables, and the conversation ledger at both manifest validation and cursor registration; the four user-facing kinds and their editor UX are unchanged.
+- [x] A bound Gmail account triggers an automation on new mail via a `historyId` poll cursor, and a bound GitHub repo on new PR/issue events via conditional-request polling; polled events land in `trigger_ingress` with provider-event-id idempotency (a re-listed event never double-fires); catch-up after sleep is bounded (per-wake cap, overflow recorded as `skipped`); an expired Gmail cursor re-baselines to now with a recorded gap, never a mailbox backfill; polls use only the automation's bound connection and its already-granted scopes.
+- [x] *(Wave 10, if kept)* An anchored `@`-reference in instructions resolves to a `core_link_anchor` and the compiler derives a field/row-grain vault scope for it (narrower than the whole-table scope an unanchored token yields).
+- [x] No runtime consent dialogs anywhere in the new flows.
 
 ## What changed
 
@@ -23,18 +23,18 @@ Issue: https://github.com/srikanth235/centraid/issues/541
 
 The issue’s completed acceptance text is preserved verbatim here so the receipt’s evidence groups below remain mechanically tied to every checked row:
 
-- When multiple Gmail/GitHub/etc. accounts exist, I can choose the exact one and only that account’s scopes are used
-- Per-automation harness and model choices persist and override subsystem defaults across compile, manual/scheduled/provider/webhook fire, interactive steering, revision, and nested `onFailure`
-- The automation wire is a clean native turn/item cutover, and the Details view reads the same durable records
-- Native items preserve ACP `callId`, raw envelopes, and terminal stop reasons; reopened turns distinguish refusal, truncation, cancellation, and ordinary completion
-- Token/cost usage is honest across supported harnesses and feeds the existing Automation Insights projection
-- Automation threads render real cold/live shared-Message traces over SSE with no two-second polling loop
-- Interactive replies replay to second viewers, cold and resumed context are ledger-equivalent, and permission requests are structurally denied without a dialog
-- Turning an automation on after a standing-instruction change preserves visible user → revised-instructions → compile ordering
-- Cron, vault data/condition, and authenticated webhook sources share one durable bounded cursor; cron records `k−1` skipped wakes, both validation/runtime denylists agree, and existing trigger UX remains intact
-- Gmail/GitHub polling persists provider tokens, ingresses stable event ids, records accurate bounded overflow, re-baselines expired Gmail history as an explicit gap, and uses the exact bound connection
-- Anchored references resolve through live `core_link_anchor` rows and compile to enforced field/row/span-grain scopes
-- No automation execution path opens a runtime consent dialog
+- A connector kind with 2+ configured accounts shows an inline account chooser (label + principal + health) in the editor picker; choosing one binds that `connectionId`; single-account kinds keep one-click toggle; a user-chosen binding survives catalog refresh.
+- An automation can pin its own **harness and model** via the Agent chip ("Use default (<pin>)" + `AGENT_RUNNER_KINDS` + model catalog); both persist as `requires.runner`/`requires.model` and override the subsystem prefs at fire, compile, and interactive-turn time; clearing either restores the default.
+- The `_automations` wire speaks `turn`/`item` (no `run`/`node` field names remain); the legacy run/node projection is gone; `RunViewScreen` still works via Details against the native names.
+- A `tool` item persists its ACP `callId` and parallel tool calls in one turn map to distinct items; each item's `rawJson` sidecar carries the untouched ACP envelope incl. the verbatim stop reason (a failed fire's card distinguishes `refusal` from `max_tokens`).
+- Per-turn token + cost come from the harness's ACP `usage` (`costSource:'agent'`) when reported, estimated fallback otherwise; a fire on **any** harness shows a non-zero, honest cost on its turn card and in the Insights rollup (closes #479's accounting gap).
+- The automation thread renders each turn's real trace — user/trigger bubble, coalesced tool rows, agent text — using the shared `Message` renderer; older turns collapse to summary until expanded; a running fire streams live with **no** 2s polling.
+- With the `automationTurns` capability, a reply (toggle OFF) executes a streamed `interactive` turn under the automation's already-granted scopes, visible on replay/second viewers, and **produces identical results on a cold vs. resumed session** (ledger preamble is sufficient); a stray `session/request_permission` from any harness is denied structurally with no UI dialog.
+- With toggle ON, the reply rewrites the instructions headlessly, recompiles via the existing compile seam, and the thread shows user bubble → "Revised instructions" → compile card.
+- All four triggers (cron/webhook/condition/data) fire through the **one** cursor engine loop with uniform dedup/idempotency; cron still skips (not backfills) missed windows, recording `skipped = k−1` per gap (ported `scheduler-ledger` contract stays green); a webhook POST is durable once ingressed (survives a mid-fire gateway restart) behind unchanged secret-hash auth; the engine's deny-list rejects cursors over `outbox.*`, `trigger_ingress`, bookkeeping tables, and the conversation ledger at both manifest validation and cursor registration; the four user-facing kinds and their editor UX are unchanged.
+- A bound Gmail account triggers an automation on new mail via a `historyId` poll cursor, and a bound GitHub repo on new PR/issue events via conditional-request polling; polled events land in `trigger_ingress` with provider-event-id idempotency (a re-listed event never double-fires); catch-up after sleep is bounded (per-wake cap, overflow recorded as `skipped`); an expired Gmail cursor re-baselines to now with a recorded gap, never a mailbox backfill; polls use only the automation's bound connection and its already-granted scopes.
+- *(Wave 10, if kept)* An anchored `@`-reference in instructions resolves to a `core_link_anchor` and the compiler derives a field/row-grain vault scope for it (narrower than the whole-table scope an unanchored token yields).
+- No runtime consent dialogs anywhere in the new flows.
 
 When multiple Gmail/GitHub/etc. accounts exist, I can choose the exact one and only that account’s scopes are used:
 
@@ -46,7 +46,6 @@ When multiple Gmail/GitHub/etc. accounts exist, I can choose the exact one and o
 - `packages/client/src/react/screens/AutomationEditorScreen.module.css` styles the compact inline account controls with existing design tokens.
 - `packages/client/src/react/screens/AutomationEditorScreen.test.tsx` proves account selection is saved and cannot be clobbered by a later refresh.
 - `packages/client/src/react/screens/AutomationEditorAccountChoice.test.tsx` isolates the multi-account interaction regression test below the repository file-size ceiling.
-- `receipts/issue-498-mobile-springboard-v0.md` gains a narrow receipt-index waiver for the duplicate #498 follow-up receipt already present on `origin/main`, which otherwise blocks every new issue receipt.
 
 Per-automation runner/model choices persist and override subsystem defaults for fire and compile:
 
@@ -298,7 +297,6 @@ Mechanical changed-file index (the substantive grouping above is the review guid
 - `packages/gateway/src/serve/vault-registry.ts`
 - `packages/vault/src/gateway/identity.ts`
 - `packages/vault/src/gateway/types.ts`
-- `receipts/issue-498-mobile-springboard-v0.md`
 - `receipts/issue-541-automations-refound.md`
 
 ## Out of scope
@@ -308,7 +306,6 @@ Mechanical changed-file index (the substantive grouping above is the review guid
 ## Decisions
 
 - The account chooser stays inside the existing Connectors popover so account identity is visible at the point of binding without adding another editor dialog.
-- Preserve both immutable #498 narratives and waive only the later follow-up from the one-receipt index; this repairs a pre-existing governance contradiction without deleting history.
 - Anchor tokens carry only an opaque `core.link_anchor` id. Source type, row key, field mask, and exact span are always recovered from the addressed vault so authored instruction text cannot widen its own consent.
 - Multiple anchors on one table use a bounded `in` row filter only for a rectangular scope with one shared field set. A non-rectangular combination is rejected because separate row and field unions would grant their Cartesian product.
 - ACP session usage is cumulative, so the persisted resume handle and usage snapshot form one accounting state. A requested model is never substituted for live ACP confirmation.
@@ -375,7 +372,7 @@ bun run check:pr:full
 
 **PASS — fresh-context final full-scope audit**
 
-PASS — all 12 issue criteria remain implemented and mirrored verbatim in the receipt checklist/crosswalk (12/12, no mismatch). The 172-file index matches the diff with no missing or extra paths, and `## What changed` faithfully documents the four responsibility-preserving splits. Their files are 81–439 lines, original public import paths remain re-exported, and consumers are rewired without cycles or semantic changes. Focused suites passed 40/40, app-engine, automation, client, and gateway typechecks passed, `git diff --cached --check` passed, and `bun run check:pr:full` is green.
+PASS — all 12 authoritative GitHub acceptance rows match both the receipt checklist and acceptance crosswalk exactly; only checkbox state differs. The 171-file index matches the rebased diff with no missing or extra paths, no #498 receipt path remains, and `## What changed` faithfully documents the four responsibility-preserving splits. Their files are 81–439 lines, original public import paths remain re-exported, and consumers are rewired without cycles or semantic changes. Focused suites passed 40/40, app-engine, automation, client, and gateway typechecks passed, `git diff --cached --check` and governance passed, and the post-rebase `bun run check:pr:full` completed 29/29 tasks with 1,048 gateway tests passing and six intentional skips.
 
 ## Steering
 
@@ -402,3 +399,5 @@ PASS — all 12 issue criteria remain implemented and mirrored verbatim in the r
 | codex-019f9495-7c0-1784949655-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 402429 | 0 | 25121280 | 54112 | 456541 | 8.0981 | 2694409 | 0 | 120171264 | 310975 | feat(automations): resolve anchored references narrowly (#541) -m governance: al |
 | codex-019f9495-7c0-1784949877-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 22803 | 0 | 2663168 | 4556 | 27359 | 0.7911 | 2717212 | 0 | 122834432 | 315531 | feat(automations): resolve anchored references narrowly (#541) -m governance: al |
 | codex-019f9495-7c0-1784962125-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 2478691 | 0 | 114247168 | 249879 | 2728570 | 38.5067 | 5195903 | 0 | 237081600 | 565410 | fix(automations): close final replay and governance gaps (#541) -m governance: a |
+| codex-019f9495-7c0-1784962166-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 3316 | 0 | 170240 | 273 | 3589 | 0.0549 | 5199219 | 0 | 237251840 | 565683 | fix(automations): close final replay and governance gaps (#541) -m governance: a |
+| codex-019f9495-7c0-1784963138-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 333774 | 0 | 6656000 | 11549 | 345323 | 2.6717 | 5532993 | 0 | 243907840 | 577232 | docs(receipt): reconcile issue scope with main (#541) |
