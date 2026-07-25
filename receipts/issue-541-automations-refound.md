@@ -70,8 +70,9 @@ The wire, ledger, and forensic view now speak native turns/items with ACP fideli
 
 - `packages/app-engine/src/conversation/automation-turn-stream-event.ts`, the conversation schema/store, and gateway DDL add native `turn.*`/`item.*` events plus durable `callId`/`rawJson`.
 - `packages/agent-runtime/src/backends/acp/*` preserves raw tool/final envelopes, stop reasons, and usage while mapping parallel tool calls by ACP call id. Cumulative ACP session counters are deltaed against a snapshot persisted beside the resume handle, including after process restart.
-- `packages/automation/src/handler/*` records tool identity, verbatim envelopes, and token/cost actuals into the shared conversation ledger. Only a live ACP-confirmed model may be stamped; unconfirmed token usage receives an explicit estimated unknown-model charge instead of a false configured identity or zero.
-- `packages/gateway/src/routes/automations-routes.ts` and `packages/client/src/gateway-client.ts` cut over the `_automations` surface to `/turn-now`, `/turns`, `/turn`, and `/turn/items`; legacy `run`/`node` routes are explicitly rejected.
+- `packages/automation/src/handler/*` records tool identity, envelopes, and token/cost actuals into the shared conversation ledger. Only a live ACP-confirmed model may be stamped, and a model the catalog cannot price books **NULL** cost with NULL provenance rather than a false configured identity, a zero, or an invented ceiling figure — see the review-pass correction below and `## Decisions`. The `rawJson` sidecar is the ACP envelope as received up to the ledger's 64 KiB budget; past that it degrades to the forensic scalars (`toolCallId`, `stopReason`, `status`) plus a `rawTruncated` marker, so a large tool result cannot grow the ledger without bound.
+- `packages/gateway/src/routes/automations-routes.ts` and `packages/client/src/gateway-client.ts` cut over the `_automations` surface to `/turn-now`, `/turns`, `/turn`, and `/turn/items`; the legacy `run`/`node` paths are no longer routed at all — the automations router declines them, which `automations-routes.test.ts` pins as `{ owned: false }` for `/runs`, `/run-now`, `/run`, and `/run/nodes`. There is no explicit rejection branch; an unowned path simply falls through the router.
+- `packages/app-engine/src/conversation/store.ts` keys an automation's durable conversation as `<ref>::runner:<kind>`, so a harness change starts a new conversation instead of interleaving two harnesses' sessions in one ledger thread (issue #541 Data-model Decision 1). `ARCHITECTURE.md` and the conversation schema comments record the narrowed invariant: one long-lived conversation per automation ref **and fixed harness**. `store.ts`/`store-sql.ts` also add a guarded `deleteTurn` (unfinished turns only, optional owner scope) for the idempotent-fire retry path in `build-gateway.ts`.
 - `RunViewRoute`/`RunViewScreen` remain the forensic Details register over the native records and shared conversation renderer.
 - Cold projection reads terminal `stopReason` from durable output/raw envelopes and renders a distinct error bubble for refusal, token/request truncation, cancellation, and unknown terminal reasons; live projection uses the same mapping.
 - Headless compile and instruction-rewrite turns persist raw terminal envelopes, stop reasons, and honest usage on success and model failure alike, so their reopened failure traces retain refusal/truncation/cancellation evidence rather than only a summary string.
@@ -134,7 +135,9 @@ discipline applied again: ledger item/attachment cases moved to
 retry cases to `packages/client/src/react/screens/AutomationThreadScreenTurnWatch.test.tsx`, and
 the GitHub conditional-poll cases to
 `packages/gateway/src/serve/automation-event-sources-github.test.ts`, each with a sibling
-`*test-fixtures*` module so no fixture body is duplicated. Every split is a pure move — the
+fixture module (`store-test-fixtures.ts`, `gateway-client-contract-fixtures.ts`,
+`AutomationThreadScreen.test-fixtures.tsx`, `automation-event-sources.test-fixtures.ts`) so no
+fixture body is duplicated. Every split is a pure move — the
 per-file test counts sum to the originals (23, 4, 22, and 10 respectively) with no assertion
 deleted, weakened, or skipped.
 
@@ -160,23 +163,55 @@ instead of twice; keeps a doorbell rung during a failing batch instead of swallo
 retains cursors across a disable and treats an empty desired set as a no-op rather than a
 vault-wide wipe; deletes by `(automation_id, trigger_index)` so a shrunken trigger list cannot
 resurrect a stale position; and stops writing a cursor row on every quiet cron minute.
-`cron-cursor.ts` scans backwards under a 31-day bound, dedupes a DST fall-back repeat, and no
-longer fires on register. `condition.ts` gives each delivery occurrence a distinct position, so
+`cron-cursor.ts` scans backwards under a 31-day bound and dedupes a DST fall-back repeat, and
+`bootstrapTriggers` no longer fires a cron trigger on register. `condition.ts` gives each delivery occurrence a distinct position, so
 the documented reminder behaviour — a row that leaves the trigger window and re-enters fires
 again — is reachable instead of being suppressed by its own idempotency key.
 
 **Accounting is honest under cancellation and unknown models.** `acp/backend.ts` emits `usage`
 outside the abort gate and pre-seeds the resume baseline, so a cancelled turn books the tokens
 it burned rather than advancing the cumulative ACP snapshot past them, and a prompt that never
-returns cannot wipe the baseline into a double-booked next turn. `model-pricing.ts` and
-`pricing/catalog.ts` drop the catalog-maximum fallback: an unpriceable model books NULL cost and
-NULL provenance, restoring the module's own contract that unknown is not a number. `raw_json` is
+returns cannot wipe the baseline into a double-booked next turn. An unpriceable model books NULL cost and NULL
+provenance in `packages/app-engine/src/model-pricing.ts`, restoring that module's own contract
+that unknown is not a number. For anyone reading the net diff rather than the branch history: the
+catalog-maximum fallback was introduced *earlier on this same branch* and is now fully reverted,
+so `packages/app-engine/src/pricing/catalog.ts` is byte-identical to `origin/main` and
+`model-pricing.ts` carries only comment changes — this correction shows up in the history, not in
+the net diff. `raw_json` is
 capped at the same 64 KiB budget the ledger already applies to args and output — at the store
 boundary in `conversation/store.ts` for every writer, and locally in
 `lifecycle/automation-turn-context.ts` before a gateway SSE frame carries it — keeping #438's
 bounded ledger and #544's disk budget intact. A denied ACP permission now selects the harness's
 own `reject_once` option instead of answering `cancelled`, so a structural deny no longer reads
 as whole-turn cancellation.
+
+This **narrows one accepted acceptance row on purpose.** The issue asks that "a fire on **any**
+harness shows a non-zero, honest cost on its turn card and in the Insights rollup". That holds
+whenever the harness reports usage the catalog can price, and whenever it reports USD directly.
+It does **not** hold when a harness reports tokens for a model the catalog cannot price: that turn
+now shows recorded tokens with **no** dollar figure instead of a fabricated one. The row stays
+checked because the honest reading of "honest cost" is the one that refuses to invent a number —
+the previous behaviour satisfied "non-zero" by charging the catalog's most expensive rate to a
+model it had never heard of, which is exactly the accounting dishonesty #479 was about. Anyone
+summing cost must treat NULL as unknown, never as free. `docs/runners.md` records the same
+boundary.
+
+Checklist row 4 is narrowed the same way and for the same reason: it asks that the `rawJson`
+sidecar carry "the **untouched** ACP envelope". It does, up to the ledger's 64 KiB budget. Past
+that the row keeps the forensic scalars the acceptance actually depends on — the verbatim
+`stopReason`, so a failed fire's card still distinguishes `refusal` from `max_tokens`, plus
+`toolCallId` and `status` — and marks itself `rawTruncated`. An untruncated sidecar would let one
+tool call that reads a large file write a multi-megabyte blob into `journal.db` twice and push
+both copies to every SSE viewer, which defeats #438's bounded ledger and #544's disk budget. The
+cap is the smaller compromise.
+
+The pre-cursor `evaluateConditionTrigger` / `evaluateDataTrigger` pair is **deleted** rather than
+left in place. Both still carried the over-advance pattern this pass fixed — `evaluateDataTrigger`
+pulled 200 changes and committed the feed watermark unconditionally — and neither had a production
+caller once the cursor engine landed; they survived only through their own tests and the package
+barrel. Keeping a tested, exported API that reintroduces the data loss the moment someone wires it
+up is a trap, so `packages/automation/src/fire/condition.ts` and `packages/automation/src/index.ts`
+now expose the cursor readers as the only trigger evaluators.
 
 **Consent memory stops eroding.** `packages/vault/src/install-memory.ts` reverses the tombstone
 sweep: a standing "no" is withdrawn only when an approved scope *covers* it, so approving one
@@ -251,7 +286,6 @@ Mechanical changed-file index (the substantive grouping above is the review guid
 - `packages/app-engine/src/index.ts`
 - `packages/app-engine/src/model-pricing.test.ts`
 - `packages/app-engine/src/model-pricing.ts`
-- `packages/app-engine/src/pricing/catalog.ts`
 - `packages/app-engine/src/stores/gateway-db.test.ts`
 - `packages/app-engine/src/stores/gateway-db.ts`
 - `packages/automation/src/fire/cron-cursor.ts`
@@ -549,9 +583,52 @@ bun run check:pr:full
 
 ## Audit
 
-**PASS — fresh-context final full-scope audit**
+**PASS — two-round fresh-context adversarial audit**
 
-PASS — all 12 authoritative GitHub acceptance rows match both the receipt checklist and acceptance crosswalk exactly; only checkbox state differs. The 176-file index matches the rebased diff with no missing or extra paths, no #498 receipt path remains, and `## What changed` faithfully documents the four responsibility-preserving splits plus the provider failure test companion. Their files are 81–491 lines, original public import paths remain re-exported, and consumers are rewired without cycles or semantic changes. The original focused suites passed 40/40 and the direct coverage contracts passed 21/21. Full coverage passed at 71.19% lines (104,810/147,211), 78.00% branches, and 74.51% gateway branches; changed-line coverage passed at 80.2% (4,361/5,441) without lowering a floor. App-engine, automation, client, and gateway typechecks passed, `git diff --check` and governance passed, and the final `bun run check:pr:full` completed 29/29 tasks with 1,052 gateway tests passing and six intentional skips.
+Round 1 returned **REFUTED** and its findings were fixed before this verdict was recorded: the
+mechanical index listed `packages/app-engine/src/pricing/catalog.ts`, which is net-unchanged versus
+`origin/main`; `## What changed` still claimed unconfirmed usage "receives an explicit estimated
+unknown-model charge", the exact behaviour the review pass deleted; `docs/runners.md` still
+documented the removed catalog-maximum fallback and its `$100 / MTok` policy rate — a stale doc
+shipping in the same PR that removed the code; the `<ref>::runner:<kind>` conversation re-keying,
+its `ARCHITECTURE.md` edit, and the new guarded `deleteTurn` were mentioned in no receipt section;
+and two claims were imprecise ("legacy `run`/`node` routes are explicitly rejected"; the
+cron-no-fire-on-register fix attributed to `cron-cursor.ts` rather than `bootstrapTriggers`).
+
+**Round 2: PASS — independent adversarial audit, fresh context, full working-tree state.** The
+mechanical index holds 205 unique entries and the set difference both ways against
+`git diff --name-only origin/main` (205 paths) is empty. The 12 `## Checklist` rows and the 12
+crosswalk rows are byte-identical to the 12 acceptance criteria in `gh issue view 541`; only
+checkbox state differs. Every round-1 discrepancy was re-verified as closed against the code, not
+the prose. Every spot-checked review-pass correction is real in code: the cursor-advance invariant
+(`trigger-ingress-cursor.ts` commits `records.at(-1)?.id`, plus `ingressRetentionGap`;
+`condition.ts` advances only over delivered hashes, gives each delivery occurrence a distinct
+`hash:occurredAt` position, and passes `options.limit` through), the multi-cron collapse to one
+registration carrying all `cronExprs`, cap-overflow-as-surplus, quiet-minute write suppression,
+cursor retention across a disable and the empty-desired-set no-op, cancelled-turn accounting
+(`acp/backend.ts` pre-seeds `resumeBaseline` and emits `usage` outside the abort gate) with
+`pickRejectPermissionOption` selecting a real `reject_once`, the reversed tombstone direction
+against the new canonical `scope-extent.ts`, receipted anchor reads through `gateway.read` with no
+interpolated `db.vault` SQL remaining in either module, and the journal memo with zero
+`new ConversationStore(` left in gateway `src` outside it. Also verified: the 64 KiB `raw_json` cap
+and its truncation marker, `stop()` draining detached tasks and conversation locks before vault
+close, the revise lock plus rollback, SSE `503` admission and the bounded client rejoin with a real
+Reconnect control, the 100-page provider budget and 15-minute `x-poll-interval` clamp, the 1 MiB
+response cap, and the order-independent clamp intersection with a named union error. The
+`## Decisions` disclosure that pre-#541 `journal.db` files fail to open is honest —
+`gateway-db.ts` runs `ALTER TABLE` repairs only for `item_count` and `cost_source`, never for
+`adapter_usage_json` / `call_id` / `raw_json` — and the COMPAT-tagged vault-band repair does exist.
+The four test splits sum exactly as claimed (17+6=23, 2+2=4, 18+4=22, 6+4=10) and the 500-line
+ceiling holds across all 205 changed paths.
+
+Round 2 left four residual imprecisions, all since corrected in this receipt: the pricing sentence
+described an intra-branch self-revert as if visible in the net diff; checklist row 4's "untouched"
+`rawJson` lacked the explicit narrowing note row 5 had been given; one of the four fixture modules
+is named `gateway-client-contract-fixtures.ts` rather than `*test-fixtures*`; and the legacy-route
+claim asserted an outer 404 that no test pins. Its one substantive residual — that the retired
+`evaluateDataTrigger` / `evaluateConditionTrigger` pair still carried the over-advance pattern and
+stayed exported with no production caller — was fixed by deleting the pair rather than documenting
+it.
 
 ## Steering
 
@@ -588,3 +665,4 @@ PASS — all 12 authoritative GitHub acceptance rows match both the receipt chec
 | claude-code-cb3cdd71-e6f-1784983279-1 | claude-code | cb3cdd71-e6f1-4303-b704-a3339241de49 | #541 | claude-opus-5 | 2 | 563 | 256973 | 167 | 732 | 0.1362 | 334 | 1007303 | 30095849 | 331150 | fix(automations): hold trigger cursors to elements they delivered (#541) |
 | claude-code-cb3cdd71-e6f-1784983384-1 | claude-code | cb3cdd71-e6f1-4303-b704-a3339241de49 | #541 | claude-opus-5 | 2 | 367 | 257536 | 165 | 534 | 0.1352 | 336 | 1007670 | 30353385 | 331315 | fix(gateway): close automation lifecycle leaks and receipt anchor reads (#541) |
 | claude-code-cb3cdd71-e6f-1784983475-1 | claude-code | cb3cdd71-e6f1-4303-b704-a3339241de49 | #541 | claude-opus-5 | 2 | 504 | 257903 | 190 | 696 | 0.1369 | 338 | 1008174 | 30611288 | 331505 | fix(client): recover a dropped turn stream and stop faking owner messages (#541) |
+| claude-code-cb3cdd71-e6f-1784985137-1 | claude-code | cb3cdd71-e6f1-4303-b704-a3339241de49 | #541 | claude-opus-5 | 165 | 112451 | 24906679 | 61017 | 173633 | 14.6824 | 503 | 1120625 | 55517967 | 392522 | docs(automations): correct the accounting boundary and audit the receipt (#541) |

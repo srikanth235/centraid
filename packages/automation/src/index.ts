@@ -56,17 +56,14 @@ export {
   type HistoryKeep,
 } from './manifest/manifest.js';
 
-// Condition-trigger evaluation — the host runs one consented read per gate
-// tick and fires on unseen rows (duaility: time semantics live in the data).
+// Condition/data cursor sources — the engine reads one consented query per
+// gate tick and delivers unseen rows (duaility: time semantics live in the
+// data). These are the only trigger evaluators; the pre-cursor `evaluate*`
+// pair is retired, so no caller can advance a watermark past rows it never
+// delivered.
 export {
-  evaluateConditionTrigger,
-  evaluateDataTrigger,
   readConditionCursor,
   readDataCursor,
-  type ConditionEvaluation,
-  type EvaluateConditionOptions,
-  type DataEvaluation,
-  type EvaluateDataOptions,
   type ReadConditionCursorOptions,
   type ReadDataCursorOptions,
 } from './fire/condition.js';
