@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-25T03:30:13.704Z",
-  "passed": 612,
+  "generatedAt": "2026-07-25T13:41:03.495Z",
+  "passed": 646,
   "failed": 0,
   "skipped": 0,
   "skippedTests": 36,
@@ -19,8 +19,6 @@
   "cellsMissingPrior": null,
   "cellsMissingRose": false,
   "cellsMissingDelta": 0,
-  "coverageBelowFloor": [
-    "repo-wide"
-  ],
+  "coverageBelowFloor": [],
   "validationErrorCount": 0
 }
