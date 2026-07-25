@@ -1,4 +1,3 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Condition/data cursor sources: consented read → row-content dedup →
  * delivered elements. Stub bridge; the committed position is handed in by the
@@ -6,9 +5,7 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * what it actually returned.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { describe, expect, it } from 'vitest';
 import type { VaultBridge } from '@centraid/app-engine';
 import { readConditionCursor, readDataCursor } from './condition.js';
 import type { ConditionTrigger } from '../manifest/manifest.js';
@@ -18,20 +15,6 @@ const TRIGGER: ConditionTrigger = {
   entity: 'business.invoice',
   where: [{ column: 'due_at', op: 'within-next-days', value: 3 }],
 };
-
-function bridgeReturning(rowsByCall: Record<string, unknown>[][]): {
-  bridge: VaultBridge;
-  reads: number;
-} {
-  const state = { reads: 0 };
-  const bridge: VaultBridge = async (call) => {
-    if (call.op !== 'read') return { ok: false, code: 'VAULT_ERROR', error: 'unexpected op' };
-    const rows = rowsByCall[Math.min(state.reads, rowsByCall.length - 1)] ?? [];
-    state.reads += 1;
-    return { ok: true, result: { rows, receiptId: `r${state.reads}` } };
-  };
-  return { bridge, reads: state.reads };
-}
 
 /*
  * The cursor-source readers hold no state of their own: the engine hands them
