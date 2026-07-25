@@ -16,6 +16,6 @@ Coverage below floor: `repo-wide`
 
 _Public HTML report publishes on main (and nightly); this run keeps the artifact + Job Summary only._
 
-Generated: `2026-07-25T03:05:16.485Z`
+Generated: `2026-07-25T03:30:13.704Z`
 
 <!-- centraid-test-health-report -->
