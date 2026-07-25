@@ -12,6 +12,7 @@
 import type { VaultDb } from './db.js';
 import type { FilterClause } from './gateway/types.js';
 import { nowIso, uuidv7 } from './ids.js';
+import { scopeCovers } from './scope-extent.js';
 
 /** One scope extent as the consent-memory tables store it. */
 export interface ScopeTriple {
@@ -50,28 +51,6 @@ const tripleKey = (s: {
   `${s.schema}|${s.table ?? ''}|${s.verbs}|${JSON.stringify(s.rowFilter ?? null)}|${JSON.stringify(
     s.fieldMask ?? null,
   )}`;
-
-function scopeCovers(existing: ScopeTriple, requested: ScopeTriple): boolean {
-  if (
-    existing.schema !== requested.schema ||
-    existing.verbs !== requested.verbs ||
-    (existing.table !== undefined && existing.table !== requested.table)
-  ) {
-    return false;
-  }
-  if (
-    existing.rowFilter !== undefined &&
-    JSON.stringify(existing.rowFilter) !== JSON.stringify(requested.rowFilter)
-  ) {
-    return false;
-  }
-  if (existing.fieldMask !== undefined) {
-    if (requested.fieldMask === undefined) return false;
-    const allowed = new Set(existing.fieldMask);
-    if (!requested.fieldMask.every((field) => allowed.has(field))) return false;
-  }
-  return true;
-}
 
 function granteeClause(grantee: GranteeKey): { where: string; param: string } {
   if (grantee.appId) return { where: 'app_id = ?', param: grantee.appId };
@@ -115,61 +94,60 @@ export function writeScopeTombstones(
   return written;
 }
 
-export function listScopeTombstones(db: VaultDb, grantee: GranteeKey): ScopeTriple[] {
-  const { where, param } = granteeClause(grantee);
-  const rows = db.vault
-    .prepare(
-      `SELECT schema_name, table_name, verbs, row_filter_json, field_mask_json
-         FROM consent_scope_tombstone WHERE ${where}`,
-    )
-    .all(param) as {
-    schema_name: string;
-    table_name: string | null;
-    verbs: string;
-    row_filter_json: string | null;
-    field_mask_json: string | null;
-  }[];
-  return rows.map((r) => ({
-    schema: r.schema_name,
-    ...(r.table_name !== null ? { table: r.table_name } : {}),
-    verbs: r.verbs as ScopeTriple['verbs'],
-    ...(r.row_filter_json ? { rowFilter: JSON.parse(r.row_filter_json) as FilterClause[] } : {}),
-    ...(r.field_mask_json ? { fieldMask: JSON.parse(r.field_mask_json) as string[] } : {}),
-  }));
+interface TombstoneRow {
+  tombstone_id: string;
+  schema_name: string;
+  table_name: string | null;
+  verbs: string;
+  row_filter_json: string | null;
+  field_mask_json: string | null;
 }
 
-/** An explicit owner approval of these triples clears their tombstones. */
+const tombstoneExtent = (row: TombstoneRow): ScopeTriple => ({
+  schema: row.schema_name,
+  ...(row.table_name !== null ? { table: row.table_name } : {}),
+  verbs: row.verbs as ScopeTriple['verbs'],
+  ...(row.row_filter_json ? { rowFilter: JSON.parse(row.row_filter_json) as FilterClause[] } : {}),
+  ...(row.field_mask_json ? { fieldMask: JSON.parse(row.field_mask_json) as string[] } : {}),
+});
+
+function tombstoneRows(db: VaultDb, grantee: GranteeKey): TombstoneRow[] {
+  const { where, param } = granteeClause(grantee);
+  return db.vault
+    .prepare(
+      `SELECT tombstone_id, schema_name, table_name, verbs, row_filter_json, field_mask_json
+         FROM consent_scope_tombstone WHERE ${where}`,
+    )
+    .all(param) as unknown as TombstoneRow[];
+}
+
+export function listScopeTombstones(db: VaultDb, grantee: GranteeKey): ScopeTriple[] {
+  return tombstoneRows(db, grantee).map(tombstoneExtent);
+}
+
+/**
+ * An explicit owner approval clears the tombstones that approval COVERS —
+ * and only those. The direction matters: approving schema-wide `core` read
+ * withdraws every narrower `core.*` read "no", but approving one anchored
+ * `core.core_task` read must NOT erase a schema-wide `core` read refusal
+ * (issue #541 review). Erasing it would put the owner back in front of an ask
+ * they already refused on the next mount — exactly the nagging A4 exists to
+ * end.
+ *
+ * The surviving broad tombstone costs the approved scope nothing: the grant
+ * this approval mints covers it, so `missingScopes` never asks for it again.
+ * That is why a covered sub-extent is not carved out of the tombstone — the
+ * row shape has no "everything except" and it would buy nothing.
+ */
 export function clearScopeTombstones(
   db: VaultDb,
   grantee: GranteeKey,
   scopes: readonly ScopeTriple[],
 ): void {
-  const { where, param } = granteeClause(grantee);
-  const rows = db.vault
-    .prepare(
-      `SELECT tombstone_id, schema_name, table_name, verbs, row_filter_json, field_mask_json
-         FROM consent_scope_tombstone WHERE ${where}`,
-    )
-    .all(param) as {
-    tombstone_id: string;
-    schema_name: string;
-    table_name: string | null;
-    verbs: ScopeTriple['verbs'];
-    row_filter_json: string | null;
-    field_mask_json: string | null;
-  }[];
   const del = db.vault.prepare('DELETE FROM consent_scope_tombstone WHERE tombstone_id = ?');
-  for (const row of rows) {
-    const tombstone: ScopeTriple = {
-      schema: row.schema_name,
-      ...(row.table_name !== null ? { table: row.table_name } : {}),
-      verbs: row.verbs,
-      ...(row.row_filter_json
-        ? { rowFilter: JSON.parse(row.row_filter_json) as FilterClause[] }
-        : {}),
-      ...(row.field_mask_json ? { fieldMask: JSON.parse(row.field_mask_json) as string[] } : {}),
-    };
-    if (scopes.some((scope) => scopeCovers(tombstone, scope))) del.run(row.tombstone_id);
+  for (const row of tombstoneRows(db, grantee)) {
+    const tombstone = tombstoneExtent(row);
+    if (scopes.some((approved) => scopeCovers(approved, tombstone))) del.run(row.tombstone_id);
   }
 }
 

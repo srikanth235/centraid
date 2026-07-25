@@ -127,6 +127,99 @@ The first GitHub `verify` run also exposed an instrumentation gap: the shipped b
 
 The final governance pass also enforced the 500-line source ceiling. The shared turn attachment/locking helpers now live in `packages/app-engine/src/http/turn-sse-support.ts`; conversation prune/delete cases live in `packages/app-engine/src/conversation/store-prune.test.ts`; cursor contracts and pending-batch parsing live in `packages/automation/src/fire/cursor-engine-support.ts`; and the live automation reducer/projection lives in `packages/client/src/react/shell/routes/automationLiveMessages.ts`. These are responsibility-preserving splits of already-tested behavior, with all resulting modules below the cap.
 
+The review-pass corrections pushed four test modules back over that ceiling, so the same
+discipline applied again: ledger item/attachment cases moved to
+`packages/app-engine/src/conversation/store-items.test.ts`, the owner-plane HTTP contracts to
+`packages/client/src/gateway-client-vault.contract.test.ts`, the live-turn rejoin and cold-trace
+retry cases to `packages/client/src/react/screens/AutomationThreadScreenTurnWatch.test.tsx`, and
+the GitHub conditional-poll cases to
+`packages/gateway/src/serve/automation-event-sources-github.test.ts`, each with a sibling
+`*test-fixtures*` module so no fixture body is duplicated. Every split is a pure move — the
+per-file test counts sum to the originals (23, 4, 22, and 10 respectively) with no assertion
+deleted, weakened, or skipped.
+
+### Review-pass corrections
+
+An independent multi-agent review of this branch found defects the green gate did not catch.
+They are fixed here rather than deferred, because each one falsified a claim this receipt
+already makes.
+
+**Durable delivery now means what it says.** The cursor contract gained one invariant: a cursor
+may only advance to the position of an element that was actually delivered and acknowledged.
+Rows past the per-read catch-up cap are *surplus* — still durable, delivered on the next tick —
+not a gap. `packages/gateway/src/serve/trigger-ingress-cursor.ts` extracts the ingress read so
+that invariant is unit-testable, and `packages/automation/src/fire/condition.ts` now requests
+exactly the limit it can deliver instead of over-fetching 200 changes and committing a watermark
+past 150 of them. `skipped`/`gapReason` is reserved for genuinely unrecoverable loss: a missed
+cron window, an expired Gmail history, and now an ingress row that passed its retention TTL
+before it was ever read — `pruneIngress` measures that loss per source and
+`ingressRetentionGap` charges it only to the reader whose delivered position it actually
+overtook. `packages/automation/src/fire/cursor-engine.ts` collapses every cron trigger of one
+automation into a single registration, so two overlapping crons fire once per matching minute
+instead of twice; keeps a doorbell rung during a failing batch instead of swallowing it;
+retains cursors across a disable and treats an empty desired set as a no-op rather than a
+vault-wide wipe; deletes by `(automation_id, trigger_index)` so a shrunken trigger list cannot
+resurrect a stale position; and stops writing a cursor row on every quiet cron minute.
+`cron-cursor.ts` scans backwards under a 31-day bound, dedupes a DST fall-back repeat, and no
+longer fires on register. `condition.ts` gives each delivery occurrence a distinct position, so
+the documented reminder behaviour — a row that leaves the trigger window and re-enters fires
+again — is reachable instead of being suppressed by its own idempotency key.
+
+**Accounting is honest under cancellation and unknown models.** `acp/backend.ts` emits `usage`
+outside the abort gate and pre-seeds the resume baseline, so a cancelled turn books the tokens
+it burned rather than advancing the cumulative ACP snapshot past them, and a prompt that never
+returns cannot wipe the baseline into a double-booked next turn. `model-pricing.ts` and
+`pricing/catalog.ts` drop the catalog-maximum fallback: an unpriceable model books NULL cost and
+NULL provenance, restoring the module's own contract that unknown is not a number. `raw_json` is
+capped at the same 64 KiB budget the ledger already applies to args and output — at the store
+boundary in `conversation/store.ts` for every writer, and locally in
+`lifecycle/automation-turn-context.ts` before a gateway SSE frame carries it — keeping #438's
+bounded ledger and #544's disk budget intact. A denied ACP permission now selects the harness's
+own `reject_once` option instead of answering `cancelled`, so a structural deny no longer reads
+as whole-turn cancellation.
+
+**Consent memory stops eroding.** `packages/vault/src/install-memory.ts` reverses the tombstone
+sweep: a standing "no" is withdrawn only when an approved scope *covers* it, so approving one
+anchored `core.core_task` read no longer deletes a schema-wide `core` refusal and re-prompts the
+owner for something they declined. `packages/vault/src/gateway/consent.ts` intersects every
+clamp scope covering a table instead of picking one by sort order, so a second same-table scope
+can only narrow the first and the result is order-independent; the one shape intersection cannot
+express — two scopes pinning the same column to different values, which is a union — throws a
+named error instead of silently dropping a restriction. `packages/vault/src/scope-extent.ts` is
+now the single canonical `scopeCovers`, so consent memory and install-grant reconciliation
+cannot drift.
+
+**The new anchor reads are receipted.** `lifecycle/automation-anchor-scopes.ts` and
+`serve/vault-picker.ts` no longer reach into `db.vault` with interpolated SQL; every anchor,
+link, source row, and content read goes through `gateway.read` with the owner credential and a
+purpose, so `GET /centraid/_vault/anchors` leaves an audit trail instead of returning locker
+titles silently. The scope-clamp algebra is untouched.
+
+**Lifecycle plumbing.** `packages/gateway/src/journal-stores.ts` memoizes one `ConversationStore`
+per `journal.db` path and can actually release it, closing a per-fire connection leak that
+accumulated an unclosed handle and 64 MiB of mapped address space every few seconds on a
+webhook-driven automation — `ConversationStore.close()` had been a documented no-op.
+`lifecycle/automation-revision.ts` runs a revise under the same conversation lock an interactive
+turn takes, and rolls the published prompt back with a visible `Instructions rolled back` turn
+when the compile fails, so the thread can no longer show new instructions while the old
+`handler.js` keeps firing. `stop()` drains detached automation work and conversation locks before
+closing vault databases. The interactive-turn stream admits through the SSE subscriber cap and
+refuses with a complete `503`, and the client treats any non-settled outcome as grounds for a
+bounded rejoin with a Reconnect affordance — replacing a stream that, once dropped, left a
+running turn spinning forever. A provider-supplied `x-poll-interval` is clamped to 15 minutes so
+one response cannot park a trigger for years.
+
+**Client honesty.** The cold projection and the live seed share one
+`automationTurnInboundText`, so the headless compiler's internal work order is no longer
+rendered as a message the owner supposedly typed. A connector binding whose account has vanished
+from the catalog is surfaced as `Bound account unavailable` with the event trigger withdrawn,
+rather than displaying a different surviving account while saving the dead id. A failed cold
+trace read is distinguishable from an empty one and offers a retry instead of showing a spinner
+and a Done footer at once. Messages key off ledger item ids, `RunViewScreen.module.css` uses a
+real shell token, the retired `RunNodeDTO` payload is gone, the screenshot harness serves the
+`turn` routes, and the automations contract test now fails closed on an unrouted path and
+asserts method plus query parameters.
+
 Mechanical changed-file index (the substantive grouping above is the review guide; this exact index closes the receipt’s file-coverage loop):
 
 - `apps/desktop/tests/e2e/automations.spec.ts`
@@ -305,10 +398,54 @@ Mechanical changed-file index (the substantive grouping above is the review guid
 - `packages/vault/src/gateway/identity.ts`
 - `packages/vault/src/gateway/types.ts`
 - `receipts/issue-541-automations-refound.md`
+- `apps/desktop/scripts/screenshot-automations.mjs`
+- `packages/agent-runtime/src/backends/acp/fake-acp-agent.mjs`
+- `packages/agent-runtime/src/backends/acp/permissions.test.ts`
+- `packages/agent-runtime/src/backends/acp/usage.test.ts`
+- `packages/automation/src/fire/condition.test.ts`
+- `packages/automation/src/fire/cron-cursor.test.ts`
+- `packages/automation/src/fire/cursor-engine-support.test.ts`
+- `packages/automation/src/fire/cursor-invariants.test.ts`
+- `packages/client/src/react/shell/App.tsx`
+- `packages/gateway/src/journal-stores.ts`
+- `packages/gateway/src/journal-stores.test.ts`
+- `packages/gateway/src/lifecycle/automation-revision.ts`
+- `packages/gateway/src/lifecycle/automation-revision.test.ts`
+- `packages/gateway/src/lifecycle/automation-turn-context.ts`
+- `packages/gateway/src/lifecycle/automation-turn-context.test.ts`
+- `packages/gateway/src/serve/trigger-ingress-cursor.ts`
+- `packages/gateway/src/serve/trigger-ingress-cursor.test.ts`
+- `packages/vault/src/index.ts`
+- `packages/vault/src/install-memory.test.ts`
+- `packages/vault/src/scope-extent.ts`
+- `packages/vault/src/scope-extent.test.ts`
+- `packages/vault/src/gateway/execution-clamp.test.ts`
+- `packages/app-engine/src/conversation/store-items.test.ts`
+- `packages/app-engine/src/conversation/store-test-fixtures.ts`
+- `packages/client/src/gateway-client-contract-fixtures.ts`
+- `packages/client/src/gateway-client-vault.contract.test.ts`
+- `packages/client/src/react/screens/AutomationThreadScreen.test-fixtures.tsx`
+- `packages/client/src/react/screens/AutomationThreadScreenTurnWatch.test.tsx`
+- `packages/gateway/src/serve/automation-event-sources-github.test.ts`
+- `packages/gateway/src/serve/automation-event-sources.test-fixtures.ts`
 
 ## Out of scope
 
-- None.
+- **Never dropping an undelivered ingress row.** The retention TTL still deletes
+  `trigger_ingress` rows an automation stalled past 72 h never read; this change makes that loss
+  measured and attributed (`ingress_retention`) instead of silent. Making it impossible needs a
+  per-source undelivered floor plus a hard backlog ceiling — a durability design with its own
+  tradeoffs against #544's disk budget, not a review-fix.
+- **Runner launch modes.** `packages/agent-runtime/src/registry.ts` launches codex with
+  `agent-full-access` and claude-code with `bypassPermissions`, so the automation turn's
+  `permissionPolicy: 'deny'` is never exercised in production and confinement rests on `cwd`.
+  The untrusted-data fencing below reduces the injection surface; closing it is a product
+  decision about how automation turns are sandboxed.
+- **A capability gate for the `run.*` → `turn.*` wire rename.** v0 carries no
+  backward-compatibility obligation, so an older client meeting a newer gateway is out of scope.
+- `AutomationTriggerStore` still opens its own handle on `journal.db` alongside the memoized
+  conversation store, so each vault holds two. It does not leak; sharing one provider is a
+  follow-up.
 
 ## Decisions
 
@@ -316,6 +453,25 @@ Mechanical changed-file index (the substantive grouping above is the review guid
 - Anchor tokens carry only an opaque `core.link_anchor` id. Source type, row key, field mask, and exact span are always recovered from the addressed vault so authored instruction text cannot widen its own consent.
 - Multiple anchors on one table use a bounded `in` row filter only for a rectangular scope with one shared field set. A non-rectangular combination is rejected because separate row and field unions would grant their Cartesian product.
 - ACP session usage is cumulative, so the persisted resume handle and usage snapshot form one accounting state. A requested model is never substituted for live ACP confirmation.
+- **No ledger-band column repair for pre-#541 `journal.db` files.** The conversation ledger gains
+  `conversations.adapter_usage_json`, `items.call_id`, and `items.raw_json` plus a partial unique
+  index over `call_id`, and `ensureConversationLedger` runs the DDL without `ALTER TABLE` repairs
+  for them, so a journal created before this change fails to open. This is a deliberate v0 call
+  by the project owner: pre-release carries no backward-compatibility or migration obligation and
+  dev vaults are recreated. The vault audit band keeps its own COMPAT-tagged repair because that
+  ladder is versioned independently.
+- **An unpriceable model books NULL, not a ceiling.** The previous fallback charged the
+  catalog-wide maximum per-token rate under `costSource: 'estimated'`, indistinguishable from a
+  real estimate; a local model's run could report orders of magnitude over actual. Unknown is now
+  absent rather than a maximal number, per the pricing module's own stated contract.
+- **A dangling connector binding is surfaced, never silently rebound.** When the bound
+  `connectionId` is gone from the catalog the editor says so and withdraws the connector-event
+  trigger, but keeps the stored id: choosing a different account is the owner's decision, not a
+  repair the editor may make on their behalf.
+- **Prior-run output reaches the model as fenced untrusted data.** Interactive-turn context is
+  flattened, defused, clipped per turn and in total, and wrapped in labelled untrusted-data
+  fences. This bounds a prompt-injection path from webhook/Gmail/GitHub payloads into an agent
+  whose permission prompts are bypassed; it does not close it (see Out of scope).
 
 ## Verification
 
@@ -379,6 +535,18 @@ bun run coverage
 bun run test:diff-coverage
 ```
 
+Review-pass corrections:
+
+```sh
+bun run --cwd packages/vault test -- src/install-memory.test.ts src/scope-extent.test.ts src/gateway/execution-clamp.test.ts
+bun run --cwd packages/agent-runtime test -- src/backends/acp/usage.test.ts src/backends/acp/permissions.test.ts src/backends/acp/backend.model-usage.test.ts src/backends/acp/backend.test.ts
+bun run --cwd packages/app-engine test -- src/model-pricing.test.ts src/conversation/store.test.ts src/conversation/trigger-store.test.ts
+bun run --cwd packages/automation test -- src/fire/cron-cursor.test.ts src/fire/cursor-engine-support.test.ts src/fire/cursor-invariants.test.ts src/fire/condition.test.ts src/fire/cursor-engine.test.ts
+bun run --cwd packages/gateway test -- src/journal-stores.test.ts src/serve/trigger-ingress-cursor.test.ts src/lifecycle/automation-revision.test.ts src/lifecycle/automation-turn-context.test.ts src/lifecycle/automation-anchor-scopes.test.ts
+bun run --cwd packages/client test -- src/react/shell/routes/automationTurnMessages.test.ts src/react/screens/AutomationThreadScreen.test.tsx src/react/screens/AutomationEditorAccountChoice.test.tsx gateway-client-automations.contract.test.ts
+bun run check:pr:full
+```
+
 ## Audit
 
 **PASS — fresh-context final full-scope audit**
@@ -414,3 +582,5 @@ PASS — all 12 authoritative GitHub acceptance rows match both the receipt chec
 | codex-019f9495-7c0-1784963138-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 333774 | 0 | 6656000 | 11549 | 345323 | 2.6717 | 5532993 | 0 | 243907840 | 577232 | docs(receipt): reconcile issue scope with main (#541) |
 | codex-019f9495-7c0-1784964031-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 101994 | 0 | 6809600 | 6819 | 108813 | 2.0597 | 5637891 | 0 | 251251200 | 584364 | test(desktop): await automation lifecycle request (#541) |
 | codex-019f9495-7c0-1784966365-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 532618 | 0 | 13535744 | 44029 | 576647 | 5.3759 | 6170509 | 0 | 264786944 | 628393 | test(automations): cover route and provider contracts (#541) |
+| claude-code-cb3cdd71-e6f-1784981974-1 | claude-code | cb3cdd71-e6f1-4303-b704-a3339241de49 | #541 | claude-opus-5 | 289 | 962650 | 24179812 | 317857 | 1280796 | 26.0543 | 289 | 962650 | 24179812 | 317857 | fix(vault): stop a narrow approval from erasing a broad revocation (#541) |
+| claude-code-cb3cdd71-e6f-1784983111-1 | claude-code | cb3cdd71-e6f1-4303-b704-a3339241de49 | #541 | claude-opus-5 | 41 | 36770 | 5152438 | 12402 | 49213 | 3.1163 | 330 | 999420 | 29332250 | 330259 | fix(vault): stop a narrow approval from erasing a broad revocation (#541) |

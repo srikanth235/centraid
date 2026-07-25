@@ -6,7 +6,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { nowIso } from '../ids.js';
 import type { ExecutionScopeSpec, FilterClause, Identity } from './types.js';
-import { DEFAULT_PURPOSE } from './types.js';
+import { DEFAULT_PURPOSE, GatewayError } from './types.js';
 
 export interface GrantRow {
   grant_id: string;
@@ -58,9 +58,46 @@ function intersectFieldMasks(
 }
 
 /**
- * Pick the most-specific manifest scope that covers this entity. Explicit
- * row/field anchors therefore attenuate a schema-wide declaration for the
- * anchored table while that declaration can still cover unrelated tables.
+ * Ops that pin a column to a value set. Two scopes pinning the SAME column to
+ * DIFFERENT values are alternatives ("row A or row B"), and the clamp ANDs, so
+ * their conjunction matches nothing. Range ops (`lt`/`gte`/`within-days`/…)
+ * are not alternatives — two of them on one column is a legitimate window.
+ */
+const PINNING_OPS = new Set<FilterClause['op']>(['eq', 'in']);
+
+/**
+ * Reject a clamp that asks for a UNION. The clamp vocabulary has no OR: a
+ * bounded union must be written as ONE scope with one `in` filter (see
+ * `scopesForAutomationAnchors` in the gateway, which collapses same-table
+ * anchors for exactly this reason). Two scopes pinning one column differently
+ * are that union written wrong — refuse loudly rather than quietly read zero
+ * rows or quietly honour whichever scope sorted first.
+ */
+function conflictingPin(candidates: readonly ExecutionScopeSpec[]): string | undefined {
+  const pinned = new Map<string, string>();
+  for (const scope of candidates) {
+    for (const clause of scope.rowFilter ?? []) {
+      if (!PINNING_OPS.has(clause.op)) continue;
+      const seen = pinned.get(clause.column);
+      const clauseJson = JSON.stringify(clause);
+      if (seen === undefined) pinned.set(clause.column, clauseJson);
+      else if (seen !== clauseJson) return clause.column;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The execution clamp for one entity + verb: EVERY manifest scope covering it,
+ * intersected. Row filters AND together and field masks intersect, so a second
+ * declaration on the same table can only ever narrow the first — no declared
+ * restriction is dropped, and the result does not depend on the order the host
+ * happened to list its scopes in.
+ *
+ * Explicit row/field anchors therefore attenuate a schema-wide declaration for
+ * the anchored table while that declaration can still cover unrelated tables.
+ * `undefined` (no covering scope at all) is a deny; an absent clamp is "no
+ * manifest attenuation" and leaves the durable grant untouched.
  */
 function executionClamp(
   identity: Identity,
@@ -69,26 +106,34 @@ function executionClamp(
   verb: 'read' | 'act' | 'reveal',
 ): { rowFilter: FilterClause[]; fieldMask: string[] | null } | undefined {
   if (!identity.scopeClamp) return { rowFilter: [], fieldMask: null };
-  const candidates = identity.scopeClamp
-    .filter(
-      (scope) =>
-        scope.schema === schema &&
-        (scope.table === undefined || scope.table === table) &&
-        verbAllowed(scope.verbs, verb),
-    )
-    .toSorted((left, right) => {
-      const specificity = (scope: ExecutionScopeSpec): number =>
-        (scope.table === table ? 4 : 0) +
-        (scope.rowFilter && scope.rowFilter.length > 0 ? 2 : 0) +
-        (scope.fieldMask && scope.fieldMask.length > 0 ? 1 : 0);
-      return specificity(right) - specificity(left);
-    });
-  const scope = candidates[0];
-  if (!scope) return undefined;
-  return {
-    rowFilter: scope.rowFilter ? [...scope.rowFilter] : [],
-    fieldMask: scope.fieldMask ? [...scope.fieldMask] : null,
-  };
+  const candidates = identity.scopeClamp.filter(
+    (scope) =>
+      scope.schema === schema &&
+      (scope.table === undefined || scope.table === table) &&
+      verbAllowed(scope.verbs, verb),
+  );
+  if (candidates.length === 0) return undefined;
+  const pin = conflictingPin(candidates);
+  if (pin !== undefined) {
+    throw new GatewayError(
+      'consent',
+      `execution manifest pins ${schema}.${table}.${pin} in two different scopes for verb ${verb}` +
+        ' — express a bounded union as one "in" filter, not as separate scopes',
+    );
+  }
+  const rowFilter: FilterClause[] = [];
+  const seenClauses = new Set<string>();
+  let fieldMask: string[] | null = null;
+  for (const scope of candidates) {
+    for (const clause of scope.rowFilter ?? []) {
+      const clauseJson = JSON.stringify(clause);
+      if (seenClauses.has(clauseJson)) continue;
+      seenClauses.add(clauseJson);
+      rowFilter.push(clause);
+    }
+    fieldMask = intersectFieldMasks(fieldMask, scope.fieldMask ?? null);
+  }
+  return { rowFilter, fieldMask };
 }
 
 function activeGrants(

@@ -422,6 +422,7 @@ export {
   type ScopeTriple,
   type ScopeRequestSummary,
 } from './install-memory.js';
+export { scopeCovers, type ScopeExtent } from './scope-extent.js';
 
 export { registerScheduleCommands } from './commands/schedule.js';
 export { registerTaskCommands } from './commands/tasks.js';
