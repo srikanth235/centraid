@@ -1,5 +1,5 @@
 {
-  "_comment": "Coverage floors (#532). Up-only under test:ratchet. Seeded ~1pt under measured bun run coverage (coverage-summary.json, 2026-07-24).",
+  "_comment": "Coverage floors (#532). Up-only under test:ratchet. Seeded ~1pt under measured bun run coverage (coverage-summary.json, 2026-07-24). packages/client/src/react/** kept deliberately low (45/35) until a full measured baseline is available (#545 D5).",
   "lines": 71,
   "packages/app-engine/src/**": { "lines": 84, "branches": 79 },
   "packages/automation/src/**": { "lines": 72, "branches": 78 },
@@ -11,6 +11,8 @@
   "packages/vault/src/**": { "lines": 91, "branches": 78 },
   "packages/design-tokens/src/**": { "lines": 90, "branches": 81 },
   "packages/tunnel/src/**": { "lines": 73, "branches": 80 },
-  "packages/protocol/src/**": { "lines": 67, "branches": 70 },
-  "packages/cli/src/**": { "lines": 70, "branches": 57 }
+  "packages/protocol/src/**": { "lines": 99, "branches": 97 },
+  "packages/cli/src/**": { "lines": 86, "branches": 83 },
+  "apps/oauth-worker/src/**": { "lines": 70, "branches": 55 },
+  "packages/client/src/react/**": { "lines": 45, "branches": 35 }
 }

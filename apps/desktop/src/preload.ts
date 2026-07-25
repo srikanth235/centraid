@@ -7,74 +7,8 @@
 
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import * as tokens from '@centraid/design-tokens';
+import { Channel, hostCapabilities } from './main/ipc-core.js';
 import { createDeepLinkBuffer } from './main/oauth-deep-link.js';
-
-const Channel = {
-  SETTINGS_GET: 'centraid:settings:get',
-  SETTINGS_SAVE: 'centraid:settings:save',
-  DEVICE_TRANSCRIPT_AVAILABLE: 'centraid:device-transcript:available',
-  DEVICE_TRANSCRIBE: 'centraid:device-transcript:run',
-
-  // App create/files/write/delete/update-meta + publish + templates clone
-  // + automation create/enable/delete moved to the renderer's direct HTTP
-  // client (renderer/gateway-client.ts) under the thin-client pivot. The
-  // preview iframe points at the gateway draft URL (Phase 4), so only the
-  // local-only reveal-in-Finder stays on IPC.
-  APPS_OPEN: 'centraid:apps:open',
-
-  PUBLISH_STATUS: 'centraid:publish:status',
-  PUBLISH_EVENT: 'centraid:publish:event',
-
-  // Gateways (issue #109)
-  GATEWAYS_LIST: 'centraid:gateways:list',
-  GATEWAYS_REMOVE: 'centraid:gateways:remove',
-  GATEWAYS_RENAME: 'centraid:gateways:rename',
-  GATEWAYS_UPDATE_METADATA: 'centraid:gateways:update-metadata',
-  GATEWAYS_UPDATE_TOKEN: 'centraid:gateways:update-token',
-  GATEWAYS_SET_ACTIVE: 'centraid:gateways:set-active',
-  GATEWAY_CHANGED: 'centraid:gateways:changed',
-  GATEWAY_AUTH_GET: 'centraid:gateways:auth',
-  // Pairing-ticket redemption + per-gateway vault preview (issue #376).
-  GATEWAY_PAIR_REDEEM: 'centraid:gateways:pair-redeem',
-  GATEWAYS_LIST_VAULTS: 'centraid:gateways:list-vaults',
-  // ConnectFlow "handshake ladder" + "Over SSH" commit (issue #382).
-  GATEWAY_TEST_CONNECTION: 'centraid:gateways:test-connection',
-  GATEWAY_SSH_CONNECT: 'centraid:gateways:ssh-connect',
-  // Gateway runtime watch (heartbeat status + outage log + down alert).
-  GATEWAY_RUNTIME_GET: 'centraid:gateway-runtime:get',
-  GATEWAY_RUNTIME_EVENT: 'centraid:gateway-runtime:event',
-  // Gateway ops (issue #351): manual restart of the local embedded gateway
-  // + save-dialog export of the gateway's diagnostics bundle.
-  GATEWAY_RESTART: 'centraid:gateway-runtime:restart',
-  GATEWAY_DIAGNOSTICS_EXPORT: 'centraid:gateway-runtime:export-diagnostics',
-  GATEWAY_RECOVERY_KIT_EXPORT: 'centraid:gateway-runtime:export-recovery-kit',
-  // Vault addressing (issue #289): client-side active vault per gateway.
-  VAULTS_SET_ACTIVE: 'centraid:vaults:set-active',
-  VAULT_CHANGED: 'centraid:vaults:changed',
-  VAULTS_CREATE: 'centraid:vaults:create',
-  VAULTS_DELETE: 'centraid:vaults:delete',
-  VAULT_METADATA_CHANGED: 'centraid:vaults:metadata-changed',
-  VAULT_METADATA_PUSH: 'centraid:vaults:metadata-push',
-
-  // Phone link (issue #263)
-  PHONE_STATUS: 'centraid:phone:status',
-  PHONE_BEGIN_PAIRING: 'centraid:phone:begin-pairing',
-  PHONE_CANCEL_PAIRING: 'centraid:phone:cancel-pairing',
-  PHONE_REVOKE: 'centraid:phone:revoke',
-  PHONE_PAIRED: 'centraid:phone:paired',
-
-  // Relaunch to update (dist watcher in main/update-watcher.ts)
-  UPDATE_STATUS: 'centraid:update:status',
-  UPDATE_CHECK: 'centraid:update:check',
-  UPDATE_RELAUNCH: 'centraid:update:relaunch',
-  GATEWAY_SERVICE_INSTALL: 'centraid:gateway:service-install',
-
-  UPDATE_AVAILABLE: 'centraid:update:available',
-
-  // "What's new" changelog (main/changelog.ts) — GitHub Releases fetch, cached.
-  CHANGELOG_GET: 'centraid:changelog:get',
-  DEEP_LINK: 'centraid:deep-link',
-} as const;
 
 const deepLinkBuffer = createDeepLinkBuffer();
 ipcRenderer.on(Channel.DEEP_LINK, (_event: IpcRendererEvent, url: unknown) => {
@@ -116,20 +50,7 @@ contextBridge.exposeInMainWorld('CentraidApi', {
       .invoke(Channel.DEVICE_TRANSCRIPT_AVAILABLE)
       .then((value) => value === true)
       .catch(() => false);
-    return {
-      platform: 'desktop' as const,
-      appSessions: false,
-      compute: {
-        previews: true,
-        poster: true,
-        pdfText: true,
-        ocr: false,
-        embedding: false,
-        transcript,
-        edgeSeal: true,
-        backgroundTransfer: false,
-      },
-    };
+    return hostCapabilities(transcript);
   },
   transcribeMedia: (input: { bytes: ArrayBuffer; mediaType: string; filename?: string }) =>
     ipcRenderer.invoke(Channel.DEVICE_TRANSCRIBE, input),

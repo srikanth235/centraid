@@ -33,7 +33,15 @@ export default defineConfig({
       reporter: ['text', 'json', 'json-summary', 'html'],
       reportsDirectory: './coverage',
       include: ['packages/*/src/**', 'apps/*/src/**'],
-      exclude: ['**/*.test.ts', '**/*.test.tsx', '**/*.d.ts', '**/dist/**', '**/index.ts'],
+      exclude: [
+        '**/*.test.ts',
+        '**/*.test.tsx',
+        '**/*.d.ts',
+        '**/dist/**',
+        '**/index.ts',
+        // Test-only harnesses (issue #545 B12) — not product surface.
+        'packages/backup/src/testing/**',
+      ],
       // Engine packages are where the meaningful coverage lives (TESTING.md).
       // These are the *seeded* regression floors — set a conservative margin
       // below the measured baseline so they catch backsliding without flaking,

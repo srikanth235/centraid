@@ -245,6 +245,7 @@ describe('InProcessScheduler.nudge', () => {
   });
 
   it('bypasses the minute gate while leaving condition triggers poll-only', async () => {
+    vi.useFakeTimers();
     const evals: Array<[string, number]> = [];
     const s = new InProcessScheduler({
       fire: () => {},
@@ -252,45 +253,54 @@ describe('InProcessScheduler.nudge', () => {
       now: () => at(9, 0),
       nudgeDelayMs: 0,
     });
-    const condition = {
-      ...dataRow('studio/condition', ['business.invoice']),
-      triggers: [{ kind: 'condition' as const, entity: 'business.invoice' }],
-    };
-    await s.reconcile([dataRow('studio/data', ['business.invoice']), condition]);
-    evals.length = 0;
+    try {
+      const condition = {
+        ...dataRow('studio/condition', ['business.invoice']),
+        triggers: [{ kind: 'condition' as const, entity: 'business.invoice' }],
+      };
+      await s.reconcile([dataRow('studio/data', ['business.invoice']), condition]);
+      evals.length = 0;
 
-    s.tick();
-    expect(evals).toEqual([
-      ['studio/data', 0],
-      ['studio/condition', 0],
-    ]);
-    s.nudge(['business.invoice']);
-    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+      s.tick();
+      expect(evals).toEqual([
+        ['studio/data', 0],
+        ['studio/condition', 0],
+      ]);
+      s.nudge(['business.invoice']);
+      // nudgeDelayMs: 0 still schedules via setTimeout — advance the fake clock.
+      await vi.advanceTimersByTimeAsync(0);
 
-    expect(evals).toEqual([
-      ['studio/data', 0],
-      ['studio/condition', 0],
-      ['studio/data', 0],
-    ]);
+      expect(evals).toEqual([
+        ['studio/data', 0],
+        ['studio/condition', 0],
+        ['studio/data', 0],
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('bootstraps a fresh data watcher during reconcile before its first write', async () => {
+    vi.useFakeTimers();
     const evals: Array<[string, number]> = [];
     const s = new InProcessScheduler({
       fire: () => {},
       evaluate: (ref, index) => void evals.push([ref, index]),
       nudgeDelayMs: 0,
     });
+    try {
+      await s.reconcile([dataRow('studio/data', ['core.party'])]);
+      expect(evals).toEqual([['studio/data', 0]]);
 
-    await s.reconcile([dataRow('studio/data', ['core.party'])]);
-    expect(evals).toEqual([['studio/data', 0]]);
-
-    s.nudge(['core.party']);
-    await new Promise<void>((resolve) => setTimeout(resolve, 5));
-    expect(evals).toEqual([
-      ['studio/data', 0],
-      ['studio/data', 0],
-    ]);
+      s.nudge(['core.party']);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(evals).toEqual([
+        ['studio/data', 0],
+        ['studio/data', 0],
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('fails readiness on bootstrap error, restores the old registry, and retries', async () => {
@@ -318,6 +328,7 @@ describe('InProcessScheduler.nudge', () => {
   });
 
   it('serializes a doorbell that races the minute tick and performs one dirty rerun', async () => {
+    vi.useFakeTimers();
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -337,18 +348,22 @@ describe('InProcessScheduler.nudge', () => {
         active--;
       },
     });
-    await s.register(dataRow('studio/data', ['core.party']));
+    try {
+      await s.register(dataRow('studio/data', ['core.party']));
 
-    s.nudge(['core.party']);
-    await new Promise<void>((resolve) => setTimeout(resolve, 5));
-    expect(calls).toBe(1);
-    s.tick();
-    expect(calls).toBe(1);
-    release();
-    await new Promise<void>((resolve) => setImmediate(resolve));
+      s.nudge(['core.party']);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(calls).toBe(1);
+      s.tick();
+      expect(calls).toBe(1);
+      release();
+      await vi.advanceTimersByTimeAsync(0);
 
-    expect(calls).toBe(2);
-    expect(maxActive).toBe(1);
+      expect(calls).toBe(2);
+      expect(maxActive).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('the minute cron backstop consumes one missed offline change exactly once', async () => {
@@ -384,6 +399,7 @@ describe('InProcessScheduler.nudge', () => {
   });
 
   it('routes rejected off-cycle evaluations without rejecting the caller', async () => {
+    vi.useFakeTimers();
     const errors: string[] = [];
     const s = new InProcessScheduler({
       fire: () => {},
@@ -393,12 +409,16 @@ describe('InProcessScheduler.nudge', () => {
       nudgeDelayMs: 0,
       onError: (error) => errors.push(error instanceof Error ? error.message : String(error)),
     });
-    await s.register(dataRow('studio/data', ['core.transaction']));
+    try {
+      await s.register(dataRow('studio/data', ['core.transaction']));
 
-    expect(() => s.nudge()).not.toThrow();
-    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+      expect(() => s.nudge()).not.toThrow();
+      await vi.advanceTimersByTimeAsync(0);
 
-    expect(errors).toEqual(['nudge failed']);
+      expect(errors).toEqual(['nudge failed']);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

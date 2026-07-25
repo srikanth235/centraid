@@ -103,10 +103,15 @@ PY
 )"
 
 # Package/app ids that have non-test source.
+# git's **/ requires an intervening directory, so also list flat src/*.ts
+# (blob-format, blueprints, cli, protocol, test-kit, tunnel, extension,
+# oauth-worker, web, …) — #545 A3.
 PKG_IDS="$(
     git -C "$REPO_ROOT" ls-files \
         'packages/*/src/**/*.ts' 'packages/*/src/**/*.tsx' \
-        'apps/*/src/**/*.ts' 'apps/*/src/**/*.tsx' 2>/dev/null \
+        'packages/*/src/*.ts' 'packages/*/src/*.tsx' \
+        'apps/*/src/**/*.ts' 'apps/*/src/**/*.tsx' \
+        'apps/*/src/*.ts' 'apps/*/src/*.tsx' 2>/dev/null \
         | grep -vE '\.(test|spec)\.(ts|tsx)$|\.d\.ts$' \
         | awk -F/ '{print $1"/"$2}' \
         | sort -u

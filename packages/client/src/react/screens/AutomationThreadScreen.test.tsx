@@ -156,14 +156,14 @@ describe('AutomationThreadScreen', () => {
     // The header stays quiet in the happy path — no "Active"/"Plan ready"
     // status badge. Compile state shows as a turn in the thread instead.
     expect(el.querySelector('[data-au-status]')).toBeNull();
-    expect(el.querySelector('[data-hue="indigo"]')).toBeTruthy();
-    expect(byText(el, 'button', 'Run now')).toBeTruthy();
+    expect(el.querySelector('[data-hue="indigo"]')).not.toBeNull();
+    expect(byText(el, 'button', 'Run now')).not.toBeNull();
     // The enable switch, Edit, and Delete moved into a single overflow menu —
     // nothing but the trigger is in the DOM until it's opened.
     const trigger = el.querySelector<HTMLButtonElement>(
       '[data-testid="automation-menu-trigger"]',
     ) as HTMLButtonElement;
-    expect(trigger).toBeTruthy();
+    expect(trigger).not.toBeNull();
     expect(trigger.getAttribute('aria-haspopup')).toBe('menu');
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
     expect(el.querySelector('[role="menu"]')).toBeNull();
@@ -187,7 +187,7 @@ describe('AutomationThreadScreen', () => {
     const trigger = el.querySelector<HTMLButtonElement>('[data-testid="automation-menu-trigger"]')!;
     await act(async () => trigger.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     const menu = el.querySelector('[role="menu"]') as HTMLElement;
-    expect(menu).toBeTruthy();
+    expect(menu).not.toBeNull();
     expect(trigger.getAttribute('aria-expanded')).toBe('true');
     // Pause (enabled), Edit setup, and Delete all live in the menu.
     expect(menu.textContent).toContain('Edit setup');
@@ -236,7 +236,7 @@ describe('AutomationThreadScreen', () => {
     const el = await mount(makeProps());
     const trigger = el.querySelector<HTMLButtonElement>('[data-testid="automation-menu-trigger"]')!;
     await act(async () => trigger.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(el.querySelector('[role="menu"]')).toBeTruthy();
+    expect(el.querySelector('[role="menu"]')).not.toBeNull();
     await act(async () =>
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
     );
@@ -245,7 +245,7 @@ describe('AutomationThreadScreen', () => {
 
   it('renders trigger chips — mono cron expr + next run, plain-word summaries', async () => {
     const el = await mount(makeProps());
-    expect(el.querySelector('[data-trigger-kind="cron"]')).toBeTruthy();
+    expect(el.querySelector('[data-trigger-kind="cron"]')).not.toBeNull();
     expect(el.querySelector('code')?.textContent).toBe('0 8 * * *');
     expect(el.textContent).toContain('next Tomorrow, 8:00 AM');
   });
@@ -254,10 +254,10 @@ describe('AutomationThreadScreen', () => {
     const props = makeProps();
     const el = await mount(props);
     const outboxCard = el.querySelector('[data-kind="outbox"]') as HTMLElement;
-    expect(outboxCard).toBeTruthy();
+    expect(outboxCard).not.toBeNull();
     expect(outboxCard.textContent).toContain('Staged');
     const parkedCard = el.querySelector('[data-kind="parked"]') as HTMLElement;
-    expect(parkedCard).toBeTruthy();
+    expect(parkedCard).not.toBeNull();
     expect(parkedCard.textContent).toContain('Parked');
 
     const checkbox = outboxCard.querySelector('input[type="checkbox"]') as HTMLInputElement;
@@ -274,7 +274,7 @@ describe('AutomationThreadScreen', () => {
     const el = await mount(props);
     expect(el.textContent).toContain('1 standing grant');
     const revokeBtn = byText(el, 'button', 'Revoke') as HTMLButtonElement;
-    expect(revokeBtn).toBeTruthy();
+    expect(revokeBtn).not.toBeNull();
     await act(async () => revokeBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onDecideConsent).toHaveBeenCalledWith('grant', 'g1', 'revoke', undefined);
   });
@@ -308,8 +308,8 @@ describe('AutomationThreadScreen', () => {
     const el = await mount(props);
     const input = el.querySelector<HTMLInputElement>('input[aria-label="Message this automation"]');
     const send = el.querySelector<HTMLButtonElement>('button[aria-label="Send"]');
-    expect(input).toBeTruthy();
-    expect(send).toBeTruthy();
+    expect(input).not.toBeNull();
+    expect(send).not.toBeNull();
     // Drive the controlled input through React's value tracker (native setter).
     const nativeSet = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set as (
       v: string,
@@ -331,7 +331,7 @@ describe('AutomationThreadScreen', () => {
     const el = await mount(props);
     // Toggle the standing-instruction switch off.
     const toggle = el.querySelector<HTMLButtonElement>('button[aria-pressed="true"]');
-    expect(toggle).toBeTruthy();
+    expect(toggle).not.toBeNull();
     await act(async () => toggle!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     const input = el.querySelector<HTMLInputElement>('input[aria-label="Message this automation"]');
     const nativeSet = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set as (

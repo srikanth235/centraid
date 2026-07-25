@@ -4,20 +4,16 @@ import {
   isTrustedCredentialGesture,
   passwordForSave,
 } from './credential-gesture.js';
+import { randomPassword, unwrapCompanionEnvelope } from './content-core.js';
 import { applyFillToLiveFields, findFields, isLiveFillTarget } from './page-fields.js';
 
 if (window.top === window.self && window.isSecureContext) installCompanion();
 
-interface CompanionEnvelope<T> {
-  readonly ok: boolean;
-  readonly value?: T;
-  readonly error?: string;
-}
-
 async function send<T>(message: CompanionRequest): Promise<T> {
-  const envelope = (await chrome.runtime.sendMessage(message)) as CompanionEnvelope<T> | undefined;
-  if (!envelope?.ok) throw new Error(envelope?.error ?? 'Centraid request failed.');
-  return envelope.value as T;
+  const envelope = (await chrome.runtime.sendMessage(message)) as
+    | { ok: boolean; value?: T; error?: string }
+    | undefined;
+  return unwrapCompanionEnvelope(envelope);
 }
 
 function nativeSet(input: HTMLInputElement, value: string): void {
@@ -25,24 +21,6 @@ function nativeSet(input: HTMLInputElement, value: string): void {
   setter?.call(input, value);
   input.dispatchEvent(new Event('input', { bubbles: true }));
   input.dispatchEvent(new Event('change', { bubbles: true }));
-}
-
-/** Unbiased charset sampling (rejection sampling over crypto.getRandomValues). */
-function randomPassword(length = 20): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*';
-  const out: string[] = [];
-  // Largest multiple of alphabet.length that fits in a uint32 bucket.
-  const bound = Math.floor(0x1_0000_0000 / alphabet.length) * alphabet.length;
-  while (out.length < length) {
-    const values = new Uint32Array(length - out.length);
-    crypto.getRandomValues(values);
-    for (const value of values) {
-      if (value >= bound) continue;
-      out.push(alphabet[value % alphabet.length]!);
-      if (out.length === length) break;
-    }
-  }
-  return out.join('');
 }
 
 function installCompanion(): void {

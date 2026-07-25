@@ -1,5 +1,5 @@
 import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import crypto from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -99,14 +99,14 @@ test('SSE: delivers a change event when the bus emits for the subscribed app', a
 
   // Emit after the connection is open. We use the bus directly because the
   // /_changes endpoint is the consumer side; producers are tested elsewhere.
-  setTimeout(() => {
+  queueMicrotask(() => {
     runtime.changeBus.emit({
       appId: 'myapp',
       tables: ['todos'],
       ts: 1234,
       source: 'handler',
     });
-  }, 50);
+  });
 
   const events = await readChangeEvents(res, (e) => e.length >= 1);
   expect(events.length).toBe(1);
@@ -119,10 +119,10 @@ test('SSE: does not deliver events for OTHER apps to this subscriber', async () 
   });
   expect(res.status).toBe(200);
 
-  setTimeout(() => {
+  queueMicrotask(() => {
     runtime.changeBus.emit({ appId: 'otherapp', tables: ['x'], ts: 1, source: 'handler' });
     runtime.changeBus.emit({ appId: 'myapp', tables: ['todos'], ts: 2, source: 'handler' });
-  }, 50);
+  });
 
   const events = await readChangeEvents(res, (e) => e.length >= 1);
   expect(events.length).toBe(1);
@@ -137,15 +137,21 @@ test('SSE: client disconnect unsubscribes the listener from the bus', async () =
   // Drain a tiny bit so the connection is fully established and the
   // subscribe() has run on the server.
   const reader = res.body!.getReader();
-  await Promise.race([reader.read(), new Promise((resolve) => setTimeout(resolve, 50))]);
-  expect(runtime.changeBus.listenerCount('cleanup-app')).toBe(1);
+  await vi.waitFor(() => {
+    expect(runtime.changeBus.listenerCount('cleanup-app')).toBe(1);
+  });
+  // Drain a chunk so the connection is fully established.
+  await Promise.race([
+    reader.read(),
+    vi.waitFor(() => expect(runtime.changeBus.listenerCount('cleanup-app')).toBe(1)),
+  ]);
 
   // Cancel the reader → underlying socket closes → server cleanup fires.
   await reader.cancel();
-  // The cleanup runs on the next tick of the close event; give it a
-  // moment to propagate.
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  expect(runtime.changeBus.listenerCount('cleanup-app')).toBe(0);
+  // The cleanup runs on the next tick of the close event; poll for unsubscribe.
+  await vi.waitFor(() => {
+    expect(runtime.changeBus.listenerCount('cleanup-app')).toBe(0);
+  });
 });
 
 test('SSE: requires the bearer token (gated by the surrounding http-server)', async () => {
@@ -159,7 +165,7 @@ test('SSE: agent-sourced events carry source, toolCallId, and turnId', async () 
   });
   expect(res.status).toBe(200);
 
-  setTimeout(() => {
+  queueMicrotask(() => {
     runtime.changeBus.emit({
       appId: 'myapp',
       tables: ['todos'],
@@ -168,7 +174,7 @@ test('SSE: agent-sourced events carry source, toolCallId, and turnId', async () 
       toolCallId: 'call-abc',
       turnId: 'turn-xyz',
     });
-  }, 50);
+  });
 
   const events = await readChangeEvents(res, (e) => e.length >= 1);
   expect(events.length).toBe(1);
@@ -183,14 +189,14 @@ test('SSE: handler-sourced events carry source but omit toolCallId/turnId', asyn
   });
   expect(res.status).toBe(200);
 
-  setTimeout(() => {
+  queueMicrotask(() => {
     runtime.changeBus.emit({
       appId: 'myapp',
       tables: ['notes'],
       ts: 6,
       source: 'handler',
     });
-  }, 50);
+  });
 
   const events = await readChangeEvents(res, (e) => e.length >= 1);
   expect(events.length).toBe(1);
@@ -259,7 +265,7 @@ function mockClient(): MockClient {
   };
 }
 
-const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 10));
+const settle = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
 test('SSE cap: subscribers past the per-app limit get 503 + Retry-After; the count decrements on disconnect', async () => {
   const bus = new ChangeBus();

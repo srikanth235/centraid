@@ -162,7 +162,7 @@ describe('ReplicaShellSession', () => {
     await session.close();
 
     expect(coordinator.close).toHaveBeenCalledOnce();
-    expect(coordinator.purge).not.toHaveBeenCalled();
+    expect(coordinator.purge).toHaveBeenCalledTimes(0);
     expect(listRememberedReplicaIdentities()).toEqual([identity]);
     localStorage.clear();
   });
@@ -252,7 +252,7 @@ describe('ReplicaShellSession', () => {
       cursor: { epoch: 'warm', seq: 42 },
       schemaEpoch: 'schema',
     });
-    expect(coordinator.bootstrap).not.toHaveBeenCalled();
+    expect(coordinator.bootstrap).toHaveBeenCalledTimes(0);
     await session.read('todos', { entity: 'core.task' });
     expect(coordinator.readWire).toHaveBeenCalledWith({
       shapeId: 'shape-todos',
@@ -329,7 +329,7 @@ describe('ReplicaShellSession', () => {
       );
 
       await session.start({ mode: 'memory', cursor: null, schemaEpoch: null });
-      expect(coordinator.bootstrap).not.toHaveBeenCalled();
+      expect(coordinator.bootstrap).toHaveBeenCalledTimes(0);
       await vi.advanceTimersByTimeAsync(10);
       await vi.waitFor(() => expect(coordinator.bootstrap).toHaveBeenCalledOnce());
       expect(fetcher).toHaveBeenCalledTimes(2);
@@ -370,7 +370,7 @@ describe('ReplicaShellSession', () => {
       payloadHash: queued.payloadHash,
     });
     expect(coordinator.markIntentAwaitingChange).toHaveBeenCalledWith(queued.intentId);
-    expect(coordinator.applyIntentOutcome).not.toHaveBeenCalled();
+    expect(coordinator.applyIntentOutcome).toHaveBeenCalledTimes(0);
     await session.close();
   });
 
@@ -420,7 +420,7 @@ describe('ReplicaShellSession', () => {
         },
       ],
     });
-    expect(coordinator.claimNextIntent).not.toHaveBeenCalled();
+    expect(coordinator.claimNextIntent).toHaveBeenCalledTimes(0);
     await session.close();
   });
 
@@ -480,7 +480,7 @@ describe('ReplicaShellSession', () => {
 
     events.dispatchEvent(new Event('online'));
     await Promise.resolve();
-    expect(coordinator.bootstrap).not.toHaveBeenCalled();
+    expect(coordinator.bootstrap).toHaveBeenCalledTimes(0);
     await session.close();
   });
 

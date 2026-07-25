@@ -1,6 +1,6 @@
 import { tempDir, tempDirSync } from '@centraid/test-kit/temp-dir';
 // governance: allow-repo-hygiene file-size-limit (#408) one HTTP turn-routing suite sharing the same runtime and conversation-runner fixture; splitting would duplicate the protocol harness and its state assertions
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -277,9 +277,11 @@ test('two concurrent POSTs with the SAME idempotencyKey run the turn once (in-fl
     });
   const p1 = post();
   const p2 = post();
-  // Let both requests reach the route + queue on the lock, then let the first
-  // turn complete; the second acquires the lock, finds the recorded turn, replays.
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  // Wait until the runner has entered the in-flight gate (both requests queued
+  // on the per-conversation lock), then release so the second can replay.
+  await vi.waitFor(() => {
+    expect(runs).toBe(1);
+  });
   release();
   const [t1, t2] = await Promise.all([p1.then((r) => r.text()), p2.then((r) => r.text())]);
   expect(runs).toBe(1);
@@ -436,9 +438,11 @@ test('conversationLocks are per-runtime — two runtimes sharing appId+conversat
 
   // -- Setup runtime A: runner hangs on `releaseA`.
   let releaseA!: () => void;
+  let aStarted = false;
   const aDone = new Promise<void>((resolve) => (releaseA = resolve));
   const runnerA: ConversationRunner = {
     async run(input) {
+      aStarted = true;
       input.onEvent({ type: 'assistant.start' });
       await aDone;
       input.onEvent({ type: 'final', text: 'a-final' });
@@ -473,8 +477,10 @@ test('conversationLocks are per-runtime — two runtimes sharing appId+conversat
       body: JSON.stringify({ conversationId: 'w1', message: 'a' }),
     }).then((r) => r.text());
 
-    // Give A's runner a tick to enter the lock + start streaming.
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // Wait until A's runner has entered the lock + started streaming.
+    await vi.waitFor(() => {
+      expect(aStarted).toBe(true);
+    });
 
     // Now fire B with the SAME appId+conversationId. If locks are
     // per-runtime (the fix), this resolves on its own without waiting

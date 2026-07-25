@@ -11,8 +11,17 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { hashWebhookSecret } from '@centraid/automation';
 import { serve, type GatewayServeHandle } from '../serve/serve.ts';
 import type { GatewayPaths } from '../paths.ts';
+// Name the lifecycle-automation-routes module (issue #545 B3) so cold-spot
+// reachability counts this suite against the webhook mint path.
+import {
+  handleAutomationCompile,
+  handleAutomationCreate,
+  handleAutomationRotateWebhook,
+  handleAutomationUpdate,
+} from './lifecycle-automation-routes.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -87,6 +96,32 @@ afterEach(async () => {
   await fs.rm(dataDir, { recursive: true, force: true });
 });
 
+test('lifecycle-automation-routes exports the create/update/rotate/compile handlers', () => {
+  expect(typeof handleAutomationCreate).toBe('function');
+  expect(typeof handleAutomationUpdate).toBe('function');
+  expect(typeof handleAutomationRotateWebhook).toBe('function');
+  expect(typeof handleAutomationCompile).toBe('function');
+});
+
+test('create mints a webhook plaintext once and persists only the hash', async () => {
+  const created = await createAutomation('minted-hook', {
+    triggers: [{ kind: 'webhook' }],
+  });
+  expect(created.webhook).toBeTruthy();
+  const secret = created.webhook!.secret;
+  expect(secret.length).toBeGreaterThan(16);
+  const trigger = created.row.manifest.triggers[0] as {
+    kind: string;
+    id: string;
+    secretHash: string;
+  };
+  expect(trigger.kind).toBe('webhook');
+  expect(trigger.id).toBe(created.webhook!.id);
+  // Plaintext is returned once; the manifest stores only SHA-256(secret).
+  expect(trigger.secretHash).toBe(hashWebhookSecret(secret));
+  expect(JSON.stringify(created.row.manifest)).not.toContain(secret);
+});
+
 test('update patches only the name, leaving prompt/triggers untouched', async () => {
   const created = await createAutomation('renamer');
   const { status, json } = await update(created.row.ref, { name: 'Renamed Automation' });
@@ -132,8 +167,9 @@ test('update mints a fresh webhook when the automation had none before', async (
   expect(webhook.url).toMatch(/\/_centraid-hook\//);
   const row = json.row as { manifest: { triggers: Array<{ kind: string; id?: string }> } };
   expect(row.manifest.triggers).toEqual([
-    { kind: 'webhook', id: webhook.id, secretHash: expect.any(String) },
+    { kind: 'webhook', id: webhook.id, secretHash: hashWebhookSecret(webhook.secret) },
   ]);
+  expect(JSON.stringify(row.manifest)).not.toContain(webhook.secret);
 });
 
 test('update keeps an existing webhook trigger secret untouched when re-declared', async () => {

@@ -8,16 +8,18 @@
   `check:pr`, product journey owners (chat/ENOSPC/restore/multi-writer), matrix
   honesty, Android home-loads, CI latency pins, and hygiene chip-away
   (`toHaveBeenCalled` / fixed sleeps). See [TESTING.md](TESTING.md) Nightly SLA
-  + confidence map. Residual hygiene debt: ~500 `toHaveBeenCalled` sites and
-  remaining fixed sleeps; continue per-file chip-away.
+  + confidence map. Residual hygiene debt: ~600 `toHaveBeenCalled*` sites
+  (~160 bare `toHaveBeenCalled()`) and remaining fixed sleeps; continue
+  per-file chip-away under #545 E1–E3.
 - #212 — Testing strategy ([TESTING.md](TESTING.md)) follow-up: the three
   per-layer workstreams (`assert.*` → `expect`, coverage-floor ratchet, desktop
   renderer logic-extraction) landed under #214; the **desktop Playwright e2e
-  journeys** landed under #225 (nightly/on-demand). **Still open:** the Maestro
-  mobile flows (iOS landed; Android home-loads under #496 PC1), and the remaining
-  renderer extraction — `app.ts` (6,803 lines) still holds pure logic
-  (appearance-prefs bridge, profile view-models, insights formatters) plus a
-  near-duplicate `relativeTime` to consolidate.
+  journeys** landed under #225 (nightly/on-demand + path-filtered PR via
+  `client-e2e-pr.yml`). **Still open:** the Maestro mobile flows (iOS landed;
+  Android home-loads under #496 PC1), and remaining pure-logic extraction from
+  `packages/client/src/react/**` (the old monolithic `app.ts` was removed in the
+  React flip; appearance-prefs, profile view-models, insights formatters, and
+  near-duplicate `relativeTime` still need consolidation / floors — #545 D5/B8).
 
 ## Resolved
 

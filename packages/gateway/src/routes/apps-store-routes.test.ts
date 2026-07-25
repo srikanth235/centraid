@@ -13,6 +13,9 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { serve, type GatewayServeHandle } from '../serve/serve.ts';
 import type { GatewayPaths } from '../paths.ts';
+// Name apps-store-routes (issue #545 B7) so cold-spot reachability counts
+// this HTTP suite against the git-store publish surface.
+import { makeAppsStoreRouteHandler, type AppMetaRow } from './apps-store-routes.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -73,6 +76,13 @@ async function putFile(sessionId: string, rel: string, content: string): Promise
   });
   expect(res.status).toBe(200);
 }
+
+test('makeAppsStoreRouteHandler returns a route handler function', () => {
+  const handler = makeAppsStoreRouteHandler({
+    listAppsWithMeta: async () => [] as AppMetaRow[],
+  } as never);
+  expect(typeof handler).toBe('function');
+});
 
 test('session → write → publish → serve → rollback round-trip', async () => {
   await openSession('s1');

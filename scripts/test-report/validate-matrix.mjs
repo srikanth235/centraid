@@ -8,6 +8,7 @@ const allowedStatuses = new Set(['solid', 'partial', 'gap', 'skip']);
 
 export async function validateMatrix(matrix, options = {}) {
   const errors = [];
+  const warnings = [];
   const dimensions = new Map(matrix.dimensions?.map((dimension) => [dimension.id, dimension]));
   const surfaces = new Map(matrix.surfaces?.map((surface) => [surface.id, surface]));
   const flowIds = new Set();
@@ -99,12 +100,24 @@ export async function validateMatrix(matrix, options = {}) {
       errors.push(`${flow.id} owner must be a repository-relative path`);
       continue;
     }
+    // #545 D4 — warn on missing minimumTests even when file checks are off.
+    if (
+      options.warnMissingMinimumTests &&
+      flow.minimumTests === undefined &&
+      flow.tier !== 'perf' &&
+      flow.tier !== 'scale' &&
+      flow.tier !== 'e2e'
+    ) {
+      warnings.push(
+        `${flow.id} has no minimumTests (set a floor or minimumTests: null for perf/scale/e2e opt-out)`,
+      );
+    }
     if (options.checkFiles !== false) {
       try {
         const ownerPath = path.join(options.root ?? root, flow.owner);
         await access(ownerPath);
         const source = await readFile(ownerPath, 'utf8');
-        if (flow.minimumTests !== undefined) {
+        if (flow.minimumTests !== undefined && flow.minimumTests !== null) {
           const testCount = source.match(/\b(?:test|it)\s*\(/g)?.length ?? 0;
           if (testCount < flow.minimumTests) {
             errors.push(
@@ -133,13 +146,16 @@ export async function validateMatrix(matrix, options = {}) {
     }
   }
 
-  return { errors, dimensions, surfaces, flowIds };
+  return { errors, warnings, dimensions, surfaces, flowIds };
 }
 
 async function main() {
   const matrixPath = path.resolve(process.argv[2] ?? path.join(root, 'tests/matrix.json'));
   const matrix = JSON.parse(await readFile(matrixPath, 'utf8'));
-  const { errors, surfaces, dimensions, flowIds } = await validateMatrix(matrix);
+  const { errors, warnings, surfaces, dimensions, flowIds } = await validateMatrix(matrix, {
+    warnMissingMinimumTests: true,
+  });
+  for (const w of warnings ?? []) console.warn(`matrix: warning: ${w}`);
   if (errors.length) {
     for (const error of errors) console.error(`matrix: ${error}`);
     process.exitCode = 1;

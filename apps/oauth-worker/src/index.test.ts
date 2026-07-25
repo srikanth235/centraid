@@ -1,6 +1,7 @@
+// governance: allow-repo-hygiene file-size-limit #545 cohesive security/ACID suite for one module
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { handleRequest } from './index.js';
+import { handleRequest } from './worker.js';
 
 const NOW = Date.UTC(2026, 6, 23, 10, 0, 0);
 const STATE = `w.${'A'.repeat(43)}`;
@@ -183,7 +184,7 @@ describe('Centraid Assist Worker', () => {
     const html = await response.text();
     expect(html).toContain('centraid://oauth/finish#');
     expect(html).not.toContain('ya29.');
-    expect(log).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledTimes(0);
     expect(env.METRICS.writeDataPoint).toHaveBeenCalledWith({
       blobs: ['callback', 'success'],
       doubles: [200, 1],
@@ -231,7 +232,7 @@ describe('Centraid Assist Worker', () => {
       now: () => NOW + 121_000,
     });
     expect(await expired.json()).toEqual({ error: 'expired_receipt' });
-    expect(upstream).not.toHaveBeenCalled();
+    expect(upstream).toHaveBeenCalledTimes(0);
   });
 
   test('invalid body shape and PKCE verifier are rejected before any upstream call', async () => {
@@ -267,7 +268,7 @@ describe('Centraid Assist Worker', () => {
       { fetch: upstream as typeof fetch, now: () => NOW },
     );
     expect(await restricted.json()).toEqual({ error: 'invalid_body' });
-    expect(upstream).not.toHaveBeenCalled();
+    expect(upstream).toHaveBeenCalledTimes(0);
   });
 
   test('Google must return the exact requested allowlisted scope set', async () => {
@@ -333,7 +334,7 @@ describe('Centraid Assist Worker', () => {
     });
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ error: 'assist_disabled' });
-    expect(upstream).not.toHaveBeenCalled();
+    expect(upstream).toHaveBeenCalledTimes(0);
 
     const limited = environment();
     limited.IP_LIMITER = { limit: async () => ({ success: false }) } as RateLimit;
@@ -345,7 +346,7 @@ describe('Centraid Assist Worker', () => {
     );
     expect(limitedResponse.status).toBe(429);
     expect(limitedResponse.headers.get('retry-after')).toBe('60');
-    expect(upstream).not.toHaveBeenCalled();
+    expect(upstream).toHaveBeenCalledTimes(0);
   });
 
   test('fixed public origins and environment invariants fail closed', async () => {
@@ -418,5 +419,112 @@ describe('Centraid Assist Worker', () => {
       { fetch, now: () => NOW },
     );
     expect(wrongPort.status).toBe(421);
+  });
+
+  test('upstream Google timeout and 5xx map to transient failures without leaking tokens', async () => {
+    const env = environment();
+    const receipt = await callbackReceipt(env);
+
+    const timeoutUpstream = vi.fn(async () => {
+      throw new Error('Google token endpoint timed out');
+    });
+    const timeoutResponse = await handleRequest(exchangeRequest(receipt), env, context, {
+      fetch: timeoutUpstream as typeof fetch,
+      now: () => NOW,
+    });
+    expect(timeoutResponse.status).toBe(503);
+    expect(await timeoutResponse.json()).toEqual({ error: 'upstream_unavailable' });
+    expect(timeoutUpstream).toHaveBeenCalledTimes(1);
+    expect(String(timeoutUpstream.mock.calls.at(0)?.at(0))).toBe(
+      'https://oauth2.googleapis.com/token',
+    );
+
+    const fiveXxUpstream = vi.fn(async () =>
+      Response.json(
+        { error: 'server_error', error_description: 'ya29.must-not-leak' },
+        { status: 503 },
+      ),
+    );
+    const fiveXx = await handleRequest(exchangeRequest(receipt), env, context, {
+      fetch: fiveXxUpstream as typeof fetch,
+      now: () => NOW,
+    });
+    expect(fiveXx.status).toBe(503);
+    const fiveXxBody = await fiveXx.json();
+    expect(fiveXxBody).toEqual({ error: 'server_error' });
+    expect(JSON.stringify(fiveXxBody)).not.toContain('ya29');
+  });
+
+  test('malformed Google responses fail closed as invalid_upstream_response', async () => {
+    const env = environment();
+    const receipt = await callbackReceipt(env);
+    const notJson = vi.fn(async () => new Response('not-json{', { status: 200 }));
+    const notJsonResponse = await handleRequest(exchangeRequest(receipt), env, context, {
+      fetch: notJson as typeof fetch,
+      now: () => NOW,
+    });
+    expect(notJsonResponse.status).toBe(502);
+    expect(await notJsonResponse.json()).toEqual({ error: 'invalid_upstream_response' });
+
+    const missingToken = vi.fn(async () =>
+      Response.json({
+        token_type: 'Bearer',
+        scope: 'https://www.googleapis.com/auth/calendar.readonly',
+      }),
+    );
+    const missing = await handleRequest(exchangeRequest(receipt), env, context, {
+      fetch: missingToken as typeof fetch,
+      now: () => NOW,
+    });
+    expect(missing.status).toBe(502);
+    expect(await missing.json()).toEqual({ error: 'invalid_upstream_response' });
+  });
+
+  test('receipt clock-skew beyond the TTL window is rejected as expired_receipt', async () => {
+    const env = environment();
+    const receipt = await callbackReceipt(env);
+    const upstream = vi.fn();
+    // Receipt expiresAt is NOW/1000 + 120. A clock that is more than TTL
+    // *ahead* of mint time also fails closed (future skew).
+    const skewedFuture = await handleRequest(exchangeRequest(receipt), env, context, {
+      fetch: upstream as typeof fetch,
+      now: () => NOW - 121_000,
+    });
+    expect(await skewedFuture.json()).toEqual({ error: 'expired_receipt' });
+    expect(upstream.mock.calls).toEqual([]);
+  });
+
+  test('rate-limit recovery: a later request succeeds after the limiter opens', async () => {
+    const env = environment();
+    const receipt = await callbackReceipt(env);
+    let open = false;
+    env.IP_LIMITER = {
+      limit: async () => ({ success: open }),
+    } as RateLimit;
+    const upstream = vi.fn(async () =>
+      Response.json({
+        access_token: 'ya29.recovered',
+        expires_in: 3600,
+        token_type: 'Bearer',
+        scope: 'https://www.googleapis.com/auth/calendar.readonly',
+      }),
+    );
+
+    const blocked = await handleRequest(exchangeRequest(receipt), env, context, {
+      fetch: upstream as typeof fetch,
+      now: () => NOW,
+    });
+    expect(blocked.status).toBe(429);
+    expect(await blocked.json()).toEqual({ error: 'rate_limited' });
+    expect(upstream.mock.calls).toEqual([]);
+
+    open = true;
+    const recovered = await handleRequest(exchangeRequest(receipt), env, context, {
+      fetch: upstream as typeof fetch,
+      now: () => NOW,
+    });
+    expect(recovered.status).toBe(200);
+    expect(await recovered.json()).toMatchObject({ access_token: 'ya29.recovered' });
+    expect(upstream).toHaveBeenCalledTimes(1);
   });
 });

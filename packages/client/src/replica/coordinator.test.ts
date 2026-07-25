@@ -1,6 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit cohesive coordinator regression suite; splitting would obscure issue #417 review
 import { describe, expect, test, vi } from 'vitest';
 
+import { flushMicrotasks } from '../test-flush.js';
 import type { VaultChangeMessage } from '../vault-change-feed.js';
 import { ReplicaCoordinator, type ReplicaChangeFeedAdapter } from './coordinator.js';
 import { createReplicaCoordinator } from './coordinator-web.js';
@@ -487,7 +488,7 @@ describe('ReplicaCoordinator', () => {
       to: { epoch: 'epoch', seq: 1 },
       changes: [],
     });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushMicrotasks();
 
     expect((await client.status()).cursor).toEqual({ epoch: 'new-epoch', seq: 0 });
     expect(worker.requests.filter((request) => request.op === 'apply-changes')).toHaveLength(0);

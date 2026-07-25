@@ -42,7 +42,7 @@ describe('processShareIntent routing', () => {
       ],
     });
     expect(ports.backupDeviceMedia).toHaveBeenCalledTimes(2);
-    expect(ports.backupDocument).not.toHaveBeenCalled();
+    expect(ports.backupDocument).toHaveBeenCalledTimes(0);
     expect(ports.backupDeviceMedia).toHaveBeenNthCalledWith(
       1,
       session,
@@ -72,7 +72,7 @@ describe('processShareIntent routing', () => {
       GATEWAY,
       expect.objectContaining({ kind: 'audio', deleteSourceAfterSettle: true }),
     );
-    expect(ports.backupDocument).not.toHaveBeenCalled();
+    expect(ports.backupDocument).toHaveBeenCalledTimes(0);
   });
 
   it('routes documents to the docs producer', async () => {
@@ -89,7 +89,7 @@ describe('processShareIntent routing', () => {
         deleteSourceAfterSettle: true,
       }),
     );
-    expect(ports.backupDeviceMedia).not.toHaveBeenCalled();
+    expect(ports.backupDeviceMedia).toHaveBeenCalledTimes(0);
   });
 
   it('falls back to fileSize when the intent carries no size', async () => {
@@ -110,8 +110,8 @@ describe('processShareIntent lifecycle', () => {
   it('alerts honestly and resets on an unsupported (text) share, touching no producer', async () => {
     const ports = fakePorts();
     await processShareIntent(ports, session, GATEWAY, { files: [], text: 'hello' });
-    expect(ports.backupDeviceMedia).not.toHaveBeenCalled();
-    expect(ports.backupDocument).not.toHaveBeenCalled();
+    expect(ports.backupDeviceMedia).toHaveBeenCalledTimes(0);
+    expect(ports.backupDocument).toHaveBeenCalledTimes(0);
     expect(ports.alert).toHaveBeenCalledTimes(1);
     expect(ports.alert).toHaveBeenCalledWith('Can’t save this to Centraid', expect.any(String));
     expect(ports.reset).toHaveBeenCalledTimes(1);

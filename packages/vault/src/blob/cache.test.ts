@@ -4,7 +4,7 @@
 // "statusFor/replicate perform ZERO list() calls", "max in-flight = N") are
 // assertions over recorded call shapes, not vibes.
 
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { nowIso, uuidv7 } from '../ids.js';
 import { BlobCustody } from './custody.js';
@@ -446,8 +446,10 @@ test('replicate pushes at most `concurrency` blobs in flight at once', async () 
   const gate = h.remote.gatePuts(); // every put() parks until released
 
   const pending = h.custody.replicate();
-  // Let the pool spin up its workers.
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  // Wait until the pool has saturated (or finished claiming work).
+  await vi.waitFor(() => {
+    expect(gate.inFlightMax()).toBeGreaterThan(0);
+  });
   expect(gate.inFlightMax()).toBeLessThanOrEqual(3);
   gate.release();
   const moved = await pending;
@@ -471,14 +473,17 @@ test('bulk replication parks while an interactive read-through is in flight', as
 
   const getGate = h.remote.gateGets(); // the interactive GET will hang here
   const reading = h.custody.open(hot.sha); // interactive read starts, parks in get()
-  await new Promise((resolve) => setTimeout(resolve, 5));
-  expect(getGate.pending()).toBe(1); // the read is genuinely in flight
+  await vi.waitFor(() => {
+    expect(getGate.pending()).toBe(1); // the read is genuinely in flight
+  });
 
   const putsBefore = h.remote.calls.put;
   const replicating = h.custody.replicate();
-  // Give replication a chance to (wrongly) proceed — it must NOT while the read is hot.
-  await new Promise((resolve) => setTimeout(resolve, 20));
-  expect(h.remote.calls.put).toBe(putsBefore); // parked by QoS
+  // Poll a few microtasks — replication must stay parked while the read is hot.
+  for (let i = 0; i < 5; i++) {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(h.remote.calls.put).toBe(putsBefore); // parked by QoS
+  }
 
   getGate.resolveAll(); // the interactive read completes
   await reading;

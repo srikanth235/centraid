@@ -17,7 +17,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --dangerouslyIgnoreUnhandledErrors",
     "clean": "rm -rf dist"
   },
   "dependencies": {

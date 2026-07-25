@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // The inline kit is imported (transitively, via the module under test) FIRST so
 // its `./suppress-served-ask` side effect runs before the real kit module. This
 // suite exercises the generic blob-image authorizer (issue #505 Phase 4).
+import { flushMicrotasks } from '../../test-flush.js';
 import { installInlineBlobImages } from './inline-blob-images.js';
 
 // gateway-client-core is the choke point authorizeBlobUrl routes through; stub
@@ -48,7 +49,7 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+const flush = flushMicrotasks;
 
 describe('installInlineBlobImages', () => {
   it('swaps an <img> src pointing at /_vault/blobs to an authed object URL', async () => {

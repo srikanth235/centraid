@@ -46,16 +46,17 @@ test('GET /centraid/_templates returns stripped bundled metadata behind auth', a
   });
   expect(res.status).toBe(200);
   const templates = (await res.json()) as Array<Record<string, unknown>>;
-  expect(Array.isArray(templates) && templates.length > 0).toBeTruthy();
+  expect(Array.isArray(templates)).toBe(true);
+  expect(templates.length).toBeGreaterThan(0);
 
   for (const t of templates) {
     // Display metadata present…
     for (const key of ['id', 'name', 'desc', 'colorKey', 'iconKey', 'version']) {
-      expect(key in t).toBeTruthy();
+      expect(t).toHaveProperty(key);
     }
     // …and the bulky resolver internals stripped.
-    expect(!('files' in t)).toBeTruthy();
-    expect(!('source' in t)).toBeTruthy();
+    expect(t).not.toHaveProperty('files');
+    expect(t).not.toHaveProperty('source');
   }
 
   // `kind` must cross the wire — the renderer's automation gallery filters on
@@ -65,7 +66,7 @@ test('GET /centraid/_templates returns stripped bundled metadata behind auth', a
   for (const t of automations) {
     // The automation card renders from these display fields.
     for (const key of ['emoji', 'category', 'triggerKind', 'triggerLabel', 'integrations']) {
-      expect(key in t).toBeTruthy();
+      expect(t).toHaveProperty(key);
     }
   }
   // Automations declare access on their own manifest, not the app-kind vault
@@ -77,16 +78,17 @@ test('GET /centraid/_templates returns stripped bundled metadata behind auth', a
   // Issue #434: an app-kind template with a declared vault block carries it,
   // so the Discover install/consent sheet can render the requested access.
   const photos = templates.find((t) => t.id === 'photos');
-  expect(photos).toBeTruthy();
+  expect(photos).toBeDefined();
   const vault = photos?.vault as
     | { why?: string; scopes?: Array<{ schema: string; table?: string; verbs: string }> }
     | undefined;
-  expect(vault).toBeTruthy();
+  expect(vault).toBeDefined();
   expect(typeof vault?.why).toBe('string');
-  expect(Array.isArray(vault?.scopes) && (vault?.scopes?.length ?? 0) > 0).toBeTruthy();
+  expect(Array.isArray(vault?.scopes)).toBe(true);
+  expect(vault?.scopes?.length ?? 0).toBeGreaterThan(0);
   expect(
     vault?.scopes?.every((s) => typeof s.schema === 'string' && typeof s.verbs === 'string'),
-  ).toBeTruthy();
+  ).toBe(true);
 });
 
 // Issue #141, Phase 5: the gateway owns the remote template *refresh* too —
@@ -108,7 +110,7 @@ test('handler refreshes the cache from the remote URL on construction', async ()
   });
   // Fire-and-forget — poll until the remote fetch lands (no fixed sleep).
   await vi.waitFor(() => {
-    expect(calls.some((u) => u.startsWith('https://templates.example.test'))).toBeTruthy();
+    expect(calls.some((u) => u.startsWith('https://templates.example.test'))).toBe(true);
   });
 });
 

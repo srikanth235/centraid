@@ -1,0 +1,173 @@
+import { describe, expect, it } from 'vitest';
+import {
+  AVATAR_PALETTE,
+  defaultAvatarColor,
+  isValidAvatarColor,
+  isValidGatewayId,
+  isValidSshBlock,
+  normalizeProfile,
+  sortGatewayProfiles,
+  validateAddGatewayFields,
+} from './gateway-store-core.js';
+
+describe('defaultAvatarColor', () => {
+  it('is deterministic and lands in the palette', () => {
+    const a = defaultAvatarColor('local');
+    const b = defaultAvatarColor('local');
+    expect(a).toBe(b);
+    expect(AVATAR_PALETTE).toContain(a);
+    // Different ids almost always differ; at minimum both are palette members.
+    expect(AVATAR_PALETTE).toContain(defaultAvatarColor('remote-uuid-1'));
+  });
+});
+
+describe('isValidAvatarColor', () => {
+  it('accepts only #RRGGBB', () => {
+    expect(isValidAvatarColor('#5B8DEF')).toBe(true);
+    expect(isValidAvatarColor('#abcdef')).toBe(true);
+    expect(isValidAvatarColor('#ABC')).toBe(false);
+    expect(isValidAvatarColor('5B8DEF')).toBe(false);
+    expect(isValidAvatarColor('#GGGGGG')).toBe(false);
+    expect(isValidAvatarColor(null)).toBe(false);
+  });
+});
+
+describe('isValidSshBlock', () => {
+  it('requires a non-empty destination string', () => {
+    expect(isValidSshBlock({ destination: 'user@host' })).toBe(true);
+    expect(isValidSshBlock({ destination: 'user@host', dataDir: '/data', remoteCli: 'c' })).toBe(
+      true,
+    );
+    expect(isValidSshBlock(null)).toBe(false);
+    expect(isValidSshBlock({})).toBe(false);
+    expect(isValidSshBlock({ destination: '' })).toBe(false);
+    expect(isValidSshBlock({ destination: 'h', dataDir: 1 })).toBe(false);
+    expect(isValidSshBlock({ destination: 'h', remoteCli: 1 })).toBe(false);
+  });
+});
+
+describe('isValidGatewayId', () => {
+  it('accepts slug ids and rejects path-like junk', () => {
+    expect(isValidGatewayId('local')).toBe(true);
+    expect(isValidGatewayId('a1b2c3d4-e5f6')).toBe(true);
+    expect(isValidGatewayId('../etc')).toBe(false);
+    expect(isValidGatewayId('')).toBe(false);
+    expect(isValidGatewayId('has space')).toBe(false);
+  });
+});
+
+describe('normalizeProfile', () => {
+  const base = {
+    id: 'gw-1',
+    kind: 'remote' as const,
+    label: 'Home',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  };
+
+  it('fills displayName from label and avatarColor from palette when absent', () => {
+    const p = normalizeProfile('gw-1', base);
+    expect(p).toMatchObject({
+      id: 'gw-1',
+      kind: 'remote',
+      label: 'Home',
+      displayName: 'Home',
+      rememberDevice: false,
+    });
+    expect(p?.avatarColor).toBe(defaultAvatarColor('gw-1'));
+  });
+
+  it('preserves valid optional fields and drops invalid transport/ssh', () => {
+    const p = normalizeProfile('gw-1', {
+      ...base,
+      displayName: 'Family',
+      avatarColor: '#E5734A',
+      transport: 'iroh',
+      endpointTicket: 'ticket',
+      endpointId: 'ep',
+      rememberDevice: true,
+      ssh: { destination: 'box' },
+      url: 'https://x',
+    });
+    expect(p).toMatchObject({
+      displayName: 'Family',
+      avatarColor: '#E5734A',
+      transport: 'iroh',
+      endpointTicket: 'ticket',
+      endpointId: 'ep',
+      rememberDevice: true,
+      ssh: { destination: 'box' },
+      url: 'https://x',
+    });
+
+    const bad = normalizeProfile('gw-1', {
+      ...base,
+      transport: 'weird' as never,
+      ssh: { destination: '' },
+      avatarColor: 'nope',
+    });
+    expect(bad?.transport).toBeUndefined();
+    expect(bad?.ssh).toBeUndefined();
+    expect(bad?.avatarColor).toBe(defaultAvatarColor('gw-1'));
+  });
+
+  it('rejects id mismatch, bad kind, empty label, missing createdAt', () => {
+    expect(normalizeProfile('other', base)).toBeUndefined();
+    expect(normalizeProfile('gw-1', { ...base, kind: 'cloud' as never })).toBeUndefined();
+    expect(normalizeProfile('gw-1', { ...base, label: '' })).toBeUndefined();
+    expect(normalizeProfile('gw-1', { ...base, createdAt: undefined })).toBeUndefined();
+    expect(normalizeProfile('gw-1', null)).toBeUndefined();
+  });
+});
+
+describe('sortGatewayProfiles', () => {
+  it('puts local first then remotes by createdAt ascending', () => {
+    const out = sortGatewayProfiles(
+      [
+        { id: 'b', createdAt: '2026-02-01T00:00:00.000Z' },
+        { id: 'local', createdAt: '2026-01-01T00:00:00.000Z' },
+        { id: 'a', createdAt: '2026-01-15T00:00:00.000Z' },
+      ],
+      'local',
+    );
+    expect(out.map((p) => p.id)).toEqual(['local', 'a', 'b']);
+  });
+});
+
+describe('validateAddGatewayFields', () => {
+  it('requires label and exactly one of url / endpointTicket', () => {
+    expect(validateAddGatewayFields({ label: '  ' })).toMatchObject({
+      ok: false,
+      code: 'invalid_input',
+    });
+    expect(validateAddGatewayFields({ label: 'G' })).toMatchObject({
+      ok: false,
+      message: expect.stringContaining('URL or an iroh'),
+    });
+    expect(
+      validateAddGatewayFields({ label: 'G', url: 'https://x', endpointTicket: 't' }),
+    ).toMatchObject({ ok: false, message: expect.stringContaining('not both') });
+  });
+
+  it('trims and derives transport + displayName', () => {
+    expect(validateAddGatewayFields({ label: '  Home  ', url: '  https://x  ' })).toEqual({
+      ok: true,
+      label: 'Home',
+      url: 'https://x',
+      transport: 'direct',
+      displayName: 'Home',
+    });
+    expect(
+      validateAddGatewayFields({
+        label: 'Home',
+        endpointTicket: 'tik',
+        displayName: '  Family  ',
+      }),
+    ).toEqual({
+      ok: true,
+      label: 'Home',
+      endpointTicket: 'tik',
+      transport: 'iroh',
+      displayName: 'Family',
+    });
+  });
+});

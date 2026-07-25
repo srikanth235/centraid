@@ -113,8 +113,11 @@ async function waitForShellBundle(page: Page): Promise<void> {
       { timeout: 20_000 },
     )
     .toBe(true);
-  // Brief settle for the CSS / token chunk that trails the JS.
-  await page.waitForTimeout(500);
+  // Settle until the document is interactive and stylesheets have applied —
+  // replaces a fixed 500ms sleep so a slow/fast host both pass honestly.
+  await expect
+    .poll(() => page.evaluate(() => document.readyState), { timeout: 5_000 })
+    .toBe('complete');
 }
 
 // Mirror the working control-session bootstrap from web-pwa.spec.ts: mint a
@@ -205,12 +208,15 @@ async function openInstalledAndMeasure(
   const frame = await iframe.contentFrame();
   expect(frame).not.toBeNull();
   // Static markup paints before the iframe's network settles, so wait for the
-  // marker, then for network to go quiet, then a short settle for late fetches.
+  // marker, then poll until the iframe document is complete. NOTE: the app
+  // runtime holds a long-lived `_changes` SSE open, so `networkidle` never
+  // settles — expect.poll on readyState is the honest wait here.
   await page.frameLocator('iframe[title="app"]').locator('#ready').waitFor({ state: 'visible' });
-  // NOTE: the app runtime holds a long-lived `_changes` SSE open, so
-  // `networkidle` never settles — a fixed settle for late subresource fetches
-  // is the honest wait here.
-  await page.waitForTimeout(1200);
+  await expect
+    .poll(() => frame!.evaluate(() => document.readyState).catch(() => 'loading'), {
+      timeout: 10_000,
+    })
+    .toBe('complete');
   const origin = new URL(frame!.url()).origin;
   const summary = await collect(frame!, origin);
   return { summary, elapsedMs: Date.now() - started };
@@ -455,16 +461,27 @@ test('sw tunnel cache — warm re-open collapses relay round trips and bytes', a
   expect(await read(blobUrl)).toBe('b'.repeat(8192));
   const cold = await tunnel();
 
-  // Let the background asset revalidation (SWR) settle, then reset the tally
-  // so it doesn't leak into the warm measurement.
-  await page.waitForTimeout(500);
+  // Let the background asset revalidation (SWR) settle — poll until the tunnel
+  // call counter is stable across two samples — then reset the tally so it
+  // doesn't leak into the warm measurement.
+  await expect
+    .poll(
+      async () => {
+        const a = (await tunnel()).calls;
+        await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 40)));
+        return (await tunnel()).calls === a;
+      },
+      { timeout: 5_000 },
+    )
+    .toBe(true);
   await reset();
 
   // Warm: both bodies are served from cache; conditional checks reach the
   // bridge with zero body bytes so revocation remains observable.
   expect(await read(assetUrl)).toBe('a'.repeat(4096));
   expect(await read(blobUrl)).toBe('b'.repeat(8192));
-  await page.waitForTimeout(300);
+  // Poll until the warm path has recorded at least one tunnel observation.
+  await expect.poll(async () => (await tunnel()).calls, { timeout: 5_000 }).toBeGreaterThan(0);
   const warm = await tunnel();
 
   console.log(

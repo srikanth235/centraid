@@ -4,6 +4,12 @@ import { companionJson } from './transport.js';
 import { isLocked, loadPairing } from './storage.js';
 import type { CompanionRequest, PageCapture } from './types.js';
 import { clearFillMaterial, clearSavedPassword } from './credential-gesture.js';
+import { pageCaptureFromTab } from './content-core.js';
+import {
+  approvalBadgeForState,
+  isLockerFillMessage,
+  shouldCaptureContextMenu,
+} from './worker-core.js';
 
 const APPROVAL_ALARM = 'centraid-companion-approvals';
 
@@ -15,7 +21,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   void request(message, sender).then(
     (value) => {
       sendResponse({ ok: true, value });
-      if ((message as { type?: string } | undefined)?.type === 'locker:fill') {
+      if (isLockerFillMessage(message)) {
         clearFillMaterial(value);
       }
       clearSavedPassword(message);
@@ -40,16 +46,28 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 });
 
 async function updateApprovalBadge(): Promise<void> {
-  if (!(await loadPairing()) || (await isLocked())) {
-    await chrome.action.setBadgeText({ text: '' });
+  const paired = !!(await loadPairing());
+  const locked = await isLocked();
+  if (!paired || locked) {
+    await chrome.action.setBadgeText({
+      text: approvalBadgeForState({ paired, locked }),
+    });
     return;
   }
   try {
     const { count } = await companionJson<{ count: number }>(ROUTES.vaultBlocking);
     await chrome.action.setBadgeBackgroundColor({ color: '#315cf5' });
-    await chrome.action.setBadgeText({ text: count ? String(Math.min(count, 99)) : '' });
+    await chrome.action.setBadgeText({
+      text: approvalBadgeForState({ paired: true, locked: false, count }),
+    });
   } catch {
-    await chrome.action.setBadgeText({ text: (await loadPairing()) ? '!' : '' });
+    await chrome.action.setBadgeText({
+      text: approvalBadgeForState({
+        paired: !!(await loadPairing()),
+        locked: false,
+        unreachable: true,
+      }),
+    });
   }
 }
 
@@ -68,11 +86,11 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId !== 'centraid-quick-task' || !tab?.url) return;
-  const capture: PageCapture = {
-    title: tab.title ?? tab.url,
-    url: tab.url,
-    ...(info.selectionText ? { selection: info.selectionText } : {}),
-  };
+  if (!shouldCaptureContextMenu({ menuItemId: info.menuItemId, tabUrl: tab?.url })) return;
+  const capture: PageCapture = pageCaptureFromTab({
+    title: tab?.title,
+    url: tab!.url!,
+    selectionText: info.selectionText,
+  });
   void handleCompanionRequest({ type: 'capture:task', capture }, {}).catch(() => undefined);
 });

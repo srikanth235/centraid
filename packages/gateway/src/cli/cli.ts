@@ -60,17 +60,9 @@ import { commandService } from './service-admin.js';
 import { commandStatus } from './status-admin.js';
 import { makeDaemonDevicePlane } from './endpoint-host.js';
 import { mergeAllowedHosts } from './allowed-hosts.js';
+import { parseServeArgsPure, timingSafeTokenEqual, type ParsedServe } from './cli-serve-args.js';
 
 const PKG_VERSION = '0.1.0';
-
-interface ParsedServe {
-  configPath?: string;
-  dataDir?: string;
-  host?: string;
-  port?: number;
-  /** Extra Hostnames from repeated `--allowed-host` (issue #504 packaging). */
-  allowedHosts?: string[];
-}
 
 async function bundledWebRoot(): Promise<string | undefined> {
   const candidates = [
@@ -91,13 +83,6 @@ async function bundledWebRoot(): Promise<string | undefined> {
 function fail(message: string, code = 1): never {
   process.stderr.write(`centraid-gateway: ${message}\n`);
   process.exit(code);
-}
-
-/** Constant-time string compare — same posture as app-engine's bearer check. */
-function timingSafeTokenEqual(a: string, b: string): boolean {
-  const bufA = Buffer.from(a, 'utf8');
-  const bufB = Buffer.from(b, 'utf8');
-  return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
 }
 
 function usage(): never {
@@ -191,48 +176,10 @@ function usage(): never {
 }
 
 function parseServeArgs(args: string[]): ParsedServe {
-  const out: ParsedServe = {};
-  for (let i = 0; i < args.length; i++) {
-    const flag = args[i];
-    if (flag === undefined) continue;
-    const next = (): string => {
-      const v = args[++i];
-      if (v === undefined) fail(`flag "${flag}" requires a value`, 2);
-      return v;
-    };
-    switch (flag) {
-      case '--config':
-        out.configPath = next();
-        break;
-      case '--data-dir':
-        out.dataDir = next();
-        break;
-      case '--host':
-        out.host = next();
-        break;
-      case '--port': {
-        const n = Number(next());
-        if (!Number.isInteger(n) || n < 0 || n > 65535) {
-          fail(`--port must be an integer in [0, 65535], got "${args[i]}"`, 2);
-        }
-        out.port = n;
-        break;
-      }
-      case '--allowed-host': {
-        const name = next().trim();
-        if (!name) fail('--allowed-host requires a hostname', 2);
-        out.allowedHosts = [...(out.allowedHosts ?? []), name];
-        break;
-      }
-      case '--help':
-      case '-h':
-        usage();
-        break;
-      default:
-        fail(`unknown flag "${flag}"`, 2);
-    }
-  }
-  return out;
+  const parsed = parseServeArgsPure(args);
+  if (parsed.ok) return parsed.value;
+  if ('help' in parsed) usage();
+  fail(parsed.message, parsed.code);
 }
 
 async function resolveConfig(parsed: ParsedServe): Promise<DaemonConfig> {
@@ -447,9 +394,18 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
-  process.stderr.write(
-    `centraid-gateway: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`,
-  );
-  process.exit(1);
-});
+// Only boot when this file is the process entrypoint (tsx/node/bin). Importing
+// pure helpers for unit tests (issue #545 B7) must not call process.exit.
+const isMain =
+  typeof process.argv[1] === 'string' &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  main().catch((err) => {
+    process.stderr.write(
+      `centraid-gateway: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`,
+    );
+    process.exit(1);
+  });
+}
+
+export { parseServeArgsPure, timingSafeTokenEqual } from './cli-serve-args.js';

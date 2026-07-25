@@ -72,11 +72,11 @@ describe('loadAutomationsOverviewData', () => {
     expect(data.rows).toHaveLength(1);
     expect(data.rows[0]!.name).toBe('Daily Digest');
     expect(data.rows[0]!.attentionCount).toBe(0);
-    expect(listAutomationsMock).toHaveBeenCalled();
-    expect(collectRunsMock).toHaveBeenCalled();
-    expect(getBlockingMock).toHaveBeenCalled();
-    expect(listOutboxGrantsMock).toHaveBeenCalled();
-    expect(listAgentsMock).toHaveBeenCalled();
+    expect(listAutomationsMock).toHaveBeenCalledTimes(1);
+    expect(collectRunsMock).toHaveBeenCalledTimes(1);
+    expect(getBlockingMock).toHaveBeenCalledTimes(1);
+    expect(listOutboxGrantsMock).toHaveBeenCalledTimes(1);
+    expect(listAgentsMock).toHaveBeenCalledTimes(1);
   });
 
   it('counts parked + outbox items as attention when the agent host matches', async () => {
@@ -130,13 +130,12 @@ describe('adoptOverviewSuggestion', () => {
     const showToast = vi.fn();
     await adoptOverviewSuggestion('missing-tmpl', { navigate, showToast });
     expect(showToast).toHaveBeenCalledWith(expect.stringContaining('no longer available'));
-    expect(navigate).not.toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledTimes(0);
   });
 
   it('clones, surfaces webhooks, and navigates to the new automation', async () => {
-    listTemplatesMock.mockResolvedValue([
-      { id: 'obligation-extractor', name: 'Deadlines', desc: 'x' },
-    ]);
+    const tmpl = { id: 'obligation-extractor', name: 'Deadlines', desc: 'x' };
+    listTemplatesMock.mockResolvedValue([tmpl]);
     cloneMock.mockResolvedValue({
       ref: 'auto.x/y',
       webhooks: [{ url: 'https://h/1', secret: 's' }],
@@ -144,7 +143,8 @@ describe('adoptOverviewSuggestion', () => {
     const navigate = vi.fn();
     const showToast = vi.fn();
     await adoptOverviewSuggestion('obligation-extractor', { navigate, showToast });
-    expect(cloneMock).toHaveBeenCalled();
+    expect(cloneMock).toHaveBeenCalledTimes(1);
+    expect(cloneMock).toHaveBeenCalledWith(tmpl);
     expect(surfaceMock).toHaveBeenCalledWith({ url: 'https://h/1', secret: 's' });
     expect(revealMock).toHaveBeenCalledWith({ url: 'https://h/1', secret: 's' });
     expect(navigate).toHaveBeenCalledWith({ kind: 'automation-view', automationId: 'auto.x/y' });
@@ -166,6 +166,6 @@ describe('adoptOverviewSuggestion', () => {
     const showToast = vi.fn();
     await adoptOverviewSuggestion('t1', { navigate, showToast });
     expect(showToast).toHaveBeenCalledWith(expect.stringContaining('clone boom'));
-    expect(navigate).not.toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledTimes(0);
   });
 });

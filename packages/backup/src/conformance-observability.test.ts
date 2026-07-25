@@ -1,0 +1,29 @@
+/**
+ * Direct naming of conformance-observability.ts (issue #545 B12).
+ */
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { promises as fs } from 'node:fs';
+import { describe, expect, test } from 'vitest';
+import { providerObservabilityConformanceCases } from './conformance-observability.js';
+import type { ConformanceHarness } from './conformance.js';
+import { LocalBackupProvider } from './local-provider.js';
+
+async function makeHarness(): Promise<ConformanceHarness> {
+  const dir = await tempDir('backup-obs-conf-');
+  return {
+    provider: new LocalBackupProvider({ rootDir: dir }),
+    cleanup: () => fs.rm(dir, { recursive: true, force: true }),
+  };
+}
+
+describe('providerObservabilityConformanceCases (direct)', () => {
+  const cases = providerObservabilityConformanceCases(makeHarness);
+  expect(cases.length).toBeGreaterThanOrEqual(1);
+  for (const c of cases) {
+    test(c.name, async () => {
+      await c.run();
+      expect(true).toBe(true);
+    });
+  }
+});

@@ -34,8 +34,9 @@ describe('update-watcher rollout wiring (I4)', () => {
 
   it('IPC registers UPDATE_CHECK to the manual path (I6)', () => {
     const ipc = readFileSync(path.join(here, 'ipc.ts'), 'utf8');
+    const channels = readFileSync(path.join(here, 'ipc-core.ts'), 'utf8');
     expect(ipc).toContain('checkForUpdatesManual');
-    expect(ipc).toContain("UPDATE_CHECK: 'centraid:update:check'");
+    expect(channels).toContain("UPDATE_CHECK: 'centraid:update:check'");
     expect(ipc).toContain('Channel.UPDATE_CHECK');
   });
 

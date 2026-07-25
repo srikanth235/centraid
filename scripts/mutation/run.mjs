@@ -102,6 +102,26 @@ export function buildScoresArtifact(rows) {
  * @param {Record<string, unknown>} floors tests/mutation-floors.json shape.
  * @returns {string[]} Human-readable errors (empty = pass).
  */
+/**
+ * Assert every floor key (except meta) is a known MUTATION_SEEDS id.
+ * @param {Record<string, unknown>} floors Mutation floors object from disk.
+ * @param {import('./seeds.mjs').MutationSeed[]} [seeds] Seed catalog (defaults to MUTATION_SEEDS).
+ * @returns {string[]} Errors when a floor id is not in the seed catalog.
+ */
+export function assertFloorsSubsetOfSeeds(floors, seeds = MUTATION_SEEDS) {
+  const errors = [];
+  if (!floors || typeof floors !== 'object') return errors;
+  const seedIds = new Set(seeds.map((s) => s.id));
+  for (const id of Object.keys(floors)) {
+    if (id.startsWith('_') || id === 'approvedDeviation') continue;
+    if (typeof floors[id] !== 'number') continue;
+    if (!seedIds.has(id)) {
+      errors.push(`mutation floor "${id}" has no matching MUTATION_SEEDS entry (floors ⊆ seeds)`);
+    }
+  }
+  return errors;
+}
+
 export function enforceMutationFloors(scores, floors) {
   const errors = [];
   if (!floors || typeof floors !== 'object') return errors;
@@ -112,7 +132,14 @@ export function enforceMutationFloors(scores, floors) {
     if (id.startsWith('_') || id === 'approvedDeviation') continue;
     if (typeof floor !== 'number') continue;
     const row = byId.get(id);
-    if (!row || typeof row.score !== 'number') continue;
+    // #545 A5 — missing score is a gate failure (Stryker crash, renamed seed,
+    // config drift). Previously `continue` left mutation-pr green.
+    if (!row || typeof row.score !== 'number') {
+      errors.push(
+        `mutation floor "${id}" has no measured score (seed missing, crashed, or skipped)`,
+      );
+      continue;
+    }
     if (row.score + 1e-9 < floor) {
       errors.push(
         `mutation floor "${id}" not met: measured ${row.score.toFixed(2)} < floor ${floor}`,
@@ -391,7 +418,18 @@ function main() {
 
   if (args.enforceFloors) {
     const floors = loadMutationFloors();
-    const floorErrors = enforceMutationFloors(artifact, floors);
+    // Only enforce floors for seeds that ran (affected / --package). Full
+    // nightly runs every seed so every floor is checked.
+    const ranIds = new Set(rows.map((r) => r.id));
+    const floorsForRun = Object.fromEntries(
+      Object.entries(floors).filter(([id, v]) => {
+        if (id.startsWith('_') || id === 'approvedDeviation') return true;
+        if (typeof v !== 'number') return true;
+        return ranIds.has(id);
+      }),
+    );
+    const subsetErrors = assertFloorsSubsetOfSeeds(floors);
+    const floorErrors = [...subsetErrors, ...enforceMutationFloors(artifact, floorsForRun)];
     if (floorErrors.length) {
       for (const e of floorErrors) console.error(`mutation: ${e}`);
       failed = true;
