@@ -69,6 +69,7 @@ web/extension/oauth-worker, `docs/plans/test-gap-closure-2026-07.md`, QUALITY.md
 - `apps/desktop/src/main/update-watcher-wiring.test.ts`
 - `apps/desktop/src/preload.ts`
 - `apps/desktop/tests/e2e/COVERAGE_REPORT.md`
+- `apps/desktop/tests/e2e/automations.spec.ts`
 - `apps/extension/src/content-core.test.ts`
 - `apps/extension/src/content-core.ts`
 - `apps/extension/src/content.ts`
@@ -213,6 +214,8 @@ web/extension/oauth-worker, `docs/plans/test-gap-closure-2026-07.md`, QUALITY.md
 - oauth-worker `index.ts` renamed to `worker.ts` so root coverage `**/index.ts` exclusion does not blind the only source file.
 - Vault package test script uses `--dangerouslyIgnoreUnhandledErrors` for vitest worker RPC timeouts under turbo concurrency when all assertions pass.
 - Gateway factories remain under `tests/helpers` (typechecked via tests/tsconfig); package-local consumer removed (rootDir).
+- Desktop automations e2e uses overflow menu (`automation-menu-*`) and `run-details` (thread UI), not bare Disable/Edit/Delete titles or `run-entry` shell clicks.
+- Coverage exclude adds web `src/generated/**` (wasm-bindgen) and ACP `fake-acp-agent.mjs` so global line floor is not diluted by non-product/generated trees after oauth-worker instrumentation.
 
 ## Verification
 
@@ -221,6 +224,7 @@ web/extension/oauth-worker, `docs/plans/test-gap-closure-2026-07.md`, QUALITY.md
 - C1–C11 app surfaces owned (desktop cores, mobile owners, web iroh-transport, vitest tsx include, extension cores, oauth-worker availability).
 - D1–D10 matrix/floors/infra + governance shell (extension/oauth-worker surfaces, partial notes, mutation seeds, scripts coverage, shellcheck).
 - E1–E4 hygiene + stale docs (named assertion files cleared, sleeps fixed, QUALITY.md + COVERAGE_REPORT.md).
+- Desktop e2e automations realigned to current thread chrome; global coverage floors green with generated/fake excludes.
 - `bun run check:pr` green; PR opened for #545.
 
 ```sh
