@@ -143,6 +143,8 @@ Eight steering events were recorded: two user interrupts (ordinals 419, 644) and
 | claude-code-8873d135-a2e-1784658221-1 | claude-code | 8873d135-a2e7-4294-829d-84c0e0d8e73e | #498 | claude-opus-4-8 | 3 | 15849 | 703860 | 3291 | 19143 | 0.5333 | 1183 | 2817793 | 152582147 | 682055 | feat(mobile): port Centraid Mobile design — onboarding, home, photos, solar ligh |
 | claude-code-e6790fe2-225-1784901155-1 | claude-code | e6790fe2-2259-4e74-8cd5-ae7ff42a1c69 | #498 | claude-opus-4-8 | 16 | 19246 | 1741010 | 10109 | 29371 | 1.2436 | 43961 | 18966432 | 1138984094 | 6576225 |  |
 | claude-code-e6790fe2-225-1784901770-1 | claude-code | e6790fe2-2259-4e74-8cd5-ae7ff42a1c69 | #498 | claude-opus-4-8 | 32 | 55989 | 3663696 | 27302 | 83323 | 2.8645 | 43993 | 19022421 | 1142647790 | 6603527 |  |
+| claude-code-2083e21f-a5e-1784947385-1 | claude-code | 2083e21f-a5e0-4ed2-a754-d227f26d7ad8 | #498 | claude-opus-5 | 71 | 179126 | 2663973 | 28046 | 207243 | 3.1530 | 71 | 179126 | 2663973 | 28046 |  |
+| claude-code-2083e21f-a5e-1784947483-1 | claude-code | 2083e21f-a5e0-4ed2-a754-d227f26d7ad8 | #498 | claude-opus-5 | 12 | 9555 | 506910 | 7524 | 17091 | 0.5013 | 83 | 188681 | 3170883 | 35570 |  |
 
 ### Steering
 
