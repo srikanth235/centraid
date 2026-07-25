@@ -1,0 +1,127 @@
+/* Storage → Limits. Co-located with StorageLimitsPanel.tsx; shares the
+   GatewayScreen.module.css panel shell like its sibling cards.
+
+   Aesthetic: two identical instrument blocks, deliberately. The disk budget
+   warns and the ledger limit acts — very different consequences — so the
+   COPY carries the difference while the form stays symmetrical. A control
+   that looked different would imply the shape of the interaction differs,
+   and it doesn't: pick a preset, or type a size. The current value sits
+   right-aligned in the header as a mono readout, so a glance down the panel
+   answers "what have I actually set" without reading a word. */
+
+.card {
+  grid-column: 1 / -1;
+}
+
+.body {
+  padding: 14px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.control {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 12px);
+  padding: 13px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.controlHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+.controlIcon {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-2);
+  background: var(--bg-sunken);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.controlTitles {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.controlTitles h3 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.controlTitles p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+.controlState {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-4);
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+}
+.controlState[data-on] {
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.controlRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+  justify-content: space-between;
+}
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.presetActive {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.customField {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.textInput {
+  width: 148px;
+  padding: 6px 9px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm, 9px);
+}
+.textInput:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.hereNow {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.controlError {
+  font-size: 12px;
+  color: var(--danger);
+}

@@ -591,6 +591,10 @@ export * from './gateway-client-backup.js';
 // barrel.
 export * from './gateway-client-storage.js';
 
+// The LOCAL disk surface (issue #544) — footprint by component + the owner's
+// two limits. Same route prefix, different question; see the module header.
+export * from './gateway-client-local-storage.js';
+
 // The paired-device roster + revoke surface (issue #376) lives in
 // `gateway-client-devices.ts`. Re-exported here so the Gateway page's
 // Devices card imports it from the same barrel.

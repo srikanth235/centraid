@@ -17,7 +17,7 @@ const NAV_ACTIONS: { label: string; icon: string; route: ShellRoute }[] = [
   { label: 'Automations', icon: 'Bolt', route: { kind: 'automations' } },
   { label: 'Connectors', icon: 'Plug', route: { kind: 'connectors' } },
   { label: 'Gateway', icon: 'Cellular', route: { kind: 'gateway' } },
-  { label: 'Backups', icon: 'Save', route: { kind: 'backups' } },
+  { label: 'Storage', icon: 'Save', route: { kind: 'storage' } },
   { label: 'Settings', icon: 'Settings', route: { kind: 'settings' } },
 ];
 

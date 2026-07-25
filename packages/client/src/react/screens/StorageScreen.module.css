@@ -1,0 +1,17 @@
+/* The Storage page — co-located styles for StorageScreen.tsx.
+
+   Layout only. Each of the three cards it stacks (footprint, limits, backups)
+   owns its own chrome and reaches into GatewayScreen.module.css for the
+   shared `.panel` family, so this file holds nothing but the page measure.
+
+   1080px (not the Gateway page's 1120px) because Storage wears the shell's
+   standard PageScroll head, whose `.pageHead` is capped at 1080 — the cards
+   have to line up with the title above them. */
+
+.grid {
+  max-width: 1080px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}

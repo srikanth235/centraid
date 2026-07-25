@@ -95,7 +95,9 @@ import {
 import { createImagePreviewCodec } from '../preview/codec.js';
 import { WorktreeStore } from '../worktree-store/index.js';
 import { openVaultRegistry, type VaultRegistry } from './vault-registry.js';
-import { createDiskHealthProbe } from './disk-health.js';
+import { createDiskHealthProbe, formatBytes } from './disk-health.js';
+import { LocalUsageScanner } from './local-usage.js';
+import { StorageLimitsStore, evaluateStorageLimit } from './storage-limits.js';
 import { createBrokerHealthProbe } from './broker-health.js';
 import { createSchedulerHealthProbe } from './scheduler-health.js';
 import { createEnrichmentHealthProbe } from './enrichment-health.js';
@@ -723,6 +725,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // refresh in front of a provider connection's optional `usage` capability
   // (PROTOCOL.md § Usage). Never polls on its own timer; see storage-usage.ts.
   const storageUsage = new StorageUsagePoller({ storageConnections });
+  // The owner's two local-disk limits (issue #544), stored beside the
+  // connections for the same reason. Loaded ONCE here so every later reader
+  // — the routes, the `storage-limit` probe, and each vault plane's sweep —
+  // shares one instance and sees a change without a restart.
+  const storageLimits = new StorageLimitsStore(storageDir);
+  await storageLimits.load();
 
   // Model price catalog (issue #445) — seed the app-engine pricing seam from a
   // fresh-enough disk cache and kick a background LiteLLM refresh. Costing works
@@ -834,6 +842,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       resourceAccounting.recordBackgroundTimerFire();
     },
     onReplicationPass: (info) => resourceAccounting.recordReplicationPass(info),
+    // Size-triggered ledger archive (issue #544). Read through the shared
+    // store's in-memory copy so a limit change applies on the next sweep of
+    // every mounted plane without a remount, and without the sweep awaiting
+    // a file read inside its synchronous block.
+    journalLimitBytes: () => storageLimits.current().journalLimitBytes,
   });
 
   // Vault mounts are pull-checked at snapshot time — nothing pushes when a
@@ -897,6 +910,56 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         vaultRegistry.planesList().map((p) => ({ vaultId: p.boot.vaultId, dir: p.dir })),
     }),
   );
+
+  // Local footprint by component (issue #544) — the other half of the disk
+  // story: `disk` above says how much room is LEFT, this says where Centraid's
+  // own bytes went. One scanner instance shared by `GET storage/local` and the
+  // `storage-limit` probe below, so the page and the health badge can never
+  // report different totals. The walk is TTL-cached; nothing puts it on a timer.
+  const localUsage = new LocalUsageScanner({
+    rootDir: paths.vaultDir,
+    vaults: () =>
+      vaultRegistry.planesList().map((p) => ({
+        vaultId: p.boot.vaultId,
+        dir: p.dir,
+        // The runner scratch lives OUTSIDE the vault tree; bill it to the
+        // vault it belongs to rather than to a nameless gateway bucket.
+        ...(p.cacheDir && p.cacheDir !== p.dir ? { cacheDir: p.cacheDir } : {}),
+      })),
+    gatewayDirs: () => ({
+      backup: paths.backupDir ?? path.join(path.dirname(paths.vaultDir), 'backup'),
+      logs: paths.logsDir,
+      templates: paths.templatesCacheDir,
+      storage: storageDir,
+    }),
+  });
+
+  // The owner's disk budget (issue #544). Warn-only by design — see
+  // storage-limits.ts for why a soft budget must never refuse a write. With
+  // no limit set this is a permanent `ok`, so an owner who never opted in
+  // gains no new noise in their component list.
+  health.registerProbe('storage-limit', async () => {
+    const limits = storageLimits.current();
+    if (limits.totalLimitBytes === null) {
+      return { status: 'ok', detail: 'no disk budget set' };
+    }
+    const report = await localUsage.report();
+    const evaluation = evaluateStorageLimit(report.totalBytes, limits);
+    const percent = ((evaluation.fractionUsed ?? 0) * 100).toFixed(1);
+    const detail =
+      `${formatBytes(evaluation.usedBytes)} of the ${formatBytes(limits.totalLimitBytes)} ` +
+      `budget (${percent}%)`;
+    if (evaluation.status === 'error') {
+      return { status: 'error', detail: `${detail} — over budget; nothing is being blocked` };
+    }
+    if (evaluation.status === 'degraded') {
+      return {
+        status: 'degraded',
+        detail: `${detail} — past the ${limits.warnAtPercent}% warning`,
+      };
+    }
+    return { status: 'ok', detail };
+  });
 
   // `instanceLease` is constructed above (before the vault registry) —
   // `start()`/`stop()` below drive its renew timer; `instanceId` also rides
@@ -2514,6 +2577,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         recoveryKit,
         vaults: vaultRegistry,
         storageUsage,
+        localUsage,
+        storageLimits,
         onConnectionsChanged: async () => {
           walCaptureConfigured =
             options.backup?.enabled === true || (await storageConnections.list()).length > 0;

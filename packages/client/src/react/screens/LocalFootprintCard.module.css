@@ -1,0 +1,289 @@
+/* Storage → On this machine. Co-located with LocalFootprintCard.tsx; reuses
+   GatewayScreen.module.css's .panel/.panelHead/.panelEmpty shells (imported
+   there as `gwStyles`) so this reads as a sibling of the Backups card rather
+   than a bolted-on style.
+
+   Aesthetic: a fuel gauge in the shell's field-notebook language. One
+   oversized display figure carries the answer; the rail underneath is the
+   only chart, drawn as a single continuous band of component hues rather
+   than a stack of bars — a disk is one contiguous thing and the picture
+   should say so. Over budget, the fill takes on a hatch: crossing a line the
+   owner drew themselves should LOOK like crossing it, not merely turn red.
+   Figures are tabular mono throughout so columns of bytes line up. */
+
+.card {
+  grid-column: 1 / -1;
+}
+
+.body {
+  padding: 14px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.loadError,
+.staleNote {
+  font-size: 12.5px;
+  color: var(--danger);
+}
+.staleNote {
+  color: var(--ink-3);
+}
+
+/* ── Headline ───────────────────────────────────────────────────────────── */
+
+.headline {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+  --tone: var(--ink-3);
+}
+.headline[data-status='degraded'] {
+  --tone: var(--icon-amber);
+}
+.headline[data-status='error'] {
+  --tone: var(--danger);
+}
+.headlineFigure {
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.headlineNote {
+  flex: 1 1 240px;
+  min-width: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--tone);
+}
+
+/* ── The occupancy rail ─────────────────────────────────────────────────── */
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.railTrack {
+  position: relative;
+  display: flex;
+  height: 18px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--bg-sunken);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.railSegment {
+  height: 100%;
+  min-width: 0;
+  transition: width 420ms var(--ease, cubic-bezier(0.22, 1, 0.36, 1));
+}
+/* Over budget: the whole fill picks up a diagonal hatch on top of its hues,
+   so the state is legible without relying on colour alone. */
+.rail[data-over] .railSegment {
+  background-image: repeating-linear-gradient(135deg, rgb(0 0 0 / 0.28) 0 4px, transparent 4px 8px);
+}
+.rail[data-over] .railTrack {
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+/* The warn threshold, as a notch cut through the fill. */
+.railWarnMark {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  transform: translateX(-1px);
+  background: var(--ink);
+  opacity: 0.55;
+}
+
+.railFoot {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-4);
+}
+.railCap {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.railCapKind {
+  font-family: var(--font-sans);
+  letter-spacing: 0;
+  text-transform: lowercase;
+  color: var(--ink-4);
+}
+
+/* ── Legend ─────────────────────────────────────────────────────────────── */
+
+.legend {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 12px);
+  overflow: hidden;
+}
+.legendRow {
+  display: grid;
+  grid-template-columns: 10px 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 13px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  animation: legendIn 320ms var(--ease, cubic-bezier(0.22, 1, 0.36, 1)) both;
+}
+.legendRow + .legendRow {
+  border-top: 1px solid var(--line);
+}
+.legendRow:hover {
+  background: var(--bg-sunken);
+}
+.legendRow:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+@keyframes legendIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .legendRow {
+    animation: none;
+  }
+  .railSegment {
+    transition: none;
+  }
+}
+
+.chip {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+}
+.legendLabel {
+  font-size: 13px;
+  color: var(--ink);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.legendShare {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
+.legendBytes {
+  color: var(--ink-2);
+}
+.legendBlurb {
+  grid-column: 2 / -1;
+  padding-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+
+.figure {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+/* ── Per-vault disclosure ───────────────────────────────────────────────── */
+
+.byVault > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--ink-3);
+  padding: 4px 0;
+}
+.byVault > summary:hover {
+  color: var(--ink);
+}
+.byVaultBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 8px;
+}
+.vaultRow {
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm, 9px);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.vaultHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+.vaultName {
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--ink);
+}
+.vaultParts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+.vaultPart {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.vaultPart b {
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+/* ── Disk line ──────────────────────────────────────────────────────────── */
+
+.diskLine {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.rescanIcon {
+  display: inline-flex;
+}
+.rescanIcon[data-spin] {
+  animation: rescanSpin 900ms linear infinite;
+}
+@keyframes rescanSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
