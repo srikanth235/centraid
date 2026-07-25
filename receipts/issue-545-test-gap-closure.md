@@ -225,6 +225,7 @@ web/extension/oauth-worker, `docs/plans/test-gap-closure-2026-07.md`, QUALITY.md
 - D1–D10 matrix/floors/infra + governance shell (extension/oauth-worker surfaces, partial notes, mutation seeds, scripts coverage, shellcheck).
 - E1–E4 hygiene + stale docs (named assertion files cleared, sleeps fixed, QUALITY.md + COVERAGE_REPORT.md).
 - Desktop e2e automations realigned to current thread chrome; global coverage floors green with generated/fake excludes.
+- Automations e2e 8.5 polls for async set-enabled; 9.7 re-runs from the thread card (Run again removed from run-view). Local + CI desktop-e2e green.
 - `bun run check:pr` green; PR opened for #545.
 
 ```sh

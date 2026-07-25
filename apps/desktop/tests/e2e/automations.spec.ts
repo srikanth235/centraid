@@ -150,16 +150,20 @@ test('8.5 — toggling enable from the overflow menu posts set-enabled; a failed
     await expect(page.getByTestId('automation-thread')).toBeVisible();
 
     // Enable/disable lives in the ⋯ menu (Pause when enabled, Resume when not).
-    // Success is silent — toast only on failure. Never-run rows become draft
-    // (not "paused") when disabled, so re-open the menu and assert Resume.
+    // Success is silent — toast only on failure. set-enabled is async
+    // (opens an app session first), so poll the mock rather than assert
+    // synchronously. Never-run rows become draft (not "paused") when
+    // disabled, so re-open the menu and assert Resume.
     await openAutomationMenu(page);
     await expect(page.getByTestId('automation-menu-toggle')).toContainText('Pause');
     await page.getByTestId('automation-menu-toggle').click();
-    expect(
-      gateway.calls.some(
-        (c) => c.method === 'POST' && c.pathname === '/centraid/_automations/set-enabled',
-      ),
-    ).toBe(true);
+    await expect
+      .poll(() =>
+        gateway.calls.some(
+          (c) => c.method === 'POST' && c.pathname === '/centraid/_automations/set-enabled',
+        ),
+      )
+      .toBe(true);
     await openAutomationMenu(page);
     await expect(page.getByTestId('automation-menu-toggle')).toContainText('Resume');
 
@@ -335,7 +339,7 @@ test('9.4 + 9.9 — a timeline node expands to show payloads and Escape collapse
   }
 });
 
-test('9.7 — Run again fires another run from the run viewer', async () => {
+test('9.7 — Run again on a finished thread card fires another run', async () => {
   const row = automationRow({ id: 'digest', name: 'Inbox Digest' });
   gateway.state.automations = [row];
   seedSuccessfulRun(gateway, row.ref as string, 'run-ok');
@@ -344,8 +348,10 @@ test('9.7 — Run again fires another run from the run viewer', async () => {
     await openAutomations(page);
     await page.getByTestId('automation-row').filter({ hasText: 'Inbox Digest' }).click();
     await page.getByRole('button', { name: 'Run now' }).click();
-    await openRunDetails(page);
-    await expect(page.getByTestId('run-view')).toBeVisible();
+    // Re-run lives on the automation thread card ("Run again"), not the
+    // run-view detail (those in-view controls were removed as noise).
+    await page.getByTestId('run-entry').first().waitFor({ timeout: 15_000 });
+    await expect(page.getByTestId('run-details').first()).toBeVisible({ timeout: 15_000 });
     const before = gateway.countCalls('POST', (p) => p === '/centraid/_automations/run-now');
     await page.getByRole('button', { name: 'Run again' }).first().click();
     await expect
