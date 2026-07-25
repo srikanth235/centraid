@@ -7,6 +7,11 @@
  *   name, kind }] } → { outcome: { outcome: 'selected', optionId } |
  *   { outcome: 'cancelled' } }.
  *
+ * `cancelled` means the PROMPT TURN was cancelled before this request could be
+ * answered — agents unwind the whole turn on it. A per-tool refusal is a
+ * `selected` outcome naming a `reject_once` / `reject_always` option, which
+ * leaves the turn running with its pre-granted tools.
+ *
  * We auto-allow the least-destructive option, matching the headless policy
  * codex/claude already run under: nothing in this surface can render an
  * approval prompt, so a turn that waited for one would simply stall.
@@ -51,6 +56,20 @@ export function readPermissionToolTitle(params: unknown): string {
   if (typeof rec.kind === 'string' && rec.kind.trim()) return rec.kind.trim();
   if (typeof rec.toolCallId === 'string' && rec.toolCallId.trim()) return rec.toolCallId.trim();
   return 'tool';
+}
+
+/**
+ * The option a confined turn answers with. `reject_once` is preferred over
+ * `reject_always` so one denied request never poisons the agent's memory of
+ * the tool for a later turn that runs under a different policy.
+ *
+ * Returns undefined only when the agent offered no reject option at all —
+ * the one case where `{ outcome: 'cancelled' }` is the honest answer, even
+ * though agents read that as "the prompt turn was cancelled".
+ */
+export function pickRejectPermissionOption(options: PermissionOption[]): string | undefined {
+  const byKind = (k: string): PermissionOption | undefined => options.find((o) => o.kind === k);
+  return (byKind('reject_once') ?? byKind('reject_always'))?.optionId;
 }
 
 /** Least-destructive allow: prefer allow_always, then allow_once, then any non-reject, then first. */

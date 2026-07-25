@@ -415,7 +415,17 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       WHERE id = $tid
     `),
     getTurn: db.prepare(`SELECT * FROM turns WHERE id = ?`),
-    deleteTurn: db.prepare(`DELETE FROM turns WHERE id = ?`),
+    // Scoped + guarded (see `ConversationStore.deleteTurn`): only an UNFINISHED
+    // turn, and only within the caller's user scope when one is supplied
+    // (`NULL` = no owner filter, for callers that hold just a run id).
+    deleteTurn: db.prepare(`
+      DELETE FROM turns
+      WHERE id = ? AND ended_at IS NULL
+        AND EXISTS (
+          SELECT 1 FROM conversations c
+          WHERE c.id = turns.conversation_id AND (? IS NULL OR c.user_id = ?)
+        )
+    `),
     // Idempotency lookup (issue #420): the most recent recorded turn on a
     // conversation carrying the given key. A key is written once per user send;
     // newest-first is defensive against any accidental reuse.

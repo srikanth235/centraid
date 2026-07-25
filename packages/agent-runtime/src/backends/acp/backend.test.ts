@@ -189,5 +189,11 @@ test('confined turns structurally deny ACP permission requests', async () => {
   });
   expect(notices(events)).toContain('permission_denied');
   expect(notices(events)).not.toContain('permission_auto_allowed');
-  await expect(fs.readFile(permMarker, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+  // The refusal names the agent's own reject option — NOT `cancelled`, which
+  // means "the prompt turn was cancelled" and would unwind the whole turn.
+  expect(await fs.readFile(permMarker, 'utf8')).toBe('reject');
+  // …so the turn keeps running on its pre-granted tools and still finishes,
+  // exactly as the `permission_denied` notice promises.
+  expect(types(events).at(-1)).toBe('final');
+  expect(deltas(events)).toBe('Hello world');
 });

@@ -1,17 +1,10 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
+// Conversation rows, turn rows, and the search / pin / archive surface. Item,
+// message_in, and attachment rows live in store-items.test.ts; retention
+// pruning in store-prune.test.ts. Shared fixtures in store-test-fixtures.ts.
+
 import { describe, expect, it } from 'vitest';
-import path from 'node:path';
-import { makeJournalDbProvider, type DatabaseProvider } from '../stores/gateway-db.js';
 import { ConversationStore } from './store.js';
-
-function newProvider(): DatabaseProvider {
-  const dir = tempDirSync('centraid-conv-store-');
-  return makeJournalDbProvider(path.join(dir, 'journal.db'));
-}
-
-function newStore(): ConversationStore {
-  return new ConversationStore(newProvider());
-}
+import { newProvider, newStore } from './store-test-fixtures.js';
 
 describe('ConversationStore — conversations', () => {
   it('creates + round-trips a conversation (kind/app/automation/title)', () => {
@@ -84,6 +77,25 @@ describe('ConversationStore — conversations', () => {
       automationId: 'app/digest',
       adapterKind: 'claude-code',
     });
+    store.close();
+  });
+
+  it('refuses to reuse an automation conversation whose row names another harness', () => {
+    const store = newStore();
+    // A row that could only come from a hand-edited ledger or the deprecated
+    // `createAutomationRun` path: the `::runner:` id says codex, the column
+    // says claude-code. Handing a claude-code ACP resume handle to codex would
+    // corrupt the session, so this fails loudly.
+    store.createConversation({
+      id: 'app/digest::runner:codex',
+      kind: 'automation',
+      userId: '',
+      automationId: 'app/digest',
+      adapterKind: 'claude-code',
+    });
+    expect(() =>
+      store.ensureAutomationConversation('app/digest', 'app', 'Digest', 'codex'),
+    ).toThrow(/belongs to claude-code/);
     store.close();
   });
 
@@ -231,6 +243,51 @@ describe('ConversationStore — turns', () => {
     store.close();
   });
 
+  it('deleteTurn removes an unfinished turn but refuses a finished one', () => {
+    const store = newStore();
+    const c = store.createConversation({ kind: 'automation', userId: '', automationId: 'app/a' });
+    store.insertTurn({ turnId: 'r0', conversationId: c.id, triggerKind: 'manual', startedAt: 1 });
+    store.finishTurn({ turnId: 'r0', endedAt: 2, ok: true });
+    store.insertTurn({ turnId: 'r1', conversationId: c.id, triggerKind: 'manual', startedAt: 3 });
+
+    // A finished turn is durable history: deleting it would hand its `seq` to
+    // the next insert and alias the archive's seq_from/seq_to ranges.
+    expect(store.deleteTurn('r0')).toBe(false);
+    expect(store.getTurn('r0')).toBeDefined();
+
+    // The interrupted newest turn is the retry path — its seq is recycled on
+    // purpose, and nothing archived can be covering it.
+    expect(store.deleteTurn('r1')).toBe(true);
+    expect(store.getTurn('r1')).toBeUndefined();
+    store.insertTurn({ turnId: 'r1', conversationId: c.id, triggerKind: 'manual', startedAt: 4 });
+    expect(store.getTurn('r1')?.seq).toBe(1);
+    store.close();
+  });
+
+  it('deleteTurn confines itself to the given owner when one is supplied', () => {
+    const store = newStore();
+    const mine = store.createConversation({ kind: 'chat', userId: 'u1' });
+    const theirs = store.createConversation({ kind: 'chat', userId: 'u2' });
+    store.insertTurn({
+      turnId: 'a',
+      conversationId: mine.id,
+      triggerKind: 'interactive',
+      startedAt: 1,
+    });
+    store.insertTurn({
+      turnId: 'b',
+      conversationId: theirs.id,
+      triggerKind: 'interactive',
+      startedAt: 1,
+    });
+
+    // A stray id must not reach across users.
+    expect(store.deleteTurn('b', 'u1')).toBe(false);
+    expect(store.getTurn('b')).toBeDefined();
+    expect(store.deleteTurn('a', 'u1')).toBe(true);
+    store.close();
+  });
+
   it('finishTurn rolls up step/agent tokens + step/tool counts', () => {
     const store = newStore();
     const c = store.createConversation({ kind: 'automation', userId: '', automationId: 'app/a' });
@@ -290,115 +347,6 @@ describe('ConversationStore — turns', () => {
     expect(store.listTurnsFiltered(c.id, { status: 'error' }).length).toBe(1);
     expect(store.listTurnsFiltered(c.id, { since: 103 }).length).toBe(2);
     expect(store.listTurnsFiltered(c.id, { limit: 2 }).map((t) => t.turnId)).toEqual(['r4', 'r3']);
-    store.close();
-  });
-});
-
-describe('ConversationStore — items + message_in', () => {
-  it('insertMessageIn lands ordinal 0; listItems is ordinal-ordered', () => {
-    const store = newStore();
-    const c = store.createConversation({ kind: 'chat', userId: 'u1' });
-    store.insertTurn({
-      turnId: 't',
-      conversationId: c.id,
-      triggerKind: 'interactive',
-      startedAt: 1,
-    });
-    store.insertMessageIn({ turnId: 't', role: 'user', text: 'hi there', startedAt: 1 });
-    store.insertItem({
-      itemId: 's1',
-      turnId: 't',
-      ordinal: 1,
-      kind: 'step',
-      outputJson: JSON.stringify({ text: 'reply' }),
-      ok: true,
-      startedAt: 2,
-      endedAt: 3,
-      durationMs: 1,
-    });
-    const items = store.listItems('t');
-    expect(items.map((i) => [i.kind, i.ordinal])).toEqual([
-      ['message_in', 0],
-      ['step', 1],
-    ]);
-    expect(items[0]?.text).toBe('hi there');
-    expect(items[0]?.role).toBe('user');
-    expect(store.messageInText('t')).toBe('hi there');
-    store.close();
-  });
-
-  it('openItem lands an in-flight row; closeItem settles outcome + duration', () => {
-    const store = newStore();
-    const c = store.createConversation({ kind: 'chat', userId: 'u1' });
-    store.insertTurn({
-      turnId: 't',
-      conversationId: c.id,
-      triggerKind: 'interactive',
-      startedAt: 0,
-    });
-    store.openItem({
-      turnId: 't',
-      itemId: 'n1',
-      ordinal: 0,
-      callId: 'call-1',
-      kind: 'tool',
-      name: 'x',
-      argsJson: '{"q":1}',
-      rawJson: '{"phase":"start"}',
-      startedAt: 10,
-    });
-    let [n] = store.listItems('t');
-    expect(n?.endedAt).toBe(undefined);
-    expect(n?.ok).toBe(true);
-    store.closeItem({
-      itemId: 'n1',
-      ok: false,
-      error: 'rate limited',
-      rawJson: '{"phase":"result"}',
-      endedAt: 35,
-      durationMs: 25,
-    });
-    [n] = store.listItems('t');
-    expect(store.listItems('t').length).toBe(1);
-    expect(n?.ok).toBe(false);
-    expect(n?.error).toBe('rate limited');
-    expect(n?.argsJson).toBe('{"q":1}');
-    expect(n?.callId).toBe('call-1');
-    expect(n?.rawJson).toBe('{"phase":"result"}');
-    store.close();
-  });
-});
-
-describe('ConversationStore — attachments', () => {
-  it('insertAttachment FKs to a message_in item; lists by item + turn; referencedHashes', () => {
-    const store = newStore();
-    const c = store.createConversation({ kind: 'chat', userId: 'u1' });
-    store.insertTurn({
-      turnId: 't',
-      conversationId: c.id,
-      triggerKind: 'interactive',
-      startedAt: 1,
-    });
-    const itemId = store.insertMessageIn({
-      turnId: 't',
-      role: 'user',
-      text: 'see file',
-      startedAt: 1,
-    });
-    store.insertAttachment({
-      itemId,
-      hash: 'a'.repeat(64),
-      mime: 'image/png',
-      sizeBytes: 12,
-      source: 'upload',
-      filename: 'pic.png',
-    });
-    const byItem = store.listAttachmentsForItem(itemId);
-    expect(byItem.length).toBe(1);
-    expect(byItem[0]?.mime).toBe('image/png');
-    expect(byItem[0]?.filename).toBe('pic.png');
-    expect(store.listAttachmentsForTurn('t').length).toBe(1);
-    expect([...store.referencedHashes()]).toEqual(['a'.repeat(64)]);
     store.close();
   });
 });

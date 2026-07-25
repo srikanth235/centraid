@@ -217,6 +217,60 @@ export function conversationMatchExpression(query: string): string | null {
   return tokens.map((t) => `"${t}"*`).join(' ');
 }
 
+/**
+ * Ledger cap for a runner's raw envelope. `args_json` / `output_json` arrive
+ * already capped, but `raw_json` carries the SAME payload inside the runner's
+ * envelope (an entire file read, a full tool result) and is written TWICE per
+ * tool call — once at `openItem`, once at `closeItem`. Uncapped that is
+ * megabytes per call into `journal.db`, straight through #544's disk budget
+ * and #438's bounded ledger. Enforced here, at the write boundary, so no
+ * producer can forget; producers capping their own output is defense in depth,
+ * not a substitute.
+ */
+const RAW_JSON_MAX_BYTES = 64 * 1024;
+
+/** A value this short is an identifier, not a payload — worth keeping. */
+const RAW_JSON_KEPT_FIELD_MAX_CHARS = 256;
+
+/**
+ * The parts of an oversized envelope worth keeping: every top-level scalar
+ * short enough to be an identifier (`stopReason`, `callId` / `toolCallId`,
+ * `status`, `kind`, …). Nested content — the file bodies and result arrays
+ * that blew the cap — is exactly what we drop. Returns `{}` for anything that
+ * isn't a JSON object; a non-JSON envelope has no structure to preserve, and
+ * the truncation marker alone is then the honest record.
+ */
+function rawJsonForensics(raw: string): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return {};
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+  const kept: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    if (typeof value === 'string') {
+      if (value.length <= RAW_JSON_KEPT_FIELD_MAX_CHARS) kept[key] = value;
+    } else if (typeof value === 'number' || typeof value === 'boolean' || value === null) {
+      kept[key] = value;
+    }
+  }
+  return kept;
+}
+
+/** `raw_json` as it may be written: verbatim under the cap, else forensics + marker. */
+function cappedRawJson(raw: string | undefined): string | null {
+  if (raw === undefined) return null;
+  const originalBytes = Buffer.byteLength(raw, 'utf8');
+  if (originalBytes <= RAW_JSON_MAX_BYTES) return raw;
+  const marker = { rawTruncated: true, rawOriginalBytes: originalBytes };
+  const kept = JSON.stringify({ ...rawJsonForensics(raw), ...marker });
+  // A pathological envelope (thousands of short scalar keys) can still exceed
+  // the cap; the marker on its own always fits.
+  return Buffer.byteLength(kept, 'utf8') <= RAW_JSON_MAX_BYTES ? kept : JSON.stringify(marker);
+}
+
 export class ConversationStore {
   private readonly provider: DatabaseProvider;
   private db: DatabaseSync | undefined;
@@ -320,6 +374,12 @@ export class ConversationStore {
     if (existing.kind !== 'automation' || existing.automationId !== automationRef) {
       throw new Error(`conversation id collision for automation "${conversationId}"`);
     }
+    // Unreachable through this method — the id above encodes `runnerKind`, so
+    // a row found under it was created for that kind. It stays as a corruption
+    // guard for the rows that DON'T come from here: a hand-edited ledger, or
+    // the deprecated `createAutomationRun` path where a caller's own ref can
+    // collide with the `::runner:` encoding. Failing loudly beats handing an
+    // ACP resume handle to the wrong harness.
     if (
       runnerKind !== undefined &&
       existing.adapterKind !== undefined &&
@@ -543,10 +603,21 @@ export class ConversationStore {
     return raw ? turnFromRaw(raw) : undefined;
   }
 
-  /** Delete one interrupted turn; items/attachments cascade with it. */
-  deleteTurn(turnId: string): boolean {
+  /**
+   * Delete ONE unfinished turn; items/attachments cascade with it. This is the
+   * retry-under-the-original-id path, not a general eraser.
+   *
+   * A finished turn is refused on purpose. `insertTurn` derives `seq` from
+   * `MAX(seq)+1` (below), so deleting the newest turn hands its `seq` to the
+   * next one — and `conversation_archive`'s `seq_from`/`seq_to` ranges assume
+   * `seq` is monotonic within a conversation. An unfinished turn is never
+   * inside an archived range, so recycling ITS seq is the retry; recycling a
+   * finished turn's seq would alias an archived range. `userId`, when the
+   * caller has one, additionally confines the delete to that owner's threads.
+   */
+  deleteTurn(turnId: string, userId?: string): boolean {
     const { stmts } = this.ensureReady();
-    return Number(stmts.deleteTurn.run(turnId).changes) > 0;
+    return Number(stmts.deleteTurn.run(turnId, userId ?? null, userId ?? null).changes) > 0;
   }
 
   /** Every turn of a conversation, oldest-first (seq ASC) — the thread's turns. */
@@ -671,7 +742,7 @@ export class ConversationStore {
       input.name ?? null,
       input.argsJson ?? null,
       input.outputJson ?? null,
-      input.rawJson ?? null,
+      cappedRawJson(input.rawJson),
       input.childTurnId ?? null,
       input.ok ? 1 : 0,
       input.error ?? null,
@@ -693,7 +764,7 @@ export class ConversationStore {
       input.appId ?? null,
       input.name ?? null,
       input.argsJson ?? null,
-      input.rawJson ?? null,
+      cappedRawJson(input.rawJson),
       input.startedAt,
     );
   }
@@ -703,7 +774,7 @@ export class ConversationStore {
     stmts.closeItem.run({
       ok: input.ok ? 1 : 0,
       outputJson: input.outputJson ?? null,
-      rawJson: input.rawJson ?? null,
+      rawJson: cappedRawJson(input.rawJson),
       error: input.error ?? null,
       childTurnId: input.childTurnId ?? null,
       inputTokens: input.inputTokens ?? null,

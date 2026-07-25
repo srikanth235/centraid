@@ -129,3 +129,33 @@ test('resumed cumulative token and USD totals are booked as deltas', async () =>
     cost: { amount: 0.42, currency: 'USD' },
   });
 });
+
+test('a cancelled turn still books the tokens it burned', async () => {
+  const { events, result } = await runFake({
+    extraArgs: ['--mode=cancel'],
+    abortOn: (e) => e.type === 'assistant.delta',
+  });
+
+  // The abort really happened…
+  expect(events.map((e) => e.type)).toContain('aborted');
+  // …and the spend is still on the ledger. Suppressing this event while the
+  // snapshot advanced would charge these tokens to nobody, and the next turn
+  // would subtract a baseline it was never billed for.
+  expect(usageOf(events)).toMatchObject({ inputTokens: 100, outputTokens: 50 });
+  expect(result.usageSnapshot).toMatchObject({ inputTokens: 100, outputTokens: 50 });
+});
+
+test('an aborted resumed turn advances the snapshot past its own baseline', async () => {
+  const { events, result } = await runFake({
+    extraArgs: ['--mode=cancel', '--session-resume'],
+    prevSessionId: 'prev-1',
+    prevUsageSnapshot: { inputTokens: 40, outputTokens: 20 },
+    abortOn: (e) => e.type === 'assistant.delta',
+  });
+
+  // Booked delta is cumulative-minus-baseline…
+  expect(usageOf(events)).toMatchObject({ inputTokens: 60, outputTokens: 30 });
+  // …and the persisted baseline moves to the same cumulative total, so the
+  // two can never disagree about what has already been charged.
+  expect(result.usageSnapshot).toMatchObject({ inputTokens: 100, outputTokens: 50 });
+});

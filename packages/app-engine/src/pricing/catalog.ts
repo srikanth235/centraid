@@ -33,14 +33,6 @@ function loadSnapshot(): PricingCatalog {
 let catalog: PricingCatalog = loadSnapshot();
 
 /**
- * Explicit unknown-model accounting policy when the loaded catalog has no
- * positive rate for a consumed bucket: $100 / MTok. This is intentionally
- * conspicuous and non-zero, but it is not a claim about an unreported
- * provider's actual rate or a proven upper bound.
- */
-export const UNKNOWN_MODEL_POLICY_RATE_PER_TOKEN = 100 / 1_000_000;
-
-/**
  * Replace the active price table (gateway warmer). Empty input is ignored so a
  * failed fetch never wipes the bundled snapshot.
  */
@@ -52,41 +44,4 @@ export function setPricingCatalog(entries: PricingCatalog): void {
 export function lookupEntry(model: string | undefined): PricingEntry | undefined {
   if (!model) return undefined;
   return matchEntry(catalog, model);
-}
-
-/**
- * Per-token rate ceiling across the known catalog. Used only when a runner
- * reports tokens but neither USD nor a model identity. Combining maxima is a
- * deliberately conservative envelope, not a claim that one catalog model
- * has this exact price.
- */
-export function catalogRateCeilingFor(entries: PricingCatalog): PricingEntry {
-  const values = Object.values(entries);
-  const max = (read: (entry: PricingEntry) => number | undefined): number | undefined => {
-    const rates = values
-      .map(read)
-      .filter(
-        (value): value is number => value !== undefined && Number.isFinite(value) && value > 0,
-      );
-    return rates.length > 0 ? Math.max(...rates) : undefined;
-  };
-  const policy = (value: number | undefined): number =>
-    value ?? UNKNOWN_MODEL_POLICY_RATE_PER_TOKEN;
-  const cacheWrite = max((entry) =>
-    Math.max(
-      entry.cache_creation_input_token_cost ?? 0,
-      entry.cache_creation_input_token_cost_above_1hr ?? 0,
-    ),
-  );
-  return {
-    input_cost_per_token: policy(max((entry) => entry.input_cost_per_token)),
-    output_cost_per_token: policy(max((entry) => entry.output_cost_per_token)),
-    cache_read_input_token_cost: policy(max((entry) => entry.cache_read_input_token_cost)),
-    // `costFromEntry` prefers this field, so fold both duration buckets into it.
-    cache_creation_input_token_cost: policy(cacheWrite),
-  };
-}
-
-export function catalogRateCeiling(): PricingEntry {
-  return catalogRateCeilingFor(catalog);
 }

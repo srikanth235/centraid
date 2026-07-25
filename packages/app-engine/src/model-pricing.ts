@@ -12,11 +12,12 @@
  * zero-cost call. Callers that sum cost must treat NULL as "unknown",
  * not "free".
  *
- * Automation accounting may opt into an explicit unknown-model policy when a
- * harness reports tokens without USD or a confirmed model identity. That path
- * uses per-bucket maxima from the loaded catalog, falling back to a conspicuous
- * non-zero policy rate for a missing bucket. It is an estimate relative to the
- * loaded catalog, not a provider-price claim or proven universal ceiling.
+ * Unknown is NULL, never a number. A local/self-hosted model, or one newer
+ * than the LiteLLM snapshot, has no honest price here: substituting a
+ * catalog-wide rate ceiling would stamp `cost_source = 'estimated'` on a figure
+ * that can be orders of magnitude off and is indistinguishable downstream from
+ * a real catalog estimate. Surfaces render NULL as "unknown"; that is the
+ * honest answer, and inventing a maximal number inverts the rule above.
  *
  * Internally this delegates to an injectable in-memory catalog seeded from a
  * committed LiteLLM snapshot and overlaid by the gateway warmer's live fetch
@@ -26,7 +27,7 @@
  * though it no longer holds any literal ids itself.
  */
 
-import { catalogRateCeiling, lookupEntry } from './pricing/catalog.js';
+import { lookupEntry } from './pricing/catalog.js';
 import { costFromEntry, entryToModelPrice } from './pricing/cost.js';
 
 export { setPricingCatalog } from './pricing/catalog.js';
@@ -81,17 +82,16 @@ export interface ResolvedItemCost {
 /**
  * Prefer agent/ACP-reported USD; fall back to the catalog estimate. Marks
  * provenance so Insights can be honest and reprice never clobbers agent costs.
+ *
+ * Returns `{}` — cost AND provenance NULL — when the model is unpriceable.
+ * Every reported+priceable usage still books a real non-zero cost; an
+ * unpriceable one books "unknown", which is a different claim from "free" and
+ * from "estimated at some number".
  */
 export function resolveItemCost(opts: {
   agentCostUsd?: number;
   model?: string;
   usage: TokenUsage;
-  /**
-   * Automation-only safety net: when a harness reports tokens but neither
-   * cost nor a priceable model, record a conservative catalog-rate ceiling
-   * rather than silently presenting the call as free.
-   */
-  estimateUnknownModel?: boolean;
 }): ResolvedItemCost {
   if (opts.agentCostUsd !== undefined && Number.isFinite(opts.agentCostUsd)) {
     return { costUsd: opts.agentCostUsd, costSource: 'agent' };
@@ -99,13 +99,6 @@ export function resolveItemCost(opts: {
   const estimated = costForUsage(opts.model, opts.usage);
   if (estimated !== undefined) {
     return { costUsd: estimated, costSource: 'estimated' };
-  }
-  if (opts.estimateUnknownModel) {
-    const ceiling = catalogRateCeiling();
-    const conservative = costFromEntry(ceiling, opts.usage);
-    if (conservative > 0) {
-      return { costUsd: conservative, costSource: 'estimated' };
-    }
   }
   return {};
 }
