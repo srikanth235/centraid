@@ -85,7 +85,7 @@ describe('VaultCursorEngine', () => {
     expect(cursors.getCursor('clock/minutely', 0)?.pendingJson).toBeUndefined();
   });
 
-  it('fires the latest missed cron instant even when the wake minute is not due', async () => {
+  it('fires the latest missed cron instant on the first tick after a sleep', async () => {
     const cursors = store();
     const from = new Date(2026, 0, 1, 8, 0).getTime();
     cursors.putCursor({
@@ -105,6 +105,11 @@ describe('VaultCursorEngine', () => {
     });
 
     await engine.reconcile([row('clock/daily', [{ kind: 'cron', expr: '0 9 * * *' }])]);
+    // Registration itself must never fire — the catch-up belongs to the tick.
+    expect(fired).toEqual([]);
+
+    engine.tick();
+    await settle();
 
     expect(fired).toEqual([
       expect.objectContaining({

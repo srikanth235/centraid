@@ -315,8 +315,14 @@ function extractSecret(req: IncomingMessage): string | undefined {
   return undefined;
 }
 
+/**
+ * The sender's per-delivery id, used to deduplicate durable ingress. Only
+ * headers that are per-delivery BY CONTRACT qualify — `x-request-id` is a
+ * transport correlation id some proxies reuse across requests, and reusing it
+ * here would make two distinct deliveries collapse into one.
+ */
 function deliveryId(req: IncomingMessage): string {
-  for (const name of ['x-centraid-delivery-id', 'x-github-delivery', 'x-request-id']) {
+  for (const name of ['x-centraid-delivery-id', 'x-github-delivery']) {
     const value = req.headers[name];
     if (typeof value === 'string' && value.trim()) return value.trim().slice(0, 256);
   }

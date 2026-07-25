@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ManifestError,
+  isDeniedTriggerCursorEntity,
   isPendingWebhookTrigger,
   isValidCronExpression,
   parseManifest,
@@ -359,40 +360,76 @@ describe('provider event triggers and cursor loop guard', () => {
   });
 
   it.each([
-    'outbox.item',
-    'infra.trigger_ingress',
-    'infra.automation_trigger_cursor',
-    'infra.automation_state',
-    'infra.scheduler_ledger',
-    'infra.conversations',
-    'infra.turns',
-    'infra.items',
-    'infra.attachments',
-    'infra.run_summary',
-    'infra.conversation_archive',
-    'infra.conversation_digest',
-  ])('rejects loop-sensitive condition/data cursor entity %s', (entity) => {
-    const vault = {
-      purpose: 'dpv:ServiceProvision',
-      scopes: [{ schema: 'core', table: 'event', verbs: 'read' }],
-    };
-    expect(() =>
-      validateManifest({
-        name: 'Loop',
-        prompt: 'never loop',
-        generated: { by: 'test', at: '2026-07-25' },
-        vault,
-        triggers: [{ kind: 'condition', entity }],
-      }),
-    ).toThrow(/prevent trigger loops/);
-    expect(() =>
-      validateManifest({
-        name: 'Loop',
-        prompt: 'never loop',
-        generated: { by: 'test', at: '2026-07-25' },
-        vault,
-        triggers: [{ kind: 'data', entities: [entity] }],
-      }),
-    ).toThrow(/prevent trigger loops/);
+    'trigger_ingress',
+    'automation_trigger_cursor',
+    'automation_state',
+    'scheduler_ledger',
+    'conversations',
+    'turns',
+    'items',
+    'attachments',
+    'run_summary',
+    'conversation_archive',
+    'conversation_digest',
+  ])('denies the bare runtime ledger table %s at the cursor guard', (entity) => {
+    expect(isDeniedTriggerCursorEntity(entity)).toBe(true);
+    // A user's own vault table that merely ends in the same word is data.
+    expect(isDeniedTriggerCursorEntity(`shop.${entity}`)).toBe(false);
   });
+
+  it.each(['outbox.item', 'outbox.receipt'])(
+    'rejects loop-sensitive condition/data cursor entity %s',
+    (entity) => {
+      const vault = {
+        purpose: 'dpv:ServiceProvision',
+        scopes: [{ schema: 'core', table: 'event', verbs: 'read' }],
+      };
+      expect(() =>
+        validateManifest({
+          name: 'Loop',
+          prompt: 'never loop',
+          generated: { by: 'test', at: '2026-07-25' },
+          vault,
+          triggers: [{ kind: 'condition', entity }],
+        }),
+      ).toThrow(/prevent trigger loops/);
+      expect(() =>
+        validateManifest({
+          name: 'Loop',
+          prompt: 'never loop',
+          generated: { by: 'test', at: '2026-07-25' },
+          vault,
+          triggers: [{ kind: 'data', entities: [entity] }],
+        }),
+      ).toThrow(/prevent trigger loops/);
+    },
+  );
+
+  it.each(['inventory.items', 'shop.attachments', 'crm.conversations', 'schedule.turns'])(
+    'accepts the user vault entity %s — the loop guard names runtime tables, not table words',
+    (entity) => {
+      const vault = {
+        purpose: 'dpv:ServiceProvision',
+        scopes: [{ schema: 'core', table: 'event', verbs: 'read' }],
+      };
+      expect(
+        validateManifest({
+          name: 'Watch',
+          prompt: 'watch my own data',
+          generated: { by: 'test', at: '2026-07-25' },
+          vault,
+          triggers: [{ kind: 'condition', entity }],
+        }).triggers[0],
+      ).toMatchObject({ kind: 'condition', entity });
+      expect(
+        validateManifest({
+          name: 'Watch',
+          prompt: 'watch my own data',
+          generated: { by: 'test', at: '2026-07-25' },
+          vault,
+          triggers: [{ kind: 'data', entities: [entity] }],
+        }).triggers[0],
+      ).toMatchObject({ kind: 'data', entities: [entity] });
+    },
+  );
 });

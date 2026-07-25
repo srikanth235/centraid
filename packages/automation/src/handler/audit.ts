@@ -258,9 +258,9 @@ export interface CloseRunNodeArgs {
 
 /**
  * Settle a node opened by `openRunNode`: write the outcome to the ledger
- * AND publish `item.end`. The `item.end` `result` carries the untruncated
- * value (it's ephemeral on the bus); the ledger row keeps the 64 KB-capped
- * copy.
+ * AND publish `item.end`. The `item.end` `result` and `rawJson` carry the
+ * untruncated values (they're ephemeral on the bus); the ledger row keeps the
+ * 64 KB-capped copies.
  */
 export function closeRunNode(args: CloseRunNodeArgs): void {
   const durationMs = args.ended - args.started;
@@ -281,7 +281,6 @@ export function closeRunNode(args: CloseRunNodeArgs): void {
             ...(args.costUsd !== undefined ? { agentCostUsd: args.costUsd } : {}),
             model: args.model,
             usage,
-            estimateUnknownModel: true,
           });
   try {
     args.store.closeItem({

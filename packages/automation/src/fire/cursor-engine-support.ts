@@ -1,5 +1,6 @@
 import type { AutomationTriggerCursor, AutomationTriggerStore } from '@centraid/app-engine';
 import type { Host } from './host.js';
+import type { Row } from '../scaffold/app.js';
 import {
   CONDITION_DEFAULT_EVERY,
   DATA_DEFAULT_EVERY,
@@ -13,13 +14,29 @@ export const DEFAULT_TRIGGER_CATCH_UP_CAP = 50;
 export type CursorSourceKind = Trigger['kind'];
 
 export interface CursorElement {
-  /** Stable source-native position/id for this element. */
+  /**
+   * Stable source-native position/id for this element. It must be unique per
+   * DELIVERY OCCURRENCE, not merely per source row: the host derives its
+   * idempotency run id from it, so a re-delivery of the same row (a condition
+   * row that left the window and re-entered) needs a position of its own.
+   */
   position: string;
   occurredAt: number;
   payload?: unknown;
+  /**
+   * The source position committed once THIS element is acknowledged. Readers
+   * that can express a per-element watermark set it; it lets the engine
+   * truncate an over-long read without ever committing past what it delivered.
+   */
+  positionJson?: string;
 }
 
 export interface CursorReadResult {
+  /**
+   * Ordered elements after the supplied cursor, oldest first. A reader must
+   * not return more than `limit`; the surplus belongs to the next read, and
+   * `positionJson` must never point past the last element returned here.
+   */
   elements: CursorElement[];
   /** Serialized next source position. Undefined preserves the current one. */
   positionJson?: string;
@@ -64,7 +81,13 @@ export interface CursorStore {
     gapReason?: string;
     updatedAt: number;
   }): void;
-  deleteCursorsNotIn?(automationIds: readonly string[]): number;
+  deleteCursorsNotIn?(retained: readonly CursorRetentionKey[]): number;
+}
+
+/** One declared `(automation, trigger index)` slot whose cursor must survive. */
+export interface CursorRetentionKey {
+  automationId: string;
+  triggerIndex: number;
 }
 
 export interface VaultCursorEngineOptions {
@@ -92,6 +115,35 @@ export interface CursorRegistration {
   ref: string;
   triggerIndex: number;
   trigger: Trigger;
+  /** Every cron expression this registration schedules (cron registrations only). */
+  cronExprs?: readonly string[];
+}
+
+/**
+ * The cursor registrations one automation contributes — one per trigger,
+ * EXCEPT cron: every cron trigger collapses into a single registration held at
+ * the first cron index. An automation declaring both a daily 08:00 expression
+ * and a half-hourly one is one schedule with two expressions, so 08:00 fires
+ * it exactly once.
+ */
+export function registrationsFor(row: Row): CursorRegistration[] {
+  for (const trigger of row.triggers) assertTriggerCursorAllowed(trigger);
+  const cronExprs = row.triggers.flatMap((trigger) =>
+    trigger.kind === 'cron' ? [trigger.expr] : [],
+  );
+  const firstCron = row.triggers.findIndex((trigger) => trigger.kind === 'cron');
+  return row.triggers.flatMap((trigger, triggerIndex): CursorRegistration[] => {
+    if (trigger.kind !== 'cron') return [{ ref: row.ref, triggerIndex, trigger }];
+    if (triggerIndex !== firstCron) return [];
+    return [{ ref: row.ref, triggerIndex, trigger, cronExprs }];
+  });
+}
+
+/** Every `(automation, trigger index)` slot the desired set declares. */
+export function retentionKeysFor(rows: ReadonlyArray<Row>): CursorRetentionKey[] {
+  return rows.flatMap((row) =>
+    row.triggers.map((_trigger, triggerIndex) => ({ automationId: row.ref, triggerIndex })),
+  );
 }
 
 export interface PendingFireBatch {
@@ -126,6 +178,9 @@ export function readPendingBatch(raw: string | undefined): PendingFireBatch | un
           position: element.position,
           occurredAt: element.occurredAt,
           ...('payload' in element ? { payload: element.payload } : {}),
+          ...(typeof element.positionJson === 'string'
+            ? { positionJson: element.positionJson }
+            : {}),
         },
       ];
     });

@@ -322,6 +322,32 @@ describe('runFire', () => {
     store.close();
   });
 
+  it('keeps the final runner envelope when a later error carries none', async () => {
+    const handler = `export default async ({ ctx }) => ({ output: await ctx.agent({ prompt: 'go' }) });`;
+    await writeAutomation(appsDir, 'notes', 'late-error', manifest({ name: 'LateError' }), handler);
+    const dispatch = (): Promise<DispatchSurface> =>
+      Promise.resolve({
+        agentDispatcher: async (call) => {
+          call.onEvent?.({ type: 'final', text: 'done', rawJson: '{"stopReason":"end_turn"}' });
+          // A trailing error with no envelope of its own must not blank the
+          // one the final already captured.
+          call.onEvent?.({ type: 'error', message: 'stream closed late' });
+          return 'done';
+        },
+        async close() {},
+      });
+
+    const { record } = await runFire(
+      { automationRef: 'notes/late-error', appsDir, journalDbFile },
+      { openDispatch: dispatch },
+    );
+    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    expect(store.listItems(record.runId).find((item) => item.kind === 'agent')?.rawJson).toBe(
+      '{"stopReason":"end_turn"}',
+    );
+    store.close();
+  });
+
   it('does not attribute an unconfirmed configured model when estimating usage', async () => {
     setPricingCatalog({
       'priced-fixture-model': {
@@ -359,18 +385,16 @@ describe('runFire', () => {
       { openDispatch: dispatch },
     );
     const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
-    expect(store.listItems(record.runId).find((item) => item.kind === 'agent')).toMatchObject({
-      costUsd: 0.008,
-      costSource: 'estimated',
-    });
-    expect(
-      store.listItems(record.runId).find((item) => item.kind === 'agent')?.model,
-    ).toBeUndefined();
-    expect(store.getTurn(record.runId)?.totalCostUsd).toBe(0.008);
+    const item = store.listItems(record.runId).find((entry) => entry.kind === 'agent');
+    // The harness confirmed neither a model nor a cost, so the run books
+    // "unknown" — not the configured model, and not an invented number.
+    expect(item?.model).toBeUndefined();
+    expect(item?.costUsd).toBeUndefined();
+    expect(item?.costSource).toBeUndefined();
     store.close();
   });
 
-  it('records a conservative non-zero estimate when a harness reports tokens without a model', async () => {
+  it('books an unpriceable harness report as unknown rather than inventing a rate', async () => {
     setPricingCatalog({
       'catalog-low': {
         input_cost_per_token: 0.001,
@@ -411,10 +435,11 @@ describe('runFire', () => {
     );
     const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
     const agentItem = store.listItems(record.runId).find((item) => item.kind === 'agent');
-    expect(agentItem?.costSource).toBe('estimated');
-    expect(agentItem?.costUsd).toBeCloseTo(0.018, 9);
+    // Tokens without a priceable model are unknown, and unknown is NULL: a
+    // catalog-wide ceiling would be indistinguishable from a real estimate.
+    expect(agentItem?.costSource).toBeUndefined();
+    expect(agentItem?.costUsd).toBeUndefined();
     expect(agentItem?.model).toBeUndefined();
-    expect(store.getTurn(record.runId)?.totalCostUsd).toBeCloseTo(0.018, 9);
     store.close();
   });
 

@@ -376,6 +376,8 @@ export {
   type TriggerIngressRecord,
   type AppendTriggerIngress,
   type TriggerIngressBounds,
+  type TriggerIngressGap,
+  type PruneIngressResult,
 } from './conversation/trigger-store.js';
 export type { AutomationTurnStreamEvent } from './conversation/automation-turn-stream-event.js';
 export type {

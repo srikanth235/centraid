@@ -74,44 +74,47 @@ describe('InProcessScheduler.reconcile', () => {
 describe('InProcessScheduler.tick', () => {
   it('fires each due cron once and catches the latest missed instant', async () => {
     const fired: string[] = [];
-    let clock = at(7, 59);
+    let clock = at(8, 0);
     const s = new InProcessScheduler({ fire: (ref) => void fired.push(ref), now: () => clock });
     await s.reconcile([
       row('a/morning', true, ['0 8 * * *']),
       row('a/evening', true, ['0 20 * * *']),
     ]);
+    // Registering at 08:00 does not run the 08:00 automation: cron has the
+    // same no-fire bootstrap data triggers get.
+    await settle();
+    expect(fired).toEqual([]);
 
     // 08:00 — only the morning automation matches.
-    clock = at(8, 0);
     s.tick();
-    expect(fired).toEqual(['a/morning']);
     await settle();
+    expect(fired).toEqual(['a/morning']);
 
     // Same minute again — de-duped, no second fire.
     s.tick();
+    await settle();
     expect(fired).toEqual(['a/morning']);
 
     // The scheduler slept across 20:00. Its cursor catches the latest due
     // instant on the first wake minute instead of losing the evening run.
     clock = at(20, 1);
     s.tick();
-    expect(fired).toEqual(['a/morning', 'a/evening']);
     await settle();
+    expect(fired).toEqual(['a/morning', 'a/evening']);
   });
 
   it('fires every registered automation whose cron matches the minute', async () => {
     const fired: string[] = [];
-    let clock = at(7, 59);
+    const clock = at(8, 0);
     const s = new InProcessScheduler({ fire: (ref) => void fired.push(ref), now: () => clock });
     await s.reconcile([
       row('a/one', true, ['0 8 * * *']),
       row('b/two', true, ['*/15 * * * *']), // also matches :00
       row('c/three', true, ['0 9 * * *']), // does not
     ]);
-    clock = at(8, 0);
     s.tick();
-    expect(fired.sort()).toEqual(['a/one', 'b/two']);
     await settle();
+    expect(fired.sort()).toEqual(['a/one', 'b/two']);
   });
 });
 
@@ -414,7 +417,7 @@ describe('InProcessScheduler.nudge', () => {
 describe('InProcessScheduler onTick hook (issue #351)', () => {
   it('fires once per processed minute, before any automation fire', async () => {
     const order: string[] = [];
-    let clock = at(7, 59);
+    let clock = at(8, 0);
     const s = new InProcessScheduler({
       fire: (ref) => void order.push(`fire:${ref}`),
       onTick: (t) => void order.push(`tick:${t.getHours()}:${t.getMinutes()}`),
@@ -422,17 +425,18 @@ describe('InProcessScheduler onTick hook (issue #351)', () => {
     });
     await s.reconcile([row('a/one', true, ['0 8 * * *'])]);
 
-    clock = at(8, 0);
     s.tick();
-    expect(order).toEqual(['tick:8:0', 'fire:a/one']);
     await settle();
+    expect(order).toEqual(['tick:8:0', 'fire:a/one']);
 
     // Same minute again — de-duped, no second tick or fire.
     s.tick();
+    await settle();
     expect(order).toEqual(['tick:8:0', 'fire:a/one']);
 
     clock = at(8, 1);
     s.tick();
+    await settle();
     expect(order).toEqual(['tick:8:0', 'fire:a/one', 'tick:8:1']);
   });
 

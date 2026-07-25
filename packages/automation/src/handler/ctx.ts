@@ -145,7 +145,11 @@ export async function handleAgentMessage(
   >();
   const onEvent = (ev: TurnStreamEvent): void => {
     if (ev.type === 'usage') lastUsage = ev;
-    if (ev.type === 'final' || ev.type === 'error') finalRawJson = ev.rawJson;
+    // Keep the last envelope that HAS one: an `error` following a `final`
+    // would otherwise blank the captured `final` envelope with its undefined.
+    if ((ev.type === 'final' || ev.type === 'error') && ev.rawJson !== undefined) {
+      finalRawJson = ev.rawJson;
+    }
     try {
       if (ev.type === 'tool.start') {
         const toolOrdinal = nextOrdinal(audit);

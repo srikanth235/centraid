@@ -255,10 +255,18 @@ const TRIGGER_CURSOR_DENIED_TABLES = new Set([
   'conversation_digest',
 ]);
 
-/** Shared authoring/runtime loop guard for cursor-targeted vault entities. */
+/**
+ * Shared authoring/runtime loop guard for cursor-targeted vault entities.
+ *
+ * The denied names are runtime ledger tables — they live in `journal.db` and
+ * are only ever referenced bare. A QUALIFIED entity is a user's own vault
+ * table: `inventory.items`, `shop.attachments`, and `crm.conversations` are
+ * ordinary data and must stay watchable.
+ */
 export function isDeniedTriggerCursorEntity(entity: string): boolean {
-  const [schema = '', table = ''] = entity.split('.', 2);
-  return schema === 'outbox' || TRIGGER_CURSOR_DENIED_TABLES.has(table || schema);
+  const [schema = '', table] = entity.split('.', 2);
+  if (schema === 'outbox') return true;
+  return table === undefined && TRIGGER_CURSOR_DENIED_TABLES.has(schema);
 }
 
 function rejectDeniedTriggerEntity(entity: string, field: string): void {

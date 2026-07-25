@@ -323,6 +323,38 @@ describe('makeWebhookRouteHandler', () => {
     );
   });
 
+  it('takes its delivery id only from per-delivery headers', async () => {
+    const ingress = vi.fn().mockResolvedValue({ accepted: true });
+    const handler = makeWebhookRouteHandler({ appsDir, ingress });
+
+    for (const header of ['x-centraid-delivery-id', 'x-github-delivery']) {
+      expect(
+        await handler(
+          mockReq({
+            body: '{}',
+            headers: { authorization: `Bearer ${secret}`, [header]: `delivery-${header}` },
+          }),
+          mockRes(),
+        ),
+      ).toBe(true);
+      expect(ingress).toHaveBeenLastCalledWith(
+        expect.objectContaining({ deliveryId: `delivery-${header}` }),
+      );
+    }
+
+    // `x-request-id` is a transport correlation id; some proxies reuse one
+    // across requests, and INSERT OR IGNORE would then swallow a real
+    // delivery. Two posts sharing it must get two distinct ids.
+    const shared = { authorization: `Bearer ${secret}`, 'x-request-id': 'proxy-reused' };
+    expect(await handler(mockReq({ body: '{"n":1}', headers: shared }), mockRes())).toBe(true);
+    const first = ingress.mock.calls.at(-1)?.[0] as { deliveryId: string };
+    expect(await handler(mockReq({ body: '{"n":2}', headers: shared }), mockRes())).toBe(true);
+    const second = ingress.mock.calls.at(-1)?.[0] as { deliveryId: string };
+
+    expect(first.deliveryId).not.toBe('proxy-reused');
+    expect(second.deliveryId).not.toBe(first.deliveryId);
+  });
+
   it('skips disabled automations and reports ingress failures', async () => {
     const dir = path.join(appsDir, 'auto.hook', 'automations', 'hook');
     const raw = JSON.parse(await fs.readFile(path.join(dir, 'automation.json'), 'utf8')) as {

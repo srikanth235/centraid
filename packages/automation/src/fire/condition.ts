@@ -276,15 +276,26 @@ export async function readConditionCursor(
   const fresh = rows
     .map((row, index) => ({ row, hash: current[index]! }))
     .filter(({ hash }) => !seen.has(hash));
+  const delivered = fresh.slice(0, options.limit);
+  const deliveredHashes = new Set(delivered.map(({ hash }) => hash));
+  // The committed position advances over DELIVERED rows only: a match beyond
+  // the cap stays unseen and arrives on the next gate tick. Rows that left the
+  // window are dropped from the set, which is what makes a re-entry fire again.
+  const position = current.filter((hash) => seen.has(hash) || deliveredHashes.has(hash));
+  const occurredAt = options.now.getTime();
   return {
-    elements: fresh.slice(0, options.limit).map(({ row, hash }) => ({
-      position: hash,
-      occurredAt: options.now.getTime(),
+    elements: delivered.map(({ row, hash }) => ({
+      // One position per DELIVERY OCCURRENCE, not per row content. The host
+      // derives its idempotency run id from this, so a row that leaves the
+      // window and re-enters unchanged — the documented reminder behaviour —
+      // must not collide with the run that fired the first time. Rows still
+      // matching are suppressed by the hash set above, never by this id.
+      position: `${hash}:${occurredAt}`,
+      occurredAt,
       payload: row,
     })),
-    positionJson: JSON.stringify(current.slice(0, MAX_SEEN_HASHES)),
-    skipped: Math.max(0, fresh.length - options.limit),
-    ...(fresh.length > options.limit ? { gapReason: 'condition_catch_up_cap' } : {}),
+    positionJson: JSON.stringify(position.slice(0, MAX_SEEN_HASHES)),
+    skipped: 0,
   };
 }
 
@@ -308,12 +319,17 @@ function scalarPosition(positionJson: string | undefined): string | null {
   }
 }
 
-function changePosition(change: Record<string, unknown>, index: number): string {
+/** The feed-native watermark of one change entry, when it carries one. */
+function changeId(change: Record<string, unknown>): string | undefined {
   for (const key of ['id', 'provId', 'provenanceId', 'cursor']) {
     const value = change[key];
     if (typeof value === 'string' && value) return value;
   }
-  return `${rowHash(change)}:${index}`;
+  return undefined;
+}
+
+function changePosition(change: Record<string, unknown>, index: number): string {
+  return changeId(change) ?? `${rowHash(change)}:${index}`;
 }
 
 /** Vault provenance cursor source. Missing position bootstraps from now. */
@@ -322,13 +338,18 @@ export async function readDataCursor(options: ReadDataCursorOptions): Promise<Cu
     throw new Error(`invalid ref ${options.automationRef}`);
   }
   const cursor = scalarPosition(options.positionJson);
+  // Pull exactly what one fire may carry. The feed's returned watermark is the
+  // last row it returned, so delivering the whole pull is the ONLY way the
+  // committed position stays at a delivered element; over-pulling and slicing
+  // would advance past entries no fire ever saw. A backlog beyond the cap is
+  // still durably in the journal — the next gate tick reads it.
   const result = await options.vault({
     op: 'changes',
     payload: {
       entities: [...options.trigger.entities],
       purpose: options.purpose,
       cursor,
-      limit: Math.max(200, options.limit + 1),
+      limit: options.limit,
     },
   });
   if (!result.ok) {
@@ -339,17 +360,22 @@ export async function readDataCursor(options: ReadDataCursorOptions): Promise<Cu
     cursor?: string;
   };
   const changes = feed.changes ?? [];
-  const visible = cursor === null ? [] : changes.slice(0, options.limit);
+  // The bootstrap pull (no stored position) intentionally never fires: a fresh
+  // watcher reacts to what happens next, not to the whole journal.
+  const visible = cursor === null ? [] : changes;
   return {
-    elements: visible.map((change, index) => ({
-      position: changePosition(change, index),
-      occurredAt: options.now.getTime(),
-      payload: change,
-    })),
+    elements: visible.map((change, index) => {
+      // Only a feed-native id is a legal watermark; a synthesized position
+      // identifies the delivery but must never be committed as one.
+      const watermark = changeId(change);
+      return {
+        position: changePosition(change, index),
+        occurredAt: options.now.getTime(),
+        payload: change,
+        ...(watermark !== undefined ? { positionJson: JSON.stringify(watermark) } : {}),
+      };
+    }),
     ...(typeof feed.cursor === 'string' ? { positionJson: JSON.stringify(feed.cursor) } : {}),
-    skipped: cursor === null ? 0 : Math.max(0, changes.length - options.limit),
-    ...(cursor !== null && changes.length > options.limit
-      ? { gapReason: 'data_catch_up_cap' }
-      : {}),
+    skipped: 0,
   };
 }
