@@ -123,6 +123,8 @@ Anchored references are row/field/span-grade instead of whole-table hints:
 
 Full-gate concurrency exposed test-only timing assumptions. The scheduler expectations now match durable cursor bootstrap/catch-up, the handler busy-refusal test asserts causal ordering instead of a wall-clock race, the 50k-photo algorithm budget uses process CPU time so OS descheduling by parallel package suites is not charged to the algorithm, and desktop E2E polls for the lifecycle POST instead of assuming the asynchronous request is recorded in the same event-loop turn as the click.
 
+The first GitHub `verify` run also exposed an instrumentation gap: the shipped browser and Electron journeys exercised the builder cloud, editor/thread route orchestration, and thin HTTP clients, but those surfaces had no direct Vitest contracts and therefore did not count toward the repository coverage ratchet. Focused behavioral contracts now drive overview/log/automation lifecycle controls, every automation/vault/outbox/log HTTP method, exact editor create/edit bindings, native cold/live thread streaming, steering, and provider failure/backoff/malformed-input branches. Provider failure contracts live in a companion test module so both suites remain below the repository source ceiling. The coverage floors remain unchanged.
+
 The final governance pass also enforced the 500-line source ceiling. The shared turn attachment/locking helpers now live in `packages/app-engine/src/http/turn-sse-support.ts`; conversation prune/delete cases live in `packages/app-engine/src/conversation/store-prune.test.ts`; cursor contracts and pending-batch parsing live in `packages/automation/src/fire/cursor-engine-support.ts`; and the live automation reducer/projection lives in `packages/client/src/react/shell/routes/automationLiveMessages.ts`. These are responsibility-preserving splits of already-tested behavior, with all resulting modules below the cap.
 
 Mechanical changed-file index (the substantive grouping above is the review guide; this exact index closes the receipt’s file-coverage loop):
@@ -177,6 +179,7 @@ Mechanical changed-file index (the substantive grouping above is the review guid
 - `packages/blueprints/kit/turn-stream.d.ts`
 - `packages/client/src/app-format.ts`
 - `packages/client/src/app-shell-context.ts`
+- `packages/client/src/gateway-client-automations.contract.test.ts`
 - `packages/client/src/gateway-client-automation-compile.ts`
 - `packages/client/src/gateway-client-logs.ts`
 - `packages/client/src/gateway-client-outbox.ts`
@@ -193,6 +196,7 @@ Mechanical changed-file index (the substantive grouping above is the review guid
 - `packages/client/src/react/shell/App.inline-branch.test.tsx`
 - `packages/client/src/react/shell/App.test.tsx`
 - `packages/client/src/react/shell/routes/AppSettingsController.tsx`
+- `packages/client/src/react/shell/routes/AutomationViewRoute.test.tsx`
 - `packages/client/src/react/shell/routes/AutomationViewRoute.tsx`
 - `packages/client/src/react/shell/routes/HomeRoute.tsx`
 - `packages/client/src/react/shell/routes/RunViewRoute.tsx`
@@ -211,6 +215,7 @@ Mechanical changed-file index (the substantive grouping above is the review guid
 - `packages/client/src/react/shell/routes/builder/BuilderAutomationPane.tsx`
 - `packages/client/src/react/shell/routes/builder/BuilderAutomationPaneShared.test.ts`
 - `packages/client/src/react/shell/routes/builder/BuilderAutomationPaneShared.tsx`
+- `packages/client/src/react/shell/routes/builder/BuilderCloud.test.tsx`
 - `packages/client/src/react/shell/routes/builder/BuilderCloud.tsx`
 - `packages/client/src/react/shell/routes/homeData.test.ts`
 - `packages/client/src/react/shell/routes/runViewData.test.ts`
@@ -231,6 +236,7 @@ Mechanical changed-file index (the substantive grouping above is the review guid
 - `packages/gateway/src/runs/run-event-bus.test.ts`
 - `packages/gateway/src/runs/run-event-bus.ts`
 - `packages/gateway/src/runs/run-events-sse.test.ts`
+- `packages/gateway/src/serve/automation-event-sources-errors.test.ts`
 - `packages/gateway/src/serve/automation-event-sources.test.ts`
 - `packages/gateway/src/serve/connection-broker.test.ts`
 - `packages/gateway/src/serve/serve-scheduler-reconcile.test.ts`
@@ -273,6 +279,7 @@ Mechanical changed-file index (the substantive grouping above is the review guid
 - `packages/client/src/react/screens/AutomationEditorScreen.module.css`
 - `packages/client/src/react/screens/AutomationEditorScreen.test.tsx`
 - `packages/client/src/react/screens/AutomationEditorScreen.tsx`
+- `packages/client/src/react/shell/routes/AutomationEditorRoute.test.tsx`
 - `packages/client/src/react/shell/routes/AutomationEditorRoute.tsx`
 - `packages/client/src/react/shell/routes/automationEditorAgentData.ts`
 - `packages/client/src/react/shell/routes/automationEditorConnections.test.ts`
@@ -366,13 +373,17 @@ bun run --cwd packages/app-engine test -- src/conversation/store.test.ts src/con
 bun run --cwd packages/automation test -- src/fire/cursor-engine.test.ts
 bun run --cwd packages/client test -- src/react/shell/routes/automationTurnMessages.test.ts src/react/shell/routes/runViewData.test.ts
 bun run check:pr:full
+bun run --cwd packages/client test -- gateway-client-automations.contract.test.ts AutomationEditorRoute.test.tsx AutomationViewRoute.test.tsx BuilderCloud.test.tsx
+bun run --cwd packages/gateway test -- automation-event-sources.test.ts automation-event-sources-errors.test.ts
+bun run coverage
+bun run test:diff-coverage
 ```
 
 ## Audit
 
 **PASS — fresh-context final full-scope audit**
 
-PASS — all 12 authoritative GitHub acceptance rows match both the receipt checklist and acceptance crosswalk exactly; only checkbox state differs. The 171-file index matches the rebased diff with no missing or extra paths, no #498 receipt path remains, and `## What changed` faithfully documents the four responsibility-preserving splits. Their files are 81–439 lines, original public import paths remain re-exported, and consumers are rewired without cycles or semantic changes. Focused suites passed 40/40, app-engine, automation, client, and gateway typechecks passed, `git diff --cached --check` and governance passed, and the post-rebase `bun run check:pr:full` completed 29/29 tasks with 1,048 gateway tests passing and six intentional skips.
+PASS — all 12 authoritative GitHub acceptance rows match both the receipt checklist and acceptance crosswalk exactly; only checkbox state differs. The 176-file index matches the rebased diff with no missing or extra paths, no #498 receipt path remains, and `## What changed` faithfully documents the four responsibility-preserving splits plus the provider failure test companion. Their files are 81–491 lines, original public import paths remain re-exported, and consumers are rewired without cycles or semantic changes. The original focused suites passed 40/40 and the direct coverage contracts passed 21/21. Full coverage passed at 71.19% lines (104,810/147,211), 78.00% branches, and 74.51% gateway branches; changed-line coverage passed at 80.2% (4,361/5,441) without lowering a floor. App-engine, automation, client, and gateway typechecks passed, `git diff --check` and governance passed, and the final `bun run check:pr:full` completed 29/29 tasks with 1,052 gateway tests passing and six intentional skips.
 
 ## Steering
 
@@ -402,3 +413,4 @@ PASS — all 12 authoritative GitHub acceptance rows match both the receipt chec
 | codex-019f9495-7c0-1784962166-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 3316 | 0 | 170240 | 273 | 3589 | 0.0549 | 5199219 | 0 | 237251840 | 565683 | fix(automations): close final replay and governance gaps (#541) -m governance: a |
 | codex-019f9495-7c0-1784963138-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 333774 | 0 | 6656000 | 11549 | 345323 | 2.6717 | 5532993 | 0 | 243907840 | 577232 | docs(receipt): reconcile issue scope with main (#541) |
 | codex-019f9495-7c0-1784964031-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 101994 | 0 | 6809600 | 6819 | 108813 | 2.0597 | 5637891 | 0 | 251251200 | 584364 | test(desktop): await automation lifecycle request (#541) |
+| codex-019f9495-7c0-1784966365-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 532618 | 0 | 13535744 | 44029 | 576647 | 5.3759 | 6170509 | 0 | 264786944 | 628393 | test(automations): cover route and provider contracts (#541) |

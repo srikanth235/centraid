@@ -326,4 +326,166 @@ describe('pollProviderEventSource', () => {
     expect(next.events.map((event) => event.id)).toEqual(['github:event:1', 'github:event:2']);
     expect(next.cursor).toMatchObject({ provider: 'github', etag: '"events-all"' });
   });
+
+  it('fails closed for unsupported adapters, events, and malformed repository filters', async () => {
+    const base = {
+      connection: github,
+      now: new Date('2026-07-25T00:00:00Z'),
+      limit: 50,
+      pollJson: replies(),
+    };
+    expect(() =>
+      pollProviderEventSource({
+        ...base,
+        trigger: { kind: 'event', connectorKind: 'push.slack', event: 'message' },
+      }),
+    ).toThrow('no event cursor adapter');
+    await expect(
+      pollProviderEventSource({
+        ...base,
+        connection: gmail,
+        trigger: { kind: 'event', connectorKind: 'pull.gmail', event: 'deleted-message' },
+      }),
+    ).rejects.toThrow('unsupported Gmail event');
+    await expect(
+      pollProviderEventSource({
+        ...base,
+        trigger: {
+          kind: 'event',
+          connectorKind: 'pull.github',
+          event: 'release',
+          filter: { repo: 'acme/app' },
+        },
+      }),
+    ).rejects.toThrow('unsupported GitHub event');
+    for (const repo of [undefined, '', 'one-segment', 'owner/repo/extra', 'owner/repo name']) {
+      await expect(
+        pollProviderEventSource({
+          ...base,
+          trigger: {
+            kind: 'event',
+            connectorKind: 'pull.github',
+            event: 'issue',
+            filter: repo === undefined ? {} : { repo },
+          },
+        }),
+      ).rejects.toThrow('filter.repo');
+    }
+  });
+
+  it('honors GitHub backoff and baselines a newly authored watcher without replay', async () => {
+    const trigger = {
+      kind: 'event' as const,
+      connectorKind: 'pull.github',
+      event: 'issue',
+      filter: { repo: 'acme/app' },
+    };
+    const waitingFetch = vi.fn() satisfies PollJson;
+    const waiting = await pollProviderEventSource({
+      trigger,
+      connection: github,
+      cursor: {
+        provider: 'github',
+        etag: '"old"',
+        notBefore: Date.parse('2026-07-25T00:01:00Z'),
+      },
+      now: new Date('2026-07-25T00:00:00Z'),
+      limit: 50,
+      pollJson: waitingFetch,
+    });
+    expect(waiting.events).toEqual([]);
+    expect(waitingFetch).not.toHaveBeenCalled();
+
+    const baseline = await pollProviderEventSource({
+      trigger,
+      connection: github,
+      now: new Date('2026-07-25T00:00:00Z'),
+      limit: 0,
+      pollJson: replies({
+        status: 200,
+        headers: { etag: '"current"', 'x-poll-interval': 'invalid' },
+        body: [{ id: 'historical', type: 'IssuesEvent', payload: { issue: {} } }],
+      }),
+    });
+    expect(baseline.events).toEqual([]);
+    expect(baseline.cursor).toMatchObject({
+      provider: 'github',
+      etag: '"current"',
+      notBefore: Date.parse('2026-07-25T00:01:00Z'),
+    });
+  });
+
+  it('skips malformed provider rows while preserving minimal valid events', async () => {
+    const now = new Date('2026-07-25T00:00:00Z');
+    const gmailResult = await pollProviderEventSource({
+      trigger: { kind: 'event', connectorKind: 'pull.gmail', event: 'new-message' },
+      connection: gmail,
+      cursor: { provider: 'gmail', historyId: '1' },
+      now,
+      limit: 1_000,
+      pollJson: replies({
+        status: 200,
+        headers: {},
+        body: {
+          history: [
+            null,
+            { id: 7, messagesAdded: 'bad' },
+            {
+              id: '2',
+              messagesAdded: [
+                null,
+                { message: { threadId: 'missing-id' } },
+                { message: { id: 'message-1', labelIds: ['INBOX', 7] } },
+              ],
+            },
+          ],
+        },
+      }),
+    });
+    expect(gmailResult.events).toEqual([
+      {
+        id: 'gmail:message:message-1',
+        occurredAt: now.getTime(),
+        payload: {
+          provider: 'gmail',
+          event: 'new-message',
+          messageId: 'message-1',
+          historyId: '2',
+          labelIds: ['INBOX'],
+        },
+      },
+    ]);
+
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(now.getTime());
+    const githubResult = await pollProviderEventSource({
+      trigger: {
+        kind: 'event',
+        connectorKind: 'pull.github',
+        event: 'issue',
+        filter: { repo: 'acme/app' },
+      },
+      connection: github,
+      cursor: { provider: 'github' },
+      now,
+      limit: 500,
+      pollJson: replies({
+        status: 200,
+        headers: {},
+        body: [
+          null,
+          { id: 'wrong-type', type: 'PushEvent', payload: {} },
+          { type: 'IssuesEvent', payload: { issue: {} } },
+          { id: 'minimal', type: 'IssuesEvent', payload: { issue: {} } },
+        ],
+      }),
+    });
+    expect(githubResult.events).toEqual([
+      {
+        id: 'github:event:minimal',
+        occurredAt: now.getTime(),
+        payload: { provider: 'github', event: 'issue', eventId: 'minimal', repo: 'acme/app' },
+      },
+    ]);
+    nowSpy.mockRestore();
+  });
 });
