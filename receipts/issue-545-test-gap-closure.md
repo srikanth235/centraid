@@ -140,7 +140,9 @@ web/extension/oauth-worker, `docs/plans/test-gap-closure-2026-07.md`, QUALITY.md
 - `packages/client/src/replica/purge-selector.test.ts`
 - `packages/client/src/replica/shell-session.test.ts`
 - `packages/client/src/replica/sqlite-worker.test.ts`
-- `packages/test-kit/src/flush.ts`
+- `packages/test-kit/src/flush.ts` (moved from client `test-flush.ts`)
+- `packages/test-kit/package.json` (`./flush` export)
+- `packages/client/src/test-flush.ts` (deleted — lives in test-kit)
 - `packages/client/src/vault-change-feed.test.ts`
 - `packages/gateway/src/backup/backup-cas-diff.test.ts`
 - `packages/gateway/src/backup/backup-cas-inventory.test.ts`
@@ -167,6 +169,7 @@ web/extension/oauth-worker, `docs/plans/test-gap-closure-2026-07.md`, QUALITY.md
 - `packages/gateway/vitest.mutation.config.ts`
 - `packages/protocol/src/capabilities.test.ts`
 - `packages/protocol/src/handshake-direct.test.ts`
+- `packages/protocol/src/routes-capabilities.test.ts` (deleted — redundant with routes/capabilities siblings)
 - `packages/protocol/src/routes.test.ts`
 - `packages/test-kit/src/test-kit.test.ts`
 - `packages/vault/package.json`
