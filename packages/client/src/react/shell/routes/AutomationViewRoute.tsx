@@ -24,7 +24,7 @@ import PageScroll from '../PageScroll.js';
 import { openWebhookReveal } from '../webhookReveal.js';
 import { deriveAutomationHero } from './automationsData.js';
 import { decideConsentItem, loadAutomationThreadData } from './automationThreadData.js';
-import { automationTurnMessages } from './automationTurnMessages.js';
+import { automationTurnInboundText, automationTurnMessages } from './automationTurnMessages.js';
 import {
   automationLiveMessages,
   createAutomationLiveTrace,
@@ -41,19 +41,28 @@ async function loadTrace(turnId: string): Promise<AsstMsgDTO[]> {
   return expanded.turn ? automationTurnMessages(expanded.turn, expanded.items) : [];
 }
 
+/**
+ * Result of one live watch. `settled` is what the *ledger* says: `false`
+ * means the stream closed (or the gateway refused the join) while the turn is
+ * still open, so the caller must rejoin rather than leave a turn spinning
+ * forever. `ok` is the turn's outcome once settled.
+ */
+interface WatchOutcome {
+  settled: boolean;
+  ok: boolean;
+}
+
 async function watchNativeTrace(
   turnId: string,
   onMessages: (messages: AsstMsgDTO[]) => void,
   signal: AbortSignal,
-): Promise<boolean> {
+): Promise<WatchOutcome> {
   const initial = await readAutomationTurnExpanded({ turnId }).catch(() => ({
     turn: null,
     items: [] as CentraidAutomationItem[],
   }));
   if (initial.turn) onMessages(automationTurnMessages(initial.turn, initial.items));
-  const inbound =
-    initial.items.find((item) => item.kind === 'message_in')?.text ??
-    (initial.turn?.triggerKind === 'compile' ? 'Apply the revised standing instructions.' : '');
+  const inbound = automationTurnInboundText(initial.turn, initial.items);
   let live = createAutomationLiveTraceFromItems(inbound, initial.items);
   let ended = false;
   let terminalOk: boolean | undefined;
@@ -84,16 +93,18 @@ async function watchNativeTrace(
     }
   };
   await streamAutomationTurn(turnId, apply, signal);
-  if (signal.aborted) return false;
+  if (signal.aborted) return { settled: false, ok: false };
   // The ledger is authoritative for completion, usage, errors, and cold/live
-  // parity. Re-read once after turn.end (or an unexpectedly closed stream).
+  // parity. Re-read once after turn.end (or an unexpectedly closed stream) —
+  // this is the ONLY authoritative re-read of the watch, so callers must not
+  // issue a second one.
   const final = await readAutomationTurnExpanded({ turnId });
   if (final.turn) {
     onMessages(automationTurnMessages(final.turn, final.items));
-    return final.turn.ok;
+    return { settled: final.turn.endedAt !== undefined, ok: final.turn.ok };
   }
   if (ended) onMessages(automationLiveMessages(live));
-  return terminalOk ?? false;
+  return { settled: ended, ok: terminalOk ?? false };
 }
 
 // React-owned automation thread — replaces the old single-view
@@ -171,9 +182,9 @@ export default function AutomationViewRoute({
           if (row) navigate({ automationId: row.ref, kind: 'run-view', runId });
         }}
         loadTurnTrace={loadTrace}
-        watchTurn={async (turnId, onMessages, signal) => {
-          await watchNativeTrace(turnId, onMessages, signal);
-        }}
+        watchTurn={async (turnId, onMessages, signal) =>
+          (await watchNativeTrace(turnId, onMessages, signal)).settled
+        }
         onCopyWebhook={(url) =>
           void navigator.clipboard
             .writeText(url)
@@ -253,7 +264,7 @@ export default function AutomationViewRoute({
                 automationId: row.ref,
                 message: text,
               });
-              const ok = await watchNativeTrace(compileTurnId, onMessages, signal);
+              const { ok } = await watchNativeTrace(compileTurnId, onMessages, signal);
               showToast(ok ? 'Standing instructions updated' : 'Could not revise instructions');
               return compileTurnId;
             }

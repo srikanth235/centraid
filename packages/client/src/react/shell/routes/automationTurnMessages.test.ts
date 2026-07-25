@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { automationTurnMessages } from './automationTurnMessages.js';
+import {
+  automationTurnInboundText,
+  automationTurnMessages,
+  COMPILE_TURN_INBOUND_TEXT,
+} from './automationTurnMessages.js';
 import {
   automationLiveMessages,
   createAutomationLiveTrace,
@@ -241,6 +245,68 @@ describe('automation turn live projection', () => {
         copyText:
           'The agent hit its max turn/request limit before finishing — the reply may be incomplete.',
       }),
+    ]);
+  });
+});
+
+describe('compile-turn inbound bubble (#541)', () => {
+  const WORK_ORDER = [
+    'Compile this automation headlessly. Do not ask questions.',
+    "Use generated.by = 'centraid-compiler'.",
+    'Resolved anchors: core.link_anchor/anchor-1 → invoice.total',
+  ].join('\n\n');
+
+  it('never renders the compiler work order as the owner’s own message', () => {
+    const messages = automationTurnMessages(turn({ triggerKind: 'compile' }), [
+      item(0, 'message_in', { text: WORK_ORDER }),
+      item(1, 'agent', { startedAt: 1, endedAt: 10, outputJson: '{"text":"Plan ready"}' }),
+    ]);
+    const user = messages.find((message) => message.kind === 'user');
+    expect(user).toEqual(
+      expect.objectContaining({ kind: 'user', text: COMPILE_TURN_INBOUND_TEXT }),
+    );
+    expect(JSON.stringify(messages)).not.toContain('centraid-compiler');
+  });
+
+  it('keeps a non-compile turn’s inbound message verbatim', () => {
+    const messages = automationTurnMessages(turn({ triggerKind: 'interactive' }), [
+      item(0, 'message_in', { text: 'only flag movers over 5%' }),
+    ]);
+    expect(messages[0]).toEqual(
+      expect.objectContaining({ kind: 'user', text: 'only flag movers over 5%' }),
+    );
+  });
+
+  it('agrees with the live seed on the same turn', () => {
+    const items = [item(0, 'message_in', { text: WORK_ORDER })];
+    // The cold projection and the live seed read the same turn — they must
+    // put the same words in the owner's bubble.
+    expect(automationTurnInboundText(turn({ triggerKind: 'compile' }), items)).toBe(
+      COMPILE_TURN_INBOUND_TEXT,
+    );
+    expect(automationTurnMessages(turn({ triggerKind: 'compile' }), items)[0]).toEqual(
+      expect.objectContaining({ text: COMPILE_TURN_INBOUND_TEXT }),
+    );
+    expect(automationTurnInboundText(turn({ triggerKind: 'manual' }), items)).toBe(WORK_ORDER);
+  });
+
+  it('gives every projected message a stable id that survives a tool flush', () => {
+    const before = automationTurnMessages(turn({ endedAt: undefined }), [
+      item(0, 'message_in', { text: 'go' }),
+      item(1, 'agent', { startedAt: 1, endedAt: undefined }),
+    ]);
+    const after = automationTurnMessages(turn({ endedAt: undefined }), [
+      item(0, 'message_in', { text: 'go' }),
+      item(1, 'agent', { startedAt: 1, endedAt: undefined }),
+      item(2, 'tool', { callId: 'a', name: 'mail.search', startedAt: 2, endedAt: undefined }),
+    ]);
+    // The tools row is inserted AHEAD of the agent bubble on flush, so index 1
+    // changes identity — the ids must not.
+    expect(before.map((message) => message.msgId)).toEqual(['item-0:in', 'item-1:ai']);
+    expect(after.map((message) => message.msgId)).toEqual([
+      'item-0:in',
+      'item-2:tools',
+      'item-1:ai',
     ]);
   });
 });

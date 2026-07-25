@@ -405,6 +405,22 @@
 .connAccountHealth[data-health='needs-auth'] {
   color: var(--danger);
 }
+/* The saved binding names a connection the vault no longer lists (#541). */
+.connAccountWarn {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--ink-2);
+  background: color-mix(in oklab, var(--danger) 10%, transparent);
+}
+.connDanglingNote {
+  flex-basis: 100%;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--danger);
+}
 .connAccountCheck {
   display: grid;
   place-items: center;

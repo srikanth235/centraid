@@ -312,8 +312,17 @@ export function AutomationEditorConnectorsPicker({
           rows.map((item) => {
             const isSelected = selected.has(item.kind);
             const health = item.connection?.health;
-            const hasAccountChoice = item.connections.length > 1;
             const boundConnectionId = bindings.get(item.kind)?.connectionId;
+            // The saved binding points at a connection the vault no longer
+            // lists — the owner revoked that account. Never resolved silently
+            // (that would swap the principal the automation acts as): the row
+            // says so and opens the account list so a replacement is a
+            // deliberate choice (#541).
+            const bindingDangling =
+              boundConnectionId !== undefined &&
+              !item.connections.some((c) => c.connectionId === boundConnectionId);
+            const multipleAccounts = item.connections.length > 1;
+            const hasAccountChoice = multipleAccounts || bindingDangling;
             const connecting = connectingKind === item.kind;
             const busy = busyKind === item.kind;
             return (
@@ -343,11 +352,13 @@ export function AutomationEditorConnectorsPicker({
                     <span className={styles.connPickerName}>{item.name}</span>
                     <span className={styles.connPickerSub}>
                       {item.credKind === 'oauth2' ? 'OAuth' : 'API key'}
-                      {hasAccountChoice
+                      {multipleAccounts
                         ? ` · ${item.connections.length} configured accounts`
-                        : health
-                          ? ` · ${HEALTH_LABEL[health]} · ${item.connection?.label}`
-                          : ' · Not connected'}
+                        : bindingDangling
+                          ? ' · Bound account unavailable'
+                          : health
+                            ? ` · ${HEALTH_LABEL[health]} · ${item.connection?.label}`
+                            : ' · Not connected'}
                     </span>
                   </span>
                   <span
@@ -364,6 +375,16 @@ export function AutomationEditorConnectorsPicker({
                     role="group"
                     aria-label={`Choose ${item.name} account`}
                   >
+                    {bindingDangling ? (
+                      <p
+                        className={styles.connAccountWarn}
+                        data-testid="connector-account-dangling"
+                        data-kind={item.kind}
+                      >
+                        This automation is still bound to an account that is no longer configured.
+                        Nothing was changed for you — pick a replacement.
+                      </p>
+                    ) : null}
                     {item.connections.map((connection) => {
                       const chosen = boundConnectionId === connection.connectionId;
                       return (

@@ -1,249 +1,20 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+// The app, automation, turn, health, compile, and lifecycle wire surfaces of
+// the renderer gateway client — including the `run.*` → `turn.*` rename pinned
+// method-and-query deep (#541). Owner vault / import / outbox / log transports
+// live in gateway-client-vault.contract.test.ts; the mock gateway itself in
+// gateway-client-contract-fixtures.ts.
 
-const getGatewayAuth = vi.fn();
-const fetchMock = vi.fn();
-let hostAppSessions = false;
-let forceVault404 = false;
+import { describe, expect, it } from 'vitest';
+import {
+  client,
+  compile,
+  editing,
+  fetchMock,
+  installGatewayContractHarness,
+  state,
+} from './gateway-client-contract-fixtures.js';
 
-let client: typeof import('./gateway-client.js');
-let vault: typeof import('./gateway-client-vault.js');
-let editing: typeof import('./gateway-client-automation-editing.js');
-let outbox: typeof import('./gateway-client-outbox.js');
-let logs: typeof import('./gateway-client-logs.js');
-let compile: typeof import('./gateway-client-automation-compile.js');
-let resetGatewayAuthCache: typeof import('./gateway-client-core.js').resetGatewayAuthCache;
-let resetAppSessions: typeof import('./gateway-client-editing.js').resetAppSessions;
-
-function json(body: unknown, status = 200, headers?: HeadersInit): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json', ...headers },
-  });
-}
-
-function stream(frames: string, headers?: HeadersInit): Response {
-  return new Response(
-    new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(new TextEncoder().encode(frames));
-        controller.close();
-      },
-    }),
-    { status: 200, headers },
-  );
-}
-
-function row(): CentraidAutomationRow {
-  const triggers: CentraidAutomationManifest['triggers'] = [{ kind: 'cron', expr: '0 9 * * *' }];
-  return {
-    id: 'daily',
-    dir: '/apps/daily',
-    name: 'Daily',
-    triggers,
-    enabled: true,
-    ownerApp: 'daily',
-    ref: 'daily/daily',
-    manifest: {
-      name: 'Daily',
-      version: '0.1.0',
-      enabled: true,
-      prompt: 'Run daily.',
-      triggers,
-      requires: {},
-      history: { keep: { count: 10 } },
-      generated: { by: 'agent', at: '2026-07-25T00:00:00.000Z' },
-    },
-  };
-}
-
-function responseFor(rawUrl: string, init?: RequestInit): Response {
-  const url = new URL(rawUrl);
-  const path = `${url.pathname}${url.search}`;
-  const method = init?.method ?? 'GET';
-
-  if (path === '/centraid/_gateway/info')
-    return json({
-      capabilities: {
-        webSessions: true,
-        devicePairing: true,
-        tunnel: true,
-        backupWal: true,
-        assistOAuth: true,
-        automationTurns: true,
-      },
-    });
-  if (path.includes('/web-session')) return json({ launchPath: '/centraid/_web/session/launch-1' });
-  if (path.includes('/git-versions'))
-    return json({
-      versions: [
-        {
-          tag: 'v2',
-          version: 2,
-          sha: 'abc',
-          uploadedAt: '2026-07-25T00:00:00.000Z',
-          active: true,
-        },
-      ],
-    });
-  if (path.endsWith('/rollback')) return json({ id: 'daily', sha: 'abc' });
-  if (path.endsWith('/logs') || path.includes('/logs?'))
-    return json({
-      entries: [{ ts: 1, level: 'info', source: 'query', handler: 'list', msg: 'ok' }],
-    });
-  if (path.endsWith('/settings')) return json({ settings: { timezone: 'UTC' } });
-  if (path === '/centraid/_apps' && method === 'GET')
-    return json([{ id: 'daily', hasIndex: true }]);
-  if (path === '/centraid/_templates') return json([]);
-  if (path === '/_centraid-user/id') return json({ id: 'user-1' });
-  if (path === '/_centraid-user/prefs') return json({ prefs: { runner: 'codex' } });
-  if (path === '/centraid/_apps/_sessions' && method === 'POST') {
-    const body = JSON.parse(String(init?.body)) as { sessionId: string };
-    return json({ sessionId: body.sessionId });
-  }
-  if (path === '/centraid/_automations' && method === 'GET') return json({ rows: [row()] });
-  if (path === '/centraid/_automations' && method === 'POST')
-    return json({
-      row: row(),
-      webhook: { id: 'hook-1', secret: 'secret-1', url: 'https://gateway.test/hook-1' },
-    });
-  if (path.startsWith('/centraid/_automations/read')) return json({ row: row() });
-  if (path.startsWith('/centraid/_automations/update'))
-    return json({
-      row: row(),
-      webhook: { id: 'hook-1', secret: 'secret-2', url: 'https://gateway.test/hook-1' },
-    });
-  if (path.startsWith('/centraid/_automations/rotate-webhook'))
-    return json({
-      webhook: { id: 'hook-1', secret: 'secret-3', url: 'https://gateway.test/hook-1' },
-    });
-  if (path.startsWith('/centraid/_automations/turn-now')) return json({ turnId: 'turn-1' });
-  if (path.startsWith('/centraid/_automations/turns'))
-    return json({ turns: [{ turnId: 'turn-1', startedAt: 1, endedAt: 2, ok: true }] });
-  if (path.startsWith('/centraid/_automations/turn/items'))
-    return json({ items: [{ itemId: 'item-1', kind: 'assistant', ordinal: 0 }] });
-  if (path.startsWith('/centraid/_automations/turn/events'))
-    return stream(
-      'data: not-json\n\ndata: {"missing":"type"}\n\ndata: {"type":"turn.end","turnId":"turn-1","ok":true}\n\n',
-    );
-  if (path.startsWith('/centraid/_automations/turn?') && method === 'POST')
-    return stream(
-      'event: final\ndata: {"type":"final","text":"done"}\n\nevent: end\ndata: {}\n\n',
-      { 'x-centraid-turn-id': 'turn-2' },
-    );
-  if (path.startsWith('/centraid/_automations/turn?'))
-    return json({
-      turn: { turnId: 'turn-1', startedAt: 1, endedAt: 2, ok: true },
-      items: [{ itemId: 'item-1', kind: 'assistant', ordinal: 0 }],
-    });
-  if (path.startsWith('/centraid/_automations/source'))
-    return json({ manifest: '{"name":"Daily"}', handler: 'export default {}' });
-  if (path.startsWith('/centraid/_automations/compile'))
-    return json({ compileTurnId: 'compile-1' });
-  if (path.startsWith('/centraid/_automations/revise')) return json({ compileTurnId: 'compile-2' });
-  if (path.startsWith('/centraid/_automations/turn/pin')) return json({ ok: true });
-  if (path.startsWith('/centraid/_automations/set-enabled')) return json({ ok: true });
-  if (path.startsWith('/centraid/_automations?') && method === 'DELETE')
-    return json({ deletedApp: true });
-  if (path.startsWith('/centraid/_insights/summary')) return json({ totals: {} });
-  if (path === '/centraid/_gateway/health') return json({ status: 'ok', components: [] });
-  if (path === '/centraid/_gateway/resource/pause')
-    return method === 'DELETE'
-      ? json({ paused: false })
-      : json({ paused: true, until: '2026-07-25T01:00:00.000Z' });
-
-  if (path === '/centraid/_vault/status')
-    return forceVault404
-      ? new Response(null, { status: 404 })
-      : json({ vaultId: 'vault-1', name: 'Home', ownerPartyId: 'party-1', fresh: false });
-  if (path === '/centraid/_vault/vaults')
-    return forceVault404
-      ? new Response(null, { status: 404 })
-      : json({ vaults: [{ vaultId: 'vault-1', name: 'Home', ownerPartyId: 'party-1' }] });
-  if (path.startsWith('/centraid/_vault/vaults/'))
-    return json({ vaultId: 'vault-1', name: 'Renamed', ownerPartyId: 'party-1' });
-  if (path === '/centraid/_vault/agents') return json({ agents: [] });
-  if (path === '/centraid/_vault/entities') return json({ entities: ['business.invoice'] });
-  if (path.startsWith('/centraid/_vault/picker')) return json({ cards: [] });
-  if (path.startsWith('/centraid/_vault/anchors')) return json({ anchors: [] });
-  if (path === '/centraid/_vault/apps') return json({ apps: [] });
-  if (path.includes('/grants') && method === 'POST') return json({ grantId: 'grant-1' });
-  if (path.startsWith('/centraid/_vault/grants/'))
-    return json({ viewsRevoked: 1, parkedDropped: 1 });
-  if (path === '/centraid/_vault/parked') return json({ parked: [] });
-  if (path.startsWith('/centraid/_vault/parked/')) return json({ status: 'executed' });
-  if (path === '/centraid/_vault/demo') return json({ apps: [] });
-  if (path.startsWith('/centraid/_vault/demo/')) return json({ rows: 3 });
-  if (path === '/centraid/_vault/imports' && method === 'POST')
-    return json({
-      batchId: 'batch-1',
-      kind: 'csv',
-      staged: { invoice: 1 },
-      total: 1,
-      unrouted: [],
-    });
-  if (path === '/centraid/_vault/imports' && method === 'GET') return json({ batches: [] });
-  if (path.endsWith('/publish')) return json({ created: 1, updated: 0, skipped: 0, failed: [] });
-  if (path.endsWith('/discard')) return json({ receiptId: 'receipt-1' });
-  if (path === '/centraid/_vault/imports/connections') return json({ connections: [] });
-  if (path.includes('/imports/connections/')) return json({ ok: true });
-  if (path.startsWith('/centraid/_vault/imports/')) return json({ rows: [] });
-
-  if (path === '/centraid/_vault/blocking')
-    return json({ outbox: [], needsAuth: [], parked: [], scopeRequests: [] });
-  if (path.startsWith('/centraid/_vault/review')) return json({ entries: [] });
-  if (path.startsWith('/centraid/_vault/outbox?') || path === '/centraid/_vault/outbox')
-    return json({ items: [] });
-  if (path.startsWith('/centraid/_vault/outbox/'))
-    return json({ status: 'executed', item_id: 'item-1' }, 409);
-  if (path === '/centraid/_vault/outbox-grants') return json({ grants: [] });
-  if (path.startsWith('/centraid/_vault/outbox-grants/'))
-    return json({ status: 'revoked', grant_id: 'grant-1' }, 409);
-  if (path === '/centraid/_vault/scope-requests') return json({ requests: [] });
-  if (path.startsWith('/centraid/_vault/scope-requests/'))
-    return json({ request: { requestId: 'scope-1' }, approved: true });
-
-  if (path.startsWith('/centraid/_logs/events'))
-    return stream(
-      'data: nope\n\ndata: {"seq":"bad","message":"skip"}\n\ndata: {"seq":2,"ts":1,"level":"info","message":"ready"}\n\n',
-    );
-  if (path.startsWith('/centraid/_logs'))
-    return json({ entries: [{ seq: 1, ts: 1, level: 'info', message: 'booted' }] });
-  if (path.startsWith('/centraid/_apps/') && method === 'DELETE') return json({ id: 'daily' });
-
-  return json({ ok: true });
-}
-
-beforeAll(async () => {
-  window.CentraidApi = {
-    getGatewayAuth,
-    getHostCapabilities: async () => ({ appSessions: hostAppSessions }),
-    onGatewayChanged: () => () => undefined,
-    onVaultChanged: () => () => undefined,
-  } as unknown as typeof window.CentraidApi;
-  vi.stubGlobal('fetch', fetchMock);
-  client = await import('./gateway-client.js');
-  vault = await import('./gateway-client-vault.js');
-  editing = await import('./gateway-client-automation-editing.js');
-  outbox = await import('./gateway-client-outbox.js');
-  logs = await import('./gateway-client-logs.js');
-  compile = await import('./gateway-client-automation-compile.js');
-  ({ resetGatewayAuthCache } = await import('./gateway-client-core.js'));
-  ({ resetAppSessions } = await import('./gateway-client-editing.js'));
-});
-
-beforeEach(() => {
-  hostAppSessions = false;
-  forceVault404 = false;
-  getGatewayAuth.mockReset().mockResolvedValue({
-    baseUrl: 'https://gateway.test',
-    gatewayId: 'gateway-1',
-    token: 'token-1',
-    vaultId: 'vault-1',
-  });
-  fetchMock.mockReset().mockImplementation(responseFor);
-  resetGatewayAuthCache();
-  resetAppSessions();
-});
+installGatewayContractHarness();
 
 describe('renderer gateway automation contracts', () => {
   it('covers the app, turn, health, compile, and lifecycle surfaces', async () => {
@@ -253,7 +24,7 @@ describe('renderer gateway automation contracts', () => {
     await expect(client.appLiveUrl({ id: 'daily' })).resolves.toEqual({
       url: 'https://gateway.test/centraid/daily/',
     });
-    hostAppSessions = true;
+    state.hostAppSessions = true;
     await expect(client.appLiveUrl({ id: 'daily' })).resolves.toEqual({
       url: 'https://gateway.test/centraid/_web/session/launch-1',
     });
@@ -336,99 +107,85 @@ describe('renderer gateway automation contracts', () => {
     await editing.rotateAutomationWebhookSecret({ automationId: 'daily/daily' });
     await editing.deleteAutomation({ automationId: 'daily/daily' });
 
-    const paths = fetchMock.mock.calls.map(([url]) => new URL(String(url)).pathname);
+    const requests = fetchMock.mock.calls.map(([url, init]) => {
+      const parsed = new URL(String(url));
+      return {
+        method: (init as RequestInit | undefined)?.method ?? 'GET',
+        path: parsed.pathname,
+        query: parsed.searchParams,
+      };
+    });
+    const paths = requests.map((request) => request.path);
     expect(paths).toContain('/centraid/_automations/compile');
     expect(paths).toContain('/centraid/_automations/revise');
     expect(paths).toContain('/centraid/_automations/set-enabled');
     expect(paths).toContain('/centraid/_apps/_sessions/desktop-daily');
-  });
 
-  it('covers owner vault, import, outbox, and log transport contracts', async () => {
-    await vault.listAgents();
-    await vault.listVaultEntityTypes();
-    await vault.searchVaultEntities('invoice');
-    await vault.searchVaultAnchors('amount');
-    await vault.vaultStatus();
-    await vault.listVaults();
-    await vault.updateVault({
-      vaultId: 'vault-1',
-      name: 'Renamed',
-      color: null,
-      icon: 'home',
-      blurb: undefined,
-    });
-    await vault.vaultApps();
-    await vault.approveVaultGrant({
-      appId: 'daily',
-      purpose: 'dpv:ServiceProvision',
-      scopes: [{ schema: 'business', table: 'invoice', verbs: 'read' }],
-      expiresAt: '2026-08-01T00:00:00.000Z',
-    });
-    await vault.revokeVaultGrant({ grantId: 'grant-1' });
-    await vault.vaultParked();
-    await vault.confirmVaultParked({ invocationId: 'invocation-1', approve: true });
-    await vault.vaultDemoStatus();
-    await vault.vaultDemoLoad('daily');
-    await vault.vaultImportStage({
-      filename: 'invoices.csv',
-      text: 'id,total\n1,5',
-      accountName: 'Work',
-      currency: 'USD',
-    });
-    await vault.vaultImportsList();
-    await vault.vaultImportRows('batch-1');
-    await vault.vaultImportPublish('batch-1');
-    await vault.vaultImportDiscard('batch-1');
-    await vault.vaultConnections();
-    await vault.vaultConnectionSetStatus('connection-1', 'paused');
+    // The `run.*` → `turn.*` wire surface, pinned method + query and all:
+    // a path assertion alone cannot catch a GET that should be a POST or a
+    // dropped query parameter (#541).
+    const sent = (
+      path: string,
+      predicate: (query: URLSearchParams) => boolean = () => true,
+      method = 'GET',
+    ): boolean =>
+      requests.some(
+        (request) => request.path === path && request.method === method && predicate(request.query),
+      );
 
-    await outbox.getBlocking();
-    await outbox.getReview(5);
-    await outbox.getReview();
-    await outbox.listOutboxItems(['pending', 'parked']);
-    await outbox.listOutboxItems();
-    await expect(
-      outbox.decideOutboxItem({
-        itemId: 'item-1',
-        decision: 'approve',
-        artifact: { subject: 'Hello' },
-        alwaysAllow: true,
-        note: 'Reviewed',
-      }),
-    ).resolves.toMatchObject({ status: 'executed' });
-    await outbox.listOutboxGrants();
-    await outbox.revokeOutboxGrant('grant-1');
-    await outbox.listScopeRequests();
-    await outbox.decideScopeRequest({ requestId: 'scope-1', approve: true });
-
-    await expect(logs.fetchGatewayLogs({ after: 1, limit: 10 })).resolves.toMatchObject({
-      entries: [expect.objectContaining({ message: 'booted' })],
-    });
-    const entries: string[] = [];
-    await logs.streamGatewayLogs(
-      (entry) => entries.push(entry.message),
-      new AbortController().signal,
-      1,
+    // A manual fire mints a turn — a write, never a GET.
+    expect(
+      sent('/centraid/_automations/turn-now', (q) => q.get('ref') === 'daily/daily', 'POST'),
+    ).toBe(true);
+    // The turn feed carries both its filter and its bound.
+    expect(
+      sent(
+        '/centraid/_automations/turns',
+        (q) => q.get('ref') === 'daily/daily' && q.get('limit') === '3',
+      ),
+    ).toBe(true);
+    // …and defaults the bound when the caller omits it.
+    expect(
+      sent('/centraid/_automations/turns', (q) => !q.has('ref') && q.get('limit') === '50'),
+    ).toBe(true);
+    // The expanded read must ask for items, or the thread renders a bare turn.
+    expect(
+      sent(
+        '/centraid/_automations/turn',
+        (q) => q.get('turnId') === 'turn-1' && q.get('expand') === 'items',
+      ),
+    ).toBe(true);
+    expect(
+      sent(
+        '/centraid/_automations/turn',
+        (q) => q.get('ref') === 'daily/daily' && q.get('expand') === 'items',
+      ),
+    ).toBe(true);
+    // A plain turn read must NOT expand — that is the cheap header path.
+    expect(
+      sent('/centraid/_automations/turn', (q) => q.get('turnId') === 'turn-1' && !q.has('expand')),
+    ).toBe(true);
+    expect(sent('/centraid/_automations/turn/items', (q) => q.get('turnId') === 'turn-1')).toBe(
+      true,
     );
-    expect(entries).toEqual(['ready']);
-
-    const writes = fetchMock.mock.calls.map(([url, init]) => ({
-      method: (init as RequestInit | undefined)?.method,
-      path: new URL(String(url)).pathname,
-    }));
-    expect(writes).toContainEqual({
-      method: 'POST',
-      path: '/centraid/_vault/imports/batch-1/publish',
-    });
-    expect(writes).toContainEqual({
-      method: 'POST',
-      path: '/centraid/_vault/outbox/item-1',
-    });
+    expect(sent('/centraid/_automations/turn/events', (q) => q.get('turnId') === 'turn-1')).toBe(
+      true,
+    );
+    // An interactive turn posts to the automation ref, not a turn id.
+    expect(sent('/centraid/_automations/turn', (q) => q.get('ref') === 'daily/daily', 'POST')).toBe(
+      true,
+    );
+    expect(
+      sent('/centraid/_automations/turn/pin', (q) => q.get('turnId') === 'turn-1', 'POST'),
+    ).toBe(true);
   });
 
-  it('treats an absent vault plane as a valid state', async () => {
-    forceVault404 = true;
-    await expect(vault.vaultStatus()).resolves.toBeUndefined();
-    await expect(vault.listVaults()).resolves.toBeUndefined();
+  it('fails a client that calls a path the gateway does not serve', () => {
+    // The retired `run.*` surface is the concrete regression this guards: a
+    // renamed or misspelled path must break the suite, not fall through to a
+    // permissive `{ ok: true }`.
+    expect(() => fetch('https://gateway.test/centraid/_automations/runs?ref=daily/daily')).toThrow(
+      /unrouted gateway path: GET \/centraid\/_automations\/runs/,
+    );
   });
 });

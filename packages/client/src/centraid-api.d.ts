@@ -1276,7 +1276,8 @@ export interface CentraidAutomationRow {
 
 /**
  * Result of `runAutomationNow`. The fire runs in the background; the
- * `runId` lets the caller open the run viewer and poll for progress.
+ * `turnId` lets the caller open the run viewer and join the turn's live
+ * event stream (`streamAutomationTurn`) — there is no progress polling.
  */
 export interface CentraidAutomationTurnResult {
   turnId: string;

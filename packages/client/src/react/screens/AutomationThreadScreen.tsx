@@ -77,6 +77,21 @@ const STATUS_ICON: Record<AuStatusKind, IconName> = {
   failed: 'AlertTriangle',
 };
 
+/**
+ * Backoff between rejoin attempts for a dropped/refused turn stream. Bounded
+ * on purpose: four quick tries cover a gateway restart or a momentarily full
+ * subscriber cap, and anything longer is a real outage the reader should be
+ * told about rather than a spinner that never resolves.
+ */
+const WATCH_REJOIN_DELAYS_MS = [500, 1500, 4000, 10_000];
+
+function withoutId(current: ReadonlySet<string>, id: string): ReadonlySet<string> {
+  if (!current.has(id)) return current;
+  const next = new Set(current);
+  next.delete(id);
+  return next;
+}
+
 function fmtDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   const s = ms / 1000;
@@ -392,7 +407,10 @@ function RunTurn({
   tokens,
   messages,
   traceLoading,
+  traceFailed,
+  watchLost,
   onLoadTrace,
+  onRetryWatch,
   onOpen,
   onRerun,
   rerunBusy,
@@ -401,7 +419,12 @@ function RunTurn({
   tokens?: number;
   messages?: readonly AsstMsgDTO[];
   traceLoading: boolean;
+  /** The cold trace read failed — the turn offers a retry instead of lying. */
+  traceFailed: boolean;
+  /** The live stream is gone after bounded rejoins — offer Reconnect. */
+  watchLost: boolean;
   onLoadTrace: () => void;
+  onRetryWatch: () => void;
   onOpen: () => void;
   onRerun: () => void;
   rerunBusy: boolean;
@@ -450,7 +473,7 @@ function RunTurn({
           {messages.length > 0 ? (
             messages.map((message, index) => (
               <Message
-                key={`${message.kind}:${index}`}
+                key={message.msgId ?? `${message.kind}:${index}`}
                 m={message}
                 index={index}
                 cb={messageCallbacks}
@@ -525,6 +548,39 @@ function RunTurn({
           </div>
         </>
       )}
+      {!hasTrace && traceFailed ? (
+        <div className={styles.turnNotice} data-testid="turn-trace-error">
+          <div className={styles.turnErrorBody}>Couldn’t load this turn’s transcript.</div>
+          <div className={styles.turnErrorActions}>
+            <button
+              type="button"
+              className={cx(au.auBtn, au.auBtnGhost, styles.turnErrorBtn)}
+              data-testid="retry-trace"
+              disabled={traceLoading}
+              onClick={onLoadTrace}
+            >
+              {traceLoading ? 'Retrying…' : 'Try again'}
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {watchLost && running ? (
+        <div className={styles.turnNotice} data-testid="turn-watch-lost">
+          <div className={styles.turnErrorBody}>
+            Lost the live connection to this run. It may still be working.
+          </div>
+          <div className={styles.turnErrorActions}>
+            <button
+              type="button"
+              className={cx(au.auBtn, au.auBtnGhost, styles.turnErrorBtn)}
+              data-testid="rejoin-turn"
+              onClick={onRetryWatch}
+            >
+              Reconnect
+            </button>
+          </div>
+        </div>
+      ) : null}
       {hasTrace && !running ? (
         <div className={styles.turnFoot}>
           <span className={styles.turnOutcome} data-ok={failed ? undefined : 'true'}>
@@ -637,6 +693,10 @@ export default function AutomationThreadScreen({
   const [sending, setSending] = useState(false);
   const [traces, setTraces] = useState<Record<string, AsstMsgDTO[]>>({});
   const [loadingTraces, setLoadingTraces] = useState<ReadonlySet<string>>(new Set());
+  /** Turns whose cold trace read failed — distinct from "no messages yet". */
+  const [traceErrors, setTraceErrors] = useState<ReadonlySet<string>>(new Set());
+  /** Running turns whose live stream is gone and stayed gone after rejoins. */
+  const [lostWatches, setLostWatches] = useState<ReadonlySet<string>>(new Set());
   const [pendingTrace, setPendingTrace] = useState<AsstMsgDTO[] | null>(null);
   const watchedTurnsRef = useRef(new Set<string>());
   const streamControllersRef = useRef(new Map<string, AbortController>());
@@ -667,45 +727,95 @@ export default function AutomationThreadScreen({
       try {
         const messages = await loadTurnTrace(turnId);
         setTraces((current) => ({ ...current, [turnId]: messages }));
+        setTraceErrors((current) => withoutId(current, turnId));
       } catch {
-        // Keep the turn collapsed when a cold trace is temporarily
-        // unavailable; a live watcher may still replace it.
-        setTraces((current) => ({ ...current, [turnId]: [] }));
+        // A failed cold read is NOT an empty turn. Writing `[]` here would be
+        // indistinguishable from "no messages yet" — the turn would show the
+        // spinner and the Done/Failed footer at once and lose "Show trace".
+        // Leave `traces` untouched and flag the turn so it offers a retry.
+        setTraceErrors((current) => new Set(current).add(turnId));
       } finally {
-        setLoadingTraces((current) => {
-          const next = new Set(current);
-          next.delete(turnId);
-          return next;
-        });
+        setLoadingTraces((current) => withoutId(current, turnId));
       }
     },
     [loadTurnTrace],
   );
 
+  /**
+   * Join a running turn's live stream, rejoining with backoff when the join is
+   * refused or the stream drops with the turn still open (the gateway's
+   * subscriber cap answers 503; a restart or proxy idle timeout just closes
+   * the socket). The old 2s poll this replaced is gone, so without a rejoin a
+   * still-running turn would spin "Working through your instructions…" until
+   * the reader navigated away and back. Bounded: after the last delay the turn
+   * is marked lost and the reader gets an explicit Reconnect.
+   */
   const watchNativeTurn = useCallback(
     (turnId: string): void => {
       if (watchedTurnsRef.current.has(turnId)) return;
       watchedTurnsRef.current.add(turnId);
+      setLostWatches((current) => withoutId(current, turnId));
       const controller = new AbortController();
       streamControllersRef.current.set(turnId, controller);
-      void watchTurn(
-        turnId,
-        (messages) => setTraces((current) => ({ ...current, [turnId]: messages })),
-        controller.signal,
-      )
-        .then(async () => {
-          if (controller.signal.aborted) return;
-          await reload();
-          await loadTrace(turnId);
-        })
-        .catch(() => {
-          if (!controller.signal.aborted) void loadTrace(turnId);
-        })
-        .finally(() => {
-          streamControllersRef.current.delete(turnId);
+      const pause = (ms: number): Promise<void> =>
+        new Promise((resolve) => {
+          const timer = window.setTimeout(resolve, ms);
+          controller.signal.addEventListener(
+            'abort',
+            () => {
+              window.clearTimeout(timer);
+              resolve();
+            },
+            { once: true },
+          );
         });
+      void (async () => {
+        for (let attempt = 0; !controller.signal.aborted; attempt++) {
+          let settled = false;
+          try {
+            settled = await watchTurn(
+              turnId,
+              (messages) => setTraces((current) => ({ ...current, [turnId]: messages })),
+              controller.signal,
+            );
+          } catch {
+            settled = false;
+          }
+          if (controller.signal.aborted) return;
+          if (settled) {
+            // `watchTurn` already performed the authoritative ledger re-read
+            // and pushed its messages — only the header/run row needs a reload.
+            await reload();
+            return;
+          }
+          const delay = WATCH_REJOIN_DELAYS_MS[attempt];
+          if (delay === undefined) {
+            // Keep the id in `watchedTurnsRef` so the auto-watch effect does
+            // not immediately restart the loop; `retryWatch` clears it.
+            setLostWatches((current) => new Set(current).add(turnId));
+            return;
+          }
+          await pause(delay);
+        }
+      })().finally(() => {
+        // Only retire our own registration: `retryWatch` aborts this loop and
+        // registers a replacement under the same turn id, and this `finally`
+        // runs after that — deleting blindly would orphan the live stream.
+        if (streamControllersRef.current.get(turnId) === controller) {
+          streamControllersRef.current.delete(turnId);
+        }
+      });
     },
-    [loadTrace, reload, watchTurn],
+    [reload, watchTurn],
+  );
+
+  const retryWatch = useCallback(
+    (turnId: string): void => {
+      streamControllersRef.current.get(turnId)?.abort();
+      watchedTurnsRef.current.delete(turnId);
+      watchNativeTurn(turnId);
+    },
+    [watchNativeTurn],
   );
 
   // Latest history is warm; older turns stay collapsed until the reader asks
@@ -715,11 +825,15 @@ export default function AutomationThreadScreen({
     if (state === 'loading' || state === 'error' || state === 'missing') return;
     const latest = state.runs[0];
     if (!latest) return;
-    if (traces[latest.runId] === undefined && !loadingTraces.has(latest.runId)) {
+    if (
+      traces[latest.runId] === undefined &&
+      !loadingTraces.has(latest.runId) &&
+      !traceErrors.has(latest.runId)
+    ) {
       void loadTrace(latest.runId);
     }
     if (latest.status === 'running') watchNativeTurn(latest.runId);
-  }, [loadTrace, loadingTraces, state, traces, watchNativeTurn]);
+  }, [loadTrace, loadingTraces, state, traceErrors, traces, watchNativeTurn]);
 
   useEffect(
     () => () => {
@@ -1048,7 +1162,10 @@ export default function AutomationThreadScreen({
                   tokens={d.runTokens?.[run.runId]}
                   messages={traces[run.runId]}
                   traceLoading={loadingTraces.has(run.runId)}
+                  traceFailed={traceErrors.has(run.runId)}
+                  watchLost={lostWatches.has(run.runId)}
                   onLoadTrace={() => void loadTrace(run.runId)}
+                  onRetryWatch={() => retryWatch(run.runId)}
                   rerunBusy={busy || running}
                   onOpen={() => onOpenRun(run.runId)}
                   onRerun={doRun}
@@ -1061,7 +1178,7 @@ export default function AutomationThreadScreen({
           <div className={styles.pendingConversation} data-testid="automation-pending-turn">
             {pendingTrace.map((message, index) => (
               <Message
-                key={`${message.kind}:${index}`}
+                key={message.msgId ?? `${message.kind}:${index}`}
                 m={message}
                 index={index}
                 cb={{

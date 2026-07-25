@@ -58,8 +58,8 @@ describe('buildRunSnapshot', () => {
     const snap = buildRunSnapshot(row(), run({ endedAt: Date.now() }), nodes, new Map());
     // trigger + node + completion row
     expect(snap.logRows.length).toBe(3);
-    expect(snap.nodes).toHaveLength(1);
-    expect(snap.nodes[0]?.name).toBe('fetch');
+    expect(snap.logRows[1]?.label).toBe('fetch');
+    expect(snap.logRows[1]?.sub).toBe('tool');
   });
 
   it('labels a data-originated run honestly instead of falling back to cron', () => {
@@ -185,8 +185,12 @@ describe('buildRunSnapshot', () => {
       nodes,
       new Map([[2, 'partial…']]),
     );
-    expect(snap.nodes[0]?.liveText).toBe('partial…');
-    expect(snap.nodes[0]?.streaming).toBe(true);
+    // The live agent text reaches the reader through the projected transcript
+    // and the log rows — the dead `nodes` payload is gone (#541).
+    expect(snap.logRows[1]?.response).toBe('partial…');
+    expect(snap.messages).toContainEqual(
+      expect.objectContaining({ kind: 'ai', streaming: true, text: 'partial…' }),
+    );
   });
 });
 

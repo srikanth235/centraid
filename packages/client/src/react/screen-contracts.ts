@@ -741,12 +741,19 @@ export interface AutomationThreadBridgeProps {
   onOpenRun: (runId: string) => void;
   /** Read one cold turn as the shared Message DTO. */
   loadTurnTrace: (turnId: string) => Promise<AsstMsgDTO[]>;
-  /** Join a native turn SSE stream and push shared Message snapshots. */
+  /**
+   * Join a native turn SSE stream and push shared Message snapshots. Resolves
+   * `true` once the ledger shows the turn settled, `false` when the stream
+   * closed with the turn still open (subscriber cap, gateway restart, proxy
+   * idle timeout) — the screen rejoins on `false` instead of leaving a running
+   * turn spinning forever. Implementations perform the one authoritative
+   * post-stream ledger re-read themselves.
+   */
   watchTurn: (
     turnId: string,
     onMessages: (messages: AsstMsgDTO[]) => void,
     signal: AbortSignal,
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   /** Start a manual fire and return its native turn id. */
   onRunNow: () => Promise<string | null>;
   onToggleEnabled: (next: boolean) => Promise<boolean>;
@@ -947,20 +954,6 @@ export interface HomeBridgeProps {
 // The vanilla side owns the SSE stream + node model and derives a fully-display
 // snapshot on each event; React renders it (timeline / log). React never sees
 // the stream — same split as every other screen.
-export interface RunNodeDTO {
-  ordinal: number;
-  status: 'running' | 'ok' | 'fail';
-  typeIcon: string;
-  name: string;
-  kind: string;
-  meta: string;
-  error?: string;
-  response?: string;
-  input?: string;
-  output?: string;
-  liveText?: string;
-  streaming: boolean;
-}
 export interface RunLogRowDTO {
   time: string;
   tone: string;
@@ -990,7 +983,6 @@ export interface RunViewSnapshot {
   triggersSummary: string;
   triggerHeroIcon: string;
   promptInstr: string;
-  nodes: RunNodeDTO[];
   /** Native automation items rendered by the shared conversation Message. */
   messages: AsstMsgDTO[];
   final: {
@@ -1072,16 +1064,30 @@ export interface AsstUsageDTO {
   estimated?: boolean;
   model?: string;
 }
+/**
+ * `msgId` is a stable identity for list keying (issue #541). A projected
+ * transcript both grows and re-orders while a turn streams — a tool row is
+ * inserted ahead of the answer bubble it belongs to on flush — so an array
+ * index is not an identity, and keying by it remounts `Message` (which does
+ * imperative DOM work on mount). Projections that know their source item
+ * derive it from the ledger item id; hand-built optimistic bubbles omit it.
+ */
 export type AsstMsgDTO =
-  | { kind: 'user'; text: string; attachments?: AsstAttachmentDTO[]; createdAt?: number }
-  | { kind: 'tools'; label: string; calls: AsstToolCallDTO[] }
+  | {
+      kind: 'user';
+      text: string;
+      attachments?: AsstAttachmentDTO[];
+      createdAt?: number;
+      msgId?: string;
+    }
+  | { kind: 'tools'; label: string; calls: AsstToolCallDTO[]; msgId?: string }
   /** A live streaming reasoning/thinking row (issue #420, Wave 2). Live-only —
    *  reasoning is not persisted in the ledger, so it never comes back on reload. */
-  | { kind: 'thinking'; text: string; streaming: boolean }
+  | { kind: 'thinking'; text: string; streaming: boolean; msgId?: string }
   /** A non-fatal runner notice (issue #420) — e.g. "this model can't read PDF
    *  attachments". Live-only; not persisted, so it never replays on reload. */
-  | { kind: 'notice'; level: 'warn' | 'info'; text: string }
-  | { kind: 'ai'; streaming: true; text: string; catchingUp?: boolean }
+  | { kind: 'notice'; level: 'warn' | 'info'; text: string; msgId?: string }
+  | { kind: 'ai'; streaming: true; text: string; catchingUp?: boolean; msgId?: string }
   | {
       kind: 'ai';
       streaming: false;
@@ -1106,6 +1112,7 @@ export type AsstMsgDTO =
       canRetry?: boolean;
       /** The failed send happened while the browser was offline (issue #420). */
       offline?: boolean;
+      msgId?: string;
     };
 /** A file the composer has uploaded (or is uploading) ahead of the next send. */
 export interface AsstPendingAttachmentDTO {

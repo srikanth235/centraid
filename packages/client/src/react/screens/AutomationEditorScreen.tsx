@@ -511,6 +511,14 @@ export default function AutomationEditorScreen({
     Map<string, { connectionId: string; kind: string; label: string }>
   >(() => new Map());
 
+  // Mirrors `selectedConnectors` so `refreshCatalog` — an async event-handler
+  // continuation — can read the current selection without nesting a setState
+  // inside another state updater (updaters must stay pure).
+  const selectedConnectorsRef = useRef(selectedConnectors);
+  useEffect(() => {
+    selectedConnectorsRef.current = selectedConnectors;
+  }, [selectedConnectors]);
+
   const baselineInstructionsRef = useRef('');
   const instructionsRef = useRef<HTMLTextAreaElement | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
@@ -642,24 +650,32 @@ export default function AutomationEditorScreen({
       setCatalog(next);
       // Rehydrate durable bindings for any selected kinds that now have a
       // live vault connection (covers select-then-connect + post-refresh).
-      setSelectedConnectors((selected) => {
-        setConnectionBindings((prev) => {
-          const copy = new Map(prev);
-          for (const cat of next) {
-            if (!selected.has(cat.kind) || !cat.connection) continue;
-            // A catalog refresh may make a formerly unique kind ambiguous.
-            // Preserve the owner's explicit account choice; only hydrate a
-            // binding when the form does not already carry one.
-            if (copy.has(cat.kind)) continue;
-            copy.set(cat.kind, {
-              connectionId: cat.connection.connectionId,
-              kind: cat.kind,
-              label: cat.connection.label,
-            });
-          }
-          return copy;
-        });
-        return selected;
+      // Read `selectedConnectors` off a ref, never from inside another
+      // updater: React requires updaters to be pure and StrictMode
+      // double-invokes them.
+      const selected = selectedConnectorsRef.current;
+      setConnectionBindings((prev) => {
+        let copy: typeof prev | undefined;
+        for (const cat of next) {
+          if (!selected.has(cat.kind) || !cat.connection) continue;
+          // A catalog refresh may make a formerly unique kind ambiguous.
+          // Preserve the owner's explicit account choice; only hydrate a
+          // binding when the form does not already carry one.
+          //
+          // A binding whose connection has VANISHED from the catalog (the
+          // account was revoked) is deliberately left alone too — silently
+          // re-pointing it at whatever account survives would change the
+          // principal the automation acts as without the owner ever seeing
+          // it. `danglingConnectorKinds` surfaces it instead (#541).
+          if (prev.has(cat.kind)) continue;
+          copy ??= new Map(prev);
+          copy.set(cat.kind, {
+            connectionId: cat.connection.connectionId,
+            kind: cat.kind,
+            label: cat.connection.label,
+          });
+        }
+        return copy ?? prev;
       });
     } catch {
       setCatalog([]);
@@ -861,9 +877,29 @@ export default function AutomationEditorScreen({
 
   const connectorCount = selectedConnectors.size;
   const isCreate = d.mode === 'create';
+  /**
+   * Bound connections that no longer exist in the live catalog — the owner
+   * revoked the account after this automation was saved. The binding is kept
+   * (never silently swapped for a surviving account), but it is a dead
+   * principal: it must not keep offering connector-event triggers, and the
+   * owner is told about it (#541).
+   */
+  const danglingConnectorKinds = new Set(
+    [...connectionBindings.values()]
+      .filter((binding) => {
+        const entry = catalog.find((candidate) => candidate.kind === binding.kind);
+        return (
+          entry !== undefined &&
+          !entry.connections.some((c) => c.connectionId === binding.connectionId)
+        );
+      })
+      .map((binding) => binding.kind),
+  );
   const eventConnectorKinds = [...connectionBindings.keys()].filter(
     (kind): kind is keyof typeof EVENTS_BY_CONNECTOR =>
-      selectedConnectors.has(kind) && kind in EVENTS_BY_CONNECTOR,
+      selectedConnectors.has(kind) &&
+      !danglingConnectorKinds.has(kind) &&
+      kind in EVENTS_BY_CONNECTOR,
   );
   const addableTriggerKinds: Array<'cron' | 'data' | 'event'> =
     eventConnectorKinds.length > 0
@@ -1420,6 +1456,16 @@ export default function AutomationEditorScreen({
             ? 'Optional — attach Gmail, GitHub, …'
             : `${connectorCount} selected`}
         </span>
+        {danglingConnectorKinds.size > 0 ? (
+          <span
+            className={styles.connDanglingNote}
+            role="status"
+            data-testid="connector-binding-dangling"
+          >
+            {[...danglingConnectorKinds].join(', ')} — the bound account is no longer configured.
+            Open Connectors and choose a replacement.
+          </span>
+        ) : null}
         <AutomationEditorConnectorsPicker
           open={connectorsOpen}
           catalog={catalog}

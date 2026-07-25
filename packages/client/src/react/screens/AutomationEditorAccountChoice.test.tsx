@@ -131,11 +131,32 @@ it('chooses among configured accounts inline and preserves the explicit binding 
   const workButton = picker?.querySelector('[data-connection-id="conn-work"]') as HTMLButtonElement;
   await act(async () => workButton.dispatchEvent(new MouseEvent('click', { bubbles: true })));
 
+  // Refresh the catalog: the work account has been revoked, so only
+  // `personal` survives.
   await act(async () => connectorsButton.dispatchEvent(new MouseEvent('click', { bubbles: true })));
   await act(async () => connectorsButton.dispatchEvent(new MouseEvent('click', { bubbles: true })));
   await act(async () => {
     await new Promise<void>((resolve) => queueMicrotask(resolve));
   });
+
+  // The binding is NOT silently re-pointed at the surviving account — that
+  // would change the principal the automation acts as. It is surfaced (#541).
+  const refreshed = el.querySelector('[data-testid="automation-connectors-picker"]');
+  expect(refreshed?.querySelector('[data-testid="connector-account-dangling"]')).toBeTruthy();
+  expect(refreshed?.textContent).toContain('no longer configured');
+  // The row must not claim the automation is on `personal`…
+  expect(refreshed?.textContent).toContain('Bound account unavailable');
+  expect(refreshed?.textContent).not.toContain('Connected · GitHub · personal');
+  // …and the surviving account is offered as an explicit choice.
+  expect(refreshed?.querySelector('[data-connection-id="conn-personal"]')).toBeTruthy();
+  const survivor = refreshed?.querySelector('[data-connection-id="conn-personal"]');
+  expect((survivor as HTMLElement | null)?.dataset.chosen).toBe('false');
+  // The dangling kind stops offering a connector-event trigger.
+  const addTrigger = [...el.querySelectorAll('button')].find(
+    (candidate) => candidate.textContent === '+ Add Trigger',
+  ) as HTMLButtonElement;
+  await act(async () => addTrigger.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+  expect(el.querySelector('[aria-label="Trigger kinds"]')?.textContent).not.toContain('Connector');
 
   await act(async () =>
     button(el, 'Create automation').dispatchEvent(new MouseEvent('click', { bubbles: true })),
@@ -151,6 +172,47 @@ it('chooses among configured accounts inline and preserves the explicit binding 
       ],
     }),
   );
+});
+
+it('offers an event trigger while the bound account is live, and drops it when it vanishes', async () => {
+  const personal = {
+    connectionId: 'conn-personal',
+    health: 'ok' as const,
+    label: 'GitHub · personal',
+    principal: 'personal@example.com',
+  };
+  const base = {
+    allowedHosts: ['api.github.com'],
+    credKind: 'api_key' as const,
+    key: 'github:pull.github',
+    kind: 'pull.github',
+    name: 'GitHub',
+    providerId: 'github',
+    providerName: 'GitHub',
+    setup: [] as string[],
+    templateId: 'github-pull',
+    tone: 'github',
+  };
+  const loadConnectorCatalog = vi
+    .fn()
+    .mockResolvedValue([{ ...base, connection: personal, connections: [personal] }]);
+  const el = await mount(makeProps({ loadConnectorCatalog }));
+  const connectorsButton = [...el.querySelectorAll('button')].find((candidate) =>
+    candidate.textContent?.includes('Connectors'),
+  ) as HTMLButtonElement;
+  await act(async () => connectorsButton.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+  await act(async () => {
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+  });
+  const row = el.querySelector('[data-kind="pull.github"] button') as HTMLButtonElement;
+  await act(async () => row.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+  expect(el.querySelector('[data-testid="connector-binding-dangling"]')).toBeNull();
+
+  const addTrigger = [...el.querySelectorAll('button')].find(
+    (candidate) => candidate.textContent === '+ Add Trigger',
+  ) as HTMLButtonElement;
+  await act(async () => addTrigger.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+  expect(el.querySelector('[aria-label="Trigger kinds"]')?.textContent).toContain('Connector');
 });
 
 it('saves a dynamic per-automation runner and model pin', async () => {

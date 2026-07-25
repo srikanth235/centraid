@@ -88,6 +88,28 @@ export function usageForItem(item: CentraidAutomationItem): AsstUsageDTO | undef
   };
 }
 
+/**
+ * What a compile turn's inbound message reads as in the thread.
+ *
+ * A compile turn's `message_in` item holds the headless compiler's own work
+ * order (`HEADLESS_COMPILE_WORK_ORDER` — the multi-paragraph "compile this
+ * automation headlessly…" prompt plus resolved anchors). That is machinery
+ * talking to itself, not something the owner typed, so rendering it verbatim
+ * as the owner's chat bubble is a lie. Both the cold projection
+ * (`automationTurnMessages`) and the live seed (`AutomationViewRoute`) show
+ * the owner's actual action instead — they must agree on the same turn.
+ */
+export const COMPILE_TURN_INBOUND_TEXT = 'Apply the revised standing instructions.';
+
+/** The inbound bubble text for a turn — see `COMPILE_TURN_INBOUND_TEXT`. */
+export function automationTurnInboundText(
+  turn: { triggerKind?: CentraidAutomationTurnRecord['triggerKind'] } | null,
+  items: readonly CentraidAutomationItem[],
+): string {
+  if (turn?.triggerKind === 'compile') return COMPILE_TURN_INBOUND_TEXT;
+  return items.find((item) => item.kind === 'message_in')?.text ?? '';
+}
+
 export function toolLabel(calls: readonly AsstToolCallDTO[]): string {
   const running = calls.some((entry) => entry.state === 'run');
   const failed = calls.filter((entry) => entry.state === 'error').length;
@@ -113,10 +135,21 @@ export function automationTurnMessages(
   const messages: AsstMsgDTO[] = [];
   let calls: AsstToolCallDTO[] = [];
   let callIndex = new Map<string, number>();
+  // Identity of the first tool item in the current coalescing group — the
+  // group's stable list key, since the row itself is a synthesised summary.
+  let callsAnchor: string | undefined;
   const flushTools = (): void => {
-    if (calls.length > 0) messages.push({ kind: 'tools', label: toolLabel(calls), calls });
+    if (calls.length > 0) {
+      messages.push({
+        kind: 'tools',
+        label: toolLabel(calls),
+        calls,
+        msgId: `${callsAnchor ?? turn.turnId}:tools`,
+      });
+    }
     calls = [];
     callIndex = new Map();
+    callsAnchor = undefined;
   };
   let pendingAgent: CentraidAutomationItem | undefined;
   let answers = 0;
@@ -127,7 +160,7 @@ export function automationTurnMessages(
     answers++;
     const live = liveText.get(item.ordinal) ?? '';
     if (item.endedAt === undefined) {
-      messages.push({ kind: 'ai', streaming: true, text: live });
+      messages.push({ kind: 'ai', streaming: true, text: live, msgId: `${item.itemId}:ai` });
       return;
     }
     const text = item.ok
@@ -143,10 +176,13 @@ export function automationTurnMessages(
       createdAt: item.endedAt,
       turnId: turn.turnId,
       feedback: null,
+      msgId: `${item.itemId}:ai`,
       ...(usage ? { usage } : {}),
     });
     const stop = stopReasonBubble(stopReasonForItem(item), turn.turnId, item.endedAt);
-    if (stop && (item.ok || stop.copyText !== text)) messages.push(stop);
+    if (stop && (item.ok || stop.copyText !== text)) {
+      messages.push({ ...stop, msgId: `${item.itemId}:stop` });
+    }
   };
   const flushToolsThenAgent = (): void => {
     flushTools();
@@ -160,8 +196,11 @@ export function automationTurnMessages(
       flushToolsThenAgent();
       messages.push({
         kind: 'user',
-        text: item.text ?? '',
+        // A compile turn's inbound item is the compiler's own work order, not
+        // the owner's words — see `COMPILE_TURN_INBOUND_TEXT`.
+        text: turn.triggerKind === 'compile' ? COMPILE_TURN_INBOUND_TEXT : (item.text ?? ''),
         createdAt: item.startedAt,
+        msgId: `${item.itemId}:in`,
       });
       continue;
     }
@@ -195,7 +234,10 @@ export function automationTurnMessages(
       };
       const prior = callIndex.get(key);
       if (prior !== undefined) calls[prior] = call;
-      else callIndex.set(key, calls.push(call) - 1);
+      else {
+        callsAnchor ??= item.itemId;
+        callIndex.set(key, calls.push(call) - 1);
+      }
       continue;
     }
     flushToolsThenAgent();
@@ -203,7 +245,7 @@ export function automationTurnMessages(
     answers++;
     const live = liveText.get(item.ordinal) ?? '';
     if (item.endedAt === undefined) {
-      messages.push({ kind: 'ai', streaming: true, text: live });
+      messages.push({ kind: 'ai', streaming: true, text: live, msgId: `${item.itemId}:ai` });
       continue;
     }
     const text = item.ok
@@ -219,10 +261,13 @@ export function automationTurnMessages(
       createdAt: item.endedAt,
       turnId: turn.turnId,
       feedback: null,
+      msgId: `${item.itemId}:ai`,
       ...(usage ? { usage } : {}),
     });
     const stop = stopReasonBubble(stopReasonForItem(item), turn.turnId, item.endedAt);
-    if (stop && (item.ok || stop.copyText !== text)) messages.push(stop);
+    if (stop && (item.ok || stop.copyText !== text)) {
+      messages.push({ ...stop, msgId: `${item.itemId}:stop` });
+    }
   }
   flushToolsThenAgent();
 
@@ -239,6 +284,7 @@ export function automationTurnMessages(
       createdAt: turn.endedAt,
       turnId: turn.turnId,
       feedback: turn.feedback ?? null,
+      msgId: `${turn.turnId}:summary`,
     });
   }
   return messages;

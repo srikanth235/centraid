@@ -525,9 +525,9 @@
   display: grid;
   gap: 12px;
   padding: 16px;
-  border: 1px solid var(--line);
+  border: 0.5px solid var(--line);
   border-radius: 14px;
-  background: var(--surface);
+  background: var(--bg-elev);
 }
 .rsideCard {
   border: 0.5px solid var(--line);

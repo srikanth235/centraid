@@ -295,6 +295,12 @@ function json(res, body, status = 200) {
   res.end(JSON.stringify(body));
 }
 
+/** Fixture run → native turn record (the ledger's `turnId` naming). */
+const asTurn = (run) => ({ ...run, turnId: run.runId });
+/** Fixture node → native turn item. */
+const itemsFor = (turnId) =>
+  (NODES[turnId] ?? []).map((node) => ({ ...node, itemId: node.nodeId, turnId: node.runId }));
+
 async function startSeedServer() {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');
@@ -304,21 +310,34 @@ async function startSeedServer() {
       const ref = url.searchParams.get('ref');
       return json(res, { row: ROWS.find((r) => r.ref === ref) ?? null });
     }
-    if (p.endsWith('/_automations/runs')) {
+    // The client speaks the native turn ledger (`turns` / `turn` /
+    // `turn/items` / `turn/events`); the fixtures above still use the older
+    // `runId`/`nodeId` field names, so map them here rather than rewriting
+    // every literal (#541).
+    if (p.endsWith('/_automations/turns')) {
       const ref = url.searchParams.get('ref');
-      return json(res, { runs: ref ? RUNS.filter((r) => r.automationId === ref) : RUNS });
+      const rows = ref ? RUNS.filter((r) => r.automationId === ref) : RUNS;
+      return json(res, { turns: rows.map(asTurn) });
     }
-    if (p.endsWith('/_automations/run/nodes')) {
-      return json(res, { nodes: NODES[url.searchParams.get('runId')] ?? [] });
+    if (p.endsWith('/_automations/turn/items')) {
+      return json(res, { items: itemsFor(url.searchParams.get('turnId')) });
     }
     // SSE — return a non-event 404 so the renderer falls back to a one-shot
-    // ledger read (settled run).
-    if (p.endsWith('/_automations/run/events')) return json(res, { error: 'no stream' }, 404);
-    if (p.endsWith('/_automations/run')) {
-      return json(res, {
-        run: RUNS.find((r) => r.runId === url.searchParams.get('runId')) ?? null,
-      });
+    // ledger read. Every fixture turn is settled, so nothing rejoins.
+    if (p.endsWith('/_automations/turn/events')) return json(res, { error: 'no stream' }, 404);
+    if (p.endsWith('/_automations/turn')) {
+      const ref = url.searchParams.get('ref');
+      const turnId = url.searchParams.get('turnId');
+      const found = turnId
+        ? RUNS.find((r) => r.runId === turnId)
+        : RUNS.filter((r) => r.automationId === ref).sort((a, b) => b.startedAt - a.startedAt)[0];
+      const body = { turn: found ? asTurn(found) : null };
+      if (url.searchParams.get('expand') === 'items') {
+        body.items = found ? itemsFor(found.runId) : [];
+      }
+      return json(res, body);
     }
+    if (p.endsWith('/_automations/turn-now')) return json(res, { turnId: RUNS[0].runId });
     if (p.endsWith('/_templates')) return json(res, TEMPLATES);
     return json(res, {});
   });

@@ -311,7 +311,7 @@ export default function RunViewScreen({
                 {snap.messages.length > 0 ? (
                   snap.messages.map((message, index) => (
                     <Message
-                      key={`${message.kind}:${index}`}
+                      key={message.msgId ?? `${message.kind}:${index}`}
                       m={message}
                       index={index}
                       cb={messageCallbacks}

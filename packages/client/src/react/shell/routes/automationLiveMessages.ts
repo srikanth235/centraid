@@ -350,17 +350,29 @@ function liveItemMessages(
 ): AsstMsgDTO[] {
   const messages: AsstMsgDTO[] = [];
   if (state.reasoningText) {
-    messages.push({ kind: 'thinking', text: state.reasoningText, streaming: !state.done });
+    messages.push({
+      kind: 'thinking',
+      text: state.reasoningText,
+      streaming: !state.done,
+      msgId: `${state.itemId}:thinking`,
+    });
   }
   const tools = [...state.tools, ...nestedTools];
   if (tools.length > 0) {
-    messages.push({ kind: 'tools', label: toolLabel(tools), calls: tools });
+    messages.push({
+      kind: 'tools',
+      label: toolLabel(tools),
+      calls: tools,
+      msgId: `${state.itemId}:tools`,
+    });
   }
-  for (const notice of state.notices) messages.push({ kind: 'notice', ...notice });
+  for (const [index, notice] of state.notices.entries()) {
+    messages.push({ kind: 'notice', ...notice, msgId: `${state.itemId}:notice:${index}` });
+  }
   const answer = state.error ?? state.finalText ?? state.assistantText;
   if (!answer && state.kind === 'tool') return messages;
   if (!state.done) {
-    messages.push({ kind: 'ai', streaming: true, text: answer });
+    messages.push({ kind: 'ai', streaming: true, text: answer, msgId: `${state.itemId}:ai` });
   } else {
     const text = answer || 'The automation completed.';
     messages.push({
@@ -370,18 +382,21 @@ function liveItemMessages(
       error: state.error !== undefined,
       copyText: text,
       feedback: null,
+      msgId: `${state.itemId}:ai`,
       ...(state.usage ? { usage: state.usage } : {}),
     });
   }
   const stop = stopReasonBubble(state.stopReason);
-  if (stop && (state.error === undefined || stop.copyText !== answer)) messages.push(stop);
+  if (stop && (state.error === undefined || stop.copyText !== answer)) {
+    messages.push({ ...stop, msgId: `${state.itemId}:stop` });
+  }
   return messages;
 }
 
 /** Project live reducer state into the exact DTO consumed by shared Message. */
 export function automationLiveMessages(state: AutomationLiveTraceState): AsstMsgDTO[] {
   const messages: AsstMsgDTO[] = [];
-  if (state.message) messages.push({ kind: 'user', text: state.message });
+  if (state.message) messages.push({ kind: 'user', text: state.message, msgId: 'inbound' });
   const ordered = [...state.items.values()].sort(
     (left, right) => left.ordinal - right.ordinal || left.itemId.localeCompare(right.itemId),
   );

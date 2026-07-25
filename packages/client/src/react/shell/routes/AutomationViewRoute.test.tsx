@@ -57,7 +57,11 @@ vi.mock('./automationThreadData.js', () => ({
   loadAutomationThreadData: helpers.loadThread,
 }));
 vi.mock('./automationsData.js', () => ({ deriveAutomationHero: helpers.deriveHero }));
-vi.mock('./automationTurnMessages.js', () => ({
+// Partial: only the projection is stubbed. `automationTurnInboundText` is the
+// shared cold/live agreement on a compile turn's inbound bubble (#541) — the
+// route must exercise the real one.
+vi.mock('./automationTurnMessages.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./automationTurnMessages.js')>()),
   automationTurnMessages: helpers.automationTurnMessages,
 }));
 vi.mock('./automationLiveMessages.js', () => ({
