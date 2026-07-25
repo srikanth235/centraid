@@ -9,7 +9,7 @@ vi.mock('../../../../gateway-client.js', () => ({
   writeAppFile: vi.fn(),
   publish: vi.fn(),
   readAutomation: vi.fn(),
-  listAutomationRuns: vi.fn().mockResolvedValue([]),
+  listAutomationTurns: vi.fn().mockResolvedValue([]),
 }));
 
 const { default: ConfigView } = await import('./BuilderAutomationConfigView.js');

@@ -9,6 +9,7 @@ const YESTERDAY = NOW - 24 * 60 * 60 * 1000;
 
 function makeData(over: Partial<AutomationThreadDataEx> = {}): AutomationThreadDataEx {
   return {
+    automationTurns: true,
     consent: {
       grants: [
         {
@@ -110,6 +111,21 @@ function makeProps(
 ): AutomationThreadBridgeProps {
   return {
     loadData: vi.fn().mockResolvedValue(data),
+    loadTurnTrace: vi.fn(async (turnId: string) => {
+      const text = turnId === 'r1' ? 'ok run' : turnId === 'r2' ? 'failed run' : '';
+      return text
+        ? [
+            {
+              kind: 'ai' as const,
+              streaming: false as const,
+              html: text,
+              error: turnId === 'r2',
+              copyText: text,
+              feedback: null,
+            },
+          ]
+        : [];
+    }),
     onBack: vi.fn(),
     onCopyWebhook: vi.fn(),
     onDecideConsent: vi.fn().mockResolvedValue(true),
@@ -118,9 +134,10 @@ function makeProps(
     onOpenRun: vi.fn(),
     onRotateWebhook: vi.fn().mockResolvedValue(true),
     onRetryCompile: vi.fn().mockResolvedValue(true),
-    onRunNow: vi.fn().mockResolvedValue(true),
-    onSendMessage: vi.fn(),
+    onRunNow: vi.fn().mockResolvedValue('r-new'),
+    onSendMessage: vi.fn().mockResolvedValue('r-message'),
     onToggleEnabled: vi.fn().mockResolvedValue(true),
+    watchTurn: vi.fn().mockResolvedValue(undefined),
     ...over,
   };
 }
@@ -323,7 +340,19 @@ describe('AutomationThreadScreen', () => {
     await act(async () =>
       form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
     );
-    expect(props.onSendMessage).toHaveBeenCalledWith('only flag movers over 5%');
+    expect(props.onSendMessage).toHaveBeenCalledWith(
+      'only flag movers over 5%',
+      true,
+      expect.any(Function),
+      expect.any(AbortSignal),
+    );
+  });
+
+  it('hides the composer for gateways without the automationTurns capability', async () => {
+    const el = await mount(makeProps({}, makeData({ automationTurns: false })));
+    expect(
+      el.querySelector<HTMLInputElement>('input[aria-label="Message this automation"]'),
+    ).toBeNull();
   });
 
   it('reframes a reply as one-off when "Apply to future runs" is toggled off', async () => {
@@ -346,7 +375,10 @@ describe('AutomationThreadScreen', () => {
       form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
     );
     expect(props.onSendMessage).toHaveBeenCalledWith(
-      "For this thread only (don't change the schedule): what changed since yesterday?",
+      'what changed since yesterday?',
+      false,
+      expect.any(Function),
+      expect.any(AbortSignal),
     );
   });
 

@@ -146,6 +146,11 @@ export interface Item {
   readonly itemId: string;
   readonly turnId: string;
   readonly ordinal: number;
+  /**
+   * Runner-native call identity. ACP tool calls can overlap, so start/result
+   * correlation must use this value rather than display name or ordinal.
+   */
+  readonly callId?: string;
   readonly batchId?: number;
   readonly kind: ItemKind;
   /** `message_in` messages: 'user' (incl. a webhook/cron trigger) | 'assistant'. */
@@ -156,6 +161,8 @@ export interface Item {
   readonly name?: string;
   readonly argsJson?: string;
   readonly outputJson?: string;
+  /** Lossless runner envelope for diagnostics and future protocol fields. */
+  readonly rawJson?: string;
   readonly ok: boolean;
   readonly error?: string;
   readonly startedAt: number;

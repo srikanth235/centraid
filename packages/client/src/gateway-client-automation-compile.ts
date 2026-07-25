@@ -4,7 +4,7 @@ import { auth, authHeaders, doFetch, enc, readJson } from './gateway-client-core
 export async function compileAutomation(input: {
   automationId: string;
   enableOnSuccess?: boolean;
-}): Promise<{ runId: string }> {
+}): Promise<{ compileTurnId: string }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(
     baseUrl,
@@ -15,7 +15,25 @@ export async function compileAutomation(input: {
       body: JSON.stringify({ enableOnSuccess: input.enableOnSuccess === true }),
     },
   );
-  return readJson<{ runId: string }>(res, 'compile automation');
+  return readJson<{ compileTurnId: string }>(res, 'compile automation');
+}
+
+/** Rewrite standing instructions from a steering message, then recompile. */
+export async function reviseAutomation(input: {
+  automationId: string;
+  message: string;
+}): Promise<{ compileTurnId: string }> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_automations/revise?ref=${enc(input.automationId)}`,
+    {
+      method: 'POST',
+      headers: authHeaders(token, 'application/json'),
+      body: JSON.stringify({ message: input.message }),
+    },
+  );
+  return readJson<{ compileTurnId: string }>(res, 'revise automation');
 }
 
 /** The compiled plan the headless compiler wrote for this automation — the

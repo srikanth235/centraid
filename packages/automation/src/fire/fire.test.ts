@@ -14,7 +14,7 @@ import path from 'node:path';
 import {
   ConversationStore,
   makeJournalDbProvider,
-  type RunStreamEvent,
+  type AutomationTurnStreamEvent,
 } from '@centraid/app-engine';
 import { runFire, type DispatchSurface, type OpenDispatchArgs } from './fire.js';
 import type { Manifest } from '../manifest/manifest.js';
@@ -126,7 +126,7 @@ describe('runFire', () => {
          return { ok: true };
        };`,
     );
-    const events: RunStreamEvent[] = [];
+    const events: AutomationTurnStreamEvent[] = [];
     const dispatch = (args: OpenDispatchArgs): Promise<DispatchSurface> => {
       void args;
       return Promise.resolve({
@@ -146,14 +146,14 @@ describe('runFire', () => {
     );
     expect(outcome.ok).toBe(true);
 
-    // run.start first, run.end last.
-    expect(events.at(0)?.type).toBe('run.start');
-    expect(events.at(-1)?.type).toBe('run.end');
-    const end = events.at(-1) as Extract<RunStreamEvent, { type: 'run.end' }>;
+    // turn.start first, turn.end last.
+    expect(events.at(0)?.type).toBe('turn.start');
+    expect(events.at(-1)?.type).toBe('turn.end');
+    const end = events.at(-1) as Extract<AutomationTurnStreamEvent, { type: 'turn.end' }>;
     expect(end.ok).toBe(true);
 
     // The agent node opened (start) before it closed (end), at ordinal 0.
-    const lifecycle = events.filter((e) => e.type === 'node.start' || e.type === 'node.end');
+    const lifecycle = events.filter((e) => e.type === 'item.start' || e.type === 'item.end');
     expect(
       lifecycle.map((e) => [
         e.type,
@@ -161,10 +161,10 @@ describe('runFire', () => {
         (e as { kind?: string }).kind,
       ]),
     ).toEqual([
-      ['node.start', 0, 'agent'],
-      ['node.end', 0, undefined],
+      ['item.start', 0, 'agent'],
+      ['item.end', 0, undefined],
     ]);
-    const agentStart = lifecycle[0] as Extract<RunStreamEvent, { type: 'node.start' }>;
+    const agentStart = lifecycle[0] as Extract<AutomationTurnStreamEvent, { type: 'item.start' }>;
     expect(agentStart.name).toBe('agent');
     expect(agentStart.args).toEqual({ prompt: 'summarize' });
   });
@@ -180,7 +180,7 @@ describe('runFire', () => {
          return { output: answer };
        };`,
     );
-    const events: RunStreamEvent[] = [];
+    const events: AutomationTurnStreamEvent[] = [];
     // A stub agent dispatcher that behaves like a streaming chat adapter:
     // forward token deltas + a usage event through `call.onEvent`, then
     // return the final answer.
@@ -213,8 +213,8 @@ describe('runFire', () => {
     );
     expect(outcome.ok).toBe(true);
 
-    // Token deltas surfaced as node.delta on the agent node (ordinal 0).
-    const deltas = events.filter((e) => e.type === 'node.delta');
+    // Token deltas surfaced as item.delta on the agent item (ordinal 0).
+    const deltas = events.filter((e) => e.type === 'item.delta');
     expect(deltas.length >= 3).toBeTruthy();
     expect(deltas.every((d) => (d as { ordinal: number }).ordinal === 0)).toBeTruthy();
     const deltaTypes = deltas.map((d) => ((d as { event: { type: string } }).event ?? {}).type);
@@ -232,6 +232,85 @@ describe('runFire', () => {
     const run = store.getTurn(record.runId);
     expect(run?.totalInputTokens).toBe(12);
     expect(run?.totalOutputTokens).toBe(3);
+    store.close();
+  });
+
+  it('persists overlapping ACP tool calls as distinct callId-keyed items', async () => {
+    await writeAutomation(
+      appsDir,
+      'notes',
+      'parallel',
+      manifest({ name: 'Parallel' }),
+      `export default async ({ ctx }) => {
+         return { output: await ctx.agent({ prompt: 'compare both files' }) };
+       };`,
+    );
+    const dispatch = (): Promise<DispatchSurface> =>
+      Promise.resolve({
+        agentDispatcher: async (call) => {
+          call.onEvent?.({
+            type: 'tool.start',
+            toolCallId: 'call-a',
+            toolName: 'read_file',
+            args: { path: 'a.txt' },
+            rawJson: '{"toolCallId":"call-a","status":"pending"}',
+          });
+          call.onEvent?.({
+            type: 'tool.start',
+            toolCallId: 'call-b',
+            toolName: 'read_file',
+            args: { path: 'b.txt' },
+            rawJson: '{"toolCallId":"call-b","status":"pending"}',
+          });
+          // Finish out of start order: name/ordinal correlation would cross
+          // these results; callId correlation must not.
+          call.onEvent?.({
+            type: 'tool.result',
+            toolCallId: 'call-b',
+            toolName: 'read_file',
+            ok: true,
+            result: 'B',
+            rawJson: '{"toolCallId":"call-b","status":"completed","rawOutput":"B"}',
+          });
+          call.onEvent?.({
+            type: 'tool.result',
+            toolCallId: 'call-a',
+            toolName: 'read_file',
+            ok: true,
+            result: 'A',
+            rawJson: '{"toolCallId":"call-a","status":"completed","rawOutput":"A"}',
+          });
+          call.onEvent?.({
+            type: 'final',
+            text: 'done',
+            stopReason: 'end_turn',
+            rawJson: '{"stopReason":"end_turn"}',
+          });
+          return 'done';
+        },
+        async close() {},
+      });
+
+    const { record } = await runFire(
+      { automationRef: 'notes/parallel', appsDir, journalDbFile },
+      { openDispatch: dispatch },
+    );
+    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const tools = store
+      .listItems(record.runId)
+      .filter((item) => item.kind === 'tool')
+      .sort((a, b) => (a.callId ?? '').localeCompare(b.callId ?? ''));
+    expect(tools.map((item) => [item.callId, item.outputJson])).toEqual([
+      ['call-a', '"A"'],
+      ['call-b', '"B"'],
+    ]);
+    expect(tools.map((item) => JSON.parse(item.rawJson ?? '{}').toolCallId)).toEqual([
+      'call-a',
+      'call-b',
+    ]);
+    expect(store.listItems(record.runId).find((item) => item.kind === 'agent')?.rawJson).toBe(
+      '{"stopReason":"end_turn"}',
+    );
     store.close();
   });
 

@@ -461,6 +461,21 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.turnTrace,
+.pendingConversation {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.turnTrace > *,
+.pendingConversation > * {
+  max-width: 100%;
+}
+.pendingConversation {
+  position: relative;
+  padding: 14px 2px 16px 4px;
+}
 .turnFoot {
   display: flex;
   align-items: center;

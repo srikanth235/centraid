@@ -1036,8 +1036,8 @@ interface CentraidApi {
   //
   // The full automation surface — create/enable/delete mutators AND the
   // read/run/analytics surface (listAutomations / readAutomation /
-  // runAutomationNow / listAutomationRuns / readAutomationRun /
-  // listAutomationRunNodes / pinAutomationRun / getInsightsSummary) — moved
+  // runAutomationNow / listAutomationTurns / readAutomationTurn /
+  // listAutomationItems / pinAutomationTurn / getInsightsSummary) — moved
   // to the renderer's direct HTTP client (renderer/gateway-client.ts) under
   // the thin-client pivot: the gateway owns scaffold + webhook mint + stage +
   // publish (`POST /centraid/_automations`, `…/set-enabled`, `DELETE …`).
@@ -1148,24 +1148,27 @@ export interface CentraidInsightsSummary {
   attention?: CentraidInsightsAttention;
 }
 
-/** A single run record from the unified `runs` ledger. */
-export interface CentraidAutomationRunRecord {
-  runId: string;
-  kind: 'automation' | 'chat' | 'build';
-  /** Set for `kind: 'automation'` — the automation app id. */
+/** A native automation turn, enriched with its stable automation identity. */
+export interface CentraidAutomationTurnRecord {
+  turnId: string;
+  conversationId: string;
+  seq: number;
   automationId?: string;
-  /** The automation's last-known display name, recorded on the run itself —
+  /** The automation's last-known display name, recorded on its conversation —
    *  survives the automation being deleted (falls back to `automationId`). */
   automationName?: string;
   triggerKind: 'scheduled' | 'manual' | 'replay' | 'on_failure' | 'compile' | 'interactive';
   /** Source that fired the run (`cron` / `webhook` / `data` / `condition` / `manual`). */
   triggerOrigin?: 'cron' | 'webhook' | 'data' | 'condition' | 'manual';
-  parentRunId?: string;
-  inputJson?: string;
+  parentTurnId?: string;
+  note?: string;
+  retryOf?: string;
+  idempotencyKey?: string;
   startedAt: number;
   endedAt?: number;
   ok: boolean;
   error?: string;
+  feedback?: 'up' | 'down';
   summary?: string;
   outputJson?: string;
   /** True when the run is pinned as a replay fixture. */
@@ -1180,17 +1183,21 @@ export interface CentraidAutomationRunRecord {
   toolCount?: number;
 }
 
-/** A single node (step / tool / agent / invoke) inside a run. */
-export interface CentraidAutomationRunNode {
-  nodeId: string;
-  runId: string;
+/** A native item inside an automation turn. */
+export interface CentraidAutomationItem {
+  itemId: string;
+  turnId: string;
   ordinal: number;
+  callId?: string;
   batchId?: number;
-  kind: 'step' | 'tool' | 'agent' | 'invoke';
-  /** Tool / invoke target. Absent for `kind: 'step'`. */
+  kind: 'message_in' | 'step' | 'tool' | 'agent';
+  role?: 'user' | 'assistant';
+  text?: string;
+  /** Tool target. Absent for `kind: 'step'` / `message_in`. */
   name?: string;
   argsJson?: string;
   outputJson?: string;
+  rawJson?: string;
   ok: boolean;
   error?: string;
   startedAt: number;
@@ -1205,8 +1212,9 @@ export interface CentraidAutomationRunNode {
   provider?: string;
   /** Frozen at write time; NULL = no price known. */
   costUsd?: number;
-  /** For `kind: 'invoke'` — the run id of the child run it spawned. */
-  childRunId?: string;
+  costSource?: 'agent' | 'estimated';
+  appId?: string;
+  childTurnId?: string;
 }
 
 /** The `automation.json` app manifest. Mirrors app-engine. */
@@ -1256,8 +1264,8 @@ export interface CentraidAutomationRow {
  * Result of `runAutomationNow`. The fire runs in the background; the
  * `runId` lets the caller open the run viewer and poll for progress.
  */
-export interface CentraidAutomationRunResult {
-  runId: string;
+export interface CentraidAutomationTurnResult {
+  turnId: string;
 }
 
 /**
@@ -1597,8 +1605,8 @@ declare global {
     ref: string;
     manifest: CentraidAutomationManifest;
   }
-  interface CentraidAutomationRunResult {
-    runId: string;
+  interface CentraidAutomationTurnResult {
+    turnId: string;
   }
   interface CentraidMintedWebhook {
     automationId: string;
@@ -1607,19 +1615,23 @@ declare global {
     url: string;
     secret: string;
   }
-  interface CentraidAutomationRunRecord {
-    runId: string;
-    kind: 'automation' | 'chat' | 'build';
+  interface CentraidAutomationTurnRecord {
+    turnId: string;
+    conversationId: string;
+    seq: number;
     automationId?: string;
     automationName?: string;
     triggerKind: 'scheduled' | 'manual' | 'replay' | 'on_failure' | 'compile' | 'interactive';
     triggerOrigin?: 'cron' | 'webhook' | 'data' | 'condition' | 'manual';
-    parentRunId?: string;
-    inputJson?: string;
+    parentTurnId?: string;
+    note?: string;
+    retryOf?: string;
+    idempotencyKey?: string;
     startedAt: number;
     endedAt?: number;
     ok: boolean;
     error?: string;
+    feedback?: 'up' | 'down';
     summary?: string;
     outputJson?: string;
     pinned: boolean;
@@ -1631,15 +1643,19 @@ declare global {
     stepCount?: number;
     toolCount?: number;
   }
-  interface CentraidAutomationRunNode {
-    nodeId: string;
-    runId: string;
+  interface CentraidAutomationItem {
+    itemId: string;
+    turnId: string;
     ordinal: number;
+    callId?: string;
     batchId?: number;
-    kind: 'step' | 'tool' | 'agent' | 'invoke';
+    kind: 'message_in' | 'step' | 'tool' | 'agent';
+    role?: 'user' | 'assistant';
+    text?: string;
     name?: string;
     argsJson?: string;
     outputJson?: string;
+    rawJson?: string;
     ok: boolean;
     error?: string;
     startedAt: number;
@@ -1652,7 +1668,9 @@ declare global {
     model?: string;
     provider?: string;
     costUsd?: number;
-    childRunId?: string;
+    costSource?: 'agent' | 'estimated';
+    appId?: string;
+    childTurnId?: string;
   }
   // Mirror of the module-level Insights types (issue #514).
   interface CentraidInsightsKpis {

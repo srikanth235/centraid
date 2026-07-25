@@ -75,6 +75,7 @@ export interface RawItem {
   id: string;
   turn_id: string;
   ordinal: number;
+  call_id: string | null;
   batch_id: number | null;
   kind: string;
   role: string | null;
@@ -82,6 +83,7 @@ export interface RawItem {
   name: string | null;
   args_json: string | null;
   output_json: string | null;
+  raw_json: string | null;
   child_turn_id: string | null;
   model: string | null;
   provider: string | null;
@@ -175,6 +177,7 @@ export function itemFromRaw(raw: RawItem): Item {
     itemId: raw.id,
     turnId: raw.turn_id,
     ordinal: raw.ordinal,
+    ...(raw.call_id !== null ? { callId: raw.call_id } : {}),
     ...(raw.batch_id !== null ? { batchId: raw.batch_id } : {}),
     kind: raw.kind as ItemKind,
     ...(raw.role !== null ? { role: raw.role as 'user' | 'assistant' } : {}),
@@ -182,6 +185,7 @@ export function itemFromRaw(raw: RawItem): Item {
     ...(raw.name !== null ? { name: raw.name } : {}),
     ...(raw.args_json !== null ? { argsJson: raw.args_json } : {}),
     ...(raw.output_json !== null ? { outputJson: raw.output_json } : {}),
+    ...(raw.raw_json !== null ? { rawJson: raw.raw_json } : {}),
     ok: raw.ok !== 0,
     ...(raw.error !== null ? { error: raw.error } : {}),
     startedAt: raw.started_at,
@@ -457,12 +461,12 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     `),
     insertItem: db.prepare(`
       INSERT INTO items (
-        id, turn_id, ordinal, batch_id, kind, role, text, model, provider,
+        id, turn_id, ordinal, call_id, batch_id, kind, role, text, model, provider,
         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd,
         cost_source,
-        app_id, name, args_json, output_json, child_turn_id,
+        app_id, name, args_json, output_json, raw_json, child_turn_id,
         ok, error, started_at, ended_at, duration_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     // The inbound message (issue #190) — ordinal 0 of the turn. Attachments
     // hang off the returned item id.
@@ -473,12 +477,14 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     // Ledger-tail hybrid (issue #158): durable "running" row, ended_at NULL.
     openItem: db.prepare(`
       INSERT INTO items (
-        id, turn_id, ordinal, batch_id, kind, app_id, name, args_json, ok, started_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+        id, turn_id, ordinal, call_id, batch_id, kind, app_id, name, args_json, raw_json,
+        ok, started_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
     `),
     closeItem: db.prepare(`
       UPDATE items SET
-        ok = $ok, output_json = $outputJson, error = $error,
+        ok = $ok, output_json = $outputJson, raw_json = COALESCE($rawJson, raw_json),
+        error = $error,
         child_turn_id = $childTurnId,
         input_tokens = $inputTokens, output_tokens = $outputTokens,
         cache_read_tokens = $cacheReadTokens, cache_write_tokens = $cacheWriteTokens,

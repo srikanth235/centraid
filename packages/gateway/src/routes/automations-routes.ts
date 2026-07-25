@@ -13,11 +13,12 @@
 //
 //   GET  /centraid/_automations                       list → {rows, errors}
 //   GET  /centraid/_automations/read?ref=             one automation → {row}
-//   POST /centraid/_automations/run-now?ref=          fire now → {runId}
-//   GET  /centraid/_automations/runs?ref=&limit=      run feed → {runs}
-//   GET  /centraid/_automations/run?runId=            one run → {run}
-//   GET  /centraid/_automations/run/nodes?runId=      node timeline → {nodes}
-//   POST /centraid/_automations/run/pin?runId=        body {pinned} → {ok}
+//   POST /centraid/_automations/run-now?ref=          fire now → {turnId}
+//   GET  /centraid/_automations/turns?ref=&limit=     turn feed → {turns}
+//   GET  /centraid/_automations/turn?turnId=          one turn → {turn}
+//   POST /centraid/_automations/turn?ref=             interactive turn → TurnStreamEvent SSE
+//   GET  /centraid/_automations/turn/items?turnId=    item timeline → {items}
+//   POST /centraid/_automations/turn/pin?turnId=      body {pinned} → {ok}
 //   GET  /centraid/_insights/summary?windowDays=      insights payload
 //
 // Code (manifests) resolves from the git-store materialized `main`
@@ -40,9 +41,8 @@ import {
   type Turn,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
-  type RunKind,
-  type RunStreamEvent,
-  type RunSummary,
+  type AutomationTurnStreamEvent,
+  type TurnStreamEvent,
 } from '@centraid/app-engine';
 import * as automation from '@centraid/automation';
 import type { WorktreeStore } from '../worktree-store/index.js';
@@ -50,7 +50,7 @@ import { readJson, sendError, sendJson } from './route-helpers.js';
 import { SseSubscriberCap } from './sse-cap.js';
 
 /**
- * The production subscriber cap for `/centraid/_automations/run/events` —
+ * The production subscriber cap for `/centraid/_automations/turn/events` —
  * one gateway process serves one of these (`buildGateway` calls
  * `makeAutomationsRouteHandler` with no override), so this instance's live
  * count IS the real count (issue #351).
@@ -58,7 +58,7 @@ import { SseSubscriberCap } from './sse-cap.js';
 const defaultSubscriberCap = new SseSubscriberCap();
 
 /** Live subscriber count on the automation run-events SSE stream. */
-export function runEventsSubscriberCount(): number {
+export function turnEventsSubscriberCount(): number {
   return defaultSubscriberCap.current();
 }
 
@@ -74,18 +74,30 @@ export interface AutomationsRouteOptions {
   /**
    * Fire an automation now (fire-and-forget). Injected so `serve()` wires
    * `runAutomation` with the gateway's dirs + runner, and tests can
-   * stub it. The runId is minted by the route and passed in.
+   * stub it. The turnId is minted by the route and passed in.
    */
-  runAutomation: (input: { automationRef: string; runId: string }) => void;
+  runAutomation: (input: { automationRef: string; turnId: string }) => void;
   /**
-   * Subscribe to a run's live `RunStreamEvent`s (issue #158). Wired to the
-   * gateway's `RunEventBus`. Returns an unsubscribe. Omitted in hosts that
+   * Subscribe to a turn's live native events. Wired to the gateway event bus.
+   * Returns an unsubscribe. Omitted in hosts that
    * don't stream — the SSE endpoint then replays the ledger and closes.
    */
-  subscribeRunEvents?: (
-    runId: string,
-    listener: (ev: RunStreamEvent, serialized: string) => void,
+  subscribeTurnEvents?: (
+    turnId: string,
+    listener: (ev: AutomationTurnStreamEvent, serialized: string) => void,
   ) => () => void;
+  /**
+   * Drive a real interactive automation turn. The route owns the standard
+   * `TurnStreamEvent` SSE transport; the injected lifecycle owns ledger,
+   * scoped runner dispatch, and automation-bus fanout.
+   */
+  runInteractiveTurn?: (input: {
+    row: automation.Row;
+    turnId: string;
+    message: string;
+    abortSignal: AbortSignal;
+    onEvent: (event: TurnStreamEvent) => void;
+  }) => Promise<void>;
   /** Overridable for tests; production callers take the shared default. */
   subscriberCap?: SseSubscriberCap;
 }
@@ -100,169 +112,57 @@ function safeParseJson(json: string): unknown {
 }
 
 /**
- * The run-record JSON the desktop's run feed / detail consumes
- * (`CentraidAutomationRunRecord`). Under issue #190 the spine is
- * conversation/turn/item; `kind` / `automationId` (the ref) source from the
- * owning conversation (via the run summary), `inputJson` from the turn's
- * `message_in` item — so this wire shape stays stable for the renderer.
+ * Native automation turn JSON enriched with its stable conversation identity.
  */
-interface RunRecordJson {
-  runId: string;
-  kind: RunKind;
+interface AutomationTurnJson extends Turn {
   automationId?: string;
   /** The automation's last-known display name — see `RunSummary.automationName`. */
   automationName?: string;
-  triggerKind: AutomationTriggerKind;
-  triggerOrigin?: AutomationTriggerOrigin;
-  parentRunId?: string;
-  inputJson?: string;
-  startedAt: number;
-  endedAt?: number;
-  ok: boolean;
-  error?: string;
-  summary?: string;
-  outputJson?: string;
-  pinned: boolean;
-  totalInputTokens?: number;
-  totalOutputTokens?: number;
-  totalCacheReadTokens?: number;
-  totalCacheWriteTokens?: number;
-  totalCostUsd?: number;
-  stepCount?: number;
-  toolCount?: number;
 }
 
 /**
- * Reconstruct a durable ledger item as live-stream events for SSE replay: a
- * `node.start`, plus a `node.end` when the item has finished (in-flight items
+ * Reconstruct a durable ledger item as live-stream events for SSE replay: an
+ * `item.start`, plus an `item.end` when the item has finished (in-flight items
  * — `endedAt` NULL — replay as start-only and finish live off the bus). The
  * inbound `message_in` item is not a trace node and is filtered by the caller.
  */
-function replayNodeEvents(item: Item): RunStreamEvent[] {
-  const start: RunStreamEvent = {
-    type: 'node.start',
+function replayItemEvents(item: Item): AutomationTurnStreamEvent[] {
+  const start: AutomationTurnStreamEvent = {
+    type: 'item.start',
+    itemId: item.itemId,
     ordinal: item.ordinal,
+    ...(item.callId !== undefined ? { callId: item.callId } : {}),
     ...(item.batchId !== undefined ? { batchId: item.batchId } : {}),
     kind: item.kind,
     ...(item.name !== undefined ? { name: item.name } : {}),
     ...(item.argsJson !== undefined ? { args: safeParseJson(item.argsJson) } : {}),
+    ...(item.rawJson !== undefined ? { rawJson: item.rawJson } : {}),
   };
   if (item.endedAt === undefined) return [start];
-  const end: RunStreamEvent = {
-    type: 'node.end',
+  const end: AutomationTurnStreamEvent = {
+    type: 'item.end',
+    itemId: item.itemId,
     ordinal: item.ordinal,
+    ...(item.callId !== undefined ? { callId: item.callId } : {}),
     ok: item.ok,
     ...(item.outputJson !== undefined ? { result: safeParseJson(item.outputJson) } : {}),
     ...(item.error !== undefined ? { error: item.error } : {}),
     durationMs: item.durationMs ?? 0,
+    ...(item.rawJson !== undefined ? { rawJson: item.rawJson } : {}),
   };
   return [start, end];
 }
 
-/** Map a central run summary into the run-feed record shape. */
-function summaryToRunRow(s: RunSummary): RunRecordJson {
-  return {
-    runId: s.runId,
-    kind: s.kind,
-    ...(s.automationRef !== undefined ? { automationId: s.automationRef } : {}),
-    ...(s.automationName !== undefined ? { automationName: s.automationName } : {}),
-    triggerKind: s.trigger as AutomationTriggerKind,
-    ...(s.triggerOrigin !== undefined
-      ? { triggerOrigin: s.triggerOrigin as AutomationTriggerOrigin }
-      : {}),
-    startedAt: s.startedAt,
-    ...(s.endedAt !== undefined ? { endedAt: s.endedAt } : {}),
-    ok: s.ok,
-    ...(s.error !== undefined ? { error: s.error } : {}),
-    ...(s.summary !== undefined ? { summary: s.summary } : {}),
-    pinned: s.pinned ?? false,
-    ...(s.totalInputTokens !== undefined ? { totalInputTokens: s.totalInputTokens } : {}),
-    ...(s.totalOutputTokens !== undefined ? { totalOutputTokens: s.totalOutputTokens } : {}),
-    ...(s.totalCacheReadTokens !== undefined
-      ? { totalCacheReadTokens: s.totalCacheReadTokens }
-      : {}),
-    ...(s.totalCacheWriteTokens !== undefined
-      ? { totalCacheWriteTokens: s.totalCacheWriteTokens }
-      : {}),
-    ...(s.totalCostUsd !== undefined ? { totalCostUsd: s.totalCostUsd } : {}),
-    ...(s.stepCount !== undefined ? { stepCount: s.stepCount } : {}),
-    ...(s.toolCount !== undefined ? { toolCount: s.toolCount } : {}),
-  };
-}
-
-/**
- * The single-run detail record: the `turns` row enriched with `kind` /
- * `automationId` from the run summary and `inputJson` from the turn's
- * `message_in` item — the stable wire shape the renderer's run viewer reads.
- */
-function turnToRunRecord(
+/** Enrich the native row with its automation conversation identity. */
+function turnToAutomationTurn(
   turn: Turn,
-  summary: RunSummary | undefined,
-  inputJson: string | undefined,
   automationRef: string | undefined,
   conversationTitle: string | undefined,
-): RunRecordJson {
-  // Prefer the analytics summary's ref; fall back to the owning long-lived
-  // automation conversation's `automation_id`.
-  const ref = summary?.automationRef ?? automationRef;
-  // Same fallback for the display name: the analytics view only covers
-  // finished runs, so an in-flight run's name comes straight off its own
-  // long-lived automation conversation's `title`.
-  const name = summary?.automationName ?? (conversationTitle || undefined);
+): AutomationTurnJson {
   return {
-    runId: turn.turnId,
-    kind: summary?.kind ?? 'automation',
-    ...(ref !== undefined ? { automationId: ref } : {}),
-    ...(name !== undefined ? { automationName: name } : {}),
-    triggerKind: turn.triggerKind,
-    ...(turn.triggerOrigin !== undefined ? { triggerOrigin: turn.triggerOrigin } : {}),
-    ...(turn.parentTurnId !== undefined ? { parentRunId: turn.parentTurnId } : {}),
-    ...(inputJson !== undefined ? { inputJson } : {}),
-    startedAt: turn.startedAt,
-    ...(turn.endedAt !== undefined ? { endedAt: turn.endedAt } : {}),
-    ok: turn.ok,
-    ...(turn.error !== undefined ? { error: turn.error } : {}),
-    ...(turn.summary !== undefined ? { summary: turn.summary } : {}),
-    ...(turn.outputJson !== undefined ? { outputJson: turn.outputJson } : {}),
-    pinned: turn.pinned,
-    ...(turn.totalInputTokens !== undefined ? { totalInputTokens: turn.totalInputTokens } : {}),
-    ...(turn.totalOutputTokens !== undefined ? { totalOutputTokens: turn.totalOutputTokens } : {}),
-    ...(turn.totalCacheReadTokens !== undefined
-      ? { totalCacheReadTokens: turn.totalCacheReadTokens }
-      : {}),
-    ...(turn.totalCacheWriteTokens !== undefined
-      ? { totalCacheWriteTokens: turn.totalCacheWriteTokens }
-      : {}),
-    ...(turn.totalCostUsd !== undefined ? { totalCostUsd: turn.totalCostUsd } : {}),
-    ...(turn.stepCount !== undefined ? { stepCount: turn.stepCount } : {}),
-    ...(turn.toolCount !== undefined ? { toolCount: turn.toolCount } : {}),
-  };
-}
-
-/** Map an `items` row into the legacy run-node wire shape the renderer reads. */
-function itemToNode(item: Item): Record<string, unknown> {
-  return {
-    nodeId: item.itemId,
-    runId: item.turnId,
-    ordinal: item.ordinal,
-    ...(item.batchId !== undefined ? { batchId: item.batchId } : {}),
-    kind: item.kind,
-    ...(item.name !== undefined ? { name: item.name } : {}),
-    ...(item.argsJson !== undefined ? { argsJson: item.argsJson } : {}),
-    ...(item.outputJson !== undefined ? { outputJson: item.outputJson } : {}),
-    ok: item.ok,
-    ...(item.error !== undefined ? { error: item.error } : {}),
-    startedAt: item.startedAt,
-    ...(item.endedAt !== undefined ? { endedAt: item.endedAt } : {}),
-    ...(item.durationMs !== undefined ? { durationMs: item.durationMs } : {}),
-    ...(item.inputTokens !== undefined ? { inputTokens: item.inputTokens } : {}),
-    ...(item.outputTokens !== undefined ? { outputTokens: item.outputTokens } : {}),
-    ...(item.cacheReadTokens !== undefined ? { cacheReadTokens: item.cacheReadTokens } : {}),
-    ...(item.cacheWriteTokens !== undefined ? { cacheWriteTokens: item.cacheWriteTokens } : {}),
-    ...(item.model !== undefined ? { model: item.model } : {}),
-    ...(item.provider !== undefined ? { provider: item.provider } : {}),
-    ...(item.costUsd !== undefined ? { costUsd: item.costUsd } : {}),
-    ...(item.childTurnId !== undefined ? { childRunId: item.childTurnId } : {}),
+    ...turn,
+    ...(automationRef !== undefined ? { automationId: automationRef } : {}),
+    ...(conversationTitle ? { automationName: conversationTitle } : {}),
   };
 }
 
@@ -280,16 +180,16 @@ export function makeAutomationsRouteHandler(
   // Run-ledger store — every run's full ledger is the vault's single
   // `journal.db` (#280), so run-id → file resolution is gone. A ledger
   // file that doesn't exist yet just means no run ever landed here.
-  const runsStore = new ConversationStore(makeJournalDbProvider(opts.journalDbFile));
-  const runsStoreForRunId = (_runId: string): ConversationStore | undefined => {
+  const turnsStore = new ConversationStore(makeJournalDbProvider(opts.journalDbFile));
+  const turnsStoreForTurnId = (_turnId: string): ConversationStore | undefined => {
     if (!existsSync(opts.journalDbFile)) return undefined;
-    return runsStore;
+    return turnsStore;
   };
 
   // SSE: stream one run end-to-end (issue #158, ledger-tail hybrid). Subscribe
   // to the bus first (so events during replay aren't lost), replay the durable
-  // ledger snapshot, then drain buffered + live events until `run.end`.
-  const streamRunEvents = (req: IncomingMessage, res: ServerResponse, runId: string): boolean => {
+  // ledger snapshot, then drain buffered + live events until `turn.end`.
+  const streamTurnEvents = (req: IncomingMessage, res: ServerResponse, turnId: string): boolean => {
     const releaseSlot = subscriberCap.admit(res);
     if (!releaseSlot) return true; // 503 + Retry-After already written
 
@@ -299,7 +199,7 @@ export function makeAutomationsRouteHandler(
       Connection: 'keep-alive',
       'X-Accel-Buffering': 'no',
     });
-    res.write(`: run ${runId}\n\n`);
+    res.write(`: turn ${turnId}\n\n`);
     const heartbeat = setInterval(() => {
       if (!res.writableEnded) res.write(`: ping\n\n`);
     }, 30_000);
@@ -318,7 +218,7 @@ export function makeAutomationsRouteHandler(
     req.on('close', cleanup);
     res.on('error', cleanup);
 
-    const write = (ev: RunStreamEvent, serialized = JSON.stringify(ev)): void => {
+    const write = (ev: AutomationTurnStreamEvent, serialized = JSON.stringify(ev)): void => {
       if (res.writableEnded) return;
       res.write(`event: ${ev.type}\n`);
       res.write(`data: ${serialized}\n\n`);
@@ -327,46 +227,47 @@ export function makeAutomationsRouteHandler(
     // Buffer live events that land during replay; drain once the snapshot is
     // written. The client dedupes by ordinal, so a replay/live overlap on the
     // same node is harmless.
-    const queue: Array<readonly [RunStreamEvent, string]> = [];
+    const queue: Array<readonly [AutomationTurnStreamEvent, string]> = [];
     let replayed = false;
     const drain = (): void => {
       while (queue.length > 0) {
         const [ev, serialized] = queue.shift()!;
         write(ev, serialized);
-        if (ev.type === 'run.end') {
+        if (ev.type === 'turn.end') {
           cleanup();
           return;
         }
       }
     };
     unsub =
-      opts.subscribeRunEvents?.(runId, (ev, serialized) => {
+      opts.subscribeTurnEvents?.(turnId, (ev, serialized) => {
         queue.push([ev, serialized]);
         if (replayed) drain();
       }) ?? ((): void => undefined);
 
-    const store = runsStoreForRunId(runId);
-    const run = store?.getTurn(runId);
-    write({ type: 'run.start', runId });
-    const items = store ? store.listItems(runId) : [];
+    const store = turnsStoreForTurnId(turnId);
+    const turn = store?.getTurn(turnId);
+    write({ type: 'turn.start', turnId });
+    const items = store ? store.listItems(turnId) : [];
     for (const item of items) {
       if (item.kind === 'message_in') continue;
-      for (const ev of replayNodeEvents(item)) write(ev);
+      for (const ev of replayItemEvents(item)) write(ev);
     }
 
     // Run already finished (background fire / late join) — emit terminal + close.
-    if (run && run.endedAt !== undefined) {
+    if (turn && turn.endedAt !== undefined) {
       write({
-        type: 'run.end',
-        ok: run.ok,
-        ...(run.error !== undefined ? { error: run.error } : {}),
+        type: 'turn.end',
+        turnId,
+        ok: turn.ok,
+        ...(turn.error !== undefined ? { error: turn.error } : {}),
       });
       cleanup();
       return true;
     }
     // No live transport wired and the run is still open: replay-only, then
     // close so the client can fall back to polling rather than hang.
-    if (!opts.subscribeRunEvents) {
+    if (!opts.subscribeTurnEvents) {
       cleanup();
       return true;
     }
@@ -434,90 +335,158 @@ export function makeAutomationsRouteHandler(
         if (!automation.parseRef(ref)) {
           return sendJson(res, 400, { error: 'bad_request', message: 'run-now needs ?ref=' });
         }
-        const runId = `${ref}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
-        opts.runAutomation({ automationRef: ref, runId });
-        return sendJson(res, 202, { runId });
+        const turnId = `${ref}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
+        opts.runAutomation({ automationRef: ref, turnId });
+        return sendJson(res, 202, { turnId });
       }
 
-      if (sub === 'runs' && method === 'GET') {
+      if (sub === 'turns' && method === 'GET') {
         const ref = url.searchParams.get('ref');
         const limit = Number(url.searchParams.get('limit'));
-        const summaries = opts.analytics.listSummaries({
-          ...(ref ? { automationRef: ref } : {}),
-          limit: Number.isFinite(limit) && limit > 0 ? limit : 50,
+        const boundedLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 250) : 50;
+        if (!existsSync(opts.journalDbFile)) return sendJson(res, 200, { turns: [] });
+        const rows = ref
+          ? turnsStore.listAutomationTurns(ref, { limit: boundedLimit })
+          : (() => {
+              const finished = opts.analytics
+                .listSummaries({ limit: boundedLimit })
+                .filter((summary) => summary.kind === 'automation')
+                .map((summary) => turnsStore.getTurn(summary.runId))
+                .filter((turn): turn is Turn => turn !== undefined);
+              const seen = new Set(finished.map((turn) => turn.turnId));
+              return [
+                ...turnsStore
+                  .listInFlightAutomationTurns(boundedLimit)
+                  .filter((turn) => !seen.has(turn.turnId)),
+                ...finished,
+              ]
+                .sort((a, b) => b.startedAt - a.startedAt)
+                .slice(0, boundedLimit);
+            })();
+        const turns = rows.map((turn) => {
+          const conversation = turnsStore.getConversation(turn.conversationId);
+          return turnToAutomationTurn(turn, conversation?.automationId, conversation?.title);
         });
-        const finished = summaries.filter((s) => s.kind === 'automation').map(summaryToRunRow);
-        // The `run_summary` view only covers FINISHED turns (`ended_at IS NOT
-        // NULL`), so a fire that is still executing is invisible to it. The
-        // thread and fleet surfaces both need in-flight turns; otherwise a
-        // compile or long fire disappears until completion.
-        {
-          const seen = new Set(finished.map((r) => r.runId));
-          const candidates = ref
-            ? runsStore.listAutomationTurns(ref, { limit: 10 })
-            : runsStore.listInFlightAutomationTurns(50);
-          const live = candidates
-            .filter((t) => t.endedAt === undefined && !seen.has(t.turnId))
-            .map((t) => {
-              const conversation = runsStore.getConversation(t.conversationId);
-              return turnToRunRecord(
-                t,
-                undefined,
-                runsStore.messageInText(t.turnId),
-                conversation?.automationId,
-                conversation?.title,
-              );
-            });
-          return sendJson(res, 200, {
-            runs: [...live, ...finished]
-              .sort((a, b) => b.startedAt - a.startedAt)
-              .slice(0, Number.isFinite(limit) && limit > 0 ? limit : 50),
+        return sendJson(res, 200, { turns });
+      }
+
+      if (sub === 'turn' && method === 'GET') {
+        const requestedTurnId = url.searchParams.get('turnId') ?? '';
+        const ref = url.searchParams.get('ref') ?? '';
+        const store = turnsStoreForTurnId(requestedTurnId);
+        const turn =
+          store?.getTurn(requestedTurnId) ??
+          (ref ? store?.listAutomationTurns(ref, { limit: 1 })[0] : undefined);
+        if (!store || !turn) return sendJson(res, 200, { turn: null });
+        const conversation = store.getConversation(turn.conversationId);
+        const record = turnToAutomationTurn(turn, conversation?.automationId, conversation?.title);
+        return sendJson(res, 200, {
+          turn: record,
+          ...(url.searchParams.get('expand') === 'items'
+            ? { items: store.listItems(turn.turnId) }
+            : {}),
+        });
+      }
+
+      if (sub === 'turn' && method === 'POST') {
+        const parsed = automation.parseRef(url.searchParams.get('ref') ?? '');
+        if (!parsed) {
+          return sendJson(res, 400, {
+            error: 'bad_request',
+            message: 'turn needs ?ref=',
           });
         }
-      }
-
-      if (sub === 'run' && method === 'GET') {
-        const runId = url.searchParams.get('runId') ?? '';
-        const store = runsStoreForRunId(runId);
-        const turn = store?.getTurn(runId);
-        if (!store || !turn) return sendJson(res, 200, { run: null });
-        const conversation = store.getConversation(turn.conversationId);
-        const record = turnToRunRecord(
-          turn,
-          opts.analytics.getSummary(runId),
-          store.messageInText(runId),
-          conversation?.automationId,
-          conversation?.title,
-        );
-        return sendJson(res, 200, { run: record });
-      }
-
-      if (sub === 'run/nodes' && method === 'GET') {
-        const runId = url.searchParams.get('runId') ?? '';
-        const store = runsStoreForRunId(runId);
-        const nodes = store
-          ? store
-              .listItems(runId)
-              .filter((i) => i.kind !== 'message_in')
-              .map(itemToNode)
-          : [];
-        return sendJson(res, 200, { nodes });
-      }
-
-      if (sub === 'run/events' && method === 'GET') {
-        const runId = url.searchParams.get('runId') ?? '';
-        if (!runId) {
-          return sendJson(res, 400, { error: 'bad_request', message: 'run/events needs ?runId=' });
+        if (!opts.runInteractiveTurn) {
+          return sendJson(res, 501, {
+            error: 'not_supported',
+            message: 'Interactive automation turns are not available on this gateway.',
+          });
         }
-        return streamRunEvents(req, res, runId);
+        const row = await automation.readAppOwned(codeAppsDir(), parsed.appId, parsed.automationId);
+        if (!row) {
+          return sendJson(res, 404, {
+            error: 'not_found',
+            message: `Automation "${parsed.appId}/${parsed.automationId}" was not found.`,
+          });
+        }
+        const body = await readJson(req);
+        const message = typeof body.message === 'string' ? body.message.trim() : '';
+        if (!message) {
+          return sendJson(res, 400, {
+            error: 'bad_request',
+            message: 'turn body needs a non-empty {message}',
+          });
+        }
+        const turnId = `${row.ref}:interactive:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
+        const abort = new AbortController();
+        const onClose = (): void => abort.abort();
+        req.on('close', onClose);
+        req.on('error', onClose);
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'Cache-Control': 'no-cache, no-transform',
+          Connection: 'keep-alive',
+          'X-Accel-Buffering': 'no',
+          'X-Centraid-Turn-Id': turnId,
+        });
+        res.write(`: automation ${row.ref} turn ${turnId}\n\n`);
+        const heartbeat = setInterval(() => {
+          if (!res.writableEnded) res.write(`: ping\n\n`);
+        }, 30_000);
+        heartbeat.unref?.();
+        const onEvent = (event: TurnStreamEvent): void => {
+          if (res.writableEnded) return;
+          res.write(`event: ${event.type}\n`);
+          res.write(`data: ${JSON.stringify(event)}\n\n`);
+        };
+        try {
+          await opts.runInteractiveTurn({
+            row,
+            turnId,
+            message,
+            abortSignal: abort.signal,
+            onEvent,
+          });
+        } catch (error) {
+          onEvent({
+            type: 'error',
+            message: error instanceof Error ? error.message : String(error),
+          });
+        } finally {
+          clearInterval(heartbeat);
+          req.off('close', onClose);
+          req.off('error', onClose);
+          if (!res.writableEnded) {
+            res.write('event: end\ndata: {}\n\n');
+            res.end();
+          }
+        }
+        return true;
       }
 
-      if (sub === 'run/pin' && method === 'POST') {
-        const runId = url.searchParams.get('runId') ?? '';
+      if (sub === 'turn/items' && method === 'GET') {
+        const turnId = url.searchParams.get('turnId') ?? '';
+        const store = turnsStoreForTurnId(turnId);
+        return sendJson(res, 200, { items: store?.listItems(turnId) ?? [] });
+      }
+
+      if (sub === 'turn/events' && method === 'GET') {
+        const turnId = url.searchParams.get('turnId') ?? '';
+        if (!turnId) {
+          return sendJson(res, 400, {
+            error: 'bad_request',
+            message: 'turn/events needs ?turnId=',
+          });
+        }
+        return streamTurnEvents(req, res, turnId);
+      }
+
+      if (sub === 'turn/pin' && method === 'POST') {
+        const turnId = url.searchParams.get('turnId') ?? '';
         const body = await readJson(req);
         const pinned = body.pinned === true;
         // turns.pinned is the source — the run_summary view reflects it.
-        runsStoreForRunId(runId)?.setTurnPinned(runId, pinned);
+        turnsStoreForTurnId(turnId)?.setTurnPinned(turnId, pinned);
         return sendJson(res, 200, { ok: true });
       }
 

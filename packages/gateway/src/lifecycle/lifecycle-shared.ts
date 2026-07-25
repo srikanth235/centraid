@@ -52,6 +52,13 @@ export interface LifecycleRouteOptions {
     runId: string;
     enableOnSuccess: boolean;
   }) => void;
+  /** Rewrite standing instructions, publish them, then enter the same compile seam. */
+  reviseAutomation?: (input: {
+    row: automation.Row;
+    steering: string;
+    revisionTurnId: string;
+    compileTurnId: string;
+  }) => void;
   /**
    * True when `id` is a bundled blueprint app id (issue #434). Bundled ids are
    * RESERVED — scaffold/clone reject or avoid them so a code-store app can

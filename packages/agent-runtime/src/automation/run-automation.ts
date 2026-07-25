@@ -21,7 +21,7 @@
 import {
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
-  type RunStreamEvent,
+  type AutomationTurnStreamEvent,
   type VaultBridge,
 } from '@centraid/app-engine';
 import * as automation from '@centraid/automation';
@@ -73,7 +73,7 @@ export interface RunAutomationOptions {
   /** Optional logger. */
   onLog?: (level: 'info' | 'warn' | 'error', msg: string) => void;
   /** Live run-stream sink (issue #158); forwarded to the fire spine. */
-  onRunEvent?: (ev: RunStreamEvent) => void;
+  onRunEvent?: (ev: AutomationTurnStreamEvent) => void;
   /**
    * Trigger that caused this fire. Defaults to `'scheduled'`. The onFailure
    * dispatch loop uses `'on_failure'`.

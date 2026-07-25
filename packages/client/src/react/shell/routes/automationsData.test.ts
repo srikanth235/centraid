@@ -6,14 +6,14 @@ import {
   triggerOriginLabel,
   type AutomationFeedEntry,
 } from './automationsData.js';
-import { listAutomationRuns, listAutomations } from '../../../gateway-client.js';
+import { listAutomationTurns, listAutomations } from '../../../gateway-client.js';
 
 // buildOverviewData is pure; stub the gateway module so importing it doesn't
 // run gateway-client-core's load-time window.CentraidApi side-effect. `vi.mock`
 // is hoisted above these imports by vitest, so the stub is in place first.
 vi.mock('../../../gateway-client.js', () => ({
   listAutomations: vi.fn(),
-  listAutomationRuns: vi.fn(),
+  listAutomationTurns: vi.fn(),
 }));
 
 const row = (over: Partial<CentraidAutomationRow> = {}): CentraidAutomationRow =>
@@ -41,7 +41,7 @@ const entry = (over: Partial<AutomationFeedEntry['run']> = {}): AutomationFeedEn
     totalInputTokens: 10,
     totalOutputTokens: 5,
     ...over,
-  } as unknown as CentraidAutomationRunRecord,
+  } as unknown as CentraidAutomationTurnRecord,
 });
 
 describe('buildOverviewData', () => {
@@ -287,16 +287,16 @@ describe('deriveAutomationHero', () => {
 describe('collectAutomationRuns', () => {
   it('prefers the live automation name over the run-recorded name over the raw ref', async () => {
     vi.mocked(listAutomations).mockResolvedValue([row()] as unknown as CentraidAutomationRow[]);
-    vi.mocked(listAutomationRuns).mockResolvedValue([
+    vi.mocked(listAutomationTurns).mockResolvedValue([
       entry({ automationId: 'digest/main' }).run,
-    ] as unknown as CentraidAutomationRunRecord[]);
+    ] as unknown as CentraidAutomationTurnRecord[]);
     const entries = await collectAutomationRuns();
     expect(entries[0]?.automationName).toBe('Daily Digest');
   });
 
   it('falls back to the run-recorded name when the automation was deleted', async () => {
     vi.mocked(listAutomations).mockResolvedValue([] as unknown as CentraidAutomationRow[]);
-    vi.mocked(listAutomationRuns).mockResolvedValue([
+    vi.mocked(listAutomationTurns).mockResolvedValue([
       {
         runId: 'r1',
         automationId: 'gone-app/gone-auto',
@@ -305,14 +305,14 @@ describe('collectAutomationRuns', () => {
         ok: true,
         triggerKind: 'cron',
       },
-    ] as unknown as CentraidAutomationRunRecord[]);
+    ] as unknown as CentraidAutomationTurnRecord[]);
     const entries = await collectAutomationRuns();
     expect(entries[0]?.automationName).toBe('Gone Automation');
   });
 
   it('falls back to the raw ref when neither the automation nor a recorded name exists', async () => {
     vi.mocked(listAutomations).mockResolvedValue([] as unknown as CentraidAutomationRow[]);
-    vi.mocked(listAutomationRuns).mockResolvedValue([
+    vi.mocked(listAutomationTurns).mockResolvedValue([
       {
         runId: 'r1',
         automationId: 'gone-app/gone-auto',
@@ -320,7 +320,7 @@ describe('collectAutomationRuns', () => {
         ok: true,
         triggerKind: 'cron',
       },
-    ] as unknown as CentraidAutomationRunRecord[]);
+    ] as unknown as CentraidAutomationTurnRecord[]);
     const entries = await collectAutomationRuns();
     expect(entries[0]?.automationName).toBe('gone-app/gone-auto');
   });

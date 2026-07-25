@@ -1,7 +1,7 @@
 import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * SSE streaming for automation runs (issue #158): the
- * `GET /centraid/_automations/run/events?runId=` endpoint. Drives
+ * `GET /centraid/_automations/turn/events?turnId=` endpoint. Drives
  * `makeAutomationsRouteHandler` with a mock streaming req/res, a real
  * per-app run ledger over a tempdir, and a `RunEventBus` for the live path.
  */
@@ -16,7 +16,7 @@ import {
   AnalyticsStore,
   InsightsStore,
   makeJournalDbProvider,
-  type RunStreamEvent,
+  type AutomationTurnStreamEvent,
 } from '@centraid/app-engine';
 import { WorktreeStore } from '../worktree-store/index.js';
 import { makeAutomationsRouteHandler } from '../routes/automations-routes.ts';
@@ -53,7 +53,7 @@ beforeEach(async () => {
     analytics,
     insights: new InsightsStore(provider),
     runAutomation: () => undefined,
-    subscribeRunEvents: (runId, listener) => bus.subscribe(runId, listener),
+    subscribeTurnEvents: (turnId, listener) => bus.subscribe(turnId, listener),
   });
 });
 
@@ -64,7 +64,7 @@ afterEach(async () => {
 interface SseClient {
   req: IncomingMessage;
   res: ServerResponse;
-  events: () => RunStreamEvent[];
+  events: () => AutomationTurnStreamEvent[];
   ended: () => boolean;
 }
 
@@ -108,7 +108,7 @@ function sseClient(url: string): SseClient {
         .split('\n\n')
         .map((frame) => frame.split('\n').find((l) => l.startsWith('data: ')))
         .filter((l): l is string => l !== undefined)
-        .map((l) => JSON.parse(l.slice('data: '.length)) as RunStreamEvent),
+        .map((l) => JSON.parse(l.slice('data: '.length)) as AutomationTurnStreamEvent),
   };
 }
 
@@ -133,21 +133,21 @@ test('replays a finished run from the ledger then closes', async () => {
   });
   store.finishTurn({ turnId: runId, endedAt: 6, ok: true, summary: 'done' });
 
-  const c = sseClient(`/centraid/_automations/run/events?runId=${encodeURIComponent(runId)}`);
+  const c = sseClient(`/centraid/_automations/turn/events?turnId=${encodeURIComponent(runId)}`);
   const owned = await handler(c.req, c.res);
 
   expect(owned).toBe(true);
   expect(c.res.statusCode).toBe(200);
   expect(c.ended()).toBe(true);
   const evs = c.events();
-  expect(evs.map((e) => e.type)).toEqual(['run.start', 'node.start', 'node.end', 'run.end']);
-  const end = evs[3] as Extract<RunStreamEvent, { type: 'run.end' }>;
+  expect(evs.map((e) => e.type)).toEqual(['turn.start', 'item.start', 'item.end', 'turn.end']);
+  const end = evs[3] as Extract<AutomationTurnStreamEvent, { type: 'turn.end' }>;
   expect(end.ok).toBe(true);
   // No live subscriber should linger for a closed run.
   expect(bus.subscriberCount(runId)).toBe(0);
 });
 
-test('joins an in-flight run: replays the open node, then streams live to run.end', async () => {
+test('joins an in-flight run: replays the open node, then streams live to turn.end', async () => {
   const runId = `${APP}/watch:${Date.now()}:beef0000`;
   const store = ledger();
   seedTurn(store, `${APP}/watch`, runId, 1);
@@ -161,51 +161,68 @@ test('joins an in-flight run: replays the open node, then streams live to run.en
     startedAt: 2,
   });
 
-  const c = sseClient(`/centraid/_automations/run/events?runId=${encodeURIComponent(runId)}`);
+  const c = sseClient(`/centraid/_automations/turn/events?turnId=${encodeURIComponent(runId)}`);
   await handler(c.req, c.res);
 
-  // Replay: run.start + the open node's start (no end yet). Still live.
-  expect(c.events().map((e) => e.type)).toEqual(['run.start', 'node.start']);
+  // Replay: turn.start + the open node's start (no end yet). Still live.
+  expect(c.events().map((e) => e.type)).toEqual(['turn.start', 'item.start']);
   expect(c.ended()).toBe(false);
   expect(bus.subscriberCount(runId)).toBe(1);
 
   // The fire finishes the node and the run — delivered live off the bus.
-  bus.publish(runId, { type: 'node.end', ordinal: 0, ok: true, result: 'hi', durationMs: 40 });
-  bus.publish(runId, { type: 'run.end', ok: true });
+  bus.publish(runId, {
+    type: 'item.end',
+    itemId: 'n0',
+    ordinal: 0,
+    ok: true,
+    result: 'hi',
+    durationMs: 40,
+  });
+  bus.publish(runId, { type: 'turn.end', turnId: runId, ok: true });
 
-  expect(c.events().map((e) => e.type)).toEqual(['run.start', 'node.start', 'node.end', 'run.end']);
+  expect(c.events().map((e) => e.type)).toEqual([
+    'turn.start',
+    'item.start',
+    'item.end',
+    'turn.end',
+  ]);
   expect(c.ended()).toBe(true);
   expect(bus.subscriberCount(runId)).toBe(0);
 });
 
-test('a fire that fails before the ledger opens still closes via a bus run.end', async () => {
+test('a fire that fails before the ledger opens still closes via a bus turn.end', async () => {
   // No insertRun: `fireAutomation` threw before the handler runner opened the
   // ledger (bad ref / automation gone / dispatch setup failure). `run-now`
   // already handed the caller this runId and the viewer subscribed, so without
   // a terminal event the stream would hang. build-gateway's catch publishes a
-  // synthetic run.end — this proves the SSE side honors it and closes.
+  // synthetic turn.end — this proves the SSE side honors it and closes.
   const runId = `${APP}/broken:${Date.now()}:dead0000`;
-  const c = sseClient(`/centraid/_automations/run/events?runId=${encodeURIComponent(runId)}`);
+  const c = sseClient(`/centraid/_automations/turn/events?turnId=${encodeURIComponent(runId)}`);
   await handler(c.req, c.res);
 
-  // Synthetic run.start written, no ledger nodes, still live on the bus.
-  expect(c.events().map((e) => e.type)).toEqual(['run.start']);
+  // Synthetic turn.start written, no ledger nodes, still live on the bus.
+  expect(c.events().map((e) => e.type)).toEqual(['turn.start']);
   expect(c.ended()).toBe(false);
   expect(bus.subscriberCount(runId)).toBe(1);
 
-  bus.publish(runId, { type: 'run.end', ok: false, error: 'automation not found' });
+  bus.publish(runId, {
+    type: 'turn.end',
+    turnId: runId,
+    ok: false,
+    error: 'automation not found',
+  });
 
   const evs = c.events();
-  expect(evs.map((e) => e.type)).toEqual(['run.start', 'run.end']);
-  const end = evs[1] as Extract<RunStreamEvent, { type: 'run.end' }>;
+  expect(evs.map((e) => e.type)).toEqual(['turn.start', 'turn.end']);
+  const end = evs[1] as Extract<AutomationTurnStreamEvent, { type: 'turn.end' }>;
   expect(end.ok).toBe(false);
   expect(end.error).toBe('automation not found');
   expect(c.ended()).toBe(true);
   expect(bus.subscriberCount(runId)).toBe(0);
 });
 
-test('run/events without ?runId= is a 400', async () => {
-  const c = sseClient('/centraid/_automations/run/events');
+test('run/events without ?turnId= is a 400', async () => {
+  const c = sseClient('/centraid/_automations/turn/events');
   await handler(c.req, c.res);
   expect(c.res.statusCode).toBe(400);
 });

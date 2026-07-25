@@ -357,8 +357,8 @@ export default function AutomationEditorRoute({
           const ref = refIdRef.current;
           if (!ref) return false;
           try {
-            const { runId } = await runAutomationNow({ automationId: ref });
-            navigate({ automationId: ref, kind: 'run-view', runId });
+            const { turnId } = await runAutomationNow({ automationId: ref });
+            navigate({ automationId: ref, kind: 'run-view', runId: turnId });
             return true;
           } catch (err) {
             showToast(`Run failed: ${err instanceof Error ? err.message : String(err)}`);

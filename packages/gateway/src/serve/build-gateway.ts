@@ -40,6 +40,7 @@ import {
   COMPANION_GRANTS_HEADER,
   ConversationHistoryStore,
   ConversationStore,
+  Dispatcher,
   InsightsStore,
   PrefsStore,
   RUNNER_KINDS,
@@ -49,6 +50,7 @@ import {
   deriveTitle,
   generateConversationTitle,
   makeConversationRouteHandler,
+  makeConversationRunnerCore,
   makeJournalDbProvider,
   makeUserStoreRouteHandler,
   resolveSubsystemModel,
@@ -131,7 +133,7 @@ import { makeAppsStoreRouteHandler } from '../routes/apps-store-routes.js';
 import { makeDraftCodeDirResolver, type ExtBandOps } from '../lifecycle/ext-band.js';
 import {
   makeAutomationsRouteHandler,
-  runEventsSubscriberCount,
+  turnEventsSubscriberCount,
 } from '../routes/automations-routes.js';
 import { RunEventBus } from '../runs/run-event-bus.js';
 import { defaultLogger } from './default-logger.js';
@@ -140,12 +142,19 @@ import { buildDiagnosticsBundle } from './gateway-diagnostics.js';
 import { makeDiagnosticsRouteHandler } from '../routes/diagnostics-routes.js';
 import { makeBackupRouteHandler } from '../routes/backup-routes.js';
 import { makeLifecycleRouteHandler } from '../routes/lifecycle-routes.js';
-import { publishAndReconcile, type LifecycleRouteOptions } from '../lifecycle/lifecycle-shared.js';
+import {
+  prepareLifecycleSession,
+  publishAndReconcile,
+  stageAndMaybePublish,
+  type LifecycleRouteOptions,
+} from '../lifecycle/lifecycle-shared.js';
 import {
   finalizeCompiledManifest,
   runHeadlessAutomationCompile,
 } from '../lifecycle/headless-automation-compile.js';
 import { resolveAutomationAgentSelection } from '../lifecycle/automation-agent-selection.js';
+import { runInteractiveAutomationTurn } from '../lifecycle/interactive-automation-turn.js';
+import { rewriteAutomationInstructions } from '../lifecycle/rewrite-automation-instructions.js';
 import { makeUnifiedConversationRunner } from '../runs/unified-conversation-runner.js';
 import {
   assistantCwd,
@@ -1127,7 +1136,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // `connections` probe above. `rssBytes`/`uptimeMs` need no wiring (see
   // `HealthRegistry.snapshot`). `sseClients` sums three production SSE
   // surfaces' live subscriber counts — `logsEventsSubscriberCount` /
-  // `runEventsSubscriberCount` (issue #351's SSE subscriber-cap change,
+  // `turnEventsSubscriberCount` (issue #351's SSE subscriber-cap change,
   // `sse-cap.ts`), each backed by the SAME `SseSubscriberCap` instance
   // `makeLogsRouteHandler`/`makeAutomationsRouteHandler` admit through below,
   // plus `@centraid/app-engine`'s `changesSubscriberCount()` — the per-appId
@@ -1149,7 +1158,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     return {
       outboxPending,
       sseClients:
-        logsEventsSubscriberCount() + runEventsSubscriberCount() + changesSubscriberCount(),
+        logsEventsSubscriberCount() + turnEventsSubscriberCount() + changesSubscriberCount(),
       hardwareProfileClass: hardwareProfile.class,
       resourceMode: hardwareProfile.resourceMode,
       resourceProfile: toStructuredResourceProfile(hardwareProfile),
@@ -1411,6 +1420,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // In-process bus for live run streaming (issue #158): a fire publishes via
   // `onRunEvent`; the `run/events` SSE endpoint subscribes by runId.
   const runEventBus = new RunEventBus();
+  const automationConversationLocks = new Map<string, Promise<void>>();
 
   // The connection broker (issue #304): resolves a connector's broker-carried
   // credential (oauth2/api_key sealed on the connection row) per fire —
@@ -1572,7 +1582,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     })().catch((err) => {
       const message = err instanceof Error ? err.message : String(err);
       // Failed before the ledger opened: close off the bus or the viewer hangs.
-      runEventBus.publish(runId, { type: 'run.end', ok: false, error: message });
+      runEventBus.publish(runId, { type: 'turn.end', turnId: runId, ok: false, error: message });
       health.reportError('automation-runs', `${opts.triggerKind} ${automationRef}: ${message}`);
       logger.warn(`${opts.triggerKind} ${automationRef} failed: ` + message);
     });
@@ -1703,6 +1713,22 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
       // Test inject: finish headless compile without spawning a coding agent.
       // Either way the driver is wrapped for resource accounting (#528 Phase C).
+      runTurn: accountRunTurn(options.runTurn ?? runTurn),
+    });
+    // Interactive automation turns run in a scratch cwd (the route passes it
+    // as `dataDir`) and through an agent-plane dispatcher. This preserves the
+    // automation's enrolled `agent.agent` grant boundary while keeping native
+    // file tools away from the live automation source tree.
+    const automationDispatcher = new Dispatcher({
+      registry: () => requireRuntime().registry,
+      codeDirOverride: (appId) => store.resolveActiveAppDir(appId),
+      vaultFor: (appId) => vaultRegistry.agentBridgeFor(appId),
+    });
+    const automationConversationRunner = makeConversationRunnerCore({
+      prefsLoader,
+      subsystem: 'automations',
+      getDispatcher: () => automationDispatcher,
+      resolveCwd: (input) => input.dataDir,
       runTurn: accountRunTurn(options.runTurn ?? runTurn),
     });
     const lifecycleOpts: LifecycleRouteOptions = {
@@ -1841,6 +1867,72 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           });
         })();
       },
+      reviseAutomation: ({ row, steering, revisionTurnId, compileTurnId }) => {
+        void (async () => {
+          const parsed = automation.parseRef(row.ref);
+          if (!parsed) return;
+          const agent = await resolveAutomationAgent(row.manifest.requires);
+          const runnerPrefs = await prefsLoader('automations', agent.runner);
+          if (!runnerPrefs) throw new Error('No automation agent is configured.');
+          const configuredRewrite = prefs.getAllPrefs()[`model.${agent.runner}.rewrite`];
+          const catalog = resolveCatalogModels
+            ? await resolveCatalogModels(agent.runner, false)
+            : { list: [] };
+          const fastModel = catalog.list.find((model) => model.tier === 'fast')?.id;
+          const rewriteModel =
+            (typeof configuredRewrite === 'string' && configuredRewrite
+              ? configuredRewrite
+              : undefined) ??
+            fastModel ??
+            (agent.runner === 'claude-code' ? 'fast' : agent.model);
+          const suffix = revisionTurnId.split(':').at(-1) ?? crypto.randomUUID().slice(0, 8);
+          const sessionId = `revise-${parsed.appId}-${suffix}`;
+          await rewriteAutomationInstructions({
+            row,
+            steering,
+            revisionTurnId,
+            journalDbFile: workspace.journalDbFile,
+            runnerSessionDir: workspace.runnerSessionDir,
+            runTurn: accountRunTurn(options.runTurn ?? runTurn),
+            runnerPrefs,
+            ...(rewriteModel ? { model: rewriteModel } : {}),
+            persistPrompt: async (prompt) => {
+              await prepareLifecycleSession(store, sessionId, true);
+              const appDir = await store.snapshotSessionAppDir(sessionId, parsed.appId);
+              const manifestPath = path.join(
+                appDir,
+                'automations',
+                parsed.automationId,
+                automation.MANIFEST_FILE,
+              );
+              const existing = automation.parseManifest(await fs.readFile(manifestPath, 'utf8'));
+              const revised = automation.validateManifest({ ...existing, prompt });
+              await stageAndMaybePublish(lifecycleOpts, {
+                appId: parsed.appId,
+                sessionId,
+                files: [
+                  {
+                    path: `automations/${parsed.automationId}/${automation.MANIFEST_FILE}`,
+                    content: `${JSON.stringify(revised, null, 2)}\n`,
+                  },
+                ],
+                publish: true,
+                message: `revise ${parsed.automationId}`,
+                ephemeralSession: true,
+              });
+            },
+          });
+          lifecycleOpts.compileAutomation?.({
+            automationRef: row.ref,
+            runId: compileTurnId,
+            enableOnSuccess: false,
+          });
+        })().catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          health.reportError('automation-runs', `Revision failed for ${row.name}: ${message}`);
+          logger.warn?.(`Instruction revision failed for ${row.ref}: ${message}`);
+        });
+      },
     };
 
     const handlers: RouteHandler[] = [
@@ -1888,13 +1980,30 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         journalDbFile: workspace.journalDbFile,
         analytics: analyticsStore,
         insights: insightsStore,
-        runAutomation: ({ automationRef, runId }) =>
+        runAutomation: ({ automationRef, turnId }) =>
           fireAutomation(automationRef, {
-            runId,
+            runId: turnId,
             triggerKind: 'manual',
             triggerOrigin: 'manual',
           }),
-        subscribeRunEvents: (runId, listener) => runEventBus.subscribe(runId, listener),
+        subscribeTurnEvents: (turnId, listener) => runEventBus.subscribe(turnId, listener),
+        runInteractiveTurn: async ({ row, turnId, message, abortSignal, onEvent }) => {
+          const selected = await resolveAutomationAgent(row.manifest.requires);
+          await runInteractiveAutomationTurn({
+            row,
+            turnId,
+            message,
+            journalDbFile: workspace.journalDbFile,
+            runnerSessionDir: workspace.runnerSessionDir,
+            runner: automationConversationRunner,
+            runnerKind: selected.runner,
+            ...(selected.model ? { model: selected.model } : {}),
+            abortSignal,
+            conversationLocks: automationConversationLocks,
+            onEvent,
+            onTurnEvent: (event) => runEventBus.publish(turnId, event),
+          });
+        },
       }),
     ];
 
@@ -2201,7 +2310,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       health.reportError('automation-runs', `webhook ${automationRef}: ${message}`);
-      runEventBus.publish(runId, { type: 'run.end', ok: false, error: message });
+      runEventBus.publish(runId, { type: 'turn.end', turnId: runId, ok: false, error: message });
       return { ok: false, runId, error: message };
     }
   };
@@ -2479,6 +2588,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           tunnel: Boolean(options.dataPlaneControl),
           backupWal: options.backup?.enabled === true,
           assistOAuth: Boolean(options.assistOAuth),
+          automationTurns: true,
         },
       }),
     ),

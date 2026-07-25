@@ -239,7 +239,7 @@ test('update with no recognized fields is a 400', async () => {
   expect(json.error).toBe('bad_request');
 });
 
-test('headless compile returns a run id and records failure in the automation thread', async () => {
+test('headless compile returns a turn id and records failure in the automation thread', async () => {
   const created = await createAutomation('compile-ledger', { enabled: false });
   const res = await fetch(
     `${handle.url}/centraid/_automations/compile?ref=${encodeURIComponent(created.row.ref)}`,
@@ -250,8 +250,8 @@ test('headless compile returns a run id and records failure in the automation th
     },
   );
   expect(res.status).toBe(202);
-  const { runId } = (await res.json()) as { runId: string };
-  expect(runId).toContain(':compile:');
+  const { compileTurnId } = (await res.json()) as { compileTurnId: string };
+  expect(compileTurnId).toContain(':compile:');
 
   // Wait on a wall-clock deadline, not an iteration count. A compile spawns a
   // real app-server subprocess; the old 20x25ms budget was 500ms, which a
@@ -266,18 +266,18 @@ test('headless compile returns a run id and records failure in the automation th
   await vi.waitFor(
     async () => {
       const feed = await fetch(
-        `${handle.url}/centraid/_automations/runs?ref=${encodeURIComponent(created.row.ref)}`,
+        `${handle.url}/centraid/_automations/turns?ref=${encodeURIComponent(created.row.ref)}`,
         { headers: auth() },
       );
       const body = (await feed.json()) as {
-        runs: Array<{
-          runId: string;
+        turns: Array<{
+          turnId: string;
           triggerKind: string;
           endedAt?: number | null;
           ok: boolean | null;
         }>;
       };
-      const found = body.runs.find((candidate) => candidate.runId === runId);
+      const found = body.turns.find((candidate) => candidate.turnId === compileTurnId);
       // Terminal failure: ok is false AND endedAt is a number. Accepting
       // endedAt null/undefined reduced the wait to `ok === false` and
       // reinstated the ENOTEMPTY teardown race this comment warns about —
@@ -288,3 +288,41 @@ test('headless compile returns a run id and records failure in the automation th
     { timeout: 30_000, interval: 100 },
   );
 }, 35_000);
+
+test('headless revision validates steering and returns the compile turn id immediately', async () => {
+  const created = await createAutomation('revise-ledger', { enabled: false });
+  const endpoint = `${handle.url}/centraid/_automations/revise?ref=${encodeURIComponent(created.row.ref)}`;
+  const empty = await fetch(endpoint, {
+    method: 'POST',
+    headers: { ...auth(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: '   ' }),
+  });
+  expect(empty.status).toBe(400);
+
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { ...auth(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: 'Only include messages from customers.' }),
+  });
+  expect(res.status).toBe(202);
+  const body = (await res.json()) as { compileTurnId: string };
+  expect(body.compileTurnId).toMatch(/^revise-ledger\/revise-ledger:compile:[0-9a-f]{8}$/);
+  const revisionTurnId = body.compileTurnId.replace(':compile:', ':revise:');
+  await vi.waitFor(
+    async () => {
+      const feed = await fetch(
+        `${handle.url}/centraid/_automations/turns?ref=${encodeURIComponent(created.row.ref)}`,
+        { headers: auth() },
+      );
+      const turns = (
+        (await feed.json()) as {
+          turns: Array<{ turnId: string; ok: boolean; endedAt?: number }>;
+        }
+      ).turns;
+      const revision = turns.find((turn) => turn.turnId === revisionTurnId);
+      expect(revision?.ok).toBe(false);
+      expect(typeof revision?.endedAt).toBe('number');
+    },
+    { timeout: 10_000, interval: 50 },
+  );
+});

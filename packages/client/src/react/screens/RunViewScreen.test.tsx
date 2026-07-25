@@ -6,6 +6,21 @@ import RunViewScreen from './RunViewScreen.js';
 
 function makeSnapshot(over: Partial<RunViewSnapshot> = {}): RunViewSnapshot {
   return {
+    messages: [
+      { kind: 'user', text: 'Summarize the inbox.', createdAt: Date.now() - 4000 },
+      {
+        kind: 'tools',
+        label: '1 tool',
+        calls: [{ tool: 'gmail.search', state: 'ok', meta: '1s' }],
+      },
+      {
+        kind: 'ai',
+        streaming: false,
+        html: '<p>Done — 12 emails.</p>',
+        error: false,
+        copyText: 'Done — 12 emails.',
+      },
+    ],
     crumbName: 'Daily Digest',
     glyphIcon: 'Bolt',
     hue: 'indigo',
@@ -156,26 +171,28 @@ describe('RunViewScreen', () => {
     expect(runAgain).toBeUndefined();
   });
 
-  it('renders the timeline: breadcrumb, header, node cards, final outcome, KPI rail', () => {
+  it('renders the timeline through the shared conversation messages', () => {
     const el = mount(makeProps());
     push(makeSnapshot());
     expect(el.querySelector('.rvHeadName')?.textContent).toContain('Daily Digest');
-    // trigger node + 2 run nodes + final node
-    expect(el.querySelectorAll('.tlItem').length).toBe(4);
+    // Trigger + one native conversation transcript.
+    expect(el.querySelectorAll('.tlItem').length).toBe(2);
+    expect(el.querySelector('[data-testid="automation-turn-messages"]')).toBeTruthy();
     expect(el.textContent).toContain('gmail.search');
     expect(el.textContent).toContain('Done — 12 emails.');
     expect(el.querySelector('.rside')).toBeTruthy();
     expect(el.textContent).toContain('claude-opus-4-8');
   });
 
-  it('expands a node payload on click', () => {
+  it('uses the shared expandable tool group', () => {
     const el = mount(makeProps());
     push(makeSnapshot());
-    const head = el.querySelector('.tlHead') as HTMLButtonElement;
-    expect(head.getAttribute('aria-expanded')).toBe('false');
-    void act(() => head.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(head.getAttribute('aria-expanded')).toBe('true');
-    expect(el.querySelector('.tlBody')?.hasAttribute('hidden')).toBe(false);
+    const details = el.querySelector('.tools') as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    void act(() =>
+      details.querySelector('summary')?.dispatchEvent(new MouseEvent('click', { bubbles: true })),
+    );
+    expect(details.open).toBe(true);
   });
 
   it('renders log mode when opened with initialMode "log"', () => {
@@ -186,25 +203,32 @@ describe('RunViewScreen', () => {
     expect(el.querySelector('.tl')).toBeNull();
   });
 
-  it('names the assistant reply author "Centraid" without a model suffix', () => {
+  it('renders the assistant answer with the shared AI message', () => {
     const el = mount(makeProps());
     push(makeSnapshot());
-    const name = el.querySelector('[data-testid="timeline-final"] .tlName');
-    expect(name?.textContent).toBe('Centraid');
-    expect(name?.textContent).not.toContain('·');
+    expect(el.querySelector('.msgAi')?.textContent).toContain('Done — 12 emails.');
   });
 
-  it('labels the final node "Run failed" when the run failed', () => {
+  it('renders turn failures through the shared error message', () => {
     const el = mount(makeProps());
     push(
       makeSnapshot({
         statusKind: 'failed',
         statusLabel: 'Failed',
         final: { kind: 'fail', model: 'claude-opus-4-8', error: 'boom' },
+        messages: [
+          {
+            kind: 'ai',
+            streaming: false,
+            html: '<p>boom</p>',
+            error: true,
+            copyText: 'boom',
+          },
+        ],
       }),
     );
-    const name = el.querySelector('[data-testid="timeline-final"] .tlName');
-    expect(name?.textContent).toBe('Run failed');
+    expect(el.querySelector('.msgAi')?.getAttribute('data-error')).toBe('true');
+    expect(el.textContent).toContain('boom');
   });
 
   it('always shows the Model row, plus token/cost/step rows when usage exists', () => {
@@ -251,6 +275,7 @@ describe('RunViewScreen', () => {
         statusKind: 'running',
         statusLabel: 'Running',
         final: { kind: 'pending', model: 'claude-opus-4-8' },
+        messages: [],
       }),
     );
     expect(el.querySelector('.pending')).toBeTruthy();

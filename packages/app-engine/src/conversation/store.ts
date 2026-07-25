@@ -112,6 +112,7 @@ export interface InsertItemInput {
   readonly itemId: string;
   readonly turnId: string;
   readonly ordinal: number;
+  readonly callId?: string;
   readonly batchId?: number;
   readonly kind: ItemKind;
   readonly role?: 'user' | 'assistant';
@@ -119,6 +120,7 @@ export interface InsertItemInput {
   readonly name?: string;
   readonly argsJson?: string;
   readonly outputJson?: string;
+  readonly rawJson?: string;
   readonly childTurnId?: string;
   readonly ok: boolean;
   readonly error?: string;
@@ -142,10 +144,12 @@ export interface OpenItemInput {
   readonly itemId: string;
   readonly turnId: string;
   readonly ordinal: number;
+  readonly callId?: string;
   readonly batchId?: number;
   readonly kind: ItemKind;
   readonly name?: string;
   readonly argsJson?: string;
+  readonly rawJson?: string;
   readonly appId?: string;
   readonly startedAt: number;
 }
@@ -154,6 +158,7 @@ export interface CloseItemInput {
   readonly itemId: string;
   readonly ok: boolean;
   readonly outputJson?: string;
+  readonly rawJson?: string;
   readonly error?: string;
   readonly childTurnId?: string;
   readonly endedAt: number;
@@ -604,6 +609,7 @@ export class ConversationStore {
       input.itemId,
       input.turnId,
       input.ordinal,
+      input.callId ?? null,
       input.batchId ?? null,
       input.kind,
       input.role ?? null,
@@ -620,6 +626,7 @@ export class ConversationStore {
       input.name ?? null,
       input.argsJson ?? null,
       input.outputJson ?? null,
+      input.rawJson ?? null,
       input.childTurnId ?? null,
       input.ok ? 1 : 0,
       input.error ?? null,
@@ -635,11 +642,13 @@ export class ConversationStore {
       input.itemId,
       input.turnId,
       input.ordinal,
+      input.callId ?? null,
       input.batchId ?? null,
       input.kind,
       input.appId ?? null,
       input.name ?? null,
       input.argsJson ?? null,
+      input.rawJson ?? null,
       input.startedAt,
     );
   }
@@ -649,6 +658,7 @@ export class ConversationStore {
     stmts.closeItem.run({
       ok: input.ok ? 1 : 0,
       outputJson: input.outputJson ?? null,
+      rawJson: input.rawJson ?? null,
       error: input.error ?? null,
       childTurnId: input.childTurnId ?? null,
       inputTokens: input.inputTokens ?? null,

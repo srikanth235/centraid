@@ -6,7 +6,7 @@ import {
   deleteAutomation,
   listAutomations,
   listVersions,
-  readAutomationRun,
+  readAutomationTurn,
   runAutomationNow,
   setAutomationEnabled,
 } from '../../../../gateway-client.js';
@@ -119,10 +119,10 @@ function showToast(text: string): void {
 // Poll the run ledger until a run finishes — run-now fires in the background,
 // so a caller reporting an outcome must wait for it (vanilla
 // `waitForAutomationRun`).
-async function waitForAutomationRun(runId: string): Promise<CentraidAutomationRunRecord> {
+async function waitForAutomationRun(runId: string): Promise<CentraidAutomationTurnRecord> {
   const deadline = Date.now() + 6 * 60 * 1000;
   while (Date.now() < deadline) {
-    const rec = await readAutomationRun({ runId });
+    const rec = await readAutomationTurn({ turnId: runId });
     if (rec && rec.endedAt !== undefined) return rec;
     await new Promise((resolve) => setTimeout(resolve, 1500));
   }
@@ -263,8 +263,8 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
       try {
         // run-now fires in the background and returns the run id; poll the
         // ledger for the finished record to report the outcome.
-        const { runId } = await runAutomationNow({ automationId: row.ref });
-        const rec = await waitForAutomationRun(runId);
+        const { turnId } = await runAutomationNow({ automationId: row.ref });
+        const rec = await waitForAutomationRun(turnId);
         setRunStates((s) => ({
           ...s,
           [row.name]: {

@@ -17,6 +17,7 @@ import type {
   RunNodeDTO,
   RunViewSnapshot,
 } from '../../screen-contracts.js';
+import { automationTurnMessages } from './automationTurnMessages.js';
 
 const NODE_TYPE_ICON: Record<string, string> = {
   trigger: 'Bolt',
@@ -26,19 +27,21 @@ const NODE_TYPE_ICON: Record<string, string> = {
   invoke: 'Cpu',
 };
 
+export { automationTurnMessages } from './automationTurnMessages.js';
+
 export function buildRunSnapshot(
   // `null` when the run's parent automation was deleted — the Automations
   // overview deliberately keeps those runs visible (raw-ref fallback name),
   // so this must degrade gracefully instead of requiring a live row.
   row: CentraidAutomationRow | null,
-  run: CentraidAutomationRunRecord,
-  nodes: readonly CentraidAutomationRunNode[],
+  run: CentraidAutomationTurnRecord,
+  nodes: readonly CentraidAutomationItem[],
   liveText: Map<number, string>,
 ): RunViewSnapshot {
   const deleted = row === null;
   // Matches the Automations overview's orphan-run label (InsightsRoute does
   // the same fallback for the same reason).
-  const fallbackRef = run.automationId ?? run.runId;
+  const fallbackRef = run.automationId ?? run.turnId;
   const identityId = row === null ? fallbackRef : row.id;
   const inFlight = run.endedAt === undefined;
   // `requires.model` is `provider/model-id`; show the readable model id (the
@@ -199,6 +202,7 @@ export function buildRunSnapshot(
     },
     logRows,
     model,
+    messages: automationTurnMessages(run, nodes, liveText),
     nodes: runNodes,
     promptInstr,
     side: {
@@ -208,7 +212,7 @@ export function buildRunSnapshot(
       model,
       outcomeKind: statusKind,
       outcomeLabel: statusLabel,
-      runId: run.runId,
+      runId: run.turnId,
       started: new Date(run.startedAt).toLocaleString(),
       steps: String(run.stepCount ?? nodes.length),
       tokens: fmtTokens(tokens),

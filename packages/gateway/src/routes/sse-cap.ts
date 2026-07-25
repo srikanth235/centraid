@@ -1,7 +1,7 @@
 /*
  * Shared per-surface SSE concurrent-subscriber cap (issue #351 Tier 4
  * hygiene). Every SSE surface the gateway serves (`/centraid/_logs/events`,
- * `/centraid/_automations/run/events`) accepted unlimited clients — a
+ * `/centraid/_automations/turn/events`) accepted unlimited clients — a
  * buggy client reconnect loop could pile up live connections until the
  * process ran out of file descriptors. Each surface gets its own
  * `SseSubscriberCap`; once it is saturated a new subscribe request gets a

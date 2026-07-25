@@ -29,6 +29,7 @@ import {
 import { planLaunch } from './launch.js';
 import {
   permissionAutoAllowNotice,
+  permissionDeniedNotice,
   pickPermissionOption,
   readPermissionOptions,
   readPermissionToolTitle,
@@ -104,9 +105,14 @@ export async function runAcpTurn(
           conn.respond(id, { outcome: { outcome: 'cancelled' } });
           return;
         }
+        const toolTitle = readPermissionToolTitle(params);
+        if (input.permissionPolicy === 'deny') {
+          emit(permissionDeniedNotice(toolTitle));
+          conn.respond(id, { outcome: { outcome: 'cancelled' } });
+          return;
+        }
         const options = readPermissionOptions(params);
         const optionId = pickPermissionOption(options);
-        const toolTitle = readPermissionToolTitle(params);
         if (optionId) {
           emit(permissionAutoAllowNotice(optionId, options, toolTitle));
           conn.respond(id, { outcome: { outcome: 'selected', optionId } });
@@ -360,9 +366,24 @@ export async function runAcpTurn(
 
     if (!input.abortSignal.aborted) {
       const stop = outcomeForStopReason(promptResult?.stopReason);
+      const rawJson = JSON.stringify(promptResult ?? {});
+      const stopReason =
+        typeof promptResult?.stopReason === 'string' ? promptResult.stopReason : undefined;
       if (stop.notice) emit(stop.notice);
-      if (stop.error) emit(stop.error);
-      else if (stop.emitFinal) emit({ type: 'final', text: stream.finalText() });
+      if (stop.error) {
+        emit({
+          ...stop.error,
+          ...(stopReason !== undefined ? { stopReason } : {}),
+          rawJson,
+        });
+      } else if (stop.emitFinal) {
+        emit({
+          type: 'final',
+          text: stream.finalText(),
+          ...(stopReason !== undefined ? { stopReason } : {}),
+          rawJson,
+        });
+      }
       parkWarm =
         Boolean(sessionId) &&
         (canResume || canLoad) &&

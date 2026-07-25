@@ -45,7 +45,7 @@ export function fmtNextRun(d: Date): string {
  * `triggerOrigin` when present, falling back to `triggerKind` so an older
  * run recorded before `triggerOrigin` existed still reads sensibly.
  */
-export function runOriginLabel(r: CentraidAutomationRunRecord): string {
+export function runOriginLabel(r: CentraidAutomationTurnRecord): string {
   if (r.triggerOrigin === 'webhook') return 'Webhook';
   if (r.triggerOrigin === 'data') return 'Data';
   if (r.triggerOrigin === 'condition') return 'Condition';

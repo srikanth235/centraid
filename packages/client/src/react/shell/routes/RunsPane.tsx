@@ -1,6 +1,6 @@
 import { type JSX, useEffect, useState } from 'react';
 import { formatDuration, relativeTime } from '../../../app-format.js';
-import { listAutomationRuns, pinAutomationRun } from '../../../gateway-client.js';
+import { listAutomationTurns, pinAutomationTurn } from '../../../gateway-client.js';
 import styles from './RunsPane.module.css';
 
 // The per-order run-history list inside the app-settings popover — the React
@@ -9,7 +9,7 @@ import styles from './RunsPane.module.css';
 // runs double as replay fixtures). Rendered into the host div AppSettingsPanel
 // hands `onMountRuns`.
 export default function RunsPane({ automationId }: { automationId: string }): JSX.Element {
-  const [runs, setRuns] = useState<CentraidAutomationRunRecord[] | null>(null);
+  const [runs, setRuns] = useState<CentraidAutomationTurnRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
 
@@ -17,7 +17,7 @@ export default function RunsPane({ automationId }: { automationId: string }): JS
     let alive = true;
     setRuns(null);
     setError(null);
-    listAutomationRuns({ automationId, limit: 25 })
+    listAutomationTurns({ automationId, limit: 25 })
       .then((r) => {
         if (alive) setRuns(r);
       })
@@ -29,8 +29,8 @@ export default function RunsPane({ automationId }: { automationId: string }): JS
     };
   }, [automationId, nonce]);
 
-  const togglePin = (run: CentraidAutomationRunRecord): void => {
-    void pinAutomationRun({ runId: run.runId, pinned: !run.pinned })
+  const togglePin = (run: CentraidAutomationTurnRecord): void => {
+    void pinAutomationTurn({ turnId: run.turnId, pinned: !run.pinned })
       .then(() => setNonce((n) => n + 1))
       .catch(() => setNonce((n) => n + 1));
   };
@@ -42,7 +42,7 @@ export default function RunsPane({ automationId }: { automationId: string }): JS
   return (
     <div className={styles.list}>
       {runs.map((run) => (
-        <div key={run.runId} className={styles.run} data-ok={String(run.ok)}>
+        <div key={run.turnId} className={styles.run} data-ok={String(run.ok)}>
           <span className={styles.status} aria-hidden="true" />
           <div className={styles.body}>
             <div className={styles.head}>

@@ -210,6 +210,7 @@ export function makeConversationRunnerCore(
         onEvent: input.onEvent,
         ...(opts.extraPath ? { extraPath: opts.extraPath } : {}),
         ...(input.model ? { model: input.model } : {}),
+        ...(input.permissionPolicy ? { permissionPolicy: input.permissionPolicy } : {}),
         ...(resumeId ? { prevSessionId: resumeId } : {}),
       };
 

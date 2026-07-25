@@ -178,6 +178,12 @@ export interface TurnInput {
   /** Backend-specific append point: codex `developerInstructions` / claude `systemPrompt.append`. */
   extraSystemPrompt: string;
   model?: string;
+  /**
+   * How ACP `session/request_permission` calls are answered. `deny` is a
+   * structural boundary used by automation conversations: the agent keeps
+   * its pre-granted surface and every request to expand it is cancelled.
+   */
+  permissionPolicy?: 'auto-allow' | 'deny';
   /** Resume id from a prior turn (codex thread id / claude session id). */
   prevSessionId?: string;
   /**

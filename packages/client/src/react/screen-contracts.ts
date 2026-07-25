@@ -711,6 +711,8 @@ export interface AutomationThreadData {
   header: AutomationThreadHeaderDTO;
   consent: AuConsentDTO;
   runs: ThreadRunDTO[];
+  /** Native interactive automation-turn endpoint advertised by the gateway. */
+  automationTurns?: boolean;
 }
 export interface AutomationThreadBridgeProps {
   /** Load the automation + its runs + its consent surface. `null` = not found. */
@@ -721,7 +723,16 @@ export interface AutomationThreadBridgeProps {
   /** Retry the hidden compiler after a failed compile turn. */
   onRetryCompile: () => Promise<boolean>;
   onOpenRun: (runId: string) => void;
-  onRunNow: () => Promise<boolean>;
+  /** Read one cold turn as the shared Message DTO. */
+  loadTurnTrace: (turnId: string) => Promise<AsstMsgDTO[]>;
+  /** Join a native turn SSE stream and push shared Message snapshots. */
+  watchTurn: (
+    turnId: string,
+    onMessages: (messages: AsstMsgDTO[]) => void,
+    signal: AbortSignal,
+  ) => Promise<void>;
+  /** Start a manual fire and return its native turn id. */
+  onRunNow: () => Promise<string | null>;
   onToggleEnabled: (next: boolean) => Promise<boolean>;
   onDecideConsent: (
     kind: ConsentKind,
@@ -729,8 +740,17 @@ export interface AutomationThreadBridgeProps {
     decision: ConsentDecision,
     alwaysAllow?: boolean,
   ) => Promise<boolean>;
-  /** Internal-only conversational revision callback retained but hidden in v0. */
-  onSendMessage: (text: string) => void;
+  /**
+   * Execute a one-off conversation turn, or revise the standing instructions
+   * and compile when `applyFuture` is true. Returns the native turn id whose
+   * trace was streamed.
+   */
+  onSendMessage: (
+    text: string,
+    applyFuture: boolean,
+    onMessages: (messages: AsstMsgDTO[]) => void,
+    signal: AbortSignal,
+  ) => Promise<string | null>;
   onCopyWebhook: (url: string) => void;
   onRotateWebhook: () => Promise<boolean>;
   /** Confirm + delete; resolves true when deleted (thread is navigating away). */
@@ -955,6 +975,8 @@ export interface RunViewSnapshot {
   triggerHeroIcon: string;
   promptInstr: string;
   nodes: RunNodeDTO[];
+  /** Native automation items rendered by the shared conversation Message. */
+  messages: AsstMsgDTO[];
   final: {
     kind: 'pending' | 'ok' | 'fail';
     model: string;

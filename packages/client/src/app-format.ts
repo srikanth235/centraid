@@ -154,7 +154,7 @@ export function relativeRunLabel(d: Date): string {
 }
 
 // Trigger-origin/kind → human label for a run row.
-export function runTriggerLabel(run: CentraidAutomationRunRecord): string {
+export function runTriggerLabel(run: CentraidAutomationTurnRecord): string {
   if (run.triggerOrigin === 'webhook') return 'Webhook trigger';
   const byKind: Record<string, string> = {
     scheduled: 'Scheduled run',
@@ -168,7 +168,7 @@ export function runTriggerLabel(run: CentraidAutomationRunRecord): string {
 
 // A node is still in flight when it has started but not ended (and hasn't
 // errored). Drives the pulsing accent spinner on its rail circle.
-export function nodeRunStatus(node: CentraidAutomationRunNode): 'ok' | 'running' | 'fail' {
+export function nodeRunStatus(node: CentraidAutomationItem): 'ok' | 'running' | 'fail' {
   if (node.endedAt === undefined && !node.error) return 'running';
   return node.ok ? 'ok' : 'fail';
 }

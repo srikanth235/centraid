@@ -319,9 +319,11 @@ describe('ConversationStore — items + message_in', () => {
       turnId: 't',
       itemId: 'n1',
       ordinal: 0,
+      callId: 'call-1',
       kind: 'tool',
       name: 'x',
       argsJson: '{"q":1}',
+      rawJson: '{"phase":"start"}',
       startedAt: 10,
     });
     let [n] = store.listItems('t');
@@ -331,6 +333,7 @@ describe('ConversationStore — items + message_in', () => {
       itemId: 'n1',
       ok: false,
       error: 'rate limited',
+      rawJson: '{"phase":"result"}',
       endedAt: 35,
       durationMs: 25,
     });
@@ -339,6 +342,8 @@ describe('ConversationStore — items + message_in', () => {
     expect(n?.ok).toBe(false);
     expect(n?.error).toBe('rate limited');
     expect(n?.argsJson).toBe('{"q":1}');
+    expect(n?.callId).toBe('call-1');
+    expect(n?.rawJson).toBe('{"phase":"result"}');
     store.close();
   });
 });

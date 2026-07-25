@@ -1,7 +1,7 @@
 import { type JSX, useEffect, useState } from 'react';
 import { cronNextRuns, describeCron } from '../../../../cron.js';
 import {
-  listAutomationRuns,
+  listAutomationTurns,
   publish,
   readAutomation,
   writeAppFile,
@@ -75,12 +75,12 @@ function ActivityCard({
   automationRef: string;
   triggers: CentraidAutomationManifest['triggers'];
 }): JSX.Element {
-  const [lastRun, setLastRun] = useState<CentraidAutomationRunRecord[] | null | 'error'>(null);
+  const [lastRun, setLastRun] = useState<CentraidAutomationTurnRecord[] | null | 'error'>(null);
 
   useEffect(() => {
     let alive = true;
     setLastRun(null);
-    listAutomationRuns({ automationId: automationRef, limit: 1 })
+    listAutomationTurns({ automationId: automationRef, limit: 1 })
       .then((r) => {
         if (alive) setLastRun(r);
       })

@@ -20,6 +20,7 @@ export interface RunOptions {
   toolContext?: ToolContext;
   label?: string;
   installHint?: string;
+  permissionPolicy?: 'auto-allow' | 'deny';
   /** Called with each event as it arrives — return true to abort the turn. */
   abortOn?: (event: TurnStreamEvent) => boolean;
 }
@@ -49,6 +50,7 @@ export async function runFake(opts: RunOptions): Promise<{
       ...(opts.model ? { model: opts.model } : {}),
       ...(opts.attachments ? { attachments: opts.attachments } : {}),
       ...(opts.toolContext ? { toolContext: opts.toolContext } : {}),
+      ...(opts.permissionPolicy ? { permissionPolicy: opts.permissionPolicy } : {}),
       abortSignal: controller.signal,
       onEvent: (e) => {
         events.push(e);

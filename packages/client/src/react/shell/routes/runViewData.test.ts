@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildRunSnapshot } from './runViewData.js';
+import { automationTurnMessages, buildRunSnapshot } from './runViewData.js';
+import {
+  automationLiveMessages,
+  createAutomationLiveTrace,
+  reduceAutomationTurnEvent,
+} from './automationTurnMessages.js';
 
 // `vi.mock` is hoisted above the import by vitest, so the gateway stub lands
 // before runViewData.js pulls gateway-client-core's load-time side-effect.
@@ -15,7 +20,7 @@ const row = (): CentraidAutomationRow =>
     manifest: { requires: { model: 'claude-opus-4-8' }, prompt: 'Summarize', history: {} },
   }) as unknown as CentraidAutomationRow;
 
-const run = (over: Partial<CentraidAutomationRunRecord> = {}): CentraidAutomationRunRecord =>
+const run = (over: Partial<CentraidAutomationTurnRecord> = {}): CentraidAutomationTurnRecord =>
   ({
     runId: 'r1',
     automationId: 'digest/main',
@@ -24,7 +29,7 @@ const run = (over: Partial<CentraidAutomationRunRecord> = {}): CentraidAutomatio
     startedAt: Date.now() - 5000,
     ok: true,
     ...over,
-  }) as unknown as CentraidAutomationRunRecord;
+  }) as unknown as CentraidAutomationTurnRecord;
 
 describe('buildRunSnapshot', () => {
   it('marks an in-flight run running with a pending final', () => {
@@ -49,7 +54,7 @@ describe('buildRunSnapshot', () => {
   it('renders a trigger log row plus one per node', () => {
     const nodes = [
       { runId: 'r1', ordinal: 1, kind: 'tool', name: 'fetch', startedAt: Date.now(), ok: true },
-    ] as unknown as CentraidAutomationRunNode[];
+    ] as unknown as CentraidAutomationItem[];
     const snap = buildRunSnapshot(row(), run({ endedAt: Date.now() }), nodes, new Map());
     // trigger + node + completion row
     expect(snap.logRows.length).toBe(3);
@@ -88,7 +93,7 @@ describe('buildRunSnapshot', () => {
   it('falls back to the run id when a deleted run has no recorded automationId', () => {
     const snap = buildRunSnapshot(
       null,
-      run({ endedAt: Date.now(), ok: true, automationId: undefined, runId: 'r9' }),
+      run({ endedAt: Date.now(), ok: true, automationId: undefined, turnId: 'r9' }),
       [],
       new Map(),
     );
@@ -165,7 +170,7 @@ describe('buildRunSnapshot', () => {
   it('flags hasUsage true when the run has recorded steps', () => {
     const nodes = [
       { runId: 'r1', ordinal: 1, kind: 'tool', name: 'fetch', startedAt: Date.now(), ok: true },
-    ] as unknown as CentraidAutomationRunNode[];
+    ] as unknown as CentraidAutomationItem[];
     const snap = buildRunSnapshot(row(), run({ endedAt: Date.now() }), nodes, new Map());
     expect(snap.side.hasUsage).toBe(true);
   });
@@ -173,7 +178,7 @@ describe('buildRunSnapshot', () => {
   it('surfaces streamed live text on an in-flight agent node', () => {
     const nodes = [
       { runId: 'r1', ordinal: 2, kind: 'agent', startedAt: Date.now(), ok: true },
-    ] as unknown as CentraidAutomationRunNode[];
+    ] as unknown as CentraidAutomationItem[];
     const snap = buildRunSnapshot(
       row(),
       run({ endedAt: undefined }),
@@ -182,5 +187,166 @@ describe('buildRunSnapshot', () => {
     );
     expect(snap.nodes[0]?.liveText).toBe('partial…');
     expect(snap.nodes[0]?.streaming).toBe(true);
+  });
+});
+
+describe('automationTurnMessages', () => {
+  it('coalesces updates by callId while keeping parallel same-named calls distinct', () => {
+    const messages = automationTurnMessages(
+      run({ turnId: 'turn-1', endedAt: Date.now() }),
+      [
+        {
+          itemId: 'start-a',
+          turnId: 'turn-1',
+          ordinal: 1,
+          callId: 'call-a',
+          kind: 'tool',
+          name: 'read_file',
+          ok: true,
+          startedAt: 1,
+        },
+        {
+          itemId: 'finish-a',
+          turnId: 'turn-1',
+          ordinal: 1,
+          callId: 'call-a',
+          kind: 'tool',
+          name: 'read_file',
+          ok: false,
+          error: 'denied',
+          startedAt: 1,
+          endedAt: 2,
+          durationMs: 1,
+        },
+        {
+          itemId: 'finish-b',
+          turnId: 'turn-1',
+          ordinal: 2,
+          callId: 'call-b',
+          kind: 'tool',
+          name: 'read_file',
+          ok: true,
+          startedAt: 1,
+          endedAt: 3,
+          durationMs: 2,
+        },
+      ],
+      new Map(),
+    );
+    const tools = messages.find((message) => message.kind === 'tools');
+    expect(tools?.kind === 'tools' ? tools.calls : []).toEqual([
+      { tool: 'read_file', state: 'error', meta: 'denied' },
+      { tool: 'read_file', state: 'ok', meta: '2ms' },
+    ]);
+  });
+
+  it('renders failed agent items as shared error messages', () => {
+    const messages = automationTurnMessages(
+      run({ turnId: 'turn-1', endedAt: 3, ok: false }),
+      [
+        {
+          itemId: 'agent-1',
+          turnId: 'turn-1',
+          ordinal: 1,
+          kind: 'agent',
+          ok: false,
+          error: 'runner disconnected',
+          startedAt: 1,
+          endedAt: 2,
+          durationMs: 1,
+        },
+      ],
+      new Map(),
+    );
+    const answer = messages.find((message) => message.kind === 'ai');
+    expect(answer?.kind === 'ai' && !answer.streaming && answer.error).toBe(true);
+    expect(answer?.kind === 'ai' && !answer.streaming && answer.copyText).toBe(
+      'runner disconnected',
+    );
+  });
+});
+
+describe('automation live trace reducer', () => {
+  it('projects standard assistant, reasoning, tool, notice, usage and final events', () => {
+    let state = createAutomationLiveTrace('what changed?');
+    state = reduceAutomationTurnEvent(state, {
+      type: 'reasoning.delta',
+      delta: 'checking',
+    });
+    state = reduceAutomationTurnEvent(state, {
+      type: 'tool.start',
+      toolCallId: 'call-1',
+      toolName: 'gmail.search',
+    });
+    state = reduceAutomationTurnEvent(state, {
+      type: 'assistant.delta',
+      delta: 'Three messages',
+    });
+    state = reduceAutomationTurnEvent(state, {
+      type: 'tool.result',
+      toolCallId: 'call-1',
+      toolName: 'gmail.search',
+      ok: true,
+    });
+    state = reduceAutomationTurnEvent(state, {
+      type: 'notice',
+      level: 'info',
+      message: 'Used the bound work account.',
+    });
+    state = reduceAutomationTurnEvent(state, {
+      type: 'usage',
+      model: 'fast-model',
+      inputTokens: 20,
+      outputTokens: 5,
+      costUsd: 0.001,
+      costSource: 'agent',
+    });
+    state = reduceAutomationTurnEvent(state, {
+      type: 'final',
+      text: 'Three messages arrived.',
+      stopReason: 'end_turn',
+    });
+    const messages = automationLiveMessages(state);
+    expect(messages.map((message) => message.kind)).toEqual([
+      'user',
+      'thinking',
+      'tools',
+      'notice',
+      'ai',
+    ]);
+    expect(messages[2]).toMatchObject({
+      kind: 'tools',
+      calls: [{ tool: 'gmail.search', state: 'ok' }],
+    });
+    expect(messages.at(-1)).toMatchObject({
+      kind: 'ai',
+      streaming: false,
+      error: false,
+      copyText: 'Three messages arrived.',
+      usage: { inputTokens: 20, outputTokens: 5, costUsd: 0.001, model: 'fast-model' },
+    });
+  });
+
+  it('keeps parallel same-named live tools distinct by call id', () => {
+    let state = createAutomationLiveTrace();
+    for (const toolCallId of ['a', 'b']) {
+      state = reduceAutomationTurnEvent(state, {
+        type: 'tool.start',
+        toolCallId,
+        toolName: 'read_file',
+      });
+    }
+    state = reduceAutomationTurnEvent(state, {
+      type: 'tool.result',
+      toolCallId: 'b',
+      toolName: 'read_file',
+      ok: false,
+      errorText: 'denied',
+    });
+    const tools = automationLiveMessages(state).find((message) => message.kind === 'tools');
+    expect(tools?.kind === 'tools' ? tools.calls : []).toEqual([
+      { tool: 'read_file', state: 'run', meta: 'running…' },
+      { tool: 'read_file', state: 'error', meta: 'denied' },
+    ]);
   });
 });

@@ -368,7 +368,7 @@ export {
   type InsertAttachmentInput,
   type ListTurnsOptions,
 } from './conversation/store.js';
-export type { RunStreamEvent } from './conversation/run-stream-event.js';
+export type { AutomationTurnStreamEvent } from './conversation/automation-turn-stream-event.js';
 export type {
   Conversation,
   Turn,

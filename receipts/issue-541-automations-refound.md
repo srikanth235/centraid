@@ -8,8 +8,11 @@ Issue: https://github.com/srikanth235/centraid/issues/541
 
 - [x] When multiple Gmail/GitHub/etc. accounts exist, I can choose the exact one and only that account’s scopes are used
 - [x] Per-automation runner/model choices persist and override subsystem defaults for fire and compile
-- [ ] Interactive automation replies use the same per-automation runner/model override
-- [ ] Remaining issue scope is in progress
+- [x] The automation wire and durable ledger expose native turns/items with ACP call ids, raw envelopes, stop reasons, and usage
+- [x] The thread renders cold and live shared-Message traces without polling
+- [x] Interactive automation replies use the same per-automation runner/model override and structurally deny runtime permission requests
+- [x] Standing replies rewrite instructions and enter the existing compile seam
+- [ ] Unified cursor triggers, connector event sources, and anchor-grain scopes are in progress
 
 ## What changed
 
@@ -43,9 +46,31 @@ Per-automation runner/model choices persist and override subsystem defaults for 
 - `packages/gateway/src/serve/build-gateway.ts` applies the same selection to compile, manual/scheduled fire, and webhook fire.
 - `docs/runners.md` records the per-automation precedence and forward-compatible fallback contract.
 
+The wire, ledger, and forensic view now speak native turns/items with ACP fidelity:
+
+- `packages/app-engine/src/conversation/automation-turn-stream-event.ts`, the conversation schema/store, and gateway DDL add native `turn.*`/`item.*` events plus durable `callId`/`rawJson`.
+- `packages/agent-runtime/src/backends/acp/*` preserves raw tool/final envelopes, stop reasons, and usage while mapping parallel tool calls by ACP call id.
+- `packages/automation/src/handler/*` records tool identity, verbatim envelopes, and token/cost actuals into the shared conversation ledger.
+- `packages/gateway/src/routes/automations-routes.ts` and `packages/client/src/gateway-client.ts` cut over the `_automations` surface to `turn`/`item`; legacy `run`/`node` routes are absent.
+- `RunViewRoute`/`RunViewScreen` remain the forensic register over the native records and shared conversation renderer.
+
+The automation thread is a real cold/live conversation:
+
+- `packages/client/src/react/shell/routes/automationTurnMessages.ts` folds durable items and reduces standard `TurnStreamEvent` activity into `AsstMsgDTO`.
+- `AutomationThreadScreen` consumes `AssistantMessage` unchanged, warms the newest trace, lazily expands older traces, joins running fires over SSE, and contains no timer poll.
+- `AutomationViewRoute` performs the required authoritative expanded read after `turn.end`; the hidden builder redirect and one-off text prefix are gone.
+
+Interactive steering and standing revision use the automation's existing identity:
+
+- `GatewayCapabilities.automationTurns` gates the composer for older gateways.
+- `interactive-automation-turn.ts` builds a bounded ledger preamble, serializes per-ref execution, resumes only as an optimization, runs in a scoped scratch directory, and fans identical standard events to the response and automation bus.
+- ACP permission requests on interactive automation turns receive a structural deny instead of a runtime consent dialog.
+- `rewrite-automation-instructions.ts` performs a tool-less cheap-tier rewrite, records the visible revision turn, persists through the existing manifest path, and invokes the existing compile seam.
+- `POST /centraid/_automations/turn?ref=` streams the standard grammar; `POST /centraid/_automations/revise?ref=` returns the reserved `compileTurnId`.
+
 ## Out of scope
 
-- None for issue #541. Waves 2–10 are still in progress and will be recorded here before the PR is opened.
+- None for issue #541. Waves 8–10 are still in progress and will be recorded here before the PR is opened.
 
 ## Decisions
 
@@ -65,6 +90,12 @@ bun run --cwd packages/gateway test -- src/lifecycle/automation-agent-selection.
 bun run --cwd packages/automation typecheck
 bun run --cwd packages/app-engine typecheck
 bun run --cwd packages/gateway typecheck
+bun run --filter @centraid/client test -- src/react/shell/routes/runViewData.test.ts src/react/screens/AutomationThreadScreen.test.tsx
+bun run --filter @centraid/client typecheck
+bun run --filter @centraid/agent-runtime test -- src/backends/acp/backend.test.ts
+bun run --filter @centraid/gateway test -- src/routes/automations-routes.test.ts src/routes/lifecycle-automation-routes.test.ts src/lifecycle/interactive-automation-turn.test.ts src/lifecycle/rewrite-automation-instructions.test.ts
+bun run --filter @centraid/gateway typecheck
+bun run --filter @centraid/protocol typecheck
 ```
 
 ## Audit
@@ -87,6 +118,8 @@ PASS — the final fresh-context Waves 1–2 auditor verified exact account bind
 | codex-019f9495-7c0-1784905470-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 28664 | 0 | 1103360 | 7060 | 35724 | 0.4534 | 363485 | 0 | 11119104 | 30248 | feat(automations): choose exact connector account (#541) -m governance: allow-do |
 | codex-019f9495-7c0-1784911283-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 312159 | 0 | 16580096 | 37209 | 349368 | 5.4836 | 675644 | 0 | 27699200 | 67457 | feat(automations): pin runner and model per automation (#541) |
 | codex-019f9495-7c0-1784911338-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 3047 | 0 | 440832 | 163 | 3210 | 0.1203 | 678691 | 0 | 28140032 | 67620 | feat(automations): pin runner and model per automation (#541) -m governance: all |
+| codex-019f9495-7c0-1784943285-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 1022245 | 0 | 29047552 | 97489 | 1119734 | 11.2798 | 1700936 | 0 | 57187584 | 165109 | feat(automations): stream native turn conversations (#541) -m governance: allow- |
+| codex-019f9495-7c0-1784943378-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 4157 | 0 | 787200 | 592 | 4749 | 0.2161 | 1705093 | 0 | 57974784 | 165701 | feat(automations): stream native turn conversations (#541) -m governance: allow- |
 
 ## Steering
 

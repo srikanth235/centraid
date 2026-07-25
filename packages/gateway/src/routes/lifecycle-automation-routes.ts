@@ -47,13 +47,51 @@ export async function handleAutomationCompile(
       message: `Automation "${rawRef}" does not exist.`,
     });
   }
-  const runId = `${rawRef}:compile:${crypto.randomUUID().slice(0, 8)}`;
+  const compileTurnId = `${rawRef}:compile:${crypto.randomUUID().slice(0, 8)}`;
   opts.compileAutomation({
     automationRef: rawRef,
-    runId,
+    runId: compileTurnId,
     enableOnSuccess: body.enableOnSuccess === true,
   });
-  return sendJson(res, 202, { runId });
+  return sendJson(res, 202, { compileTurnId });
+}
+
+// ---- POST /centraid/_automations/revise?ref= (rewrite + existing compile) ----
+
+export async function handleAutomationRevise(
+  opts: LifecycleRouteOptions,
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+): Promise<boolean> {
+  const rawRef = url.searchParams.get('ref') ?? '';
+  const ref = automation.parseRef(rawRef);
+  if (!ref) return sendJson(res, 400, { error: 'bad_request', message: 'revise needs ?ref=' });
+  if (!opts.reviseAutomation) {
+    return sendJson(res, 503, { error: 'unavailable', message: 'revision runner unavailable' });
+  }
+  const body = await readJson(req);
+  const steering = typeof body.message === 'string' ? body.message.trim() : '';
+  if (!steering) {
+    return sendJson(res, 400, {
+      error: 'bad_request',
+      message: 'revise body needs a non-empty {message}',
+    });
+  }
+  const row = await automation
+    .readAppOwned(opts.codeAppsDir(), ref.appId, ref.automationId)
+    .catch(() => undefined);
+  if (!row) {
+    return sendJson(res, 404, {
+      error: 'not_found',
+      message: `Automation "${rawRef}" does not exist.`,
+    });
+  }
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const revisionTurnId = `${row.ref}:revise:${suffix}`;
+  const compileTurnId = `${row.ref}:compile:${suffix}`;
+  opts.reviseAutomation({ row, steering, revisionTurnId, compileTurnId });
+  return sendJson(res, 202, { compileTurnId });
 }
 
 // ---- POST /centraid/_automations (scaffold an automation app) ----

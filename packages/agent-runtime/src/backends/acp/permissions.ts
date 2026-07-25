@@ -79,3 +79,15 @@ export function permissionAutoAllowNotice(
     message: `Auto-allowed agent permission for “${toolTitle}”: ${choice}.`,
   };
 }
+
+/** Transcript notice for a permission request refused by a confined surface. */
+export function permissionDeniedNotice(
+  toolTitle: string,
+): Extract<TurnStreamEvent, { type: 'notice' }> {
+  return {
+    type: 'notice',
+    level: 'warn',
+    code: 'permission_denied',
+    message: `Denied agent permission request for “${toolTitle}”. This turn may use only its pre-granted tools.`,
+  };
+}

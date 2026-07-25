@@ -189,6 +189,7 @@ export const CONVERSATION_LEDGER_DDL = `
       id                 TEXT PRIMARY KEY,
       turn_id            TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE,
       ordinal            INTEGER NOT NULL,
+      call_id            TEXT,
       batch_id           INTEGER,
       kind               TEXT NOT NULL,
       role               TEXT,
@@ -196,6 +197,7 @@ export const CONVERSATION_LEDGER_DDL = `
       name               TEXT,
       args_json          TEXT,
       output_json        TEXT,
+      raw_json           TEXT,
       child_turn_id      TEXT,
       model              TEXT,
       provider           TEXT,
@@ -218,6 +220,8 @@ export const CONVERSATION_LEDGER_DDL = `
     ) STRICT;
     CREATE INDEX IF NOT EXISTS idx_items_by_turn
       ON items(turn_id, ordinal);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_items_turn_call
+      ON items(turn_id, call_id) WHERE call_id IS NOT NULL;
     CREATE INDEX IF NOT EXISTS idx_items_by_model
       ON items(model, started_at DESC);
 

@@ -5,13 +5,13 @@ import type { IconName } from '@centraid/design-tokens';
 import type {
   AuStatusKind,
   RunLogRowDTO,
-  RunNodeDTO,
   RunViewBridgeProps,
   RunViewSnapshot,
 } from '../screen-contracts.js';
 import { cx } from '../ui/cx.js';
 import styles from './RunViewScreen.module.css';
 import au from '../styles/automation.module.css';
+import Message, { type MessageCallbacks } from './AssistantMessage.js';
 
 const STATUS_ICON: Record<AuStatusKind, IconName> = {
   active: 'Power',
@@ -34,71 +34,6 @@ function StatusPill({ kind, label }: { kind: AuStatusKind; label: string }): JSX
       </span>
       <span>{label}</span>
     </span>
-  );
-}
-
-function TimelineNode({ node }: { node: RunNodeDTO }): JSX.Element {
-  const [open, setOpen] = useState(false);
-  const railIcon: IconName =
-    node.status === 'running' ? 'Loader' : node.status === 'ok' ? 'CheckCircle' : 'AlertTriangle';
-  return (
-    <div className={styles.tlItem} data-status={node.status}>
-      <span className={styles.tlRail} aria-hidden="true">
-        <span className={styles.tlDot} data-spin={node.status === 'running' ? 'true' : undefined}>
-          <Icon name={railIcon} size={node.status === 'running' ? 12 : 13} />
-        </span>
-        <span className={styles.tlLine} />
-      </span>
-      <div className={styles.tlCard} data-status={node.status}>
-        <button
-          type="button"
-          className={styles.tlHead}
-          aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
-        >
-          <span className={styles.tlType} aria-hidden="true">
-            <Icon name={node.typeIcon as IconName} size={13} />
-          </span>
-          <span className={styles.tlName}>{node.name}</span>
-          <span className={styles.tlKind}>{node.kind}</span>
-          <span className={styles.tlMeta}>{node.meta || '—'}</span>
-          <span className={styles.tlChev} aria-hidden="true">
-            <Icon name="ChevronRight" size={14} />
-          </span>
-        </button>
-        <div className={styles.tlBody} hidden={!open}>
-          {node.error ? <div className={styles.tlError}>{node.error}</div> : null}
-          {node.response ? <div className={styles.tlResponse}>{node.response}</div> : null}
-          {node.input ? (
-            <>
-              <div className={styles.stepLabel}>Input</div>
-              <pre className={styles.stepPre} data-testid="run-step-payload">
-                {node.input}
-              </pre>
-            </>
-          ) : null}
-          {node.output ? (
-            <>
-              <div className={styles.stepLabel}>Output</div>
-              <pre className={styles.stepPre} data-testid="run-step-payload">
-                {node.output}
-              </pre>
-            </>
-          ) : null}
-          {!node.error && !node.response && !node.input && !node.output ? (
-            <div className={styles.stepEmpty}>No payload recorded.</div>
-          ) : null}
-        </div>
-        {node.streaming && node.liveText ? (
-          <div className={styles.tlStream}>
-            {/* Unclassed: .tlStream already carries the type + pre-wrap; this
-                span only separates the text run from the caret. */}
-            <span>{node.liveText}</span>
-            <span className={styles.tlCaret} aria-hidden="true" />
-          </div>
-        ) : null}
-      </div>
-    </div>
   );
 }
 
@@ -214,6 +149,16 @@ export default function RunViewScreen({
   // The view still honours `initialMode`, so a deep link can open the raw
   // log; there just isn't a control to flip it here.
   const mode = initialMode;
+  const messageCallbacks: MessageCallbacks = {
+    hydrateRefs: () => undefined,
+    wireCodeCopy: () => undefined,
+    loadAttachmentImage: () => Promise.reject(new Error('automation attachments unavailable')),
+    onCopyMessage: (text) => void navigator.clipboard?.writeText(text),
+    onFeedback: () => undefined,
+    onRegenerate: () => undefined,
+    onRetryError: () => undefined,
+    onPagerNav: () => undefined,
+  };
 
   useEffect(() => {
     onReady((s) => setSnap(s));
@@ -340,10 +285,6 @@ export default function RunViewScreen({
               </div>
             </div>
 
-            {snap.nodes.map((node) => (
-              <TimelineNode key={node.ordinal} node={node} />
-            ))}
-
             <div
               className={styles.tlItem}
               data-testid="timeline-final"
@@ -366,22 +307,17 @@ export default function RunViewScreen({
                   />
                 </span>
               </span>
-              <div
-                className={styles.tlCard}
-                data-status={snap.final.kind === 'pending' ? 'running' : snap.final.kind}
-              >
-                <div className={cx(styles.tlHead, styles.tlHeadStatic)}>
-                  <span className={styles.tlType} aria-hidden="true">
-                    <Icon
-                      name={snap.final.kind === 'fail' ? 'AlertTriangle' : 'Sparkle'}
-                      size={13}
+              <div className={styles.turnTranscript} data-testid="automation-turn-messages">
+                {snap.messages.length > 0 ? (
+                  snap.messages.map((message, index) => (
+                    <Message
+                      key={`${message.kind}:${index}`}
+                      m={message}
+                      index={index}
+                      cb={messageCallbacks}
                     />
-                  </span>
-                  <span className={styles.tlName}>
-                    {snap.final.kind === 'fail' ? 'Run failed' : 'Centraid'}
-                  </span>
-                </div>
-                {snap.final.kind === 'pending' ? (
+                  ))
+                ) : (
                   <div className={styles.pending}>
                     <span className={styles.pendingDots} aria-hidden="true">
                       <i />
@@ -389,31 +325,6 @@ export default function RunViewScreen({
                       <i />
                     </span>
                     <span>Working — this updates live as the run progresses.</span>
-                  </div>
-                ) : (
-                  <div className={styles.tlFinalBody}>
-                    {snap.final.kind === 'ok' ? (
-                      <>
-                        <p className={styles.replyLead}>
-                          {snap.final.summary ?? 'The run completed.'}
-                        </p>
-                        {snap.final.output ? (
-                          <>
-                            <div className={styles.stepLabel}>Output</div>
-                            <pre className={styles.stepPre} data-testid="run-step-payload">
-                              {snap.final.output}
-                            </pre>
-                          </>
-                        ) : null}
-                      </>
-                    ) : (
-                      <>
-                        <p className={styles.replyLead}>This run did not complete.</p>
-                        <div className={styles.tlError}>
-                          {snap.final.error ?? 'No error detail was recorded.'}
-                        </div>
-                      </>
-                    )}
                   </div>
                 )}
               </div>

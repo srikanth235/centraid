@@ -50,7 +50,7 @@ const entry = (ok: boolean): AutomationFeedEntry => ({
     automationId: 'digest/main',
     startedAt: Date.now(),
     ok,
-  } as unknown as CentraidAutomationRunRecord,
+  } as unknown as CentraidAutomationTurnRecord,
 });
 
 describe('homeData', () => {

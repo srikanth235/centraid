@@ -26,7 +26,7 @@ import {
   makeJournalDbProvider,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
-  type RunStreamEvent,
+  type AutomationTurnStreamEvent,
   type VaultBridge,
 } from '@centraid/app-engine';
 import { parseRef } from '../manifest/ref.js';
@@ -123,7 +123,7 @@ export interface RunFireOptions {
    * and ledgers, so streaming them onto this run's channel would mislabel
    * their events. A late viewer can open the child run by its own id.
    */
-  onRunEvent?: (ev: RunStreamEvent) => void;
+  onRunEvent?: (ev: AutomationTurnStreamEvent) => void;
   /**
    * Trigger that caused this fire. Defaults to `'scheduled'`. The onFailure
    * dispatch loop uses `'on_failure'`.

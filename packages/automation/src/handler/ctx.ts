@@ -105,7 +105,7 @@ async function resolveAgentAttachments(
 
 /**
  * Service one `ctx.agent` call: open an `agent` run node, dispatch, forward
- * streamed chat events as `node.delta`, and settle the node with the
+ * streamed chat events as `item.delta`, and settle the item with the
  * token/model rollup. Returns the reply the runner sends back to the worker.
  * Extracted from the runner so each file stays under the repo-hygiene line
  * cap (issue #166).
@@ -133,16 +133,97 @@ export async function handleAgentMessage(
     started,
   });
   // When the runner streams (issue #158, Phase 2), forward each chat event as a
-  // `node.delta` on this agent node, and remember the last `usage` event so
-  // `closeRunNode` can persist the token/model rollup.
+  // native `item.delta`, and remember the last `usage` event so
+  // `closeRunNode` can persist the token/model rollup. ACP tool calls become
+  // their own durable items keyed by toolCallId: parallel calls can share a
+  // name and finish out of order, so ordinal/name correlation is invalid.
   let lastUsage: Extract<TurnStreamEvent, { type: 'usage' }> | undefined;
+  let finalRawJson: string | undefined;
+  const toolItems = new Map<
+    string,
+    { itemId: string; ordinal: number; started: number; name: string }
+  >();
   const onEvent = (ev: TurnStreamEvent): void => {
     if (ev.type === 'usage') lastUsage = ev;
+    if (ev.type === 'final' || ev.type === 'error') finalRawJson = ev.rawJson;
     try {
-      audit.emit({ type: 'node.delta', ordinal, event: ev });
+      if (ev.type === 'tool.start') {
+        const toolOrdinal = nextOrdinal(audit);
+        const toolStarted = Date.now();
+        const itemId = openRunNode({
+          store: audit.store,
+          emit: audit.emit,
+          runId: audit.runId,
+          ordinal: toolOrdinal,
+          callId: ev.toolCallId,
+          kind: 'tool',
+          name: ev.toolName,
+          ...(ev.args !== undefined ? { args: ev.args } : {}),
+          ...(ev.rawJson !== undefined ? { rawJson: ev.rawJson } : {}),
+          started: toolStarted,
+        });
+        toolItems.set(ev.toolCallId, {
+          itemId,
+          ordinal: toolOrdinal,
+          started: toolStarted,
+          name: ev.toolName,
+        });
+        audit.emit({
+          type: 'item.delta',
+          itemId,
+          ordinal: toolOrdinal,
+          callId: ev.toolCallId,
+          event: ev,
+        });
+        return;
+      }
+      if (ev.type === 'tool.result') {
+        const open = toolItems.get(ev.toolCallId);
+        if (open) {
+          audit.emit({
+            type: 'item.delta',
+            itemId: open.itemId,
+            ordinal: open.ordinal,
+            callId: ev.toolCallId,
+            event: ev,
+          });
+          closeRunNode({
+            store: audit.store,
+            emit: audit.emit,
+            nodeId: open.itemId,
+            ordinal: open.ordinal,
+            callId: ev.toolCallId,
+            ok: ev.ok,
+            ...(ev.result !== undefined ? { result: ev.result } : {}),
+            ...(ev.errorText !== undefined ? { error: ev.errorText } : {}),
+            ...(ev.rawJson !== undefined ? { rawJson: ev.rawJson } : {}),
+            started: open.started,
+            ended: Date.now(),
+          });
+          toolItems.delete(ev.toolCallId);
+          return;
+        }
+      }
+      audit.emit({ type: 'item.delta', itemId: nodeId, ordinal, event: ev });
     } catch {
       /* swallow */
     }
+  };
+  const closeDanglingTools = (error: string): void => {
+    for (const [callId, open] of toolItems) {
+      closeRunNode({
+        store: audit.store,
+        emit: audit.emit,
+        nodeId: open.itemId,
+        ordinal: open.ordinal,
+        callId,
+        ok: false,
+        error,
+        started: open.started,
+        ended: Date.now(),
+      });
+    }
+    toolItems.clear();
   };
   try {
     const attachments = content?.length ? await resolveAgentAttachments(vault, content) : undefined;
@@ -150,6 +231,7 @@ export async function handleAgentMessage(
       { prompt, json, ...(attachments ? { attachments } : {}), onEvent },
       dispatchCtx,
     );
+    closeDanglingTools('Tool call ended without a terminal result.');
     closeRunNode({
       store: audit.store,
       emit: audit.emit,
@@ -157,6 +239,7 @@ export async function handleAgentMessage(
       ordinal,
       ok: true,
       result,
+      ...(finalRawJson !== undefined ? { rawJson: finalRawJson } : {}),
       started,
       ended: Date.now(),
       ...usageCloseFields(lastUsage),
@@ -164,6 +247,7 @@ export async function handleAgentMessage(
     return { ok: true, result };
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
+    closeDanglingTools(error);
     closeRunNode({
       store: audit.store,
       emit: audit.emit,
@@ -171,6 +255,7 @@ export async function handleAgentMessage(
       ordinal,
       ok: false,
       error,
+      ...(finalRawJson !== undefined ? { rawJson: finalRawJson } : {}),
       started,
       ended: Date.now(),
       ...usageCloseFields(lastUsage),
